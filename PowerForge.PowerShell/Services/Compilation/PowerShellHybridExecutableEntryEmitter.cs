@@ -6,6 +6,10 @@ namespace PowerForge;
 /// <summary>Emits the private command that enters one already-bound Hybrid script body.</summary>
 internal static class PowerShellHybridExecutableEntryEmitter
 {
+    private const string NamespaceName = "PowerForge.Compiled";
+    private const string TypeName = "CompiledPowerShellEntry";
+    internal const string DeclaringTypeName = NamespaceName + "." + TypeName;
+
     internal static string GenerateSource(PowerShellTypedExecutableCompilation compiled)
     {
         var method = compiled.EntryPointMethod;
@@ -16,8 +20,8 @@ internal static class PowerShellHybridExecutableEntryEmitter
             .AppendLine("#nullable enable")
             .AppendLine("using System;")
             .AppendLine("using System.Management.Automation;")
-            .AppendLine("namespace PowerForge.Compiled;")
-            .AppendLine("internal static class CompiledPowerShellEntry")
+            .AppendLine("namespace " + NamespaceName + ";")
+            .AppendLine("internal static class " + TypeName)
             .AppendLine("{")
             .AppendLine(method.Source)
             .AppendLine("}")

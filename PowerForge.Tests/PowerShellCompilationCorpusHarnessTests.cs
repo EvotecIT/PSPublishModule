@@ -332,15 +332,5 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
         Assert.True(string.IsNullOrWhiteSpace(result.StandardError), result.StandardError);
     }
 
-    private static string FindCorpusRepositoryRoot()
-    {
-        var current = new DirectoryInfo(AppContext.BaseDirectory);
-        while (current is not null)
-        {
-            if (File.Exists(Path.Combine(current.FullName, "Benchmarks", "PowerShellCompilation", "Corpus", "Invoke-PublicCorpus.ps1")))
-                return current.FullName;
-            current = current.Parent;
-        }
-        throw new DirectoryNotFoundException("Unable to locate the PowerShell compilation corpus runner.");
-    }
+    private static string FindCorpusRepositoryRoot() => RepoRootLocator.Find();
 }

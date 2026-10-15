@@ -6,6 +6,10 @@ namespace PowerForge;
 /// <summary>Emits a source-locked factory and launcher wiring for a native script root.</summary>
 internal static class PowerShellHybridNativeEntryEmitter
 {
+    private const string NamespaceName = "PowerForge.Compiled";
+    private const string TypeName = "CompiledNativeScriptEntry";
+    internal const string DeclaringTypeName = NamespaceName + "." + TypeName;
+
     internal static string GenerateSource(PowerShellTypedExecutableCompilation compiled, string sourcePath)
     {
         var method = compiled.EntryPointMethod;
@@ -15,7 +19,7 @@ internal static class PowerShellHybridNativeEntryEmitter
         using (var sha = SHA256.Create())
             sourceHash = BitConverter.ToString(sha.ComputeHash(Encoding.UTF8.GetBytes(File.ReadAllText(sourcePath))))
                 .Replace("-", string.Empty).ToLowerInvariant();
-        var builder = new StringBuilder("#nullable enable\nnamespace PowerForge.Compiled;\npublic static class CompiledNativeScriptEntry\n{\n")
+        var builder = new StringBuilder("#nullable enable\nnamespace " + NamespaceName + ";\npublic static class " + TypeName + "\n{\n")
             .AppendLine(method.Source)
             .AppendLine("    public static global::System.Management.Automation.ExternalScriptInfo Create(global::System.Management.Automation.Runspaces.Runspace runspace, string path)")
             .AppendLine("    {")

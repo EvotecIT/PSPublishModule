@@ -586,6 +586,10 @@ public sealed partial class PowerShellTypedCompilationTranspiler
         result.NativeDeclarationTimingSourcePaths = parsedFiles.Where(static file => file.Document.PreserveFunctionDeclarationTiming)
             .Select(static file => file.Path).ToArray();
         result.GuardedExecutableEntryPath = guardedExecutableEntryPath;
+        // C# identifier escapes are source syntax and do not appear in CLR stack frames.
+        var declaringTypeName = (result.NamespaceName + "." + result.TypeName).Replace("@", string.Empty);
+        foreach (var method in result.Methods)
+            method.GeneratedDeclaringTypeName = declaringTypeName;
         if (runtimeFreeModule is not null && initializer is not null)
             result.RuntimeFreeModule = new PowerShellRuntimeFreeModuleContract
             {
@@ -602,6 +606,8 @@ public sealed partial class PowerShellTypedCompilationTranspiler
                 }).ToArray()
             };
         result.PromotedRegions = promotedRegions ?? Array.Empty<PowerShellCompiledRegion>();
+        foreach (var region in result.PromotedRegions)
+            region.GeneratedDeclaringTypeName = declaringTypeName;
         result.RegionCandidates = regionCandidates ?? Array.Empty<PowerShellCompilationRegionCandidate>();
         result.RegionOpportunities = (regionOpportunities ?? Array.Empty<PowerShellCompilationRegionOpportunity>())
             .Where(opportunity => !methods.Any(method =>

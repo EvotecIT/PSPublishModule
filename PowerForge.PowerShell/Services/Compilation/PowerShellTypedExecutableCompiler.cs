@@ -164,6 +164,10 @@ internal static class PowerShellTypedExecutableCompiler
         var entryDescription = CreateMethodDescription(entryUnit, entry.Function, entry.Emission, entryPoint);
         entryDescription.IsSyntheticNoOpExecutableEntry = syntheticNoOpEntry;
         descriptions.Add(entryDescription);
+        var declaringType = nativeScriptEntry ? PowerShellHybridNativeEntryEmitter.DeclaringTypeName :
+            parametersAlreadyBound ? PowerShellHybridExecutableEntryEmitter.DeclaringTypeName :
+            PowerShellTypedExecutableEmitter.DeclaringTypeName;
+        foreach (var description in descriptions) description.GeneratedDeclaringTypeName = declaringType;
         var reachableCommandProviders = CollectReachableCommandProviders(semantic, entry.Function.Symbol);
         return new PowerShellTypedExecutableCompilation(
             new PowerShellTypedExecutableContract(entryDescription, entry.Function.Parameters

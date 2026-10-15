@@ -47,6 +47,8 @@ internal static class PowerShellCompilationDiagnosticsEvidenceBuilder
                 UnitId = unitId,
                 UnitName = ledgerEntry.Name,
                 GeneratedMemberName = method.GeneratedName,
+                GeneratedDeclaringTypeName = method.GeneratedDeclaringTypeName,
+                SourcePathCaseSensitive = PowerShellCompilationPathSafety.GetPathComparison(file.FullPath) == StringComparison.Ordinal,
                 SourceStartLine = map.SourceStartLine,
                 SourceStartColumn = map.SourceStartColumn,
                 SourceEndLine = map.SourceEndLine,
@@ -75,6 +77,8 @@ internal static class PowerShellCompilationDiagnosticsEvidenceBuilder
                 UnitId = unitId,
                 UnitName = disposition.Name,
                 GeneratedMemberName = region.GeneratedName,
+                GeneratedDeclaringTypeName = region.GeneratedDeclaringTypeName,
+                SourcePathCaseSensitive = PowerShellCompilationPathSafety.GetPathComparison(file.FullPath) == StringComparison.Ordinal,
                 SourceStartLine = map.SourceStartLine,
                 SourceStartColumn = map.SourceStartColumn,
                 SourceEndLine = map.SourceEndLine,
@@ -96,7 +100,7 @@ internal static class PowerShellCompilationDiagnosticsEvidenceBuilder
                      .ThenBy(static entry => entry.Name, StringComparer.Ordinal))
         {
             var file = plan.Files.FirstOrDefault(item =>
-                NormalizeRelative(item.RelativePath, Path.GetFileName(item.FullPath)).Equals(disposition.RelativePath, StringComparison.OrdinalIgnoreCase));
+                NormalizeRelative(item.RelativePath, Path.GetFileName(item.FullPath)).Equals(disposition.RelativePath, StringComparison.Ordinal));
             if (file is null) continue;
             var unit = file.Units.FirstOrDefault(item =>
                 PowerShellCompilationExplanationService.ComputeUnitId(
@@ -110,6 +114,7 @@ internal static class PowerShellCompilationDiagnosticsEvidenceBuilder
                 RelativePath = NormalizeRelative(file.RelativePath, Path.GetFileName(file.FullPath)),
                 UnitId = disposition.UnitId,
                 UnitName = disposition.Name,
+                SourcePathCaseSensitive = PowerShellCompilationPathSafety.GetPathComparison(file.FullPath) == StringComparison.Ordinal,
                 GeneratedMemberName = disposition.PromotedTypedRegions > 0
                     ? string.Empty
                     : disposition.GeneratedMemberName,
@@ -229,8 +234,10 @@ internal static class PowerShellCompilationDiagnosticsEvidenceBuilder
             foreach (Match match in RuntimeLocation.Matches(output ?? string.Empty))
             {
                 var member = match.Groups["member"].Value.Trim();
-                var generatedMemberName = member.Length == 0 ? null : member.Substring(member.LastIndexOf('.') + 1);
-                var entry = MatchEntry(failureMap, match.Groups["file"].Value.Trim(), Parse(match.Groups["line"].Value), generatedMemberName);
+                var separator = member.LastIndexOf('.');
+                var generatedMemberName = member.Length == 0 ? null : member.Substring(separator + 1);
+                var declaringTypeName = separator > 0 ? member.Substring(0, separator) : null;
+                var entry = MatchEntry(failureMap, match.Groups["file"].Value.Trim(), Parse(match.Groups["line"].Value), generatedMemberName, declaringTypeName);
                 if (entry is null) continue;
                 locations.Add(Location(entry, "RuntimeFailure", summary));
             }
@@ -242,7 +249,7 @@ internal static class PowerShellCompilationDiagnosticsEvidenceBuilder
             Reason = reason,
             Summary = redactedSummary,
             ExitCode = exitCode,
-            Locations = locations.GroupBy(static item => item.RelativePath + "\0" + item.Line + "\0" + item.Column + "\0" + item.Code, StringComparer.Ordinal)
+            Locations = locations.GroupBy(static item => item.UnitId + "\0" + item.RelativePath + "\0" + item.Line + "\0" + item.Column + "\0" + item.Code, StringComparer.Ordinal)
                 .Select(static group => group.First())
                 .OrderBy(static item => item.RelativePath, StringComparer.Ordinal)
                 .ThenBy(static item => item.Line)
@@ -281,23 +288,45 @@ internal static class PowerShellCompilationDiagnosticsEvidenceBuilder
         => Hash(new { trail.SchemaVersion, trail.Events });
 
     private static PowerShellCompilationFailureMapEntry? MatchEntry(
-        PowerShellCompilationFailureMap map, string file, int line, string? generatedMemberName = null)
+        PowerShellCompilationFailureMap map, string file, int line, string? generatedMemberName = null, string? declaringTypeName = null)
     {
         var normalized = file.Replace('\\', '/');
-        return MostSpecific(map.Entries.Where(item => item.DocumentId.Equals(normalized, StringComparison.Ordinal)), line, generatedMemberName)
-               ?? MostSpecific(map.Entries.Where(item => item.RelativePath.Equals(normalized, StringComparison.OrdinalIgnoreCase)), line, generatedMemberName)
-               ?? MostSpecific(map.Entries.Where(item => normalized.EndsWith("/" + item.RelativePath, StringComparison.OrdinalIgnoreCase)), line, generatedMemberName)
-               ?? MostSpecific(map.Entries.Where(item => item.GeneratedMemberName.Equals(normalized, StringComparison.Ordinal)), line, generatedMemberName);
+        var documents = map.Entries.Where(item => item.DocumentId.Equals(normalized, StringComparison.Ordinal)).ToArray();
+        if (documents.Length > 0) return MostSpecific(documents, line, generatedMemberName, declaringTypeName);
+        var exactPaths = map.Entries.Where(item => item.RelativePath.Equals(normalized, StringComparison.Ordinal)).ToArray();
+        if (exactPaths.Length > 0) return MostSpecific(exactPaths, line, generatedMemberName, declaringTypeName);
+        var exactSuffixes = map.Entries.Where(item => normalized.EndsWith("/" + item.RelativePath, StringComparison.Ordinal)).ToArray();
+        if (exactSuffixes.Length > 0)
+        {
+            var longest = exactSuffixes.Max(static item => item.RelativePath.Length);
+            return MostSpecific(exactSuffixes.Where(item => item.RelativePath.Length == longest), line, generatedMemberName, declaringTypeName);
+        }
+        // The recorded source filesystem owns path comparison after relocation. Legacy
+        // maps retain unique case-insensitive matching, but never choose between A/a.
+        var folded = map.Entries.Where(item => item.SourcePathCaseSensitive != true &&
+            (item.RelativePath.Equals(normalized, StringComparison.OrdinalIgnoreCase) ||
+             normalized.EndsWith("/" + item.RelativePath, StringComparison.OrdinalIgnoreCase))).ToArray();
+        if (folded.Length > 0)
+        {
+            if (folded.Select(static item => item.RelativePath).Distinct(StringComparer.Ordinal).Skip(1).Any()) return null;
+            return MostSpecific(folded, line, generatedMemberName, declaringTypeName);
+        }
+        return MostSpecific(map.Entries.Where(item => item.GeneratedMemberName.Equals(normalized, StringComparison.Ordinal)), line, generatedMemberName, declaringTypeName);
     }
 
     private static PowerShellCompilationFailureMapEntry? MostSpecific(
         IEnumerable<PowerShellCompilationFailureMapEntry> entries,
         int line,
-        string? generatedMemberName)
+        string? generatedMemberName,
+        string? declaringTypeName)
     {
-        var candidates = entries
+        var matching = entries
             .Where(item => line >= item.SourceStartLine && line <= Math.Max(item.SourceStartLine, item.SourceEndLine) &&
                            (generatedMemberName is null || item.GeneratedMemberName.Equals(generatedMemberName, StringComparison.Ordinal)))
+            .ToArray();
+        if (declaringTypeName is not null && matching.Any(static item => item.GeneratedDeclaringTypeName is not null))
+            matching = matching.Where(item => string.Equals(item.GeneratedDeclaringTypeName, declaringTypeName, StringComparison.Ordinal)).ToArray();
+        var candidates = matching
             .OrderBy(item => Math.Max(item.SourceStartLine, item.SourceEndLine) - item.SourceStartLine)
             .ThenByDescending(static item => item.GeneratedStartLine > 0)
             .ThenBy(static item => item.UnitName.Equals("<script>", StringComparison.Ordinal))
@@ -307,6 +336,15 @@ internal static class PowerShellCompilationDiagnosticsEvidenceBuilder
         var span = Math.Max(candidates[0].SourceStartLine, candidates[0].SourceEndLine) - candidates[0].SourceStartLine;
         var generated = candidates[0].GeneratedStartLine > 0;
         var script = candidates[0].UnitName.Equals("<script>", StringComparison.Ordinal);
+        var sameRank = candidates.Where(item => Math.Max(item.SourceStartLine, item.SourceEndLine) - item.SourceStartLine == span &&
+                                               (item.GeneratedStartLine > 0) == generated).ToArray();
+        // A CLR frame needs its exact declaring type when equally specific generated
+        // owners overlap. Hosted PowerShell keeps narrower/function source precedence.
+        if (generated && sameRank.Select(static item => item.UnitId).Distinct(StringComparer.Ordinal).Skip(1).Any() &&
+            (sameRank.Select(static item => item.GeneratedDeclaringTypeName).OfType<string>()
+                 .Distinct(StringComparer.Ordinal).Skip(1).Any() ||
+             sameRank.GroupBy(static item => item.GeneratedMemberName, StringComparer.Ordinal)
+                 .Any(group => group.Select(static item => item.UnitId).Distinct(StringComparer.Ordinal).Skip(1).Any()))) return null;
         // #line remaps lines only. A generated C# column cannot select an authored owner.
         // Retain the established generated/function precedence over broader fallback owners.
         if (candidates.Where(item => Math.Max(item.SourceStartLine, item.SourceEndLine) - item.SourceStartLine == span &&

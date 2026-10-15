@@ -186,6 +186,9 @@ public sealed class PowerShellCompiledMethod
     /// <summary>Generated C# method name.</summary>
     public string GeneratedName { get; }
 
+    /// <summary>Exact CLR declaring type selected by the source emitter, independent of authored name or line.</summary>
+    internal string? GeneratedDeclaringTypeName { get; set; }
+
     /// <summary>Compiler-owned no-op process entry with no authored script unit to count or map.</summary>
     internal bool IsSyntheticNoOpExecutableEntry { get; set; }
 

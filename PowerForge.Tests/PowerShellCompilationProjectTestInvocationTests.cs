@@ -157,6 +157,101 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.False(Directory.Exists(Path.Combine(fixture.RootPath, ".powerforge", "i")));
     }
 
+    [Fact]
+    [Trait("Category", "PowerShellCompilerGate")]
+    public void Project_OfflineRestoreAuthenticatesRemovedTargetsBeforeRequalifyingCurrentSelection()
+    {
+        using var fixture = ArtifactFixture.Create("""
+            function Get-TargetValue {
+                [OutputType([int])]
+                param()
+                return 7
+            }
+            """, compactPath: true);
+        var project = Path.Combine(fixture.RootPath, "p.json");
+        var service = new PowerShellCompilationProjectManifestService();
+        var strictTarget = PowerShellCompilationTargetContractService.Create(
+            PowerShellCompilationArtifactKind.Library, PowerShellCompilationMode.Strict, "net10.0",
+            runtimeIdentifier: null, selfContained: false, singleFile: false,
+            PowerShellCompilationExecutableOptimization.None, explicitContract: true);
+        var hybridTarget = PowerShellCompilationTargetContractService.Create(
+            PowerShellCompilationArtifactKind.Library, PowerShellCompilationMode.Hybrid, "net10.0",
+            runtimeIdentifier: null, selfContained: false, singleFile: false,
+            PowerShellCompilationExecutableOptimization.None, explicitContract: true);
+        var manifest = service.Create(project, fixture.ScriptPath, "TwoTargets", strictTarget);
+        var artifactA = Assert.Single(manifest.Artifacts);
+        var artifactB = Assert.Single(service.Create(project, fixture.ScriptPath, "TwoTargets", hybridTarget).Artifacts);
+        manifest.Artifacts = new[] { artifactA, artifactB };
+        service.Save(project, manifest);
+        var workflow = new PowerShellCompilationProjectWorkflowService();
+        AssertProjectSuccess(workflow.Lock(project));
+        AssertProjectSuccess(workflow.Restore(project));
+        var environmentPath = Path.Combine(fixture.RootPath, ".powerforge", "environment", "environment.json");
+        var originalEnvironmentBytes = File.ReadAllBytes(environmentPath);
+        var originalEnvironment = JsonSerializer.Deserialize<PowerShellCompilationProjectEnvironment>(
+            originalEnvironmentBytes, PowerShellCompilationProjectManifestService.JsonOptions)!;
+        Assert.Equal(2, originalEnvironment.ResolvedLocks.Length);
+        var reviewedAPath = Path.Combine(fixture.RootPath, artifactA.DependencyLock);
+        var reviewedABytes = File.ReadAllBytes(reviewedAPath);
+        var resolvedAPath = Path.Combine(fixture.RootPath,
+            Assert.Single(originalEnvironment.ResolvedLocks, item => item.TargetName == artifactA.Name).Path);
+        var resolvedABytes = File.ReadAllBytes(resolvedAPath);
+        var resolvedBPath = Path.Combine(fixture.RootPath,
+            Assert.Single(originalEnvironment.ResolvedLocks, item => item.TargetName == artifactB.Name).Path);
+        var resolvedBBytes = File.ReadAllBytes(resolvedBPath);
+        var archives = originalEnvironment.Packages.Select(package =>
+        {
+            var path = Path.Combine(originalEnvironment.PackageRoot, package.Id.ToLowerInvariant(),
+                package.Version.ToLowerInvariant(), package.Id.ToLowerInvariant() + "." + package.Version.ToLowerInvariant() + ".nupkg");
+            return new { Path = path, Sha256 = PowerShellCompilationProjectManifestService.ComputeSha256(path) };
+        }).ToArray();
+        Assert.NotEmpty(archives);
+
+        manifest.Artifacts = new[] { artifactA };
+        service.Save(project, manifest);
+        var relocked = workflow.Lock(project, new[] { artifactA.Name });
+        AssertProjectSuccess(relocked);
+        Assert.Equal(reviewedABytes, File.ReadAllBytes(reviewedAPath));
+        var currentProjectBytes = File.ReadAllBytes(project);
+        Assert.NotEqual(originalEnvironment.ProjectSha256, PowerShellCompilationProjectManifestService.ComputeSha256(project));
+
+        // Removing B from the current selection must not exempt its historical closure from authentication.
+        File.AppendAllText(resolvedBPath, "tamper");
+        var tamperedBBytes = File.ReadAllBytes(resolvedBPath);
+        try
+        {
+            var rejected = workflow.Restore(project, offline: true, targetNames: new[] { artifactA.Name });
+            Assert.False(rejected.Succeeded);
+            Assert.Contains($"Resolved NuGet closure lock for '{artifactB.Name}' differs from environment evidence.",
+                Assert.Single(rejected.Targets).Message, StringComparison.Ordinal);
+            Assert.Equal(originalEnvironmentBytes, File.ReadAllBytes(environmentPath));
+            Assert.Equal(currentProjectBytes, File.ReadAllBytes(project));
+            Assert.Equal(reviewedABytes, File.ReadAllBytes(reviewedAPath));
+            Assert.Equal(resolvedABytes, File.ReadAllBytes(resolvedAPath));
+            Assert.Equal(tamperedBBytes, File.ReadAllBytes(resolvedBPath));
+        }
+        finally
+        {
+            File.WriteAllBytes(resolvedBPath, resolvedBBytes);
+        }
+
+        AssertProjectSuccess(workflow.Restore(project, offline: true, targetNames: new[] { artifactA.Name }));
+        var restoredEnvironment = JsonSerializer.Deserialize<PowerShellCompilationProjectEnvironment>(
+            File.ReadAllBytes(environmentPath), PowerShellCompilationProjectManifestService.JsonOptions)!;
+        Assert.True(restoredEnvironment.Offline);
+        Assert.Equal(PowerShellCompilationProjectManifestService.ComputeSha256(project), restoredEnvironment.ProjectSha256);
+        Assert.NotEqual(originalEnvironment.EnvironmentSha256, restoredEnvironment.EnvironmentSha256);
+        Assert.Equal(originalEnvironment.PackageRoot, restoredEnvironment.PackageRoot);
+        Assert.Equal(artifactA.Name, Assert.Single(restoredEnvironment.ResolvedLocks).TargetName);
+        Assert.Equal(Assert.Single(relocked.Targets).DependencyLockSha256, Assert.Single(restoredEnvironment.DependencyLockSha256));
+        Assert.Equal(currentProjectBytes, File.ReadAllBytes(project));
+        Assert.Equal(reviewedABytes, File.ReadAllBytes(reviewedAPath));
+        Assert.Equal(resolvedABytes, File.ReadAllBytes(resolvedAPath));
+        Assert.Equal(resolvedBBytes, File.ReadAllBytes(resolvedBPath));
+        foreach (var archive in archives)
+            Assert.Equal(archive.Sha256, PowerShellCompilationProjectManifestService.ComputeSha256(archive.Path));
+    }
+
     [Theory]
     [InlineData("../outside", "escapes the project root")]
     [InlineData("absolute", "must be relative")]

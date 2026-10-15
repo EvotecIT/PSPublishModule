@@ -43,6 +43,7 @@ if (($NoBuild -and $ArtifactsPath) -or (-not $ArtifactsPath -and $previousCliPat
 $EvidencePath = [IO.Path]::GetFullPath($EvidencePath)
 New-Item -ItemType Directory -Path $EvidencePath -Force | Out-Null
 $requiredFamilies = @{
+    'project removed-target recovery' = 'PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.Project_OfflineRestoreAuthenticatesRemovedTargetsBeforeRequalifyingCurrentSelection*'
     'empty executable entry' = 'PowerForge.Tests.PowerShellCompilationArtifactHardeningTests.Build_EmptyExecutableEntryPointExitsWithoutOutput*'
     'corpus performance disposition' = 'PowerForge.Tests.PowerShellCompilationArtifactHardeningTests.PublicCorpusPerformancePolicyRecordsOnlyKnownTimingBudgets*'
     'final emitted unit ownership' = 'PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.FailureMap*'

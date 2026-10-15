@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace PowerForge;
 
 /// <summary>Compiler stage that produced a mapped failure.</summary>
@@ -76,6 +78,12 @@ public sealed class PowerShellCompilationFailureMapEntry
     public string UnitName { get; set; } = string.Empty;
     /// <summary>Generated CLR member name.</summary>
     public string GeneratedMemberName { get; set; } = string.Empty;
+    /// <summary>Exact CLR declaring type, or null for hosted source and legacy maps without this identity.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? GeneratedDeclaringTypeName { get; set; }
+    /// <summary>Source filesystem case policy, or null for legacy maps using unique case-insensitive path matching.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public bool? SourcePathCaseSensitive { get; set; }
     /// <summary>One-based authored statement start line.</summary>
     public int SourceStartLine { get; set; }
     /// <summary>One-based authored statement start column.</summary>

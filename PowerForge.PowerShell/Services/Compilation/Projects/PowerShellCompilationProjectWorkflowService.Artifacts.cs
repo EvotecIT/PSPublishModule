@@ -240,7 +240,9 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
             throw new InvalidDataException("The isolated environment records no exact NuGet transitive-closure locks.");
         foreach (var resolvedLock in environment.ResolvedLocks)
         {
-            if (!context.Manifest.Artifacts.Any(artifact => artifact.Name.Equals(resolvedLock.TargetName, StringComparison.Ordinal)))
+            // Offline restore authenticates historical closures independently of the current target selection.
+            if (requireCurrentProjectRevision &&
+                !context.Manifest.Artifacts.Any(artifact => artifact.Name.Equals(resolvedLock.TargetName, StringComparison.Ordinal)))
                 throw new InvalidDataException($"The isolated environment references unknown target '{resolvedLock.TargetName}'.");
             var resolvedPath = context.Resolve(resolvedLock.Path);
             if (!File.Exists(resolvedPath)) throw new FileNotFoundException("A resolved NuGet closure lock is missing.", resolvedPath);
