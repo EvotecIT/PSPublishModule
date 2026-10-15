@@ -76,6 +76,7 @@ public static partial class WebApiDocsGenerator
         public string? Signature { get; set; }
         public string? ReturnType { get; set; }
         public string? DeclaringType { get; set; }
+        internal string? DeclaringAssemblyName { get; set; }
         public bool IsInherited { get; set; }
         public bool IsStatic { get; set; }
         public string? Access { get; set; }
@@ -173,6 +174,7 @@ public static partial class WebApiDocsGenerator
         private readonly IReadOnlyList<SourceUrlMappingRule> _sourceUrlMappings;
         private readonly string? _revision;
         private readonly bool _workingTreeChanged;
+        private readonly Lazy<CSharpSourceDeclarationIndex> _declarations;
         private static readonly string[] SupportedSourceUrlTokens = { "path", "line", "root", "pathNoRoot", "pathNoPrefix", "revision" };
 
         private SourceLinkContext(
@@ -196,6 +198,7 @@ public static partial class WebApiDocsGenerator
             _sourceUrlMappings = sourceUrlMappings ?? Array.Empty<SourceUrlMappingRule>();
             _revision = revision;
             _workingTreeChanged = workingTreeChanged;
+            _declarations = new Lazy<CSharpSourceDeclarationIndex>(() => CSharpSourceDeclarationIndex.Create(_reader, _sourceRoot));
         }
 
         public static SourceLinkContext? Create(WebApiDocsOptions options, Assembly assembly, List<string> warnings, string? assemblyPathOverride = null)
@@ -261,6 +264,7 @@ public static partial class WebApiDocsGenerator
 
         public ApiSourceLink? TryGetSource(Type type)
         {
+            if (type.Module != _sourceModule) return null;
             // Only members declared by the type locate its source: inherited members from the
             // same assembly would otherwise point a derived type at its base class file.
             const BindingFlags declared = BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static | BindingFlags.DeclaredOnly;
@@ -281,7 +285,10 @@ public static partial class WebApiDocsGenerator
                 if (rank == 2) return link;
                 if (rank == 1) part ??= link;
             }
-            return part ?? first;
+            var source = part ?? first;
+            if (source is not null) return source;
+            var declaration = _declarations.Value.FindType(type);
+            return declaration is null ? null : BuildSourceLink(declaration.Path, declaration.Line);
         }
 
         internal static string GetSourceFileStem(Type type)
@@ -339,7 +346,9 @@ public static partial class WebApiDocsGenerator
 
         public ApiSourceLink? TryGetSource(FieldInfo field)
         {
-            return null;
+            if (field.Module != _sourceModule) return null;
+            var declaration = _declarations.Value.FindField(field);
+            return declaration is null ? null : BuildSourceLink(declaration.Path, declaration.Line);
         }
 
         private ApiSourceLink? BuildSourceLink(string path, int line)
