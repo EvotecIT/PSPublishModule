@@ -75,6 +75,24 @@ public sealed partial class AppStoreConnectClientTests
         Assert.Equal(2, handler.VersionReads);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ReviewNotes_ReportsUnconfirmedOutcomeWhenPostPatchObservationFails(bool ambiguousPatch)
+    {
+        var handler = new ReviewNotesHandler { FailAfterPatch = ambiguousPatch, FailReadsAfterPatch = true };
+        using var http = new HttpClient(handler);
+        using var client = new AppStoreConnectClient(CreateCredential(), http);
+        var service = new AppStoreConnectReviewNotesService(client);
+        var spec = ReviewNotesSpec();
+        var plan = await service.PlanAsync(spec);
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => service.ApplyAsync(spec, plan, true));
+        Assert.Contains("outcome is unconfirmed", error.Message);
+        Assert.DoesNotContain("private-contact@example.test", error.ToString());
+        Assert.Single(handler.Patches);
+        Assert.Equal(spec.Notes, handler.Notes);
+    }
+
     [Fact]
     public void ReviewNotes_ValidatesTheUtf8ByteLimit()
     {
@@ -113,6 +131,7 @@ public sealed partial class AppStoreConnectClientTests
         public Action? CancelAfterPatch { get; set; }
         public int VersionReads { get; private set; }
         public bool FailReads { get; set; }
+        public bool FailReadsAfterPatch { get; set; }
         public List<string> Patches { get; } = [];
 
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
@@ -131,7 +150,8 @@ public sealed partial class AppStoreConnectClientTests
                 if (TimeoutAfterPatch) throw new TaskCanceledException("The provider response timed out.");
                 if (FailAfterPatch) return Response(HttpStatusCode.InternalServerError, "private-contact@example.test");
             }
-            else if (FailReads) return Response(HttpStatusCode.Forbidden, "private-contact@example.test");
+            else if (FailReads || (FailReadsAfterPatch && Patches.Count > 0))
+                return Response(HttpStatusCode.Forbidden, "private-contact@example.test");
             if (request.RequestUri!.AbsolutePath.EndsWith("/appStoreVersions"))
             {
                 VersionReads++;

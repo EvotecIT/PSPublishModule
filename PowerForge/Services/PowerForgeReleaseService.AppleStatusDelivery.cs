@@ -15,7 +15,7 @@ internal sealed partial class PowerForgeReleaseService
     {
         if (plan.Action != PowerForgeAppleReleaseAction.Status ||
             result?.Success != true ||
-            result.RemoteState?.Platforms.SingleOrDefault(value => value.Platform == app.Platform) is not { MatchedBuild: null } ||
+            result.RemoteState?.Platforms.SingleOrDefault(value => value.Platform == app.Platform) is not { MatchedBuild: null, SelectedBuild: null } ||
             string.IsNullOrWhiteSpace(plan.SourceCommit) ||
             string.IsNullOrWhiteSpace(version) ||
             string.IsNullOrWhiteSpace(build))

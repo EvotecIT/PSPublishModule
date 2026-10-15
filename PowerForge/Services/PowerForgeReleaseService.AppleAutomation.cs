@@ -232,7 +232,8 @@ internal sealed partial class PowerForgeReleaseService
             PowerForgeAppleReleaseAction.Release;
 
     private static bool RequiresAppleReleaseIdentity(PowerForgeAppleReleasePlan plan)
-        => plan.Action == PowerForgeAppleReleaseAction.Status ||
+        => !IsExplicitAppleVersionObservation(plan) &&
+           (plan.Action == PowerForgeAppleReleaseAction.Status ||
            plan.Action == PowerForgeAppleReleaseAction.Doctor ||
            plan.Action == PowerForgeAppleReleaseAction.Ship ||
            IsUploadExecution(plan) ||
@@ -243,7 +244,11 @@ internal sealed partial class PowerForgeReleaseService
            plan.DistributeTestFlight ||
            plan.SubmitTestFlightBetaReview ||
            plan.SubmitForReview ||
-           plan.ReleaseApprovedVersion;
+           plan.ReleaseApprovedVersion);
+
+    private static bool IsExplicitAppleVersionObservation(PowerForgeAppleReleasePlan plan)
+        => plan.Action is PowerForgeAppleReleaseAction.Status or PowerForgeAppleReleaseAction.Doctor &&
+           !string.IsNullOrWhiteSpace(plan.ObservedMarketingVersion);
 
     private static void ValidateAppleAutomation(PowerForgeAppleReleaseAutomationOptions automation)
     {
@@ -331,8 +336,8 @@ internal sealed partial class PowerForgeReleaseService
         PowerForgeAppleReleasePlan plan,
         PowerForgeAppleAppReleaseTargetPlan app)
     {
-        var version = ResolveAppleDistributionValues(app, versionUpdate: null);
         var observedVersion = string.IsNullOrWhiteSpace(plan.ObservedMarketingVersion) ? null : plan.ObservedMarketingVersion;
+        var version = observedVersion is null ? ResolveAppleDistributionValues(app, versionUpdate: null) : default;
         return _getAppleReleaseState(new AppStoreConnectReleaseStateRequest
         {
             Credential = CreateAppStoreConnectCredential(plan),
@@ -538,6 +543,7 @@ internal sealed partial class PowerForgeReleaseService
                 }
             }
             else if (!skippedIndependentRelease &&
+                     !IsExplicitAppleVersionObservation(plan) &&
                      plan.Action != PowerForgeAppleReleaseAction.Cleanup &&
                      (RequiresAppleReleaseIdentity(plan) ||
                       !string.IsNullOrWhiteSpace(app.MarketingVersion) ||
@@ -641,6 +647,7 @@ internal sealed partial class PowerForgeReleaseService
                 DistributionVersionId = receiptVersion?.Id,
                 DistributionState = receiptVersion?.AppStoreState ?? receiptVersion?.AppVersionState,
                 BuildSelected = platform?.MatchedBuildSelected ??
+                                (observesExplicitVersion && platform?.SelectedBuild is not null ? (bool?)true : null) ??
                                 (result?.Distribution?.Build is not null && plan.SelectBuildForDistribution ? true : null),
                 TestFlightInternalState = platform?.BetaDetail?.InternalBuildState,
                 TestFlightExternalState = platform?.BetaDetail?.ExternalBuildState,

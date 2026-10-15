@@ -16,4 +16,19 @@ public sealed partial class AppStoreConnectClientTests
         Assert.Equal(1320, image.ImageAssetWidth);
         Assert.Equal(2868, image.ImageAssetHeight);
     }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData(",\"attributes\":null")]
+    [InlineData(",\"attributes\":[]")]
+    public async Task ScreenshotRead_ToleratesAbsentImageAttributes(string attributes)
+    {
+        var handler = new RecordingHandler("{\"data\":[{\"type\":\"appScreenshots\",\"id\":\"image-1\"" + attributes + "}]}");
+        using var http = new HttpClient(handler);
+        using var client = new AppStoreConnectClient(CreateCredential(), http);
+        var image = Assert.Single(await client.GetScreenshotsAsync("set-1"));
+        Assert.Equal("image-1", image.Id);
+        Assert.Null(image.ImageAssetUrlTemplate);
+        Assert.Null(image.ImageAssetWidth);
+    }
 }

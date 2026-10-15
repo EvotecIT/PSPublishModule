@@ -33,9 +33,81 @@ public sealed partial class PowerForgeReleaseServiceTests
             var target = Assert.Single(result.AppleReceipt!.Targets);
             Assert.Equal(observedVersion, target.Version);
             Assert.Equal("8", target.Build);
+            Assert.True(target.BuildSelected);
             Assert.Equal("REJECTED", target.DistributionState);
             Assert.False(target.ArchiveCreated);
             Assert.False(target.UploadPerformed);
+        }
+        finally { TryDelete(root); }
+    }
+
+    [Theory]
+    [InlineData(PowerForgeAppleReleaseAction.Status)]
+    [InlineData(PowerForgeAppleReleaseAction.Doctor)]
+    public void Execute_AppleExplicitObservation_DoesNotRequireLocalWorkspaceVersion(PowerForgeAppleReleaseAction action)
+    {
+        var root = CreateSandbox();
+        try
+        {
+            var (spec, _) = CreateAppleStatusDeliveryFixture(root);
+            var app = Assert.Single(spec.AppleApps!.Apps);
+            app.ProjectPath = "Versionless.xcworkspace";
+            app.MarketingVersion = null;
+            app.BuildNumber = null;
+            Directory.CreateDirectory(Path.Combine(root, app.ProjectPath));
+            var source = EnsureTestSourceCommit(root);
+            var calls = 0;
+            var service = CreateAppleAutomationService(request =>
+            {
+                calls++;
+                Assert.Equal("1.1", request.VersionString);
+                Assert.Null(request.BuildNumber);
+                return CreateReleaseState(request, null);
+            }, generateAppleProject: _ => throw new InvalidOperationException("Observation must not generate a project."));
+            var result = service.Execute(spec, new PowerForgeReleaseRequest
+            {
+                ConfigPath = Path.Combine(root, "powerforge.release.json"), AppleAction = action,
+                AppleSourceCommit = source, AppleMarketingVersion = "1.1"
+            });
+            Assert.True(result.Success, result.ErrorMessage);
+            Assert.Equal(1, calls);
+            var target = Assert.Single(result.AppleReceipt!.Targets);
+            Assert.Equal("1.1", target.Version);
+            Assert.Null(target.Build);
+            Assert.Null(target.BuildSelected);
+        }
+        finally { TryDelete(root); }
+    }
+
+    [Fact]
+    public void Execute_AppleHistoricalStatus_DoesNotObserveUploadWhenSelectedBuildIsVisible()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            var (spec, source) = CreateAppleStatusDeliveryFixture(root);
+            var service = CreateAppleAutomationService(request =>
+            {
+                var state = CreateReleaseState(request, null);
+                state.Platforms[0].SelectedBuild = new()
+                {
+                    Id = "selected-build", Version = "9", MarketingVersion = "1.2.0", ProcessingState = "VALID"
+                };
+                return state;
+            }, getAppleBuildUpload: (_, _) => throw new InvalidOperationException("A visible selected build must not use delivery fallback."));
+            var plan = CreateAppleStatusDeliveryPlan(service, spec, root, source);
+            WriteAppleStatusDelivery(plan, "older-upload");
+            var result = service.Execute(spec, new PowerForgeReleaseRequest
+            {
+                ConfigPath = Path.Combine(root, "powerforge.release.json"), AppleAction = PowerForgeAppleReleaseAction.Status,
+                AppleSourceCommit = source, AppleMarketingVersion = "1.2.0"
+            });
+            Assert.True(result.Success, result.ErrorMessage);
+            var target = Assert.Single(result.AppleReceipt!.Targets);
+            Assert.Equal("selected-build", target.BuildId);
+            Assert.True(target.BuildSelected);
+            Assert.Null(target.BuildUploadId);
+            Assert.DoesNotContain(target.Diagnostics, value => value.Code.StartsWith("APPLE_BUILD_UPLOAD_", StringComparison.Ordinal));
         }
         finally { TryDelete(root); }
     }

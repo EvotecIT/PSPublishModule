@@ -73,13 +73,24 @@ public sealed class AppStoreConnectReviewNotesService
         catch (Exception error) when (error is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
         {
             // An ambiguous response may have applied. Observe once; never repeat the patch blindly.
-            var observed = await PlanAsync(desired, cancellationToken).ConfigureAwait(false);
+            var observed = await ObserveAfterUpdateAsync(desired, cancellationToken).ConfigureAwait(false);
             if (observed.IsConverged) return observed;
             throw new InvalidOperationException("App Review notes did not converge. Provider details were suppressed; inspect Apple state and generate a new plan.");
         }
-        var final = await PlanAsync(desired, cancellationToken).ConfigureAwait(false);
+        var final = await ObserveAfterUpdateAsync(desired, cancellationToken).ConfigureAwait(false);
         if (!final.IsConverged) throw new InvalidOperationException("App Review notes did not match after update; inspect Apple state before retrying.");
         return final;
+    }
+
+    private async Task<AppStoreConnectReviewNotesPlan> ObserveAfterUpdateAsync(
+        AppStoreConnectReviewNotesSpec desired, CancellationToken cancellationToken)
+    {
+        try { return await PlanAsync(desired, cancellationToken).ConfigureAwait(false); }
+        catch (Exception) when (!cancellationToken.IsCancellationRequested)
+        {
+            throw new InvalidOperationException(
+                "App Review notes update outcome is unconfirmed; inspect Apple state before generating a new plan.");
+        }
     }
 
     private static string Hash(string value)
