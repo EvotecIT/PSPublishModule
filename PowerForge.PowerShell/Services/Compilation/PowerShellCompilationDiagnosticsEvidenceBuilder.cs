@@ -328,6 +328,9 @@ internal static class PowerShellCompilationDiagnosticsEvidenceBuilder
         PowerShellCompilationFailureMap map, string file, int line, string? generatedMemberName = null, string? declaringTypeName = null)
     {
         var normalized = file.Replace('\\', '/');
+        if (PowerShellCompilationDocumentIdentity.TryGetMappedDocumentId(normalized, out var documentId))
+            return MostSpecific(map.Entries.Where(item => item.DocumentId.Equals(documentId, StringComparison.Ordinal)),
+                line, generatedMemberName, declaringTypeName);
         var documents = map.Entries.Where(item => item.DocumentId.Equals(normalized, StringComparison.Ordinal)).ToArray();
         if (documents.Length > 0) return MostSpecific(documents, line, generatedMemberName, declaringTypeName);
         var exactPaths = map.Entries.Where(item => item.RelativePath.Equals(normalized, StringComparison.Ordinal)).ToArray();

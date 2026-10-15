@@ -58,6 +58,16 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             $"at {root.GeneratedDeclaringTypeName}.{root.GeneratedName}() in {root.DocumentId}:line {rootLine}").Locations).UnitId);
         Assert.Equal(functionOwner.UnitId, Assert.Single(PowerShellCompilationFailureMapper.MapRuntimeFailure(manifest,
             $"at {function.GeneratedDeclaringTypeName}.{function.GeneratedName}() in {function.DocumentId}:line {functionLine}").Locations).UnitId);
+        Assert.Equal(rootOwner.UnitId, Assert.Single(PowerShellCompilationFailureMapper.MapRuntimeFailure(manifest,
+            $"at {root.GeneratedDeclaringTypeName}.{root.GeneratedName}() in /_/src/{root.DocumentId}:line {rootLine}").Locations).UnitId);
+        Assert.Equal(functionOwner.UnitId, Assert.Single(PowerShellCompilationFailureMapper.MapRuntimeFailure(manifest,
+            $"at {nested.GeneratedDeclaringTypeName}.{nested.GeneratedMemberName}() in /_/src/{nested.DocumentId}:line {functionLine}").Locations).UnitId);
+        Assert.Empty(PowerShellCompilationFailureMapper.MapRuntimeFailure(manifest,
+            $"at Other.DeclaringType.{root.GeneratedName}() in /_/src/{root.DocumentId}:line {rootLine}").Locations);
+        foreach (var unknownDocument in new[] { "/other/" + root.DocumentId, "/_/src/nested/" + root.DocumentId,
+                     "/_/src/" + root.DocumentId.ToUpperInvariant(), "/_/src/" + new string('0', 64) })
+            Assert.Empty(PowerShellCompilationFailureMapper.MapRuntimeFailure(manifest,
+                $"at {root.GeneratedDeclaringTypeName}.{root.GeneratedName}() in {unknownDocument}:line {rootLine}").Locations);
         Assert.Empty(PowerShellCompilationFailureMapper.MapRuntimeFailure(manifest,
             $"at Other.DeclaringType.{root.GeneratedName}() in {root.DocumentId}:line {rootLine}").Locations);
         var bare = PowerShellCompilationFailureMapper.MapRuntimeFailure(manifest,

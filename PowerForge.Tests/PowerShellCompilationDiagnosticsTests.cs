@@ -455,13 +455,27 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         var rootOwner = Assert.Single(ledger.Entries, unit => unit.Kind == PowerShellCompilationUnitKind.Script);
         var functionOwner = Assert.Single(ledger.Entries, unit => unit.Kind == PowerShellCompilationUnitKind.Function);
         Assert.NotEqual(rootOwner.UnitId, functionOwner.UnitId);
+        Assert.NotEqual(entry.EntryPoint.Method.GeneratedDeclaringTypeName, function.GeneratedDeclaringTypeName);
         foreach (var pair in new[] { (Method: entry.EntryPoint.Method, Owner: rootOwner), (Method: function, Owner: functionOwner) })
         {
-            var segments = map.Entries.Where(segment => segment.UnitId == pair.Owner.UnitId).ToArray();
-            Assert.Equal(pair.Method.SourceMap.Length, segments.Length);
+            var nestedMaps = pair.Method.NestedBodies.SelectMany(static body => body.SourceMap).ToHashSet();
+            var segments = map.Entries.Where(segment => segment.UnitId == pair.Owner.UnitId &&
+                segment.GeneratedDeclaringTypeName == pair.Method.GeneratedDeclaringTypeName &&
+                segment.GeneratedMemberName == pair.Method.GeneratedName).ToArray();
+            Assert.Equal(pair.Method.SourceMap.Count(segment => !nestedMaps.Contains(segment)), segments.Length);
             Assert.NotEmpty(segments);
             Assert.All(segments, segment => Assert.Equal(pair.Method.GeneratedName, segment.GeneratedMemberName));
         }
+        var privateBody = Assert.Single(entry.EntryPoint.Method.NestedBodies);
+        Assert.Equal(entry.EntryPoint.Method.GeneratedDeclaringTypeName, privateBody.GeneratedDeclaringTypeName);
+        Assert.Same(functionOwner, ledger.GetEmittedBodyOwner(privateBody));
+        var privateSegments = map.Entries.Where(segment => segment.GeneratedDeclaringTypeName == privateBody.GeneratedDeclaringTypeName &&
+            segment.GeneratedMemberName == privateBody.GeneratedMemberName).ToArray();
+        Assert.Equal(privateBody.SourceMap.Length, privateSegments.Length);
+        Assert.NotEmpty(privateSegments);
+        Assert.All(privateSegments, segment => Assert.Equal(functionOwner.UnitId, segment.UnitId));
+        Assert.Equal(entry.EntryPoint.Method.SourceMap.Length,
+            privateSegments.Length + map.Entries.Count(segment => segment.UnitId == rootOwner.UnitId));
     }
 
     [Fact]

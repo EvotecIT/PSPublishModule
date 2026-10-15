@@ -45,10 +45,8 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
             {
                 var document = reader.GetDocument(handle);
                 var name = reader.GetString(document.Name);
-                if (!name.StartsWith("/_/src/", StringComparison.Ordinal) || name.Length != "/_/src/".Length + 64 ||
-                    !name.Skip("/_/src/".Length).All(static character => character is >= '0' and <= '9' or >= 'a' and <= 'f'))
+                if (!PowerShellCompilationDocumentIdentity.TryGetMappedDocumentId(name, out var documentId))
                     continue;
-                var documentId = name.Substring("/_/src/".Length);
                 if (!sourceById.TryGetValue(documentId, out var sourcePath))
                     throw new InvalidDataException($"Portable PDB refers to unknown PowerShell document '{documentId}'.");
                 if (document.HashAlgorithm.IsNil || reader.GetGuid(document.HashAlgorithm) != Sha256DocumentHashAlgorithm || document.Hash.IsNil)
