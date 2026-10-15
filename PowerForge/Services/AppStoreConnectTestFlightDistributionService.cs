@@ -49,11 +49,21 @@ public sealed class AppStoreConnectTestFlightDistributionService
         ValidateGroupPolicy(request, groups);
 
         var messages = new List<string>();
+        var verifiedGroups = new List<AppStoreConnectBetaGroupInfo>();
         foreach (var group in groups)
         {
             if (group.IsInternalGroup == true && group.HasAccessToAllBuilds == true)
             {
                 messages.Add($"Internal beta group '{group.Name ?? group.Id}' has access to all builds; skipped explicit build assignment.");
+                verifiedGroups.Add(group);
+                continue;
+            }
+
+            if ((await _client.GetBuildsForBetaGroupAsync(group.Id, cancellationToken: cancellationToken).ConfigureAwait(false))
+                .Any(value => value.Id == build.Id))
+            {
+                verifiedGroups.Add(group);
+                messages.Add($"Build '{request.BuildNumber}' is already assigned to beta group '{group.Name ?? group.Id}'.");
                 continue;
             }
 
@@ -71,11 +81,12 @@ public sealed class AppStoreConnectTestFlightDistributionService
             messages.Add($"Added beta tester '{resolution.Tester.Email ?? resolution.Tester.Id}' to {resolution.TargetGroups.Length} beta group(s).");
         }
 
-        var verifiedGroups = new List<AppStoreConnectBetaGroupInfo>();
         if (request.TestFlightPolicy is AppleTestFlightPolicy.Internal or AppleTestFlightPolicy.External)
         {
             foreach (var group in groups)
             {
+                if (verifiedGroups.Any(value => value.Id == group.Id))
+                    continue;
                 if ((group.IsInternalGroup == true && group.HasAccessToAllBuilds == true) ||
                     (await _client.GetBuildsForBetaGroupAsync(group.Id, cancellationToken: cancellationToken).ConfigureAwait(false)).Any(value => value.Id == build.Id))
                     verifiedGroups.Add(group);

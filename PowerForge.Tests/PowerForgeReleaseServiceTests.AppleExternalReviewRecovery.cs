@@ -5,7 +5,7 @@ public sealed partial class PowerForgeReleaseServiceTests
     [Theory]
     [InlineData("IN_BETA_REVIEW")]
     [InlineData("WAITING_FOR_BETA_REVIEW")]
-    public void Execute_ExternalTestFlightDeliversApprovedPlatformWhileSiblingIsInReview(string reviewState)
+    public void Execute_ExternalTestFlightVerifiesBothPlatformAssignmentsWhileSiblingIsInReview(string reviewState)
     {
         var root = CreateSandbox();
         try
@@ -48,10 +48,9 @@ public sealed partial class PowerForgeReleaseServiceTests
                 });
 
             Assert.True(result.Success, result.ErrorMessage);
-            Assert.Equal(new[] { ApplePlatform.macOS }, distributed);
+            Assert.Equal(new[] { ApplePlatform.iOS, ApplePlatform.macOS }, distributed);
             var pending = Assert.Single(result.AppleReceipt!.Targets, target => target.Platform == ApplePlatform.iOS);
             Assert.Equal(reviewState, pending.TestFlightExternalState);
-            Assert.Contains("testFlightBetaReviewPending", pending.SkippedSteps);
             Assert.All(result.AppleReceipt.Targets, target =>
             {
                 Assert.False(target.ArchiveCreated);

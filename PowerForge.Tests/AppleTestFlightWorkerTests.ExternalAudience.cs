@@ -3,6 +3,56 @@ namespace PowerForge.Tests;
 public sealed partial class AppleTestFlightWorkerTests
 {
     [Theory]
+    [InlineData("WAITING_FOR_REVIEW")]
+    [InlineData("IN_REVIEW")]
+    public void ExternalDelivery_UsesPendingSubmissionBeforeExternalStateConverges(string reviewState)
+    {
+        var policy = new AppleTestFlightWorkerPolicy { BetaGroupIsInternal = false, Targets = [new() { Name = "iOS" }] };
+        var receipt = new PowerForgeAppleReleaseReceipt
+        {
+            Success = true, ShipPhase = PowerForgeAppleShipPhase.Release,
+            Targets = [new() { Name = "iOS", BuildProcessingState = "VALID", TestFlightExternalState = "READY_FOR_BETA_SUBMISSION", TestFlightReviewState = reviewState }]
+        };
+        Assert.True(AppleTestFlightWorker.IsExternalReviewPending(receipt, policy));
+        Assert.Equal(AppleTestFlightJobStage.AppleProcessingPending, AppleTestFlightWorker.DeliveryOutcome(receipt, policy).Stage);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void ExternalDelivery_DoesNotHideSiblingDeliveryFailureBehindReview(bool perTargetError)
+    {
+        var policy = new AppleTestFlightWorkerPolicy
+        {
+            BetaGroupIsInternal = false, Targets = [new() { Name = "iOS" }, new() { Name = "Mac" }]
+        };
+        var receipt = new PowerForgeAppleReleaseReceipt
+        {
+            Success = false, ShipPhase = PowerForgeAppleShipPhase.Release, ErrorMessage = "Group assignment readback failed",
+            Targets =
+            [
+                new() { Name = "iOS", BuildProcessingState = "VALID", TestFlightExternalState = "IN_BETA_REVIEW" },
+                new() { Name = "Mac", BuildProcessingState = "VALID", ErrorMessage = perTargetError ? "Group assignment readback failed" : null }
+            ]
+        };
+        var outcome = AppleTestFlightWorker.DeliveryOutcome(receipt, policy);
+        Assert.Equal(AppleTestFlightJobStage.NeedsOperator, outcome.Stage);
+        Assert.Contains("Group assignment readback failed", outcome.Diagnostic);
+    }
+
+    [Fact]
+    public void ExternalDelivery_StillWaitsForProcessingTimeout()
+    {
+        var policy = new AppleTestFlightWorkerPolicy { BetaGroupIsInternal = false, Targets = [new() { Name = "iOS" }] };
+        var receipt = new PowerForgeAppleReleaseReceipt
+        {
+            Success = false, ShipPhase = PowerForgeAppleShipPhase.Release, ErrorMessage = "Timed out waiting for processing",
+            Targets = [new() { Name = "iOS", BuildProcessingState = "PROCESSING", ErrorMessage = "Timed out waiting for processing" }]
+        };
+        Assert.Equal(AppleTestFlightJobStage.AppleProcessingPending, AppleTestFlightWorker.DeliveryOutcome(receipt, policy).Stage);
+    }
+
+    [Theory]
     [InlineData("READY_FOR_BETA_SUBMISSION", (int)AppleTestFlightJobStage.NeedsOperator, false)]
     [InlineData("BETA_REJECTED", (int)AppleTestFlightJobStage.NeedsOperator, false)]
     [InlineData("MISSING_EXPORT_COMPLIANCE", (int)AppleTestFlightJobStage.NeedsOperator, false)]
