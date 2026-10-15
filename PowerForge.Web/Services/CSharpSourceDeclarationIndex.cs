@@ -104,9 +104,9 @@ internal sealed class CSharpSourceDeclarationIndex
         var portable = path.Replace('\\', '/');
         var prefix = portable.StartsWith("/_/", StringComparison.Ordinal) ? 3
             : portable.Length > 5 && char.IsAsciiLetter(portable[0]) && portable.AsSpan(1, 4).SequenceEqual(":/_/") ? 5 : 0;
-        if (prefix == 0) return Path.IsPathRooted(path) ? path : root is null ? null : Path.Combine(root, path);
+        if (prefix == 0 && Path.IsPathRooted(path)) return path;
         if (root is null) return null;
-        var candidate = Path.GetFullPath(Path.Combine(root, portable[prefix..]));
+        var candidate = Path.GetFullPath(Path.Combine(root, prefix == 0 ? path : portable[prefix..]));
         var relative = Path.GetRelativePath(root, candidate);
         return relative == ".." || relative.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal) || Path.IsPathRooted(relative) ? null : candidate;
     }

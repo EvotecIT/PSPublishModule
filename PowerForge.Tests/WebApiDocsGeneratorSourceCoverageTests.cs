@@ -10,6 +10,24 @@ using Xunit;
 public class WebApiDocsGeneratorSourceCoverageTests
 {
     [Fact]
+    public void AssemblySourceScopeRequiresDllInputsRatherThanDroppingUnknownMembers()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-source-scope-input-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var xml = Path.Combine(root, "fixture.xml");
+            File.WriteAllText(xml, """<doc><members><member name="T:Example.PublicType"><summary>Public API.</summary></member></members></doc>""");
+            var error = Assert.Throws<ArgumentException>(() => WebApiDocsGenerator.Generate(new WebApiDocsOptions
+            {
+                XmlPath = xml, OutputPath = Path.Combine(root, "api"), Format = "json", SourceMemberCoverageScope = "assembly"
+            }));
+            Assert.Contains("requires AssemblyPath or AssemblyPaths", error.Message, StringComparison.Ordinal);
+        }
+        finally { Directory.Delete(root, recursive: true); }
+    }
+
+    [Fact]
     public void SourceScopeRetainsMembersFromSuppliedBaseAssemblyWhenItsTypesAreFilteredOut()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-source-multi-scope-" + Guid.NewGuid().ToString("N"));

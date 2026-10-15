@@ -425,6 +425,8 @@ public static partial class WebApiDocsGenerator
         var assemblyPaths = options.Type == ApiDocsType.CSharp
             ? ResolveCSharpAssemblyPaths(options)
             : Array.Empty<string>();
+        if (options.SourceMemberCoverageScope.Trim().Equals("assembly", StringComparison.OrdinalIgnoreCase) && assemblyPaths.Length == 0)
+            throw new ArgumentException("SourceMemberCoverageScope 'assembly' requires AssemblyPath or AssemblyPaths to establish member ownership.", nameof(options));
         Assembly? assembly = null;
         ApiDocsAssemblyLoadContext? assemblyContext = null;
         var assemblies = new List<Assembly>();

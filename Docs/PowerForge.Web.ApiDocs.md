@@ -16,7 +16,8 @@ The `apidocs` pipeline option `sourceMemberCoverageScope: "assembly"` measures
 member source links against members declared by the documented assemblies.
 Inherited members from other assemblies remain visible in the API reference,
 but do not count against source links into the project's repository. The default
-`"all"` retains the full denominator. The report records the chosen `scope` and
+`"all"` retains the full denominator. Assembly scope requires matching DLL inputs;
+XML-only references use `"all"`. The report records the chosen `scope` and
 `excludedExternalMembers` under `source.members`; summary and example coverage
 continue to include the full API. Use `--source-member-coverage-scope assembly`
 with the CLI, or `SourceMemberCoverageScope = "assembly"` with the library.

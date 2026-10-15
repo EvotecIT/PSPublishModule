@@ -10,6 +10,25 @@ using PowerForge.Web;
 public sealed class CSharpSourceDeclarationIndexTests
 {
     [Fact]
+    public void NormalizesRelativePdbDocumentsWithinTheSourceRoot()
+    {
+        using var fixture = new Fixture("nested/../");
+        var type = fixture.Assembly.GetType("Example.Nested.Owner`1+State")!;
+        Assert.Equal(new CSharpSourceDeclarationIndex.Location(fixture.Primary, 5), fixture.Index().FindType(type));
+    }
+
+    [Fact]
+    public void RejectsRelativePdbDocumentsEscapingTheSourceRoot()
+    {
+        using var fixture = new Fixture("../");
+        var root = Path.Combine(Path.GetDirectoryName(fixture.Primary)!, "subroot");
+        Directory.CreateDirectory(root);
+        var type = fixture.Assembly.GetType("Example.Nested.Owner`1+State")!;
+        Assert.Null(fixture.Index(root).FindType(type));
+        Assert.Null(fixture.Index(root).FindField(type.GetField("Ready")!));
+    }
+
+    [Fact]
     public void FindsNestedGenericEnumAndEachFieldByDeclarationIdentity()
     {
         using var fixture = new Fixture();
@@ -52,7 +71,7 @@ public sealed class CSharpSourceDeclarationIndexTests
         internal string Primary { get; }
         internal System.Reflection.Assembly Assembly { get; }
 
-        internal Fixture()
+        internal Fixture(string? documentPrefix = null)
         {
             Directory.CreateDirectory(_root);
             Primary = Path.Combine(_root, "Owner.cs");
@@ -80,7 +99,8 @@ public sealed class CSharpSourceDeclarationIndexTests
             var trees = new[] { other, Primary }.Select(path =>
             {
                 using var source = File.OpenRead(path);
-                return CSharpSyntaxTree.ParseText(SourceText.From(source, Encoding.UTF8), options, path);
+                return CSharpSyntaxTree.ParseText(SourceText.From(source, Encoding.UTF8), options,
+                    documentPrefix is null ? path : documentPrefix + Path.GetFileName(path));
             });
             var compilation = CSharpCompilation.Create("DeclarationFixture", trees,
                 new[] { MetadataReference.CreateFromFile(typeof(object).Assembly.Location) },
@@ -93,11 +113,11 @@ public sealed class CSharpSourceDeclarationIndexTests
             Assembly = _context.LoadFromStream(pe, _pdb);
         }
 
-        internal CSharpSourceDeclarationIndex Index()
+        internal CSharpSourceDeclarationIndex Index(string? sourceRoot = null)
         {
             _pdb.Position = 0;
             using var provider = MetadataReaderProvider.FromPortablePdbStream(_pdb, MetadataStreamOptions.LeaveOpen);
-            return CSharpSourceDeclarationIndex.Create(provider.GetMetadataReader(), _root);
+            return CSharpSourceDeclarationIndex.Create(provider.GetMetadataReader(), sourceRoot ?? _root);
         }
 
         public void Dispose()
