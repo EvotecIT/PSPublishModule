@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -1770,6 +1770,7 @@ public sealed partial class AppStoreConnectClientTests
                   ]
                 }
                 """),
+            new SequenceResponse(HttpStatusCode.OK, """{ "data": [] }"""),
             new SequenceResponse(HttpStatusCode.NoContent, string.Empty),
             new SequenceResponse(HttpStatusCode.OK, """{ "data": [] }"""),
             new SequenceResponse(HttpStatusCode.Created,
@@ -1810,10 +1811,10 @@ public sealed partial class AppStoreConnectClientTests
         Assert.Equal("tester@example.test", Assert.Single(result.Testers).Email);
         Assert.Contains("filter%5Bapp%5D=app-1", handler.RequestUris[1].Query, StringComparison.Ordinal);
         Assert.Contains("filter%5Bname%5D=Internal", handler.RequestUris[1].Query, StringComparison.Ordinal);
-        Assert.Equal("https://api.appstoreconnect.apple.com/v1/betaGroups/group-1/relationships/builds", handler.RequestUris[2].ToString());
-        Assert.Equal("https://api.appstoreconnect.apple.com/v1/betaTesters?limit=10&filter%5Bemail%5D=tester%40example.test", handler.RequestUris[3].ToString());
-        Assert.Equal("https://api.appstoreconnect.apple.com/v1/betaTesters", handler.RequestUris[4].ToString());
-        Assert.Equal("https://api.appstoreconnect.apple.com/v1/betaGroups/group-1/relationships/betaTesters", handler.RequestUris[5].ToString());
+        Assert.Equal("https://api.appstoreconnect.apple.com/v1/betaGroups/group-1/relationships/builds", handler.RequestUris[3].ToString());
+        Assert.Equal("https://api.appstoreconnect.apple.com/v1/betaTesters?limit=10&filter%5Bemail%5D=tester%40example.test", handler.RequestUris[4].ToString());
+        Assert.Equal("https://api.appstoreconnect.apple.com/v1/betaTesters", handler.RequestUris[5].ToString());
+        Assert.Equal("https://api.appstoreconnect.apple.com/v1/betaGroups/group-1/relationships/betaTesters", handler.RequestUris[6].ToString());
     }
 
     [Fact]
@@ -1872,7 +1873,9 @@ public sealed partial class AppStoreConnectClientTests
                   ]
                 }
                 """),
+            new SequenceResponse(HttpStatusCode.OK, """{ "data": [] }"""),
             new SequenceResponse(HttpStatusCode.NoContent, string.Empty),
+            new SequenceResponse(HttpStatusCode.OK, """{ "data": [] }"""),
             new SequenceResponse(HttpStatusCode.NoContent, string.Empty));
         using var http = new HttpClient(handler) { BaseAddress = new Uri("https://api.appstoreconnect.apple.com/v1/") };
         using var client = new AppStoreConnectClient(CreateCredential(), http);
@@ -1891,9 +1894,9 @@ public sealed partial class AppStoreConnectClientTests
         Assert.Contains(result.Messages, message => message.Contains("skipped explicit build assignment", StringComparison.Ordinal));
         Assert.Contains(result.Messages, message => message.Contains("Manual Internal", StringComparison.Ordinal));
         Assert.Contains(result.Messages, message => message.Contains("Discord Testers", StringComparison.Ordinal));
-        Assert.Equal(6, handler.RequestUris.Count);
-        Assert.Equal("https://api.appstoreconnect.apple.com/v1/betaGroups/group-manual-internal/relationships/builds", handler.RequestUris[4].ToString());
-        Assert.Equal("https://api.appstoreconnect.apple.com/v1/betaGroups/group-external/relationships/builds", handler.RequestUris[5].ToString());
+        Assert.Equal(8, handler.RequestUris.Count);
+        Assert.Equal("https://api.appstoreconnect.apple.com/v1/betaGroups/group-manual-internal/relationships/builds", handler.RequestUris[5].ToString());
+        Assert.Equal("https://api.appstoreconnect.apple.com/v1/betaGroups/group-external/relationships/builds", handler.RequestUris[7].ToString());
         Assert.DoesNotContain(handler.RequestUris, uri => uri.ToString().Contains("group-internal/relationships/builds", StringComparison.Ordinal));
     }
 
@@ -1981,6 +1984,7 @@ public sealed partial class AppStoreConnectClientTests
                   ]
                 }
                 """),
+            new SequenceResponse(HttpStatusCode.OK, """{ "data": [] }"""),
             new SequenceResponse(HttpStatusCode.NoContent, string.Empty),
             new SequenceResponse(HttpStatusCode.OK,
                 """
@@ -2013,9 +2017,9 @@ public sealed partial class AppStoreConnectClientTests
         });
 
         Assert.Equal("internal@example.test", Assert.Single(result.Testers).Email);
-        Assert.Equal(5, handler.RequestUris.Count);
-        Assert.Equal("https://api.appstoreconnect.apple.com/v1/betaGroups/group-manual-internal/relationships/builds", handler.RequestUris[2].ToString());
-        Assert.Equal("https://api.appstoreconnect.apple.com/v1/betaGroups/group-manual-internal/relationships/betaTesters", handler.RequestUris[4].ToString());
+        Assert.Equal(6, handler.RequestUris.Count);
+        Assert.Equal("https://api.appstoreconnect.apple.com/v1/betaGroups/group-manual-internal/relationships/builds", handler.RequestUris[3].ToString());
+        Assert.Equal("https://api.appstoreconnect.apple.com/v1/betaGroups/group-manual-internal/relationships/betaTesters", handler.RequestUris[5].ToString());
     }
 
     [Fact]
@@ -2062,7 +2066,9 @@ public sealed partial class AppStoreConnectClientTests
                   ]
                 }
                 """),
+            new SequenceResponse(HttpStatusCode.OK, """{ "data": [] }"""),
             new SequenceResponse(HttpStatusCode.NoContent, string.Empty),
+            new SequenceResponse(HttpStatusCode.OK, """{ "data": [] }"""),
             new SequenceResponse(HttpStatusCode.NoContent, string.Empty),
             new SequenceResponse(HttpStatusCode.OK, """{ "data": [] }"""));
         using var http = new HttpClient(handler) { BaseAddress = new Uri("https://api.appstoreconnect.apple.com/v1/") };
@@ -2084,7 +2090,7 @@ public sealed partial class AppStoreConnectClientTests
             }));
 
         Assert.Contains("must already exist in App Store Connect", ex.Message, StringComparison.Ordinal);
-        Assert.Equal(6, handler.RequestUris.Count);
+        Assert.Equal(8, handler.RequestUris.Count);
         Assert.DoesNotContain(handler.RequestUris, uri =>
             string.Equals(uri.AbsolutePath, "/v1/betaTesters", StringComparison.Ordinal) &&
             !string.IsNullOrEmpty(handler.RequestBodies[handler.RequestUris.IndexOf(uri)]));
@@ -2197,8 +2203,16 @@ public sealed partial class AppStoreConnectClientTests
         Assert.All(handler.Methods, method => Assert.Equal(HttpMethod.Get, method));
     }
 
-    [Fact]
-    public async Task ReleaseStateService_SummarizesAppStoreTestFlightAndBetaGroups()
+    [Theory]
+    [InlineData("WAITING_FOR_BETA_REVIEW", "WAITING_FOR_REVIEW")]
+    [InlineData("READY_FOR_BETA_SUBMISSION", "WAITING_FOR_REVIEW")]
+    [InlineData("READY_FOR_BETA_SUBMISSION", "IN_REVIEW")]
+    [InlineData("waiting_for_beta_review", "")]
+    [InlineData("in_beta_review", "APPROVED")]
+    [InlineData("READY_FOR_BETA_SUBMISSION", "waiting_for_review")]
+    [InlineData("READY_FOR_BETA_SUBMISSION", "in_review")]
+    [InlineData(" READY_FOR_BETA_SUBMISSION ", " in_review ")]
+    public async Task ReleaseStateService_SummarizesAppStoreTestFlightAndBetaGroups(string externalState, string reviewState)
     {
         var handler = new SequenceHandler(
             new SequenceResponse(HttpStatusCode.OK,
@@ -2285,7 +2299,7 @@ public sealed partial class AppStoreConnectClientTests
                     "attributes": { "internalBuildState": "IN_BETA_TESTING", "externalBuildState": "WAITING_FOR_BETA_REVIEW", "autoNotifyEnabled": true }
                   }
                 }
-                """),
+                """.Replace("WAITING_FOR_BETA_REVIEW", externalState, StringComparison.Ordinal)),
             new SequenceResponse(HttpStatusCode.OK,
                 """
                 {
@@ -2296,7 +2310,7 @@ public sealed partial class AppStoreConnectClientTests
                     "relationships": { "build": { "data": { "type": "builds", "id": "build-6" } } }
                   }
                 }
-                """),
+                """.Replace("WAITING_FOR_REVIEW", reviewState, StringComparison.Ordinal)),
             new SequenceResponse(HttpStatusCode.OK,
                 """
                 {
@@ -2340,8 +2354,10 @@ public sealed partial class AppStoreConnectClientTests
         Assert.Equal("build-6", platform.SelectedBuild?.Id);
         Assert.True(platform.MatchedBuildSelected);
         Assert.Equal("WAITING_FOR_REVIEW", Assert.Single(platform.ReviewSubmissions).State);
-        Assert.Equal("WAITING_FOR_BETA_REVIEW", platform.BetaDetail?.ExternalBuildState);
-        Assert.Equal("WAITING_FOR_REVIEW", platform.BetaReviewSubmission?.BetaReviewState);
+        Assert.Equal(externalState, platform.BetaDetail?.ExternalBuildState);
+        Assert.Equal(reviewState, platform.BetaReviewSubmission?.BetaReviewState);
+        Assert.Contains("Wait for Beta App Review.", platform.NextActions);
+        Assert.DoesNotContain("Submit the TestFlight build to Beta App Review.", platform.NextActions);
         Assert.Contains("iOS: Wait for App Review.", result.NextActions);
         Assert.Contains("iOS: Wait for Beta App Review.", result.NextActions);
 

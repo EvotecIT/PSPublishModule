@@ -1,7 +1,7 @@
 # TestFlight builds after merges
 
 PowerForge provides a request-only GitHub button and a trusted local Mac worker
-for internal TestFlight builds. Automatic builds start **Off**. Choose **Selected
+for TestFlight builds. Enroll an internal or external group on the Mac. Automatic builds start **Off**. Choose **Selected
 PRs** to build merged PRs labelled `testflight`, or **Every merged PR** to request
 a build after each eligible merge. `testflight-skip` excludes an automatic trigger;
 the label cannot remove code already merged into main. **Build now** works while
@@ -11,8 +11,9 @@ The source is latest qualified main containing the requested merged PR. This
 does not promise a binary for each historical merge SHA or an unmerged PR preview.
 Every request has durable local history. Commit statuses show the actual source,
 stage, version/build, included PRs, and observed automatic mode. The Actions job
-says **request recorded**; the Mac later reports **ReadyInHome** only when every
-selected platform has a valid build available to the enrolled internal group.
+says **request recorded**; the Mac later reports **ReadyInHome** for an internal
+group or **ReadyInTestFlight** for an external group only when every selected
+platform has a valid build available to that group.
 
 ## Add the button
 
@@ -110,7 +111,8 @@ check names and group id are not taken from GitHub request inputs. For example:
   ],
   "PublisherPaths": ["project.yml", "Application.xcodeproj/project.pbxproj"],
   "BetaGroupId": "00000000-0000-0000-0000-000000000000",
-  "BetaGroupName": "Home"
+  "BetaGroupName": "Home",
+  "BetaGroupIsInternal": true
 }
 ```
 
@@ -122,10 +124,21 @@ jobs do not qualify another merged commit. Qualification reuse across behavior
 changes is outside this lane.
 
 In the release configuration, name the enrolled group explicitly in
-`AppleApps.TestFlightBetaGroupIds`. Use `TestFlightPolicy: Internal` for each
-selected target, durable receipts, resume and processing waits. Do not configure
-tester creation in this lane. `Ship` receives only `--apple-testflight-target` and
+`AppleApps.TestFlightBetaGroupIds`. Match each selected target’s
+`TestFlightPolicy` to the enrolled audience: `Internal` when
+`BetaGroupIsInternal` is true (the default), or `External` when it is false. Use
+durable receipts, resume and processing waits. Do not configure tester creation
+in this lane. `Ship` receives only `--apple-testflight-target` and
 excludes store selection, screenshots, public metadata and review submission.
+
+For external testers, enroll the existing external group by its exact id and
+name. Internal groups that already receive all builds retain that access.
+External readiness requires Apple’s external testing state and read-back of the
+exact build in the enrolled group; an uploaded build alone is insufficient.
+Beta App Review remains a separately approved `SubmitTestFlightReview` action.
+If Apple requires review, inspect and reconcile the retained delivery before
+retiring a held job or requesting another build. The worker does not invite
+testers, change group membership, enable public links, or submit beta review.
 
 Run a bounded pass through the existing pinned operator:
 

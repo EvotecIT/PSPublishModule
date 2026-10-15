@@ -279,15 +279,19 @@ public sealed class AppStoreConnectReleaseStateService
             return;
         }
 
-        var externalState = NormalizeOptional(betaDetail?.ExternalBuildState);
+        var externalState = NormalizeOptional(betaDetail?.ExternalBuildState)?.ToUpperInvariant();
+        var reviewState = NormalizeOptional(betaSubmission?.BetaReviewState)?.ToUpperInvariant();
+        if (reviewState is "WAITING_FOR_REVIEW" or "IN_REVIEW" ||
+            externalState is "WAITING_FOR_BETA_REVIEW" or "IN_BETA_REVIEW")
+        {
+            nextActions.Add("Wait for Beta App Review.");
+            return;
+        }
         if (externalState is null)
             return;
 
         if (string.Equals(externalState, "READY_FOR_BETA_SUBMISSION", StringComparison.OrdinalIgnoreCase))
             nextActions.Add("Submit the TestFlight build to Beta App Review.");
-        else if (string.Equals(externalState, "WAITING_FOR_BETA_REVIEW", StringComparison.OrdinalIgnoreCase) ||
-                 string.Equals(betaSubmission?.BetaReviewState, "WAITING_FOR_REVIEW", StringComparison.OrdinalIgnoreCase))
-            nextActions.Add("Wait for Beta App Review.");
         else if (string.Equals(externalState, "BETA_APPROVED", StringComparison.OrdinalIgnoreCase))
             nextActions.Add("External TestFlight is approved; verify public link availability.");
     }

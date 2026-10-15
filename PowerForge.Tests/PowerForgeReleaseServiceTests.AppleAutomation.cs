@@ -1253,6 +1253,7 @@ public sealed partial class PowerForgeReleaseServiceTests
             var receipt = Assert.IsType<PowerForgeAppleReleaseReceipt>(result.AppleReceipt);
             var target = Assert.Single(receipt.Targets);
             Assert.Equal("PROCESSING", target.BuildProcessingState);
+            Assert.True(target.WaitingForAppleBuildProcessing);
             Assert.Contains("Timed out", Assert.IsType<string>(target.ErrorMessage), StringComparison.OrdinalIgnoreCase);
             Assert.True(File.Exists(Path.Combine(root, receipt.ReceiptPath!)));
         }

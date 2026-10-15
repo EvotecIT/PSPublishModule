@@ -45,8 +45,8 @@ public sealed partial class PowerForgeReleaseServiceTests
 
     [Theory]
     [InlineData(AppleTestFlightPolicy.Automatic)]
-    [InlineData(AppleTestFlightPolicy.External)]
-    public void Execute_AppleShipPlan_RejectsNonInternalTestFlightPolicy(AppleTestFlightPolicy policy)
+    [InlineData(AppleTestFlightPolicy.Disabled)]
+    public void Execute_AppleShipPlan_RejectsImplicitOrDisabledTestFlightPolicy(AppleTestFlightPolicy policy)
     {
         var root = CreateSandbox();
         try
@@ -82,10 +82,11 @@ public sealed partial class PowerForgeReleaseServiceTests
     }
 
     [Theory]
-    [InlineData(true, false)]
-    [InlineData(false, true)]
-    [InlineData(true, true)]
-    public void Execute_AppleShipReleasePlan_SupportsInternalTestFlightRouteMatrix(bool includeIos, bool includeMac)
+    [InlineData(true, false, AppleTestFlightPolicy.Internal)]
+    [InlineData(false, true, AppleTestFlightPolicy.Internal)]
+    [InlineData(true, true, AppleTestFlightPolicy.Internal)]
+    [InlineData(true, true, AppleTestFlightPolicy.External)]
+    public void Execute_AppleShipReleasePlan_SupportsExplicitTestFlightRouteMatrix(bool includeIos, bool includeMac, AppleTestFlightPolicy audience)
     {
         var root = CreateSandbox();
         try
@@ -112,6 +113,7 @@ public sealed partial class PowerForgeReleaseServiceTests
             ];
             EnableInternalAppleShipTargets(spec);
             var targets = new List<string>();
+            foreach (var app in spec.AppleApps.Apps) app.TestFlightPolicy = audience;
             if (includeIos) targets.Add("CasaRay iOS");
             if (includeMac) targets.Add("CasaRay Mac");
 
@@ -132,6 +134,7 @@ public sealed partial class PowerForgeReleaseServiceTests
             Assert.Equal(PowerForgeAppleShipPhase.Release, result.AppleReceipt!.ShipPhase);
             Assert.False(result.AppleAppPlan!.PrepareDistribution);
             Assert.False(result.AppleAppPlan.SubmitForReview);
+            Assert.False(result.AppleAppPlan.SubmitTestFlightBetaReview);
             Assert.False(result.AppleAppPlan.SyncScreenshots);
             Assert.Equal(includeIos, Assert.Single(result.AppleReceipt.Targets, target => target.Platform == ApplePlatform.iOS).ShipToTestFlight);
             Assert.Equal(includeMac, Assert.Single(result.AppleReceipt.Targets, target => target.Platform == ApplePlatform.macOS).ShipToTestFlight);
@@ -673,7 +676,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                         AppleShipTestFlightTargets = ["Missing target"]
                     }));
 
-            Assert.Contains("Unknown Apple Ship internal TestFlight target", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("Unknown Apple Ship TestFlight target", exception.Message, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {

@@ -805,6 +805,10 @@ internal sealed class PowerForgeAppleAppReleaseTargetPlan
 
 internal sealed class PowerForgeAppleAppReleaseResult
 {
+    public bool WaitingForAppleBuildProcessing { get; set; }
+
+    private string? _errorMessage;
+
     public PowerForgeAppleAppReleaseTargetPlan Plan { get; set; } = new();
 
     public AppleAppArchiveResult? Archive { get; set; }
@@ -849,7 +853,16 @@ internal sealed class PowerForgeAppleAppReleaseResult
 
     public bool Success { get; set; }
 
-    public string? ErrorMessage { get; set; }
+    public string? ErrorMessage
+    {
+        get => _errorMessage;
+        set
+        {
+            _errorMessage = value;
+            // A later failure cannot inherit the retry permission of a prior processing wait.
+            WaitingForAppleBuildProcessing = false;
+        }
+    }
 }
 
 internal sealed class PowerForgeReleaseGitHubOptions

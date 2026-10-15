@@ -405,7 +405,7 @@ internal sealed partial class PowerForgeReleaseService
         throw new AppleBuildProcessingException(
             $"Timed out after {plan.Automation.ProcessingTimeoutSeconds} seconds waiting for " +
             $"App Store Connect build processing for '{app.Name}'.",
-            state);
+            state, waitingForProcessing: true);
     }
 
     private static bool IsTerminalAppleBuildFailure(string? state)
@@ -629,6 +629,7 @@ internal sealed partial class PowerForgeReleaseService
                 result?.Upload);
             return new PowerForgeAppleReleaseTargetReceipt
             {
+                WaitingForAppleBuildProcessing = result?.WaitingForAppleBuildProcessing == true,
                 Name = app.Name,
                 ErrorMessage = result?.ErrorMessage,
                 BundleId = app.BundleId,
@@ -956,12 +957,15 @@ internal sealed partial class PowerForgeReleaseService
     {
         internal AppleBuildProcessingException(
             string message,
-            AppStoreConnectReleaseStateResult state)
+            AppStoreConnectReleaseStateResult state,
+            bool waitingForProcessing = false)
             : base(message)
         {
             State = state;
+            WaitingForProcessing = waitingForProcessing;
         }
 
         internal AppStoreConnectReleaseStateResult State { get; }
+        internal bool WaitingForProcessing { get; }
     }
 }

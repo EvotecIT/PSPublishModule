@@ -176,10 +176,12 @@ public sealed partial class AppleTestFlightWorkerTests
     public void PublisherCheckpoint_OnlyVersionFieldsMayChange(string before, string after, bool allowed)
         => Assert.Equal(allowed, AppleTestFlightWorker.PublisherVersionOnly(before, after));
 
-    [Fact]
-    public void ReadyRequiresBothValidPlatforms_AndActualInternalGroupDistribution()
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void ReadyRequiresBothValidPlatforms_AndActualEnrolledGroupDistribution(bool isInternal)
     {
-        var policy = new AppleTestFlightWorkerPolicy { BetaGroupId = "home-id", BetaGroupName = "Home", Targets = new[]
+        var policy = new AppleTestFlightWorkerPolicy { BetaGroupId = "home-id", BetaGroupName = "Home", BetaGroupIsInternal = isInternal, Targets = new[]
         {
             new AppleTestFlightWorkerTarget { Name = "iOS", AppId = "app", Platform = ApplePlatform.iOS },
             new AppleTestFlightWorkerTarget { Name = "Mac", AppId = "app", Platform = ApplePlatform.macOS }
@@ -188,10 +190,19 @@ public sealed partial class AppleTestFlightWorkerTests
         {
             Name = target.Name, AppId = target.AppId, Platform = target.Platform, BuildId = target.Name,
             Version = "2.2", Build = "29",
-            BuildProcessingState = "VALID", TestFlightInternalState = "IN_BETA_TESTING", TestFlightBetaGroupsConfigured = true,
-            DistributedTestFlightBetaGroups = new[] { new AppStoreConnectBetaGroupInfo { Id = "home-id", Name = "Home", IsInternalGroup = true } }
+            BuildProcessingState = "VALID", TestFlightInternalState = "IN_BETA_TESTING", TestFlightExternalState = "IN_BETA_TESTING", TestFlightBetaGroupsConfigured = true,
+            DistributedTestFlightBetaGroups = new[] { new AppStoreConnectBetaGroupInfo { Id = "home-id", Name = "Home", IsInternalGroup = isInternal } }
         }).ToArray() };
         Assert.True(AppleTestFlightWorker.IsReady(receipt, policy));
+        receipt.Targets[1].DistributedTestFlightBetaGroups[0].IsInternalGroup = !isInternal;
+        Assert.False(AppleTestFlightWorker.IsReady(receipt, policy));
+        receipt.Targets[1].DistributedTestFlightBetaGroups[0].IsInternalGroup = isInternal;
+        if (!isInternal)
+        {
+            receipt.Targets[1].TestFlightExternalState = "WAITING_FOR_BETA_REVIEW";
+            Assert.False(AppleTestFlightWorker.IsReady(receipt, policy));
+            receipt.Targets[1].TestFlightExternalState = "IN_BETA_TESTING";
+        }
         receipt.Targets[1].BuildProcessingState = "PROCESSING";
         Assert.False(AppleTestFlightWorker.IsReady(receipt, policy));
         receipt.Targets[1].BuildProcessingState = "VALID";
