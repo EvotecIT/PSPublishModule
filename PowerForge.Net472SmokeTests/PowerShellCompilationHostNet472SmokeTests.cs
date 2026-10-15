@@ -13,7 +13,8 @@ public sealed class PowerShellCompilationHostNet472SmokeTests
         Directory.CreateDirectory(root);
         try
         {
-            var source = Path.Combine(root, "Example.psm1");
+            var input = Directory.CreateDirectory(Path.Combine(root, "input")).FullName;
+            var source = Path.Combine(input, "Example.psm1");
             File.WriteAllText(source, """
 function Get-MappedTotal { param([int[]] $Values) [int] $total = 0; $Values | ForEach-Object { $total += $_ }; return $total }
 function Set-CompiledCallback { [System.Net.ServicePointManager]::ServerCertificateValidationCallback = { $true }; return 42 }
@@ -38,6 +39,7 @@ $spec.KeepBuildWorkspace = $true
 Write-Checkpoint 'Build hybrid module: SDK fingerprint, analysis, generated dotnet build'
 $result = [PowerForge.PowerShellCompilationArtifactBuilder]::new().Build($spec)
 Write-Checkpoint 'Hybrid build returned'
+if (-not $result.Succeeded -and $null -ne $result.Failure) { Write-Checkpoint ('Failure stage: ' + $result.Failure.Stage) }
 if (-not $result.Succeeded) { throw ($result.Error + [Environment]::NewLine + $result.BuildOutput) }
 if ($result.Manifest.CompiledMethods -lt 2) { throw 'The mapping and delegate workflows were not compiled.' }
 Import-Module $result.ArtifactPath -Force
@@ -89,7 +91,7 @@ if ($usingResult.Succeeded -or $usingResult.Error -notlike '*using module/assemb
             var failureEvidence = string.Empty;
             if (!result.Succeeded)
             {
-                var phasePath = Path.Combine(root, "phases.log");
+                var phasePath = Path.Combine(input, "phases.log");
                 var phases = File.Exists(phasePath) ? File.ReadAllText(phasePath) : "No child checkpoint was written.";
                 // Generated workspace milestones distinguish SDK fingerprinting from restore/build.
                 // All files are synthetic and contained in this test's child TEMP directory.
