@@ -371,7 +371,7 @@
     "expectedOutcome": "Success",
     "observerLine": 241,
     "helpInfoObservation": {
-      "relativePath": "cab-increment/PlatyWorkflowFixture_00000000-0000-0000-000000000123_HelpInfo.xml",
+      "relativePath": "cab-increment/PlatyWorkflowFixture_00000000-0000-0000-0000-000000000123_HelpInfo.xml",
       "kind": "platyps-helpinfo-culture-map",
       "uri": "https://example.invalid/help",
       "cultures": [

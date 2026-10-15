@@ -270,7 +270,7 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
     }
 
     private static string GetArtifactName(PowerShellCompilationProjectManifest manifest, PowerShellCompilationProjectArtifact artifact)
-        => artifact.ArtifactName ?? GetPackageName(manifest, artifact);
+        => PowerShellCompilationArtifactName.ResolveProjectArtifactName(manifest, artifact);
 
     /// <summary>Keeps project-target package paths distinct when variants share a shipped artifact basename.</summary>
     internal static string GetPackageName(PowerShellCompilationProjectManifest manifest, PowerShellCompilationProjectArtifact artifact)

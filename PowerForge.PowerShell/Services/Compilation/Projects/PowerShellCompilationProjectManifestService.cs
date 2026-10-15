@@ -127,7 +127,15 @@ public sealed partial class PowerShellCompilationProjectManifestService
             onStage?.Invoke(PowerShellCompilationDiagnosticStage.Target, artifact.Name);
             artifact.Name = NormalizeName(artifact.Name, "artifact target name");
             if (artifact.ArtifactName is not null)
-                artifact.ArtifactName = NormalizeName(artifact.ArtifactName, "artifact name");
+                artifact.ArtifactName = NormalizeArtifactName(artifact.ArtifactName);
+            try
+            {
+                _ = PowerShellCompilationArtifactName.ResolveProjectArtifactName(manifest, artifact);
+            }
+            catch (ArgumentException exception)
+            {
+                throw new InvalidDataException($"The artifact name for project target '{artifact.Name}' is invalid: {exception.Message}", exception);
+            }
             if (!names.Add(artifact.Name)) throw new InvalidDataException($"Duplicate project target name '{artifact.Name}'.");
             var target = artifact.Target ?? throw new InvalidDataException($"Project target '{artifact.Name}' has no target contract.");
             artifact.Target = PowerShellCompilationTargetContractService.Normalize(
@@ -193,6 +201,19 @@ public sealed partial class PowerShellCompilationProjectManifestService
             name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0 || name.Contains('/') || name.Contains('\\'))
             throw new InvalidDataException($"The {label} is not a portable identifier.");
         return name;
+    }
+
+    private static string NormalizeArtifactName(string value)
+    {
+        var name = NormalizeName(value, "artifact name");
+        try
+        {
+            return PowerShellCompilationArtifactName.Normalize(name, nameof(value));
+        }
+        catch (ArgumentException exception)
+        {
+            throw new InvalidDataException($"The artifact name is invalid: {exception.Message}", exception);
+        }
     }
 
     private static string CreateTargetName(PowerShellCompilationTargetContract target)

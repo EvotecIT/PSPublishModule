@@ -61,6 +61,7 @@ if ($qualified.Count -eq 0) { throw 'No selected workload declares an external q
 Assert-WorkflowNameSet @($qualified.id) @($qualified.id) 'Selected workload IDs'
 $selectedCommands = @($qualified | Where-Object { $_.qualification.kind -eq 'HybridModuleCommand' })
 $workflowEntries = @($qualified | Where-Object { $_.qualification.kind -in @('HybridModuleWorkflow', 'HybridScriptApplication') })
+if ($workflowEntries.Count -gt 0) { Assert-WholeWorkflowRestoreMode -Offline:$Offline }
 
 $repositoryRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..\..'))
 if (-not $CliAssemblyPath) { $CliAssemblyPath = Join-Path $repositoryRoot 'PowerForge.Cli/bin/Release/net10.0/PowerForge.Cli.dll' }

@@ -372,9 +372,17 @@ function Invoke-WorkflowArtifactObserver {
     }
 }
 
+function Assert-WholeWorkflowRestoreMode {
+    param([switch] $Offline)
+    if ($Offline) {
+        throw 'Whole-workflow qualification does not support -Offline: each run creates a fresh project without an authenticated acquired environment. Rerun without -Offline to acquire and verify its dependencies. For an existing retained project, run normal project restore first, then use powershell project restore <project> --offline to authenticate its saved environment and exact closure locks.'
+    }
+}
+
 function Invoke-WholeWorkflowQualification {
     param($Entry, $Packet, [string] $PacketPath, [string] $SourceRoot, [string] $RunRoot, [switch] $Offline,
         [string] $EvidenceRoot)
+    Assert-WholeWorkflowRestoreMode -Offline:$Offline
     Assert-WorkflowQualificationContract $Entry
     if ($Entry.id -notmatch '^[A-Za-z0-9][A-Za-z0-9._-]*$') { throw 'Workflow id must be a portable filename component.' }
     $root = Assert-ContainedPath -Root $RunRoot -Path (Join-Path $RunRoot $Entry.id) -Label 'Workflow project'
@@ -446,7 +454,6 @@ function Invoke-WholeWorkflowQualification {
     $steps = [ordered]@{}
     foreach ($operation in @('analyze', 'lock', 'restore', 'build')) {
         $arguments = @('powershell', 'project', $operation, $projectPath, '--output', 'json')
-        if ($operation -eq 'restore' -and $Offline) { $arguments += '--offline' }
         $steps[$operation] = Invoke-WorkflowCliOperation -Arguments $arguments -WorkingDirectory $root -EvidencePath (Join-Path $evidenceRoot ($operation + '.json'))
     }
     $built = @($steps.build.targets)

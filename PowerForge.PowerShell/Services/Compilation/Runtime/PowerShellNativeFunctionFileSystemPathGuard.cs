@@ -1,6 +1,7 @@
 namespace PowerForge.Generated.Runtime
 {
     using System;
+    using System.IO;
     using System.Management.Automation;
 
     /// <summary>Checks an already evaluated packaged operand without replacing its value or executing a provider command.</summary>
@@ -34,8 +35,18 @@ namespace PowerForge.Generated.Runtime
                         throw new InvalidOperationException("An absent packaged provider path requires the active FileSystem location.");
                     return;
                 }
-                if (selected is not string path)
-                    throw new InvalidOperationException("A guarded packaged path must be a string or a one-dimensional string array.");
+                // These sealed built-in path values have the same fixed CLR string
+                // representation used by PowerShell's path-parameter binding. Do not
+                // run arbitrary conversion here and then bind the original again:
+                // a user converter could produce a different provider on its next call.
+                var path = selected switch
+                {
+                    string text => text,
+                    PathInfo resolved => resolved.ToString(),
+                    FileInfo file => file.ToString(),
+                    DirectoryInfo directory => directory.ToString(),
+                    _ => throw new InvalidOperationException("A guarded packaged path must be a string, a built-in path value, or a one-dimensional array of those values.")
+                };
                 session.Path.GetUnresolvedProviderPathFromPSPath(path, out var provider, out _);
                 if (!provider.Name.Equals("FileSystem", StringComparison.OrdinalIgnoreCase))
                     throw new InvalidOperationException("A dynamic packaged provider path must resolve to the active FileSystem provider.");
@@ -43,6 +54,8 @@ namespace PowerForge.Generated.Runtime
             if (value is Array paths)
             {
                 if (paths.Rank != 1) throw new InvalidOperationException("A guarded packaged path array must be one-dimensional.");
+                // Get-ChildItem treats an empty path array as a current-location read.
+                if (paths.Length == 0) Check(null);
                 foreach (var path in paths) Check(path);
             }
             else Check(value);

@@ -11,12 +11,12 @@ successful qualification; a completed failure may still release its workspace.
 param([Parameter(Mandatory)] [string] $RunnerTemp)
 
 $ErrorActionPreference = 'Stop'
-. (Join-Path $PSScriptRoot '../Benchmarks/PowerShellCompilation/Corpus/Corpus.Runner.Common.ps1')
-. (Join-Path $PSScriptRoot '../Benchmarks/PowerShellCompilation/Corpus/Corpus.Qualification.Workflow.ps1')
+. (Join-Path $PSScriptRoot 'PowerShellWholeWorkflowWorkspace.ps1')
 $RunnerTemp = [IO.Path]::GetFullPath($RunnerTemp)
 $gateRoot = Assert-ContainedPath -Root $RunnerTemp -Path (Join-Path $RunnerTemp 'powerforge-compiler-gate') -Label 'Compiler gate cleanup'
 $decisionPath = Join-Path $RunnerTemp 'powerforge-compiler-gate-cleanup.json'
 $workflowRoot = $null
+$workflowOwnership = $null
 $reasons = [Collections.Generic.List[string]]::new()
 
 function Read-CleanupReceipt([string] $Path) {
@@ -30,11 +30,9 @@ function Read-CleanupReceipt([string] $Path) {
 
 try {
     Assert-WorkflowPathWithoutLinks $gateRoot
-    $workflowReceipt = Join-Path $gateRoot 'whole-workflow-root.txt'
-    if (Test-Path -LiteralPath $workflowReceipt -PathType Leaf) {
-        $workflowRoot = Assert-ContainedPath -Root $RunnerTemp -Path ((Get-Content -LiteralPath $workflowReceipt -Raw).Trim()) -Label 'Whole-workflow cleanup'
-        if ([IO.Path]::GetFileName($workflowRoot) -notmatch '^pfw-[0-9a-f]{8}$') { throw 'Unexpected whole-workflow cleanup root.' }
-        Assert-WorkflowPathWithoutLinks $workflowRoot
+    $workflowOwnership = Get-OwnedWholeWorkflowWorkspace -RunnerTemp $RunnerTemp
+    if ($workflowOwnership) { $workflowRoot = $workflowOwnership.workspacePath }
+    if ($workflowRoot) {
         $wholeEvidence = Join-Path $gateRoot 'evidence/whole-workflows'
         $terminal = Read-CleanupReceipt (Join-Path $wholeEvidence 'whole-workflow-gate.json')
         if ($terminal -and ($terminal.schemaVersion -ne 1 -or $terminal.passed -isnot [bool] -or $terminal.plannedLanes -lt 1)) {
@@ -74,7 +72,7 @@ try {
     }
 } catch { $reasons.Add($_.Exception.Message) }
 
-$decision = [ordered]@{ schemaVersion=1; removed=$false; gateRoot=$gateRoot; workflowRoot=$workflowRoot; reasons=@($reasons) }
+$decision = [ordered]@{ schemaVersion=1; removed=$false; gateRoot=$gateRoot; workflowRoot=$workflowRoot; workspaceOwnership=$workflowOwnership; reasons=@($reasons) }
 if ($reasons.Count) {
     Write-Utf8Json -Path $decisionPath -Value $decision
     Write-Warning "Compiler workspace retained for owned-state recovery; see $decisionPath"

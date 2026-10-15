@@ -28,6 +28,10 @@ public sealed partial class ModulePipelineRunner
     {
         var compilation = buildSpec.PowerShellCompilation;
         if (compilation?.Enabled != true) return;
+        var artifactName = PowerShellCompilationArtifactName.Normalize(buildSpec.Name, nameof(buildSpec.Name));
+        if (!artifactName.Equals(buildSpec.Name, StringComparison.Ordinal))
+            throw new InvalidOperationException(
+                $"PowerShell module compilation must preserve its published module name. Rename module '{buildSpec.Name}' and its manifest/root file to the canonical basename '{artifactName}' before compiling.");
         if (buildSpec.RefreshManifestOnly)
             throw new InvalidOperationException("PowerShell module compilation cannot be combined with RefreshPSD1Only.");
         if (!string.IsNullOrWhiteSpace(buildSpec.CsprojPath))

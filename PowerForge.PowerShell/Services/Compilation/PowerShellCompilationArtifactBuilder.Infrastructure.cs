@@ -171,18 +171,6 @@ public sealed partial class PowerShellCompilationArtifactBuilder
         return string.Concat(algorithm.ComputeHash(stream).Select(static value => value.ToString("x2", System.Globalization.CultureInfo.InvariantCulture)));
     }
 
-    private static string SanitizeArtifactName(string value)
-    {
-        var sanitized = new string(value.Trim().Select(character => char.IsLetterOrDigit(character) || character is '.' or '-' or '_' ? character : '_').ToArray());
-        if (string.IsNullOrWhiteSpace(sanitized) || sanitized is "." or "..")
-            throw new ArgumentException("Artifact name does not contain a usable file name.", nameof(value));
-        if (new[] { ".exe", ".dll", ".pdb", ".generated", ".powerforge-compilation.json" }
-            .Any(suffix => sanitized.EndsWith(suffix, StringComparison.OrdinalIgnoreCase)))
-            throw new ArgumentException("Artifact name must not end with a generated artifact suffix because it can overlap another artifact set.", nameof(value));
-        PowerShellArtifactSetPublisher.EnsureArtifactNameIsNotReserved(sanitized, nameof(value));
-        return sanitized;
-    }
-
     private static string EscapeXml(string value)
         => System.Security.SecurityElement.Escape(value) ?? string.Empty;
 

@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param([Parameter(Mandatory)] [string] $WorkspacePath, [string] $EvidencePath,
-    [ValidateSet('All', 'ArtifactName', 'DurableEvidence', 'NestedEmission')] [string] $Scope = 'All',
+    [ValidateSet('All', 'ArtifactName', 'DurableEvidence', 'NestedEmission', 'OfflineMode')] [string] $Scope = 'All',
     [string] $MetadataAssemblyPath)
 
 $ErrorActionPreference = 'Stop'
@@ -119,6 +119,40 @@ if($Scope -eq 'NestedEmission') {
     if($EvidencePath) {Write-Utf8Json -Path $EvidencePath -Value $result}
     $result|ConvertTo-Json -Depth 8
     return
+}
+
+if ($Scope -in @('All', 'OfflineMode')) {
+    Assert-WholeWorkflowRestoreMode
+    $checked.Add('fresh whole-workflow normal restore mode remains supported')
+    $offlineRoot = Join-Path ([IO.Path]::GetFullPath($WorkspacePath)) ('offline-' + [guid]::NewGuid().ToString('N'))
+    $workflowPacketPath = Join-Path $PSScriptRoot 'Workflows/Yaml/yaml-whole-module.net10.0.json'
+    $workflowPacket = Get-Content -LiteralPath $workflowPacketPath -Raw | ConvertFrom-Json
+    $script:offlineCliInvocations = 0
+    $savedCliOperation = (Get-Item -LiteralPath Function:\Invoke-WorkflowCliOperation).ScriptBlock
+    try {
+        function Invoke-WorkflowCliOperation { $script:offlineCliInvocations++; throw 'Unexpected Offline CLI invocation' }
+        Assert-RejectedContract 'direct whole-workflow Offline rejects before source, observer or CLI work' {
+            Invoke-WholeWorkflowQualification $workflowPacket.workloads[0] $workflowPacket $workflowPacketPath `
+                (Join-Path $offlineRoot 'unavailable-source') (Join-Path $offlineRoot 'runs') -Offline
+        } 'each run creates a fresh project'
+    } finally { Set-Item -LiteralPath Function:\Invoke-WorkflowCliOperation -Value $savedCliOperation }
+    if ($script:offlineCliInvocations -ne 0 -or (Test-Path -LiteralPath $offlineRoot)) { throw 'Offline refusal performed CLI or workspace work.' }
+    $missingCli = Join-Path $offlineRoot 'unavailable-cli.dll'
+    Assert-RejectedContract 'public whole-workflow Offline rejects before CLI bootstrap or workspace creation' {
+        & (Join-Path $PSScriptRoot 'Invoke-ExternalQualification.ps1') -PacketPath $workflowPacketPath `
+            -CliAssemblyPath $missingCli -WorkspacePath $offlineRoot -Offline -AllowExternalExecution
+    } 'For an existing retained project, run normal project restore first'
+    if (Test-Path -LiteralPath $offlineRoot) { throw 'Public Offline refusal created a workspace.' }
+    Assert-RejectedContract 'command-only qualification preserves Offline admission' {
+        & (Join-Path $PSScriptRoot 'Invoke-ExternalQualification.ps1') -PacketPath (Join-Path $PSScriptRoot 'external-assessment.net10.json') `
+            -CliAssemblyPath $missingCli -WorkspacePath $offlineRoot -Offline -AllowExternalExecution
+    } 'Build the PowerForge CLI first'
+    if ($Scope -eq 'OfflineMode') {
+        $result=[ordered]@{schemaVersion=1;passed=$true;checks=@($checked);checkCount=$checked.Count;scope='Offline mode admission and early refusal only; no CLI, SDK, source execution, acquisition or network';cliInvocations=$script:offlineCliInvocations}
+        if($EvidencePath) {Write-Utf8Json -Path $EvidencePath -Value $result}
+        $result|ConvertTo-Json -Depth 8
+        return
+    }
 }
 
 if ($Scope -in @('All', 'DurableEvidence')) {

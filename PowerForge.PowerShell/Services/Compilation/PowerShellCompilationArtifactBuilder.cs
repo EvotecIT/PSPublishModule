@@ -48,7 +48,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
         PowerShellCompilationPathSafety.EnsureNoLinksFromFileSystemRoot(
             spec.OutputDirectory,
             $"PowerShell compilation output directory '{spec.OutputDirectory}' must not be a symbolic link or junction.");
-        var artifactName = SanitizeArtifactName(spec.ArtifactName);
+        var artifactName = PowerShellCompilationArtifactName.Normalize(spec.ArtifactName, nameof(spec.ArtifactName));
         // Microsoft.PowerShell.SDK carries deeply nested content files. Keeping the disposable
         // generated project below the durable output directory can exceed MAX_PATH on Windows
         // even when the user's final artifact path is otherwise reasonable.

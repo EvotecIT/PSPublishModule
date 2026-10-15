@@ -444,8 +444,8 @@ jobs:
         run: |
           $gateRoot = Join-Path $env:RUNNER_TEMP 'powerforge-compiler-gate'
           $hostRoot = Join-Path $gateRoot 'host'
-          $workflowRoot = Join-Path $env:RUNNER_TEMP ('pfw-' + [guid]::NewGuid().ToString('N').Substring(0, 8))
-          $workflowRoot | Set-Content -LiteralPath (Join-Path $gateRoot 'whole-workflow-root.txt')
+          . ./Build/PowerShellWholeWorkflowWorkspace.ps1
+          $workflowRoot = (New-WholeWorkflowWorkspace -RunnerTemp $env:RUNNER_TEMP).workspacePath
           $env:PATH = $hostRoot + [IO.Path]::PathSeparator + $env:PATH
           $env:DOTNET_GENERATE_ASPNET_CERTIFICATE = 'false'
           $env:DOTNET_ADD_GLOBAL_TOOLS_TO_PATH = 'false'

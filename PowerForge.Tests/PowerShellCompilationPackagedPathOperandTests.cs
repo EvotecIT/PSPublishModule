@@ -138,15 +138,17 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     public void Build_RetainedPackageGuardsTheSelectedFilesystemOperand()
     {
         using var fixture = ArtifactFixture.Create("""
-            param([switch]$Unsafe,[switch]$Implicit)
+            param([switch]$Unsafe,[switch]$Implicit,[string]$Operand='String')
             $ErrorActionPreference='Stop'
-            function Read-File { param([string]$Path) Get-Content -LiteralPath:$Path -Raw }
+            function Read-File { param([object]$Path) Get-Content -LiteralPath:$Path -Raw }
             if($Implicit){
                 if($Unsafe){Set-Location Variable:}else{Set-Location ([IO.Path]::Combine($PSScriptRoot,'implicit'))}
                 try{$items=Get-ChildItem; "implicit:$($items.Name):count:$(@($items).Count)"}catch{'guarded-refusal'}
                 return
             }
             $path=if($Unsafe){'Variable:Host'}else{[IO.Path]::Combine($PSScriptRoot,'data.txt')}
+            if($Operand -eq 'FileInfo'){$path=Get-Item -LiteralPath $path}
+            elseif($Operand -eq 'PathInfo'){$path=Resolve-Path -LiteralPath $path}
             try{ $value=Read-File -Path $path; "value:$($value.Trim())" }catch{'guarded-refusal'}
             """, compactPath: true);
         File.WriteAllText(Path.Combine(fixture.RootPath, "data.txt"), "retained-file");
@@ -160,9 +162,22 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         var positive = RunProcess(result.ArtifactPath!);
         Assert.Equal(0, positive.ExitCode); Assert.Contains("value:retained-file", positive.StandardOutput);
+        foreach (var operand in new[] { "FileInfo", "PathInfo" })
+        {
+            var original = RunProcess("pwsh", "-NoProfile", "-File", fixture.ScriptPath, "-Operand", operand);
+            var generated = RunProcess(result.ArtifactPath!, "-Operand", operand);
+            Assert.Equal(0, original.ExitCode); Assert.Equal(0, generated.ExitCode);
+            Assert.Empty(generated.StandardError);
+            Assert.Equal(original.StandardOutput.Trim(), generated.StandardOutput.Trim());
+            Assert.Contains("value:retained-file", generated.StandardOutput);
+        }
         var negative = RunProcess(result.ArtifactPath!, "-Unsafe");
         Assert.Equal(0, negative.ExitCode); Assert.Contains("guarded-refusal", negative.StandardOutput);
         Assert.Empty(negative.StandardError);
+        var unsafePathInfo = RunProcess(result.ArtifactPath!, "-Unsafe", "-Operand", "PathInfo");
+        Assert.Equal(0, unsafePathInfo.ExitCode);
+        Assert.Contains("guarded-refusal", unsafePathInfo.StandardOutput);
+        Assert.Empty(unsafePathInfo.StandardError);
         var implicitRead = RunProcess(result.ArtifactPath!, "-Implicit");
         Assert.Equal(0, implicitRead.ExitCode); Assert.Contains("implicit:one.txt:count:1", implicitRead.StandardOutput);
         var implicitUnsafe = RunProcess(result.ArtifactPath!, "-Implicit", "-Unsafe");
@@ -213,6 +228,36 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
                 $paths=@([IO.Path]::Combine($PSScriptRoot,'data.txt'),[IO.Path]::Combine($PSScriptRoot,'second.txt'))
                 $values=Microsoft.PowerShell.Management\Get-Content -Path $paths
                 "values:$($values -join ','):type:$($values.GetType().FullName)"
+            }elseif($Case -like 'PathValue*'){
+                $file=[IO.Path]::Combine($PSScriptRoot,'data.txt')
+                if($Case -eq 'PathValueFileInfo'){$paths=Microsoft.PowerShell.Management\Get-Item -LiteralPath $file}
+                elseif($Case -eq 'PathValuePathInfo'){$paths=Resolve-Path -LiteralPath $file}
+                elseif($Case -eq 'PathValueWrapped'){$paths=[psobject](Resolve-Path -LiteralPath $file)}
+                else{$paths=@((Resolve-Path -LiteralPath $file),(Microsoft.PowerShell.Management\Get-Item -LiteralPath $file))}
+                $values=Microsoft.PowerShell.Management\Get-Content -LiteralPath $paths
+                "values:$($values -join ',')"
+            }elseif($Case -like 'UnsafePathValue*'){
+                $paths=Resolve-Path -LiteralPath 'Variable:Host'
+                if($Case -eq 'UnsafePathValueWrapped'){$paths=[psobject]$paths}
+                elseif($Case -eq 'UnsafePathValueArray'){$paths=@([IO.Path]::Combine($PSScriptRoot,'data.txt'),$paths)}
+                try{Microsoft.PowerShell.Management\Get-Content -LiteralPath $paths; 'unexpected provider read'}catch{'guarded-refusal'}
+            }elseif($Case -eq 'CustomConversion'){
+                $script:conversionCalls=0
+                $paths=[pscustomobject]@{}
+                Add-Member -InputObject $paths -MemberType ScriptMethod -Name ToString -Value {
+                    $script:conversionCalls++
+                    if($script:conversionCalls -eq 1){[IO.Path]::Combine($PSScriptRoot,'data.txt')}else{'Variable:Host'}
+                } -Force
+                try{Microsoft.PowerShell.Management\Get-Content -LiteralPath $paths; 'unexpected conversion read'}catch{'guarded-refusal'}
+                "conversions:$script:conversionCalls"
+            }elseif($Case -like 'EmptyArray*'){
+                if($Case -eq 'EmptyArrayUnsafe'){Set-Location Variable:}
+                else{Set-Location ([IO.Path]::Combine($PSScriptRoot,'implicit'))}
+                $paths=[string[]]@()
+                try{
+                    $items=Microsoft.PowerShell.Management\Get-ChildItem -Path $paths
+                    "empty-array:$($items.Name):count:$(@($items).Count)"
+                }catch{'guarded-refusal'}
             }elseif($Case -like 'Implicit*'){
                 if($Case -eq 'ImplicitUnsafe'){Set-Location Variable:}
                 else{Set-Location ([IO.Path]::Combine($PSScriptRoot,'implicit'))}
@@ -223,6 +268,9 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
                     'ShadowOne'{[string[]]@("$PSScriptRoot/data.txt")}
                     'ShadowEmpty'{[string[]]@()}
                     'ShadowWrapped'{[psobject][string[]]@("$PSScriptRoot/data.txt")}
+                    'ShadowFileInfo'{Microsoft.PowerShell.Management\Get-Item -LiteralPath ([IO.Path]::Combine($PSScriptRoot,'data.txt'))}
+                    'ShadowPathInfo'{Resolve-Path -LiteralPath ([IO.Path]::Combine($PSScriptRoot,'data.txt'))}
+                    'ShadowDirectoryInfo'{Microsoft.PowerShell.Management\Get-Item -LiteralPath ([IO.Path]::Combine($PSScriptRoot,'implicit'))}
                     default{[object[]]@([IO.Path]::Combine($PSScriptRoot,'data.txt'),[IO.Path]::Combine($PSScriptRoot,'second.txt'))}
                 }
                 # Switch pipelines can enumerate their output; use explicit shapes for these contracts.
@@ -290,7 +338,13 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             ("ShadowScalar", "shadow:System.String:utf8:1:same:True", "trace:encoding"),
             ("ShadowOne", "shadow:System.String[]:utf8:1:same:True", "trace:encoding"),
             ("ShadowEmpty", "shadow:System.String[]:utf8:0:same:True", "trace:encoding"),
-            ("ShadowWrapped", "shadow:System.String[]:utf8:1:same:True", "trace:encoding") })
+            ("ShadowWrapped", "shadow:System.String[]:utf8:1:same:True", "trace:encoding"),
+            ("ShadowFileInfo", "shadow:System.IO.FileInfo:utf8:1:same:True", "trace:encoding"),
+            ("ShadowPathInfo", "shadow:System.Management.Automation.PathInfo:utf8:1:same:True", "trace:encoding"),
+            ("ShadowDirectoryInfo", "shadow:System.IO.DirectoryInfo:utf8:1:same:True", "trace:encoding"),
+            ("PathValueFileInfo", "values:alpha", "trace:"), ("PathValuePathInfo", "values:alpha", "trace:"),
+            ("PathValueWrapped", "values:alpha", "trace:"), ("PathValueArray", "values:alpha,alpha", "trace:"),
+            ("EmptyArrayFileSystem", "empty-array:one.txt:count:1", "trace:") })
         {
             var original = RunProcess("pwsh", "-NoProfile", "-File", fixture.ScriptPath, "-Case", item.Item1);
             var generated = RunProcess(result.ArtifactPath!, "-Case", item.Item1);
@@ -347,5 +401,24 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.Equal(0, implicitUnsafe.ExitCode);
         Assert.Contains("guarded-refusal", implicitUnsafe.StandardOutput);
         Assert.DoesNotContain("dispatch", implicitUnsafe.StandardOutput);
+        foreach (var item in new[] { "UnsafePathValue", "UnsafePathValueWrapped", "UnsafePathValueArray" })
+        {
+            var generated = RunProcess(result.ArtifactPath!, "-Case", item);
+            Assert.Equal(0, generated.ExitCode);
+            Assert.Contains("guarded-refusal", generated.StandardOutput);
+            Assert.DoesNotContain("unexpected provider read", generated.StandardOutput);
+            Assert.Empty(generated.StandardError);
+        }
+        var customConversion = RunProcess(result.ArtifactPath!, "-Case", "CustomConversion");
+        Assert.Equal(0, customConversion.ExitCode);
+        Assert.Contains("guarded-refusal", customConversion.StandardOutput);
+        Assert.Contains("conversions:0", customConversion.StandardOutput);
+        Assert.DoesNotContain("unexpected conversion read", customConversion.StandardOutput);
+        Assert.Empty(customConversion.StandardError);
+        var emptyArrayUnsafe = RunProcess(result.ArtifactPath!, "-Case", "EmptyArrayUnsafe");
+        Assert.Equal(0, emptyArrayUnsafe.ExitCode);
+        Assert.Contains("guarded-refusal", emptyArrayUnsafe.StandardOutput);
+        Assert.DoesNotContain("empty-array:", emptyArrayUnsafe.StandardOutput);
+        Assert.Empty(emptyArrayUnsafe.StandardError);
     }
 }
