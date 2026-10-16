@@ -163,6 +163,8 @@ internal static partial class WebCliCommandHandlers
             PackageId = TryGetOptionValue(subArgs, "--package-id"),
             OutputPath = outPath,
             Title = string.IsNullOrWhiteSpace(title) ? "API Reference" : title,
+            IndexLead = TryGetOptionValue(subArgs, "--index-lead"),
+            IndexDescription = TryGetOptionValue(subArgs, "--index-description"),
             SectionLabel = TryGetOptionValue(subArgs, "--section-label"),
             PowerShellModuleName = TryGetOptionValue(subArgs, "--module-name"),
             BaseUrl = baseUrl,

@@ -26,6 +26,10 @@ inherited documentation with the inputs for contracts outside the local build.
 Assembly-backed generation also discovers adjacent dependency XML and the
 matching installed .NET reference-pack XML. Those records supply inherited
 summaries without adding dependency or framework types to the reference.
+When reference-pack XML is unavailable, built-in summaries cover the framework
+`Object`/`ValueType` equality, hash-code and string methods and `IEquatable<T>.Equals`.
+Missing documentation on a library-owned base contract still produces a warning;
+CI steps with `failOnWarnings` enabled fail instead of substituting framework copy.
 Pipeline caches account for their bytes and additional `xmls`/`xmlPaths` inputs.
 Unresolved implicit inheritance produces a warning. An explicit `cref` remains supported.
 
@@ -36,6 +40,36 @@ the reference without holding the build output open.
 Malformed C# XML or PowerShell help stops generation before replacing existing
 reference files. Correct the input and rerun the generator; an empty reference
 is not a successful recovery from invalid documentation.
+
+## API and command index copy
+
+Set `indexLead` and `indexDescription` on each `apidocs` pipeline step to write
+the visible introduction and the search/social description independently:
+
+```json
+{
+  "task": "apidocs",
+  "title": "ChartForgeX API reference",
+  "indexLead": "Build charts, dashboards, and visual stories with ChartForgeX.",
+  "indexDescription": "Explore ChartForgeX types, signatures, and members for building charts, dashboards, and visual stories."
+}
+```
+
+These are plain-text values; the generator HTML-encodes them. The CLI accepts
+`--index-lead` and `--index-description`, and pipeline steps also accept the
+hyphenated names. Custom index templates can use `{{INDEX_LEAD}}` and
+`{{INDEX_DESCRIPTION}}`; `{{DESCRIPTION_META}}` includes the description meta tag.
+An explicit description is preserved without automatic length padding or truncation.
+
+Without an explicit lead, C# references use assembly descriptions from either
+`assembly` or `assemblies`, then a product-specific introduction using `packageId`,
+the page title, or the assembly name. PowerShell references use the description
+from an explicit or discovered module manifest, then a command introduction
+naming the module inferred from the help file or `moduleName`.
+
+Pre-rendered `headerHtml` and `footerHtml` fragments do not need navigation
+placeholders. Fragments that contain navigation placeholders still require a
+navigation configuration or supplied template-token values.
 
 ## Cross-package API search
 

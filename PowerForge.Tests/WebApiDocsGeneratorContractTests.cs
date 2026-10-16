@@ -126,7 +126,7 @@ public class WebApiDocsGeneratorContractTests
     }
 
     [Fact]
-    public void GenerateDocsHtml_WarnsWhenCustomFragmentsDoNotContainNavPlaceholders()
+    public void GenerateDocsHtml_AcceptsCustomFragmentsWithoutNavPlaceholders()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-webapidocs-nav-placeholders-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
@@ -175,8 +175,7 @@ public class WebApiDocsGeneratorContractTests
         try
         {
             var result = WebApiDocsGenerator.Generate(options);
-            Assert.Contains(result.Warnings, w => w.Contains("[PFWEB.APIDOCS.NAV]", StringComparison.OrdinalIgnoreCase));
-            Assert.Contains(result.Warnings, w => w.Contains("placeholders", StringComparison.OrdinalIgnoreCase));
+            Assert.DoesNotContain(result.Warnings, w => w.Contains("header/footer fragments do not contain", StringComparison.OrdinalIgnoreCase));
 
             var indexHtmlPath = Path.Combine(outputPath, "index.html");
             Assert.True(File.Exists(indexHtmlPath), "Expected index.html to be generated.");

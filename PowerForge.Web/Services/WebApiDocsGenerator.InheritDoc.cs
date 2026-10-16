@@ -8,7 +8,8 @@ public static partial class WebApiDocsGenerator
     private static bool SameReflectedMember(MemberInfo left, MemberInfo right) =>
         left.Module == right.Module && left.MetadataToken == right.MetadataToken;
 
-    private static void ResolveImplicitInheritDoc(Assembly assembly, Dictionary<string, XElement> members, WebApiDocsOptions options, List<string> warnings)
+    private static void ResolveImplicitInheritDoc(Assembly assembly, string assemblyPath, Dictionary<string, XElement> members,
+        HashSet<string> frameworkFallbacks, List<string> warnings)
     {
         var reflected = new Dictionary<string, MemberInfo>(StringComparer.Ordinal);
         const BindingFlags flags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static | BindingFlags.DeclaredOnly;
@@ -39,13 +40,13 @@ public static partial class WebApiDocsGenerator
             var targets = implicitTarget ? candidates.Select(DocumentationId).ToArray() : new[] { explicitTarget! };
             foreach (var candidateId in targets)
             {
-                if (!members.ContainsKey(candidateId) && !string.IsNullOrWhiteSpace(options.AssemblyPath))
+                var candidate = candidates.FirstOrDefault(candidate => DocumentationId(candidate) == candidateId) ?? candidates.FirstOrDefault();
+                var declaring = candidate as Type ?? candidate?.DeclaringType;
+                if (!members.ContainsKey(candidateId) || frameworkFallbacks.Contains(candidateId))
                 {
-                    referenceInputs ??= WebApiDocumentationInputs.Discover(options.AssemblyPath);
-                    var candidate = candidates.FirstOrDefault(candidate => DocumentationId(candidate) == candidateId) ?? candidates.FirstOrDefault();
-                    var declaring = candidate as Type ?? candidate?.DeclaringType;
+                    referenceInputs ??= WebApiDocumentationInputs.Discover(assemblyPath);
                     var ownerName = declaring?.Assembly.GetName().Name;
-                    var assemblyDirectory = Path.GetDirectoryName(Path.GetFullPath(options.AssemblyPath));
+                    var assemblyDirectory = Path.GetDirectoryName(assemblyPath);
                     var candidateInputs = referenceInputs.Where(path =>
                         !string.Equals(Path.GetDirectoryName(path), assemblyDirectory, StringComparison.OrdinalIgnoreCase) ||
                         inheritedOwnerNames.Contains(Path.GetFileNameWithoutExtension(path)));
@@ -54,10 +55,24 @@ public static partial class WebApiDocsGenerator
                         if (!loadedReferences.Add(path)) continue;
                         var document = LoadXmlDocumentation(path, warnings);
                         foreach (var inherited in document.Root!.Element("members")!.Elements("member"))
-                            if (inherited.Attribute("name")?.Value is { Length: > 0 } id) members.TryAdd(id, inherited);
-                        if (members.ContainsKey(candidateId)) break;
+                        {
+                            if (inherited.Attribute("name")?.Value is not { Length: > 0 } id) continue;
+                            if (frameworkFallbacks.Remove(id)) members[id] = inherited;
+                            else members.TryAdd(id, inherited);
+                        }
+                        if (members.ContainsKey(candidateId) && !frameworkFallbacks.Contains(candidateId)) break;
                     }
                 }
+                // Only framework contracts get built-in documentation. Missing library contracts
+                // must remain visible rather than silently inheriting a distant Object summary.
+                if (!members.ContainsKey(candidateId) && candidate is not null &&
+                    TryCreateFrameworkDocumentation(candidate, candidateId) is { } frameworkDocumentation)
+                {
+                    members.Add(candidateId, frameworkDocumentation);
+                    frameworkFallbacks.Add(candidateId);
+                }
+                if (implicitTarget && !members.ContainsKey(candidateId) && declaring?.Assembly != typeof(object).Assembly)
+                    break;
                 if (!members.ContainsKey(candidateId)) continue;
                 target = candidateId;
                 break;
