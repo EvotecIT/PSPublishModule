@@ -54,20 +54,22 @@ internal static class SpectrePipelineSummaryWriter
             return count;
         }
 
-        var unicode = AnsiConsole.Profile.Capabilities.Unicode;
+        var unicode = ConsoleEncoding.ShouldRenderUnicode(AnsiConsole.Profile.Capabilities.Unicode);
+        AnsiConsole.Profile.Capabilities.Unicode = unicode;
+        var emoji = ConsoleEncoding.ShouldRenderEmoji(AnsiConsole.Profile.Capabilities.Unicode);
         var border = unicode ? TableBorder.Rounded : TableBorder.Simple;
         var versionText = BuildServices.FormatVersionWithPreRelease(res.Plan.ResolvedVersion, res.Plan.PreRelease);
         var publishSummary = PipelinePublishSummaryBuilder.Build(res);
 
-        AnsiConsole.Write(new Rule($"[green]{(unicode ? "✅" : "OK")} Summary[/]").LeftJustified());
+        AnsiConsole.Write(new Rule($"[green]{(emoji ? "✅" : "OK")} Summary[/]").LeftJustified());
 
         var table = new Table()
             .Border(border)
             .AddColumn(new TableColumn("Item").NoWrap())
             .AddColumn(new TableColumn("Value"));
 
-        table.AddRow($"{(unicode ? "📦" : "*")} Module", $"{Esc(res.Plan.ModuleName)} [grey]{Esc(versionText)}[/]");
-        table.AddRow($"{(unicode ? "🧪" : "*")} Staging", Esc(res.BuildResult.StagingPath));
+        table.AddRow($"{(emoji ? "📦" : "*")} Module", $"{Esc(res.Plan.ModuleName)} [grey]{Esc(versionText)}[/]");
+        table.AddRow($"{(emoji ? "🧪" : "*")} Staging", Esc(res.BuildResult.StagingPath));
 
         var fileConsistencySettings = res.Plan.FileConsistencySettings;
         if (fileConsistencySettings?.Enable == true && fileConsistencySettings.Severity != ValidationSeverity.Off)
@@ -83,12 +85,12 @@ internal static class SpectrePipelineSummaryWriter
                     var issues = CountIssues(res.FileConsistencyReport, fileConsistencySettings);
                     var compliance = total <= 0 ? 100.0 : Math.Round(((total - issues) / (double)total) * 100.0, 1);
                     table.AddRow(
-                        $"{(unicode ? "🔎" : "*")} File consistency",
+                        $"{(emoji ? "🔎" : "*")} File consistency",
                         $"{StatusMarkup(status)} [grey]{CountLabel(total, "file", "files")} checked, {CountLabel(issues, "issue", "issues")} ({compliance:0.0}% compliant)[/]");
                 }
                 else
                 {
-                    table.AddRow($"{(unicode ? "🔎" : "*")} File consistency", "[grey]Disabled[/]");
+                    table.AddRow($"{(emoji ? "🔎" : "*")} File consistency", "[grey]Disabled[/]");
                 }
             }
 
@@ -101,18 +103,18 @@ internal static class SpectrePipelineSummaryWriter
                     var issues = CountIssues(res.ProjectRootFileConsistencyReport, fileConsistencySettings);
                     var compliance = total <= 0 ? 100.0 : Math.Round(((total - issues) / (double)total) * 100.0, 1);
                     table.AddRow(
-                        $"{(unicode ? "🔎" : "*")} File consistency (project)",
+                        $"{(emoji ? "🔎" : "*")} File consistency (project)",
                         $"{StatusMarkup(status)} [grey]{CountLabel(total, "file", "files")} checked, {CountLabel(issues, "issue", "issues")} ({compliance:0.0}% compliant)[/]");
                 }
                 else
                 {
-                    table.AddRow($"{(unicode ? "🔎" : "*")} File consistency (project)", "[grey]Disabled[/]");
+                    table.AddRow($"{(emoji ? "🔎" : "*")} File consistency (project)", "[grey]Disabled[/]");
                 }
             }
         }
         else
         {
-            table.AddRow($"{(unicode ? "🔎" : "*")} File consistency", "[grey]Disabled[/]");
+            table.AddRow($"{(emoji ? "🔎" : "*")} File consistency", "[grey]Disabled[/]");
         }
 
         if (res.CompatibilityReport is not null && res.Plan.CompatibilitySettings?.Severity != ValidationSeverity.Off)
@@ -122,23 +124,23 @@ internal static class SpectrePipelineSummaryWriter
                 ? $"{s.CrossCompatibilityPercentage:0.0}% cross-compatible"
                 : $"{s.CrossCompatibilityPercentage:0.0}% cross-compatible, {CountLabel(s.FilesWithIssues, "file", "files")} with issues";
             table.AddRow(
-                $"{(unicode ? "🔎" : "*")} Compatibility",
+                $"{(emoji ? "🔎" : "*")} Compatibility",
                 $"{StatusMarkup(s.Status)} [grey]{Esc(detail)}[/]");
         }
         else
         {
-            table.AddRow($"{(unicode ? "🔎" : "*")} Compatibility", "[grey]Disabled[/]");
+            table.AddRow($"{(emoji ? "🔎" : "*")} Compatibility", "[grey]Disabled[/]");
         }
 
         if (res.ValidationReport is not null)
         {
             table.AddRow(
-                $"{(unicode ? "🔎" : "*")} Module validation",
+                $"{(emoji ? "🔎" : "*")} Module validation",
                 $"{StatusMarkup(res.ValidationReport.Status)} [grey]{Esc(res.ValidationReport.Summary)}[/]");
         }
         else
         {
-            table.AddRow($"{(unicode ? "🔎" : "*")} Module validation", "[grey]Disabled[/]");
+            table.AddRow($"{(emoji ? "🔎" : "*")} Module validation", "[grey]Disabled[/]");
         }
 
         if (res.Plan.Formatting is not null)
@@ -155,19 +157,19 @@ internal static class SpectrePipelineSummaryWriter
             }
 
             table.AddRow(
-                $"{(unicode ? "🎨" : "*")} Formatting",
+                $"{(emoji ? "🎨" : "*")} Formatting",
                 $"{StatusMarkup(status)} [grey]{string.Join(", ", parts)}[/]");
         }
         else
         {
-            table.AddRow($"{(unicode ? "🎨" : "*")} Formatting", "[grey]Disabled[/]");
+            table.AddRow($"{(emoji ? "🎨" : "*")} Formatting", "[grey]Disabled[/]");
         }
 
         if (res.Plan.SignModule)
         {
             if (res.SigningResult is null)
             {
-                table.AddRow($"{(unicode ? "🔏" : "*")} Signing", "[yellow]Enabled[/]");
+                table.AddRow($"{(emoji ? "🔏" : "*")} Signing", "[yellow]Enabled[/]");
             }
             else
             {
@@ -183,35 +185,34 @@ internal static class SpectrePipelineSummaryWriter
 
                 if (s.Failed > 0) bits.Add($"failed [red]{s.Failed}[/]");
 
-                table.AddRow($"{(unicode ? "🔏" : "*")} Signing", $"{SigningStatusMarkup(s.Success)} [grey]{string.Join(", ", bits)}[/]");
+                table.AddRow($"{(emoji ? "🔏" : "*")} Signing", $"{SigningStatusMarkup(s.Success)} [grey]{string.Join(", ", bits)}[/]");
             }
         }
         else
         {
-            table.AddRow($"{(unicode ? "🔏" : "*")} Signing", "[grey]Disabled[/]");
+            table.AddRow($"{(emoji ? "🔏" : "*")} Signing", "[grey]Disabled[/]");
         }
 
         if (res.ArtefactResults is { Length: > 0 })
-            table.AddRow($"{(unicode ? "📦" : "*")} Artefacts", $"[green]{res.ArtefactResults.Length}[/]");
+            table.AddRow($"{(emoji ? "📦" : "*")} Artefacts", $"[green]{res.ArtefactResults.Length}[/]");
         else
-            table.AddRow($"{(unicode ? "📦" : "*")} Artefacts", "[grey]None[/]");
+            table.AddRow($"{(emoji ? "📦" : "*")} Artefacts", "[grey]None[/]");
 
         if (publishSummary.Rows.Count > 0)
         {
             table.AddRow(
-                $"{(unicode ? "🚀" : "*")} Publish",
+                $"{(emoji ? "🚀" : "*")} Publish",
                 $"[green]{publishSummary.Rows.Count}[/] result(s) across [green]{publishSummary.ChannelCount}[/] channel(s)");
 
             foreach (var channel in publishSummary.Channels)
             {
-                var icon = unicode
-                    ? channel.Channel == "GitHub" ? "🚀" : "📦"
+                var icon = emoji ? channel.Channel == "GitHub" ? "🚀" : "📦"
                     : "*";
                 table.AddRow($"{icon} {Esc(channel.Channel)}", Esc(channel.Label));
             }
         }
         else
-            table.AddRow($"{(unicode ? "🚀" : "*")} Publish", "[grey]Disabled[/]");
+            table.AddRow($"{(emoji ? "🚀" : "*")} Publish", "[grey]Disabled[/]");
 
         if (res.DiagnosticsBaseline is not null)
         {
@@ -219,7 +220,7 @@ internal static class SpectrePipelineSummaryWriter
             var detail = baseline.BaselineLoaded
                 ? $"known {baseline.BaselineDiagnosticCount}, new {baseline.NewDiagnosticCount}, resolved {baseline.ResolvedDiagnosticCount}"
                 : $"current {baseline.CurrentDiagnosticCount}";
-            table.AddRow($"{(unicode ? "🧭" : "*")} Diagnostics baseline", $"[grey]{Esc(detail)}[/]");
+            table.AddRow($"{(emoji ? "🧭" : "*")} Diagnostics baseline", $"[grey]{Esc(detail)}[/]");
         }
 
         if (res.DiagnosticsPolicy is not null)
@@ -232,7 +233,7 @@ internal static class SpectrePipelineSummaryWriter
             if (policy.FailOnSeverity.HasValue)
                 parts.Add($"{policy.FailOnSeverity.Value}+ {policy.SeverityDiagnosticCount}");
             var detail = parts.Count == 0 ? "configured" : string.Join(", ", parts);
-            table.AddRow($"{(unicode ? "🛡️" : "*")} Diagnostics policy", $"{policyStatus} [grey]{Esc(detail)}[/]");
+            table.AddRow($"{(emoji ? "🛡️" : "*")} Diagnostics policy", $"{policyStatus} [grey]{Esc(detail)}[/]");
         }
 
         if (res.Diagnostics is { Length: > 0 })
@@ -245,7 +246,7 @@ internal static class SpectrePipelineSummaryWriter
             if (warningCount > 0) parts.Add($"{warningCount} warning");
             if (errorCount > 0) parts.Add($"{errorCount} error");
             var detail = parts.Count == 0 ? "none" : string.Join(", ", parts);
-            table.AddRow($"{(unicode ? "💡" : "*")} Diagnostics", $"[grey]{Esc(detail)}[/]");
+            table.AddRow($"{(emoji ? "💡" : "*")} Diagnostics", $"[grey]{Esc(detail)}[/]");
         }
 
         if (res.OwnerNotes is { Length: > 0 })
@@ -255,13 +256,13 @@ internal static class SpectrePipelineSummaryWriter
             var parts = new List<string>(2);
             if (actionableCount > 0) parts.Add($"[yellow]{actionableCount} action needed[/]");
             if (fyiCount > 0) parts.Add($"[blue]{fyiCount} FYI[/]");
-            table.AddRow($"{(unicode ? "📝" : "*")} Owner notes", parts.Count == 0 ? "[grey]None[/]" : string.Join(", ", parts));
+            table.AddRow($"{(emoji ? "📝" : "*")} Owner notes", parts.Count == 0 ? "[grey]None[/]" : string.Join(", ", parts));
         }
 
         if (res.InstallResult is not null)
-            table.AddRow($"{(unicode ? "📥" : "*")} Install", $"[green]{Esc(res.InstallResult.Version)}[/]");
+            table.AddRow($"{(emoji ? "📥" : "*")} Install", $"[green]{Esc(res.InstallResult.Version)}[/]");
         else
-            table.AddRow($"{(unicode ? "📥" : "*")} Install", "[grey]Disabled[/]");
+            table.AddRow($"{(emoji ? "📥" : "*")} Install", "[grey]Disabled[/]");
 
         AnsiConsole.Write(table);
 
@@ -363,9 +364,9 @@ internal static class SpectrePipelineSummaryWriter
 
         if (res.InstallResult is not null && res.InstallResult.InstalledPaths is { Count: > 0 })
         {
-            AnsiConsole.MarkupLine($"[grey]{(unicode ? "📍" : "*")} Installed paths:[/]");
+            AnsiConsole.MarkupLine($"[grey]{(emoji ? "📍" : "*")} Installed paths:[/]");
             foreach (var path in res.InstallResult.InstalledPaths)
-                AnsiConsole.MarkupLine($"  [grey]{(unicode ? "→" : "->")}[/] {Esc(path)}");
+                AnsiConsole.MarkupLine($"  [grey]{(emoji ? "→" : "->")}[/] {Esc(path)}");
         }
     }
 
@@ -376,36 +377,38 @@ internal static class SpectrePipelineSummaryWriter
         static string Esc(string? s) => Markup.Escape(s ?? string.Empty);
 
         var unicode = ConsoleEncoding.ShouldRenderUnicode(AnsiConsole.Profile.Capabilities.Unicode);
+        AnsiConsole.Profile.Capabilities.Unicode = unicode;
+        var emoji = ConsoleEncoding.ShouldRenderEmoji(AnsiConsole.Profile.Capabilities.Unicode);
         var border = unicode ? TableBorder.Rounded : TableBorder.Simple;
 
-        AnsiConsole.Write(new Rule($"[red]{(unicode ? "❌" : "!!")} Summary[/]").LeftJustified());
+        AnsiConsole.Write(new Rule($"[red]{(emoji ? "❌" : "!!")} Summary[/]").LeftJustified());
 
         var table = new Table()
             .Border(border)
             .AddColumn(new TableColumn("Item").NoWrap())
             .AddColumn(new TableColumn("Value"));
 
-        table.AddRow($"{(unicode ? "📦" : "*")} Module", $"{Esc(plan.ModuleName)} [grey]{Esc(BuildServices.FormatVersionWithPreRelease(plan.ResolvedVersion, plan.PreRelease))}[/]");
-        table.AddRow($"{(unicode ? "📁" : "*")} Project", Esc(plan.ProjectRoot));
+        table.AddRow($"{(emoji ? "📦" : "*")} Module", $"{Esc(plan.ModuleName)} [grey]{Esc(BuildServices.FormatVersionWithPreRelease(plan.ResolvedVersion, plan.PreRelease))}[/]");
+        table.AddRow($"{(emoji ? "📁" : "*")} Project", Esc(plan.ProjectRoot));
 
         var stagingText = string.IsNullOrWhiteSpace(plan.BuildSpec.StagingPath) ? "(temp)" : plan.BuildSpec.StagingPath;
-        table.AddRow($"{(unicode ? "🧪" : "*")} Staging", Esc(stagingText));
+        table.AddRow($"{(emoji ? "🧪" : "*")} Staging", Esc(stagingText));
 
         if (error is ModuleSigningException signingEx && signingEx.Result is not null)
         {
             var s = signingEx.Result;
             table.AddRow(
-                $"{(unicode ? "🔏" : "*")} Signing",
+                $"{(emoji ? "🔏" : "*")} Signing",
                 $"[red]Fail[/] [grey]signed {s.SignedTotal}, already {s.AlreadySignedOther} 3p/{s.AlreadySignedByThisCert} ours, failed {s.Failed}[/]");
         }
 
         var message = NormalizeFailureMessage(error);
         if (!string.IsNullOrWhiteSpace(message))
-            table.AddRow($"{(unicode ? "💥" : "*")} Error", Esc(GetFailureHeadline(message)));
+            table.AddRow($"{(emoji ? "💥" : "*")} Error", Esc(GetFailureHeadline(message)));
 
         var hint = BuildHint(message);
         if (!string.IsNullOrWhiteSpace(hint))
-            table.AddRow($"{(unicode ? "💡" : "*")} Hint", Esc(hint));
+            table.AddRow($"{(emoji ? "💡" : "*")} Hint", Esc(hint));
 
         AnsiConsole.Write(table);
         WriteFailureDetails(message, border);

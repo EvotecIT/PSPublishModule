@@ -348,6 +348,12 @@ public sealed class PowerShellRunRequest
             invocationMode: PowerShellInvocationMode.Command);
     }
 
+    internal PowerShellRunRequest WithOutputLineReceived(Action<string>? callback)
+        => new(
+            ScriptPath, CommandText, Arguments, Timeout, PreferPwsh, WorkingDirectory,
+            EnvironmentVariables, ExecutableOverride, CaptureOutput, CaptureError,
+            callback, ErrorLineReceived, RequiredRuntimeMajor, HostRequirement, InvocationMode);
+
     private PowerShellRunRequest(
         string? scriptPath,
         string? commandText,

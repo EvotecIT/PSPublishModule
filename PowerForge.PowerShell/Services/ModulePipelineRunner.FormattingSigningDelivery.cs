@@ -128,7 +128,8 @@ public sealed partial class ModulePipelineRunner
         InformationConfiguration? information,
         DeliveryOptionsConfiguration? delivery,
         bool includeScriptFolders,
-        IReadOnlyList<string>? finalizedPayloadFiles)
+        IReadOnlyList<string>? finalizedPayloadFiles,
+        Action<int, int, string>? progress = null)
     {
         if (string.IsNullOrWhiteSpace(rootPath))
             throw new ArgumentException("Root path is required.", nameof(rootPath));
@@ -159,7 +160,7 @@ public sealed partial class ModulePipelineRunner
             finalizedPayloadFiles);
         var include = BuildSigningIncludePatterns(signing);
         var exclude = BuildSigningExcludeSubstrings(signing, delivery);
-        return _hostedOperations.SignModuleOutput(moduleName, rootPath, packageFilePaths, include, exclude, signing);
+        return _hostedOperations.SignModuleOutput(moduleName, rootPath, packageFilePaths, include, exclude, signing, progress);
     }
 
     internal static string[] BuildSigningIncludePatterns(SigningOptionsConfiguration signing)

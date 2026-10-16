@@ -60,7 +60,8 @@ internal interface IModulePipelineHostedOperations
         string[] packageFilePaths,
         string[] includePatterns,
         string[] excludeSubstrings,
-        SigningOptionsConfiguration signing);
+        SigningOptionsConfiguration signing,
+        Action<int, int, string>? progress = null);
 }
 
 internal interface IModulePipelinePublishPreflightOperations

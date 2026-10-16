@@ -58,7 +58,7 @@ internal sealed partial class PowerForgeReleaseService
             if (releaseCheckpoint.HasValue)
                 request.ReleaseCheckpoint = releaseCheckpoint.Value;
 
-            return _executeModuleBuild(request, cancellationToken);
+            return ExecuteModuleBuildWithDiagnostics(request, cancellationToken);
         }
         finally
         {
@@ -71,6 +71,19 @@ internal sealed partial class PowerForgeReleaseService
             request.ReuseStaging = originalReuseStaging;
             request.ReleaseCheckpoint = originalReleaseCheckpoint;
         }
+    }
+
+    private ModuleBuildHostExecutionResult ExecuteModuleBuildWithDiagnostics(
+        ModuleBuildHostBuildRequest request, CancellationToken cancellationToken)
+    {
+        var result = _executeModuleBuild(request, cancellationToken);
+        // Native PowerShell streams must be written by the calling host thread.
+        // Interactive stdout has already been streamed through the progress owner.
+        if (request.Progress is null && !string.IsNullOrWhiteSpace(result.StandardOutput))
+            _logger.Info(result.StandardOutput.TrimEnd());
+        if (!string.IsNullOrWhiteSpace(result.StandardError))
+            _logger.Warn(result.StandardError.TrimEnd());
+        return result;
     }
 
     private sealed class TemporaryReleaseDirectory : IDisposable

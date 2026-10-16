@@ -33,6 +33,8 @@ public enum ModulePipelineStepKind
     PackageBuild = 12,
     /// <summary>Prepare external files before module staging.</summary>
     ExternalAsset = 13,
+    /// <summary>Compile or restore the staged PowerShell binary module.</summary>
+    Compilation = 14,
 }
 
 /// <summary>
@@ -171,6 +173,10 @@ public sealed class ModulePipelineStep
             key: "build:build",
             title: "Build module"));
         AddActionSteps(steps, plan, ModulePipelineActionStage.AfterBuild);
+        steps.Add(new ModulePipelineStep(
+            kind: ModulePipelineStepKind.Build,
+            key: "build:prepare",
+            title: "Prepare module contents"));
         AddActionSteps(steps, plan, ModulePipelineActionStage.BeforeManifest);
         steps.Add(new ModulePipelineStep(
             kind: ModulePipelineStepKind.Build,
@@ -178,7 +184,45 @@ public sealed class ModulePipelineStep
             title: "Patch manifest"));
         AddActionSteps(steps, plan, ModulePipelineActionStage.AfterManifest);
 
-        // 2) Docs (split into extraction + writing so users can see where time goes)
+        // Formatting follows manifest preparation.
+        AddActionSteps(steps, plan, ModulePipelineActionStage.BeforeFormatting);
+        if (plan.Formatting is not null)
+        {
+            steps.Add(new ModulePipelineStep(
+                kind: ModulePipelineStepKind.Formatting,
+                key: "format:staging",
+                title: "Format PowerShell"));
+
+            if (plan.Formatting.Options.UpdateProjectRoot)
+            {
+                steps.Add(new ModulePipelineStep(
+                    kind: ModulePipelineStepKind.Formatting,
+                    key: "format:project",
+                    title: "Format PowerShell (project)"));
+            }
+        }
+        AddActionSteps(steps, plan, ModulePipelineActionStage.AfterFormatting);
+
+        if (plan.BuildSpec.PowerShellCompilation?.Enabled == true)
+        {
+            steps.Add(new ModulePipelineStep(
+                kind: ModulePipelineStepKind.Compilation,
+                key: "build:compile",
+                title: plan.BuildSpec.ReuseStaging ? "Restore compiled module" : "Compile PowerShell module"));
+        }
+
+        // Signing follows formatting and precedes docs, validation and tests.
+        AddActionSteps(steps, plan, ModulePipelineActionStage.BeforeSigning);
+        if (plan.SignModule)
+        {
+            steps.Add(new ModulePipelineStep(
+                kind: ModulePipelineStepKind.Signing,
+                key: "sign",
+                title: "Sign module"));
+        }
+        AddActionSteps(steps, plan, ModulePipelineActionStage.AfterSigning);
+
+        // Docs (split into extraction + writing so users can see where time goes).
         AddActionSteps(steps, plan, ModulePipelineActionStage.BeforeDocumentation);
         if (plan.Documentation is not null && plan.DocumentationBuild?.Enable == true)
         {
@@ -200,25 +244,6 @@ public sealed class ModulePipelineStep
             }
         }
         AddActionSteps(steps, plan, ModulePipelineActionStage.AfterDocumentation);
-
-        // 3) Formatting (after build/docs, before validation/packaging).
-        AddActionSteps(steps, plan, ModulePipelineActionStage.BeforeFormatting);
-        if (plan.Formatting is not null)
-        {
-            steps.Add(new ModulePipelineStep(
-                kind: ModulePipelineStepKind.Formatting,
-                key: "format:staging",
-                title: "Format PowerShell"));
-
-            if (plan.Formatting.Options.UpdateProjectRoot)
-            {
-                steps.Add(new ModulePipelineStep(
-                    kind: ModulePipelineStepKind.Formatting,
-                    key: "format:project",
-                    title: "Format PowerShell (project)"));
-            }
-        }
-        AddActionSteps(steps, plan, ModulePipelineActionStage.AfterFormatting);
 
         // 4) Validation checks (after build/docs/formatting, before tests/packaging/publish/install).
         AddActionSteps(steps, plan, ModulePipelineActionStage.BeforeValidation);
@@ -299,17 +324,6 @@ public sealed class ModulePipelineStep
             }
         }
         AddActionSteps(steps, plan, ModulePipelineActionStage.AfterTests);
-
-        // 6) Signing (after tests, before packaging/publish/install).
-        AddActionSteps(steps, plan, ModulePipelineActionStage.BeforeSigning);
-        if (plan.SignModule)
-        {
-            steps.Add(new ModulePipelineStep(
-                kind: ModulePipelineStepKind.Signing,
-                key: "sign",
-                title: "Sign module"));
-        }
-        AddActionSteps(steps, plan, ModulePipelineActionStage.AfterSigning);
 
         // 7) Artefacts
         AddActionSteps(steps, plan, ModulePipelineActionStage.BeforeArtefacts);

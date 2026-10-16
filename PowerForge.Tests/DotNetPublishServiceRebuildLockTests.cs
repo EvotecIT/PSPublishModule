@@ -42,7 +42,7 @@ public sealed class DotNetPublishServiceRebuildLockTests
             var publish = typeof(DotNetPublishPipelineRunner).GetMethod("Publish", BindingFlags.Instance | BindingFlags.NonPublic)!;
             var error = Assert.Throws<TargetInvocationException>(() => publish.Invoke(runner,
                 [plan, "Service", "net10.0", "win-x64", DotNetPublishStyle.PortableCompat,
-                    "test", null, null, null, Array.Empty<string>(), null]));
+                    "test", null, null, null, Array.Empty<string>(), null, null]));
 
             // WhatIf reaches the real lifecycle boundary without touching SCM. The remaining
             // exclusive lock must still block publishing; moving the guard before stop fails this.

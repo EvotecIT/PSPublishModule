@@ -516,7 +516,7 @@ public sealed class ModulePipelineInstallSigningTests
             string[] packageFilePaths,
             string[] includePatterns,
             string[] excludeSubstrings,
-            SigningOptionsConfiguration signing)
+            SigningOptionsConfiguration signing, Action<int, int, string>? progress = null)
         {
             var paths = packageFilePaths.Select(Path.GetFullPath).ToArray();
             var verifiedPaths = HonorSigningPatterns

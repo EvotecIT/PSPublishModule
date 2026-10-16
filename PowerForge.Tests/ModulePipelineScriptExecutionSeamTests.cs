@@ -832,7 +832,7 @@ public sealed partial class ModulePipelineScriptExecutionSeamTests
             string[] packageFilePaths,
             string[] includePatterns,
             string[] excludeSubstrings,
-            SigningOptionsConfiguration signing)
+            SigningOptionsConfiguration signing, Action<int, int, string>? progress = null)
         {
             OperationOrder.Add("Sign");
             SignCalls++;

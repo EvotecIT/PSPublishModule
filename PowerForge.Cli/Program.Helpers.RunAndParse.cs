@@ -27,11 +27,12 @@ internal static partial class Program
             logger.Warn($"stdout (tail):{Environment.NewLine}{f.StdOutTail.TrimEnd()}");
     }
 
-    static T RunWithStatus<T>(bool outputJson, CliOptions cli, string statusText, Func<T> action)
+    static T RunWithStatus<T>(bool outputJson, CliOptions cli, string statusText, Func<T> action, Func<T, bool>? succeeded = null, bool outputIsCaptured = true)
     {
         if (action is null) throw new ArgumentNullException(nameof(action));
 
-        if (outputJson || cli.Quiet || cli.NoColor)
+        if (outputJson || cli.Quiet || cli.NoColor || cli.Verbose || !outputIsCaptured
+            || Console.IsOutputRedirected || Console.IsErrorRedirected)
             return action();
 
         var view = ResolveConsoleView(cli.View);
@@ -41,9 +42,7 @@ internal static partial class Program
         if (ConsoleEnvironment.IsCI || !Spectre.Console.AnsiConsole.Profile.Capabilities.Interactive)
             return action();
 
-        T? result = default;
-        Spectre.Console.AnsiConsole.Status().Start(statusText, _ => { result = action(); });
-        return result!;
+        return PowerForge.ConsoleShared.SpectreStatusConsoleUi.Run(statusText, action, succeeded);
     }
 
     static ConsoleView ResolveConsoleView(ConsoleView requested)

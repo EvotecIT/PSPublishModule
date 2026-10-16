@@ -367,7 +367,7 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
             string[] packageFilePaths,
             string[] includePatterns,
             string[] excludeSubstrings,
-            SigningOptionsConfiguration signing)
+            SigningOptionsConfiguration signing, Action<int, int, string>? progress = null)
         {
             if (ModuleSigningCompleted is null)
                 throw new InvalidOperationException("Signing is not used in this test.");

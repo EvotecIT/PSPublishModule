@@ -197,10 +197,13 @@ public sealed class InvokeDotNetPublishCommand : PSCmdlet
         var isVerbose = boundParameters?.ContainsKey("Verbose") == true;
         var interactive = !Quiet.IsPresent && !NoInteractive.IsPresent &&
                           SpectrePipelineConsoleUi.ShouldUseInteractiveView(isVerbose);
-        var buffer = interactive || Quiet.IsPresent || ExitCode.IsPresent
+        var buffer = Quiet.IsPresent || !interactive && ExitCode.IsPresent
             ? new BufferedLogger { IsVerbose = isVerbose }
             : null;
-        var logger = new CmdletWarningLogger(this, buffer is null ? new CmdletLogger(this, isVerbose) : buffer);
+        ILogger outputLogger = buffer is not null ? buffer
+            : interactive ? new SpectreConsoleLogger { IsVerbose = isVerbose }
+            : new CmdletLogger(this, isVerbose);
+        var logger = new CmdletWarningLogger(this, outputLogger);
         DotNetPublishWorkflowResult workflow;
         try
         {

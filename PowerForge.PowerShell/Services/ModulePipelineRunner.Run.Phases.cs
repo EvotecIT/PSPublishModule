@@ -85,18 +85,32 @@ public sealed partial class ModulePipelineRunner
         }
         ExecuteActions(ModulePipelineActionStage.AfterBuild, plan, session, state);
 
-        state.MergeExecution = plan.BuildSpec.RefreshManifestOnly || IsReusingCompiledPowerShellModule(plan)
-            ? MergeExecutionResult.None
-            : ApplyMerge(plan, buildResult);
-        manifestRequiredModules = ResolveOutputRequiredModules(
-            plan.RequiredModules,
-            plan.MergeMissing,
-            state.MergeExecution.FullyInlinedApprovedModules);
-        if (!plan.BuildSpec.RefreshManifestOnly && !IsReusingCompiledPowerShellModule(plan))
-            ApplyPlaceholders(plan, buildResult);
+        session.Start(session.PrepareStep);
+        try
+        {
+            session.Progress(session.PrepareStep, 0, 0, "Merging module sources and approved dependencies");
+            state.MergeExecution = plan.BuildSpec.RefreshManifestOnly || IsReusingCompiledPowerShellModule(plan)
+                ? MergeExecutionResult.None
+                : ApplyMerge(plan, buildResult);
+            manifestRequiredModules = ResolveOutputRequiredModules(
+                plan.RequiredModules,
+                plan.MergeMissing,
+                state.MergeExecution.FullyInlinedApprovedModules);
+            if (!plan.BuildSpec.RefreshManifestOnly && !IsReusingCompiledPowerShellModule(plan))
+                ApplyPlaceholders(plan, buildResult);
 
-        if (!IsReusingCompiledPowerShellModule(plan))
-            EmbedModuleDependencies(plan, buildResult);
+            if (!IsReusingCompiledPowerShellModule(plan))
+            {
+                session.Progress(session.PrepareStep, 0, 0, "Embedding module dependencies");
+                EmbedModuleDependencies(plan, buildResult);
+            }
+            session.Done(session.PrepareStep);
+        }
+        catch (Exception ex)
+        {
+            session.Fail(session.PrepareStep, ex);
+            throw;
+        }
 
         ExecuteActions(ModulePipelineActionStage.BeforeManifest, plan, session, state);
         session.Start(session.ManifestStep);
@@ -321,11 +335,7 @@ public sealed partial class ModulePipelineRunner
             if (_logger.IsVerbose) _logger.Verbose(ex.ToString());
         }
 
-        ApplyPowerShellModuleCompilation(
-            plan,
-            state,
-            manifestRequiredModules,
-            manifestExternalModuleDependencies);
+        ExecuteCompilationPhase(plan, session, state, manifestRequiredModules, manifestExternalModuleDependencies);
         buildResult = state.RequireBuildResult();
 
         ExecuteActions(ModulePipelineActionStage.BeforeSigning, plan, session, state);
@@ -341,7 +351,8 @@ public sealed partial class ModulePipelineRunner
                     information: plan.Information,
                     delivery: plan.Delivery,
                     includeScriptFolders: !state.PackageWithoutScriptFolders,
-                    finalizedPayloadFiles: buildResult.FinalizedPayloadFiles);
+                    finalizedPayloadFiles: buildResult.FinalizedPayloadFiles,
+                    progress: (completed, total, detail) => session.Progress(session.SignStep, completed, total, detail));
                 session.Done(session.SignStep);
             }
             catch (Exception ex)

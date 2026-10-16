@@ -80,7 +80,6 @@ internal static partial class Program
         }
 
         PowerForgeReleaseSpec? specForRedaction = null;
-        BufferedLogger? interactiveBuffer = null;
         try
         {
             var loaded = LoadPowerForgeReleaseSpecWithPath(configPath);
@@ -90,9 +89,7 @@ internal static partial class Program
 
             var request = BuildReleaseRequestFromArgs(argv, fullConfigPath, planOnly, validateOnly, packagesOnly, moduleOnly, toolsOnly);
             var interactive = !request.AppleSummaryOnly && PipelineConsoleUi.ShouldUseInteractiveView(outputJson, cli);
-            var (cmdLogger, logBuffer) = interactive
-                ? (interactiveBuffer = new BufferedLogger { IsVerbose = cli.Verbose }, interactiveBuffer)
-                : CreateCommandLogger(outputJson, cli, logger);
+            var (cmdLogger, logBuffer) = CreateCommandLogger(outputJson, cli, logger);
 
             var service = new PowerForgeReleaseService(
                 cmdLogger,
@@ -108,7 +105,7 @@ internal static partial class Program
                         request.Progress = progress;
                         return service.Execute(spec, request);
                     })
-                : RunWithStatus(outputJson, cli, "Running unified release workflow", () => service.Execute(spec, request));
+                : RunWithStatus(outputJson, cli, "Running unified release workflow", () => service.Execute(spec, request), value => value.Success);
             watch.Stop();
             var exitCode = result.Success ? 0 : 1;
 
@@ -140,10 +137,6 @@ internal static partial class Program
             if (interactive)
             {
                 SpectrePowerForgeReleaseConsoleUi.WriteSummary(result, watch.Elapsed);
-                if (!result.Success && interactiveBuffer is not null && interactiveBuffer.Entries.Count > 0 && !cli.Quiet)
-                {
-                    WriteInteractiveFailureTail(interactiveBuffer, logger);
-                }
                 return exitCode;
             }
 
@@ -303,10 +296,6 @@ internal static partial class Program
                 RedactReleaseCredentialText(ex.Message, CollectReleaseCredentialMetadata(specForRedaction, null)),
                 logger, ex is AppleReleaseLeaseContentionException ? "AppleAppLeaseBusy" :
                     ex is AppleReleaseGateClosedException { BeforeMutation: true } ? "AppleMutationGateClosed" : null);
-        }
-        finally
-        {
-            ReplayInteractiveWarnings(interactiveBuffer, logger);
         }
     }
 

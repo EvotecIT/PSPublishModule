@@ -12,7 +12,8 @@ public sealed partial class DotNetPublishPipelineRunner
         IList<DotNetPublishMsiBuildResult> msiBuilds,
         DotNetPublishStep step,
         IReadOnlyDictionary<string, string> cleanTrackedGeneratedProvenanceState,
-        string msiReservationOwner)
+        string msiReservationOwner,
+        Action<string>? signingProgress = null)
     {
         if (plan is null) throw new ArgumentNullException(nameof(plan));
         if (msiBuilds is null) throw new ArgumentNullException(nameof(msiBuilds));
@@ -78,7 +79,8 @@ public sealed partial class DotNetPublishPipelineRunner
             files: outputs,
             workingDirectory: plan.ProjectRoot,
             sign: installer.Sign,
-            scope: $"msi:{installerId}");
+            scope: $"msi:{installerId}",
+            progress: signingProgress);
 
         build.SignedFiles = signed;
         _logger.Info(

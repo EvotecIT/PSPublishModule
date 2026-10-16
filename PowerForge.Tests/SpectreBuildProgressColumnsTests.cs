@@ -8,6 +8,32 @@ namespace PowerForge.Tests;
 public sealed class SpectreBuildProgressColumnsTests
 {
     [Fact]
+    public void DetailedRowsStayOnOneLineWhenDescriptionsExceedTheViewport()
+    {
+        using var writer = new StringWriter();
+        var console = AnsiConsole.Create(new AnsiConsoleSettings
+        {
+            Out = new TerminalConsoleOutput(writer, 60), Ansi = AnsiSupport.Yes,
+            ColorSystem = ColorSystemSupport.NoColors, Interactive = InteractionSupport.Yes
+        });
+        var presentation = new SpectreProgressPresentation(60, false);
+        SpectreProgressDisplay.Run(console, presentation.CreateColumns(), context =>
+            {
+                foreach (var title in new[] { "First task", "Second task" })
+                    context.AddTask(presentation.BuildLabel(new SpectreProgressLedgerItem
+                    {
+                        Title = title + " with a long description that would otherwise wrap across the viewport"
+                    }, null), autoStart: false);
+                SpectreProgressDisplay.Refresh(context);
+            });
+        var plain = System.Text.RegularExpressions.Regex.Replace(writer.ToString(), @"\x1b\[[0-?]*[ -/]*[@-~]", string.Empty);
+        var lines = plain.TrimEnd().Split('\n').TakeLast(2).ToArray();
+        Assert.Equal(2, lines.Length);
+        Assert.Contains("First task", lines[0]);
+        Assert.Contains("Second task", lines[1]);
+    }
+
+    [Fact]
     public void CreateStandard_UsesLeftAnchoredModuleStyleLayout()
     {
         var columns = SpectreBuildProgressColumns.CreateStandard();
@@ -231,14 +257,17 @@ public sealed class SpectreBuildProgressColumnsTests
 
     private sealed class TerminalConsoleOutput : IAnsiConsoleOutput
     {
-        public TerminalConsoleOutput(TextWriter writer)
-            => Writer = writer;
+        public TerminalConsoleOutput(TextWriter writer, int width = 120)
+        {
+            Writer = writer;
+            Width = width;
+        }
 
         public TextWriter Writer { get; }
 
         public bool IsTerminal => true;
 
-        public int Width => 120;
+        public int Width { get; }
 
         public int Height => 40;
 
