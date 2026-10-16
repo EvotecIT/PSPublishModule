@@ -13,6 +13,8 @@ public static partial class WebApiDocsGenerator
         WebApiDocsOptions options,
         int documentedTypeCount)
     {
+        if (!string.IsNullOrWhiteSpace(options.IndexDescription))
+            return options.IndexDescription.Trim();
         var title = NormalizeApiSeoText(options.Title);
         var count = FormatApiSeoCount(documentedTypeCount);
         var referenceEntryLabel = documentedTypeCount == 1

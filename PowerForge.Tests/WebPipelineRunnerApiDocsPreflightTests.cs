@@ -8,6 +8,27 @@ using Xunit;
 
 public class WebPipelineRunnerApiDocsPreflightTests
 {
+    [Theory]
+    [InlineData("sourceMemberCoverageScope")]
+    [InlineData("source-member-coverage-scope")]
+    public void RunPipeline_AssemblySourceScopeRequiresAssemblyForEitherOptionName(string optionName)
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-api-source-scope-alias-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "test.xml"), BuildMinimalXml());
+            var pipeline = Path.Combine(root, "pipeline.json");
+            File.WriteAllText(pipeline, $$"""
+                { "steps": [{ "task": "apidocs", "xml": "./test.xml", "out": "./api", "format": "json", "{{optionName}}": "assembly" }] }
+                """);
+            var result = WebPipelineRunner.RunPipeline(pipeline, logger: null);
+            Assert.False(result.Success);
+            Assert.Contains("requires AssemblyPath or AssemblyPaths", Assert.Single(result.Steps).Message, StringComparison.Ordinal);
+        }
+        finally { Directory.Delete(root, recursive: true); }
+    }
+
     [Fact]
     public void RunPipeline_ApiDocsPreflight_FailsOnSourceMappingsWithoutSourceConfig()
     {

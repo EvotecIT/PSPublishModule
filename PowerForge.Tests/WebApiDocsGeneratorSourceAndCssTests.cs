@@ -863,7 +863,7 @@ public class WebApiDocsGeneratorSourceAndCssTests
         {
             WebApiDocsGenerator.Generate(options);
             var html = File.ReadAllText(Path.Combine(outputPath, "index.html"));
-            var lead = WebApiDocsGenerator.TryReadAssemblyDescription(assemblyPath) ?? "Complete API documentation auto-generated from source documentation.";
+            var lead = WebApiDocsGenerator.TryReadAssemblyDescription(assemblyPath) ?? "API reference for PowerForge.Fixtures, with types, members, and signatures.";
             Assert.Contains($"<p class=\"lead\">{System.Web.HttpUtility.HtmlEncode(lead)}</p>", html, StringComparison.Ordinal);
             Assert.Equal("PowerForge.Web static-site engine and reusable website build components.",
                 WebApiDocsGenerator.TryReadAssemblyDescription(typeof(WebApiDocsGenerator).Assembly.Location));

@@ -53,6 +53,8 @@ public static partial class WebApiDocsGenerator
         var indexHtml = ApplyTemplate(indexTemplate, new Dictionary<string, string?>
         {
             ["TITLE"] = System.Web.HttpUtility.HtmlEncode(options.Title),
+            ["INDEX_LEAD"] = System.Web.HttpUtility.HtmlEncode(ResolveApiIndexLead(options)),
+            ["INDEX_DESCRIPTION"] = System.Web.HttpUtility.HtmlEncode(indexDescription),
             ["DESCRIPTION_META"] = BuildDescriptionMetaTag(indexDescription),
             ["OPEN_GRAPH_META"] = BuildApiOpenGraphMetaTags(options, social, options.Title, indexDescription, indexRoute),
             ["HEAD_HTML"] = head,
@@ -148,6 +150,8 @@ public static partial class WebApiDocsGenerator
         var indexHtml = ApplyTemplate(indexTemplate, new Dictionary<string, string?>
         {
             ["TITLE"] = System.Web.HttpUtility.HtmlEncode(options.Title),
+            ["INDEX_LEAD"] = System.Web.HttpUtility.HtmlEncode(ResolveApiIndexLead(options)),
+            ["INDEX_DESCRIPTION"] = System.Web.HttpUtility.HtmlEncode(indexDescription),
             ["DESCRIPTION_META"] = BuildDescriptionMetaTag(indexDescription),
             ["OPEN_GRAPH_META"] = BuildApiOpenGraphMetaTags(options, social, options.Title, indexDescription, NormalizeApiIndexRoute(baseUrl)),
             ["HEAD_HTML"] = head,
@@ -1188,7 +1192,7 @@ body.pf-api-docs .api-suite-search-filter{
             }
             html.Line($"<div class=\"sidebar-count\" data-total=\"{totalTypes}\" data-unit=\"{primaryKindPluralLabel}\">Showing {totalTypes} of {totalTypes} {primaryKindPluralLabel}</div>");
             if (lazyCatalog)
-                html.Line($"<a class=\"sidebar-browse-all\" href=\"{indexUrl}\">Browse all {totalTypes} types</a>");
+                html.Line($"<a class=\"sidebar-browse-all\" href=\"{indexUrl}\">Browse all {totalTypes} {primaryKindPluralLabel}</a>");
             html.Line("<div class=\"sidebar-tools\">");
             using (html.Indent())
             {
@@ -1324,10 +1328,7 @@ body.pf-api-docs .api-suite-search-filter{
             {
                 html.Line($"<p class=\"ev-eyebrow\">{System.Web.HttpUtility.HtmlEncode(labels.SectionLabel)}</p>");
                 html.Line($"<h1>{System.Web.HttpUtility.HtmlEncode(overviewTitle)}</h1>");
-                // The package's own description says what it is for; the generic line is the fallback.
-                var lead = (options.Type == ApiDocsType.PowerShell
-                    ? TryReadModuleManifestDescription(options.PowerShellModuleManifestPath)
-                    : TryReadAssemblyDescription(options.AssemblyPath)) ?? "Complete API documentation auto-generated from source documentation.";
+                var lead = ResolveApiIndexLead(options);
                 html.Line($"<p class=\"lead\">{System.Web.HttpUtility.HtmlEncode(lead)}</p>");
                 AppendOverviewActions(html, options, baseUrl);
             }

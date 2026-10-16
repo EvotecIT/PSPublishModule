@@ -48,6 +48,10 @@ with only the plural `assemblies` input. If framework XML is unavailable,
 `ToString`, and implementations of `IEquatable<T>.Equals`, receive built-in
 summary and return documentation. Available XML documentation takes precedence.
 Pipeline caches account for its bytes and additional `xmls`/`xmlPaths` inputs.
+The search continues past undocumented library candidates to documented library
+ancestors or interfaces, without substituting a distant framework summary.
+Imported XML records can themselves inherit from another base or interface;
+generation follows those chains and reports unresolved imported library contracts.
 Unresolved implicit inheritance on library contracts still produces a warning
 and fails pipeline steps with `failOnWarnings` enabled (the CI default).
 An explicit `cref` remains supported.
@@ -61,6 +65,38 @@ another copy of the same library.
 Malformed C# XML or PowerShell help stops generation before replacing existing
 reference files. Correct the input and rerun the generator; an empty reference
 is not a successful recovery from invalid documentation.
+
+## API and command index copy
+
+Set `indexLead` and `indexDescription` on each `apidocs` pipeline step to write
+the visible introduction and the search/social description independently. Batch
+`inputs` and `entries` inherit these settings; child values override parent values
+even when they use the other supported spelling:
+
+```json
+{
+  "task": "apidocs",
+  "title": "ChartForgeX API reference",
+  "indexLead": "Build charts, dashboards, and visual stories with ChartForgeX.",
+  "indexDescription": "Explore ChartForgeX types, signatures, and members for building charts, dashboards, and visual stories."
+}
+```
+
+These are plain-text values; the generator HTML-encodes them. The CLI accepts
+`--index-lead` and `--index-description`, and pipeline steps also accept the
+hyphenated names. Custom index templates can use `{{INDEX_LEAD}}` and
+`{{INDEX_DESCRIPTION}}`; `{{DESCRIPTION_META}}` includes the description meta tag.
+An explicit description is preserved without automatic length padding or truncation.
+
+Without an explicit lead, C# references use assembly descriptions from either
+`assembly` or `assemblies`, then a product-specific introduction using `packageId`,
+the page title, or the assembly name. PowerShell references use the description
+from an explicit or discovered module manifest, then a command introduction
+naming the module inferred from the help file or `moduleName`.
+
+Pre-rendered `headerHtml` and `footerHtml` fragments do not need navigation
+placeholders. Fragments that contain navigation placeholders still require a
+navigation configuration or supplied template-token values.
 
 ## Cross-package API search
 

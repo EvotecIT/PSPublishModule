@@ -122,6 +122,7 @@ internal static partial class WebCliHelpers
         Console.WriteLine("                     (source-url/source-map tokens: {path} {line} {root} {pathNoRoot} {pathNoPrefix})");
         Console.WriteLine("                     [--nav <file>] [--nav-surface <name>] [--include-namespace <prefix[,prefix]>] [--exclude-namespace <prefix[,prefix]>]");
         Console.WriteLine("                     [--quickstart-types <type[,type]>] [--display-name-mode short|namespace-suffix|full]");
+        Console.WriteLine("                     [--index-lead <text>] [--index-description <text>]");
         Console.WriteLine("                     [--section-label <text>] [--module-name <name>]");
         Console.WriteLine("  powerforge-web changelog --out <file> [--source auto|file|github] [--changelog <file>] [--repo <owner/name>]");
         Console.WriteLine("                     [--repo-url <url>] [--token <token>] [--max <n>] [--title <text>]");

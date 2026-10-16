@@ -42,6 +42,10 @@ public sealed class WebApiDocsOptions
     public string OutputPath { get; set; } = string.Empty;
     /// <summary>Documentation title.</summary>
     public string Title { get; set; } = "API Reference";
+    /// <summary>Optional plain-text lead displayed on the API or command index.</summary>
+    public string? IndexLead { get; set; }
+    /// <summary>Optional plain-text index description used for search and social metadata.</summary>
+    public string? IndexDescription { get; set; }
     /// <summary>
     /// Optional short label naming the reference section in breadcrumbs, the sidebar heading and the overview eyebrow.
     /// Defaults to <c>Commands</c> for PowerShell references and <c>API Reference</c> for C# references.

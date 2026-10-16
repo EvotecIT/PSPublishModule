@@ -35,4 +35,32 @@ public sealed class WebApiDocsCommandCountTests
         }
         finally { Directory.Delete(root, recursive: true); }
     }
+
+    [Fact]
+    public void Generate_LargeMixedCommandCatalogUsesCommandBrowseLabel()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-api-command-catalog-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var commands = string.Concat(Enumerable.Range(0, 201).Select(i => $"""
+                <command:command><command:details><command:name>Get-Item{i}</command:name><command:commandType>{(i % 2 == 0 ? "Cmdlet" : "Function")}</command:commandType>
+                <maml:description><maml:para>Gets item {i}.</maml:para></maml:description></command:details></command:command>
+                """));
+            var help = Path.Combine(root, "Demo-help.xml");
+            File.WriteAllText(help, $"""
+                <helpItems xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10">{commands}</helpItems>
+                """);
+            var output = Path.Combine(root, "api");
+            WebApiDocsGenerator.Generate(new WebApiDocsOptions
+            {
+                Type = ApiDocsType.PowerShell, HelpPath = help, OutputPath = output,
+                Format = "html", Template = "docs", PowerShellModuleName = "Demo", GeneratePowerShellFallbackExamples = false
+            });
+            var detailPage = Directory.GetFiles(output, "*.html", SearchOption.AllDirectories)
+                .First(path => File.ReadAllText(path).Contains("sidebar-browse-all", StringComparison.Ordinal));
+            Assert.Contains(">Browse all 201 commands</a>", File.ReadAllText(detailPage));
+        }
+        finally { Directory.Delete(root, recursive: true); }
+    }
 }

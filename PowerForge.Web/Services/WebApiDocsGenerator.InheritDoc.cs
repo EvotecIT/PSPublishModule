@@ -1,4 +1,5 @@
 using System.Reflection;
+using System.Runtime.Loader;
 using System.Xml.Linq;
 
 namespace PowerForge.Web;
@@ -9,7 +10,7 @@ public static partial class WebApiDocsGenerator
         left.Module == right.Module && left.MetadataToken == right.MetadataToken;
 
     private static void ResolveImplicitInheritDoc(Assembly assembly, Dictionary<string, XElement> members, string assemblyPath,
-        Dictionary<string, XElement> frameworkFallbacks, List<string> warnings)
+        Dictionary<string, XElement> frameworkFallbacks, IReadOnlyList<string> sourceMemberIds, List<string> warnings)
     {
         var reflected = new Dictionary<string, MemberInfo>(StringComparer.Ordinal);
         const BindingFlags flags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static | BindingFlags.DeclaredOnly;
@@ -25,47 +26,69 @@ public static partial class WebApiDocsGenerator
         }
         IReadOnlyList<string>? referenceInputs = null;
         var loadedReferences = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var pair in members.ToArray())
+        // Imported records may themselves inherit documentation; process reachable
+        // records with their reflected metadata before the model follows their cref.
+        var pendingRecords = new Queue<KeyValuePair<string, XElement>>(sourceMemberIds.Select(id => new KeyValuePair<string, XElement>(id, members[id])));
+        var resolvedRecords = new HashSet<string>(StringComparer.Ordinal);
+        while (pendingRecords.TryDequeue(out var pair))
         {
             var inheritDoc = pair.Value.Element("inheritdoc");
             if (inheritDoc is null) continue;
             var explicitTarget = inheritDoc.Attribute("cref")?.Value;
             var implicitTarget = string.IsNullOrWhiteSpace(explicitTarget);
             if (!reflected.TryGetValue(pair.Key, out var member)) continue;
+            if (!resolvedRecords.Add(pair.Key)) continue;
             var candidates = InheritedDocumentationMembers(member).ToArray();
             var inheritedOwnerNames = candidates.Select(candidate => candidate is Type candidateType
                     ? candidateType.Assembly.GetName().Name : candidate.DeclaringType!.Assembly.GetName().Name)
                 .OfType<string>().ToHashSet(StringComparer.OrdinalIgnoreCase);
             string? target = null;
+            var missingLibraryContract = false;
             var targets = implicitTarget ? candidates.Select(DocumentationId).ToArray() : new[] { explicitTarget! };
             foreach (var candidateId in targets)
             {
+                var candidate = candidates.FirstOrDefault(candidate => DocumentationId(candidate) == candidateId)
+                    ?? (implicitTarget ? null : FindLoadedInheritDocMember(candidateId, assembly) ?? FrameworkInheritDocMember(candidateId));
+                var declaring = candidate as Type ?? candidate?.DeclaringType;
+                if (implicitTarget && missingLibraryContract && declaring?.Assembly == typeof(object).Assembly)
+                    continue;
                 if (!members.ContainsKey(candidateId))
                 {
                     referenceInputs ??= WebApiDocumentationInputs.Discover(assemblyPath);
-                    var candidate = candidates.FirstOrDefault(candidate => DocumentationId(candidate) == candidateId) ?? candidates.FirstOrDefault();
-                    var declaring = candidate as Type ?? candidate?.DeclaringType;
                     var ownerName = declaring?.Assembly.GetName().Name;
                     var assemblyDirectory = Path.GetDirectoryName(Path.GetFullPath(assemblyPath));
                     var candidateInputs = referenceInputs.Where(path =>
                         !string.Equals(Path.GetDirectoryName(path), assemblyDirectory, StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(Path.GetFileNameWithoutExtension(path), ownerName, StringComparison.OrdinalIgnoreCase) ||
                         inheritedOwnerNames.Contains(Path.GetFileNameWithoutExtension(path)));
                     foreach (var path in candidateInputs.OrderBy(path => ReferenceDocumentationPriority(path, ownerName, declaring?.Namespace)))
                     {
                         if (!loadedReferences.Add(path)) continue;
                         var document = LoadXmlDocumentation(path, warnings);
                         foreach (var inherited in document.Root!.Element("members")!.Elements("member"))
-                            if (inherited.Attribute("name")?.Value is { Length: > 0 } id) members.TryAdd(id, inherited);
+                        {
+                            if (inherited.Attribute("name")?.Value is not { Length: > 0 } id) continue;
+                            members.TryAdd(id, inherited);
+                        }
                         if (members.ContainsKey(candidateId)) break;
                     }
                 }
-                if (!members.ContainsKey(candidateId)) continue;
+                if (!members.ContainsKey(candidateId))
+                {
+                    if (implicitTarget && declaring?.Assembly != typeof(object).Assembly)
+                        missingLibraryContract = true;
+                    continue;
+                }
                 target = candidateId;
+                if (candidate is not null) reflected.TryAdd(candidateId, candidate);
+                if (reflected.ContainsKey(candidateId) && members[candidateId].Element("inheritdoc") is not null)
+                    pendingRecords.Enqueue(new(candidateId, members[candidateId]));
                 break;
             }
             // Prefer real XML documentation. Only synthesize the nearest well-known framework contract;
             // a missing library contract must retain the unresolved-inheritdoc diagnostic.
-            if (implicitTarget && target is null && candidates.FirstOrDefault() is { } nearest &&
+            var fallbackMember = implicitTarget ? candidates.FirstOrDefault() : FrameworkInheritDocMember(explicitTarget!);
+            if (target is null && fallbackMember is { } nearest &&
                 CreateFrameworkInheritDoc(nearest) is { } frameworkDocumentation)
             {
                 target = DocumentationId(nearest);
@@ -74,6 +97,26 @@ public static partial class WebApiDocsGenerator
             if (implicitTarget && target is not null) inheritDoc.SetAttributeValue("cref", target);
             else if (implicitTarget) warnings.Add($"Implicit inheritdoc could not be resolved for {pair.Key}; supply the inherited XML documentation or an explicit cref.");
         }
+    }
+
+    private static MemberInfo? FindLoadedInheritDocMember(string documentationId, Assembly sourceAssembly)
+    {
+        var loadContext = AssemblyLoadContext.GetLoadContext(sourceAssembly);
+        var assemblies = (loadContext?.Assemblies ?? Array.Empty<Assembly>())
+            .Concat(AppDomain.CurrentDomain.GetAssemblies().Where(candidate => AssemblyLoadContext.GetLoadContext(candidate) == AssemblyLoadContext.Default))
+            .Distinct()
+            .OrderBy(candidate => candidate == sourceAssembly ? 0 : 1);
+        const BindingFlags flags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static | BindingFlags.DeclaredOnly;
+        foreach (var candidateAssembly in assemblies)
+        foreach (var type in GetExportedTypesSafe(candidateAssembly))
+        {
+            if (type is null) continue;
+            if (DocumentationId(type) == documentationId) return type;
+            foreach (var member in type.GetMembers(flags))
+                if (member is (MethodInfo or PropertyInfo or EventInfo) && DocumentationId(member) == documentationId)
+                    return member;
+        }
+        return null;
     }
 
     private static int ReferenceDocumentationPriority(string path, string? ownerName, string? typeNamespace)

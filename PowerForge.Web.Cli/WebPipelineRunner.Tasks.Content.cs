@@ -333,6 +333,8 @@ internal static partial class WebPipelineRunner
                 AssemblyPaths = assemblies,
                 OutputPath = outPath,
                 Title = string.IsNullOrWhiteSpace(title) ? "API Reference" : title,
+                IndexLead = GetString(step, "indexLead") ?? GetString(step, "index-lead"),
+                IndexDescription = GetString(step, "indexDescription") ?? GetString(step, "index-description"),
                 SectionLabel = GetString(step, "sectionLabel") ?? GetString(step, "section-label"),
                 PowerShellModuleName = GetString(step, "moduleName") ?? GetString(step, "module-name"),
                 BaseUrl = baseUrl,
@@ -375,7 +377,7 @@ internal static partial class WebPipelineRunner
                 SourceUrlPattern = sourceUrl,
                 GenerateCoverageReport = generateCoverageReport,
                 CoverageReportPath = coverageReportPath,
-                SourceMemberCoverageScope = GetString(step, "sourceMemberCoverageScope") ?? "all",
+                SourceMemberCoverageScope = GetString(step, "sourceMemberCoverageScope") ?? GetString(step, "source-member-coverage-scope") ?? "all",
                 GenerateXrefMap = generateXrefMap,
                 GenerateMemberXrefs = generateMemberXrefs,
                 MemberXrefMaxPerType = memberXrefMaxPerType <= 0 ? 0 : memberXrefMaxPerType,
@@ -682,6 +684,15 @@ internal static partial class WebPipelineRunner
 
         if (input.ValueKind != JsonValueKind.Object)
             throw new InvalidOperationException("apidocs batch inputs must be JSON objects.");
+
+        // A child overrides inherited copy regardless of which supported alias it uses.
+        foreach (var (primary, alias) in new[] { ("indexLead", "index-lead"), ("indexDescription", "index-description") })
+        {
+            if (!input.TryGetProperty(primary, out _) && !input.TryGetProperty(alias, out _))
+                continue;
+            parentNode.Remove(primary);
+            parentNode.Remove(alias);
+        }
 
         foreach (var property in input.EnumerateObject())
             parentNode[property.Name] = JsonNode.Parse(property.Value.GetRawText());

@@ -5,6 +5,16 @@ namespace PowerForge.Web;
 
 public static partial class WebApiDocsGenerator
 {
+    /// <summary>Resolves an explicit framework ID using actual core library metadata.</summary>
+    private static MemberInfo? FrameworkInheritDocMember(string id)
+    {
+        const BindingFlags flags = BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly;
+        foreach (var type in new[] { typeof(object), typeof(ValueType), typeof(IEquatable<>) })
+            foreach (var method in type.GetMethods(flags))
+                if (DocumentationId(method) == id) return method;
+        return null;
+    }
+
     /// <summary>Supplies common framework contracts when the matching reference XML is unavailable.</summary>
     private static XElement? CreateFrameworkInheritDoc(MemberInfo member)
     {

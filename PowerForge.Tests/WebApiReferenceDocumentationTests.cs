@@ -9,6 +9,60 @@ namespace PowerForge.Tests;
 public sealed class WebApiReferenceDocumentationTests
 {
     [Fact]
+    public void Generate_RecursivelyResolvesExplicitImportedTargetFromLoadedDependency()
+    {
+        WithRoot(root =>
+        {
+            var suffix = Guid.NewGuid().ToString("N");
+            var namespaceName = "Imported.InheritDoc." + suffix;
+            var dependency = AssemblyBuilder.DefineDynamicAssembly(new AssemblyName("ImportedInheritDoc" + suffix), AssemblyBuilderAccess.Run);
+            var module = dependency.DefineDynamicModule("ImportedInheritDoc" + suffix);
+            var contract = module.DefineType(namespaceName + ".IContract", TypeAttributes.Public | TypeAttributes.Interface | TypeAttributes.Abstract);
+            var contractMethod = contract.DefineMethod("Other", MethodAttributes.Public | MethodAttributes.Abstract | MethodAttributes.Virtual | MethodAttributes.NewSlot,
+                typeof(void), Type.EmptyTypes);
+            var contractType = contract.CreateType()!;
+            var baseBuilder = module.DefineType(namespaceName + ".Base", TypeAttributes.Public | TypeAttributes.Class);
+            baseBuilder.AddInterfaceImplementation(contractType);
+            var baseMethod = baseBuilder.DefineMethod("Other", MethodAttributes.Public | MethodAttributes.Virtual | MethodAttributes.HideBySig,
+                typeof(void), Type.EmptyTypes);
+            baseMethod.GetILGenerator().Emit(OpCodes.Ret);
+            baseBuilder.DefineMethodOverride(baseMethod, contractMethod);
+            var baseType = baseBuilder.CreateType()!;
+            var targetId = "M:" + baseType.FullName + ".Other";
+            var contractId = "M:" + contractType.FullName + ".Other";
+
+            var assembly = Path.Combine(root, "PowerForge.Tests.dll");
+            File.Copy(typeof(WebReferenceNamedDerived).Assembly.Location, assembly);
+            var dependencyName = "ImportedInheritDoc" + suffix;
+            File.WriteAllText(Path.Combine(root, dependencyName + ".dll"), "loaded from the test AppDomain");
+            File.WriteAllText(Path.Combine(root, dependencyName + ".xml"), $"""
+                <doc><members>
+                  <member name="{targetId}"><inheritdoc/></member>
+                  <member name="{contractId}"><summary>Imported interface contract summary.</summary></member>
+                </members></doc>
+                """);
+            var xml = Path.Combine(root, "docs.xml");
+            File.WriteAllText(xml, $"""
+                <doc><members>
+                  <member name="T:PowerForge.Tests.WebReferenceNamedDerived"><summary>Derived.</summary></member>
+                  <member name="M:PowerForge.Tests.WebReferenceNamedDerived.Run"><inheritdoc cref="{targetId}"/></member>
+                </members></doc>
+                """);
+            var output = Path.Combine(root, "api");
+
+            var result = WebApiDocsGenerator.Generate(new WebApiDocsOptions
+            {
+                XmlPath = xml, AssemblyPath = assembly, OutputPath = output, Format = "json", IncludeUndocumentedTypes = false
+            });
+
+            Assert.Empty(result.Warnings);
+            using var json = JsonDocument.Parse(File.ReadAllText(Path.Combine(output, "types", "powerforge-tests-webreferencenamedderived.json")));
+            var method = json.RootElement.GetProperty("methods").EnumerateArray().Single(item => item.GetProperty("name").GetString() == "Run");
+            Assert.Equal("Imported interface contract summary.", method.GetProperty("summary").GetString());
+        });
+    }
+
+    [Fact]
     public void Generate_ResolvesExplicitOtherMemberFromAdjacentInheritedOwner()
     {
         WithRoot(root =>
@@ -118,24 +172,29 @@ public sealed class WebApiReferenceDocumentationTests
     [InlineData(false)]
     [InlineData(true)]
     [InlineData(true, "entries")]
-    public void PipelineCache_TracksInheritedDocumentationBytes(bool explicitInput, string? batchKey = null)
+    [InlineData(false, null, "assemblies")]
+    [InlineData(false, null, "assemblyPaths")]
+    [InlineData(false, "inputs", "assemblies")]
+    [InlineData(false, "entries", "assemblyPaths")]
+    public void PipelineCache_TracksInheritedDocumentationBytes(bool explicitInput, string? batchKey = null, string assemblyKey = "assembly")
     {
         WithRoot(root =>
         {
             var assembly = Path.Combine(root, "PowerForge.Tests.dll");
             File.Copy(typeof(WebInheritanceImplementation).Assembly.Location, assembly);
             var inherited = explicitInput ? Path.Combine(root, "contracts.xml") : Path.ChangeExtension(assembly, ".xml");
-            string Contracts(string summary) => "<doc><members><member name=\"T:PowerForge.Tests.WebInheritanceBase\"><summary>Base.</summary></member>" +
+            string Contracts(string summary) => "<doc><assembly><name>PowerForge.Tests</name></assembly><members><member name=\"T:PowerForge.Tests.WebInheritanceBase\"><summary>Base.</summary></member>" +
                 "<member name=\"M:PowerForge.Tests.WebInheritanceBase.Execute(System.String)\"><summary>" + summary + "</summary></member></members></doc>";
             File.WriteAllText(inherited, Contracts("Initial documentation"));
             File.WriteAllText(Path.Combine(root, "docs.xml"), """
-                <doc><members>
+                <doc><assembly><name>PowerForge.Tests</name></assembly><members>
                   <member name="T:PowerForge.Tests.WebInheritanceImplementation"><summary>Implementation.</summary></member>
                   <member name="M:PowerForge.Tests.WebInheritanceImplementation.Execute(System.String)"><inheritdoc/></member>
                 </members></doc>
                 """);
             var pipeline = Path.Combine(root, "pipeline.json");
-            var fields = "\"xml\":\"docs.xml\",\"assembly\":\"PowerForge.Tests.dll\",\"out\":\"api\",\"format\":\"json\",\"includeUndocumented\":false,\"failOnWarnings\":false" +
+            var assemblyInput = assemblyKey == "assembly" ? "\"PowerForge.Tests.dll\"" : "[\"PowerForge.Tests.dll\"]";
+            var fields = "\"xml\":\"docs.xml\",\"" + assemblyKey + "\":" + assemblyInput + ",\"out\":\"api\",\"format\":\"json\",\"includeUndocumented\":false,\"failOnWarnings\":false" +
                 (explicitInput ? ",\"xmls\":[\"contracts.xml\"]" : "");
             var step = batchKey is null ? "{\"task\":\"apidocs\"," + fields + "}"
                 : "{\"task\":\"apidocs\",\"" + batchKey + "\":[{" + fields + "}]}";
@@ -159,8 +218,11 @@ public sealed class WebApiReferenceDocumentationTests
         });
     }
 
-    [Fact]
-    public void Generate_ReleasesAssemblyFilesAndInspectsRebuiltBytesAtTheSamePath()
+    [Theory]
+    [InlineData("assembly")]
+    [InlineData("assemblies")]
+    [InlineData("assemblyPaths")]
+    public void PipelineCache_ReleasesAssemblyFilesAndInspectsRebuiltBytesAtTheSamePath(string assemblyKey)
     {
         WithRoot(root =>
         {
@@ -175,14 +237,26 @@ public sealed class WebApiReferenceDocumentationTests
                 builder.Save(assemblyPath);
             }
             var xml = Path.Combine(root, "docs.xml");
-            File.WriteAllText(xml, "<doc><members><member name=\"T:WebReferenceRefreshFixture\"><summary>Current API.</summary></member></members></doc>");
-            var options = new WebApiDocsOptions { AssemblyPath = assemblyPath, XmlPath = xml, OutputPath = Path.Combine(root, "api"), Format = "json" };
+            File.WriteAllText(xml, "<doc><assembly><name>WebReferenceRefresh</name></assembly><members><member name=\"T:WebReferenceRefreshFixture\"><summary>Current API.</summary></member></members></doc>");
+            var pipeline = Path.Combine(root, "pipeline.json");
+            var step = new Dictionary<string, object?>
+            {
+                ["task"] = "apidocs", ["xml"] = "docs.xml", ["out"] = "api", ["format"] = "json",
+                [assemblyKey] = assemblyKey == "assembly" ? (object)assemblyPath : new[] { assemblyPath }
+            };
+            File.WriteAllText(pipeline, JsonSerializer.Serialize(new { cache = true, steps = new[] { step } }));
             WriteAssembly("BeforeRebuild");
-            WebApiDocsGenerator.Generate(options);
+            var first = WebPipelineRunner.RunPipeline(pipeline, logger: null);
+            Assert.True(first.Success, Assert.Single(first.Steps).Message);
             var output = Path.Combine(root, "api", "types", "webreferencerefreshfixture.json");
             Assert.Contains("BeforeRebuild", File.ReadAllText(output));
+            Assert.True(Assert.Single(WebPipelineRunner.RunPipeline(pipeline, logger: null).Steps).Cached);
+            var timestamp = File.GetLastWriteTimeUtc(assemblyPath);
             WriteAssembly("AfterRebuild");
-            WebApiDocsGenerator.Generate(options);
+            File.SetLastWriteTimeUtc(assemblyPath, timestamp);
+            var rebuilt = WebPipelineRunner.RunPipeline(pipeline, logger: null);
+            Assert.True(rebuilt.Success, Assert.Single(rebuilt.Steps).Message);
+            Assert.False(Assert.Single(rebuilt.Steps).Cached);
             Assert.Contains("AfterRebuild", File.ReadAllText(output));
             Assert.DoesNotContain("BeforeRebuild", File.ReadAllText(output));
         });
