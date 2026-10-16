@@ -50,6 +50,46 @@ public sealed class WebApiDocsInheritanceChainTests
         });
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Generate_DoesNotDiagnoseUnusedImportedAncestorsWhenNearestDocumentationResolves(bool includeDependencyAssembly)
+    {
+        WithRoot(root =>
+        {
+            var assemblyPath = Path.Combine(root, "ImportedDerived.dll");
+            var builder = new PersistedAssemblyBuilder(new AssemblyName("ImportedDerived"), typeof(object).Assembly);
+            var type = builder.DefineDynamicModule("Main").DefineType("ImportedDerived", TypeAttributes.Public, typeof(WebImportedNearestDocBase));
+            type.DefineMethod("Run", MethodAttributes.Public | MethodAttributes.Virtual, typeof(void), Type.EmptyTypes)
+                .GetILGenerator().Emit(OpCodes.Ret);
+            type.CreateType();
+            builder.Save(assemblyPath);
+            File.Copy(typeof(WebImportedNearestDocBase).Assembly.Location, Path.Combine(root, "PowerForge.Tests.dll"));
+            File.WriteAllText(Path.Combine(root, "PowerForge.Tests.xml"), """
+                <doc><members>
+                  <member name="M:PowerForge.Tests.WebImportedNearestDocBase.Run"><summary>Nearest documented operation.</summary></member>
+                  <member name="M:PowerForge.Tests.WebImportedUndocumentedRoot.Run"><inheritdoc/></member>
+                </members></doc>
+                """);
+            var xml = Path.Combine(root, "docs.xml");
+            File.WriteAllText(xml, """
+                <doc><assembly><name>ImportedDerived</name></assembly><members><member name="T:ImportedDerived"><summary>Implementation.</summary></member>
+                  <member name="M:ImportedDerived.Run"><inheritdoc/></member></members></doc>
+                """);
+            var result = WebApiDocsGenerator.Generate(new WebApiDocsOptions
+            {
+                XmlPath = xml, AssemblyPath = assemblyPath,
+                AssemblyPaths = includeDependencyAssembly ? new[] { Path.Combine(root, "PowerForge.Tests.dll") } : Array.Empty<string>(),
+                OutputPath = Path.Combine(root, "api"),
+                Format = "json", IncludeUndocumentedTypes = false
+            });
+            Assert.DoesNotContain(result.Warnings, warning => warning.Contains("Implicit inheritdoc", StringComparison.Ordinal));
+            using var json = JsonDocument.Parse(File.ReadAllText(Path.Combine(root, "api", "types", "importedderived.json")));
+            Assert.Equal("Nearest documented operation.", json.RootElement.GetProperty("methods").EnumerateArray()
+                .Single(method => method.GetProperty("name").GetString() == "Run").GetProperty("summary").GetString());
+        });
+    }
+
     [Fact]
     public void Generate_ExplicitFrameworkTargetUsesBuiltInDocsWithoutInferredCandidatesOrTargetingPack()
     {
@@ -100,4 +140,14 @@ public interface IWebImportedDocContract
 public class WebImportedDocBase : IWebImportedDocContract
 {
     public virtual void Run() { }
+}
+
+public class WebImportedUndocumentedRoot : IWebImportedDocContract
+{
+    public virtual void Run() { }
+}
+
+public class WebImportedNearestDocBase : WebImportedUndocumentedRoot
+{
+    public override void Run() { }
 }

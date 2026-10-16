@@ -49,8 +49,9 @@ public static partial class WebApiDocsGenerator
             foreach (var member in source.Document.Root!.Element("members")!.Elements("member"))
                 if (member.Attribute("name")?.Value is { Length: > 0 } name) members.TryAdd(name, member);
         var frameworkFallbacks = new Dictionary<string, XElement>(StringComparer.Ordinal);
+        var sourceMemberIds = members.Keys.ToArray();
         foreach (var assembly in assemblies.Values)
-            ResolveImplicitInheritDoc(assembly, members, assemblyPaths[assembly.GetName().Name!], frameworkFallbacks, warnings);
+            ResolveImplicitInheritDoc(assembly, members, assemblyPaths[assembly.GetName().Name!], frameworkFallbacks, sourceMemberIds, warnings);
         // A later assembly may supply real framework XML. Synthetic records must not shadow it.
         foreach (var fallback in frameworkFallbacks)
             members.TryAdd(fallback.Key, fallback.Value);

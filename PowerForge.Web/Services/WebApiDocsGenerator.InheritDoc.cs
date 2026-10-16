@@ -9,7 +9,7 @@ public static partial class WebApiDocsGenerator
         left.Module == right.Module && left.MetadataToken == right.MetadataToken;
 
     private static void ResolveImplicitInheritDoc(Assembly assembly, Dictionary<string, XElement> members, string assemblyPath,
-        Dictionary<string, XElement> frameworkFallbacks, List<string> warnings)
+        Dictionary<string, XElement> frameworkFallbacks, IReadOnlyList<string> sourceMemberIds, List<string> warnings)
     {
         var reflected = new Dictionary<string, MemberInfo>(StringComparer.Ordinal);
         const BindingFlags flags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static | BindingFlags.DeclaredOnly;
@@ -27,7 +27,7 @@ public static partial class WebApiDocsGenerator
         var loadedReferences = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         // Imported records may themselves inherit documentation; process reachable
         // records with their reflected metadata before the model follows their cref.
-        var pendingRecords = new Queue<KeyValuePair<string, XElement>>(members);
+        var pendingRecords = new Queue<KeyValuePair<string, XElement>>(sourceMemberIds.Select(id => new KeyValuePair<string, XElement>(id, members[id])));
         var resolvedRecords = new HashSet<string>(StringComparer.Ordinal);
         while (pendingRecords.TryDequeue(out var pair))
         {
@@ -38,13 +38,6 @@ public static partial class WebApiDocsGenerator
             if (!reflected.TryGetValue(pair.Key, out var member)) continue;
             if (!resolvedRecords.Add(pair.Key)) continue;
             var candidates = InheritedDocumentationMembers(member).ToArray();
-            foreach (var inheritedMember in candidates)
-            {
-                var id = DocumentationId(inheritedMember);
-                reflected.TryAdd(id, inheritedMember);
-                if (members.TryGetValue(id, out var record) && record.Element("inheritdoc") is not null)
-                    pendingRecords.Enqueue(new(id, record));
-            }
             var inheritedOwnerNames = candidates.Select(candidate => candidate is Type candidateType
                     ? candidateType.Assembly.GetName().Name : candidate.DeclaringType!.Assembly.GetName().Name)
                 .OfType<string>().ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -74,8 +67,7 @@ public static partial class WebApiDocsGenerator
                         foreach (var inherited in document.Root!.Element("members")!.Elements("member"))
                         {
                             if (inherited.Attribute("name")?.Value is not { Length: > 0 } id) continue;
-                            if (members.TryAdd(id, inherited) && reflected.ContainsKey(id) && inherited.Element("inheritdoc") is not null)
-                                pendingRecords.Enqueue(new(id, inherited));
+                            members.TryAdd(id, inherited);
                         }
                         if (members.ContainsKey(candidateId)) break;
                     }
@@ -87,6 +79,9 @@ public static partial class WebApiDocsGenerator
                     continue;
                 }
                 target = candidateId;
+                if (candidate is not null) reflected.TryAdd(candidateId, candidate);
+                if (reflected.ContainsKey(candidateId) && members[candidateId].Element("inheritdoc") is not null)
+                    pendingRecords.Enqueue(new(candidateId, members[candidateId]));
                 break;
             }
             // Prefer real XML documentation. Only synthesize the nearest well-known framework contract;
