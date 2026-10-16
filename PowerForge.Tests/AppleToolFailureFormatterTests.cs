@@ -34,6 +34,17 @@ public sealed class AppleToolFailureFormatterTests
         Assert.True(diagnostic.Length <= 2000);
     }
 
+    [Theory]
+    [InlineData("error:\nerror:")]
+    [InlineData("error:\r\nerror:")]
+    public void Format_PreservesShortErrorStreamsWithoutExpandingLineSeparators(string stderr)
+    {
+        var diagnostic = AppleToolFailureFormatter.Format(Failure("build output", stderr), Array.Empty<string>());
+
+        Assert.Contains("stdout:\nbuild output", diagnostic);
+        Assert.EndsWith("stderr:\nerror:\nerror:", diagnostic);
+    }
+
     [Fact]
     public void Format_RedactsPrivateKeyBlocksAndEncodedCredentials()
     {

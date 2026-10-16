@@ -34,7 +34,7 @@ internal static class AppleToolFailureFormatter
         var errors = text.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
             .Where(line => ErrorLine.IsMatch(line)).Reverse().Take(8).Reverse().ToArray();
         if (errors.Length > 0)
-            text = string.Join(Environment.NewLine, errors);
+            text = string.Join("\n", errors);
         if (text.Length <= maximumLength)
             return text;
         const string separator = "\n... output truncated ...\n";
