@@ -14,6 +14,7 @@ internal sealed partial class AppleReleaseSourceSnapshot
                 new[] { "ls-files", "-z" },
                 "enumerate local Swift package roots")
             .StdOut.Split(new[] { '\0' }, StringSplitOptions.RemoveEmptyEntries);
+        var metadataRoots = new Dictionary<string, string[]>(GetPathComparer());
         foreach (var relativePath in trackedPaths.Where(path =>
                      Path.GetFileName(path).Equals("Package.swift", StringComparison.Ordinal)))
         {
@@ -22,30 +23,57 @@ internal sealed partial class AppleReleaseSourceSnapshot
                 relativePath.Replace('/', Path.DirectorySeparatorChar)));
             EnsureContained(RootPath, packageManifest, "Apple snapshot Swift package manifest");
             var metadataRoot = Path.Combine(Path.GetDirectoryName(packageManifest)!, ".swiftpm");
-            PrepareSwiftPackageMetadata(metadataRoot, "configuration", "xcode");
+            metadataRoots[metadataRoot] = new[] { "configuration", "xcode" };
         }
 
+        var workspaces = new HashSet<string>(GetPathComparer());
         foreach (var relativePath in trackedPaths.Where(path =>
                      Path.GetFileName(path).Equals("contents.xcworkspacedata", StringComparison.Ordinal) &&
                      string.Equals(Path.GetExtension(Path.GetDirectoryName(path)), ".xcworkspace", StringComparison.OrdinalIgnoreCase)))
         {
-            var workspace = Path.GetDirectoryName(Path.GetFullPath(Path.Combine(
+            workspaces.Add(Path.GetDirectoryName(Path.GetFullPath(Path.Combine(
+                RootPath, relativePath.Replace('/', Path.DirectorySeparatorChar))))!);
+        }
+        foreach (var relativePath in trackedPaths.Where(path =>
+                     Path.GetFileName(path).Equals("project.pbxproj", StringComparison.Ordinal) &&
+                     string.Equals(Path.GetExtension(Path.GetDirectoryName(path)), ".xcodeproj", StringComparison.OrdinalIgnoreCase)))
+        {
+            var project = Path.GetDirectoryName(Path.GetFullPath(Path.Combine(
                 RootPath, relativePath.Replace('/', Path.DirectorySeparatorChar))))!;
-            EnsureRealDirectory(workspace, "Apple snapshot Xcode workspace");
-            foreach (var directory in AppleXcodeWorkspaceWorkingDirectories.GetMetadataDirectories(workspace, isWorkspace: true))
-                EnsureRealDirectory(directory, "Apple snapshot Xcode workspace metadata directory", createIfMissing: true);
-            PrepareSwiftPackageMetadata(Path.Combine(workspace, "xcshareddata", "swiftpm"), "configuration");
+            workspaces.Add(Path.Combine(project, "project.xcworkspace"));
+        }
+        foreach (var workspace in workspaces)
+        {
+            EnsureRealDirectory(workspace, "Apple snapshot Xcode workspace", createIfMissing: true);
+            metadataRoots[AppleXcodeWorkspaceWorkingDirectories.GetPackageMetadataRoot(workspace, isWorkspace: true)] =
+                new[] { "configuration" };
+        }
+
+        // A tracked workspace can live inside another package's .swiftpm tree.
+        // Finish every ordinary directory before capturing any overlapping tree.
+        var preparedDirectories = metadataRoots.SelectMany(pair =>
+                new[] { pair.Key }.Concat(pair.Value.Select(name => Path.Combine(pair.Key, name))))
+            .Distinct(GetPathComparer())
+            .ToArray();
+        foreach (var directory in preparedDirectories)
+            EnsureRealDirectory(directory, "Apple snapshot package working directory", createIfMissing: true);
+        foreach (var metadataRoot in metadataRoots.Keys)
+        {
+            var prefix = metadataRoot + Path.DirectorySeparatorChar;
+            var descendants = preparedDirectories.Where(directory =>
+                    directory.Equals(metadataRoot, GetPathComparison()) ||
+                    directory.StartsWith(prefix, GetPathComparison()))
+                .ToArray();
+            PrepareSwiftPackageMetadata(metadataRoot, descendants);
         }
     }
 
-    private void PrepareSwiftPackageMetadata(string metadataRoot, params string[] directoryNames)
+    private void PrepareSwiftPackageMetadata(string metadataRoot, string[] preparedDirectories)
     {
-        EnsureRealDirectory(metadataRoot, "Apple snapshot Swift package metadata root", createIfMissing: true);
-        foreach (var name in directoryNames)
-            EnsureRealDirectory(Path.Combine(metadataRoot, name), $"Apple snapshot Swift package {name} directory", createIfMissing: true);
-        ValidateSwiftPackageMetadataTree(metadataRoot, directoryNames);
+        EnsureRealDirectory(metadataRoot, "Apple snapshot Swift package metadata root");
+        ValidateSwiftPackageMetadataTree(metadataRoot, preparedDirectories);
         _preparedSwiftPackageMetadata[metadataRoot] = new PreparedSwiftPackageMetadata(
-            directoryNames,
+            preparedDirectories,
             AppleArchiveUploadSnapshot.CaptureCompleteIdentity(metadataRoot, "prepared Apple snapshot Swift package metadata"));
     }
 
@@ -55,13 +83,13 @@ internal sealed partial class AppleReleaseSourceSnapshot
         {
             var metadataRoot = pair.Key;
             EnsureRealDirectory(metadataRoot, "Apple snapshot Swift package metadata root");
-            foreach (var name in pair.Value.DirectoryNames)
+            foreach (var directory in pair.Value.Directories)
             {
                 EnsureRealDirectory(
-                    Path.Combine(metadataRoot, name),
-                    $"Apple snapshot Swift package {name} directory");
+                    directory,
+                    "Apple snapshot package working directory");
             }
-            ValidateSwiftPackageMetadataTree(metadataRoot, pair.Value.DirectoryNames);
+            ValidateSwiftPackageMetadataTree(metadataRoot, pair.Value.Directories);
             var current = AppleArchiveUploadSnapshot.CaptureCompleteIdentity(
                 metadataRoot,
                 "prepared Apple snapshot Swift package metadata");
@@ -73,7 +101,7 @@ internal sealed partial class AppleReleaseSourceSnapshot
         }
     }
 
-    private void ValidateSwiftPackageMetadataTree(string metadataRoot, IReadOnlyList<string> directoryNames)
+    private void ValidateSwiftPackageMetadataTree(string metadataRoot, IReadOnlyList<string> preparedDirectories)
     {
         var relativeRoot = FrameworkCompatibility.GetRelativePath(RootPath, metadataRoot).Replace('\\', '/');
         var trackedFiles = Run(
@@ -88,9 +116,13 @@ internal sealed partial class AppleReleaseSourceSnapshot
         {
             metadataRoot
         };
-        foreach (var name in directoryNames)
-            allowedDirectories.Add(Path.Combine(metadataRoot, name));
-        foreach (var trackedFile in trackedFiles)
+        foreach (var preparedDirectory in preparedDirectories)
+        {
+            EnsureContained(metadataRoot, preparedDirectory, "prepared Apple snapshot package directory");
+            allowedDirectories.Add(preparedDirectory);
+        }
+        foreach (var trackedFile in trackedFiles.Concat(preparedDirectories).Where(path =>
+                     !path.Equals(metadataRoot, GetPathComparison())))
         {
             EnsureContained(metadataRoot, trackedFile, "tracked Apple snapshot Swift package metadata");
             for (var directory = Path.GetDirectoryName(trackedFile);
@@ -154,13 +186,13 @@ internal sealed partial class AppleReleaseSourceSnapshot
 
     private sealed class PreparedSwiftPackageMetadata
     {
-        internal PreparedSwiftPackageMetadata(string[] directoryNames, AppleArchiveUploadSnapshot.SnapshotIdentity identity)
+        internal PreparedSwiftPackageMetadata(string[] directories, AppleArchiveUploadSnapshot.SnapshotIdentity identity)
         {
-            DirectoryNames = directoryNames;
+            Directories = directories;
             Identity = identity;
         }
 
-        internal string[] DirectoryNames { get; }
+        internal string[] Directories { get; }
         internal AppleArchiveUploadSnapshot.SnapshotIdentity Identity { get; }
     }
 }

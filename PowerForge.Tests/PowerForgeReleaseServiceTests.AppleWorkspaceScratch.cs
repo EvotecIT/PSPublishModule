@@ -43,6 +43,53 @@ public sealed partial class PowerForgeReleaseServiceTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
+    public void AppleReleaseSourceSnapshot_accepts_workspace_nested_inside_package_metadata(bool trackedLock)
+    {
+        var root = CreateSandbox();
+        try
+        {
+            CreateSnapshotWorkspaceFixture(root, false);
+            File.WriteAllText(Path.Combine(root, "Package.swift"), "// swift-tools-version: 6.0\nimport PackageDescription\nlet package = Package(name: \"Sample\", targets: [])");
+            var workspace = Path.Combine(root, ".swiftpm", "xcode", "package.xcworkspace");
+            Directory.CreateDirectory(workspace);
+            File.WriteAllText(Path.Combine(workspace, "contents.xcworkspacedata"), "<Workspace version=\"1.0\"/>");
+            if (trackedLock)
+            {
+                var metadata = Path.Combine(workspace, "xcshareddata", "swiftpm");
+                Directory.CreateDirectory(metadata);
+                File.WriteAllText(Path.Combine(metadata, "Package.resolved"), "{\"pins\":[],\"version\":3}");
+            }
+            RunSnapshotGit(root, "add", "--force", "Package.swift", ".swiftpm");
+            RunSnapshotGit(root, "commit", "--quiet", "-m", "package workspace source");
+
+            using var snapshot = CreateWorkspaceSnapshot(root);
+            using var monitor = snapshot.MonitorChanges();
+            monitor.ValidateNoChanges(snapshot.ValidateUnchanged);
+        }
+        finally { TryDelete(root); }
+    }
+
+    [Fact]
+    public void AppleReleaseSourceSnapshot_prepares_implicit_project_workspace()
+    {
+        var root = CreateSandbox();
+        try
+        {
+            CreateSnapshotWorkspaceFixture(root, false);
+            RunSnapshotGit(root, "rm", "Sample.xcodeproj/project.xcworkspace/contents.xcworkspacedata");
+            RunSnapshotGit(root, "commit", "--quiet", "-m", "implicit workspace source");
+            using var snapshot = CreateWorkspaceSnapshot(root);
+            using var monitor = snapshot.MonitorChanges();
+            Directory.CreateDirectory(Path.Combine(snapshot.RootPath, "Sample.xcodeproj", "project.xcworkspace", "xcshareddata", "swiftpm", "configuration"));
+
+            monitor.ValidateNoChanges(snapshot.ValidateUnchanged);
+        }
+        finally { TryDelete(root); }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
     public void AppleReleaseSourceSnapshot_rejects_transient_workspace_file_changes(bool trackedLock)
     {
         var root = CreateSandbox();

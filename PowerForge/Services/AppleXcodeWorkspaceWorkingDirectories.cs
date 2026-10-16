@@ -5,10 +5,16 @@ internal static class AppleXcodeWorkspaceWorkingDirectories
 {
     internal static IReadOnlyList<string> GetMetadataDirectories(string projectPath, bool isWorkspace)
     {
-        var workspace = isWorkspace ? projectPath : Path.Combine(projectPath, "project.xcworkspace");
-        var shared = Path.Combine(workspace, "xcshareddata");
-        var packages = Path.Combine(shared, "swiftpm");
+        var packages = GetPackageMetadataRoot(projectPath, isWorkspace);
+        var shared = Path.GetDirectoryName(packages)!;
         return new[] { shared, packages, Path.Combine(packages, "configuration") };
+    }
+
+    /// <summary>Locates the workspace's package metadata without materializing package files.</summary>
+    internal static string GetPackageMetadataRoot(string projectPath, bool isWorkspace)
+    {
+        var workspace = isWorkspace ? projectPath : Path.Combine(projectPath, "project.xcworkspace");
+        return Path.Combine(workspace, "xcshareddata", "swiftpm");
     }
 
     // Local mirrors tolerate creation/metadata only. Files, deletions, renames,
