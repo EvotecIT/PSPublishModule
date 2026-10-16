@@ -1,0 +1,52 @@
+name: Database backups
+on:
+  pull_request:
+    paths:
+      - 'PowerForge.Backups*/**'
+      - 'Deployment/Synology/**'
+      - 'Deployment/Monitoring/**'
+      - 'Deployment/Windows/Install-PowerForgeDatabaseBackup.ps1'
+      - 'Deployment/Windows/DatabaseBackupInstallation.ps1'
+      - 'Deployment/Windows/Test-DatabaseBackupInstallation.ps1'
+      - '.github/workflows/database-backups-tests.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'PowerForge.Backups*/**'
+      - 'Deployment/Synology/**'
+      - 'Deployment/Monitoring/**'
+      - 'Deployment/Windows/Install-PowerForgeDatabaseBackup.ps1'
+      - 'Deployment/Windows/DatabaseBackupInstallation.ps1'
+      - 'Deployment/Windows/Test-DatabaseBackupInstallation.ps1'
+      - '.github/workflows/database-backups-tests.yml'
+permissions:
+  contents: read
+jobs:
+  contracts:
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            python: '3.13'
+          - os: ubuntu-22.04
+            python: '3.8'
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.303'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - run: dotnet test PowerForge.Backups.Tests/PowerForge.Backups.Tests.csproj -c Release
+      - run: python -B -m unittest discover -s Deployment/Monitoring -v
+      - if: runner.os == 'Windows'
+        shell: powershell
+        run: ./Deployment/Windows/Test-DatabaseBackupInstallation.ps1 -TemporaryRoot $env:TEMP -IncludePrivilegedCreation
+      - if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./Deployment/Windows/Test-DatabaseBackupInstallation.ps1 -TemporaryRoot $env:TEMP -IncludePrivilegedCreation
+      - if: runner.os == 'Linux'
+        run: python3 -B -m unittest discover -s Deployment/Synology -v
