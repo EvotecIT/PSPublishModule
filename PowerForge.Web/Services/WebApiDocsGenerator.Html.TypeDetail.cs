@@ -24,18 +24,16 @@ public static partial class WebApiDocsGenerator
         ApiTypeUsageModel? usage,
         ApiTypeRelatedContentModel? relatedContent,
         string codeLanguage,
-        string displayName)
+        string displayName,
+        ApiDocsChromeLabels labels)
     {
         var sb = new StringBuilder();
         var inheritanceChain = BuildInheritanceChain(type, typeIndex);
         var derivedTypes = GetDerivedTypes(type, derivedMap);
         var isPowerShellCommand = IsPowerShellCommandType(type);
-        var methodSectionLabel = isPowerShellCommand ? "Syntax" : "Methods";
-        var methodSectionId = isPowerShellCommand ? "syntax" : "methods";
-        var memberFilterLabel = isPowerShellCommand ? "Filter syntax" : "Filter members";
-        var memberFilterPlaceholder = isPowerShellCommand ? "Search syntax..." : "Search members...";
-        var hasPowerShellCommonParameters = isPowerShellCommand && HasPowerShellCommonParameters(type);
-        var toc = BuildTypeToc(type, inheritanceChain.Count > 0, derivedTypes.Count > 0, usage?.HasEntries == true, relatedContent?.Entries.Count > 0);
+        var toc = isPowerShellCommand
+            ? BuildPowerShellCommandToc(type, usage?.HasEntries == true, relatedContent?.Entries.Count > 0)
+            : BuildTypeToc(type, inheritanceChain.Count > 0, derivedTypes.Count > 0, usage?.HasEntries == true, relatedContent?.Entries.Count > 0);
         var detailClasses = isPowerShellCommand
             ? "type-detail ev-page-body type-detail--powershell-command"
             : "type-detail ev-page-body";
@@ -43,8 +41,8 @@ public static partial class WebApiDocsGenerator
         var indexUrl = EnsureTrailingSlash(baseUrl);
         var kindLabel = string.IsNullOrWhiteSpace(type.Kind) ? "Type" : type.Kind;
         var sourceAction = RenderTypeSourceAction(type.Source);
-        sb.AppendLine(BuildTypeBreadcrumbHtml(indexUrl, displayName).TrimEnd());
-        sb.AppendLine(BuildTypeHeaderHtml(type, displayName, kindLabel, isPowerShellCommand, sourceAction).TrimEnd());
+        sb.AppendLine(BuildTypeBreadcrumbHtml(indexUrl, displayName, labels.SectionLabel).TrimEnd());
+        sb.AppendLine(BuildTypeHeaderHtml(type, displayName, kindLabel, isPowerShellCommand, sourceAction, labels).TrimEnd());
 
         var flags = new List<string>();
         if (type.IsStatic) flags.Add("static");
@@ -53,9 +51,16 @@ public static partial class WebApiDocsGenerator
             if (type.IsAbstract) flags.Add("abstract");
             if (type.IsSealed) flags.Add("sealed");
         }
-        sb.AppendLine(BuildTypeMetaHtml(type, baseUrl, slugMap, isPowerShellCommand, sourceAction, flags).TrimEnd());
+        sb.AppendLine(BuildTypeMetaHtml(type, baseUrl, slugMap, isPowerShellCommand, sourceAction, flags, labels).TrimEnd());
 
         var detailBody = new HtmlFragmentBuilder(initialIndent: 6);
+        if (isPowerShellCommand)
+        {
+            AppendPowerShellCommandBody(detailBody, type, baseUrl, slugMap, usage, relatedContent, codeLanguage);
+            sb.Append(BuildTypeDetailShellHtml(detailBody.ToString(), toc));
+            sb.AppendLine("    </article>");
+            return sb.ToString().TrimEnd();
+        }
 
         if (!string.IsNullOrWhiteSpace(type.Summary))
             detailBody.Line($"<p class=\"type-summary\">{RenderLinkedText(type.Summary, baseUrl, slugMap)}</p>");
@@ -177,40 +182,19 @@ public static partial class WebApiDocsGenerator
             detailBody.Line("</section>");
         }
 
-        if (hasPowerShellCommonParameters)
-        {
-            var commonParametersLink = ResolvePowerShellCommonParametersUrl(baseUrl, slugMap);
-            var commonParametersLinkTarget = IsExternal(commonParametersLink) ? " target=\"_blank\" rel=\"noopener\"" : string.Empty;
-            detailBody.Line("<section class=\"type-common-parameters\" id=\"common-parameters\">");
-            using (detailBody.Indent())
-            {
-                detailBody.Line("<h2>Common Parameters</h2>");
-                detailBody.Line("<p>This command supports the common parameters: -Debug, -ErrorAction, -ErrorVariable, -InformationAction, -InformationVariable, -OutVariable, -OutBuffer, -PipelineVariable, -Verbose, -WarningAction, and -WarningVariable.</p>");
-                detailBody.Line($"<p>For more information, see <a href=\"{System.Web.HttpUtility.HtmlAttributeEncode(commonParametersLink)}\"{commonParametersLinkTarget}>about_CommonParameters</a>.</p>");
-            }
-            detailBody.Line("</section>");
-        }
-
         var totalMembers = type.Constructors.Count + type.Methods.Count + type.Properties.Count + type.Fields.Count + type.Events.Count + type.ExtensionMethods.Count;
         if (totalMembers > 0)
         {
-            detailBody.AppendRaw(BuildMemberToolbarHtml(type, totalMembers, methodSectionLabel, memberFilterLabel, memberFilterPlaceholder, isPowerShellCommand) + Environment.NewLine);
+            detailBody.AppendRaw(BuildMemberToolbarHtml(type, totalMembers, "Methods", "Filter members", "Search members...", isPowerShellCommand: false) + Environment.NewLine);
 
             var usedMemberIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            if (isPowerShellCommand)
-            {
-                AppendMemberSections(detailBody, methodSectionLabel, "method", type.Methods, baseUrl, slugMap, relatedContent, codeLanguage, usedMemberIds, treatAsInherited: false, groupOverloads: false, sectionId: methodSectionId);
-            }
-            else
-            {
-                AppendMemberSections(detailBody, "Constructors", "constructor", type.Constructors, baseUrl, slugMap, relatedContent, codeLanguage, usedMemberIds, treatAsInherited: false, groupOverloads: true, sectionId: "constructors");
-                AppendMemberSections(detailBody, methodSectionLabel, "method", type.Methods, baseUrl, slugMap, relatedContent, codeLanguage, usedMemberIds, groupOverloads: true, sectionId: methodSectionId);
-                AppendMemberSections(detailBody, "Properties", "property", type.Properties, baseUrl, slugMap, relatedContent, codeLanguage, usedMemberIds, sectionId: "properties");
-                AppendMemberSections(detailBody, type.Kind == "Enum" ? "Values" : "Fields", "field", type.Fields, baseUrl, slugMap, relatedContent, codeLanguage, usedMemberIds, sectionId: type.Kind == "Enum" ? "values" : "fields");
-                AppendMemberSections(detailBody, "Events", "event", type.Events, baseUrl, slugMap, relatedContent, codeLanguage, usedMemberIds, sectionId: "events");
-                if (type.ExtensionMethods.Count > 0)
-                    AppendMemberSections(detailBody, "Extension Methods", "extension", type.ExtensionMethods, baseUrl, slugMap, relatedContent, codeLanguage, usedMemberIds, treatAsInherited: false, groupOverloads: true, sectionId: "extensions");
-            }
+            AppendMemberSections(detailBody, "Constructors", "constructor", type.Constructors, baseUrl, slugMap, relatedContent, codeLanguage, usedMemberIds, treatAsInherited: false, groupOverloads: true, sectionId: "constructors");
+            AppendMemberSections(detailBody, "Methods", "method", type.Methods, baseUrl, slugMap, relatedContent, codeLanguage, usedMemberIds, groupOverloads: true, sectionId: "methods");
+            AppendMemberSections(detailBody, "Properties", "property", type.Properties, baseUrl, slugMap, relatedContent, codeLanguage, usedMemberIds, sectionId: "properties");
+            AppendMemberSections(detailBody, type.Kind == "Enum" ? "Values" : "Fields", "field", type.Fields, baseUrl, slugMap, relatedContent, codeLanguage, usedMemberIds, sectionId: type.Kind == "Enum" ? "values" : "fields");
+            AppendMemberSections(detailBody, "Events", "event", type.Events, baseUrl, slugMap, relatedContent, codeLanguage, usedMemberIds, sectionId: "events");
+            if (type.ExtensionMethods.Count > 0)
+                AppendMemberSections(detailBody, "Extension Methods", "extension", type.ExtensionMethods, baseUrl, slugMap, relatedContent, codeLanguage, usedMemberIds, treatAsInherited: false, groupOverloads: true, sectionId: "extensions");
         }
 
         sb.Append(BuildTypeDetailShellHtml(detailBody.ToString(), toc));
@@ -219,13 +203,13 @@ public static partial class WebApiDocsGenerator
         return sb.ToString().TrimEnd();
     }
 
-    private static string BuildTypeBreadcrumbHtml(string indexUrl, string displayName)
+    private static string BuildTypeBreadcrumbHtml(string indexUrl, string displayName, string sectionLabel)
     {
         var html = new HtmlFragmentBuilder(initialIndent: 6);
         html.Line("<nav class=\"breadcrumb\">");
         using (html.Indent())
         {
-            html.Line($"<a href=\"{indexUrl}\">API Reference</a>");
+            html.Line($"<a href=\"{indexUrl}\">{System.Web.HttpUtility.HtmlEncode(sectionLabel)}</a>");
             html.Line("<span class=\"sep\">/</span>");
             html.Line($"<span class=\"current\">{System.Web.HttpUtility.HtmlEncode(displayName)}</span>");
         }
@@ -233,13 +217,15 @@ public static partial class WebApiDocsGenerator
         return html.ToString();
     }
 
-    private static string BuildTypeHeaderHtml(ApiTypeModel type, string displayName, string kindLabel, bool isPowerShellCommand, string? sourceAction)
+    private static string BuildTypeHeaderHtml(ApiTypeModel type, string displayName, string kindLabel, bool isPowerShellCommand, string? sourceAction, ApiDocsChromeLabels labels)
     {
         var html = new HtmlFragmentBuilder(initialIndent: 6);
         html.Line("<header class=\"type-header ev-docs-header\" id=\"overview\">");
         using (html.Indent())
         {
-            html.Line("<p class=\"ev-eyebrow\">API Reference</p>");
+            // The breadcrumb already names the section; PowerShell pages skip the repeated eyebrow.
+            if (labels.ShowTypeEyebrow)
+                html.Line($"<p class=\"ev-eyebrow\">{System.Web.HttpUtility.HtmlEncode(labels.SectionLabel)}</p>");
             html.Line("<div class=\"type-title-row\">");
             using (html.Indent())
             {
@@ -269,13 +255,14 @@ public static partial class WebApiDocsGenerator
         IReadOnlyDictionary<string, string> slugMap,
         bool isPowerShellCommand,
         string? sourceAction,
-        IReadOnlyList<string> flags)
+        IReadOnlyList<string> flags,
+        ApiDocsChromeLabels labels)
     {
         var html = new HtmlFragmentBuilder(initialIndent: 6);
         html.Line("<div class=\"type-meta\">");
         using (html.Indent())
         {
-            AppendTypeMetaHtmlRow(html, "Namespace", $"<code>{System.Web.HttpUtility.HtmlEncode(type.Namespace)}</code>");
+            AppendTypeMetaHtmlRow(html, labels.GroupLabel, $"<code>{System.Web.HttpUtility.HtmlEncode(type.Namespace)}</code>", labels.IsPowerShell ? "type-meta-module" : null);
 
             AppendTypeMetaListRow(
                 html,
@@ -824,7 +811,9 @@ public static partial class WebApiDocsGenerator
                 html.Line("</dl>");
             }
 
-            if (member.Parameters.Count > 0)
+            // PowerShell syntax cards stay signature-only; parameters and outputs are listed once for the command.
+            var isPowerShellSyntax = string.Equals(sectionLabel, "Syntax", StringComparison.OrdinalIgnoreCase);
+            if (member.Parameters.Count > 0 && !isPowerShellSyntax)
             {
                 html.Line("<h3>Parameters</h3>");
                 html.Line("<dl class=\"param-list\">");
@@ -857,10 +846,9 @@ public static partial class WebApiDocsGenerator
                     html.Line($"<div class=\"member-value\">Value: <code>{System.Web.HttpUtility.HtmlEncode(member.Value)}</code></div>");
             }
 
-            if (!string.IsNullOrWhiteSpace(member.Returns))
+            if (!string.IsNullOrWhiteSpace(member.Returns) && !isPowerShellSyntax)
             {
-                var returnsLabel = string.Equals(sectionLabel, "Syntax", StringComparison.OrdinalIgnoreCase) ? "Outputs" : "Returns";
-                html.Line($"<h3>{returnsLabel}</h3>");
+                html.Line("<h3>Returns</h3>");
                 html.Line($"<p>{RenderLinkedText(member.Returns, baseUrl, slugMap)}</p>");
             }
 
@@ -974,53 +962,34 @@ public static partial class WebApiDocsGenerator
         if (html is null || string.IsNullOrWhiteSpace(codeText))
             return;
 
+        // Code is emitted inline between the tags: any newline or indentation inside <pre><code> renders as blank lines.
         var normalizedCode = codeText
             .Replace("\r\n", "\n", StringComparison.Ordinal)
-            .Replace('\r', '\n');
+            .Replace('\r', '\n')
+            .Trim('\n')
+            .TrimEnd();
 
         var languageToken = string.IsNullOrWhiteSpace(codeLanguage)
             ? string.Empty
             : codeLanguage.Trim().ToLowerInvariant();
         var languageClass = string.IsNullOrWhiteSpace(languageToken)
             ? string.Empty
+            : $"language-{languageToken} ";
+        var codeClass = string.IsNullOrWhiteSpace(languageToken)
+            ? string.Empty
             : $" class=\"language-{languageToken}\"";
 
         if (TrySplitPowerShellPrompt(normalizedCode, languageToken, out var prompt, out var body))
         {
-            html.Line($"<pre class=\"language-{languageToken} example-code-block example-code-block--has-prompt\">");
-            using (html.Indent())
-            {
-                html.Line($"<span class=\"example-code__prompt\">{System.Web.HttpUtility.HtmlEncode(prompt)}</span>");
-                html.Line($"<code class=\"language-{languageToken} example-code__body\">{System.Web.HttpUtility.HtmlEncode(body)}</code>");
-            }
-            html.Line("</pre>");
+            // The prompt sits outside <code> and is hidden from assistive tech so copy actions get only the command.
+            html.Line(
+                $"<pre class=\"{languageClass}example-code-block example-code-block--has-prompt\">" +
+                $"<span class=\"example-code__prompt\" aria-hidden=\"true\">{System.Web.HttpUtility.HtmlEncode(prompt)} </span>" +
+                $"<code class=\"language-{languageToken} example-code__body\">{System.Web.HttpUtility.HtmlEncode(body)}</code></pre>");
             return;
         }
 
-        html.Line($"<pre{languageClass}><code{languageClass}>");
-        html.AppendRaw(System.Web.HttpUtility.HtmlEncode(normalizedCode));
-        if (!normalizedCode.EndsWith('\n'))
-            html.AppendRaw(Environment.NewLine);
-        html.Line("</code></pre>");
-    }
-
-    private static bool TrySplitPowerShellPrompt(string codeText, string? languageToken, out string prompt, out string body)
-    {
-        prompt = string.Empty;
-        body = codeText;
-
-        if (!string.Equals(languageToken, "powershell", StringComparison.OrdinalIgnoreCase))
-            return false;
-        if (string.IsNullOrWhiteSpace(codeText))
-            return false;
-
-        var trimmedStart = codeText.TrimStart();
-        if (!trimmedStart.StartsWith("PS>", StringComparison.Ordinal))
-            return false;
-
-        prompt = "PS>";
-        body = trimmedStart.Substring(prompt.Length).TrimStart();
-        return !string.IsNullOrWhiteSpace(body);
+        html.Line($"<pre class=\"{languageClass}example-code-block\"><code{codeClass}>{System.Web.HttpUtility.HtmlEncode(normalizedCode)}</code></pre>");
     }
 
     private static void AppendExampleOriginBadge(

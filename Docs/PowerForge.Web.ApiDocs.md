@@ -445,6 +445,41 @@ xml location), `about_*` files are also imported into the API output:
 Imported `about_*` topics render as `About` entries and are linkable from command
 remarks (for example `about_CommonParameters`).
 
+### Command pages
+
+PowerShell references render as a command reference rather than a .NET type page:
+
+- Section order follows Get-Help and Microsoft Learn: syntax (one signature per
+  parameter set, positional names written as `[-Path] <String>`), description,
+  examples, parameters, common parameters, outputs, related links.
+- Parameters are listed once for the command (`section#parameters`,
+  `dl.param-list--command`, anchors `#parameter-<name>`). Chips show `required`,
+  `required in <set>` or `optional`, the position only when positional, pipeline
+  input only when accepted, aliases, and `sets:` when a parameter is not in every set.
+  Syntax cards no longer repeat the parameter list or outputs, and the member
+  filter toolbar is omitted.
+- The page meta says `Module` instead of `Namespace`. The module name comes from
+  `moduleName` (pipeline) / `--module-name` (CLI); otherwise from a module manifest
+  or `packageId` whose name matches the help file case-insensitively; otherwise
+  from the help file name.
+- Type pages drop the eyebrow above the title because the breadcrumb already names
+  the section. The sidebar hides kind and module filters that cannot narrow
+  anything (one kind, one module) and labels them `Command type` / `Module`.
+- Example introductions that are only a prompt (`PS>`, `PS C:\>`) are dropped.
+  Example code keeps relative indentation but loses indentation inherited from the
+  XML layout (including the common case where the first line was trimmed and the
+  rest kept the XML indent). A prompt at the start of example code renders as
+  `span.example-code__prompt` outside `<code>`, so copy actions get only the command.
+
+`sectionLabel` (pipeline) / `--section-label` (CLI) sets the short label used in
+the breadcrumb root, sidebar heading and overview eyebrow. It defaults to
+`Commands` for PowerShell and `API Reference` for C#. Templates can use the same
+text through the `{{SECTION_LABEL}}` token (for example in the mobile sidebar toggle).
+
+Example code blocks in both PowerShell and C# pages render as
+`<pre class="language-<lang> example-code-block"><code class="language-<lang>">`
+with the code placed directly between the tags.
+
 ## Usage scenarios
 
 ### C# library with XML docs
@@ -496,6 +531,7 @@ Pipeline step:
   "type": "PowerShell",
   "help": "./Module/en-US/MyModule-help.xml",
   "out": "./_site/api",
+  "moduleName": "MyModule",
   "format": "both",
   "template": "docs",
   "css": "/css/api-docs.css",

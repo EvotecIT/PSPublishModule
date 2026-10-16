@@ -42,6 +42,16 @@ public sealed class WebApiDocsOptions
     public string OutputPath { get; set; } = string.Empty;
     /// <summary>Documentation title.</summary>
     public string Title { get; set; } = "API Reference";
+    /// <summary>
+    /// Optional short label naming the reference section in breadcrumbs, the sidebar heading and the overview eyebrow.
+    /// Defaults to <c>Commands</c> for PowerShell references and <c>API Reference</c> for C# references.
+    /// </summary>
+    public string? SectionLabel { get; set; }
+    /// <summary>
+    /// Optional PowerShell module display name (for example <c>ImagePlayground</c>). When omitted, the name comes from the
+    /// module manifest file, a matching <see cref="PackageId"/>, or the help file name.
+    /// </summary>
+    public string? PowerShellModuleName { get; set; }
     /// <summary>Base URL for API documentation routes.</summary>
     public string BaseUrl { get; set; } = "/api";
     /// <summary>Optional absolute site base URL used for canonical/OpenGraph URL generation.</summary>

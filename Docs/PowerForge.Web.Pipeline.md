@@ -455,8 +455,8 @@ Simple templates:
 - `type.html`: `{{TYPE_TITLE}}`, `{{TYPE_FULLNAME}}`, `{{TYPE_SUMMARY}}`, `{{TYPE_REMARKS}}`, `{{MEMBERS}}`
 
 Docs templates (`template: docs`):
-  - `docs-index.html`: `{{TITLE}}`, `{{SIDEBAR}}`, `{{SIDEBAR_CLASS}}`, `{{MAIN}}`, `{{DOCS_SCRIPT}}`
-  - `docs-type.html`: `{{TITLE}}`, `{{SIDEBAR}}`, `{{SIDEBAR_CLASS}}`, `{{MAIN}}`, `{{DOCS_SCRIPT}}`
+  - `docs-index.html`: `{{TITLE}}`, `{{SIDEBAR}}`, `{{SIDEBAR_CLASS}}`, `{{MAIN}}`, `{{DOCS_SCRIPT}}`, `{{SECTION_LABEL}}`
+  - `docs-type.html`: `{{TITLE}}`, `{{SIDEBAR}}`, `{{SIDEBAR_CLASS}}`, `{{MAIN}}`, `{{DOCS_SCRIPT}}`, `{{SECTION_LABEL}}`
 
 Header/footer fragments can use nav tokens when `nav` is provided:
 - `{{SITE_NAME}}`, `{{BRAND_NAME}}`, `{{BRAND_URL}}`, `{{BRAND_ICON}}`

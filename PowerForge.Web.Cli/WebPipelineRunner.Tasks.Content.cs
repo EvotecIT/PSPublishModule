@@ -333,6 +333,8 @@ internal static partial class WebPipelineRunner
                 AssemblyPaths = assemblies,
                 OutputPath = outPath,
                 Title = string.IsNullOrWhiteSpace(title) ? "API Reference" : title,
+                SectionLabel = GetString(step, "sectionLabel") ?? GetString(step, "section-label"),
+                PowerShellModuleName = GetString(step, "moduleName") ?? GetString(step, "module-name"),
                 BaseUrl = baseUrl,
                 SiteBaseUrl = siteBaseUrl,
                 LanguageCode = languageCode,

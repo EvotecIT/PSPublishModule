@@ -132,9 +132,8 @@ public class WebApiDocsGeneratorPowerShellTests
             Assert.Contains("type-examples", html, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("New-SampleCmdlet -Name", html, StringComparison.Ordinal);
             Assert.Contains("<pre class=\"member-signature language-powershell\"><code class=\"language-powershell\">", html, StringComparison.OrdinalIgnoreCase);
-            Assert.Contains("<pre class=\"language-powershell\"><code class=\"language-powershell\">", html, StringComparison.OrdinalIgnoreCase);
-            Assert.Contains("New-SampleCmdlet -Name &quot;Demo&quot;" + Environment.NewLine + "        </code></pre>", html, StringComparison.Ordinal);
-            Assert.DoesNotContain("New-SampleCmdlet -Name &quot;Demo&quot;        </code></pre>", html, StringComparison.Ordinal);
+            // Code sits directly between the tags so <pre> renders no blank first line or trailing indentation line.
+            Assert.Contains("<pre class=\"language-powershell example-code-block\"><code class=\"language-powershell\">New-SampleCmdlet -Name &quot;Demo&quot;</code></pre>", html, StringComparison.Ordinal);
             Assert.Contains("window.Prism=window.Prism||{};window.Prism.manual=true;", html, StringComparison.Ordinal);
             Assert.Contains("prism-core.min.js", html, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("prism-autoloader.min.js", html, StringComparison.OrdinalIgnoreCase);
@@ -153,8 +152,12 @@ public class WebApiDocsGeneratorPowerShellTests
             Assert.Contains("Common Parameters", html, StringComparison.Ordinal);
             Assert.Contains("Name value from command parameters.", html, StringComparison.Ordinal);
             Assert.Contains("Category from command parameters.", html, StringComparison.Ordinal);
-            Assert.Contains("position: named", html, StringComparison.OrdinalIgnoreCase);
-            Assert.Contains("pipeline: false", html, StringComparison.OrdinalIgnoreCase);
+            // Parameters are listed once for the command; default position/pipeline values are not restated as chips.
+            Assert.Contains("<section class=\"type-parameters-list powershell-parameters\" id=\"parameters\">", html, StringComparison.Ordinal);
+            Assert.Contains("<dt id=\"parameter-name\"><span class=\"param-name\">-Name</span>", html, StringComparison.Ordinal);
+            Assert.Contains("<span class=\"param-default\"> = General</span>", html, StringComparison.Ordinal);
+            Assert.DoesNotContain("position: named", html, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("pipeline: false", html, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {
