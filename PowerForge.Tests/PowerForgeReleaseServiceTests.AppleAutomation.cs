@@ -770,8 +770,11 @@ public sealed partial class PowerForgeReleaseServiceTests
                     Destination = request.Destination!,
                     ProcessResult = new ProcessRunResult(
                         65,
-                        string.Empty,
-                        "codesign failed",
+                        "Compile ScreenshotCaptureTests.swift\nGenerate localization output and CFBundleVersion\n" +
+                        new string('x', 6000) + "\nproject.xcodeproj: error: Authentication failed: bearer token was rejected.\n" +
+                        "project.xcodeproj: error: Provisioning profile doesn't include the App Groups capability.\n" +
+                        "project.xcodeproj: error: Profile lookup used " + keyPath,
+                        "** ARCHIVE FAILED **",
                         "xcodebuild",
                         TimeSpan.FromSeconds(1),
                         false)
@@ -793,6 +796,13 @@ public sealed partial class PowerForgeReleaseServiceTests
                 "exit code 65",
                 Assert.IsType<string>(Assert.Single(receipt.Targets).ErrorMessage),
                 StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("App Groups capability", receipt.ErrorMessage);
+            Assert.Contains("bearer token was rejected", receipt.ErrorMessage);
+            Assert.DoesNotContain(keyPath, receipt.ErrorMessage);
+            Assert.Contains(receipt.Diagnostics, value => value.Code == "APPLE_PROVISIONING");
+            Assert.Contains(receipt.Diagnostics, value => value.Code == "APPLE_AUTH");
+            Assert.Equal(new[] { "APPLE_AUTH", "APPLE_PROVISIONING" }, receipt.Diagnostics.Select(value => value.Code).OrderBy(value => value));
+            Assert.All(receipt.Diagnostics, value => Assert.DoesNotContain(keyPath, value.Evidence ?? ""));
         }
         finally
         {

@@ -503,6 +503,10 @@ optional receipt field in a later PowerForge version does not invalidate old evi
 The first schema-v4 write also preserves a schema-v3 latest receipt in history before
 replacing it.
 
+Archive and export failures retain bounded, credential-redacted Xcode errors in the
+receipt. This includes provisioning and compiler errors written to stdout, so an
+operator can diagnose a failed build without rerunning it just to recover the error.
+
 Mutating actions validate the complete journal and append a `Started` checkpoint before
 their first side effect. An upload appends `UploadCompleted` when the external tool
 succeeds, preserving the delivery fact before private-input validation. It appends
