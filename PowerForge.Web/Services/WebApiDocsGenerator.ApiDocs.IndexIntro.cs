@@ -2,6 +2,26 @@ namespace PowerForge.Web;
 
 public static partial class WebApiDocsGenerator
 {
+    internal static IReadOnlyList<string> DiscoverPowerShellIndexInputs(string helpPath, string? explicitManifestPath, string? explicitCommandMetadataPath)
+    {
+        var warnings = new List<string>();
+        var resolvedHelp = ResolvePowerShellHelpFile(helpPath, warnings);
+        if (string.IsNullOrWhiteSpace(resolvedHelp)) return Array.Empty<string>();
+        var moduleName = Path.GetFileNameWithoutExtension(resolvedHelp);
+        if (moduleName.EndsWith("-help", StringComparison.OrdinalIgnoreCase)) moduleName = moduleName[..^5];
+        if (moduleName.EndsWith(".dll", StringComparison.OrdinalIgnoreCase)) moduleName = moduleName[..^4];
+        return new[]
+            {
+                ResolvePowerShellModuleManifestPath(resolvedHelp, moduleName, explicitManifestPath),
+                ResolvePowerShellCommandMetadataPath(resolvedHelp, explicitCommandMetadataPath)
+            }
+            .OfType<string>()
+            .Where(File.Exists)
+            .Select(Path.GetFullPath)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
     /// <summary>Uses site copy, package metadata, or a product-specific reference introduction.</summary>
     private static string ResolveApiIndexLead(WebApiDocsOptions options)
     {

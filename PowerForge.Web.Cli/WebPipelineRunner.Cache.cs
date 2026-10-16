@@ -278,7 +278,21 @@ internal static partial class WebPipelineRunner
                 .Where(File.Exists)
                 .Distinct(WebCliHelpers.FileSystemPathComparer);
             foreach (var assembly in assemblies)
-                foreach (var input in WebApiDocumentationInputs.Discover(assembly)) yield return input;
+                foreach (var input in WebApiDocumentationInputs.DiscoverCacheInputs(assembly)) yield return input;
+
+            if (string.Equals(GetString(step, "type"), "PowerShell", StringComparison.OrdinalIgnoreCase))
+            {
+                var helpPath = ResolvePath(baseDir, GetString(step, "help") ?? GetString(step, "helpPath") ?? GetString(step, "help-path"));
+                if (!string.IsNullOrWhiteSpace(helpPath))
+                {
+                    var manifestPath = ResolvePath(baseDir, GetString(step, "psManifestPath") ?? GetString(step, "ps-manifest-path") ??
+                        GetString(step, "powerShellManifestPath") ?? GetString(step, "powershell-manifest-path"));
+                    var metadataPath = ResolvePath(baseDir, GetString(step, "psCommandMetadataPath") ?? GetString(step, "ps-command-metadata-path") ??
+                        GetString(step, "powerShellCommandMetadataPath") ?? GetString(step, "powershell-command-metadata-path"));
+                    foreach (var input in WebApiDocsGenerator.DiscoverPowerShellIndexInputs(helpPath, manifestPath, metadataPath))
+                        yield return input;
+                }
+            }
         }
 
         var isLlmsSite = string.Equals(GetString(step, "task"), "llms", StringComparison.OrdinalIgnoreCase) &&

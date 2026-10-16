@@ -2975,6 +2975,7 @@
         "coverageReportPath": { "type": "string", "description": "Alias of coverageReport." },
         "coverage-report-path": { "type": "string", "description": "Alias of coverageReport." },
         "sourceMemberCoverageScope": { "type": "string", "enum": ["all", "assembly"], "default": "all", "description": "Source-link coverage denominator: all members, or members declared by the documented assemblies. Inherited external members remain visible in API output." },
+        "source-member-coverage-scope": { "type": "string", "enum": ["all", "assembly"], "description": "Alias of sourceMemberCoverageScope." },
         "generateXrefMap": { "type": "boolean", "description": "Generate API xref map JSON for external symbol linking." },
         "generate-xref-map": { "type": "boolean", "description": "Alias of generateXrefMap." },
         "generateMemberXrefs": { "type": "boolean", "description": "Include member-level xref entries (methods/properties/fields/events/parameters)." },

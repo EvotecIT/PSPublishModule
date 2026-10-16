@@ -39,6 +39,60 @@ public sealed class WebApiDocsGeneratorFrameworkInheritDocTests
         });
     }
 
+    [Fact]
+    public void PipelineCache_TracksAutoDiscoveredPowerShellManifestAndCommandMetadata()
+    {
+        WithRoot(root =>
+        {
+            var help = Path.Combine(root, "CacheModule-help.xml");
+            var manifest = Path.Combine(root, "CacheModule.psd1");
+            var metadata = Path.Combine(root, "command-metadata.json");
+            File.WriteAllText(help, "<helpItems />");
+            File.WriteAllText(manifest, "@{ Description = 'Initial description' }");
+            File.WriteAllText(metadata, "{\"commands\":[]}");
+            using var step = JsonDocument.Parse(JsonSerializer.Serialize(new
+            {
+                task = "apidocs", type = "PowerShell", help, @out = Path.Combine(root, "api")
+            }));
+            var method = typeof(WebPipelineRunner).GetMethod("ComputeStepFingerprint", BindingFlags.NonPublic | BindingFlags.Static);
+            Assert.NotNull(method);
+
+            var first = (string)method!.Invoke(null, new object?[] { root, step.RootElement, null })!;
+            File.WriteAllText(manifest, "@{ Description = 'Updated description' }");
+            var manifestChanged = (string)method.Invoke(null, new object?[] { root, step.RootElement, null })!;
+            Assert.NotEqual(first, manifestChanged);
+            File.WriteAllText(metadata, "{\"commands\":[{\"name\":\"Get-CacheModule\"}]}");
+            var metadataChanged = (string)method.Invoke(null, new object?[] { root, step.RootElement, null })!;
+            Assert.NotEqual(manifestChanged, metadataChanged);
+        });
+    }
+
+    [Fact]
+    public void PipelineCache_TracksDependencyAssemblyMetadataBesideReferenceXml()
+    {
+        WithRoot(root =>
+        {
+            var assembly = Path.Combine(root, "CacheFixture.dll");
+            File.Copy(typeof(WebApiDocsGeneratorFrameworkInheritDocTests).Assembly.Location, assembly);
+            var dependencyDll = Path.Combine(root, "Dependency.dll");
+            var dependencyXml = Path.Combine(root, "Dependency.xml");
+            File.WriteAllText(dependencyDll, "metadata-v1");
+            File.WriteAllText(dependencyXml, "<doc><members /></doc>");
+            using var step = JsonDocument.Parse(JsonSerializer.Serialize(new
+            {
+                task = "apidocs", assemblies = new[] { assembly }, xml = dependencyXml, @out = Path.Combine(root, "api")
+            }));
+            var method = typeof(WebPipelineRunner).GetMethod("ComputeStepFingerprint", BindingFlags.NonPublic | BindingFlags.Static);
+            Assert.NotNull(method);
+
+            var first = (string)method!.Invoke(null, new object?[] { root, step.RootElement, null })!;
+            File.WriteAllText(dependencyDll, "metadata-v2-with-different-length");
+            var second = (string)method.Invoke(null, new object?[] { root, step.RootElement, null })!;
+
+            Assert.NotEqual(first, second);
+        });
+    }
+
     [Theory]
     [InlineData(false, false)]
     [InlineData(true, false)]

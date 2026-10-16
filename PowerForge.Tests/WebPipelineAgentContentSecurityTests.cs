@@ -79,6 +79,18 @@ public sealed class WebPipelineAgentContentSecurityTests
     }
 
     [Fact]
+    public void Api_docs_schema_declares_dashed_source_member_coverage_alias()
+    {
+        var schema = JsonNode.Parse(File.ReadAllText(GetRepoPath(
+            "Schemas",
+            "powerforge.web.pipelinespec.schema.json")))!;
+        var properties = schema["$defs"]!["ApiDocsStep"]!["properties"]!;
+
+        Assert.NotNull(properties["sourceMemberCoverageScope"]);
+        Assert.NotNull(properties["source-member-coverage-scope"]);
+    }
+
+    [Fact]
     public void Audit_fingerprint_changes_when_agent_publication_catalog_changes()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-agent-fingerprint-" + Guid.NewGuid().ToString("N"));

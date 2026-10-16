@@ -40,6 +40,21 @@ internal static class WebApiDocumentationInputs
         return inputs.Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(path => path, StringComparer.OrdinalIgnoreCase).ToArray();
     }
 
+    /// <summary>Discovers the XML and assembly files that can affect inherited API documentation.</summary>
+    internal static IReadOnlyList<string> DiscoverCacheInputs(string assemblyPath)
+    {
+        var assembly = Path.GetFullPath(assemblyPath);
+        var directory = Path.GetDirectoryName(assembly)!;
+        var inputs = Discover(assembly).ToList();
+        inputs.Add(assembly);
+        foreach (var xmlPath in Directory.EnumerateFiles(directory, "*.xml", SearchOption.TopDirectoryOnly))
+        {
+            var dllPath = Path.ChangeExtension(xmlPath, ".dll");
+            if (File.Exists(dllPath)) inputs.Add(Path.GetFullPath(dllPath));
+        }
+        return inputs.Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(path => path, StringComparer.OrdinalIgnoreCase).ToArray();
+    }
+
     private static Version? ParseVersion(string value)
         => Version.TryParse(value.Split('-')[0], out var version) ? version : null;
 

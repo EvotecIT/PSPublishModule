@@ -1,4 +1,5 @@
 using System.Reflection;
+using System.Runtime.Loader;
 using System.Xml.Linq;
 
 namespace PowerForge.Web;
@@ -47,7 +48,7 @@ public static partial class WebApiDocsGenerator
             foreach (var candidateId in targets)
             {
                 var candidate = candidates.FirstOrDefault(candidate => DocumentationId(candidate) == candidateId)
-                    ?? (implicitTarget ? null : FrameworkInheritDocMember(candidateId));
+                    ?? (implicitTarget ? null : FindLoadedInheritDocMember(candidateId, assembly) ?? FrameworkInheritDocMember(candidateId));
                 var declaring = candidate as Type ?? candidate?.DeclaringType;
                 if (implicitTarget && missingLibraryContract && declaring?.Assembly == typeof(object).Assembly)
                     continue;
@@ -96,6 +97,26 @@ public static partial class WebApiDocsGenerator
             if (implicitTarget && target is not null) inheritDoc.SetAttributeValue("cref", target);
             else if (implicitTarget) warnings.Add($"Implicit inheritdoc could not be resolved for {pair.Key}; supply the inherited XML documentation or an explicit cref.");
         }
+    }
+
+    private static MemberInfo? FindLoadedInheritDocMember(string documentationId, Assembly sourceAssembly)
+    {
+        var loadContext = AssemblyLoadContext.GetLoadContext(sourceAssembly);
+        var assemblies = (loadContext?.Assemblies ?? Array.Empty<Assembly>())
+            .Concat(AppDomain.CurrentDomain.GetAssemblies().Where(candidate => AssemblyLoadContext.GetLoadContext(candidate) == AssemblyLoadContext.Default))
+            .Distinct()
+            .OrderBy(candidate => candidate == sourceAssembly ? 0 : 1);
+        const BindingFlags flags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static | BindingFlags.DeclaredOnly;
+        foreach (var candidateAssembly in assemblies)
+        foreach (var type in GetExportedTypesSafe(candidateAssembly))
+        {
+            if (type is null) continue;
+            if (DocumentationId(type) == documentationId) return type;
+            foreach (var member in type.GetMembers(flags))
+                if (member is (MethodInfo or PropertyInfo or EventInfo) && DocumentationId(member) == documentationId)
+                    return member;
+        }
+        return null;
     }
 
     private static int ReferenceDocumentationPriority(string path, string? ownerName, string? typeNamespace)

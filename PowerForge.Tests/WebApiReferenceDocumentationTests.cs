@@ -9,6 +9,60 @@ namespace PowerForge.Tests;
 public sealed class WebApiReferenceDocumentationTests
 {
     [Fact]
+    public void Generate_RecursivelyResolvesExplicitImportedTargetFromLoadedDependency()
+    {
+        WithRoot(root =>
+        {
+            var suffix = Guid.NewGuid().ToString("N");
+            var namespaceName = "Imported.InheritDoc." + suffix;
+            var dependency = AssemblyBuilder.DefineDynamicAssembly(new AssemblyName("ImportedInheritDoc" + suffix), AssemblyBuilderAccess.Run);
+            var module = dependency.DefineDynamicModule("ImportedInheritDoc" + suffix);
+            var contract = module.DefineType(namespaceName + ".IContract", TypeAttributes.Public | TypeAttributes.Interface | TypeAttributes.Abstract);
+            var contractMethod = contract.DefineMethod("Other", MethodAttributes.Public | MethodAttributes.Abstract | MethodAttributes.Virtual | MethodAttributes.NewSlot,
+                typeof(void), Type.EmptyTypes);
+            var contractType = contract.CreateType()!;
+            var baseBuilder = module.DefineType(namespaceName + ".Base", TypeAttributes.Public | TypeAttributes.Class);
+            baseBuilder.AddInterfaceImplementation(contractType);
+            var baseMethod = baseBuilder.DefineMethod("Other", MethodAttributes.Public | MethodAttributes.Virtual | MethodAttributes.HideBySig,
+                typeof(void), Type.EmptyTypes);
+            baseMethod.GetILGenerator().Emit(OpCodes.Ret);
+            baseBuilder.DefineMethodOverride(baseMethod, contractMethod);
+            var baseType = baseBuilder.CreateType()!;
+            var targetId = "M:" + baseType.FullName + ".Other";
+            var contractId = "M:" + contractType.FullName + ".Other";
+
+            var assembly = Path.Combine(root, "PowerForge.Tests.dll");
+            File.Copy(typeof(WebReferenceNamedDerived).Assembly.Location, assembly);
+            var dependencyName = "ImportedInheritDoc" + suffix;
+            File.WriteAllText(Path.Combine(root, dependencyName + ".dll"), "loaded from the test AppDomain");
+            File.WriteAllText(Path.Combine(root, dependencyName + ".xml"), $"""
+                <doc><members>
+                  <member name="{targetId}"><inheritdoc/></member>
+                  <member name="{contractId}"><summary>Imported interface contract summary.</summary></member>
+                </members></doc>
+                """);
+            var xml = Path.Combine(root, "docs.xml");
+            File.WriteAllText(xml, $"""
+                <doc><members>
+                  <member name="T:PowerForge.Tests.WebReferenceNamedDerived"><summary>Derived.</summary></member>
+                  <member name="M:PowerForge.Tests.WebReferenceNamedDerived.Run"><inheritdoc cref="{targetId}"/></member>
+                </members></doc>
+                """);
+            var output = Path.Combine(root, "api");
+
+            var result = WebApiDocsGenerator.Generate(new WebApiDocsOptions
+            {
+                XmlPath = xml, AssemblyPath = assembly, OutputPath = output, Format = "json", IncludeUndocumentedTypes = false
+            });
+
+            Assert.Empty(result.Warnings);
+            using var json = JsonDocument.Parse(File.ReadAllText(Path.Combine(output, "types", "powerforge-tests-webreferencenamedderived.json")));
+            var method = json.RootElement.GetProperty("methods").EnumerateArray().Single(item => item.GetProperty("name").GetString() == "Run");
+            Assert.Equal("Imported interface contract summary.", method.GetProperty("summary").GetString());
+        });
+    }
+
+    [Fact]
     public void Generate_ResolvesExplicitOtherMemberFromAdjacentInheritedOwner()
     {
         WithRoot(root =>
