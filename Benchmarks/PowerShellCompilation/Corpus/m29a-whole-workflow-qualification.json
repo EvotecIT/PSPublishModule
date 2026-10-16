@@ -1,36 +1,38 @@
 {
   "schemaVersion": 1,
-  "recordedOn": "2026-10-15",
+  "recordedOn": "2026-10-16",
   "status": "selected-whole-workflows-and-declared-local-functional-gates-qualified",
   "wholeWorkflowQualified": true,
   "functionalQualificationComplete": true,
-  "interpretation": "Complete declared owned inventories and selected Original/Built/Installed scenarios qualify at Source31. Local functional proof, performance, hosted integration, distribution and cleanup have separate boundaries. Counts from different suites or historical candidates are not combined.",
+  "interpretation": "Complete declared owned inventories and selected Original/Built/Installed scenarios qualify at Source34. Local functional proof, performance, hosted integration, distribution and cleanup have separate boundaries. Counts from different suites or historical candidates are not combined.",
   "finalCandidate": {
-    "label": "Source31",
-    "commit": "24b8955bf7a9a5aca4c48755ea63341a03ce8b02",
-    "tree": "5231c1813a314f3be19f579ff25a434e136cc021",
-    "integratedMain": "1fec68976f06c3ee520fb90f62c5461a877e6328",
-    "sourceInputs": 226,
+    "label": "Source34",
+    "commit": "42fe4ecf1d9f5c644970d20f38871bb62f88ca1f",
+    "tree": "6f68984e2e035a03a18adc11c0dc50d8348160aa",
+    "integratedMain": "b708456929c395636ee4fb8ae926cd452545156c",
+    "sourceInputs": 309,
     "sourceManifest": {
-      "sha256": "DF0A905A1FBB3AA879521B181DEEE2AC60A3F2881DC9DE8DB3A34C6FA890FB6A",
-      "role": "Complete Source31 qualification input union"
+      "sha256": "70A0083112FE5D42A321605A4C53EB52DFBE9EE1CEA682947BCFDB93993D046D",
+      "role": "Complete Source34 qualification input union"
     },
     "windowsGraphManifest": {
-      "sha256": "2BEF6314D00FDDE0F564BF6A09E752D06C54F38A8435F7638301F4BE43184D1E",
-      "role": "Source31 Windows graph"
+      "sha256": "71B67C653116766E94F011C096772CC51FAAEE31A54CD143BDB0AC4C974506AD",
+      "role": "Source34 Windows graph"
     },
     "nativeGraphManifest": {
-      "sha256": "EF1587AC23FF60B1962C8EDC08312F2F21440AE2294BD7D9AC6CAE5FA10312CA",
-      "role": "Source31 native graph"
+      "sha256": "681A71A784B7333CB6300DE3C570E96D67C204F95453640F6483B481328965A1",
+      "role": "Source34 native graph"
     },
     "cliFilesPerPlatform": 449,
     "windowsTestIdentities": 3,
     "nativeTestIdentities": 7,
     "nativeGraphFiles": 3523,
-    "nativeCopiedTrackedFilesAndModes": 6659,
+    "nativeCopiedTrackedFilesAndModes": 6682,
     "fixtureFiles": 508,
     "sdkPinByteIdentical": true,
-    "sourceAndGraphStableBeforeAfter": true
+    "sourceAndGraphStableBeforeAfter": true,
+    "nativeGraphLogicalBytes": 1769239226,
+    "qualificationSnapshotExcludesFinalDocumentationEdits": true
   },
   "declaredPortfolio": {
     "workloads": 3,
@@ -82,34 +84,34 @@
         }
       ],
       "result": {
-        "status": "passed-current-source31",
+        "status": "passed-current-source34",
         "receipt": {
-          "sha256": "FF9417D81A7384D819608514D0DB372F8523FBDC09D0FC042CBB2B6D3DA1ACB6",
-          "role": "yaml-net10.0 complete qualification"
+          "sha256": "2BFDACCA15CC79000982E8E9DABF59C0819FDFCDB2D5F212CE535D9CB339E957",
+          "role": "yaml-net10.0 complete Source34 qualification"
         },
-        "compilerGraphSha256": "2BEF6314D00FDDE0F564BF6A09E752D06C54F38A8435F7638301F4BE43184D1E",
+        "compilerGraphSha256": "71B67C653116766E94F011C096772CC51FAAEE31A54CD143BDB0AC4C974506AD",
         "artifactSha256": "fe841eef6b910bf4bbe6c22bca6ca28fc518a4cb14719073de9ca77824512f76",
         "projectSha256": "615408B3BA55A3DD36FD4FCF32C8D363FBFA08F3AB2709AB27820B7ED2E5AF42",
         "observations": {
           "Original": {
             "scenarios": 105,
             "receipt": {
-              "sha256": "79FD96BC9500C00019D1FC268E38B53ADA6D4BDDC2EA965B4EC3D1E4BA834CBD",
-              "role": "yaml-net10.0 Original observation"
+              "sha256": "C9328FE48AB79568C06B317514B5090CCD8B64725E945D76EA5432A5FA52B406",
+              "role": "yaml-net10.0 Original Source34 observation"
             }
           },
           "Built": {
             "scenarios": 105,
             "receipt": {
-              "sha256": "1F97BAF2D069E1E733D3BE8ADEDE2F4B9351BC5DE3789758C3638A464F8B9FC8",
-              "role": "yaml-net10.0 Built observation"
+              "sha256": "D6BFA042E8356B02A8F5138FCB396074CD5BE797DE4D9C2BA00BDDD19C091072",
+              "role": "yaml-net10.0 Built Source34 observation"
             }
           },
           "Installed": {
             "scenarios": 105,
             "receipt": {
-              "sha256": "D1A3DB7E32DDA7E316AAC1CB8B0D1872425C80DB09131134866E206322F4DDC0",
-              "role": "yaml-net10.0 Installed observation"
+              "sha256": "BB32BF0240619709C706ECC657ACE458129DFB7D3FDFFAF9395770A889AD2DB3",
+              "role": "yaml-net10.0 Installed Source34 observation"
             }
           }
         },
@@ -123,32 +125,32 @@
         "publicSurfacePreserved": true,
         "canonicalLifecycleReceipts": {
           "analyze": {
-            "sha256": "5FE716E4569CDFB405809495C46AB6A8EC5B0033A38F4B01FECE606E3E2A3BF6",
-            "role": "yaml-net10.0 analyze"
+            "sha256": "88FDF530FE89C1E39DACFF755D1E41A290F940B4CEFE82223177A72D9269C76B",
+            "role": "yaml-net10.0 Source34 analyze"
           },
           "lock": {
-            "sha256": "68026608CEE502355FCA38F48F8B4BF6505168AB1AB405A89ACB92C3AFC7F477",
-            "role": "yaml-net10.0 lock"
+            "sha256": "E8791E0B4A8C0FD2A5DB176FBEE0E5A7AE823DC2E296AD30F9694ACC878EBC11",
+            "role": "yaml-net10.0 Source34 lock"
           },
           "restore": {
-            "sha256": "300A14A9D0561A347B1DC5D4FCB363E8CF2C612CDA837AD1B9B431B81D199088",
-            "role": "yaml-net10.0 restore"
+            "sha256": "A286E0BA7CCA2C3022159532053148C108F38E9C7B3EEAF1E51A15B5E4ED0F5C",
+            "role": "yaml-net10.0 Source34 restore"
           },
           "build": {
-            "sha256": "E2A478C093CB3FD734CD1076F7F5846C249834C6A0C07A8477BBF03E4DE43523",
-            "role": "yaml-net10.0 build"
+            "sha256": "2947D1D335D24D0F4E6A875C8793C5F833A3CAEF6AF48974ABDE05325DDB541D",
+            "role": "yaml-net10.0 Source34 build"
           },
           "test": {
-            "sha256": "8CFA6D6645520971C893D0F359226757D2BDD5D5B00EBECC542FC4A208CC8A4B",
-            "role": "yaml-net10.0 test"
+            "sha256": "CFF4763948E00909698055342C7519DE22C8D9A63674CE6DCA11C92B89FAD734",
+            "role": "yaml-net10.0 Source34 test"
           },
           "pack": {
-            "sha256": "FF183E8F39B1821D8668664E0BD64CD1061F2C198D37F22E7B59E28CB2923CA6",
-            "role": "yaml-net10.0 pack"
+            "sha256": "2774854A80BD741336D1271B73A1F46DA320198B8BB7465A729F5DED1424E785",
+            "role": "yaml-net10.0 Source34 pack"
           },
           "install": {
-            "sha256": "0FA1F0A1A820ABD8ED8FA432506739761FF5A9C72F469FF70C62334CE5519E95",
-            "role": "yaml-net10.0 install"
+            "sha256": "6ECD327F1EAD1993263AD529E40FC8666087DDB6B2FC6414C9E870C6E77096EE",
+            "role": "yaml-net10.0 Source34 install"
           }
         },
         "compilerInputUnavailableDuringBuiltAndInstalled": true,
@@ -196,34 +198,34 @@
         }
       ],
       "result": {
-        "status": "passed-current-source31",
+        "status": "passed-current-source34",
         "receipt": {
-          "sha256": "95F4517BD09BCE471662D885461B82A10D28318CA0F8F6F1D768F57A3F7CE7C0",
-          "role": "yaml-net472 complete qualification"
+          "sha256": "BC006216DD7B3E30E2DD00291C4B599C1B91B3D08EF5A7D344291922CB952EE2",
+          "role": "yaml-net472 complete Source34 qualification"
         },
-        "compilerGraphSha256": "2BEF6314D00FDDE0F564BF6A09E752D06C54F38A8435F7638301F4BE43184D1E",
+        "compilerGraphSha256": "71B67C653116766E94F011C096772CC51FAAEE31A54CD143BDB0AC4C974506AD",
         "artifactSha256": "da8876d54e544e5f4f662f2f856119d179b211deb3a3a8ea386dda37d721b94a",
         "projectSha256": "01FAEA29C01348F1E341BEEB33F267A3DC285489B877A6A7F76B2D27E0DAC100",
         "observations": {
           "Original": {
             "scenarios": 105,
             "receipt": {
-              "sha256": "76F5353EB51F61B6161CD39989D747CDC0D49AB168D2CA99F8A288E41B4361F8",
-              "role": "yaml-net472 Original observation"
+              "sha256": "1F1B8F18EC71E87FECF8F1CC779A35F2ADCEA748697672A28D61045C471F546E",
+              "role": "yaml-net472 Original Source34 observation"
             }
           },
           "Built": {
             "scenarios": 105,
             "receipt": {
-              "sha256": "B67133D17E012C11C2AE174145009C4BF2617998FEBF18440F75A0CAF04CA3F6",
-              "role": "yaml-net472 Built observation"
+              "sha256": "F905E0BC400F05183BFED992278E4117E81F12538552C13319792951FF107CDD",
+              "role": "yaml-net472 Built Source34 observation"
             }
           },
           "Installed": {
             "scenarios": 105,
             "receipt": {
-              "sha256": "DB11B6991E782FA8D95326172502E56F0B63B2AD61A6398899443048B62DEDD6",
-              "role": "yaml-net472 Installed observation"
+              "sha256": "10EF5945AFF0BE6618ADEBDD33E9BDC076DE36199BEE229ECDC93CBD72360F57",
+              "role": "yaml-net472 Installed Source34 observation"
             }
           }
         },
@@ -237,32 +239,32 @@
         "publicSurfacePreserved": true,
         "canonicalLifecycleReceipts": {
           "analyze": {
-            "sha256": "A0ABD48E4CA51C5DC97DDB7B897B8D9195EAB8789445144A3DD8405EE37916AF",
-            "role": "yaml-net472 analyze"
+            "sha256": "52CA8CB3F2C6F6B6EEF4400A67AC108C116C911FA833B420CF196A809053BE6B",
+            "role": "yaml-net472 Source34 analyze"
           },
           "lock": {
-            "sha256": "AD0B36CCE23FA85EF8B3F0D208FC7DD7CB8AB7F49118AF4CF58DCA0FD80D4128",
-            "role": "yaml-net472 lock"
+            "sha256": "7634EB183D51E8BBC2BBD53B2B39DB48A7E671AEC3DC3210CF8F4CB955C7C0ED",
+            "role": "yaml-net472 Source34 lock"
           },
           "restore": {
-            "sha256": "C9E9C7CC573D7871EDC85D581FE8B2A53A4B24E6BC2036613D11513C8301C391",
-            "role": "yaml-net472 restore"
+            "sha256": "86263E1EDAFE6EFE63C18AF70B6C57DF839F9940C59DEA78DB4DF679A4507578",
+            "role": "yaml-net472 Source34 restore"
           },
           "build": {
-            "sha256": "5BFD437EC05288A8EF26E8914ECB7896B3271A78EE0E2D0F832DEB4897637476",
-            "role": "yaml-net472 build"
+            "sha256": "DCA4EF88C070EAD118D5E06AD2420E645A0BD404B22A1A8CFF9AA7C18E8B3AF6",
+            "role": "yaml-net472 Source34 build"
           },
           "test": {
-            "sha256": "85446326A674203D4E3C4E2331B28DF16BBD44F51328EEF074F6440032E31372",
-            "role": "yaml-net472 test"
+            "sha256": "D65ADD26C11A8EF5A26E37D5C6D36F8E472F17E53E7A7E88A45AAD106B0A50E2",
+            "role": "yaml-net472 Source34 test"
           },
           "pack": {
-            "sha256": "6E89D2786B1335C3C5D3E3916C42D8A09D35324036A61DCF3A7E9351A24C0FA2",
-            "role": "yaml-net472 pack"
+            "sha256": "D52F4FA4D98213FEC2F0E08764332942E15258CCC58087D9BE8661E4832D5887",
+            "role": "yaml-net472 Source34 pack"
           },
           "install": {
-            "sha256": "CB14EAF3DC30B43E6B9DD6AFDDC8E3F582296D61A2C4104751D4E0EBE41351DF",
-            "role": "yaml-net472 install"
+            "sha256": "43B3E2AAF82785290DAAC066FF3CEE3C6959563D86F4DE2E3AC1F4B8D119323C",
+            "role": "yaml-net472 Source34 install"
           }
         },
         "compilerInputUnavailableDuringBuiltAndInstalled": true,
@@ -309,34 +311,34 @@
       ],
       "requiredAliases": [],
       "result": {
-        "status": "passed-current-source31",
+        "status": "passed-current-source34",
         "receipt": {
-          "sha256": "D8CB3CC98A429B5C5E658581BB89AE8B73E8112B5F61C609C89D150C7F662B0F",
-          "role": "platyps-net10.0 complete qualification"
+          "sha256": "EC5EC90CB77B260A65A6DCB138A66AD38951A2C262EBC559768D8DB033AA9947",
+          "role": "platyps-net10.0 complete Source34 qualification"
         },
-        "compilerGraphSha256": "2BEF6314D00FDDE0F564BF6A09E752D06C54F38A8435F7638301F4BE43184D1E",
+        "compilerGraphSha256": "71B67C653116766E94F011C096772CC51FAAEE31A54CD143BDB0AC4C974506AD",
         "artifactSha256": "13af9af0bf58f353b28e195f6e420183105ada4691071b9dc107ccb9b9cb4666",
         "projectSha256": "180488A6848393614889EE935D73CC53FC1B138B0B6952FA03815799938AB0D4",
         "observations": {
           "Original": {
             "scenarios": 77,
             "receipt": {
-              "sha256": "245744D40AB92B01BEACC2F3AA0728951F8A7C6370876051E43CAFC20D11377A",
-              "role": "platyps-net10.0 Original observation"
+              "sha256": "B6FBED59113AD0A3D6072D2B3771886EEDE4E2419096FAE2E099FC08E6C301EE",
+              "role": "platyps-net10.0 Original Source34 observation"
             }
           },
           "Built": {
             "scenarios": 77,
             "receipt": {
-              "sha256": "AC46AC1A5B7D9476479791E384B5AB515F8CE139BC04CC2E7C94F9153C30221E",
-              "role": "platyps-net10.0 Built observation"
+              "sha256": "E7A71EB83AE9DD7A82AC4DA1E4A9A0055AAF895D6D933FCDF7E07FEE4E25C166",
+              "role": "platyps-net10.0 Built Source34 observation"
             }
           },
           "Installed": {
             "scenarios": 77,
             "receipt": {
-              "sha256": "83C3DCFD552A4ABF1B7DCF21F925B7A39310419A1C8C7B7FB8E9002D757AB8D5",
-              "role": "platyps-net10.0 Installed observation"
+              "sha256": "E86C79BEABADE13110A0285C75D42E70DF8C40DA3CD69ABCA2A0BCE04BEA1EAB",
+              "role": "platyps-net10.0 Installed Source34 observation"
             }
           }
         },
@@ -350,32 +352,32 @@
         "publicSurfacePreserved": true,
         "canonicalLifecycleReceipts": {
           "analyze": {
-            "sha256": "51C7B19C94630BD4EE069DDC7848F9C1C4D6D147491CAEA2243B6253CFB1E1AA",
-            "role": "platyps-net10.0 analyze"
+            "sha256": "8A2D3E4A7BE8BF7D2E6C9A66411182E5A7A4860D5149859CD6D4D65CA51469C4",
+            "role": "platyps-net10.0 Source34 analyze"
           },
           "lock": {
-            "sha256": "0F9F902874B86E0072B4D3DAF9534307757F864B04094AA81F03CB643B88995F",
-            "role": "platyps-net10.0 lock"
+            "sha256": "AB4493E076E0745BE03D3D12FA991C3756CEE267036D344D16273FF408306221",
+            "role": "platyps-net10.0 Source34 lock"
           },
           "restore": {
-            "sha256": "6A4F94472C62B6BEA493857A96FCC102E8987ADFF082CA31025ABD655D842817",
-            "role": "platyps-net10.0 restore"
+            "sha256": "EA7C7EBC26E5EAB695277236EE13D517030C5DD32CBC955E3D85ADA8C15A4CF6",
+            "role": "platyps-net10.0 Source34 restore"
           },
           "build": {
-            "sha256": "8C4481827B9F2296146677A24AAECD7937EC961C44E61010350B1A17930007DA",
-            "role": "platyps-net10.0 build"
+            "sha256": "4830405425EA24389D5AE37E501CE9CDB99A1D23DF54983061A9BE148CB2D622",
+            "role": "platyps-net10.0 Source34 build"
           },
           "test": {
-            "sha256": "3B2CEEB3D78DF3A67034A3ABC39B4A0B60E4186113C9E6BEEEE0BDB1CEE50A18",
-            "role": "platyps-net10.0 test"
+            "sha256": "9262F2E1CA2C67E5CA5D77B5F6C67CC7E91535A49BC7475C9CF4B3BD5B0CFDD8",
+            "role": "platyps-net10.0 Source34 test"
           },
           "pack": {
-            "sha256": "8EF2A80C8DFF7EB671E155289C008E974F5A98AA8D9A4C6330C0C5CC281A053B",
-            "role": "platyps-net10.0 pack"
+            "sha256": "99BAA28364DFE93C968203950F2391F0FFCD042470F9844331456FAD9A694833",
+            "role": "platyps-net10.0 Source34 pack"
           },
           "install": {
-            "sha256": "39AD0202AC599FD424018A024BB96C81E5FF75520E62B05ABF47C00CE05EAFE7",
-            "role": "platyps-net10.0 install"
+            "sha256": "9B02728C7E7927EE4A4EFF731515425930351FD62A9F8FE17EC4F728F8D2D84D",
+            "role": "platyps-net10.0 Source34 install"
           }
         },
         "compilerInputUnavailableDuringBuiltAndInstalled": true,
@@ -422,34 +424,34 @@
       ],
       "requiredAliases": [],
       "result": {
-        "status": "passed-current-source31",
+        "status": "passed-current-source34",
         "receipt": {
-          "sha256": "FF6947A5DCDD2F1A1B4E97C7D1A4D2C4050FB347190355668F6393E90956AF3A",
-          "role": "platyps-net472 complete qualification"
+          "sha256": "34B7A5290DE474C523FC890C2F6A42174E06E31AE24DBE2C485E40A3E2927186",
+          "role": "platyps-net472 complete Source34 qualification"
         },
-        "compilerGraphSha256": "2BEF6314D00FDDE0F564BF6A09E752D06C54F38A8435F7638301F4BE43184D1E",
+        "compilerGraphSha256": "71B67C653116766E94F011C096772CC51FAAEE31A54CD143BDB0AC4C974506AD",
         "artifactSha256": "e41e96a7daef76d155b9c38c33aa6ff03c0adc69fd79927ed3db86294e6a6747",
         "projectSha256": "2489DA154F413B361A07D78CF2F02C5BB619C3EC9B088CB7B0A83A82CE5C415F",
         "observations": {
           "Original": {
             "scenarios": 77,
             "receipt": {
-              "sha256": "B51EB59A97CF31317DB7C0B1672D931277107FD51B7DAD348D133D7EEDE476D7",
-              "role": "platyps-net472 Original observation"
+              "sha256": "A9C84440E9A5AB5B651395B4FB04A90FA0B9551DB054A88524F190EE57CBE0B9",
+              "role": "platyps-net472 Original Source34 observation"
             }
           },
           "Built": {
             "scenarios": 77,
             "receipt": {
-              "sha256": "D64DF5069A14761D16482448A29762959084015BC9159E90CC59DA7187371C18",
-              "role": "platyps-net472 Built observation"
+              "sha256": "61F1E016AB572D3161ED2BEAE01D0A67A439D6B0664498248F4EF078C35CCB6D",
+              "role": "platyps-net472 Built Source34 observation"
             }
           },
           "Installed": {
             "scenarios": 77,
             "receipt": {
-              "sha256": "92B149AACFC0B41E911D2DB21BC0A02CC6E18E204E3A2B795582266B15AF4A19",
-              "role": "platyps-net472 Installed observation"
+              "sha256": "D17E6F998AFDD37F397151D32CC2131AC71C9F436A44B09324E6ED7A1BA85466",
+              "role": "platyps-net472 Installed Source34 observation"
             }
           }
         },
@@ -463,32 +465,32 @@
         "publicSurfacePreserved": true,
         "canonicalLifecycleReceipts": {
           "analyze": {
-            "sha256": "5F019894CDDB859694DB42DEE00F78F22AC418101B4412401E6D208C60D96254",
-            "role": "platyps-net472 analyze"
+            "sha256": "FD0CB641970EB61540E09B01DAF240E4FD111428533BA47A9F05B618954974AA",
+            "role": "platyps-net472 Source34 analyze"
           },
           "lock": {
-            "sha256": "2C49D9DCA9DA9C59250C2FFE9B10352C23B2B402B73DC83D5D2291B822EB3B5B",
-            "role": "platyps-net472 lock"
+            "sha256": "963703395D6D67D637BD0DC06DED4DC5CD5ACAFDB6B526B7B2372589939D69B6",
+            "role": "platyps-net472 Source34 lock"
           },
           "restore": {
-            "sha256": "84484E0F3642592A8DEBA92851C8977F7B263710F37976916FD93D25ED218A4A",
-            "role": "platyps-net472 restore"
+            "sha256": "EFC2191B88ACA80EEFB8ED2D5DC45F2BF894402C3520F903F5E8F4CA7224B3E8",
+            "role": "platyps-net472 Source34 restore"
           },
           "build": {
-            "sha256": "2B1B5386EB5106815AA0337F300F4816C8FC395C54E8858678B6E1900E5CBAEF",
-            "role": "platyps-net472 build"
+            "sha256": "254770630D324F89C328DBFBF46318AB43FC8B6A2F4017C36C3527C2A907B12F",
+            "role": "platyps-net472 Source34 build"
           },
           "test": {
-            "sha256": "FC9BDC93F7DBBFFC1C01447F654BF7F5C638844ED5BB1C1922068CE04DC0D303",
-            "role": "platyps-net472 test"
+            "sha256": "4366B52338459C39FABA3FF13923F7487735B3B97B945418BA60A083D7C1C5C1",
+            "role": "platyps-net472 Source34 test"
           },
           "pack": {
-            "sha256": "C96A130C89254D8AD445785D914BC5BEF2366AE688265E8827FA9D06B5EDF4EB",
-            "role": "platyps-net472 pack"
+            "sha256": "B2C1CD69D88C4781864618901BF14F3BEB3F3F95725F39DE3067EB3D40F6C3D6",
+            "role": "platyps-net472 Source34 pack"
           },
           "install": {
-            "sha256": "CDF96E9395C114F1FFF2A954C693F57548E5C341FC994E57C615096B699C8FF9",
-            "role": "platyps-net472 install"
+            "sha256": "27A05E9C804FB90B0ECB5B2384C2F01D67274643496A9AC0932397FA1D7DA98E",
+            "role": "platyps-net472 Source34 install"
           }
         },
         "compilerInputUnavailableDuringBuiltAndInstalled": true,
@@ -523,34 +525,34 @@
       "requiredExports": [],
       "requiredAliases": [],
       "result": {
-        "status": "passed-current-source31",
+        "status": "passed-current-source34",
         "receipt": {
-          "sha256": "71AA71041D0A888FEA728738D6D9C4EAD2F2B73AFD697D36070C022E2E4DF789",
-          "role": "sitemap-net10.0 complete qualification"
+          "sha256": "75B1254841F0DDD316055FC669692E0848F17F71EDADB10FFDDD9EE74581C28A",
+          "role": "sitemap-net10.0 complete Source34 qualification"
         },
-        "compilerGraphSha256": "2BEF6314D00FDDE0F564BF6A09E752D06C54F38A8435F7638301F4BE43184D1E",
-        "artifactSha256": "cb2337c24d4cbfac7f7306b6146d59a27529b99a0521c0c206e03d6a4355c1f4",
-        "projectSha256": "CFFF85D8B76E251B5DFB356EC6736E9849C506ABFEA41996C74BF3F2EBAB4F18",
+        "compilerGraphSha256": "71B67C653116766E94F011C096772CC51FAAEE31A54CD143BDB0AC4C974506AD",
+        "artifactSha256": "7d1fff84102765d70c2b62fd8f0549d9fd82c1716fd6dcc7d2b9be0d896f26b8",
+        "projectSha256": "E5E51CD9FA645295A3A7B8EEE1F7AB4CDDB715F633288960C79CA9BB172F1AE0",
         "observations": {
           "Original": {
             "scenarios": 10,
             "receipt": {
-              "sha256": "25BA156426CCB13BFB8985D417E1F70819FE092DEC8A83B5881BCEB6E1EA9A81",
-              "role": "sitemap-net10.0 Original observation"
+              "sha256": "C5B2F6ABEA51AC2388AC6EF0EB79B25CD7A7E0C75364F5D22B9FC8FAC082A59D",
+              "role": "sitemap-net10.0 Original Source34 observation"
             }
           },
           "Built": {
             "scenarios": 10,
             "receipt": {
-              "sha256": "9935630C330C512A0BFC2A46CEF5CF2A9B51692113AD567A9CB7FA0CB59F57DC",
-              "role": "sitemap-net10.0 Built observation"
+              "sha256": "180CFC9B1AE07EBE53BDB7B246E167EE97B4E3D4D5F54BC6B927BB649B72900E",
+              "role": "sitemap-net10.0 Built Source34 observation"
             }
           },
           "Installed": {
             "scenarios": 10,
             "receipt": {
-              "sha256": "8386EF29DFB0D41D71ABE5F6E6D259126D8F2F86A79B3F9B23381D32ED35AA02",
-              "role": "sitemap-net10.0 Installed observation"
+              "sha256": "7801F4299F51176B1E7853174A3BCA4887E8CE9A2CE42AC1C0862002F5FDB688",
+              "role": "sitemap-net10.0 Installed Source34 observation"
             }
           }
         },
@@ -564,32 +566,32 @@
         "publicSurfacePreserved": true,
         "canonicalLifecycleReceipts": {
           "analyze": {
-            "sha256": "EF53F113723FB4BEA3BAC3F319E91F4DED45565A85BEC946E54E17D08C0EE50E",
-            "role": "sitemap-net10.0 analyze"
+            "sha256": "1EE4255E49FA4A352934271CC3E0E496AF10120EE23A5983954A5732D97A4B5C",
+            "role": "sitemap-net10.0 Source34 analyze"
           },
           "lock": {
-            "sha256": "D0B6AA5312D4399EC4FEB85DE59BE75DF5FEC661C6F87B0B9AC795D957E77FB3",
-            "role": "sitemap-net10.0 lock"
+            "sha256": "B45964D92DF3F0C6B698D048C321145852210C1505ED0053CB2A0EEF87771D84",
+            "role": "sitemap-net10.0 Source34 lock"
           },
           "restore": {
-            "sha256": "FC56037E86835C5A8B7D6C6B7DAE792458BB3767773B4BD88A61D30AA873A554",
-            "role": "sitemap-net10.0 restore"
+            "sha256": "FA9AE452F083491A85DEA3424BA2BA49C912048808AED8547E8B3375C3ABC101",
+            "role": "sitemap-net10.0 Source34 restore"
           },
           "build": {
-            "sha256": "34B52209048201913F36528E936E9939FAC66CB946E55ADEE62F72ADC0BC0CA2",
-            "role": "sitemap-net10.0 build"
+            "sha256": "5965F6B184BF9ED4D371CF1044A46E66E0ACF7C5276E0D30532C50F955A7F2DB",
+            "role": "sitemap-net10.0 Source34 build"
           },
           "test": {
-            "sha256": "92E67268AD69552A4F7EC0738720BD8FEE21BAB25ED4D6D5E832E1220B80DCB5",
-            "role": "sitemap-net10.0 test"
+            "sha256": "918F8A317711F92D8A021994D8B0D584E1A5A2C912FDA0A63F7B0DB42DB5D98A",
+            "role": "sitemap-net10.0 Source34 test"
           },
           "pack": {
-            "sha256": "86FA410C2B47B0E40C93BFCE58C210C818A7B447D17B7F9F0FD020EE6A96F5E0",
-            "role": "sitemap-net10.0 pack"
+            "sha256": "74703464D92C3577C5BFD049A84E9DDA58971EF067037A7B1032A5BF05B7642D",
+            "role": "sitemap-net10.0 Source34 pack"
           },
           "install": {
-            "sha256": "C03FF18CE53BF6700744527E1118C5292915EF11AD3DEFBD085C56B072D59980",
-            "role": "sitemap-net10.0 install"
+            "sha256": "62A115A7C2EC23DCF8E7ECCA356D66736768773F435BB1E6D71A0F867BCE1BCA",
+            "role": "sitemap-net10.0 Source34 install"
           }
         },
         "compilerInputUnavailableDuringBuiltAndInstalled": true,
@@ -624,35 +626,39 @@
         "exitCode": 0,
         "warnings": 0,
         "errors": 0,
+        "scope": "Source34 test-owner-only rebuild; unchanged Source33 production CLI/owner and restored assets authenticated before/finally",
         "receipt": {
-          "sha256": "EFA428905D69C73A581F6C74CC4F982C62B00E0AFF69E35BF18C21324AEC6C62",
-          "role": "Source31 source build finally envelope"
+          "sha256": "64A28A5A54358E11A95551948CC341C96B232AA077DE91F476964516CFFD16D7",
+          "role": "Source34 test-owner build finally envelope"
         }
       },
       "focused": {
-        "total": 34,
-        "passed": 34,
+        "total": 109,
+        "passed": 109,
         "failed": 0,
         "skipped": 0,
-        "selectors": 10,
-        "distinctIds": 34,
+        "selectors": 22,
+        "distinctIds": 109,
         "discoveryMultiplicitiesMatched": true,
         "receipt": {
-          "sha256": "63E91D778D7961B0E187762E8CAA34DC3B70EF5025164A45C5E7D675CB16901E",
-          "role": "Source31 Windows focused result"
-        }
+          "sha256": "FE727A6BC5A2353939ED67219E532A606C2B80CB3F76F826762657A35703D1C3",
+          "role": "Source34 fresh Windows focused result"
+        },
+        "methodSelectors": 19,
+        "classSelectors": 3,
+        "trxSha256": "FD0C6505748E3E61F2D43DD76F7F9AFF09C8C3F5B0E1BB8F94D31CCAF36D93EA"
       },
       "whole": {
         "lanes": 5,
         "passed": true,
         "compilerClosureUnchanged": true,
         "receipt": {
-          "sha256": "56F1999847CB50EC6B9CA35E894317DF5E317C5ACAA98F94C45511E4D0716CF9",
-          "role": "Source31 five-lane whole-workflow result"
+          "sha256": "C6E6757C352CBB465DC55D1CEE434BD2EF44A53006E2EFD6C6217AE21AFD4720",
+          "role": "Source34 five-lane whole-workflow result"
         },
         "phase": {
-          "sha256": "C4A37659CCDB1897B8414786A7F62A83DE3CF90B047A6DEA91CD787C413DC6C7",
-          "role": "Source31 Whole/compatibility terminal"
+          "sha256": "D837BF95C080057611E56314780B5FEDA661D57A783DBBA0BEC7CAF667A27032",
+          "role": "Source34 Whole/compatibility terminal"
         }
       },
       "sharedCompatibility": {
@@ -662,19 +668,19 @@
             "exitCode": 0,
             "warnings": 0,
             "errors": 0,
-            "logSha256": "3D8BCEA59FBE86F841F7C316FDFF6E3674AA3B6CEF304618C77F1FACEF18983F"
+            "logSha256": "BAC55214E6D33184133F9296A7242F9FCC99B930E1F6A5866A56EB6B768F8B0D"
           },
           {
             "framework": "net8.0",
             "exitCode": 0,
             "warnings": 0,
             "errors": 0,
-            "logSha256": "6C4CC67BAF99D8E2EB7F6640FB7EABA339D757D98AD255D7FE130EDBED317A0A"
+            "logSha256": "D573D0324ABC6068034D407CEF7B5F3C4E56BC7C9F5F40FCD79C147E67132667"
           }
         ],
         "receipt": {
-          "sha256": "6AFC462227795246B0C55813784FC2F555E6B6171E3796548F2E580FE483A939",
-          "role": "Source31 shared compatibility result"
+          "sha256": "7ABB3F12CBC0C8984AFAD6AB745666829A5AC20F941ADB09B711F99C22D30904",
+          "role": "Source34 shared compatibility result"
         },
         "generatedNet8TargetReopened": false
       },
@@ -685,11 +691,12 @@
         "knownLinuxPrerequisiteSkips": 2,
         "ownedStrictPassed": 6,
         "receipt": {
-          "sha256": "924CCC98B3576078289B4F133992CD232908A5AF2D6206AEA7F43B627A1D44C1",
-          "role": "Source31 functional Full result"
+          "sha256": "B5E8E69911676A88ABF5D2D96F1359A07E4BC618D2E95C3052D4C9DB4C64525E",
+          "role": "Source34 functional Full PhaseAll result"
         },
-        "trxSha256": "660733E137E2585221AC458F43AAE09C8E01B9C56F459BDF9C620143CCADD98B",
-        "strictSha256": "992E1D5170F80FCAE9CB16B77006283C68A7F4D5266D9FD12216C57415F32E75"
+        "trxSha256": "5F62D5F37217CB9DA59C12CB35509DECF2303902E7FBF9A94183D8BF297DE05F",
+        "strictSha256": "96A23A5756DFC417DC6B62329BBB179924F686500C5F6A0B1CF52246D26A3BDA",
+        "phase": "All"
       },
       "supplement": {
         "total": 67,
@@ -698,25 +705,77 @@
         "skipped": 0,
         "selectors": 5,
         "receipt": {
-          "sha256": "B50172317BA0E33527F8754A5A7250DC86D46B6DDD7E04FB7BEE85350D9EA6B9",
-          "role": "Source31 Windows mandatory supplement"
+          "sha256": "93F26E76AECDA7144234829FCA97E37AB56BE65EF480716DCFE0E9EE7CDA74BB",
+          "role": "Source34 Windows mandatory supplement"
         },
-        "trxSha256": "BE94D3D5312442F9E04AD57F56C7CF20DFAC313EF7EA9ED3FF2AACCFC9654B50"
+        "trxSha256": "53A849BB2828C05B4FCA5E99267437A70093342A06EEE6F8D168BC729F2744D3"
       },
       "outerFinally": {
         "passed": true,
         "receipt": {
-          "sha256": "20E91349D30D8EEFE22EB6BFCC1909D52CB9BF055935EAE51939E6155E097A1B",
-          "role": "Source31 Full/supplement terminal"
+          "sha256": "E859122ADAF3A4568DF3D19920D22A7D6F161C0C4CEB56BBF6F46E4234824796",
+          "role": "Source34 Full/supplement terminal"
         },
         "inputGuardReceipt": {
-          "sha256": "1648C11F97B906DA17E8367655F9069DA056467A526A41880AFAC77ABED59B0E",
-          "role": "Source31 supplement outer finally source/graph guard"
+          "sha256": "61D3F8E71C92D18AA664207FDCEA8165D5E8B97657B26B3150802F38D2868931",
+          "role": "Source34 supplement outer finally source/graph guard"
+        },
+        "serialSequence": {
+          "sha256": "4F11039EBBEAA57125B03B1B04C1DFB47135E572C67D02F86EDD65D08EA43A4C",
+          "role": "Source34 complete Whole/compatibility/Net472/Full/supplement sequence"
         }
       },
       "actualRoslynBinding": {
-        "sha256": "3252EF3C75ED8F119BF2963BD8C95DB76B38035C25858C27BF49C37410E46B2E",
-        "role": "Source31 exact deps/CLR metadata/restored asset bytes"
+        "sha256": "24A923D07F839050954CDE248EA95381F84110FD850A9F71A48C6F799CE0CA0E",
+        "role": "Source34 exact deps/CLR metadata/restored asset bytes"
+      },
+      "net472Smoke": {
+        "total": 26,
+        "passed": 26,
+        "failed": 0,
+        "skipped": 0,
+        "distinctIds": 26,
+        "discoveryMultiplicitiesMatched": true,
+        "compilerChildTimeoutMinutes": 6,
+        "receipt": {
+          "sha256": "56BF1DE653D71A4D816E79A6A0FB77F5CA9537794C3CF7FDC1D0F4F3F30D2981",
+          "role": "Source34 full unfiltered Net472 smoke"
+        },
+        "trxSha256": "3CDC9775AFE54889F9AC5D3A0AA6187C7E388DDB66CEA72161479630C81BCAD7"
+      },
+      "generatedArtifactDiagnostics": {
+        "scope": "Generated Hybrid platyPS artifacts, separate from compiler/test/shared compatibility builds; repeated log-summary lines are not extra warnings",
+        "builds": [
+          {
+            "lane": "platyps-net10.0",
+            "warnings": 72,
+            "errors": 0,
+            "uniqueDiagnosticCodes": {
+              "CS8321": 70,
+              "NU1510": 2
+            },
+            "receipt": {
+              "sha256": "1C01EDE82EA35660A0E8417EC1F3FC8738DDD6ACBC32CA85C09AA9AAD3653C36",
+              "role": "platyps-net10.0 actual generated artifact build diagnostics"
+            }
+          },
+          {
+            "lane": "platyps-net472",
+            "warnings": 70,
+            "errors": 0,
+            "uniqueDiagnosticCodes": {
+              "CS8321": 70
+            },
+            "receipt": {
+              "sha256": "D71EAF36DD1EE2D842E95F193D8A223F4ACC1193D514D35A1380B0C51E3C6351",
+              "role": "platyps-net472 actual generated artifact build diagnostics"
+            }
+          }
+        ],
+        "representative": {
+          "CS8321": "The local function '__powerForgeConvertInvariant' is declared but never used",
+          "NU1510": "PackageReference System.Reflection.Metadata will not be pruned; the package is automatically available"
+        }
       }
     },
     "native": {
@@ -724,20 +783,21 @@
       "buildWarnings": 0,
       "buildErrors": 0,
       "build": {
-        "sha256": "3D2621DA214FCB85AA6B4772917FBEF48F56ACEBCCA4FCFCAD6ABB854DE37315",
-        "role": "Source31 first actual native build terminal"
+        "sha256": "42A96B658EF2E58BCE79CB38356EEF10FD2A288FF43DEE3D7DC6904D5DE3B9DE",
+        "role": "Source34 native test-owner build terminal"
       },
       "focused": {
-        "total": 24,
-        "passed": 23,
+        "total": 98,
+        "passed": 93,
         "failed": 0,
-        "knownWindowsPrerequisiteSkips": 1,
-        "distinctIds": 24,
+        "knownWindowsPrerequisiteSkips": 5,
+        "distinctIds": 98,
         "discoveryMultiplicitiesMatched": true,
         "receipt": {
-          "sha256": "DDDB4B3D128EED9F8AB4A202C9BEB6B49EC76428BB1EF2C207742974C56A9078",
-          "role": "Source31 native focused result"
-        }
+          "sha256": "46854E9A62B6CC6908FE356820B31CE29A8C9910B76F792389FE7D6CFC3022E1",
+          "role": "Source34 fresh native focused result"
+        },
+        "trxSha256": "44D7C6CB165872F75437451023F133D22670C2EBFED688E3927F2A5A3E93FC20"
       },
       "fast": {
         "total": 333,
@@ -749,70 +809,70 @@
         "distinctIds": 333,
         "discoveryMultiplicitiesMatched": true,
         "reconciliation": {
-          "sha256": "9DBF5A3525DFA0AEE20F8563FA8924E7B56DCAFC9209EECB0CDA660ED4067F40",
-          "role": "Source31 canonical Fast/Strict/required-row reconciliation"
+          "sha256": "739D1DEC478AB9A63FCC0B63D41C127838FB28332BA48DCD646C0A3300F61B46",
+          "role": "Source34 canonical Fast/Strict/required-row reconciliation"
         },
-        "trxSha256": "B72368535F1D5BC4483BA0F1EE27A7E894631D35AFE5ED36AA1B0C8BD4C80504",
-        "strictSha256": "7B8E0546EEF3770637D6E77490F0ACC94C6B98B0F57BFDACF734D0C67A620D49"
+        "trxSha256": "74CEDD098528B6FDE3595592A2FE3AF17AAC7C641A085DE110E0AB750F1151A4",
+        "strictSha256": "E243DD5C748BF82CBBAC98673EB2F21F2451E3FFAB26BBF0B2D9C9AD7ED82A0E",
+        "runtimeIdentifierArgument": "OMITTED",
+        "maxParallelThreads": 1
       },
       "supplement": {
-        "total": 85,
-        "passed": 85,
+        "total": 108,
+        "passed": 108,
         "failed": 0,
         "skipped": 0,
-        "distinctSelectors": 12,
-        "additionalSelectors": 0,
+        "distinctSelectors": 19,
+        "additionalSelectors": 7,
         "discoveryMultiplicitiesMatched": true,
         "receipt": {
-          "sha256": "4AC8C457BA70CC1EB18B0BDC9ACCA3B7E0A81E4E9CD92FAC08D91CAAEF4883B4",
-          "role": "Source31 native mandatory supplement rows"
+          "sha256": "92C2316DF6376200CEC7A088843B15502E4C7A032164F912D11C195A8C9F8B25",
+          "role": "Source34 native mandatory19-selector supplement rows"
         },
-        "trxSha256": "DEBD14FFDE700795DCF366E7CCA67196DFD8953C15F6DE107C0555195E90AC3A"
+        "trxSha256": "26B048391DBF5A1AC527854CEC241B21327638EFF2A7D8B2E68993BEC79EEDF5"
       },
       "actualRoslynBinding": {
-        "sha256": "64EC4BCA99E6D6B9DBCC22241ED9E40594560FE9E6283682622B4E09D97B96B6",
-        "role": "Source31 native exact deps/CLR metadata/restored asset bytes"
+        "sha256": "151F0BDFBD89F3B104A6DB55D72CF365DB0077D4E9B752D762E50D79FC98D075",
+        "role": "Source34 native exact deps/CLR metadata/restored asset bytes"
       },
       "finalAudit": {
-        "sha256": "7A6E8FFD5E93F28C17656D0D75DE20A9C04CA976BB1863B0AEA2BB21ECB91498",
-        "role": "Source31 native complete functional audit"
+        "sha256": "3E5D6011F23106D956425EF9D97CB9394B00464548F015B602F6846359D088FF",
+        "role": "Source34 final functional audit and bounded resource handoff"
       },
       "functionalTerminal": {
-        "sha256": "54D9DA3CB6A8E9EE79E9C0C4C81D7021C052E41EFCFC7FC13EFD62D309D1D12D",
-        "role": "Source31 native functional chain terminal"
+        "sha256": "16BC8FCECA3EB5074567006C93BA08D2113A7140B353EEF2824A3DAE24F023D4",
+        "role": "Source34 native functional chain terminal"
       },
       "readerRelease": {
-        "sha256": "885EAA256C94CBB541690BE223AE6BB81CEBE603B0246F3517DD10E050F4223B",
-        "role": "Source31 native readers released"
-      }
+        "sha256": "F080DCE244A0DC82433CDC8D79BAAA5B7106E8694494B0C9CAE42DBF3FBCBC6D",
+        "role": "Source34 fresh final native/original-source readers released"
+      },
+      "buildScope": "Current test-owner build with unchanged qualified production graph; compiler/test build log records zero warnings/errors",
+      "wholeModuleExecutionQualified": false
     },
     "boundedOwnerReview": {
-      "reviewedCandidate": 30,
-      "reportSha256": "94D14EB58F0B0708773BAEC057C9F872A0F459755F9765D7B321E909D4B73010",
+      "reviewedCandidate": 32,
+      "reportSha256": "EA5581EEAA179A49EB5DA07AFDE1B2F52E1CAC2D8B880F820F7DE9BC512F0208",
       "openP0P1P2": 0,
       "openP3": 0,
       "reservedTargetedConfirmationUsed": 1,
-      "newIndependentReviewForSource31": false,
+      "newIndependentReviewForSource34": false,
       "admission": {
-        "sha256": "1F7297DD930BAC6FCB7584AAA54869BEE41D30CAB03AA4B221646D5AFDB38980",
-        "role": "Retained owner closure carried to Source31 unchanged compiler owners"
+        "sha256": "7AF85AB8B39FDED9CF1A0A67C6BC7F28ACAC5244492BEC933AF44CB3BCD2E5C4",
+        "role": "Retained bounded closure and directly observed Source34 composition; pre-gate admission, not broad results"
       },
-      "scope": "One bounded independent owner review and its reserved targeted closure; directly qualified two-test formatter repair and changed shared-test Roslyn binding. No fresh review is inferred from a source SHA."
+      "scope": "Original compiler/SDK/mapping owner reviews and reserved closure are retained. One bounded first-wave pass reconciled its provisional ETS inference against actual binding and found no actionable defect. The later main composition and narrow Census assertion repair have direct current proof; no SHA-only review reset is claimed."
     },
     "hostedIntegration": {
-      "status": "pending-one-ready-PR-current-head-CI-review-settlement-and-merge",
-      "pullRequest": null,
+      "status": "source34-consolidated-update-current-head-CI-review-settlement-merge-pending",
+      "pullRequest": "https://github.com/EvotecIT/PSPublishModule/pull/1118",
+      "currentLocalCandidatePublished": false,
       "mergeCommit": null,
       "newReleaseClaimed": false
     },
     "cleanup": {
-      "status": "released-whole-and-compatibility-output-retired-final-owned-cleanup-pending-parent",
-      "wholeCompatibility": {
-        "sha256": "DF7B08B64D3EBC5106419DCFFE5F938351B5F8BA8012ACE0C3DCD03FECC4283E",
-        "role": "Verified Source31 released whole/compatibility cleanup"
-      },
-      "hostLogicalBytesRemoved": 130837066,
-      "scope": "Partial compact proof remains; this receipt does not claim final graph/private-root/worktree cleanup."
+      "status": "current-source34-final-owned-cleanup-pending",
+      "scope": "Functional reader release is verified. Compact preservation and earlier cleanup remain separate; no final graph/private-root/worktree cleanup is claimed here."
     }
   },
   "performance": {
@@ -827,26 +887,27 @@
         "id": "strict-multifile-application",
         "metric": "artifactP50Milliseconds",
         "expectedMaximum": 100,
-        "actual": 348.0
+        "actual": 319.0
       },
       {
         "scope": "strictQualification",
         "id": "strict-multifile-application",
         "metric": "artifactP95Milliseconds",
         "expectedMaximum": 250,
-        "actual": 397.0
+        "actual": 358.0
       },
       {
         "scope": "strictQualification",
         "id": "strict-multifile-application",
         "metric": "artifactToSourceP50Ratio",
         "expectedMaximum": 0.75,
-        "actual": 1.033
+        "actual": 1.013
       }
     ],
     "windowsRecordedRegressions": [],
     "defaultCiEnforceAndThresholdsUnchanged": true,
-    "scope": "Functional gates do not promote performance or alter declared budgets."
+    "scope": "RecordOnly functional gates do not qualify precision timing, promote performance or change default CI Enforce/budgets. Windows NoPerformanceBudgetRegressions does not establish quiet-machine qualification.",
+    "windowsRecordedBudgetStatus": "NoPerformanceBudgetRegressions"
   },
   "sdkSelectionAndAcquisition": {
     "status": "direct-causal-control-with-passing-selected-rows",
@@ -865,17 +926,14 @@
     "observed": "External test output without global.json selected SDK10.0.402/runtime10.0.13; CLI source cwd selected SDK10.0.303/runtime10.0.11. Copying the repository pin aligned both directories at303/11; unchanged449CLI+3testassemblies and all three prior CLI failure rows now pass.",
     "testSelectionRepair": "Repository global.json is copied into external test output; repository SDK policy unchanged.",
     "independentProductRepair": "Acquired-environment schema3 authenticates exact SDK downloadDependencies separately from libraries using existing Microsoft author policy; refresh older environment with ordinary project restore.",
-    "historicalLimit": "Unchanged14 non-reproductions and failed15 focus retain their original scope; no retroactive historical Full pass."
+    "historicalLimit": "Unchanged14 non-reproductions and failed15 focus retain their original scope; no retroactive historical Full pass.",
+    "currentQualification": "Source34 retains the repository SDK pin and exact acquired-environment/download-dependency authentication; current selected CLI/SDK contracts and actual metadata receipts have separate current identities above. Earlier selection/binary-equivalence controls keep their historical scopes."
   },
   "guideConsistency": {
     "path": "Docs/PowerForge.PowerShellCompilation.md",
-    "sha256": "1F37458708AA6A2990B4F8423B86FF5F3F3E3E4F97CDE0C19C6B984F3130E51E",
-    "paragraphs": [
-      105,
-      107
-    ],
+    "sha256": "2D4F5AA48DD2E746C5A7CD973549B92F379EE81C2B8064F0C8A5AB702F8B4294",
     "consistency": "SDK download dependencies are distinct from lock libraries; exact package authentication retains existing Microsoft author policy. Acquired-environment schema3 requires ordinary project restore to refresh older evidence before offline use.",
-    "scope": "Source documentation consistency only; no new SDK execution or broad qualification."
+    "scope": "Current source-guide consistency; the earlier SDK causal controls remain historical and current functional contracts are recorded separately."
   },
   "historicalEvidence": {
     "portfolio": {
@@ -1161,6 +1219,168 @@
       },
       "classification": "Eight literal substring checks failed because the actual diagnostic wrapped between Packaged and dot-source. All twelve runtime-contract observations matched; the capture is not compiled qualification.",
       "repair": "Two existing tests reuse the existing escaped-word/gutter pattern, retaining exit, marker, authored-error and integrity assertions. The existing affected fact passes in Source31 Windows and native focused proof."
+    },
+    "candidate31": {
+      "status": "passed-at-recorded-source31-historical-scope",
+      "candidate": {
+        "label": "Source31",
+        "commit": "24b8955bf7a9a5aca4c48755ea63341a03ce8b02",
+        "tree": "5231c1813a314f3be19f579ff25a434e136cc021",
+        "integratedMain": "1fec68976f06c3ee520fb90f62c5461a877e6328",
+        "sourceInputs": 226,
+        "sourceManifest": {
+          "sha256": "DF0A905A1FBB3AA879521B181DEEE2AC60A3F2881DC9DE8DB3A34C6FA890FB6A",
+          "role": "Complete Source31 qualification input union"
+        },
+        "windowsGraphManifest": {
+          "sha256": "2BEF6314D00FDDE0F564BF6A09E752D06C54F38A8435F7638301F4BE43184D1E",
+          "role": "Source31 Windows graph"
+        },
+        "nativeGraphManifest": {
+          "sha256": "EF1587AC23FF60B1962C8EDC08312F2F21440AE2294BD7D9AC6CAE5FA10312CA",
+          "role": "Source31 native graph"
+        },
+        "cliFilesPerPlatform": 449,
+        "windowsTestIdentities": 3,
+        "nativeTestIdentities": 7,
+        "nativeGraphFiles": 3523,
+        "nativeCopiedTrackedFilesAndModes": 6659,
+        "fixtureFiles": 508,
+        "sdkPinByteIdentical": true,
+        "sourceAndGraphStableBeforeAfter": true
+      },
+      "wholeLaneReceipts": [
+        {
+          "id": "yaml-net10.0",
+          "qualificationSha256": "FF9417D81A7384D819608514D0DB372F8523FBDC09D0FC042CBB2B6D3DA1ACB6",
+          "artifactSha256": "fe841eef6b910bf4bbe6c22bca6ca28fc518a4cb14719073de9ca77824512f76"
+        },
+        {
+          "id": "yaml-net472",
+          "qualificationSha256": "95F4517BD09BCE471662D885461B82A10D28318CA0F8F6F1D768F57A3F7CE7C0",
+          "artifactSha256": "da8876d54e544e5f4f662f2f856119d179b211deb3a3a8ea386dda37d721b94a"
+        },
+        {
+          "id": "platyps-net10.0",
+          "qualificationSha256": "D8CB3CC98A429B5C5E658581BB89AE8B73E8112B5F61C609C89D150C7F662B0F",
+          "artifactSha256": "13af9af0bf58f353b28e195f6e420183105ada4691071b9dc107ccb9b9cb4666"
+        },
+        {
+          "id": "platyps-net472",
+          "qualificationSha256": "FF6947A5DCDD2F1A1B4E97C7D1A4D2C4050FB347190355668F6393E90956AF3A",
+          "artifactSha256": "e41e96a7daef76d155b9c38c33aa6ff03c0adc69fd79927ed3db86294e6a6747"
+        },
+        {
+          "id": "sitemap-net10.0",
+          "qualificationSha256": "71AA71041D0A888FEA728738D6D9C4EAD2F2B73AFD697D36070C022E2E4DF789",
+          "artifactSha256": "cb2337c24d4cbfac7f7306b6146d59a27529b99a0521c0c206e03d6a4355c1f4"
+        }
+      ],
+      "windows": {
+        "focused": 34,
+        "fullPassed": 1447,
+        "fullLinuxPrerequisiteSkips": 2,
+        "ownedStrictPassed": 6,
+        "supplementPassed": 67
+      },
+      "native": {
+        "focusedPassed": 23,
+        "focusedWindowsPrerequisiteSkips": 1,
+        "fastPassed": 326,
+        "fastWindowsPrerequisiteSkips": 7,
+        "ownedStrictPassed": 6,
+        "supplementPassed": 85,
+        "supplementSelectors": 12
+      },
+      "performance": {
+        "policy": "RecordOnly",
+        "functionalQualificationPassed": true,
+        "performanceQualified": false,
+        "qualification": "PerformanceNotQualified",
+        "precisionTiming": "Pending",
+        "nativeRecordedRegressions": [
+          {
+            "scope": "strictQualification",
+            "id": "strict-multifile-application",
+            "metric": "artifactP50Milliseconds",
+            "expectedMaximum": 100,
+            "actual": 348.0
+          },
+          {
+            "scope": "strictQualification",
+            "id": "strict-multifile-application",
+            "metric": "artifactP95Milliseconds",
+            "expectedMaximum": 250,
+            "actual": 397.0
+          },
+          {
+            "scope": "strictQualification",
+            "id": "strict-multifile-application",
+            "metric": "artifactToSourceP50Ratio",
+            "expectedMaximum": 0.75,
+            "actual": 1.033
+          }
+        ],
+        "windowsRecordedRegressions": [],
+        "defaultCiEnforceAndThresholdsUnchanged": true,
+        "scope": "Functional gates do not promote performance or alter declared budgets."
+      },
+      "boundedOwnerReview": {
+        "reviewedCandidate": 30,
+        "reportSha256": "94D14EB58F0B0708773BAEC057C9F872A0F459755F9765D7B321E909D4B73010",
+        "openP0P1P2": 0,
+        "openP3": 0,
+        "reservedTargetedConfirmationUsed": 1,
+        "newIndependentReviewForSource31": false,
+        "admission": {
+          "sha256": "1F7297DD930BAC6FCB7584AAA54869BEE41D30CAB03AA4B221646D5AFDB38980",
+          "role": "Retained owner closure carried to Source31 unchanged compiler owners"
+        },
+        "scope": "One bounded independent owner review and its reserved targeted closure; directly qualified two-test formatter repair and changed shared-test Roslyn binding. No fresh review is inferred from a source SHA."
+      },
+      "cleanup": {
+        "status": "released-whole-and-compatibility-output-retired-final-owned-cleanup-pending-parent",
+        "wholeCompatibility": {
+          "sha256": "DF7B08B64D3EBC5106419DCFFE5F938351B5F8BA8012ACE0C3DCD03FECC4283E",
+          "role": "Verified Source31 released whole/compatibility cleanup"
+        },
+        "hostLogicalBytesRemoved": 130837066,
+        "scope": "Partial compact proof remains; this receipt does not claim final graph/private-root/worktree cleanup."
+      },
+      "scope": "Published qualification baseline retained. Its counts, receipt hashes and timing losses do not qualify Source34; historical artifacts may have been self-disposed."
+    },
+    "candidate32": {
+      "sourceManifestSha256": "9BBA64C9C80662AA5695FCAC028CF3CA18756C6D15A8F775DA7C866D45D29012",
+      "status": "prior-local-functional-chain-passed",
+      "censusCliExecutionsInFullAndFocus": 0,
+      "scope": "Source32 Full1449/focus59 did not select the later failing CLI Census method. Its PowerShell46 controls remain historical. Source33 Node24 observes the cleanup timestamp correction on inputs retained unchanged at Source34."
+    },
+    "candidate33": {
+      "status": "expanded-focused-cohorts-failed-at-stale-Census-assertion",
+      "sourceManifestSha256": "4C3EEF5E9820BAF9EB9E29A900420092018BDF17865F81844B6E08667BC373B6",
+      "windows": {
+        "total": 109,
+        "passed": 108,
+        "failed": 1,
+        "skipped": 0,
+        "trxSha256": "865E846CDD941BEA2BB56C21C043D5FDB900E83965F3344EF33063DB1A1487C7"
+      },
+      "native": {
+        "total": 98,
+        "passed": 92,
+        "failed": 1,
+        "knownWindowsPrerequisiteSkips": 5,
+        "receipt": {
+          "sha256": "47120906A6351423191BC9EE01053044E794D453D242CD39D3D3F7DA20147B6B",
+          "role": "Historical failed native focus"
+        }
+      },
+      "cause": "Hybrid emits one function while runtime fallback rises from0 to1. The old CLI test incorrectly required CompilableUnits to fall; unchanged actual CLI capture confirmed the comparator's correct failure and metrics.",
+      "causalCapture": {
+        "sha256": "1F553DCD2D0DA598BABCAD57BF7DA357C4553EDCB8F8ED685F88C8439205D83D",
+        "role": "Two unchanged CLI Census invocations, exits0/1 and unchanged written baseline"
+      },
+      "scope": "No Source33 broad gate or mixed prior-pass recovery is claimed. Source34 executes fresh complete focused cohorts."
     }
   },
   "completionLimits": [
@@ -1169,5 +1389,20 @@
     "OwnedStrict6 gate programs do not make the selected Hybrid modules Strict.",
     "Precision/performance pending; PATH restart deferred.",
     "No new release, signing, additional-host or allM30-complete claim."
-  ]
+  ],
+  "workflowBoundaryRepairs": {
+    "firstHostedWave": [
+      "Short CI workspace creation and cleanup share exact ownership/admission records.",
+      "Fresh disposable whole-workflow qualification rejects Offline before CLI/bootstrap/network; authenticated retained project offline use keeps its separate contract.",
+      "One canonical artifact basename owner serves builder/project receipts; module planning refuses published-name drift before staging.",
+      "Packaged path guards admit fixed built-in filesystem operands and preserve authored identity/binding, while refusing wrong providers, unsupported custom conversion and unsafe empty-array locations."
+    ],
+    "metadataAndFixtures": "Corrected scenario GUID metadata, exact checkout line endings for two hash-pinned support files, and legacy SDK/timeout observation retain authored behavior and deadlines.",
+    "census": "The existing CLI Census test now protects runtime fallback0to1 while one compilable/emitted function remains; no production comparison change.",
+    "dependencies": "No new production dependency or public API introduced by these repairs.",
+    "workspaceTimestampControl": {
+      "sha256": "176A6BAE171FC7280643A53731A8008831EBCD944E15FA69E62CC81F6DC767A8",
+      "role": "Source33 observed cleanup timestamp fix and Node24; identical consumed inputs retained at Source34, not a fresh34 Node execution"
+    }
+  }
 }
