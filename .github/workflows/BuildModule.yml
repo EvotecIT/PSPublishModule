@@ -114,6 +114,7 @@ jobs:
             '.github/workflows/powerforge-website-run.yml'
             '.github/workflows/powerforge-catalog-update.yml'
             '.github/workflows/powerforge-npm-publish.yml'
+            '.github/workflows/powerforge-apple-screenshot-capture.yml'
           )
 
           # GitHub added job.workflow_* identity fields after actionlint's current schema.

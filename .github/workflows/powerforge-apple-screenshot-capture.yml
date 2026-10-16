@@ -20,6 +20,11 @@ on:
         required: false
         default: bash
         type: string
+      xcodegen_version_file:
+        description: Optional source-relative XcodeGen version file; blank uses the runner's provisioned generator.
+        required: false
+        default: ""
+        type: string
       capture_artifact_path:
         description: Repository-relative folder produced by the capture script.
         required: false
@@ -80,6 +85,7 @@ jobs:
           CAPTURE_RUNTIME: ${{ inputs.runtime }}
           SIMULATOR_TOOL_REF: ${{ inputs.simulator_tool_ref }}
           SIMULATOR_DEVICES: ${{ inputs.simulator_devices_json }}
+          XCODEGEN_VERSION_FILE: ${{ inputs.xcodegen_version_file }}
         run: |
           if ($env:SIMULATOR_TOOL_REF -and $env:SIMULATOR_TOOL_REF -notmatch '^[0-9A-Fa-f]{40}$') { throw 'simulator_tool_ref must be an exact commit SHA.' }
           $devices = $env:SIMULATOR_DEVICES | ConvertFrom-Json -AsHashtable
@@ -95,6 +101,12 @@ jobs:
           if ($env:SOURCE_REF -notmatch '^[0-9A-Fa-f]{40}$') { throw 'source_ref must be an exact 40-character commit SHA.' }
           if ($env:MARKETING_VERSION -notmatch '^\d+\.\d+(?:\.\d+)?$') { throw 'marketing_version must use x.y or x.y.z.' }
           if ($env:CAPTURE_SHELL -notin @('bash', 'pwsh')) { throw 'capture_shell must be bash or pwsh.' }
+          if ($env:XCODEGEN_VERSION_FILE -and
+              ($env:XCODEGEN_VERSION_FILE -cnotmatch '\A[A-Za-z0-9._/-]+\z' -or
+               $env:XCODEGEN_VERSION_FILE.StartsWith('/') -or
+               '..' -in $env:XCODEGEN_VERSION_FILE.Split('/'))) {
+            throw 'xcodegen_version_file must be a relative path inside the capture source.'
+          }
           if ([string]::IsNullOrWhiteSpace($env:CAPTURE_RUNTIME) -or $env:CAPTURE_RUNTIME.Length -gt 200 -or $env:CAPTURE_RUNTIME -match '[\r\n]') {
             throw 'runtime must be a non-empty single-line platform runtime no longer than 200 characters.'
           }
@@ -107,6 +119,12 @@ jobs:
           fetch-depth: 1
           path: source
           persist-credentials: false
+
+      - name: Setup pinned XcodeGen
+        if: inputs.xcodegen_version_file != ''
+        uses: EvotecIT/PSPublishModule/.github/actions/setup-xcodegen@e25d9c17bcd11ff3f233e6b44ebe741eba8bcfc1
+        with:
+          version-file: source/${{ inputs.xcodegen_version_file }}
 
       - name: Checkout pinned simulator lifecycle tool
         if: inputs.simulator_tool_ref != ''

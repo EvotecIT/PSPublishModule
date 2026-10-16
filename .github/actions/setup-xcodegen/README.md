@@ -23,3 +23,8 @@ The complete vendor directory, including setting presets, stays under
 afterward. Failed downloads, checksum checks and version checks remove their
 partial installation immediately. Each invocation has its own directory, so
 concurrent jobs do not replace each other's tools.
+
+The reusable `powerforge-apple-screenshot-capture.yml` workflow accepts
+`xcodegen_version_file: .xcodegen-version` to perform the same setup after checking
+out its exact capture source. It runs before simulator provisioning and capture.
+Leaving that input blank keeps the runner's existing generator policy.
