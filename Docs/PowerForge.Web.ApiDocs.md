@@ -44,7 +44,9 @@ is not a successful recovery from invalid documentation.
 ## API and command index copy
 
 Set `indexLead` and `indexDescription` on each `apidocs` pipeline step to write
-the visible introduction and the search/social description independently:
+the visible introduction and the search/social description independently. Batch
+`inputs` and `entries` inherit these settings; child values override parent values
+even when they use the other supported spelling:
 
 ```json
 {

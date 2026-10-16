@@ -42,6 +42,46 @@ public sealed class WebApiDocsIndexIntroTests
     }
 
     [Theory]
+    [InlineData("inputs", false)]
+    [InlineData("inputs", true)]
+    [InlineData("entries", false)]
+    [InlineData("entries", true)]
+    public void Pipeline_BatchChildCopyOverridesParentAcrossAliases(string batchKey, bool dashedParent)
+    {
+        WithRoot(root =>
+        {
+            File.WriteAllText(Path.Combine(root, "docs.xml"), "<doc><members><member name=\"T:Charts.Chart\"><summary>A chart.</summary></member></members></doc>");
+            var parent = new Dictionary<string, object?>
+            {
+                ["task"] = "apidocs", ["xml"] = "docs.xml", ["format"] = "html", ["template"] = "docs",
+                [dashedParent ? "index-lead" : "indexLead"] = "Shared lead",
+                [dashedParent ? "index-description" : "indexDescription"] = "Shared description",
+                ["failOnWarnings"] = false,
+                [batchKey] = new[]
+                {
+                    new Dictionary<string, object?>
+                    {
+                        ["out"] = "custom",
+                        [dashedParent ? "indexLead" : "index-lead"] = "Child lead",
+                        [dashedParent ? "indexDescription" : "index-description"] = "Child description"
+                    },
+                    new Dictionary<string, object?> { ["out"] = "shared" }
+                }
+            };
+            var pipeline = Path.Combine(root, "pipeline.json");
+            File.WriteAllText(pipeline, JsonSerializer.Serialize(new { steps = new[] { parent } }));
+            var result = WebPipelineRunner.RunPipeline(pipeline, logger: null);
+            Assert.True(result.Success, Assert.Single(result.Steps).Message);
+            foreach (var (directory, prefix) in new[] { ("custom", "Child"), ("shared", "Shared") })
+            {
+                var html = File.ReadAllText(Path.Combine(root, directory, "index.html"));
+                Assert.Contains($"<p class=\"lead\">{prefix} lead</p>", html);
+                Assert.Contains($"<meta name=\"description\" content=\"{prefix} description\"", html);
+            }
+        });
+    }
+
+    [Theory]
     [InlineData(false)]
     [InlineData(true)]
     public void Generate_PowerShellIndexUsesHelpNameOrDiscoveredManifestDescription(bool manifest)

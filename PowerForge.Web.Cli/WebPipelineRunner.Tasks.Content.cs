@@ -684,6 +684,15 @@ internal static partial class WebPipelineRunner
         if (input.ValueKind != JsonValueKind.Object)
             throw new InvalidOperationException("apidocs batch inputs must be JSON objects.");
 
+        // A child overrides inherited copy regardless of which supported alias it uses.
+        foreach (var (primary, alias) in new[] { ("indexLead", "index-lead"), ("indexDescription", "index-description") })
+        {
+            if (!input.TryGetProperty(primary, out _) && !input.TryGetProperty(alias, out _))
+                continue;
+            parentNode.Remove(primary);
+            parentNode.Remove(alias);
+        }
+
         foreach (var property in input.EnumerateObject())
             parentNode[property.Name] = JsonNode.Parse(property.Value.GetRawText());
 
