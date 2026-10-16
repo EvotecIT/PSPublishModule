@@ -1639,7 +1639,15 @@ body.pf-api-docs .api-suite-search-filter{
             .ToArray();
 
         if (distinctKinds.Length != 1)
-            return "types";
+        {
+            var commandKinds = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            {
+                "about", "alias", "cmdlet", "command", "function"
+            };
+            return distinctKinds.Length > 1 && distinctKinds.All(commandKinds.Contains)
+                ? "commands"
+                : "types";
+        }
 
         return distinctKinds[0].ToLowerInvariant() switch
         {
