@@ -562,10 +562,8 @@ public sealed partial class InvokeModuleBuildCommand : PSCmdlet
         var useLegacy = preparation.UseLegacy;
 
 #pragma warning disable CA1031 // Legacy cmdlet UX: capture and report errors consistently
-        BufferedLogger? interactiveBuffer = null;
         CmdletWarningLogger? interactiveLogger = null;
         ModuleBuildWorkflowResult? workflow = null;
-        var logSupport = new BufferedLogSupportService();
         ModuleBuildCompletionOutcome? outcome = null;
 
         if (Legacy.IsPresent && Settings is null && ParameterSetName != ParameterSetConfiguration)
@@ -587,8 +585,7 @@ public sealed partial class InvokeModuleBuildCommand : PSCmdlet
                 logger,
                 runInteractive: (spec, plan, configLabel) =>
                 {
-                    interactiveBuffer = new BufferedLogger { IsVerbose = isVerbose };
-                    interactiveLogger = new CmdletWarningLogger(this, interactiveBuffer);
+                    interactiveLogger = new CmdletWarningLogger(this, outputLogger);
                     return SpectrePipelineConsoleUi.RunInteractive(
                         runner: new ModulePipelineRunner(interactiveLogger), spec: spec, plan: plan, configLabel: configLabel);
                 },
@@ -611,8 +608,6 @@ public sealed partial class InvokeModuleBuildCommand : PSCmdlet
             var ex = workflow?.Error!;
             if (outcome.ShouldEmitErrorRecord && ex is not null)
                 WriteError(new ErrorRecord(ex, outcome.ErrorRecordId, ErrorCategory.NotSpecified, null));
-            if (outcome.ShouldReplayBufferedLogs && interactiveBuffer is not null && interactiveBuffer.Entries.Count > 0)
-                logSupport.WriteTail(interactiveBuffer.Entries, outputLogger);
             if (outcome.ShouldWriteInteractiveFailureSummary && workflow?.Plan is not null && ex is not null)
             {
                 try { SpectrePipelineConsoleUi.WriteFailureSummary(workflow.Plan, ex); }

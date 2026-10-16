@@ -606,6 +606,9 @@ internal sealed class PowerForgeAppleReleasePlan
 
     public string? RequestedMarketingVersion { get; set; }
 
+    /// <summary>Explicit version to observe for read-only Status or Doctor, separate from the versioning pattern.</summary>
+    public string? ObservedMarketingVersion { get; set; }
+
     public string? SourceCommit { get; set; }
 
     public bool RequireImmutableSourceSnapshot { get; set; }
@@ -802,6 +805,10 @@ internal sealed class PowerForgeAppleAppReleaseTargetPlan
 
 internal sealed class PowerForgeAppleAppReleaseResult
 {
+    public bool WaitingForAppleBuildProcessing { get; set; }
+
+    private string? _errorMessage;
+
     public PowerForgeAppleAppReleaseTargetPlan Plan { get; set; } = new();
 
     public AppleAppArchiveResult? Archive { get; set; }
@@ -846,7 +853,16 @@ internal sealed class PowerForgeAppleAppReleaseResult
 
     public bool Success { get; set; }
 
-    public string? ErrorMessage { get; set; }
+    public string? ErrorMessage
+    {
+        get => _errorMessage;
+        set
+        {
+            _errorMessage = value;
+            // A later failure cannot inherit the retry permission of a prior processing wait.
+            WaitingForAppleBuildProcessing = false;
+        }
+    }
 }
 
 internal sealed class PowerForgeReleaseGitHubOptions

@@ -1,0 +1,27 @@
+name: Setup pinned XcodeGen
+description: Verify and install the repository's exact XcodeGen release for this macOS job.
+
+inputs:
+  version-file:
+    description: Checked-in file containing the exact supported XcodeGen version.
+    required: false
+    default: .xcodegen-version
+
+outputs:
+  tool-path:
+    description: Absolute path to the verified XcodeGen executable.
+    value: ${{ steps.setup.outputs.tool-path }}
+  version:
+    description: Exact installed XcodeGen version.
+    value: ${{ steps.setup.outputs.version }}
+
+runs:
+  using: composite
+  steps:
+    - name: Download and verify XcodeGen
+      id: setup
+      shell: bash
+      env:
+        XCODEGEN_VERSION_FILE: ${{ inputs.version-file }}
+        XCODEGEN_ACTION_PATH: ${{ github.action_path }}
+      run: bash "$XCODEGEN_ACTION_PATH/Install-XcodeGen.sh" "$XCODEGEN_VERSION_FILE"

@@ -68,6 +68,7 @@ internal sealed class ModulePipelineExecutionSession
 
     internal ModulePipelineStep? StageStep => GetStep("build:stage");
     internal ModulePipelineStep? BuildStep => GetStep("build:build");
+    internal ModulePipelineStep? PrepareStep => GetStep("build:prepare");
     internal ModulePipelineStep? ManifestStep => GetStep("build:manifest");
     internal ModulePipelineStep? DocsExtractStep => GetStep("docs:extract");
     internal ModulePipelineStep? DocsWriteStep => GetStep("docs:write");
@@ -75,6 +76,7 @@ internal sealed class ModulePipelineExecutionSession
     internal ModulePipelineStep? FormatStagingStep => GetStep("format:staging");
     internal ModulePipelineStep? FormatProjectStep => GetStep("format:project");
     internal ModulePipelineStep? SignStep => GetStep("sign");
+    internal ModulePipelineStep? CompilationStep => GetStep("build:compile");
     internal ModulePipelineStep? FileConsistencyStep => GetStep("validate:fileconsistency");
     internal ModulePipelineStep? ProjectFileConsistencyStep => GetStep("validate:fileconsistency-project");
     internal ModulePipelineStep? CompatibilityStep => GetStep("validate:compatibility");

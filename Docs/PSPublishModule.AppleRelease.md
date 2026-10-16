@@ -337,6 +337,12 @@ Start with a remote-read-only status receipt:
 powerforge apple-release Status --config powerforge.release.json --summary --output json
 ```
 
+For an existing App Store version that differs from the current beta source,
+use `Status --apple-version 2.2` or `Doctor --apple-version 2.2`. These read-only
+actions inspect the exact requested version and its selected build; they do not
+allocate a version or borrow the current beta's build number. Observation takes
+an exact numeric version rather than an `X` pattern.
+
 Every mutating Apple target requires an explicit `BundleId`, including a direct
 notarized app or an App Store app with an explicit `AppStoreConnectAppId`. The
 bundle identifier provides the shared app lease across local checkouts; mutation
@@ -357,7 +363,7 @@ Use the same entry point for each transition:
 | `Screenshots` | Validates and syncs configured screenshot sets as a separate, deliberate transition. |
 | `TestFlight` | Assigns the processed build to configured groups and testers. |
 | `Advance` | Resumes versioning, archive, upload, preparation, metadata, readiness, configured TestFlight distribution, and screenshots only when `SyncScreenshots` is explicitly enabled; then stops before any review or public-release action. |
-| `Ship` | Runs one resumable intent across versioning, upload, internal TestFlight, preparation, and App Review for explicitly selected targets. It reuses remote screenshots by default and stops at a reviewed source-version checkpoint when needed. |
+| `Ship` | Runs one resumable intent across versioning, upload, explicit internal or external TestFlight, preparation, and App Review for explicitly selected targets. It reuses remote screenshots by default and stops at a reviewed source-version checkpoint when needed. |
 | `SubmitTestFlightReview` | Submits external TestFlight distribution for Beta App Review. |
 | `SubmitAppReview` | Submits a ready App Store version for App Review. |
 | `Release` | Publishes a version waiting for developer release. |
@@ -456,11 +462,15 @@ powerforge apple-release Ship --config powerforge.release.json --apple-version 1
   --confirm-apple-action --summary --output json
 ```
 
-The same command supports iOS-only, Mac-only, or both platforms in internal
-TestFlight. PowerForge never adds groups or testers that are not already configured,
-requires each selected target to declare `TestFlightPolicy: Internal`, and an
-internal-TestFlight-only target does not receive an App Store version or review
-submission.
+The same command supports iOS-only, Mac-only, or both platforms in TestFlight.
+PowerForge never adds groups or testers that are not already configured. A worker
+defaults to an internal group; an operator may explicitly enroll an existing
+external group with `BetaGroupIsInternal: false`. Each selected target must declare
+the matching `TestFlightPolicy: Internal` or `External`. The worker rejects App
+Store review and does not submit Beta App Review. An external build that needs
+review or export compliance is held for the operator; a review already in progress
+is observed without repeating build assignment. Public App Store distribution
+remains a separate local release decision.
 
 Remote App Store screenshots are reused by default. Add
 `--apple-sync-screenshots` only when reviewed local screenshot inputs should replace
@@ -781,6 +791,37 @@ details changed after review. Review notes are intentionally not copied because 
 are product-specific. When `createTargetVersion` is true, the reviewed apply may first
 create that exact draft version if it is still absent. This command prepares a draft version only; it does not submit
 Beta App Review, submit App Review, or release the app.
+
+For product-specific review instructions, use the same command's `notes-validate`,
+`notes-plan`, and `notes-apply` operations. The configuration identifies one
+existing version and contains the complete replacement text:
+
+```json
+{
+  "schemaVersion": 1,
+  "target": { "appId": "1234567890", "versionString": "1.4.0", "platform": "iOS" },
+  "notes": "Explain the submitted functionality and how App Review can test it."
+}
+```
+
+Keep credentials in Apple's existing private review fields. Notes must fit
+Apple's 4000-byte UTF-8 limit. Review both the authored text and the plan before
+applying it through the pinned local operator:
+
+```text
+powerforge apple-review-details notes-plan --config scripts/review-notes.json --receipt build/review-notes-plan.json
+powerforge apple-review-details notes-apply --config scripts/review-notes.json --reviewed-plan build/review-notes-plan.json --confirm
+```
+
+To clear stale instructions, set `notes` to an explicit empty string and review
+the resulting plan. An omitted or null `notes` value is rejected so an incomplete
+configuration cannot erase existing instructions.
+
+The plan hashes the existing and replacement notes without exposing their text
+or contact details. Apply refuses changed inputs, updates only the notes field,
+and verifies exact readback. It preserves review contacts, demo credentials,
+attachments, and release state. Updating notes does not reply in Resolution
+Center, resubmit a rejected app, or release a version.
 
 ## Reusable GitHub workflows
 

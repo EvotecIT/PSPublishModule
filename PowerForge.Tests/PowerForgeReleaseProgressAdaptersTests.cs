@@ -3,6 +3,20 @@ namespace PowerForge.Tests;
 public sealed class PowerForgeReleaseProgressAdaptersTests
 {
     [Fact]
+    public void ProjectBuildAdapter_KeepsPlanCompleteDuringExecutionMetadataUpdates()
+    {
+        var release = new RecordingReleaseProgress();
+        var adapter = new ProjectBuildReleaseProgressAdapter(release, PowerForgeReleaseProgressPhase.Packages);
+        adapter.PhaseStarted(ProjectBuildProgressPhase.Plan, 1, "discovering");
+        adapter.PhaseCompleted(ProjectBuildProgressPhase.Plan, "plan prepared");
+        adapter.PhaseStarted(ProjectBuildProgressPhase.Plan, 2, "execution metadata");
+        adapter.PhaseUpdated(ProjectBuildProgressPhase.Plan, 1, 2, "execution metadata");
+        Assert.Equal(2, release.Updates.Count);
+        Assert.Equal(PowerForgeReleaseProgressItemState.Completed, release.Updates[^1].State);
+        Assert.Contains("plan prepared", release.Updates[^1].Detail);
+    }
+
+    [Fact]
     public void ProjectBuildAdapter_DerivesNestedGroupsFromTheOwningReleasePhase()
     {
         var release = new RecordingReleaseProgress();

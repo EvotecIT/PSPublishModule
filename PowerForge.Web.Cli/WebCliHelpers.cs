@@ -110,6 +110,7 @@ internal static partial class WebCliHelpers
         Console.WriteLine("                     [--format json|hybrid] [--css <href>] [--header-html <file>] [--footer-html <file>]");
         Console.WriteLine("                     [--legacy-alias-mode noindex|redirect|omit]");
         Console.WriteLine("                     [--coverage-report <file>] [--no-coverage-report]");
+        Console.WriteLine("                     [--source-member-coverage-scope all|assembly]");
         Console.WriteLine("                     [--xref-map <file>] [--no-xref-map] [--no-member-xref] [--member-xref-kinds <list>] [--member-xref-max-per-type <n>]");
         Console.WriteLine("                     [--ps-examples <file|dir>] [--related-content-manifest <file>] [--related-content-manifests <list>] [--no-ps-fallback-examples] [--ps-fallback-limit <n>]");
         Console.WriteLine("                     [--suite-title <text>] [--suite-current-id <id>] [--suite-home-url <url>] [--suite-home-label <text>] [--suite-search-url <url>] [--suite-xref-map-url <url>] [--suite-coverage-url <url>] [--suite-entry <id|label|href|summary|order>]");

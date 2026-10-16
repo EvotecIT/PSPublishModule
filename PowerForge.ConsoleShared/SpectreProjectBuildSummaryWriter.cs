@@ -22,8 +22,10 @@ internal static class SpectreProjectBuildSummaryWriter
             };
 
         var unicode = ConsoleEncoding.ShouldRenderUnicode(AnsiConsole.Profile.Capabilities.Unicode);
+        AnsiConsole.Profile.Capabilities.Unicode = unicode;
+        var emoji = ConsoleEncoding.ShouldRenderEmoji(AnsiConsole.Profile.Capabilities.Unicode);
         var border = unicode ? TableBorder.Rounded : TableBorder.Simple;
-        var icon = unicode ? (display.Success ? (display.IsPlan ? "ℹ" : "✅") : "❌") : "*";
+        var icon = emoji ? (display.Success ? (display.IsPlan ? "ℹ" : "✅") : "❌") : "*";
         var titleColor = display.Success ? (display.IsPlan ? "grey" : "green") : "red";
 
         AnsiConsole.Write(new Rule($"[{titleColor}]{icon} {Esc(display.Title)}[/]").LeftJustified());

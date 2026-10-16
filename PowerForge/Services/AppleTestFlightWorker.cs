@@ -93,7 +93,7 @@ internal sealed partial class AppleTestFlightWorker
 
     internal static AppleTestFlightJob? SelectRunnableJob(AppleTestFlightWorkerState state) =>
         state.Jobs.Any(job => job.Stage == AppleTestFlightJobStage.NeedsOperator) ? null :
-        state.Jobs.FirstOrDefault(job => job.Stage is not (AppleTestFlightJobStage.ReadyInHome or AppleTestFlightJobStage.Excluded) &&
+        state.Jobs.FirstOrDefault(job => job.Stage is not (AppleTestFlightJobStage.ReadyInHome or AppleTestFlightJobStage.ReadyInTestFlight or AppleTestFlightJobStage.Excluded) &&
             !(job.Automatic && state.Mode == AppleTestFlightAutomaticMode.Off && IsUnstarted(job.Stage)));
 
     internal static bool IsUnstarted(AppleTestFlightJobStage stage) => stage is
@@ -101,7 +101,7 @@ internal sealed partial class AppleTestFlightWorker
 
     internal static AppleTestFlightJob? SelectManualBehindHeldIntent(AppleTestFlightWorkerState state) =>
         state.Jobs.FirstOrDefault(job => !job.Automatic && job.Stage is not
-            (AppleTestFlightJobStage.ReadyInHome or AppleTestFlightJobStage.Excluded));
+            (AppleTestFlightJobStage.ReadyInHome or AppleTestFlightJobStage.ReadyInTestFlight or AppleTestFlightJobStage.Excluded));
 
     internal static AppleTestFlightJobStage FailureStage(AppleTestFlightJobStage stage, Exception exception, AppleTestFlightJobStage? releasingFrom = null) =>
         exception is AppleTestFlightPreMutationRejectedException
@@ -163,7 +163,7 @@ internal sealed partial class AppleTestFlightWorker
             policy.Targets.Length == 0 || policy.Targets.Select(value => value.Name).Distinct().Count() != policy.Targets.Length ||
             policy.Targets.Any(value => string.IsNullOrWhiteSpace(value.Name) || string.IsNullOrWhiteSpace(value.BundleId) || string.IsNullOrWhiteSpace(value.AppId)) ||
             !Guid.TryParse(policy.BetaGroupId, out _) || string.IsNullOrWhiteSpace(policy.BetaGroupName))
-            throw new ArgumentException("Worker policy must name exact checks, app targets, and one existing internal beta group.");
+            throw new ArgumentException("Worker policy must name exact checks, app targets, and one existing beta group with its audience.");
         foreach (var path in policy.PublisherPaths.Append(policy.ConfigPath).Append(policy.WorkflowPath).Append(policy.QualificationWorkflowPath))
             ContainedPath(policy.ConsumerRoot, path);
         if (policy.PublisherPaths.Length == 0) throw new ArgumentException("Publisher checkpoint paths must be explicit.");

@@ -3,7 +3,7 @@ using System.Text.Json;
 
 namespace PowerForge.Tests;
 
-public sealed class PowerForgeCliAppleReleaseTests
+public sealed partial class PowerForgeCliAppleReleaseTests
 {
     private const string ApprovedSourceCommit = "0123456789abcdef0123456789abcdef01234567";
 

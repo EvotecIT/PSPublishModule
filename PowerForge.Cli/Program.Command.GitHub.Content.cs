@@ -34,7 +34,7 @@ internal static partial class Program
                 outputJson,
                 cli,
                 "Synchronizing GitHub repository content",
-                () => service.Sync(spec, baseDirectory, restrictedOutputRoot));
+                () => service.Sync(spec, baseDirectory, restrictedOutputRoot), value => value.Success);
             var exitCode = result.Success ? 0 : 1;
 
             if (outputJson)

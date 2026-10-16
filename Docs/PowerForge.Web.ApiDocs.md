@@ -6,6 +6,22 @@ overriding templates via `templateRoot`.
 
 ## Documentation inputs and inheritance
 
+Source-link coverage measures whether readers can open the implementation from
+the API reference. It is separate from test code coverage. Enum declarations and
+fields use Roslyn syntax from checksum-verified portable PDB documents; methods
+continue to use execution sequence points. Missing or changed source files do
+not receive inferred declaration links.
+
+The `apidocs` pipeline option `sourceMemberCoverageScope: "assembly"` measures
+member source links against members declared by the documented assemblies.
+Inherited members from other assemblies remain visible in the API reference,
+but do not count against source links into the project's repository. The default
+`"all"` retains the full denominator. Assembly scope requires matching DLL inputs;
+XML-only references use `"all"`. The report records the chosen `scope` and
+`excludedExternalMembers` under `source.members`; summary and example coverage
+continue to include the full API. Use `--source-member-coverage-scope assembly`
+with the CLI, or `SourceMemberCoverageScope = "assembly"` with the library.
+
 For C# references, supply both the XML documentation and its matching assembly.
 The assembly restricts output to the public API and supplies C# signatures.
 For a project built from several assemblies, pass each XML file through `xmls`
@@ -26,18 +42,23 @@ inherited documentation with the inputs for contracts outside the local build.
 Assembly-backed generation also discovers adjacent dependency XML and the
 matching installed .NET reference-pack XML. Those records supply inherited
 summaries without adding dependency or framework types to the reference.
-When reference-pack XML is unavailable, built-in summaries cover the framework
-`Object`/`ValueType` equality, hash-code and string methods and `IEquatable<T>.Equals`.
-The search continues past undocumented library candidates to a documented library
-ancestor or interface. If no library contract resolves, generation warns instead
-of substituting a more distant framework summary; CI steps with `failOnWarnings`
-enabled fail.
-Pipeline caches account for their bytes and additional `xmls`/`xmlPaths` inputs.
-Unresolved implicit inheritance produces a warning. An explicit `cref` remains supported.
+This discovery uses each supplied assembly's path, including references built
+with only the plural `assemblies` input. If framework XML is unavailable,
+`System.Object` and `System.ValueType` overrides of `Equals`, `GetHashCode`, and
+`ToString`, and implementations of `IEquatable<T>.Equals`, receive built-in
+summary and return documentation. Available XML documentation takes precedence.
+Pipeline caches account for its bytes and additional `xmls`/`xmlPaths` inputs.
+The search continues past undocumented library candidates to documented library
+ancestors or interfaces, without substituting a distant framework summary.
+Unresolved implicit inheritance on library contracts still produces a warning
+and fails pipeline steps with `failOnWarnings` enabled (the CI default).
+An explicit `cref` remains supported.
 
 Assembly inspection reads a fresh snapshot on each generation and releases its
 collectible load context afterward. Rebuilding a DLL at the same path updates
-the reference without holding the build output open.
+the reference without holding the build output open. Dependency types resolve
+in the inspected assembly's own context, even when the documentation host loads
+another copy of the same library.
 
 Malformed C# XML or PowerShell help stops generation before replacing existing
 reference files. Correct the input and rerun the generator; an empty reference

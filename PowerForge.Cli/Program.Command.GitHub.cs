@@ -71,7 +71,7 @@ internal static partial class Program
             var (cmdLogger, logBuffer) = CreateCommandLogger(outputJson, cli, logger);
             var service = new GitHubArtifactCleanupService(cmdLogger);
             var statusText = spec.DryRun ? "Planning GitHub artifact cleanup" : "Pruning GitHub artifacts";
-            var result = RunWithStatus(outputJson, cli, statusText, () => service.Prune(spec));
+            var result = RunWithStatus(outputJson, cli, statusText, () => service.Prune(spec), value => value.Success);
             var exitCode = result.Success ? 0 : 1;
 
             if (outputJson)
@@ -142,7 +142,7 @@ internal static partial class Program
             var (cmdLogger, logBuffer) = CreateCommandLogger(outputJson, cli, logger);
             var service = new GitHubActionsCacheCleanupService(cmdLogger);
             var statusText = spec.DryRun ? "Planning GitHub cache cleanup" : "Pruning GitHub caches";
-            var result = RunWithStatus(outputJson, cli, statusText, () => service.Prune(spec));
+            var result = RunWithStatus(outputJson, cli, statusText, () => service.Prune(spec), value => value.Success);
             var exitCode = result.Success ? 0 : 1;
 
             if (outputJson)
@@ -220,7 +220,7 @@ internal static partial class Program
             var (cmdLogger, logBuffer) = CreateCommandLogger(outputJson, cli, logger);
             var service = new RunnerHousekeepingService(cmdLogger);
             var statusText = spec.DryRun ? "Planning runner housekeeping" : "Cleaning runner working sets";
-            var result = RunWithStatus(outputJson, cli, statusText, () => service.Clean(spec));
+            var result = RunWithStatus(outputJson, cli, statusText, () => service.Clean(spec), value => value.Success);
             var exitCode = result.Success ? 0 : 1;
 
             if (outputJson)
@@ -280,7 +280,7 @@ internal static partial class Program
             var (cmdLogger, logBuffer) = CreateCommandLogger(outputJson, cli, logger);
             var service = new GitHubHousekeepingService(cmdLogger);
             var statusText = spec.DryRun ? "Planning GitHub housekeeping" : "Running GitHub housekeeping";
-            var result = RunWithStatus(outputJson, cli, statusText, () => service.Run(spec));
+            var result = RunWithStatus(outputJson, cli, statusText, () => service.Run(spec), value => value.Success);
             var exitCode = result.Success ? 0 : 1;
             WriteGitHubHousekeepingOutputs(reportService, reportService.CreateSuccessReport(result), outputOptions);
 

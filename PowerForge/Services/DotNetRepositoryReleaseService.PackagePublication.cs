@@ -86,18 +86,37 @@ public sealed partial class DotNetRepositoryReleaseService
             ProjectBuildProgressPhase.PackageSigning,
             detailedProgress);
         progress?.PhaseStarted(ProjectBuildProgressPhase.PackageSigning, packages.Length, "Signing NuGet packages");
-        foreach (var package in packages)
+        var signedCount = 0;
+        var reportedPackages = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var attemptedPackages = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        void ReportSigning(string package, int attempt, DotNetNuGetSignResult? outcome)
         {
+            attemptedPackages.Add(package);
+            var detail = outcome is null
+                ? $"Signing and timestamping (attempt {attempt}/2)"
+                : outcome.Succeeded ? "signed" : outcome.ErrorMessage ?? "signing failed";
             UpdateArtifactProgress(
                 detailedProgress,
                 items[package],
-                ProjectBuildProgressItemState.Started,
-                "signing");
+                outcome is null ? ProjectBuildProgressItemState.Started
+                    : outcome.Succeeded ? ProjectBuildProgressItemState.Completed
+                    : ProjectBuildProgressItemState.Failed,
+                detail,
+                outcome?.Duration);
+            if (outcome is not null)
+            {
+                signedCount++;
+                reportedPackages.Add(package);
+            }
+            progress?.PhaseUpdated(ProjectBuildProgressPhase.PackageSigning, signedCount, packages.Length,
+                $"{Path.GetFileName(package)} — {detail}");
+            if (attempt > 1)
+                _logger.Info($"Retrying package signing: {Path.GetFileName(package)} (attempt {attempt}/2).");
         }
 
         _logger.Info($"Signing {packages.Length} NuGet package(s)...");
         var watch = Stopwatch.StartNew();
-        if (!_signPackages(packages, spec, signingCertificateSha256, out var failedPackages, out var error))
+        if (!_signPackages(packages, spec, signingCertificateSha256, ReportSigning, out var failedPackages, out var error))
         {
             watch.Stop();
             result.ErrorMessage = error;
@@ -106,13 +125,17 @@ public sealed partial class DotNetRepositoryReleaseService
             _logger.Warn(error);
             foreach (var package in packages)
             {
+                if (reportedPackages.Contains(package)) continue;
                 bool failed = failedPackages.Contains(package, StringComparer.OrdinalIgnoreCase);
+                bool attempted = attemptedPackages.Contains(package);
                 UpdateArtifactProgress(
                     detailedProgress,
                     items[package],
-                    failed ? ProjectBuildProgressItemState.Failed : ProjectBuildProgressItemState.Completed,
-                    failed ? error : "signed; publication blocked by another package signing failure",
-                    watch.Elapsed);
+                    failed ? attempted ? ProjectBuildProgressItemState.Failed : ProjectBuildProgressItemState.Skipped
+                        : ProjectBuildProgressItemState.Completed,
+                    failed ? attempted ? error : "not attempted; skipped after signing failure"
+                        : "signed; publication blocked by another package signing failure",
+                    attempted ? watch.Elapsed : null);
             }
 
             progress?.PhaseFailed(ProjectBuildProgressPhase.PackageSigning, error);
@@ -123,6 +146,7 @@ public sealed partial class DotNetRepositoryReleaseService
         _logger.Success($"Signed {packages.Length} NuGet package(s) in {FormatDuration(watch.Elapsed)}.");
         foreach (var package in packages)
         {
+            if (reportedPackages.Contains(package)) continue;
             UpdateArtifactProgress(
                 detailedProgress,
                 items[package],

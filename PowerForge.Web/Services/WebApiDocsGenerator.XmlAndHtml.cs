@@ -60,29 +60,45 @@ public static partial class WebApiDocsGenerator
         return results;
     }
 
+    /// <summary>Resolves against the inspected assembly's context before shared host types.
+    /// Other inspection contexts may be retiring and must never supply dependency identities.</summary>
     private static Type? ResolveType(Assembly assembly, string fullName)
     {
         if (string.IsNullOrWhiteSpace(fullName)) return null;
-        var candidate = fullName;
-        var type = assembly.GetType(candidate) ?? Type.GetType(candidate);
+        var type = FindInAssembly(assembly);
         if (type is not null) return type;
 
-        while (true)
+        var context = AssemblyLoadContext.GetLoadContext(assembly) ?? AssemblyLoadContext.Default;
+        foreach (var loaded in context.Assemblies)
         {
-            var lastDot = candidate.LastIndexOf('.');
-            if (lastDot <= 0) break;
-            candidate = candidate.Substring(0, lastDot) + "+" + candidate.Substring(lastDot + 1);
-            type = assembly.GetType(candidate) ?? Type.GetType(candidate);
+            if (loaded == assembly) continue;
+            type = FindInAssembly(loaded);
             if (type is not null) return type;
         }
 
-        foreach (var loaded in AppDomain.CurrentDomain.GetAssemblies())
+        if (context != AssemblyLoadContext.Default)
         {
-            type = loaded.GetType(fullName);
-            if (type is not null) return type;
+            foreach (var loaded in AssemblyLoadContext.Default.Assemblies)
+            {
+                type = FindInAssembly(loaded);
+                if (type is not null) return type;
+            }
         }
 
-        return null;
+        return Type.GetType(fullName);
+
+        Type? FindInAssembly(Assembly source)
+        {
+            var candidate = fullName;
+            while (true)
+            {
+                var resolved = source.GetType(candidate);
+                if (resolved is not null) return resolved;
+                var lastDot = candidate.LastIndexOf('.');
+                if (lastDot <= 0) return null;
+                candidate = candidate.Substring(0, lastDot) + "+" + candidate.Substring(lastDot + 1);
+            }
+        }
     }
 
     private static string StripGenericArity(string name)

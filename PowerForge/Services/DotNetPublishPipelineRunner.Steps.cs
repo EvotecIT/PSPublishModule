@@ -359,7 +359,8 @@ public sealed partial class DotNetPublishPipelineRunner
         PublishProvenanceLease? provenanceLease,
         SourceProvenance? verifiedSourceProvenance,
         IReadOnlyCollection<string> plannedPublishGeneratedPaths,
-        out SourceProvenance? finalSourceProvenance)
+        out SourceProvenance? finalSourceProvenance,
+        Action<string>? signingProgress = null)
     {
         var target = plan.Targets.FirstOrDefault(t => string.Equals(t.Name, targetName, StringComparison.OrdinalIgnoreCase))
             ?? throw new InvalidOperationException($"Target not found: {targetName}");
@@ -473,7 +474,7 @@ public sealed partial class DotNetPublishPipelineRunner
             if (!plan.UseControlledSourceProvenance)
                 signingProvenance = ReadPortableInventorySourceProvenance(
                     plan, outputDir, plannedPublishGeneratedPaths, publishStep);
-            signedFilePaths = TrySignOutput(outputDir, target.Publish.Sign);
+            signedFilePaths = TrySignOutput(outputDir, target.Publish.Sign, signingProgress);
             if (signedFilePaths.Length > 0)
             {
                 signingProvenance = ReadPortableInventorySourceProvenance(
@@ -542,9 +543,10 @@ public sealed partial class DotNetPublishPipelineRunner
                     includeCompleteOutput: target.Publish.Zip);
                 inventory.BuildInputMode = DescribeBuildInputMode(plan);
                 byte[] inventoryBytes = PowerForgePortablePayloadInventoryCms.Serialize(inventory);
-                byte[] signatureBytes = _signPortableInventory(
+                byte[] signatureBytes = SignPortableInventoryWithProgress(
                     inventoryBytes,
-                    ResolvePortableInventorySigningOptions(signedFilePaths, target.Publish.Sign));
+                    ResolvePortableInventorySigningOptions(signedFilePaths, target.Publish.Sign),
+                    signingProgress, target.Name);
                 if (target.Publish.Zip)
                     PowerForgePortablePayloadInventoryCms.RewriteEvidenceFiles(inventoryPath, inventoryBytes, signaturePath, signatureBytes);
                 else

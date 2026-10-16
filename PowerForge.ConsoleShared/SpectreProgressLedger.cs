@@ -76,7 +76,7 @@ internal sealed class SpectreProgressLedger
             // Spectre keeps task insertion order. The full plan is materialized
             // before any updates so an out-of-order start cannot move a row.
             ApplyUpdate(entry, state, detail);
-            _context.Refresh();
+            SpectreProgressDisplay.Refresh(_context);
         }
     }
 
@@ -133,7 +133,7 @@ internal sealed class SpectreProgressLedger
             }
 
             RefreshTasks();
-            _context.Refresh();
+            SpectreProgressDisplay.Refresh(_context);
         }
     }
 
@@ -148,7 +148,7 @@ internal sealed class SpectreProgressLedger
             }
 
             _visibleTasks.Clear();
-            _context.Refresh();
+            SpectreProgressDisplay.Refresh(_context);
         }
     }
 
@@ -224,7 +224,8 @@ internal sealed class SpectreProgressLedger
                     .Where(value => !string.IsNullOrWhiteSpace(value)));
             table.AddRow(
                 $"[{color}]{icon}[/]",
-                SpectreProgressPresentation.GetKindIcon(snapshot.Kind, unicode),
+                SpectreProgressPresentation.GetKindIcon(snapshot.Kind,
+                    ConsoleEncoding.ShouldRenderEmoji(console.Profile.Capabilities.Unicode)),
                 $"[{color}]{Esc($"{ordinal} {snapshot.Title}")}[/]",
                 $"[{color}]{Esc(result)}[/]",
                 $"[deepskyblue1]{Esc(FormatDuration(snapshot.Duration))}[/]");
@@ -257,6 +258,7 @@ internal sealed class SpectreProgressLedger
         entry.ProgressFraction = ResolveProgressFraction(entry.Item, state);
 
         var task = EnsureVisibleTask(entry);
+        _presentation?.SetDetail(task, entry.Item, state, detail);
         task.Description = BuildLiveLabel(entry);
 
         if (state == SpectreProgressLedgerState.Started)
@@ -271,13 +273,16 @@ internal sealed class SpectreProgressLedger
         }
         else if (IsTerminal(state))
         {
+            var wasStarted = task.IsStarted;
             if (!task.IsStarted)
                 task.StartTask();
 
             task.IsIndeterminate = false;
             task.Value = task.MaxValue;
             task.StopTask();
-            entry.Duration = entry.Item.Duration ?? task.ElapsedTime ?? TimeSpan.Zero;
+            entry.Duration = state == SpectreProgressLedgerState.Skipped && !wasStarted
+                ? null
+                : entry.Item.Duration ?? task.ElapsedTime ?? TimeSpan.Zero;
             _presentation?.MarkTerminal(task, state, entry.Duration);
         }
     }

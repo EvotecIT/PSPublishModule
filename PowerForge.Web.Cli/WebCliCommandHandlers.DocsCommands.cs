@@ -195,6 +195,7 @@ internal static partial class WebCliCommandHandlers
             NavSurfaceName = navSurface,
             GenerateCoverageReport = generateCoverageReport,
             CoverageReportPath = coverageReport,
+            SourceMemberCoverageScope = TryGetOptionValue(subArgs, "--source-member-coverage-scope") ?? "all",
             GenerateXrefMap = generateXrefMap,
             GenerateMemberXrefs = generateMemberXrefs,
             MemberXrefMaxPerType = memberXrefMaxPerType <= 0 ? 0 : memberXrefMaxPerType,

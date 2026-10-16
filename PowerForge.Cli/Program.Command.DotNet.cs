@@ -85,14 +85,10 @@ internal static partial class Program
                     return 2;
                 }
 
-                BufferedLogger? interactiveLogs = null;
                 try
                 {
                     var interactive = runPipeline && DotNetPublishConsoleUi.ShouldUseInteractiveView(outputJson, cli);
-                    if (interactive) interactiveLogs = new BufferedLogger { IsVerbose = cli.Verbose };
-                    (ILogger cmdLogger, BufferedLogger? logBuffer) = interactive
-                        ? (interactiveLogs!, interactiveLogs)
-                        : CreateCommandLogger(outputJson, cli, logger);
+                    var (cmdLogger, logBuffer) = CreateCommandLogger(outputJson, cli, logger);
 
                     var loaded = LoadDotNetPublishSpecWithPath(configPath);
                     var spec = CloneDotNetPublishSpec(loaded.Value);
@@ -156,7 +152,7 @@ internal static partial class Program
                     {
                         result = interactive
                             ? DotNetPublishConsoleUi.Run(runner, plan, specPath, outputJson, cli)
-                            : RunWithStatus(outputJson, cli, "Publishing dotnet artefacts", () => runner.Run(plan, progress: null));
+                            : RunWithStatus(outputJson, cli, "Publishing dotnet artefacts", () => runner.Run(plan, progress: null), value => value.Succeeded);
                     }
 
                     var exitCode = result is not null && !result.Succeeded ? 1 : 0;
@@ -255,10 +251,6 @@ internal static partial class Program
 
                     logger.Error(ex.Message);
                     return 1;
-                }
-                finally
-                {
-                    ReplayInteractiveWarnings(interactiveLogs, logger);
                 }
             }
             case "bundle-postprocess":

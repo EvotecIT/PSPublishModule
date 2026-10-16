@@ -231,11 +231,14 @@ public sealed class InvokeDotNetRepositoryReleaseCommand : PSCmdlet
         });
 
         var executeBuild = ShouldProcess(preparation.RootPath, "Release .NET repository packages");
-        var result = new DotNetRepositoryReleaseWorkflowService(
+        var workflow = new DotNetRepositoryReleaseWorkflowService(
             logger,
             signAssemblies: DotNetAssemblySigningCallbackFactory.Create(logger),
-            validateAssemblySigning: DotNetAssemblySigningCallbackFactory.CreatePreflight(logger))
-            .Execute(preparation, executeBuild);
+            validateAssemblySigning: DotNetAssemblySigningCallbackFactory.CreatePreflight(logger));
+        var result = interactive
+            ? PowerForge.ConsoleShared.SpectreStatusConsoleUi.Run(
+                "Release repository packages", () => workflow.Execute(preparation, executeBuild), value => value.Success)
+            : workflow.Execute(preparation, executeBuild);
         if (interactive)
         {
             var summary = new DotNetRepositoryReleaseSummaryService().CreateSummary(result);

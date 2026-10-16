@@ -7,7 +7,8 @@ public sealed partial class DotNetPublishPipelineRunner
     internal void FinalizePortableEvidence(
         DotNetPublishPlan plan,
         IReadOnlyList<DotNetPublishArtefactResult> artefacts,
-        IReadOnlyDictionary<string, SourceProvenance>? verifiedProvenanceByArtifact = null)
+        IReadOnlyDictionary<string, SourceProvenance>? verifiedProvenanceByArtifact = null,
+        Action<string>? signingProgress = null)
     {
         if (plan is null) throw new ArgumentNullException(nameof(plan));
         if (artefacts is null) throw new ArgumentNullException(nameof(artefacts));
@@ -128,7 +129,7 @@ public sealed partial class DotNetPublishPipelineRunner
             inventory.BuildInputMode = DescribeBuildInputMode(plan);
 
             byte[] inventoryBytes = PowerForgePortablePayloadInventoryCms.Serialize(inventory);
-            byte[] signatureBytes = _signPortableInventory(inventoryBytes, inventorySign);
+            byte[] signatureBytes = SignPortableInventoryWithProgress(inventoryBytes, inventorySign, signingProgress, artefact.Target);
             (string inventoryPath, string signaturePath) =
                 PowerForgePortablePayloadInventoryCms.ResolveEvidencePaths(
                     outputDirectory,

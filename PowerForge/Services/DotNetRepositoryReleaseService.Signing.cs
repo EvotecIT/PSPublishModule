@@ -14,6 +14,7 @@ public sealed partial class DotNetRepositoryReleaseService
         IReadOnlyList<string> packages,
         DotNetRepositoryReleaseSpec spec,
         string sha256,
+        Action<string, int, DotNetNuGetSignResult?>? progress,
         out string[] failedPackages,
         out string error)
     {
@@ -36,6 +37,7 @@ public sealed partial class DotNetRepositoryReleaseService
             store,
             timeStampServer,
             spec.OverwriteSignedPackages,
+            progress,
             out failedPackages);
         if (result.Succeeded) return true;
 
@@ -50,6 +52,7 @@ public sealed partial class DotNetRepositoryReleaseService
         string store,
         string timeStampServer,
         bool overwriteSignedPackages,
+        Action<string, int, DotNetNuGetSignResult?>? progress,
         out string[] failedPackages)
     {
         (DotNetNuGetSignResult Result, string[] FailedPackages) outcome = new DotNetNuGetClient()
@@ -58,7 +61,8 @@ public sealed partial class DotNetRepositoryReleaseService
                 certificateFingerprint: sha256,
                 certificateStoreLocation: store,
                 timeStampServer: timeStampServer,
-                overwrite: overwriteSignedPackages))
+                overwrite: overwriteSignedPackages),
+                progress: progress)
             .GetAwaiter()
             .GetResult();
 

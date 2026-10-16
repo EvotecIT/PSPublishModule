@@ -68,6 +68,15 @@ public sealed class AppStoreConnectScreenshotInfo
     /// <summary>Asset delivery state value when available.</summary>
     public string? AssetDeliveryState { get; set; }
 
+    /// <summary>Apple-hosted image URL template for inspecting delivered screenshot pixels.</summary>
+    public string? ImageAssetUrlTemplate { get; set; }
+
+    /// <summary>Delivered image width when available.</summary>
+    public long? ImageAssetWidth { get; set; }
+
+    /// <summary>Delivered image height when available.</summary>
+    public long? ImageAssetHeight { get; set; }
+
     /// <summary>Upload operations returned by the asset reservation.</summary>
     public AppStoreConnectUploadOperation[] UploadOperations { get; set; } = Array.Empty<AppStoreConnectUploadOperation>();
 }

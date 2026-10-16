@@ -27,7 +27,7 @@ internal sealed partial class PowerForgeReleaseService
         var testFlight = ResolveAppleShipTargets(
             plan.Apps,
             request.AppleShipTestFlightTargets,
-            "internal TestFlight");
+            "TestFlight");
         var appStore = ResolveAppleShipTargets(
             plan.Apps,
             request.AppleShipAppStoreTargets,
@@ -40,10 +40,10 @@ internal sealed partial class PowerForgeReleaseService
 
         foreach (var app in testFlight)
         {
-            if (!UsesTestFlight(app) || app.TestFlightPolicy != AppleTestFlightPolicy.Internal)
+            if (!UsesTestFlight(app) || app.TestFlightPolicy is not (AppleTestFlightPolicy.Internal or AppleTestFlightPolicy.External))
             {
                 throw new InvalidOperationException(
-                    $"Apple Ship internal TestFlight target '{app.Name}' must use AppStore or TestFlightOnly distribution with TestFlightPolicy=Internal.");
+                    $"Apple Ship TestFlight target '{app.Name}' must use AppStore or TestFlightOnly distribution with an explicit TestFlightPolicy=Internal or External.");
             }
             app.ShipToTestFlight = true;
         }

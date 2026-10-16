@@ -235,7 +235,8 @@ public sealed partial class DotNetPublishPipelineRunner
                                 provenanceLease,
                                 publishProvenance,
                                 plannedPublishGeneratedPaths,
-                                out SourceProvenance? finalPublishProvenance);
+                                out SourceProvenance? finalPublishProvenance,
+                                detail => ReportSigningProgress(progress, step, detail));
                             artefacts.Add(publishedArtefact);
                             if (finalPublishProvenance is not null)
                             {
@@ -246,7 +247,8 @@ public sealed partial class DotNetPublishPipelineRunner
                             break;
                         }
                         case DotNetPublishStepKind.Bundle:
-                            artefacts.Add(BuildBundle(plan, artefacts, step));
+                            artefacts.Add(BuildBundle(plan, artefacts, step,
+                                detail => ReportSigningProgress(progress, step, detail)));
                             break;
                         case DotNetPublishStepKind.ServiceLifecycle:
                             RunServiceLifecycleStep(plan, artefacts, step);
@@ -260,7 +262,8 @@ public sealed partial class DotNetPublishPipelineRunner
                         case DotNetPublishStepKind.MsiSign:
                             SignMsiPackage(
                                 plan, msiBuilds, step,
-                                cleanTrackedGeneratedProvenanceState, msiReservationOwner);
+                                cleanTrackedGeneratedProvenanceState, msiReservationOwner,
+                                detail => ReportSigningProgress(progress, step, detail));
                             break;
                         case DotNetPublishStepKind.DebianPackage:
                             artefacts.Add(BuildDebianPackage(plan, artefacts, step));
@@ -287,7 +290,8 @@ public sealed partial class DotNetPublishPipelineRunner
                                     cleanTrackedGeneratedProvenanceState,
                                     msiReservationOwner));
                             ValidatePublishProvenanceEntries(publishProvenanceByArtifact);
-                            FinalizePortableEvidence(plan, artefacts, publishProvenanceByArtifact);
+                            FinalizePortableEvidence(plan, artefacts, publishProvenanceByArtifact,
+                                detail => ReportSigningProgress(progress, step, detail));
                             ValidateManifestProvenance(
                                 manifestProvenanceLease,
                                 sharedPublishProvenance,

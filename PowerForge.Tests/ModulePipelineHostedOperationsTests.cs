@@ -166,13 +166,15 @@ public sealed partial class ModulePipelineHostedOperationsTests
         {
             var scripts = Directory.CreateDirectory(Path.Combine(root.FullName, "Build"));
             var contextPath = Path.Combine(root.FullName, "action.context.json");
+            var logger = new BufferedLogger();
             var requests = new List<PowerShellRunRequest>();
             var runner = new RecordingPowerShellRunner(request =>
             {
                 requests.Add(request);
-                return new PowerShellRunResult(0, "ok", string.Empty, "pwsh.exe");
+                request.OutputLineReceived!("WARNING: Complete action recovery instructions.");
+                return new PowerShellRunResult(0, "WARNING: Complete action recovery instructions.", "Action stderr diagnostic.", "pwsh.exe");
             });
-            var operations = new PowerShellModulePipelineHostedOperations(runner, new NullLogger());
+            var operations = new PowerShellModulePipelineHostedOperations(runner, logger);
             var action = new ModulePipelineActionConfiguration
             {
                 Name = "Release guard",
@@ -216,6 +218,8 @@ public sealed partial class ModulePipelineHostedOperationsTests
             Assert.True(result.Inline);
             Assert.Equal("pwsh.exe", result.Executable);
             Assert.Equal(contextPath, result.ContextPath);
+            Assert.Contains(logger.Entries, entry => entry.Level == "info" && entry.Message == result.StdOut);
+            Assert.Contains(logger.Entries, entry => entry.Level == "warn" && entry.Message == result.StdErr);
         }
         finally
         {
@@ -3630,7 +3634,7 @@ public sealed partial class ModulePipelineHostedOperationsTests
             string[] packageFilePaths,
             string[] includePatterns,
             string[] excludeSubstrings,
-            SigningOptionsConfiguration signing)
+            SigningOptionsConfiguration signing, Action<int, int, string>? progress = null)
             => throw new InvalidOperationException("Not used in this test.");
     }
 

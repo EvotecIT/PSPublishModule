@@ -611,9 +611,8 @@ public sealed partial class InvokePowerForgeReleaseCommand : PSCmdlet
             var request = BuildRequest(configFullPath, requestDefaults, boundParameters);
             ConsoleEncoding.EnsureUtf8();
             var interactive = !NoInteractive.IsPresent && SpectrePipelineConsoleUi.ShouldUseInteractiveView(isVerbose);
-            BufferedLogger? interactiveBuffer = null;
             ILogger outputLogger = interactive
-                ? interactiveBuffer = new BufferedLogger { IsVerbose = isVerbose }
+                ? new SpectreConsoleLogger { IsVerbose = isVerbose }
                 : new CmdletLogger(this, isVerbose);
             var logger = new CmdletWarningLogger(this, outputLogger);
             var service = new PowerForgeReleaseService(
@@ -635,12 +634,6 @@ public sealed partial class InvokePowerForgeReleaseCommand : PSCmdlet
                 watch.Stop();
                 logger.RethrowWarningStop();
                 SpectrePowerForgeReleaseConsoleUi.WriteSummary(result, watch.Elapsed);
-                if (!result.Success && interactiveBuffer?.Entries.Count > 0)
-                {
-                    new BufferedLogSupportService().WriteTail(
-                        interactiveBuffer.Entries,
-                        new SpectreConsoleLogger { IsVerbose = isVerbose });
-                }
             }
             else
             {

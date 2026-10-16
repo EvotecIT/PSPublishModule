@@ -6,8 +6,11 @@ namespace PowerForge.Tests;
 
 public sealed class ModulePipelineStepTests
 {
-    [Fact]
-    public void Create_IncludesBuildSubsteps()
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public void Create_IncludesBuildSubsteps(bool compile, bool reuseStaging)
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
         try
@@ -29,11 +32,21 @@ public sealed class ModulePipelineStepTests
             };
 
             var plan = new ModulePipelineRunner(new NullLogger()).Plan(spec);
+            plan.BuildSpec.PowerShellCompilation = new PowerShellModuleCompilationConfiguration { Enabled = compile };
+            plan.BuildSpec.ReuseStaging = reuseStaging;
             var steps = ModulePipelineStep.Create(plan);
 
             Assert.Contains(steps, s => s.Key == "build:stage");
             Assert.Contains(steps, s => s.Key == "build:build");
+            Assert.Contains(steps, s => s.Key == "build:prepare");
             Assert.Contains(steps, s => s.Key == "build:manifest");
+            if (compile)
+            {
+                var compilation = Assert.Single(steps, s => s.Kind == ModulePipelineStepKind.Compilation);
+                Assert.Equal(reuseStaging ? "Restore compiled module" : "Compile PowerShell module", compilation.Title);
+                Assert.True(Array.IndexOf(steps, compilation) > Array.FindIndex(steps, s => s.Key == "build:manifest"));
+            }
+            else Assert.DoesNotContain(steps, s => s.Kind == ModulePipelineStepKind.Compilation);
         }
         finally
         {
@@ -458,7 +471,7 @@ public sealed class ModulePipelineStepTests
     }
 
     [Fact]
-    public void Create_IncludesDocsSubsteps_WhenDocsEnabled()
+    public void Create_OrdersSigningBeforeDocsAndValidationAsExecuted()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
         try
@@ -493,6 +506,21 @@ public sealed class ModulePipelineStepTests
                             Enable = true,
                             GenerateExternalHelp = true
                         }
+                    },
+                    new ConfigurationBuildSegment
+                    {
+                        BuildModule = new BuildModuleConfiguration { SignMerged = true }
+                    },
+                    new ConfigurationOptionsSegment
+                    {
+                        Options = new ConfigurationOptions
+                        {
+                            Signing = new SigningOptionsConfiguration { CertificateThumbprint = "synthetic" }
+                        }
+                    },
+                    new ConfigurationValidationSegment
+                    {
+                        Settings = new ModuleValidationSettings { Enable = true }
                     }
                 }
             };
@@ -503,6 +531,8 @@ public sealed class ModulePipelineStepTests
             Assert.Contains(steps, s => s.Key == "docs:extract");
             Assert.Contains(steps, s => s.Key == "docs:write");
             Assert.Contains(steps, s => s.Key == "docs:maml");
+            Assert.True(Array.FindIndex(steps, s => s.Key == "sign") < Array.FindIndex(steps, s => s.Key == "docs:extract"));
+            Assert.True(Array.FindIndex(steps, s => s.Key == "docs:maml") < Array.FindIndex(steps, s => s.Key == "validate:module"));
         }
         finally
         {

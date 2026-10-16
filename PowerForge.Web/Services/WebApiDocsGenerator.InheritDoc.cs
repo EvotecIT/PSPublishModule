@@ -8,8 +8,8 @@ public static partial class WebApiDocsGenerator
     private static bool SameReflectedMember(MemberInfo left, MemberInfo right) =>
         left.Module == right.Module && left.MetadataToken == right.MetadataToken;
 
-    private static void ResolveImplicitInheritDoc(Assembly assembly, string assemblyPath, Dictionary<string, XElement> members,
-        HashSet<string> frameworkFallbacks, List<string> warnings)
+    private static void ResolveImplicitInheritDoc(Assembly assembly, Dictionary<string, XElement> members, string assemblyPath,
+        Dictionary<string, XElement> frameworkFallbacks, List<string> warnings)
     {
         var reflected = new Dictionary<string, MemberInfo>(StringComparer.Ordinal);
         const BindingFlags flags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static | BindingFlags.DeclaredOnly;
@@ -43,15 +43,13 @@ public static partial class WebApiDocsGenerator
             {
                 var candidate = candidates.FirstOrDefault(candidate => DocumentationId(candidate) == candidateId) ?? candidates.FirstOrDefault();
                 var declaring = candidate as Type ?? candidate?.DeclaringType;
-                // Keep searching library ancestors/interfaces, but do not hide a missing
-                // library contract with documentation from a more distant framework member.
                 if (implicitTarget && missingLibraryContract && declaring?.Assembly == typeof(object).Assembly)
                     continue;
-                if (!members.ContainsKey(candidateId) || frameworkFallbacks.Contains(candidateId))
+                if (!members.ContainsKey(candidateId))
                 {
                     referenceInputs ??= WebApiDocumentationInputs.Discover(assemblyPath);
                     var ownerName = declaring?.Assembly.GetName().Name;
-                    var assemblyDirectory = Path.GetDirectoryName(assemblyPath);
+                    var assemblyDirectory = Path.GetDirectoryName(Path.GetFullPath(assemblyPath));
                     var candidateInputs = referenceInputs.Where(path =>
                         !string.Equals(Path.GetDirectoryName(path), assemblyDirectory, StringComparison.OrdinalIgnoreCase) ||
                         inheritedOwnerNames.Contains(Path.GetFileNameWithoutExtension(path)));
@@ -60,21 +58,9 @@ public static partial class WebApiDocsGenerator
                         if (!loadedReferences.Add(path)) continue;
                         var document = LoadXmlDocumentation(path, warnings);
                         foreach (var inherited in document.Root!.Element("members")!.Elements("member"))
-                        {
-                            if (inherited.Attribute("name")?.Value is not { Length: > 0 } id) continue;
-                            if (frameworkFallbacks.Remove(id)) members[id] = inherited;
-                            else members.TryAdd(id, inherited);
-                        }
-                        if (members.ContainsKey(candidateId) && !frameworkFallbacks.Contains(candidateId)) break;
+                            if (inherited.Attribute("name")?.Value is { Length: > 0 } id) members.TryAdd(id, inherited);
+                        if (members.ContainsKey(candidateId)) break;
                     }
-                }
-                // Only framework contracts get built-in documentation. Missing library contracts
-                // must remain visible rather than silently inheriting a distant Object summary.
-                if (!members.ContainsKey(candidateId) && candidate is not null &&
-                    TryCreateFrameworkDocumentation(candidate, candidateId) is { } frameworkDocumentation)
-                {
-                    members.Add(candidateId, frameworkDocumentation);
-                    frameworkFallbacks.Add(candidateId);
                 }
                 if (!members.ContainsKey(candidateId))
                 {
@@ -84,6 +70,14 @@ public static partial class WebApiDocsGenerator
                 }
                 target = candidateId;
                 break;
+            }
+            // Prefer real XML documentation. Only synthesize the nearest well-known framework contract;
+            // a missing library contract must retain the unresolved-inheritdoc diagnostic.
+            if (implicitTarget && target is null && candidates.FirstOrDefault() is { } nearest &&
+                CreateFrameworkInheritDoc(nearest) is { } frameworkDocumentation)
+            {
+                target = DocumentationId(nearest);
+                frameworkFallbacks.TryAdd(target, frameworkDocumentation);
             }
             if (implicitTarget && target is not null) inheritDoc.SetAttributeValue("cref", target);
             else if (implicitTarget) warnings.Add($"Implicit inheritdoc could not be resolved for {pair.Key}; supply the inherited XML documentation or an explicit cref.");

@@ -7,6 +7,7 @@ internal sealed class ProjectBuildReleaseProgressAdapter : IProjectBuildProgress
     private readonly Dictionary<ProjectBuildProgressPhase, PowerForgeReleaseProgressItem> _items = new();
     private readonly Dictionary<string, PowerForgeReleaseProgressItem> _projectItems = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<ProjectBuildProgressPhase, (int Completed, int Total)> _phaseCounts = new();
+    private readonly HashSet<ProjectBuildProgressPhase> _terminalPhases = new();
 
     internal ProjectBuildReleaseProgressAdapter(
         IPowerForgeReleaseProgressReporterV2 release,
@@ -18,6 +19,7 @@ internal sealed class ProjectBuildReleaseProgressAdapter : IProjectBuildProgress
 
     public void PhaseStarted(ProjectBuildProgressPhase phase, int totalItems, string? detail = null)
     {
+        if (_terminalPhases.Contains(phase)) return;
         RememberCount(phase, 0, totalItems);
         var item = GetOrCreate(phase);
         _release.ItemUpdated(item, PowerForgeReleaseProgressItemState.Started, WithCount(phase, detail, 0, totalItems));
@@ -29,6 +31,7 @@ internal sealed class ProjectBuildReleaseProgressAdapter : IProjectBuildProgress
         int totalItems,
         string? detail = null)
     {
+        if (_terminalPhases.Contains(phase)) return;
         RememberCount(phase, completedItems, totalItems);
         var item = GetOrCreate(phase);
         _release.ItemUpdated(
@@ -39,6 +42,7 @@ internal sealed class ProjectBuildReleaseProgressAdapter : IProjectBuildProgress
 
     public void PhaseCompleted(ProjectBuildProgressPhase phase, string? detail = null)
     {
+        _terminalPhases.Add(phase);
         var count = GetTerminalCount(phase, completed: true);
         _release.ItemUpdated(
             GetOrCreate(phase),
@@ -48,6 +52,7 @@ internal sealed class ProjectBuildReleaseProgressAdapter : IProjectBuildProgress
 
     public void PhaseFailed(ProjectBuildProgressPhase phase, string? detail = null)
     {
+        _terminalPhases.Add(phase);
         var count = GetTerminalCount(phase, completed: false);
         _release.ItemUpdated(
             GetOrCreate(phase),
@@ -216,7 +221,7 @@ internal sealed class ProjectBuildReleaseProgressAdapter : IProjectBuildProgress
     }
 }
 
-internal sealed class DotNetPublishReleaseProgressAdapter : IDotNetPublishProgressReporter
+internal sealed class DotNetPublishReleaseProgressAdapter : IDotNetPublishProgressReporterV2
 {
     private readonly IPowerForgeReleaseProgressReporterV2 _release;
     private readonly IReadOnlyDictionary<string, PowerForgeReleaseProgressItem> _items;
@@ -242,6 +247,20 @@ internal sealed class DotNetPublishReleaseProgressAdapter : IDotNetPublishProgre
 
     public void StepStarting(DotNetPublishStep step)
         => Update(step, PowerForgeReleaseProgressItemState.Started);
+
+    public void StepProgress(DotNetPublishStep step, string kind, string detail)
+    {
+        if (!_items.TryGetValue(step.Key, out var item)) return;
+        _release.ItemUpdated(new PowerForgeReleaseProgressItem
+        {
+            Phase = item.Phase,
+            Key = item.Key,
+            Title = kind == "Signing" ? $"Sign outputs ({step.TargetName ?? "release evidence"})" : item.Title,
+            Kind = kind,
+            Position = item.Position,
+            Total = item.Total
+        }, PowerForgeReleaseProgressItemState.Started, detail);
+    }
 
     public void StepCompleted(DotNetPublishStep step)
         => Update(step, PowerForgeReleaseProgressItemState.Completed);

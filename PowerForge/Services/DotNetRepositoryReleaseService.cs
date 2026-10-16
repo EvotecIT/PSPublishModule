@@ -20,6 +20,7 @@ public sealed partial class DotNetRepositoryReleaseService
         IReadOnlyList<string> packages,
         DotNetRepositoryReleaseSpec spec,
         string sha256,
+        Action<string, int, DotNetNuGetSignResult?>? progress,
         out string[] failedPackages,
         out string error);
 

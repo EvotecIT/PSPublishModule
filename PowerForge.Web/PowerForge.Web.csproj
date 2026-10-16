@@ -31,8 +31,9 @@
 
   <ItemGroup>
     <PackageReference Include="Google.Apis.Auth" Version="1.77.0" />
-    <PackageReference Include="HtmlTinkerX" Version="3.0.3" />
+    <PackageReference Include="HtmlTinkerX" Version="3.0.4" />
     <PackageReference Include="Magick.NET-Q8-AnyCPU" Version="14.17.2" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="5.9.0" />
     <PackageReference Include="OfficeIMO.Markdown" Version="3.4.4" />
     <PackageReference Include="Scriban" Version="7.5.0" />
     <PackageReference Include="YamlDotNet" Version="18.1.0" />

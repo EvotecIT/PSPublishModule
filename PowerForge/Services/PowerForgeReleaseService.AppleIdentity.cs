@@ -6,7 +6,7 @@ internal sealed partial class PowerForgeReleaseService
         PowerForgeAppleReleasePlan plan,
         PowerForgeAppleAppReleaseTargetPlan app)
     {
-        if (plan.Action == PowerForgeAppleReleaseAction.Cleanup)
+        if (plan.Action == PowerForgeAppleReleaseAction.Cleanup || IsExplicitAppleVersionObservation(plan))
             return false;
 
         var generated = _generateAppleProject(app);

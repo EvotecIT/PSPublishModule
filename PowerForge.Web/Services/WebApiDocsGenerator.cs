@@ -229,6 +229,9 @@ public sealed class WebApiDocsOptions
     /// Defaults to <c>coverage.json</c> when not set.
     /// </summary>
     public string? CoverageReportPath { get; set; }
+
+    /// <summary>Source-link member coverage scope: all (default), or assembly to exclude inherited members from undocumented assemblies.</summary>
+    public string SourceMemberCoverageScope { get; set; } = "all";
     /// <summary>
     /// Generates a DocFX-compatible xref map for API symbols.
     /// </summary>
@@ -402,6 +405,10 @@ public static partial class WebApiDocsGenerator
     public static WebApiDocsResult Generate(WebApiDocsOptions options)
     {
         if (options is null) throw new ArgumentNullException(nameof(options));
+        if (options.SourceMemberCoverageScope is null ||
+            !(options.SourceMemberCoverageScope.Trim().Equals("all", StringComparison.OrdinalIgnoreCase) ||
+              options.SourceMemberCoverageScope.Trim().Equals("assembly", StringComparison.OrdinalIgnoreCase)))
+            throw new ArgumentException("SourceMemberCoverageScope must be 'all' or 'assembly'.", nameof(options));
         var xmlPaths = options.Type == ApiDocsType.CSharp
             ? ResolveCSharpXmlPaths(options)
             : Array.Empty<string>();
@@ -432,6 +439,8 @@ public static partial class WebApiDocsGenerator
         var assemblyPaths = options.Type == ApiDocsType.CSharp
             ? ResolveCSharpAssemblyPaths(options)
             : Array.Empty<string>();
+        if (options.SourceMemberCoverageScope.Trim().Equals("assembly", StringComparison.OrdinalIgnoreCase) && assemblyPaths.Length == 0)
+            throw new ArgumentException("SourceMemberCoverageScope 'assembly' requires AssemblyPath or AssemblyPaths to establish member ownership.", nameof(options));
         Assembly? assembly = null;
         ApiDocsAssemblyLoadContext? assemblyContext = null;
         var assemblies = new List<Assembly>();
@@ -464,7 +473,7 @@ public static partial class WebApiDocsGenerator
                         $"Configured API documentation assembly was not found: {additionalPath}",
                         additionalPath);
                 using var additionalStream = new MemoryStream(File.ReadAllBytes(additionalPath), writable: false);
-                var additional = assemblyContext!.LoadFromStream(additionalStream);
+                var additional = assemblyContext.LoadFromStream(additionalStream);
                 if (!assembliesByName.TryAdd(additional.GetName().Name!, additional))
                     throw new InvalidOperationException($"Duplicate API documentation assembly: {additional.GetName().Name}");
                 assemblies.Add(additional);
@@ -893,7 +902,8 @@ public static partial class WebApiDocsGenerator
         AppendSourceCoverageWarnings(types, warnings);
         AppendRelatedContentCoverageWarnings(types, options, typeRelatedContentMap, warnings);
         AppendPowerShellExampleQualityWarnings(types, warnings);
-        var coveragePath = WriteCoverageReport(outputPath, options, types, typeRelatedContentMap, assemblyName, assemblyVersion, warnings);
+        var documentedAssemblies = assemblies.Select(static input => input.GetName().Name!).ToHashSet(StringComparer.Ordinal);
+        var coveragePath = WriteCoverageReport(outputPath, options, types, typeRelatedContentMap, assemblyName, assemblyVersion, documentedAssemblies, warnings);
         var xrefPath = WriteXrefMap(outputPath, options, types, assemblyName, assemblyVersion, warnings);
         var powerShellExampleMediaManifestPath = WritePowerShellExampleMediaManifest(outputPath, options, types, warnings);
 

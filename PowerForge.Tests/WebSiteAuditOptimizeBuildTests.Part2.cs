@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using PowerForge.Web;
 using ImageMagick;
 using System.Text.Json;
@@ -1395,6 +1396,68 @@ public partial class WebSiteAuditOptimizeBuildTests
             Assert.Contains("decoding=\"async\"", html, StringComparison.OrdinalIgnoreCase);
             Assert.Contains(" />", html, StringComparison.Ordinal);
             Assert.DoesNotContain(" / srcset=", html, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void OptimizeDetailed_RewritesPictureSourcesToNextGenVariants()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-opt-img-source-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "index.html"),
+                """
+                <!doctype html>
+                <html>
+                  <head><title>Images</title></head>
+                  <body>
+                    <picture>
+                      <source srcset="/light.png" media="(prefers-color-scheme: light)" />
+                      <source type="image/png" srcset="/typed.png" />
+                      <img src="/dark.png" alt="Hero" />
+                    </picture>
+                  </body>
+                </html>
+                """);
+
+            foreach (var name in new[] { "light.png", "dark.png", "typed.png" })
+            {
+                using var image = new MagickImage(MagickColors.DeepSkyBlue, 1400, 700);
+                image.Comment = new string('x', 50000);
+                image.Write(Path.Combine(root, name), MagickFormat.Png);
+            }
+
+            WebAssetOptimizer.OptimizeDetailed(new WebAssetOptimizerOptions
+            {
+                SiteRoot = root,
+                OptimizeImages = true,
+                ImageExtensions = new[] { ".png" },
+                ImageGenerateWebp = true,
+                ImagePreferNextGen = true,
+                ResponsiveImageWidths = new[] { 480, 960 },
+                EnhanceImageTags = true
+            });
+
+            var html = File.ReadAllText(Path.Combine(root, "index.html"));
+            var lightSource = Regex.Match(html, "<source[^>]*prefers-color-scheme: light[^>]*>").Value;
+            var darkImage = Regex.Match(html, "<img[^>]*dark[^>]*>").Value;
+            // The theme source gets the same variants and hints as its image.
+            Assert.Contains("/light.w480.", lightSource, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("/light.w960.", lightSource, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains(" 1400w\"", lightSource, StringComparison.Ordinal);
+            Assert.Contains("sizes=\"100vw\"", lightSource, StringComparison.Ordinal);
+            Assert.Equal(
+                Regex.Match(darkImage, "srcset=\"([^\"]+)\"").Groups[1].Value.Replace("dark", "light"),
+                Regex.Match(lightSource, "srcset=\"([^\"]+)\"").Groups[1].Value);
+            // A source that names its format is left as authored.
+            Assert.Contains("<source type=\"image/png\" srcset=\"/typed.png\" />", html, StringComparison.Ordinal);
         }
         finally
         {

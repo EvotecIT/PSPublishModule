@@ -369,16 +369,19 @@ public sealed partial class DotNetNuGetClientTests
     [Fact]
     public async Task SignPackagesIndividuallyAsync_RetriesOnlyThePackageThatFailed()
     {
+        var events = new List<string>();
+        var completedDurations = new Dictionary<string, TimeSpan>();
         var attempts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         var processRunner = new StubProcessRunner(request =>
         {
             string package = request.Arguments[2];
             attempts[package] = attempts.TryGetValue(package, out int count) ? count + 1 : 1;
+            Assert.Equal($"{Path.GetFileName(package)}:start:{attempts[package]}", events[^1]);
             bool transientFailure = package.EndsWith("One.1.0.0.nupkg", StringComparison.OrdinalIgnoreCase) &&
                                     attempts[package] == 1;
             return transientFailure
-                ? new ProcessRunResult(1, string.Empty, "Access was denied because of a security violation.", request.FileName, TimeSpan.Zero, timedOut: false)
-                : new ProcessRunResult(0, "Package(s) signed successfully.", string.Empty, request.FileName, TimeSpan.Zero, timedOut: false);
+                ? new ProcessRunResult(1, string.Empty, "Access was denied because of a security violation.", request.FileName, TimeSpan.FromSeconds(30), timedOut: false)
+                : new ProcessRunResult(0, "Package(s) signed successfully.", string.Empty, request.FileName, TimeSpan.FromSeconds(2), timedOut: false);
         });
         var client = new DotNetNuGetClient(processRunner);
         string first = @"C:\repo\Artifacts\One.1.0.0.nupkg";
@@ -388,13 +391,26 @@ public sealed partial class DotNetNuGetClientTests
             new[] { first, second },
             certificateFingerprint: "ABC123",
             certificateStoreLocation: "CurrentUser",
-            timeStampServer: "http://timestamp.digicert.com"));
+            timeStampServer: "http://timestamp.digicert.com"),
+            progress: (package, attempt, result) =>
+            {
+                events.Add($"{Path.GetFileName(package)}:{(result is null ? $"start:{attempt}" : $"end:{result.Succeeded}")}");
+                if (result is not null) completedDurations.Add(package, result.Duration);
+            });
 
         Assert.True(outcome.Result.Succeeded, outcome.Result.ErrorMessage);
         Assert.Empty(outcome.FailedPackages);
         Assert.Equal(2, attempts[first]);
         Assert.Equal(1, attempts[second]);
+        Assert.Equal(TimeSpan.FromSeconds(32), completedDurations[first]);
+        Assert.Equal(TimeSpan.FromSeconds(2), completedDurations[second]);
         Assert.Contains("One.1.0.0.nupkg: signed on retry", outcome.Result.StdOut, StringComparison.Ordinal);
+        Assert.Equal([
+            $"{Path.GetFileName(first)}:start:1",
+            $"{Path.GetFileName(first)}:start:2",
+            $"{Path.GetFileName(first)}:end:True",
+            $"{Path.GetFileName(second)}:start:1",
+            $"{Path.GetFileName(second)}:end:True"], events);
     }
 
     [Fact]

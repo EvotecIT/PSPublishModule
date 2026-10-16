@@ -192,7 +192,12 @@ internal sealed class PowerShellModulePipelineHostedOperations :
         }
 
         _logger.Info($"Running lifecycle action '{name}' at {action.At}.");
-        var result = _runner.Run(request);
+        var result = _runner.Run(request.WithOutputLineReceived(line =>
+        {
+            if (!string.IsNullOrWhiteSpace(line)) _logger.Info(line);
+        }));
+        // Warning preferences and prompts belong on the synchronous host thread.
+        if (!string.IsNullOrWhiteSpace(result.StdErr)) _logger.Warn(result.StdErr.TrimEnd());
         return new ModulePipelineActionResult
         {
             Name = name,
@@ -254,9 +259,12 @@ internal sealed class PowerShellModulePipelineHostedOperations :
         string[] packageFilePaths,
         string[] includePatterns,
         string[] excludeSubstrings,
-        SigningOptionsConfiguration signing)
+        SigningOptionsConfiguration signing,
+        Action<int, int, string>? progress = null)
     {
         var normalizedPackageFilePaths = NormalizePackageFilePaths(packageFilePaths);
+        _logger.Info(ModuleSigningProgressProtocol.UserGuidance);
+        progress?.Invoke(0, 0, "Starting signing host");
         var packageFileListPath = WriteTemporaryLineFile(normalizedPackageFilePaths);
         var temporaryPackageFileLists = new List<string> { packageFileListPath };
         var args = new List<string>(9)
@@ -290,7 +298,15 @@ internal sealed class PowerShellModulePipelineHostedOperations :
                 preferPwsh: !useWindowsPowerShellStoreCertificate,
                 hostRequirement: useWindowsPowerShellStoreCertificate
                     ? PowerShellHostRequirement.WindowsPowerShell
-                    : PowerShellHostRequirement.Any);
+                    : PowerShellHostRequirement.Any,
+                outputLineReceived: line =>
+                {
+                    if (ModuleSigningProgressProtocol.TryParse(line, out var completed, out var total, out var detail))
+                    {
+                        progress?.Invoke(completed, total, detail);
+                        _logger.Verbose(detail);
+                    }
+                });
             attemptSummary = TryExtractSigningSummary(result.StdOut);
             summary = attemptSummary;
         }
@@ -397,7 +413,8 @@ internal sealed class PowerShellModulePipelineHostedOperations :
         IReadOnlyList<string> args,
         TimeSpan timeout,
         bool preferPwsh,
-        PowerShellHostRequirement hostRequirement = PowerShellHostRequirement.Any)
+        PowerShellHostRequirement hostRequirement = PowerShellHostRequirement.Any,
+        Action<string>? outputLineReceived = null)
     {
         var tempDir = Path.Combine(Path.GetTempPath(), "PowerForge", "modulepipeline");
         Directory.CreateDirectory(tempDir);
@@ -405,9 +422,10 @@ internal sealed class PowerShellModulePipelineHostedOperations :
         File.WriteAllText(scriptPath, scriptText, new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
         try
         {
-            return _runner.Run(hostRequirement == PowerShellHostRequirement.Any
+            var request = hostRequirement == PowerShellHostRequirement.Any
                 ? new PowerShellRunRequest(scriptPath, args, timeout, preferPwsh)
-                : new PowerShellRunRequest(scriptPath, args, timeout, preferPwsh, hostRequirement));
+                : new PowerShellRunRequest(scriptPath, args, timeout, preferPwsh, hostRequirement);
+            return _runner.Run(request.WithOutputLineReceived(outputLineReceived));
         }
         finally
         {

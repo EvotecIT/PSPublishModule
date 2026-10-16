@@ -235,8 +235,10 @@ public sealed partial class DotNetPublishPipelineRunnerHardeningTests
             File.WriteAllText(dlib, "dlib");
             ProcessRunRequest? captured = null;
             string? metadataJson = null;
+            var signingProgress = new List<string>();
             var processRunner = new StubProcessRunner(request =>
             {
+                Assert.Equal("Signing file 1/1: app.exe", Assert.Single(signingProgress));
                 captured = request;
                 int metadataIndex = request.Arguments.ToList().IndexOf("/dmdf");
                 metadataJson = File.ReadAllText(request.Arguments[metadataIndex + 1]);
@@ -256,9 +258,10 @@ public sealed partial class DotNetPublishPipelineRunnerHardeningTests
                         publisherMatch = options;
                         return true;
                     }),
-                new object[] { output, sign }));
+                new object[] { output, sign, new Action<string>(signingProgress.Add) }));
 
             Assert.Equal(executable, Assert.Single(signed));
+            Assert.Equal(string.Empty, signingProgress[^1]);
             Assert.NotNull(captured);
             Assert.Contains("/dlib", captured!.Arguments);
             Assert.Contains("/dmdf", captured.Arguments);
@@ -302,7 +305,7 @@ public sealed partial class DotNetPublishPipelineRunnerHardeningTests
                         processRunner,
                         _ => false,
                         signatureMatchesPublisher: (_, _) => false),
-                    new object[] { output, sign }));
+                    new object?[] { output, sign, null }));
 
             Assert.IsType<InvalidOperationException>(exception.InnerException);
             Assert.Contains("publisher subject", exception.InnerException!.Message, StringComparison.OrdinalIgnoreCase);
@@ -488,7 +491,7 @@ public sealed partial class DotNetPublishPipelineRunnerHardeningTests
             var ex = Assert.Throws<TargetInvocationException>(() =>
                 GetTrySignOutputMethod().Invoke(
                     new DotNetPublishPipelineRunner(new NullLogger()),
-                    new object[] { outputDir, sign }));
+                    new object?[] { outputDir, sign, null }));
             Assert.IsType<InvalidOperationException>(ex.InnerException);
             Assert.True(
                 ex.InnerException!.Message.Contains("Signing requested", StringComparison.OrdinalIgnoreCase)
@@ -527,7 +530,7 @@ public sealed partial class DotNetPublishPipelineRunnerHardeningTests
 
             _ = GetTrySignOutputMethod().Invoke(
                 new DotNetPublishPipelineRunner(logger),
-                new object[] { outputDir, sign });
+                new object?[] { outputDir, sign, null });
 
             Assert.Contains(
                 logger.InfoMessages,
@@ -572,7 +575,7 @@ public sealed partial class DotNetPublishPipelineRunnerHardeningTests
                     processRunner,
                     _ => true,
                     signatureMatchesPublisher: (_, _) => true),
-                new object[] { outputDir, sign }));
+                new object?[] { outputDir, sign, null }));
 
             Assert.Equal(executable, Assert.Single(signedFiles));
             Assert.Empty(requests);
@@ -624,7 +627,7 @@ public sealed partial class DotNetPublishPipelineRunnerHardeningTests
                     processRunner,
                     path => string.Equals(path, dependency, StringComparison.OrdinalIgnoreCase),
                     signatureMatchesPublisher: (_, _) => false),
-                new object[] { outputDir, sign }));
+                new object?[] { outputDir, sign, null }));
 
             Assert.Equal(executable, Assert.Single(signedFiles));
             Assert.Equal(executable, Assert.Single(requests).Arguments[^1]);
@@ -825,7 +828,7 @@ public sealed partial class DotNetPublishPipelineRunnerHardeningTests
 
             string[] signedFiles = Assert.IsType<string[]>(GetTrySignOutputMethod().Invoke(
                 new DotNetPublishPipelineRunner(new NullLogger(), processRunner, _ => true),
-                new object[] { outputDir, sign }));
+                new object?[] { outputDir, sign, null }));
 
             Assert.Equal(Path.Combine(outputDir, "app.exe"), Assert.Single(signedFiles));
             Assert.Equal("sign", Assert.Single(requests).Arguments[0]);
@@ -858,7 +861,7 @@ public sealed partial class DotNetPublishPipelineRunnerHardeningTests
             var ex = Assert.Throws<TargetInvocationException>(() =>
                 GetTrySignOutputMethod().Invoke(
                     new DotNetPublishPipelineRunner(new NullLogger()),
-                    new object[] { outputDir, sign }));
+                    new object?[] { outputDir, sign, null }));
             Assert.IsType<InvalidOperationException>(ex.InnerException);
             Assert.Contains("no matching files were found", ex.InnerException!.Message, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("IncludeDlls=true", ex.InnerException.Message, StringComparison.OrdinalIgnoreCase);

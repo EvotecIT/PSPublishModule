@@ -6,6 +6,9 @@ namespace PowerForge;
 /// </summary>
 internal static class AppleReleaseMarketingVersionResolver
 {
+    internal static void ValidateExactVersion(string value, string settingName)
+        => _ = ParseKnownVersion(value, settingName);
+
     internal static void ValidatePattern(string pattern, string settingName)
     {
         if (string.IsNullOrWhiteSpace(pattern))

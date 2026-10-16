@@ -57,11 +57,7 @@ public sealed class ProcessRunnerEnvironmentTests
     {
         var order = new List<string>();
         var processId = 0;
-        var request = new ProcessRunRequest(
-            "dotnet",
-            Path.GetTempPath(),
-            new[] { "--version" },
-            TimeSpan.FromSeconds(30));
+        var request = CreateBoundaryRequest(TimeSpan.FromSeconds(30));
         request.SetStartedProcessBoundary(value =>
         {
             processId = value;
@@ -81,11 +77,7 @@ public sealed class ProcessRunnerEnvironmentTests
     [InlineData(true)]
     public async Task RunAsync_fails_closed_when_started_process_boundary_rejects_launch(bool ownProcessTree)
     {
-        var request = new ProcessRunRequest(
-            "dotnet",
-            Path.GetTempPath(),
-            new[] { "--version" },
-            TimeSpan.FromSeconds(30));
+        var request = CreateBoundaryRequest(TimeSpan.FromSeconds(30));
         request.SetStartedProcessBoundary(_ => throw new InvalidOperationException("reject started process"));
 
         var result = await new ProcessRunner(ownProcessTree).RunAsync(request);
@@ -97,11 +89,7 @@ public sealed class ProcessRunnerEnvironmentTests
     [Fact]
     public async Task RunAsync_counts_the_started_process_boundary_against_the_request_timeout()
     {
-        var request = new ProcessRunRequest(
-            "dotnet",
-            Path.GetTempPath(),
-            new[] { "--version" },
-            TimeSpan.FromMilliseconds(100));
+        var request = CreateBoundaryRequest(TimeSpan.FromMilliseconds(100));
         request.SetStartedProcessBoundary(_ => Thread.Sleep(250));
 
         var result = await new ProcessRunner().RunAsync(request);
@@ -110,6 +98,14 @@ public sealed class ProcessRunnerEnvironmentTests
         Assert.Equal(124, result.ExitCode);
         Assert.Equal("Timeout", result.StdErr);
     }
+
+    // Boundary ordering is a generic process contract; it does not require SDK
+    // discovery or initialization, which the SDK and build tests cover.
+    private static ProcessRunRequest CreateBoundaryRequest(TimeSpan timeout)
+        => OperatingSystem.IsWindows()
+            ? new ProcessRunRequest(Path.Combine(Environment.SystemDirectory, "cmd.exe"),
+                Path.GetTempPath(), new[] { "/d", "/c", "exit 0" }, timeout)
+            : new ProcessRunRequest("/bin/sh", Path.GetTempPath(), new[] { "-c", "exit 0" }, timeout);
 
     [Fact]
     public async Task RunAsync_invokes_completion_boundary_before_inherited_output_pipe_drain()

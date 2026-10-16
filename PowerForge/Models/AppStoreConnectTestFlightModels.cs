@@ -134,7 +134,7 @@ public sealed class AppStoreConnectTestFlightDistributionResult
     /// <summary>Target beta groups.</summary>
     public AppStoreConnectBetaGroupInfo[] BetaGroups { get; set; } = Array.Empty<AppStoreConnectBetaGroupInfo>();
 
-    /// <summary>Internal groups whose exact-build access was read back from Apple, including automatic access to all builds.</summary>
+    /// <summary>Groups whose exact-build access was read back from Apple, including automatic internal access to all builds.</summary>
     public AppStoreConnectBetaGroupInfo[] VerifiedBetaGroups { get; set; } = Array.Empty<AppStoreConnectBetaGroupInfo>();
 
     /// <summary>Created or resolved beta testers.</summary>

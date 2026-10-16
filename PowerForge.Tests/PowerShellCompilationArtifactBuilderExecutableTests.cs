@@ -424,31 +424,14 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     private static (int ExitCode, string StandardOutput, string StandardError) RunProcess(
         string fileName, IReadOnlyDictionary<string, string>? environment, params string[] arguments)
     {
-        const int processTimeoutMilliseconds = 120_000;
-        var startInfo = new ProcessStartInfo
-        {
-            FileName = fileName,
-            UseShellExecute = false,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            CreateNoWindow = true
-        };
-        // Compare stream content independently of the invoking terminal's color policy.
-        startInfo.Environment["NO_COLOR"] = "1";
+        var variables = new Dictionary<string, string?> { ["NO_COLOR"] = "1" };
         if (environment is not null)
-            foreach (var pair in environment)
-                startInfo.Environment[pair.Key] = pair.Value;
-        foreach (var argument in arguments)
-            startInfo.ArgumentList.Add(argument);
-        using var process = Process.Start(startInfo)!;
-        var standardOutput = process.StandardOutput.ReadToEndAsync();
-        var standardError = process.StandardError.ReadToEndAsync();
-        if (!process.WaitForExit(processTimeoutMilliseconds))
-        {
-            process.Kill(entireProcessTree: true);
-            process.WaitForExit();
-            Assert.Fail($"Typed executable did not exit within {processTimeoutMilliseconds / 1000} seconds.");
-        }
-        return (process.ExitCode, standardOutput.GetAwaiter().GetResult(), standardError.GetAwaiter().GetResult());
+            foreach (var pair in environment) variables[pair.Key] = pair.Value;
+        var result = new ProcessRunner(ownProcessTree: true).RunAsync(new ProcessRunRequest(
+            fileName, Directory.GetCurrentDirectory(), arguments, TimeSpan.FromMinutes(2), variables))
+            .GetAwaiter().GetResult();
+        Assert.False(result.TimedOut, $"Typed executable timed out. STDOUT:{Environment.NewLine}{result.StdOut}{Environment.NewLine}STDERR:{Environment.NewLine}{result.StdErr}");
+        Assert.False(result.StartFailed, result.StdErr);
+        return (result.ExitCode, result.StdOut, result.StdErr);
     }
 }
