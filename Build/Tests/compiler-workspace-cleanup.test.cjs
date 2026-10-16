@@ -57,7 +57,7 @@ for (const scenario of ['held', 'incomplete-run', 'missing-whole-terminal', 'mis
         if (scenario === 'missing-qualification') fs.unlinkSync(path.join(lane, 'qualification.json'));
         if (scenario === 'missing-fixture-stop') fs.unlinkSync(path.join(fixture, 'fixture.Stop.json'));
         const record = path.join(gate, 'whole-workflow-workspace.json');
-        const marker = path.join(owned, '.powerforge-whole-workflow-owner.json');
+        const marker = path.join(owned, 'powerforge-whole-workflow-owner.json');
         if (scenario === 'completed-failure') {
           owner.createdUtc = '2026-10-16T00:00:00.1200000Z';
           write(record, owner);
@@ -65,7 +65,7 @@ for (const scenario of ['held', 'incomplete-run', 'missing-whole-terminal', 'mis
         }
         if (scenario === 'invalid-root') write(record, { ...owner, workspacePath: outside });
         if (scenario === 'missing-owner-record') fs.unlinkSync(record);
-        if (scenario === 'missing-owner-marker') fs.unlinkSync(marker);
+        if (scenario === 'missing-owner-marker') fs.renameSync(marker, path.join(owned, '.powerforge-whole-workflow-owner.json'));
         if (scenario === 'wrong-owner-marker') write(marker, { ...owner, ownershipId: crypto.randomBytes(16).toString('hex') });
         if (scenario === 'wrong-runner') write(record, { ...owner, runnerTemp: outside });
         if (scenario === 'copied-owner-record') {
@@ -73,12 +73,14 @@ for (const scenario of ['held', 'incomplete-run', 'missing-whole-terminal', 'mis
           unownedShortRoot = path.join(owner.shortBase, 'pf' + otherId.slice(0, 8));
           fs.mkdirSync(unownedShortRoot);
           fs.writeFileSync(path.join(unownedShortRoot, 'unrelated.txt'), 'preserve same-base unrelated root');
-          fs.copyFileSync(marker, path.join(unownedShortRoot, '.powerforge-whole-workflow-owner.json'));
+          fs.copyFileSync(marker, path.join(unownedShortRoot, 'powerforge-whole-workflow-owner.json'));
           write(record, { ...owner, ownershipId: otherId, workspacePath: unownedShortRoot });
         }
         if (scenario === 'linked-residue') fs.symlinkSync(outside, path.join(owned, 'linked-residue'), process.platform === 'win32' ? 'junction' : 'dir');
       }
       const beforeState = scenario === 'incomplete-run' ? fs.readFileSync(path.join(owned, 'runs', 'owned', 'scenarios', 'fixture', 'start-attempt.json')) : null;
+      const priorMarker = path.join(owned, '.powerforge-whole-workflow-owner.json');
+      const beforePriorMarker = scenario === 'missing-owner-marker' ? fs.readFileSync(priorMarker) : null;
       const result = spawnSync('pwsh', ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command', command], {
         cwd: repository, env: { ...process.env, RUNNER_TEMP: runner }, encoding: 'utf8', timeout: 30_000
       });
@@ -98,6 +100,7 @@ for (const scenario of ['held', 'incomplete-run', 'missing-whole-terminal', 'mis
         assert.ok(fs.existsSync(path.join(fixture, 'fixture.Start.json')));
       }
       if (beforeState) assert.deepEqual(fs.readFileSync(path.join(owned, 'runs', 'owned', 'scenarios', 'fixture', 'start-attempt.json')), beforeState);
+      if (beforePriorMarker) assert.deepEqual(fs.readFileSync(priorMarker), beforePriorMarker, 'A prior marker cannot replace the exact current ownership marker or be modified during refusal.');
     } finally {
       // All test identities are synthetic; no process was created by these receipts.
       if (owner && fs.existsSync(owned)) {

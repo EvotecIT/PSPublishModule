@@ -366,11 +366,8 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
             !artifact.Target.TargetFramework.Equals("net472", StringComparison.OrdinalIgnoreCase)) return;
         foreach (var file in files)
         {
-            var extension = Path.GetExtension(file.Path);
-            if (!extension.Equals(".ps1", StringComparison.OrdinalIgnoreCase) &&
-                !extension.Equals(".psm1", StringComparison.OrdinalIgnoreCase) &&
-                !extension.Equals(".psd1", StringComparison.OrdinalIgnoreCase) &&
-                !extension.Equals(".dll", StringComparison.OrdinalIgnoreCase)) continue;
+            // Manifest loaders accept paths such as RequiredAssemblies independently of
+            // the filename suffix. Bound the complete legacy payload before publishing it.
             var path = Path.GetFullPath(Path.Combine(payloadRoot, file.Path.Replace('/', Path.DirectorySeparatorChar)));
             PowerShellCompilationPathSafety.EnsureContained(payloadRoot, path, "Module payload path escapes its qualified root.");
             PowerShellCompilationPathSafety.EnsureWindowsPowerShellPayloadPath(path);

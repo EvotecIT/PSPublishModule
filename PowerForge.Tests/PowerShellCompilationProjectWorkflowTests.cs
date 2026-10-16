@@ -450,6 +450,104 @@ public sealed class PowerShellCompilationProjectWorkflowTests
     }
 
     [Theory]
+    [InlineData("My Module", "My_Module", "artifacts/shared", "artifacts/shared")]
+    [InlineData("Generic", "Generic", "artifacts/shared", "artifacts/child/../shared")]
+    [InlineData(null, null, "artifacts/shared", "artifacts/shared")]
+    [InlineData("First", "Second", "artifacts/shared", "artifacts/shared")]
+    [InlineData("First", "Second", "artifacts/shared", "artifacts/shared/nested")]
+    [InlineData("First", "Second", "artifacts/shared/nested", "artifacts/shared")]
+    public void ProjectManifest_RejectsOverlappingArtifactOutputDirectoriesBeforeWorkflowWrites(
+        string? firstName, string? secondName, string firstOutput, string secondOutput)
+    {
+        using var fixture = ProjectFixture.Create();
+        var service = new PowerShellCompilationProjectManifestService();
+        var manifest = CreateOutputVariantManifest(fixture, firstName, secondName, firstOutput, secondOutput);
+        var first = manifest.Artifacts[0];
+        var second = manifest.Artifacts[1];
+        manifest.Artifacts = new[] { first };
+        service.Save(fixture.ProjectPath, manifest);
+        var originalProject = File.ReadAllBytes(fixture.ProjectPath);
+        manifest.Artifacts = new[] { first, second };
+
+        var exception = Assert.Throws<InvalidDataException>(() => service.Save(fixture.ProjectPath, manifest));
+
+        Assert.Contains("module target", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("module_target", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("overlapping output directories", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("Each target requires a separate artifact output directory", exception.Message, StringComparison.Ordinal);
+        Assert.Equal(originalProject, File.ReadAllBytes(fixture.ProjectPath));
+        Assert.False(Directory.Exists(Path.Combine(fixture.Root, "artifacts")));
+        Assert.False(Directory.Exists(Path.Combine(fixture.Root, ".powerforge")));
+
+        File.WriteAllText(fixture.ProjectPath, JsonSerializer.Serialize(
+            manifest, PowerShellCompilationProjectManifestService.JsonOptions));
+        Assert.Throws<InvalidDataException>(() => service.Load(fixture.ProjectPath));
+        Assert.Throws<InvalidDataException>(() => service.Load(fixture.ProjectPath, requireInputs: false));
+        Assert.Throws<InvalidDataException>(() => new PowerShellCompilationProjectWorkflowService().Build(fixture.ProjectPath));
+        Assert.False(Directory.Exists(Path.Combine(fixture.Root, "artifacts")));
+        Assert.False(Directory.Exists(Path.Combine(fixture.Root, ".powerforge")));
+    }
+
+    [Theory]
+    [InlineData("artifacts/shared", "ARTIFACTS/SHARED")]
+    [InlineData("artifacts/shared", "artifacts/shared-other")]
+    public void ProjectManifest_ArtifactOutputDirectoriesFollowFileSystemCaseSemantics(
+        string firstOutput, string secondOutput)
+    {
+        using var fixture = ProjectFixture.Create();
+        var service = new PowerShellCompilationProjectManifestService();
+        var manifest = CreateOutputVariantManifest(fixture, "Generic", "Generic", firstOutput, secondOutput);
+        var firstDirectory = Path.Combine(fixture.Root, firstOutput.Replace('/', Path.DirectorySeparatorChar));
+        Directory.CreateDirectory(firstDirectory);
+        var firstFile = Path.Combine(firstDirectory, "Generic.dll");
+        File.WriteAllText(firstFile, "pre-existing artifact payload");
+        var secondDirectory = Path.Combine(fixture.Root, secondOutput.Replace('/', Path.DirectorySeparatorChar));
+        var sameFileSystemIdentity = Directory.Exists(secondDirectory);
+
+        if (sameFileSystemIdentity)
+        {
+            var exception = Assert.Throws<InvalidDataException>(() => service.Save(fixture.ProjectPath, manifest));
+            Assert.Contains("overlapping output directories", exception.Message, StringComparison.Ordinal);
+            Assert.False(File.Exists(fixture.ProjectPath));
+        }
+        else
+        {
+            service.Save(fixture.ProjectPath, manifest);
+            Assert.Equal(2, service.Load(fixture.ProjectPath).Artifacts.Length);
+        }
+        Assert.Equal("pre-existing artifact payload", File.ReadAllText(firstFile));
+    }
+
+    private static PowerShellCompilationProjectManifest CreateOutputVariantManifest(
+        ProjectFixture fixture, string? firstName, string? secondName, string firstOutput, string secondOutput)
+    {
+        var service = new PowerShellCompilationProjectManifestService();
+        var target = PowerShellCompilationTargetContractService.Create(
+            PowerShellCompilationArtifactKind.BinaryModule, PowerShellCompilationMode.Hybrid,
+            "net10.0", null, false, false, PowerShellCompilationExecutableOptimization.None, explicitContract: true);
+        var manifest = service.Create(fixture.ProjectPath, fixture.ManifestPath, "Names", target);
+        var first = Assert.Single(manifest.Artifacts);
+        first.Name = "module target";
+        first.ArtifactName = firstName;
+        first.OutputDirectory = firstOutput;
+        manifest.Artifacts = new[]
+        {
+            first,
+            new PowerShellCompilationProjectArtifact
+            {
+                Name = "module_target",
+                ArtifactName = secondName,
+                Target = PowerShellCompilationTargetContractService.Create(
+                    PowerShellCompilationArtifactKind.BinaryModule, PowerShellCompilationMode.Strict,
+                    "net10.0", null, false, false, PowerShellCompilationExecutableOptimization.None, explicitContract: true),
+                OutputDirectory = secondOutput,
+                DependencyLock = ".powerforge/locks/strict.lock.json"
+            }
+        };
+        return manifest;
+    }
+
+    [Theory]
     [InlineData("CON")]
     [InlineData("NUL.txt")]
     [InlineData("Name.")]

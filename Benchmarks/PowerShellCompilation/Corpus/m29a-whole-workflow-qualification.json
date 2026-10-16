@@ -614,7 +614,7 @@
       "Pack",
       "Install"
     ],
-    "methodEvidence": "Actual emitted CLR methods with nonempty IL; no retained, omitted or rejected required owned unit. platyPS additionally requires23 actual private/static nested methods under9parents.",
+    "methodEvidence": "Actual emitted CLR methods with nonempty IL; no retained, omitted or rejected required owned unit. platyPS additionally requires 23 actual private/static nested methods under 9 parents.",
     "deliveryEvidence": "Unavailable staged compiler input during Built/Installed; dependencies from artifact; authentication of every installed payload byte.",
     "executionLimit": "Method existence plus selected scenarios does not establish every branch or every individual nested method invocation.",
     "boundaryLimit": "Offline transport/provider and owned loopback fixtures do not qualify live remoting, external optional completion or production services.",
@@ -827,7 +827,7 @@
         "discoveryMultiplicitiesMatched": true,
         "receipt": {
           "sha256": "92C2316DF6376200CEC7A088843B15502E4C7A032164F912D11C195A8C9F8B25",
-          "role": "Source34 native mandatory19-selector supplement rows"
+          "role": "Source34 native mandatory 19-selector supplement rows"
         },
         "trxSha256": "26B048391DBF5A1AC527854CEC241B21327638EFF2A7D8B2E68993BEC79EEDF5"
       },
@@ -923,16 +923,16 @@
       "path": "evidence/consolidated16/sdk-pin-binary-equivalence18.json",
       "sha256": "6D0139ADAEA59A7594091D9BA1FC230B005157D38D3A469499E5FD4C96ABA8C3"
     },
-    "observed": "External test output without global.json selected SDK10.0.402/runtime10.0.13; CLI source cwd selected SDK10.0.303/runtime10.0.11. Copying the repository pin aligned both directories at303/11; unchanged449CLI+3testassemblies and all three prior CLI failure rows now pass.",
+    "observed": "External test output without global.json selected SDK 10.0.402/runtime 10.0.13; CLI source cwd selected SDK 10.0.303/runtime 10.0.11. Copying the repository pin aligned both directories at 303/11; unchanged 449 CLI+3 test assemblies and all three prior CLI failure rows now pass.",
     "testSelectionRepair": "Repository global.json is copied into external test output; repository SDK policy unchanged.",
-    "independentProductRepair": "Acquired-environment schema3 authenticates exact SDK downloadDependencies separately from libraries using existing Microsoft author policy; refresh older environment with ordinary project restore.",
-    "historicalLimit": "Unchanged14 non-reproductions and failed15 focus retain their original scope; no retroactive historical Full pass.",
+    "independentProductRepair": "Acquired-environment schema 3 authenticates exact SDK downloadDependencies separately from libraries using existing Microsoft author policy; refresh older environment with ordinary project restore.",
+    "historicalLimit": "Unchanged 14 non-reproductions and failed 15 focus retain their original scope; no retroactive historical Full pass.",
     "currentQualification": "Source34 retains the repository SDK pin and exact acquired-environment/download-dependency authentication; current selected CLI/SDK contracts and actual metadata receipts have separate current identities above. Earlier selection/binary-equivalence controls keep their historical scopes."
   },
   "guideConsistency": {
     "path": "Docs/PowerForge.PowerShellCompilation.md",
     "sha256": "2D4F5AA48DD2E746C5A7CD973549B92F379EE81C2B8064F0C8A5AB702F8B4294",
-    "consistency": "SDK download dependencies are distinct from lock libraries; exact package authentication retains existing Microsoft author policy. Acquired-environment schema3 requires ordinary project restore to refresh older evidence before offline use.",
+    "consistency": "SDK download dependencies are distinct from lock libraries; exact package authentication retains existing Microsoft author policy. Acquired-environment schema 3 requires ordinary project restore to refresh older evidence before offline use.",
     "scope": "Current source-guide consistency; the earlier SDK causal controls remain historical and current functional contracts are recorded separately."
   },
   "historicalEvidence": {
@@ -940,7 +940,7 @@
       "path": "Benchmarks/PowerShellCompilation/Corpus/m29a-qualified-portfolio.net10-net472.json",
       "sha256": "6E32EB2C64B4B258AFCE9418A9C3ADFC3DCA67D258AE9160B9523BC275CB9127"
     },
-    "graph7": "Four module lanes passed at their recorded source; no transfer to18.",
+    "graph7": "Four module lanes passed at their recorded source; no transfer to 18.",
     "script10": "Report files and negative diagnostics matched; newline mismatch stopped Test/Pack/Install, not final workflow completion.",
     "full14": {
       "status": "failed-terminal-historical",
@@ -957,7 +957,7 @@
       "sourceAndGraphStable": true,
       "rawTrxSha256": "82C4B48AFFA5AB4A9D60B0B73C22984AD42A575B8AE629A5DA6EFE9A96BC2523",
       "consumerClosureSha256": "6F6E2E32DDB8DE3C1FB97876D981F75B3059532E9C75B25BAA8209FFD8AAD15E",
-      "scope": "Nine-failure wave retained; no candidate15 proof or zero-exit relabel."
+      "scope": "Nine-failure wave retained; no candidate 15 proof or zero-exit relabel."
     },
     "focused15": {
       "status": "terminal-failed",
@@ -992,7 +992,7 @@
       "skipped": 6,
       "exitCode": 1,
       "strict": "not-run",
-      "scope": "HistoricalFast12 only; historical long project does not replace fresh18 Fast."
+      "scope": "Historical Fast 12 only; historical long project does not replace fresh 18 Fast."
     },
     "publicM30": {
       "version": "3.0.169",
@@ -1056,7 +1056,7 @@
           "path": "evidence/broader-gates/candidate-18/focused-complete-wave.json",
           "sha256": "7BC470B5FC89C14BBA138E2F15CB33A26B899CAD7BA2E98725DDFD33305C78DB"
         },
-        "interpretation": "Actual main98 plus two distinct corrected ArtifactHardeningTests facts; no zero-exit original collector or broader qualification claim."
+        "interpretation": "Actual main 98 plus two distinct corrected ArtifactHardeningTests facts; no zero-exit original collector or broader qualification claim."
       },
       "whole": {
         "status": "passed-historical-five-lanes",
@@ -1108,7 +1108,7 @@
         ],
         "compilerClosureUnchanged": true,
         "rawLaneEvidenceFiles": 151,
-        "scope": "All5 Original/Built/Installed and canonical lifecycle pass at18, not20."
+        "scope": "All 5 Original/Built/Installed and canonical lifecycle pass at 18, not 20."
       },
       "compatibility": {
         "status": "passed-historical",
@@ -1176,7 +1176,7 @@
         "passed": 99,
         "failed": 2,
         "skipped": 0,
-        "scope": "Two conditional duplicate-priority regressions retained as failed19 proof;20 fixes one production predicate and passes all4 variants in its21 selected rows."
+        "scope": "Two conditional duplicate-priority regressions retained as failed 19 proof; 20 fixes one production predicate and passes all 4 variants in its 21 selected rows."
       }
     },
     "candidate20": {
@@ -1353,7 +1353,7 @@
       "sourceManifestSha256": "9BBA64C9C80662AA5695FCAC028CF3CA18756C6D15A8F775DA7C866D45D29012",
       "status": "prior-local-functional-chain-passed",
       "censusCliExecutionsInFullAndFocus": 0,
-      "scope": "Source32 Full1449/focus59 did not select the later failing CLI Census method. Its PowerShell46 controls remain historical. Source33 Node24 observes the cleanup timestamp correction on inputs retained unchanged at Source34."
+      "scope": "Source32 Full 1449/focus 59 did not select the later failing CLI Census method. Its PowerShell 46 controls remain historical. Source33 Node 24 observes the cleanup timestamp correction on inputs retained unchanged at Source34."
     },
     "candidate33": {
       "status": "expanded-focused-cohorts-failed-at-stale-Census-assertion",
@@ -1375,10 +1375,10 @@
           "role": "Historical failed native focus"
         }
       },
-      "cause": "Hybrid emits one function while runtime fallback rises from0 to1. The old CLI test incorrectly required CompilableUnits to fall; unchanged actual CLI capture confirmed the comparator's correct failure and metrics.",
+      "cause": "Hybrid emits one function while runtime fallback rises from 0 to 1. The old CLI test incorrectly required CompilableUnits to fall; unchanged actual CLI capture confirmed the comparator's correct failure and metrics.",
       "causalCapture": {
         "sha256": "1F553DCD2D0DA598BABCAD57BF7DA357C4553EDCB8F8ED685F88C8439205D83D",
-        "role": "Two unchanged CLI Census invocations, exits0/1 and unchanged written baseline"
+        "role": "Two unchanged CLI Census invocations, exits 0/1 and unchanged written baseline"
       },
       "scope": "No Source33 broad gate or mixed prior-pass recovery is claimed. Source34 executes fresh complete focused cohorts."
     }
@@ -1386,9 +1386,9 @@
   "completionLimits": [
     "No general-language, exhaustive-branch or individual-nested-execution claim.",
     "Hybrid/module package delivery is distinct from Strict and runtime-free compilation.",
-    "OwnedStrict6 gate programs do not make the selected Hybrid modules Strict.",
+    "Owned Strict 6 gate programs do not make the selected Hybrid modules Strict.",
     "Precision/performance pending; PATH restart deferred.",
-    "No new release, signing, additional-host or allM30-complete claim."
+    "No new release, signing, additional-host or all M30-complete claim."
   ],
   "workflowBoundaryRepairs": {
     "firstHostedWave": [
@@ -1398,11 +1398,11 @@
       "Packaged path guards admit fixed built-in filesystem operands and preserve authored identity/binding, while refusing wrong providers, unsupported custom conversion and unsafe empty-array locations."
     ],
     "metadataAndFixtures": "Corrected scenario GUID metadata, exact checkout line endings for two hash-pinned support files, and legacy SDK/timeout observation retain authored behavior and deadlines.",
-    "census": "The existing CLI Census test now protects runtime fallback0to1 while one compilable/emitted function remains; no production comparison change.",
+    "census": "The existing CLI Census test now protects runtime fallback 0 to 1 while one compilable/emitted function remains; no production comparison change.",
     "dependencies": "No new production dependency or public API introduced by these repairs.",
     "workspaceTimestampControl": {
       "sha256": "176A6BAE171FC7280643A53731A8008831EBCD944E15FA69E62CC81F6DC767A8",
-      "role": "Source33 observed cleanup timestamp fix and Node24; identical consumed inputs retained at Source34, not a fresh34 Node execution"
+      "role": "Source33 observed cleanup timestamp fix and Node 24; identical consumed inputs retained at Source34, not a fresh 34 Node execution"
     }
   }
 }

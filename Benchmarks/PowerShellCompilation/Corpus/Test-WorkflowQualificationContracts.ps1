@@ -372,10 +372,57 @@ $pinned = Copy-ContractValue $entry
 $pinned.sourceInputs[0].sha256=(Get-FileHash -LiteralPath (Join-Path $source 'Input.ps1')).Hash
 Copy-WorkflowSourceInputs $pinned $source (Join-Path $source 'stage')
 $checked.Add('exact pinned source bytes staged without executing source')
+$sourceVariants = @($source + [IO.Path]::DirectorySeparatorChar)
+if ((Get-PathComparison) -eq [StringComparison]::OrdinalIgnoreCase) {
+    $sourceVariants += $source.ToUpperInvariant(), ($source + [IO.Path]::AltDirectorySeparatorChar)
+}
+foreach ($sourceVariant in $sourceVariants) {
+    $destination = Join-Path $source ('normalized-' + [guid]::NewGuid().ToString('N'))
+    Copy-WorkflowSourceInputs $pinned $sourceVariant $destination
+    if ((Get-FileHash -LiteralPath (Join-Path $destination 'Input.ps1')).Hash -ne $pinned.sourceInputs[0].sha256) {
+        throw 'Normalized source root did not stage the pinned bytes.'
+    }
+}
+$checked.Add('source directory separators and platform casing preserve pinned staging')
+$filesystemRoot = [IO.Path]::GetPathRoot($source)
+$rootPinned = Copy-ContractValue $pinned
+$rootRelativePath = $source.Substring($filesystemRoot.Length).Replace('\', '/') + '/Input.ps1'
+$rootPinned.entryPoint = $rootRelativePath
+$rootPinned.sourceInputs[0].path = $rootRelativePath
+$rootDestination = Join-Path $WorkspacePath ('root-stage-' + [guid]::NewGuid().ToString('N'))
+Copy-WorkflowSourceInputs $rootPinned $filesystemRoot $rootDestination
+if ((Get-FileHash -LiteralPath (Join-Path $rootDestination $rootRelativePath)).Hash -ne $pinned.sourceInputs[0].sha256) {
+    throw 'Filesystem-root source did not stage the pinned bytes.'
+}
+$checked.Add('filesystem-root source preserves its root separator and exact pinned bytes')
 $bad=Copy-ContractValue $pinned; $bad.sourceInputs[0].sha256='c'*64
 Assert-RejectedContract 'source bytes differ from pin' {Copy-WorkflowSourceInputs $bad $source (Join-Path $source 'bad-hash')} 'identity mismatch'
 $bad=Copy-ContractValue $pinned; $bad.entryPoint='../Input.ps1'; $bad.sourceInputs[0].path='../Input.ps1'
 Assert-RejectedContract 'source containment traversal' {Copy-WorkflowSourceInputs $bad $source (Join-Path $source 'bad-path')} 'portable relative'
+if ((Get-PathComparison) -eq [StringComparison]::OrdinalIgnoreCase) {
+    $linkedSource = Join-Path $source 'linked-source'
+    New-Item -ItemType Junction -Path $linkedSource -Target (Join-Path $source 'stage') | Out-Null
+    try {
+        Assert-RejectedContract 'normalized source root still rejects a junction' {
+            Copy-WorkflowSourceInputs $pinned ($linkedSource + [IO.Path]::DirectorySeparatorChar) (Join-Path $source 'bad-root-link')
+        } 'link or junction'
+        $bad = Copy-ContractValue $pinned
+        $bad.entryPoint = 'linked-source/Input.ps1'
+        $bad.sourceInputs[0].path = $bad.entryPoint
+        Assert-RejectedContract 'source descendant still rejects a junction' {
+            Copy-WorkflowSourceInputs $bad ($source + [IO.Path]::DirectorySeparatorChar) (Join-Path $source 'bad-child-link')
+        } 'traverses a link'
+    } finally {
+        if (-not ((Get-Item -LiteralPath $linkedSource -Force).Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+            throw 'Owned source-link fixture is no longer a junction.'
+        }
+        # Delete only the junction, without the recursive provider prompt on Windows PowerShell 5.1.
+        [IO.Directory]::Delete($linkedSource)
+    }
+    if ((Get-FileHash -LiteralPath (Join-Path $source 'stage/Input.ps1')).Hash -ne $pinned.sourceInputs[0].sha256) {
+        throw 'Source-link fixture cleanup changed its target bytes.'
+    }
+}
 
 # Exercise actual owned-directory withdrawal and finally restoration without a process.
 # The only mock is the external observer boundary, which this proof must not execute.

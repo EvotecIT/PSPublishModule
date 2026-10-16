@@ -266,7 +266,11 @@ function Copy-WorkflowSourceInputs {
     if ([string]::IsNullOrWhiteSpace($SourceRoot)) { throw 'Whole-workflow qualification requires -SourceRoot with reviewed local inputs.' }
     $root = [IO.Path]::GetFullPath($SourceRoot)
     if (-not (Test-Path -LiteralPath $root -PathType Container)) { throw "SourceRoot does not exist: $root" }
-    if ((Get-Item -LiteralPath $root).Attributes -band [IO.FileAttributes]::ReparsePoint) { throw 'SourceRoot must not be a link or junction.' }
+    $rootDirectory = Get-Item -LiteralPath $root
+    $root = $rootDirectory.FullName
+    # Ignore ending separators for identity only; keep filesystem-root paths intact for access.
+    $rootIdentity = $root.TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
+    if ($rootDirectory.Attributes -band [IO.FileAttributes]::ReparsePoint) { throw 'SourceRoot must not be a link or junction.' }
     $paths = @($Entry.sourceInputs | ForEach-Object { $_.path })
     Assert-WorkflowNameSet $paths $paths 'Pinned source paths'
     if ($Entry.entryPoint -notin $paths) { throw 'The entrypoint must be included in pinned sourceInputs.' }
@@ -282,7 +286,7 @@ function Copy-WorkflowSourceInputs {
         if ($input.sha256 -notmatch '^[0-9a-fA-F]{64}$') { throw "Invalid source SHA-256 for '$($input.path)'." }
         $source = Assert-ContainedPath -Root $root -Path (Join-Path $root $input.path) -Label 'Pinned workflow source'
         $ancestor = Get-Item -LiteralPath $source -Force
-        while ($ancestor.FullName -ne $root) {
+        while (-not $ancestor.FullName.TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar).Equals($rootIdentity, (Get-PathComparison))) {
             if ($ancestor.Attributes -band [IO.FileAttributes]::ReparsePoint) { throw "Pinned workflow source traverses a link: $source" }
             $ancestor = if ($ancestor -is [IO.DirectoryInfo]) { $ancestor.Parent } else { $ancestor.Directory }
             if ($null -eq $ancestor) { throw 'Pinned source ancestor could not be verified.' }

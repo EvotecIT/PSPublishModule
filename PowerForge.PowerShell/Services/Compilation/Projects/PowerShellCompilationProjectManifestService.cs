@@ -122,6 +122,7 @@ public sealed partial class PowerShellCompilationProjectManifestService
         if (manifest.Artifacts.Length == 0) throw new InvalidDataException("A PowerShell compilation project requires at least one artifact target.");
         var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var identities = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var outputDirectories = new Dictionary<string, string>(PowerShellCompilationPathSafety.PathComparer);
         foreach (var artifact in manifest.Artifacts)
         {
             onStage?.Invoke(PowerShellCompilationDiagnosticStage.Target, artifact.Name);
@@ -147,6 +148,21 @@ public sealed partial class PowerShellCompilationProjectManifestService
             if (!identities.Add(artifact.Target.ContractSha256)) throw new InvalidDataException($"Project target '{artifact.Name}' duplicates another exact artifact variant.");
             onStage?.Invoke(PowerShellCompilationDiagnosticStage.Input, artifact.Name);
             artifact.OutputDirectory = NormalizeRelativePath(root, artifact.OutputDirectory, requireExists: false, "output directory");
+            // Project qualification covers the entire output tree, including dependencies and compiler evidence.
+            var outputDirectory = Path.GetFullPath(Path.Combine(root,
+                artifact.OutputDirectory.Replace('/', Path.DirectorySeparatorChar)));
+            var outputPrefix = outputDirectory.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+            foreach (var previous in outputDirectories)
+            {
+                var previousPrefix = previous.Key.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+                if (PowerShellCompilationPathSafety.PathEquals(outputDirectory, previous.Key) ||
+                    PowerShellCompilationPathSafety.PathStartsWith(outputDirectory, previousPrefix) ||
+                    PowerShellCompilationPathSafety.PathStartsWith(previous.Key, outputPrefix))
+                    throw new InvalidDataException(
+                        $"Project targets '{previous.Value}' and '{artifact.Name}' have overlapping output directories " +
+                        $"'{NormalizeRelative(root, previous.Key)}' and '{artifact.OutputDirectory}'. Each target requires a separate artifact output directory.");
+            }
+            outputDirectories.Add(outputDirectory, artifact.Name);
             artifact.DependencyLock = NormalizeRelativePath(root, artifact.DependencyLock, requireExists: false, "dependency lock");
             if (!string.IsNullOrWhiteSpace(artifact.ProviderLock))
                 artifact.ProviderLock = NormalizeRelativePath(root, artifact.ProviderLock!, requireExists: false, "provider lock");

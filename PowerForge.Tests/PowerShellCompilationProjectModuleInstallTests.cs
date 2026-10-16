@@ -7,6 +7,123 @@ namespace PowerForge.Tests;
 
 public sealed partial class PowerShellCompilationArtifactBuilderTests
 {
+    [WindowsTheory]
+    [Trait("Category", "PowerShellCompilerGate")]
+    [InlineData("FormatsToProcess", ".ps1xml")]
+    [InlineData("TypesToProcess", ".ps1xml")]
+    [InlineData("NestedModules", ".cdxml")]
+    [InlineData("RequiredAssemblies", ".exe")]
+    [InlineData("RequiredAssemblies", ".bin")]
+    public void Project_LegacyModuleInstallRejectsDeepManifestLoadedPayloadBeforeCreatingInstallation(
+        string manifestKey, string extension)
+    {
+        using var fixture = ArtifactFixture.Create("'unused'", compactPath: true);
+        var root = Path.Combine(fixture.RootPath, new string('p', 130 - fixture.RootPath.Length - 1));
+        Directory.CreateDirectory(root);
+        var source = Path.Combine(root, "main.psm1");
+        File.WriteAllText(source, "function Get-OwnedLegacyValue { return 42 }; Export-ModuleMember -Function Get-OwnedLegacyValue");
+        var payloadName = new string('m', 80) + extension;
+        var payloadPath = Path.Combine(root, payloadName);
+        if (manifestKey == "RequiredAssemblies")
+        {
+            // RequiredAssemblies accepts managed PE files independently of their suffix.
+            var frameworkDirectory = Environment.Is64BitOperatingSystem ? "Framework64" : "Framework";
+            var frameworkAssembly = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows),
+                "Microsoft.NET", frameworkDirectory, "v4.0.30319", "System.Core.dll");
+            File.Copy(frameworkAssembly, payloadPath);
+        }
+        else
+        {
+            File.WriteAllText(payloadPath, manifestKey switch
+            {
+                "FormatsToProcess" => "<Configuration />",
+                "TypesToProcess" => "<Types />",
+                _ => """
+                    <PowerShellMetadata xmlns="http://schemas.microsoft.com/cmdlets-over-objects/2009/11">
+                      <Class ClassName="root/cimv2/Win32_OperatingSystem" ClassVersion="1.0">
+                        <Version>1.0</Version><DefaultNoun>LegacyPathOperatingSystem</DefaultNoun>
+                        <InstanceCmdlets><GetCmdletParameters /><GetCmdlet><CmdletMetadata Verb="Get" /></GetCmdlet></InstanceCmdlets>
+                      </Class>
+                    </PowerShellMetadata>
+                    """
+            });
+        }
+        File.WriteAllText(Path.ChangeExtension(source, ".psd1"),
+            "@{ RootModule='main.psm1'; ModuleVersion='1.0.0'; " + manifestKey + "=@('./" + payloadName +
+            "'); FunctionsToExport=@('Get-OwnedLegacyValue'); CmdletsToExport=@('*'); VariablesToExport=@(); AliasesToExport=@() }");
+        var project = Path.Combine(root, "p.json");
+        var manifests = new PowerShellCompilationProjectManifestService();
+        var target = PowerShellCompilationTargetContractService.Create(
+            PowerShellCompilationArtifactKind.BinaryModule, PowerShellCompilationMode.Hybrid,
+            "net472", null, false, false, PowerShellCompilationExecutableOptimization.None, explicitContract: true);
+        var manifest = manifests.Create(project, source, "D", target);
+        var artifact = Assert.Single(manifest.Artifacts);
+        artifact.Name = "x";
+        artifact.ArtifactName = "D";
+        artifact.OutputDirectory = "out";
+        artifact.DependencyLock = ".powerforge/locks/x.lock.json";
+        manifests.Save(project, manifest);
+        var workflow = new PowerShellCompilationProjectWorkflowService();
+        AssertProjectSuccess(workflow.Lock(project));
+        AssertProjectSuccess(workflow.Restore(project));
+        var build = workflow.Build(project);
+        AssertProjectSuccess(build);
+        var primary = Assert.Single(build.Targets).Path!;
+        AssertProjectSuccess(workflow.Test(project));
+        var pack = workflow.Pack(project);
+        AssertProjectSuccess(pack);
+        var package = Assert.Single(pack.Targets).Path!;
+        var outputRoot = Path.Combine(root, artifact.OutputDirectory);
+        var builtPayload = Assert.Single(Directory.GetFiles(outputRoot, payloadName, SearchOption.AllDirectories));
+        Assert.True(builtPayload.Length < 260);
+        var installs = Path.Combine(root, ".powerforge", "i");
+        using (var archive = ZipFile.OpenRead(package))
+        {
+            using var stream = archive.GetEntry("powerforge-package.json")!.Open();
+            using var buffer = new MemoryStream();
+            stream.CopyTo(buffer);
+            var descriptorBytes = buffer.ToArray();
+            using var descriptor = JsonDocument.Parse(descriptorBytes);
+            var identity = PowerShellCompilationProjectWorkflowService.ComputeQualifiedInstallationIdentity(
+                descriptor.RootElement.GetProperty("target").GetProperty("contractSha256").GetString()!,
+                descriptor.RootElement.GetProperty("artifactSetSha256").GetString()!,
+                Convert.ToHexString(SHA256.HashData(descriptorBytes)));
+            var payloadRoot = Path.Combine(installs, identity, "artifact");
+            Assert.True(Path.Combine(payloadRoot, Path.GetRelativePath(outputRoot, primary)).Length < 260,
+                "The primary must remain loadable so this fixture reaches the additional manifest payload boundary.");
+            var payloadRelative = Path.GetRelativePath(outputRoot, builtPayload).Replace('\\', '/');
+            Assert.True(Path.Combine(payloadRoot, payloadRelative).Length >= 260);
+            foreach (var file in descriptor.RootElement.GetProperty("files").EnumerateArray())
+            {
+                var relativePath = file.GetProperty("path").GetString()!;
+                if (relativePath == payloadRelative) continue;
+                Assert.True(Path.Combine(payloadRoot, relativePath).Length < 260,
+                    $"Only the manifest-loaded fixture payload may cross the legacy path limit: {relativePath}.");
+            }
+        }
+        var packageHash = PowerShellCompilationProjectManifestService.ComputeSha256(package);
+        var primaryHash = PowerShellCompilationProjectManifestService.ComputeSha256(primary);
+        var payloadHash = PowerShellCompilationProjectManifestService.ComputeSha256(builtPayload);
+        var state = Directory.GetFiles(Path.Combine(root, ".powerforge"), "*", SearchOption.AllDirectories)
+            .ToDictionary(path => Path.GetRelativePath(root, path), PowerShellCompilationProjectManifestService.ComputeSha256);
+        Assert.False(Directory.Exists(installs));
+
+        var install = workflow.Install(project);
+
+        Assert.False(install.Succeeded);
+        var message = Assert.Single(install.Targets).Message;
+        Assert.Contains("Windows PowerShell 5.1", message, StringComparison.Ordinal);
+        Assert.Contains("shorter than 260 characters", message, StringComparison.Ordinal);
+        Assert.Contains(payloadName, message, StringComparison.Ordinal);
+        Assert.False(Directory.Exists(installs));
+        Assert.Equal(packageHash, PowerShellCompilationProjectManifestService.ComputeSha256(package));
+        Assert.Equal(primaryHash, PowerShellCompilationProjectManifestService.ComputeSha256(primary));
+        Assert.Equal(payloadHash, PowerShellCompilationProjectManifestService.ComputeSha256(builtPayload));
+        Assert.Equal(state.OrderBy(pair => pair.Key), Directory.GetFiles(Path.Combine(root, ".powerforge"), "*", SearchOption.AllDirectories)
+            .ToDictionary(path => Path.GetRelativePath(root, path), PowerShellCompilationProjectManifestService.ComputeSha256)
+            .OrderBy(pair => pair.Key));
+    }
+
     [WindowsFact]
     [Trait("Category", "PowerShellCompilerGate")]
     public void Project_CleanLegacyModuleImportCannotAcceptDeepPayloadErrors()

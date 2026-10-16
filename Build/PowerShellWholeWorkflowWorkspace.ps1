@@ -46,7 +46,9 @@ function New-WholeWorkflowWorkspace {
         $owner = [ordered]@{ schemaVersion = 1; kind = 'PowerForge.WholeWorkflowWorkspace'; ownershipId = $ownershipId
             runnerTemp = $RunnerTemp; shortBase = $base; workspacePath = $workspace; createdUtc = [DateTime]::UtcNow.ToString('o') }
         $text = ($owner | ConvertTo-Json -Compress) + [Environment]::NewLine
-        Write-NewWholeWorkflowWorkspaceRecord -Path (Join-Path $workspace '.powerforge-whole-workflow-owner.json') -Text $text
+        # Keep the marker visible: Unix dot-files are Hidden to PowerShell and
+        # prevent ordinary terminal cleanup without forceful deletion.
+        Write-NewWholeWorkflowWorkspaceRecord -Path (Join-Path $workspace 'powerforge-whole-workflow-owner.json') -Text $text
         Write-NewWholeWorkflowWorkspaceRecord -Path $recordPath -Text $text
         return [pscustomobject]$owner
     }
@@ -86,7 +88,7 @@ function Get-OwnedWholeWorkflowWorkspace {
     }
     Assert-WorkflowPathWithoutLinks $expected
     if (Test-Path -LiteralPath $expected) {
-        $marker = Join-Path $expected '.powerforge-whole-workflow-owner.json'
+        $marker = Join-Path $expected 'powerforge-whole-workflow-owner.json'
         Assert-WorkflowPathWithoutLinks $marker
         if (-not (Test-Path -LiteralPath $marker -PathType Leaf) -or (Get-Content -LiteralPath $marker -Raw) -cne $text) {
             throw 'Whole-workflow workspace marker does not match its recorded creation identity.'

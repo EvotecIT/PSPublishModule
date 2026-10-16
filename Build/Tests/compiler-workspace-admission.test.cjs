@@ -12,8 +12,7 @@ const run = lines.findIndex((line, index) => index > start && line.trim() === 'r
 const end = lines.findIndex((line, index) => index > run && line.trim().startsWith('$env:PATH ='));
 const creation = lines.slice(run + 1, end).map(line => line.trimStart()).join('\n');
 
-test('CI whole-workflow creation admits long runner temp and preserves its fresh short ownership',
-  { skip: process.platform !== 'win32' }, () => {
+test('CI whole-workflow creation admits long runner temp and preserves its fresh short ownership', () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'powerforge-ci-admission-'));
     const runner = path.join(root, 'actions-runner', '_work', '_temp');
     const gate = path.join(runner, 'powerforge-compiler-gate');
@@ -45,14 +44,18 @@ catch { $message=$_.Exception.Message }
       assert.ok(workspace.length <= 25, `CI created ${workspace.length} characters: ${workspace}`);
       assert.equal(actual.exists, true);
       assert.match(actual.repeatMessage, /Prior whole-workflow ownership must be preserved/);
-      assert.match(actual.message, /^Build the source CLI first:/, 'The real gate must admit the root before checking its CLI.');
-      const owner = JSON.parse(fs.readFileSync(path.join(workspace, '.powerforge-whole-workflow-owner.json'), 'utf8'));
+      if (process.platform === 'win32') {
+        assert.match(actual.message, /^Build the source CLI first:/, 'The real gate must admit the root before checking its CLI.');
+      } else {
+        assert.equal(actual.message, 'Whole-workflow qualification requires Windows x64 with PowerShell 7.6 and Windows PowerShell 5.1.');
+      }
+      const owner = JSON.parse(fs.readFileSync(path.join(workspace, 'powerforge-whole-workflow-owner.json'), 'utf8'));
       assert.equal(owner.runnerTemp, runner);
       assert.equal(owner.workspacePath, workspace);
-      assert.equal(fs.readFileSync(path.join(gate, 'whole-workflow-workspace.json'), 'utf8'), fs.readFileSync(path.join(workspace, '.powerforge-whole-workflow-owner.json'), 'utf8'));
+      assert.equal(fs.readFileSync(path.join(gate, 'whole-workflow-workspace.json'), 'utf8'), fs.readFileSync(path.join(workspace, 'powerforge-whole-workflow-owner.json'), 'utf8'));
     } finally {
       if (workspace && fs.existsSync(workspace) && !workspace.startsWith(root + path.sep)) {
-        const owner = JSON.parse(fs.readFileSync(path.join(workspace, '.powerforge-whole-workflow-owner.json'), 'utf8'));
+        const owner = JSON.parse(fs.readFileSync(path.join(workspace, 'powerforge-whole-workflow-owner.json'), 'utf8'));
         assert.equal(owner.runnerTemp, runner);
         assert.equal(owner.workspacePath, workspace);
         fs.rmSync(workspace, { recursive: true });

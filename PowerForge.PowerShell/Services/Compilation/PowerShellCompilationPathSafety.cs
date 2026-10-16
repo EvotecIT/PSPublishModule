@@ -32,7 +32,7 @@ internal static class PowerShellCompilationPathSafety
     {
         if (!IsWindows || path.Length < 260) return;
         throw new InvalidOperationException(
-            "Windows PowerShell 5.1 requires script, manifest, and managed assembly payload paths shorter than 260 characters. " +
+            "Windows PowerShell 5.1 requires module payload paths shorter than 260 characters. " +
             $"Payload path length: {path.Length}; path: {path}. " +
             "Shorten the project or output root before testing or installing this net472 module.");
     }
