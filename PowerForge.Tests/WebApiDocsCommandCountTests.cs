@@ -31,7 +31,7 @@ public sealed class WebApiDocsCommandCountTests
             });
             var html = File.ReadAllText(Path.Combine(output, "index.html"));
             Assert.Contains($"data-unit=\"{expectedUnit}\">Showing 2 of 2 {expectedUnit}", html);
-            Assert.Contains($"Browse all 2 {expectedUnit}", html);
+            Assert.Contains($"<p class=\"section-desc\">Browse all 2 {expectedUnit}", html);
         }
         finally { Directory.Delete(root, recursive: true); }
     }
