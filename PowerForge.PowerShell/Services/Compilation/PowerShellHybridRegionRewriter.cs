@@ -36,10 +36,11 @@ internal static class PowerShellHybridRegionRewriter
         {
             var owner = functions.SingleOrDefault(function =>
                 function.Name.Equals(region.SourceName, StringComparison.OrdinalIgnoreCase) &&
-                function.Body.Extent.StartLineNumber == region.SourceLine);
+                function.Body.Extent.StartLineNumber == region.SourceLine &&
+                function.Body.Extent.StartOffset <= region.StartOffset && function.Body.Extent.EndOffset >= region.EndOffset);
             if (owner is null)
                 throw new InvalidOperationException($"Promoted region '{region.RegionId}' no longer has its retained function owner.");
-            var ownerKey = PowerShellHybridModuleComposer.GetCompiledMethodKey(fullPath, owner.Name, owner.Body.Extent.StartLineNumber);
+            var ownerKey = PowerShellHybridModuleComposer.GetCompiledMethodKey(fullPath, owner);
             if (removedFunctionKeys.Contains(ownerKey))
                 throw new InvalidOperationException($"Promoted region '{region.RegionId}' overlaps a function selected for whole-method emission.");
             if (!region.DocumentId.Equals(expectedDocumentId, StringComparison.Ordinal) ||

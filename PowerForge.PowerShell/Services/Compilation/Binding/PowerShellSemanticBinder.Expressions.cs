@@ -39,7 +39,8 @@ internal sealed partial class PowerShellSemanticBinder
             !HasClosedDirectTypeArgumentCatchAll(nativeInvocation) &&
             !HasClosedBoundTypeVariableCatchAll(nativeInvocation, symbols) &&
             !HasClosedStaticValueArgumentCatchAll(nativeInvocation) &&
-            !HasClosedEncodingVectorArgumentCatchAll(nativeInvocation))
+            !HasClosedEncodingVectorArgumentCatchAll(nativeInvocation) &&
+            !HasClosedReferenceValueArgumentCatchAll(nativeInvocation))
         {
             diagnostics.Add(new PowerShellSemanticDiagnostic(
                 PowerShellCompilationFeatureIds.ForSyntax(nameof(InvokeMemberExpressionAst)),
@@ -161,6 +162,11 @@ internal sealed partial class PowerShellSemanticBinder
                                         vectorType.GetElementType() is { } vectorElement &&
                                         vectorType == vectorElement.MakeArrayType() &&
                                         PowerShellStableScalarTypePolicy.IsSupported(vectorElement);
+                if (capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding) && !closedTypedVector &&
+                    array.SubExpression.Find(static node => node is SwitchStatementAst or TryStatementAst or LoopStatementAst,
+                        searchNestedScriptBlocks: false) is not null)
+                    return BindNativeCollectedStatements(document, array, array.SubExpression, symbols, functions,
+                        diagnostics, targetFramework, capabilities, preserveRecords: true);
                 if (capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding) &&
                     array.SubExpression.Statements.Count > 0 && !closedTypedVector)
                     return PowerShellArraySemanticBinder.BindNativeCollection(document, array, contextualType,

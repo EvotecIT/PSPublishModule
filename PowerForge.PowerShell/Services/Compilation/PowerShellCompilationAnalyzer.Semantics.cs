@@ -43,7 +43,7 @@ public sealed partial class PowerShellCompilationAnalyzer
         {
             if (!documentsByPath.TryGetValue(Path.GetFullPath(file.FullPath), out var document) || document.Errors.Length > 0)
                 continue;
-            var functions = PowerShellSourceParser.GetTopLevelFunctions(document.SyntaxRoot).ToArray();
+            var functions = PowerShellSourceParser.GetTopLevelFunctions(document.SyntaxRoot, capabilities).ToArray();
             foreach (var unit in file.Units.Where(static unit => unit.Kind == PowerShellCompilationUnitKind.Function))
             {
                 var occurrence = file.Units.TakeWhile(candidate => !ReferenceEquals(candidate, unit)).Count(candidate =>
@@ -60,7 +60,8 @@ public sealed partial class PowerShellCompilationAnalyzer
                         file.FullPath,
                         unit,
                         document.DocumentId,
-                        function.Name,
+                        document.RootFunctionDeclarations.Single(declaration => ReferenceEquals(declaration.Syntax, function))
+                            .GetBindingName(document, capabilities),
                         function.Extent.StartOffset,
                         function.Extent.EndOffset,
                         synthetic: false));

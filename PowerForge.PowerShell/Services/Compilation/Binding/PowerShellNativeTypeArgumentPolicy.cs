@@ -166,7 +166,8 @@ internal static class PowerShellNativeTypeArgumentPolicy
             properties.All(static property => IsClosedNonTypeReferenceResult(property.PropertyType));
     }
 
-    private static bool IsClosedNonTypeReferenceResult(Type result)
+    /// <summary>Recognizes closed nonenumerable class results unrelated to Type and PSObject.</summary>
+    internal static bool IsClosedNonTypeReferenceResult(Type result)
         // A non-generic, non-enumerable class unrelated to Type cannot return a Type instance.
         // Object, Type ancestry, interfaces, wrappers, and unknown collection shapes stay conservative.
         => result.IsClass && !result.IsArray && !typeof(System.Collections.IEnumerable).IsAssignableFrom(result) &&

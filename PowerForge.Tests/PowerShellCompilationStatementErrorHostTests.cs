@@ -215,12 +215,9 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
 
     private static string FindStatementErrorFixtureProject()
     {
-        for (var directory = new DirectoryInfo(AppContext.BaseDirectory); directory is not null; directory = directory.Parent)
-        {
-            var project = Path.Combine(directory.FullName, "PowerForge.Tests", "Fixtures",
-                "PowerShellCompilationStatementErrorFixture", "PowerShellCompilationStatementErrorFixture.csproj");
-            if (File.Exists(project)) return project;
-        }
+        var project = Path.Combine(RepoRootLocator.Find(), "PowerForge.Tests", "Fixtures",
+            "PowerShellCompilationStatementErrorFixture", "PowerShellCompilationStatementErrorFixture.csproj");
+        if (File.Exists(project)) return project;
         throw new DirectoryNotFoundException("The statement-error host fixture project could not be found.");
     }
 

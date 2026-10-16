@@ -351,7 +351,7 @@ jobs:
         run: .\PSPublishModule.Tests.ps1
   ProductBuildSmoke:
     runs-on: ${{ fromJSON(github.event.repository.private && '["self-hosted","windows"]' || '["windows-latest"]') }}
-    timeout-minutes: 180
+    timeout-minutes: ${{ github.event_name == 'workflow_dispatch' && inputs.compilerFullGate == true && 240 || 180 }}
     env:
       DbaClientXRoot: ${{ github.workspace }}\_dependencies\DbaClientX
 
@@ -423,7 +423,7 @@ jobs:
         if: ${{ github.event_name != 'workflow_dispatch' || inputs.compilerFullGate != true }}
         shell: pwsh
         # Cold runtime restores can consume twenty minutes before the CLI scenarios.
-        timeout-minutes: 40
+        timeout-minutes: 60
         run: |
           $gateRoot = Join-Path $env:RUNNER_TEMP 'powerforge-compiler-gate'
           $hostRoot = Join-Path $gateRoot 'host'
@@ -453,6 +453,25 @@ jobs:
           & (Join-Path $hostRoot 'pwsh.exe') -NoProfile -File ./Build/Invoke-PowerShellCompilerGate.ps1 -EvidencePath (Join-Path $gateRoot 'evidence') -Lane Full -NoBuild
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
+      - name: Qualify complete public modules and script workflow
+        shell: pwsh
+        timeout-minutes: 45
+        run: |
+          $gateRoot = Join-Path $env:RUNNER_TEMP 'powerforge-compiler-gate'
+          $hostRoot = Join-Path $gateRoot 'host'
+          . ./Build/PowerShellWholeWorkflowWorkspace.ps1
+          $workflowRoot = (New-WholeWorkflowWorkspace -RunnerTemp $env:RUNNER_TEMP).workspacePath
+          $env:PATH = $hostRoot + [IO.Path]::PathSeparator + $env:PATH
+          $env:DOTNET_GENERATE_ASPNET_CERTIFICATE = 'false'
+          $env:DOTNET_ADD_GLOBAL_TOOLS_TO_PATH = 'false'
+          $env:DOTNET_CLI_HOME = Join-Path $workflowRoot 'home'
+          if ([string]::IsNullOrWhiteSpace($env:NUGET_SCRATCH)) { $env:NUGET_SCRATCH = Join-Path $env:RUNNER_TEMP 'NuGetScratch' }
+          $env:TEMP = Join-Path $workflowRoot 'temp'
+          $env:TMP = $env:TEMP
+          New-Item -ItemType Directory -Path $env:DOTNET_CLI_HOME, $env:TEMP, $env:NUGET_SCRATCH -Force | Out-Null
+          & (Join-Path $hostRoot 'pwsh.exe') -NoProfile -File ./Build/Invoke-PowerShellWholeWorkflowGate.ps1 -WorkspacePath $workflowRoot -EvidencePath (Join-Path $gateRoot 'evidence/whole-workflows')
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
       - name: Upload compiler gate evidence
         if: always()
         uses: actions/upload-artifact@v7
@@ -461,6 +480,7 @@ jobs:
           path: |
             ${{ runner.temp }}/powerforge-compiler-gate/evidence/*.trx
             ${{ runner.temp }}/powerforge-compiler-gate/evidence/*.json
+            ${{ runner.temp }}/powerforge-compiler-gate/evidence/whole-workflows/**
             ${{ runner.temp }}/powerforge-compiler-gate/evidence/**/*.xml
           if-no-files-found: ignore
           retention-days: 7
@@ -468,11 +488,16 @@ jobs:
       - name: Clean compiler gate workspace
         if: always()
         shell: pwsh
-        run: |
-          . ./Benchmarks/PowerShellCompilation/Corpus/Corpus.Runner.Common.ps1
-          $gateRoot = Join-Path $env:RUNNER_TEMP 'powerforge-compiler-gate'
-          Assert-ContainedPath -Root $env:RUNNER_TEMP -Path $gateRoot -Label 'compiler gate cleanup' | Out-Null
-          if (Test-Path -LiteralPath $gateRoot) { Remove-Item -LiteralPath $gateRoot -Recurse -Force }
+        run: ./Build/Remove-PowerShellCompilerGateWorkspace.ps1 -RunnerTemp $env:RUNNER_TEMP
+
+      - name: Upload compiler workspace cleanup decision
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: powershell-compiler-workspace-cleanup-windows
+          path: ${{ runner.temp }}/powerforge-compiler-gate-cleanup.json
+          if-no-files-found: ignore
+          retention-days: 7
   LinuxBuild:
     # The type of runner that the job will run on
     # Prefer private/self-hosted runners for private repos to reduce hosted spend.
@@ -524,7 +549,7 @@ jobs:
         run: >
           dotnet test .\PowerForge.Tests\PowerForge.Tests.csproj
           -c Release --no-build --no-restore --nologo
-          --filter 'FullyQualifiedName~PowerShellCompilationArtifactBuilderTests.Project_ExecutablePackagePreservesQualifiedPermissionsAndRunsAfterInstall|FullyQualifiedName~PowerShellCompilationArtifactBuilderTests.Project_LinuxBundledSelfContainedRuntimeClosureRunsAfterInstall|FullyQualifiedName~PowerShellCompilationArtifactBuilderTests.Project_LinuxTrimmedRuntimeClosurePreservesAuthenticatedCallersAfterInstall|FullyQualifiedName~PowerShellCompilationSdkProcessEnvironmentTests'
+          --filter 'FullyQualifiedName~PowerShellCompilationArtifactBuilderTests.Project_ExecutablePackagePreservesQualifiedPermissionsAndRunsAfterInstall|FullyQualifiedName~PowerShellCompilationArtifactBuilderTests.Project_LinuxBundledSelfContainedRuntimeClosureRunsAfterInstall|FullyQualifiedName~PowerShellCompilationArtifactBuilderTests.Project_LinuxTrimmedRuntimeClosurePreservesAuthenticatedCallersAfterInstall|FullyQualifiedName~PowerShellCompilationArtifactBuilderTests.Build_PackageConsolePreservesFormattingStreamsAndAuthoredErrors|FullyQualifiedName~PowerShellCompilationSdkProcessEnvironmentTests|FullyQualifiedName~PowerShellCompilationArtifactBuilderTests.FailureMap|FullyQualifiedName~PowerShellCompilationArtifactHardeningTests.Build_EmptyExecutableEntryPointExitsWithoutOutput|FullyQualifiedName~PowerShellCompilationArtifactHardeningTests.PublicCorpusPerformancePolicyRecordsOnlyKnownTimingBudgets|FullyQualifiedName~PowerShellCompilationArtifactBuilderTests.Project_OfflineRestoreAuthenticatesRemovedTargetsBeforeRequalifyingCurrentSelection'
 
       - uses: actions/setup-node@v7
         with:

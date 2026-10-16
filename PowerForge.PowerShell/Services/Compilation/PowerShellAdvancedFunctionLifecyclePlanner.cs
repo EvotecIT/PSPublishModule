@@ -53,6 +53,7 @@ internal static class PowerShellAdvancedFunctionLifecyclePlanner
         result.PromotedRegions = typed.PromotedRegions;
         result.RegionCandidates = typed.RegionCandidates;
         result.RegionOpportunities = typed.RegionOpportunities;
+        result.CopySourceContextFrom(typed);
         return result;
     }
 

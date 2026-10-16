@@ -106,7 +106,7 @@ namespace PowerForge.Generated.Runtime
                IsNativeAssignmentIndex(binary.Left) && IsNativeAssignmentIndex(binary.Right) ||
                index is UnaryExpressionAst { TokenKind: TokenKind.Plus or TokenKind.Minus } unary &&
                IsNativeAssignmentIndex(unary.Child) ||
-               index is ParenExpressionAst { Pipeline: PipelineAst parenthesized } && IsNativeAssignmentIndexPipeline(parenthesized) ||
+               index is ParenExpressionAst { Pipeline: PipelineAst parenthesized } && IsNativeAssignmentIndexPipeline(parenthesized, allowCommand: true) ||
                index is SubExpressionAst { SubExpression.Statements.Count: 1 } subexpression &&
                (subexpression.SubExpression.Traps is null || subexpression.SubExpression.Traps.Count == 0) &&
                subexpression.SubExpression.Statements[0] is PipelineAst subPipeline && IsNativeAssignmentIndexPipeline(subPipeline) ||
@@ -117,10 +117,16 @@ namespace PowerForge.Generated.Runtime
                member.GetType().GetProperty("NullConditional")?.GetValue(member) is not true &&
                receiver.VariablePath.IsUnqualified;
 
-        private static bool IsNativeAssignmentIndexPipeline(PipelineAst pipeline)
+        private static bool IsNativeAssignmentIndexPipeline(PipelineAst pipeline, bool allowCommand = false)
             => pipeline.PipelineElements.Count == 1 && !IsBackgroundAssignmentPipeline(pipeline) &&
-               pipeline.PipelineElements[0] is CommandExpressionAst { Redirections.Count: 0 } expression &&
-               IsNativeAssignmentIndex(expression.Expression);
+               (pipeline.PipelineElements[0] is CommandExpressionAst { Redirections.Count: 0 } expression &&
+                IsNativeAssignmentIndex(expression.Expression) ||
+                allowCommand && pipeline.PipelineElements[0] is CommandAst
+                    { InvocationOperator: TokenKind.Unknown, Redirections.Count: 0 } command &&
+                command.GetCommandName() is not null && command.CommandElements.Skip(1).All(element =>
+                    element is ExpressionAst argument && IsNativeAssignmentIndex(argument) ||
+                    element is CommandParameterAst parameter &&
+                    (parameter.Argument is null || IsNativeAssignmentIndex(parameter.Argument))));
 
         private static bool IsNativeAssignmentInterpolation(ExpressionAst expression)
             => expression is VariableExpressionAst { VariablePath.IsUnqualified: true } ||

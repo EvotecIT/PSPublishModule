@@ -1,0 +1,184 @@
+{
+  "schemaVersion": 1,
+  "packetId": "whole-script-compare-web-sitemaps-corrected",
+  "semanticProfile": "PowerForge.Oracle.PowerShell/7.6",
+  "targetFramework": "net10.0",
+  "provenance": {
+    "repository": "https://github.com/EvotecIT/PSPublishModule",
+    "baseCommit": "1b25ab83254b11d526f2acc22d9994cc52e3cc24",
+    "sourceVariant": "CorrectedOriginal",
+    "correction": "User-authorized AMP-local variable repair; full application and all helpers retained",
+    "sourceRootHint": "Build",
+    "license": {
+      "id": "MIT",
+      "path": "LICENSE",
+      "sha256": "2396e8c36e486e5e2bd71c4db90301a9cad2ee87718cfaa6861558d2d2c79af2",
+      "repository": "https://github.com/EvotecIT/PSPublishModule"
+    },
+    "qualificationClaim": "Contract only; execution receipts are produced by the canonical runner"
+  },
+  "workloads": [
+    {
+      "id": "compare-web-sitemaps-complete-application",
+      "entryPoint": "Compare-WebSitemaps.ps1",
+      "sourceInputs": [
+        {
+          "path": "Compare-WebSitemaps.ps1",
+          "sha256": "a9676e6c75c0644a28d7af2053da54f6b4c0d371886c95c408684694e42ac640"
+        },
+        {
+          "path": "Compare-WebSitemaps.Helpers.ps1",
+          "sha256": "3e299e0acd9bcaa4c20e2b1df1688b3d5b7c9a53505daffaa124524a6640d460"
+        }
+      ],
+      "qualification": {
+        "kind": "HybridScriptApplication",
+        "runtimeIdentifier": "win-x64",
+        "requiredExports": [],
+        "requiredAliases": [],
+        "requiredCompiledOwnedFunctions": [
+          {
+            "relativePath": "Compare-WebSitemaps.ps1",
+            "name": "<script>"
+          },
+          {
+            "relativePath": "Compare-WebSitemaps.Helpers.ps1",
+            "name": "Get-NormalizedUrl",
+            "startLine": 1
+          },
+          {
+            "relativePath": "Compare-WebSitemaps.Helpers.ps1",
+            "name": "Get-UrlPath",
+            "startLine": 20
+          },
+          {
+            "relativePath": "Compare-WebSitemaps.Helpers.ps1",
+            "name": "Get-UrlOrigin",
+            "startLine": 34
+          },
+          {
+            "relativePath": "Compare-WebSitemaps.Helpers.ps1",
+            "name": "ConvertTo-SafeXmlDocument",
+            "startLine": 41
+          },
+          {
+            "relativePath": "Compare-WebSitemaps.Helpers.ps1",
+            "name": "Import-SitemapUrls",
+            "startLine": 63
+          },
+          {
+            "relativePath": "Compare-WebSitemaps.Helpers.ps1",
+            "name": "Import-LocalSitemapUrls",
+            "startLine": 104
+          },
+          {
+            "relativePath": "Compare-WebSitemaps.Helpers.ps1",
+            "name": "Test-GeneratedRouteExists",
+            "startLine": 126
+          },
+          {
+            "relativePath": "Compare-WebSitemaps.Helpers.ps1",
+            "name": "New-UrlLookup",
+            "startLine": 160
+          },
+          {
+            "relativePath": "Compare-WebSitemaps.Helpers.ps1",
+            "name": "ConvertTo-ComparablePath",
+            "startLine": 181
+          },
+          {
+            "relativePath": "Compare-WebSitemaps.Helpers.ps1",
+            "name": "New-PathAliasLookup",
+            "startLine": 198
+          },
+          {
+            "relativePath": "Compare-WebSitemaps.Helpers.ps1",
+            "name": "Get-SlugVariants",
+            "startLine": 215
+          },
+          {
+            "relativePath": "Compare-WebSitemaps.Helpers.ps1",
+            "name": "Add-CandidateIfFound",
+            "startLine": 245
+          },
+          {
+            "relativePath": "Compare-WebSitemaps.Helpers.ps1",
+            "name": "Get-SafeTargetUrl",
+            "startLine": 316
+          },
+          {
+            "relativePath": "Compare-WebSitemaps.Helpers.ps1",
+            "name": "Test-AmpProbeCandidate",
+            "startLine": 332
+          },
+          {
+            "relativePath": "Compare-WebSitemaps.Helpers.ps1",
+            "name": "Get-AmpHtmlAlternateUrl",
+            "startLine": 358
+          },
+          {
+            "relativePath": "Compare-WebSitemaps.Helpers.ps1",
+            "name": "New-RedirectExportRow",
+            "startLine": 396
+          },
+          {
+            "relativePath": "Compare-WebSitemaps.Helpers.ps1",
+            "name": "Get-SyntheticAmpLegacyUrl",
+            "startLine": 416
+          },
+          {
+            "relativePath": "Compare-WebSitemaps.Helpers.ps1",
+            "name": "Test-SyntheticAmpRedirectCandidate",
+            "startLine": 436
+          },
+          {
+            "relativePath": "Compare-WebSitemaps.Helpers.ps1",
+            "name": "Get-RedirectCandidate",
+            "startLine": 457
+          }
+        ],
+        "requiredScenarioIds": [
+          "full-migration",
+          "full-migration-passthru",
+          "plain-migration",
+          "amp-migration-eight-urls",
+          "empty-difference",
+          "malformed-remote",
+          "malformed-local",
+          "missing-local",
+          "depth-refusal",
+          "output-refusal"
+        ],
+        "publicExportScenarios": {},
+        "requiredSourceFiles": [
+          "Compare-WebSitemaps.ps1",
+          "Compare-WebSitemaps.Helpers.ps1"
+        ],
+        "observerScript": "Observe-CompareWebSitemaps.ps1",
+        "observerSha256": "E89210AF3A0954DDE810C6B307FA664CBD7890190B4DE64CB61B60F6C4F21FD1",
+        "observerSupport": [
+          {
+            "path": "SourceIdentity.json",
+            "sha256": "E0BD199A487F0CF6E463C6A9B611A0666007C20001A52128C67324198E98F8D2"
+          },
+          {
+            "path": "Serve-SitemapFixture.ps1",
+            "sha256": "20BB350CA5A7EB83C023F100CD580109924A7B1AC316257C7701FE4119496EC5"
+          },
+          {
+            "path": "Trace-SitemapHelpers.ps1",
+            "sha256": "40CA24FBE9BD0F12C031CF8C452F1F11CD1C0F1ABCE2ADBA9A05BB340AAD8774"
+          }
+        ],
+        "fixtureScript": "Invoke-SitemapFixture.ps1",
+        "fixtureSha256": "FC4ECF5007F61D062B94A390A8D13D3826D15ECD7978C41974A123D91B05B87E",
+        "fixtureSupport": [
+          {
+            "path": "Serve-SitemapFixture.ps1",
+            "sha256": "20BB350CA5A7EB83C023F100CD580109924A7B1AC316257C7701FE4119496EC5"
+          }
+        ]
+      }
+    }
+  ]
+}

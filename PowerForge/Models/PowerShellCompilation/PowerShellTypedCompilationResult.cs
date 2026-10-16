@@ -186,6 +186,18 @@ public sealed class PowerShellCompiledMethod
     /// <summary>Generated C# method name.</summary>
     public string GeneratedName { get; }
 
+    /// <summary>Exact CLR declaring type selected by the source emitter, independent of authored name or line.</summary>
+    internal string? GeneratedDeclaringTypeName { get; set; }
+
+    /// <summary>Private compiled child bodies with their exact authored identities; these do not add public or authored methods.</summary>
+    internal PowerShellCompiledBodyIdentity[] NestedBodies { get; set; } = Array.Empty<PowerShellCompiledBodyIdentity>();
+
+    /// <summary>Compiler-owned no-op process entry with no authored script unit to count or map.</summary>
+    internal bool IsSyntheticNoOpExecutableEntry { get; set; }
+
+    /// <summary>Exact authored identity of a native conditional module declaration; never a startup command identity.</summary>
+    internal int? ConditionalDeclarationOffset { get; set; }
+
     /// <summary>Whether the generated method operates on one managed module instance.</summary>
     public bool IsInstanceMethod { get; internal set; }
 
@@ -499,6 +511,19 @@ public sealed class PowerShellTypedCompilationResult
     /// These records do not authorize backend emission or source rewriting.
     /// </summary>
     public PowerShellCompilationRegionOpportunity[] RegionOpportunities { get; internal set; } = Array.Empty<PowerShellCompilationRegionOpportunity>();
+
+    /// <summary>Internal qualified declaration files whose methods must remain registered at their authored load point.</summary>
+    internal string[] NativeDeclarationTimingSourcePaths { get; set; } = Array.Empty<string>();
+
+    /// <summary>Selected executable root whose parsed documents require packaged provider-path guards.</summary>
+    internal string? GuardedExecutableEntryPath { get; set; }
+
+    /// <summary>Preserves qualified source-document context when shaping creates a replacement result.</summary>
+    internal void CopySourceContextFrom(PowerShellTypedCompilationResult source)
+    {
+        NativeDeclarationTimingSourcePaths = source.NativeDeclarationTimingSourcePaths;
+        GuardedExecutableEntryPath = source.GuardedExecutableEntryPath;
+    }
 
     /// <summary>Whether at least one method was translated and no blockers remain.</summary>
     public bool Success => Methods.Length > 0 && Diagnostics.Length == 0;

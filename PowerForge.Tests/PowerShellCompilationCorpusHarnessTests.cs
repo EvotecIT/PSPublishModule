@@ -268,15 +268,69 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
         Assert.True(root.GetProperty("invalidRejected").GetBoolean());
     }
 
-    private static string FindCorpusRepositoryRoot()
+    [Fact]
+    [Trait("Category", "PowerShellCompilerGate")]
+    public void PublicCorpusPerformancePolicyRecordsOnlyKnownTimingBudgets()
     {
-        var current = new DirectoryInfo(AppContext.BaseDirectory);
-        while (current is not null)
-        {
-            if (File.Exists(Path.Combine(current.FullName, "Benchmarks", "PowerShellCompilation", "Corpus", "Invoke-PublicCorpus.ps1")))
-                return current.FullName;
-            current = current.Parent;
-        }
-        throw new DirectoryNotFoundException("Unable to locate the PowerShell compilation corpus runner.");
+        var scriptPath = Path.Combine(FindCorpusRepositoryRoot(),
+            "Benchmarks", "PowerShellCompilation", "Corpus", "Invoke-PublicCorpus.ps1");
+        var ast = Parser.ParseFile(scriptPath, out _, out var parseErrors);
+        Assert.Empty(parseErrors);
+        var dispositionFunction = Assert.IsType<FunctionDefinitionAst>(ast.Find(
+            static node => node is FunctionDefinitionAst function &&
+                           function.Name.Equals("Get-PublicCorpusDisposition", StringComparison.Ordinal),
+            searchNestedScriptBlocks: true));
+        var command = $$"""
+            Set-StrictMode -Version Latest
+            $ErrorActionPreference = 'Stop'
+            {{dispositionFunction.Extent.Text}}
+            $timing = @(
+                [pscustomobject]@{scope='strictQualification';metric='artifactP50Milliseconds';expectedMaximum=100;actual=287},
+                [pscustomobject]@{scope='strictQualification';metric='artifactP95Milliseconds';expectedMaximum=250;actual=297},
+                [pscustomobject]@{scope='strictQualification';metric='artifactToSourceP50Ratio';expectedMaximum=0.75;actual=0.99}
+            )
+            $cases = @(
+                @{name='empty';rows=@();timing=0;hard=0;failures=0},
+                @{name='p50';rows=@($timing[0]);timing=1;hard=0;failures=0},
+                @{name='p95';rows=@($timing[1]);timing=1;hard=0;failures=0},
+                @{name='ratio';rows=@($timing[2]);timing=1;hard=0;failures=0},
+                @{name='all-timing';rows=$timing;timing=3;hard=0;failures=0},
+                @{name='wrong-scope';rows=@([pscustomobject]@{scope='identity';metric='artifactP50Milliseconds'});timing=0;hard=1;failures=0},
+                @{name='unknown-budget';rows=@([pscustomobject]@{scope='strictQualification';metric='futureBudget'});timing=0;hard=1;failures=0},
+                @{name='semantic-profile';rows=@([pscustomobject]@{scope='identity';metric='semanticProfile'});timing=0;hard=1;failures=0},
+                @{name='resource';rows=@([pscustomobject]@{scope='strictQualification';metric='resourceSha256'});timing=0;hard=1;failures=0},
+                @{name='stream';rows=@([pscustomobject]@{scope='strictQualification';metric='successOutputSha256'});timing=0;hard=1;failures=0},
+                @{name='functional-failure';rows=@();timing=0;hard=0;failures=1},
+                @{name='mixed';rows=@($timing[0],[pscustomobject]@{scope='strict';metric='programs'});timing=1;hard=1;failures=0}
+            )
+            $checked = 0
+            foreach ($case in $cases) {
+                foreach ($policy in @('Enforce','RecordOnly')) {
+                    $before = ConvertTo-Json -InputObject $case.rows -Depth 8 -Compress
+                    $arguments = @{Regressions=$case.rows;Failures=$case.failures}
+                    if ($policy -eq 'RecordOnly') { $arguments.PerformancePolicy = $policy }
+                    $result = Get-PublicCorpusDisposition @arguments
+                    $nonblocking = if ($policy -eq 'RecordOnly') { $case.timing } else { 0 }
+                    $blocking = $case.hard + $case.timing - $nonblocking
+                    $exitCode = if ($case.failures -gt 0 -or $blocking -gt 0) { 1 } else { 0 }
+                    $qualification = if ($case.timing -gt 0) { 'PerformanceNotQualified' } else { 'NoPerformanceBudgetRegressions' }
+                    if ($result.performancePolicy -cne $policy -or $result.performanceQualification -cne $qualification -or
+                        $result.performanceRegressions -ne $case.timing -or $result.nonBlockingPerformanceRegressions -ne $nonblocking -or
+                        $result.blockingRegressions -ne $blocking -or $result.exitCode -ne $exitCode -or
+                        (ConvertTo-Json -InputObject $case.rows -Depth 8 -Compress) -cne $before) {
+                        throw "Incorrect disposition or changed raw rows: $($case.name)/$policy"
+                    }
+                    $checked++
+                }
+            }
+            [Console]::Out.Write($checked)
+            """;
+        var result = Run("pwsh", "-NoProfile", "-NonInteractive", "-Command", command);
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.Equal("24", result.StandardOutput);
+        Assert.True(string.IsNullOrWhiteSpace(result.StandardError), result.StandardError);
     }
+
+    private static string FindCorpusRepositoryRoot() => RepoRootLocator.Find();
 }

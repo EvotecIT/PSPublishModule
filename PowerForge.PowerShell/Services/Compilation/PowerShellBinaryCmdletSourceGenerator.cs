@@ -117,7 +117,9 @@ internal static partial class PowerShellBinaryCmdletSourceGenerator
             typed.TypeName,
             targetFramework,
             invalid,
-            capabilities);
+            capabilities,
+            nativeDeclarationTimingSourcePaths: typed.NativeDeclarationTimingSourcePaths,
+            guardedExecutableEntryPath: typed.GuardedExecutableEntryPath);
         var result = new PowerShellTypedCompilationResult(
             filtered.SourcePath,
             filtered.NamespaceName,
@@ -135,6 +137,7 @@ internal static partial class PowerShellBinaryCmdletSourceGenerator
         result.PromotedRegions = filtered.PromotedRegions;
         result.RegionCandidates = filtered.RegionCandidates;
         result.RegionOpportunities = filtered.RegionOpportunities;
+        result.CopySourceContextFrom(filtered);
         return result;
     }
 
@@ -528,7 +531,8 @@ internal static partial class PowerShellBinaryCmdletSourceGenerator
     }
 
     private static string GetMethodKey(PowerShellCompiledMethod method)
-        => method.SourcePath + "\0" + method.SourceName + "\0" + method.SourceLine;
+        => method.SourcePath + "\0" + method.SourceName + "\0" + method.SourceLine +
+           (method.ConditionalDeclarationOffset is { } offset ? "\0" + offset.ToString(System.Globalization.CultureInfo.InvariantCulture) : string.Empty);
 
     private sealed class CmdletDescriptor
     {

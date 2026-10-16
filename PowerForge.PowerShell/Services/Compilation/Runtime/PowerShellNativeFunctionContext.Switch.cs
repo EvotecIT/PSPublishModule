@@ -13,6 +13,12 @@ namespace PowerForge.Generated.Runtime
         private NativeVariableStorage? _switchItemStorage;
         private static readonly Lazy<Func<object?, object, string>> SwitchString = new(CreateSwitchString);
         private static readonly Lazy<Func<ScriptBlock, object?, object?>> SwitchPredicate = new(CreateSwitchPredicateInvocation);
+        private static readonly Lazy<MethodInfo> SwitchRegex = new(() => typeof(PSObject).Assembly
+            .GetType("System.Management.Automation.SwitchOps", true)!
+            .GetMethod("ConditionSatisfiedRegex", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic,
+                null, new[] { typeof(bool), typeof(object), typeof(System.Management.Automation.Language.IScriptExtent),
+                    typeof(string), PowerShellNativeFunctionHost.NativeContract.Shared.ExecutionContext.FieldType }, null)
+            ?? throw new NotSupportedException("PowerShell's regex switch operation is unavailable."));
 
         /// <summary>Saves switch automatic variables before evaluating its input in the current invocation.</summary>
         public NativeSwitchScope EnterSwitch()
@@ -21,7 +27,7 @@ namespace PowerForge.Generated.Runtime
             return new NativeSwitchScope(this);
         }
 
-        /// <summary>Owns native enumeration, current-item matching, and restoration for an exact literal switch.</summary>
+        /// <summary>Owns native enumeration, current-item matching, and automatic-variable restoration.</summary>
         public sealed class NativeSwitchScope : IDisposable
         {
             private readonly PowerShellNativeFunctionContext _owner;
@@ -66,6 +72,18 @@ namespace PowerForge.Generated.Runtime
                 var current = _item.Read.Invoke(_owner.FunctionContext);
                 return string.Equals(label, SwitchString.Value(current, _owner._executionContext),
                     caseSensitive ? StringComparison.InvariantCulture : StringComparison.InvariantCultureIgnoreCase);
+            }
+
+            /// <summary>Uses the host's regex-switch operation, including its persistent $Matches captures.</summary>
+            public bool MatchesRegex(string label, bool caseSensitive, string file,
+                int line, int column, int endLine, int endColumn, string sourceText)
+            {
+                CheckActive();
+                var current = _item.Read.Invoke(_owner.FunctionContext);
+                var text = SwitchString.Value(current, _owner._executionContext);
+                var extent = PowerShellSourceExtent.Create(file, line, column, endLine, endColumn, sourceText);
+                return (bool)PowerShellNativeFunctionHost.Invoke(SwitchRegex.Value, null,
+                    new object[] { caseSensitive, label, extent, text, _owner._executionContext })!;
             }
 
             /// <summary>Invokes a compiled predicate in the engine's local scope and converts its captured records as Boolean.</summary>
@@ -121,14 +139,7 @@ namespace PowerForge.Generated.Runtime
 
         /// <summary>Recognizes native unlabeled break/continue raised by an invoked command or conversion callback.</summary>
         public bool IsSwitchTransfer(FlowControlException error, bool isBreak)
-        {
-            EnsureActive();
-            var type = typeof(PSObject).Assembly.GetType("System.Management.Automation." + (isBreak ? "BreakException" : "ContinueException"), true)!;
-            if (!type.IsInstanceOfType(error)) return false;
-            var matches = type.GetMethod("MatchLabel", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
-                null, new[] { typeof(string) }, null)!;
-            return (bool)PowerShellNativeFunctionHost.Invoke(matches, error, new object[] { string.Empty })!;
-        }
+            => IsLoopTransfer(error, isBreak, string.Empty);
 
     }
 }

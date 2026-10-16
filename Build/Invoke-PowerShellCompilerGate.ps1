@@ -5,6 +5,8 @@ param(
     [ValidateSet('win-x64', 'linux-x64')] [string] $RuntimeIdentifier,
     [ValidateRange(1, 32)] [int] $MaxParallelThreads = 4,
     [ValidateSet('Fast', 'Full')] [string] $Lane = 'Fast',
+    [ValidateSet('Enforce', 'RecordOnly')] [string] $PerformancePolicy = 'Enforce',
+    [string] $ArtifactsPath,
     [ValidateSet('All', 'Contracts', 'Corpus')] [string] $Phase = 'All',
     [switch] $NoBuild
 )
@@ -25,9 +27,27 @@ if ($RuntimeIdentifier -ne $hostRuntimeIdentifier) {
     throw "Compiler qualification runtime '$RuntimeIdentifier' does not match the current host '$hostRuntimeIdentifier' (PowerShell process architecture: $processArchitecture). Use the matching runtime or omit -RuntimeIdentifier."
 }
 $repositoryRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
+$previousCliPath = $env:POWERFORGE_TEST_CLI_ASSEMBLY_PATH
+$cliAssemblyPath = if ($PSBoundParameters.ContainsKey('ArtifactsPath')) {
+    if ([string]::IsNullOrWhiteSpace($ArtifactsPath)) { throw '-ArtifactsPath must identify the SDK artifacts root.' }
+    $ArtifactsPath = [IO.Path]::GetFullPath($ArtifactsPath)
+    Join-Path $ArtifactsPath 'bin/PowerForge.Cli/release_net10.0/PowerForge.Cli.dll'
+} elseif ($previousCliPath) { $previousCliPath }
+else { Join-Path $repositoryRoot 'PowerForge.Cli/bin/Release/net10.0/PowerForge.Cli.dll' }
+if (($NoBuild -and $ArtifactsPath) -or (-not $ArtifactsPath -and $previousCliPath)) {
+    if (-not [IO.Path]::IsPathFullyQualified($cliAssemblyPath) -or
+        [IO.Path]::GetFileName($cliAssemblyPath) -cne 'PowerForge.Cli.dll' -or
+        -not (Test-Path -LiteralPath $cliAssemblyPath -PathType Leaf)) {
+        throw "The selected prebuilt test CLI must be an absolute existing PowerForge.Cli.dll path: $cliAssemblyPath"
+    }
+}
 $EvidencePath = [IO.Path]::GetFullPath($EvidencePath)
 New-Item -ItemType Directory -Path $EvidencePath -Force | Out-Null
 $requiredFamilies = @{
+    'project removed-target recovery' = 'PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.Project_OfflineRestoreAuthenticatesRemovedTargetsBeforeRequalifyingCurrentSelection*'
+    'empty executable entry' = 'PowerForge.Tests.PowerShellCompilationArtifactHardeningTests.Build_EmptyExecutableEntryPointExitsWithoutOutput*'
+    'corpus performance disposition' = 'PowerForge.Tests.PowerShellCompilationArtifactHardeningTests.PublicCorpusPerformancePolicyRecordsOnlyKnownTimingBudgets*'
+    'final emitted unit ownership' = 'PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.FailureMap*'
     'bound semantics' = 'PowerForge.Tests.PowerShellCompilationBoundPipelineTests.*'
     'census disposition' = 'PowerForge.Tests.PowerShellCompilationCensusTests.*'
     'supported arithmetic fuzz' = 'PowerForge.Tests.PowerShellCompilationFuzzTests.*'
@@ -45,8 +65,11 @@ $requiredFamilies = @{
     'project executable installation' = 'PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.Project_ExecutablePackagePreservesQualifiedPermissionsAndRunsAfterInstall*'
     'hosted lifecycle metadata admission' = 'PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.Plan_HostedLifecyclePromotesOnlyRepresentableValidationMetadata*'
     'hosted lifecycle validation compatibility' = 'PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.Build_HybridLifecyclePreservesUnrepresentedValidationMetadata*'
+    'conditional declaration execution' = 'PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.ConditionalDeclarations_ArtifactPreservesSelectedBodyReplacementAndNativeMetadata*'
+    'retained executable console presentation' = 'PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.Build_PackageConsolePreservesFormattingStreamsAndAuthoredErrors*'
 }
 $windowsRequiredFamilies = @{
+    'native Hybrid executable console presentation' = 'PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.Build_NativeHybridConsolePreservesFormattingStreamsAndAuthoredErrors*'
     'project Windows launch path' = 'PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.Project_ExecutableInstallRejectsUnlaunchablePathBeforeCreatingInstallation*'
     'project run' = 'PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.Project_RunRebuildsEditedSource*'
     'project launch integrity' = 'PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.Project_RunRejectsArtifactReplacementAtLaunchBoundary*'
@@ -54,6 +77,17 @@ $windowsRequiredFamilies = @{
     'project CLI streams' = 'PowerForge.Tests.PowerForgeCliPowerShellCompilationTests.ProjectRunCli_*'
     'project NuGet consumption' = 'PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.Project_NuGetPackRebuildsLockedLibraryAndRunsOrdinaryConsumer*'
     'project runtime-pack diagnostics CLI' = 'PowerForge.Tests.PowerForgeCliPowerShellCompilationTests.ProjectDiagnosticsCli_UsesAcquiredRuntimePackWithEmptyGlobalCache*'
+    'native owned declarations' = 'PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.Build_HybridNativeScriptRootPreservesOwnedFunctionDeclarations*'
+    'project offline recovery integrity' = 'PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.Project_OfflineRestoreRejectsTamperedHistoricalEnvironmentAfterInvocationEdit*'
+    'project declared test invocation' = 'PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.Project_TestAndInstallUseDeclaredArgumentsAndWorkingDirectoryWithRevisionBoundEvidence*'
+    'project clean legacy import errors' = 'PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.Project_CleanLegacyModuleImportCannotAcceptDeepPayloadErrors*'
+    'project legacy payload path' = 'PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.Project_LegacyModuleInstallRejectsDeepPayloadBeforeCreatingInstallation*'
+    'native source load timing' = 'PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.Project_NativeScriptClosureLoadsAtAuthoredPointWithArgumentsAndWorkingDirectory*'
+    'native source operand integrity' = 'PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.Build_NativeScriptClosureRejectsLiveJoinPathReplacementToExternalOrWrongEmbeddedFile*'
+    'native source byte integrity' = 'PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.Build_NativeScriptClosureRejectsHelperMutationAtAuthoredLoadPoint*'
+    'native declaration timing' = 'PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.Shape_GuardedExecutableDeclarationsRemainCompiledWithoutStartupCommandRegistration*'
+    'native declaration closure' = 'PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.Shape_ExecutableTimingQualificationDoesNotAdmitOtherSourceInitialization*'
+    'native command region execution' = 'PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.Build_HybridNativeScriptRootPreservesGenericCommandRegionsAndCallerBoundary*'
 }
 $excludedRequirements = @()
 if ($IsWindows) {
@@ -76,6 +110,7 @@ if ($IsWindows) {
     windowsPowerShell51 = if ($IsWindows) { 'selected by numeric artifact tests' } else { 'unavailable; Windows workflow fixtures are excluded or explicitly skipped' }
     maxParallelThreads = $MaxParallelThreads
     lane = $Lane
+    performancePolicy = $PerformancePolicy
     phase = $Phase
     requiredFamilies = @($requiredFamilies.Keys | Sort-Object)
     excludedRequirements = $excludedRequirements
@@ -83,11 +118,8 @@ if ($IsWindows) {
 $fastPatterns = @(
     'PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.CompleteWorkflow_PinnedBinaryToStringPreservesBindingAndOutput'
 ) + @($requiredFamilies.Values | ForEach-Object { $_.TrimEnd('*') })
-$filter = if ($Lane -eq 'Full') {
-    'Category=PowerShellCompilerGate|FullyQualifiedName~PowerShellCompilationCensusTests|FullyQualifiedName~PowerShellCompilationBoundPipelineTests|FullyQualifiedName~PowerShellCompilationFuzzTests'
-} else {
-    ($fastPatterns | ForEach-Object { "FullyQualifiedName~$_" }) -join '|'
-}
+$fastFilter = ($fastPatterns | ForEach-Object { "FullyQualifiedName~$_" }) -join '|'
+$filter = if ($Lane -eq 'Full') { 'Category=PowerShellCompilerGate|FullyQualifiedName~PowerShellCompilationCensusTests|FullyQualifiedName~PowerShellCompilationBoundPipelineTests|FullyQualifiedName~PowerShellCompilationFuzzTests|' + $fastFilter } else { $fastFilter }
 # Keep the running-test sequence when a subprocess stalls, without retaining large dumps.
 $hangDiagnosticTimeout = if ($Lane -eq 'Full') { '115min' } else { '35min' }
 $testArguments = @('test', (Join-Path $repositoryRoot 'PowerForge.Tests/PowerForge.Tests.csproj'),
@@ -95,9 +127,11 @@ $testArguments = @('test', (Join-Path $repositoryRoot 'PowerForge.Tests/PowerFor
     '--logger', 'trx;LogFileName=compiler-gate.trx', '--results-directory', $EvidencePath,
     '--blame-hang-timeout', $hangDiagnosticTimeout, '--blame-hang-dump-type', 'none')
 if ($NoBuild) { $testArguments += @('--no-build', '--no-restore') }
+if ($ArtifactsPath) { $testArguments += @('--artifacts-path', $ArtifactsPath) }
 $testArguments += @('--', "xUnit.MaxParallelThreads=$MaxParallelThreads")
 Push-Location $repositoryRoot
 try {
+    $env:POWERFORGE_TEST_CLI_ASSEMBLY_PATH = $cliAssemblyPath
     if ($Phase -ne 'Corpus') {
         & dotnet @testArguments
         if ($LASTEXITCODE -ne 0) { throw "Compiler contract tests failed with exit $LASTEXITCODE." }
@@ -111,18 +145,23 @@ try {
     }
     $moduleWorkflow = 'PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.CompleteWorkflow_PinnedBinaryToStringPreservesBindingAndOutput*'
     if ($IsWindows) {
-        foreach ($framework in @('net10.0', 'net472')) {
-            $hostCases = @($passedNames | Where-Object { $_ -like $moduleWorkflow -and $_ -like "*framework: `"$framework`"*" })
-            if ($hostCases.Count -eq 0) { throw "The compiler gate is missing a passing $framework generated module workflow." }
+        foreach ($pattern in @($moduleWorkflow, $requiredFamilies['conditional declaration execution'], $requiredFamilies['project module lifecycle'])) {
+            foreach ($framework in @('net10.0', 'net472')) {
+                $hostCases = @($passedNames | Where-Object { $_ -like $pattern -and $_ -like "*framework: `"$framework`"*" })
+                if ($hostCases.Count -eq 0) { throw "The compiler gate is missing a passing $framework generated workflow: $pattern" }
+            }
         }
     } elseif (-not ($passedNames -like $moduleWorkflow)) {
         throw 'The compiler gate is missing a passing generated module workflow.'
     }
     if ($Phase -ne 'Contracts') {
         & (Join-Path $repositoryRoot 'Benchmarks/PowerShellCompilation/Corpus/Invoke-PublicCorpus.ps1') `
-            -SkipModules -RuntimeIdentifier $RuntimeIdentifier `
+            -SkipModules -RuntimeIdentifier $RuntimeIdentifier -CliAssemblyPath $cliAssemblyPath -PerformancePolicy $PerformancePolicy `
             -WorkspacePath (Join-Path $EvidencePath 'corpus-workspace') `
             -EvidencePath (Join-Path $EvidencePath 'strict-corpus.json')
         if ($LASTEXITCODE -ne 0) { throw "Strict compiler corpus failed with exit $LASTEXITCODE." }
     }
-} finally { Pop-Location }
+} finally {
+    $env:POWERFORGE_TEST_CLI_ASSEMBLY_PATH = $previousCliPath
+    Pop-Location
+}

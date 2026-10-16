@@ -8,6 +8,8 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- VSTest runs from external artifacts; preserve the repository SDK policy there. -->
+    <None Include="..\global.json" Link="global.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="Never" />
     <PackageReference Include="coverlet.collector" Version="10.1.0" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.10.1" />
     <PackageReference Include="xunit" Version="2.9.3" />
@@ -51,6 +53,12 @@
     <None Update="Fixtures\PowerShellCompilationInventoryWorkflow\*.ps1" CopyToOutputDirectory="PreserveNewest" />
     <None Update="Fixtures\PowerShellCompilationSavedStateWorkflow\*.ps1" CopyToOutputDirectory="PreserveNewest" />
     <None Update="Fixtures\PowerShellCompilationReservationWorkflow\*.psm1" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\Benchmarks\PowerShellCompilation\Corpus\ExternalWorkflows\**\*"
+          Link="Benchmarks\PowerShellCompilation\Corpus\ExternalWorkflows\%(RecursiveDir)%(Filename)%(Extension)"
+          CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="Never" />
+    <None Include="..\Benchmarks\PowerShellCompilation\Corpus\m29a-indexed-interpolation-probe.ps1"
+          Link="Benchmarks\PowerShellCompilation\Corpus\m29a-indexed-interpolation-probe.ps1"
+          CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="Never" />
   </ItemGroup>
 
   <Target Name="CopyProcessOutputPressureFixture" AfterTargets="Build">

@@ -10,6 +10,7 @@ param(
     [switch] $Offline,
     [switch] $SkipModules,
     [switch] $SkipStrictPrograms,
+    [ValidateSet('Enforce', 'RecordOnly')] [string] $PerformancePolicy = 'Enforce',
     [switch] $KeepRunArtifacts
 )
 
@@ -21,16 +22,7 @@ function Invoke-PowerForgeJson {
     param([string[]] $Arguments, [string] $WorkingDirectory, [int] $TimeoutSeconds = 900)
 
     $result = Invoke-OwnedProcess -FileName 'dotnet' -Arguments (@($CliAssemblyPath) + $Arguments + @('--output', 'json')) -WorkingDirectory $WorkingDirectory -Environment @{} -TimeoutSeconds $TimeoutSeconds
-    try {
-        $json = $result.StandardOutput | ConvertFrom-Json
-    } catch {
-        $tail = if ($result.StandardOutput.Length -gt 4000) { $result.StandardOutput.Substring($result.StandardOutput.Length - 4000) } else { $result.StandardOutput }
-        throw "PowerForge did not return JSON. Exit=$($result.ExitCode). stdout tail: $tail stderr: $($result.StandardError)"
-    }
-    if ($result.ExitCode -ne 0 -or -not $json.success) {
-        $message = if ($json.error) { [string] $json.error } else { [string] $result.StandardError }
-        throw "PowerForge command failed with exit $($result.ExitCode): $message"
-    }
+    $json = ConvertFrom-CorpusCliProcess $result -Label 'PowerForge command'
     return [pscustomobject]@{ Json = $json; DurationMilliseconds = $result.DurationMilliseconds }
 }
 
@@ -337,6 +329,30 @@ function Compare-PublicBaseline {
     return @($regressions)
 }
 
+function Get-PublicCorpusDisposition {
+    param(
+        [object[]] $Regressions = @(),
+        [int] $Failures = 0,
+        [ValidateSet('Enforce', 'RecordOnly')] [string] $PerformancePolicy = 'Enforce'
+    )
+
+    # Only these baseline startup budgets are eligible for explicit recording without enforcement.
+    $performanceRegressions = @($Regressions | Where-Object {
+        $_.scope -ceq 'strictQualification' -and $_.metric -cin @(
+            'artifactP50Milliseconds', 'artifactP95Milliseconds', 'artifactToSourceP50Ratio')
+    }).Count
+    $nonBlockingPerformanceRegressions = if ($PerformancePolicy -eq 'RecordOnly') { $performanceRegressions } else { 0 }
+    $blockingRegressions = $Regressions.Count - $nonBlockingPerformanceRegressions
+    return [ordered]@{
+        performancePolicy = $PerformancePolicy
+        performanceQualification = if ($performanceRegressions -gt 0) { 'PerformanceNotQualified' } else { 'NoPerformanceBudgetRegressions' }
+        performanceRegressions = $performanceRegressions
+        nonBlockingPerformanceRegressions = $nonBlockingPerformanceRegressions
+        blockingRegressions = $blockingRegressions
+        exitCode = if ($Failures -gt 0 -or $blockingRegressions -gt 0) { 1 } else { 0 }
+    }
+}
+
 function Get-CurrentRuntimeIdentifier {
     $architecture = [Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture.ToString().ToLowerInvariant()
     if ([Runtime.InteropServices.RuntimeInformation]::IsOSPlatform([Runtime.InteropServices.OSPlatform]::Windows)) { return "win-$architecture" }
@@ -433,7 +449,8 @@ try {
                     succeeded = $true
                 })
             } catch {
-                $moduleResults.Add([ordered]@{ id = $entry.id; version = $entry.version; scenarioFamily = $entry.scenarioFamily; succeeded = $false; error = $_.Exception.Message })
+                $moduleResults.Add([ordered]@{ id = $entry.id; version = $entry.version; scenarioFamily = $entry.scenarioFamily;
+                    succeeded = $false; error = $_.Exception.Message; cliFailure = (Get-CorpusCliFailureEvidence $_.Exception) })
             }
         }
     }
@@ -581,7 +598,8 @@ try {
                     succeeded = $true
                 })
             } catch {
-                $strictResults.Add([ordered]@{ id = $program.id; scenarioFamily = $program.scenarioFamily; runtimeIdentifier = $RuntimeIdentifier; succeeded = $false; error = $_.Exception.Message })
+                $strictResults.Add([ordered]@{ id = $program.id; scenarioFamily = $program.scenarioFamily; runtimeIdentifier = $RuntimeIdentifier;
+                    succeeded = $false; error = $_.Exception.Message; cliFailure = (Get-CorpusCliFailureEvidence $_.Exception) })
             }
         }
     }
@@ -594,6 +612,7 @@ try {
     $compareModules = -not $SkipModules -and -not $ModuleId
     $compareStrict = -not $SkipStrictPrograms
     $regressions = @(Compare-PublicBaseline -Baseline $baseline -Packet $packet -PacketSha256 $packetSha256 -Modules @($moduleResults) -StrictPrograms @($strictResults) -Rid $RuntimeIdentifier -CompareModules $compareModules -CompareStrict $compareStrict)
+    $disposition = Get-PublicCorpusDisposition -Regressions $regressions -Failures ($failedModules + $failedStrict) -PerformancePolicy $PerformancePolicy
     $regionDecisionRows = @($moduleResults | Where-Object succeeded | ForEach-Object {
         $module = $_
         @($module.regionCandidateDecisions) | ForEach-Object {
@@ -626,6 +645,8 @@ try {
         crossWorkloadRetainedRegionFrontier = $crossWorkloadRetainedRegionFrontier
         crossWorkloadRegionOpportunityFrontier = $crossWorkloadRegionOpportunityFrontier
         regressions = $regressions
+        performancePolicy = $disposition.performancePolicy
+        performanceQualification = $disposition.performanceQualification
         baselineScope = [ordered]@{ hybrid = if ($compareModules) { 'Full' } else { 'IdentityOnly' }; strict = if ($compareStrict) { 'Full' } else { 'IdentityOnly' } }
         summary = [ordered]@{
             modulesPassed = @($moduleResults | Where-Object succeeded).Count
@@ -634,6 +655,9 @@ try {
             strictProgramsTotal = $strictResults.Count
             failures = $failedModules + $failedStrict
             regressions = $regressions.Count
+            blockingRegressions = $disposition.blockingRegressions
+            performanceRegressions = $disposition.performanceRegressions
+            nonBlockingPerformanceRegressions = $disposition.nonBlockingPerformanceRegressions
             promotedTypedRegions = Get-Sum @($moduleResults | Where-Object succeeded | ForEach-Object { $_.counts.promotedTypedRegions })
             regionCandidates = Get-Sum @($moduleResults | Where-Object succeeded | ForEach-Object { $_.regionCandidates })
             rejectedTypedRegions = Get-Sum @($moduleResults | Where-Object succeeded | ForEach-Object { $_.rejectedTypedRegions })
@@ -644,7 +668,8 @@ try {
     Write-Utf8Json -Path $EvidencePath -Value $evidence
     Write-Host "Evidence: $EvidencePath"
     Write-Host "Modules: $($evidence.summary.modulesPassed)/$($evidence.summary.modulesTotal); promoted typed regions: $($evidence.summary.promotedTypedRegions); retained candidates: $($evidence.summary.rejectedTypedRegions)/$($evidence.summary.regionCandidates); analysis-only opportunities outside terminal candidates: $($evidence.summary.nonTerminalRegionOpportunities)/$($evidence.summary.regionOpportunities); Strict programs: $($evidence.summary.strictProgramsPassed)/$($evidence.summary.strictProgramsTotal)"
-    if ($evidence.summary.failures -gt 0 -or $evidence.summary.regressions -gt 0) { exit 1 }
+    Write-Host "Performance policy: $($disposition.performancePolicy); $($disposition.performanceQualification); timing regressions: $($disposition.performanceRegressions); nonblocking timing regressions: $($disposition.nonBlockingPerformanceRegressions); blocking regressions: $($disposition.blockingRegressions)"
+    if ($disposition.exitCode -ne 0) { exit $disposition.exitCode }
 } finally {
     if (-not $KeepRunArtifacts -and (Test-Path -LiteralPath $runRoot)) {
         Assert-ContainedPath -Root $WorkspacePath -Path $runRoot -Label 'Corpus run cleanup' | Out-Null

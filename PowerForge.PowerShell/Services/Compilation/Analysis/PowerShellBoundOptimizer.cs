@@ -81,7 +81,7 @@ internal sealed class PowerShellBoundOptimizer
                     _deadBranchesRemoved++;
                     continue;
                 }
-                statements.Add(new PowerShellBoundWhileStatement(loop.Span, loop.Kind, condition, body, loop.CheckHostInterrupts));
+                statements.Add(new PowerShellBoundWhileStatement(loop.Span, loop.Kind, condition, body, loop.CheckHostInterrupts, loop.Label));
                 continue;
             }
             statements.Add(OptimizeStatement(statement));
@@ -123,7 +123,7 @@ internal sealed class PowerShellBoundOptimizer
                 loop.Initializer is null ? null : (PowerShellBoundMutationExpression)OptimizeExpression(loop.Initializer),
                 loop.Condition is null ? null : OptimizeExpression(loop.Condition),
                 loop.Iterator is null ? null : (PowerShellBoundMutationExpression)OptimizeExpression(loop.Iterator),
-                OptimizeBlock(loop.Body), loop.CheckHostInterrupts),
+                OptimizeBlock(loop.Body), loop.CheckHostInterrupts, loop.Label),
             PowerShellBoundForEachStatement loop => new PowerShellBoundForEachStatement(
                 loop.Span,
                 loop.Variable,
@@ -132,7 +132,7 @@ internal sealed class PowerShellBoundOptimizer
                 loop.EnumerationKind,
                 OptimizeBlock(loop.Body),
                 loop.DeclareVariable,
-                loop.NullCollectionElement is null ? null : OptimizeExpression(loop.NullCollectionElement), loop.CheckHostInterrupts, loop.NativeBinding),
+                loop.NullCollectionElement is null ? null : OptimizeExpression(loop.NullCollectionElement), loop.CheckHostInterrupts, loop.NativeBinding, loop.Label),
             PowerShellBoundThrowStatement thrown => new PowerShellBoundThrowStatement(
                 thrown.Span, thrown.Expression is null ? null : OptimizeExpression(thrown.Expression),
                 thrown.PreserveStatementErrors, thrown.SourcePath, thrown.SourceText),
@@ -249,7 +249,8 @@ internal sealed class PowerShellBoundOptimizer
                 collection.Items.Select(item => new PowerShellBoundNativeCollectionItem(item.Span, item.SourceText,
                     OptimizeExpression(item.Value), item.SetSuccess, item.EmitsOutput, item.IsPipelineStatement)).ToArray(), collection.ShareEmptyResult, collection.SingleExpression, collection.CollapseResult);
         if (expression is PowerShellBoundNativeStatementValueExpression statementValue)
-            return new PowerShellBoundNativeStatementValueExpression(statementValue.Span, OptimizeBlock(statementValue.Body));
+            return new PowerShellBoundNativeStatementValueExpression(statementValue.Span, OptimizeBlock(statementValue.Body),
+                statementValue.PreserveRecords, statementValue.ShareEmptyResult);
         if (expression is PowerShellBoundNativeConditionalValueExpression conditionalValue)
             return new PowerShellBoundNativeConditionalValueExpression(conditionalValue.Span,
                 conditionalValue.Clauses.Select(clause => new PowerShellBoundNativeConditionalValueClause(

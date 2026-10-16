@@ -22,8 +22,8 @@ internal static class PowerShellCompilationTestPrerequisites
             ["NUGET_PACKAGES"] = packageRoot
         };
         var runner = new ProcessRunner(ownProcessTree: true);
-        var selected = await runner.RunAsync(new ProcessRunRequest(
-            "dotnet", Directory.GetCurrentDirectory(), new[] { "--version" },
+        var selected = await runner.RunAsync(PowerShellCompilationSdkProcessEnvironment.CreateInheritedRequest(
+            Directory.GetCurrentDirectory(), new[] { "--version" },
             TimeSpan.FromSeconds(30), environment));
         Assert.True(selected.Succeeded, selected.StdErr + selected.StdOut);
         PowerShellCompilationArtifactBuilder.WriteSdkSelection(workspace.Path, selected.StdOut.Trim());
@@ -37,8 +37,8 @@ internal static class PowerShellCompilationTestPrerequisites
               </PropertyGroup>
             </Project>
             """);
-        var restored = await runner.RunAsync(new ProcessRunRequest(
-            "dotnet", workspace.Path, new[] { "restore", project, "--nologo", "--verbosity", "minimal" },
+        var restored = await runner.RunAsync(PowerShellCompilationSdkProcessEnvironment.CreateInheritedRequest(
+            workspace.Path, new[] { "restore", project, "--nologo", "--verbosity", "minimal" },
             TimeSpan.FromMinutes(5), environment));
         Assert.True(restored.Succeeded, restored.StdErr + restored.StdOut);
     }

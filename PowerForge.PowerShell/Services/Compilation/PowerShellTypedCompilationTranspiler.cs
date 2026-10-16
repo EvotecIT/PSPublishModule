@@ -6,7 +6,7 @@ namespace PowerForge;
 /// <summary>
 /// Translates structurally eligible PowerShell functions into readable typed C# source.
 /// </summary>
-public sealed class PowerShellTypedCompilationTranspiler
+public sealed partial class PowerShellTypedCompilationTranspiler
 {
     private const string TemplateResourceName = "PowerForge.PowerShell.Compilation.TypedLibrary.cs.template";
     private readonly PowerShellCommandSemanticRegistry _commandRegistry;
@@ -60,7 +60,9 @@ public sealed class PowerShellTypedCompilationTranspiler
         string namespaceName,
         string typeName,
         string? targetFramework,
-        PowerShellCompilationCapability capabilities = PowerShellCompilationCapabilities.BinaryModule)
+        PowerShellCompilationCapability capabilities = PowerShellCompilationCapabilities.BinaryModule,
+        string? guardedExecutableEntryPath = null,
+        bool nativeScriptEntry = false)
         => TranspileCore(
             sourcePaths,
             namespaceName,
@@ -70,7 +72,9 @@ public sealed class PowerShellTypedCompilationTranspiler
             capabilities,
             _commandRegistry,
             _semanticProfileId,
-            _nativeDependencyTypes);
+            _nativeDependencyTypes,
+            guardedExecutableEntryPath,
+            nativeScriptEntry: nativeScriptEntry);
 
     internal PowerShellTypedCompilationResult TranspileExcluding(
         IEnumerable<string> sourcePaths,
@@ -78,8 +82,11 @@ public sealed class PowerShellTypedCompilationTranspiler
         string typeName,
         string? targetFramework,
         ISet<string> excludedMethods,
-        PowerShellCompilationCapability capabilities = PowerShellCompilationCapability.None)
-        => TranspileCore(sourcePaths, namespaceName, typeName, targetFramework, excludedMethods, capabilities, _commandRegistry, _semanticProfileId, _nativeDependencyTypes);
+        PowerShellCompilationCapability capabilities = PowerShellCompilationCapability.None,
+        IReadOnlyCollection<string>? nativeDeclarationTimingSourcePaths = null,
+        string? guardedExecutableEntryPath = null)
+        => TranspileCore(sourcePaths, namespaceName, typeName, targetFramework, excludedMethods, capabilities, _commandRegistry, _semanticProfileId,
+            _nativeDependencyTypes, guardedExecutableEntryPath, nativeDeclarationTimingSourcePaths);
 
     private static PowerShellTypedCompilationResult TranspileCore(
         IEnumerable<string> sourcePaths,
@@ -90,7 +97,10 @@ public sealed class PowerShellTypedCompilationTranspiler
         PowerShellCompilationCapability capabilities,
         PowerShellCommandSemanticRegistry commandRegistry,
         string semanticProfileId,
-        PowerShellNativeDependencyTypes? nativeDependencyTypes = null)
+        PowerShellNativeDependencyTypes? nativeDependencyTypes = null,
+        string? guardedExecutableEntryPath = null,
+        IReadOnlyCollection<string>? nativeDeclarationTimingSourcePaths = null,
+        bool nativeScriptEntry = false)
     {
         if (sourcePaths is null)
             throw new ArgumentNullException(nameof(sourcePaths));
@@ -132,6 +142,8 @@ public sealed class PowerShellTypedCompilationTranspiler
         }
         if (parsedFiles.Count != fullPaths.Length)
             return CreateResult(fullPaths, namespaceName, typeName, Array.Empty<PowerShellCompiledMethod>(), Array.Empty<string>(), diagnostics, parsedFiles, targetFramework, semanticProfileId);
+        ApplyDeclarationSourceContext(parsedFiles, capabilities, guardedExecutableEntryPath,
+            nativeDeclarationTimingSourcePaths, nativeScriptEntry);
         var boundResult = CreateBoundEmissionIndex(parsedFiles, targetFramework, capabilities, diagnostics, commandRegistry, semanticProfileId,
             nativeDependencyTypes);
         var boundEmissions = boundResult.Emissions;
@@ -141,13 +153,15 @@ public sealed class PowerShellTypedCompilationTranspiler
         typeName = ResolveCollisionFreeTypeName(typeName, parsedFiles.Select(static file => file.Ast));
 
         var duplicateFunctions = parsedFiles
-            .SelectMany(file => file.Ast.FindAll(static node => node is FunctionDefinitionAst, searchNestedScriptBlocks: false)
-                .Cast<FunctionDefinitionAst>()
-                .Select(function => new { file.Path, Function = function }))
+            .SelectMany(file => file.Document.RootFunctionDeclarations
+                .Select(declaration => new { file.Path, Function = declaration.Syntax, Declaration = declaration }))
             .GroupBy(static item => item.Function.Name, StringComparer.OrdinalIgnoreCase)
             .Where(static group => group.Count() > 1)
             .SelectMany(group => group.Select(item =>
             {
+                if (item.Declaration.UsesConditionalNativeBinding(capabilities) &&
+                    boundEmissions.TryGetValue(GetSemanticMethodKey(item.Path, item.Function.Name, item.Function.Extent.StartOffset), out var emission) &&
+                    emission.NativeFunctionBinding is not null) return null;
                 if (!diagnostics.Any(diagnostic =>
                         PowerShellCompilationPathSafety.PathEquals(diagnostic.FilePath, item.Path) &&
                         diagnostic.Message.Contains("multiple retained definitions", StringComparison.OrdinalIgnoreCase)))
@@ -159,8 +173,10 @@ public sealed class PowerShellTypedCompilationTranspiler
                         item.Function.Extent.StartLineNumber,
                         item.Function.Extent.StartColumnNumber));
                 }
-                return GetMethodKey(item.Path, item.Function.Name, item.Function.Body.Extent.StartLineNumber);
+                return GetMethodKey(item.Path, item.Function.Name, item.Function.Body.Extent.StartLineNumber,
+                    item.Declaration.UsesConditionalNativeBinding(capabilities) ? item.Function.Extent.StartOffset : null);
             }))
+            .Where(static key => key is not null).Select(static key => key!)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
         var declaredFunctionNames = parsedFiles
             .SelectMany(parsed => parsed.Ast.FindAll(static node => node is FunctionDefinitionAst, searchNestedScriptBlocks: false)
@@ -168,27 +184,17 @@ public sealed class PowerShellTypedCompilationTranspiler
                 .Select(static function => function.Name))
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
         var functionSources = parsedFiles
-            .SelectMany(parsed => parsed.Ast.FindAll(static node => node is FunctionDefinitionAst, searchNestedScriptBlocks: false)
-                .Cast<FunctionDefinitionAst>()
-                .OrderBy(static function => function.Extent.StartOffset)
-                .Select(function => new
-                {
-                    Parsed = parsed,
-                    Function = function,
-                    Unit = parsed.Plan.Units.FirstOrDefault(unit =>
-                        unit.Kind == PowerShellCompilationUnitKind.Function &&
-                        unit.Name.Equals(function.Name, StringComparison.OrdinalIgnoreCase) &&
-                        unit.StartLine == function.Body.Extent.StartLineNumber)
-                })
-                .Where(static source => source.Unit is not null)
-                .Select(static source => new FunctionSource(source.Parsed, source.Function, source.Unit!)))
+            .SelectMany(parsed => parsed.Document.RootFunctionDeclarations
+                .Where(declaration => !declaration.IsConditional || declaration.UsesConditionalNativeBinding(capabilities))
+                .Select(declaration => CreateFunctionSource(parsed, declaration, capabilities))
+                .OfType<FunctionSource>())
             .ToArray();
 
         var collidingFunctions = functionSources
             .Where(source => source.Unit.IsCompilable &&
-                             !duplicateFunctions.Contains(GetMethodKey(source.Parsed.Path, source.Function.Name, source.Function.Body.Extent.StartLineNumber)))
+                             !duplicateFunctions.Contains(GetMethodKey(source)))
             .GroupBy(static source =>
-                PowerShellCSharpSymbolRenderer.Identifier(source.Function.Name) + "\0" +
+                PowerShellCSharpSymbolRenderer.Identifier(source.BindingName) + "\0" +
                 string.Join("\0", source.Unit.Parameters.Select(static parameter => parameter.TypeName)),
                 StringComparer.OrdinalIgnoreCase)
             .Where(static group => group.Count() > 1)
@@ -200,7 +206,7 @@ public sealed class PowerShellTypedCompilationTranspiler
                     source.Parsed.Path,
                     source.Function.Extent.StartLineNumber,
                     source.Function.Extent.StartColumnNumber));
-                return GetMethodKey(source.Parsed.Path, source.Function.Name, source.Function.Body.Extent.StartLineNumber);
+                return GetMethodKey(source);
             }))
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
         var methods = new List<PowerShellCompiledMethod>();
@@ -222,8 +228,8 @@ public sealed class PowerShellTypedCompilationTranspiler
         {
             foreach (var source in functionSources)
             {
-                var key = GetMethodKey(source.Parsed.Path, source.Function.Name, source.Function.Body.Extent.StartLineNumber);
-                var duplicateKey = GetMethodKey(source.Parsed.Path, source.Function.Name, source.Function.Body.Extent.StartLineNumber);
+                var key = GetMethodKey(source);
+                var duplicateKey = key;
                 if (!source.Unit.IsCompilable || duplicateFunctions.Contains(duplicateKey) || collidingFunctions.Contains(key) || excludedMethods?.Contains(key) == true)
                     continue;
                 TryEmitIndependent(source, targetFramework, capabilities, boundEmissions, methods, methodSources, diagnostics);
@@ -268,7 +274,7 @@ public sealed class PowerShellTypedCompilationTranspiler
         {
             var parsed = parsedFiles.Single(file => file.Document.DocumentId == module.Document.DocumentId);
             var unit = parsed.Plan.Units.Single(unit => unit.Kind != PowerShellCompilationUnitKind.Function);
-            var emission = boundEmissions[GetSemanticMethodKey(parsed.Path, initializer.Symbol.Name, initializer.Symbol.Declaration.StartLine)];
+            var emission = boundEmissions[GetSemanticMethodKey(parsed.Path, initializer.Symbol.Name, initializer.Symbol.Declaration.StartOffset)];
             var method = CreateCompiledMethod(new FunctionSource(parsed, module.Initializer, unit), emission, unit.Name);
             method.IsModuleInitializer = true;
             methods.Add(method);
@@ -292,7 +298,8 @@ public sealed class PowerShellTypedCompilationTranspiler
             selectedRegions.Candidates,
             boundResult.RegionOpportunities,
             boundResult.RuntimeFreeModule,
-            boundResult.Initializer);
+            boundResult.Initializer,
+            capabilities == PowerShellCompilationCapabilities.HybridExecutable ? guardedExecutableEntryPath : null);
     }
 
     private static void EmitFunctionGraph(
@@ -309,7 +316,7 @@ public sealed class PowerShellTypedCompilationTranspiler
         foreach (var source in sources
                      .Where(source =>
                      {
-                         var key = GetMethodKey(source.Parsed.Path, source.Function.Name, source.Function.Body.Extent.StartLineNumber);
+                         var key = GetMethodKey(source);
                          return source.Unit.IsCompilable &&
                                 !duplicateFunctions.Contains(key) &&
                                 !collidingFunctions.Contains(key) &&
@@ -350,7 +357,7 @@ public sealed class PowerShellTypedCompilationTranspiler
         IReadOnlyDictionary<string, PowerShellCSharpMethodEmission> boundEmissions)
     {
         return boundEmissions.TryGetValue(
-            GetSemanticMethodKey(source.Parsed.Path, source.Function.Name, source.Function.Extent.StartLineNumber),
+            GetSemanticMethodKey(source.Parsed.Path, source.Function.Name, source.Function.Extent.StartOffset),
             out var emitted)
             ? emitted
             : null;
@@ -398,7 +405,12 @@ public sealed class PowerShellTypedCompilationTranspiler
         {
             var function = result.Lowered.Functions[index];
             if (!paths.TryGetValue(function.Symbol.DocumentId, out var path)) continue;
-            emissions[GetSemanticMethodKey(path, function.Symbol.Name, function.Symbol.Declaration.StartLine)] = result.Emitted.Methods[index];
+            var document = sources.Single(source => source.Document.DocumentId == function.Symbol.DocumentId).Document;
+            var declaration = document.RootFunctionDeclarations.FirstOrDefault(candidate =>
+                candidate.Syntax.Extent.StartOffset == function.Symbol.Declaration.StartOffset);
+            var authoredName = declaration?.UsesConditionalNativeBinding(capabilities) == true
+                ? declaration.Syntax.Name : function.Symbol.Name;
+            emissions[GetSemanticMethodKey(path, authoredName, function.Symbol.Declaration.StartOffset)] = result.Emitted.Methods[index];
         }
         var promotedRegions = result.PromotedRegions.Select(static region => CreateCompiledRegion(region)).ToArray();
         var regionCandidates = result.RegionCandidateDecisions
@@ -415,8 +427,8 @@ public sealed class PowerShellTypedCompilationTranspiler
             result.Lowered.Functions.SingleOrDefault(static function => function.Symbol.Kind == PowerShellSymbolKind.ModuleInitializer));
     }
 
-    private static string GetSemanticMethodKey(string path, string name, int definitionStartLine)
-        => path + "\0" + name + "\0" + definitionStartLine;
+    private static string GetSemanticMethodKey(string path, string name, int definitionStartOffset)
+        => path + "\0" + name + "\0" + definitionStartOffset;
 
     private static void EnsureBasicFunctionBinarySurfacePreserved(
         FunctionSource source,
@@ -440,7 +452,7 @@ public sealed class PowerShellTypedCompilationTranspiler
             emitted.GeneratedName,
             emitted.ReturnType.FullName ?? emitted.ReturnType.Name,
             source.Unit.Parameters,
-            emitted.SourceSpan.StartLine,
+            source.ConditionalDeclarationOffset is not null ? source.Function.Body.Extent.StartLineNumber : emitted.SourceSpan.StartLine,
             source.Parsed.Path,
             emitted.RequiresPowerShellStreams,
             emitted.RequiresPowerShellCommandRegions,
@@ -462,6 +474,8 @@ public sealed class PowerShellTypedCompilationTranspiler
             emitted.HostedRegionSiteCount,
             emitted.RequiresProviderCancellation);
         method.RegionGraph = emitted.RegionGraph;
+        method.NestedBodies = emitted.NestedBodies;
+        method.ConditionalDeclarationOffset = source.ConditionalDeclarationOffset;
         method.NativeFunctionBinding = emitted.NativeFunctionBinding;
         if (emitted.NativeFunctionBinding is { } native && (native.HasBegin || native.HasProcess || native.HasClean))
         {
@@ -543,7 +557,8 @@ public sealed class PowerShellTypedCompilationTranspiler
         PowerShellCompilationRegionCandidate[]? regionCandidates = null,
         PowerShellCompilationRegionOpportunity[]? regionOpportunities = null,
         PowerShellRuntimeFreeModuleDefinition? runtimeFreeModule = null,
-        PowerShellLoweredFunction? initializer = null)
+        PowerShellLoweredFunction? initializer = null,
+        string? guardedExecutableEntryPath = null)
     {
         var template = ReadTemplate();
         var source = template
@@ -569,6 +584,17 @@ public sealed class PowerShellTypedCompilationTranspiler
             parsedFiles.SelectMany(parsed => PowerShellLifecycleSourceBinder.Bind(parsed.Document, targetFramework, semanticProfileId)).ToArray(),
             optimization,
             irSnapshots);
+        result.NativeDeclarationTimingSourcePaths = parsedFiles.Where(static file => file.Document.PreserveFunctionDeclarationTiming)
+            .Select(static file => file.Path).ToArray();
+        result.GuardedExecutableEntryPath = guardedExecutableEntryPath;
+        // C# identifier escapes are source syntax and do not appear in CLR stack frames.
+        var declaringTypeName = (result.NamespaceName + "." + result.TypeName).Replace("@", string.Empty);
+        foreach (var method in result.Methods)
+        {
+            method.GeneratedDeclaringTypeName = declaringTypeName;
+            foreach (var body in method.NestedBodies)
+                body.GeneratedDeclaringTypeName = declaringTypeName;
+        }
         if (runtimeFreeModule is not null && initializer is not null)
             result.RuntimeFreeModule = new PowerShellRuntimeFreeModuleContract
             {
@@ -585,6 +611,8 @@ public sealed class PowerShellTypedCompilationTranspiler
                 }).ToArray()
             };
         result.PromotedRegions = promotedRegions ?? Array.Empty<PowerShellCompiledRegion>();
+        foreach (var region in result.PromotedRegions)
+            region.GeneratedDeclaringTypeName = declaringTypeName;
         result.RegionCandidates = regionCandidates ?? Array.Empty<PowerShellCompilationRegionCandidate>();
         result.RegionOpportunities = (regionOpportunities ?? Array.Empty<PowerShellCompilationRegionOpportunity>())
             .Where(opportunity => !methods.Any(method =>
@@ -638,50 +666,6 @@ public sealed class PowerShellTypedCompilationTranspiler
     private static string SanitizeQualifiedName(string value)
         => string.Join(".", value.Split('.').Select(PowerShellCSharpSymbolRenderer.Identifier));
 
-    private static string GetMethodKey(string sourcePath, string name, int sourceLine)
-        => Path.GetFullPath(sourcePath) + "\0" + name + "\0" + sourceLine;
-
-    private static string ResolveCollisionFreeTypeName(string requestedTypeName, IEnumerable<ScriptBlockAst> asts)
-    {
-        var generatedMethods = asts.SelectMany(ast => ast.FindAll(static node => node is FunctionDefinitionAst, searchNestedScriptBlocks: false)
-            .Cast<FunctionDefinitionAst>())
-            .Select(static function => PowerShellCSharpSymbolRenderer.Identifier(function.Name))
-            .ToHashSet(StringComparer.Ordinal);
-        var candidate = PowerShellCSharpSymbolRenderer.Identifier(requestedTypeName);
-        while (generatedMethods.Contains(candidate))
-            candidate = PowerShellCSharpSymbolRenderer.Identifier("_" + candidate.TrimStart('@'));
-        return candidate;
-    }
-
-    private sealed class FunctionSource
-    {
-        internal FunctionSource(ParsedSource parsed, FunctionDefinitionAst function, PowerShellCompilationUnitPlan unit)
-        {
-            Parsed = parsed;
-            Function = function;
-            Unit = unit;
-        }
-
-        internal ParsedSource Parsed { get; }
-        internal FunctionDefinitionAst Function { get; }
-        internal PowerShellCompilationUnitPlan Unit { get; }
-    }
-
-    private sealed class ParsedSource
-    {
-        internal ParsedSource(string path, ScriptBlockAst ast, PowerShellCompilationFilePlan plan, ParsedSourceDocument document)
-        {
-            Path = path;
-            Ast = ast;
-            Plan = plan;
-            Document = document;
-        }
-
-        internal string Path { get; }
-        internal ScriptBlockAst Ast { get; }
-        internal PowerShellCompilationFilePlan Plan { get; }
-        internal ParsedSourceDocument Document { get; }
-    }
 }
 
 internal sealed class PowerShellCSharpEmissionException : Exception
@@ -790,6 +774,7 @@ internal sealed class PowerShellCSharpMethodEmission
     internal string[] Aliases { get; }
     internal PowerShellCompilationCommandBinding CommandBinding { get; }
     internal PowerShellCompilationSourceMapEntry[] SourceMap { get; set; }
+    internal PowerShellCompiledBodyIdentity[] NestedBodies { get; set; } = Array.Empty<PowerShellCompiledBodyIdentity>();
     internal PowerShellCompilationCommandProviderContract[] CommandProviders { get; }
     internal string OutputCardinality { get; }
     internal string[] OutputValueStates { get; }

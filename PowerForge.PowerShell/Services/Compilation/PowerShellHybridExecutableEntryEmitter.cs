@@ -6,6 +6,10 @@ namespace PowerForge;
 /// <summary>Emits the private command that enters one already-bound Hybrid script body.</summary>
 internal static class PowerShellHybridExecutableEntryEmitter
 {
+    private const string NamespaceName = "PowerForge.Compiled";
+    private const string TypeName = "CompiledPowerShellEntry";
+    internal const string DeclaringTypeName = NamespaceName + "." + TypeName;
+
     internal static string GenerateSource(PowerShellTypedExecutableCompilation compiled)
     {
         var method = compiled.EntryPointMethod;
@@ -16,8 +20,8 @@ internal static class PowerShellHybridExecutableEntryEmitter
             .AppendLine("#nullable enable")
             .AppendLine("using System;")
             .AppendLine("using System.Management.Automation;")
-            .AppendLine("namespace PowerForge.Compiled;")
-            .AppendLine("internal static class CompiledPowerShellEntry")
+            .AppendLine("namespace " + NamespaceName + ";")
+            .AppendLine("internal static class " + TypeName)
             .AppendLine("{")
             .AppendLine(method.Source)
             .AppendLine("}")
@@ -63,7 +67,8 @@ internal static class PowerShellHybridExecutableEntryEmitter
         return source.ToString();
     }
 
-    internal static string ComposeScript(string packagedSource, string authoredSourcePath, PowerShellTypedExecutableCompilation compiled)
+    internal static string ComposeScript(string packagedSource, string authoredSourcePath, PowerShellTypedExecutableCompilation compiled,
+        PowerShellPackagedSourceMapping? sourceMapping = null)
     {
         var authored = Parser.ParseFile(authoredSourcePath, out _, out var authoredErrors);
         var packaged = Parser.ParseInput(packagedSource, out _, out var packagedErrors);
@@ -89,7 +94,11 @@ internal static class PowerShellHybridExecutableEntryEmitter
                          string.Join(", ", values) + "))";
         var source = new StringBuilder(packagedSource);
         for (var index = selected.Length - 1; index > 0; index--)
+        {
+            sourceMapping?.Record(selected[index].StartOffset, selected[index].EndOffset - selected[index].StartOffset, string.Empty);
             source.Remove(selected[index].StartOffset, selected[index].EndOffset - selected[index].StartOffset);
+        }
+        sourceMapping?.Record(selected[0].StartOffset, selected[0].EndOffset - selected[0].StartOffset, invocation);
         source.Remove(selected[0].StartOffset, selected[0].EndOffset - selected[0].StartOffset);
         source.Insert(selected[0].StartOffset, invocation);
         return source.ToString();

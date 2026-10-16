@@ -65,12 +65,7 @@ function Invoke-Census {
     param([string] $EntryPoint, [string] $TargetFramework, [string] $WorkingDirectory)
 
     $process = Invoke-OwnedProcess -FileName 'dotnet' -Arguments @($CliAssemblyPath, 'powershell', 'census', $EntryPoint, '--framework', $TargetFramework, '--output', 'json') -WorkingDirectory $WorkingDirectory
-    try { $json = $process.StandardOutput | ConvertFrom-Json }
-    catch { throw "PowerForge census did not return JSON. Exit=$($process.ExitCode); stderr=$($process.StandardError)" }
-    if ($process.ExitCode -ne 0 -or -not $json.success) {
-        $message = if ($json.error) { [string] $json.error } else { [string] $process.StandardError }
-        throw "PowerForge census failed with exit $($process.ExitCode): $message"
-    }
+    $json = ConvertFrom-CorpusCliProcess $process -Label 'PowerForge census'
     return [pscustomobject]@{ Product = $json.result.products[0]; DurationMilliseconds = $process.DurationMilliseconds }
 }
 
@@ -336,7 +331,8 @@ try {
                 succeeded = $true
             })
         } catch {
-            $results.Add([ordered]@{ id = $entry.id; workloadKind = $entry.workloadKind; scenarioFamily = $entry.scenarioFamily; succeeded = $false; error = $_.Exception.Message })
+            $results.Add([ordered]@{ id = $entry.id; workloadKind = $entry.workloadKind; scenarioFamily = $entry.scenarioFamily;
+                succeeded = $false; error = $_.Exception.Message; cliFailure = (Get-CorpusCliFailureEvidence $_.Exception) })
         }
     }
 

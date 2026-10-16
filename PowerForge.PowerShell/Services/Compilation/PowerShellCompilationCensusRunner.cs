@@ -164,15 +164,13 @@ public sealed partial class PowerShellCompilationCensusRunner
                 dependencies,
                 resolved.ModuleManifestPath is null ? null : analyzedCompilation.DependencyGraph,
                 analyzedCompilation.TargetContract);
-            var emitted = PowerShellCompilationExplainShaper.Shape(resolved, plan, targetFramework!, profile);
+            var emitted = PowerShellCompilationExplainShaper.Shape(resolved, plan, targetFramework!, out var entry, profile);
             dispositionLedger = PowerShellCompilationUnitDispositionLedgerBuilder.Create(
                 plan,
                 resolved.Kind,
                 emitted,
                 resolved.SourcePath,
-                emittedMethods: PowerShellCompilationExplainShaper.GetEmittedMethods(
-                    resolved, plan, emitted, targetFramework!, profile,
-                    Array.Empty<PowerShellCompilationCommandProviderContract>()));
+                emittedMethods: PowerShellCompilationExplainShaper.GetEmittedMethods(emitted, entry));
             sourceFiles = resolved.SourceFiles.Length;
             sourceFingerprint = ComputeSourceFingerprint(resolved.SourceFiles, path);
             coverage = BuildCoverageBreakdown(dispositionLedger);

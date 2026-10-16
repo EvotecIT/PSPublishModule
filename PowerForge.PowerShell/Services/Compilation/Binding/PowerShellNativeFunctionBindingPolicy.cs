@@ -111,7 +111,8 @@ internal static class PowerShellNativeFunctionBindingPolicy
            function.Body.GetType().GetProperty("CleanBlock")?.GetValue(function.Body) is not null ||
            FindNativePipelineOperator(function) is not null ||
            function.Body.Find(static node => node is BinaryExpressionAst { Operator: TokenKind.Format } format &&
-               format.Left.StaticType == typeof(object), searchNestedScriptBlocks: false) is not null ||
+               (format.Left.StaticType == typeof(object) || format.Right is ArrayLiteralAst),
+               searchNestedScriptBlocks: false) is not null ||
            function.Body.Find(static node =>
                node is ConvertExpressionAst conversion && conversion.Parent is CommandExpressionAst { Parent: PipelineAst discardPipeline } &&
                    PowerShellCompilationConversionPolicy.IsStatementDiscard(conversion) && IsCapturedPipeline(discardPipeline) ||
@@ -137,6 +138,10 @@ internal static class PowerShellNativeFunctionBindingPolicy
            RequiresNativeStatementValue(function) ||
            RequiresNativeLiteralCommandValue(function, capabilities) ||
            RequiresNativeCommandSwitch(function, capabilities) ||
+           function.Body.Find(static node => node is SwitchStatementAst selection &&
+               (selection.Flags & SwitchFlags.Regex) != 0 &&
+               PowerShellAutomaticVariableObservationPolicy.Observes(selection, "Matches"),
+               searchNestedScriptBlocks: false) is not null ||
            RequiresNativeCommandCondition(function, capabilities) ||
            RequiresNativeObjectParameterSwitch(function, capabilities) ||
            RequiresNativeAccessOutputCapture(function) ||

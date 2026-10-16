@@ -66,8 +66,7 @@ internal static class PowerShellGeneratedReferenceAssemblyResolver
                 </Project>
                 """,
                 new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
-            var run = new ProcessRunner().RunAsync(new ProcessRunRequest(
-                    "dotnet",
+            var run = new ProcessRunner().RunAsync(PowerShellCompilationSdkProcessEnvironment.CreateInheritedRequest(
                     workspace,
                     new[] { "restore", projectPath, "--nologo", "--verbosity", "minimal" },
                     TimeSpan.FromMinutes(2)))

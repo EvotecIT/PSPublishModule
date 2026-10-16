@@ -89,6 +89,6 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         var error = Assert.Throws<System.InvalidOperationException>(() =>
             PowerShellTypedExecutableCompiler.CompileHybridNativeEntry(fixture.ScriptPath,
                 plan, "net10.0", PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId));
-        Assert.Contains("without types, requirements or dependencies", error.Message);
+        Assert.Contains("without types or requirements", error.Message);
     }
 }

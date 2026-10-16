@@ -44,14 +44,19 @@ internal static class PowerShellTypedExecutableCompiler
     /// <summary>Compiles an end-only authored script body for the native script invocation owner.</summary>
     /// <remarks>This internal lowering route does not admit or package an executable root.</remarks>
     internal static PowerShellTypedExecutableCompilation CompileHybridNativeEntry(
+        string entryPointPath, PowerShellCompilationPlan plan, string targetFramework, string semanticProfileId)
+        => CompileHybridNativeEntry(entryPointPath, new[] { entryPointPath }, plan, targetFramework, semanticProfileId);
+
+    internal static PowerShellTypedExecutableCompilation CompileHybridNativeEntry(
         string entryPointPath,
+        IEnumerable<string> sourcePaths,
         PowerShellCompilationPlan plan,
         string targetFramework,
         string semanticProfileId)
     {
         if (plan.Mode != PowerShellCompilationMode.Hybrid)
             throw new InvalidOperationException("A native script entry requires a Hybrid compilation plan.");
-        return CompileCore(entryPointPath, new[] { entryPointPath }, plan, targetFramework,
+        return CompileCore(entryPointPath, sourcePaths, plan, targetFramework,
             semanticProfileId, null, PowerShellCompilationCapabilities.HybridExecutable,
             parametersAlreadyBound: false, nativeScriptEntry: true);
     }
@@ -72,7 +77,7 @@ internal static class PowerShellTypedExecutableCompiler
         var entryPoint = Path.GetFullPath(entryPointPath);
         var requestedSources = sourcePaths.Select(Path.GetFullPath)
             .Distinct(PowerShellCompilationPathSafety.PathComparer).ToArray();
-        ValidateSourceClosure(entryPoint, requestedSources);
+        ValidateSourceClosure(entryPoint, requestedSources, allowDerivedPaths: nativeScriptEntry);
 
         var identityRoot = Path.GetDirectoryName(entryPoint) ?? Directory.GetCurrentDirectory();
         var parsed = requestedSources.Select(path => Parse(path, identityRoot))
@@ -86,14 +91,13 @@ internal static class PowerShellTypedExecutableCompiler
             .ToArray();
         ValidateDefinitions(definitions, emitTopLevelMethods: !nativeScriptEntry);
         ValidateDependencyTopLevels(parsed.Values, entryPoint);
-        ValidateEntryPointDeclarationOrder(entrySource);
-        if (nativeScriptEntry && (requestedSources.Length != 1 ||
-            PowerShellSourceParser.HasUsingStatements(entrySource.Ast) || entrySource.Ast.ScriptRequirements is not null ||
+        ValidateEntryPointDeclarationOrder(entrySource, preserveNativeDeclarationTiming: nativeScriptEntry);
+        if (nativeScriptEntry && (PowerShellSourceParser.HasUsingStatements(entrySource.Ast) || entrySource.Ast.ScriptRequirements is not null ||
             entrySource.Ast.EndBlock?.Statements.Any(static statement => statement is TypeDefinitionAst) == true ||
             entrySource.Ast.BeginBlock is not null || entrySource.Ast.ProcessBlock is not null ||
             entrySource.Ast.DynamicParamBlock is not null ||
             entrySource.Ast.GetType().GetProperty("CleanBlock")?.GetValue(entrySource.Ast) is not null))
-            throw new InvalidOperationException("Native script-root lowering currently requires a single end-only source without types, requirements or dependencies.");
+            throw new InvalidOperationException("Native script-root lowering requires an end-only source without types or requirements and declaration-only dependencies.");
 
         var statements = entrySource.Ast.EndBlock?.Statements
             .Where(static statement => statement is not FunctionDefinitionAst && !IsTopLevelDotSource(statement))
@@ -104,8 +108,7 @@ internal static class PowerShellTypedExecutableCompiler
             : CreateEntryDocument(entrySource, statements, identityRoot, parametersAlreadyBound);
         var registry = PowerShellCommandSemanticRegistry.Create(commandProviders);
         var semantic = new PowerShellSemanticCompilationPipeline(registry, semanticProfileId).Compile(
-            parsed.Values.Where(source => !nativeScriptEntry ||
-                    !PowerShellCompilationPathSafety.PathEquals(source.Path, entryPoint))
+            parsed.Values.Where(source => !nativeScriptEntry)
                 .Select(static source => source.Document).Append(entryDocument.Document),
             targetFramework,
             capabilities);
@@ -147,6 +150,7 @@ internal static class PowerShellTypedExecutableCompiler
 
         var entryUnit = plan.Files.First(file => PowerShellCompilationPathSafety.PathEquals(file.FullPath, entryPoint))
             .Units.SingleOrDefault(static unit => unit.Kind == PowerShellCompilationUnitKind.Script);
+        var syntheticNoOpEntry = entryUnit is null;
         if (entryUnit is null)
         {
             if (statements.Length != 0)
@@ -158,7 +162,17 @@ internal static class PowerShellTypedExecutableCompiler
                 Array.Empty<PowerShellCompilationDiagnostic>());
         }
         var entryDescription = CreateMethodDescription(entryUnit, entry.Function, entry.Emission, entryPoint);
+        entryDescription.IsSyntheticNoOpExecutableEntry = syntheticNoOpEntry;
         descriptions.Add(entryDescription);
+        var declaringType = nativeScriptEntry ? PowerShellHybridNativeEntryEmitter.DeclaringTypeName :
+            parametersAlreadyBound ? PowerShellHybridExecutableEntryEmitter.DeclaringTypeName :
+            PowerShellTypedExecutableEmitter.DeclaringTypeName;
+        foreach (var description in descriptions)
+        {
+            description.GeneratedDeclaringTypeName = declaringType;
+            foreach (var body in description.NestedBodies)
+                body.GeneratedDeclaringTypeName = declaringType;
+        }
         var reachableCommandProviders = CollectReachableCommandProviders(semantic, entry.Function.Symbol);
         return new PowerShellTypedExecutableCompilation(
             new PowerShellTypedExecutableContract(entryDescription, entry.Function.Parameters
@@ -195,9 +209,9 @@ internal static class PowerShellTypedExecutableCompiler
             .ToArray();
     }
 
-    private static void ValidateSourceClosure(string entryPoint, string[] requestedSources)
+    private static void ValidateSourceClosure(string entryPoint, string[] requestedSources, bool allowDerivedPaths = false)
     {
-        var reachableSources = PowerShellHybridDependencyResolver.DiscoverDependencies(entryPoint);
+        var reachableSources = PowerShellHybridDependencyResolver.DiscoverDependencies(entryPoint, allowDerivedPaths: allowDerivedPaths);
         var injected = requestedSources.Except(reachableSources, PowerShellCompilationPathSafety.PathComparer).ToArray();
         var missing = reachableSources.Except(requestedSources, PowerShellCompilationPathSafety.PathComparer).ToArray();
         if (injected.Length == 0 && missing.Length == 0) return;
@@ -264,7 +278,8 @@ internal static class PowerShellTypedExecutableCompiler
         var remaps = mappings.ToArray();
         return new ExecutableEntryDocument(
             new ParsedSourceDocument(parsed.DocumentId, parsed.Path, parsed.Text, parsed.SyntaxRoot,
-                parsed.Tokens, parsed.Errors, new PowerShellAuthoredSourceProjection(entrySource.Document, remaps)),
+                parsed.Tokens, parsed.Errors, new PowerShellAuthoredSourceProjection(entrySource.Document, remaps),
+                guardPackagedPathReads: true),
             remaps);
     }
 
@@ -278,7 +293,7 @@ internal static class PowerShellTypedExecutableCompiler
         var root = new ScriptBlockAst(source.Ast.Extent, null, block, false);
         var document = new ParsedSourceDocument(source.Document.DocumentId, source.Path,
             source.Document.Text, root, source.Document.Tokens, source.Document.Errors,
-            nativeScriptRootName: "Invoke");
+            nativeScriptRootName: "Invoke", guardPackagedPathReads: true);
         return new ExecutableEntryDocument(document, Array.Empty<PowerShellRegionSourceRemap>());
     }
 
@@ -339,6 +354,7 @@ internal static class PowerShellTypedExecutableCompiler
             hostedRegionSiteCount: method.HostedRegionSiteCount,
             requiresProviderCancellation: method.RequiresProviderCancellation);
         description.DocumentId = method.SourceSpan.DocumentId;
+        description.NestedBodies = method.NestedBodies;
         description.NativeFunctionBinding = method.NativeFunctionBinding;
         description.DeclaredOutputTypeIsSemanticContract = method.DeclaredOutputType is not null;
         description.SuccessOutputType = method.SuccessOutputType?.FullName ?? string.Empty;
@@ -375,11 +391,14 @@ internal static class PowerShellTypedExecutableCompiler
         => statement is PipelineAst { PipelineElements.Count: 1 } pipeline &&
            pipeline.PipelineElements[0] is CommandAst { InvocationOperator: TokenKind.Dot };
 
-    private static void ValidateEntryPointDeclarationOrder(ParsedSource entrySource)
+    private static void ValidateEntryPointDeclarationOrder(ParsedSource entrySource, bool preserveNativeDeclarationTiming = false)
     {
         var executableStatementSeen = false;
         foreach (var statement in entrySource.Ast.EndBlock?.Statements.AsEnumerable() ?? Enumerable.Empty<StatementAst>())
         {
+            // The native root emits declaration operations at their authored statements.
+            // Strict/prebound entrypoints still remove them before executing their compiled body.
+            if (preserveNativeDeclarationTiming && (statement is FunctionDefinitionAst || IsTopLevelDotSource(statement))) continue;
             if (statement is FunctionDefinitionAst || IsTopLevelDotSource(statement))
             {
                 if (executableStatementSeen)

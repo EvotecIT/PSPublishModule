@@ -160,13 +160,16 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
     private static string ComputeArtifactSetSha256(IEnumerable<QualifiedProjectFile> files)
         => CanonicalJsonSha256(files.OrderBy(static file => file.Path, StringComparer.Ordinal).ToArray());
 
+    /// <summary>Addresses immutable installed payload bytes and their exact qualification descriptor.</summary>
     internal static string ComputeQualifiedInstallationIdentity(
         string targetContractSha256,
-        string artifactSetSha256)
+        string artifactSetSha256,
+        string qualifiedDescriptorSha256)
         => Convert.ToBase64String(CanonicalJsonHash(new
             {
                 TargetContractSha256 = targetContractSha256.ToLowerInvariant(),
-                ArtifactSetSha256 = artifactSetSha256.ToLowerInvariant()
+                ArtifactSetSha256 = artifactSetSha256.ToLowerInvariant(),
+                QualifiedDescriptorSha256 = qualifiedDescriptorSha256.ToLowerInvariant()
             }))
             .TrimEnd('=')
             .Replace('+', '-')
@@ -257,7 +260,7 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
             Files = validated.Files
         };
 
-    private static void ValidateQualifiedPackage(
+    private static string ValidateQualifiedPackage(
         string packagePath,
         PowerShellCompilationProjectManifestService.ProjectContext context,
         PowerShellCompilationProjectArtifact artifact,
@@ -268,10 +271,16 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
         var descriptorEntry = archive.GetEntry("powerforge-package.json")
             ?? throw new InvalidDataException("Qualified package has no descriptor.");
         PowerShellCompilationQualifiedPackageDescriptor descriptor;
-        using (var stream = descriptorEntry.Open())
+        string descriptorSha256;
+        using (var buffer = new MemoryStream())
         {
-            descriptor = JsonSerializer.Deserialize<PowerShellCompilationQualifiedPackageDescriptor>(stream, PowerShellCompilationProjectManifestService.JsonOptions)
+            using (var stream = descriptorEntry.Open()) stream.CopyTo(buffer);
+            buffer.Position = 0;
+            descriptor = JsonSerializer.Deserialize<PowerShellCompilationQualifiedPackageDescriptor>(buffer, PowerShellCompilationProjectManifestService.JsonOptions)
                 ?? throw new InvalidDataException("Qualified package descriptor is empty.");
+            buffer.Position = 0;
+            using var algorithm = SHA256.Create();
+            descriptorSha256 = PowerShellCompilationProjectManifestService.ToHex(algorithm.ComputeHash(buffer));
         }
         var expected = CreatePackageDescriptor(context, artifact, validated, testEvidence);
         if (descriptor.SchemaVersion != 1 ||
@@ -319,6 +328,7 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
             if (!hash.Equals(expected.Files[index].Sha256, StringComparison.OrdinalIgnoreCase))
                 throw new InvalidDataException($"Qualified package entry '{entry.FullName}' differs from its descriptor hash.");
         }
+        return descriptorSha256;
     }
 
     private static string CanonicalJsonSha256<T>(T value)
