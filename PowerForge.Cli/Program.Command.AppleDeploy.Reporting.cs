@@ -85,32 +85,7 @@ internal static partial class Program
         var failed = stages.FirstOrDefault(static stage => stage is not null && !stage.Succeeded);
         if (failed is null)
             return null;
-        var status = failed.StartFailed ? "could not start" : failed.TimedOut ? "timed out" :
-            failed.StandardOutputLimitExceeded || failed.StandardErrorLimitExceeded ? "exceeded its output limit" : "failed";
-        // Redact complete streams before selecting excerpts: a truncation boundary
-        // must never expose a suffix of a credential.
-        var secrets = sensitiveValues.ToArray();
-        var summary = CompactAppleDeployOutput(RedactReleaseCredentialText(
-            $"{failed.Executable} {status} (exit code {failed.ExitCode}).", secrets), 200);
-        var stdout = RedactReleaseCredentialText(failed.StdOut, secrets).Trim();
-        var stderr = RedactReleaseCredentialText(failed.StdErr, secrets).Trim();
-        var streams = new List<string>();
-        var budget = !string.IsNullOrWhiteSpace(stdout) && !string.IsNullOrWhiteSpace(stderr) ? 880 : 1760;
-        if (!string.IsNullOrWhiteSpace(stdout))
-            streams.Add("stdout:\n" + CompactAppleDeployOutput(stdout, budget));
-        if (!string.IsNullOrWhiteSpace(stderr))
-            streams.Add("stderr:\n" + CompactAppleDeployOutput(stderr, budget));
-        return summary + (streams.Count == 0 ? string.Empty : "\n" + string.Join("\n", streams));
-    }
-
-    private static string CompactAppleDeployOutput(string text, int maximumLength)
-    {
-        if (text.Length <= maximumLength)
-            return text;
-        const string separator = "\n... output truncated ...\n";
-        var headLength = (maximumLength - separator.Length) / 2;
-        var tailLength = maximumLength - separator.Length - headLength;
-        return text[..headLength] + separator + text[^tailLength..];
+        return AppleToolFailureFormatter.Format(failed, sensitiveValues);
     }
 
 }

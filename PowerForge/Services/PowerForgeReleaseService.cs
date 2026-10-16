@@ -2706,7 +2706,8 @@ internal sealed partial class PowerForgeReleaseService
                     if (!archive.Succeeded)
                     {
                         result.Success = false;
-                        result.ErrorMessage = $"xcodebuild archive failed for '{app.Name}' with exit code {archive.ProcessResult.ExitCode}.";
+                        result.ErrorMessage = AppleToolFailureFormatter.Format(archive.ProcessResult, AppleToolCredentials(plan),
+                            $"xcodebuild archive failed for '{app.Name}' with exit code {archive.ProcessResult.ExitCode}.");
                         return CompleteAppleExecutionFailure(plan, resultsByApp, app);
                     }
 
@@ -2839,7 +2840,8 @@ internal sealed partial class PowerForgeReleaseService
                 if (!upload.Succeeded)
                 {
                     result.Success = false;
-                    result.ErrorMessage = $"xcodebuild exportArchive {(direct ? "Developer ID export" : "upload")} failed for '{app.Name}' with exit code {upload.ProcessResult.ExitCode}.";
+                    result.ErrorMessage = AppleToolFailureFormatter.Format(upload.ProcessResult, AppleToolCredentials(plan),
+                        $"xcodebuild exportArchive {(direct ? "Developer ID export" : "upload")} failed for '{app.Name}' with exit code {upload.ProcessResult.ExitCode}.");
                     return CompleteAppleExecutionFailure(plan, resultsByApp, app);
                 }
                 VerifyAppleArchiveUnchangedAfterUpload(app, result);

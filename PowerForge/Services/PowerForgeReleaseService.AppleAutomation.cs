@@ -595,9 +595,7 @@ internal sealed partial class PowerForgeReleaseService
             var delivery = ReadAppleStatusDelivery(plan, app, result, values.MarketingVersion, values.BuildNumber);
             var diagnostics = AppleReleaseFailureClassifier.Classify(
                     result?.ErrorMessage,
-                    build?.ProcessingState,
-                    result?.Upload?.ProcessResult.StdOut,
-                    result?.Upload?.ProcessResult.StdErr)
+                    build?.ProcessingState)
                 .Concat(plan.Action == PowerForgeAppleReleaseAction.Doctor &&
                         (!IsExplicitAppleVersionObservation(plan) || !skippedIndependentRelease)
                     ? AppleReleaseDoctor.Evaluate(plan, app, result?.RemoteState?.ControlPlane,
