@@ -50,6 +50,8 @@ summary and return documentation. Available XML documentation takes precedence.
 Pipeline caches account for its bytes and additional `xmls`/`xmlPaths` inputs.
 The search continues past undocumented library candidates to documented library
 ancestors or interfaces, without substituting a distant framework summary.
+Imported XML records can themselves inherit from another base or interface;
+generation follows those chains and reports unresolved imported library contracts.
 Unresolved implicit inheritance on library contracts still produces a warning
 and fails pipeline steps with `failOnWarnings` enabled (the CI default).
 An explicit `cref` remains supported.

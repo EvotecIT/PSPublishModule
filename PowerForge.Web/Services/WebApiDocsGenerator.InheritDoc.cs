@@ -25,14 +25,26 @@ public static partial class WebApiDocsGenerator
         }
         IReadOnlyList<string>? referenceInputs = null;
         var loadedReferences = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var pair in members.ToArray())
+        // Imported records may themselves inherit documentation; process reachable
+        // records with their reflected metadata before the model follows their cref.
+        var pendingRecords = new Queue<KeyValuePair<string, XElement>>(members);
+        var resolvedRecords = new HashSet<string>(StringComparer.Ordinal);
+        while (pendingRecords.TryDequeue(out var pair))
         {
             var inheritDoc = pair.Value.Element("inheritdoc");
             if (inheritDoc is null) continue;
             var explicitTarget = inheritDoc.Attribute("cref")?.Value;
             var implicitTarget = string.IsNullOrWhiteSpace(explicitTarget);
             if (!reflected.TryGetValue(pair.Key, out var member)) continue;
+            if (!resolvedRecords.Add(pair.Key)) continue;
             var candidates = InheritedDocumentationMembers(member).ToArray();
+            foreach (var inheritedMember in candidates)
+            {
+                var id = DocumentationId(inheritedMember);
+                reflected.TryAdd(id, inheritedMember);
+                if (members.TryGetValue(id, out var record) && record.Element("inheritdoc") is not null)
+                    pendingRecords.Enqueue(new(id, record));
+            }
             var inheritedOwnerNames = candidates.Select(candidate => candidate is Type candidateType
                     ? candidateType.Assembly.GetName().Name : candidate.DeclaringType!.Assembly.GetName().Name)
                 .OfType<string>().ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -41,7 +53,8 @@ public static partial class WebApiDocsGenerator
             var targets = implicitTarget ? candidates.Select(DocumentationId).ToArray() : new[] { explicitTarget! };
             foreach (var candidateId in targets)
             {
-                var candidate = candidates.FirstOrDefault(candidate => DocumentationId(candidate) == candidateId) ?? candidates.FirstOrDefault();
+                var candidate = candidates.FirstOrDefault(candidate => DocumentationId(candidate) == candidateId)
+                    ?? (implicitTarget ? null : FrameworkInheritDocMember(candidateId));
                 var declaring = candidate as Type ?? candidate?.DeclaringType;
                 if (implicitTarget && missingLibraryContract && declaring?.Assembly == typeof(object).Assembly)
                     continue;
@@ -52,13 +65,18 @@ public static partial class WebApiDocsGenerator
                     var assemblyDirectory = Path.GetDirectoryName(Path.GetFullPath(assemblyPath));
                     var candidateInputs = referenceInputs.Where(path =>
                         !string.Equals(Path.GetDirectoryName(path), assemblyDirectory, StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(Path.GetFileNameWithoutExtension(path), ownerName, StringComparison.OrdinalIgnoreCase) ||
                         inheritedOwnerNames.Contains(Path.GetFileNameWithoutExtension(path)));
                     foreach (var path in candidateInputs.OrderBy(path => ReferenceDocumentationPriority(path, ownerName, declaring?.Namespace)))
                     {
                         if (!loadedReferences.Add(path)) continue;
                         var document = LoadXmlDocumentation(path, warnings);
                         foreach (var inherited in document.Root!.Element("members")!.Elements("member"))
-                            if (inherited.Attribute("name")?.Value is { Length: > 0 } id) members.TryAdd(id, inherited);
+                        {
+                            if (inherited.Attribute("name")?.Value is not { Length: > 0 } id) continue;
+                            if (members.TryAdd(id, inherited) && reflected.ContainsKey(id) && inherited.Element("inheritdoc") is not null)
+                                pendingRecords.Enqueue(new(id, inherited));
+                        }
                         if (members.ContainsKey(candidateId)) break;
                     }
                 }
@@ -73,7 +91,8 @@ public static partial class WebApiDocsGenerator
             }
             // Prefer real XML documentation. Only synthesize the nearest well-known framework contract;
             // a missing library contract must retain the unresolved-inheritdoc diagnostic.
-            if (implicitTarget && target is null && candidates.FirstOrDefault() is { } nearest &&
+            var fallbackMember = implicitTarget ? candidates.FirstOrDefault() : FrameworkInheritDocMember(explicitTarget!);
+            if (target is null && fallbackMember is { } nearest &&
                 CreateFrameworkInheritDoc(nearest) is { } frameworkDocumentation)
             {
                 target = DocumentationId(nearest);
