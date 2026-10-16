@@ -263,10 +263,12 @@ internal static partial class WebPipelineRunner
         hash.AppendData(SHA256.HashData(stream));
     }
 
-    private static IEnumerable<string> EnumerateFingerprintPaths(string baseDir, JsonElement step)
+    private static IEnumerable<string> EnumerateFingerprintPaths(string baseDir, JsonElement step, string? inheritedType = null)
     {
         if (step.ValueKind != JsonValueKind.Object)
             yield break;
+
+        var effectiveType = GetString(step, "type") ?? inheritedType;
 
         if (GetString(step, "task") is null || string.Equals(GetString(step, "task"), "apidocs", StringComparison.OrdinalIgnoreCase))
         {
@@ -280,7 +282,7 @@ internal static partial class WebPipelineRunner
             foreach (var assembly in assemblies)
                 foreach (var input in WebApiDocumentationInputs.DiscoverCacheInputs(assembly)) yield return input;
 
-            if (string.Equals(GetString(step, "type"), "PowerShell", StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(effectiveType, "PowerShell", StringComparison.OrdinalIgnoreCase))
             {
                 var helpPath = ResolvePath(baseDir, GetString(step, "help") ?? GetString(step, "helpPath") ?? GetString(step, "help-path"));
                 if (!string.IsNullOrWhiteSpace(helpPath))
@@ -346,7 +348,7 @@ internal static partial class WebPipelineRunner
                 if (item.ValueKind != JsonValueKind.Object)
                     continue;
 
-                foreach (var nestedPath in EnumerateFingerprintPaths(baseDir, item))
+                foreach (var nestedPath in EnumerateFingerprintPaths(baseDir, item, effectiveType))
                     yield return nestedPath;
             }
         }
