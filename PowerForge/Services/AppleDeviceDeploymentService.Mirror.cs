@@ -47,7 +47,7 @@ public sealed partial class AppleDeviceDeploymentService
             ignoredMutation: args => IsExpectedGeneratedMirrorDirectoryMutation(
                 args,
                 mirrorPath,
-                excludedGeneratedRootPaths) || IsExpectedXcodeWorkspaceDirectoryMutation(
+                excludedGeneratedRootPaths) || AppleXcodeWorkspaceWorkingDirectories.IsExpectedDirectoryMutation(
                     args, mirroredProjectPath, request.IsWorkspace));
 
         try
@@ -199,30 +199,6 @@ public sealed partial class AppleDeviceDeploymentService
             throw new InvalidOperationException(
                 "BuildMirrorPath must not physically overlap the mirrored build root through a symbolic-link or path alias.");
         }
-    }
-
-    // Xcode creates these workspace containers even when no Swift packages are
-    // declared. Ignore directory metadata only; file writes (including locks
-    // and schemes), deletion, renames, and linked directories remain mutations.
-    private static bool IsExpectedXcodeWorkspaceDirectoryMutation(
-        FileSystemEventArgs args, string projectPath, bool isWorkspace)
-    {
-        if (args.ChangeType != WatcherChangeTypes.Created && args.ChangeType != WatcherChangeTypes.Changed)
-            return false;
-        var workspace = isWorkspace ? projectPath : Path.Combine(projectPath, "project.xcworkspace");
-        var shared = Path.Combine(workspace, "xcshareddata");
-        var packages = Path.Combine(shared, "swiftpm");
-        var configuration = Path.Combine(packages, "configuration");
-        var comparison = FrameworkCompatibility.GetPathStringComparisonForPath(workspace);
-        if (!args.FullPath.Equals(shared, comparison) && !args.FullPath.Equals(packages, comparison) &&
-            !args.FullPath.Equals(configuration, comparison))
-            return false;
-        try
-        {
-            var attributes = File.GetAttributes(args.FullPath);
-            return (attributes & FileAttributes.Directory) != 0 && (attributes & FileAttributes.ReparsePoint) == 0;
-        }
-        catch { return false; }
     }
 
     private static string RewritePath(
