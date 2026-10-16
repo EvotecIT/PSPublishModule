@@ -7,6 +7,7 @@ param(
     [ValidateSet('Fast', 'Full')] [string] $Lane = 'Fast',
     [ValidateSet('Enforce', 'RecordOnly')] [string] $PerformancePolicy = 'Enforce',
     [string] $ArtifactsPath,
+    [ValidateSet('All', 'Contracts', 'Corpus')] [string] $Phase = 'All',
     [switch] $NoBuild
 )
 
@@ -110,6 +111,7 @@ if ($IsWindows) {
     maxParallelThreads = $MaxParallelThreads
     lane = $Lane
     performancePolicy = $PerformancePolicy
+    phase = $Phase
     requiredFamilies = @($requiredFamilies.Keys | Sort-Object)
     excludedRequirements = $excludedRequirements
 } | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $EvidencePath 'host-capabilities.json') -Encoding utf8
@@ -117,18 +119,23 @@ $fastPatterns = @(
     'PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.CompleteWorkflow_PinnedBinaryToStringPreservesBindingAndOutput'
 ) + @($requiredFamilies.Values | ForEach-Object { $_.TrimEnd('*') })
 $fastFilter = ($fastPatterns | ForEach-Object { "FullyQualifiedName~$_" }) -join '|'
-$filter = if ($Lane -eq 'Full') { 'Category=PowerShellCompilerGate|' + $fastFilter } else { $fastFilter }
+$filter = if ($Lane -eq 'Full') { 'Category=PowerShellCompilerGate|FullyQualifiedName~PowerShellCompilationCensusTests|FullyQualifiedName~PowerShellCompilationBoundPipelineTests|FullyQualifiedName~PowerShellCompilationFuzzTests|' + $fastFilter } else { $fastFilter }
+# Keep the running-test sequence when a subprocess stalls, without retaining large dumps.
+$hangDiagnosticTimeout = if ($Lane -eq 'Full') { '115min' } else { '35min' }
 $testArguments = @('test', (Join-Path $repositoryRoot 'PowerForge.Tests/PowerForge.Tests.csproj'),
     '-c', 'Release', '--filter', $filter, '--logger', 'console;verbosity=normal',
-    '--logger', 'trx;LogFileName=compiler-gate.trx', '--results-directory', $EvidencePath)
+    '--logger', 'trx;LogFileName=compiler-gate.trx', '--results-directory', $EvidencePath,
+    '--blame-hang-timeout', $hangDiagnosticTimeout, '--blame-hang-dump-type', 'none')
 if ($NoBuild) { $testArguments += @('--no-build', '--no-restore') }
 if ($ArtifactsPath) { $testArguments += @('--artifacts-path', $ArtifactsPath) }
 $testArguments += @('--', "xUnit.MaxParallelThreads=$MaxParallelThreads")
 Push-Location $repositoryRoot
 try {
     $env:POWERFORGE_TEST_CLI_ASSEMBLY_PATH = $cliAssemblyPath
-    & dotnet @testArguments
-    if ($LASTEXITCODE -ne 0) { throw "Compiler contract tests failed with exit $LASTEXITCODE." }
+    if ($Phase -ne 'Corpus') {
+        & dotnet @testArguments
+        if ($LASTEXITCODE -ne 0) { throw "Compiler contract tests failed with exit $LASTEXITCODE." }
+    }
     [xml] $testResults = Get-Content -LiteralPath (Join-Path $EvidencePath 'compiler-gate.trx') -Raw
     if ([int] $testResults.TestRun.ResultSummary.Counters.executed -eq 0) { throw 'The compiler gate did not execute any tests.' }
     # Require actual passing coverage for this host's artifact/API and development families in both lanes.
@@ -147,11 +154,13 @@ try {
     } elseif (-not ($passedNames -like $moduleWorkflow)) {
         throw 'The compiler gate is missing a passing generated module workflow.'
     }
-    & (Join-Path $repositoryRoot 'Benchmarks/PowerShellCompilation/Corpus/Invoke-PublicCorpus.ps1') `
-        -SkipModules -RuntimeIdentifier $RuntimeIdentifier -CliAssemblyPath $cliAssemblyPath -PerformancePolicy $PerformancePolicy `
-        -WorkspacePath (Join-Path $EvidencePath 'corpus-workspace') `
-        -EvidencePath (Join-Path $EvidencePath 'strict-corpus.json')
-    if ($LASTEXITCODE -ne 0) { throw "Strict compiler corpus failed with exit $LASTEXITCODE." }
+    if ($Phase -ne 'Contracts') {
+        & (Join-Path $repositoryRoot 'Benchmarks/PowerShellCompilation/Corpus/Invoke-PublicCorpus.ps1') `
+            -SkipModules -RuntimeIdentifier $RuntimeIdentifier -CliAssemblyPath $cliAssemblyPath -PerformancePolicy $PerformancePolicy `
+            -WorkspacePath (Join-Path $EvidencePath 'corpus-workspace') `
+            -EvidencePath (Join-Path $EvidencePath 'strict-corpus.json')
+        if ($LASTEXITCODE -ne 0) { throw "Strict compiler corpus failed with exit $LASTEXITCODE." }
+    }
 } finally {
     $env:POWERFORGE_TEST_CLI_ASSEMBLY_PATH = $previousCliPath
     Pop-Location

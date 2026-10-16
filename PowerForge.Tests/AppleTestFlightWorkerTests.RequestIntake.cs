@@ -83,6 +83,7 @@ public sealed partial class AppleTestFlightWorkerTests
     [Theory]
     [InlineData((int)AppleTestFlightJobStage.Excluded, "error")]
     [InlineData((int)AppleTestFlightJobStage.ReadyInHome, "success")]
+    [InlineData((int)AppleTestFlightJobStage.ReadyInTestFlight, "success")]
     [InlineData((int)AppleTestFlightJobStage.NeedsOperator, "failure")]
     [InlineData((int)AppleTestFlightJobStage.WaitingForChecks, "pending")]
     public void TerminalStatusMatchesDeliveryOutcome(int stage, string expected) =>

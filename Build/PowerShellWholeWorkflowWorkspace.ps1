@@ -69,6 +69,11 @@ function Get-OwnedWholeWorkflowWorkspace {
     }
     $text = Get-Content -LiteralPath $recordPath -Raw
     $owner = $text | ConvertFrom-Json
+    # ConvertFrom-Json may infer DateTime and trim fractional zeros on serialization.
+    # Keep the creation identity exactly as recorded without a newer PowerShell requirement.
+    $document = [Text.Json.JsonDocument]::Parse($text)
+    try { $owner.createdUtc = $document.RootElement.GetProperty('createdUtc').GetString() }
+    finally { $document.Dispose() }
     $comparison = Get-PathComparison
     if ($owner.schemaVersion -ne 1 -or $owner.kind -cne 'PowerForge.WholeWorkflowWorkspace' -or
         $owner.ownershipId -cnotmatch '^[0-9a-f]{32}$' -or -not $RunnerTemp.Equals($owner.runnerTemp, $comparison) -or

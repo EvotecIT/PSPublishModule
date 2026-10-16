@@ -213,6 +213,9 @@ internal sealed partial class PowerForgeReleaseService
         (AppStoreConnectScreenshotSyncSpec Spec, string ConfigPath)[] screenshotSpecs,
         (AppStoreConnectVersionMetadataSpec Spec, string ConfigPath)[] metadataSpecs)
     {
+        var explicitObservation = IsExplicitAppleVersionObservation(plan);
+        var observesTarget = IsExplicitAppleVersionObservation(plan, app);
+        var skippedObservationTarget = explicitObservation && !observesTarget;
         var target = new PowerForgeAppleReleaseTargetReceipt
         {
             Name = app.Name,
@@ -234,16 +237,16 @@ internal sealed partial class PowerForgeReleaseService
             ShipToAppStoreReview = app.ShipToAppStoreReview,
             AppId = app.AppStoreConnectAppId,
             AppIdDiscovered = app.AppStoreConnectAppIdDiscovered,
-            Version = versioning?.MarketingVersion ?? app.MarketingVersion,
-            Build = versioning?.BuildNumber ?? app.BuildNumber,
+            Version = explicitObservation ? (observesTarget ? plan.ObservedMarketingVersion : null) : versioning?.MarketingVersion ?? app.MarketingVersion,
+            Build = explicitObservation ? null : versioning?.BuildNumber ?? app.BuildNumber,
             ArchivePath = string.IsNullOrWhiteSpace(app.ExpectedArchiveSha256)
                 ? null
                 : FrameworkCompatibility.GetRelativePath(plan.ProjectRoot, app.ArchivePath).Replace('\\', '/'),
             ArchiveSha256 = app.ExpectedArchiveSha256,
-            DirectExecutionSha256 = app.DistributionRoute == AppleDistributionRoute.DirectNotarized
+            DirectExecutionSha256 = !skippedObservationTarget && app.DistributionRoute == AppleDistributionRoute.DirectNotarized
                 ? ComputeDirectExecutionSha256(plan, app)
                 : null,
-            SkippedSteps = new[] { "plan-only" }
+            SkippedSteps = skippedObservationTarget ? new[] { "plan-only", "independentRelease" } : new[] { "plan-only" }
         };
         if (plan.ShipPhase == PowerForgeAppleShipPhase.VersionCheckpoint ||
             !RequiresObservedApplePlanState(plan, app))

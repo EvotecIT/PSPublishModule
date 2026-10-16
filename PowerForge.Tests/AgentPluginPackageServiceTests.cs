@@ -35,12 +35,59 @@ public sealed class AgentPluginPackageServiceTests : IDisposable
         using var codex = ReadEntry(archive, ".codex-plugin/plugin.json");
         Assert.False(claude.RootElement.TryGetProperty("extensions", out _));
         Assert.Equal("Documents", codex.RootElement.GetProperty("interface").GetProperty("displayName").GetString());
-        Assert.Equal("./.codex-plugin/mcp.json", codex.RootElement.GetProperty("mcpServers").GetString());
+        Assert.Equal("./.mcp.json", codex.RootElement.GetProperty("mcpServers").GetString());
         Assert.Equal(archive.Entries.Count, result.FileCount);
         var hash = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(result.ArchivePath!))).ToLowerInvariant();
         Assert.Equal(hash, result.Sha256);
         Assert.Equal(hash + "  sample-documents-1.2.3.zip\n", File.ReadAllText(result.ArchivePath + ".sha256"));
         Assert.False(Directory.Exists(Path.Combine(Source, ".claude-plugin")));
+    }
+
+    [Fact]
+    public void ClaudeDirectoryIconSurvivesSyncAndIsIncludedUnchangedInArchive()
+    {
+        var service = new AgentPluginPackageService();
+        var directory = Path.Combine(Source, ".claude-plugin");
+        Directory.CreateDirectory(directory);
+        var icon = new byte[] { 137, 80, 78, 71, 13, 10, 26, 10, 1, 2, 3 };
+        var iconPath = Path.Combine(directory, "icon.png");
+        File.WriteAllBytes(iconPath, icon);
+
+        service.SyncCompatibility(Source);
+        Assert.Equal(icon, File.ReadAllBytes(iconPath));
+        service.Validate(Source);
+        var result = service.Pack(Source, Path.Combine(_sandbox, "out"));
+        using var archive = ZipFile.OpenRead(result.ArchivePath!);
+        using var input = archive.GetEntry(".claude-plugin/icon.png")!.Open();
+        using var output = new MemoryStream();
+        input.CopyTo(output);
+        Assert.Equal(icon, output.ToArray());
+    }
+
+    [Fact]
+    public void ClaudeMetadataDirectoryDoesNotPermitUnrecognizedPayloads()
+    {
+        var directory = Path.Combine(Source, ".claude-plugin");
+        Directory.CreateDirectory(directory);
+        File.WriteAllText(Path.Combine(directory, "server.exe"), "unsupported payload");
+        Assert.Throws<InvalidDataException>(() => new AgentPluginPackageService().Pack(Source, Path.Combine(_sandbox, "out")));
+        Assert.False(Directory.Exists(Path.Combine(_sandbox, "out")));
+    }
+
+    [Fact]
+    public void CompatibilityFilesRemainValidAfterGitLfNormalization()
+    {
+        var service = new AgentPluginPackageService();
+        service.SyncCompatibility(Source);
+        foreach (var name in new[] { ".mcp.json", ".claude-plugin/plugin.json", ".codex-plugin/plugin.json", ".codex-plugin/mcp.json" })
+        {
+            var path = Path.Combine(Source, name);
+            var content = File.ReadAllText(path);
+            Assert.Contains("\n", content);
+            Assert.DoesNotContain("\r", content);
+            File.WriteAllText(path, content.Replace("\r\n", "\n"));
+        }
+        service.Validate(Source);
     }
 
     [Fact]

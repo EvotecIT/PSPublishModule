@@ -232,7 +232,8 @@ internal sealed partial class PowerForgeReleaseService
             PowerForgeAppleReleaseAction.Release;
 
     private static bool RequiresAppleReleaseIdentity(PowerForgeAppleReleasePlan plan)
-        => plan.Action == PowerForgeAppleReleaseAction.Status ||
+        => !IsExplicitAppleVersionObservation(plan) &&
+           (plan.Action == PowerForgeAppleReleaseAction.Status ||
            plan.Action == PowerForgeAppleReleaseAction.Doctor ||
            plan.Action == PowerForgeAppleReleaseAction.Ship ||
            IsUploadExecution(plan) ||
@@ -243,7 +244,13 @@ internal sealed partial class PowerForgeReleaseService
            plan.DistributeTestFlight ||
            plan.SubmitTestFlightBetaReview ||
            plan.SubmitForReview ||
-           plan.ReleaseApprovedVersion;
+           plan.ReleaseApprovedVersion);
+
+    internal static bool IsExplicitAppleVersionObservation(
+        PowerForgeAppleReleasePlan plan, PowerForgeAppleAppReleaseTargetPlan? app = null)
+        => plan.Action is PowerForgeAppleReleaseAction.Status or PowerForgeAppleReleaseAction.Doctor &&
+           !string.IsNullOrWhiteSpace(plan.ObservedMarketingVersion) &&
+           (app is null || ShouldExecuteAppleTarget(plan.Action, app));
 
     private static void ValidateAppleAutomation(PowerForgeAppleReleaseAutomationOptions automation)
     {
@@ -331,13 +338,14 @@ internal sealed partial class PowerForgeReleaseService
         PowerForgeAppleReleasePlan plan,
         PowerForgeAppleAppReleaseTargetPlan app)
     {
-        var version = ResolveAppleDistributionValues(app, versionUpdate: null);
+        var observedVersion = string.IsNullOrWhiteSpace(plan.ObservedMarketingVersion) ? null : plan.ObservedMarketingVersion;
+        var version = observedVersion is null ? ResolveAppleDistributionValues(app, versionUpdate: null) : default;
         return _getAppleReleaseState(new AppStoreConnectReleaseStateRequest
         {
             Credential = CreateAppStoreConnectCredential(plan),
             AppId = app.AppStoreConnectAppId!,
-            VersionString = version.MarketingVersion,
-            BuildNumber = version.BuildNumber,
+            VersionString = observedVersion ?? version.MarketingVersion,
+            BuildNumber = observedVersion is not null ? null : version.BuildNumber,
             Platforms = new[] { app.Platform },
             BetaGroupIds = plan.TestFlightBetaGroupIds,
             BetaGroupNames = plan.TestFlightBetaGroupNames,
@@ -397,7 +405,7 @@ internal sealed partial class PowerForgeReleaseService
         throw new AppleBuildProcessingException(
             $"Timed out after {plan.Automation.ProcessingTimeoutSeconds} seconds waiting for " +
             $"App Store Connect build processing for '{app.Name}'.",
-            state);
+            state, waitingForProcessing: true);
     }
 
     private static bool IsTerminalAppleBuildFailure(string? state)
@@ -514,13 +522,20 @@ internal sealed partial class PowerForgeReleaseService
             var platform = state?.Platforms.SingleOrDefault(value => value.Platform == app.Platform);
             var preparedVersion = result?.Distribution?.Version;
             var receiptVersion = platform?.Version ?? preparedVersion;
-            var build = platform?.MatchedBuild ?? platform?.SelectedBuild ?? result?.Distribution?.Build;
             var review = platform?.ReviewSubmissions.FirstOrDefault(static value => value.IsSubmitted == true) ??
                          platform?.ReviewSubmissions.FirstOrDefault();
             (string? MarketingVersion, string? BuildNumber) values = (null, null);
             var skippedIndependentRelease = result?.SkippedSteps.Contains(
                 "independentRelease",
                 StringComparer.OrdinalIgnoreCase) == true;
+            var observesExplicitVersion = IsExplicitAppleVersionObservation(plan, app) &&
+                                          !skippedIndependentRelease && result is not null;
+            var build = platform?.MatchedBuild ??
+                        (string.IsNullOrWhiteSpace(state?.BuildNumber) ? platform?.SelectedBuild : null) ??
+                        result?.Distribution?.Build;
+            var hasTestFlightBuild = build is not null &&
+                                     (platform?.MatchedBuild?.Id == build.Id || platform?.TestFlightBuild?.Id == build.Id ||
+                                      observesExplicitVersion && platform?.SelectedBuild?.Id == build.Id);
             if (!skippedIndependentRelease &&
                 plan.Action is PowerForgeAppleReleaseAction.Archive or PowerForgeAppleReleaseAction.Rehearse)
             {
@@ -537,6 +552,7 @@ internal sealed partial class PowerForgeReleaseService
                 }
             }
             else if (!skippedIndependentRelease &&
+                     !IsExplicitAppleVersionObservation(plan) &&
                      plan.Action != PowerForgeAppleReleaseAction.Cleanup &&
                      (RequiresAppleReleaseIdentity(plan) ||
                       !string.IsNullOrWhiteSpace(app.MarketingVersion) ||
@@ -559,6 +575,8 @@ internal sealed partial class PowerForgeReleaseService
                     }
                 }
             }
+            if (observesExplicitVersion)
+                values = (state?.VersionString ?? plan.ObservedMarketingVersion, build?.Version);
             (string? Path, string? Sha256) uploadExport = (null, null);
             try { uploadExport = CaptureAppleUploadExportEvidence(plan, app, result); }
             catch (Exception exception)
@@ -580,8 +598,10 @@ internal sealed partial class PowerForgeReleaseService
                     build?.ProcessingState,
                     result?.Upload?.ProcessResult.StdOut,
                     result?.Upload?.ProcessResult.StdErr)
-                .Concat(plan.Action == PowerForgeAppleReleaseAction.Doctor
-                    ? AppleReleaseDoctor.Evaluate(plan, app, result?.RemoteState?.ControlPlane)
+                .Concat(plan.Action == PowerForgeAppleReleaseAction.Doctor &&
+                        (!IsExplicitAppleVersionObservation(plan) || !skippedIndependentRelease)
+                    ? AppleReleaseDoctor.Evaluate(plan, app, result?.RemoteState?.ControlPlane,
+                        inspectLocalProject: !IsExplicitAppleVersionObservation(plan))
                     : Array.Empty<PowerForgeAppleReleaseDiagnostic>())
                 .Concat(CreateGovernanceDiagnostics(result?.Governance))
                 .Concat(CreateAdoptedBuildDiagnostics(result))
@@ -609,6 +629,7 @@ internal sealed partial class PowerForgeReleaseService
                 result?.Upload);
             return new PowerForgeAppleReleaseTargetReceipt
             {
+                WaitingForAppleBuildProcessing = result?.WaitingForAppleBuildProcessing == true,
                 Name = app.Name,
                 ErrorMessage = result?.ErrorMessage,
                 BundleId = app.BundleId,
@@ -629,7 +650,7 @@ internal sealed partial class PowerForgeReleaseService
                 AppId = app.AppStoreConnectAppId,
                 AppIdDiscovered = app.AppStoreConnectAppIdDiscovered,
                 Version = state?.VersionString ?? values.MarketingVersion,
-                Build = state?.BuildNumber ?? values.BuildNumber,
+                Build = state?.BuildNumber ?? build?.Version ?? values.BuildNumber,
                 BuildId = build?.Id,
                 BuildProcessingState = build?.ProcessingState,
                 BuildUploadId = result?.Upload?.BuildUploadId ?? result?.ResumedUploadAttestation?.BuildUploadId ?? delivery.Id,
@@ -637,10 +658,11 @@ internal sealed partial class PowerForgeReleaseService
                 DistributionVersionId = receiptVersion?.Id,
                 DistributionState = receiptVersion?.AppStoreState ?? receiptVersion?.AppVersionState,
                 BuildSelected = platform?.MatchedBuildSelected ??
+                                (observesExplicitVersion && platform?.SelectedBuild is not null ? (bool?)true : null) ??
                                 (result?.Distribution?.Build is not null && plan.SelectBuildForDistribution ? true : null),
-                TestFlightInternalState = platform?.BetaDetail?.InternalBuildState,
-                TestFlightExternalState = platform?.BetaDetail?.ExternalBuildState,
-                TestFlightReviewState = platform?.BetaReviewSubmission?.BetaReviewState,
+                TestFlightInternalState = hasTestFlightBuild ? platform?.BetaDetail?.InternalBuildState : null,
+                TestFlightExternalState = hasTestFlightBuild ? platform?.BetaDetail?.ExternalBuildState : null,
+                TestFlightReviewState = hasTestFlightBuild ? platform?.BetaReviewSubmission?.BetaReviewState : null,
                 AppReviewSubmissionId = review?.Id,
                 AppReviewState = review?.State,
                 ReadinessChecked = readiness is not null,
@@ -935,12 +957,15 @@ internal sealed partial class PowerForgeReleaseService
     {
         internal AppleBuildProcessingException(
             string message,
-            AppStoreConnectReleaseStateResult state)
+            AppStoreConnectReleaseStateResult state,
+            bool waitingForProcessing = false)
             : base(message)
         {
             State = state;
+            WaitingForProcessing = waitingForProcessing;
         }
 
         internal AppStoreConnectReleaseStateResult State { get; }
+        internal bool WaitingForProcessing { get; }
     }
 }

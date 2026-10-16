@@ -38,7 +38,7 @@ public sealed partial class PowerForgeCliPowerShellCompilationTests
         foreach (var operation in new[] { "explain", "diagnose" })
         {
             var result = await RunCliAsync(FindRepositoryRoot(),
-                $"powershell project {operation} \"{fixture.Project}\" --output json", environment);
+                new[] { "powershell", "project", operation, fixture.Project, "--output", "json" }, environment);
             Assert.True(result.ExitCode == 0, FormatFailure(operation, result));
             using var document = JsonDocument.Parse(result.StdOut);
             var report = document.RootElement.GetProperty("result").GetProperty("targets")[0].GetProperty("diagnosticReport");
@@ -49,7 +49,7 @@ public sealed partial class PowerForgeCliPowerShellCompilationTests
         var environmentPath = Path.Combine(fixture.Root, ".powerforge", "environment", "environment.json");
         File.Move(environmentPath, environmentPath + ".saved");
         var missing = await RunCliAsync(FindRepositoryRoot(),
-            $"powershell project explain \"{fixture.Project}\" --output json", environment);
+            new[] { "powershell", "project", "explain", fixture.Project, "--output", "json" }, environment);
         Assert.Equal(1, missing.ExitCode);
         using var failure = JsonDocument.Parse(missing.StdOut);
         var issues = failure.RootElement.GetProperty("result").GetProperty("targets")[0]
@@ -67,8 +67,8 @@ public sealed partial class PowerForgeCliPowerShellCompilationTests
         using var fixture = PowerShellCompilationProjectDiagnosticsTests.Fixture.Create(
             PowerShellCompilationProjectDiagnosticsTests.ShapingSource,
             PowerShellCompilationArtifactKind.BinaryModule, PowerShellCompilationMode.Strict);
-        var args = $"powershell project explain \"{fixture.Project}\"";
-        var json = await RunCliAsync(FindRepositoryRoot(), args + " --output json");
+        var args = new[] { "powershell", "project", "explain", fixture.Project };
+        var json = await RunCliAsync(FindRepositoryRoot(), args.Concat(new[] { "--output", "json" }).ToArray());
         Assert.Equal(1, json.ExitCode);
         using var document = JsonDocument.Parse(json.StdOut);
         var result = document.RootElement;
@@ -84,7 +84,7 @@ public sealed partial class PowerForgeCliPowerShellCompilationTests
         Assert.Contains("Get-Leaf", text.StdOut + text.StdErr);
         Assert.Contains("7:5", text.StdOut + text.StdErr);
         var diagnose = await RunCliAsync(FindRepositoryRoot(),
-            $"powershell project diagnose \"{fixture.Project}\" --output json");
+            new[] { "powershell", "project", "diagnose", fixture.Project, "--output", "json" });
         Assert.Equal(1, diagnose.ExitCode);
         using var diagnosis = JsonDocument.Parse(diagnose.StdOut);
         Assert.Contains(diagnosis.RootElement.GetProperty("result").GetProperty("targets")[0]

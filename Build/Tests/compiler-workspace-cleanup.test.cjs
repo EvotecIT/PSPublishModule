@@ -58,6 +58,11 @@ for (const scenario of ['held', 'incomplete-run', 'missing-whole-terminal', 'mis
         if (scenario === 'missing-fixture-stop') fs.unlinkSync(path.join(fixture, 'fixture.Stop.json'));
         const record = path.join(gate, 'whole-workflow-workspace.json');
         const marker = path.join(owned, '.powerforge-whole-workflow-owner.json');
+        if (scenario === 'completed-failure') {
+          owner.createdUtc = '2026-10-16T00:00:00.1200000Z';
+          write(record, owner);
+          write(marker, owner);
+        }
         if (scenario === 'invalid-root') write(record, { ...owner, workspacePath: outside });
         if (scenario === 'missing-owner-record') fs.unlinkSync(record);
         if (scenario === 'missing-owner-marker') fs.unlinkSync(marker);

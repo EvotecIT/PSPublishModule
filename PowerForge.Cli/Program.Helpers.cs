@@ -51,7 +51,7 @@ internal static partial class Program
       powerforge apple-governance <validate|plan|apply> --config <governance.json> [--release-config <release.json>]
                         [--key-path <AuthKey.p8> --key-id <id> --issuer-id <id>] [--receipt <path>]
                         [--confirm] [--max-changes <N>] [--fail-on-drift] [--output json]
-      powerforge apple-review-details <validate|plan|apply> --config <review-details.json>
+      powerforge apple-review-details <validate|plan|apply|notes-validate|notes-plan|notes-apply> --config <review-details.json>
                         [--key-path <AuthKey.p8> --key-id <id> --issuer-id <id>] [--receipt <path>]
                         [--reviewed-plan <path> --confirm] [--output json]
       powerforge store submit [--config <powerforge.store.submit.json>] [--list] [--list-assets] [--target <Name>] [--submission-id <id>] [--plan] [--validate] [--no-commit] [--no-wait] [--output json]

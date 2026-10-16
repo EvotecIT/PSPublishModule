@@ -83,6 +83,7 @@ internal sealed partial class PowerForgeReleaseService
                     Plan = app,
                     Success = false,
                     ErrorMessage = exception.Message,
+                    WaitingForAppleBuildProcessing = exception is AppleBuildProcessingException { WaitingForProcessing: true },
                     RemoteState = exception is AppleBuildProcessingException processing
                         ? processing.State
                         : null
@@ -197,6 +198,7 @@ internal sealed partial class PowerForgeReleaseService
                 Plan = app,
                 Success = false,
                 ErrorMessage = exception.Message,
+                WaitingForAppleBuildProcessing = exception is AppleBuildProcessingException { WaitingForProcessing: true },
                 RemoteState = exception is AppleBuildProcessingException processing
                     ? processing.State
                     : null

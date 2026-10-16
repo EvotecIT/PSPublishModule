@@ -11,7 +11,8 @@ internal static class AppleReleaseDoctor
     internal static PowerForgeAppleReleaseDiagnostic[] Evaluate(
         PowerForgeAppleReleasePlan plan,
         PowerForgeAppleAppReleaseTargetPlan app,
-        AppStoreConnectControlPlaneState? controlPlane = null)
+        AppStoreConnectControlPlaneState? controlPlane = null,
+        bool inspectLocalProject = true)
     {
         var diagnostics = new List<PowerForgeAppleReleaseDiagnostic>();
         var usesStore = UsesStore(app);
@@ -106,8 +107,16 @@ internal static class AppleReleaseDoctor
                 "Add a release-version-bound screenshot config and approval manifest before the next App Store submission."));
         }
 
-        var source = ReadProjectEvidence(app.ProjectPath);
-        foreach (var requiredBundleId in app.RequiredEmbeddedBundleIds)
+        var source = inspectLocalProject ? ReadProjectEvidence(app.ProjectPath) : string.Empty;
+        if (!inspectLocalProject)
+        {
+            diagnostics.Add(Info(
+                "observation",
+                "APPLE_LOCAL_PROJECT_NOT_EVALUATED",
+                "The current local project is not evidence for the requested historical App Store version.",
+                "Run Doctor without --apple-version to validate the current local product topology."));
+        }
+        foreach (var requiredBundleId in inspectLocalProject ? app.RequiredEmbeddedBundleIds : Array.Empty<string>())
         {
             if (!source.Contains(requiredBundleId, StringComparison.OrdinalIgnoreCase))
             {
@@ -119,7 +128,7 @@ internal static class AppleReleaseDoctor
             }
         }
 
-        if (app.DistributionRoute != AppleDistributionRoute.DevelopmentOnly &&
+        if (inspectLocalProject && app.DistributionRoute != AppleDistributionRoute.DevelopmentOnly &&
             app.Capabilities.Any(static capability => capability.Equals("CarPlay", StringComparison.OrdinalIgnoreCase)) &&
             !source.Contains("com.apple.developer.carplay", StringComparison.OrdinalIgnoreCase))
         {

@@ -641,8 +641,10 @@ internal static partial class Program
                 AppId = app.AppStoreConnectAppId,
                 AppIdDiscovered = app.AppStoreConnectAppIdDiscovered,
                 Scheme = app.Scheme,
-                MarketingVersion = result.AppleReceipt?.Versioning?.MarketingVersion ?? app.MarketingVersion,
-                BuildNumber = result.AppleReceipt?.Versioning?.BuildNumber ?? app.BuildNumber,
+                MarketingVersion = PowerForgeReleaseService.IsExplicitAppleVersionObservation(plan, app)
+                    ? plan.ObservedMarketingVersion : result.AppleReceipt?.Versioning?.MarketingVersion ?? app.MarketingVersion,
+                BuildNumber = PowerForgeReleaseService.IsExplicitAppleVersionObservation(plan, app)
+                    ? null : result.AppleReceipt?.Versioning?.BuildNumber ?? app.BuildNumber,
                 GenerateProjectIfMissing = app.GenerateProjectIfMissing
             }).ToArray()
         };
