@@ -591,11 +591,12 @@ public sealed partial class PowerForgeCliPowerShellCompilationTests
                 var result = document.RootElement.GetProperty("result");
                 Assert.Equal(1, result.GetProperty("sourceFiles").GetInt32());
                 Assert.True(result.GetProperty("compilableUnits").GetInt32() == 1, capture.StdOut);
+                Assert.Equal(1, result.GetProperty("emittedFunctions").GetInt32());
                 Assert.True(result.GetProperty("passed").GetBoolean());
             }
 
-            // A throw statement is supported. Use the same unsupported -as contract
-            // exercised by the census frontier tests to produce an actual coverage regression.
+            // Hybrid emits the -as function but routes its conversion through PowerShell.
+            // Runtime fallback increases without reducing the emitted function count.
             File.WriteAllText(source, "function Add-TypedValue { [CmdletBinding()] param([string] $Value) return ($Value -as [string]) }");
             var regression = await RunCliAsync(
                 repositoryRoot,
@@ -604,9 +605,13 @@ public sealed partial class PowerForgeCliPowerShellCompilationTests
             using var regressionDocument = JsonDocument.Parse(regression.StdOut);
             var regressionResult = regressionDocument.RootElement.GetProperty("result");
             Assert.False(regressionResult.GetProperty("passed").GetBoolean());
+            Assert.Equal(1, regressionResult.GetProperty("compilableUnits").GetInt32());
+            Assert.Equal(1, regressionResult.GetProperty("emittedFunctions").GetInt32());
             Assert.Contains(
                 regressionResult.GetProperty("regressions").EnumerateArray(),
-                item => item.GetProperty("metric").GetString() == "CompilableUnits");
+                item => item.GetProperty("metric").GetString() == "RuntimeFallbackUnits"
+                        && item.GetProperty("baseline").GetInt32() == 0
+                        && item.GetProperty("current").GetInt32() == 1);
         }
         finally
         {
