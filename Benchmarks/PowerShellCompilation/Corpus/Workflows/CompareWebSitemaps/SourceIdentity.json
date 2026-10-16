@@ -1,0 +1,102 @@
+{
+  "schemaVersion": 1,
+  "sourceVariant": "CorrectedOriginal",
+  "sourceBaseCommit": "1b25ab83254b11d526f2acc22d9994cc52e3cc24",
+  "correction": "User-authorized AMP-local variable repair; full application and all helpers retained",
+  "SourceFiles": [
+    {
+      "Path": "Compare-WebSitemaps.ps1",
+      "Bytes": 11259,
+      "Sha256": "a9676e6c75c0644a28d7af2053da54f6b4c0d371886c95c408684694e42ac640"
+    },
+    {
+      "Path": "Compare-WebSitemaps.Helpers.ps1",
+      "Bytes": 24099,
+      "Sha256": "3e299e0acd9bcaa4c20e2b1df1688b3d5b7c9a53505daffaa124524a6640d460"
+    }
+  ],
+  "license": {
+    "id": "MIT",
+    "path": "LICENSE",
+    "sha256": "2396e8c36e486e5e2bd71c4db90301a9cad2ee87718cfaa6861558d2d2c79af2",
+    "repository": "https://github.com/EvotecIT/PSPublishModule"
+  },
+  "Helpers": [
+    {
+      "Name": "Get-NormalizedUrl",
+      "StartLine": 1
+    },
+    {
+      "Name": "Get-UrlPath",
+      "StartLine": 20
+    },
+    {
+      "Name": "Get-UrlOrigin",
+      "StartLine": 34
+    },
+    {
+      "Name": "ConvertTo-SafeXmlDocument",
+      "StartLine": 41
+    },
+    {
+      "Name": "Import-SitemapUrls",
+      "StartLine": 63
+    },
+    {
+      "Name": "Import-LocalSitemapUrls",
+      "StartLine": 104
+    },
+    {
+      "Name": "Test-GeneratedRouteExists",
+      "StartLine": 126
+    },
+    {
+      "Name": "New-UrlLookup",
+      "StartLine": 160
+    },
+    {
+      "Name": "ConvertTo-ComparablePath",
+      "StartLine": 181
+    },
+    {
+      "Name": "New-PathAliasLookup",
+      "StartLine": 198
+    },
+    {
+      "Name": "Get-SlugVariants",
+      "StartLine": 215
+    },
+    {
+      "Name": "Add-CandidateIfFound",
+      "StartLine": 245
+    },
+    {
+      "Name": "Get-SafeTargetUrl",
+      "StartLine": 316
+    },
+    {
+      "Name": "Test-AmpProbeCandidate",
+      "StartLine": 332
+    },
+    {
+      "Name": "Get-AmpHtmlAlternateUrl",
+      "StartLine": 358
+    },
+    {
+      "Name": "New-RedirectExportRow",
+      "StartLine": 396
+    },
+    {
+      "Name": "Get-SyntheticAmpLegacyUrl",
+      "StartLine": 416
+    },
+    {
+      "Name": "Test-SyntheticAmpRedirectCandidate",
+      "StartLine": 436
+    },
+    {
+      "Name": "Get-RedirectCandidate",
+      "StartLine": 457
+    }
+  ]
+}

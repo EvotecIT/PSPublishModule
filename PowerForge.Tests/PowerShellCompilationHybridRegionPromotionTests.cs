@@ -48,6 +48,22 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.Empty(hybrid.Methods);
         var region = Assert.Single(hybrid.PromotedRegions);
         Assert.Equal("Get-RegionalValue", region.SourceName);
+        var plan = new PowerShellCompilationAnalyzer().AnalyzeFiles(PowerShellCompilationMode.Hybrid,
+            new[] { fixture.ScriptPath }, fixture.RootPath, "net10.0", PowerShellCompilationCapabilities.HybridModule);
+        var ledger = PowerShellCompilationUnitDispositionLedgerBuilder.Create(plan,
+            PowerShellCompilationArtifactKind.BinaryModule, hybrid, fixture.ScriptPath);
+        var owner = Assert.Single(ledger.Entries, unit => unit.Name == region.SourceName);
+        Assert.Equal(region.GeneratedName, Assert.Single(owner.GeneratedRegionMemberNames));
+        var map = PowerShellCompilationDiagnosticsEvidenceBuilder.CreateFailureMap(plan, hybrid.Methods, ledger, hybrid.PromotedRegions);
+        var generatedSegments = map.Entries.Where(entry => entry.GeneratedMemberName == region.GeneratedName).ToArray();
+        Assert.NotEmpty(generatedSegments);
+        Assert.All(generatedSegments, segment =>
+        {
+            Assert.Equal(owner.UnitId, segment.UnitId);
+            Assert.Equal("PowerShellRuntime", segment.BoundaryContract);
+            Assert.True(segment.GeneratedStartLine > 0);
+        });
+        Assert.Contains(map.Entries, entry => entry.UnitId == owner.UnitId && entry.GeneratedStartLine == 0);
         Assert.Equal(typeof(int).FullName, region.ReturnType);
         Assert.Equal(new[] { "Value", "UseZero" }, region.InputParameters.Select(static parameter => parameter.Name));
         Assert.StartsWith("__PowerForgeRegion_", region.GeneratedName, StringComparison.Ordinal);

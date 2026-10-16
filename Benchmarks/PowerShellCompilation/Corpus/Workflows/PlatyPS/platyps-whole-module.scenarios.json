@@ -1,0 +1,483 @@
+[
+  {
+    "scenarioId": "markdown-command",
+    "export": "New-MarkdownHelp",
+    "expectedOutcome": "Success",
+    "observerLine": 148
+  },
+  {
+    "scenarioId": "markdown-repeat",
+    "export": "New-MarkdownHelp",
+    "expectedOutcome": "Success",
+    "observerLine": 150
+  },
+  {
+    "scenarioId": "markdown-overwrite-refusal",
+    "export": "New-MarkdownHelp",
+    "expectedOutcome": "Error",
+    "observerLine": 152
+  },
+  {
+    "scenarioId": "markdown-force",
+    "export": "New-MarkdownHelp",
+    "expectedOutcome": "Success",
+    "observerLine": 153
+  },
+  {
+    "scenarioId": "markdown-module",
+    "export": "New-MarkdownHelp",
+    "expectedOutcome": "Success",
+    "observerLine": 154
+  },
+  {
+    "scenarioId": "markdown-missing-command",
+    "export": "New-MarkdownHelp",
+    "expectedOutcome": "Error",
+    "observerLine": 155
+  },
+  {
+    "scenarioId": "markdown-metadata-conflict",
+    "export": "New-MarkdownHelp",
+    "expectedOutcome": "Error",
+    "observerLine": 156
+  },
+  {
+    "scenarioId": "metadata-text",
+    "export": "Get-MarkdownMetadata",
+    "expectedOutcome": "Success",
+    "observerLine": 157
+  },
+  {
+    "scenarioId": "metadata-path-pipeline",
+    "export": "Get-MarkdownMetadata",
+    "expectedOutcome": "Success",
+    "observerLine": 158
+  },
+  {
+    "scenarioId": "metadata-empty",
+    "export": "Get-MarkdownMetadata",
+    "expectedOutcome": "Observe",
+    "observerLine": 159
+  },
+  {
+    "scenarioId": "metadata-invalid-path",
+    "export": "Get-MarkdownMetadata",
+    "expectedOutcome": "Error",
+    "observerLine": 160
+  },
+  {
+    "scenarioId": "metadata-invalid-yaml",
+    "export": "Get-MarkdownMetadata",
+    "expectedOutcome": "Observe",
+    "observerLine": 161
+  },
+  {
+    "scenarioId": "about-name",
+    "export": "New-MarkdownAboutHelp",
+    "expectedOutcome": "Success",
+    "observerLine": 163
+  },
+  {
+    "scenarioId": "about-prefixed",
+    "export": "New-MarkdownAboutHelp",
+    "expectedOutcome": "Success",
+    "observerLine": 164
+  },
+  {
+    "scenarioId": "about-missing-folder",
+    "export": "New-MarkdownAboutHelp",
+    "expectedOutcome": "Error",
+    "observerLine": 165
+  },
+  {
+    "scenarioId": "about-duplicate",
+    "export": "New-MarkdownAboutHelp",
+    "expectedOutcome": "Error",
+    "observerLine": 166
+  },
+  {
+    "scenarioId": "about-empty-name",
+    "export": "New-MarkdownAboutHelp",
+    "expectedOutcome": "Observe",
+    "observerLine": 167
+  },
+  {
+    "scenarioId": "external-one",
+    "export": "New-ExternalHelp",
+    "expectedOutcome": "Success",
+    "observerLine": 169
+  },
+  {
+    "scenarioId": "external-pipeline",
+    "export": "New-ExternalHelp",
+    "expectedOutcome": "Success",
+    "observerLine": 170
+  },
+  {
+    "scenarioId": "external-explicit-xml",
+    "export": "New-ExternalHelp",
+    "expectedOutcome": "Success",
+    "observerLine": 171
+  },
+  {
+    "scenarioId": "external-repeat",
+    "export": "New-ExternalHelp",
+    "expectedOutcome": "Success",
+    "observerLine": 172
+  },
+  {
+    "scenarioId": "external-overwrite-refusal",
+    "export": "New-ExternalHelp",
+    "expectedOutcome": "Error",
+    "observerLine": 174
+  },
+  {
+    "scenarioId": "external-force",
+    "export": "New-ExternalHelp",
+    "expectedOutcome": "Success",
+    "observerLine": 175
+  },
+  {
+    "scenarioId": "external-empty",
+    "export": "New-ExternalHelp",
+    "expectedOutcome": "Empty",
+    "observerLine": 176
+  },
+  {
+    "scenarioId": "external-invalid-width",
+    "export": "New-ExternalHelp",
+    "expectedOutcome": "Error",
+    "observerLine": 177
+  },
+  {
+    "scenarioId": "external-about-tags",
+    "export": "New-ExternalHelp",
+    "expectedOutcome": "Success",
+    "observerLine": 182
+  },
+  {
+    "scenarioId": "external-parser-error-log",
+    "export": "New-ExternalHelp",
+    "expectedOutcome": "Error",
+    "observerLine": 184
+  },
+  {
+    "scenarioId": "markdown-maml",
+    "export": "New-MarkdownHelp",
+    "expectedOutcome": "Success",
+    "observerLine": 185
+  },
+  {
+    "scenarioId": "markdown-pinned-maml",
+    "export": "New-MarkdownHelp",
+    "expectedOutcome": "Success",
+    "observerLine": 186
+  },
+  {
+    "scenarioId": "yaml-files",
+    "export": "New-YamlHelp",
+    "expectedOutcome": "Success",
+    "observerLine": 188
+  },
+  {
+    "scenarioId": "yaml-pipeline",
+    "export": "New-YamlHelp",
+    "expectedOutcome": "Success",
+    "observerLine": 189
+  },
+  {
+    "scenarioId": "yaml-repeat",
+    "export": "New-YamlHelp",
+    "expectedOutcome": "Success",
+    "observerLine": 190
+  },
+  {
+    "scenarioId": "yaml-overwrite-refusal",
+    "export": "New-YamlHelp",
+    "expectedOutcome": "Error",
+    "observerLine": 192
+  },
+  {
+    "scenarioId": "yaml-force",
+    "export": "New-YamlHelp",
+    "expectedOutcome": "Success",
+    "observerLine": 193
+  },
+  {
+    "scenarioId": "yaml-empty",
+    "export": "New-YamlHelp",
+    "expectedOutcome": "Empty",
+    "observerLine": 194
+  },
+  {
+    "scenarioId": "yaml-output-is-file",
+    "export": "New-YamlHelp",
+    "expectedOutcome": "Error",
+    "observerLine": 196
+  },
+  {
+    "scenarioId": "preview-maml",
+    "export": "Get-HelpPreview",
+    "expectedOutcome": "Success",
+    "observerLine": 198
+  },
+  {
+    "scenarioId": "preview-list-conversion",
+    "export": "Get-HelpPreview",
+    "expectedOutcome": "Success",
+    "observerLine": 199
+  },
+  {
+    "scenarioId": "preview-repeat",
+    "export": "Get-HelpPreview",
+    "expectedOutcome": "Success",
+    "observerLine": 200
+  },
+  {
+    "scenarioId": "preview-missing-then-valid",
+    "export": "Get-HelpPreview",
+    "expectedOutcome": "Error",
+    "observerLine": 201
+  },
+  {
+    "scenarioId": "preview-invalid-xml",
+    "export": "Get-HelpPreview",
+    "expectedOutcome": "Error",
+    "observerLine": 203
+  },
+  {
+    "scenarioId": "update-command",
+    "export": "Update-MarkdownHelp",
+    "expectedOutcome": "Success",
+    "observerLine": 205
+  },
+  {
+    "scenarioId": "update-pipeline",
+    "export": "Update-MarkdownHelp",
+    "expectedOutcome": "Success",
+    "observerLine": 206
+  },
+  {
+    "scenarioId": "update-log-append",
+    "export": "Update-MarkdownHelp",
+    "expectedOutcome": "Success",
+    "observerLine": 207
+  },
+  {
+    "scenarioId": "update-empty",
+    "export": "Update-MarkdownHelp",
+    "expectedOutcome": "Warning",
+    "observerLine": 208
+  },
+  {
+    "scenarioId": "update-missing-command",
+    "export": "Update-MarkdownHelp",
+    "expectedOutcome": "Warning",
+    "observerLine": 210
+  },
+  {
+    "scenarioId": "update-force-missing",
+    "export": "Update-MarkdownHelp",
+    "expectedOutcome": "Warning",
+    "observerLine": 211
+  },
+  {
+    "scenarioId": "update-multiple-command-file",
+    "export": "Update-MarkdownHelp",
+    "expectedOutcome": "Warning",
+    "observerLine": 213
+  },
+  {
+    "scenarioId": "update-module",
+    "export": "Update-MarkdownHelpModule",
+    "expectedOutcome": "Success",
+    "observerLine": 215
+  },
+  {
+    "scenarioId": "update-module-refresh",
+    "export": "Update-MarkdownHelpModule",
+    "expectedOutcome": "Success",
+    "observerLine": 216
+  },
+  {
+    "scenarioId": "update-module-empty",
+    "export": "Update-MarkdownHelpModule",
+    "expectedOutcome": "Error",
+    "observerLine": 217
+  },
+  {
+    "scenarioId": "update-module-no-name",
+    "export": "Update-MarkdownHelpModule",
+    "expectedOutcome": "Error",
+    "observerLine": 219
+  },
+  {
+    "scenarioId": "update-module-missing-module",
+    "export": "Update-MarkdownHelpModule",
+    "expectedOutcome": "Error",
+    "observerLine": 221
+  },
+  {
+    "scenarioId": "merge-tagged",
+    "export": "Merge-MarkdownHelp",
+    "expectedOutcome": "Success",
+    "observerLine": 225
+  },
+  {
+    "scenarioId": "merge-explicit-tags",
+    "export": "Merge-MarkdownHelp",
+    "expectedOutcome": "Success",
+    "observerLine": 226
+  },
+  {
+    "scenarioId": "merge-repeat",
+    "export": "Merge-MarkdownHelp",
+    "expectedOutcome": "Success",
+    "observerLine": 227
+  },
+  {
+    "scenarioId": "merge-overwrite-refusal",
+    "export": "Merge-MarkdownHelp",
+    "expectedOutcome": "Error",
+    "observerLine": 229
+  },
+  {
+    "scenarioId": "merge-force",
+    "export": "Merge-MarkdownHelp",
+    "expectedOutcome": "Success",
+    "observerLine": 230
+  },
+  {
+    "scenarioId": "merge-empty",
+    "export": "Merge-MarkdownHelp",
+    "expectedOutcome": "Warning",
+    "observerLine": 231
+  },
+  {
+    "scenarioId": "merge-invalid-markdown",
+    "export": "Merge-MarkdownHelp",
+    "expectedOutcome": "Observe",
+    "observerLine": 232
+  },
+  {
+    "scenarioId": "cab-positive",
+    "export": "New-ExternalHelpCab",
+    "expectedOutcome": "Success",
+    "observerLine": 237
+  },
+  {
+    "scenarioId": "cab-increment-locale",
+    "export": "New-ExternalHelpCab",
+    "expectedOutcome": "Success",
+    "observerLine": 241,
+    "helpInfoObservation": {
+      "relativePath": "cab-increment/PlatyWorkflowFixture_00000000-0000-0000-0000-000000000123_HelpInfo.xml",
+      "kind": "platyps-helpinfo-culture-map",
+      "uri": "https://example.invalid/help",
+      "cultures": [
+        {
+          "name": "en-US",
+          "version": "1.0.0.1"
+        },
+        {
+          "name": "pl-PL",
+          "version": "2.0.0.0"
+        }
+      ],
+      "encoding": "UTF-8 BOM",
+      "exactXmlScaffoldingAndCultureFormatting": true,
+      "rawXmlAndHashRetained": true,
+      "scope": "Only the two culture sibling positions may vary, reproduced by fresh Original controls; no duplicate, extra or changed locale/version/URI/structure accepted."
+    }
+  },
+  {
+    "scenarioId": "cab-empty",
+    "export": "New-ExternalHelpCab",
+    "expectedOutcome": "Error",
+    "observerLine": 242
+  },
+  {
+    "scenarioId": "cab-invalid-folder",
+    "export": "New-ExternalHelpCab",
+    "expectedOutcome": "Error",
+    "observerLine": 243
+  },
+  {
+    "scenarioId": "cab-invalid-landing",
+    "export": "New-ExternalHelpCab",
+    "expectedOutcome": "Error",
+    "observerLine": 244
+  },
+  {
+    "scenarioId": "cab-invalid-help-files",
+    "export": "New-ExternalHelpCab",
+    "expectedOutcome": "Error",
+    "observerLine": 246
+  },
+  {
+    "scenarioId": "helper-range",
+    "export": "",
+    "expectedOutcome": "Success",
+    "observerLine": 248
+  },
+  {
+    "scenarioId": "helper-type-string",
+    "export": "",
+    "expectedOutcome": "Success",
+    "observerLine": 249
+  },
+  {
+    "scenarioId": "helper-provider-fallback",
+    "export": "",
+    "expectedOutcome": "Success",
+    "observerLine": 250
+  },
+  {
+    "scenarioId": "session-boundary-positive",
+    "export": "New-MarkdownHelp",
+    "expectedOutcome": "Success",
+    "observerLine": 252
+  },
+  {
+    "scenarioId": "session-boundary-error",
+    "export": "New-MarkdownHelp",
+    "expectedOutcome": "Error",
+    "observerLine": 253
+  },
+  {
+    "scenarioId": "module-initialization",
+    "export": "",
+    "expectedOutcome": "Success",
+    "observerLine": 254
+  },
+  {
+    "scenarioId": "module-reimport",
+    "export": "",
+    "expectedOutcome": "Success",
+    "observerLine": 263
+  },
+  {
+    "scenarioId": "module-completer",
+    "export": "",
+    "expectedOutcome": "Success",
+    "observerLine": 264
+  },
+  {
+    "scenarioId": "module-completer-inbox-direct",
+    "export": "",
+    "expectedOutcome": "Success",
+    "observerLine": 266
+  },
+  {
+    "scenarioId": "module-completer-alternative",
+    "export": "",
+    "expectedOutcome": "Success",
+    "observerLine": 267
+  },
+  {
+    "scenarioId": "module-completer-alternative-empty",
+    "export": "",
+    "expectedOutcome": "Success",
+    "observerLine": 268
+  }
+]

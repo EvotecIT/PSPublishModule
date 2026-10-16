@@ -24,30 +24,29 @@ internal static class Program
         try
         {
             var source = ReadEmbeddedScript();
-            PowerForgePackagedEntryPoint.Path = ExtractEmbeddedSources(source);
+            PowerForgePackagedEntryPoint.Path = ExtractEmbeddedSources();
             ConfigureBundledModules();
             var initialState = InitialSessionState.CreateDefault2();
             RegisterCompiledCmdlets(initialState);
             if (System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Windows))
                 initialState.ExecutionPolicy = Microsoft.PowerShell.ExecutionPolicy.Bypass;
-            using var runspace = RunspaceFactory.CreateRunspace(initialState);
+            var consoleHost = new global::PowerForge.Generated.Runtime.PowerShellPackagedConsoleHost();
+            using var runspace = RunspaceFactory.CreateRunspace(consoleHost, initialState);
             runspace.Open();
             using var powerShell = PowerShell.Create();
             powerShell.Runspace = runspace;
 {{ENTRY_INVOCATION}}
-            powerShell.AddCommand("Out-String").AddParameter("Stream");
+            // Match the console host's error pipeline: retain ErrorRecord metadata and stream identity
+            // while the standard formatter writes nonterminating errors during this invocation.
+            powerShell.Commands.Commands[0].MergeMyResults(PipelineResultTypes.Error, PipelineResultTypes.Output);
+            powerShell.AddCommand("Out-Default");
+            powerShell.Commands.Commands[powerShell.Commands.Commands.Count - 1].MergeUnclaimedPreviousCommandResults =
+                PipelineResultTypes.Error | PipelineResultTypes.Output;
 
             int? requestedExitCode = null;
             using var output = new PSDataCollection<PSObject>();
             output.DataAdded += (_, eventArgs) => Console.Out.WriteLine(output[eventArgs.Index]?.ToString());
-            powerShell.Streams.Information.DataAdded += (_, eventArgs) =>
-            {
-                var record = powerShell.Streams.Information[eventArgs.Index];
-                if (record.MessageData is HostInformationMessage { NoNewLine: true } hostMessage)
-                    Console.Out.Write(hostMessage.Message);
-                else
-                    Console.Out.WriteLine(record.MessageData?.ToString());
-            };
+            // The host owns information display, including visibility preferences and Write-Host's newline policy.
             powerShell.Streams.Verbose.DataAdded += (_, eventArgs) => Console.Out.WriteLine($"VERBOSE: {powerShell.Streams.Verbose[eventArgs.Index].Message}");
             powerShell.Streams.Debug.DataAdded += (_, eventArgs) => Console.Out.WriteLine($"DEBUG: {powerShell.Streams.Debug[eventArgs.Index].Message}");
             powerShell.Streams.Warning.DataAdded += (_, eventArgs) => Console.Out.WriteLine($"WARNING: {powerShell.Streams.Warning[eventArgs.Index].Message}");
@@ -61,16 +60,23 @@ internal static class Program
             };
             try
             {
-                powerShell.Invoke<PSObject>(input: null, output);
+{{PIPELINE_INVOCATION}}
             }
             catch (RuntimeException exception) when (TryGetScriptExitCode(exception, out _))
             {
                 TryGetScriptExitCode(exception, out var exitCode);
                 requestedExitCode = exitCode;
             }
+            catch (RuntimeException exception)
+            {
+                global::PowerForge.Generated.Runtime.PowerShellPackagedConsoleErrors.Write(runspace, exception.ErrorRecord);
+                return 1;
+            }
 
             if (requestedExitCode.HasValue)
                 return requestedExitCode.Value;
+            if (consoleHost.RequestedExitCode.HasValue)
+                return consoleHost.RequestedExitCode.Value;
             if (powerShell.InvocationStateInfo.State == PSInvocationState.Failed)
                 return 1;
             return 0;
@@ -130,7 +136,7 @@ internal static class Program
         return reader.ReadToEnd();
     }
 
-    private static string ExtractEmbeddedSources(string entrySource)
+    private static string ExtractEmbeddedSources()
     {
         var assembly = Assembly.GetExecutingAssembly();
         var cacheBase = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
@@ -164,7 +170,10 @@ internal static class Program
                 Directory.CreateDirectory(stagingRoot);
                 var stagedEntryPath = ResolveContainedExtractionPath(stagingRoot, EntryRelativePath);
                 Directory.CreateDirectory(System.IO.Path.GetDirectoryName(stagedEntryPath)!);
-                File.WriteAllText(stagedEntryPath, entrySource, new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
+                using (var stream = assembly.GetManifestResourceStream(ScriptResourceName)
+                           ?? throw new InvalidOperationException($"Embedded PowerShell script '{ScriptResourceName}' was not found."))
+                using (var file = File.Create(stagedEntryPath))
+                    stream.CopyTo(file);
                 foreach (var dependency in Dependencies)
                 {
                     var target = ResolveContainedExtractionPath(stagingRoot, dependency.RelativePath);
@@ -232,6 +241,44 @@ internal static class Program
         using var stream = File.OpenRead(path);
         using var algorithm = System.Security.Cryptography.SHA256.Create();
         return string.Concat(algorithm.ComputeHash(stream).Select(static value => value.ToString("x2", System.Globalization.CultureInfo.InvariantCulture)));
+    }
+
+    internal static string ValidateDotSource(object? operand, string selectedRelativePath)
+    {
+        if (operand is PSObject wrapped) operand = wrapped.BaseObject;
+        if (operand is not string actualPath || string.IsNullOrWhiteSpace(actualPath) ||
+            !System.IO.Path.IsPathFullyQualified(actualPath) || WildcardPattern.ContainsWildcardCharacters(actualPath))
+            throw new InvalidOperationException("Packaged dot-source operand must identify its selected staged source file.");
+        var root = System.IO.Path.GetDirectoryName(PowerForgePackagedEntryPoint.Path)
+            ?? throw new InvalidOperationException("Packaged source extraction has not established its source root.");
+        var selectedPath = ResolveContainedExtractionPath(root, selectedRelativePath);
+        var actual = System.IO.Path.GetFullPath(actualPath);
+        var comparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+        if (!actual.Equals(selectedPath, comparison))
+            throw new InvalidOperationException("Packaged dot-source operand does not match its selected staged source file.");
+        var expectedHash = selectedRelativePath.Equals(EntryRelativePath, StringComparison.Ordinal)
+            ? EntrySha256
+            : Dependencies.SingleOrDefault(dependency => dependency.RelativePath.Equals(selectedRelativePath, StringComparison.Ordinal))?.Sha256;
+        if (expectedHash is null)
+            throw new InvalidOperationException("Packaged dot-source target is absent from the embedded payload catalog.");
+        var current = System.IO.Path.GetFullPath(root);
+        RejectSourceLink(current);
+        foreach (var segment in selectedRelativePath.Replace('\\', '/').Split('/', StringSplitOptions.RemoveEmptyEntries))
+        {
+            current = System.IO.Path.Combine(current, segment);
+            RejectSourceLink(current);
+        }
+        // This verifies the actual selected path immediately before file-backed loading.
+        // PowerShell reopens the file; this is not an atomic lease against concurrent filesystem writers.
+        if (!File.Exists(actual) || !ComputeFileSha256(actual).Equals(expectedHash, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("Packaged dot-source target changed after payload extraction.");
+        return actual;
+    }
+
+    private static void RejectSourceLink(string path)
+    {
+        if ((File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0)
+            throw new InvalidOperationException("Packaged dot-source target traverses a symbolic link or junction.");
     }
 
     private static string ResolveContainedExtractionPath(string root, string relativePath)
@@ -389,6 +436,11 @@ internal static class Program
 public static class PowerForgePackagedEntryPoint
 {
     public static string Path { get; internal set; } = string.Empty;
+
+    /// <summary>Checks the evaluated operand against the selected extracted source path and final payload hash.</summary>
+    /// <remarks>This is a point-in-time source-load check, not an atomic filesystem lease.</remarks>
+    public static string ValidateDotSource(object? operand, string selectedRelativePath)
+        => Program.ValidateDotSource(operand, selectedRelativePath);
 }
 
 public sealed class PowerForgeScriptExitException : Exception

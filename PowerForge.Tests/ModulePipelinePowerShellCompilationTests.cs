@@ -8,7 +8,7 @@ using PowerForge;
 namespace PowerForge.Tests;
 
 [Trait("Category", "PowerShellCompilation")]
-public sealed class ModulePipelinePowerShellCompilationTests
+public sealed partial class ModulePipelinePowerShellCompilationTests
 {
     [WindowsCodeSigningFact]
     public void Public_dsl_produces_signed_zip_with_post_sign_evidence_and_runnable_extraction()

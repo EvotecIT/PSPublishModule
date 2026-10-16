@@ -110,7 +110,7 @@ public sealed partial class PowerShellCompilationAnalyzer
             units.Add(scriptUnit);
         }
 
-        var functions = PowerShellSourceParser.GetTopLevelFunctions(ast).ToArray();
+        var functions = PowerShellSourceParser.GetTopLevelFunctions(ast, capabilities).ToArray();
         foreach (var function in functions)
         {
             var functionUnit = AnalyzeUnit(

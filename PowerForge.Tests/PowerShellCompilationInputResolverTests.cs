@@ -5,7 +5,7 @@ using Xunit;
 namespace PowerForge.Tests;
 
 [Trait("Category", "PowerShellCompilation")]
-public sealed class PowerShellCompilationInputResolverTests
+public sealed partial class PowerShellCompilationInputResolverTests
 {
     [Fact]
     public void PublicCompilationResultConstructorsPreserveOriginalBinarySignatures()

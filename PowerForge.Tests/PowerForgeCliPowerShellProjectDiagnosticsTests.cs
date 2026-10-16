@@ -39,7 +39,7 @@ public sealed partial class PowerForgeCliPowerShellCompilationTests
         {
             var result = await RunCliAsync(FindRepositoryRoot(),
                 new[] { "powershell", "project", operation, fixture.Project, "--output", "json" }, environment);
-            Assert.Equal(0, result.ExitCode);
+            Assert.True(result.ExitCode == 0, FormatFailure(operation, result));
             using var document = JsonDocument.Parse(result.StdOut);
             var report = document.RootElement.GetProperty("result").GetProperty("targets")[0].GetProperty("diagnosticReport");
             Assert.True(report.GetProperty("canProceed").GetBoolean());

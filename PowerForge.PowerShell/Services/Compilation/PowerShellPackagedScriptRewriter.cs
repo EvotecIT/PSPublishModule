@@ -6,7 +6,7 @@ namespace PowerForge;
 /// <summary>
 /// Preserves file-backed script semantics when source is embedded and invoked through AddScript.
 /// </summary>
-internal static class PowerShellPackagedScriptRewriter
+internal static partial class PowerShellPackagedScriptRewriter
 {
     private const string PackagedCommandPathExpression =
         "$(& { $entryPath = [System.Reflection.Assembly]::GetEntryAssembly().Location; " +
@@ -19,7 +19,9 @@ internal static class PowerShellPackagedScriptRewriter
         IReadOnlyCollection<string>? embeddedScriptPaths = null,
         string? dependencyCommandPathExpression = null,
         IReadOnlyCollection<string>? embeddedResourceRelativePaths = null,
-        string? packagedScriptRootExpression = null)
+        string? packagedScriptRootExpression = null,
+        bool guardDotSources = false,
+        PowerShellPackagedSourceMapping? sourceMapping = null)
     {
         var commandPathExpression = string.IsNullOrWhiteSpace(packagedCommandPathExpression)
             ? PackagedCommandPathExpression
@@ -38,7 +40,7 @@ internal static class PowerShellPackagedScriptRewriter
                 $"Packaged executable generation does not support '{fileResolvedUsing.Extent.Text}' because using module/assembly directives are resolved before the embedded script receives file-backed path metadata.");
         }
 
-        ValidateDotSources(ast, sourcePath, embeddedScriptPaths ?? Array.Empty<string>());
+        var dotSources = PlanDotSources(ast, sourcePath, embeddedScriptPaths ?? Array.Empty<string>(), guardDotSources);
 
         var explicitNamedBlock = FindExplicitNamedBlock(ast);
         if (explicitNamedBlock is not null)
@@ -90,6 +92,9 @@ internal static class PowerShellPackagedScriptRewriter
                 "$([System.IO.Path]::GetDirectoryName(" + dependencyCommandPathExpression + "))")))
             .OrderByDescending(static replacement => replacement.StartOffset)
             .ToArray();
+        if (guardDotSources)
+            replacements = AddDotSourceGuards(dotSources, Path.GetDirectoryName(Path.GetFullPath(sourcePath))!, replacements);
+        replacements = AddPathOperandGuards(ast, replacements);
 
         // Parser.ParseFile owns PowerShell's encoding detection (including Windows PowerShell's
         // active-code-page handling for BOM-less files). Reuse that decoded text so the AST
@@ -97,6 +102,7 @@ internal static class PowerShellPackagedScriptRewriter
         var source = new StringBuilder(ast.Extent.Text);
         foreach (var replacement in replacements)
         {
+            sourceMapping?.Record(replacement.StartOffset, replacement.EndOffset - replacement.StartOffset, replacement.Text);
             source.Remove(replacement.StartOffset, replacement.EndOffset - replacement.StartOffset);
             source.Insert(replacement.StartOffset, replacement.Text);
         }
@@ -114,6 +120,7 @@ internal static class PowerShellPackagedScriptRewriter
             string.IsNullOrWhiteSpace(packagedScriptRootExpression)
                 ? "[System.IO.Path]::GetDirectoryName($script:PSCommandPath)"
                 : packagedScriptRootExpression);
+        sourceMapping?.Record(prologueEndOffset, 0, pathSemantics.ToString());
         source.Insert(prologueEndOffset, pathSemantics.ToString());
         return source.ToString();
     }
@@ -352,57 +359,8 @@ internal static class PowerShellPackagedScriptRewriter
         if (leafName.Equals("Get-Variable", StringComparison.OrdinalIgnoreCase) ||
             leafName.Equals("gv", StringComparison.OrdinalIgnoreCase))
             return GetVariableMayRetrieve(command, variableName);
-        if (!leafName.Equals("Get-Item", StringComparison.OrdinalIgnoreCase) &&
-            !leafName.Equals("Get-Content", StringComparison.OrdinalIgnoreCase) &&
-            !leafName.Equals("Get-ChildItem", StringComparison.OrdinalIgnoreCase) &&
-            !leafName.Equals("gi", StringComparison.OrdinalIgnoreCase) &&
-            !leafName.Equals("gc", StringComparison.OrdinalIgnoreCase) &&
-            !leafName.Equals("gci", StringComparison.OrdinalIgnoreCase) &&
-            !leafName.Equals("dir", StringComparison.OrdinalIgnoreCase) &&
-            !leafName.Equals("ls", StringComparison.OrdinalIgnoreCase))
-            return false;
-        var arguments = command.CommandElements.Skip(1)
-            .Where(static element => element is not CommandParameterAst)
-            .ToArray();
-        if (arguments.Any(argument =>
-                argument is not StringConstantExpressionAst &&
-                !IsArtifactBackedPath(argument, command, root, new HashSet<string>(StringComparer.OrdinalIgnoreCase))))
-            return true;
-        return arguments.OfType<StringConstantExpressionAst>().Any(argument =>
-        {
-            if (!TryGetVariableProviderPattern(argument.Value, out var pattern)) return false;
-            return string.IsNullOrWhiteSpace(pattern) || VariablePatternMatches(pattern!, variableName);
-        });
-    }
-
-    private static bool IsArtifactBackedPath(
-        Ast expression,
-        CommandAst command,
-        ScriptBlockAst root,
-        HashSet<string> visited)
-    {
-        var variables = expression.FindAll(static node => node is VariableExpressionAst, searchNestedScriptBlocks: true)
-            .Cast<VariableExpressionAst>()
-            .ToArray();
-        if (variables.Any(static variable =>
-                variable.VariablePath.UserPath.Equals("PSScriptRoot", StringComparison.OrdinalIgnoreCase) ||
-                variable.VariablePath.UserPath.Equals("PSCommandPath", StringComparison.OrdinalIgnoreCase)))
-            return true;
-        foreach (var variable in variables)
-        {
-            var name = variable.VariablePath.UserPath;
-            if (!visited.Add(name)) continue;
-            var assignment = root.FindAll(static node => node is AssignmentStatementAst, searchNestedScriptBlocks: true)
-                .Cast<AssignmentStatementAst>()
-                .Where(candidate => candidate.Extent.StartOffset < command.Extent.StartOffset &&
-                                    candidate.Left is VariableExpressionAst target &&
-                                    target.VariablePath.UserPath.Equals(name, StringComparison.OrdinalIgnoreCase))
-                .OrderByDescending(static candidate => candidate.Extent.StartOffset)
-                .FirstOrDefault();
-            if (assignment is not null && IsArtifactBackedPath(assignment.Right, command, root, visited))
-                return true;
-        }
-        return false;
+        var operand = PowerShellPackagedPathOperandPolicy.Select(command);
+        return operand is not null && PowerShellPackagedPathOperandPolicy.MayRetrieveVariable(operand, variableName, root);
     }
 
     private static bool GetVariableMayRetrieve(CommandAst command, string variableName)
@@ -434,15 +392,6 @@ internal static class PowerShellPackagedScriptRewriter
         return false;
     }
 
-    private static bool TryGetVariableProviderPattern(string value, out string? pattern)
-    {
-        pattern = null;
-        const string prefix = "Variable:";
-        if (!value.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) return false;
-        pattern = value.Substring(prefix.Length).TrimStart('\\', '/');
-        return true;
-    }
-
     private static bool VariablePatternMatches(string pattern, string name)
         => new System.Management.Automation.WildcardPattern(
                 pattern,
@@ -450,59 +399,17 @@ internal static class PowerShellPackagedScriptRewriter
                 System.Management.Automation.WildcardOptions.CultureInvariant)
             .IsMatch(name);
 
-    internal static void ValidateDotSources(
-        ScriptBlockAst ast,
-        string sourcePath,
-        IReadOnlyCollection<string> embeddedScriptPaths)
-    {
-        var allowed = embeddedScriptPaths
-            .Select(Path.GetFullPath)
-            .ToHashSet(PowerShellCompilationPathSafety.PathComparer);
-        var sourceDirectory = Path.GetDirectoryName(Path.GetFullPath(sourcePath)) ?? Directory.GetCurrentDirectory();
-        foreach (var command in ast.FindAll(
-                     static node => node is CommandAst { InvocationOperator: TokenKind.Dot },
-                     searchNestedScriptBlocks: true).Cast<CommandAst>())
-        {
-            var expression = command.CommandElements.FirstOrDefault();
-            if (expression is ScriptBlockExpressionAst)
-                continue;
-            if (!TryGetScriptRootRelativePath(expression, out var relativePath))
-            {
-                throw new InvalidOperationException(
-                    $"Packaged executable generation does not support dot-sourced command '{command.Extent.Text}' because its target is not a literal $PSScriptRoot path embedded with the artifact.");
-            }
-
-            string targetPath;
-            try
-            {
-                targetPath = Path.GetFullPath(Path.Combine(
-                    sourceDirectory,
-                    relativePath!.Replace('/', Path.DirectorySeparatorChar).Replace('\\', Path.DirectorySeparatorChar)));
-            }
-            catch (Exception exception) when (exception is ArgumentException or NotSupportedException or PathTooLongException)
-            {
-                throw new InvalidOperationException(
-                    $"Packaged executable generation cannot resolve dot-sourced command '{command.Extent.Text}' to an embedded dependency.",
-                    exception);
-            }
-            if (!allowed.Contains(targetPath))
-            {
-                throw new InvalidOperationException(
-                    $"Packaged executable generation does not support dot-sourced command '{command.Extent.Text}' because resolved dependency '{targetPath}' is not embedded with the artifact.");
-            }
-        }
-    }
-
     internal static void ValidateDependency(
         string dependencyPath,
-        IReadOnlyCollection<string> embeddedScriptPaths)
+        IReadOnlyCollection<string> embeddedScriptPaths,
+        bool allowDerivedPaths = false)
     {
         var ast = Parser.ParseFile(dependencyPath, out _, out var errors);
         if (errors.Length > 0)
             throw new InvalidOperationException($"Packaged dependency '{dependencyPath}' could not be parsed while validating package semantics.");
         ValidateScriptRequirements(ast, dependencyPath);
         ValidateHostInteraction(ast);
-        ValidateDotSources(ast, dependencyPath, embeddedScriptPaths);
+        ValidateDotSources(ast, dependencyPath, embeddedScriptPaths, allowDerivedPaths);
         var exit = ast.FindAll(static node => node is ExitStatementAst, searchNestedScriptBlocks: true)
             .Cast<ExitStatementAst>()
             .FirstOrDefault();
@@ -518,25 +425,6 @@ internal static class PowerShellPackagedScriptRewriter
         if (ast.ScriptRequirements is null) return;
         throw new InvalidOperationException(
             $"Packaged script '{sourcePath}' declares #requires directives, which AddScript cannot enforce with pwsh -File semantics. Remove the directives or keep the script on a file-backed PowerShell runtime path.");
-    }
-
-    private static bool TryGetScriptRootRelativePath(CommandElementAst? expression, out string? relativePath)
-    {
-        relativePath = null;
-        if (expression is not ExpandableStringExpressionAst expandable ||
-            expandable.NestedExpressions.Count != 1 ||
-            expandable.NestedExpressions[0] is not VariableExpressionAst variable ||
-            !variable.VariablePath.UserPath.Equals("PSScriptRoot", StringComparison.OrdinalIgnoreCase))
-            return false;
-        var text = expression.Extent.Text.Trim().Trim('"');
-        var prefixes = new[] { "$PSScriptRoot/", "$PSScriptRoot\\", "${PSScriptRoot}/", "${PSScriptRoot}\\" };
-        var prefix = prefixes.FirstOrDefault(candidate => text.StartsWith(candidate, StringComparison.OrdinalIgnoreCase));
-        if (prefix is null) return false;
-        var candidate = text.Substring(prefix.Length);
-        if (string.IsNullOrWhiteSpace(candidate) || candidate.IndexOf('$') >= 0 || candidate.IndexOf('`') >= 0)
-            return false;
-        relativePath = candidate;
-        return true;
     }
 
     private static bool IsTopLevel(Ast node, ScriptBlockAst root)
@@ -568,6 +456,7 @@ internal static class PowerShellPackagedScriptRewriter
 
     internal static void ValidateHostInteraction(ScriptBlockAst ast)
     {
+        PowerShellPackagedPathOperandPolicy.ValidateGuardableReads(ast);
         var confirmationInvocation = FindConfirmationInvocation(ast);
         if (SupportsShouldProcess(ast) || confirmationInvocation is not null)
         {

@@ -3,7 +3,7 @@ using NuGet.Common;
 
 namespace PowerForge;
 
-/// <summary>Owns the explicit child environment for provenance-bound SDK discovery and trimmed publication.</summary>
+/// <summary>Owns compiler SDK environments, including provenance-bound discovery and trimmed publication.</summary>
 internal static class PowerShellCompilationSdkProcessEnvironment
 {
     private static readonly string[] ForwardedVariables =
@@ -34,6 +34,21 @@ internal static class PowerShellCompilationSdkProcessEnvironment
         if (arguments.Count > 0 && (arguments[0] == "restore" || arguments[0] == "publish"))
             arguments = arguments.Concat(new[] { "-noAutoResponse" }).ToArray();
         return Create(host, workingDirectory, arguments, timeout, environment);
+    }
+
+    /// <summary>Preserves ordinary compiler build inputs without maintaining unrelated installed workloads.</summary>
+    internal static ProcessRunRequest CreateInheritedRequest(string workingDirectory,
+        IReadOnlyList<string> arguments, TimeSpan timeout,
+        IReadOnlyDictionary<string, string?>? environmentVariables = null)
+    {
+        var environment = new Dictionary<string, string?>(StringComparer.Ordinal);
+        if (environmentVariables is not null)
+        {
+            foreach (var variable in environmentVariables)
+                environment[variable.Key] = variable.Value;
+        }
+        environment["DOTNET_SKIP_WORKLOAD_INTEGRITY_CHECK"] = "true";
+        return new ProcessRunRequest("dotnet", workingDirectory, arguments, timeout, environment);
     }
 
     /// <summary>Preserves PATH-based SDK selection while removing ambient resolver, MSBuild, and CLR startup overrides.</summary>
@@ -81,6 +96,8 @@ internal static class PowerShellCompilationSdkProcessEnvironment
         environment["DOTNET_ADD_GLOBAL_TOOLS_TO_PATH"] = "false";
         environment["DOTNET_CLI_TELEMETRY_OPTOUT"] = "1";
         environment["DOTNET_SKIP_FIRST_TIME_EXPERIENCE"] = "1";
+        // Fresh compiler homes must not maintain workloads installed for other projects.
+        environment["DOTNET_SKIP_WORKLOAD_INTEGRITY_CHECK"] = "true";
         environment["DOTNET_NOLOGO"] = "1";
         environment["DOTNET_MULTILEVEL_LOOKUP"] = "0";
         environment["MSBUILDDISABLENODEREUSE"] = "1";

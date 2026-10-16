@@ -13,6 +13,11 @@ public sealed class PowerShellCompilationHostNet472SmokeTests
         Directory.CreateDirectory(root);
         try
         {
+            // Resolve the policy beside the original assembly, outside xUnit shadow copies.
+            var testAssembly = new Uri(typeof(PowerShellCompilationHostNet472SmokeTests).Assembly.CodeBase!).LocalPath;
+            var sdkPolicy = Path.Combine(Path.GetDirectoryName(testAssembly)!, "global.json");
+            Assert.True(File.Exists(sdkPolicy), "The repository SDK policy fixture is missing: " + sdkPolicy);
+            File.Copy(sdkPolicy, Path.Combine(root, "global.json"));
             var input = Directory.CreateDirectory(Path.Combine(root, "input")).FullName;
             var source = Path.Combine(input, "Example.psm1");
             File.WriteAllText(source, """
@@ -22,13 +27,15 @@ function Get-HostedYear { return [int](Get-Date -Format yyyy) }
 """, new UTF8Encoding(true));
             var script = Path.Combine(root, "Observe.ps1");
             File.WriteAllText(script, """
-param([string]$CompilerAssembly, [string]$Source, [string]$Output)
+param([string]$CompilerAssembly, [string]$Source, [string]$Output, [string]$SdkPolicy)
 $ErrorActionPreference = 'Stop'
 function Write-Checkpoint([string] $Phase) {
     $line = [DateTime]::UtcNow.ToString('O') + ' ' + $Phase
     [IO.File]::AppendAllText((Join-Path (Split-Path $Source) 'phases.log'), $line + [Environment]::NewLine)
     Write-Output $line
 }
+Write-Checkpoint ('Host PID=' + $PID + '; PS=' + $PSVersionTable.PSVersion + '; CLR=' + [Environment]::Version)
+Write-Checkpoint ('SDK policy: ' + [IO.File]::ReadAllText($SdkPolicy))
 Write-Checkpoint 'Load compiler'
 [void][Reflection.Assembly]::LoadFrom($CompilerAssembly)
 [void][Reflection.Assembly]::LoadFrom((Join-Path (Split-Path $CompilerAssembly) 'PowerForge.dll'))
@@ -134,7 +141,7 @@ if ($usingResult.Succeeded -or $usingResult.Error -notlike '*using module/assemb
             var childTemp = Directory.CreateDirectory(Path.Combine(root, "temp")).FullName;
             var result = await new ProcessRunner(ownProcessTree: true).RunAsync(new ProcessRunRequest(
                 host, root, new[] { "-NoProfile", "-NonInteractive", "-File", script,
-                    "-CompilerAssembly", compiler, "-Source", source, "-Output", Path.Combine(root, "out") },
+                    "-CompilerAssembly", compiler, "-Source", source, "-Output", Path.Combine(root, "out"), "-SdkPolicy", sdkPolicy },
                 TimeSpan.FromMinutes(6), new Dictionary<string, string?>
                 {
                     ["TEMP"] = childTemp, ["TMP"] = childTemp,
@@ -155,7 +162,11 @@ if ($usingResult.Succeeded -or $usingResult.Error -notlike '*using module/assemb
                     .Take(40).Select(path => path.Substring(childTemp.Length + 1) + " " + new FileInfo(path).Length + " bytes");
                 failureEvidence = Environment.NewLine + phases + Environment.NewLine + string.Join(Environment.NewLine, inventory);
             }
-            Assert.True(result.Succeeded, result.StdErr + Environment.NewLine + result.StdOut + failureEvidence);
+            Assert.True(result.Succeeded,
+                $"Legacy compiler smoke failed. TimedOut={result.TimedOut}; ExitCode={result.ExitCode}; Duration={result.Duration}" +
+                Environment.NewLine + "SDK policy:" + Environment.NewLine + File.ReadAllText(sdkPolicy) +
+                Environment.NewLine + "stderr:" + Environment.NewLine + result.StdErr +
+                Environment.NewLine + "stdout:" + Environment.NewLine + result.StdOut + failureEvidence);
             Assert.Contains("LEGACY_COMPILER_AND_MODULE_PASSED", result.StdOut);
         }
         finally

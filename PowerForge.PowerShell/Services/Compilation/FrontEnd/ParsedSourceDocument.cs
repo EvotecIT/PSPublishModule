@@ -16,7 +16,9 @@ internal sealed class ParsedSourceDocument
         ParseError[] errors,
         PowerShellAuthoredSourceProjection? authoredProjection = null,
         PowerShellNativeDependencyTypes? nativeDependencyTypes = null,
-        string? nativeScriptRootName = null)
+        string? nativeScriptRootName = null,
+        bool preserveFunctionDeclarationTiming = false,
+        bool guardPackagedPathReads = false)
     {
         DocumentId = documentId;
         Path = path;
@@ -26,7 +28,10 @@ internal sealed class ParsedSourceDocument
         Errors = errors;
         AuthoredProjection = authoredProjection;
         NativeScriptRootName = nativeScriptRootName;
+        PreserveFunctionDeclarationTiming = preserveFunctionDeclarationTiming;
+        GuardPackagedPathReads = guardPackagedPathReads;
         NativeDependencyTypes = nativeDependencyTypes ?? PowerShellNativeDependencyTypes.Empty;
+        RootFunctionDeclarations = PowerShellSourceParser.GetRootFunctionDeclarations(syntaxRoot);
         TypeClosure = PowerShellSourceTypeClosure.Discover(this);
     }
 
@@ -39,9 +44,25 @@ internal sealed class ParsedSourceDocument
     internal PowerShellAuthoredSourceProjection? AuthoredProjection { get; }
     /// <summary>Identifies a compiler-created script-root adapter whose storage belongs to a native script invocation.</summary>
     internal string? NativeScriptRootName { get; }
+    /// <summary>Requires each emitted function to enter native command lookup only when its authored declaration runs.</summary>
+    internal bool PreserveFunctionDeclarationTiming { get; }
+    /// <summary>Admits dynamic provider reads only behind the packaged executable's FileSystem operand guard.</summary>
+    internal bool GuardPackagedPathReads { get; }
     internal PowerShellSourceTypeClosure TypeClosure { get; }
+    internal PowerShellRootFunctionDeclaration[] RootFunctionDeclarations { get; }
     internal PowerShellNativeDependencyTypes NativeDependencyTypes { get; }
     internal ParsedSourceDocument WithNativeDependencyTypes(PowerShellNativeDependencyTypes types)
         => ReferenceEquals(types, NativeDependencyTypes) ? this : new ParsedSourceDocument(
-            DocumentId, Path, Text, SyntaxRoot, Tokens, Errors, AuthoredProjection, types, NativeScriptRootName);
+            DocumentId, Path, Text, SyntaxRoot, Tokens, Errors, AuthoredProjection, types, NativeScriptRootName,
+            PreserveFunctionDeclarationTiming, GuardPackagedPathReads);
+
+    internal ParsedSourceDocument WithFunctionDeclarationTiming()
+        => PreserveFunctionDeclarationTiming ? this : new ParsedSourceDocument(
+            DocumentId, Path, Text, SyntaxRoot, Tokens, Errors, AuthoredProjection, NativeDependencyTypes, NativeScriptRootName,
+            preserveFunctionDeclarationTiming: true, guardPackagedPathReads: GuardPackagedPathReads);
+
+    internal ParsedSourceDocument WithPackagedPathGuards()
+        => GuardPackagedPathReads ? this : new ParsedSourceDocument(
+            DocumentId, Path, Text, SyntaxRoot, Tokens, Errors, AuthoredProjection, NativeDependencyTypes,
+            NativeScriptRootName, PreserveFunctionDeclarationTiming, guardPackagedPathReads: true);
 }

@@ -502,7 +502,8 @@ internal sealed partial class PowerShellTypedLowerer
                 region.Span,
                 region.HostedFallbackSource,
                 region.Arguments.Select(static argument => new PowerShellLoweredCommandRegionArgument(argument.Symbol, argument.IsSwitch)).ToArray(),
-                LowerCommandStages(region.Stages), region.NativeSourcePath, region.NativeSourceDocument, region.SourceSelection),
+                LowerCommandStages(region.Stages), region.NativeSourcePath, region.NativeSourceDocument, region.SourceSelection,
+                region.GuardedDotSourceRelativePath, region.GuardedPathOperands.ToArray()),
             PowerShellBoundCommandCaptureStatement capture => LowerCommandCapture(capture, localTypes, declared),
             PowerShellBoundIfStatement conditional => new PowerShellLoweredIfStatement(
                 conditional.Span,
@@ -520,7 +521,7 @@ internal sealed partial class PowerShellTypedLowerer
                     _ => throw new InvalidOperationException($"Unsupported bound loop kind '{loop.Kind}'.")
                 },
                 LowerExpression(loop.Condition, functions, names, targetCapabilities),
-                LowerStatements(loop.Body, functions, symbolTypes, localTypes, declared, names, targetCapabilities), loop.CheckHostInterrupts),
+                LowerStatements(loop.Body, functions, symbolTypes, localTypes, declared, names, targetCapabilities), loop.CheckHostInterrupts, loop.Label),
             PowerShellBoundForStatement loop => LowerFor(loop, functions, symbolTypes, localTypes, declared, names, targetCapabilities),
             PowerShellBoundForEachStatement loop => LowerForEach(loop, functions, symbolTypes, localTypes, declared, names, targetCapabilities),
             PowerShellBoundSwitchStatement switchStatement => new PowerShellLoweredSwitchStatement(
@@ -528,7 +529,7 @@ internal sealed partial class PowerShellTypedLowerer
                 LowerExpression(switchStatement.Value, functions, names, targetCapabilities),
                 switchStatement.Clauses.Select(clause => new PowerShellLoweredSwitchClause(
                     LowerExpression(clause.Value, functions, names, targetCapabilities),
-                    LowerStatements(clause.Body, functions, symbolTypes, localTypes, declared, names, targetCapabilities))).ToArray(),
+                    LowerStatements(clause.Body, functions, symbolTypes, localTypes, declared, names, targetCapabilities), clause.NativeSourceText)).ToArray(),
                 switchStatement.DefaultBlock is null ? null : LowerStatements(switchStatement.DefaultBlock, functions, symbolTypes, localTypes, declared, names, targetCapabilities),
                 switchStatement.MatchMode,
                 switchStatement.CaseSensitive,
@@ -588,7 +589,7 @@ internal sealed partial class PowerShellTypedLowerer
             loop.Iterator is null ? null : (PowerShellLoweredMutationExpression)LowerExpression(loop.Iterator, functions, names, targetCapabilities),
             LowerStatements(loop.Body, functions, symbolTypes, localTypes, declared, names, targetCapabilities),
             declareInitializer,
-            loop.CheckHostInterrupts);
+            loop.CheckHostInterrupts, loop.Label);
     }
 
     private static PowerShellLoweredForEachStatement LowerForEach(
@@ -612,7 +613,7 @@ internal sealed partial class PowerShellTypedLowerer
             loop.NullCollectionElement is null
                 ? null
                 : LowerExpression(loop.NullCollectionElement, functions, names, targetCapabilities),
-            loop.CheckHostInterrupts, loop.NativeBinding);
+            loop.CheckHostInterrupts, loop.NativeBinding, loop.Label);
     }
 
     private static PowerShellLoweredStatement[] LowerStatements(

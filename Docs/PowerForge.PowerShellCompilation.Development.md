@@ -96,6 +96,21 @@ After building a typed executable or binary module, inspect its authenticated de
 
 For a module, follow the [module consumer quickstart](PowerForge.PowerShellCompilation.ModuleConsumers.md) from a `.psd1` or `.psm1` with `--kind dll --mode Hybrid`. For a CLR library, use `--kind library --mode Strict` and the [NuGet consumer guide](PowerForge.PowerShellCompilation.LibraryPackages.md). Both use the same lock → restore → build → test → diagnose → pack sequence. Module test performs a clean import, while library test validates CLR metadata. Invoke exported commands or use an ordinary .NET consumer to verify the behavior you intend to distribute. Run/watch is the executable development path, not a substitute for those consumers.
 
+## Qualify whole workflows
+
+`Build/Invoke-PowerShellWholeWorkflowGate.ps1` runs the reviewed public powershell-yaml 0.4.12 and platyPS 0.14.2 module packets on both PowerShell 7/net10 and Windows PowerShell 5.1/net472, followed by the complete sitemap comparison application. It reuses the corpus download, archive and qualification owners and requires original, built and installed scenario parity through the canonical project lifecycle. The module packages are pinned comparison inputs; this gate does not install them globally or add their binaries to PowerForge.
+
+Use the built source CLI in a Windows x64 PowerShell 7.6 child process. Choose `$workspace` on the configured scratch volume with an absolute path of at most 25 characters, leaving room for installed Desktop module payload paths. Choose a separate empty `$evidence` directory. Keep `DOTNET_CLI_HOME` and `TEMP` private to the child, retain the ordinary NuGet cache and shared `NUGET_SCRATCH`, and set `DOTNET_GENERATE_ASPNET_CERTIFICATE` and `DOTNET_ADD_GLOBAL_TOOLS_TO_PATH` to `false`.
+
+```powershell
+./Build/Invoke-PowerShellWholeWorkflowGate.ps1 `
+    -CliAssemblyPath $powerforge -WorkspacePath $workspace -EvidencePath $evidence
+```
+
+The gate seals compiler and packet identities, workflow receipts, observations and source-withdrawal evidence. The required authored bodies must be emitted, and the declared scenarios must match with the staged compiler inputs unavailable during artifact observation. Hybrid still uses the PowerShell SDK and supported hosted command regions; passing these packets does not establish exhaustive branch coverage or execution without PowerShell. The existing Windows product CI job runs this gate alongside the focused compiler contracts.
+
+For a compiler test graph built with the SDK's `--artifacts-path`, pass that same root to `Build/Invoke-PowerShellCompilerGate.ps1 -ArtifactsPath $artifacts -NoBuild -EvidencePath $evidence`. The gate uses that graph's net10 CLI for process tests and the strict corpus. Direct test runners can select the same prebuilt CLI with the test-only `POWERFORGE_TEST_CLI_ASSEMBLY_PATH` environment variable; an invalid configured path fails instead of selecting another build.
+
 ## Diagnose a failed attempt
 
 | Symptom | Next action |

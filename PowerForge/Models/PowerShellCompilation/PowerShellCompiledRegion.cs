@@ -172,6 +172,9 @@ public sealed class PowerShellCompiledRegion
     public string SourcePath { get; }
     /// <summary>Generated CLR helper member name.</summary>
     public string GeneratedName { get; }
+
+    /// <summary>Exact CLR declaring type selected by the containing source emitter.</summary>
+    internal string? GeneratedDeclaringTypeName { get; set; }
     /// <summary>Supported CLR region-transfer return type.</summary>
     public string ReturnType { get; }
     /// <summary>Current retained-function parameter values transferred into the region.</summary>

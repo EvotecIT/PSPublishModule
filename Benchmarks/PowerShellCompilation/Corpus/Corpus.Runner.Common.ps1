@@ -35,6 +35,77 @@ function Write-Utf8Json {
     [IO.File]::WriteAllText($Path, (($Value | ConvertTo-Json -Depth $Depth) + [Environment]::NewLine), [Text.UTF8Encoding]::new($false))
 }
 
+function Get-CorpusProperty {
+    param($Value, [string] $Name, $Default = $null)
+    if ($Value -is [Collections.IDictionary]) {
+        if ($Value.Contains($Name)) { return $Value[$Name] }
+    } elseif ($null -ne $Value -and $null -ne $Value.PSObject.Properties[$Name]) {
+        return $Value.$Name
+    }
+    return $Default
+}
+
+function Get-CorpusCliFailureEvidence {
+    param([Exception] $Exception)
+    if ($Exception.Data.Contains('PowerForgeCliProcess')) {
+        return [ordered]@{process=$Exception.Data['PowerForgeCliProcess'];envelope=$Exception.Data['PowerForgeCliEnvelope']}
+    }
+    return $null
+}
+
+function Get-CorpusOwnedProcessFailureEvidence {
+    param([Exception] $Exception)
+    if ($Exception.Data.Contains('PowerForgeOwnedProcess')) {
+        return $Exception.Data['PowerForgeOwnedProcess']
+    }
+    return $null
+}
+
+function ConvertFrom-CorpusCliProcess {
+    param($Process, [string] $Label = 'PowerForge CLI', [string] $ProcessEvidencePath)
+    # Keep exact streams before parsing so malformed/empty output cannot erase the failure.
+    if ($ProcessEvidencePath) { Write-Utf8Json -Path $ProcessEvidencePath -Value $Process }
+    $stdout = [string] (Get-CorpusProperty $Process 'StandardOutput' '')
+    $stderr = [string] (Get-CorpusProperty $Process 'StandardError' '')
+    $exitCode = Get-CorpusProperty $Process 'ExitCode'
+    $json = $null
+    $parseFailure = $null
+    try {
+        if ([string]::IsNullOrWhiteSpace($stdout)) { throw 'stdout is empty' }
+        $json = ConvertFrom-Json -InputObject $stdout -ErrorAction Stop
+        if ($null -eq $json -or $json -is [array] -or $json -is [string] -or
+            $json -is [ValueType]) { throw 'expected one JSON object envelope' }
+    } catch { $parseFailure = $_.Exception.Message }
+    $success = Get-CorpusProperty $json 'success'
+    if (-not $parseFailure -and $exitCode -eq 0 -and $success -is [bool] -and $success -and
+        $null -ne (Get-CorpusProperty $json 'result')) { return $json }
+
+    $messages = [Collections.Generic.List[string]]::new()
+    if ($parseFailure) { $messages.Add("did not return a JSON object envelope: $parseFailure") }
+    elseif ($success -isnot [bool]) { $messages.Add('Response lacks a Boolean success field.') }
+    elseif ($success -and $null -eq (Get-CorpusProperty $json 'result')) { $messages.Add('Successful response lacks its result payload.') }
+    foreach ($scope in @($json, (Get-CorpusProperty $json 'result'))) {
+        $errorText = Get-CorpusProperty $scope 'error'
+        if (-not [string]::IsNullOrWhiteSpace([string] $errorText)) { $messages.Add([string] $errorText) }
+        foreach ($target in @(Get-CorpusProperty $scope 'targets' @())) {
+            if ((Get-CorpusProperty $target 'succeeded') -eq $true) { continue }
+            $targetName = [string] (Get-CorpusProperty $target 'name' '<unnamed>')
+            foreach ($field in @('error', 'message')) {
+                $text = Get-CorpusProperty $target $field
+                if (-not [string]::IsNullOrWhiteSpace([string] $text)) { $messages.Add("Target '${targetName}': $text") }
+            }
+        }
+    }
+    if (-not [string]::IsNullOrWhiteSpace($stderr)) { $messages.Add('stderr: ' + $stderr) }
+    if ($messages.Count -eq 0) {
+        $messages.Add('The response has no actionable error field; inspect the retained raw CLI process envelope.')
+    }
+    $failure = [InvalidOperationException]::new("$Label failed with exit ${exitCode}: " + (($messages | Select-Object -Unique) -join [Environment]::NewLine))
+    $failure.Data['PowerForgeCliProcess'] = $Process
+    $failure.Data['PowerForgeCliEnvelope'] = $json
+    throw $failure
+}
+
 function ConvertTo-PortableRegionGraph {
     param([object] $Graph)
 
@@ -306,11 +377,33 @@ function Invoke-OwnedProcess {
     $clock = [Diagnostics.Stopwatch]::StartNew()
     $process = [Diagnostics.Process]::Start($start)
     try {
+        # Optional diagnostics must not fail an otherwise successful child.
+        $processStartUtc = $null
+        $processStartError = $null
+        try { $processStartUtc = $process.StartTime.ToUniversalTime().ToString('o') } catch { $processStartError = $_.Exception.Message }
         $stdout = $process.StandardOutput.ReadToEndAsync()
         $stderr = $process.StandardError.ReadToEndAsync()
         if (-not $process.WaitForExit($TimeoutSeconds * 1000)) {
             try { $process.Kill($true) } catch { Write-Verbose "Failed to terminate timed-out process '$FileName': $($_.Exception.Message)" }
-            throw "Owned process '$FileName' exceeded $TimeoutSeconds seconds."
+            $exited = $false
+            $drained = $false
+            try {
+                $exited = $process.WaitForExit(5000)
+                $drained = [Threading.Tasks.Task]::WaitAll([Threading.Tasks.Task[]] @($stdout, $stderr), 2000)
+            } catch { Write-Verbose "Failed to drain timed-out process '$FileName': $($_.Exception.Message)" }
+            $clock.Stop()
+            $failure = [Management.Automation.RuntimeException]::new("Owned process '$FileName' exceeded $TimeoutSeconds seconds.")
+            $failure.Data['PowerForgeOwnedProcess'] = [pscustomobject]@{
+                FileName = $FileName; Arguments = $Arguments; WorkingDirectory = $WorkingDirectory
+                ProcessId = $process.Id; ProcessStartUtc = $processStartUtc; TimedOut = $true; TimeoutSeconds = $TimeoutSeconds
+                ProcessStartTimeAvailable = ($null -ne $processStartUtc); ProcessStartTimeError = $processStartError
+                ProcessExited = $exited; OutputDrained = $drained
+                ExitCode = if ($exited) { $process.ExitCode } else { $null }
+                StandardOutput = if ($stdout.Status -eq 'RanToCompletion') { $stdout.GetAwaiter().GetResult() } else { '' }
+                StandardError = if ($stderr.Status -eq 'RanToCompletion') { $stderr.GetAwaiter().GetResult() } else { '' }
+                DurationMilliseconds = $clock.ElapsedMilliseconds
+            }
+            throw $failure
         }
         $clock.Stop()
         return [pscustomobject]@{

@@ -9,10 +9,13 @@ internal sealed partial class PowerShellBoundCSharpBackend
 
     private string EmitNativeStatementValue(PowerShellLoweredNativeStatementValueExpression value)
     {
-        var builder = new StringBuilder("new global::System.Func<object?>(() =>\n{\n");
+        var builder = new StringBuilder(value.PreserveRecords
+            ? "new global::System.Func<object?[]>(() =>\n{\n"
+            : "new global::System.Func<object?>(() =>\n{\n");
         var sourceMap = new List<PowerShellCompilationSourceMapEntry>();
         EmitCapturedOutputBody(builder, value.Statements, value.RecordsTemporary, value.SinkTemporary,
-            null, true, PowerShellOutputCaptureKind.CollapsedPowerShellValue, false, 1,
+            null, true, value.PreserveRecords ? PowerShellOutputCaptureKind.NativeObjectArray
+                : PowerShellOutputCaptureKind.CollapsedPowerShellValue, value.ShareEmptyResult, 1,
             _getTemporaryIdentifier!, _statementValueDiscardHelper, sourceMap);
         builder.Append("})()");
         var text = builder.ToString();

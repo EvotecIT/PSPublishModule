@@ -45,10 +45,10 @@ internal static class PowerShellCommandHostRuntimeSource
             foreach (var name in new[] { "PowerShellNativeFunctionHost", "PowerShellNativeFunctionHost.Declared", "PowerShellNativeFunctionHost.OwnedDeclaration", "PowerShellNativeFunctionHost.LazyClauses", "PowerShellNativeFunctionHost.ScriptEntry", "PowerShellNativeFunctionHost.ScriptEntryArguments", "PowerShellNativeFunctionHost.FunctionEnums", "PowerShellNativeFunctionContext", "PowerShellNativeFunctionContext.Operations",
                 "PowerShellNativeFunctionContext.Output", "PowerShellNativeFunctionContext.Members", "PowerShellNativeFunctionContext.Indexing",
                 "PowerShellNativeFunctionContext.Conversions", "PowerShellNativeFunctionContext.Invocations",
-                "PowerShellNativeFunctionContext.CommandRegions", "PowerShellNativeFunctionContext.Compilation",
+                "PowerShellNativeFunctionContext.CommandRegions", "PowerShellNativeFunctionContext.PathOperands", "PowerShellNativeFunctionContext.Compilation",
                 "PowerShellNativeFunctionContext.Declarations", "PowerShellNativeFunctionContext.NestedDeclarations",
                 "PowerShellNativeFunctionContext.AccessMutations", "PowerShellNativeFunctionContext.Enumeration",
-                "PowerShellNativeFunctionContext.Switch",
+                "PowerShellNativeFunctionContext.Switch", "PowerShellNativeFunctionContext.LoopTransfers",
                 "PowerShellNativeFunctionContext.StringJoin", "PowerShellNativeFunctionContext.ScriptBlocks", "PowerShellNativeFunctionContext.Patterns",
                 "PowerShellNativeFunctionContext.Membership", "PowerShellNativeFunctionContext.Dictionaries" })
             {

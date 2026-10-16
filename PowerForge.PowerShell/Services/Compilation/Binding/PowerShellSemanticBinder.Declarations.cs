@@ -6,7 +6,8 @@ internal sealed partial class PowerShellSemanticBinder
 {
     private static FunctionDeclaration[] DeclareFunctions(
         IEnumerable<ParsedSourceDocument> documents,
-        ICollection<PowerShellSemanticDiagnostic> diagnostics)
+        ICollection<PowerShellSemanticDiagnostic> diagnostics,
+        PowerShellCompilationCapability capabilities)
     {
         var declarations = new List<FunctionDeclaration>();
         foreach (var document in documents)
@@ -20,15 +21,19 @@ internal sealed partial class PowerShellSemanticBinder
             }
             if (document.Errors.Length > 0) continue;
 
-            foreach (var function in document.SyntaxRoot
-                         .FindAll(static node => node is FunctionDefinitionAst, searchNestedScriptBlocks: false)
-                         .Cast<FunctionDefinitionAst>())
+            foreach (var declaration in document.RootFunctionDeclarations)
             {
+                var original = declaration.Syntax;
+                var conditional = declaration.UsesConditionalNativeBinding(capabilities);
+                var function = conditional
+                    ? CreateNativeFunctionSyntax(original, declaration.GetBindingName(document, capabilities))
+                    : original;
                 var span = PowerShellSourceParser.GetSpan(document, function.Extent);
                 declarations.Add(new FunctionDeclaration(
                     document,
                     function,
-                    new PowerShellSymbolId(PowerShellSymbolKind.Function, document.DocumentId, function.Name, span)));
+                    new PowerShellSymbolId(conditional ? PowerShellSymbolKind.ConditionalFunction : PowerShellSymbolKind.Function,
+                        document.DocumentId, function.Name, span)));
             }
         }
 

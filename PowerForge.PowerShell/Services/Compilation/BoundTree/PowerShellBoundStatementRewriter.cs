@@ -16,15 +16,15 @@ internal static class PowerShellBoundStatementRewriter
                 conditional.Clauses.Select(clause => new PowerShellBoundConditionalClause(clause.Condition, rewriteBlock(clause.Body))).ToArray(),
                 conditional.ElseBlock is null ? null : rewriteBlock(conditional.ElseBlock)),
             PowerShellBoundWhileStatement loop => new PowerShellBoundWhileStatement(
-                loop.Span, loop.Kind, loop.Condition, rewriteBlock(loop.Body), loop.CheckHostInterrupts),
+                loop.Span, loop.Kind, loop.Condition, rewriteBlock(loop.Body), loop.CheckHostInterrupts, loop.Label),
             PowerShellBoundForStatement loop => new PowerShellBoundForStatement(
-                loop.Span, loop.Initializer, loop.Condition, loop.Iterator, rewriteBlock(loop.Body), loop.CheckHostInterrupts),
+                loop.Span, loop.Initializer, loop.Condition, loop.Iterator, rewriteBlock(loop.Body), loop.CheckHostInterrupts, loop.Label),
             PowerShellBoundForEachStatement loop => new PowerShellBoundForEachStatement(
                 loop.Span, loop.Variable, loop.ElementType, loop.Collection, loop.EnumerationKind,
-                rewriteBlock(loop.Body), loop.DeclareVariable, loop.NullCollectionElement, loop.CheckHostInterrupts, loop.NativeBinding),
+                rewriteBlock(loop.Body), loop.DeclareVariable, loop.NullCollectionElement, loop.CheckHostInterrupts, loop.NativeBinding, loop.Label),
             PowerShellBoundSwitchStatement selection => new PowerShellBoundSwitchStatement(
                 selection.Span, selection.Value,
-                selection.Clauses.Select(clause => new PowerShellBoundSwitchClause(clause.Value, rewriteBlock(clause.Body))).ToArray(),
+                selection.Clauses.Select(clause => new PowerShellBoundSwitchClause(clause.Value, rewriteBlock(clause.Body), clause.NativeSourceText)).ToArray(),
                 selection.DefaultBlock is null ? null : rewriteBlock(selection.DefaultBlock),
                 selection.MatchMode, selection.CaseSensitive, selection.InputKind,
                 selection.NativeSourcePath, selection.NativeInputSourceText),

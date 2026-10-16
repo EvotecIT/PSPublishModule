@@ -27,6 +27,16 @@ internal static class PowerShellCompilationPathSafety
             "Shorten the project or output root before testing, running, or installing this artifact.");
     }
 
+    /// <summary>Refuses payload paths Windows PowerShell 5.1 and its CLR loader cannot reliably load.</summary>
+    internal static void EnsureWindowsPowerShellPayloadPath(string path)
+    {
+        if (!IsWindows || path.Length < 260) return;
+        throw new InvalidOperationException(
+            "Windows PowerShell 5.1 requires module payload paths shorter than 260 characters. " +
+            $"Payload path length: {path.Length}; path: {path}. " +
+            "Shorten the project or output root before testing or installing this net472 module.");
+    }
+
     internal static void EnsureContained(string root, string path, string error)
     {
         var normalizedRoot = Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;

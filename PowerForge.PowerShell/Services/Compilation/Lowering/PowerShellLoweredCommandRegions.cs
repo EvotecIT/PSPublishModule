@@ -60,7 +60,8 @@ internal sealed class PowerShellLoweredCommandRegionStatement : PowerShellLowere
         SourceSpan span,
         string source,
         PowerShellLoweredCommandRegionArgument[] arguments,
-        PowerShellLoweredCommandStage[]? stages = null, string? nativeSourcePath = null, string? nativeSourceDocument = null, PowerShellCommandRegionSourceSelection? sourceSelection = null)
+        PowerShellLoweredCommandStage[]? stages = null, string? nativeSourcePath = null, string? nativeSourceDocument = null, PowerShellCommandRegionSourceSelection? sourceSelection = null,
+        string? guardedDotSourceRelativePath = null, int[]? guardedPathOperands = null)
         : base(span)
     {
         HostedFallbackSource = source;
@@ -69,6 +70,8 @@ internal sealed class PowerShellLoweredCommandRegionStatement : PowerShellLowere
         NativeSourcePath = nativeSourcePath;
         NativeSourceDocument = nativeSourceDocument;
         SourceSelection = sourceSelection;
+        GuardedDotSourceRelativePath = guardedDotSourceRelativePath;
+        GuardedPathOperands = guardedPathOperands ?? Array.Empty<int>();
     }
 
     internal string HostedFallbackSource { get; }
@@ -77,6 +80,8 @@ internal sealed class PowerShellLoweredCommandRegionStatement : PowerShellLowere
     internal string? NativeSourcePath { get; }
     internal string? NativeSourceDocument { get; }
     internal PowerShellCommandRegionSourceSelection? SourceSelection { get; }
+    internal string? GuardedDotSourceRelativePath { get; }
+    internal PowerShellImmutableArray<int> GuardedPathOperands { get; }
 }
 
 internal sealed class PowerShellLoweredCommandCaptureStatement : PowerShellLoweredStatement

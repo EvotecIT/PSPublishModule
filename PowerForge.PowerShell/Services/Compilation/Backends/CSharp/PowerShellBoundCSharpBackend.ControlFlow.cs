@@ -36,14 +36,21 @@ internal sealed partial class PowerShellBoundCSharpBackend
         ICollection<PowerShellCompilationSourceMapEntry> sourceMap,
         bool checkHostInterrupts = false,
         string? successOutputSink = null,
-        SourceSpan? continueTarget = null)
+        SourceSpan? continueTarget = null, string loopLabel = "")
     {
         var prefix = new string(' ', indent * 4);
         builder.Append(prefix).AppendLine("{");
         if (checkHostInterrupts)
             builder.Append(prefix).AppendLine("    __checkLoopInterrupts();");
+        var nativeTransfers = continueTarget is not null && HasNativeLoopTransferOwner;
+        if (nativeTransfers) builder.Append(prefix).AppendLine("    try\n" + prefix + "    {");
         foreach (var statement in statements)
-            EmitStatement(builder, statement, indent + 1, getTemporaryIdentifier, discardHelper, sourceMap, successOutputSink);
+            EmitStatement(builder, statement, indent + (nativeTransfers ? 2 : 1), getTemporaryIdentifier, discardHelper, sourceMap, successOutputSink);
+        if (nativeTransfers)
+        {
+            builder.Append(prefix).AppendLine("    }");
+            EmitNativeLoopTransferCatches(builder, prefix + "    ", loopLabel, getTemporaryIdentifier);
+        }
         if (continueTarget is { } target) EmitLoopTransferTarget(builder, target, prefix + "    ", isContinue: true);
         builder.Append(prefix).AppendLine("}");
     }
@@ -176,13 +183,21 @@ internal sealed partial class PowerShellBoundCSharpBackend
         // the authored loop variable. General enumerators do this in MoveEnumerator.
         if (loop.CheckHostInterrupts && loop.EnumerationKind != PowerShellForEachEnumerationKind.PowerShellEnumerable)
             builder.Append(prefix).AppendLine("__checkLoopInterrupts();");
+        var nativeTransfers = HasNativeLoopTransferOwner;
+        if (nativeTransfers) builder.Append(prefix).AppendLine("try\n" + prefix + "{");
         builder.Append(prefix)
+            .Append(nativeTransfers ? "    " : string.Empty)
             .Append(loop.DeclareVariable ? elementTypeName + " " : string.Empty)
             .Append(RenderStorage(loop.Variable)).Append(" = ")
             .Append(itemIdentifier).AppendLine(";");
         foreach (var nested in loop.Statements)
         {
-            EmitStatement(builder, nested, indent + 1, getTemporaryIdentifier, discardHelper, sourceMap, successOutputSink);
+            EmitStatement(builder, nested, indent + (nativeTransfers ? 2 : 1), getTemporaryIdentifier, discardHelper, sourceMap, successOutputSink);
+        }
+        if (nativeTransfers)
+        {
+            builder.Append(prefix).AppendLine("}");
+            EmitNativeLoopTransferCatches(builder, prefix, loop.Label, getTemporaryIdentifier);
         }
         EmitLoopTransferTarget(builder, loop.Span, prefix, isContinue: true);
     }
@@ -267,6 +282,11 @@ internal sealed partial class PowerShellBoundCSharpBackend
             {
                 _ when nativeSwitchScope is not null && clause.Value is PowerShellLoweredNativeScriptBlockExpression { IsSwitchPredicate: true } =>
                     $"{nativeSwitchScope}.MatchesPredicate({clauseSource})",
+                PowerShellBoundSwitchMatchMode.Regex when nativeSwitchScope is not null =>
+                    $"{nativeSwitchScope}.MatchesRegex({clauseSource}, {(statement.CaseSensitive ? "true" : "false")}, " +
+                    QuotePortableSourcePath(statement.NativeSourcePath) + ", " + clause.Value.Span.StartLine + ", " +
+                    clause.Value.Span.StartColumn + ", " + clause.Value.Span.EndLine + ", " + clause.Value.Span.EndColumn +
+                    ", " + PowerShellCSharpLiteral.QuoteString(clause.NativeSourceText) + ")",
                 _ when nativeSwitchScope is not null => $"{nativeSwitchScope}.Matches({clauseSource}, {(statement.CaseSensitive ? "true" : "false")})",
                 PowerShellBoundSwitchMatchMode.Regex =>
                     $"global::System.Text.RegularExpressions.Regex.IsMatch(({valueIdentifier} ?? string.Empty), ({clauseSource} ?? string.Empty), global::System.Text.RegularExpressions.RegexOptions.{(statement.CaseSensitive ? "None" : "IgnoreCase")})",
@@ -275,6 +295,9 @@ internal sealed partial class PowerShellBoundCSharpBackend
                     $"global::System.String.Equals({valueIdentifier}, {clauseSource}, global::System.StringComparison.{(statement.CaseSensitive ? "InvariantCulture" : "InvariantCultureIgnoreCase")})",
                 _ => $"{valueIdentifier} == {clauseSource}"
             };
+            if (nativeSwitchScope is not null && statement.MatchMode == PowerShellBoundSwitchMatchMode.Regex)
+                comparison = EmitNativeExpressionPosition(comparison, clause.Value.Span,
+                    statement.NativeSourcePath, clause.NativeSourceText);
             builder.Append(prefix).Append("    if (").Append(comparison).AppendLine(")");
             builder.Append(prefix).AppendLine("    {");
             builder.Append(prefix).Append("        ").Append(matchedIdentifier).AppendLine(" = true;");

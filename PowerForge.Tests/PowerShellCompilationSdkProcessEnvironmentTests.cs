@@ -1,4 +1,3 @@
-using System.Runtime.InteropServices;
 using System.Security;
 
 namespace PowerForge.Tests;
@@ -23,7 +22,8 @@ public sealed class PowerShellCompilationSdkProcessEnvironmentTests
             ["BuildDependsOn"] = "CallerOwnedTarget",
             ["ComSpec"] = "caller-owned-shell",
             ["MSBuildSDKsPath"] = "caller-owned-sdk",
-            ["DOTNET_STARTUP_HOOKS"] = "caller-owned-hook"
+            ["DOTNET_STARTUP_HOOKS"] = "caller-owned-hook",
+            ["DOTNET_SKIP_WORKLOAD_INTEGRITY_CHECK"] = "false"
         });
 
         var request = PowerShellCompilationSdkProcessEnvironment.CreateRequest(
@@ -47,6 +47,7 @@ public sealed class PowerShellCompilationSdkProcessEnvironmentTests
         Assert.Equal(values["HOME"], values["DOTNET_CLI_HOME"]);
         Assert.Equal("false", values["DOTNET_GENERATE_ASPNET_CERTIFICATE"]);
         Assert.Equal("false", values["DOTNET_ADD_GLOBAL_TOOLS_TO_PATH"]);
+        Assert.Equal("true", values["DOTNET_SKIP_WORKLOAD_INTEGRITY_CHECK"]);
         Assert.Equal("false", values["UseSharedCompilation"]);
         Assert.Equal("false", values["MSBuildEnableWorkloadResolver"]);
         Assert.Equal("false", values["ImportUserLocationsByWildcardBeforeMicrosoftCommonProps"]);
@@ -60,7 +61,48 @@ public sealed class PowerShellCompilationSdkProcessEnvironmentTests
         Assert.DoesNotContain("DOTNET_STARTUP_HOOKS", values.Keys);
     }
 
-    [WindowsOrLinuxX64SdkEnvironmentFact]
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    [Trait("Category", "PowerShellCompilerGate")]
+    public void CompilerSdkRequestSuppressesWorkloadMaintenanceAndPreservesInheritedBuildInputs(bool hasOverrides)
+    {
+        var arguments = new[] { "build", "generated.csproj", "--nologo" };
+        var timeout = TimeSpan.FromSeconds(17);
+        var overrides = hasOverrides ? new Dictionary<string, string?>
+        {
+            ["NUGET_PACKAGES"] = "caller-packages",
+            ["NUGET_SCRATCH"] = "shared-locks",
+            ["NUGET_HTTP_CACHE_PATH"] = "http-cache",
+            ["BuildDependsOn"] = "CallerOwnedTarget",
+            ["DOTNET_STARTUP_HOOKS"] = "caller-owned-hook",
+            ["DOTNET_SKIP_WORKLOAD_INTEGRITY_CHECK"] = "false"
+        } : null;
+
+        var request = PowerShellCompilationSdkProcessEnvironment.CreateInheritedRequest(
+            "compiler-owned-project", arguments, timeout, overrides);
+
+        Assert.True(request.InheritEnvironment);
+        Assert.Equal("dotnet", request.FileName);
+        Assert.Equal("compiler-owned-project", request.WorkingDirectory);
+        Assert.Equal(arguments, request.Arguments);
+        Assert.Equal(timeout, request.Timeout);
+        var values = Assert.IsAssignableFrom<IReadOnlyDictionary<string, string?>>(request.EnvironmentVariables);
+        Assert.Equal("true", values["DOTNET_SKIP_WORKLOAD_INTEGRITY_CHECK"]);
+        if (overrides is null)
+        {
+            Assert.Single(values);
+        }
+        else
+        {
+            Assert.Equal(overrides.Count, values.Count);
+            foreach (var variable in overrides.Where(static variable => variable.Key != "DOTNET_SKIP_WORKLOAD_INTEGRITY_CHECK"))
+                Assert.Equal(variable.Value, values[variable.Key]);
+            Assert.Equal("false", overrides["DOTNET_SKIP_WORKLOAD_INTEGRITY_CHECK"]);
+        }
+    }
+
+    [WindowsOrLinuxX64Fact]
     [Trait("Category", "PowerShellCompilerGate")]
     public async Task AuthenticatedTrimmedProducerIgnoresInheritedSdkTargetsAndRuntimeInjection()
     {
@@ -139,14 +181,5 @@ public sealed class PowerShellCompilationSdkProcessEnvironmentTests
         {
             foreach (var item in _original) Environment.SetEnvironmentVariable(item.Key, item.Value);
         }
-    }
-}
-
-internal sealed class WindowsOrLinuxX64SdkEnvironmentFactAttribute : FactAttribute
-{
-    public WindowsOrLinuxX64SdkEnvironmentFactAttribute()
-    {
-        if ((!OperatingSystem.IsWindows() && !OperatingSystem.IsLinux()) || RuntimeInformation.ProcessArchitecture != Architecture.X64)
-            Skip = "Authenticated trimmed producer execution qualification requires Windows or Linux x64.";
     }
 }

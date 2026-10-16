@@ -28,7 +28,7 @@ internal sealed class PowerShellCommandSemanticResolution
 }
 
 /// <summary>Canonical, deterministic registry for compile-time-only command semantics.</summary>
-internal sealed class PowerShellCommandSemanticRegistry
+internal sealed partial class PowerShellCommandSemanticRegistry
 {
     private readonly IReadOnlyDictionary<string, PowerShellCompilationCommandProviderContract> _qualified;
     private readonly IReadOnlyDictionary<string, PowerShellCompilationCommandProviderContract[]> _unqualified;
@@ -119,6 +119,7 @@ internal sealed class PowerShellCommandSemanticRegistry
 
     private static IEnumerable<PowerShellCompilationCommandProviderContract> CreateBuiltIns()
     {
+        foreach (var contract in CreatePathReads()) yield return contract;
         yield return Stream("output", "Write-Output", "InputObject", "Success", PowerShellCompilationCommandOutput.Enumerated, PowerShellCompilationCommandCardinality.Collection, PowerShellCompilationCommandErrors.None);
         yield return Stream("verbose", "Write-Verbose", "Message", "Verbose");
         yield return Stream("debug", "Write-Debug", "Message", "Debug");

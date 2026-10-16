@@ -156,7 +156,7 @@ internal sealed partial class PowerShellTypedLowerer
                 memberRead.IsStatic),
             PowerShellBoundNativeCommandExpression nativeCommand => new PowerShellLoweredNativeCommandExpression(nativeCommand.Span,
                 nativeCommand.Source, nativeCommand.SourcePath, nativeCommand.SourceDocument, nativeCommand.PreservePartialOutput,
-                LowerCommandStages(nativeCommand.Stages), nativeCommand.PreserveReturnRecords),
+                LowerCommandStages(nativeCommand.Stages), nativeCommand.PreserveReturnRecords, nativeCommand.GuardedPathOperands.ToArray()),
             PowerShellBoundNativeInvocationExpression nativeInvocation => new PowerShellLoweredNativeInvocationExpression(nativeInvocation.Span,
                 nativeInvocation.Receiver is null ? null : LowerExpression(nativeInvocation.Receiver, functions, names, targetCapabilities),
                 nativeInvocation.LiteralTargetType, nativeInvocation.Name, nativeInvocation.IsStatic,
@@ -175,7 +175,8 @@ internal sealed partial class PowerShellTypedLowerer
                 collection.ShareEmptyResult, names.Allocate("pf_collection_result"), collection.SingleExpression, collection.CollapseResult),
             PowerShellBoundNativeStatementValueExpression statementValue => new PowerShellLoweredNativeStatementValueExpression(
                 statementValue.Span, LowerStatements(statementValue.Body, functions, names.SymbolTypes, names.LocalTypes,
-                    names.Declared, names, targetCapabilities), names.Allocate("pf_value_records"), names.Allocate("pf_value_sink")),
+                    names.Declared, names, targetCapabilities), names.Allocate("pf_value_records"), names.Allocate("pf_value_sink"),
+                statementValue.PreserveRecords, statementValue.ShareEmptyResult),
             PowerShellBoundNativeConditionalValueExpression conditionalValue => new PowerShellLoweredNativeConditionalValueExpression(
                 conditionalValue.Span,
                 conditionalValue.Clauses.Select(clause => new PowerShellLoweredNativeConditionalValueClause(

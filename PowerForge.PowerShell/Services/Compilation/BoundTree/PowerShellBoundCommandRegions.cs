@@ -67,7 +67,8 @@ internal sealed class PowerShellBoundCommandRegionStatement : PowerShellBoundSta
         string source,
         PowerShellBoundCommandRegionArgument[] arguments,
         PowerShellBoundCommandStage[]? stages = null,
-        int statementCount = 1, string? nativeSourcePath = null, string? nativeSourceDocument = null, PowerShellCommandRegionSourceSelection? sourceSelection = null)
+        int statementCount = 1, string? nativeSourcePath = null, string? nativeSourceDocument = null, PowerShellCommandRegionSourceSelection? sourceSelection = null,
+        string? guardedDotSourceRelativePath = null, int[]? guardedPathOperands = null)
         : base(span, PowerShellSemanticEffect.Host | PowerShellSemanticEffect.SuccessOutput | PowerShellSemanticEffect.NonSuccessStream |
             (nativeSourcePath is null ? PowerShellSemanticEffect.None : PowerShellSemanticEffect.Mutation | PowerShellSemanticEffect.TerminatingError),
             PowerShellRequiredCapability.CommandRegion | (nativeSourcePath is null ? PowerShellRequiredCapability.None :
@@ -80,6 +81,8 @@ internal sealed class PowerShellBoundCommandRegionStatement : PowerShellBoundSta
         NativeSourcePath = nativeSourcePath;
         NativeSourceDocument = nativeSourceDocument;
         SourceSelection = sourceSelection;
+        GuardedDotSourceRelativePath = guardedDotSourceRelativePath;
+        GuardedPathOperands = guardedPathOperands ?? Array.Empty<int>();
     }
 
     internal string HostedFallbackSource { get; }
@@ -89,6 +92,8 @@ internal sealed class PowerShellBoundCommandRegionStatement : PowerShellBoundSta
     internal string? NativeSourcePath { get; }
     internal string? NativeSourceDocument { get; }
     internal PowerShellCommandRegionSourceSelection? SourceSelection { get; }
+    internal string? GuardedDotSourceRelativePath { get; }
+    internal PowerShellImmutableArray<int> GuardedPathOperands { get; }
 }
 
 internal sealed class PowerShellBoundCommandCaptureStatement : PowerShellBoundStatement

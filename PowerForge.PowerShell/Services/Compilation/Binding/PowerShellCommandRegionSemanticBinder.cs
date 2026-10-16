@@ -83,7 +83,8 @@ internal static class PowerShellCommandRegionSemanticBinder
         return new PowerShellBoundNativeCommandExpression(PowerShellSourceParser.GetSpan(document, syntax.Extent),
             syntax.Extent.Text, document.Path, document.Text, preserve,
             BindStages(document, new[] { syntax }, commandResolver, localFunctionNames, capabilities),
-            wrapper is null && syntax is PipelineAst { Parent: ReturnStatementAst returned } && ReferenceEquals(returned.Pipeline, syntax));
+            wrapper is null && syntax is PipelineAst { Parent: ReturnStatementAst returned } && ReferenceEquals(returned.Pipeline, syntax),
+            document.GuardPackagedPathReads ? PowerShellPackagedPathOperandPolicy.SelectNativeRegionOperands(syntax) : null);
     }
 
     internal static bool TryBindNativePipeline(ParsedSourceDocument document, StatementAst statement,
@@ -98,10 +99,26 @@ internal static class PowerShellCommandRegionSemanticBinder
         var hasPipelineOperator = HasPipelineOperators(pipeline);
         if (!hasPipelineOperator && !RequiresNativePipelineBinding(pipeline) && (commands.Length == 0 || commands.All(command =>
                 commandResolver.IsRuntimeFreeCompilerIntrinsic(command, localFunctionNames, capabilities)))) return false;
+        string? guardedDotSource = null;
+        if (document.NativeScriptRootName is not null && pipeline.PipelineElements.Count == 1 &&
+            commands.SingleOrDefault() is { InvocationOperator: TokenKind.Dot } sourceLoad)
+        {
+            var owner = sourceLoad.Parent;
+            while (owner is not null && owner is not ScriptBlockAst) owner = owner.Parent;
+            if (owner is not ScriptBlockAst body ||
+                !PowerShellCompilationSourcePathPlanner.TryPlan(body, sourceLoad, allowDerivedPaths: true, out var fact))
+                throw new InvalidOperationException("The native script source load requires a planned contained path.");
+            var directory = Path.GetDirectoryName(Path.GetFullPath(document.Path))!;
+            var selected = Path.GetFullPath(Path.Combine(directory,
+                fact!.RelativePath.Replace('\\', Path.DirectorySeparatorChar).Replace('/', Path.DirectorySeparatorChar)));
+            guardedDotSource = FrameworkCompatibility.GetRelativePath(directory, selected).Replace('\\', '/');
+        }
         region = new PowerShellBoundCommandRegionStatement(PowerShellSourceParser.GetSpan(document, pipeline.Extent),
             pipeline.Extent.Text, Array.Empty<PowerShellBoundCommandRegionArgument>(),
             BindStages(document, new[] { pipeline }, commandResolver, localFunctionNames, capabilities),
-            nativeSourcePath: document.Path, nativeSourceDocument: document.Text);
+            nativeSourcePath: document.Path, nativeSourceDocument: document.Text,
+            guardedDotSourceRelativePath: guardedDotSource,
+            guardedPathOperands: document.GuardPackagedPathReads ? PowerShellPackagedPathOperandPolicy.SelectNativeRegionOperands(pipeline) : null);
         return true;
     }
 

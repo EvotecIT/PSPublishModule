@@ -112,7 +112,8 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             ? PowerShellCompilationSdkProcessEnvironment.CreateRequest(
                 PowerShellCompilationToolchainFingerprint.ResolveSelectedSdk(), directory, arguments, timeout,
                 authenticatedPackageRoot ?? spec.NuGetPackageRoot)
-            : new ProcessRunRequest("dotnet", directory, arguments, timeout, GetNuGetEnvironment(spec, authenticatedPackageRoot));
+            : PowerShellCompilationSdkProcessEnvironment.CreateInheritedRequest(
+                directory, arguments, timeout, GetNuGetEnvironment(spec, authenticatedPackageRoot));
     }
 
     private static IReadOnlyDictionary<string, string?>? GetNuGetEnvironment(PowerShellCompilationBuildSpec spec, string? authenticatedPackageRoot = null)
@@ -168,18 +169,6 @@ public sealed partial class PowerShellCompilationArtifactBuilder
         using var stream = File.OpenRead(path);
         using var algorithm = SHA256.Create();
         return string.Concat(algorithm.ComputeHash(stream).Select(static value => value.ToString("x2", System.Globalization.CultureInfo.InvariantCulture)));
-    }
-
-    private static string SanitizeArtifactName(string value)
-    {
-        var sanitized = new string(value.Trim().Select(character => char.IsLetterOrDigit(character) || character is '.' or '-' or '_' ? character : '_').ToArray());
-        if (string.IsNullOrWhiteSpace(sanitized) || sanitized is "." or "..")
-            throw new ArgumentException("Artifact name does not contain a usable file name.", nameof(value));
-        if (new[] { ".exe", ".dll", ".pdb", ".generated", ".powerforge-compilation.json" }
-            .Any(suffix => sanitized.EndsWith(suffix, StringComparison.OrdinalIgnoreCase)))
-            throw new ArgumentException("Artifact name must not end with a generated artifact suffix because it can overlap another artifact set.", nameof(value));
-        PowerShellArtifactSetPublisher.EnsureArtifactNameIsNotReserved(sanitized, nameof(value));
-        return sanitized;
     }
 
     private static string EscapeXml(string value)
@@ -257,7 +246,8 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             bool hasDependencies,
             string[] embeddedScriptPaths,
             string[] embeddedResourceRelativePaths,
-            bool usesExtractedRoot)
+            bool usesExtractedRoot,
+            PowerShellCompilationDependency[]? nativeMirroredResources = null)
         {
             EntryRelativePath = entryRelativePath;
             ProjectResources = projectResources;
@@ -266,6 +256,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             EmbeddedScriptPaths = embeddedScriptPaths;
             EmbeddedResourceRelativePaths = embeddedResourceRelativePaths;
             UsesExtractedRoot = usesExtractedRoot;
+            NativeMirroredResources = nativeMirroredResources ?? Array.Empty<PowerShellCompilationDependency>();
         }
 
         internal string EntryRelativePath { get; }
@@ -275,5 +266,6 @@ public sealed partial class PowerShellCompilationArtifactBuilder
         internal string[] EmbeddedScriptPaths { get; }
         internal string[] EmbeddedResourceRelativePaths { get; }
         internal bool UsesExtractedRoot { get; }
+        internal PowerShellCompilationDependency[] NativeMirroredResources { get; }
     }
 }
