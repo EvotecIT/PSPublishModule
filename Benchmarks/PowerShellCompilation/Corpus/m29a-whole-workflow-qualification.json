@@ -1,27 +1,27 @@
 {
   "schemaVersion": 1,
   "recordedOn": "2026-10-16",
-  "status": "selected-whole-workflows-and-declared-local-functional-gates-qualified",
+  "status": "qualified-complete-declared-workflows-local-functional-scope",
   "wholeWorkflowQualified": true,
   "functionalQualificationComplete": true,
-  "interpretation": "Complete declared owned inventories and selected Original/Built/Installed scenarios qualify at Source34. Local functional proof, performance, hosted integration, distribution and cleanup have separate boundaries. Counts from different suites or historical candidates are not combined.",
+  "interpretation": "Complete declared owned inventories and selected Original/Built/Installed scenarios qualify at Source35. Local functional proof, performance, hosted integration, distribution and cleanup have separate boundaries. Counts from different suites or historical candidates are not combined.",
   "finalCandidate": {
-    "label": "Source34",
-    "commit": "42fe4ecf1d9f5c644970d20f38871bb62f88ca1f",
-    "tree": "6f68984e2e035a03a18adc11c0dc50d8348160aa",
+    "label": "Source35",
+    "commit": "6a7046a7161bc5d1bdfacbf98bf769fadc019630",
+    "tree": "bc5f5946ea5f2191f6d50d813b22040047fb5574",
     "integratedMain": "b708456929c395636ee4fb8ae926cd452545156c",
     "sourceInputs": 309,
     "sourceManifest": {
-      "sha256": "70A0083112FE5D42A321605A4C53EB52DFBE9EE1CEA682947BCFDB93993D046D",
-      "role": "Complete Source34 qualification input union"
+      "sha256": "9CFE6629111FBD8A3E80725FDBDEFCB59D8BF4A873AFC6318157314084BA4569",
+      "role": "Complete Source35 qualification input union"
     },
     "windowsGraphManifest": {
-      "sha256": "71B67C653116766E94F011C096772CC51FAAEE31A54CD143BDB0AC4C974506AD",
-      "role": "Source34 Windows graph"
+      "sha256": "BC919CEA5269D0F78D7D6F72CB56FFF0E882B3C23172C5DBBA604DA9C75A8D4C",
+      "role": "Source35 Windows graph"
     },
     "nativeGraphManifest": {
-      "sha256": "681A71A784B7333CB6300DE3C570E96D67C204F95453640F6483B481328965A1",
-      "role": "Source34 native graph"
+      "sha256": "F011DBEC2AA57683082498126B5C922597170DBC0A911816EA9992446CC8AC8B",
+      "role": "Source35 native graph"
     },
     "cliFilesPerPlatform": 449,
     "windowsTestIdentities": 3,
@@ -31,7 +31,7 @@
     "fixtureFiles": 508,
     "sdkPinByteIdentical": true,
     "sourceAndGraphStableBeforeAfter": true,
-    "nativeGraphLogicalBytes": 1769239226,
+    "nativeGraphLogicalBytes": 1769266486,
     "qualificationSnapshotExcludesFinalDocumentationEdits": true
   },
   "declaredPortfolio": {
@@ -84,34 +84,34 @@
         }
       ],
       "result": {
-        "status": "passed-current-source34",
+        "status": "passed-current-source35",
         "receipt": {
-          "sha256": "2BFDACCA15CC79000982E8E9DABF59C0819FDFCDB2D5F212CE535D9CB339E957",
-          "role": "yaml-net10.0 complete Source34 qualification"
+          "sha256": "5AE36318545655C969AE19575774609472348DE9263C51AAEC083F7F5C861B19",
+          "role": "yaml-net10.0 complete Source35 qualification"
         },
-        "compilerGraphSha256": "71B67C653116766E94F011C096772CC51FAAEE31A54CD143BDB0AC4C974506AD",
+        "compilerGraphSha256": "BC919CEA5269D0F78D7D6F72CB56FFF0E882B3C23172C5DBBA604DA9C75A8D4C",
         "artifactSha256": "fe841eef6b910bf4bbe6c22bca6ca28fc518a4cb14719073de9ca77824512f76",
         "projectSha256": "615408B3BA55A3DD36FD4FCF32C8D363FBFA08F3AB2709AB27820B7ED2E5AF42",
         "observations": {
           "Original": {
             "scenarios": 105,
             "receipt": {
-              "sha256": "C9328FE48AB79568C06B317514B5090CCD8B64725E945D76EA5432A5FA52B406",
-              "role": "yaml-net10.0 Original Source34 observation"
+              "sha256": "5925ECABBBFD89EA6C66777C04BB54E2DD16B62B4EE7955496DC85D3632AA215",
+              "role": "yaml-net10.0 Original Source35 observation"
             }
           },
           "Built": {
             "scenarios": 105,
             "receipt": {
-              "sha256": "D6BFA042E8356B02A8F5138FCB396074CD5BE797DE4D9C2BA00BDDD19C091072",
-              "role": "yaml-net10.0 Built Source34 observation"
+              "sha256": "C1C6762978DC7EFCD894B6D4FA8C31FB60F01DD3044E1E73C87D75270BCD7359",
+              "role": "yaml-net10.0 Built Source35 observation"
             }
           },
           "Installed": {
             "scenarios": 105,
             "receipt": {
-              "sha256": "BB32BF0240619709C706ECC657ACE458129DFB7D3FDFFAF9395770A889AD2DB3",
-              "role": "yaml-net10.0 Installed Source34 observation"
+              "sha256": "455DC57A8695E683581F3355ABCAF2F66C76A54E926C6C4F5EF1954A4856B7DF",
+              "role": "yaml-net10.0 Installed Source35 observation"
             }
           }
         },
@@ -125,32 +125,32 @@
         "publicSurfacePreserved": true,
         "canonicalLifecycleReceipts": {
           "analyze": {
-            "sha256": "88FDF530FE89C1E39DACFF755D1E41A290F940B4CEFE82223177A72D9269C76B",
-            "role": "yaml-net10.0 Source34 analyze"
+            "sha256": "4C73073E602996406799443680D431DA81A1E6D2689EA69EADEE286C700AE75E",
+            "role": "yaml-net10.0 Source35 analyze"
           },
           "lock": {
-            "sha256": "E8791E0B4A8C0FD2A5DB176FBEE0E5A7AE823DC2E296AD30F9694ACC878EBC11",
-            "role": "yaml-net10.0 Source34 lock"
+            "sha256": "EFCCEA609F46E6DAC349986D69C6209814A63D42E599A56E7F8800A45A158D45",
+            "role": "yaml-net10.0 Source35 lock"
           },
           "restore": {
-            "sha256": "A286E0BA7CCA2C3022159532053148C108F38E9C7B3EEAF1E51A15B5E4ED0F5C",
-            "role": "yaml-net10.0 Source34 restore"
+            "sha256": "6E5BF3D7CC894B3AC2A1FA784041D6F0578B2664ED08715B8D4DD48595A5C787",
+            "role": "yaml-net10.0 Source35 restore"
           },
           "build": {
-            "sha256": "2947D1D335D24D0F4E6A875C8793C5F833A3CAEF6AF48974ABDE05325DDB541D",
-            "role": "yaml-net10.0 Source34 build"
+            "sha256": "1005D3648F1F4DBE84861E29748CAB1B6A9642D0945A43913CDF2C467CF0F363",
+            "role": "yaml-net10.0 Source35 build"
           },
           "test": {
-            "sha256": "CFF4763948E00909698055342C7519DE22C8D9A63674CE6DCA11C92B89FAD734",
-            "role": "yaml-net10.0 Source34 test"
+            "sha256": "7F178363E02B34CFF8A36BDCD8B25B0EBD1C13140712A2E8994CF9497621B047",
+            "role": "yaml-net10.0 Source35 test"
           },
           "pack": {
-            "sha256": "2774854A80BD741336D1271B73A1F46DA320198B8BB7465A729F5DED1424E785",
-            "role": "yaml-net10.0 Source34 pack"
+            "sha256": "F70A139AF706408BF1625A9706DBDFB4D85576EDCDE6B53285FBAAA21E4E7377",
+            "role": "yaml-net10.0 Source35 pack"
           },
           "install": {
-            "sha256": "6ECD327F1EAD1993263AD529E40FC8666087DDB6B2FC6414C9E870C6E77096EE",
-            "role": "yaml-net10.0 Source34 install"
+            "sha256": "28B389F94EC3FEE6263CDDB25890D39DDBCCFD855C3DC59777E58F571805FC6E",
+            "role": "yaml-net10.0 Source35 install"
           }
         },
         "compilerInputUnavailableDuringBuiltAndInstalled": true,
@@ -198,34 +198,34 @@
         }
       ],
       "result": {
-        "status": "passed-current-source34",
+        "status": "passed-current-source35",
         "receipt": {
-          "sha256": "BC006216DD7B3E30E2DD00291C4B599C1B91B3D08EF5A7D344291922CB952EE2",
-          "role": "yaml-net472 complete Source34 qualification"
+          "sha256": "F1B65DACF46626DF26A39731BD5218AAC844BDE773683525754965DECF347EC0",
+          "role": "yaml-net472 complete Source35 qualification"
         },
-        "compilerGraphSha256": "71B67C653116766E94F011C096772CC51FAAEE31A54CD143BDB0AC4C974506AD",
+        "compilerGraphSha256": "BC919CEA5269D0F78D7D6F72CB56FFF0E882B3C23172C5DBBA604DA9C75A8D4C",
         "artifactSha256": "da8876d54e544e5f4f662f2f856119d179b211deb3a3a8ea386dda37d721b94a",
         "projectSha256": "01FAEA29C01348F1E341BEEB33F267A3DC285489B877A6A7F76B2D27E0DAC100",
         "observations": {
           "Original": {
             "scenarios": 105,
             "receipt": {
-              "sha256": "1F1B8F18EC71E87FECF8F1CC779A35F2ADCEA748697672A28D61045C471F546E",
-              "role": "yaml-net472 Original Source34 observation"
+              "sha256": "9D66E0102B4234CAD4C68B9CFF7AEFB3BA3BFBE5BAB5A9EFDF1E746563EC6277",
+              "role": "yaml-net472 Original Source35 observation"
             }
           },
           "Built": {
             "scenarios": 105,
             "receipt": {
-              "sha256": "F905E0BC400F05183BFED992278E4117E81F12538552C13319792951FF107CDD",
-              "role": "yaml-net472 Built Source34 observation"
+              "sha256": "0BEDB708E9D958A06546D4BD9768B1557E5DDE8226213D22E05FC433922AC4E5",
+              "role": "yaml-net472 Built Source35 observation"
             }
           },
           "Installed": {
             "scenarios": 105,
             "receipt": {
-              "sha256": "10EF5945AFF0BE6618ADEBDD33E9BDC076DE36199BEE229ECDC93CBD72360F57",
-              "role": "yaml-net472 Installed Source34 observation"
+              "sha256": "ECBE6D61C7357A7D75492059C1C6E6B6081F116CF3D56F0009D374CC58A74692",
+              "role": "yaml-net472 Installed Source35 observation"
             }
           }
         },
@@ -239,32 +239,32 @@
         "publicSurfacePreserved": true,
         "canonicalLifecycleReceipts": {
           "analyze": {
-            "sha256": "52CA8CB3F2C6F6B6EEF4400A67AC108C116C911FA833B420CF196A809053BE6B",
-            "role": "yaml-net472 Source34 analyze"
+            "sha256": "69B73BCF807AF0CF2708D323848624A6AE0397B84D26B1E7FDA7E54039D95FD8",
+            "role": "yaml-net472 Source35 analyze"
           },
           "lock": {
-            "sha256": "7634EB183D51E8BBC2BBD53B2B39DB48A7E671AEC3DC3210CF8F4CB955C7C0ED",
-            "role": "yaml-net472 Source34 lock"
+            "sha256": "C0B8B53CF6808853FB75F46999D1B23F30458ABCEFABC2A85500312FBAAD29C1",
+            "role": "yaml-net472 Source35 lock"
           },
           "restore": {
-            "sha256": "86263E1EDAFE6EFE63C18AF70B6C57DF839F9940C59DEA78DB4DF679A4507578",
-            "role": "yaml-net472 Source34 restore"
+            "sha256": "C8C56E61892B80E8AA5DE390F075028202641E74A6917131BC07A8178804F96C",
+            "role": "yaml-net472 Source35 restore"
           },
           "build": {
-            "sha256": "DCA4EF88C070EAD118D5E06AD2420E645A0BD404B22A1A8CFF9AA7C18E8B3AF6",
-            "role": "yaml-net472 Source34 build"
+            "sha256": "7DB1BE8D6F5DAEDAD040CB7D99EECABD7705078844D320C3AF9CEAC65E350D85",
+            "role": "yaml-net472 Source35 build"
           },
           "test": {
-            "sha256": "D65ADD26C11A8EF5A26E37D5C6D36F8E472F17E53E7A7E88A45AAD106B0A50E2",
-            "role": "yaml-net472 Source34 test"
+            "sha256": "A87A18A92BA71E74654442F343541057D49FA33B072A2942F40D01BED0B14E78",
+            "role": "yaml-net472 Source35 test"
           },
           "pack": {
-            "sha256": "D52F4FA4D98213FEC2F0E08764332942E15258CCC58087D9BE8661E4832D5887",
-            "role": "yaml-net472 Source34 pack"
+            "sha256": "FB5AF44F4CE69A3552645C03561968C7ACAFCBBE3745F8B6FD29ECDAD5F6ED79",
+            "role": "yaml-net472 Source35 pack"
           },
           "install": {
-            "sha256": "43B3E2AAF82785290DAAC066FF3CEE3C6959563D86F4DE2E3AC1F4B8D119323C",
-            "role": "yaml-net472 Source34 install"
+            "sha256": "60B23E074C53DA08A0DF22F22EE7B3F26385CD8B829279913371FA448796C972",
+            "role": "yaml-net472 Source35 install"
           }
         },
         "compilerInputUnavailableDuringBuiltAndInstalled": true,
@@ -311,34 +311,34 @@
       ],
       "requiredAliases": [],
       "result": {
-        "status": "passed-current-source34",
+        "status": "passed-current-source35",
         "receipt": {
-          "sha256": "EC5EC90CB77B260A65A6DCB138A66AD38951A2C262EBC559768D8DB033AA9947",
-          "role": "platyps-net10.0 complete Source34 qualification"
+          "sha256": "49A8DE190B95770FF5447C4DE19137294B9347BBA529CAC07154957953B1FA1D",
+          "role": "platyps-net10.0 complete Source35 qualification"
         },
-        "compilerGraphSha256": "71B67C653116766E94F011C096772CC51FAAEE31A54CD143BDB0AC4C974506AD",
+        "compilerGraphSha256": "BC919CEA5269D0F78D7D6F72CB56FFF0E882B3C23172C5DBBA604DA9C75A8D4C",
         "artifactSha256": "13af9af0bf58f353b28e195f6e420183105ada4691071b9dc107ccb9b9cb4666",
         "projectSha256": "180488A6848393614889EE935D73CC53FC1B138B0B6952FA03815799938AB0D4",
         "observations": {
           "Original": {
             "scenarios": 77,
             "receipt": {
-              "sha256": "B6FBED59113AD0A3D6072D2B3771886EEDE4E2419096FAE2E099FC08E6C301EE",
-              "role": "platyps-net10.0 Original Source34 observation"
+              "sha256": "163DB8E9230FB4391B15E49E3B5C8C8F9322C764F56B37C9C4160CCEE400DC84",
+              "role": "platyps-net10.0 Original Source35 observation"
             }
           },
           "Built": {
             "scenarios": 77,
             "receipt": {
-              "sha256": "E7A71EB83AE9DD7A82AC4DA1E4A9A0055AAF895D6D933FCDF7E07FEE4E25C166",
-              "role": "platyps-net10.0 Built Source34 observation"
+              "sha256": "57EDECE970F08A29F4953A3C3F46B9ADBC02A11B534B0728E47155E9F57601CA",
+              "role": "platyps-net10.0 Built Source35 observation"
             }
           },
           "Installed": {
             "scenarios": 77,
             "receipt": {
-              "sha256": "E86C79BEABADE13110A0285C75D42E70DF8C40DA3CD69ABCA2A0BCE04BEA1EAB",
-              "role": "platyps-net10.0 Installed Source34 observation"
+              "sha256": "0E3B0716ABD45522D9585E35AB81CD762A82B10683B49B9F47733C711A7A3073",
+              "role": "platyps-net10.0 Installed Source35 observation"
             }
           }
         },
@@ -352,32 +352,32 @@
         "publicSurfacePreserved": true,
         "canonicalLifecycleReceipts": {
           "analyze": {
-            "sha256": "8A2D3E4A7BE8BF7D2E6C9A66411182E5A7A4860D5149859CD6D4D65CA51469C4",
-            "role": "platyps-net10.0 Source34 analyze"
+            "sha256": "3990226DB5EA8A248A42CF086F71D4900E32FAED50B99BAAFA367D520D266B93",
+            "role": "platyps-net10.0 Source35 analyze"
           },
           "lock": {
-            "sha256": "AB4493E076E0745BE03D3D12FA991C3756CEE267036D344D16273FF408306221",
-            "role": "platyps-net10.0 Source34 lock"
+            "sha256": "1764B4559C15AFCE572EAA75419EB3B412741019ECBC4045E3CB1C5EB716BA3A",
+            "role": "platyps-net10.0 Source35 lock"
           },
           "restore": {
-            "sha256": "EA7C7EBC26E5EAB695277236EE13D517030C5DD32CBC955E3D85ADA8C15A4CF6",
-            "role": "platyps-net10.0 Source34 restore"
+            "sha256": "A97C0C97EA8E7DC2ED5B2CB7B84330E16DAAF640A4653B6AFBC2D54C23A3508C",
+            "role": "platyps-net10.0 Source35 restore"
           },
           "build": {
-            "sha256": "4830405425EA24389D5AE37E501CE9CDB99A1D23DF54983061A9BE148CB2D622",
-            "role": "platyps-net10.0 Source34 build"
+            "sha256": "337C2E59D09696F4AFCB233B0C44D7B8564BA93409A911CFDD9519878E7EF9B0",
+            "role": "platyps-net10.0 Source35 build"
           },
           "test": {
-            "sha256": "9262F2E1CA2C67E5CA5D77B5F6C67CC7E91535A49BC7475C9CF4B3BD5B0CFDD8",
-            "role": "platyps-net10.0 Source34 test"
+            "sha256": "D323813152980495CCED2B16D022A08AB9D3F5473D5DDC609E4CE1CBC2C8138C",
+            "role": "platyps-net10.0 Source35 test"
           },
           "pack": {
-            "sha256": "99BAA28364DFE93C968203950F2391F0FFCD042470F9844331456FAD9A694833",
-            "role": "platyps-net10.0 Source34 pack"
+            "sha256": "8526CFC6FDED78358267F6F3B054E15C06B0927B4273DF28C1E5E42E2B8147F4",
+            "role": "platyps-net10.0 Source35 pack"
           },
           "install": {
-            "sha256": "9B02728C7E7927EE4A4EFF731515425930351FD62A9F8FE17EC4F728F8D2D84D",
-            "role": "platyps-net10.0 Source34 install"
+            "sha256": "245A4807420CBBA0BB58ADEB39F251339CF0EA9EAE5C1F83C055C558833EC7C4",
+            "role": "platyps-net10.0 Source35 install"
           }
         },
         "compilerInputUnavailableDuringBuiltAndInstalled": true,
@@ -424,34 +424,34 @@
       ],
       "requiredAliases": [],
       "result": {
-        "status": "passed-current-source34",
+        "status": "passed-current-source35",
         "receipt": {
-          "sha256": "34B7A5290DE474C523FC890C2F6A42174E06E31AE24DBE2C485E40A3E2927186",
-          "role": "platyps-net472 complete Source34 qualification"
+          "sha256": "EC31A4ACC32AF0B0EE6023D8E1DD2D7778C6F01D58CCF08F38B8710798085ADA",
+          "role": "platyps-net472 complete Source35 qualification"
         },
-        "compilerGraphSha256": "71B67C653116766E94F011C096772CC51FAAEE31A54CD143BDB0AC4C974506AD",
+        "compilerGraphSha256": "BC919CEA5269D0F78D7D6F72CB56FFF0E882B3C23172C5DBBA604DA9C75A8D4C",
         "artifactSha256": "e41e96a7daef76d155b9c38c33aa6ff03c0adc69fd79927ed3db86294e6a6747",
         "projectSha256": "2489DA154F413B361A07D78CF2F02C5BB619C3EC9B088CB7B0A83A82CE5C415F",
         "observations": {
           "Original": {
             "scenarios": 77,
             "receipt": {
-              "sha256": "A9C84440E9A5AB5B651395B4FB04A90FA0B9551DB054A88524F190EE57CBE0B9",
-              "role": "platyps-net472 Original Source34 observation"
+              "sha256": "E1D0FEAF7019812F9B87629F911C1122ACE273EEA6622883CE08FC759178BA1B",
+              "role": "platyps-net472 Original Source35 observation"
             }
           },
           "Built": {
             "scenarios": 77,
             "receipt": {
-              "sha256": "61F1E016AB572D3161ED2BEAE01D0A67A439D6B0664498248F4EF078C35CCB6D",
-              "role": "platyps-net472 Built Source34 observation"
+              "sha256": "E2231B60191F1C7306EC63CACB53E771BA4FCEC42A1A830AEF92924CC3625DBD",
+              "role": "platyps-net472 Built Source35 observation"
             }
           },
           "Installed": {
             "scenarios": 77,
             "receipt": {
-              "sha256": "D17E6F998AFDD37F397151D32CC2131AC71C9F436A44B09324E6ED7A1BA85466",
-              "role": "platyps-net472 Installed Source34 observation"
+              "sha256": "1682A74E0720662FD627E5BECC4BC7FEF2B1962CF23389FA985983E75A999FD2",
+              "role": "platyps-net472 Installed Source35 observation"
             }
           }
         },
@@ -465,32 +465,32 @@
         "publicSurfacePreserved": true,
         "canonicalLifecycleReceipts": {
           "analyze": {
-            "sha256": "FD0CB641970EB61540E09B01DAF240E4FD111428533BA47A9F05B618954974AA",
-            "role": "platyps-net472 Source34 analyze"
+            "sha256": "A14004EB9BCA0D2BC18FB42FC64B7317AC0402C945D5671698FA0CC8B67FCA40",
+            "role": "platyps-net472 Source35 analyze"
           },
           "lock": {
-            "sha256": "963703395D6D67D637BD0DC06DED4DC5CD5ACAFDB6B526B7B2372589939D69B6",
-            "role": "platyps-net472 Source34 lock"
+            "sha256": "4225540D28D8697F09A31DC12FCF51B21E197782D868CBF64F4EDA9B2E728D14",
+            "role": "platyps-net472 Source35 lock"
           },
           "restore": {
-            "sha256": "EFC2191B88ACA80EEFB8ED2D5DC45F2BF894402C3520F903F5E8F4CA7224B3E8",
-            "role": "platyps-net472 Source34 restore"
+            "sha256": "296541CC3ADD574FAA52CFA1D952751CD8EE325B574FEA012070071AA1A8BD47",
+            "role": "platyps-net472 Source35 restore"
           },
           "build": {
-            "sha256": "254770630D324F89C328DBFBF46318AB43FC8B6A2F4017C36C3527C2A907B12F",
-            "role": "platyps-net472 Source34 build"
+            "sha256": "4F87DC79DB6D8C92A3B73266C17CE862ADC60950BFDA143952A346F004C2FFB3",
+            "role": "platyps-net472 Source35 build"
           },
           "test": {
-            "sha256": "4366B52338459C39FABA3FF13923F7487735B3B97B945418BA60A083D7C1C5C1",
-            "role": "platyps-net472 Source34 test"
+            "sha256": "067C92FFBB4C9EE0B665BB3A151BF0CAD64F09C8E3DFA8DD53B460D144941208",
+            "role": "platyps-net472 Source35 test"
           },
           "pack": {
-            "sha256": "B2C1CD69D88C4781864618901BF14F3BEB3F3F95725F39DE3067EB3D40F6C3D6",
-            "role": "platyps-net472 Source34 pack"
+            "sha256": "9FD28BDC2675DE6390AD984A61D612932AAA9556BC28B0CA4F76AAA2C7EED1EC",
+            "role": "platyps-net472 Source35 pack"
           },
           "install": {
-            "sha256": "27A05E9C804FB90B0ECB5B2384C2F01D67274643496A9AC0932397FA1D7DA98E",
-            "role": "platyps-net472 Source34 install"
+            "sha256": "20F5145BF399EC5DAA627B0B98AF8394B2FA9D2EE74C5F007C6AB635D100C5EF",
+            "role": "platyps-net472 Source35 install"
           }
         },
         "compilerInputUnavailableDuringBuiltAndInstalled": true,
@@ -525,34 +525,34 @@
       "requiredExports": [],
       "requiredAliases": [],
       "result": {
-        "status": "passed-current-source34",
+        "status": "passed-current-source35",
         "receipt": {
-          "sha256": "75B1254841F0DDD316055FC669692E0848F17F71EDADB10FFDDD9EE74581C28A",
-          "role": "sitemap-net10.0 complete Source34 qualification"
+          "sha256": "B2E1C5A38E7B3C24D4D3EE7B5F7FD2C721C444DD8139E5946C8E8BC7B58E4539",
+          "role": "sitemap-net10.0 complete Source35 qualification"
         },
-        "compilerGraphSha256": "71B67C653116766E94F011C096772CC51FAAEE31A54CD143BDB0AC4C974506AD",
-        "artifactSha256": "7d1fff84102765d70c2b62fd8f0549d9fd82c1716fd6dcc7d2b9be0d896f26b8",
-        "projectSha256": "E5E51CD9FA645295A3A7B8EEE1F7AB4CDDB715F633288960C79CA9BB172F1AE0",
+        "compilerGraphSha256": "BC919CEA5269D0F78D7D6F72CB56FFF0E882B3C23172C5DBBA604DA9C75A8D4C",
+        "artifactSha256": "ebd2de7b2ef8ff3145cac3b0f9de76b72ed62130fcb8a0a81f98fc93b79bb985",
+        "projectSha256": "9F3E09658D9638DF164953DCF0D54679E0C3289351E4C47B7A428AA62F3173B4",
         "observations": {
           "Original": {
             "scenarios": 10,
             "receipt": {
-              "sha256": "C5B2F6ABEA51AC2388AC6EF0EB79B25CD7A7E0C75364F5D22B9FC8FAC082A59D",
-              "role": "sitemap-net10.0 Original Source34 observation"
+              "sha256": "2BB70F0E27BD21C712643A48F2750169755056A360AB398B2C95ED0380A1CBF4",
+              "role": "sitemap-net10.0 Original Source35 observation"
             }
           },
           "Built": {
             "scenarios": 10,
             "receipt": {
-              "sha256": "180CFC9B1AE07EBE53BDB7B246E167EE97B4E3D4D5F54BC6B927BB649B72900E",
-              "role": "sitemap-net10.0 Built Source34 observation"
+              "sha256": "CAC18AB4D84D9BE060567C29607EA8618CB09882E24E227B637B53448EEF4BC8",
+              "role": "sitemap-net10.0 Built Source35 observation"
             }
           },
           "Installed": {
             "scenarios": 10,
             "receipt": {
-              "sha256": "7801F4299F51176B1E7853174A3BCA4887E8CE9A2CE42AC1C0862002F5FDB688",
-              "role": "sitemap-net10.0 Installed Source34 observation"
+              "sha256": "CAE431BDC730959B2F4CCE6B7DEB8E7B89F60ED25F20EE9550F87418BD2F9FD9",
+              "role": "sitemap-net10.0 Installed Source35 observation"
             }
           }
         },
@@ -566,32 +566,32 @@
         "publicSurfacePreserved": true,
         "canonicalLifecycleReceipts": {
           "analyze": {
-            "sha256": "1EE4255E49FA4A352934271CC3E0E496AF10120EE23A5983954A5732D97A4B5C",
-            "role": "sitemap-net10.0 Source34 analyze"
+            "sha256": "20C8F4D4E802AA4C3835D7E486B98A03739A2E5396E6FE67A48386409A81528A",
+            "role": "sitemap-net10.0 Source35 analyze"
           },
           "lock": {
-            "sha256": "B45964D92DF3F0C6B698D048C321145852210C1505ED0053CB2A0EEF87771D84",
-            "role": "sitemap-net10.0 Source34 lock"
+            "sha256": "6B0EA6207ACC8AC3FBD4FD467FD5EC88108F3691C2530542AE7014EEF7D6FB1C",
+            "role": "sitemap-net10.0 Source35 lock"
           },
           "restore": {
-            "sha256": "FA9AE452F083491A85DEA3424BA2BA49C912048808AED8547E8B3375C3ABC101",
-            "role": "sitemap-net10.0 Source34 restore"
+            "sha256": "5E1EB08E8709C32BBC72D4CD27F5BA506C4426F1E3AE4615AE2F09D55A6371CE",
+            "role": "sitemap-net10.0 Source35 restore"
           },
           "build": {
-            "sha256": "5965F6B184BF9ED4D371CF1044A46E66E0ACF7C5276E0D30532C50F955A7F2DB",
-            "role": "sitemap-net10.0 Source34 build"
+            "sha256": "A9C6BC9480808F0BFB91746E55FA5CAD394F430655E73EB466E0AFE358942661",
+            "role": "sitemap-net10.0 Source35 build"
           },
           "test": {
-            "sha256": "918F8A317711F92D8A021994D8B0D584E1A5A2C912FDA0A63F7B0DB42DB5D98A",
-            "role": "sitemap-net10.0 Source34 test"
+            "sha256": "572A28D7B4E7E90E022E11815F0DBD1EE68BEB3EB5DA2081454352A5507DA1AC",
+            "role": "sitemap-net10.0 Source35 test"
           },
           "pack": {
-            "sha256": "74703464D92C3577C5BFD049A84E9DDA58971EF067037A7B1032A5BF05B7642D",
-            "role": "sitemap-net10.0 Source34 pack"
+            "sha256": "2D5AA84FE39646623FF70EA877364D7F2A980320CC8736125FB63882265478ED",
+            "role": "sitemap-net10.0 Source35 pack"
           },
           "install": {
-            "sha256": "62A115A7C2EC23DCF8E7ECCA356D66736768773F435BB1E6D71A0F867BCE1BCA",
-            "role": "sitemap-net10.0 Source34 install"
+            "sha256": "A5C678E250A6DA5B972B40792DA1E8BC0C8EFF8D98862EB5A22DB8342B4AAC88",
+            "role": "sitemap-net10.0 Source35 install"
           }
         },
         "compilerInputUnavailableDuringBuiltAndInstalled": true,
@@ -626,39 +626,39 @@
         "exitCode": 0,
         "warnings": 0,
         "errors": 0,
-        "scope": "Source34 test-owner-only rebuild; unchanged Source33 production CLI/owner and restored assets authenticated before/finally",
+        "scope": "Source35 ordinary production restore/build; actual metadata and current complete graph authenticated",
         "receipt": {
-          "sha256": "64A28A5A54358E11A95551948CC341C96B232AA077DE91F476964516CFFD16D7",
-          "role": "Source34 test-owner build finally envelope"
+          "sha256": "ABA7F31FCAB9CBF9867D74C8048EFC4C9464BFCA06D59C6E00418F0101EF06E9",
+          "role": "Source35 ordinary production build finally envelope"
         }
       },
       "focused": {
-        "total": 109,
-        "passed": 109,
+        "total": 122,
+        "passed": 122,
         "failed": 0,
         "skipped": 0,
-        "selectors": 22,
-        "distinctIds": 109,
+        "selectors": 25,
+        "methodSelectors": 22,
+        "classSelectors": 3,
+        "distinctIds": 122,
         "discoveryMultiplicitiesMatched": true,
         "receipt": {
-          "sha256": "FE727A6BC5A2353939ED67219E532A606C2B80CB3F76F826762657A35703D1C3",
-          "role": "Source34 fresh Windows focused result"
+          "sha256": "45DF4F365934A23C9B88772A3DC4FC6FD82C6083238C334A1208AF420B0B5519",
+          "role": "Source35 fresh Windows focused result"
         },
-        "methodSelectors": 19,
-        "classSelectors": 3,
-        "trxSha256": "FD0C6505748E3E61F2D43DD76F7F9AFF09C8C3F5B0E1BB8F94D31CCAF36D93EA"
+        "trxSha256": "355F5CA9C8AFBE0C7C613053417CD8CE4618D7DBAD76C17741BBC135941B59B8"
       },
       "whole": {
         "lanes": 5,
         "passed": true,
         "compilerClosureUnchanged": true,
         "receipt": {
-          "sha256": "C6E6757C352CBB465DC55D1CEE434BD2EF44A53006E2EFD6C6217AE21AFD4720",
-          "role": "Source34 five-lane whole-workflow result"
+          "sha256": "AE30BC5C6D2C32EF9618202727F2BF39FA42232F21BFCEEE591B2AABACE19C7F",
+          "role": "Source35 five-lane whole-workflow result"
         },
         "phase": {
-          "sha256": "D837BF95C080057611E56314780B5FEDA661D57A783DBBA0BEC7CAF667A27032",
-          "role": "Source34 Whole/compatibility terminal"
+          "sha256": "49C56E525B42F5A2A0A56F51CA4F51B035D69FF1B240C999808B7A9B31CD3F66",
+          "role": "Source35 Whole/compatibility terminal"
         }
       },
       "sharedCompatibility": {
@@ -668,34 +668,34 @@
             "exitCode": 0,
             "warnings": 0,
             "errors": 0,
-            "logSha256": "BAC55214E6D33184133F9296A7242F9FCC99B930E1F6A5866A56EB6B768F8B0D"
+            "logSha256": "010429ADEFF89914199C7D8C43C3A935033EED9E12E47175E17C634045B015C4"
           },
           {
             "framework": "net8.0",
             "exitCode": 0,
             "warnings": 0,
             "errors": 0,
-            "logSha256": "D573D0324ABC6068034D407CEF7B5F3C4E56BC7C9F5F40FCD79C147E67132667"
+            "logSha256": "0FC700BEE8F0E4C180AF2247378B0361A48FE89ECA52AD73558174A78A8256D2"
           }
         ],
         "receipt": {
-          "sha256": "7ABB3F12CBC0C8984AFAD6AB745666829A5AC20F941ADB09B711F99C22D30904",
-          "role": "Source34 shared compatibility result"
+          "sha256": "EB66F7EE61033235A4FD04A15FA0FFC085B90D4A4D3A09DF334F5B7ACA2E077B",
+          "role": "Source35 shared compatibility result"
         },
         "generatedNet8TargetReopened": false
       },
       "full": {
-        "total": 1449,
-        "passed": 1447,
+        "total": 1454,
+        "passed": 1452,
         "failed": 0,
         "knownLinuxPrerequisiteSkips": 2,
         "ownedStrictPassed": 6,
         "receipt": {
-          "sha256": "B5E8E69911676A88ABF5D2D96F1359A07E4BC618D2E95C3052D4C9DB4C64525E",
-          "role": "Source34 functional Full PhaseAll result"
+          "sha256": "90A88FEF9C0AD6219567E27AC95D41A0CC2B80C299F8D77FC18DB7F0263C962B",
+          "role": "Source35 functional Full PhaseAll result"
         },
-        "trxSha256": "5F62D5F37217CB9DA59C12CB35509DECF2303902E7FBF9A94183D8BF297DE05F",
-        "strictSha256": "96A23A5756DFC417DC6B62329BBB179924F686500C5F6A0B1CF52246D26A3BDA",
+        "trxSha256": "97CAF334E2FF0D1C9EC536A030DE0AA213D8F5588F01F591364D57361EBF4796",
+        "strictSha256": "BFEF4E61911E796CAB6EDB78D106A270DBB29C78CA3BE901564E44BE5FD40C56",
         "phase": "All"
       },
       "supplement": {
@@ -705,29 +705,22 @@
         "skipped": 0,
         "selectors": 5,
         "receipt": {
-          "sha256": "93F26E76AECDA7144234829FCA97E37AB56BE65EF480716DCFE0E9EE7CDA74BB",
-          "role": "Source34 Windows mandatory supplement"
+          "sha256": "2F4C9D3DA649681D1FE5258512B857F28098978A136BE3E58AC666A5AD1615BC",
+          "role": "Source35 mandatory Windows supplement"
         },
-        "trxSha256": "53A849BB2828C05B4FCA5E99267437A70093342A06EEE6F8D168BC729F2744D3"
+        "trxSha256": "0167933F81482C76EAFF3B303F6F4EFDC6CBE36E00E02506D29FD9C315424425"
       },
       "outerFinally": {
         "passed": true,
         "receipt": {
-          "sha256": "E859122ADAF3A4568DF3D19920D22A7D6F161C0C4CEB56BBF6F46E4234824796",
-          "role": "Source34 Full/supplement terminal"
+          "sha256": "F11C849325B3521461F33EF0DACE3CA00E210950D0E1BD11D2A9C1164A4FC37A",
+          "role": "Source35 actual Full/supplement ResourceRecovery1 terminal"
         },
-        "inputGuardReceipt": {
-          "sha256": "61D3F8E71C92D18AA664207FDCEA8165D5E8B97657B26B3150802F38D2868931",
-          "role": "Source34 supplement outer finally source/graph guard"
-        },
-        "serialSequence": {
-          "sha256": "4F11039EBBEAA57125B03B1B04C1DFB47135E572C67D02F86EDD65D08EA43A4C",
-          "role": "Source34 complete Whole/compatibility/Net472/Full/supplement sequence"
-        }
+        "scope": "The original pure pre-SDK memory refusal remains historical; this is the one actually admitted recovery chain."
       },
       "actualRoslynBinding": {
-        "sha256": "24A923D07F839050954CDE248EA95381F84110FD850A9F71A48C6F799CE0CA0E",
-        "role": "Source34 exact deps/CLR metadata/restored asset bytes"
+        "sha256": "545EE1AF77CB873C16FDC1384C87DAA9B737506408FB3E78D679ED1CC3FB63ED",
+        "role": "Source35 exact deps/CLR metadata/restored asset bytes"
       },
       "net472Smoke": {
         "total": 26,
@@ -738,10 +731,10 @@
         "discoveryMultiplicitiesMatched": true,
         "compilerChildTimeoutMinutes": 6,
         "receipt": {
-          "sha256": "56BF1DE653D71A4D816E79A6A0FB77F5CA9537794C3CF7FDC1D0F4F3F30D2981",
-          "role": "Source34 full unfiltered Net472 smoke"
+          "sha256": "5D7E47F6B0EBC6A37DDE4896C3609B68189C3DD5AF85A65624D065D750997633",
+          "role": "Source35 full unfiltered Net472 smoke"
         },
-        "trxSha256": "3CDC9775AFE54889F9AC5D3A0AA6187C7E388DDB66CEA72161479630C81BCAD7"
+        "trxSha256": "4AAFCB0B7BE7E34BF66659941BD0F8667DB63CA126FA66681F79B66C92992F97"
       },
       "generatedArtifactDiagnostics": {
         "scope": "Generated Hybrid platyPS artifacts, separate from compiler/test/shared compatibility builds; repeated log-summary lines are not extra warnings",
@@ -755,8 +748,8 @@
               "NU1510": 2
             },
             "receipt": {
-              "sha256": "1C01EDE82EA35660A0E8417EC1F3FC8738DDD6ACBC32CA85C09AA9AAD3653C36",
-              "role": "platyps-net10.0 actual generated artifact build diagnostics"
+              "sha256": "0BE62D3DB35B8D49FDABAA391C8BA0620FA76DB253CE905A8D946593B5B8E483",
+              "role": "platyps-net10.0 actual Source35 generated build diagnostics"
             }
           },
           {
@@ -767,8 +760,8 @@
               "CS8321": 70
             },
             "receipt": {
-              "sha256": "D71EAF36DD1EE2D842E95F193D8A223F4ACC1193D514D35A1380B0C51E3C6351",
-              "role": "platyps-net472 actual generated artifact build diagnostics"
+              "sha256": "E0A9BBD7243A120EC4D1B3B5040583DE7EA9769360C8BD186C442D779869F62B",
+              "role": "platyps-net472 actual Source35 generated build diagnostics"
             }
           }
         ],
@@ -776,6 +769,21 @@
           "CS8321": "The local function '__powerForgeConvertInvariant' is declared but never used",
           "NU1510": "PackageReference System.Reflection.Metadata will not be pruned; the package is automatically available"
         }
+      },
+      "separatedOutputVariants": {
+        "qualified": true,
+        "actualOperationsPassed": 14,
+        "sameCanonicalBasenameInSiblingOutputDirectories": true,
+        "reciprocalArtifactStateStable": true,
+        "installedFunctionResults": [
+          7,
+          7
+        ],
+        "receipt": {
+          "sha256": "A377270735716A1373CE75F167BFE767F62BE6244E4EFB9F02A8883C8147680B",
+          "role": "Source35 actual two-variant lifecycle"
+        },
+        "scope": "Selected Hybrid/Strict two-variant lifecycle; separate from complete module workflows."
       }
     },
     "native": {
@@ -783,21 +791,21 @@
       "buildWarnings": 0,
       "buildErrors": 0,
       "build": {
-        "sha256": "42A96B658EF2E58BCE79CB38356EEF10FD2A288FF43DEE3D7DC6904D5DE3B9DE",
-        "role": "Source34 native test-owner build terminal"
+        "sha256": "0DDAEF07AC185C940C1D36F2BE54A153A418394EB41AA1F791653BE9B017D899",
+        "role": "Source35 native ordinary production build terminal"
       },
       "focused": {
-        "total": 98,
-        "passed": 93,
+        "total": 107,
+        "passed": 101,
         "failed": 0,
-        "knownWindowsPrerequisiteSkips": 5,
-        "distinctIds": 98,
+        "knownWindowsPrerequisiteSkips": 6,
+        "distinctIds": 107,
         "discoveryMultiplicitiesMatched": true,
         "receipt": {
-          "sha256": "46854E9A62B6CC6908FE356820B31CE29A8C9910B76F792389FE7D6CFC3022E1",
-          "role": "Source34 fresh native focused result"
+          "sha256": "39ED1D08540CE1A966A39CDB72B7E67C22140C22E59338FC500FCB70EEE5F168",
+          "role": "Source35 fresh native focused result"
         },
-        "trxSha256": "44D7C6CB165872F75437451023F133D22670C2EBFED688E3927F2A5A3E93FC20"
+        "trxSha256": "4708F131E21385AE23BBF51D6084EA1AB9529EAFB1FC7A0A7545F87EB49F5CBD"
       },
       "fast": {
         "total": 333,
@@ -809,11 +817,11 @@
         "distinctIds": 333,
         "discoveryMultiplicitiesMatched": true,
         "reconciliation": {
-          "sha256": "739D1DEC478AB9A63FCC0B63D41C127838FB28332BA48DCD646C0A3300F61B46",
-          "role": "Source34 canonical Fast/Strict/required-row reconciliation"
+          "sha256": "C8CAA16E7BC42AAE3C43CF9439FF1D2B13324D4E307937679B8B2C236835F9BB",
+          "role": "Source35 canonical Fast/Strict/required-row reconciliation"
         },
-        "trxSha256": "74CEDD098528B6FDE3595592A2FE3AF17AAC7C641A085DE110E0AB750F1151A4",
-        "strictSha256": "E243DD5C748BF82CBBAC98673EB2F21F2451E3FFAB26BBF0B2D9C9AD7ED82A0E",
+        "trxSha256": "E216972F78C79C2D2938A1BDEE85CD3218E4862E7C4A27C60757DEE73DDA2F5E",
+        "strictSha256": "26E3D06AB47D6292C5EE272E4B9E8AC364EE1548C147BB65530AAF09E41DB0CE",
         "runtimeIdentifierArgument": "OMITTED",
         "maxParallelThreads": 1
       },
@@ -827,52 +835,67 @@
         "discoveryMultiplicitiesMatched": true,
         "receipt": {
           "sha256": "92C2316DF6376200CEC7A088843B15502E4C7A032164F912D11C195A8C9F8B25",
-          "role": "Source34 native mandatory 19-selector supplement rows"
+          "role": "Source35 native mandatory nineteen-selector supplement rows"
         },
-        "trxSha256": "26B048391DBF5A1AC527854CEC241B21327638EFF2A7D8B2E68993BEC79EEDF5"
+        "trxSha256": "034F9703C63E71A8B04E6715A9B560372E0226831A8D0457D60DD7019F4933C7"
       },
       "actualRoslynBinding": {
-        "sha256": "151F0BDFBD89F3B104A6DB55D72CF365DB0077D4E9B752D762E50D79FC98D075",
-        "role": "Source34 native exact deps/CLR metadata/restored asset bytes"
-      },
-      "finalAudit": {
-        "sha256": "3E5D6011F23106D956425EF9D97CB9394B00464548F015B602F6846359D088FF",
-        "role": "Source34 final functional audit and bounded resource handoff"
+        "sha256": "FEF08DB3326A7C39386ECE52933A9BB25A740ED4EFBFD080DEC8E6D645D385FD",
+        "role": "Source35 exact deps/CLR metadata/restored asset bytes"
       },
       "functionalTerminal": {
-        "sha256": "16BC8FCECA3EB5074567006C93BA08D2113A7140B353EEF2824A3DAE24F023D4",
-        "role": "Source34 native functional chain terminal"
+        "sha256": "1AEF4FD6FB090CB190AB2F0E3706EB724BBFC8BB764FE482A6DE88F5D183810C",
+        "role": "Source35 native functional chain terminal"
       },
       "readerRelease": {
-        "sha256": "F080DCE244A0DC82433CDC8D79BAAA5B7106E8694494B0C9CAE42DBF3FBCBC6D",
-        "role": "Source34 fresh final native/original-source readers released"
+        "sha256": "3003E641E9D74E66F94FF571996BA4B7194859B0D0F55EA8459D61CEECBF3002",
+        "role": "Source35 final native/original-source readers released; keeper retention and cleanup remain separate"
       },
-      "buildScope": "Current test-owner build with unchanged qualified production graph; compiler/test build log records zero warnings/errors",
-      "wholeModuleExecutionQualified": false
+      "buildScope": "Current Source35 ordinary production restore/build with zero warnings/errors; no prior production graph reuse claim",
+      "wholeModuleExecutionQualified": false,
+      "focusedPositiveQualification": {
+        "sha256": "A8CE2C5865E4490D8E1CCF88C450372AEA6A90EC869B34511926FCC86202F4FB",
+        "role": "Source35 native current build/focus/positive identity collection"
+      },
+      "separatedOutputVariants": {
+        "qualified": true,
+        "actualOperationsPassed": 14,
+        "sameCanonicalBasenameInSiblingOutputDirectories": true,
+        "reciprocalArtifactStateStable": true,
+        "installedFunctionResults": [
+          7,
+          7
+        ],
+        "receipt": {
+          "sha256": "C479F928307DE9DF9C2763CA3F63BB7613C90DACCC0780292E29DDFAA5D5F3ED",
+          "role": "Source35 actual two-variant lifecycle"
+        },
+        "scope": "Selected Hybrid/Strict two-variant lifecycle; separate from complete module workflows."
+      }
     },
     "boundedOwnerReview": {
-      "reviewedCandidate": 32,
-      "reportSha256": "EA5581EEAA179A49EB5DA07AFDE1B2F52E1CAC2D8B880F820F7DE9BC512F0208",
+      "reviewedCandidate": 35,
+      "reportSha256": "E15B2115DE9F2F5670377EFC00625CB4C0264B464357B92C2A7CDE073D099A94",
       "openP0P1P2": 0,
       "openP3": 0,
-      "reservedTargetedConfirmationUsed": 1,
-      "newIndependentReviewForSource34": false,
+      "reservedTargetedConfirmationUsed": 0,
+      "priorUnaffectedOwnerReviewsRetained": true,
       "admission": {
-        "sha256": "7AF85AB8B39FDED9CF1A0A67C6BC7F28ACAC5244492BEC933AF44CB3BCD2E5C4",
-        "role": "Retained bounded closure and directly observed Source34 composition; pre-gate admission, not broad results"
+        "sha256": "0EB7A5090CC2960D48E8AAC610B8C9F9F4F51E7467DD1C7119F0DBA502B4BAA8",
+        "role": "Current Source35 second-wave bounded closure; not broad-gate results"
       },
-      "scope": "Original compiler/SDK/mapping owner reviews and reserved closure are retained. One bounded first-wave pass reconciled its provisional ETS inference against actual binding and found no actionable defect. The later main composition and narrow Census assertion repair have direct current proof; no SHA-only review reset is claimed."
+      "scope": "One fresh read-only closure covers the exposed output-set, payload-path, source-root and cleanup contracts after both platforms' focused and positive proof. Prior unaffected owner reviews retain their scopes. The targeted confirmation remains unused."
     },
     "hostedIntegration": {
-      "status": "source34-consolidated-update-current-head-CI-review-settlement-merge-pending",
+      "status": "source35-consolidated-update-current-head-CI-review-settlement-merge-pending",
       "pullRequest": "https://github.com/EvotecIT/PSPublishModule/pull/1118",
       "currentLocalCandidatePublished": false,
       "mergeCommit": null,
       "newReleaseClaimed": false
     },
     "cleanup": {
-      "status": "current-source34-final-owned-cleanup-pending",
-      "scope": "Functional reader release is verified. Compact preservation and earlier cleanup remain separate; no final graph/private-root/worktree cleanup is claimed here."
+      "status": "current-source35-final-owned-cleanup-pending",
+      "scope": "Earlier compact preservation and exact released-output cleanup retain their receipt scopes. Final graph, private-root, resource and worktree cleanup remain separate."
     }
   },
   "performance": {
@@ -887,26 +910,26 @@
         "id": "strict-multifile-application",
         "metric": "artifactP50Milliseconds",
         "expectedMaximum": 100,
-        "actual": 319.0
+        "actual": 346.0
       },
       {
         "scope": "strictQualification",
         "id": "strict-multifile-application",
         "metric": "artifactP95Milliseconds",
         "expectedMaximum": 250,
-        "actual": 358.0
+        "actual": 1506.0
       },
       {
         "scope": "strictQualification",
         "id": "strict-multifile-application",
         "metric": "artifactToSourceP50Ratio",
         "expectedMaximum": 0.75,
-        "actual": 1.013
+        "actual": 1.113
       }
     ],
     "windowsRecordedRegressions": [],
     "defaultCiEnforceAndThresholdsUnchanged": true,
-    "scope": "RecordOnly functional gates do not qualify precision timing, promote performance or change default CI Enforce/budgets. Windows NoPerformanceBudgetRegressions does not establish quiet-machine qualification.",
+    "scope": "RecordOnly functional gates do not qualify precision timing, promote performance or change default CI Enforce/budgets. Timing losses remain recorded under the candidate that produced them; a no-regression result does not establish quiet-machine qualification.",
     "windowsRecordedBudgetStatus": "NoPerformanceBudgetRegressions"
   },
   "sdkSelectionAndAcquisition": {
@@ -927,7 +950,7 @@
     "testSelectionRepair": "Repository global.json is copied into external test output; repository SDK policy unchanged.",
     "independentProductRepair": "Acquired-environment schema 3 authenticates exact SDK downloadDependencies separately from libraries using existing Microsoft author policy; refresh older environment with ordinary project restore.",
     "historicalLimit": "Unchanged 14 non-reproductions and failed 15 focus retain their original scope; no retroactive historical Full pass.",
-    "currentQualification": "Source34 retains the repository SDK pin and exact acquired-environment/download-dependency authentication; current selected CLI/SDK contracts and actual metadata receipts have separate current identities above. Earlier selection/binary-equivalence controls keep their historical scopes."
+    "currentQualification": "Source35 retains the repository SDK pin and exact acquired-environment/download-dependency authentication; current selected CLI/SDK contracts and actual metadata receipts are bound separately. Earlier selection/binary-equivalence controls keep their historical scopes."
   },
   "guideConsistency": {
     "path": "Docs/PowerForge.PowerShellCompilation.md",
@@ -1381,6 +1404,736 @@
         "role": "Two unchanged CLI Census invocations, exits 0/1 and unchanged written baseline"
       },
       "scope": "No Source33 broad gate or mixed prior-pass recovery is claimed. Source34 executes fresh complete focused cohorts."
+    },
+    "candidate34": {
+      "status": "passed-at-recorded-source34-historical-scope",
+      "candidate": {
+        "label": "Source34",
+        "commit": "42fe4ecf1d9f5c644970d20f38871bb62f88ca1f",
+        "tree": "6f68984e2e035a03a18adc11c0dc50d8348160aa",
+        "integratedMain": "b708456929c395636ee4fb8ae926cd452545156c",
+        "sourceInputs": 309,
+        "sourceManifest": {
+          "sha256": "70A0083112FE5D42A321605A4C53EB52DFBE9EE1CEA682947BCFDB93993D046D",
+          "role": "Complete Source34 qualification input union"
+        },
+        "windowsGraphManifest": {
+          "sha256": "71B67C653116766E94F011C096772CC51FAAEE31A54CD143BDB0AC4C974506AD",
+          "role": "Source34 Windows graph"
+        },
+        "nativeGraphManifest": {
+          "sha256": "681A71A784B7333CB6300DE3C570E96D67C204F95453640F6483B481328965A1",
+          "role": "Source34 native graph"
+        },
+        "cliFilesPerPlatform": 449,
+        "windowsTestIdentities": 3,
+        "nativeTestIdentities": 7,
+        "nativeGraphFiles": 3523,
+        "nativeCopiedTrackedFilesAndModes": 6682,
+        "fixtureFiles": 508,
+        "sdkPinByteIdentical": true,
+        "sourceAndGraphStableBeforeAfter": true,
+        "nativeGraphLogicalBytes": 1769239226,
+        "qualificationSnapshotExcludesFinalDocumentationEdits": true
+      },
+      "wholeLaneResults": [
+        {
+          "id": "yaml-net10.0",
+          "result": {
+            "status": "passed-current-source34",
+            "receipt": {
+              "sha256": "2BFDACCA15CC79000982E8E9DABF59C0819FDFCDB2D5F212CE535D9CB339E957",
+              "role": "yaml-net10.0 complete Source34 qualification"
+            },
+            "compilerGraphSha256": "71B67C653116766E94F011C096772CC51FAAEE31A54CD143BDB0AC4C974506AD",
+            "artifactSha256": "fe841eef6b910bf4bbe6c22bca6ca28fc518a4cb14719073de9ca77824512f76",
+            "projectSha256": "615408B3BA55A3DD36FD4FCF32C8D363FBFA08F3AB2709AB27820B7ED2E5AF42",
+            "observations": {
+              "Original": {
+                "scenarios": 105,
+                "receipt": {
+                  "sha256": "C9328FE48AB79568C06B317514B5090CCD8B64725E945D76EA5432A5FA52B406",
+                  "role": "yaml-net10.0 Original Source34 observation"
+                }
+              },
+              "Built": {
+                "scenarios": 105,
+                "receipt": {
+                  "sha256": "D6BFA042E8356B02A8F5138FCB396074CD5BE797DE4D9C2BA00BDDD19C091072",
+                  "role": "yaml-net10.0 Built Source34 observation"
+                }
+              },
+              "Installed": {
+                "scenarios": 105,
+                "receipt": {
+                  "sha256": "BB32BF0240619709C706ECC657ACE458129DFB7D3FDFFAF9395770A889AD2DB3",
+                  "role": "yaml-net10.0 Installed Source34 observation"
+                }
+              }
+            },
+            "scenarioParity": true,
+            "strictDependencyClosureVerified": false,
+            "actualEmittedRootMethods": 14,
+            "actualPrivateStaticNestedMethodsWithNonemptyIL": 0,
+            "noRetainedOwnedBodies": true,
+            "noOmittedOwnedUnits": true,
+            "noRejectedOwnedUnits": true,
+            "publicSurfacePreserved": true,
+            "canonicalLifecycleReceipts": {
+              "analyze": {
+                "sha256": "88FDF530FE89C1E39DACFF755D1E41A290F940B4CEFE82223177A72D9269C76B",
+                "role": "yaml-net10.0 Source34 analyze"
+              },
+              "lock": {
+                "sha256": "E8791E0B4A8C0FD2A5DB176FBEE0E5A7AE823DC2E296AD30F9694ACC878EBC11",
+                "role": "yaml-net10.0 Source34 lock"
+              },
+              "restore": {
+                "sha256": "A286E0BA7CCA2C3022159532053148C108F38E9C7B3EEAF1E51A15B5E4ED0F5C",
+                "role": "yaml-net10.0 Source34 restore"
+              },
+              "build": {
+                "sha256": "2947D1D335D24D0F4E6A875C8793C5F833A3CAEF6AF48974ABDE05325DDB541D",
+                "role": "yaml-net10.0 Source34 build"
+              },
+              "test": {
+                "sha256": "CFF4763948E00909698055342C7519DE22C8D9A63674CE6DCA11C92B89FAD734",
+                "role": "yaml-net10.0 Source34 test"
+              },
+              "pack": {
+                "sha256": "2774854A80BD741336D1271B73A1F46DA320198B8BB7465A729F5DED1424E785",
+                "role": "yaml-net10.0 Source34 pack"
+              },
+              "install": {
+                "sha256": "6ECD327F1EAD1993263AD529E40FC8666087DDB6B2FC6414C9E870C6E77096EE",
+                "role": "yaml-net10.0 Source34 install"
+              }
+            },
+            "compilerInputUnavailableDuringBuiltAndInstalled": true,
+            "dependenciesFromArtifactOnly": true,
+            "installedPayloadAllFilesAuthenticated": true,
+            "artifactPathsAreHistorical": true
+          }
+        },
+        {
+          "id": "yaml-net472",
+          "result": {
+            "status": "passed-current-source34",
+            "receipt": {
+              "sha256": "BC006216DD7B3E30E2DD00291C4B599C1B91B3D08EF5A7D344291922CB952EE2",
+              "role": "yaml-net472 complete Source34 qualification"
+            },
+            "compilerGraphSha256": "71B67C653116766E94F011C096772CC51FAAEE31A54CD143BDB0AC4C974506AD",
+            "artifactSha256": "da8876d54e544e5f4f662f2f856119d179b211deb3a3a8ea386dda37d721b94a",
+            "projectSha256": "01FAEA29C01348F1E341BEEB33F267A3DC285489B877A6A7F76B2D27E0DAC100",
+            "observations": {
+              "Original": {
+                "scenarios": 105,
+                "receipt": {
+                  "sha256": "1F1B8F18EC71E87FECF8F1CC779A35F2ADCEA748697672A28D61045C471F546E",
+                  "role": "yaml-net472 Original Source34 observation"
+                }
+              },
+              "Built": {
+                "scenarios": 105,
+                "receipt": {
+                  "sha256": "F905E0BC400F05183BFED992278E4117E81F12538552C13319792951FF107CDD",
+                  "role": "yaml-net472 Built Source34 observation"
+                }
+              },
+              "Installed": {
+                "scenarios": 105,
+                "receipt": {
+                  "sha256": "10EF5945AFF0BE6618ADEBDD33E9BDC076DE36199BEE229ECDC93CBD72360F57",
+                  "role": "yaml-net472 Installed Source34 observation"
+                }
+              }
+            },
+            "scenarioParity": true,
+            "strictDependencyClosureVerified": false,
+            "actualEmittedRootMethods": 14,
+            "actualPrivateStaticNestedMethodsWithNonemptyIL": 0,
+            "noRetainedOwnedBodies": true,
+            "noOmittedOwnedUnits": true,
+            "noRejectedOwnedUnits": true,
+            "publicSurfacePreserved": true,
+            "canonicalLifecycleReceipts": {
+              "analyze": {
+                "sha256": "52CA8CB3F2C6F6B6EEF4400A67AC108C116C911FA833B420CF196A809053BE6B",
+                "role": "yaml-net472 Source34 analyze"
+              },
+              "lock": {
+                "sha256": "7634EB183D51E8BBC2BBD53B2B39DB48A7E671AEC3DC3210CF8F4CB955C7C0ED",
+                "role": "yaml-net472 Source34 lock"
+              },
+              "restore": {
+                "sha256": "86263E1EDAFE6EFE63C18AF70B6C57DF839F9940C59DEA78DB4DF679A4507578",
+                "role": "yaml-net472 Source34 restore"
+              },
+              "build": {
+                "sha256": "DCA4EF88C070EAD118D5E06AD2420E645A0BD404B22A1A8CFF9AA7C18E8B3AF6",
+                "role": "yaml-net472 Source34 build"
+              },
+              "test": {
+                "sha256": "D65ADD26C11A8EF5A26E37D5C6D36F8E472F17E53E7A7E88A45AAD106B0A50E2",
+                "role": "yaml-net472 Source34 test"
+              },
+              "pack": {
+                "sha256": "D52F4FA4D98213FEC2F0E08764332942E15258CCC58087D9BE8661E4832D5887",
+                "role": "yaml-net472 Source34 pack"
+              },
+              "install": {
+                "sha256": "43B3E2AAF82785290DAAC066FF3CEE3C6959563D86F4DE2E3AC1F4B8D119323C",
+                "role": "yaml-net472 Source34 install"
+              }
+            },
+            "compilerInputUnavailableDuringBuiltAndInstalled": true,
+            "dependenciesFromArtifactOnly": true,
+            "installedPayloadAllFilesAuthenticated": true,
+            "artifactPathsAreHistorical": true
+          }
+        },
+        {
+          "id": "platyps-net10.0",
+          "result": {
+            "status": "passed-current-source34",
+            "receipt": {
+              "sha256": "EC5EC90CB77B260A65A6DCB138A66AD38951A2C262EBC559768D8DB033AA9947",
+              "role": "platyps-net10.0 complete Source34 qualification"
+            },
+            "compilerGraphSha256": "71B67C653116766E94F011C096772CC51FAAEE31A54CD143BDB0AC4C974506AD",
+            "artifactSha256": "13af9af0bf58f353b28e195f6e420183105ada4691071b9dc107ccb9b9cb4666",
+            "projectSha256": "180488A6848393614889EE935D73CC53FC1B138B0B6952FA03815799938AB0D4",
+            "observations": {
+              "Original": {
+                "scenarios": 77,
+                "receipt": {
+                  "sha256": "B6FBED59113AD0A3D6072D2B3771886EEDE4E2419096FAE2E099FC08E6C301EE",
+                  "role": "platyps-net10.0 Original Source34 observation"
+                }
+              },
+              "Built": {
+                "scenarios": 77,
+                "receipt": {
+                  "sha256": "E7A71EB83AE9DD7A82AC4DA1E4A9A0055AAF895D6D933FCDF7E07FEE4E25C166",
+                  "role": "platyps-net10.0 Built Source34 observation"
+                }
+              },
+              "Installed": {
+                "scenarios": 77,
+                "receipt": {
+                  "sha256": "E86C79BEABADE13110A0285C75D42E70DF8C40DA3CD69ABCA2A0BCE04BEA1EAB",
+                  "role": "platyps-net10.0 Installed Source34 observation"
+                }
+              }
+            },
+            "scenarioParity": true,
+            "strictDependencyClosureVerified": false,
+            "actualEmittedRootMethods": 42,
+            "actualPrivateStaticNestedMethodsWithNonemptyIL": 23,
+            "noRetainedOwnedBodies": true,
+            "noOmittedOwnedUnits": true,
+            "noRejectedOwnedUnits": true,
+            "publicSurfacePreserved": true,
+            "canonicalLifecycleReceipts": {
+              "analyze": {
+                "sha256": "8A2D3E4A7BE8BF7D2E6C9A66411182E5A7A4860D5149859CD6D4D65CA51469C4",
+                "role": "platyps-net10.0 Source34 analyze"
+              },
+              "lock": {
+                "sha256": "AB4493E076E0745BE03D3D12FA991C3756CEE267036D344D16273FF408306221",
+                "role": "platyps-net10.0 Source34 lock"
+              },
+              "restore": {
+                "sha256": "EA7C7EBC26E5EAB695277236EE13D517030C5DD32CBC955E3D85ADA8C15A4CF6",
+                "role": "platyps-net10.0 Source34 restore"
+              },
+              "build": {
+                "sha256": "4830405425EA24389D5AE37E501CE9CDB99A1D23DF54983061A9BE148CB2D622",
+                "role": "platyps-net10.0 Source34 build"
+              },
+              "test": {
+                "sha256": "9262F2E1CA2C67E5CA5D77B5F6C67CC7E91535A49BC7475C9CF4B3BD5B0CFDD8",
+                "role": "platyps-net10.0 Source34 test"
+              },
+              "pack": {
+                "sha256": "99BAA28364DFE93C968203950F2391F0FFCD042470F9844331456FAD9A694833",
+                "role": "platyps-net10.0 Source34 pack"
+              },
+              "install": {
+                "sha256": "9B02728C7E7927EE4A4EFF731515425930351FD62A9F8FE17EC4F728F8D2D84D",
+                "role": "platyps-net10.0 Source34 install"
+              }
+            },
+            "compilerInputUnavailableDuringBuiltAndInstalled": true,
+            "dependenciesFromArtifactOnly": true,
+            "installedPayloadAllFilesAuthenticated": true,
+            "artifactPathsAreHistorical": true
+          }
+        },
+        {
+          "id": "platyps-net472",
+          "result": {
+            "status": "passed-current-source34",
+            "receipt": {
+              "sha256": "34B7A5290DE474C523FC890C2F6A42174E06E31AE24DBE2C485E40A3E2927186",
+              "role": "platyps-net472 complete Source34 qualification"
+            },
+            "compilerGraphSha256": "71B67C653116766E94F011C096772CC51FAAEE31A54CD143BDB0AC4C974506AD",
+            "artifactSha256": "e41e96a7daef76d155b9c38c33aa6ff03c0adc69fd79927ed3db86294e6a6747",
+            "projectSha256": "2489DA154F413B361A07D78CF2F02C5BB619C3EC9B088CB7B0A83A82CE5C415F",
+            "observations": {
+              "Original": {
+                "scenarios": 77,
+                "receipt": {
+                  "sha256": "A9C84440E9A5AB5B651395B4FB04A90FA0B9551DB054A88524F190EE57CBE0B9",
+                  "role": "platyps-net472 Original Source34 observation"
+                }
+              },
+              "Built": {
+                "scenarios": 77,
+                "receipt": {
+                  "sha256": "61F1E016AB572D3161ED2BEAE01D0A67A439D6B0664498248F4EF078C35CCB6D",
+                  "role": "platyps-net472 Built Source34 observation"
+                }
+              },
+              "Installed": {
+                "scenarios": 77,
+                "receipt": {
+                  "sha256": "D17E6F998AFDD37F397151D32CC2131AC71C9F436A44B09324E6ED7A1BA85466",
+                  "role": "platyps-net472 Installed Source34 observation"
+                }
+              }
+            },
+            "scenarioParity": true,
+            "strictDependencyClosureVerified": false,
+            "actualEmittedRootMethods": 42,
+            "actualPrivateStaticNestedMethodsWithNonemptyIL": 23,
+            "noRetainedOwnedBodies": true,
+            "noOmittedOwnedUnits": true,
+            "noRejectedOwnedUnits": true,
+            "publicSurfacePreserved": true,
+            "canonicalLifecycleReceipts": {
+              "analyze": {
+                "sha256": "FD0CB641970EB61540E09B01DAF240E4FD111428533BA47A9F05B618954974AA",
+                "role": "platyps-net472 Source34 analyze"
+              },
+              "lock": {
+                "sha256": "963703395D6D67D637BD0DC06DED4DC5CD5ACAFDB6B526B7B2372589939D69B6",
+                "role": "platyps-net472 Source34 lock"
+              },
+              "restore": {
+                "sha256": "EFC2191B88ACA80EEFB8ED2D5DC45F2BF894402C3520F903F5E8F4CA7224B3E8",
+                "role": "platyps-net472 Source34 restore"
+              },
+              "build": {
+                "sha256": "254770630D324F89C328DBFBF46318AB43FC8B6A2F4017C36C3527C2A907B12F",
+                "role": "platyps-net472 Source34 build"
+              },
+              "test": {
+                "sha256": "4366B52338459C39FABA3FF13923F7487735B3B97B945418BA60A083D7C1C5C1",
+                "role": "platyps-net472 Source34 test"
+              },
+              "pack": {
+                "sha256": "B2C1CD69D88C4781864618901BF14F3BEB3F3F95725F39DE3067EB3D40F6C3D6",
+                "role": "platyps-net472 Source34 pack"
+              },
+              "install": {
+                "sha256": "27A05E9C804FB90B0ECB5B2384C2F01D67274643496A9AC0932397FA1D7DA98E",
+                "role": "platyps-net472 Source34 install"
+              }
+            },
+            "compilerInputUnavailableDuringBuiltAndInstalled": true,
+            "dependenciesFromArtifactOnly": true,
+            "installedPayloadAllFilesAuthenticated": true,
+            "artifactPathsAreHistorical": true
+          }
+        },
+        {
+          "id": "sitemap-net10.0",
+          "result": {
+            "status": "passed-current-source34",
+            "receipt": {
+              "sha256": "75B1254841F0DDD316055FC669692E0848F17F71EDADB10FFDDD9EE74581C28A",
+              "role": "sitemap-net10.0 complete Source34 qualification"
+            },
+            "compilerGraphSha256": "71B67C653116766E94F011C096772CC51FAAEE31A54CD143BDB0AC4C974506AD",
+            "artifactSha256": "7d1fff84102765d70c2b62fd8f0549d9fd82c1716fd6dcc7d2b9be0d896f26b8",
+            "projectSha256": "E5E51CD9FA645295A3A7B8EEE1F7AB4CDDB715F633288960C79CA9BB172F1AE0",
+            "observations": {
+              "Original": {
+                "scenarios": 10,
+                "receipt": {
+                  "sha256": "C5B2F6ABEA51AC2388AC6EF0EB79B25CD7A7E0C75364F5D22B9FC8FAC082A59D",
+                  "role": "sitemap-net10.0 Original Source34 observation"
+                }
+              },
+              "Built": {
+                "scenarios": 10,
+                "receipt": {
+                  "sha256": "180CFC9B1AE07EBE53BDB7B246E167EE97B4E3D4D5F54BC6B927BB649B72900E",
+                  "role": "sitemap-net10.0 Built Source34 observation"
+                }
+              },
+              "Installed": {
+                "scenarios": 10,
+                "receipt": {
+                  "sha256": "7801F4299F51176B1E7853174A3BCA4887E8CE9A2CE42AC1C0862002F5FDB688",
+                  "role": "sitemap-net10.0 Installed Source34 observation"
+                }
+              }
+            },
+            "scenarioParity": true,
+            "strictDependencyClosureVerified": false,
+            "actualEmittedRootMethods": 20,
+            "actualPrivateStaticNestedMethodsWithNonemptyIL": 0,
+            "noRetainedOwnedBodies": true,
+            "noOmittedOwnedUnits": true,
+            "noRejectedOwnedUnits": true,
+            "publicSurfacePreserved": true,
+            "canonicalLifecycleReceipts": {
+              "analyze": {
+                "sha256": "1EE4255E49FA4A352934271CC3E0E496AF10120EE23A5983954A5732D97A4B5C",
+                "role": "sitemap-net10.0 Source34 analyze"
+              },
+              "lock": {
+                "sha256": "B45964D92DF3F0C6B698D048C321145852210C1505ED0053CB2A0EEF87771D84",
+                "role": "sitemap-net10.0 Source34 lock"
+              },
+              "restore": {
+                "sha256": "FA9AE452F083491A85DEA3424BA2BA49C912048808AED8547E8B3375C3ABC101",
+                "role": "sitemap-net10.0 Source34 restore"
+              },
+              "build": {
+                "sha256": "5965F6B184BF9ED4D371CF1044A46E66E0ACF7C5276E0D30532C50F955A7F2DB",
+                "role": "sitemap-net10.0 Source34 build"
+              },
+              "test": {
+                "sha256": "918F8A317711F92D8A021994D8B0D584E1A5A2C912FDA0A63F7B0DB42DB5D98A",
+                "role": "sitemap-net10.0 Source34 test"
+              },
+              "pack": {
+                "sha256": "74703464D92C3577C5BFD049A84E9DDA58971EF067037A7B1032A5BF05B7642D",
+                "role": "sitemap-net10.0 Source34 pack"
+              },
+              "install": {
+                "sha256": "62A115A7C2EC23DCF8E7ECCA356D66736768773F435BB1E6D71A0F867BCE1BCA",
+                "role": "sitemap-net10.0 Source34 install"
+              }
+            },
+            "compilerInputUnavailableDuringBuiltAndInstalled": true,
+            "dependenciesFromArtifactOnly": true,
+            "installedPayloadAllFilesAuthenticated": true,
+            "artifactPathsAreHistorical": true,
+            "fixtureFinallyReleased": true
+          }
+        }
+      ],
+      "broadGates": {
+        "windows": {
+          "build": {
+            "exitCode": 0,
+            "warnings": 0,
+            "errors": 0,
+            "scope": "Source34 test-owner-only rebuild; unchanged Source33 production CLI/owner and restored assets authenticated before/finally",
+            "receipt": {
+              "sha256": "64A28A5A54358E11A95551948CC341C96B232AA077DE91F476964516CFFD16D7",
+              "role": "Source34 test-owner build finally envelope"
+            }
+          },
+          "focused": {
+            "total": 109,
+            "passed": 109,
+            "failed": 0,
+            "skipped": 0,
+            "selectors": 22,
+            "distinctIds": 109,
+            "discoveryMultiplicitiesMatched": true,
+            "receipt": {
+              "sha256": "FE727A6BC5A2353939ED67219E532A606C2B80CB3F76F826762657A35703D1C3",
+              "role": "Source34 fresh Windows focused result"
+            },
+            "methodSelectors": 19,
+            "classSelectors": 3,
+            "trxSha256": "FD0C6505748E3E61F2D43DD76F7F9AFF09C8C3F5B0E1BB8F94D31CCAF36D93EA"
+          },
+          "whole": {
+            "lanes": 5,
+            "passed": true,
+            "compilerClosureUnchanged": true,
+            "receipt": {
+              "sha256": "C6E6757C352CBB465DC55D1CEE434BD2EF44A53006E2EFD6C6217AE21AFD4720",
+              "role": "Source34 five-lane whole-workflow result"
+            },
+            "phase": {
+              "sha256": "D837BF95C080057611E56314780B5FEDA661D57A783DBBA0BEC7CAF667A27032",
+              "role": "Source34 Whole/compatibility terminal"
+            }
+          },
+          "sharedCompatibility": {
+            "targets": [
+              {
+                "framework": "net472",
+                "exitCode": 0,
+                "warnings": 0,
+                "errors": 0,
+                "logSha256": "BAC55214E6D33184133F9296A7242F9FCC99B930E1F6A5866A56EB6B768F8B0D"
+              },
+              {
+                "framework": "net8.0",
+                "exitCode": 0,
+                "warnings": 0,
+                "errors": 0,
+                "logSha256": "D573D0324ABC6068034D407CEF7B5F3C4E56BC7C9F5F40FCD79C147E67132667"
+              }
+            ],
+            "receipt": {
+              "sha256": "7ABB3F12CBC0C8984AFAD6AB745666829A5AC20F941ADB09B711F99C22D30904",
+              "role": "Source34 shared compatibility result"
+            },
+            "generatedNet8TargetReopened": false
+          },
+          "full": {
+            "total": 1449,
+            "passed": 1447,
+            "failed": 0,
+            "knownLinuxPrerequisiteSkips": 2,
+            "ownedStrictPassed": 6,
+            "receipt": {
+              "sha256": "B5E8E69911676A88ABF5D2D96F1359A07E4BC618D2E95C3052D4C9DB4C64525E",
+              "role": "Source34 functional Full PhaseAll result"
+            },
+            "trxSha256": "5F62D5F37217CB9DA59C12CB35509DECF2303902E7FBF9A94183D8BF297DE05F",
+            "strictSha256": "96A23A5756DFC417DC6B62329BBB179924F686500C5F6A0B1CF52246D26A3BDA",
+            "phase": "All"
+          },
+          "supplement": {
+            "total": 67,
+            "passed": 67,
+            "failed": 0,
+            "skipped": 0,
+            "selectors": 5,
+            "receipt": {
+              "sha256": "93F26E76AECDA7144234829FCA97E37AB56BE65EF480716DCFE0E9EE7CDA74BB",
+              "role": "Source34 Windows mandatory supplement"
+            },
+            "trxSha256": "53A849BB2828C05B4FCA5E99267437A70093342A06EEE6F8D168BC729F2744D3"
+          },
+          "outerFinally": {
+            "passed": true,
+            "receipt": {
+              "sha256": "E859122ADAF3A4568DF3D19920D22A7D6F161C0C4CEB56BBF6F46E4234824796",
+              "role": "Source34 Full/supplement terminal"
+            },
+            "inputGuardReceipt": {
+              "sha256": "61D3F8E71C92D18AA664207FDCEA8165D5E8B97657B26B3150802F38D2868931",
+              "role": "Source34 supplement outer finally source/graph guard"
+            },
+            "serialSequence": {
+              "sha256": "4F11039EBBEAA57125B03B1B04C1DFB47135E572C67D02F86EDD65D08EA43A4C",
+              "role": "Source34 complete Whole/compatibility/Net472/Full/supplement sequence"
+            }
+          },
+          "actualRoslynBinding": {
+            "sha256": "24A923D07F839050954CDE248EA95381F84110FD850A9F71A48C6F799CE0CA0E",
+            "role": "Source34 exact deps/CLR metadata/restored asset bytes"
+          },
+          "net472Smoke": {
+            "total": 26,
+            "passed": 26,
+            "failed": 0,
+            "skipped": 0,
+            "distinctIds": 26,
+            "discoveryMultiplicitiesMatched": true,
+            "compilerChildTimeoutMinutes": 6,
+            "receipt": {
+              "sha256": "56BF1DE653D71A4D816E79A6A0FB77F5CA9537794C3CF7FDC1D0F4F3F30D2981",
+              "role": "Source34 full unfiltered Net472 smoke"
+            },
+            "trxSha256": "3CDC9775AFE54889F9AC5D3A0AA6187C7E388DDB66CEA72161479630C81BCAD7"
+          },
+          "generatedArtifactDiagnostics": {
+            "scope": "Generated Hybrid platyPS artifacts, separate from compiler/test/shared compatibility builds; repeated log-summary lines are not extra warnings",
+            "builds": [
+              {
+                "lane": "platyps-net10.0",
+                "warnings": 72,
+                "errors": 0,
+                "uniqueDiagnosticCodes": {
+                  "CS8321": 70,
+                  "NU1510": 2
+                },
+                "receipt": {
+                  "sha256": "1C01EDE82EA35660A0E8417EC1F3FC8738DDD6ACBC32CA85C09AA9AAD3653C36",
+                  "role": "platyps-net10.0 actual generated artifact build diagnostics"
+                }
+              },
+              {
+                "lane": "platyps-net472",
+                "warnings": 70,
+                "errors": 0,
+                "uniqueDiagnosticCodes": {
+                  "CS8321": 70
+                },
+                "receipt": {
+                  "sha256": "D71EAF36DD1EE2D842E95F193D8A223F4ACC1193D514D35A1380B0C51E3C6351",
+                  "role": "platyps-net472 actual generated artifact build diagnostics"
+                }
+              }
+            ],
+            "representative": {
+              "CS8321": "The local function '__powerForgeConvertInvariant' is declared but never used",
+              "NU1510": "PackageReference System.Reflection.Metadata will not be pruned; the package is automatically available"
+            }
+          }
+        },
+        "native": {
+          "platform": "Ubuntu 24.04 x64 under WSL2, native ext4",
+          "buildWarnings": 0,
+          "buildErrors": 0,
+          "build": {
+            "sha256": "42A96B658EF2E58BCE79CB38356EEF10FD2A288FF43DEE3D7DC6904D5DE3B9DE",
+            "role": "Source34 native test-owner build terminal"
+          },
+          "focused": {
+            "total": 98,
+            "passed": 93,
+            "failed": 0,
+            "knownWindowsPrerequisiteSkips": 5,
+            "distinctIds": 98,
+            "discoveryMultiplicitiesMatched": true,
+            "receipt": {
+              "sha256": "46854E9A62B6CC6908FE356820B31CE29A8C9910B76F792389FE7D6CFC3022E1",
+              "role": "Source34 fresh native focused result"
+            },
+            "trxSha256": "44D7C6CB165872F75437451023F133D22670C2EBFED688E3927F2A5A3E93FC20"
+          },
+          "fast": {
+            "total": 333,
+            "passed": 326,
+            "failed": 0,
+            "knownWindowsPrerequisiteSkips": 7,
+            "portableFamilies": 23,
+            "ownedStrictPassed": 6,
+            "distinctIds": 333,
+            "discoveryMultiplicitiesMatched": true,
+            "reconciliation": {
+              "sha256": "739D1DEC478AB9A63FCC0B63D41C127838FB28332BA48DCD646C0A3300F61B46",
+              "role": "Source34 canonical Fast/Strict/required-row reconciliation"
+            },
+            "trxSha256": "74CEDD098528B6FDE3595592A2FE3AF17AAC7C641A085DE110E0AB750F1151A4",
+            "strictSha256": "E243DD5C748BF82CBBAC98673EB2F21F2451E3FFAB26BBF0B2D9C9AD7ED82A0E",
+            "runtimeIdentifierArgument": "OMITTED",
+            "maxParallelThreads": 1
+          },
+          "supplement": {
+            "total": 108,
+            "passed": 108,
+            "failed": 0,
+            "skipped": 0,
+            "distinctSelectors": 19,
+            "additionalSelectors": 7,
+            "discoveryMultiplicitiesMatched": true,
+            "receipt": {
+              "sha256": "92C2316DF6376200CEC7A088843B15502E4C7A032164F912D11C195A8C9F8B25",
+              "role": "Source34 native mandatory 19-selector supplement rows"
+            },
+            "trxSha256": "26B048391DBF5A1AC527854CEC241B21327638EFF2A7D8B2E68993BEC79EEDF5"
+          },
+          "actualRoslynBinding": {
+            "sha256": "151F0BDFBD89F3B104A6DB55D72CF365DB0077D4E9B752D762E50D79FC98D075",
+            "role": "Source34 native exact deps/CLR metadata/restored asset bytes"
+          },
+          "finalAudit": {
+            "sha256": "3E5D6011F23106D956425EF9D97CB9394B00464548F015B602F6846359D088FF",
+            "role": "Source34 final functional audit and bounded resource handoff"
+          },
+          "functionalTerminal": {
+            "sha256": "16BC8FCECA3EB5074567006C93BA08D2113A7140B353EEF2824A3DAE24F023D4",
+            "role": "Source34 native functional chain terminal"
+          },
+          "readerRelease": {
+            "sha256": "F080DCE244A0DC82433CDC8D79BAAA5B7106E8694494B0C9CAE42DBF3FBCBC6D",
+            "role": "Source34 fresh final native/original-source readers released"
+          },
+          "buildScope": "Current test-owner build with unchanged qualified production graph; compiler/test build log records zero warnings/errors",
+          "wholeModuleExecutionQualified": false
+        },
+        "boundedOwnerReview": {
+          "reviewedCandidate": 32,
+          "reportSha256": "EA5581EEAA179A49EB5DA07AFDE1B2F52E1CAC2D8B880F820F7DE9BC512F0208",
+          "openP0P1P2": 0,
+          "openP3": 0,
+          "reservedTargetedConfirmationUsed": 1,
+          "newIndependentReviewForSource34": false,
+          "admission": {
+            "sha256": "7AF85AB8B39FDED9CF1A0A67C6BC7F28ACAC5244492BEC933AF44CB3BCD2E5C4",
+            "role": "Retained bounded closure and directly observed Source34 composition; pre-gate admission, not broad results"
+          },
+          "scope": "Original compiler/SDK/mapping owner reviews and reserved closure are retained. One bounded first-wave pass reconciled its provisional ETS inference against actual binding and found no actionable defect. The later main composition and narrow Census assertion repair have direct current proof; no SHA-only review reset is claimed."
+        },
+        "hostedIntegration": {
+          "status": "source34-consolidated-update-current-head-CI-review-settlement-merge-pending",
+          "pullRequest": "https://github.com/EvotecIT/PSPublishModule/pull/1118",
+          "currentLocalCandidatePublished": false,
+          "mergeCommit": null,
+          "newReleaseClaimed": false
+        },
+        "cleanup": {
+          "status": "current-source34-final-owned-cleanup-pending",
+          "scope": "Functional reader release is verified. Compact preservation and earlier cleanup remain separate; no final graph/private-root/worktree cleanup is claimed here."
+        }
+      },
+      "performance": {
+        "policy": "RecordOnly",
+        "functionalQualificationPassed": true,
+        "performanceQualified": false,
+        "qualification": "PerformanceNotQualified",
+        "precisionTiming": "Pending",
+        "nativeRecordedRegressions": [
+          {
+            "scope": "strictQualification",
+            "id": "strict-multifile-application",
+            "metric": "artifactP50Milliseconds",
+            "expectedMaximum": 100,
+            "actual": 319.0
+          },
+          {
+            "scope": "strictQualification",
+            "id": "strict-multifile-application",
+            "metric": "artifactP95Milliseconds",
+            "expectedMaximum": 250,
+            "actual": 358.0
+          },
+          {
+            "scope": "strictQualification",
+            "id": "strict-multifile-application",
+            "metric": "artifactToSourceP50Ratio",
+            "expectedMaximum": 0.75,
+            "actual": 1.013
+          }
+        ],
+        "windowsRecordedRegressions": [],
+        "defaultCiEnforceAndThresholdsUnchanged": true,
+        "scope": "RecordOnly functional gates do not qualify precision timing, promote performance or change default CI Enforce/budgets. Windows NoPerformanceBudgetRegressions does not establish quiet-machine qualification.",
+        "windowsRecordedBudgetStatus": "NoPerformanceBudgetRegressions"
+      },
+      "scope": "Source34 qualification is retained exactly at its original scope. Its counts, timing losses and receipt identities do not qualify Source35."
+    },
+    "candidate35PreSdkAdmissionRefusals": {
+      "windows": {
+        "sha256": "98FDBC52B6D5F269BFB1915F5A35D59FA816B35FC5317D52AC453A92FB054BA0",
+        "role": "Original failed pre-SDK Windows Full admission"
+      },
+      "windowsClassification": {
+        "sha256": "238FF2A980CEFA691245114374E43D899E02EBA1E00A41D1FC467EDEF1717770",
+        "role": "Pure pre-SDK memory admission classification; not a product or Full-test failure"
+      },
+      "native": {
+        "sha256": "70A4A0E1D1A1328356EE7EF1B5E2C0F4B8AFF2EC9E04950C23D823ED7BAC4FF7",
+        "role": "Original refused native binding before copy/SDK/discovery"
+      },
+      "scope": "Refusals remain historical. Successful later qualification does not convert these attempts into passes."
     }
   },
   "completionLimits": [
@@ -1403,6 +2156,11 @@
     "workspaceTimestampControl": {
       "sha256": "176A6BAE171FC7280643A53731A8008831EBCD944E15FA69E62CC81F6DC767A8",
       "role": "Source33 observed cleanup timestamp fix and Node 24; identical consumed inputs retained at Source34, not a fresh 34 Node execution"
-    }
+    },
+    "secondHostedWave": [
+      "Variant output roots are disjoint as recursive directory sets; same-basename sibling variants retain independent lifecycle state.",
+      "Legacy module payload paths reject unsafe boundaries before writes, including pinned source-root identity.",
+      "Unix CI cleanup observes the exact ownership marker and preserves foreign workspaces."
+    ]
   }
 }
