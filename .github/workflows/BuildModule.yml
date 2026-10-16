@@ -87,6 +87,9 @@ jobs:
           ./.github/scripts/test-npm-release-version.ps1
           ./.github/scripts/test-npm-publish.ps1
 
+      - name: Test pinned XcodeGen setup
+        run: python3 .github/scripts/test-xcodegen-setup.py
+
       - name: Validate website workflows
         shell: bash
         run: |
