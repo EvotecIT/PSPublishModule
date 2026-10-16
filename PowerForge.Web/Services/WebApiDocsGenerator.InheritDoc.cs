@@ -37,11 +37,16 @@ public static partial class WebApiDocsGenerator
                     ? candidateType.Assembly.GetName().Name : candidate.DeclaringType!.Assembly.GetName().Name)
                 .OfType<string>().ToHashSet(StringComparer.OrdinalIgnoreCase);
             string? target = null;
+            var missingLibraryContract = false;
             var targets = implicitTarget ? candidates.Select(DocumentationId).ToArray() : new[] { explicitTarget! };
             foreach (var candidateId in targets)
             {
                 var candidate = candidates.FirstOrDefault(candidate => DocumentationId(candidate) == candidateId) ?? candidates.FirstOrDefault();
                 var declaring = candidate as Type ?? candidate?.DeclaringType;
+                // Keep searching library ancestors/interfaces, but do not hide a missing
+                // library contract with documentation from a more distant framework member.
+                if (implicitTarget && missingLibraryContract && declaring?.Assembly == typeof(object).Assembly)
+                    continue;
                 if (!members.ContainsKey(candidateId) || frameworkFallbacks.Contains(candidateId))
                 {
                     referenceInputs ??= WebApiDocumentationInputs.Discover(assemblyPath);
@@ -71,9 +76,12 @@ public static partial class WebApiDocsGenerator
                     members.Add(candidateId, frameworkDocumentation);
                     frameworkFallbacks.Add(candidateId);
                 }
-                if (implicitTarget && !members.ContainsKey(candidateId) && declaring?.Assembly != typeof(object).Assembly)
-                    break;
-                if (!members.ContainsKey(candidateId)) continue;
+                if (!members.ContainsKey(candidateId))
+                {
+                    if (implicitTarget && declaring?.Assembly != typeof(object).Assembly)
+                        missingLibraryContract = true;
+                    continue;
+                }
                 target = candidateId;
                 break;
             }

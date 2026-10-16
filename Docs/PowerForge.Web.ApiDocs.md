@@ -28,8 +28,10 @@ matching installed .NET reference-pack XML. Those records supply inherited
 summaries without adding dependency or framework types to the reference.
 When reference-pack XML is unavailable, built-in summaries cover the framework
 `Object`/`ValueType` equality, hash-code and string methods and `IEquatable<T>.Equals`.
-Missing documentation on a library-owned base contract still produces a warning;
-CI steps with `failOnWarnings` enabled fail instead of substituting framework copy.
+The search continues past undocumented library candidates to a documented library
+ancestor or interface. If no library contract resolves, generation warns instead
+of substituting a more distant framework summary; CI steps with `failOnWarnings`
+enabled fail.
 Pipeline caches account for their bytes and additional `xmls`/`xmlPaths` inputs.
 Unresolved implicit inheritance produces a warning. An explicit `cref` remains supported.
 
