@@ -1192,7 +1192,7 @@ body.pf-api-docs .api-suite-search-filter{
             }
             html.Line($"<div class=\"sidebar-count\" data-total=\"{totalTypes}\" data-unit=\"{primaryKindPluralLabel}\">Showing {totalTypes} of {totalTypes} {primaryKindPluralLabel}</div>");
             if (lazyCatalog)
-                html.Line($"<a class=\"sidebar-browse-all\" href=\"{indexUrl}\">Browse all {totalTypes} types</a>");
+                html.Line($"<a class=\"sidebar-browse-all\" href=\"{indexUrl}\">Browse all {totalTypes} {primaryKindPluralLabel}</a>");
             html.Line("<div class=\"sidebar-tools\">");
             using (html.Indent())
             {
