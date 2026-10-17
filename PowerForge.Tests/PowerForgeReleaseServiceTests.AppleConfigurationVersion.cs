@@ -18,7 +18,7 @@ public sealed partial class PowerForgeReleaseServiceTests
 
             service.Update(path, content, "1.0", "2", 1, whatIf: false);
             var updated = File.ReadAllText(path);
-            Assert.Equal(content.Replace("= 0.1", "= \"1.0\"").Replace("= 1\r", "= \"2\"\r"), updated);
+            Assert.Equal(content.Replace("= 0.1", "= 1.0").Replace("= 1\r", "= 2\r"), updated);
             Assert.Equal("2", service.Read(path).BuildNumber);
         }
         finally { TryDelete(root); }

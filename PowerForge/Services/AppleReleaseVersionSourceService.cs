@@ -65,8 +65,10 @@ internal sealed class AppleReleaseVersionSourceService
         var (marketingPattern, buildPattern) = ResolvePatterns(fullPath);
         var previousMarketingVersion = ReadSingleValue(content, marketingPattern, "MARKETING_VERSION", fullPath);
         var previousBuildNumber = ReadSingleValue(content, buildPattern, "CURRENT_PROJECT_VERSION", fullPath);
-        var updated = ReplaceSingleValue(content, marketingPattern, marketingVersion.Trim());
-        updated = ReplaceSingleValue(updated, buildPattern, buildNumber.Trim());
+        // Xcode configuration values retain quotes literally; YAML values need quoting.
+        var quoteValue = !Path.GetExtension(fullPath).Equals(".xcconfig", StringComparison.OrdinalIgnoreCase);
+        var updated = ReplaceSingleValue(content, marketingPattern, marketingVersion.Trim(), quoteValue);
+        updated = ReplaceSingleValue(updated, buildPattern, buildNumber.Trim(), quoteValue);
         var changed = !string.Equals(content, updated, StringComparison.Ordinal);
 
         if (changed && !whatIf)
@@ -109,7 +111,7 @@ internal sealed class AppleReleaseVersionSourceService
         return matches[0].Groups["value"].Value.Trim();
     }
 
-    private static string ReplaceSingleValue(string content, Regex pattern, string value)
+    private static string ReplaceSingleValue(string content, Regex pattern, string value, bool quoteValue)
     {
         var matches = pattern.Matches(content);
         if (matches.Count != 1)
@@ -117,7 +119,7 @@ internal sealed class AppleReleaseVersionSourceService
 
         return pattern.Replace(
             content,
-            match => match.Groups["prefix"].Value + "\"" + value + "\"" + match.Groups["suffix"].Value,
+            match => match.Groups["prefix"].Value + (quoteValue ? "\"" + value + "\"" : value) + match.Groups["suffix"].Value,
             count: 1);
     }
 
