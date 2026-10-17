@@ -36,7 +36,9 @@ public sealed partial class AppStoreConnectClient
                 $"appInfos/{Uri.EscapeDataString(appInfo.Id)}/ageRatingDeclaration",
                 cancellationToken,
                 returnNullOnNotFound: true).ConfigureAwait(false);
-            if (HasSingleResource(ageRating))
+            // Apple creates an empty declaration before the publisher answers the questionnaire.
+            // Its existence alone does not prove that an age rating has been calculated.
+            if (HasSingleResource(ageRating) && !string.IsNullOrWhiteSpace(appInfo.AppStoreAgeRating))
             {
                 ageRatingDeclared = true;
                 break;

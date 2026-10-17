@@ -269,8 +269,12 @@ public sealed partial class PowerForgeReleaseServiceTests
         }
     }
 
-    [Fact]
-    public void Execute_AppleArchive_WorkspaceWithoutReleaseIdentityWritesSuccessfulReceipt()
+    [Theory]
+    [InlineData(PowerForgeAppleReleaseAction.Archive, false)]
+    [InlineData(PowerForgeAppleReleaseAction.Rehearse, false)]
+    [InlineData(PowerForgeAppleReleaseAction.Rehearse, true)]
+    public void Execute_AppleLocalArchive_WorkspaceWithoutReleaseIdentityWritesSuccessfulReceipt(
+        PowerForgeAppleReleaseAction action, bool manageVersion)
     {
         var root = CreateSandbox();
         try
@@ -280,24 +284,42 @@ public sealed partial class PowerForgeReleaseServiceTests
             File.WriteAllText(keyPath, "private-key");
             var spec = CreateAppleAutomationSpec(root, keyPath);
             var app = Assert.Single(spec.AppleApps!.Apps);
+            spec.AppleApps.ManageAppVersionAndBuildNumber = manageVersion;
             app.ProjectPath = "CasaRay.xcworkspace";
             app.MarketingVersion = null;
             app.BuildNumber = null;
 
             var result = CreateAppleAutomationService(
-                    _ => throw new InvalidOperationException("Archive action should not query App Store Connect."),
-                    archiveAppleApp: CreateSuccessfulArchive)
+                    _ => throw new InvalidOperationException("Local archive actions should not query App Store Connect."),
+                    archiveAppleApp: CreateSuccessfulArchive,
+                    uploadAppleApp: request =>
+                    {
+                        Assert.Equal("export", request.Destination);
+                        Assert.Equal(manageVersion, request.ManageAppVersionAndBuildNumber);
+                        Assert.Null(request.MarketingVersion);
+                        Assert.Null(request.BuildNumber);
+                        Assert.Null(request.RemoteMutationStarted);
+                        Directory.CreateDirectory(request.ExportPath!);
+                        var artifactPath = Path.Combine(request.ExportPath!, "CasaRay.ipa");
+                        File.WriteAllText(artifactPath, "signed rehearsal fixture");
+                        var export = CreateSuccessfulUpload(request);
+                        export.ExportArtifactPath = artifactPath;
+                        export.ExportArtifactSha256 = AppleNotarizationService.ComputeArtifactSha256(artifactPath);
+                        return export;
+                    })
                 .Execute(
                     spec,
                     new PowerForgeReleaseRequest
                     {
                         ConfigPath = Path.Combine(root, "powerforge.release.json"),
-                        AppleAction = PowerForgeAppleReleaseAction.Archive
+                        AppleAction = action
                     });
 
             Assert.True(result.Success);
             var target = Assert.Single(Assert.IsType<PowerForgeAppleReleaseReceipt>(result.AppleReceipt).Targets);
             Assert.True(target.ArchiveCreated);
+            Assert.Equal(action == PowerForgeAppleReleaseAction.Rehearse, target.ExportRehearsed);
+            Assert.False(target.UploadPerformed);
             Assert.Null(target.Version);
             Assert.Null(target.Build);
             Assert.Null(target.ErrorMessage);

@@ -103,6 +103,12 @@ public sealed class AppleAppArchiveUploadRequest
     /// <summary>Expected primary app bundle identifier used to select the archived product.</summary>
     public string? BundleId { get; set; }
 
+    /// <summary>Expected marketing version that the archived primary app must contain before export or upload.</summary>
+    public string? MarketingVersion { get; set; }
+
+    /// <summary>Expected build number that the archived primary app must contain before export or upload.</summary>
+    public string? BuildNumber { get; set; }
+
     /// <summary>Privacy purpose-string keys that must contain non-empty values in the final archived app.</summary>
     public string[] RequiredPrivacyUsageDescriptionKeys { get; set; } = Array.Empty<string>();
 
@@ -124,7 +130,7 @@ public sealed class AppleAppArchiveUploadRequest
     /// <summary>Signing style passed to xcodebuild exportArchive.</summary>
     public string SigningStyle { get; set; } = "automatic";
 
-    /// <summary>Controls whether App Store Connect manages app version and build numbers during upload.</summary>
+    /// <summary>Controls whether Xcode manages versions during upload. Must be false when an expected archive version or build number is supplied.</summary>
     public bool ManageAppVersionAndBuildNumber { get; set; }
 
     /// <summary>Controls whether xcodebuild may update provisioning profiles during export/upload.</summary>

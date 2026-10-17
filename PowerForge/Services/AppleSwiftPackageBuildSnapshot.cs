@@ -125,14 +125,16 @@ internal sealed class AppleSwiftPackageBuildSnapshot : IDisposable
                 "-skipPackageUpdates"
             };
             var sourceTrust = new AppleReleaseSourceTrustService();
+            AppleArchiveUploadSnapshot.SnapshotIdentity? materializedPackagesIdentity = null;
             progress?.Invoke("Resolving the pinned Swift package graph");
             monitor = new AppleReleaseSourceMutationMonitor(
                 sourcePackagesPath,
                 "materialized Swift package root",
                 "xcodebuild exact-source build",
                 "Discard the Apple product and resolve the exact package graph again.",
-                enableImmediately: false);
-            AppleArchiveUploadSnapshot.SnapshotIdentity? materializedPackagesIdentity = null;
+                enableImmediately: false,
+                unchangedMacOSCloneSource: path => IsUnchangedArtifactCloneSource(
+                    sourcePackagesPath, path, Volatile.Read(ref materializedPackagesIdentity)));
             var processRequest = new ProcessRunRequest(
                 xcodeBuildExecutable,
                 Path.GetDirectoryName(projectPath) ?? Directory.GetCurrentDirectory(),
@@ -148,13 +150,14 @@ internal sealed class AppleSwiftPackageBuildSnapshot : IDisposable
                 if (!completionResult.Succeeded)
                     return;
                 rootDirectory.ValidateUnchanged();
-                materializedPackagesIdentity = monitor.CaptureExpectedProducerOutput(
+                var boundIdentity = monitor.CaptureExpectedProducerOutput(
                     () => CaptureMaterializedPackageIdentity(sourcePackagesPath),
                     "xcodebuild -resolvePackageDependencies");
+                Volatile.Write(ref materializedPackagesIdentity, boundIdentity);
                 progress?.Invoke("Validating materialized Swift package source and Git provenance");
                 sourceTrust.ValidateMaterializedPackageCheckouts(sourcePackagesPath, approvedPackageRevisions);
                 var identityAfterValidation = CaptureMaterializedPackageIdentity(sourcePackagesPath);
-                if (!identityAfterValidation.Equals(materializedPackagesIdentity))
+                if (!identityAfterValidation.Equals(boundIdentity))
                 {
                     throw new InvalidOperationException(
                         "The materialized Swift package root changed while its exact package graph was being validated. " +
@@ -253,7 +256,11 @@ internal sealed class AppleSwiftPackageBuildSnapshot : IDisposable
         string sourcePackagesPath)
     {
         var artifactsPath = Path.Combine(sourcePackagesPath, "artifacts");
-        if (Directory.Exists(artifactsPath))
+        if (Directory.Exists(artifactsPath) || File.Exists(artifactsPath)
+#if NET8_0_OR_GREATER
+            || new DirectoryInfo(artifactsPath).LinkTarget is not null
+#endif
+           )
             ValidateNoEscapingArtifactLinks(artifactsPath);
         return AppleArchiveUploadSnapshot.CaptureCompleteIdentity(
             sourcePackagesPath,
@@ -263,6 +270,8 @@ internal sealed class AppleSwiftPackageBuildSnapshot : IDisposable
     private static void ValidateNoEscapingArtifactLinks(string artifactsRoot)
     {
         var root = Path.GetFullPath(artifactsRoot);
+        if ((File.GetAttributes(root) & FileAttributes.ReparsePoint) != 0)
+            throw new InvalidOperationException($"Materialized Swift binary artifact root must not be a symbolic link or reparse point: {root}");
         var pending = new Stack<string>();
         pending.Push(root);
         while (pending.Count > 0)
@@ -276,13 +285,19 @@ internal sealed class AppleSwiftPackageBuildSnapshot : IDisposable
                 {
                     if (isDirectory)
                         pending.Push(entry);
+                    else
+                        FileSystemPathSafety.RequireRegularFile(entry);
                     continue;
                 }
 #if NET8_0_OR_GREATER
                 var target = isDirectory ? new DirectoryInfo(entry).LinkTarget : new FileInfo(entry).LinkTarget;
                 if (string.IsNullOrWhiteSpace(target) || Path.IsPathRooted(target))
                     throw new InvalidOperationException($"Materialized Swift binary artifact contains an unbound symbolic link: {entry}");
-                var resolved = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(entry)!, target));
+                // Validate all intermediate hops, including links which leave this root and return
+                // to a contained final target. Every mutable component must remain monitored.
+                var resolved = FileSystemPathSafety.ResolveRelativeLinksWithinRoot(root, entry);
+                if (string.IsNullOrWhiteSpace(resolved))
+                    throw new InvalidOperationException($"Materialized Swift binary artifact contains an unresolved symbolic link: {entry}");
                 var relative = FrameworkCompatibility.GetRelativePath(root, resolved);
                 if (Path.IsPathRooted(relative) ||
                     relative.Equals("..", StringComparison.Ordinal) ||
@@ -290,11 +305,39 @@ internal sealed class AppleSwiftPackageBuildSnapshot : IDisposable
                 {
                     throw new InvalidOperationException($"Materialized Swift binary artifact link escapes its approved root: {entry}");
                 }
+                if (!isDirectory) FileSystemPathSafety.RequireRegularFile(resolved);
+                var selectedIdentity = isDirectory
+                    ? ExistingFilePathIdentityResolver.ResolveDirectoryStatus(entry).Identity
+                    : ExistingFilePathIdentityResolver.Resolve(entry);
+                var resolvedIdentity = isDirectory
+                    ? ExistingFilePathIdentityResolver.ResolveDirectoryStatus(resolved).Identity
+                    : ExistingFilePathIdentityResolver.Resolve(resolved);
+                if (!selectedIdentity.Equals(resolvedIdentity, StringComparison.Ordinal))
+                    throw new InvalidOperationException($"Materialized Swift binary artifact link does not resolve to its contained target: {entry}");
 #else
                 throw new PlatformNotSupportedException("Swift binary-artifact link validation requires .NET 8 or newer.");
 #endif
             }
         }
+    }
+
+    private static bool IsUnchangedArtifactCloneSource(
+        string sourcePackagesPath, string path, AppleArchiveUploadSnapshot.SnapshotIdentity? approved)
+    {
+#if NET8_0_OR_GREATER
+        if (!OperatingSystem.IsMacOS() || approved?.FileMutationIdentities is not { } identities)
+            return false;
+        var relative = Path.GetRelativePath(sourcePackagesPath, path).Replace('\\', '/');
+        if (!relative.StartsWith("artifacts/", StringComparison.Ordinal) ||
+            !identities.TryGetValue(relative, out var expected))
+            return false;
+        FileSystemPathSafety.RequireRegularFile(path);
+        return expected.Equals(
+            ExistingFilePathIdentityResolver.CapturePrivateFileMutationIdentity(path, "approved Swift binary artifact clone source"),
+            StringComparison.Ordinal);
+#else
+        return false;
+#endif
     }
 
     internal static void RejectConflictingArguments(IEnumerable<string> arguments)

@@ -25,6 +25,7 @@ internal static partial class Program
         if (argv.Length == 0 || argv[0].Equals("-h", StringComparison.OrdinalIgnoreCase) || argv[0].Equals("--help", StringComparison.OrdinalIgnoreCase))
         {
             Console.WriteLine(DotNetPublishUsage);
+            Console.WriteLine(DotNetNoticesUsage);
             Console.WriteLine(DotNetBundlePostProcessUsage);
             Console.WriteLine(DotNetScaffoldUsage);
             Console.WriteLine(DotNetReleaseArtifactVerifyUsage);
@@ -34,6 +35,8 @@ internal static partial class Program
         var sub = argv[0].ToLowerInvariant();
         switch (sub)
         {
+            case "notices":
+                return CommandDotNetNotices(argv.Skip(1).ToArray(), logger);
             case "release-artifact":
                 return CommandDotNetReleaseArtifact(argv.Skip(1).ToArray(), cli, logger);
             case "publish":

@@ -848,19 +848,10 @@ public sealed partial class PowerForgeCliAppleDeployTests
     }
 
     private static string FindRepositoryRoot()
-    {
-        var current = new DirectoryInfo(AppContext.BaseDirectory);
-        while (current is not null)
-        {
-            if (File.Exists(Path.Combine(current.FullName, "PowerForge.Cli", "PowerForge.Cli.csproj")))
-                return current.FullName;
-            current = current.Parent;
-        }
-        throw new DirectoryNotFoundException("Unable to locate repository root.");
-    }
+        => PowerForgeCliTestHost.FindRepositoryRoot();
 
     private static string GetCliPath(string repoRoot)
-        => Path.Combine(repoRoot, "PowerForge.Cli", "bin", "Release", "net10.0", "PowerForge.Cli.dll");
+        => PowerForgeCliTestHost.ResolveAssemblyPath(repoRoot, Environment.GetEnvironmentVariable(PowerForgeCliTestHost.AssemblyPathEnvironmentVariable));
 
     private static void InitializeGitRepository(string workingDirectory)
     {

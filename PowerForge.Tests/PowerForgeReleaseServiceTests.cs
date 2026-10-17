@@ -550,8 +550,10 @@ public sealed partial class PowerForgeReleaseServiceTests : IDisposable
         }
     }
 
-    [Fact]
-    public void Execute_AppleApps_RunsArchiveAndUploadThroughSharedService()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Execute_AppleApps_RunsArchiveAndUploadThroughSharedService(bool manageVersion)
     {
         var root = CreateSandbox();
         try
@@ -561,6 +563,7 @@ public sealed partial class PowerForgeReleaseServiceTests : IDisposable
             File.WriteAllText(Path.Combine(root, "secrets", "AuthKey_ABC123DEFG.p8"), "private-key");
             var archiveRequests = new List<AppleAppArchiveRequest>();
             var uploadRequests = new List<AppleAppArchiveUploadRequest>();
+            var uploadRunner = new ArchiveIdentityProcessRunner();
 
             var service = new PowerForgeReleaseService(
                 new NullLogger(),
@@ -574,18 +577,15 @@ public sealed partial class PowerForgeReleaseServiceTests : IDisposable
                 archiveAppleApp: request =>
                 {
                     archiveRequests.Add(request);
-                    return CreateSuccessfulArchive(request);
+                    var archived = CreateSuccessfulArchive(request);
+                    var app = Directory.CreateDirectory(Path.Combine(archived.ArchivePath, "Products", "Applications", "Tactra.app"));
+                    File.WriteAllText(Path.Combine(app.FullName, "Info.plist"), "fixture read through the plutil process boundary");
+                    return archived;
                 },
                 uploadAppleApp: request =>
                 {
                     uploadRequests.Add(request);
-                    return new AppleAppArchiveUploadResult
-                    {
-                        ArchivePath = request.ArchivePath,
-                        ExportPath = request.ExportPath!,
-                        ExportOptionsPlistPath = Path.Combine(request.ExportPath!, "ExportOptions.plist"),
-                        ProcessResult = new ProcessRunResult(0, "upload-ok", string.Empty, "xcodebuild", TimeSpan.FromSeconds(1), false)
-                    };
+                    return new AppleAppArchiveService(uploadRunner).UploadArchiveAsync(request).GetAwaiter().GetResult();
                 }, appleAppStateRoot: _appleAppStateRoot);
 
             var result = service.Execute(
@@ -599,7 +599,7 @@ public sealed partial class PowerForgeReleaseServiceTests : IDisposable
                         XcodeBuildExecutable = "xcodebuild-test",
                         AllowProvisioningUpdates = true,
                         SigningStyle = "automatic",
-                        ManageAppVersionAndBuildNumber = true,
+                        ManageAppVersionAndBuildNumber = manageVersion,
                         AppStoreConnectApiKeyPath = "secrets/AuthKey_ABC123DEFG.p8",
                         AppStoreConnectApiKeyId = "ABC123DEFG",
                         AppStoreConnectApiIssuerId = "issuer-id",
@@ -635,7 +635,8 @@ public sealed partial class PowerForgeReleaseServiceTests : IDisposable
             Assert.Equal("TEAMID", uploadRequest.TeamId);
             Assert.Equal("xcodebuild-test", uploadRequest.XcodeBuildExecutable);
             Assert.True(uploadRequest.AllowProvisioningUpdates);
-            Assert.True(uploadRequest.ManageAppVersionAndBuildNumber);
+            Assert.Equal(manageVersion, uploadRequest.ManageAppVersionAndBuildNumber);
+            Assert.Contains(uploadRunner.Requests, item => item.FileName.EndsWith("plutil", StringComparison.Ordinal));
             Assert.EndsWith(Path.Combine("secrets", "AuthKey_ABC123DEFG.p8"), uploadRequest.AppStoreConnectApiKeyPath, StringComparison.Ordinal);
             Assert.Equal("ABC123DEFG", uploadRequest.AppStoreConnectApiKeyId);
             Assert.Equal("issuer-id", uploadRequest.AppStoreConnectApiIssuerId);

@@ -7,7 +7,7 @@ on:
         required: true
         type: string
       pull_request:
-        description: Optional merged PR number for Build now. The worker builds latest qualified main containing it.
+        description: Optional merged PR number for Build now. The worker builds latest qualified default branch containing it.
         required: false
         default: ''
         type: string
@@ -30,6 +30,7 @@ jobs:
           REQUEST_RUN_ID: ${{ github.run_id }}
           REQUEST_ACTOR: ${{ github.actor }}
           REQUEST_REF: ${{ github.ref }}
+          REQUEST_DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
           REQUEST_SHA: ${{ github.sha }}
           REQUEST_EVENT: ${{ github.event_name }}
         run: |
@@ -38,8 +39,8 @@ jobs:
           operation = os.environ['REQUEST_OPERATION']
           pr = os.environ['REQUEST_PULL_REQUEST'].strip()
           allowed = ('Build now', 'Automatic: Off', 'Automatic: Selected PRs', 'Automatic: Every merged PR')
-          if os.environ['REQUEST_EVENT'] != 'workflow_dispatch' or os.environ['REQUEST_REF'] != 'refs/heads/main':
-              raise SystemExit('TestFlight requests must be dispatched from the default main branch.')
+          if os.environ['REQUEST_EVENT'] != 'workflow_dispatch' or os.environ['REQUEST_REF'] != 'refs/heads/' + os.environ['REQUEST_DEFAULT_BRANCH']:
+              raise SystemExit('TestFlight requests must be dispatched from the repository default branch.')
           if operation not in allowed or (pr and not re.fullmatch(r'[1-9][0-9]{0,8}', pr)) or (operation != 'Build now' and pr):
               raise SystemExit('Choose a supported operation; only Build now accepts a merged PR number.')
           request = dict(schemaVersion=1, operation=operation, pullRequest=pr,
@@ -49,7 +50,7 @@ jobs:
           pathlib.Path('request.json').write_text(json.dumps(request, indent=2) + '\n')
           with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
               summary.write('TestFlight request recorded. The trusted Mac must acknowledge and execute it.\n\n')
-              summary.write('Builds use latest qualified main containing the requested merged PR; adjacent requests may share a build.\n')
+              summary.write('Builds use latest qualified default branch containing the requested merged PR; adjacent requests may share a build.\n')
               summary.write('Mode changes remain requested until the local worker acknowledges them. No Apple upload happened in this job.\n')
           PY
       - name: Retain the durable request

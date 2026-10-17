@@ -107,7 +107,7 @@ internal static class PowerShellCompilationToolchainFingerprint
                 Append(builder, ComputeFileSha256(path));
             }
         }
-        using var sha = SHA256.Create();
+        using var sha = CreateSha256();
         return Hex(sha.ComputeHash(Encoding.UTF8.GetBytes(builder.ToString())));
     }
 
@@ -117,12 +117,23 @@ internal static class PowerShellCompilationToolchainFingerprint
     private static string ComputeFileSha256(string path)
     {
         using var stream = File.OpenRead(path);
-        using var sha = SHA256.Create();
+        using var sha = CreateSha256();
         return Hex(sha.ComputeHash(stream));
     }
 
     private static string Hex(IEnumerable<byte> bytes)
         => string.Concat(bytes.Select(static value => value.ToString("x2", System.Globalization.CultureInfo.InvariantCulture)));
+
+    private static SHA256 CreateSha256()
+    {
+#if NETFRAMEWORK
+        // Windows PowerShell's default managed implementation makes a complete SDK
+        // fingerprint take minutes. CNG hashes the same bytes with the Windows provider.
+        return new SHA256Cng();
+#else
+        return SHA256.Create();
+#endif
+    }
 }
 
 internal sealed class PowerShellCompilationSdkSelection

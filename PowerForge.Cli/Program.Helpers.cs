@@ -10,6 +10,7 @@ internal static partial class Program
     {
         Console.WriteLine(@"PowerForge CLI
     Usage:
+      powerforge dotnet notices --project-root <path> --deps-json <path> --manifest <path> --out <path> [--output json]
       powerforge build --name <ModuleName> --project-root <path> --version <X.Y.Z> [--csproj <path>] [--staging <path>] [--configuration Release] [--framework <tfm>]* [--author <name>] [--company <name>] [--description <text>] [--tag <tag>]* [--output json]
       powerforge build [--config <BuildSpec|Pipeline>.json] [--project-root <path>] [--output json]
       powerforge docs [--config <Pipeline.json>] [--project-root <path>] [--output json]

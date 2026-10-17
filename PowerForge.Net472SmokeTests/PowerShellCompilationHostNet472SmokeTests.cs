@@ -27,7 +27,7 @@ function Get-HostedYear { return [int](Get-Date -Format yyyy) }
 """, new UTF8Encoding(true));
             var script = Path.Combine(root, "Observe.ps1");
             File.WriteAllText(script, """
-param([string]$CompilerAssembly, [string]$Source, [string]$Output, [string]$SdkPolicy)
+param([string]$CompilerAssembly, [string]$ExpectedCompilerMvid, [string]$Source, [string]$Output, [string]$SdkPolicy)
 $ErrorActionPreference = 'Stop'
 function Write-Checkpoint([string] $Phase) {
     $line = [DateTime]::UtcNow.ToString('O') + ' ' + $Phase
@@ -37,7 +37,11 @@ function Write-Checkpoint([string] $Phase) {
 Write-Checkpoint ('Host PID=' + $PID + '; PS=' + $PSVersionTable.PSVersion + '; CLR=' + [Environment]::Version)
 Write-Checkpoint ('SDK policy: ' + [IO.File]::ReadAllText($SdkPolicy))
 Write-Checkpoint 'Load compiler'
-[void][Reflection.Assembly]::LoadFrom($CompilerAssembly)
+$loadedCompiler = [Reflection.Assembly]::LoadFrom($CompilerAssembly)
+if ($loadedCompiler.ManifestModule.ModuleVersionId.ToString() -ne $ExpectedCompilerMvid) {
+    throw ('Legacy host loaded a different compiler module: ' + $loadedCompiler.Location)
+}
+Write-Checkpoint ('Compiler: ' + $loadedCompiler.Location + '; MVID=' + $loadedCompiler.ManifestModule.ModuleVersionId)
 [void][Reflection.Assembly]::LoadFrom((Join-Path (Split-Path $CompilerAssembly) 'PowerForge.dll'))
 $spec = [PowerForge.PowerShellCompilationBuildSpec]::new($Source, $Output, 'Example', [PowerForge.PowerShellCompilationArtifactKind]::BinaryModule, [PowerForge.PowerShellCompilationMode]::Hybrid, $true)
 $spec.TargetFramework = 'net472'
@@ -47,6 +51,9 @@ $spec.KeepBuildWorkspace = $true
 # hashing twice while preserving the real legacy-host fingerprint operation.
 $flags = [Reflection.BindingFlags]'Static,NonPublic'
 $fingerprint = [PowerForge.PowerShellCompilationArtifactBuilder].Assembly.GetType('PowerForge.PowerShellCompilationToolchainFingerprint', $true)
+$selectedSha = $fingerprint.GetMethod('CreateSha256', $flags).Invoke($null, @())
+try { Write-Checkpoint ('Fingerprint SHA-256 provider: ' + $selectedSha.GetType().AssemblyQualifiedName) }
+finally { $selectedSha.Dispose() }
 Write-Checkpoint 'Resolve selected dotnet SDK'
 $sdk = $fingerprint.GetMethod('ResolveSelectedSdk', $flags).Invoke($null, @())
 $sdkVersion = $sdk.GetType().GetProperty('Version', [Reflection.BindingFlags]'Instance,NonPublic').GetValue($sdk)
@@ -67,19 +74,17 @@ foreach ($path in [IO.Directory]::EnumerateFiles($sdkRoot, '*', [IO.SearchOption
 }
 Write-Checkpoint ('SDK inventory: ' + $fileCount + ' files, ' + $totalBytes + ' bytes')
 if ($null -ne $largest) {
-    $defaultSha = [Security.Cryptography.SHA256]::Create()
-    try { Write-Checkpoint ('Default SHA-256 provider: ' + $defaultSha.GetType().FullName) }
-    finally { $defaultSha.Dispose() }
-    Write-Checkpoint ('Hash SDK sample: ' + $largest.Name + ', ' + $largest.Length + ' bytes')
-    $sampleHash = $fingerprint.GetMethod('ComputeFileSha256', $flags).Invoke($null, @($largest.FullName))
-    Write-Checkpoint 'SDK sample hash complete'
-    Write-Checkpoint 'Hash same SDK sample with Windows CNG SHA-256'
+    # Read with the reference provider first so a cold file/AV scan is not
+    # mistaken for a difference in the compiler's SHA-256 implementation.
+    Write-Checkpoint ('Hash SDK sample with Windows CNG SHA-256: ' + $largest.Name + ', ' + $largest.Length + ' bytes')
     $nativeSha = [Security.Cryptography.SHA256Cng]::new()
     $sampleStream = [IO.File]::OpenRead($largest.FullName)
     try { $nativeHash = [BitConverter]::ToString($nativeSha.ComputeHash($sampleStream)).Replace('-', '').ToLowerInvariant() }
     finally { $sampleStream.Dispose(); $nativeSha.Dispose() }
+    Write-Checkpoint 'Windows CNG SDK sample hash complete; hash same sample through compiler'
+    $sampleHash = $fingerprint.GetMethod('ComputeFileSha256', $flags).Invoke($null, @($largest.FullName))
     if ($sampleHash -ne $nativeHash) { throw 'SDK sample hash providers disagree.' }
-    Write-Checkpoint 'Windows CNG SDK sample hash complete; bytes agree'
+    Write-Checkpoint 'Compiler SDK sample hash complete; bytes agree'
 }
 $dotnetRoot = [IO.Directory]::GetParent([IO.Directory]::GetParent($sdkRoot).FullName).FullName
 $packsRoot = Join-Path $dotnetRoot 'packs'
@@ -141,7 +146,8 @@ if ($usingResult.Succeeded -or $usingResult.Error -notlike '*using module/assemb
             var childTemp = Directory.CreateDirectory(Path.Combine(root, "temp")).FullName;
             var result = await new ProcessRunner(ownProcessTree: true).RunAsync(new ProcessRunRequest(
                 host, root, new[] { "-NoProfile", "-NonInteractive", "-File", script,
-                    "-CompilerAssembly", compiler, "-Source", source, "-Output", Path.Combine(root, "out"), "-SdkPolicy", sdkPolicy },
+                    "-CompilerAssembly", compiler, "-ExpectedCompilerMvid", typeof(PowerShellCompilationArtifactBuilder).Module.ModuleVersionId.ToString(),
+                    "-Source", source, "-Output", Path.Combine(root, "out"), "-SdkPolicy", sdkPolicy },
                 TimeSpan.FromMinutes(6), new Dictionary<string, string?>
                 {
                     ["TEMP"] = childTemp, ["TMP"] = childTemp,

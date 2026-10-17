@@ -6,6 +6,23 @@ namespace PowerForge;
 
 internal sealed partial class PowerForgeReleaseService
 {
+    /// <summary>Uses a shared Xcode configuration without introducing per-target project mutations.</summary>
+    private static void ApplyAppleConfigurationVersionSource(
+        PowerForgeAppleAppReleaseTargetPlan[] apps,
+        string? sourcePath)
+    {
+        if (!string.Equals(Path.GetExtension(sourcePath), ".xcconfig", StringComparison.OrdinalIgnoreCase))
+            return;
+        var version = new AppleReleaseVersionSourceService().Read(sourcePath!);
+        foreach (var app in apps)
+        {
+            if (app.VersionUpdateRequested || !string.IsNullOrWhiteSpace(app.DotNetPublishInstallerId))
+                throw new InvalidOperationException("A shared .xcconfig version source cannot be combined with per-target version mutation or a .NET installer target.");
+            app.MarketingVersion = version.MarketingVersion;
+            app.BuildNumber = version.BuildNumber;
+        }
+    }
+
     private PowerForgeAppleReleaseReceipt? AssertApplePlanStillApproved(
         PowerForgeAppleReleasePlan plan,
         string? expectedPlanSha256)
@@ -696,7 +713,9 @@ internal sealed partial class PowerForgeReleaseService
                 Success = true,
                 SkippedSteps = new[] { "archive", "upload", "distribution", "review", "release" }
             };
-            if (string.IsNullOrWhiteSpace(app.DotNetPublishInstallerId) && generatedProjects.Add(app.ProjectPath))
+            if (string.IsNullOrWhiteSpace(app.DotNetPublishInstallerId) &&
+                !string.Equals(Path.GetExtension(plan.VersionSourcePath), ".xcconfig", StringComparison.OrdinalIgnoreCase) &&
+                generatedProjects.Add(app.ProjectPath))
             {
                 var generationPlan = new PowerForgeAppleAppReleaseTargetPlan
                 {

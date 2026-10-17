@@ -220,7 +220,7 @@ public sealed partial class AppleAppArchiveService
         if (!Directory.Exists(archivePath))
             throw new DirectoryNotFoundException($"Archive path was not found: {archivePath}");
 
-        await ValidatePrivacyUsageDescriptionsAsync(request, archivePath, cancellationToken).ConfigureAwait(false);
+        await ValidateArchivedApplicationAsync(request, archivePath, cancellationToken).ConfigureAwait(false);
 
         var exportPath = ResolveExportPath(request);
         var plistPath = ResolveExportOptionsPlistPath(request);

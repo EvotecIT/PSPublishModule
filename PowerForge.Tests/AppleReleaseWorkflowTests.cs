@@ -813,14 +813,17 @@ public sealed partial class AppleReleaseWorkflowTests
         }
     }
 
-    private static string FindRepoRoot()
+    private static string FindRepoRoot([System.Runtime.CompilerServices.CallerFilePath] string sourceFile = "")
     {
-        var current = new DirectoryInfo(AppContext.BaseDirectory);
-        while (current is not null)
+        foreach (var start in new[] { AppContext.BaseDirectory, Path.GetDirectoryName(sourceFile)! })
         {
-            if (File.Exists(Path.Combine(current.FullName, "PowerForge", "PowerForge.csproj")))
-                return current.FullName;
-            current = current.Parent;
+            var current = new DirectoryInfo(start);
+            while (current is not null)
+            {
+                if (File.Exists(Path.Combine(current.FullName, "PowerForge", "PowerForge.csproj")))
+                    return current.FullName;
+                current = current.Parent;
+            }
         }
 
         throw new DirectoryNotFoundException("Unable to locate the PSPublishModule repository root.");

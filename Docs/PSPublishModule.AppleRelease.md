@@ -240,6 +240,12 @@ the macOS App Store Connect platform.
 - `uploadSymbols = true`
 - `generateAppStoreInformation = true`
 
+For Xcode archives, unified releases validate the planned bundle, marketing
+version and build before export when `ManageAppVersionAndBuildNumber` is `false`
+(the default). Setting it to `true` delegates version-number management to Xcode;
+bundle identity and configured privacy purpose strings remain validated. Use
+`false` for a release bound to an approved version and build number.
+
 ## Preflight Checks
 
 Use the existing read-only App Store Connect cmdlets before or after upload:
@@ -354,7 +360,7 @@ Use the same entry point for each transition:
 | --- | --- |
 | `Status` | Reads the exact configured version/build and recommends the next action; it may generate an explicitly configured missing Xcode project locally. |
 | `Doctor` | Reads release state plus local topology, embedded-product evidence, metadata ownership, App Review details, age rating, pricing, availability, accessibility, encryption, monetization, webhook coverage, and TestFlight feedback. It does not mutate Apple state. |
-| `Version` | Updates the configured XcodeGen version source and chooses one build number above both local state and every configured App Store Connect platform. |
+| `Version` | Updates the configured XcodeGen specification or shared Xcode configuration and chooses one build number above both local state and every configured App Store Connect platform. |
 | `Archive` | Creates signed archives without uploading. |
 | `Rehearse` | Creates signed archives and completes the local Xcode export for each selected target without uploading, querying App Store Connect, or submitting notarization. |
 | `Upload` | Archives, uploads, waits for processing, and resumes an exact remote build only when an immutable receipt binds it to the same source commit and archive SHA-256. |
@@ -467,6 +473,14 @@ uses a separate plan receipt, checks the exact version/build remotely, and stops
 `SubmitTestFlightReview`, `SubmitAppReview`, or `Release`.
 Screenshot replacement is opt-in during `Advance`. Keep `SyncScreenshots=false` when the
 protected `powerforge-apple-screenshots.yml` lane owns capture, approval, and immediate sync.
+
+A checked-in Xcode project can keep its common release identity in a shared
+`.xcconfig` instead of using XcodeGen. Set `Automation.VersionSourcePath` to
+that file, define one `MARKETING_VERSION` and one `CURRENT_PROJECT_VERSION`, and
+reference it from every shipping target's project configuration. Leave per-target
+version overrides unset. `Version` updates the common file without regenerating
+or rewriting the Xcode project; Status, Doctor, archive, and delivery use the
+same values.
 
 ### Ship an Apple release with one intent
 
@@ -1236,6 +1250,16 @@ actions override those flags for one run, and the three review/release transitio
 behind explicit confirmation.
 
 ## App Information Metadata
+
+The .NET `AppStoreConnectClient` also exposes exact-resource reads and updates for
+app categories, content rights, and age questionnaire answers. Read the current
+resource first, review the publisher's facts, then supply only the fields to change.
+`UpdateAgeRatingDeclarationAsync` leaves null answers unchanged and does not choose
+an age override. It reads and updates the optional `DeveloperAgeRatingInfoUrl` as
+an absolute URI. Use `ClearKidsAgeBand()` or `ClearDeveloperAgeRatingInfoUrl()` on
+the answer model for an explicit removal; use `ClearAppSecondaryCategoryAsync`
+to remove only the optional secondary category. `Doctor` requires a calculated age rating; an empty declaration
+record does not establish that the questionnaire is complete.
 
 App-level metadata is separate from version localizations in App Store Connect. Use it
 for the localized app name, subtitle, and privacy policy URL:

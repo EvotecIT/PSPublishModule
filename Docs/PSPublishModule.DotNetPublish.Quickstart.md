@@ -320,3 +320,13 @@ For service/installer-heavy repos:
 1. start by expressing publish/sign/package steps in JSON,
 2. then add service/MSI/state primitives,
 3. only replace legacy script logic after parity is validated.
+
+## Exact binary dependency notices
+
+Use the notice generator when packaging a native or managed binary outside the regular MacApp packager:
+
+```text
+powerforge dotnet notices --project-root <repository> --deps-json <published.deps.json> --manifest <reviewed-notices.json> --out <license-directory> --output json
+```
+
+It validates every runtime package version against reviewed license text hashes and writes `THIRD_PARTY_NOTICES.txt` plus `runtime-package-inventory.json`. Keep each runtime's dependency graph with its build evidence; missing coverage or changed license bytes stop packaging.

@@ -40,6 +40,8 @@ public sealed partial class PowerForgeReleaseServiceTests
                     exportRequests.Add(request);
                     Assert.Equal("export", request.Destination);
                     Assert.Equal("app-store-connect", request.Method);
+                    Assert.Equal("1.7", request.MarketingVersion);
+                    Assert.Equal("16", request.BuildNumber);
                     Assert.Null(request.RemoteMutationStarted);
                     Directory.CreateDirectory(request.ExportPath!);
                     var artifactPath = Path.Combine(request.ExportPath!, artifactName);

@@ -114,9 +114,9 @@ internal sealed partial class AppleTestFlightWorker
             throw new InvalidOperationException("Worker owner checkout must be clean at its exact configured PowerForge pin.");
         AssertOrigin(_policy.OwnerRoot, "EvotecIT/PSPublishModule");
         AssertOrigin(_policy.ConsumerRoot, _policy.Repository);
-        if (Git("symbolic-ref", "--short", "HEAD") != "main" || Git("for-each-ref", "--format=%(refname)", "refs/replace").Length != 0)
+        if (Git("symbolic-ref", "--short", "HEAD") != _policy.DefaultBranch || Git("for-each-ref", "--format=%(refname)", "refs/replace").Length != 0)
             throw new InvalidOperationException("Worker checkout must be main without replacement refs.");
-        if (Text(Api(""), "default_branch") != "main") throw new InvalidOperationException("Worker supports the main default branch only.");
+        if (Text(Api(""), "default_branch") != _policy.DefaultBranch) throw new InvalidOperationException("Worker default branch differs from the enrolled policy.");
     }
 
     private void AssertOrigin(string root, string repository)
@@ -132,7 +132,7 @@ internal sealed partial class AppleTestFlightWorker
         if (plan) RetainPreviousSourcePlan();
         var startedAt = DateTimeOffset.UtcNow;
         var arguments = new List<string> { "-NoLogo", "-NoProfile", "-NonInteractive", "-File", Path.Combine(_policy.OwnerRoot, "scripts/Invoke-PinnedPowerForge.ps1"), "-ExpectedCommit", _policy.OwnerCommit,
-            "-ConsumerRoot", _policy.ConsumerRoot, "-ExpectedConsumerRepository", _policy.Repository,
+            "-ConsumerRoot", _policy.ConsumerRoot, "-ExpectedConsumerRepository", _policy.Repository, "-ExpectedConsumerBranch", _policy.DefaultBranch,
             "apple-release", "Ship", "--config", _policy.ConfigPath, "--apple-testflight-target", string.Join(",", _policy.Targets.Select(value => value.Name)), "--summary", "--output", "json" };
         if (plan)
         {
