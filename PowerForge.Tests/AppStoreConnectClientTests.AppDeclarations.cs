@@ -81,9 +81,7 @@ public sealed partial class AppStoreConnectClientTests
             new SequenceResponse(HttpStatusCode.OK, """{"data":{"type":"apps","id":"app-1","attributes":{"contentRightsDeclaration":"USES_THIRD_PARTY_CONTENT"}}}"""));
         using var http = new HttpClient(handler) { BaseAddress = new Uri("https://api.appstoreconnect.apple.com/v1/") };
         using var client = new AppStoreConnectClient(CreateCredential(), http);
-        var unset = await client.UpdateAppCategoriesAsync("info-1", primaryCategoryId: "PRODUCTIVITY");
-        Assert.Null(unset.AppStoreAgeRating);
-        var info = await client.GetAppInformationAsync("info-1");
+        var info = await client.UpdateAppCategoriesAsync("info-1", primaryCategoryId: "PRODUCTIVITY");
         Assert.Equal("PRODUCTIVITY", info!.PrimaryCategoryId);
         Assert.Equal("UTILITIES", info.SecondaryCategoryId);
         Assert.Equal("FOUR_PLUS", info.AppStoreAgeRating);
@@ -102,6 +100,7 @@ public sealed partial class AppStoreConnectClientTests
     {
         var handler = new SequenceHandler(
             new(HttpStatusCode.OK, """{"data":{"id":"info-1","relationships":{"primaryCategory":{"data":{"id":"PRODUCTIVITY"}},"secondaryCategory":{"data":{"id":"UTILITIES"}}}}}"""),
+            new(HttpStatusCode.OK, """{"data":{"id":"info-1","relationships":{"primaryCategory":{"links":{"related":"https://api.appstoreconnect.apple.com/v1/appInfos/info-1/primaryCategory"}},"secondaryCategory":{"links":{"related":"https://api.appstoreconnect.apple.com/v1/appInfos/info-1/secondaryCategory"}}}}}"""),
             new(HttpStatusCode.OK, """{"data":{"id":"info-1","relationships":{"primaryCategory":{"data":{"id":"PRODUCTIVITY"}},"secondaryCategory":{"data":null}}}}"""));
         using var http = new HttpClient(handler) { BaseAddress = new Uri("https://api.appstoreconnect.apple.com/v1/") };
         using var client = new AppStoreConnectClient(CreateCredential(), http);
@@ -116,6 +115,9 @@ public sealed partial class AppStoreConnectClientTests
         Assert.Single(relationships.EnumerateObject());
         Assert.Equal(JsonValueKind.Null, relationships.GetProperty("secondaryCategory").GetProperty("data").ValueKind);
         await Assert.ThrowsAsync<ArgumentException>(() => client.ClearAppSecondaryCategoryAsync(" "));
-        Assert.Equal(2, handler.RequestUris.Count);
+        Assert.Equal(3, handler.RequestUris.Count);
+        Assert.Equal(HttpMethod.Get, handler.Methods[2]);
+        Assert.Equal("/v1/appInfos/info-1", handler.RequestUris[2].AbsolutePath);
+        Assert.Contains("include=primaryCategory,secondaryCategory", handler.RequestUris[2].Query, StringComparison.Ordinal);
     }
 }

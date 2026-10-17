@@ -51,7 +51,9 @@ public sealed partial class AppStoreConnectClient
             ?? throw new InvalidOperationException("Apple returned no App Information response.");
         if (!document.RootElement.TryGetProperty("data", out var data) || data.ValueKind != JsonValueKind.Object)
             throw new InvalidOperationException("Apple returned no App Information data.");
-        return ParseAppInformation(data);
+        // PATCH responses can contain relationship links without category linkage data.
+        return await GetAppInformationAsync(id, cancellationToken).ConfigureAwait(false)
+            ?? throw new InvalidOperationException("Apple returned no updated App Information resource.");
     }
 
     /// <summary>Records the publisher's explicit content-rights declaration without changing other app attributes.</summary>
