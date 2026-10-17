@@ -376,6 +376,16 @@ work before a public App Store version is prepared, as do beta-only `Configured`
 plans with archive and upload disabled. `SubmitAppReview` and `Release` require the
 intended build to be selected on that public version.
 
+The pinned local operator permits `Status`, `TestFlight`, and
+`SubmitTestFlightReview` from a clean `main` checkout at an ancestor of freshly
+fetched `origin/main`. This lets an uploaded beta finish review after another PR
+merges. Behind-main recovery requires an explicit `--apple-source-commit` with
+the full commit ID matching the checkout. The exact source is retained in plans
+and forwarded unchanged;
+build validity, expiration, receipt authentication and confirmation gates still
+apply. New archives, uploads, Ship and public App Review/release still require
+current main.
+
 Mac App Store extension identifiers use the containing app's bundle ID followed
 by one suffix, for example `com.example.media.macwidgets`. PowerForge rejects
 an extra segment such as `com.example.media.mac.widgets` before archive/upload,

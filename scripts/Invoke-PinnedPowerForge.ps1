@@ -98,9 +98,9 @@ function Assert-CleanRepository {
             if (-not $AllowBehindMain -or $RequiredBranch -ne 'main') {
                 throw "$Name HEAD '$head' does not match origin/$RequiredBranch '$remote'."
             }
-            # Behind-main admission is restricted by the command entry policy.
-            # The worker binds release source after its canonical fast-forward;
-            # screenshot commands bind their exact retained capture source.
+            # The command policy admits only retained-source operations here.
+            # Workers fast-forward before release; screenshots and existing beta
+            # actions retain the exact source identity forwarded to the engine.
             Invoke-GitText -Root $Root -Arguments @('merge-base', '--is-ancestor', $head, $remote) | Out-Null
         }
     }
@@ -203,10 +203,18 @@ function Test-CapturedScreenshotCommand {
 function Assert-ConsumerSourceRepository {
     $consumerRequiredBranch = if ($ArgumentList.Count -gt 0 -and $ArgumentList[0] -eq 'apple-deploy') { $null } else { $requiredBranch }
     $workerEntry = $ArgumentList.Count -gt 0 -and $ArgumentList[0] -eq 'apple-testflight'
+    $existingBetaEntry = $ArgumentList.Count -gt 1 -and $ArgumentList[0] -eq 'apple-release' -and
+        $ArgumentList[1] -in @('Status', 'TestFlight', 'SubmitTestFlightReview')
+    if ($existingBetaEntry) {
+        $requestedSource = Get-OptionValue -Option '--apple-source-commit'
+        $existingBetaEntry = $requestedSource -match '^(?:[0-9A-Fa-f]{40}|[0-9A-Fa-f]{64})$' -and
+            $requestedSource -eq (Invoke-GitText -Root $consumer -Arguments @('rev-parse', 'HEAD'))
+    }
     $capturedScreenshotEntry = (Test-CapturedScreenshotCommand) -and
         -not [string]::IsNullOrWhiteSpace((Get-OptionValue -Option '--capture-provenance'))
     return Assert-CleanRepository -Root $consumer -Name 'Consumer source' -RequiredBranch $consumerRequiredBranch `
-        -ExpectedRepository $ExpectedConsumerRepository -DeferContentCheck -AllowBehindMain:($workerEntry -or $capturedScreenshotEntry)
+        -ExpectedRepository $ExpectedConsumerRepository -DeferContentCheck `
+        -AllowBehindMain:($workerEntry -or $capturedScreenshotEntry -or $existingBetaEntry)
 }
 
 function Assert-SafeArguments {
