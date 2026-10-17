@@ -379,7 +379,9 @@ intended build to be selected on that public version.
 The pinned local operator permits `Status`, `TestFlight`, and
 `SubmitTestFlightReview` from a clean `main` checkout at an ancestor of freshly
 fetched `origin/main`. This lets an uploaded beta finish review after another PR
-merges. The exact checkout source is retained in plans and forwarded unchanged;
+merges. Behind-main recovery requires an explicit `--apple-source-commit` with
+the full commit ID matching the checkout. The exact source is retained in plans
+and forwarded unchanged;
 build validity, expiration, receipt authentication and confirmation gates still
 apply. New archives, uploads, Ship and public App Review/release still require
 current main.

@@ -23,6 +23,8 @@ public sealed partial class AppleReleaseWorkflowTests
             Assert.Contains("EXACT_BETA_ANCESTOR_PASS", result.StandardOutput, StringComparison.Ordinal);
             Assert.Contains("UNSAFE_SOURCE_BLOCKED", result.StandardOutput, StringComparison.Ordinal);
             Assert.Contains("NEW_ARTIFACT_LATEST_MAIN_UNCHANGED", result.StandardOutput, StringComparison.Ordinal);
+            Assert.Contains("EXPLICIT_RECOVERY_SOURCE_REQUIRED", result.StandardOutput, StringComparison.Ordinal);
+            Assert.Contains("LATEST_MAIN_IMPLICIT_SOURCE_UNCHANGED", result.StandardOutput, StringComparison.Ordinal);
         }
         finally { DeletePinnedEvidenceDirectory(parent); }
     }
@@ -80,6 +82,11 @@ public sealed partial class AppleReleaseWorkflowTests
         [IO.File]::WriteAllText((Join-Path $consumer 'tooling.txt'),'later dependency maintenance')
         $latest=CommitFixture 'Newer main'
         Invoke-GitText -Root $consumer -Arguments @('push','--quiet','origin','main') | Out-Null
+        $ArgumentList=@('apple-release',$Operation,'--config','powerforge.release.json')
+        $current=Assert-ConsumerSourceRepository
+        $implicit=@(Get-ForwardedArgumentList -SourceCommit $current)
+        if($current -ne $latest -or $implicit[-2] -ne '--apple-source-commit' -or $implicit[-1] -ne $latest){throw 'Latest main implicit source changed.'}
+        'LATEST_MAIN_IMPLICIT_SOURCE_UNCHANGED'
         Invoke-GitText -Root $consumer -Arguments @('checkout','--quiet','-B','main',$uploaded) | Out-Null
         Invoke-GitText -Root $consumer -Arguments @('update-ref','refs/remotes/origin/main',$uploaded) | Out-Null
         $requested=@('apple-release',$Operation,'--config','powerforge.release.json','--apple-source-commit',$uploaded)
@@ -90,7 +97,23 @@ public sealed partial class AppleReleaseWorkflowTests
         Assert-ConsumerRepositoryContent
         $forwarded=@(Get-ForwardedArgumentList -SourceCommit $admitted)
         if(($forwarded -join '|') -ne ($requested -join '|')){throw 'Uploaded source identity was relabeled.'}
+        $ArgumentList=@('apple-release',$Operation,'--config','powerforge.release.json',"--apple-source-commit=$($uploaded.ToUpperInvariant())")
+        $equalSource=Assert-ConsumerSourceRepository
+        $equalForwarded=@(Get-ForwardedArgumentList -SourceCommit $equalSource)
+        if(($equalForwarded -join '|') -ne ($requested -join '|')){throw 'Equals-form source identity was not retained.'}
         'EXACT_BETA_ANCESTOR_PASS'
+
+        $ArgumentList=@('apple-release',$Operation,'--config','powerforge.release.json')
+        Reject {Assert-ConsumerSourceRepository} 'does not match origin/main'
+        foreach($invalidSource in @('', ' ', $uploaded.Substring(0,8), $latest)) {
+            $ArgumentList=@('apple-release',$Operation,'--config','powerforge.release.json',"--apple-source-commit=$invalidSource")
+            Reject {Assert-ConsumerSourceRepository} 'does not match origin/main'
+        }
+        $ArgumentList=@('apple-release',$Operation,'--config','powerforge.release.json','--apple-source-commit')
+        Reject {Assert-ConsumerSourceRepository} 'Missing value'
+        $ArgumentList=$requested+@("--apple-source-commit=$uploaded")
+        Reject {Assert-ConsumerSourceRepository} 'Duplicate option'
+        'EXPLICIT_RECOVERY_SOURCE_REQUIRED'
 
         $ArgumentList=@('apple-release',$Operation,'--config','powerforge.release.json','--apple-source-commit',$latest)
         Reject {Get-ForwardedArgumentList -SourceCommit $admitted} 'must match the exact consumer HEAD'
@@ -112,6 +135,7 @@ public sealed partial class AppleReleaseWorkflowTests
         Invoke-GitText -Root $consumer -Arguments @('checkout','--quiet','main') | Out-Null
         [IO.File]::WriteAllText((Join-Path $consumer 'feature.txt'),'unmerged application source')
         $unmerged=CommitFixture 'Unmerged local source'
+        $ArgumentList=@('apple-release',$Operation,'--config','powerforge.release.json','--apple-source-commit',$unmerged)
         Reject {Assert-ConsumerSourceRepository} 'Git failed'
         'UNSAFE_SOURCE_BLOCKED'
         """;

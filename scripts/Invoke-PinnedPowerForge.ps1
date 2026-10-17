@@ -205,6 +205,11 @@ function Assert-ConsumerSourceRepository {
     $workerEntry = $ArgumentList.Count -gt 0 -and $ArgumentList[0] -eq 'apple-testflight'
     $existingBetaEntry = $ArgumentList.Count -gt 1 -and $ArgumentList[0] -eq 'apple-release' -and
         $ArgumentList[1] -in @('Status', 'TestFlight', 'SubmitTestFlightReview')
+    if ($existingBetaEntry) {
+        $requestedSource = Get-OptionValue -Option '--apple-source-commit'
+        $existingBetaEntry = $requestedSource -match '^(?:[0-9A-Fa-f]{40}|[0-9A-Fa-f]{64})$' -and
+            $requestedSource -eq (Invoke-GitText -Root $consumer -Arguments @('rev-parse', 'HEAD'))
+    }
     $capturedScreenshotEntry = (Test-CapturedScreenshotCommand) -and
         -not [string]::IsNullOrWhiteSpace((Get-OptionValue -Option '--capture-provenance'))
     return Assert-CleanRepository -Root $consumer -Name 'Consumer source' -RequiredBranch $consumerRequiredBranch `
