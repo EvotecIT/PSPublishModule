@@ -19,7 +19,8 @@ public sealed partial class AppStoreConnectClient
     {
         RequireValue(declarationId, nameof(declarationId), "Age declaration id");
         if (answers is null) throw new ArgumentNullException(nameof(answers));
-        var attributes = BuildAgeRatingAttributes(answers);
+        var submitted = answers.CreateSubmissionSnapshot();
+        var attributes = BuildAgeRatingAttributes(submitted);
         if (attributes.Count == 0) throw new ArgumentException("Supply at least one explicit age questionnaire answer.", nameof(answers));
         var id = declarationId.Trim();
         using var document = await SendJsonAsync(new HttpMethod("PATCH"), $"ageRatingDeclarations/{Uri.EscapeDataString(id)}",
@@ -27,7 +28,9 @@ public sealed partial class AppStoreConnectClient
             ?? throw new InvalidOperationException("Apple returned no age declaration response.");
         if (!document.RootElement.TryGetProperty("data", out var data) || data.ValueKind != JsonValueKind.Object)
             throw new InvalidOperationException("Apple returned no age declaration data.");
-        return ParseAgeRatingDeclaration(data);
+        var declaration = ParseAgeRatingDeclaration(data);
+        answers.AcceptSubmission(submitted);
+        return declaration;
     }
 
     private static AppStoreConnectAgeRatingDeclarationInfo ParseAgeRatingDeclaration(JsonElement data)
@@ -79,6 +82,8 @@ public sealed partial class AppStoreConnectClient
                 if (original.TryGetValue(answer.Key, out var previous) && Equals(previous, answer.Value))
                     attributes.Remove(answer.Key);
         }
+        if (answers.KidsAgeBandClearRequested)
+            attributes["kidsAgeBand"] = null;
         foreach (var answer in attributes)
         {
             if (answer.Value is not string value) continue;

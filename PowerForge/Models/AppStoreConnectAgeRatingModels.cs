@@ -4,14 +4,29 @@ namespace PowerForge;
 public sealed class AppStoreConnectAgeRatingAnswers
 {
     private AppStoreConnectAgeRatingAnswers? _originalAnswers;
+    private string? _kidsAgeBand;
+    private bool _clearKidsAgeBand;
 
     internal AppStoreConnectAgeRatingAnswers? OriginalAnswers => _originalAnswers;
+    internal bool KidsAgeBandClearRequested => _clearKidsAgeBand;
+
+    internal AppStoreConnectAgeRatingAnswers CreateSubmissionSnapshot()
+        => (AppStoreConnectAgeRatingAnswers)MemberwiseClone();
 
     internal void CaptureOriginalAnswers()
     {
         var original = (AppStoreConnectAgeRatingAnswers)MemberwiseClone();
         original._originalAnswers = null;
+        original._clearKidsAgeBand = false;
         _originalAnswers = original;
+    }
+
+    internal void AcceptSubmission(AppStoreConnectAgeRatingAnswers submitted)
+    {
+        submitted.CaptureOriginalAnswers();
+        _originalAnswers = submitted._originalAnswers;
+        if (submitted._clearKidsAgeBand && _kidsAgeBand is null)
+            _clearKidsAgeBand = false;
     }
 
     /// <summary>Publisher answer for Apple's <c>advertising</c> question.</summary>
@@ -35,8 +50,23 @@ public sealed class AppStoreConnectAgeRatingAnswers
     /// <summary>Publisher answer for Apple's <c>healthOrWellnessTopics</c> question.</summary>
     public bool? HealthOrWellnessTopics { get; set; }
 
-    /// <summary>Optional Made for Kids age band: FIVE_AND_UNDER, SIX_TO_EIGHT, or NINE_TO_ELEVEN.</summary>
-    public string? KidsAgeBand { get; set; }
+    /// <summary>Optional Made for Kids age band: FIVE_AND_UNDER, SIX_TO_EIGHT, or NINE_TO_ELEVEN. Null leaves the band unchanged; use <see cref="ClearKidsAgeBand"/> to remove it.</summary>
+    public string? KidsAgeBand
+    {
+        get => _kidsAgeBand;
+        set
+        {
+            _kidsAgeBand = value;
+            _clearKidsAgeBand = false;
+        }
+    }
+
+    /// <summary>Requests an explicit null Made for Kids age band on the next update. Apple permits changing this selection only before App Review approval.</summary>
+    public void ClearKidsAgeBand()
+    {
+        _kidsAgeBand = null;
+        _clearKidsAgeBand = true;
+    }
 
     /// <summary>Publisher answer for Apple's <c>lootBox</c> question.</summary>
     public bool? LootBox { get; set; }
