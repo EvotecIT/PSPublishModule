@@ -5,7 +5,9 @@ namespace PowerForge;
 /// build snapshot while xcodebuild is allowed to read it.
 /// </summary>
 internal sealed class AppleReleaseSourceMutationMonitor : IDisposable {
-    private readonly FileSystemWatcher _watcher;
+    private readonly IDisposable _observer;
+    private readonly Action _stopObserving;
+    private readonly Action _drainObserving;
     private readonly string _scopeDescription;
     private readonly string _readerDescription;
     private readonly string _failureInstruction;
@@ -26,14 +28,40 @@ internal sealed class AppleReleaseSourceMutationMonitor : IDisposable {
         bool enableImmediately = true,
         string? exactPath = null,
         bool includeExactPathDescendants = false,
-        Func<FileSystemEventArgs, bool>? ignoredMutation = null) {
+        Func<FileSystemEventArgs, bool>? ignoredMutation = null,
+        Func<string, bool>? unchangedMacOSCloneSource = null) {
         _scopeDescription = scopeDescription;
         _readerDescription = readerDescription;
         _failureInstruction = failureInstruction;
         _exactPath = string.IsNullOrWhiteSpace(exactPath) ? null : Path.GetFullPath(exactPath);
         _includeExactPathDescendants = includeExactPathDescendants;
         _ignoredMutation = ignoredMutation;
-        _watcher = new FileSystemWatcher(rootPath) {
+        _enforceMutations = enableImmediately ? 1 : 0;
+#if NET8_0_OR_GREATER
+        if (OperatingSystem.IsMacOS() && unchangedMacOSCloneSource is not null)
+        {
+            var native = new AppleMacOSFileChangeObserver(rootPath,
+                (path, flags) =>
+                {
+                    // APFS reports both clone destinations and unchanged clone sources as Created.
+                    // Only this exact native event on a previously bound, still-identical regular
+                    // artifact file is read activity. Mixed flags and every other path still fail.
+                    try
+                    {
+                        if (flags == AppleMacOSFileChangeObserver.UnchangedCloneCandidate &&
+                            unchangedMacOSCloneSource(path))
+                            return;
+                        OnMutation(this, new AppleMacOSFileChangeObserver.ChangeEventArgs(rootPath, path, flags));
+                    }
+                    catch (Exception exception) { Interlocked.CompareExchange(ref _watcherError, exception, null); }
+                }, exception => Interlocked.CompareExchange(ref _watcherError, exception, null));
+            _observer = native;
+            _stopObserving = native.Stop;
+            _drainObserving = native.Drain;
+            return;
+        }
+#endif
+        var watcher = new FileSystemWatcher(rootPath) {
             IncludeSubdirectories = true,
             InternalBufferSize = 64 * 1024,
             NotifyFilter = NotifyFilters.FileName |
@@ -44,16 +72,18 @@ internal sealed class AppleReleaseSourceMutationMonitor : IDisposable {
                            NotifyFilters.CreationTime |
                            NotifyFilters.Security
         };
-        _watcher.Changed += OnMutation;
-        _watcher.Created += OnMutation;
-        _watcher.Deleted += OnMutation;
-        _watcher.Renamed += OnMutation;
-        _watcher.Error += OnError;
+        watcher.Changed += OnMutation;
+        watcher.Created += OnMutation;
+        watcher.Deleted += OnMutation;
+        watcher.Renamed += OnMutation;
+        watcher.Error += OnError;
         // Keep the watcher subscribed for the complete producer lifetime. Producer-owned writes are
         // tolerated until the process completion boundary, but the watcher itself is never started
         // late: the boundary transition therefore cannot create an unobserved activation window.
-        _enforceMutations = enableImmediately ? 1 : 0;
-        _watcher.EnableRaisingEvents = true;
+        _observer = watcher;
+        _stopObserving = () => watcher.EnableRaisingEvents = false;
+        _drainObserving = static () => { };
+        watcher.EnableRaisingEvents = true;
     }
 
     internal void ValidateNoChanges(Action? finalValidation = null)
@@ -89,7 +119,7 @@ internal sealed class AppleReleaseSourceMutationMonitor : IDisposable {
             Thread.Sleep(250);
         }
         foreach (var monitor in monitors)
-            monitor._watcher.EnableRaisingEvents = false;
+            monitor._stopObserving();
 
         foreach (var monitor in monitors)
             monitor.ThrowIfMutationObserved();
@@ -126,6 +156,7 @@ internal sealed class AppleReleaseSourceMutationMonitor : IDisposable {
         if (Volatile.Read(ref _enforceMutations) == 0)
         {
             output = capture();
+            _drainObserving();
             // FileSystemWatcher delivery is asynchronous. The producer's own final writes may still
             // be queued when the process-exit callback runs, so let the already-active observer drain
             // to a quiet sequence before changing those events from producer activity to tampering.
@@ -216,7 +247,14 @@ internal sealed class AppleReleaseSourceMutationMonitor : IDisposable {
         }
         Interlocked.Increment(ref _mutationSequence);
         if (Volatile.Read(ref _enforceMutations) != 0)
-            Interlocked.CompareExchange(ref _firstMutation, args.FullPath, null);
+        {
+            var detail = $"{args.FullPath} ({args.ChangeType})";
+#if NET8_0_OR_GREATER
+            if (args is AppleMacOSFileChangeObserver.ChangeEventArgs native)
+                detail = $"{args.FullPath} ({args.ChangeType}, native flags 0x{native.Flags:X})";
+#endif
+            Interlocked.CompareExchange(ref _firstMutation, detail, null);
+        }
     }
 
     private static bool MutationTouchesExactPath(
@@ -255,6 +293,6 @@ internal sealed class AppleReleaseSourceMutationMonitor : IDisposable {
         if (_disposed)
             return;
         _disposed = true;
-        _watcher.Dispose();
+        _observer.Dispose();
     }
 }
