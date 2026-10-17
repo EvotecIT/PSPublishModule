@@ -17,7 +17,7 @@ internal sealed class AppleMacOSFileChangeObserver : IDisposable
     private readonly string _root;
     private GCHandle _self;
     private IntPtr _stream, _queue, _paths, _path;
-    private bool _started, _stopped, _disposed;
+    private bool _scheduled, _started, _stopped, _disposed;
 
     internal AppleMacOSFileChangeObserver(string root, Action<string, uint> changed, Action<Exception> error)
     {
@@ -40,6 +40,7 @@ internal sealed class AppleMacOSFileChangeObserver : IDisposable
             _queue = DispatchQueueCreate("PowerForge.AppleReleaseSource", IntPtr.Zero);
             if (_queue == IntPtr.Zero) throw new IOException("Unable to create the native file mutation queue.");
             FSEventStreamSetDispatchQueue(_stream, _queue);
+            _scheduled = true;
             if (!FSEventStreamStart(_stream)) throw new IOException("Unable to start the native file mutation observer.");
             _started = true;
         }
@@ -108,7 +109,7 @@ internal sealed class AppleMacOSFileChangeObserver : IDisposable
         {
             FSEventStreamStop(_stream);
         }
-        FSEventStreamInvalidate(_stream);
+        if (_scheduled) FSEventStreamInvalidate(_stream);
         if (_queue != IntPtr.Zero) DispatchSync(_queue, IntPtr.Zero, Barrier);
     }
 
