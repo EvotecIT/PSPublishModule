@@ -19,12 +19,13 @@ public sealed class AppleTestFlightReadinessTests : IDisposable
     [InlineData(PowerForgeAppleReleaseAction.TestFlight, true)]
     public void BetaPlan_BindsValidBuildWithoutPublicStoreSelection(PowerForgeAppleReleaseAction action, bool hasStoreVersion)
     {
-        var result = Service(request => State(request, "VALID", hasStoreVersion)).Execute(Spec(), Request(action));
+        var result = Service(request => State(request, "VALID", hasStoreVersion, expired: false)).Execute(Spec(), Request(action));
 
         Assert.True(result.Success, result.ErrorMessage);
         var target = Assert.Single(result.AppleReceipt!.Targets);
         Assert.Equal("beta-build", target.BuildId);
         Assert.Equal("VALID", target.BuildProcessingState);
+        Assert.False(target.BuildExpired);
         Assert.Equal("1.0.0", target.Version);
         Assert.Equal("9", target.Build);
         Assert.NotEqual(true, target.BuildSelected);
@@ -99,6 +100,93 @@ public sealed class AppleTestFlightReadinessTests : IDisposable
     }
 
     [Theory]
+    [InlineData(PowerForgeAppleReleaseAction.SubmitTestFlightReview)]
+    [InlineData(PowerForgeAppleReleaseAction.TestFlight)]
+    public void BetaPlan_RejectsExpiredProcessedBuild(PowerForgeAppleReleaseAction action)
+    {
+        var error = Assert.Throws<InvalidOperationException>(() =>
+            Service(request => State(request, "VALID", false, expired: true)).Execute(Spec(), Request(action)));
+
+        Assert.Contains("not expired", error.Message);
+    }
+
+    [Theory]
+    [InlineData(PowerForgeAppleReleaseAction.SubmitTestFlightReview)]
+    [InlineData(PowerForgeAppleReleaseAction.TestFlight)]
+    public void BetaApproval_BindsExpirationAndRejectsExpiryBeforeMutation(PowerForgeAppleReleaseAction action)
+    {
+        var expired = false;
+        var service = Service(request => State(request, "VALID", false, expired));
+        var preview = service.Execute(Spec(), Request(action));
+        var target = Assert.Single(preview.AppleReceipt!.Targets);
+        target.BuildExpired = true;
+        Assert.NotEqual(preview.AppleReceipt.PlanSha256,
+            PowerForgeReleaseService.ComputeApplePlanSha256(preview.AppleReceipt));
+        target.BuildExpired = false;
+        expired = true;
+        var request = Request(action);
+        request.PlanOnly = false;
+        request.AppleActionConfirmed = true;
+        request.AppleExpectedPlanSha256 = preview.AppleReceipt.PlanSha256;
+
+        var result = service.Execute(Spec(), request);
+
+        Assert.False(result.Success);
+        Assert.Contains("not expired", result.ErrorMessage);
+    }
+
+    [Theory]
+    [InlineData("com.example.media.helper.widget", true)]
+    [InlineData("com.example.media.helper.mac.widget", false)]
+    [InlineData("com.example.media.widget", false)]
+    public void MacStoreArchivePlan_ValidatesNestedExtensionAgainstImmediateParent(string extensionId, bool valid)
+    {
+        var spec = MacSpec(extensionId);
+        var extension = spec.AppleApps!.Apps[1];
+        extension.ParentTarget = "Sample Helper";
+        spec.AppleApps.Apps = spec.AppleApps.Apps.Append(new AppleAppConfiguration
+        {
+            Name = "Sample Helper", BundleId = "com.example.media.helper", Platform = ApplePlatform.macOS,
+            ProjectPath = "Sample.xcodeproj", Scheme = "Helper", ParentTarget = "Sample Mac",
+            DistributionRoute = AppleDistributionRoute.EmbeddedCompanion, ProductRole = AppleProductRole.CompanionApp
+        }).ToArray();
+        var request = Request(PowerForgeAppleReleaseAction.Archive);
+        request.Targets = ["Sample Mac"];
+
+        if (valid)
+            Assert.True(Service().Execute(spec, request).Success);
+        else
+            Assert.Contains("Mac App Store extension", Assert.Throws<InvalidOperationException>(() =>
+                Service().Execute(spec, request)).Message);
+    }
+
+    [Fact]
+    public void MacStoreArchivePlan_FollowsMultipleEmbeddedParents()
+    {
+        var spec = MacSpec("com.example.media.helper.child.widget");
+        spec.AppleApps!.Apps[1].ParentTarget = "Child Helper";
+        spec.AppleApps.Apps = spec.AppleApps.Apps.Concat(new[]
+        {
+            new AppleAppConfiguration
+            {
+                Name = "Helper", BundleId = "com.example.media.helper", Platform = ApplePlatform.macOS,
+                ProjectPath = "Sample.xcodeproj", Scheme = "Helper", ParentTarget = "Sample Mac",
+                DistributionRoute = AppleDistributionRoute.EmbeddedCompanion, ProductRole = AppleProductRole.CompanionApp
+            },
+            new AppleAppConfiguration
+            {
+                Name = "Child Helper", BundleId = "com.example.media.helper.child", Platform = ApplePlatform.macOS,
+                ProjectPath = "Sample.xcodeproj", Scheme = "Child Helper", ParentTarget = "Helper",
+                DistributionRoute = AppleDistributionRoute.EmbeddedCompanion, ProductRole = AppleProductRole.CompanionApp
+            }
+        }).ToArray();
+        var request = Request(PowerForgeAppleReleaseAction.Archive);
+        request.Targets = ["Sample Mac"];
+
+        Assert.True(Service().Execute(spec, request).Success);
+    }
+
+    [Theory]
     [InlineData("com.example.media.mac.widgets")]
     [InlineData("com.example.other.widget")]
     [InlineData("com.example.media")]
@@ -115,10 +203,12 @@ public sealed class AppleTestFlightReadinessTests : IDisposable
         Assert.Contains("one nonempty suffix", error.Message);
     }
 
-    [Fact]
-    public void MacStoreArchivePlan_AcceptsOneSuffix()
+    [Theory]
+    [InlineData("com.example.media.macwidgets")]
+    [InlineData("COM.EXAMPLE.MEDIA.macwidgets")]
+    public void MacStoreArchivePlan_AcceptsOneSuffix(string extensionId)
     {
-        var result = Service().Execute(MacSpec("com.example.media.macwidgets"), Request(PowerForgeAppleReleaseAction.Archive));
+        var result = Service().Execute(MacSpec(extensionId), Request(PowerForgeAppleReleaseAction.Archive));
 
         Assert.True(result.Success, result.ErrorMessage);
     }
@@ -151,7 +241,8 @@ public sealed class AppleTestFlightReadinessTests : IDisposable
             getAppleReleaseState: state ?? (_ => throw new InvalidOperationException("Archive preview must not query Apple.")),
             generateAppleProject: _ => false,
             prepareAppleDistribution: _ => throw new InvalidOperationException("Beta delivery must not prepare a public version."),
-            submitTestFlightBetaReview: submit,
+            distributeTestFlight: _ => throw new InvalidOperationException("Beta distribution must not run during plan validation."),
+            submitTestFlightBetaReview: submit ?? (_ => throw new InvalidOperationException("Beta review must not run during plan validation.")),
             appleAppStateRoot: Path.Combine(_root, "state"));
 
     private PowerForgeReleaseRequest Request(PowerForgeAppleReleaseAction action)
@@ -192,7 +283,8 @@ public sealed class AppleTestFlightReadinessTests : IDisposable
             DistributionRoute = AppleDistributionRoute.AppStore, TestFlightPolicy = AppleTestFlightPolicy.External
         };
 
-    private static AppStoreConnectReleaseStateResult State(AppStoreConnectReleaseStateRequest request, string? processingState, bool hasStoreVersion)
+    private static AppStoreConnectReleaseStateResult State(AppStoreConnectReleaseStateRequest request, string? processingState, bool hasStoreVersion,
+        bool? expired = null)
         => new()
         {
             AppId = request.AppId, VersionString = request.VersionString, BuildNumber = request.BuildNumber,
@@ -204,7 +296,7 @@ public sealed class AppleTestFlightReadinessTests : IDisposable
                 MatchedBuild = processingState is null ? null : new()
                 {
                     Id = "beta-build", Version = request.BuildNumber, MarketingVersion = request.VersionString,
-                    ProcessingState = processingState
+                    ProcessingState = processingState, Expired = expired
                 }
             }]
         };

@@ -320,6 +320,9 @@ internal sealed class PowerForgeAppleReleaseTargetReceipt
 
     public string? BuildProcessingState { get; set; }
 
+    /// <summary>Observed TestFlight expiration flag, included in exact non-Ship plan approval.</summary>
+    public bool? BuildExpired { get; set; }
+
     public string? BuildUploadId { get; set; }
 
     /// <summary>Observed delivery processing state; it does not establish build or upload integrity qualification.</summary>

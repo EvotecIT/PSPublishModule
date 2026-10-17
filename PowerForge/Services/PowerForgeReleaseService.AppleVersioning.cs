@@ -261,10 +261,11 @@ internal sealed partial class PowerForgeReleaseService
             if ((plan.Action is PowerForgeAppleReleaseAction.SubmitTestFlightReview or PowerForgeAppleReleaseAction.TestFlight) &&
                 (string.IsNullOrWhiteSpace(platform.MatchedBuild?.Id) ||
                  (!plan.AllowUnprocessedTestFlightBuild &&
-                  !string.Equals(platform.MatchedBuild?.ProcessingState, "VALID", StringComparison.OrdinalIgnoreCase))))
+                  (!string.Equals(platform.MatchedBuild?.ProcessingState, "VALID", StringComparison.OrdinalIgnoreCase) ||
+                   platform.MatchedBuild?.Expired == true))))
             {
                 throw new InvalidOperationException(
-                    $"Apple action '{plan.Action}' requires the exact matched TestFlight build for '{app.Name}' to be available and processed. " +
+                    $"Apple action '{plan.Action}' requires the exact matched TestFlight build for '{app.Name}' to be available, processed and not expired. " +
                     "Upload and finish processing the intended exact build, then review a new plan.");
             }
             if (RequiresSelectedApplePlanBuild(plan) &&
@@ -280,6 +281,7 @@ internal sealed partial class PowerForgeReleaseService
             target.Build = state.BuildNumber ?? target.Build;
             target.BuildId = platform.MatchedBuild?.Id;
             target.BuildProcessingState = platform.MatchedBuild?.ProcessingState;
+            target.BuildExpired = platform.MatchedBuild?.Expired;
             target.DistributionVersionId = platform.Version?.Id;
             target.DistributionState = platform.Version?.AppStoreState ?? platform.Version?.AppVersionState;
             target.BuildSelected = platform.MatchedBuildSelected;
