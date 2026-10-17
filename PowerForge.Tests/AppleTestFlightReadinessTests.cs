@@ -239,6 +239,16 @@ public sealed class AppleTestFlightReadinessTests : IDisposable
     }
 
     [Fact]
+    public void DirectMacArchivePlan_DoesNotApplyAppStoreSuffixRestriction()
+    {
+        var spec = MacSpec("com.example.media.mac.widgets");
+        spec.AppleApps!.Apps[0].DistributionRoute = AppleDistributionRoute.DirectNotarized;
+        spec.AppleApps.Apps[0].TestFlightPolicy = AppleTestFlightPolicy.Disabled;
+
+        Assert.True(Service().Execute(spec, Request(PowerForgeAppleReleaseAction.Archive)).Success);
+    }
+
+    [Fact]
     public void IosOnlyBetaPlan_DoesNotRequireRepairOfUnselectedMacCompanion()
     {
         var spec = MacSpec("com.example.media.mac.widgets");
