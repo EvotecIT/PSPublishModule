@@ -110,6 +110,62 @@ public sealed class AppleTestFlightReadinessTests : IDisposable
         Assert.Contains("uniquely selected", error.Message);
     }
 
+    [Theory]
+    [InlineData(false, AppleTestFlightPolicy.Disabled)]
+    [InlineData(true, AppleTestFlightPolicy.Disabled)]
+    [InlineData(true, AppleTestFlightPolicy.Internal)]
+    [InlineData(true, AppleTestFlightPolicy.Automatic)]
+    public void ConfiguredBetaPlan_DoesNotRequireReadyBuildForTargetsSkippedByPolicy(
+        bool submitBetaReview, AppleTestFlightPolicy skippedPolicy)
+    {
+        var spec = Spec();
+        spec.AppleApps!.Archive = false;
+        spec.AppleApps.Upload = false;
+        spec.AppleApps.DistributeTestFlight = !submitBetaReview;
+        spec.AppleApps.SubmitTestFlightBetaReview = submitBetaReview;
+        var skipped = App("Skipped iOS", ApplePlatform.iOS);
+        skipped.BundleId = "com.example.skipped";
+        skipped.AppStoreConnectAppId = "skipped-app";
+        skipped.TestFlightPolicy = skippedPolicy;
+        spec.AppleApps.Apps = spec.AppleApps.Apps.Append(skipped).ToArray();
+
+        var result = Service(request =>
+        {
+            var isSkipped = request.AppId == "skipped-app";
+            var state = State(request, "VALID", isSkipped, expired: isSkipped);
+            if (isSkipped)
+                state.Platforms[0].MatchedBuildSelected = true;
+            return state;
+        }).Execute(spec, Request(PowerForgeAppleReleaseAction.Configured));
+
+        Assert.True(result.Success, result.ErrorMessage);
+        Assert.Equal(2, result.AppleReceipt!.Targets.Length);
+    }
+
+    [Theory]
+    [InlineData(AppleTestFlightPolicy.Internal)]
+    [InlineData(AppleTestFlightPolicy.Automatic)]
+    public void ConfiguredCombinedBetaPlan_StillChecksTargetsReceivingDistribution(AppleTestFlightPolicy policy)
+    {
+        var spec = Spec();
+        spec.AppleApps!.Archive = false;
+        spec.AppleApps.Upload = false;
+        spec.AppleApps.DistributeTestFlight = true;
+        spec.AppleApps.SubmitTestFlightBetaReview = true;
+        var internalApp = App("Internal iOS", ApplePlatform.iOS);
+        internalApp.BundleId = "com.example.internal";
+        internalApp.AppStoreConnectAppId = "internal-app";
+        internalApp.TestFlightPolicy = policy;
+        spec.AppleApps.Apps = spec.AppleApps.Apps.Append(internalApp).ToArray();
+
+        var error = Assert.Throws<InvalidOperationException>(() =>
+            Service(request => State(request, "VALID", false, expired: request.AppId == "internal-app"))
+                .Execute(spec, Request(PowerForgeAppleReleaseAction.Configured)));
+
+        Assert.Contains("not expired", error.Message);
+        Assert.Contains("Internal iOS", error.Message);
+    }
+
     [Fact]
     public void BetaReview_SubmitsExactPlannedBuildWithoutPreparingPublicVersion()
     {
