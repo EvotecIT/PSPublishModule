@@ -782,7 +782,8 @@ public sealed partial class AppStoreConnectClient : IDisposable
             Name = GetString(attrs, "name"),
             BundleId = GetString(attrs, "bundleId"),
             Sku = GetString(attrs, "sku"),
-            PrimaryLocale = GetString(attrs, "primaryLocale")
+            PrimaryLocale = GetString(attrs, "primaryLocale"),
+            ContentRightsDeclaration = GetString(attrs, "contentRightsDeclaration")
         };
     }
 
@@ -949,7 +950,12 @@ public sealed partial class AppStoreConnectClient : IDisposable
     {
         if (element.ValueKind != JsonValueKind.Object || !element.TryGetProperty(propertyName, out var prop))
             return null;
-        return prop.ValueKind == JsonValueKind.String ? prop.GetString() : prop.ToString();
+        return prop.ValueKind switch
+        {
+            JsonValueKind.Null or JsonValueKind.Undefined => null,
+            JsonValueKind.String => prop.GetString(),
+            _ => prop.ToString()
+        };
     }
 
     private static bool? GetBool(JsonElement element, string propertyName)

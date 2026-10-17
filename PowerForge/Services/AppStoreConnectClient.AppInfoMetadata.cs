@@ -155,7 +155,10 @@ public sealed partial class AppStoreConnectClient
         {
             Id = GetString(item, "id") ?? string.Empty,
             State = GetString(attrs, "state"),
-            AppStoreState = GetString(attrs, "appStoreState")
+            AppStoreState = GetString(attrs, "appStoreState"),
+            AppStoreAgeRating = GetString(attrs, "appStoreAgeRating"),
+            PrimaryCategoryId = GetRelationshipDataId(item, "primaryCategory"),
+            SecondaryCategoryId = GetRelationshipDataId(item, "secondaryCategory")
         };
     }
 

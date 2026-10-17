@@ -9,10 +9,11 @@
     <string>-ExpectedCommit</string><string>@@OWNER_COMMIT@@</string>
     <string>-ConsumerRoot</string><string>@@CONSUMER_ROOT@@</string>
     <string>-ExpectedConsumerRepository</string><string>@@REPOSITORY@@</string>
+    <string>-ExpectedConsumerBranch</string><string>@@DEFAULT_BRANCH@@</string>
     <string>-LoadFixedLocalAppleProfile</string>
     <string>apple-testflight</string><string>run</string>
     <string>--policy</string><string>@@POLICY_PATH@@</string>
-    <string>--config</string><string>powerforge.release.json</string>
+    <string>--config</string><string>@@CONFIG_PATH@@</string>
     <string>--output</string><string>json</string>
   </array>
   <key>EnvironmentVariables</key><dict>
@@ -21,6 +22,6 @@
   </dict>
   <key>StartInterval</key><integer>900</integer>
   <key>RunAtLoad</key><true/>
-  <key>StandardOutPath</key><string>@@SCRATCH_ROOT@@/worker.log</string>
-  <key>StandardErrorPath</key><string>@@SCRATCH_ROOT@@/worker-error.log</string>
+  <key>StandardOutPath</key><string>@@LOG_ROOT@@/worker.log</string>
+  <key>StandardErrorPath</key><string>@@LOG_ROOT@@/worker-error.log</string>
 </dict></plist>

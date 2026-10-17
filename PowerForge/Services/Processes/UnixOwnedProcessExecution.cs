@@ -147,10 +147,7 @@ internal sealed partial class UnixOwnedProcessExecution : OwnedProcessExecution
     {
         // Let POSIX resolve symlinks and parent traversal in PATH entries. Lexical
         // GetFullPath would select a different executable for "link/../probe".
-        var resolved = RealPath(path, IntPtr.Zero);
-        if (resolved == IntPtr.Zero) return null;
-        try { return Marshal.PtrToStringAnsi(resolved); }
-        finally { FreeNative(resolved); }
+        return FileSystemPathSafety.ResolveExistingUnixPath(path);
     }
 
     private static void AddPipe(IntPtr actions, AnonymousPipeServerStream? pipe, int destination)

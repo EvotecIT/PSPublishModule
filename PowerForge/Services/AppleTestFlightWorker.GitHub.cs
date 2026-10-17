@@ -7,7 +7,7 @@ internal sealed partial class AppleTestFlightWorker
 {
     private void SyncRequests()
     {
-        var path = $"actions/workflows/{Uri.EscapeDataString(Path.GetFileName(_policy.WorkflowPath))}/runs?event=workflow_dispatch&branch=main";
+        var path = $"actions/workflows/{Uri.EscapeDataString(Path.GetFileName(_policy.WorkflowPath))}/runs?event=workflow_dispatch&branch={Uri.EscapeDataString(_policy.DefaultBranch)}";
         var runs = ObserveRequestRuns(_state, _policy.AcceptRequestsAfter,
             page => Api(path + $"&per_page=100&page={page}").GetProperty("workflow_runs").EnumerateArray().Select(value => value.Clone()).ToArray(),
             id => Api($"actions/runs/{id}"), Save,
@@ -23,7 +23,7 @@ internal sealed partial class AppleTestFlightWorker
         var run = Api($"actions/runs/{id}");
         if (run.GetProperty("run_attempt").GetInt32() != RequestAttempt(summary) || Text(run, "status") != "completed" || Text(run, "conclusion") != "success")
             throw new AppleTestFlightToolException("Request attempt changed during observation; retry its authoritative current state.");
-        if (Text(run, "event") != "workflow_dispatch" || Text(run, "head_branch") != "main" || Text(run, "path") != _policy.WorkflowPath ||
+        if (Text(run, "event") != "workflow_dispatch" || Text(run, "head_branch") != _policy.DefaultBranch || Text(run, "path") != _policy.WorkflowPath ||
             Text(run.GetProperty("head_repository"), "full_name") != _policy.Repository ||
             !run.GetProperty("referenced_workflows").EnumerateArray().Any(value =>
                 Text(value, "path").StartsWith("EvotecIT/PSPublishModule/.github/workflows/powerforge-apple-testflight-request.yml@", StringComparison.Ordinal) &&
@@ -49,7 +49,7 @@ internal sealed partial class AppleTestFlightWorker
             using var request = JsonDocument.Parse(File.ReadAllText(files[0]));
             var value = request.RootElement;
             if (Text(value, "repository") != _policy.Repository || Text(value, "runId") != id.ToString() ||
-                Text(value, "actor") != actor || Text(value, "sourceRef") != "refs/heads/main" ||
+                Text(value, "actor") != actor || Text(value, "sourceRef") != $"refs/heads/{_policy.DefaultBranch}" ||
                 !string.Equals(Text(value, "sourceCommit"), Text(run, "head_sha"), StringComparison.OrdinalIgnoreCase))
                 throw new InvalidOperationException("TestFlight request metadata differs from the authoritative workflow run.");
             var operation = Text(value, "operation");
@@ -110,7 +110,7 @@ internal sealed partial class AppleTestFlightWorker
         foreach (var pull in Pages("pulls?state=closed&sort=updated&direction=desc"))
         {
             if (pull.GetProperty("updated_at").GetDateTimeOffset() < _policy.AcceptRequestsAfter) break;
-            if (pull.GetProperty("merged_at").ValueKind == JsonValueKind.Null || Text(pull.GetProperty("base"), "ref") != "main") continue;
+            if (pull.GetProperty("merged_at").ValueKind == JsonValueKind.Null || Text(pull.GetProperty("base"), "ref") != _policy.DefaultBranch) continue;
             var number = pull.GetProperty("number").GetInt32();
             var labels = pull.GetProperty("labels").EnumerateArray().Select(value => Text(value, "name")).ToArray();
             if (labels.Contains("testflight-skip")) continue;
@@ -210,8 +210,8 @@ internal sealed partial class AppleTestFlightWorker
 
     private bool ChecksPass(string source)
     {
-        var run = Pages($"actions/workflows/{Uri.EscapeDataString(Path.GetFileName(_policy.QualificationWorkflowPath))}/runs?head_sha={source}&branch=main&event=push", "workflow_runs").FirstOrDefault();
-        if (run.ValueKind == JsonValueKind.Undefined || Text(run, "head_sha") != source || Text(run, "head_branch") != "main" || Text(run, "event") != "push" ||
+        var run = Pages($"actions/workflows/{Uri.EscapeDataString(Path.GetFileName(_policy.QualificationWorkflowPath))}/runs?head_sha={source}&branch={Uri.EscapeDataString(_policy.DefaultBranch)}&event=push", "workflow_runs").FirstOrDefault();
+        if (run.ValueKind == JsonValueKind.Undefined || Text(run, "head_sha") != source || Text(run, "head_branch") != _policy.DefaultBranch || Text(run, "event") != "push" ||
             Text(run, "path") != _policy.QualificationWorkflowPath || Text(run, "status") != "completed" || Text(run, "conclusion") != "success") return false;
         var jobs = Pages($"actions/runs/{run.GetProperty("id").GetInt64()}/jobs?filter=latest", "jobs").ToArray();
         return _policy.RequiredChecks.All(name => jobs.Any(value => Text(value, "name") == name && Text(value, "head_sha") == source && Text(value, "status") == "completed" && Text(value, "conclusion") == "success"));

@@ -140,7 +140,10 @@ public sealed partial class AppleReleaseWorkflowTests
             var harness = Path.Combine(parent, "recovery-evidence-harness.ps1");
             File.WriteAllText(harness, PinnedRecoveryHarness);
             var configuration = new DirectoryInfo(AppContext.BaseDirectory).Parent!.Name;
-            var cli = Path.Combine(root, "PowerForge.Cli", "bin", configuration, "net10.0", "PowerForge.Cli.dll");
+            var configuredCli = Environment.GetEnvironmentVariable(PowerForgeCliTestHost.AssemblyPathEnvironmentVariable);
+            var cli = configuredCli is null
+                ? Path.Combine(root, "PowerForge.Cli", "bin", configuration, "net10.0", "PowerForge.Cli.dll")
+                : PowerForgeCliTestHost.ResolveAssemblyPath(root, configuredCli);
             Assert.True(File.Exists(cli), $"PowerForge CLI test dependency was not built: {cli}");
             if (previousPlan is not null)
             {

@@ -189,7 +189,8 @@ internal sealed class AppleArchiveUploadSnapshot : IDisposable
             digest,
             approvedFileMutationDigest,
             new HashSet<string>(identities.Keys, GetPathComparer(archivePath)),
-            ComputeMutationDigest(identities, includeRoot: false, excludeArchiveInfoPlist: true));
+            ComputeMutationDigest(identities, includeRoot: false, excludeArchiveInfoPlist: true),
+            identities);
     }
 
     private static string ComputeMutationDigest(
@@ -410,13 +411,15 @@ internal sealed class AppleArchiveUploadSnapshot : IDisposable
             string mutationDigest,
             string approvedFileMutationDigest,
             HashSet<string> approvedFiles,
-            string uploadPayloadMutationDigest = "")
+            string uploadPayloadMutationDigest = "",
+            IReadOnlyDictionary<string, string>? fileMutationIdentities = null)
         {
             Sha256 = sha256;
             MutationDigest = mutationDigest;
             ApprovedFileMutationDigest = approvedFileMutationDigest;
             ApprovedFiles = approvedFiles;
             UploadPayloadMutationDigest = uploadPayloadMutationDigest;
+            FileMutationIdentities = fileMutationIdentities;
         }
 
         internal string Sha256 { get; }
@@ -428,6 +431,8 @@ internal sealed class AppleArchiveUploadSnapshot : IDisposable
         internal HashSet<string> ApprovedFiles { get; }
 
         internal string UploadPayloadMutationDigest { get; }
+
+        internal IReadOnlyDictionary<string, string>? FileMutationIdentities { get; }
 
         public bool Equals(SnapshotIdentity? other)
             => other is not null &&

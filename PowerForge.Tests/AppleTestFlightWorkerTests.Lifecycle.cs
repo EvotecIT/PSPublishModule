@@ -86,8 +86,10 @@ public sealed partial class AppleTestFlightWorkerTests
             AppleTestFlightWorker.FailureStage(stage, new InvalidOperationException("terminal source or policy validation")));
     }
 
-    [Fact]
-    public void PinnedEntryAdmitsOnlyStrictlyBehindWorkerSource_AndDoesNotMoveTheCheckout()
+    [Theory]
+    [InlineData("main")]
+    [InlineData("master")]
+    public void PinnedEntryAdmitsOnlyStrictlyBehindWorkerSource_AndDoesNotMoveTheCheckout(string branch)
     {
         var root = Sandbox();
         try
@@ -96,20 +98,20 @@ public sealed partial class AppleTestFlightWorkerTests
             var consumer = Path.Combine(root, "consumer");
             RunTool("git", root, "init", "--bare", "--quiet", origin);
             RunTool("git", root, "clone", "--quiet", origin, consumer);
-            RunTool("git", consumer, "checkout", "-b", "main");
+            RunTool("git", consumer, "checkout", "-b", branch);
             File.WriteAllText(Path.Combine(consumer, "source"), "one");
             Commit(consumer);
-            RunTool("git", consumer, "push", "--quiet", "origin", "main");
+            RunTool("git", consumer, "push", "--quiet", "origin", branch);
             var first = RunTool("git", consumer, "rev-parse", "HEAD").Trim();
             File.WriteAllText(Path.Combine(consumer, "source"), "two");
             Commit(consumer);
-            RunTool("git", consumer, "push", "--quiet", "origin", "main");
+            RunTool("git", consumer, "push", "--quiet", "origin", branch);
             // This exact synthetic reset models a clean dedicated checkout that
             // has not yet observed the next merge; no user checkout is involved.
             RunTool("git", consumer, "reset", "--hard", first);
             var harness = Path.Combine(root, "entry.ps1");
             File.WriteAllText(harness, """
-                param($Owner, $Consumer, $First)
+                param($Owner, $Consumer, $First, $Branch)
                 $ErrorActionPreference='Stop'
                 $script:gitPath=(Get-Command git -CommandType Application | Select-Object -First 1).Source
                 $tokens=$null; $errors=$null
@@ -118,26 +120,26 @@ public sealed partial class AppleTestFlightWorkerTests
                     $function=$ast.Find({param($n) $n -is [Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq $name},$true)
                     Invoke-Expression $function.Extent.Text
                 }
-                try { Assert-CleanRepository -Root $Consumer -Name Consumer -RequiredBranch main; throw 'Ordinary release accepted stale main.' }
-                catch { if($_.Exception.Message -notlike '*does not match origin/main*'){throw} }
-                $head=Assert-CleanRepository -Root $Consumer -Name Consumer -RequiredBranch main -AllowBehindMain
+                try { Assert-CleanRepository -Root $Consumer -Name Consumer -RequiredBranch $Branch; throw 'Ordinary release accepted stale main.' }
+                catch { if($_.Exception.Message -notlike "*does not match origin/$Branch*"){throw} }
+                $head=Assert-CleanRepository -Root $Consumer -Name Consumer -RequiredBranch $Branch -AllowBehindMain
                 if($head -ne $First){throw 'Control admission moved source.'}
                 [IO.File]::WriteAllText((Join-Path $Consumer 'unexpected'), 'dirty')
-                try { Assert-CleanRepository -Root $Consumer -Name Consumer -RequiredBranch main -AllowBehindMain; throw 'Worker accepted dirty source.' }
+                try { Assert-CleanRepository -Root $Consumer -Name Consumer -RequiredBranch $Branch -AllowBehindMain; throw 'Worker accepted dirty source.' }
                 catch { if($_.Exception.Message -notlike '*must be clean*'){throw} }
                 Remove-Item -LiteralPath (Join-Path $Consumer 'unexpected')
-                & $script:gitPath -C $Consumer -c core.hooksPath=/dev/null merge --ff-only refs/remotes/origin/main | Out-Null
+                & $script:gitPath -C $Consumer -c core.hooksPath=/dev/null merge --ff-only "refs/remotes/origin/$Branch" | Out-Null
                 if($LASTEXITCODE -ne 0){throw 'Canonical fast-forward failed.'}
-                Assert-CleanRepository -Root $Consumer -Name Consumer -RequiredBranch main | Out-Null
+                Assert-CleanRepository -Root $Consumer -Name Consumer -RequiredBranch $Branch | Out-Null
                 [IO.File]::WriteAllText((Join-Path $Consumer 'source'), 'local divergence')
                 & $script:gitPath -C $Consumer add source
                 & $script:gitPath -C $Consumer -c user.name=Synthetic -c user.email=synthetic@example.invalid -c commit.gpgSign=false -c core.hooksPath=/dev/null commit -qm local
-                try { Assert-CleanRepository -Root $Consumer -Name Consumer -RequiredBranch main -AllowBehindMain; throw 'Worker accepted ahead source.' }
+                try { Assert-CleanRepository -Root $Consumer -Name Consumer -RequiredBranch $Branch -AllowBehindMain; throw 'Worker accepted ahead source.' }
                 catch { if($_.Exception.Message -notlike 'Git failed*'){throw} }
                 'PASS pinned behind-main lifecycle'
                 """);
             Assert.Contains("PASS pinned behind-main lifecycle", RunTool("pwsh", root, "-NoProfile", "-File", harness,
-                "-Owner", FindRepository(), "-Consumer", consumer, "-First", first));
+                "-Owner", FindRepository(), "-Consumer", consumer, "-First", first, "-Branch", branch));
         }
         finally { DeleteSandbox(root); }
     }
@@ -162,8 +164,7 @@ public sealed partial class AppleTestFlightWorkerTests
             { Repository = policy.Repository, Jobs = [new() { Id = "active", Stage = AppleTestFlightJobStage.Releasing }] });
             var path = Path.Combine(root, "policy.json");
             File.WriteAllText(path, JsonSerializer.Serialize(policy, AppleTestFlightWorker.Json));
-            var configuration = new DirectoryInfo(AppContext.BaseDirectory).Parent!.Name;
-            var cli = Path.Combine(FindRepository(), "PowerForge.Cli", "bin", configuration, "net10.0", "PowerForge.Cli.dll");
+            var cli = FindCli();
             Assert.True(File.Exists(cli));
             using var writer = new FileStream(Path.Combine(directory, "worker.lock"), FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
             foreach (var operation in new[] { "status", "pause", "resume" })

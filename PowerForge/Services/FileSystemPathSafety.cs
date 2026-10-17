@@ -3,6 +3,21 @@ namespace PowerForge;
 /// <summary>Filesystem preflight shared by artifact writers and validators; not a concurrent-mutation sandbox.</summary>
 internal static class FileSystemPathSafety
 {
+    /// <summary>Lets POSIX resolve existing links and parent traversal in kernel order; returns null for an unresolved path.</summary>
+    internal static string? ResolveExistingUnixPath(string path)
+    {
+        var resolved = RealPath(path, IntPtr.Zero);
+        if (resolved == IntPtr.Zero) return null;
+        try { return System.Runtime.InteropServices.Marshal.PtrToStringAnsi(resolved); }
+        finally { FreeNative(resolved); }
+    }
+
+    [System.Runtime.InteropServices.DllImport("libc", EntryPoint = "realpath", CharSet = System.Runtime.InteropServices.CharSet.Ansi)]
+    private static extern IntPtr RealPath(string path, IntPtr resolvedPath);
+
+    [System.Runtime.InteropServices.DllImport("libc", EntryPoint = "free")]
+    private static extern void FreeNative(IntPtr pointer);
+
     /// <summary>Resolves existing parent aliases, including macOS /var and /tmp aliases.
     /// The selected leaf itself must not be a link. This is a preflight, not a replacement-race guard.</summary>
     internal static string ResolveParentDirectoryAliases(string path)

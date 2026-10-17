@@ -13,7 +13,7 @@ public sealed partial class AppStoreConnectClientTests
             => new(HttpStatusCode.OK, $$"""{ "data": [], "meta": { "paging": { "total": {{total}} } } }""");
 
         var handler = new SequenceHandler(
-            new SequenceResponse(HttpStatusCode.OK, """{ "data": [{ "type": "appInfos", "id": "info-1", "attributes": { "state": "PREPARE_FOR_SUBMISSION" } }] }"""),
+            new SequenceResponse(HttpStatusCode.OK, """{ "data": [{ "type": "appInfos", "id": "info-1", "attributes": { "state": "PREPARE_FOR_SUBMISSION", "appStoreAgeRating": "FOUR_PLUS" } }] }"""),
             One("ageRatingDeclarations", "age-1"),
             One("appStoreReviewDetails", "review-1", "{ \"contactFirstName\": \"Ada\", \"contactLastName\": \"Lovelace\", \"contactPhone\": \"+48123456789\", \"contactEmail\": \"review@example.test\", \"demoAccountRequired\": true, \"demoAccountName\": \"apple-review\", \"demoAccountPassword\": \"secret-present-not-retained\" }"),
             One("appStoreVersionPhasedReleases", "phase-1", "{ \"phasedReleaseState\": \"ACTIVE\" }"),
@@ -107,6 +107,7 @@ public sealed partial class AppStoreConnectClientTests
         Assert.True(state.ReviewDemoAccountRequired);
         Assert.False(state.ReviewDemoCredentialsConfigured);
         Assert.False(state.ReviewDetailsConfigured);
+        Assert.False(state.AgeRatingDeclared);
         Assert.DoesNotContain("apple-review", System.Text.Json.JsonSerializer.Serialize(state), StringComparison.Ordinal);
     }
 }

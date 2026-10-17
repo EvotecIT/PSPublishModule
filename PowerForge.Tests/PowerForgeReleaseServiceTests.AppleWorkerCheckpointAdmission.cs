@@ -98,7 +98,10 @@ public sealed partial class PowerForgeReleaseServiceTests
                 & $validator -ConfigPath (Join-Path $Consumer 'powerforge.release.json') -SourceCommit $Source -SkipToolManifest -PublisherCheckpointPaths $script:publisherCheckpointPaths
                 """ );
             var configuration = new DirectoryInfo(AppContext.BaseDirectory).Parent!.Name;
-            var cli = Path.Combine(owner, "PowerForge.Cli", "bin", configuration, "net10.0", "PowerForge.Cli.dll");
+            var configuredCli = Environment.GetEnvironmentVariable(PowerForgeCliTestHost.AssemblyPathEnvironmentVariable);
+            var cli = configuredCli is null
+                ? Path.Combine(owner, "PowerForge.Cli", "bin", configuration, "net10.0", "PowerForge.Cli.dll")
+                : PowerForgeCliTestHost.ResolveAssemblyPath(owner, configuredCli);
             var start = new ProcessStartInfo("/usr/local/bin/pwsh") { WorkingDirectory = root, RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false };
             foreach (var value in new[] { "-NoProfile", "-NonInteractive", "-File", harness, "-Owner", owner, "-Consumer", consumer,
                 "-Policy", policyPath, "-Cli", cli, "-State", stateRoot, "-Source", source }) start.ArgumentList.Add(value);
@@ -142,9 +145,5 @@ public sealed partial class PowerForgeReleaseServiceTests
     }
 
     private static string FindWorkerOwner()
-    {
-        for (var directory = new DirectoryInfo(AppContext.BaseDirectory); directory is not null; directory = directory.Parent)
-            if (File.Exists(Path.Combine(directory.FullName, "PSPublishModule.sln"))) return directory.FullName;
-        throw new InvalidOperationException("Owner source was not found.");
-    }
+        => PowerForgeCliTestHost.FindRepositoryRoot();
 }

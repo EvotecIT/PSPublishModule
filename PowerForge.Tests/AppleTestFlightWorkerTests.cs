@@ -130,12 +130,14 @@ public sealed partial class AppleTestFlightWorkerTests
     }
 
     [Theory]
-    [InlineData("Build now", "351", "refs/heads/main", true)]
-    [InlineData("Automatic: Selected PRs", "", "refs/heads/main", true)]
-    [InlineData("Build now", "351", "refs/heads/untrusted", false)]
-    [InlineData("Automatic: Off", "351", "refs/heads/main", false)]
-    [InlineData("Build now", "1; arbitrary command", "refs/heads/main", false)]
-    public void RequestWorkflow_ProducesValidatedArtifact_WithoutExecutingInputs(string operation, string number, string sourceRef, bool accepted)
+    [InlineData("Build now", "351", "refs/heads/main", "main", true)]
+    [InlineData("Automatic: Selected PRs", "", "refs/heads/main", "main", true)]
+    [InlineData("Build now", "351", "refs/heads/untrusted", "main", false)]
+    [InlineData("Automatic: Off", "351", "refs/heads/main", "main", false)]
+    [InlineData("Build now", "1; arbitrary command", "refs/heads/main", "main", false)]
+    [InlineData("Build now", "351", "refs/heads/master", "master", true)]
+    [InlineData("Build now", "351", "refs/heads/main", "master", false)]
+    public void RequestWorkflow_ProducesValidatedArtifact_WithoutExecutingInputs(string operation, string number, string sourceRef, string defaultBranch, bool accepted)
     {
         if (!File.Exists("/usr/bin/python3")) return;
         var repository = FindRepository();
@@ -150,7 +152,7 @@ public sealed partial class AppleTestFlightWorkerTests
             foreach (var entry in new Dictionary<string, string> {
                 ["REQUEST_OPERATION"] = operation, ["REQUEST_PULL_REQUEST"] = number, ["REQUEST_REPOSITORY"] = "owner/app",
                 ["REQUEST_RUN_ID"] = "1234", ["REQUEST_ACTOR"] = "maintainer", ["REQUEST_REF"] = sourceRef,
-                ["REQUEST_SHA"] = new string('a', 40), ["REQUEST_EVENT"] = "workflow_dispatch", ["GITHUB_STEP_SUMMARY"] = Path.Combine(root, "summary") })
+                ["REQUEST_DEFAULT_BRANCH"] = defaultBranch, ["REQUEST_SHA"] = new string('a', 40), ["REQUEST_EVENT"] = "workflow_dispatch", ["GITHUB_STEP_SUMMARY"] = Path.Combine(root, "summary") })
                 start.Environment[entry.Key] = entry.Value;
             using var process = new Process { StartInfo = start };
             process.Start();
@@ -171,6 +173,10 @@ public sealed partial class AppleTestFlightWorkerTests
     [Theory]
     [InlineData("MARKETING_VERSION: \"2.2\"\nCURRENT_PROJECT_VERSION: \"28\"", "MARKETING_VERSION: \"2.2\"\nCURRENT_PROJECT_VERSION: \"29\"", true)]
     [InlineData("CURRENT_PROJECT_VERSION = 28;\nPRODUCT_BUNDLE_IDENTIFIER = app;", "CURRENT_PROJECT_VERSION = 29;\nPRODUCT_BUNDLE_IDENTIFIER = app;", true)]
+    [InlineData("MARKETING_VERSION = 0.1 // public train\r\nCURRENT_PROJECT_VERSION = 1\r\n", "MARKETING_VERSION = \"1.0\" // public train\r\nCURRENT_PROJECT_VERSION = \"2\"\r\n", true)]
+    [InlineData("CURRENT_PROJECT_VERSION: 28 # beta\r\n", "CURRENT_PROJECT_VERSION: \"29\" # beta\r\n", true)]
+    [InlineData("CURRENT_PROJECT_VERSION = 28 // keep policy\r\n", "CURRENT_PROJECT_VERSION = 29 // changed policy\r\n", false)]
+    [InlineData("CURRENT_PROJECT_VERSION = 28\r\nSWIFT_VERSION = 6\r\n", "CURRENT_PROJECT_VERSION = 29\r\nSWIFT_VERSION = 5\r\n", false)]
     [InlineData("CURRENT_PROJECT_VERSION = 28;\nSDKROOT = iphoneos;", "CURRENT_PROJECT_VERSION = 29;\nSDKROOT = macosx;", false)]
     [InlineData("CURRENT_PROJECT_VERSION: \"28\"", "CURRENT_PROJECT_VERSION: \"29\"\nscript: arbitrary", false)]
     public void PublisherCheckpoint_OnlyVersionFieldsMayChange(string before, string after, bool allowed)
@@ -252,10 +258,20 @@ public sealed partial class AppleTestFlightWorkerTests
         return root;
     }
 
-    private static string FindRepository()
+    private static string FindCli()
     {
-        for (var directory = new DirectoryInfo(AppContext.BaseDirectory); directory is not null; directory = directory.Parent)
-            if (File.Exists(Path.Combine(directory.FullName, "PSPublishModule.sln"))) return directory.FullName;
+        var configured = Environment.GetEnvironmentVariable(PowerForgeCliTestHost.AssemblyPathEnvironmentVariable)
+            ?? Environment.GetEnvironmentVariable("POWERFORGE_TEST_CLI_PATH");
+        if (configured is not null) return PowerForgeCliTestHost.ResolveAssemblyPath(FindRepository(), configured);
+        var configuration = new DirectoryInfo(AppContext.BaseDirectory).Parent!.Name;
+        return Path.Combine(FindRepository(), "PowerForge.Cli", "bin", configuration, "net10.0", "PowerForge.Cli.dll");
+    }
+
+    private static string FindRepository([System.Runtime.CompilerServices.CallerFilePath] string sourcePath = "")
+    {
+        foreach (var start in new[] { AppContext.BaseDirectory, Path.GetDirectoryName(sourcePath)! })
+            for (var directory = new DirectoryInfo(start); directory is not null; directory = directory.Parent)
+                if (File.Exists(Path.Combine(directory.FullName, "PSPublishModule.sln"))) return directory.FullName;
         throw new InvalidOperationException("Could not locate repository workflow fixture.");
     }
 }
