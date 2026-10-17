@@ -4,12 +4,14 @@ using System.Text.RegularExpressions;
 namespace PowerForge;
 
 /// <summary>
-/// Reads and compare-and-write updates the shared version values in an XcodeGen project specification.
+/// Reads and compare-and-write updates shared version values in an XcodeGen specification or Xcode configuration.
 /// </summary>
 internal sealed class AppleReleaseVersionSourceService
 {
     private static readonly Regex MarketingVersionPattern = CreateSettingPattern("MARKETING_VERSION");
     private static readonly Regex BuildNumberPattern = CreateSettingPattern("CURRENT_PROJECT_VERSION");
+    private static readonly Regex ConfigurationMarketingVersionPattern = CreateConfigurationSettingPattern("MARKETING_VERSION");
+    private static readonly Regex ConfigurationBuildNumberPattern = CreateConfigurationSettingPattern("CURRENT_PROJECT_VERSION");
     private static readonly Regex MarketingVersionValuePattern = new(
         "^\\d+\\.\\d+(?:\\.\\d+)?$",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
@@ -33,11 +35,12 @@ internal sealed class AppleReleaseVersionSourceService
     internal PowerForgeAppleVersionReceipt Read(string sourcePath, string content)
     {
         var fullPath = ResolveSourcePath(sourcePath);
+        var (marketingPattern, buildPattern) = ResolvePatterns(fullPath);
         return new PowerForgeAppleVersionReceipt
         {
             SourcePath = fullPath,
-            MarketingVersion = ReadSingleValue(content, MarketingVersionPattern, "MARKETING_VERSION", fullPath),
-            BuildNumber = ReadSingleValue(content, BuildNumberPattern, "CURRENT_PROJECT_VERSION", fullPath)
+            MarketingVersion = ReadSingleValue(content, marketingPattern, "MARKETING_VERSION", fullPath),
+            BuildNumber = ReadSingleValue(content, buildPattern, "CURRENT_PROJECT_VERSION", fullPath)
         };
     }
 
@@ -59,10 +62,11 @@ internal sealed class AppleReleaseVersionSourceService
 
         var fullPath = ResolveSourcePath(sourcePath);
         var content = approvedContent ?? throw new ArgumentNullException(nameof(approvedContent));
-        var previousMarketingVersion = ReadSingleValue(content, MarketingVersionPattern, "MARKETING_VERSION", fullPath);
-        var previousBuildNumber = ReadSingleValue(content, BuildNumberPattern, "CURRENT_PROJECT_VERSION", fullPath);
-        var updated = ReplaceSingleValue(content, MarketingVersionPattern, marketingVersion.Trim());
-        updated = ReplaceSingleValue(updated, BuildNumberPattern, buildNumber.Trim());
+        var (marketingPattern, buildPattern) = ResolvePatterns(fullPath);
+        var previousMarketingVersion = ReadSingleValue(content, marketingPattern, "MARKETING_VERSION", fullPath);
+        var previousBuildNumber = ReadSingleValue(content, buildPattern, "CURRENT_PROJECT_VERSION", fullPath);
+        var updated = ReplaceSingleValue(content, marketingPattern, marketingVersion.Trim());
+        updated = ReplaceSingleValue(updated, buildPattern, buildNumber.Trim());
         var changed = !string.Equals(content, updated, StringComparison.Ordinal);
 
         if (changed && !whatIf)
@@ -86,6 +90,16 @@ internal sealed class AppleReleaseVersionSourceService
         => new(
             "(?m)^(?<prefix>\\s*" + Regex.Escape(settingName) + "\\s*:\\s*)(?<quote>[\\\"']?)(?<value>[^\\\"'\\r\\n#]+?)(?:\\k<quote>)(?<suffix>\\s*(?:#.*)?)$",
             RegexOptions.Compiled);
+
+    private static Regex CreateConfigurationSettingPattern(string settingName)
+        => new(
+            "(?m)^(?<prefix>[ \\t]*" + Regex.Escape(settingName) + "[ \\t]*=[ \\t]*)(?<quote>[\\\"']?)(?<value>[^\\\"'\\r\\n/;]+?)(?:\\k<quote>)(?<suffix>[ \\t]*(?://[^\\r\\n]*)?\\r?)$",
+            RegexOptions.Compiled);
+
+    private static (Regex Marketing, Regex Build) ResolvePatterns(string path)
+        => Path.GetExtension(path).Equals(".xcconfig", StringComparison.OrdinalIgnoreCase)
+            ? (ConfigurationMarketingVersionPattern, ConfigurationBuildNumberPattern)
+            : (MarketingVersionPattern, BuildNumberPattern);
 
     private static string ReadSingleValue(string content, Regex pattern, string settingName, string sourcePath)
     {

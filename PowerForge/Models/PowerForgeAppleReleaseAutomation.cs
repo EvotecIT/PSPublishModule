@@ -87,7 +87,7 @@ internal sealed class PowerForgeAppleReleaseAutomationOptions
     /// <summary>Exclusive operation lock path relative to the Apple project root.</summary>
     public string LockPath { get; set; } = "build/powerforge/apple/release.lock";
 
-    /// <summary>Optional checked-in XcodeGen project.yml used as the authoritative version source.</summary>
+    /// <summary>Checked-in XcodeGen specification or shared .xcconfig used as the authoritative version source.</summary>
     public string? VersionSourcePath { get; set; }
 
     /// <summary>

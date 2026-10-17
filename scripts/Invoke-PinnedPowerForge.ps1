@@ -10,6 +10,9 @@ param(
     [ValidatePattern('^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$')]
     [string] $ExpectedConsumerRepository,
 
+    [ValidateSet('main', 'master')]
+    [string] $ExpectedConsumerBranch = 'main',
+
     [switch] $LoadFixedLocalAppleProfile,
 
     [Parameter(Mandatory, Position = 0, ValueFromRemainingArguments)]
@@ -19,7 +22,7 @@ param(
 $ErrorActionPreference = 'Stop'
 $toolRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 $consumer = [IO.Path]::GetFullPath($ConsumerRoot)
-$requiredBranch = 'main'
+$requiredBranch = $ExpectedConsumerBranch
 $temporaryRoot = Join-Path ([IO.Path]::GetTempPath()) ("PowerForge.LocalOperator." + [guid]::NewGuid().ToString('N'))
 $script:validatedCredentialEnvironment = @{}
 $script:allowedConsumerEvidencePaths = [Collections.Generic.HashSet[string]]::new(
@@ -95,7 +98,7 @@ function Assert-CleanRepository {
         Invoke-GitText -Root $Root -Arguments @('fetch', '--quiet', 'origin', $RequiredBranch) | Out-Null
         $remote = (Invoke-GitText -Root $Root -Arguments @('rev-parse', "refs/remotes/origin/$RequiredBranch")).ToLowerInvariant()
         if ($head -ne $remote) {
-            if (-not $AllowBehindMain -or $RequiredBranch -ne 'main') {
+            if (-not $AllowBehindMain) {
                 throw "$Name HEAD '$head' does not match origin/$RequiredBranch '$remote'."
             }
             # Behind-main admission is restricted by the command entry policy.
@@ -259,6 +262,8 @@ function Assert-SafeArguments {
         if (-not $policy -or -not [IO.Path]::IsPathRooted($policy)) { throw 'apple-testflight requires an absolute machine-local --policy path.' }
         Assert-UnlinkedPath -Path $policy -Name 'Local TestFlight policy'
         $localPolicy = Get-Content -LiteralPath $policy -Raw | ConvertFrom-Json
+        $policyBranch = if ($localPolicy.DefaultBranch) { $localPolicy.DefaultBranch } else { 'main' }
+        if ($policyBranch -ne $requiredBranch) { throw 'Local TestFlight policy default branch differs from this operator invocation.' }
         if ([IO.Path]::GetFullPath($localPolicy.ConsumerRoot) -ne $consumer -or
             $localPolicy.Repository -ne $ExpectedConsumerRepository -or
             [IO.Path]::GetFullPath($localPolicy.OwnerRoot) -ne $toolRoot -or

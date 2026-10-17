@@ -94,6 +94,7 @@ check names and group id are not taken from GitHub request inputs. For example:
 ```json
 {
   "Repository": "owner/application",
+  "DefaultBranch": "main",
   "ConsumerRoot": "/mounted-development/application-worker",
   "OwnerRoot": "/mounted-development/powerforge-pinned",
   "OwnerCommit": "0000000000000000000000000000000000000000",
@@ -117,6 +118,11 @@ check names and group id are not taken from GitHub request inputs. For example:
 ```
 
 Set enrollment time and baseline to the actual current main when enrolling.
+For a repository whose default branch is `master`, set `DefaultBranch` to
+`master` and pass `-ExpectedConsumerBranch master` to the pinned operator.
+The worker verifies the enrolled branch against GitHub and uses it for requests,
+qualification, fast-forward updates, and version checkpoints. Existing policies
+default to `main`.
 Use the exact successful job names in the application's main-push qualification
 workflow, including matrix suffixes. The worker verifies that workflow's latest
 exact-source push run and all enrolled jobs succeeded. PR-head success and skipped

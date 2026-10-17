@@ -70,8 +70,8 @@ internal sealed partial class AppleTestFlightWorker
             PublishCheckpoint(job);
             return;
         }
-        Git("fetch", "--quiet", "origin", "main");
-        var remote = Git("rev-parse", "refs/remotes/origin/main");
+        Git("fetch", "--quiet", "origin", _policy.DefaultBranch);
+        var remote = Git("rev-parse", $"refs/remotes/origin/{_policy.DefaultBranch}");
         var head = Git("rev-parse", "HEAD");
         if (job.Stage is AppleTestFlightJobStage.ReleaseReady or AppleTestFlightJobStage.AppleProcessingPending)
         {
@@ -99,13 +99,13 @@ internal sealed partial class AppleTestFlightWorker
             return;
         }
         AssertClean();
-        if (head != remote) Git("merge", "--ff-only", "refs/remotes/origin/main");
+        if (head != remote) Git("merge", "--ff-only", $"refs/remotes/origin/{_policy.DefaultBranch}");
         job.Source = remote;
         job.OriginalSource = remote;
         foreach (var number in job.IncludedPullRequests)
         {
             var pull = Api($"pulls/{number}");
-            if (!pull.GetProperty("merged").GetBoolean() || Text(pull.GetProperty("base"), "ref") != "main" || Text(pull.GetProperty("base").GetProperty("repo"), "full_name") != _policy.Repository)
+            if (!pull.GetProperty("merged").GetBoolean() || Text(pull.GetProperty("base"), "ref") != _policy.DefaultBranch || Text(pull.GetProperty("base").GetProperty("repo"), "full_name") != _policy.Repository)
                 throw new InvalidOperationException($"PR {number} is not merged into this repository's main.");
             Git("merge-base", "--is-ancestor", Text(pull, "merge_commit_sha"), remote);
         }
@@ -121,7 +121,7 @@ internal sealed partial class AppleTestFlightWorker
         job.Build = approved.Versioning.BuildNumber;
         if (approved.ShipPhase == PowerForgeAppleShipPhase.VersionCheckpoint)
         {
-            RequireUnprotectedMain();
+            RequireUnprotectedDefaultBranch();
             SetStage(AppleTestFlightJobStage.CheckpointExecuting);
             var checkpoint = InvokeShip(plan: false);
             if (!checkpoint.Success || checkpoint.ShipPhase != PowerForgeAppleShipPhase.VersionCheckpoint)
@@ -169,9 +169,9 @@ internal sealed partial class AppleTestFlightWorker
             throw new InvalidOperationException("Worker source has unexpected tracked or untracked changes. Preserve and inspect them.");
     }
 
-    private void RequireUnprotectedMain()
+    private void RequireUnprotectedDefaultBranch()
     {
-        if (Api("branches/main").GetProperty("protected").GetBoolean() || Api("rules/branches/main").GetArrayLength() != 0)
+        if (Api($"branches/{Uri.EscapeDataString(_policy.DefaultBranch)}").GetProperty("protected").GetBoolean() || Api($"rules/branches/{Uri.EscapeDataString(_policy.DefaultBranch)}").GetArrayLength() != 0)
             throw new InvalidOperationException("Main branch policy requires a reviewed change. Publisher metadata push is held; no policy bypass is permitted.");
     }
 
@@ -190,7 +190,7 @@ internal sealed partial class AppleTestFlightWorker
     internal static bool PublisherVersionOnly(string before, string after)
     {
         string Normalize(string value) => Regex.Replace(value,
-            @"(?m)^(?<prefix>[ \t]*(?:MARKETING_VERSION|CURRENT_PROJECT_VERSION)[ \t]*(?::|=)[ \t]*)(?:[""']?\d+(?:\.\d+){0,2}[""']?)(?<suffix>[ \t]*;?[ \t]*(?:#.*)?)$", "${prefix}<publisher-version>${suffix}");
+            @"(?m)^(?<prefix>[ \t]*(?:MARKETING_VERSION|CURRENT_PROJECT_VERSION)[ \t]*(?::|=)[ \t]*)(?:[""']?\d+(?:\.\d+){0,2}[""']?)(?<suffix>[ \t]*;?[ \t]*(?:(?:#|//)[^\r\n]*)?\r?)$", "${prefix}<publisher-version>${suffix}");
         return before != after && Normalize(before) == Normalize(after);
     }
 
@@ -199,9 +199,9 @@ internal sealed partial class AppleTestFlightWorker
         // A successful child checkpoint can finish after Off/pause was observed.
         // Its local metadata remains recoverable; do not publish it in that pass.
         if (!UpdateGate()) { SetStage(AppleTestFlightJobStage.CheckpointReady, "Publisher checkpoint is held by current Off/selection/pause intent."); return; }
-        RequireUnprotectedMain();
-        Git("fetch", "--quiet", "origin", "main");
-        if (Git("rev-parse", "refs/remotes/origin/main") != job.OriginalSource || Git("rev-parse", "HEAD") != job.OriginalSource)
+        RequireUnprotectedDefaultBranch();
+        Git("fetch", "--quiet", "origin", _policy.DefaultBranch);
+        if (Git("rev-parse", $"refs/remotes/origin/{_policy.DefaultBranch}") != job.OriginalSource || Git("rev-parse", "HEAD") != job.OriginalSource)
             throw new InvalidOperationException("Main moved during the publisher checkpoint. Preserve the narrow diff for operator reconciliation.");
         ValidatePublisherDiff(job);
         SyncRequests();
@@ -221,8 +221,8 @@ internal sealed partial class AppleTestFlightWorker
         // exact commit and let the ordinary ambiguous-mutation hold reconcile it.
         SyncRequests();
         if (!UpdateGate()) throw new InvalidOperationException("Publisher checkpoint committed locally, but Off/pause now holds its push. Reconcile the retained exact commit.");
-        Git("push", "origin", "HEAD:refs/heads/main");
-        if (Git("ls-remote", "origin", "refs/heads/main").Split('\t')[0] != job.Source)
+        Git("push", "origin", $"HEAD:refs/heads/{_policy.DefaultBranch}");
+        if (Git("ls-remote", "origin", $"refs/heads/{_policy.DefaultBranch}").Split('\t')[0] != job.Source)
             throw new InvalidOperationException("Publisher checkpoint was not read back as the current remote main.");
         AssertClean();
         SetStage(AppleTestFlightJobStage.ReleaseReady, "Original qualification is retained only for this inspected publisher-only checkpoint; signed archives still use the exact checkpoint source.");

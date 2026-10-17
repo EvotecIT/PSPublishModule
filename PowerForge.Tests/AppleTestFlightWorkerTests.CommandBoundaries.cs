@@ -70,8 +70,7 @@ public sealed partial class AppleTestFlightWorkerTests
 
     internal static (int ExitCode, string Output, string Error) RunCliWithEnvironment(string root, IReadOnlyDictionary<string, string> environment, params string[] arguments)
     {
-        var configuration = new DirectoryInfo(AppContext.BaseDirectory).Parent!.Name;
-        var cli = Path.Combine(FindRepository(), "PowerForge.Cli", "bin", configuration, "net10.0", "PowerForge.Cli.dll");
+        var cli = FindCli();
         var start = new ProcessStartInfo("dotnet") { WorkingDirectory = root, UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardError = true };
         start.ArgumentList.Add(cli);
         foreach (var argument in arguments) start.ArgumentList.Add(argument);

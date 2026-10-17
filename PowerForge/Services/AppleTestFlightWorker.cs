@@ -145,6 +145,8 @@ internal sealed partial class AppleTestFlightWorker
 
     internal static void ValidatePolicy(AppleTestFlightWorkerPolicy policy)
     {
+        if (policy.DefaultBranch is not ("main" or "master"))
+            throw new ArgumentException("Worker DefaultBranch must be main or master.");
         if (!Regex.IsMatch(policy.Repository, @"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$") ||
             !Regex.IsMatch(policy.OwnerCommit, @"^[0-9a-fA-F]{40}$") || !Regex.IsMatch(policy.BaselineSourceCommit, @"^[0-9a-fA-F]{40}$") ||
             policy.AcceptRequestsAfter == default || policy.AcceptRequestsAfter > DateTimeOffset.UtcNow)

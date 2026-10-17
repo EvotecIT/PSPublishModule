@@ -1941,6 +1941,9 @@ internal sealed partial class PowerForgeReleaseService
                 explicitObservation: observedMarketingVersion is not null))
             .ToArray();
 
+        if (request.AppleAction != PowerForgeAppleReleaseAction.Cleanup && observedMarketingVersion is null)
+            ApplyAppleConfigurationVersionSource(apps, versionSourcePath);
+
         foreach (var app in apps)
         {
             if (!options.Archive &&

@@ -5,6 +5,8 @@ namespace PowerForge;
 internal sealed class AppleTestFlightWorkerPolicy
 {
     public string Repository { get; set; } = "";
+    /// <summary>The enrolled repository's default branch; verified against GitHub before mutation.</summary>
+    public string DefaultBranch { get; set; } = "main";
     public string ConsumerRoot { get; set; } = "";
     public string OwnerRoot { get; set; } = "";
     public string OwnerCommit { get; set; } = "";

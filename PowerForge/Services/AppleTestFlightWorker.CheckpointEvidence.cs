@@ -14,10 +14,10 @@ internal sealed partial class AppleTestFlightWorker
         // The pinned entry verifies owner source before compiling this reader.
         // Keep this local evidence operation read-only and independent of GitHub availability.
         AssertOrigin(_policy.ConsumerRoot, _policy.Repository);
-        if (Git("symbolic-ref", "--short", "HEAD") != "main" || Git("for-each-ref", "--format=%(refname)", "refs/replace").Length != 0)
+        if (Git("symbolic-ref", "--short", "HEAD") != _policy.DefaultBranch || Git("for-each-ref", "--format=%(refname)", "refs/replace").Length != 0)
             throw new InvalidOperationException("Checkpoint source must be main without replacement refs.");
         if (Git("rev-parse", "HEAD") != job.OriginalSource || job.Source != job.OriginalSource ||
-            Git("rev-parse", "refs/remotes/origin/main") != job.OriginalSource ||
+            Git("rev-parse", $"refs/remotes/origin/{_policy.DefaultBranch}") != job.OriginalSource ||
             Git("diff", "--cached", "--name-only").Length != 0)
             throw new InvalidOperationException("Restart admission requires the original current main and an unstaged completed publisher checkpoint.");
         var apple = ReadSpec().AppleApps!;
