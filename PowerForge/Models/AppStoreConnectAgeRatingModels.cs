@@ -4,29 +4,32 @@ namespace PowerForge;
 public sealed class AppStoreConnectAgeRatingAnswers
 {
     private AppStoreConnectAgeRatingAnswers? _originalAnswers;
+    private string? _originalDeclarationId;
     private string? _kidsAgeBand;
     private bool _clearKidsAgeBand;
+    private long _kidsAgeBandClearVersion;
 
     internal AppStoreConnectAgeRatingAnswers? OriginalAnswers => _originalAnswers;
+    internal string? OriginalDeclarationId => _originalDeclarationId;
     internal bool KidsAgeBandClearRequested => _clearKidsAgeBand;
+    internal long KidsAgeBandClearVersion => _kidsAgeBandClearVersion;
 
     internal AppStoreConnectAgeRatingAnswers CreateSubmissionSnapshot()
         => (AppStoreConnectAgeRatingAnswers)MemberwiseClone();
 
-    internal void CaptureOriginalAnswers()
+    internal void CaptureOriginalAnswers(string declarationId)
     {
         var original = (AppStoreConnectAgeRatingAnswers)MemberwiseClone();
         original._originalAnswers = null;
-        original._clearKidsAgeBand = false;
         _originalAnswers = original;
+        _originalDeclarationId = declarationId;
     }
 
-    internal void AcceptSubmission(AppStoreConnectAgeRatingAnswers submitted)
+    internal void AcceptSubmission(AppStoreConnectAgeRatingAnswers submitted, string declarationId)
     {
-        submitted.CaptureOriginalAnswers();
+        submitted.CaptureOriginalAnswers(declarationId);
         _originalAnswers = submitted._originalAnswers;
-        if (submitted._clearKidsAgeBand && _kidsAgeBand is null)
-            _clearKidsAgeBand = false;
+        _originalDeclarationId = declarationId;
     }
 
     /// <summary>Publisher answer for Apple's <c>advertising</c> question.</summary>
@@ -61,11 +64,12 @@ public sealed class AppStoreConnectAgeRatingAnswers
         }
     }
 
-    /// <summary>Requests an explicit null Made for Kids age band on the next update. Apple permits changing this selection only before App Review approval.</summary>
+    /// <summary>Requests an explicit null Made for Kids age band. Successful submission suppresses the same clear on that declaration; a different declaration or another call requests a new clear. Apple permits changing this selection only before App Review approval.</summary>
     public void ClearKidsAgeBand()
     {
         _kidsAgeBand = null;
         _clearKidsAgeBand = true;
+        _kidsAgeBandClearVersion++;
     }
 
     /// <summary>Publisher answer for Apple's <c>lootBox</c> question.</summary>

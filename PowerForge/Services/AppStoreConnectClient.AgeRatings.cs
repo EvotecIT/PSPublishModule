@@ -19,17 +19,17 @@ public sealed partial class AppStoreConnectClient
     {
         RequireValue(declarationId, nameof(declarationId), "Age declaration id");
         if (answers is null) throw new ArgumentNullException(nameof(answers));
-        var submitted = answers.CreateSubmissionSnapshot();
-        var attributes = BuildAgeRatingAttributes(submitted);
-        if (attributes.Count == 0) throw new ArgumentException("Supply at least one explicit age questionnaire answer.", nameof(answers));
         var id = declarationId.Trim();
+        var submitted = answers.CreateSubmissionSnapshot();
+        var attributes = BuildAgeRatingAttributes(submitted, id);
+        if (attributes.Count == 0) throw new ArgumentException("Supply at least one explicit age questionnaire answer.", nameof(answers));
         using var document = await SendJsonAsync(new HttpMethod("PATCH"), $"ageRatingDeclarations/{Uri.EscapeDataString(id)}",
             new { data = new { type = "ageRatingDeclarations", id, attributes } }, cancellationToken).ConfigureAwait(false)
             ?? throw new InvalidOperationException("Apple returned no age declaration response.");
         if (!document.RootElement.TryGetProperty("data", out var data) || data.ValueKind != JsonValueKind.Object)
             throw new InvalidOperationException("Apple returned no age declaration data.");
         var declaration = ParseAgeRatingDeclaration(data);
-        answers.AcceptSubmission(submitted);
+        answers.AcceptSubmission(submitted, id);
         return declaration;
     }
 
@@ -68,21 +68,25 @@ public sealed partial class AppStoreConnectClient
                 ViolenceRealistic = GetString(attributes, "violenceRealistic"),
             }
         };
-        declaration.Answers.CaptureOriginalAnswers();
+        declaration.Answers.CaptureOriginalAnswers(declaration.Id);
         return declaration;
     }
 
-    private static Dictionary<string, object?> BuildAgeRatingAttributes(AppStoreConnectAgeRatingAnswers answers)
+    private static Dictionary<string, object?> BuildAgeRatingAttributes(AppStoreConnectAgeRatingAnswers answers, string declarationId)
     {
         var attributes = ReadAgeRatingAttributes(answers);
-        if (answers.OriginalAnswers is { } originalAnswers)
+        var originalAnswers = string.Equals(answers.OriginalDeclarationId, declarationId, StringComparison.Ordinal)
+            ? answers.OriginalAnswers : null;
+        if (originalAnswers is not null)
         {
             var original = ReadAgeRatingAttributes(originalAnswers);
             foreach (var answer in attributes.ToArray())
                 if (original.TryGetValue(answer.Key, out var previous) && Equals(previous, answer.Value))
                     attributes.Remove(answer.Key);
         }
-        if (answers.KidsAgeBandClearRequested)
+        if (answers.KidsAgeBandClearRequested &&
+            (originalAnswers?.KidsAgeBandClearRequested != true ||
+             originalAnswers.KidsAgeBandClearVersion != answers.KidsAgeBandClearVersion))
             attributes["kidsAgeBand"] = null;
         foreach (var answer in attributes)
         {
