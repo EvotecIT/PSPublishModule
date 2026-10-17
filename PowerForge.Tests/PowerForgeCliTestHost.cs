@@ -1,8 +1,17 @@
 namespace PowerForge.Tests;
 
-/// <summary>Selects the exact prebuilt CLI for compiler process tests without changing product discovery.</summary>
+/// <summary>Selects the exact prebuilt CLI for process tests without changing product discovery.</summary>
 internal static class PowerForgeCliTestHost
 {
+    internal static string FindRepositoryRoot([System.Runtime.CompilerServices.CallerFilePath] string sourceFile = "")
+    {
+        foreach (var start in new[] { AppContext.BaseDirectory, Path.GetDirectoryName(sourceFile)! })
+            for (var directory = new DirectoryInfo(start); directory is not null; directory = directory.Parent)
+                if (File.Exists(Path.Combine(directory.FullName, "PowerForge.Cli", "PowerForge.Cli.csproj")))
+                    return directory.FullName;
+        throw new DirectoryNotFoundException("Unable to locate the PowerForge CLI repository fixture.");
+    }
+
     internal const string AssemblyPathEnvironmentVariable = "POWERFORGE_TEST_CLI_ASSEMBLY_PATH";
 
     internal static string ResolveAssemblyPath(string repositoryRoot, string? configuredPath)

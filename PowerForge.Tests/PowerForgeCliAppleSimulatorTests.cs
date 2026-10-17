@@ -8,13 +8,13 @@ public sealed class PowerForgeCliAppleSimulatorTests
     [Fact]
     public async Task Simulator_json_identifies_the_cli_and_engine_builds_without_a_device()
     {
-        var directory = new DirectoryInfo(AppContext.BaseDirectory);
-        while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "PSPublishModule.sln")))
-            directory = directory.Parent;
-        var repository = directory?.FullName ?? throw new DirectoryNotFoundException("Repository root was not found.");
+        var repository = PowerForgeCliTestHost.FindRepositoryRoot();
         var configuration = typeof(PowerForgeCliAppleSimulatorTests).Assembly
             .GetCustomAttribute<AssemblyConfigurationAttribute>()!.Configuration;
-        var cli = Path.Combine(repository, "PowerForge.Cli", "bin", configuration, "net10.0", "PowerForge.Cli.dll");
+        var configuredCli = Environment.GetEnvironmentVariable(PowerForgeCliTestHost.AssemblyPathEnvironmentVariable);
+        var cli = configuredCli is null
+            ? Path.Combine(repository, "PowerForge.Cli", "bin", configuration, "net10.0", "PowerForge.Cli.dll")
+            : PowerForgeCliTestHost.ResolveAssemblyPath(repository, configuredCli);
         var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", "SimulatorCli-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
         try

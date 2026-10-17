@@ -260,8 +260,9 @@ public sealed partial class AppleTestFlightWorkerTests
 
     private static string FindCli()
     {
-        var configured = Environment.GetEnvironmentVariable("POWERFORGE_TEST_CLI_PATH");
-        if (!string.IsNullOrWhiteSpace(configured)) return Path.GetFullPath(configured);
+        var configured = Environment.GetEnvironmentVariable(PowerForgeCliTestHost.AssemblyPathEnvironmentVariable)
+            ?? Environment.GetEnvironmentVariable("POWERFORGE_TEST_CLI_PATH");
+        if (configured is not null) return PowerForgeCliTestHost.ResolveAssemblyPath(FindRepository(), configured);
         var configuration = new DirectoryInfo(AppContext.BaseDirectory).Parent!.Name;
         return Path.Combine(FindRepository(), "PowerForge.Cli", "bin", configuration, "net10.0", "PowerForge.Cli.dll");
     }
