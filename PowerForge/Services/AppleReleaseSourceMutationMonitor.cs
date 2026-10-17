@@ -44,11 +44,11 @@ internal sealed class AppleReleaseSourceMutationMonitor : IDisposable {
                 (path, flags) =>
                 {
                     // APFS reports both clone destinations and unchanged clone sources as Created.
-                    // Only this exact native event on a previously bound, still-identical regular
+                    // Only pure clone flags (optionally Created) on a bound, still-identical regular
                     // artifact file is read activity. Mixed flags and every other path still fail.
                     try
                     {
-                        if (flags == AppleMacOSFileChangeObserver.UnchangedCloneCandidate &&
+                        if (AppleMacOSFileChangeObserver.IsCloneSourceCandidate(flags) &&
                             unchangedMacOSCloneSource(path))
                             return;
                         OnMutation(this, new AppleMacOSFileChangeObserver.ChangeEventArgs(rootPath, path, flags));

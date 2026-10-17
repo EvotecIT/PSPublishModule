@@ -6,7 +6,10 @@ namespace PowerForge;
 /// <summary>Preserves native FSEvents flags so APFS clone-source notifications can be distinguished from writes.</summary>
 internal sealed class AppleMacOSFileChangeObserver : IDisposable
 {
-    internal const uint UnchangedCloneCandidate = 0x00400000 | 0x00010000 | 0x00000100;
+    private const uint CloneFile = 0x00400000 | 0x00010000;
+
+    internal static bool IsCloneSourceCandidate(uint flags)
+        => flags == CloneFile || flags == (CloneFile | 0x00000100);
     private const string Events = "/System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/FSEvents.framework/FSEvents";
     private const string Foundation = "/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation";
     private const string SystemLibrary = "/usr/lib/libSystem.B.dylib";
