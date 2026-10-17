@@ -260,9 +260,9 @@ internal sealed partial class PowerForgeReleaseService
             var platform = AssertSinglePlatformState(state, app);
             if ((plan.Action is PowerForgeAppleReleaseAction.SubmitTestFlightReview or PowerForgeAppleReleaseAction.TestFlight) &&
                 (string.IsNullOrWhiteSpace(platform.MatchedBuild?.Id) ||
+                 platform.MatchedBuild?.Expired != false ||
                  (!plan.AllowUnprocessedTestFlightBuild &&
-                  (!string.Equals(platform.MatchedBuild?.ProcessingState, "VALID", StringComparison.OrdinalIgnoreCase) ||
-                   platform.MatchedBuild?.Expired == true))))
+                  !string.Equals(platform.MatchedBuild?.ProcessingState, "VALID", StringComparison.OrdinalIgnoreCase))))
             {
                 throw new InvalidOperationException(
                     $"Apple action '{plan.Action}' requires the exact matched TestFlight build for '{app.Name}' to be available, processed and not expired. " +

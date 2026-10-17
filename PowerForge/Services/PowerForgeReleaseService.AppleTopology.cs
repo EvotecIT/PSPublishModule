@@ -99,52 +99,47 @@ internal sealed partial class PowerForgeReleaseService
         if (roots.Count == 0)
             return;
 
-        var appsByName = configuredApps.Where(static app => !string.IsNullOrWhiteSpace(ResolveAppleAppName(app)))
-            .ToDictionary(ResolveAppleAppName, StringComparer.OrdinalIgnoreCase);
-        foreach (var extension in configuredApps.Where(static app => app.Platform == ApplePlatform.macOS &&
-                     app.DistributionRoute == AppleDistributionRoute.EmbeddedCompanion &&
-                     app.ProductRole == AppleProductRole.Extension))
+        var appsByName = configuredApps.ToLookup(ResolveAppleAppName, StringComparer.OrdinalIgnoreCase);
+        var childrenByParent = configuredApps
+            .Where(static app => app.DistributionRoute == AppleDistributionRoute.EmbeddedCompanion &&
+                !string.IsNullOrWhiteSpace(app.ParentTarget))
+            .ToLookup(static app => app.ParentTarget!.Trim(), StringComparer.OrdinalIgnoreCase);
+        var pending = new Queue<string>(roots);
+        var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        while (pending.Count > 0)
         {
-            if (!appsByName.TryGetValue(extension.ParentTarget?.Trim() ?? string.Empty, out var parent) ||
-                !HasSelectedMacStoreAncestor(parent, appsByName, roots))
+            var name = pending.Dequeue();
+            if (!visited.Add(name) || !childrenByParent.Contains(name))
                 continue;
 
-            // Missing identifiers retain their existing project/identity diagnostics.
-            if (string.IsNullOrWhiteSpace(parent.BundleId) || string.IsNullOrWhiteSpace(extension.BundleId))
-                continue;
-
-            // App Store validation ITMS-90347 is stricter than general CFBundleIdentifier syntax.
-            var prefix = parent.BundleId!.Trim() + ".";
-            var bundleId = extension.BundleId!.Trim();
-            if (!bundleId.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) ||
-                bundleId.Length == prefix.Length || bundleId.Substring(prefix.Length).IndexOf('.') >= 0)
+            // Unselected duplicate names matter only when this embedding chain uses them.
+            var parents = appsByName[name].ToArray();
+            if (parents.Length != 1)
             {
                 throw new InvalidOperationException(
-                    $"Mac App Store extension '{ResolveAppleAppName(extension)}' bundle identifier '{bundleId}' must be " +
-                    $"'{prefix}<extension>' with one nonempty suffix and no additional periods.");
+                    $"Mac App Store embedding chain references ambiguous target '{name}'. Target names used by the chain must be unique.");
+            }
+            var parent = parents[0];
+            foreach (var child in childrenByParent[name])
+            {
+                pending.Enqueue(ResolveAppleAppName(child));
+                // Missing identifiers retain their existing project/identity diagnostics.
+                if (child.Platform != ApplePlatform.macOS || child.ProductRole != AppleProductRole.Extension ||
+                    string.IsNullOrWhiteSpace(parent.BundleId) || string.IsNullOrWhiteSpace(child.BundleId))
+                    continue;
+
+                // App Store validation ITMS-90347 is stricter than general CFBundleIdentifier syntax.
+                var prefix = parent.BundleId!.Trim() + ".";
+                var bundleId = child.BundleId!.Trim();
+                if (!bundleId.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) ||
+                    bundleId.Length == prefix.Length || bundleId.Substring(prefix.Length).IndexOf('.') >= 0)
+                {
+                    throw new InvalidOperationException(
+                        $"Mac App Store extension '{ResolveAppleAppName(child)}' bundle identifier '{bundleId}' must be " +
+                        $"'{prefix}<extension>' with one nonempty suffix and no additional periods.");
+                }
             }
         }
-    }
-
-    /// <summary>Follows only the configured embedding chain into a selected Mac store owner.</summary>
-    private static bool HasSelectedMacStoreAncestor(
-        AppleAppConfiguration app,
-        IReadOnlyDictionary<string, AppleAppConfiguration> appsByName,
-        HashSet<string> roots)
-    {
-        var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var name = ResolveAppleAppName(app);
-        while (!string.IsNullOrWhiteSpace(name) && visited.Add(name))
-        {
-            if (roots.Contains(name))
-                return true;
-            if (app.DistributionRoute != AppleDistributionRoute.EmbeddedCompanion ||
-                !appsByName.TryGetValue(app.ParentTarget?.Trim() ?? string.Empty, out var parent))
-                return false;
-            app = parent;
-            name = ResolveAppleAppName(app);
-        }
-        return false;
     }
 
     /// <summary>Uses the explicit target name or its supported scheme fallback consistently.</summary>

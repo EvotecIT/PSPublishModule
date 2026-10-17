@@ -100,12 +100,21 @@ public sealed class AppleTestFlightReadinessTests : IDisposable
     }
 
     [Theory]
-    [InlineData(PowerForgeAppleReleaseAction.SubmitTestFlightReview)]
-    [InlineData(PowerForgeAppleReleaseAction.TestFlight)]
-    public void BetaPlan_RejectsExpiredProcessedBuild(PowerForgeAppleReleaseAction action)
+    [InlineData(PowerForgeAppleReleaseAction.SubmitTestFlightReview, false, true)]
+    [InlineData(PowerForgeAppleReleaseAction.SubmitTestFlightReview, true, true)]
+    [InlineData(PowerForgeAppleReleaseAction.SubmitTestFlightReview, false, null)]
+    [InlineData(PowerForgeAppleReleaseAction.SubmitTestFlightReview, true, null)]
+    [InlineData(PowerForgeAppleReleaseAction.TestFlight, false, true)]
+    [InlineData(PowerForgeAppleReleaseAction.TestFlight, true, true)]
+    [InlineData(PowerForgeAppleReleaseAction.TestFlight, false, null)]
+    [InlineData(PowerForgeAppleReleaseAction.TestFlight, true, null)]
+    public void BetaPlan_RequiresKnownUnexpiredBuildIndependentlyOfProcessingPolicy(
+        PowerForgeAppleReleaseAction action, bool allowUnprocessed, bool? expired)
     {
+        var spec = Spec();
+        spec.AppleApps!.AllowUnprocessedTestFlightBuild = allowUnprocessed;
         var error = Assert.Throws<InvalidOperationException>(() =>
-            Service(request => State(request, "VALID", false, expired: true)).Execute(Spec(), Request(action)));
+            Service(request => State(request, "VALID", false, expired)).Execute(spec, Request(action)));
 
         Assert.Contains("not expired", error.Message);
     }
@@ -184,6 +193,61 @@ public sealed class AppleTestFlightReadinessTests : IDisposable
         request.Targets = ["Sample Mac"];
 
         Assert.True(Service().Execute(spec, request).Success);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void MacStoreArchivePlan_IgnoresDuplicateNamesOutsideSelectedEmbeddingChain(bool useSchemeFallback)
+    {
+        var spec = MacSpec("com.example.media.widget");
+        spec.AppleApps!.Apps = spec.AppleApps.Apps.Concat(new[]
+        {
+            new AppleAppConfiguration
+            {
+                Name = useSchemeFallback ? null : "Unrelated", Scheme = "Unrelated",
+                BundleId = "com.example.unrelated.one", Platform = ApplePlatform.macOS,
+                ProjectPath = "Sample.xcodeproj"
+            },
+            new AppleAppConfiguration
+            {
+                Name = " unrelated ", Scheme = "Other", BundleId = "com.example.unrelated.two",
+                Platform = ApplePlatform.macOS, ProjectPath = "Sample.xcodeproj"
+            }
+        }).ToArray();
+        var request = Request(PowerForgeAppleReleaseAction.Archive);
+        request.Targets = ["Sample Mac"];
+
+        Assert.True(Service().Execute(spec, request).Success);
+    }
+
+    [Fact]
+    public void MacStoreArchivePlan_RejectsAmbiguousParentUsedBySelectedEmbeddingChain()
+    {
+        var spec = MacSpec("com.example.media.helper.widget");
+        spec.AppleApps!.Apps[1].ParentTarget = "Helper";
+        spec.AppleApps.Apps = spec.AppleApps.Apps.Concat(new[]
+        {
+            new AppleAppConfiguration
+            {
+                Name = "Helper", Scheme = "Helper", BundleId = "com.example.media.helper",
+                Platform = ApplePlatform.macOS, ProjectPath = "Sample.xcodeproj",
+                ParentTarget = "Sample Mac", DistributionRoute = AppleDistributionRoute.EmbeddedCompanion,
+                ProductRole = AppleProductRole.CompanionApp
+            },
+            new AppleAppConfiguration
+            {
+                Name = " helper ", Scheme = "Other", BundleId = "com.example.other",
+                Platform = ApplePlatform.macOS, ProjectPath = "Sample.xcodeproj"
+            }
+        }).ToArray();
+        var request = Request(PowerForgeAppleReleaseAction.Archive);
+        request.Targets = ["Sample Mac"];
+
+        var error = Assert.Throws<InvalidOperationException>(() => Service().Execute(spec, request));
+
+        Assert.Contains("ambiguous", error.Message);
+        Assert.Contains("Helper", error.Message);
     }
 
     [Theory]
@@ -319,7 +383,7 @@ public sealed class AppleTestFlightReadinessTests : IDisposable
         };
 
     private static AppStoreConnectReleaseStateResult State(AppStoreConnectReleaseStateRequest request, string? processingState, bool hasStoreVersion,
-        bool? expired = null)
+        bool? expired = false)
         => new()
         {
             AppId = request.AppId, VersionString = request.VersionString, BuildNumber = request.BuildNumber,

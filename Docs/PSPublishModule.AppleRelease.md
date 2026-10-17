@@ -370,7 +370,8 @@ Use the same entry point for each transition:
 | `Cleanup` | Removes stale files only from configured archive/export roots. |
 
 `TestFlight` and `SubmitTestFlightReview` plans bind the exact remote build and
-require valid processing and a non-expired build under the default policy. They
+always require a known non-expired build. The processing override permits
+unprocessed builds without bypassing expiration checks. They
 work before a public App Store version is prepared. `SubmitAppReview` and `Release` require the
 intended build to be selected on that public version.
 
