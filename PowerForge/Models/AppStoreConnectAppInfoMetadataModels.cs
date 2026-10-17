@@ -13,6 +13,15 @@ public sealed class AppStoreConnectAppInformationInfo
 
     /// <summary>Deprecated App Store state retained for compatibility with older API responses.</summary>
     public string? AppStoreState { get; set; }
+
+    /// <summary>Apple's calculated age rating; null before the questionnaire is completed.</summary>
+    public string? AppStoreAgeRating { get; set; }
+
+    /// <summary>Primary category identifier, when category linkage was included in the response.</summary>
+    public string? PrimaryCategoryId { get; set; }
+
+    /// <summary>Secondary category identifier, when category linkage was included in the response.</summary>
+    public string? SecondaryCategoryId { get; set; }
 }
 
 /// <summary>

@@ -19,6 +19,9 @@ public sealed class AppStoreConnectAppInfo
 
     /// <summary>Primary locale.</summary>
     public string? PrimaryLocale { get; set; }
+
+    /// <summary>Publisher's explicit third-party content-rights declaration, or null when unanswered.</summary>
+    public string? ContentRightsDeclaration { get; set; }
 }
 
 /// <summary>

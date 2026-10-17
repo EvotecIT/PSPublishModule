@@ -1245,6 +1245,13 @@ behind explicit confirmation.
 
 ## App Information Metadata
 
+The .NET `AppStoreConnectClient` also exposes exact-resource reads and updates for
+app categories, content rights, and age questionnaire answers. Read the current
+resource first, review the publisher's facts, then supply only the fields to change.
+`UpdateAgeRatingDeclarationAsync` leaves null answers unchanged and does not choose
+an age override. `Doctor` requires a calculated age rating; an empty declaration
+record does not establish that the questionnaire is complete.
+
 App-level metadata is separate from version localizations in App Store Connect. Use it
 for the localized app name, subtitle, and privacy policy URL:
 

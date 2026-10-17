@@ -782,7 +782,8 @@ public sealed partial class AppStoreConnectClient : IDisposable
             Name = GetString(attrs, "name"),
             BundleId = GetString(attrs, "bundleId"),
             Sku = GetString(attrs, "sku"),
-            PrimaryLocale = GetString(attrs, "primaryLocale")
+            PrimaryLocale = GetString(attrs, "primaryLocale"),
+            ContentRightsDeclaration = GetString(attrs, "contentRightsDeclaration")
         };
     }
 
