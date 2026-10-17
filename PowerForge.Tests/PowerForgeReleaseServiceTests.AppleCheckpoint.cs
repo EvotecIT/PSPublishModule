@@ -49,7 +49,8 @@ public sealed partial class PowerForgeReleaseServiceTests
                                 Name = "Tactra",
                                 ProjectPath = "Tactra.xcodeproj",
                                 Scheme = "Tactra",
-                                Platform = ApplePlatform.iOS
+                                Platform = ApplePlatform.iOS,
+                                BundleId = "com.example.checkpoint"
                             }
                         ]
                     }
