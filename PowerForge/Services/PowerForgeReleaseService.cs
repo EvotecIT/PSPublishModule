@@ -2749,10 +2749,13 @@ internal sealed partial class PowerForgeReleaseService
                 try
                 {
                     AppleReleaseAppState.AssertMutationAllowed(plan, _appleAppStateRoot);
+                    var expectedIdentity = ResolveAppleDistributionValues(app, result.VersionUpdate);
                     upload = _uploadAppleApp(new AppleAppArchiveUploadRequest
                     {
                         ArchivePath = uploadSnapshot?.ArchivePath ?? app.ArchivePath,
                         BundleId = app.BundleId,
+                        MarketingVersion = expectedIdentity.MarketingVersion,
+                        BuildNumber = expectedIdentity.BuildNumber,
                         RequiredPrivacyUsageDescriptionKeys = app.RequiredPrivacyUsageDescriptionKeys,
                         ExportPath = directExportSnapshot?.ExportPath ?? app.ExportPath,
                         TeamId = app.TeamId,

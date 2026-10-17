@@ -1,8 +1,19 @@
 namespace PowerForge;
 
-/// <summary>Explicit publisher answers to Apple's age questionnaire. Null values are left unchanged; no answer is inferred.</summary>
+/// <summary>Publisher answers to Apple's age questionnaire. Null values are unchanged; answers read from Apple submit only edited fields.</summary>
 public sealed class AppStoreConnectAgeRatingAnswers
 {
+    private AppStoreConnectAgeRatingAnswers? _originalAnswers;
+
+    internal AppStoreConnectAgeRatingAnswers? OriginalAnswers => _originalAnswers;
+
+    internal void CaptureOriginalAnswers()
+    {
+        var original = (AppStoreConnectAgeRatingAnswers)MemberwiseClone();
+        original._originalAnswers = null;
+        _originalAnswers = original;
+    }
+
     /// <summary>Publisher answer for Apple's <c>advertising</c> question.</summary>
     public bool? Advertising { get; set; }
 
@@ -23,6 +34,9 @@ public sealed class AppStoreConnectAgeRatingAnswers
 
     /// <summary>Publisher answer for Apple's <c>healthOrWellnessTopics</c> question.</summary>
     public bool? HealthOrWellnessTopics { get; set; }
+
+    /// <summary>Optional Made for Kids age band: FIVE_AND_UNDER, SIX_TO_EIGHT, or NINE_TO_ELEVEN.</summary>
+    public string? KidsAgeBand { get; set; }
 
     /// <summary>Publisher answer for Apple's <c>lootBox</c> question.</summary>
     public bool? LootBox { get; set; }

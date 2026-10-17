@@ -13,7 +13,7 @@ public sealed partial class AppStoreConnectClient
         return GetSingleAsync($"appInfos/{Uri.EscapeDataString(appInfoId.Trim())}/ageRatingDeclaration", ParseAgeRatingDeclaration, cancellationToken);
     }
 
-    /// <summary>Updates only supplied, human-reviewed age questionnaire answers. This never chooses an age override.</summary>
+    /// <summary>Updates supplied human-reviewed answers, or only edited fields of a read snapshot. This never chooses an age override.</summary>
     public async Task<AppStoreConnectAgeRatingDeclarationInfo> UpdateAgeRatingDeclarationAsync(
         string declarationId, AppStoreConnectAgeRatingAnswers answers, CancellationToken cancellationToken = default)
     {
@@ -33,7 +33,7 @@ public sealed partial class AppStoreConnectClient
     private static AppStoreConnectAgeRatingDeclarationInfo ParseAgeRatingDeclaration(JsonElement data)
     {
         var attributes = GetAttributes(data);
-        return new AppStoreConnectAgeRatingDeclarationInfo
+        var declaration = new AppStoreConnectAgeRatingDeclarationInfo
         {
             Id = GetString(data, "id") ?? string.Empty,
             Answers = new AppStoreConnectAgeRatingAnswers
@@ -45,6 +45,7 @@ public sealed partial class AppStoreConnectClient
                 GamblingSimulated = GetString(attributes, "gamblingSimulated"),
                 GunsOrOtherWeapons = GetString(attributes, "gunsOrOtherWeapons"),
                 HealthOrWellnessTopics = GetBool(attributes, "healthOrWellnessTopics"),
+                KidsAgeBand = GetString(attributes, "kidsAgeBand"),
                 LootBox = GetBool(attributes, "lootBox"),
                 MedicalOrTreatmentInformation = GetString(attributes, "medicalOrTreatmentInformation"),
                 MessagingAndChat = GetBool(attributes, "messagingAndChat"),
@@ -64,9 +65,33 @@ public sealed partial class AppStoreConnectClient
                 ViolenceRealistic = GetString(attributes, "violenceRealistic"),
             }
         };
+        declaration.Answers.CaptureOriginalAnswers();
+        return declaration;
     }
 
     private static Dictionary<string, object?> BuildAgeRatingAttributes(AppStoreConnectAgeRatingAnswers answers)
+    {
+        var attributes = ReadAgeRatingAttributes(answers);
+        if (answers.OriginalAnswers is { } originalAnswers)
+        {
+            var original = ReadAgeRatingAttributes(originalAnswers);
+            foreach (var answer in attributes.ToArray())
+                if (original.TryGetValue(answer.Key, out var previous) && Equals(previous, answer.Value))
+                    attributes.Remove(answer.Key);
+        }
+        foreach (var answer in attributes)
+        {
+            if (answer.Value is not string value) continue;
+            var valid = answer.Key == "kidsAgeBand"
+                ? value is "FIVE_AND_UNDER" or "SIX_TO_EIGHT" or "NINE_TO_ELEVEN"
+                : value is "NONE" or "INFREQUENT_OR_MILD" or "FREQUENT_OR_INTENSE" or "INFREQUENT" or "FREQUENT";
+            if (!valid)
+                throw new ArgumentException($"Unsupported age answer '{value}' for '{answer.Key}'.", nameof(answers));
+        }
+        return attributes;
+    }
+
+    private static Dictionary<string, object?> ReadAgeRatingAttributes(AppStoreConnectAgeRatingAnswers answers)
     {
         var attributes = new Dictionary<string, object?>(StringComparer.Ordinal);
         AddIfNotNull(attributes, "advertising", answers.Advertising);
@@ -76,6 +101,7 @@ public sealed partial class AppStoreConnectClient
         AddIfNotNull(attributes, "gamblingSimulated", answers.GamblingSimulated);
         AddIfNotNull(attributes, "gunsOrOtherWeapons", answers.GunsOrOtherWeapons);
         AddIfNotNull(attributes, "healthOrWellnessTopics", answers.HealthOrWellnessTopics);
+        AddIfNotNull(attributes, "kidsAgeBand", answers.KidsAgeBand);
         AddIfNotNull(attributes, "lootBox", answers.LootBox);
         AddIfNotNull(attributes, "medicalOrTreatmentInformation", answers.MedicalOrTreatmentInformation);
         AddIfNotNull(attributes, "messagingAndChat", answers.MessagingAndChat);
@@ -93,11 +119,6 @@ public sealed partial class AppStoreConnectClient
         AddIfNotNull(attributes, "violenceCartoonOrFantasy", answers.ViolenceCartoonOrFantasy);
         AddIfNotNull(attributes, "violenceRealisticProlongedGraphicOrSadistic", answers.ViolenceRealisticProlongedGraphicOrSadistic);
         AddIfNotNull(attributes, "violenceRealistic", answers.ViolenceRealistic);
-        foreach (var answer in attributes)
-        {
-            if (answer.Value is string value && value is not ("NONE" or "INFREQUENT_OR_MILD" or "FREQUENT_OR_INTENSE" or "INFREQUENT" or "FREQUENT"))
-                throw new ArgumentException($"Unsupported age frequency '{value}' for '{answer.Key}'.", nameof(answers));
-        }
         return attributes;
     }
 

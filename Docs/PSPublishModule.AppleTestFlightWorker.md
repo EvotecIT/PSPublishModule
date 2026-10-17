@@ -63,7 +63,7 @@ the artifact retention period.
 ## Enroll the trusted Mac
 
 Use separate clean owner and application checkouts. The owner stays at its exact
-reviewed pin; the application's worker checkout stays on main and advances only
+reviewed pin; the application's worker checkout stays on its configured default branch and advances only
 by fast-forward. Preserve ordinary development checkouts separately.
 
 The default durable state is the operator user's local application data directory
@@ -117,13 +117,13 @@ check names and group id are not taken from GitHub request inputs. For example:
 }
 ```
 
-Set enrollment time and baseline to the actual current main when enrolling.
+Set enrollment time and baseline to the actual current configured default branch when enrolling.
 For a repository whose default branch is `master`, set `DefaultBranch` to
 `master` and pass `-ExpectedConsumerBranch master` to the pinned operator.
 The worker verifies the enrolled branch against GitHub and uses it for requests,
 qualification, fast-forward updates, and version checkpoints. Existing policies
 default to `main`.
-Use the exact successful job names in the application's main-push qualification
+Use the exact successful job names in the application's default-branch push qualification
 workflow, including matrix suffixes. The worker verifies that workflow's latest
 exact-source push run and all enrolled jobs succeeded. PR-head success and skipped
 jobs do not qualify another merged commit. Qualification reuse across behavior
@@ -149,7 +149,7 @@ testers, change group membership, enable public links, or submit beta review.
 Run a bounded pass through the existing pinned operator:
 
 ```text
-pwsh -NoProfile -File <owner>/scripts/Invoke-PinnedPowerForge.ps1 -ExpectedCommit <owner-sha> -ConsumerRoot <worker-checkout> -ExpectedConsumerRepository <owner/application> -LoadFixedLocalAppleProfile apple-testflight run --policy <absolute-local-policy.json> --config powerforge.release.json --output json
+pwsh -NoProfile -File <owner>/scripts/Invoke-PinnedPowerForge.ps1 -ExpectedCommit <owner-sha> -ConsumerRoot <worker-checkout> -ExpectedConsumerRepository <owner/application> -ExpectedConsumerBranch <main-or-master> -LoadFixedLocalAppleProfile apple-testflight run --policy <absolute-local-policy.json> --config <enrolled-config-path> --output json
 ```
 
 Use `status`, `pause`, or `resume` instead of `run` to inspect or change local
@@ -237,7 +237,11 @@ added.
 
 `Build/AppleTestFlightWorker.plist.template` is a reviewable LaunchAgent template.
 Replace its tokens with enrolled absolute paths and pin, XML-escape values, and
-create its scratch `tmp` directory before installation. Installation and activation
+set `@@DEFAULT_BRANCH@@` and `@@CONFIG_PATH@@` to the policy's exact `DefaultBranch`
+and `ConfigPath`, and create its scratch `tmp` directory before installation.
+Set `@@LOG_ROOT@@` to an existing local log directory, normally
+`~/Library/Logs/PowerForge`, so launchd can open its output before the external
+development volume is available. Installation and activation
 are deliberate local operator steps. This template starts a bounded pass about
 every 15 minutes while the Mac is awake; launchd does not overlap one running job.
 The current operator source-builds privately per invocation, so compilation adds

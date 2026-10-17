@@ -8,7 +8,7 @@ public sealed partial class AppleAppArchiveService
         "^NS[A-Za-z0-9]+UsageDescription$",
         RegexOptions.CultureInvariant);
 
-    private async Task ValidatePrivacyUsageDescriptionsAsync(
+    private async Task ValidateArchivedApplicationAsync(
         AppleAppArchiveUploadRequest request,
         string archivePath,
         CancellationToken cancellationToken)
@@ -18,7 +18,10 @@ public sealed partial class AppleAppArchiveService
             .Select(static value => value.Trim())
             .Distinct(StringComparer.Ordinal)
             .ToArray();
-        if (requiredKeys.Length == 0)
+        var verifyVersion = !string.IsNullOrWhiteSpace(request.MarketingVersion) || !string.IsNullOrWhiteSpace(request.BuildNumber);
+        if (verifyVersion && request.ManageAppVersionAndBuildNumber)
+            throw new InvalidOperationException("Planned archive identity requires ManageAppVersionAndBuildNumber=false so Xcode cannot rewrite the verified version during export/upload.");
+        if (requiredKeys.Length == 0 && !verifyVersion)
             return;
         var invalidKey = requiredKeys.FirstOrDefault(key => !PrivacyUsageDescriptionKey.IsMatch(key));
         if (invalidKey is not null)
@@ -68,6 +71,21 @@ public sealed partial class AppleAppArchiveService
         {
             var identity = string.IsNullOrWhiteSpace(expectedBundleId) ? "the configured target" : $"bundle '{expectedBundleId}'";
             throw new InvalidOperationException($"Apple archive contains no primary app matching {identity}.");
+        }
+
+        foreach (var expected in new[]
+                 {
+                     (Key: "CFBundleShortVersionString", Value: request.MarketingVersion),
+                     (Key: "CFBundleVersion", Value: request.BuildNumber)
+                 })
+        {
+            if (string.IsNullOrWhiteSpace(expected.Value)) continue;
+            var expectedValue = expected.Value!.Trim();
+            var actual = await ReadPlistStringAsync(selectedInfoPlist, expected.Key,
+                request.RequireTrustedSystemTools, cancellationToken).ConfigureAwait(false);
+            if (!string.Equals(actual, expectedValue, StringComparison.Ordinal))
+                throw new InvalidOperationException(
+                    $"Archived app {expected.Key} '{actual ?? "<missing>"}' does not match planned value '{expectedValue}'. Export/upload was blocked before App Store Connect delivery.");
         }
 
         foreach (var key in requiredKeys)

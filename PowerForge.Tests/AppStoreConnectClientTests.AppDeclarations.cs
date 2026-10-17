@@ -28,7 +28,8 @@ public sealed partial class AppStoreConnectClientTests
         using var body = JsonDocument.Parse(handler.RequestBodies[1]);
         var data = body.RootElement.GetProperty("data");
         Assert.Equal("age-1", data.GetProperty("id").GetString());
-        Assert.Equal(3, data.GetProperty("attributes").EnumerateObject().Count());
+        Assert.Equal(2, data.GetProperty("attributes").EnumerateObject().Count());
+        Assert.False(data.GetProperty("attributes").TryGetProperty("messagingAndChat", out _));
         Assert.False(data.GetProperty("attributes").GetProperty("advertising").GetBoolean());
         Assert.Equal(new HttpMethod("PATCH"), handler.Methods[1]);
     }
@@ -41,7 +42,33 @@ public sealed partial class AppStoreConnectClientTests
         using var client = new AppStoreConnectClient(CreateCredential(), http);
         await Assert.ThrowsAsync<ArgumentException>(() => client.UpdateAgeRatingDeclarationAsync("age-1", new()));
         await Assert.ThrowsAsync<ArgumentException>(() => client.UpdateAgeRatingDeclarationAsync("age-1", new() { ViolenceRealistic = "safe" }));
+        await Assert.ThrowsAsync<ArgumentException>(() => client.UpdateAgeRatingDeclarationAsync("age-1", new() { KidsAgeBand = "NONE" }));
         Assert.Empty(handler.RequestUris);
+    }
+
+    [Theory]
+    [InlineData("FIVE_AND_UNDER")]
+    [InlineData("SIX_TO_EIGHT")]
+    [InlineData("NINE_TO_ELEVEN")]
+    public async Task AgeQuestionnaire_ReadsKidsBandAndPatchesOnlyChangedBand(string band)
+    {
+        var handler = new SequenceHandler(
+            new SequenceResponse(HttpStatusCode.OK, """{"data":{"id":"age-1","attributes":{"kidsAgeBand":null,"advertising":true,"messagingAndChat":false}}}"""),
+            new SequenceResponse(HttpStatusCode.OK, """{"data":{"id":"age-1","attributes":{"kidsAgeBand":"BAND","advertising":true,"messagingAndChat":true}}}""".Replace("BAND", band, StringComparison.Ordinal)));
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("https://api.appstoreconnect.apple.com/v1/") };
+        using var client = new AppStoreConnectClient(CreateCredential(), http);
+        var before = await client.GetAgeRatingDeclarationAsync("info-1");
+        Assert.Null(before!.Answers.KidsAgeBand);
+        before.Answers.KidsAgeBand = band;
+        var after = await client.UpdateAgeRatingDeclarationAsync(before.Id, before.Answers);
+        Assert.Equal(band, after.Answers.KidsAgeBand);
+        Assert.True(after.Answers.MessagingAndChat);
+        using var body = JsonDocument.Parse(handler.RequestBodies[1]);
+        var attributes = body.RootElement.GetProperty("data").GetProperty("attributes");
+        Assert.Single(attributes.EnumerateObject());
+        Assert.Equal(band, attributes.GetProperty("kidsAgeBand").GetString());
+        await Assert.ThrowsAsync<ArgumentException>(() => client.UpdateAgeRatingDeclarationAsync(after.Id, after.Answers));
+        Assert.Equal(2, handler.RequestUris.Count);
     }
 
     [Fact]

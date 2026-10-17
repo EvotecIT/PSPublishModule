@@ -18,7 +18,13 @@ public sealed partial class PowerForgeReleaseServiceTests
             var states = 0;
             var service = CreateAppleAutomationService(
                 request => CreateReleaseState(request, ++states == 1 ? null : "VALID"),
-                archiveAppleApp: CreateSuccessfulArchive,
+                archiveAppleApp: request =>
+                {
+                    var archive = CreateSuccessfulArchive(request);
+                    var app = Directory.CreateDirectory(Path.Combine(archive.ArchivePath, "Products", "Applications", "CasaRay.app"));
+                    File.WriteAllText(Path.Combine(app.FullName, "Info.plist"), "synthetic archived identity fixture");
+                    return archive;
+                },
                 uploadAppleApp: request => new AppleAppArchiveService(new NativeUploadBoundary())
                     .UploadArchiveAsync(request).GetAwaiter().GetResult());
             var source = EnsureTestSourceCommit(root);
@@ -45,6 +51,17 @@ public sealed partial class PowerForgeReleaseServiceTests
     {
         public Task<ProcessRunResult> RunAsync(ProcessRunRequest request, CancellationToken cancellationToken = default)
         {
+            if (request.FileName.EndsWith("plutil", StringComparison.Ordinal))
+            {
+                var value = request.Arguments[1] switch
+                {
+                    "CFBundleIdentifier" => "com.evotecit.casaray",
+                    "CFBundleShortVersionString" => "1.2.0",
+                    "CFBundleVersion" => "9",
+                    _ => throw new InvalidOperationException("Unexpected archived identity field.")
+                };
+                return Task.FromResult(new ProcessRunResult(0, value, string.Empty, request.FileName, TimeSpan.Zero, false));
+            }
             Assert.Contains("-exportArchive", request.Arguments);
             request.InvokePreStartBoundary();
             request.InvokeStartBoundary();
