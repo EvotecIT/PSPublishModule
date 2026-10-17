@@ -187,6 +187,31 @@ public sealed class AppleTestFlightReadinessTests : IDisposable
     }
 
     [Theory]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    public void MacStoreArchivePlan_PreservesSchemeFallbackInAncestry(bool omitRootName, bool omitHelperName)
+    {
+        var spec = MacSpec("com.example.media.helper.mac.widget");
+        if (omitRootName)
+            spec.AppleApps!.Apps[0].Name = null;
+        spec.AppleApps!.Apps[1].ParentTarget = "Sample Helper";
+        spec.AppleApps.Apps = spec.AppleApps.Apps.Append(new AppleAppConfiguration
+        {
+            Name = omitHelperName ? null : "Sample Helper", Scheme = "Sample Helper",
+            BundleId = "com.example.media.helper", Platform = ApplePlatform.macOS,
+            ProjectPath = "Sample.xcodeproj", ParentTarget = "Sample Mac",
+            DistributionRoute = AppleDistributionRoute.EmbeddedCompanion, ProductRole = AppleProductRole.CompanionApp
+        }).ToArray();
+        var request = Request(PowerForgeAppleReleaseAction.Archive);
+        request.Targets = ["Sample Mac"];
+
+        var error = Assert.Throws<InvalidOperationException>(() => Service().Execute(spec, request));
+
+        Assert.Contains("Mac App Store extension", error.Message);
+    }
+
+    [Theory]
     [InlineData("com.example.media.mac.widgets")]
     [InlineData("com.example.other.widget")]
     [InlineData("com.example.media")]

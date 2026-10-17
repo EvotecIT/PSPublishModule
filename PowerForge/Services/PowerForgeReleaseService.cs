@@ -2286,7 +2286,7 @@ internal sealed partial class PowerForgeReleaseService
         if (string.IsNullOrWhiteSpace(app.Scheme))
             throw new InvalidOperationException($"Apple app '{app.Name ?? app.ProjectPath}' requires Scheme for archive automation.");
 
-        var name = string.IsNullOrWhiteSpace(app.Name) ? app.Scheme!.Trim() : app.Name!.Trim();
+        var name = ResolveAppleAppName(app);
         var requestedProjectPath = ResolveOutputPath(projectRoot, app.ProjectPath);
         EnsurePathWithinProjectRoot(projectRoot, requestedProjectPath, $"Apple app '{name}' ProjectPath");
         var projectExists = File.Exists(requestedProjectPath) || Directory.Exists(requestedProjectPath);

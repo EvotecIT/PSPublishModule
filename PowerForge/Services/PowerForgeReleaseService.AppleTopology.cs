@@ -99,8 +99,8 @@ internal sealed partial class PowerForgeReleaseService
         if (roots.Count == 0)
             return;
 
-        var appsByName = configuredApps.Where(static app => !string.IsNullOrWhiteSpace(app.Name))
-            .ToDictionary(static app => app.Name!.Trim(), StringComparer.OrdinalIgnoreCase);
+        var appsByName = configuredApps.Where(static app => !string.IsNullOrWhiteSpace(ResolveAppleAppName(app)))
+            .ToDictionary(ResolveAppleAppName, StringComparer.OrdinalIgnoreCase);
         foreach (var extension in configuredApps.Where(static app => app.Platform == ApplePlatform.macOS &&
                      app.DistributionRoute == AppleDistributionRoute.EmbeddedCompanion &&
                      app.ProductRole == AppleProductRole.Extension))
@@ -120,8 +120,8 @@ internal sealed partial class PowerForgeReleaseService
                 bundleId.Length == prefix.Length || bundleId.Substring(prefix.Length).IndexOf('.') >= 0)
             {
                 throw new InvalidOperationException(
-                    $"Mac App Store extension '{extension.Name}' bundle identifier '{bundleId}' must be " +
-                    $"'{parent.BundleId}.<extension>' with one nonempty suffix and no additional periods.");
+                    $"Mac App Store extension '{ResolveAppleAppName(extension)}' bundle identifier '{bundleId}' must be " +
+                    $"'{prefix}<extension>' with one nonempty suffix and no additional periods.");
             }
         }
     }
@@ -133,15 +133,21 @@ internal sealed partial class PowerForgeReleaseService
         HashSet<string> roots)
     {
         var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        while (!string.IsNullOrWhiteSpace(app.Name) && visited.Add(app.Name!.Trim()))
+        var name = ResolveAppleAppName(app);
+        while (!string.IsNullOrWhiteSpace(name) && visited.Add(name))
         {
-            if (roots.Contains(app.Name!.Trim()))
+            if (roots.Contains(name))
                 return true;
             if (app.DistributionRoute != AppleDistributionRoute.EmbeddedCompanion ||
                 !appsByName.TryGetValue(app.ParentTarget?.Trim() ?? string.Empty, out var parent))
                 return false;
             app = parent;
+            name = ResolveAppleAppName(app);
         }
         return false;
     }
+
+    /// <summary>Uses the explicit target name or its supported scheme fallback consistently.</summary>
+    private static string ResolveAppleAppName(AppleAppConfiguration app)
+        => (string.IsNullOrWhiteSpace(app.Name) ? app.Scheme : app.Name)?.Trim() ?? string.Empty;
 }
