@@ -8,11 +8,16 @@ public sealed class AppStoreConnectAgeRatingAnswers
     private string? _kidsAgeBand;
     private bool _clearKidsAgeBand;
     private long _kidsAgeBandClearVersion;
+    private string? _developerAgeRatingInfoUrl;
+    private bool _clearDeveloperAgeRatingInfoUrl;
+    private long _developerAgeRatingInfoUrlClearVersion;
 
     internal AppStoreConnectAgeRatingAnswers? OriginalAnswers => _originalAnswers;
     internal string? OriginalDeclarationId => _originalDeclarationId;
     internal bool KidsAgeBandClearRequested => _clearKidsAgeBand;
     internal long KidsAgeBandClearVersion => _kidsAgeBandClearVersion;
+    internal bool DeveloperAgeRatingInfoUrlClearRequested => _clearDeveloperAgeRatingInfoUrl;
+    internal long DeveloperAgeRatingInfoUrlClearVersion => _developerAgeRatingInfoUrlClearVersion;
 
     internal AppStoreConnectAgeRatingAnswers CreateSubmissionSnapshot()
         => (AppStoreConnectAgeRatingAnswers)MemberwiseClone();
@@ -40,6 +45,25 @@ public sealed class AppStoreConnectAgeRatingAnswers
 
     /// <summary>Publisher answer for Apple's <c>contests</c> question.</summary>
     public string? Contests { get; set; }
+
+    /// <summary>Absolute URI for the publisher's age-rating information. Null leaves the value unchanged; use <see cref="ClearDeveloperAgeRatingInfoUrl"/> to remove it.</summary>
+    public string? DeveloperAgeRatingInfoUrl
+    {
+        get => _developerAgeRatingInfoUrl;
+        set
+        {
+            _developerAgeRatingInfoUrl = value;
+            _clearDeveloperAgeRatingInfoUrl = false;
+        }
+    }
+
+    /// <summary>Requests an explicit null developer age-rating URL. Successful submission suppresses the same clear for that declaration; another call or declaration requests a new clear.</summary>
+    public void ClearDeveloperAgeRatingInfoUrl()
+    {
+        _developerAgeRatingInfoUrl = null;
+        _clearDeveloperAgeRatingInfoUrl = true;
+        _developerAgeRatingInfoUrlClearVersion++;
+    }
 
     /// <summary>Publisher answer for Apple's <c>gambling</c> question.</summary>
     public bool? Gambling { get; set; }

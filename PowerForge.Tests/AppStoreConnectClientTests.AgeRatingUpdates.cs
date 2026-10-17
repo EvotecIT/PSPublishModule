@@ -5,6 +5,39 @@ namespace PowerForge.Tests;
 
 public sealed partial class AppStoreConnectClientTests
 {
+    [Fact]
+    public async Task AgeQuestionnaire_DeveloperUrlRoundTripsEditsAndExplicitClear()
+    {
+        var handler = new SequenceHandler(
+            new(HttpStatusCode.OK, """{"data":{"id":"age-1","attributes":{"developerAgeRatingInfoUrl":"https://example.com/old","advertising":false}}}"""),
+            new(HttpStatusCode.OK, """{"data":{"id":"age-1","attributes":{"developerAgeRatingInfoUrl":"https://example.com/new","advertising":false}}}"""),
+            new(HttpStatusCode.Conflict, """{"errors":[{"status":"409","title":"Retry later"}]}"""),
+            new(HttpStatusCode.OK, """{"data":{"id":"age-1","attributes":{"developerAgeRatingInfoUrl":null,"advertising":false}}}"""));
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("https://api.appstoreconnect.apple.com/v1/") };
+        using var client = new AppStoreConnectClient(CreateCredential(), http);
+        var answers = (await client.GetAgeRatingDeclarationAsync("info-1"))!.Answers;
+        Assert.Equal("https://example.com/old", answers.DeveloperAgeRatingInfoUrl);
+        answers.DeveloperAgeRatingInfoUrl = "https://example.com/new";
+        var after = await client.UpdateAgeRatingDeclarationAsync("age-1", answers);
+        Assert.Equal("https://example.com/new", after.Answers.DeveloperAgeRatingInfoUrl);
+        using (var patch = JsonDocument.Parse(handler.RequestBodies[1]))
+        {
+            var attributes = patch.RootElement.GetProperty("data").GetProperty("attributes");
+            Assert.Single(attributes.EnumerateObject());
+            Assert.Equal("https://example.com/new", attributes.GetProperty("developerAgeRatingInfoUrl").GetString());
+        }
+        answers.ClearDeveloperAgeRatingInfoUrl();
+        await Assert.ThrowsAsync<InvalidOperationException>(() => client.UpdateAgeRatingDeclarationAsync("age-1", answers));
+        await client.UpdateAgeRatingDeclarationAsync("age-1", answers);
+        Assert.Equal(handler.RequestBodies[2], handler.RequestBodies[3]);
+        using var clear = JsonDocument.Parse(handler.RequestBodies[3]);
+        Assert.Equal(JsonValueKind.Null, clear.RootElement.GetProperty("data").GetProperty("attributes").GetProperty("developerAgeRatingInfoUrl").ValueKind);
+        await Assert.ThrowsAsync<ArgumentException>(() => client.UpdateAgeRatingDeclarationAsync("age-1", answers));
+        answers.DeveloperAgeRatingInfoUrl = "relative/age-info";
+        await Assert.ThrowsAsync<ArgumentException>(() => client.UpdateAgeRatingDeclarationAsync("age-1", answers));
+        Assert.Equal(4, handler.RequestUris.Count);
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
@@ -101,11 +134,13 @@ public sealed partial class AppStoreConnectClientTests
     }
 
     [Theory]
-    [InlineData(false, false)]
-    [InlineData(false, true)]
-    [InlineData(true, false)]
-    [InlineData(true, true)]
-    public async Task AgeQuestionnaire_ReusedAnswersRetainExplicitValuesForDifferentDeclaration(bool readFirst, bool clearKidsBand)
+    [InlineData(false, null)]
+    [InlineData(false, "kidsAgeBand")]
+    [InlineData(false, "developerAgeRatingInfoUrl")]
+    [InlineData(true, null)]
+    [InlineData(true, "kidsAgeBand")]
+    [InlineData(true, "developerAgeRatingInfoUrl")]
+    public async Task AgeQuestionnaire_ReusedAnswersRetainExplicitValuesForDifferentDeclaration(bool readFirst, string? clearField)
     {
         var handler = new SequenceHandler(
             new(HttpStatusCode.OK, """{"data":{"id":"age-A","attributes":{"advertising":false}}}"""),
@@ -115,7 +150,8 @@ public sealed partial class AppStoreConnectClientTests
         var answers = readFirst
             ? (await client.GetAgeRatingDeclarationAsync("info-A"))!.Answers
             : new AppStoreConnectAgeRatingAnswers { Advertising = false };
-        if (clearKidsBand) answers.ClearKidsAgeBand();
+        if (clearField == "kidsAgeBand") answers.ClearKidsAgeBand();
+        else if (clearField == "developerAgeRatingInfoUrl") answers.ClearDeveloperAgeRatingInfoUrl();
         if (!readFirst) await client.UpdateAgeRatingDeclarationAsync("age-A", answers);
         await client.UpdateAgeRatingDeclarationAsync("age-B", answers);
 
@@ -123,9 +159,9 @@ public sealed partial class AppStoreConnectClientTests
         var data = patch.RootElement.GetProperty("data");
         Assert.Equal("age-B", data.GetProperty("id").GetString());
         var attributes = data.GetProperty("attributes");
-        Assert.Equal(clearKidsBand ? 2 : 1, attributes.EnumerateObject().Count());
+        Assert.Equal(clearField is not null ? 2 : 1, attributes.EnumerateObject().Count());
         Assert.False(attributes.GetProperty("advertising").GetBoolean());
-        if (clearKidsBand) Assert.Equal(JsonValueKind.Null, attributes.GetProperty("kidsAgeBand").ValueKind);
+        if (clearField is not null) Assert.Equal(JsonValueKind.Null, attributes.GetProperty(clearField).ValueKind);
         await Assert.ThrowsAsync<ArgumentException>(() => client.UpdateAgeRatingDeclarationAsync("age-B", answers));
     }
 }

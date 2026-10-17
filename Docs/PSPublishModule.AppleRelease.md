@@ -1249,7 +1249,10 @@ The .NET `AppStoreConnectClient` also exposes exact-resource reads and updates f
 app categories, content rights, and age questionnaire answers. Read the current
 resource first, review the publisher's facts, then supply only the fields to change.
 `UpdateAgeRatingDeclarationAsync` leaves null answers unchanged and does not choose
-an age override. `Doctor` requires a calculated age rating; an empty declaration
+an age override. It reads and updates the optional `DeveloperAgeRatingInfoUrl` as
+an absolute URI. Use `ClearKidsAgeBand()` or `ClearDeveloperAgeRatingInfoUrl()` on
+the answer model for an explicit removal; use `ClearAppSecondaryCategoryAsync`
+to remove only the optional secondary category. `Doctor` requires a calculated age rating; an empty declaration
 record does not establish that the questionnaire is complete.
 
 App-level metadata is separate from version localizations in App Store Connect. Use it

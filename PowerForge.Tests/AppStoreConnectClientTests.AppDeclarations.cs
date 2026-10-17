@@ -9,7 +9,7 @@ public sealed partial class AppStoreConnectClientTests
     public async Task AgeQuestionnaire_PreservesUnansweredValuesAndSendsOnlyExplicitAnswers()
     {
         var handler = new SequenceHandler(
-            new SequenceResponse(HttpStatusCode.OK, """{"data":{"type":"ageRatingDeclarations","id":"age-1","attributes":{"advertising":null,"messagingAndChat":false,"profanityOrCrudeHumor":null,"alcoholTobaccoOrDrugUseOrReferences":null}}}"""),
+            new SequenceResponse(HttpStatusCode.OK, """{"data":{"type":"ageRatingDeclarations","id":"age-1","attributes":{"advertising":null,"messagingAndChat":false,"profanityOrCrudeHumor":null,"alcoholTobaccoOrDrugUseOrReferences":null,"developerAgeRatingInfoUrl":"https://example.com/age-info"}}}"""),
             new SequenceResponse(HttpStatusCode.OK, """{"data":{"type":"ageRatingDeclarations","id":"age-1","attributes":{"advertising":false,"profanityOrCrudeHumor":"NONE"}}}"""));
         using var http = new HttpClient(handler) { BaseAddress = new Uri("https://api.appstoreconnect.apple.com/v1/") };
         using var client = new AppStoreConnectClient(CreateCredential(), http);
@@ -18,6 +18,7 @@ public sealed partial class AppStoreConnectClientTests
         Assert.False(before.Answers.MessagingAndChat);
         Assert.Null(before.Answers.ProfanityOrCrudeHumor);
         Assert.Null(before.Answers.AlcoholTobaccoOrDrugUseOrReferences);
+        Assert.Equal("https://example.com/age-info", before.Answers.DeveloperAgeRatingInfoUrl);
         before.Answers.Advertising = false;
         before.Answers.ProfanityOrCrudeHumor = "NONE";
         var after = await client.UpdateAgeRatingDeclarationAsync(before.Id, before.Answers);
@@ -94,5 +95,27 @@ public sealed partial class AppStoreConnectClientTests
         using var rights = JsonDocument.Parse(handler.RequestBodies[2]);
         Assert.Single(rights.RootElement.GetProperty("data").GetProperty("attributes").EnumerateObject());
         Assert.Equal("/v1/apps/app-1", handler.RequestUris[2].AbsolutePath);
+    }
+
+    [Fact]
+    public async Task AppDeclarations_ExplicitSecondaryClearPreservesPrimaryCategory()
+    {
+        var handler = new SequenceHandler(
+            new(HttpStatusCode.OK, """{"data":{"id":"info-1","relationships":{"primaryCategory":{"data":{"id":"PRODUCTIVITY"}},"secondaryCategory":{"data":{"id":"UTILITIES"}}}}}"""),
+            new(HttpStatusCode.OK, """{"data":{"id":"info-1","relationships":{"primaryCategory":{"data":{"id":"PRODUCTIVITY"}},"secondaryCategory":{"data":null}}}}"""));
+        using var http = new HttpClient(handler) { BaseAddress = new Uri("https://api.appstoreconnect.apple.com/v1/") };
+        using var client = new AppStoreConnectClient(CreateCredential(), http);
+        Assert.Equal("UTILITIES", (await client.GetAppInformationAsync("info-1"))!.SecondaryCategoryId);
+        var after = await client.ClearAppSecondaryCategoryAsync("info-1");
+        Assert.Equal("PRODUCTIVITY", after.PrimaryCategoryId);
+        Assert.Null(after.SecondaryCategoryId);
+        using var body = JsonDocument.Parse(handler.RequestBodies[1]);
+        var data = body.RootElement.GetProperty("data");
+        Assert.Equal("info-1", data.GetProperty("id").GetString());
+        var relationships = data.GetProperty("relationships");
+        Assert.Single(relationships.EnumerateObject());
+        Assert.Equal(JsonValueKind.Null, relationships.GetProperty("secondaryCategory").GetProperty("data").ValueKind);
+        await Assert.ThrowsAsync<ArgumentException>(() => client.ClearAppSecondaryCategoryAsync(" "));
+        Assert.Equal(2, handler.RequestUris.Count);
     }
 }

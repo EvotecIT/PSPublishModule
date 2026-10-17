@@ -44,6 +44,7 @@ public sealed partial class AppStoreConnectClient
                 Advertising = GetBool(attributes, "advertising"),
                 AlcoholTobaccoOrDrugUseOrReferences = GetString(attributes, "alcoholTobaccoOrDrugUseOrReferences"),
                 Contests = GetString(attributes, "contests"),
+                DeveloperAgeRatingInfoUrl = GetString(attributes, "developerAgeRatingInfoUrl"),
                 Gambling = GetBool(attributes, "gambling"),
                 GamblingSimulated = GetString(attributes, "gamblingSimulated"),
                 GunsOrOtherWeapons = GetString(attributes, "gunsOrOtherWeapons"),
@@ -88,9 +89,19 @@ public sealed partial class AppStoreConnectClient
             (originalAnswers?.KidsAgeBandClearRequested != true ||
              originalAnswers.KidsAgeBandClearVersion != answers.KidsAgeBandClearVersion))
             attributes["kidsAgeBand"] = null;
+        if (answers.DeveloperAgeRatingInfoUrlClearRequested &&
+            (originalAnswers?.DeveloperAgeRatingInfoUrlClearRequested != true ||
+             originalAnswers.DeveloperAgeRatingInfoUrlClearVersion != answers.DeveloperAgeRatingInfoUrlClearVersion))
+            attributes["developerAgeRatingInfoUrl"] = null;
         foreach (var answer in attributes)
         {
             if (answer.Value is not string value) continue;
+            if (answer.Key == "developerAgeRatingInfoUrl")
+            {
+                if (!Uri.TryCreate(value, UriKind.Absolute, out var uri) || !uri.IsWellFormedOriginalString())
+                    throw new ArgumentException("Developer age-rating information URL must be a well-formed absolute URI.", nameof(answers));
+                continue;
+            }
             var valid = answer.Key == "kidsAgeBand"
                 ? value is "FIVE_AND_UNDER" or "SIX_TO_EIGHT" or "NINE_TO_ELEVEN"
                 : value is "NONE" or "INFREQUENT_OR_MILD" or "FREQUENT_OR_INTENSE" or "INFREQUENT" or "FREQUENT";
@@ -106,6 +117,7 @@ public sealed partial class AppStoreConnectClient
         AddIfNotNull(attributes, "advertising", answers.Advertising);
         AddIfNotNull(attributes, "alcoholTobaccoOrDrugUseOrReferences", answers.AlcoholTobaccoOrDrugUseOrReferences);
         AddIfNotNull(attributes, "contests", answers.Contests);
+        AddIfNotNull(attributes, "developerAgeRatingInfoUrl", answers.DeveloperAgeRatingInfoUrl);
         AddIfNotNull(attributes, "gambling", answers.Gambling);
         AddIfNotNull(attributes, "gamblingSimulated", answers.GamblingSimulated);
         AddIfNotNull(attributes, "gunsOrOtherWeapons", answers.GunsOrOtherWeapons);

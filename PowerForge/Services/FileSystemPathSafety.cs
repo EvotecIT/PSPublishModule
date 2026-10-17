@@ -3,6 +3,61 @@ namespace PowerForge;
 /// <summary>Filesystem preflight shared by artifact writers and validators; not a concurrent-mutation sandbox.</summary>
 internal static class FileSystemPathSafety
 {
+#if NET8_0_OR_GREATER
+    /// <summary>Resolves relative links in kernel traversal order, rejecting every hop outside an already trusted physical root.
+    /// The caller must monitor the root against concurrent replacement; this validates the selected path, not a mutation sandbox.</summary>
+    internal static string ResolveRelativeLinksWithinRoot(string approvedRoot, string path)
+    {
+        var root = Path.TrimEndingDirectorySeparator(Path.GetFullPath(approvedRoot));
+        var prefix = root.EndsWith(Path.DirectorySeparatorChar) ? root : root + Path.DirectorySeparatorChar;
+        if (!path.StartsWith(prefix, StringComparison.Ordinal))
+            throw new InvalidOperationException($"Symbolic link path escapes its approved root: {path}");
+        var separators = new[] { Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar };
+        var pending = new LinkedList<string>(path.Substring(prefix.Length).Split(separators, StringSplitOptions.RemoveEmptyEntries));
+        var current = root;
+        var links = 0;
+        try
+        {
+            while (pending.First is { } next)
+            {
+                var part = next.Value;
+                pending.RemoveFirst();
+                if (part == ".") continue;
+                if (part == "..")
+                {
+                    if (current.Equals(root, StringComparison.Ordinal))
+                        throw new InvalidOperationException($"Symbolic link hop escapes its approved root: {path}");
+                    current = Path.GetDirectoryName(current)!;
+                    continue;
+                }
+                var selected = Path.Combine(current, part);
+                var attributes = File.GetAttributes(selected);
+                if ((attributes & FileAttributes.ReparsePoint) == 0)
+                {
+                    if (pending.Count > 0 && (attributes & FileAttributes.Directory) == 0)
+                        throw new InvalidOperationException($"Symbolic link traverses a non-directory: {path}");
+                    current = selected;
+                    continue;
+                }
+                var target = ((attributes & FileAttributes.Directory) != 0
+                    ? (FileSystemInfo)new DirectoryInfo(selected) : new FileInfo(selected)).LinkTarget;
+                if (string.IsNullOrWhiteSpace(target) || Path.IsPathRooted(target))
+                    throw new InvalidOperationException($"Symbolic link contains an unbound hop: {path}");
+                if (++links > 40)
+                    throw new InvalidOperationException($"Symbolic link is cyclic or exceeds the supported hop limit: {path}");
+                var parts = target.Split(separators, StringSplitOptions.RemoveEmptyEntries);
+                for (var index = parts.Length - 1; index >= 0; index--)
+                    pending.AddFirst(parts[index]);
+            }
+            return current;
+        }
+        catch (IOException exception)
+        {
+            throw new InvalidOperationException($"Symbolic link contains an unresolved hop: {path}", exception);
+        }
+    }
+#endif
+
     /// <summary>Lets POSIX resolve existing links and parent traversal in kernel order; returns null for an unresolved path.</summary>
     internal static string? ResolveExistingUnixPath(string path)
     {

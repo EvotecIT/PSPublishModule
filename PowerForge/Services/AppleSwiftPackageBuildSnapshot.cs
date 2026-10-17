@@ -293,12 +293,9 @@ internal sealed class AppleSwiftPackageBuildSnapshot : IDisposable
                 var target = isDirectory ? new DirectoryInfo(entry).LinkTarget : new FileInfo(entry).LinkTarget;
                 if (string.IsNullOrWhiteSpace(target) || Path.IsPathRooted(target))
                     throw new InvalidOperationException($"Materialized Swift binary artifact contains an unbound symbolic link: {entry}");
-                // Resolve the actual link before '..' traversal. Lexical normalization can select
-                // a contained decoy while the kernel opens a different file outside this root.
-                var resolved = OperatingSystem.IsWindows()
-                    ? (isDirectory ? (FileSystemInfo)new DirectoryInfo(entry) : new FileInfo(entry))
-                        .ResolveLinkTarget(returnFinalTarget: true)?.FullName
-                    : FileSystemPathSafety.ResolveExistingUnixPath(entry);
+                // Validate all intermediate hops, including links which leave this root and return
+                // to a contained final target. Every mutable component must remain monitored.
+                var resolved = FileSystemPathSafety.ResolveRelativeLinksWithinRoot(root, entry);
                 if (string.IsNullOrWhiteSpace(resolved))
                     throw new InvalidOperationException($"Materialized Swift binary artifact contains an unresolved symbolic link: {entry}");
                 var relative = FrameworkCompatibility.GetRelativePath(root, resolved);

@@ -9,6 +9,9 @@ public sealed class AppleSwiftPackageBuildSnapshotTests
     [InlineData("broken-root")]
     [InlineData("chained-escape")]
     [InlineData("special-file")]
+    [InlineData("file-leave-and-return")]
+    [InlineData("directory-leave-and-return")]
+    [InlineData("cyclic-link")]
     public async Task Materialization_rejects_artifact_links_that_leave_binary_bytes_unbound(string scenario)
     {
         if (OperatingSystem.IsWindows()) return;
@@ -19,6 +22,31 @@ public sealed class AppleSwiftPackageBuildSnapshotTests
             {
                 var artifacts = Path.Combine(source, "artifacts");
                 var external = Path.Combine(fixture.FullName, "external");
+                if (scenario is "file-leave-and-return" or "directory-leave-and-return")
+                {
+                    var real = Directory.CreateDirectory(Path.Combine(artifacts, "real"));
+                    File.WriteAllText(Path.Combine(real.FullName, "Engine"), "approved binary");
+                    Directory.CreateDirectory(external);
+                    var jump = Path.Combine(external, "jump");
+                    if (scenario == "file-leave-and-return")
+                    {
+                        File.CreateSymbolicLink(jump, Path.GetRelativePath(external, Path.Combine(real.FullName, "Engine")));
+                        File.CreateSymbolicLink(Path.Combine(artifacts, "libEngine.a"), Path.GetRelativePath(artifacts, jump));
+                    }
+                    else
+                    {
+                        Directory.CreateSymbolicLink(jump, Path.GetRelativePath(external, real.FullName));
+                        Directory.CreateSymbolicLink(Path.Combine(artifacts, "Alias"), Path.GetRelativePath(artifacts, jump));
+                    }
+                    return;
+                }
+                if (scenario == "cyclic-link")
+                {
+                    Directory.CreateDirectory(artifacts);
+                    File.CreateSymbolicLink(Path.Combine(artifacts, "first"), "second");
+                    File.CreateSymbolicLink(Path.Combine(artifacts, "second"), "first");
+                    return;
+                }
                 if (scenario == "special-file")
                 {
                     Directory.CreateDirectory(artifacts);
@@ -43,7 +71,9 @@ public sealed class AppleSwiftPackageBuildSnapshotTests
                 File.CreateSymbolicLink(Path.Combine(artifacts, "libEngine.a"), "deep/A/../../external.a");
             });
             var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => CreateSnapshot(fixture.FullName, runner));
-            if (scenario == "chained-escape") Assert.Contains("escapes", exception.Message, StringComparison.OrdinalIgnoreCase);
+            if (scenario is "chained-escape" or "file-leave-and-return" or "directory-leave-and-return")
+                Assert.Contains("escapes", exception.Message, StringComparison.OrdinalIgnoreCase);
+            else if (scenario == "cyclic-link") Assert.Contains("link", exception.Message, StringComparison.OrdinalIgnoreCase);
             else if (scenario == "special-file") Assert.Contains("regular file", exception.Message, StringComparison.OrdinalIgnoreCase);
             else Assert.Contains("artifact", exception.Message, StringComparison.OrdinalIgnoreCase);
         }

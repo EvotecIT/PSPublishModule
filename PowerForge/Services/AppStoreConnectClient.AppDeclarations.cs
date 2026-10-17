@@ -18,18 +18,11 @@ public sealed partial class AppStoreConnectClient
         string appInfoId, string? primaryCategoryId = null, string? secondaryCategoryId = null,
         CancellationToken cancellationToken = default)
     {
-        RequireValue(appInfoId, nameof(appInfoId), "App Information id");
         var relationships = new Dictionary<string, object>(StringComparer.Ordinal);
         AddCategory("primaryCategory", primaryCategoryId);
         AddCategory("secondaryCategory", secondaryCategoryId);
         if (relationships.Count == 0) throw new ArgumentException("Supply at least one category identifier.");
-        var id = appInfoId.Trim();
-        using var document = await SendJsonAsync(new HttpMethod("PATCH"), $"appInfos/{Uri.EscapeDataString(id)}",
-            new { data = new { type = "appInfos", id, relationships } }, cancellationToken).ConfigureAwait(false)
-            ?? throw new InvalidOperationException("Apple returned no App Information response.");
-        if (!document.RootElement.TryGetProperty("data", out var data) || data.ValueKind != JsonValueKind.Object)
-            throw new InvalidOperationException("Apple returned no App Information data.");
-        return ParseAppInformation(data);
+        return await UpdateAppCategoryRelationshipsAsync(appInfoId, relationships, cancellationToken).ConfigureAwait(false);
 
         void AddCategory(string name, string? category)
         {
@@ -37,6 +30,28 @@ public sealed partial class AppStoreConnectClient
             RequireValue(category, nameof(category), "Category identifier");
             relationships.Add(name, new { data = new { type = "appCategories", id = category.Trim() } });
         }
+    }
+
+    /// <summary>Explicitly removes the optional secondary category while leaving the primary category and other app information unchanged.</summary>
+    public Task<AppStoreConnectAppInformationInfo> ClearAppSecondaryCategoryAsync(
+        string appInfoId, CancellationToken cancellationToken = default)
+        => UpdateAppCategoryRelationshipsAsync(appInfoId,
+            new Dictionary<string, object>(StringComparer.Ordinal)
+            {
+                ["secondaryCategory"] = new { data = (object?)null }
+            }, cancellationToken);
+
+    private async Task<AppStoreConnectAppInformationInfo> UpdateAppCategoryRelationshipsAsync(
+        string appInfoId, Dictionary<string, object> relationships, CancellationToken cancellationToken)
+    {
+        RequireValue(appInfoId, nameof(appInfoId), "App Information id");
+        var id = appInfoId.Trim();
+        using var document = await SendJsonAsync(new HttpMethod("PATCH"), $"appInfos/{Uri.EscapeDataString(id)}",
+            new { data = new { type = "appInfos", id, relationships } }, cancellationToken).ConfigureAwait(false)
+            ?? throw new InvalidOperationException("Apple returned no App Information response.");
+        if (!document.RootElement.TryGetProperty("data", out var data) || data.ValueKind != JsonValueKind.Object)
+            throw new InvalidOperationException("Apple returned no App Information data.");
+        return ParseAppInformation(data);
     }
 
     /// <summary>Records the publisher's explicit content-rights declaration without changing other app attributes.</summary>
