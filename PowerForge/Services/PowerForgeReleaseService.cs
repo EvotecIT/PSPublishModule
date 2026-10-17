@@ -2754,8 +2754,8 @@ internal sealed partial class PowerForgeReleaseService
                     {
                         ArchivePath = uploadSnapshot?.ArchivePath ?? app.ArchivePath,
                         BundleId = app.BundleId,
-                        MarketingVersion = expectedIdentity.MarketingVersion,
-                        BuildNumber = expectedIdentity.BuildNumber,
+                        MarketingVersion = plan.ManageAppVersionAndBuildNumber ? null : expectedIdentity.MarketingVersion,
+                        BuildNumber = plan.ManageAppVersionAndBuildNumber ? null : expectedIdentity.BuildNumber,
                         RequiredPrivacyUsageDescriptionKeys = app.RequiredPrivacyUsageDescriptionKeys,
                         ExportPath = directExportSnapshot?.ExportPath ?? app.ExportPath,
                         TeamId = app.TeamId,

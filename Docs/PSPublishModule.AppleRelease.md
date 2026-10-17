@@ -240,6 +240,12 @@ the macOS App Store Connect platform.
 - `uploadSymbols = true`
 - `generateAppStoreInformation = true`
 
+For Xcode archives, unified releases validate the planned bundle, marketing
+version and build before export when `ManageAppVersionAndBuildNumber` is `false`
+(the default). Setting it to `true` delegates version-number management to Xcode;
+bundle identity and configured privacy purpose strings remain validated. Use
+`false` for a release bound to an approved version and build number.
+
 ## Preflight Checks
 
 Use the existing read-only App Store Connect cmdlets before or after upload:

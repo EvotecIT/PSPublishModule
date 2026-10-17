@@ -21,7 +21,7 @@ public sealed partial class AppleAppArchiveService
         var verifyVersion = !string.IsNullOrWhiteSpace(request.MarketingVersion) || !string.IsNullOrWhiteSpace(request.BuildNumber);
         if (verifyVersion && request.ManageAppVersionAndBuildNumber)
             throw new InvalidOperationException("Planned archive identity requires ManageAppVersionAndBuildNumber=false so Xcode cannot rewrite the verified version during export/upload.");
-        if (requiredKeys.Length == 0 && !verifyVersion)
+        if (requiredKeys.Length == 0 && !verifyVersion && string.IsNullOrWhiteSpace(request.BundleId))
             return;
         var invalidKey = requiredKeys.FirstOrDefault(key => !PrivacyUsageDescriptionKey.IsMatch(key));
         if (invalidKey is not null)

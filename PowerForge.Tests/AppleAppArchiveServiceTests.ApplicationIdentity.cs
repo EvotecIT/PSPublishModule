@@ -71,4 +71,33 @@ public sealed partial class AppleAppArchiveServiceTests
         }
         finally { root.Delete(recursive: true); }
     }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task UploadArchiveAsync_checks_bundle_identity_without_version_or_privacy_expectations(bool manageVersion)
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var app = Directory.CreateDirectory(Path.Combine(root.FullName, "Products", "Applications", "Other.app"));
+            File.WriteAllText(Path.Combine(app.FullName, "Info.plist"), "fixture");
+            var runner = new PrivacyProcessRunner(new Dictionary<string, string> { ["CFBundleIdentifier"] = "com.example.other" });
+            var remoteStarted = false;
+            var request = new AppleAppArchiveUploadRequest
+            {
+                ArchivePath = root.FullName,
+                ExportPath = Path.Combine(root.FullName, "export"),
+                BundleId = "com.example.studio",
+                ManageAppVersionAndBuildNumber = manageVersion,
+                RemoteMutationStarted = () => remoteStarted = true
+            };
+            var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => new AppleAppArchiveService(runner).UploadArchiveAsync(request));
+            Assert.Contains("no primary app matching", exception.Message, StringComparison.Ordinal);
+            Assert.DoesNotContain(runner.Requests, item => item.FileName.EndsWith("xcodebuild", StringComparison.Ordinal));
+            Assert.False(Directory.Exists(request.ExportPath));
+            Assert.False(remoteStarted);
+        }
+        finally { root.Delete(recursive: true); }
+    }
 }
