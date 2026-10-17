@@ -304,6 +304,94 @@ public sealed class AppleTestFlightReadinessTests : IDisposable
                 Service().Execute(spec, request)).Message);
     }
 
+    [Theory]
+    [InlineData(false, false, null)]
+    [InlineData(false, true, " ")]
+    [InlineData(true, false, null)]
+    [InlineData(true, true, " ")]
+    public void MacStoreArchivePlan_RequiresIdentifiersForUnselectedExtensionAndItsParent(
+        bool nested, bool missingParent, string? missingId)
+    {
+        var spec = MacSpec(nested ? "com.example.media.helper.widget" : "com.example.media.widget");
+        var parent = spec.AppleApps!.Apps[0];
+        var extension = spec.AppleApps.Apps[1];
+        if (nested)
+        {
+            parent = new AppleAppConfiguration
+            {
+                Name = "Helper", BundleId = "com.example.media.helper", Platform = ApplePlatform.macOS,
+                ProjectPath = "Sample.xcodeproj", Scheme = "Helper", ParentTarget = "Sample Mac",
+                DistributionRoute = AppleDistributionRoute.EmbeddedCompanion, ProductRole = AppleProductRole.CompanionApp
+            };
+            extension.ParentTarget = parent.Name;
+            spec.AppleApps.Apps = spec.AppleApps.Apps.Append(parent).ToArray();
+        }
+        (missingParent ? parent : extension).BundleId = missingId;
+        var request = Request(PowerForgeAppleReleaseAction.Archive);
+        request.Targets = ["Sample Mac"];
+
+        var error = Assert.Throws<InvalidOperationException>(() => Service().Execute(spec, request));
+
+        Assert.Contains("requires BundleId", error.Message);
+    }
+
+    [Theory]
+    [InlineData(PowerForgeAppleReleaseAction.Status)]
+    [InlineData(PowerForgeAppleReleaseAction.Doctor)]
+    [InlineData(PowerForgeAppleReleaseAction.TestFlight)]
+    [InlineData(PowerForgeAppleReleaseAction.SubmitTestFlightReview)]
+    [InlineData(PowerForgeAppleReleaseAction.Release)]
+    [InlineData(PowerForgeAppleReleaseAction.Cleanup)]
+    [InlineData(PowerForgeAppleReleaseAction.Configured)]
+    public void ExistingMacBuildPlan_DoesNotRequireArchiveExtensionRepair(PowerForgeAppleReleaseAction action)
+    {
+        var spec = MacSpec("com.example.media.mac.widgets");
+        spec.AppleApps!.Archive = false;
+        spec.AppleApps.Upload = false;
+        spec.AppleApps.DistributeTestFlight = true;
+        var request = Request(action);
+        request.Targets = ["Sample Mac"];
+        var service = Service(value =>
+        {
+            var state = State(value, "VALID", true);
+            state.Platforms[0].MatchedBuildSelected = true;
+            state.Platforms[0].Version!.AppStoreState = "PENDING_DEVELOPER_RELEASE";
+            return state;
+        });
+
+        var result = service.Execute(spec, request);
+
+        Assert.True(result.Success, result.ErrorMessage);
+    }
+
+    [Theory]
+    [InlineData(PowerForgeAppleReleaseAction.Upload)]
+    [InlineData(PowerForgeAppleReleaseAction.UploadExisting)]
+    [InlineData(PowerForgeAppleReleaseAction.Rehearse)]
+    [InlineData(PowerForgeAppleReleaseAction.Advance)]
+    [InlineData(PowerForgeAppleReleaseAction.Ship)]
+    [InlineData(PowerForgeAppleReleaseAction.Configured)]
+    public void MacArtifactPlan_RejectsInvalidExtensionForArchiveAndUploadActions(PowerForgeAppleReleaseAction action)
+    {
+        var spec = MacSpec("com.example.media.mac.widgets");
+        spec.AppleApps!.Archive = false;
+        spec.AppleApps.Upload = true;
+        var request = Request(action);
+        if (action == PowerForgeAppleReleaseAction.Ship)
+        {
+            spec.AppleApps.Automation.VersionSourcePath = "project.yml";
+            File.WriteAllText(Path.Combine(_root, "project.yml"),
+                "MARKETING_VERSION: 1.0.0\nCURRENT_PROJECT_VERSION: 9\n");
+            request.AppleMarketingVersion = "1.0.0";
+            request.AppleSourceCommit = "0123456789abcdef0123456789abcdef01234567";
+            request.AppleShipTestFlightTargets = ["Sample Mac"];
+        }
+
+        var error = Assert.Throws<InvalidOperationException>(() => Service().Execute(spec, request));
+
+        Assert.Contains("Mac App Store extension", error.Message);
+    }
+
     [Fact]
     public void MacStoreArchivePlan_FollowsMultipleEmbeddedParents()
     {

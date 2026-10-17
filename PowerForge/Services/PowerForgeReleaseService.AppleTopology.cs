@@ -123,10 +123,14 @@ internal sealed partial class PowerForgeReleaseService
             foreach (var child in childrenByParent[name])
             {
                 pending.Enqueue(ResolveAppleAppName(child));
-                // Missing identifiers retain their existing project/identity diagnostics.
-                if (child.Platform != ApplePlatform.macOS || child.ProductRole != AppleProductRole.Extension ||
-                    string.IsNullOrWhiteSpace(parent.BundleId) || string.IsNullOrWhiteSpace(child.BundleId))
+                if (child.Platform != ApplePlatform.macOS || child.ProductRole != AppleProductRole.Extension)
                     continue;
+                if (string.IsNullOrWhiteSpace(parent.BundleId) || string.IsNullOrWhiteSpace(child.BundleId))
+                {
+                    throw new InvalidOperationException(
+                        $"Mac App Store extension '{ResolveAppleAppName(child)}' requires BundleId for itself and " +
+                        $"its containing target '{name}', including targets omitted by parent-only selection.");
+                }
 
                 // App Store validation ITMS-90347 is stricter than general CFBundleIdentifier syntax.
                 var prefix = parent.BundleId!.Trim() + ".";

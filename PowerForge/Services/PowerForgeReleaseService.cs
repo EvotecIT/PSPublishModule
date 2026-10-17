@@ -1979,7 +1979,6 @@ internal sealed partial class PowerForgeReleaseService
                 "Give each platform target a stable name so receipts and artifact paths cannot collide.");
         }
         ValidateAppleProductTopology(apps);
-        ValidateMacAppStoreExtensionIdentifiers(apps, configuredApps);
         ValidateUniqueAppleArtifactPaths(
             apps,
             static app => app.ArchivePath,
@@ -2236,6 +2235,11 @@ internal sealed partial class PowerForgeReleaseService
             Apps = apps
         };
         BindAppleShipRoutes(request, plan);
+        if (plan.Archive || plan.Upload)
+        {
+            ValidateMacAppStoreExtensionIdentifiers(
+                apps.Where(app => ShouldExecuteAppleTarget(plan.Action, app)).ToArray(), configuredApps);
+        }
         var validateReusableArchives =
             (!request.PlanOnly && !request.ValidateOnly) || request.CheckpointAppleApps;
         if (validateReusableArchives &&
