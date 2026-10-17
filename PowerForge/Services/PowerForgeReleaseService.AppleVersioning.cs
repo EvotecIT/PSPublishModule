@@ -258,7 +258,7 @@ internal sealed partial class PowerForgeReleaseService
         {
             var state = ReadAppleReleaseState(plan, app);
             var platform = AssertSinglePlatformState(state, app);
-            if ((plan.Action is PowerForgeAppleReleaseAction.SubmitTestFlightReview or PowerForgeAppleReleaseAction.TestFlight) &&
+            if (RequiresReadyAppleBetaPlanBuild(plan) &&
                 (string.IsNullOrWhiteSpace(platform.MatchedBuild?.Id) ||
                  platform.MatchedBuild?.Expired != false ||
                  (!plan.AllowUnprocessedTestFlightBuild &&
@@ -390,11 +390,15 @@ internal sealed partial class PowerForgeReleaseService
         return plan.Action is PowerForgeAppleReleaseAction.SubmitAppReview or
                PowerForgeAppleReleaseAction.Release ||
            plan.AdoptExistingBuild ||
-           (plan.DistributeTestFlight && !IsUploadExecution(plan)) ||
-           plan.SubmitTestFlightBetaReview ||
            plan.SubmitForReview ||
            plan.ReleaseApprovedVersion;
     }
+
+    /// <summary>Checks existing beta builds without requiring an upload to already exist at planning time.</summary>
+    private static bool RequiresReadyAppleBetaPlanBuild(PowerForgeAppleReleasePlan plan)
+        => plan.Action is PowerForgeAppleReleaseAction.SubmitTestFlightReview or PowerForgeAppleReleaseAction.TestFlight ||
+           (plan.Action != PowerForgeAppleReleaseAction.Ship && !IsUploadExecution(plan) &&
+            (plan.DistributeTestFlight || plan.SubmitTestFlightBetaReview));
 
     private (Dictionary<string, string> Files, string Sha256) CreateAppleMutationInputEvidence(
         PowerForgeAppleReleasePlan plan,

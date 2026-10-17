@@ -372,7 +372,8 @@ Use the same entry point for each transition:
 `TestFlight` and `SubmitTestFlightReview` plans bind the exact remote build and
 always require a known non-expired build. The processing override permits
 unprocessed builds without bypassing expiration checks. They
-work before a public App Store version is prepared. `SubmitAppReview` and `Release` require the
+work before a public App Store version is prepared, as do beta-only `Configured`
+plans with archive and upload disabled. `SubmitAppReview` and `Release` require the
 intended build to be selected on that public version.
 
 Mac App Store extension identifiers use the containing app's bundle ID followed

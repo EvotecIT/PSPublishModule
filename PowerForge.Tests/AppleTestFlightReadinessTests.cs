@@ -31,6 +31,85 @@ public sealed class AppleTestFlightReadinessTests : IDisposable
         Assert.NotEqual(true, target.BuildSelected);
     }
 
+    [Theory]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    public void ConfiguredBetaOnlyPlan_BindsValidBuildWithoutPublicVersion(bool distribute, bool submitBetaReview)
+    {
+        var spec = Spec();
+        spec.AppleApps!.Archive = false;
+        spec.AppleApps.Upload = false;
+        spec.AppleApps.DistributeTestFlight = distribute;
+        spec.AppleApps.SubmitTestFlightBetaReview = submitBetaReview;
+
+        var result = Service(request => State(request, "VALID", false))
+            .Execute(spec, Request(PowerForgeAppleReleaseAction.Configured));
+
+        Assert.True(result.Success, result.ErrorMessage);
+        Assert.Equal("beta-build", Assert.Single(result.AppleReceipt!.Targets).BuildId);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ConfiguredBetaOnlyPlan_PreservesProcessingOverride(bool submitBetaReview)
+    {
+        var spec = Spec();
+        spec.AppleApps!.Archive = false;
+        spec.AppleApps.Upload = false;
+        spec.AppleApps.DistributeTestFlight = !submitBetaReview;
+        spec.AppleApps.SubmitTestFlightBetaReview = submitBetaReview;
+        spec.AppleApps.AllowUnprocessedTestFlightBuild = true;
+
+        Assert.True(Service(request => State(request, "PROCESSING", false))
+            .Execute(spec, Request(PowerForgeAppleReleaseAction.Configured)).Success);
+    }
+
+    [Theory]
+    [InlineData(false, false, true)]
+    [InlineData(false, true, true)]
+    [InlineData(false, false, null)]
+    [InlineData(false, true, null)]
+    [InlineData(true, false, true)]
+    [InlineData(true, true, true)]
+    [InlineData(true, false, null)]
+    [InlineData(true, true, null)]
+    public void ConfiguredBetaOnlyPlan_RequiresKnownUnexpiredBuild(bool submitBetaReview, bool allowUnprocessed, bool? expired)
+    {
+        var spec = Spec();
+        spec.AppleApps!.Archive = false;
+        spec.AppleApps.Upload = false;
+        spec.AppleApps.DistributeTestFlight = !submitBetaReview;
+        spec.AppleApps.SubmitTestFlightBetaReview = submitBetaReview;
+        spec.AppleApps.AllowUnprocessedTestFlightBuild = allowUnprocessed;
+
+        var error = Assert.Throws<InvalidOperationException>(() =>
+            Service(request => State(request, "VALID", false, expired))
+                .Execute(spec, Request(PowerForgeAppleReleaseAction.Configured)));
+
+        Assert.Contains("not expired", error.Message);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    public void ConfiguredBetaPlan_PreservesPublicReviewAndReleaseSelection(int operation)
+    {
+        var spec = Spec();
+        spec.AppleApps!.Archive = false;
+        spec.AppleApps.Upload = false;
+        spec.AppleApps.DistributeTestFlight = true;
+        spec.AppleApps.SubmitForReview = operation == 0;
+        spec.AppleApps.ReleaseApprovedVersion = operation == 1;
+        var request = Request(PowerForgeAppleReleaseAction.Configured);
+
+        var error = Assert.Throws<InvalidOperationException>(() =>
+            Service(value => State(value, "VALID", true)).Execute(spec, request));
+
+        Assert.Contains("uniquely selected", error.Message);
+    }
+
     [Fact]
     public void BetaReview_SubmitsExactPlannedBuildWithoutPreparingPublicVersion()
     {
