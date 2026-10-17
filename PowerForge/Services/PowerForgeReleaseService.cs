@@ -2235,6 +2235,11 @@ internal sealed partial class PowerForgeReleaseService
             Apps = apps
         };
         BindAppleShipRoutes(request, plan);
+        if (plan.Archive || plan.Upload)
+        {
+            ValidateMacAppStoreExtensionIdentifiers(
+                apps.Where(app => ShouldExecuteAppleTarget(plan.Action, app)).ToArray(), configuredApps);
+        }
         var validateReusableArchives =
             (!request.PlanOnly && !request.ValidateOnly) || request.CheckpointAppleApps;
         if (validateReusableArchives &&
@@ -2285,7 +2290,7 @@ internal sealed partial class PowerForgeReleaseService
         if (string.IsNullOrWhiteSpace(app.Scheme))
             throw new InvalidOperationException($"Apple app '{app.Name ?? app.ProjectPath}' requires Scheme for archive automation.");
 
-        var name = string.IsNullOrWhiteSpace(app.Name) ? app.Scheme!.Trim() : app.Name!.Trim();
+        var name = ResolveAppleAppName(app);
         var requestedProjectPath = ResolveOutputPath(projectRoot, app.ProjectPath);
         EnsurePathWithinProjectRoot(projectRoot, requestedProjectPath, $"Apple app '{name}' ProjectPath");
         var projectExists = File.Exists(requestedProjectPath) || Directory.Exists(requestedProjectPath);

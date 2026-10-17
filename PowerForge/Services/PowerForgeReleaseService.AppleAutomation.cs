@@ -651,6 +651,7 @@ internal sealed partial class PowerForgeReleaseService
                 Build = state?.BuildNumber ?? build?.Version ?? values.BuildNumber,
                 BuildId = build?.Id,
                 BuildProcessingState = build?.ProcessingState,
+                BuildExpired = build?.Expired,
                 BuildUploadId = result?.Upload?.BuildUploadId ?? result?.ResumedUploadAttestation?.BuildUploadId ?? delivery.Id,
                 BuildUploadState = delivery.State,
                 DistributionVersionId = receiptVersion?.Id,

@@ -369,6 +369,22 @@ Use the same entry point for each transition:
 | `Release` | Publishes a version waiting for developer release. |
 | `Cleanup` | Removes stale files only from configured archive/export roots. |
 
+`TestFlight` and `SubmitTestFlightReview` plans bind the exact remote build and
+always require a known non-expired build. The processing override permits
+unprocessed builds without bypassing expiration checks. They
+work before a public App Store version is prepared, as do beta-only `Configured`
+plans with archive and upload disabled. `SubmitAppReview` and `Release` require the
+intended build to be selected on that public version.
+
+Mac App Store extension identifiers use the containing app's bundle ID followed
+by one suffix, for example `com.example.media.macwidgets`. PowerForge rejects
+an extra segment such as `com.example.media.mac.widgets` before archive/upload,
+including when only the containing Mac target is selected. Nested extensions
+are checked against their immediate containing app within that selected root;
+both targets must declare their bundle IDs. These checks apply to archive and
+upload operations. Reading status, cleaning artifacts, or distributing an
+existing build does not require repairing the local archive configuration.
+
 New App Store versions use `MANUAL` release policy, so App Review approval waits
 for the separate `Release` action. Existing versions retain their configured policy.
 For .NET callers, `AppStoreConnectVersionInfo.ReleaseType` exposes the server value,

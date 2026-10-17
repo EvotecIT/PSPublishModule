@@ -45,8 +45,7 @@ public sealed class AppStoreConnectBetaAppReviewSubmissionService
             cancellationToken: cancellationToken).ConfigureAwait(false)).FirstOrDefault()
             ?? throw new InvalidOperationException($"Build '{buildNumber}' was not found for app '{appId}', version '{versionString}', and platform '{request.Platform}'.");
 
-        if (request.RequireValidBuild)
-            ValidateBuildIsSubmittable(build, buildNumber);
+        ValidateBuildIsSubmittable(build, buildNumber, request.RequireValidBuild);
 
         var submission = await _client.GetBetaAppReviewSubmissionForBuildAsync(build.Id, cancellationToken).ConfigureAwait(false);
         if (submission is null)
@@ -71,11 +70,11 @@ public sealed class AppStoreConnectBetaAppReviewSubmissionService
         };
     }
 
-    private static void ValidateBuildIsSubmittable(AppStoreConnectBuildInfo build, string buildNumber)
+    private static void ValidateBuildIsSubmittable(AppStoreConnectBuildInfo build, string buildNumber, bool requireValidBuild)
     {
-        if (!string.Equals(build.ProcessingState, "VALID", StringComparison.OrdinalIgnoreCase))
+        if (requireValidBuild && !string.Equals(build.ProcessingState, "VALID", StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException($"Build '{buildNumber}' cannot be submitted to Beta App Review because processing state is '{build.ProcessingState ?? "unknown"}'.");
-        if (build.Expired == true)
-            throw new InvalidOperationException($"Build '{buildNumber}' cannot be submitted to Beta App Review because it is expired.");
+        if (build.Expired != false)
+            throw new InvalidOperationException($"Build '{buildNumber}' cannot be submitted to Beta App Review because it is expired or its expiration state is unknown.");
     }
 }

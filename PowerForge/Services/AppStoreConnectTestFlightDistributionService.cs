@@ -40,8 +40,7 @@ public sealed class AppStoreConnectTestFlightDistributionService
             cancellationToken: cancellationToken).ConfigureAwait(false)).FirstOrDefault()
             ?? throw new InvalidOperationException($"Build '{request.BuildNumber}' was not found for app '{request.AppId}', version '{request.VersionString}', and platform '{request.Platform}'.");
 
-        if (request.RequireValidBuild)
-            ValidateBuildIsDistributable(build, request.BuildNumber);
+        ValidateBuildIsDistributable(build, request.BuildNumber, request.RequireValidBuild);
 
         var groups = await ResolveGroupsAsync(request, cancellationToken).ConfigureAwait(false);
         if (groups.Length == 0)
@@ -188,11 +187,11 @@ public sealed class AppStoreConnectTestFlightDistributionService
         return (created, groups);
     }
 
-    private static void ValidateBuildIsDistributable(AppStoreConnectBuildInfo build, string buildNumber)
+    private static void ValidateBuildIsDistributable(AppStoreConnectBuildInfo build, string buildNumber, bool requireValidBuild)
     {
-        if (!string.Equals(build.ProcessingState, "VALID", StringComparison.OrdinalIgnoreCase))
+        if (requireValidBuild && !string.Equals(build.ProcessingState, "VALID", StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException($"Build '{buildNumber}' cannot be distributed because processing state is '{build.ProcessingState ?? "unknown"}'.");
-        if (build.Expired == true)
-            throw new InvalidOperationException($"Build '{buildNumber}' cannot be distributed because it is expired.");
+        if (build.Expired != false)
+            throw new InvalidOperationException($"Build '{buildNumber}' cannot be distributed because it is expired or its expiration state is unknown.");
     }
 }

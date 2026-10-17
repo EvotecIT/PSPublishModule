@@ -119,7 +119,7 @@ public sealed class AppStoreConnectTestFlightDistributionRequest
     /// <summary>Create testers that do not already exist.</summary>
     public bool CreateMissingTesters { get; set; } = true;
 
-    /// <summary>Require the build to be valid and not expired before assigning it to beta groups.</summary>
+    /// <summary>Require VALID processing before assignment. A known non-expired build is always required.</summary>
     public bool RequireValidBuild { get; set; } = true;
 }
 
@@ -182,7 +182,7 @@ public sealed class AppStoreConnectBetaAppReviewSubmissionRequest
     /// <summary>Apple platform for the build.</summary>
     public ApplePlatform Platform { get; set; } = ApplePlatform.iOS;
 
-    /// <summary>Require the build to be valid and not expired before Beta App Review submission.</summary>
+    /// <summary>Require VALID processing before Beta App Review. A known non-expired build is always required.</summary>
     public bool RequireValidBuild { get; set; } = true;
 }
 

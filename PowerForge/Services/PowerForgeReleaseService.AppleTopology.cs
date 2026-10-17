@@ -84,4 +84,69 @@ internal sealed partial class PowerForgeReleaseService
             }
         }
     }
+
+    /// <summary>
+    /// Rejects declared Mac App Store extension identities before archive/upload,
+    /// including nested companions omitted by a parent-only target selection.
+    /// </summary>
+    private static void ValidateMacAppStoreExtensionIdentifiers(
+        PowerForgeAppleAppReleaseTargetPlan[] selectedApps,
+        AppleAppConfiguration[] configuredApps)
+    {
+        var roots = new HashSet<string>(selectedApps.Where(static app => app.Platform == ApplePlatform.macOS &&
+                app.DistributionRoute is AppleDistributionRoute.AppStore or AppleDistributionRoute.TestFlightOnly)
+            .Select(static app => app.Name), StringComparer.OrdinalIgnoreCase);
+        if (roots.Count == 0)
+            return;
+
+        var appsByName = configuredApps.ToLookup(ResolveAppleAppName, StringComparer.OrdinalIgnoreCase);
+        var childrenByParent = configuredApps
+            .Where(static app => app.DistributionRoute == AppleDistributionRoute.EmbeddedCompanion &&
+                !string.IsNullOrWhiteSpace(app.ParentTarget))
+            .ToLookup(static app => app.ParentTarget!.Trim(), StringComparer.OrdinalIgnoreCase);
+        var pending = new Queue<string>(roots);
+        var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        while (pending.Count > 0)
+        {
+            var name = pending.Dequeue();
+            if (!visited.Add(name) || !childrenByParent.Contains(name))
+                continue;
+
+            // Unselected duplicate names matter only when this embedding chain uses them.
+            var parents = appsByName[name].ToArray();
+            if (parents.Length != 1)
+            {
+                throw new InvalidOperationException(
+                    $"Mac App Store embedding chain references ambiguous target '{name}'. Target names used by the chain must be unique.");
+            }
+            var parent = parents[0];
+            foreach (var child in childrenByParent[name])
+            {
+                pending.Enqueue(ResolveAppleAppName(child));
+                if (child.Platform != ApplePlatform.macOS || child.ProductRole != AppleProductRole.Extension)
+                    continue;
+                if (string.IsNullOrWhiteSpace(parent.BundleId) || string.IsNullOrWhiteSpace(child.BundleId))
+                {
+                    throw new InvalidOperationException(
+                        $"Mac App Store extension '{ResolveAppleAppName(child)}' requires BundleId for itself and " +
+                        $"its containing target '{name}', including targets omitted by parent-only selection.");
+                }
+
+                // App Store validation ITMS-90347 is stricter than general CFBundleIdentifier syntax.
+                var prefix = parent.BundleId!.Trim() + ".";
+                var bundleId = child.BundleId!.Trim();
+                if (!bundleId.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) ||
+                    bundleId.Length == prefix.Length || bundleId.Substring(prefix.Length).IndexOf('.') >= 0)
+                {
+                    throw new InvalidOperationException(
+                        $"Mac App Store extension '{ResolveAppleAppName(child)}' bundle identifier '{bundleId}' must be " +
+                        $"'{prefix}<extension>' with one nonempty suffix and no additional periods.");
+                }
+            }
+        }
+    }
+
+    /// <summary>Uses the explicit target name or its supported scheme fallback consistently.</summary>
+    private static string ResolveAppleAppName(AppleAppConfiguration app)
+        => (string.IsNullOrWhiteSpace(app.Name) ? app.Scheme : app.Name)?.Trim() ?? string.Empty;
 }
