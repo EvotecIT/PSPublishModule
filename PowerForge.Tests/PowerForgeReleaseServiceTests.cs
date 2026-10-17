@@ -946,7 +946,12 @@ public sealed partial class PowerForgeReleaseServiceTests : IDisposable
             File.WriteAllText(keyPath, "private-key");
 
             var service = CreateAppleAutomationService(
-                request => CreateReleaseState(request, "VALID"));
+                request =>
+                {
+                    var state = CreateReleaseState(request, "VALID");
+                    state.Platforms[0].MatchedBuild!.Expired = false;
+                    return state;
+                });
             var result = service.Execute(
                 new PowerForgeReleaseSpec
                 {
@@ -1001,7 +1006,12 @@ public sealed partial class PowerForgeReleaseServiceTests : IDisposable
             var keyPath = Path.Combine(root, "AuthKey_ABC123DEFG.p8");
             File.WriteAllText(keyPath, "private-key");
 
-            var service = CreateAppleAutomationService(request => CreateReleaseState(request, "VALID"));
+            var service = CreateAppleAutomationService(request =>
+            {
+                var state = CreateReleaseState(request, "VALID");
+                state.Platforms[0].MatchedBuild!.Expired = false;
+                return state;
+            });
             var result = service.Execute(
                 new PowerForgeReleaseSpec
                 {
