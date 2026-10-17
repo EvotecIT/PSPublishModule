@@ -84,4 +84,37 @@ internal sealed partial class PowerForgeReleaseService
             }
         }
     }
+
+    /// <summary>
+    /// Rejects declared Mac App Store extension identities before archive/upload,
+    /// including companions omitted by a parent-only target selection.
+    /// </summary>
+    private static void ValidateMacAppStoreExtensionIdentifiers(
+        PowerForgeAppleAppReleaseTargetPlan[] selectedApps,
+        AppleAppConfiguration[] configuredApps)
+    {
+        foreach (var parent in selectedApps.Where(static app => app.Platform == ApplePlatform.macOS &&
+                     app.DistributionRoute is AppleDistributionRoute.AppStore or AppleDistributionRoute.TestFlightOnly))
+        {
+            foreach (var extension in configuredApps.Where(app => app.Platform == ApplePlatform.macOS &&
+                         app.DistributionRoute == AppleDistributionRoute.EmbeddedCompanion &&
+                         app.ProductRole == AppleProductRole.Extension &&
+                         string.Equals(app.ParentTarget?.Trim(), parent.Name, StringComparison.OrdinalIgnoreCase)))
+            {
+                // Missing identifiers retain their existing project/identity diagnostics.
+                if (string.IsNullOrWhiteSpace(parent.BundleId) || string.IsNullOrWhiteSpace(extension.BundleId))
+                    continue;
+
+                var prefix = parent.BundleId + ".";
+                var bundleId = extension.BundleId!.Trim();
+                if (!bundleId.StartsWith(prefix, StringComparison.Ordinal) ||
+                    bundleId.Length == prefix.Length || bundleId.Substring(prefix.Length).IndexOf('.') >= 0)
+                {
+                    throw new InvalidOperationException(
+                        $"Mac App Store extension '{extension.Name}' bundle identifier '{bundleId}' must be " +
+                        $"'{parent.BundleId}.<extension>' with one nonempty suffix and no additional periods.");
+                }
+            }
+        }
+    }
 }

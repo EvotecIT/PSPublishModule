@@ -642,7 +642,7 @@ public sealed partial class PowerForgeReleaseServiceTests
     }
 
     [Fact]
-    public void Execute_AppleDistributionPlan_RejectsUnselectedRemoteBuild()
+    public void Execute_AppleDistributionPlan_RejectsMissingRemoteBuild()
     {
         var root = CreateSandbox();
         try
@@ -664,7 +664,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                     PlanOnly = true
                 }));
 
-            Assert.Contains("uniquely selected", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("exact matched TestFlight build", exception.Message, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {

@@ -1979,6 +1979,7 @@ internal sealed partial class PowerForgeReleaseService
                 "Give each platform target a stable name so receipts and artifact paths cannot collide.");
         }
         ValidateAppleProductTopology(apps);
+        ValidateMacAppStoreExtensionIdentifiers(apps, configuredApps);
         ValidateUniqueAppleArtifactPaths(
             apps,
             static app => app.ArchivePath,

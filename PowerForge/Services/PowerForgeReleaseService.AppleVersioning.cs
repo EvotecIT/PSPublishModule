@@ -258,6 +258,15 @@ internal sealed partial class PowerForgeReleaseService
         {
             var state = ReadAppleReleaseState(plan, app);
             var platform = AssertSinglePlatformState(state, app);
+            if ((plan.Action is PowerForgeAppleReleaseAction.SubmitTestFlightReview or PowerForgeAppleReleaseAction.TestFlight) &&
+                (string.IsNullOrWhiteSpace(platform.MatchedBuild?.Id) ||
+                 (!plan.AllowUnprocessedTestFlightBuild &&
+                  !string.Equals(platform.MatchedBuild?.ProcessingState, "VALID", StringComparison.OrdinalIgnoreCase))))
+            {
+                throw new InvalidOperationException(
+                    $"Apple action '{plan.Action}' requires the exact matched TestFlight build for '{app.Name}' to be available and processed. " +
+                    "Upload and finish processing the intended exact build, then review a new plan.");
+            }
             if (RequiresSelectedApplePlanBuild(plan) &&
                 (platform.MatchedBuildSelected != true || string.IsNullOrWhiteSpace(platform.MatchedBuild?.Id)))
             {
@@ -372,12 +381,11 @@ internal sealed partial class PowerForgeReleaseService
 
     private static bool RequiresSelectedApplePlanBuild(PowerForgeAppleReleasePlan plan)
     {
-        if (plan.Action == PowerForgeAppleReleaseAction.Ship)
+        if (plan.Action is PowerForgeAppleReleaseAction.Ship or
+            PowerForgeAppleReleaseAction.SubmitTestFlightReview or PowerForgeAppleReleaseAction.TestFlight)
             return false;
 
-        return plan.Action is PowerForgeAppleReleaseAction.SubmitTestFlightReview or
-               PowerForgeAppleReleaseAction.SubmitAppReview or
-               PowerForgeAppleReleaseAction.TestFlight or
+        return plan.Action is PowerForgeAppleReleaseAction.SubmitAppReview or
                PowerForgeAppleReleaseAction.Release ||
            plan.AdoptExistingBuild ||
            (plan.DistributeTestFlight && !IsUploadExecution(plan)) ||
