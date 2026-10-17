@@ -1030,6 +1030,46 @@ public partial class WebSiteAuditOptimizeBuildTests
     }
 
     [Fact]
+    public void Audit_LinkPurposeTreatsPageRelativeAndRootRelativeLinksToSamePageAsOneDestination()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-audit-link-purpose-relative-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(root, "docs", "overview"));
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "docs", "overview", "index.html"),
+                """
+                <!doctype html>
+                <html>
+                <head><title>Overview</title></head>
+                <body>
+                  <nav><a href="/docs/install/">Installation</a><a href="/examples/">Examples</a></nav>
+                  <main>
+                    <a href="../install/">Installation</a>
+                    <a href="../../examples/">Examples</a>
+                  </main>
+                </body>
+                </html>
+                """);
+
+            var result = WebSiteAuditor.Audit(new WebAuditOptions
+            {
+                SiteRoot = root,
+                CheckLinks = false,
+                CheckAssets = false
+            });
+
+            Assert.True(result.Success);
+            Assert.DoesNotContain(result.Issues, issue => issue.Category.Equals("link-purpose", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void Audit_LinkPurposeCheckCanBeDisabled()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-audit-link-purpose-disabled-" + Guid.NewGuid().ToString("N"));
