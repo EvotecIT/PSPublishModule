@@ -43,6 +43,7 @@ public static partial class WebApiDocsGenerator
         var fallbackCss = LoadAsset(options, "fallback.css", null);
         var cssBlock = BuildCssBlockWithFallback(fallbackCss, cssLinks, prismCss);
         var social = ResolveApiSocialProfile(options);
+        var structuredDataSite = LoadApiStructuredDataSite(options, social);
         var indexRoute = NormalizeApiIndexRoute(options.BaseUrl);
         var indexDescription = BuildApiIndexSeoDescription(options, types.Count);
 
@@ -57,7 +58,7 @@ public static partial class WebApiDocsGenerator
             ["INDEX_DESCRIPTION"] = System.Web.HttpUtility.HtmlEncode(indexDescription),
             ["DESCRIPTION_META"] = BuildDescriptionMetaTag(indexDescription),
             ["OPEN_GRAPH_META"] = BuildApiOpenGraphMetaTags(options, social, options.Title, indexDescription, indexRoute),
-            ["HEAD_HTML"] = head,
+            ["HEAD_HTML"] = BuildApiPageHeadHtml(head, structuredDataSite, options, social, options.Title, indexDescription, indexRoute, indexRoute),
             ["CRITICAL_CSS"] = criticalCss,
             ["CSS"] = cssBlock,
             ["HEADER"] = header,
@@ -85,7 +86,7 @@ public static partial class WebApiDocsGenerator
                 ["TYPE_FULLNAME"] = System.Web.HttpUtility.HtmlEncode(type.FullName),
                 ["DESCRIPTION_META"] = BuildDescriptionMetaTag(typeDescription),
                 ["OPEN_GRAPH_META"] = BuildApiOpenGraphMetaTags(options, social, typeTitle, typeDescription, typeRoute),
-                ["HEAD_HTML"] = head,
+                ["HEAD_HTML"] = BuildApiPageHeadHtml(head, structuredDataSite, options, social, typeTitle, typeDescription, typeRoute, indexRoute, type.FullName),
                 ["CRITICAL_CSS"] = criticalCss,
                 ["CSS"] = cssBlock,
                 ["HEADER"] = header,
@@ -134,6 +135,7 @@ public static partial class WebApiDocsGenerator
         var docsHomeUrl = NormalizeDocsHomeUrl(options.DocsHomeUrl, baseUrl);
         var legacyAliasMode = ResolveLegacyAliasMode(options.LegacyAliasMode);
         var social = ResolveApiSocialProfile(options);
+        var structuredDataSite = LoadApiStructuredDataSite(options, social);
         var typeDisplayNames = BuildTypeDisplayNameMap(types, options, warnings);
         var labels = ApiDocsChromeLabels.From(options);
         var sectionLabelToken = System.Web.HttpUtility.HtmlEncode(labels.SectionLabel);
@@ -154,7 +156,7 @@ public static partial class WebApiDocsGenerator
             ["INDEX_DESCRIPTION"] = System.Web.HttpUtility.HtmlEncode(indexDescription),
             ["DESCRIPTION_META"] = BuildDescriptionMetaTag(indexDescription),
             ["OPEN_GRAPH_META"] = BuildApiOpenGraphMetaTags(options, social, options.Title, indexDescription, NormalizeApiIndexRoute(baseUrl)),
-            ["HEAD_HTML"] = head,
+            ["HEAD_HTML"] = BuildApiPageHeadHtml(head, structuredDataSite, options, social, options.Title, indexDescription, NormalizeApiIndexRoute(baseUrl), NormalizeApiIndexRoute(baseUrl)),
             ["CRITICAL_CSS"] = criticalCss,
             ["CSS"] = cssBlock,
             ["HEADER"] = header,
@@ -186,7 +188,7 @@ public static partial class WebApiDocsGenerator
                 ["TITLE"] = System.Web.HttpUtility.HtmlEncode(pageTitle),
                 ["DESCRIPTION_META"] = BuildDescriptionMetaTag(typeDescription),
                 ["OPEN_GRAPH_META"] = BuildApiOpenGraphMetaTags(options, social, pageTitle, typeDescription, typeRoute),
-                ["HEAD_HTML"] = head,
+                ["HEAD_HTML"] = BuildApiPageHeadHtml(head, structuredDataSite, options, social, pageTitle, typeDescription, typeRoute, NormalizeApiIndexRoute(baseUrl), displayName),
                 ["CRITICAL_CSS"] = criticalCss,
                 ["CSS"] = cssBlock,
                 ["HEADER"] = header,
@@ -511,8 +513,9 @@ $@"<!doctype html>
     private static ApiSocialProfile ResolveApiSocialProfile(WebApiDocsOptions options)
     {
         var nav = LoadNavConfig(options);
-        var siteName = FirstNonEmpty(options.SiteName, nav?.SiteName, options.Title);
-        var siteBaseUrl = FirstNonEmpty(options.SiteBaseUrl, nav?.SiteBaseUrl);
+        var site = LoadApiSiteSpec(options);
+        var siteName = FirstNonEmpty(options.SiteName, nav?.SiteName, site?.Name, options.Title);
+        var siteBaseUrl = FirstNonEmpty(options.SiteBaseUrl, nav?.SiteBaseUrl, site?.BaseUrl);
         var image = FirstNonEmpty(options.SocialImage, nav?.SocialImage, nav?.BrandIcon);
         var imageWidth = options.SocialImageWidth ?? nav?.SocialImageWidth;
         var imageHeight = options.SocialImageHeight ?? nav?.SocialImageHeight;

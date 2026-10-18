@@ -19,17 +19,19 @@ public static partial class WebLinkService
             return Array.Empty<ApacheShortlinkMapEntry>();
 
         var entries = new List<ApacheShortlinkMapEntry>();
-        var precedingOrdinaryRules = new ApacheRuleOverlapIndex();
+        var precedingRules = new ApacheRuleOverlapIndex();
         foreach (var rule in rules)
         {
             if (!IsApacheShortlinkMapRule(rule, options) ||
-                precedingOrdinaryRules.MayOverlap(rule))
+                precedingRules.MayOverlap(rule))
             {
-                precedingOrdinaryRules.Add(rule);
+                precedingRules.Add(rule);
                 continue;
             }
 
             entries.Add(CreateApacheShortlinkMapEntry(rule, options));
+            // Later decoded aliases must retain ordinary rule precedence, including across statuses.
+            precedingRules.Add(rule);
         }
 
         return entries
@@ -59,12 +61,13 @@ public static partial class WebLinkService
             return false;
 
         var host = rule.SourceHost?.Trim() ?? string.Empty;
-        var path = NormalizeSourcePath(rule.SourcePath).Trim('/');
+        var path = Uri.UnescapeDataString(NormalizeSourcePath(rule.SourcePath)).Trim('/');
         var mapSafe = host.Length > 0 && path.Length > 0 &&
                       !host.Any(static value => char.IsControl(value) || char.IsWhiteSpace(value) || value == ':') &&
                       !path.Any(static value => char.IsControl(value) || char.IsWhiteSpace(value) || value == ':');
 
-        return mapSafe &&
+        var destination = NormalizeApacheDestination(rule.TargetUrl, rule.SourceHost, options.LanguageRootHosts);
+        return mapSafe && !TryGetApacheCanonicalPath(rule, destination, out _, out _) &&
                string.Equals(rule.Source, "shortlink", StringComparison.Ordinal) &&
                rule.MatchType == LinkRedirectMatchType.Exact &&
                !string.Equals(host, "*", StringComparison.Ordinal) &&
@@ -98,7 +101,7 @@ public static partial class WebLinkService
     private static string BuildApacheShortlinkMapKey(LinkRedirectRule rule)
     {
         var host = rule.SourceHost!.Trim().ToLowerInvariant();
-        var path = NormalizeSourcePath(rule.SourcePath).Trim('/');
+        var path = Uri.UnescapeDataString(NormalizeSourcePath(rule.SourcePath)).Trim('/');
         if (host.Any(static value => char.IsControl(value) || char.IsWhiteSpace(value) || value == ':') ||
             path.Length == 0 || path.Any(static value => char.IsControl(value) || char.IsWhiteSpace(value) || value == ':'))
             throw new InvalidOperationException($"Apache indexed shortlink path is not map-safe: {rule.Id ?? rule.SourcePath}");
@@ -176,7 +179,7 @@ public static partial class WebLinkService
 
         public bool MayOverlap(LinkRedirectRule shortlink)
         {
-            var path = NormalizeSourcePath(shortlink.SourcePath).Trim('/');
+            var path = Uri.UnescapeDataString(NormalizeSourcePath(shortlink.SourcePath)).Trim('/');
             if (_allHosts.MayOverlap(path))
                 return true;
 
@@ -210,16 +213,15 @@ public static partial class WebLinkService
                 return;
             }
 
-            var path = NormalizeSourcePath(rule.SourcePath).Trim('/');
+            var path = rule.MatchType == LinkRedirectMatchType.Prefix
+                ? NormalizeApachePrefixPath(rule.SourcePath)
+                : Uri.UnescapeDataString(NormalizeSourcePath(rule.SourcePath)).Trim('/');
             if (rule.MatchType != LinkRedirectMatchType.Prefix)
             {
                 _exactPaths.Add(path);
                 return;
             }
 
-            var starIndex = path.IndexOf('*');
-            if (starIndex >= 0)
-                path = path.Substring(0, starIndex).TrimEnd('/');
             if (path.Length == 0)
                 _matchesEveryPath = true;
             else

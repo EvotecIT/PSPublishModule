@@ -147,14 +147,29 @@ public static partial class WebApiDocsGenerator
         return File.ReadAllText(full);
     }
 
+    private static JsonDocument LoadApiNavigationDocument(WebApiDocsOptions options, string path)
+    {
+        if (string.IsNullOrWhiteSpace(options.NavJsonPath))
+        {
+            var (site, _) = WebSiteSpecLoader.LoadWithPath(path, WebJson.Options);
+            return JsonSerializer.SerializeToDocument(site, WebJson.Options);
+        }
+
+        return JsonDocument.Parse(File.ReadAllText(path), new JsonDocumentOptions
+        {
+            CommentHandling = JsonCommentHandling.Skip,
+            AllowTrailingCommas = true
+        });
+    }
+
     private static NavConfig? LoadNavConfig(WebApiDocsOptions options)
     {
-        if (string.IsNullOrWhiteSpace(options.NavJsonPath)) return null;
-        var path = Path.GetFullPath(options.NavJsonPath);
+        var configPath = FirstNonEmpty(options.NavJsonPath, options.SiteConfigPath);
+        if (string.IsNullOrWhiteSpace(configPath)) return null;
+        var path = Path.GetFullPath(configPath);
         if (!File.Exists(path)) return null;
 
-        using var stream = File.OpenRead(path);
-        using var doc = JsonDocument.Parse(stream);
+        using var doc = LoadApiNavigationDocument(options, path);
         var root = doc.RootElement;
 
         var nav = new NavConfig
@@ -212,16 +227,16 @@ public static partial class WebApiDocsGenerator
 
         if (TryGetProperty(root, "Head", out var headProp) && headProp.ValueKind == JsonValueKind.Object)
         {
-            if (headProp.TryGetProperty("Links", out var linksProp) && linksProp.ValueKind == JsonValueKind.Array)
+            if (TryGetProperty(headProp, "Links", out var linksProp) && linksProp.ValueKind == JsonValueKind.Array)
             {
                 nav.HeadLinksHtml = RenderHeadLinksHtml(linksProp);
                 foreach (var link in linksProp.EnumerateArray())
                 {
-                    if (!link.TryGetProperty("Rel", out var relProp) || relProp.ValueKind != JsonValueKind.String)
+                    if (!TryGetProperty(link, "Rel", out var relProp) || relProp.ValueKind != JsonValueKind.String)
                         continue;
                     var rel = relProp.GetString() ?? string.Empty;
                     if (!rel.Equals("icon", StringComparison.OrdinalIgnoreCase)) continue;
-                    if (!link.TryGetProperty("Href", out var hrefProp) || hrefProp.ValueKind != JsonValueKind.String)
+                    if (!TryGetProperty(link, "Href", out var hrefProp) || hrefProp.ValueKind != JsonValueKind.String)
                         continue;
                     var href = hrefProp.GetString();
                     if (!string.IsNullOrWhiteSpace(href))

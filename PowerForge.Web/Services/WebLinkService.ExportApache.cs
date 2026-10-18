@@ -133,6 +133,7 @@ public static partial class WebLinkService
         if (!IsSafeApacheRewriteSubstitution(destination))
             throw new InvalidOperationException($"Apache redirect target contains characters that must be URL-encoded before export: {rule.Id ?? rule.SourcePath}");
 
+        AppendApacheCanonicalPathCondition(lines, rule, destination);
         AppendHostCondition(lines, rule.SourceHost);
         AppendQueryCondition(lines, rule.SourceQuery, rule.SourceQueryParameter);
         WebApacheRewriteSafety.AppendOperationalPathCondition(lines);
@@ -144,9 +145,31 @@ public static partial class WebLinkService
             "L",
             rule.PreserveQuery && !hasSourceQuery ? "QSA" : "QSD"
         };
-        lines.Add($"RewriteRule {pattern} {destination} [{string.Join(",", flags)}]");
+        var literalDestination = rule.MatchType is LinkRedirectMatchType.Exact or LinkRedirectMatchType.Query;
+        // Literal URLs must retain URI escapes and fragments without interpreting
+        // percent or dollar characters as rewrite backreferences.
+        if (literalDestination && (destination.Contains('%') || destination.Contains('#')))
+            flags.Add("NE");
+        var substitution = literalDestination
+            ? WebApacheRewriteSafety.EscapeLiteralDestination(destination)
+            : destination;
+        lines.Add($"RewriteRule {pattern} {substitution} [{string.Join(",", flags)}]");
         lines.Add(string.Empty);
         return true;
+    }
+
+    private static void AppendApacheCanonicalPathCondition(List<string> lines, LinkRedirectRule rule, string destination)
+    {
+        if (rule.MatchType == LinkRedirectMatchType.Exact && !HasSourceQuerySelector(rule))
+            WebApacheRewriteSafety.AppendCanonicalPathCondition(lines, rule.SourcePath, destination, !rule.PreserveQuery);
+    }
+
+    private static bool TryGetApacheCanonicalPath(LinkRedirectRule rule, string destination, out string path, out Uri? absoluteTarget)
+    {
+        path = destination;
+        absoluteTarget = null;
+        return rule.MatchType == LinkRedirectMatchType.Exact && !HasSourceQuerySelector(rule) &&
+               WebApacheRewriteSafety.TryGetCanonicalPath(rule.SourcePath, destination, out path, out absoluteTarget);
     }
 
     private static bool IsSafeApacheRewriteSubstitution(string destination)
@@ -214,14 +237,10 @@ public static partial class WebLinkService
         {
             case LinkRedirectMatchType.Prefix:
             {
-                var prefix = NormalizeSourcePath(rule.SourcePath);
-                var starIndex = prefix.IndexOf('*');
-                if (starIndex >= 0)
-                    prefix = prefix.Substring(0, starIndex);
-                prefix = prefix.Trim('/');
+                var prefix = NormalizeApachePrefixPath(rule.SourcePath);
                 pattern = string.IsNullOrWhiteSpace(prefix)
                     ? "^/?(.*)$"
-                    : $"^/?{Regex.Escape(prefix)}(?:/(.*))?$";
+                    : $"^/?{WebApacheRewriteSafety.EscapePathPattern(prefix)}(?:/(.*))?$";
                 destination = NormalizeDestination(rule.TargetUrl).Replace("{path}", "$1", StringComparison.OrdinalIgnoreCase);
                 return rule.Status == 410 || !string.IsNullOrWhiteSpace(destination);
             }
@@ -247,12 +266,22 @@ public static partial class WebLinkService
             case LinkRedirectMatchType.Exact:
             default:
             {
-                var exact = NormalizeSourcePath(rule.SourcePath).Trim('/');
-                pattern = string.IsNullOrWhiteSpace(exact) ? "^/?$" : $"^/?{Regex.Escape(exact)}/?$";
+                var exact = Uri.UnescapeDataString(NormalizeSourcePath(rule.SourcePath)).Trim('/');
+                pattern = string.IsNullOrWhiteSpace(exact) ? "^/?$" : $"^/?{WebApacheRewriteSafety.EscapePathPattern(exact)}/?$";
                 destination = NormalizeDestination(rule.TargetUrl);
                 return rule.Status == 410 || !string.IsNullOrWhiteSpace(destination);
             }
         }
+    }
+
+    private static string NormalizeApachePrefixPath(string? sourcePath)
+    {
+        var prefix = NormalizeSourcePath(sourcePath);
+        // Recognize configuration wildcards before decoding literal URI characters.
+        var starIndex = prefix.IndexOf('*');
+        if (starIndex >= 0)
+            prefix = prefix.Substring(0, starIndex);
+        return Uri.UnescapeDataString(prefix).Trim('/');
     }
 
     private static void AppendHostCondition(List<string> lines, string? host)

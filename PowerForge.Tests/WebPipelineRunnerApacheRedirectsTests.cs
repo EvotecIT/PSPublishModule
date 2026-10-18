@@ -71,7 +71,7 @@ public class WebPipelineRunnerApacheRedirectsTests
             Assert.Contains("/new-url [R=301,L]", config, StringComparison.Ordinal);
             Assert.Single(Regex.Matches(
                 config,
-                @"RewriteRule \^old\\?-url/\?\$ /new-url \[R=301,L\]",
+                @"RewriteRule \^/\?old\\?-url/\?\$ /new-url \[R=301,L\]",
                 RegexOptions.CultureInvariant).Cast<Match>());
 
             var summaryPath = Path.Combine(root, "Build", "apache-redirects-summary.json");
@@ -157,7 +157,7 @@ public class WebPipelineRunnerApacheRedirectsTests
             var config = File.ReadAllText(Path.Combine(root, "deploy", "apache", "wordpress-redirects.conf"));
             Assert.Contains("RewriteCond %{HTTP_HOST} ^(.+\\.)?example\\.test$ [NC]", config, StringComparison.Ordinal);
             Assert.Contains("RewriteCond %{QUERY_STRING} ^v=1$", config, StringComparison.Ordinal);
-            Assert.Contains("RewriteRule ^docs/?$ /docs/current/ [R=301,L,QSD]", config, StringComparison.Ordinal);
+            Assert.Contains("RewriteRule ^/?docs/?$ /docs/current/ [R=301,L,QSD]", config, StringComparison.Ordinal);
         }
         finally
         {
@@ -175,6 +175,53 @@ public class WebPipelineRunnerApacheRedirectsTests
         catch
         {
             // ignore cleanup failures in tests
+        }
+    }
+
+    [Theory]
+    [InlineData("/allianz/", "/pl/allianz/", "pl", "!^/allianz/$")]
+    [InlineData("https://evotec.pl/company-news/", "https://evotec.pl/company-news/", "", "!^/company-news/$ [OR]")]
+    [InlineData("/", "/", "", "!^/$")]
+    [InlineData("https://evotec.pl/caf%C3%A9/", "https://evotec.pl/caf%C3%A9/", "", "!^(?:/caf%C3%A9/|/café/)$ [OR]")]
+    public void RunPipeline_ApacheRedirects_UsesSharedCanonicalPathGuard(string source, string target, string language, string condition)
+    {
+        var config = GenerateCsvRules(source, target, language);
+        Assert.Contains("RewriteCond %{REQUEST_URI} " + condition, config, StringComparison.Ordinal);
+        if (target.StartsWith("https://", StringComparison.Ordinal))
+        {
+            Assert.Contains(@"RewriteCond %{HTTP_HOST} !^evotec\.pl(?::443)?$ [NC,OR]", config, StringComparison.Ordinal);
+            Assert.Contains("RewriteCond %{HTTPS} !^on$", config, StringComparison.Ordinal);
+        }
+        // Non-query CSV rules preserve queries; canonical requests with a query must also stop redirecting.
+        Assert.DoesNotContain("RewriteCond %{QUERY_STRING} !^$", config, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("https://evotec.pl/space%20report/", "/space%20report/", @"space\x20report", @"/space\%20report/", ",NE")]
+    [InlineData("/old-price/", "/price$1/", "old-price", @"/price\$1/", "")]
+    [InlineData("/old-section/", "/page/#section", "old-section", "/page/#section", ",NE")]
+    public void RunPipeline_ApacheRedirects_PreservesLiteralUriCharacters(string source, string target, string pattern, string destination, string flag)
+    {
+        var config = GenerateCsvRules(source, target, "");
+        Assert.Contains($"RewriteRule ^/?{pattern}/?$ {destination} [R=301,L{flag}]", config, StringComparison.Ordinal);
+    }
+
+    private static string GenerateCsvRules(string source, string target, string language)
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-apache-csv-canonical-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "redirects.csv"), $"legacy_url,target_url,status,language\n{source},{target},301,{language}\n");
+            File.WriteAllText(Path.Combine(root, "pipeline.json"), """
+                {"steps":[{"task":"apache-redirects","sources":["./redirects.csv"],"languageHostMap":{"pl":"evotec.pl"},"out":"./rules.conf"}]}
+                """);
+            Assert.True(WebPipelineRunner.RunPipeline(Path.Combine(root, "pipeline.json"), logger: null).Success);
+            return File.ReadAllText(Path.Combine(root, "rules.conf"));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
         }
     }
 }

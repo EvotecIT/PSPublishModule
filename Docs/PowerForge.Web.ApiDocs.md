@@ -6,6 +6,15 @@ overriding templates via `templateRoot`.
 
 ## Documentation inputs and inheritance
 
+Generated API indexes, type pages, PowerShell command pages and suite portals
+inherit the site's `StructuredData` settings. Set `WebPage: true` for linked
+page, website and publisher metadata; `Breadcrumbs: true` adds the reference
+hierarchy. Each canonical page uses its own URL, title and description. The
+generator uses `SiteConfigPath` (or a site configuration supplied as `NavJsonPath`)
+and requires a public HTTP or HTTPS base URL. Disabling structured data in the
+site configuration also disables it on generated references. Custom API templates
+include this output through `{{HEAD_HTML}}`.
+
 Source-link coverage measures whether readers can open the implementation from
 the API reference. It is separate from test code coverage. Enum declarations and
 fields use Roslyn syntax from checksum-verified portable PDB documents; methods

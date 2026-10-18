@@ -32,6 +32,7 @@ public static partial class WebApiDocsGenerator
         var cssBlock = BuildCssBlockWithFallback(fallbackCss, cssLinks);
         var docsScript = WrapScript(LoadAsset(options, "docs.js", options.DocsScriptPath));
         var social = ResolveApiSocialProfile(options);
+        var structuredDataSite = LoadApiStructuredDataSite(options, social);
         var baseUrl = NormalizeApiRoute(options.BaseUrl);
         var title = string.IsNullOrWhiteSpace(options.Title) ? (suite.Title ?? "API Suite") : options.Title.Trim();
         var description = BuildApiSuiteSeoDescription(title, suite);
@@ -42,7 +43,7 @@ public static partial class WebApiDocsGenerator
             ["TITLE"] = System.Web.HttpUtility.HtmlEncode(title),
             ["DESCRIPTION_META"] = BuildDescriptionMetaTag(description),
             ["OPEN_GRAPH_META"] = BuildApiOpenGraphMetaTags(options, social, title, description, baseUrl),
-            ["HEAD_HTML"] = head,
+            ["HEAD_HTML"] = BuildApiPageHeadHtml(head, structuredDataSite, options, social, title, description, NormalizeApiIndexRoute(baseUrl), NormalizeApiIndexRoute(baseUrl)),
             ["CRITICAL_CSS"] = criticalCss,
             ["CSS"] = cssBlock,
             ["HEADER"] = header,

@@ -103,6 +103,8 @@ internal static partial class WebPipelineRunner
         foreach (var row in uniqueRows)
         {
             var source = ParseApacheLegacySource(row.LegacyUrl);
+            var destination = WebApacheRewriteSafety.EscapeLiteralDestination(row.TargetUrl);
+            var noEscape = row.TargetUrl.Contains('%') || row.TargetUrl.Contains('#') ? ",NE" : string.Empty;
             var hostCondition = source.HostPattern;
             var postMatch = ApacheLegacyPostIdRegex.Match(source.PathAndQuery);
             if (postMatch.Success)
@@ -112,7 +114,7 @@ internal static partial class WebPipelineRunner
                     lines.Add($"RewriteCond %{{HTTP_HOST}} {hostCondition} [NC]");
                 lines.Add($"RewriteCond %{{QUERY_STRING}} (^|&)p={id}(&|$)");
                 WebApacheRewriteSafety.AppendOperationalPathCondition(lines);
-                lines.Add($"RewriteRule ^/?$ {row.TargetUrl} [R={row.Status},L,QSD]");
+                lines.Add($"RewriteRule ^/?$ {destination} [R={row.Status},L,QSD{noEscape}]");
                 lines.Add(string.Empty);
                 continue;
             }
@@ -125,7 +127,7 @@ internal static partial class WebPipelineRunner
                     lines.Add($"RewriteCond %{{HTTP_HOST}} {hostCondition} [NC]");
                 lines.Add($"RewriteCond %{{QUERY_STRING}} (^|&)page_id={id}(&|$)");
                 WebApacheRewriteSafety.AppendOperationalPathCondition(lines);
-                lines.Add($"RewriteRule ^/?$ {row.TargetUrl} [R={row.Status},L,QSD]");
+                lines.Add($"RewriteRule ^/?$ {destination} [R={row.Status},L,QSD{noEscape}]");
                 lines.Add(string.Empty);
                 continue;
             }
@@ -141,18 +143,22 @@ internal static partial class WebPipelineRunner
                 if (!string.IsNullOrWhiteSpace(hostCondition))
                     lines.Add($"RewriteCond %{{HTTP_HOST}} {hostCondition} [NC]");
                 AppendApacheLegacyQueryCondition(lines, source.SourceQuery);
+                if (string.IsNullOrWhiteSpace(source.SourceQuery))
+                    WebApacheRewriteSafety.AppendCanonicalPathCondition(lines, path, row.TargetUrl, discardQuery: false);
                 WebApacheRewriteSafety.AppendOperationalPathCondition(lines);
-                lines.Add($"RewriteRule ^/?$ {row.TargetUrl} [R={row.Status},L{(string.IsNullOrWhiteSpace(source.SourceQuery) ? string.Empty : ",QSD")}]");
+                lines.Add($"RewriteRule ^/?$ {destination} [R={row.Status},L{(string.IsNullOrWhiteSpace(source.SourceQuery) ? string.Empty : ",QSD")}{noEscape}]");
                 lines.Add(string.Empty);
                 continue;
             }
 
-            var escapedPath = Regex.Escape(path.TrimStart('/'));
+            var escapedPath = WebApacheRewriteSafety.EscapePathPattern(Uri.UnescapeDataString(path).Trim('/'));
             if (!string.IsNullOrWhiteSpace(hostCondition))
                 lines.Add($"RewriteCond %{{HTTP_HOST}} {hostCondition} [NC]");
             AppendApacheLegacyQueryCondition(lines, source.SourceQuery);
+            if (string.IsNullOrWhiteSpace(source.SourceQuery))
+                WebApacheRewriteSafety.AppendCanonicalPathCondition(lines, path, row.TargetUrl, discardQuery: false);
             WebApacheRewriteSafety.AppendOperationalPathCondition(lines);
-            lines.Add($"RewriteRule ^{escapedPath}/?$ {row.TargetUrl} [R={row.Status},L{(string.IsNullOrWhiteSpace(source.SourceQuery) ? string.Empty : ",QSD")}]");
+            lines.Add($"RewriteRule ^/?{escapedPath}/?$ {destination} [R={row.Status},L{(string.IsNullOrWhiteSpace(source.SourceQuery) ? string.Empty : ",QSD")}{noEscape}]");
             lines.Add(string.Empty);
         }
 
