@@ -71,344 +71,43 @@ concurrency:
 
 jobs:
   capture:
-    runs-on: ${{ fromJson(inputs.runner_labels_json) }}
+    runs-on: ${{ fromJSON(inputs.runner_labels_json) }}
     timeout-minutes: 90
     permissions:
       contents: read
     steps:
-      - name: Require immutable source and supported shell
+      - name: Resolve this reusable workflow identity
+        id: owner
         shell: pwsh
         env:
-          SOURCE_REF: ${{ inputs.source_ref }}
-          MARKETING_VERSION: ${{ inputs.marketing_version }}
-          CAPTURE_SHELL: ${{ inputs.capture_shell }}
-          CAPTURE_RUNTIME: ${{ inputs.runtime }}
-          SIMULATOR_TOOL_REF: ${{ inputs.simulator_tool_ref }}
-          SIMULATOR_DEVICES: ${{ inputs.simulator_devices_json }}
-          XCODEGEN_VERSION_FILE: ${{ inputs.xcodegen_version_file }}
+          JOB_WORKFLOW: ${{ toJSON(job) }}
         run: |
-          if ($env:SIMULATOR_TOOL_REF -and $env:SIMULATOR_TOOL_REF -notmatch '^[0-9A-Fa-f]{40}$') { throw 'simulator_tool_ref must be an exact commit SHA.' }
-          $devices = $env:SIMULATOR_DEVICES | ConvertFrom-Json -AsHashtable
-          if ($devices -isnot [Collections.IDictionary]) { throw 'simulator_devices_json must be an object.' }
-          foreach ($entry in $devices.GetEnumerator()) {
-            $device = [guid]::Empty
-            if ($entry.Key -cnotmatch '^[a-z][a-z0-9_-]{0,39}$' -or
-                -not [guid]::TryParseExact([string]$entry.Value, 'D', [ref]$device) -or $device -eq [guid]::Empty) {
-              throw 'Each capture role must select one exact nonempty simulator UUID.'
-            }
+          $identity = $env:JOB_WORKFLOW | ConvertFrom-Json
+          if ($identity.workflow_repository -cne 'EvotecIT/PSPublishModule' -or
+              $identity.workflow_file_path -cne '.github/workflows/powerforge-apple-screenshot-capture.yml' -or
+              [string]$identity.workflow_sha -cnotmatch '^[0-9a-f]{40}$') {
+            throw 'GitHub must provide this reusable workflow identity before loading its code.'
           }
-          if ($devices.Count -gt 0 -and -not $env:SIMULATOR_TOOL_REF) { throw 'Simulator captures require a pinned lifecycle tool.' }
-          if ($env:SOURCE_REF -notmatch '^[0-9A-Fa-f]{40}$') { throw 'source_ref must be an exact 40-character commit SHA.' }
-          if ($env:MARKETING_VERSION -notmatch '^\d+\.\d+(?:\.\d+)?$') { throw 'marketing_version must use x.y or x.y.z.' }
-          if ($env:CAPTURE_SHELL -notin @('bash', 'pwsh')) { throw 'capture_shell must be bash or pwsh.' }
-          if ($env:XCODEGEN_VERSION_FILE -and
-              ($env:XCODEGEN_VERSION_FILE -cnotmatch '\A[A-Za-z0-9._/-]+\z' -or
-               $env:XCODEGEN_VERSION_FILE.StartsWith('/') -or
-               '..' -in $env:XCODEGEN_VERSION_FILE.Split('/'))) {
-            throw 'xcodegen_version_file must be a relative path inside the capture source.'
-          }
-          if ([string]::IsNullOrWhiteSpace($env:CAPTURE_RUNTIME) -or $env:CAPTURE_RUNTIME.Length -gt 200 -or $env:CAPTURE_RUNTIME -match '[\r\n]') {
-            throw 'runtime must be a non-empty single-line platform runtime no longer than 200 characters.'
-          }
-
-      - name: Checkout exact screenshot source
-        id: source_checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
-        with:
-          ref: ${{ inputs.source_ref }}
-          fetch-depth: 1
-          path: source
-          persist-credentials: false
-
-      - name: Setup pinned XcodeGen
-        if: inputs.xcodegen_version_file != ''
-        uses: EvotecIT/PSPublishModule/.github/actions/setup-xcodegen@e25d9c17bcd11ff3f233e6b44ebe741eba8bcfc1
-        with:
-          version-file: source/${{ inputs.xcodegen_version_file }}
-
-      - name: Checkout pinned simulator lifecycle tool
-        if: inputs.simulator_tool_ref != ''
+          "owner_commit=$($identity.workflow_sha)" | Add-Content -LiteralPath $env:GITHUB_OUTPUT -Encoding utf8
+      - name: Checkout this reusable workflow implementation
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
         with:
           repository: EvotecIT/PSPublishModule
-          ref: ${{ inputs.simulator_tool_ref }}
-          fetch-depth: 1
-          path: simulator-tool
+          ref: ${{ steps.owner.outputs.owner_commit }}
+          path: capture-owner
           persist-credentials: false
-
-      - name: Build simulator lifecycle tool
-        if: inputs.simulator_tool_ref != ''
-        shell: pwsh
-        env:
-          SIMULATOR_TOOL_REF: ${{ inputs.simulator_tool_ref }}
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $toolRoot = Join-Path '${{ github.workspace }}' 'simulator-tool'
-          $toolCommit = (& git -C $toolRoot rev-parse HEAD).Trim()
-          if ($LASTEXITCODE -ne 0 -or $toolCommit -cne $env:SIMULATOR_TOOL_REF.ToLowerInvariant()) { throw 'Simulator tool checkout does not match its pin.' }
-          $dotnet = '/usr/local/share/dotnet/dotnet'
-          if (-not (Test-Path -LiteralPath $dotnet -PathType Leaf)) { throw 'The trusted Mac needs the fixed .NET installation.' }
-          $output = Join-Path $env:RUNNER_TEMP 'powerforge-simulator-cli'
-          Push-Location $toolRoot
-          try {
-            & $dotnet build PowerForge.Cli/PowerForge.Cli.csproj --configuration Release --framework net10.0 --output $output --verbosity quiet -p:SourceRevisionId=$toolCommit -p:IncludeSourceRevisionInInformationalVersion=true
-            if ($LASTEXITCODE -ne 0) { throw 'Simulator lifecycle tool build failed.' }
-          } finally { Pop-Location }
-          $cli = Join-Path $output 'PowerForge.Cli.dll'
-          # An empty isolated status root reads build identity without native discovery.
-          $identityRoot = Join-Path $output ('capture-identity-' + [Guid]::NewGuid().ToString('N'))
-          try {
-            $identity = (& $dotnet $cli apple-simulator status --state-root $identityRoot --output json) | ConvertFrom-Json
-            if ($LASTEXITCODE -ne 0 -or $identity.command -ne 'apple-simulator.status' -or $identity.success -ne $true -or
-                [string]::IsNullOrWhiteSpace($identity.tool.cliModuleId) -or [string]::IsNullOrWhiteSpace($identity.tool.engineModuleId)) {
-              throw 'Built simulator tool did not provide loaded assembly identities.'
-            }
-            $identity.tool | ConvertTo-Json -Compress | Set-Content -LiteralPath (Join-Path $env:RUNNER_TEMP 'powerforge-simulator-build-identity.json') -Encoding utf8
-          } finally {
-            if (Test-Path -LiteralPath $identityRoot) { Remove-Item -LiteralPath $identityRoot -ErrorAction Stop }
-          }
-          "POWERFORGE_DOTNET=$dotnet" | Add-Content $env:GITHUB_ENV
-          "POWERFORGE_SIMULATOR_CLI=$cli" | Add-Content $env:GITHUB_ENV
-
       - name: Capture deterministic App Store screenshots
-        shell: pwsh
-        env:
-          SOURCE_REF: ${{ inputs.source_ref }}
-          CAPTURE_SCRIPT: ${{ inputs.capture_script }}
-          CAPTURE_SHELL: ${{ inputs.capture_shell }}
-          CAPTURE_ARTIFACT_PATH: ${{ inputs.capture_artifact_path }}
-          POWERFORGE_CAPTURE_SIMULATORS: ${{ inputs.simulator_devices_json }}
-          SIMULATOR_TOOL_REF: ${{ inputs.simulator_tool_ref }}
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $sourceRoot = [IO.Path]::GetFullPath('${{ github.workspace }}/source').TrimEnd([IO.Path]::DirectorySeparatorChar)
-          $scriptPath = [IO.Path]::GetFullPath((Join-Path $sourceRoot $env:CAPTURE_SCRIPT))
-          $artifactPath = [IO.Path]::GetFullPath((Join-Path $sourceRoot $env:CAPTURE_ARTIFACT_PATH))
-          $comparison = if ($IsWindows) { [StringComparison]::OrdinalIgnoreCase } else { [StringComparison]::Ordinal }
-          $prefix = $sourceRoot + [IO.Path]::DirectorySeparatorChar
-          if (((Get-Item -LiteralPath $sourceRoot -Force).Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
-            throw "Checked-out source must not be a symbolic link or reparse point: $sourceRoot"
-          }
-
-          function Assert-UnlinkedSourcePath {
-            param(
-              [Parameter(Mandatory)] [string] $Path,
-              [Parameter(Mandatory)] [string] $Name
-            )
-
-            $current = $Path
-            while (-not $current.Equals($sourceRoot, $comparison)) {
-              if (Test-Path -LiteralPath $current) {
-                $item = Get-Item -LiteralPath $current -Force
-                if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
-                  throw "$Name must not traverse a symbolic link or reparse point: $current"
-                }
-              }
-              $parent = Split-Path -Parent $current
-              if ([string]::IsNullOrWhiteSpace($parent) -or $parent.Equals($current, $comparison)) {
-                throw "$Name could not be validated inside the checked-out source."
-              }
-              $current = $parent
-            }
-          }
-
-          foreach ($entry in @{ capture_script = $scriptPath; capture_artifact_path = $artifactPath }.GetEnumerator()) {
-            if (-not $entry.Value.StartsWith($prefix, $comparison)) { throw "$($entry.Key) escapes the checked-out source." }
-          }
-          $actualCommit = (& git -C $sourceRoot rev-parse HEAD).Trim()
-          if ($LASTEXITCODE -ne 0 -or -not $actualCommit.Equals($env:SOURCE_REF, [StringComparison]::OrdinalIgnoreCase)) {
-            throw "Capture source '$actualCommit' does not match source_ref '$($env:SOURCE_REF)'."
-          }
-          Assert-UnlinkedSourcePath -Path $scriptPath -Name 'Capture script'
-          Assert-UnlinkedSourcePath -Path $artifactPath -Name 'Capture artifact'
-          if (-not (Test-Path -LiteralPath $scriptPath -PathType Leaf)) { throw "Capture script was not found: $scriptPath" }
-          $relativeScript = [IO.Path]::GetRelativePath($sourceRoot, $scriptPath).Replace('\', '/')
-          & git -C $sourceRoot ls-files --error-unmatch -- $relativeScript *> $null
-          if ($LASTEXITCODE -ne 0) { throw "Capture script must be tracked at the exact source commit: $relativeScript" }
-          & git -C $sourceRoot diff --quiet HEAD -- $relativeScript
-          if ($LASTEXITCODE -ne 0) { throw "Capture script differs from the exact source commit: $relativeScript" }
-
-          $devices = $env:POWERFORGE_CAPTURE_SIMULATORS | ConvertFrom-Json -AsHashtable
-          if ($devices.Count -gt 0) {
-            # The provisioned CLI enforces this even if a consumer omits the flag.
-            $env:POWERFORGE_APPLE_SIMULATOR_REQUIRE_SHUTDOWN = '1'
-            $inventoryPath = Join-Path $env:RUNNER_TEMP 'powerforge-capture-simulator-inventory.json'
-            $errorPath = Join-Path $env:RUNNER_TEMP 'powerforge-capture-simulator-inventory-error.txt'
-            $discovery = Start-Process -FilePath xcrun -ArgumentList @('simctl', 'list', 'devices', '--json') -RedirectStandardOutput $inventoryPath -RedirectStandardError $errorPath -PassThru
-            try {
-              if (-not $discovery.WaitForExit(30000)) {
-                $discovery.Kill($true)
-                $null = $discovery.WaitForExit(5000)
-                throw 'Simulator capture discovery timed out before capture.'
-              }
-              # The timed wait observes exit before redirected output is drained.
-              $discovery.WaitForExit()
-              if ($discovery.ExitCode -ne 0) { throw 'Simulator capture discovery failed before capture.' }
-            } finally { $discovery.Dispose() }
-            $inventory = Get-Content -LiteralPath $inventoryPath -Raw | ConvertFrom-Json
-            foreach ($entry in $devices.GetEnumerator()) {
-              $selected = @($inventory.devices.PSObject.Properties | ForEach-Object { $_.Value } | Where-Object { $_.udid -eq $entry.Value })
-              if ($selected.Count -ne 1 -or $selected[0].state -ne 'Shutdown' -or $selected[0].isAvailable -ne $true) {
-                throw "Capture role '$($entry.Key)' must select one available Shutdown simulator before capture."
-              }
-            }
-          }
-
-          Push-Location $sourceRoot
-          $captureStartedAt = [DateTimeOffset]::UtcNow
-          try {
-            if ($env:CAPTURE_SHELL -eq 'bash') { & bash $scriptPath } else { & pwsh -NoLogo -NoProfile -File $scriptPath }
-            if ($LASTEXITCODE -ne 0) { throw "Screenshot capture failed with exit code $LASTEXITCODE." }
-          } finally { Pop-Location }
-
-          if (-not (Test-Path -LiteralPath $artifactPath -PathType Container)) { throw "Capture artifact folder was not created: $artifactPath" }
-          Assert-UnlinkedSourcePath -Path $artifactPath -Name 'Capture artifact'
-          $artifactItems = @(Get-ChildItem -LiteralPath $artifactPath -Force -Recurse)
-          $linkedArtifact = $artifactItems | Where-Object { ($_.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0 } | Select-Object -First 1
-          if ($null -ne $linkedArtifact) {
-            throw "Capture artifact must not traverse a symbolic link or reparse point: $($linkedArtifact.FullName)"
-          }
-          if (@($artifactItems | Where-Object { -not $_.PSIsContainer -and $_.Extension -ieq '.png' }).Count -eq 0) {
-            throw 'Capture produced no PNG screenshots.'
-          }
-
-          $devices = $env:POWERFORGE_CAPTURE_SIMULATORS | ConvertFrom-Json -AsHashtable
-          $sessions = @()
-          $expectedTool = if ($devices.Count -gt 0) {
-            Get-Content -LiteralPath (Join-Path $env:RUNNER_TEMP 'powerforge-simulator-build-identity.json') -Raw | ConvertFrom-Json
-          } else { $null }
-          foreach ($entry in $devices.GetEnumerator()) {
-            $receiptPath = Join-Path $sourceRoot "build/powerforge/screenshots/$($entry.Key).json"
-            Assert-UnlinkedSourcePath -Path $receiptPath -Name 'Simulator capture receipt'
-            $receiptFile = Get-Item -LiteralPath $receiptPath
-            if ($receiptFile.PSIsContainer -or $receiptFile.Length -gt 65536) { throw 'Invalid simulator capture receipt file.' }
-            $receiptJson = Get-Content -LiteralPath $receiptPath -Raw
-            $capture = $receiptJson | ConvertFrom-Json -Depth 10
-            $receipt = $capture.result.receipt
-            # Informational versions come from both executing loaded assemblies,
-            # never from a consumer-provided environment or the requested pin.
-            $cliIdentity = [regex]::Match([string]$capture.tool.cliVersion, '\+([0-9a-f]{40})$')
-            $engineIdentity = [regex]::Match([string]$capture.tool.engineVersion, '\+([0-9a-f]{40})$')
-            if (-not $cliIdentity.Success -or -not $engineIdentity.Success -or
-                $cliIdentity.Groups[1].Value -cne $env:SIMULATOR_TOOL_REF.ToLowerInvariant() -or
-                $engineIdentity.Groups[1].Value -cne $cliIdentity.Groups[1].Value -or
-                [string]::IsNullOrWhiteSpace($expectedTool.cliModuleId) -or [string]::IsNullOrWhiteSpace($expectedTool.engineModuleId) -or
-                $capture.tool.cliModuleId -cne $expectedTool.cliModuleId -or $capture.tool.engineModuleId -cne $expectedTool.engineModuleId) {
-              throw "Simulator capture role '$($entry.Key)' did not use the pinned CLI and engine builds."
-            }
-            $expectedOwner = "$env:GITHUB_REPOSITORY/$env:GITHUB_RUN_ID/$($entry.Key)"
-            # Read raw ISO strings: PowerShell can coerce JSON dates to DateTime,
-            # whose implicit string conversion loses fractional seconds.
-            $document = [Text.Json.JsonDocument]::Parse($receiptJson)
-            try {
-              $timestamps = $document.RootElement.GetProperty('result').GetProperty('receipt')
-              $invariant = [Globalization.CultureInfo]::InvariantCulture
-              $started = [DateTimeOffset]::Parse($timestamps.GetProperty('startedAtUtc').GetString(), $invariant)
-              $completed = [DateTimeOffset]::Parse($timestamps.GetProperty('completedAtUtc').GetString(), $invariant)
-            } finally { $document.Dispose() }
-            if ($capture.command -ne 'apple-simulator.run' -or $capture.success -ne $true -or $capture.exitCode -ne 0 -or
-                $receipt.schemaVersion -ne 1 -or $receipt.deviceId -ne $entry.Value -or $receipt.owner -cne $expectedOwner -or
-                $started -lt $captureStartedAt -or $completed -lt $started -or $completed -gt [DateTimeOffset]::UtcNow -or
-                $capture.result.requireInitialShutdown -ne $true -or $receipt.initialState -ne 'Shutdown' -or $receipt.bootSucceeded -ne $true -or
-                $receipt.commandExitCode -ne 0 -or $receipt.cleanupSucceeded -ne $true -or $receipt.finalState -ne 'Shutdown') {
-              throw "Simulator capture role '$($entry.Key)' lacks a matching successful, released session from this capture."
-            }
-            $sessions += [ordered]@{
-              role = $entry.Key
-              deviceId = $receipt.deviceId
-              sessionId = $receipt.sessionId
-              owner = $receipt.owner
-              initialState = $receipt.initialState
-              requireInitialShutdown = $capture.result.requireInitialShutdown
-              toolCommit = $cliIdentity.Groups[1].Value
-              cliVersion = $capture.tool.cliVersion
-              engineVersion = $capture.tool.engineVersion
-              cliModuleId = $capture.tool.cliModuleId
-              engineModuleId = $capture.tool.engineModuleId
-              finalState = $receipt.finalState
-              receiptSha256 = (Get-FileHash -LiteralPath $receiptPath -Algorithm SHA256).Hash.ToLowerInvariant()
-            }
-          }
-          if ($devices.Count -gt 0) {
-            [ordered]@{ toolCommit = $sessions[0].toolCommit; devices = $devices; sessions = $sessions } |
-              ConvertTo-Json -Depth 6 -Compress |
-              Set-Content -LiteralPath (Join-Path $env:RUNNER_TEMP 'powerforge-apple-simulator-evidence.json') -Encoding utf8
-          }
-
-      - name: Record capture provenance
-        shell: pwsh
-        env:
-          SOURCE_REF: ${{ inputs.source_ref }}
-          MARKETING_VERSION: ${{ inputs.marketing_version }}
-          CAPTURE_DEVICE: ${{ inputs.device }}
-          CAPTURE_RUNTIME: ${{ inputs.runtime }}
-          CAPTURE_THEME: ${{ inputs.theme }}
-          CAPTURE_SCENARIO: ${{ inputs.scenario }}
-          CAPTURE_ARTIFACT_PATH: ${{ inputs.capture_artifact_path }}
-          SIMULATOR_DEVICES: ${{ inputs.simulator_devices_json }}
-        run: |
-          $sourceRoot = [IO.Path]::GetFullPath('${{ github.workspace }}/source')
-          $artifactRoot = [IO.Path]::GetFullPath((Join-Path $sourceRoot $env:CAPTURE_ARTIFACT_PATH))
-          $screenshots = @(Get-ChildItem -LiteralPath $artifactRoot -File -Filter '*.png' -Recurse | Sort-Object FullName | ForEach-Object {
-            $dimensions = @(& sips -g pixelWidth -g pixelHeight $_.FullName 2>&1)
-            if ($LASTEXITCODE -ne 0) { throw "Unable to read PNG dimensions: $($_.FullName)" }
-            $widthLine = $dimensions | Where-Object { $_ -match '^\s*pixelWidth:\s*(\d+)\s*$' } | Select-Object -First 1
-            $heightLine = $dimensions | Where-Object { $_ -match '^\s*pixelHeight:\s*(\d+)\s*$' } | Select-Object -First 1
-            if (-not $widthLine -or -not $heightLine) { throw "Unable to parse PNG dimensions: $($_.FullName)" }
-            $width = [int]([regex]::Match($widthLine, '(\d+)\s*$').Groups[1].Value)
-            $height = [int]([regex]::Match($heightLine, '(\d+)\s*$').Groups[1].Value)
-            [ordered]@{
-              path = [IO.Path]::GetRelativePath($artifactRoot, $_.FullName).Replace('\\', '/')
-              sha256 = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
-              width = $width
-              height = $height
-            }
-          })
-          if ($screenshots.Count -eq 0) { throw 'Capture provenance requires at least one PNG screenshot.' }
-          $xcodeVersion = (& xcodebuild -version) -join ' '
-          if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($xcodeVersion)) { throw 'Unable to record the capture Xcode version.' }
-          $captureRuntime = $env:CAPTURE_RUNTIME.Trim()
-          $provenance = [ordered]@{
-            schemaVersion = 2
-            repository = $env:GITHUB_REPOSITORY
-            captureRunId = $env:GITHUB_RUN_ID
-            sourceCommit = $env:SOURCE_REF.ToLowerInvariant()
-            marketingVersion = $env:MARKETING_VERSION
-            workflowRef = $env:GITHUB_WORKFLOW_REF
-            xcodeVersion = $xcodeVersion
-            runtime = $captureRuntime
-            device = $env:CAPTURE_DEVICE
-            theme = $env:CAPTURE_THEME
-            scenario = $env:CAPTURE_SCENARIO
-            screenshots = $screenshots
-          }
-          if (($env:SIMULATOR_DEVICES | ConvertFrom-Json -AsHashtable).Count -gt 0) {
-            $provenance.simulatorCapture = Get-Content -LiteralPath (Join-Path $env:RUNNER_TEMP 'powerforge-apple-simulator-evidence.json') -Raw | ConvertFrom-Json -AsHashtable
-          }
-          $provenance | ConvertTo-Json -Depth 8 -Compress |
-            Set-Content -LiteralPath (Join-Path $env:RUNNER_TEMP 'powerforge-apple-screenshot-provenance.json') -Encoding utf8
-
-      - name: Retain compact capture provenance
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: ./capture-owner/.github/actions/apple-screenshot-capture
         with:
-          name: powerforge-apple-screenshot-provenance-${{ inputs.source_ref }}
-          path: ${{ runner.temp }}/powerforge-apple-screenshot-provenance.json
-          if-no-files-found: error
-          retention-days: 30
-
-      - name: Retain exact captures for manual review
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: powerforge-apple-screenshots-${{ inputs.source_ref }}
-          path: source/${{ inputs.capture_artifact_path }}/**/*.png
-          if-no-files-found: error
-          retention-days: 30
-
-      - name: Retain simulator ownership and release receipts
-        if: always() && steps.source_checkout.outcome == 'success' && inputs.simulator_tool_ref != ''
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: powerforge-apple-simulator-receipts-${{ inputs.source_ref }}
-          path: source/build/powerforge/screenshots/*.json
-          if-no-files-found: warn
-          retention-days: 30
+          source_ref: ${{ inputs.source_ref }}
+          marketing_version: ${{ inputs.marketing_version }}
+          capture_script: ${{ inputs.capture_script }}
+          capture_shell: ${{ inputs.capture_shell }}
+          xcodegen_version_file: ${{ inputs.xcodegen_version_file }}
+          capture_artifact_path: ${{ inputs.capture_artifact_path }}
+          simulator_tool_ref: ${{ inputs.simulator_tool_ref }}
+          simulator_devices_json: ${{ inputs.simulator_devices_json }}
+          device: ${{ inputs.device }}
+          runtime: ${{ inputs.runtime }}
+          theme: ${{ inputs.theme }}
+          scenario: ${{ inputs.scenario }}

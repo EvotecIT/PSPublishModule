@@ -288,7 +288,7 @@ function Assert-ConsumerRepositoryContent {
 
 function Test-AppleWorkerControl {
     return $ArgumentList.Count -gt 1 -and $ArgumentList[0] -eq 'apple-testflight' -and
-        $ArgumentList[1] -in @('status', 'pause', 'resume')
+        $ArgumentList[1] -in @('status', 'pause', 'resume', 'mode')
 }
 
 function Register-AppleAutomationEvidence {

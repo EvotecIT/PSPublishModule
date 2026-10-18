@@ -1,0 +1,13 @@
+{
+  "SchemaVersion": 1,
+  "ControllerRepository": "example/private-release-control",
+  "ControllerBranch": "main",
+  "ControllerCommit": "__REVIEWED_CONTROLLER_COMMIT__",
+  "WorkflowPath": ".github/workflows/capture.yml",
+  "OwnerCommit": "__REVIEWED_OWNER_COMMIT__",
+  "RunnerGroup": "private-apple-capture",
+  "SourceRepository": "example/public-app",
+  "SourceBranch": "master",
+  "QualificationWorkflowPath": ".github/workflows/apple-ci.yml",
+  "RequiredChecks": [ "Native Apple qualification" ]
+}

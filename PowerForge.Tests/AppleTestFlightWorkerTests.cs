@@ -253,7 +253,7 @@ public sealed partial class AppleTestFlightWorkerTests
 
     private static string Sandbox()
     {
-        var root = Path.Combine(Path.GetTempPath(), "PowerForge.TestFlight.Tests." + Guid.NewGuid().ToString("N"));
+        var root = Path.Combine(AppleReleaseArtifactService.ResolvePhysicalPath(Path.GetTempPath()), "PowerForge.TestFlight.Tests." + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
         return root;
     }

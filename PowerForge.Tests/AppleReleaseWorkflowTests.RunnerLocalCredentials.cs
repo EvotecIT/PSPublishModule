@@ -89,7 +89,7 @@ public sealed partial class AppleReleaseWorkflowTests
         Assert.Contains("/usr/bin/xcodebuild", script, StringComparison.Ordinal);
         Assert.DoesNotContain("[string] $DotNet =", script, StringComparison.Ordinal);
 
-        var captureWorkflow = Read(root, ".github", "workflows", "powerforge-apple-screenshot-capture.yml");
+        var captureWorkflow = ReadCaptureImplementation(root);
         var screenshotWorkflow = Read(root, ".github", "workflows", "powerforge-apple-screenshots.yml");
         var approvalWorkflow = Read(root, ".github", "workflows", "powerforge-apple-screenshot-approve.yml");
         foreach (var workflow in new[] { captureWorkflow, screenshotWorkflow, approvalWorkflow })
@@ -108,7 +108,7 @@ public sealed partial class AppleReleaseWorkflowTests
     public void ScreenshotCaptureProvenanceInventoriesExactPngBytesAndDimensions()
     {
         var root = FindRepoRoot();
-        var workflow = Read(root, ".github", "workflows", "powerforge-apple-screenshot-capture.yml");
+        var workflow = ReadCaptureImplementation(root);
         Assert.Contains("Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256", workflow, StringComparison.Ordinal);
         Assert.Contains("sips -g pixelWidth -g pixelHeight", workflow, StringComparison.Ordinal);
         Assert.Contains("path = [IO.Path]::GetRelativePath($artifactRoot, $_.FullName)", workflow, StringComparison.Ordinal);

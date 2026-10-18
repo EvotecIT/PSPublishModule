@@ -1,0 +1,177 @@
+name: PowerForge Private Apple Screenshot Capture
+
+on:
+  workflow_call:
+    inputs:
+      source_repository:
+        description: Public application repository containing the qualified merged source.
+        required: true
+        type: string
+      source_branch:
+        description: Enrolled default branch for private cross-repository qualification.
+        required: true
+        type: string
+      qualification_workflow:
+        description: Application push workflow required before a private capture can reach the Mac.
+        required: true
+        type: string
+      required_checks_json:
+        description: Exact successful native job names required for private capture.
+        required: true
+        type: string
+      runner_group:
+        description: Restricted private runner group; required for cross-repository capture.
+        required: true
+        type: string
+      source_ref:
+        description: Exact source commit to capture.
+        required: true
+        type: string
+      marketing_version:
+        description: Exact x.y or x.y.z App Store version represented by the captures and approval.
+        required: true
+        type: string
+      capture_script:
+        description: Repository-relative deterministic capture script.
+        required: true
+        type: string
+      capture_shell:
+        description: Capture script host (bash or pwsh).
+        required: false
+        default: bash
+        type: string
+      xcodegen_version_file:
+        description: Optional source-relative XcodeGen version file; blank uses the runner's provisioned generator.
+        required: false
+        default: ""
+        type: string
+      capture_artifact_path:
+        description: Repository-relative folder produced by the capture script.
+        required: false
+        default: build/appstore-screenshots
+        type: string
+      simulator_devices_json:
+        description: Task-owned UUIDs by capture role; consumers persist each apple-simulator JSON result under build/powerforge/screenshots/<role>.json.
+        required: false
+        default: '{}'
+        type: string
+      runner_labels_json:
+        description: JSON array of trusted Apple runner labels.
+        required: false
+        default: '["self-hosted","macOS","ARM64"]'
+        type: string
+      device:
+        description: Device matrix identity captured with the screenshot evidence.
+        required: false
+        default: configured Apple screenshot matrix
+        type: string
+      runtime:
+        description: Exact platform runtime represented by the captures, such as iOS 26.0 Simulator or macOS 26.0.
+        required: true
+        type: string
+      theme:
+        description: Appearance matrix captured with the screenshot evidence.
+        required: false
+        default: light-and-dark
+        type: string
+      scenario:
+        description: Stable scenario identity captured with the screenshot evidence.
+        required: false
+        default: app-store-publication
+        type: string
+
+concurrency:
+  group: powerforge-apple-screenshot-capture-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  qualify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      qualification: ${{ steps.verify.outputs.qualification }}
+      owner_commit: ${{ steps.policy.outputs.owner_commit }}
+    steps:
+      - name: Require private-controller tool and runner policy
+        id: policy
+        shell: pwsh
+        env:
+          JOB_WORKFLOW: ${{ toJSON(job) }}
+          SOURCE_REPOSITORY: ${{ inputs.source_repository }}
+          RUNNER_GROUP: ${{ inputs.runner_group }}
+          RUNNER_LABELS: ${{ inputs.runner_labels_json }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:SOURCE_REPOSITORY)) { throw 'Private capture requires an application repository.' }
+          $identity = $env:JOB_WORKFLOW | ConvertFrom-Json
+          if ($identity.workflow_repository -cne 'EvotecIT/PSPublishModule' -or
+              $identity.workflow_file_path -cne '.github/workflows/powerforge-apple-private-screenshot-capture.yml' -or
+              [string]$identity.workflow_sha -cnotmatch '^[0-9a-f]{40}$') {
+            throw 'GitHub must provide this reusable workflow identity before loading its code.'
+          }
+          "owner_commit=$($identity.workflow_sha)" | Add-Content -LiteralPath $env:GITHUB_OUTPUT -Encoding utf8
+          if ($env:RUNNER_GROUP -cnotmatch '^[A-Za-z0-9][A-Za-z0-9 _-]{0,99}$' -or $env:RUNNER_GROUP -ieq 'Default') { throw 'Private capture requires a restricted runner group.' }
+          $labels = $env:RUNNER_LABELS | ConvertFrom-Json -NoEnumerate
+          if ($labels -isnot [array] -or $labels.Count -eq 0 -or
+              @($labels | Where-Object { $_ -isnot [string] -or $_ -cnotmatch '^[A-Za-z0-9][A-Za-z0-9_-]{0,99}$' }).Count) {
+            throw 'Private capture requires explicit runner labels.'
+          }
+      - name: Checkout the pinned capture policy owner
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+        with:
+          repository: EvotecIT/PSPublishModule
+          ref: ${{ steps.policy.outputs.owner_commit }}
+          path: capture-policy
+          persist-credentials: false
+      - name: Verify private controller and qualified merged application source
+        id: verify
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_REPOSITORY: ${{ inputs.source_repository }}
+          SOURCE_BRANCH: ${{ inputs.source_branch }}
+          SOURCE_REF: ${{ inputs.source_ref }}
+          QUALIFICATION_WORKFLOW: ${{ inputs.qualification_workflow }}
+          REQUIRED_CHECKS: ${{ inputs.required_checks_json }}
+          TOOL_COMMIT: ${{ steps.policy.outputs.owner_commit }}
+        run: |
+          $checks = $env:REQUIRED_CHECKS | ConvertFrom-Json -NoEnumerate
+          if ($checks -isnot [array] -or @($checks | Where-Object { $_ -isnot [string] }).Count) { throw 'required_checks_json must be an array of job names.' }
+          ./capture-policy/scripts/Invoke-ApplePrivateCapturePreflight.ps1 -Repository $env:SOURCE_REPOSITORY `
+            -Branch $env:SOURCE_BRANCH -SourceCommit $env:SOURCE_REF -WorkflowPath $env:QUALIFICATION_WORKFLOW `
+            -RequiredChecks $checks -ToolCommit $env:TOOL_COMMIT
+
+  capture:
+    needs: qualify
+    if: ${{ !cancelled() && needs.qualify.result == 'success' }}
+    runs-on: ${{ fromJSON(format('{{"group":"{0}","labels":{1}}}', inputs.runner_group, inputs.runner_labels_json)) }}
+    timeout-minutes: 90
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout this reusable workflow implementation
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+        with:
+          repository: EvotecIT/PSPublishModule
+          ref: ${{ needs.qualify.outputs.owner_commit }}
+          path: capture-owner
+          persist-credentials: false
+      - name: Capture deterministic App Store screenshots
+        uses: ./capture-owner/.github/actions/apple-screenshot-capture
+        with:
+          source_ref: ${{ inputs.source_ref }}
+          marketing_version: ${{ inputs.marketing_version }}
+          capture_script: ${{ inputs.capture_script }}
+          capture_shell: ${{ inputs.capture_shell }}
+          xcodegen_version_file: ${{ inputs.xcodegen_version_file }}
+          capture_artifact_path: ${{ inputs.capture_artifact_path }}
+          simulator_tool_ref: ${{ needs.qualify.outputs.owner_commit }}
+          simulator_devices_json: ${{ inputs.simulator_devices_json }}
+          device: ${{ inputs.device }}
+          runtime: ${{ inputs.runtime }}
+          theme: ${{ inputs.theme }}
+          scenario: ${{ inputs.scenario }}
+          source_repository: ${{ inputs.source_repository }}
+          qualification_json: ${{ needs.qualify.outputs.qualification }}
