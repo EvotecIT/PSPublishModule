@@ -449,7 +449,12 @@ public sealed partial class DotNetPublishPipelineRunner
                 foreach (var file in EnumerateArtifactFilesForChecksum(a))
                 {
                     var full = Path.GetFullPath(file);
-                    if (!File.Exists(full)) continue;
+                    if (!File.Exists(full))
+                    {
+                        if (a.PublishedChecksumFiles is not null)
+                            throw new FileNotFoundException("Published checksum input was not found.", full);
+                        continue;
+                    }
                     filesToHash[full] = ToManifestRelativePath(plan.ProjectRoot, full);
                 }
 
@@ -530,7 +535,7 @@ public sealed partial class DotNetPublishPipelineRunner
             throw new ArgumentNullException(nameof(artefact));
         return (artefact.Category == DotNetPublishArtefactCategory.Installer
             ? artefact.OutputFiles ?? Array.Empty<string>()
-            : EnumerateFilesSafe(artefact.OutputDir, "*", SearchOption.AllDirectories))
+            : artefact.PublishedChecksumFiles ?? EnumerateFilesSafe(artefact.OutputDir, "*", SearchOption.AllDirectories))
             .Concat(artefact.EvidencePaths);
     }
 

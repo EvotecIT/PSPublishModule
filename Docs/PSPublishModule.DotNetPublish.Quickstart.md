@@ -21,6 +21,8 @@ For final package and runtime checks after building, see [Validate release artif
 
 Signed portable ZIPs contain application files only. PowerForge writes their publisher-signed inventory beside the ZIP as `<archive>.release-inventory.json` and `<archive>.release-inventory.p7s`, records both in the manifest and checksum catalog, and stages them as release metadata. Keep these files with the ZIP when verifying a downloaded release. MSI and native installer staging excludes publisher-owned evidence from the installed application. The verifier also accepts embedded inventory in previously published ZIPs.
 
+With the default `UseStaging=true`, checksums cover files deployed from the clean publish staging directory, generated service-package files, and release evidence. Files already present only in the destination, such as service logs, databases, and stale binaries, are excluded. A missing deployed checksum input fails the publish. When `UseStaging=false`, the output directory itself defines the publish payload; use staging for updates into a service directory that also contains runtime data. ZIP creation continues to package its configured output directory.
+
 1. Scaffold config:
 
 ```powershell
