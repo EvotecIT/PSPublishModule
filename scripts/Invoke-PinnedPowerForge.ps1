@@ -15,6 +15,8 @@ param(
 
     [switch] $LoadFixedLocalAppleProfile,
 
+    [string] $CapturePolicyPath,
+
     [Parameter(Mandatory, Position = 0, ValueFromRemainingArguments)]
     [string[]] $ArgumentList
 )
@@ -537,9 +539,17 @@ function Assert-AuthoritativeCaptureProvenance {
     $runId = [string]$provenance.captureRunId
     $provenanceSourceCommit = ([string]$provenance.sourceCommit).ToLowerInvariant()
     $workflowRef = [string]$provenance.workflowRef
-    $workflowPattern = '^' + [regex]::Escape($ExpectedConsumerRepository) + '/(?<path>\.github/workflows/[A-Za-z0-9._/-]+\.ya?ml)@refs/heads/' + [regex]::Escape($requiredBranch) + '$'
+    $captureRepository = $ExpectedConsumerRepository
+    $captureBranch = $requiredBranch
+    if ($CapturePolicyPath) {
+        # Trust is enrolled locally, never inferred from a downloaded artifact.
+        $capturePolicy = Get-EnrolledPrivateCapturePolicy
+        $captureRepository = [string]$capturePolicy.ControllerRepository
+        $captureBranch = [string]$capturePolicy.ControllerBranch
+    }
+    $workflowPattern = '^' + [regex]::Escape($captureRepository) + '/(?<path>\.github/workflows/[A-Za-z0-9._/-]+\.ya?ml)@refs/heads/' + [regex]::Escape($captureBranch) + '$'
     $workflowMatch = [regex]::Match($workflowRef, $workflowPattern, [Text.RegularExpressions.RegexOptions]::IgnoreCase)
-    if (-not $repository.Equals($ExpectedConsumerRepository, [StringComparison]::OrdinalIgnoreCase) -or
+    if (-not $repository.Equals($captureRepository, [StringComparison]::OrdinalIgnoreCase) -or
         $runId -notmatch '^\d+$' -or $provenanceSourceCommit -notmatch '^(?:[0-9a-f]{40}|[0-9a-f]{64})$' -or -not $workflowMatch.Success) {
         throw 'Capture provenance repository, run id, source commit, or workflow identity is invalid.'
     }
@@ -547,7 +557,10 @@ function Assert-AuthoritativeCaptureProvenance {
         throw "Capture provenance source commit '$provenanceSourceCommit' does not match the exact consumer HEAD '$SourceCommit'."
     }
     $run = & $GhPath api "repos/$repository/actions/runs/$runId" 2>$null | ConvertFrom-Json
-    if ($LASTEXITCODE -ne 0 -or $run.status -ne 'completed' -or $run.conclusion -ne 'success' -or
+    if ($LASTEXITCODE -ne 0) { throw 'Unable to verify the authoritative capture workflow run.' }
+    if ($CapturePolicyPath) {
+        Assert-PrivateCaptureController -GhPath $GhPath -Provenance $provenance -Run $run -Policy $capturePolicy
+    } elseif ($run.status -ne 'completed' -or $run.conclusion -ne 'success' -or
         $run.event -ne 'workflow_dispatch' -or $run.path -ne $workflowMatch.Groups['path'].Value -or
         $run.head_repository.full_name -ne $repository -or $run.head_branch -ne $requiredBranch -or
         ([string]$run.head_sha).ToLowerInvariant() -ne $provenanceSourceCommit) {
@@ -688,7 +701,11 @@ try {
     $scriptRelative = [IO.Path]::GetRelativePath($toolRoot, $PSCommandPath).Replace('\', '/')
     Invoke-GitText -Root $toolRoot -Arguments @('ls-files', '--error-unmatch', '--', $scriptRelative) | Out-Null
     Invoke-GitText -Root $toolRoot -Arguments @('diff', '--quiet', 'HEAD', '--', $scriptRelative) | Out-Null
-    foreach ($supportName in @('Invoke-PinnedPowerForge.Evidence.ps1', 'Invoke-PinnedPowerForge.Recovery.ps1')) {
+    $supportNames = @('Invoke-PinnedPowerForge.Evidence.ps1', 'Invoke-PinnedPowerForge.Recovery.ps1')
+    if ($CapturePolicyPath) {
+        $supportNames += @('Get-AppleCaptureQualification.ps1', 'Invoke-PinnedPowerForge.Capture.ps1')
+    }
+    foreach ($supportName in $supportNames) {
         $supportPath = Join-Path $PSScriptRoot $supportName
         $supportRelative = [IO.Path]::GetRelativePath($toolRoot, $supportPath).Replace('\', '/')
         Invoke-GitText -Root $toolRoot -Arguments @('ls-files', '--error-unmatch', '--', $supportRelative) | Out-Null
