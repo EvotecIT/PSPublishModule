@@ -147,6 +147,21 @@ public static partial class WebApiDocsGenerator
         return File.ReadAllText(full);
     }
 
+    private static JsonDocument LoadApiNavigationDocument(WebApiDocsOptions options, string path)
+    {
+        if (string.IsNullOrWhiteSpace(options.NavJsonPath))
+        {
+            var (site, _) = WebSiteSpecLoader.LoadWithPath(path, WebJson.Options);
+            return JsonSerializer.SerializeToDocument(site, WebJson.Options);
+        }
+
+        return JsonDocument.Parse(File.ReadAllText(path), new JsonDocumentOptions
+        {
+            CommentHandling = JsonCommentHandling.Skip,
+            AllowTrailingCommas = true
+        });
+    }
+
     private static NavConfig? LoadNavConfig(WebApiDocsOptions options)
     {
         var configPath = FirstNonEmpty(options.NavJsonPath, options.SiteConfigPath);
@@ -154,8 +169,7 @@ public static partial class WebApiDocsGenerator
         var path = Path.GetFullPath(configPath);
         if (!File.Exists(path)) return null;
 
-        using var stream = File.OpenRead(path);
-        using var doc = JsonDocument.Parse(stream);
+        using var doc = LoadApiNavigationDocument(options, path);
         var root = doc.RootElement;
 
         var nav = new NavConfig

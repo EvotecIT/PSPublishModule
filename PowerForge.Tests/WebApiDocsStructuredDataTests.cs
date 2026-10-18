@@ -51,6 +51,31 @@ public sealed class WebApiDocsStructuredDataTests : IDisposable
     }
 
     [Fact]
+    public void Generate_UsesMergedSiteOriginWithPermissiveJsonAndSeparateNavigation()
+    {
+        var options = Options("docs", false);
+        File.Copy(options.SiteConfigPath!, Path.Combine(_root, "base.json"));
+        File.WriteAllText(options.SiteConfigPath!, """
+            {
+              // Site configuration accepts comments, inheritance and trailing commas.
+              "extends": "./base.json",
+            }
+            """);
+        options.NavJsonPath = Path.Combine(_root, "nav.json");
+        File.WriteAllText(options.NavJsonPath, """{"navigation": {"menus": []}}""");
+        options.SiteBaseUrl = null;
+        WebApiDocsGenerator.Generate(options);
+        var html = File.ReadAllText(Path.Combine(options.OutputPath, "index.html"));
+        Assert.Contains("rel=\"canonical\" href=\"https://product.example/api/\"", html);
+        AssertPage(Models(html), "https://product.example/api/", options.Title);
+
+        options.NavJsonPath = null;
+        WebApiDocsGenerator.Generate(options);
+        html = File.ReadAllText(Path.Combine(options.OutputPath, "index.html"));
+        AssertPage(Models(html), "https://product.example/api/", options.Title);
+    }
+
+    [Fact]
     public void GenerateSuitePortal_InheritsLinkedSiteSchema()
     {
         var options = Options("docs", false);

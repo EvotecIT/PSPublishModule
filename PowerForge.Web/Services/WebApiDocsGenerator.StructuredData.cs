@@ -2,14 +2,20 @@ namespace PowerForge.Web;
 
 public static partial class WebApiDocsGenerator
 {
-    private static SiteSpec? LoadApiStructuredDataSite(WebApiDocsOptions options, ApiSocialProfile social)
+    private static SiteSpec? LoadApiSiteSpec(WebApiDocsOptions options)
     {
         var path = FirstNonEmpty(options.SiteConfigPath, options.NavJsonPath);
         if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
             return null;
 
         var (site, _) = WebSiteSpecLoader.LoadWithPath(path, WebJson.Options);
-        if (site.StructuredData?.Enabled != true)
+        return site;
+    }
+
+    private static SiteSpec? LoadApiStructuredDataSite(WebApiDocsOptions options, ApiSocialProfile social)
+    {
+        var site = LoadApiSiteSpec(options);
+        if (site?.StructuredData?.Enabled != true)
             return null;
 
         // Use the same public origin as the canonical link, including a CLI override.

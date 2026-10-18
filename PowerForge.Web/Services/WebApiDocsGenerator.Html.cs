@@ -513,8 +513,9 @@ $@"<!doctype html>
     private static ApiSocialProfile ResolveApiSocialProfile(WebApiDocsOptions options)
     {
         var nav = LoadNavConfig(options);
-        var siteName = FirstNonEmpty(options.SiteName, nav?.SiteName, options.Title);
-        var siteBaseUrl = FirstNonEmpty(options.SiteBaseUrl, nav?.SiteBaseUrl);
+        var site = LoadApiSiteSpec(options);
+        var siteName = FirstNonEmpty(options.SiteName, nav?.SiteName, site?.Name, options.Title);
+        var siteBaseUrl = FirstNonEmpty(options.SiteBaseUrl, nav?.SiteBaseUrl, site?.BaseUrl);
         var image = FirstNonEmpty(options.SocialImage, nav?.SocialImage, nav?.BrandIcon);
         var imageWidth = options.SocialImageWidth ?? nav?.SocialImageWidth;
         var imageHeight = options.SocialImageHeight ?? nav?.SocialImageHeight;
