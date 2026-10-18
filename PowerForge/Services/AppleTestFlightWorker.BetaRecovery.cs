@@ -49,11 +49,14 @@ internal sealed partial class AppleTestFlightWorker
         if (job.BetaActionStartedAt is null || job.BetaPlanSha256?.Length != 64 || result.Action != action || result.PlanOnly || result.CheckedAt < job.BetaActionStartedAt ||
             !string.Equals(result.PlanSha256, job.BetaPlanSha256, StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("Beta result does not match the retained source/build-bound approval.");
-        if (!result.Success) throw new InvalidOperationException(result.ErrorMessage ?? "Beta action failed; reconcile the retained exact builds before resuming.");
+        if (!result.Success && !HasOnlyGateFailures(result))
+            throw new InvalidOperationException(result.ErrorMessage ?? "Beta action failed; reconcile the retained exact builds before resuming.");
         job.Outcomes = MergeBetaOutcomes(job.Outcomes, result.Targets);
         SetStage(action == PowerForgeAppleReleaseAction.TestFlight && IsExistingBetaReady(result, job, _policy)
             ? AppleTestFlightJobStage.ReadyInTestFlight : AppleTestFlightJobStage.AppleProcessingPending,
-            action == PowerForgeAppleReleaseAction.SubmitTestFlightReview
+            !result.Success
+                ? "The local mutation gate closed; observe the retained builds and recheck the gate before continuing this beta action."
+                : action == PowerForgeAppleReleaseAction.SubmitTestFlightReview
                 ? "Exact uploaded builds submitted to Beta App Review; waiting for Apple's decision."
                 : "Verify all selected builds and enrolled group access after Apple's state converges.");
     }
@@ -83,8 +86,7 @@ internal sealed partial class AppleTestFlightWorker
         foreach (var target in targets)
         {
             if (target.BuildProcessingState is not (null or "" or "VALID" or "PROCESSING" or "PROCESSING_PENDING") ||
-                target.BuildExpired == true || target.TestFlightExternalState is "BETA_REJECTED" or "MISSING_EXPORT_COMPLIANCE" ||
-                target.TestFlightReviewState == "REJECTED")
+                target.BuildExpired == true || RequiresBetaOperatorAction(target))
                 throw new InvalidOperationException($"{target.Name}: Apple rejected, expired, or requires compliance for this build. Operator action is required; preserve its delivery history.");
             if (target.BuildProcessingState == "VALID" && target.BuildExpired != false)
                 throw new InvalidOperationException($"{target.Name}: explicit nonexpiry evidence is required before any beta mutation.");
@@ -125,8 +127,17 @@ internal sealed partial class AppleTestFlightWorker
                 (!string.IsNullOrEmpty(priorId) && value.BuildId != priorId) ||
                 (requireValid && (string.IsNullOrWhiteSpace(value.BuildId) || value.BuildProcessingState != "VALID" || value.BuildExpired != false)))
                 throw new InvalidOperationException($"{name}: beta recovery changed the exact enrolled build identity or exceeded beta-only authority.");
+            if (requireValid && RequiresBetaOperatorAction(value))
+                throw new InvalidOperationException($"{name}: Apple rejected this beta build or requires export compliance. Operator action is required before another beta action.");
         }
     }
+
+    // A processing-valid build can still require a human review or compliance
+    // decision. Reject it at both plan and completed-result boundaries, including
+    // a gate-held result, rather than recording a misleading retryable stage.
+    private static bool RequiresBetaOperatorAction(PowerForgeAppleReleaseTargetReceipt target)
+        => target.TestFlightExternalState is "BETA_REJECTED" or "MISSING_EXPORT_COMPLIANCE" ||
+           target.TestFlightReviewState == "REJECTED";
 
     internal static void ValidateBetaPlan(PowerForgeAppleReleaseReceipt plan, AppleTestFlightJob job,
         AppleTestFlightWorkerPolicy policy, PowerForgeAppleReleaseAction action, string[] targets)

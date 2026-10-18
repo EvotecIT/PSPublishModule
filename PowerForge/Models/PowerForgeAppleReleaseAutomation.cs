@@ -266,6 +266,9 @@ internal sealed class PowerForgeAppleRemoteVersionInventory
 /// </summary>
 internal sealed class PowerForgeAppleReleaseTargetReceipt
 {
+    /// <summary>A known local gate refused the next mutation; earlier delivery evidence remains authoritative.</summary>
+    public bool MutationGateClosed { get; set; }
+
     /// <summary>A bounded canonical processing wait expired after a qualified upload; this is not proof that other delivery failures are retryable.</summary>
     public bool WaitingForAppleBuildProcessing { get; set; }
 

@@ -159,7 +159,7 @@
         "observerSupport": [
           {
             "path": "SourceIdentity.json",
-            "sha256": "E0BD199A487F0CF6E463C6A9B611A0666007C20001A52128C67324198E98F8D2"
+            "sha256": "0DB4EF181E328D1C39173D55FD49414D14A3D5DB56D44A58863B961C8BBEB0A5"
           },
           {
             "path": "Serve-SitemapFixture.ps1",

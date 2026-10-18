@@ -83,6 +83,7 @@ internal sealed partial class PowerForgeReleaseService
                     Plan = app,
                     Success = false,
                     ErrorMessage = exception.Message,
+                    MutationGateClosed = exception is AppleReleaseGateClosedException,
                     WaitingForAppleBuildProcessing = exception is AppleBuildProcessingException { WaitingForProcessing: true },
                     RemoteState = exception is AppleBuildProcessingException processing
                         ? processing.State

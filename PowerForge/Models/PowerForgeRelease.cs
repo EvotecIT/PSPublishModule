@@ -807,6 +807,9 @@ internal sealed class PowerForgeAppleAppReleaseResult
 {
     public bool WaitingForAppleBuildProcessing { get; set; }
 
+    /// <summary>The next mutation was refused by the local pause or worker heartbeat gate.</summary>
+    public bool MutationGateClosed { get; set; }
+
     private string? _errorMessage;
 
     public PowerForgeAppleAppReleaseTargetPlan Plan { get; set; } = new();
@@ -861,6 +864,7 @@ internal sealed class PowerForgeAppleAppReleaseResult
             _errorMessage = value;
             // A later failure cannot inherit the retry permission of a prior processing wait.
             WaitingForAppleBuildProcessing = false;
+            MutationGateClosed = false;
         }
     }
 }

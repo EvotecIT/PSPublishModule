@@ -15,6 +15,7 @@ Benchmarks/PowerShellCompilation/Corpus/**/*.txt text eol=lf
 Benchmarks/PowerShellCompilation/Corpus/Workflows/PlatyPS/FixtureHelp.xml text eol=lf
 # Keep the other hash-pinned non-script observer support byte-identical too.
 Benchmarks/PowerShellCompilation/Corpus/Workflows/CompareWebSitemaps/SourceIdentity.json text eol=lf
+Benchmarks/PowerShellCompilation/Corpus/Workflows/CompareWebSitemaps/workflow.json text eol=lf
 Benchmarks/PowerShellCompilation/Corpus/ExternalWorkflows/PSScriptTools/CommandProxy/*.ps1 -text -eol -whitespace
 Benchmarks/PowerShellCompilation/Corpus/ExternalWorkflows/PSScriptTools/CommandProxy/license.txt -text -eol -whitespace
 Module/PSPublishModule.psd1 -text whitespace=cr-at-eol
