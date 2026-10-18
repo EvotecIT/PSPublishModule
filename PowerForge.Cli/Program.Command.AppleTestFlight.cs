@@ -35,14 +35,14 @@ internal static partial class Program
             }
             if (policyPath is null || !Path.IsPathRooted(policyPath) || config is null)
                 throw new ArgumentException("An absolute machine-local --policy and explicit --config are required.");
+            if (argv[0] == "mode" ? !confirmMode || automaticMode is not ("Off" or "SelectedPRs" or "EveryMergedPR") : confirmMode || automaticMode is not null)
+                throw new ArgumentException("Only mode accepts --automatic-mode Off|SelectedPRs|EveryMergedPR and requires --confirm-mode-change.");
             AppleReleaseAppState.AssertUnlinked(policyPath);
             var policy = JsonSerializer.Deserialize<AppleTestFlightWorkerPolicy>(File.ReadAllText(policyPath), AppleTestFlightWorker.Json)
                          ?? throw new InvalidOperationException("TestFlight worker policy is invalid.");
             if (policy.ConfigPath != config) throw new ArgumentException("Configuration must match the enrolled worker policy.");
             if (argv[0] == "retire" ? job is null || !reconciled : job is not null || reconciled)
                 throw new ArgumentException("Only retire accepts --job <id> and requires --confirm-reconciled after inspecting canonical receipts and remote delivery.");
-            if (argv[0] == "mode" ? !confirmMode || automaticMode is not ("Off" or "SelectedPRs" or "EveryMergedPR") : confirmMode || automaticMode is not null)
-                throw new ArgumentException("Only mode accepts --automatic-mode Off|SelectedPRs|EveryMergedPR and requires --confirm-mode-change.");
             var worker = new AppleTestFlightWorker(policy);
             if (argv[0] == "checkpoint-evidence")
             {

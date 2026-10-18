@@ -3,9 +3,23 @@ namespace PowerForge;
 
 internal sealed partial class AppleTestFlightWorker
 {
+    // Ship waits after each upload. A timeout can leave later platforms untouched;
+    // beta-only commands cannot finish those uploads. Keep ordinary Ship recovery
+    // (and its latest-main gate) until every target has positive delivery evidence.
+    internal static bool CanRecoverExistingBeta(AppleTestFlightJob job, AppleTestFlightWorkerPolicy policy)
+        => job.Stage == AppleTestFlightJobStage.AppleProcessingPending && policy.SubmitBetaReviewAutomatically &&
+           !policy.BetaGroupIsInternal && policy.Targets.All(target => job.UploadedTargets.Contains(target.Name) || job.Outcomes.Any(value =>
+               value.Name == target.Name && value.BundleId == target.BundleId && value.AppId == target.AppId && value.Platform == target.Platform &&
+               value.Version == job.Version && value.Build == job.Build && !value.SkippedSteps.Contains("notAttempted") &&
+               (value.UploadPerformed || !string.IsNullOrEmpty(value.UploadAttestationAttemptId) || !string.IsNullOrEmpty(value.BuildId))));
+
     private void AdvanceExistingBeta(AppleTestFlightJob job)
     {
         ReadSpec();
+        // This transition is admitted only from positive Ship delivery evidence.
+        // Status receipts intentionally do not repeat archive/upload flags.
+        job.UploadedTargets = _policy.Targets.Select(value => value.Name).ToArray();
+        Save();
         var status = InvokeBeta(PowerForgeAppleReleaseAction.Status, _policy.Targets.Select(value => value.Name).ToArray(), plan: false);
         if (!status.Success) throw new AppleTestFlightToolException("Could not observe the uploaded beta builds; retain their source and retry observation.");
         ValidateExistingBetaReceipt(status, job, _policy, _policy.Targets.Select(value => value.Name).ToArray(), requireValid: false);
@@ -32,7 +46,7 @@ internal sealed partial class AppleTestFlightWorker
     private void CompleteBetaMutation(AppleTestFlightJob job, PowerForgeAppleReleaseReceipt result, PowerForgeAppleReleaseAction action)
     {
         ValidateExistingBetaReceipt(result, job, _policy, job.BetaActionTargets, requireValid: true);
-        if (result.Action != action || result.PlanOnly || result.CheckedAt < job.BetaActionStartedAt ||
+        if (job.BetaActionStartedAt is null || job.BetaPlanSha256?.Length != 64 || result.Action != action || result.PlanOnly || result.CheckedAt < job.BetaActionStartedAt ||
             !string.Equals(result.PlanSha256, job.BetaPlanSha256, StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("Beta result does not match the retained source/build-bound approval.");
         if (!result.Success) throw new InvalidOperationException(result.ErrorMessage ?? "Beta action failed; reconcile the retained exact builds before resuming.");

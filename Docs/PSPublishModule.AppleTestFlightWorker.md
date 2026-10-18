@@ -190,6 +190,9 @@ pwsh -NoProfile -File <owner>/scripts/Invoke-PinnedPowerForge.ps1 -ExpectedCommi
 history. It does not build or release anything. `Off` and `SelectedPRs` are also
 accepted. A newly selected EveryMergedPR mode covers merges after that intent;
 it does not replay every historical PR.
+The local mode command takes the queue writer lease, so run it between worker
+passes. During an active delivery, local `pause` remains available immediately;
+the request workflow can also record an Off intent for the active worker to read.
 
 ## Not-ready PR exception
 
@@ -261,8 +264,11 @@ same local operator with `apple-testflight retire --job <id> --confirm-reconcile
 the held intent as Excluded and permits a new request. Retirement is a local
 operator acknowledgement; it does not cancel or roll back an Apple delivery.
 The worker never assumes an interrupted upload failed or blindly allocates a
-replacement. With automatic beta review enabled, processing recovery observes the
-same uploaded source even when main advances. Only Status, TestFlight and
+replacement. With automatic beta review enabled, once every enrolled platform
+has positive upload evidence, processing recovery observes the same uploaded
+source even when main advances. A timeout before a later platform's upload keeps
+ordinary Ship recovery and its latest-main gate; it cannot silently abandon that
+platform or use beta commands to upload it. Only Status, TestFlight and
 SubmitTestFlightReview use that clean ancestor with an explicit full source SHA;
 Ship, archive, upload and public store actions retain latest-main requirements.
 Beta mutations retain their own approved plan hash and exact per-platform build

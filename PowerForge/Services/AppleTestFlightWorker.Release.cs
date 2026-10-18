@@ -78,7 +78,7 @@ internal sealed partial class AppleTestFlightWorker
         Git("fetch", "--quiet", "origin", _policy.DefaultBranch);
         var remote = Git("rev-parse", $"refs/remotes/origin/{_policy.DefaultBranch}");
         var head = Git("rev-parse", "HEAD");
-        if (job.Stage == AppleTestFlightJobStage.AppleProcessingPending && _policy.SubmitBetaReviewAutomatically && !_policy.BetaGroupIsInternal)
+        if (CanRecoverExistingBeta(job, _policy))
         {
             if (head != job.Source) throw new InvalidOperationException("Existing beta recovery must retain its exact uploaded source checkout.");
             Git("merge-base", "--is-ancestor", job.Source!, remote);

@@ -195,4 +195,50 @@ public sealed partial class AppleTestFlightWorkerTests
         Assert.Throws<AppleTestFlightToolException>(() => AppleTestFlightWorker.FindReleaseHolds(policy, source, [issue],
             _ => pull, (_, _) => throw new AppleTestFlightToolException("GitHub unavailable")));
     }
+
+    [Fact]
+    public void ProcessingTimeoutBeforeSiblingUploadRetainsShipRecovery_OnlyCompleteDeliveryCanUseBetaActions()
+    {
+        var (policy, job, receipt) = AutomaticBeta();
+        job.Stage = AppleTestFlightJobStage.AppleProcessingPending;
+        receipt.Success = false;
+        receipt.ShipPhase = PowerForgeAppleShipPhase.Release;
+        var first = receipt.Targets[0];
+        first.BuildProcessingState = "PROCESSING";
+        first.WaitingForAppleBuildProcessing = true;
+        first.UploadPerformed = true;
+        first.BuildId = null;
+        var sibling = receipt.Targets[1];
+        sibling.SkippedSteps = ["notAttempted"];
+        sibling.BuildProcessingState = null;
+        sibling.BuildId = null;
+        job.Outcomes = receipt.Targets;
+        Assert.Equal(AppleTestFlightJobStage.AppleProcessingPending, AppleTestFlightWorker.DeliveryOutcome(receipt, policy).Stage);
+        Assert.False(AppleTestFlightWorker.CanRecoverExistingBeta(job, policy));
+        sibling.SkippedSteps = [];
+        sibling.UploadPerformed = true;
+        Assert.True(AppleTestFlightWorker.CanRecoverExistingBeta(job, policy));
+        // Once recorded, read-only status may omit upload flags and build IDs
+        // while processing. It cannot erase the source-bound delivery transition.
+        job.UploadedTargets = ["Phone", "Mac"];
+        job.Outcomes = [];
+        Assert.True(AppleTestFlightWorker.CanRecoverExistingBeta(job, policy));
+        policy.Targets = policy.Targets.Append(new() { Name = "Another" }).ToArray();
+        Assert.False(AppleTestFlightWorker.CanRecoverExistingBeta(job, policy));
+    }
+
+    [Fact]
+    public void PreChildObservationOutageRemainsRetryable_ChildEntryFailureStillRequiresReconciliation()
+    {
+        var entry = Assert.Throws<AppleTestFlightPreMutationRejectedException>(() =>
+            AppleTestFlightWorker.CheckAppleChildEntry(() => throw new AppleTestFlightToolException("GitHub label read unavailable"), mutation: true));
+        Assert.Equal(AppleTestFlightJobStage.AppleProcessingPending,
+            AppleTestFlightWorker.FailureStage(AppleTestFlightJobStage.SubmittingBetaReview, entry));
+        Assert.Throws<AppleTestFlightToolException>(() =>
+            AppleTestFlightWorker.CheckAppleChildEntry(() => throw new AppleTestFlightToolException("Status read unavailable"), mutation: false));
+        Assert.Throws<InvalidOperationException>(() =>
+            AppleTestFlightWorker.CheckAppleChildEntry(() => throw new InvalidOperationException("Owner pin changed"), mutation: true));
+        Assert.Equal(AppleTestFlightJobStage.NeedsOperator,
+            AppleTestFlightWorker.FailureStage(AppleTestFlightJobStage.SubmittingBetaReview, new AppleTestFlightToolException("Lost child response")));
+    }
 }

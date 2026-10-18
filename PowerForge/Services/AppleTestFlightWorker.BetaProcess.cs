@@ -27,12 +27,16 @@ internal sealed partial class AppleTestFlightWorker
 
     private PowerForgeAppleReleaseReceipt InvokeBeta(PowerForgeAppleReleaseAction action, string[] targets, bool plan)
     {
-        AssertOwner();
-        AssertClean();
-        if (!plan && action != PowerForgeAppleReleaseAction.Status && !UpdateGate())
-            throw new AppleTestFlightPreMutationRejectedException();
-        var spec = ReadSpec();
-        var automation = spec.AppleApps!.Automation;
+        PowerForgeReleaseSpec? spec = null;
+        CheckAppleChildEntry(() =>
+        {
+            AssertOwner();
+            AssertClean();
+            if (!plan && action != PowerForgeAppleReleaseAction.Status && !UpdateGate())
+                throw new AppleTestFlightPreMutationRejectedException();
+            spec = ReadSpec();
+        }, mutation: !plan && action != PowerForgeAppleReleaseAction.Status);
+        var automation = spec!.AppleApps!.Automation;
         if (plan) PreserveBetaPreview(ContainedPath(_policy.ConsumerRoot, automation.PlanReceiptPath));
         var started = DateTimeOffset.UtcNow;
         Process("pwsh", _policy.ConsumerRoot, BetaArguments(_policy, _running!, action, targets, plan), apple: true);

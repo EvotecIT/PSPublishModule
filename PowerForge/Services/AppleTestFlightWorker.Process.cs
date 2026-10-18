@@ -128,9 +128,12 @@ internal sealed partial class AppleTestFlightWorker
 
     private PowerForgeAppleReleaseReceipt InvokeShip(bool plan)
     {
-        AssertOwner();
-        if (!plan && !UpdateGate()) throw new AppleTestFlightPreMutationRejectedException();
-        if (plan) RetainPreviousSourcePlan();
+        CheckAppleChildEntry(() =>
+        {
+            AssertOwner();
+            if (!plan && !UpdateGate()) throw new AppleTestFlightPreMutationRejectedException();
+            if (plan) RetainPreviousSourcePlan();
+        }, mutation: !plan);
         var startedAt = DateTimeOffset.UtcNow;
         var arguments = new List<string> { "-NoLogo", "-NoProfile", "-NonInteractive", "-File", Path.Combine(_policy.OwnerRoot, "scripts/Invoke-PinnedPowerForge.ps1"), "-ExpectedCommit", _policy.OwnerCommit,
             "-ConsumerRoot", _policy.ConsumerRoot, "-ExpectedConsumerRepository", _policy.Repository, "-ExpectedConsumerBranch", _policy.DefaultBranch,
@@ -152,6 +155,13 @@ internal sealed partial class AppleTestFlightWorker
         if (receipt.SourceCommit != _running!.Source || receipt.Action != PowerForgeAppleReleaseAction.Ship || receipt.PlanOnly != plan || receipt.CheckedAt < startedAt)
             throw new InvalidOperationException("Ship receipt is stale or belongs to another source or action.");
         return receipt;
+    }
+
+    /// <summary>Only read/tool failures before child entry are definitive non-mutations. Never wrap the child or receipt read here.</summary>
+    internal static void CheckAppleChildEntry(Action checks, bool mutation)
+    {
+        try { checks(); }
+        catch (AppleTestFlightToolException) when (mutation) { throw new AppleTestFlightPreMutationRejectedException(); }
     }
 }
 

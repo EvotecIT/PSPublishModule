@@ -89,6 +89,7 @@ internal sealed class AppleTestFlightJob
     public string? Diagnostic { get; set; }
     public bool StatusPending { get; set; }
     public Dictionary<string, string> BuildIds { get; set; } = new(StringComparer.Ordinal);
+    public string[] UploadedTargets { get; set; } = Array.Empty<string>();
     public string? BetaPlanSha256 { get; set; }
     public string[] BetaActionTargets { get; set; } = Array.Empty<string>();
     public DateTimeOffset? BetaActionStartedAt { get; set; }

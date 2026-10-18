@@ -65,6 +65,49 @@ public sealed partial class AppleTestFlightWorkerTests
             AppleTestFlightWorker.FailureStage(AppleTestFlightJobStage.Releasing, new AppleTestFlightToolException("interrupted")));
     }
 
+    [Theory]
+    [InlineData("Off")]
+    [InlineData("EveryMergedPR")]
+    public void LocalModeRequiresConfirmationBeforePolicyOrSourceInspection(string mode)
+    {
+        var root = Sandbox();
+        try
+        {
+            var result = RunCli(root, "apple-testflight", "mode", "--automatic-mode", mode,
+                "--policy", Path.Combine(root, "missing.json"), "--config", "release.json", "--output", "json");
+            Assert.Equal(2, result.ExitCode);
+            Assert.Contains("requires --confirm-mode-change", result.Output);
+        }
+        finally { DeleteSandbox(root); }
+    }
+
+    [Fact]
+    public void PinnedModeControlAdmitsRetainedPublisherDiff_BuildCommandsStillRejectIt()
+    {
+        if (!File.Exists("/usr/local/bin/pwsh")) return;
+        var root = Sandbox();
+        try
+        {
+            var harness = Path.Combine(root, "mode-control.ps1");
+            File.WriteAllText(harness, """
+                param($Owner,$Fixture)
+                $ErrorActionPreference='Stop'
+                . (Join-Path $Owner 'scripts/Invoke-PinnedPowerForge.Evidence.ps1')
+                $consumer=$Fixture
+                function Invoke-GitText { throw 'Tracked publisher checkpoint diff remains in the consumer.' }
+                $ArgumentList=@('apple-testflight','mode','--automatic-mode','EveryMergedPR','--confirm-mode-change')
+                if(-not(Test-AppleWorkerControl)){throw 'Mode must be a journal-only control.'}
+                Assert-ConsumerRepositoryContent
+                $ArgumentList=@('apple-release','Ship')
+                try { Assert-ConsumerRepositoryContent; throw 'Unexpected build admission.' }
+                catch { if($_.Exception.Message -ne 'Tracked publisher checkpoint diff remains in the consumer.'){throw} }
+                """ );
+            RunTool("/usr/local/bin/pwsh", root, "-NoProfile", "-NonInteractive", "-File", harness,
+                "-Owner", FindRepository(), "-Fixture", root);
+        }
+        finally { DeleteSandbox(root); }
+    }
+
     internal static (int ExitCode, string Output, string Error) RunCli(string root, params string[] arguments)
         => RunCliWithEnvironment(root, new Dictionary<string, string>(), arguments);
 
