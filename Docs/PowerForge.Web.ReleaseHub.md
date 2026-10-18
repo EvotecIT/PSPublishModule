@@ -166,7 +166,7 @@ Helpers should be page-agnostic and usable in any Scriban layout.
 
 - `pf.release_button product [channel] [platform] [arch] [kind] [label] [css_class]`
 - `pf.release_buttons product [channel] [limit] [group_by]`
-- `pf.release_changelog [product] [limit] [include_preview]`
+- `pf.release_changelog [product] [limit] [include_preview] [css_class] [data_path] [include_links] [include_assets]`
 
 Expected behavior:
 
@@ -189,6 +189,15 @@ For content authors (without editing theme layouts):
 ```
 
 These shortcodes should consume the same `data.release_hub` payload and helper selection logic.
+
+For a public notes page whose release tracker or downloads require separate access, set
+`includeLinks="false"` and `includeAssets="false"` on `release-changelog`.
+Version titles, dates, badges and note text remain visible. `includeLinks` controls
+the release-title link and links within the notes; their text and surrounding
+formatting are preserved. `includeAssets` independently controls the download list.
+Both default to `true`, preserving existing timelines. The same settings work in
+placement maps; explicit shortcode attributes take precedence. Scriban callers
+use the optional `include_links` and `include_assets` arguments.
 
 ### Placement-driven shortcodes (recommended for non-template pages)
 

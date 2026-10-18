@@ -88,6 +88,10 @@ internal static partial class ShortcodeDefaults
         var limit = ReadIntAttr(attrs, "limit", "max") ?? 20;
         var includePreviewText = ReadAttr(attrs, "includePreview", "include_preview", "includePrerelease", "include_prerelease");
         var includePreview = ReadBoolAttr(attrs, defaultValue: true, "includePreview", "include_preview", "includePrerelease", "include_prerelease");
+        var includeLinksText = ReadAttr(attrs, "includeLinks", "include_links");
+        var includeLinks = ReadBoolAttr(attrs, defaultValue: true, "includeLinks", "include_links");
+        var includeAssetsText = ReadAttr(attrs, "includeAssets", "include_assets");
+        var includeAssets = ReadBoolAttr(attrs, defaultValue: true, "includeAssets", "include_assets");
         var cssClass = ReadAttr(attrs, "class", "cssClass", "css_class");
         var dataPath = ReadAttr(attrs, "data", "from");
         var placement = ResolveReleasePlacement(context, attrs);
@@ -98,6 +102,10 @@ internal static partial class ShortcodeDefaults
                 limit = ReadMapInt(placement, "limit", "max") ?? limit;
             if (string.IsNullOrWhiteSpace(includePreviewText))
                 includePreview = ReadMapBool(placement, "includePreview", "include_preview", "includePrerelease", "include_prerelease") ?? includePreview;
+            if (string.IsNullOrWhiteSpace(includeLinksText))
+                includeLinks = ReadMapBool(placement, "includeLinks", "include_links") ?? includeLinks;
+            if (string.IsNullOrWhiteSpace(includeAssetsText))
+                includeAssets = ReadMapBool(placement, "includeAssets", "include_assets") ?? includeAssets;
             cssClass = FirstNonEmpty(cssClass, ReadMapString(placement, "class", "cssClass", "css_class"));
             dataPath = FirstNonEmpty(dataPath, ReadMapString(placement, "data", "from", "dataPath", "data_path"));
         }
@@ -109,7 +117,9 @@ internal static partial class ShortcodeDefaults
             limit,
             includePreview,
             cssClass,
-            dataPath);
+            dataPath,
+            includeLinks,
+            includeAssets);
     }
 
     private static IReadOnlyDictionary<string, object?>? ResolveReleasePlacement(
