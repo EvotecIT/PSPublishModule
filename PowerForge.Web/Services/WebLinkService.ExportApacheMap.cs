@@ -59,12 +59,13 @@ public static partial class WebLinkService
             return false;
 
         var host = rule.SourceHost?.Trim() ?? string.Empty;
-        var path = NormalizeSourcePath(rule.SourcePath).Trim('/');
+        var path = Uri.UnescapeDataString(NormalizeSourcePath(rule.SourcePath)).Trim('/');
         var mapSafe = host.Length > 0 && path.Length > 0 &&
                       !host.Any(static value => char.IsControl(value) || char.IsWhiteSpace(value) || value == ':') &&
                       !path.Any(static value => char.IsControl(value) || char.IsWhiteSpace(value) || value == ':');
 
-        return mapSafe &&
+        var destination = NormalizeApacheDestination(rule.TargetUrl, rule.SourceHost, options.LanguageRootHosts);
+        return mapSafe && !TryGetApacheCanonicalPath(rule, destination, out _, out _) &&
                string.Equals(rule.Source, "shortlink", StringComparison.Ordinal) &&
                rule.MatchType == LinkRedirectMatchType.Exact &&
                !string.Equals(host, "*", StringComparison.Ordinal) &&
@@ -98,7 +99,7 @@ public static partial class WebLinkService
     private static string BuildApacheShortlinkMapKey(LinkRedirectRule rule)
     {
         var host = rule.SourceHost!.Trim().ToLowerInvariant();
-        var path = NormalizeSourcePath(rule.SourcePath).Trim('/');
+        var path = Uri.UnescapeDataString(NormalizeSourcePath(rule.SourcePath)).Trim('/');
         if (host.Any(static value => char.IsControl(value) || char.IsWhiteSpace(value) || value == ':') ||
             path.Length == 0 || path.Any(static value => char.IsControl(value) || char.IsWhiteSpace(value) || value == ':'))
             throw new InvalidOperationException($"Apache indexed shortlink path is not map-safe: {rule.Id ?? rule.SourcePath}");
@@ -176,7 +177,7 @@ public static partial class WebLinkService
 
         public bool MayOverlap(LinkRedirectRule shortlink)
         {
-            var path = NormalizeSourcePath(shortlink.SourcePath).Trim('/');
+            var path = Uri.UnescapeDataString(NormalizeSourcePath(shortlink.SourcePath)).Trim('/');
             if (_allHosts.MayOverlap(path))
                 return true;
 
@@ -210,7 +211,7 @@ public static partial class WebLinkService
                 return;
             }
 
-            var path = NormalizeSourcePath(rule.SourcePath).Trim('/');
+            var path = Uri.UnescapeDataString(NormalizeSourcePath(rule.SourcePath)).Trim('/');
             if (rule.MatchType != LinkRedirectMatchType.Prefix)
             {
                 _exactPaths.Add(path);
