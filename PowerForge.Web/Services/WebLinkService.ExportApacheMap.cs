@@ -19,17 +19,19 @@ public static partial class WebLinkService
             return Array.Empty<ApacheShortlinkMapEntry>();
 
         var entries = new List<ApacheShortlinkMapEntry>();
-        var precedingOrdinaryRules = new ApacheRuleOverlapIndex();
+        var precedingRules = new ApacheRuleOverlapIndex();
         foreach (var rule in rules)
         {
             if (!IsApacheShortlinkMapRule(rule, options) ||
-                precedingOrdinaryRules.MayOverlap(rule))
+                precedingRules.MayOverlap(rule))
             {
-                precedingOrdinaryRules.Add(rule);
+                precedingRules.Add(rule);
                 continue;
             }
 
             entries.Add(CreateApacheShortlinkMapEntry(rule, options));
+            // Later decoded aliases must retain ordinary rule precedence, including across statuses.
+            precedingRules.Add(rule);
         }
 
         return entries
