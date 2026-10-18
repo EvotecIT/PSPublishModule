@@ -853,7 +853,7 @@ public static partial class WebLinkService
         return 5;
     }
 
-    private static string NormalizeSourcePath(string? source)
+    internal static string NormalizeSourcePath(string? source)
     {
         if (string.IsNullOrWhiteSpace(source))
             return string.Empty;

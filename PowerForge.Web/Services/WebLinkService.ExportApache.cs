@@ -151,7 +151,7 @@ public static partial class WebLinkService
         if (literalDestination && (destination.Contains('%') || destination.Contains('#')))
             flags.Add("NE");
         var substitution = literalDestination
-            ? destination.Replace("%", @"\%", StringComparison.Ordinal).Replace("$", @"\$", StringComparison.Ordinal)
+            ? WebApacheRewriteSafety.EscapeLiteralDestination(destination)
             : destination;
         lines.Add($"RewriteRule {pattern} {substitution} [{string.Join(",", flags)}]");
         lines.Add(string.Empty);
@@ -160,64 +160,17 @@ public static partial class WebLinkService
 
     private static void AppendApacheCanonicalPathCondition(List<string> lines, LinkRedirectRule rule, string destination)
     {
-        if (!TryGetApacheCanonicalPath(rule, destination, out var path, out var absoluteTarget))
-            return;
-
-        var hasAuthority = absoluteTarget is not null;
-        var discardQuery = !rule.PreserveQuery;
-        var decodedPath = Uri.UnescapeDataString(path);
-        var pathPattern = path.Equals(decodedPath, StringComparison.Ordinal)
-            ? EscapeApacheCanonicalPathPattern(path)
-            : $"(?:{EscapeApacheCanonicalPathPattern(path)}|{EscapeApacheCanonicalPathPattern(decodedPath)})";
-        lines.Add($"RewriteCond %{{REQUEST_URI}} !^{pathPattern}$" + (hasAuthority || discardQuery ? " [OR]" : string.Empty));
-        if (absoluteTarget is not null)
-        {
-            var port = absoluteTarget.Scheme == Uri.UriSchemeHttps ? 443 : 80;
-            lines.Add($"RewriteCond %{{HTTP_HOST}} !^{Regex.Escape(absoluteTarget.Host)}(?::{port})?$ [NC,OR]");
-            lines.Add($"RewriteCond %{{HTTPS}} !^{(absoluteTarget.Scheme == Uri.UriSchemeHttps ? "on" : "off")}$" +
-                (discardQuery ? " [OR]" : string.Empty));
-        }
-        if (discardQuery)
-            lines.Add("RewriteCond %{QUERY_STRING} !^$");
+        if (rule.MatchType == LinkRedirectMatchType.Exact && !HasSourceQuerySelector(rule))
+            WebApacheRewriteSafety.AppendCanonicalPathCondition(lines, rule.SourcePath, destination, !rule.PreserveQuery);
     }
 
     private static bool TryGetApacheCanonicalPath(LinkRedirectRule rule, string destination, out string path, out Uri? absoluteTarget)
     {
         path = destination;
         absoluteTarget = null;
-        if (rule.MatchType != LinkRedirectMatchType.Exact || HasSourceQuerySelector(rule))
-            return false;
-
-        if (IsHttpUrl(destination))
-        {
-            if (!Uri.TryCreate(destination, UriKind.Absolute, out var target) ||
-                !target.IsDefaultPort || !string.IsNullOrEmpty(target.Query))
-                return false;
-            path = target.AbsolutePath;
-            absoluteTarget = target;
-        }
-        else if (!path.StartsWith('/') || path.StartsWith("//", StringComparison.Ordinal) || path.Contains('?'))
-            return false;
-
-        // RewriteRule matches decoded paths. REQUEST_URI can expose either spelling
-        // across rewrite phases, so recognize encoded and decoded canonical paths.
-        var sourcePath = Uri.UnescapeDataString(NormalizeSourcePath(rule.SourcePath));
-        var targetPath = Uri.UnescapeDataString(NormalizeSourcePath(path));
-        if (!sourcePath.Equals(targetPath, StringComparison.Ordinal))
-            return false;
-
-        if (absoluteTarget is null)
-        {
-            if (!Uri.TryCreate(new Uri("https://canonical.invalid"), path, out var relativeTarget))
-                return false;
-            path = relativeTarget.AbsolutePath;
-        }
-        return true;
+        return rule.MatchType == LinkRedirectMatchType.Exact && !HasSourceQuerySelector(rule) &&
+               WebApacheRewriteSafety.TryGetCanonicalPath(rule.SourcePath, destination, out path, out absoluteTarget);
     }
-
-    private static string EscapeApacheCanonicalPathPattern(string path) =>
-        Regex.Escape(path).Replace("\\ ", "\\x20", StringComparison.Ordinal)
-            .Replace("\"", "\\x22", StringComparison.Ordinal).Replace("'", "\\x27", StringComparison.Ordinal);
 
     private static bool IsSafeApacheRewriteSubstitution(string destination)
     {
@@ -287,7 +240,7 @@ public static partial class WebLinkService
                 var prefix = NormalizeApachePrefixPath(rule.SourcePath);
                 pattern = string.IsNullOrWhiteSpace(prefix)
                     ? "^/?(.*)$"
-                    : $"^/?{EscapeApacheCanonicalPathPattern(prefix)}(?:/(.*))?$";
+                    : $"^/?{WebApacheRewriteSafety.EscapePathPattern(prefix)}(?:/(.*))?$";
                 destination = NormalizeDestination(rule.TargetUrl).Replace("{path}", "$1", StringComparison.OrdinalIgnoreCase);
                 return rule.Status == 410 || !string.IsNullOrWhiteSpace(destination);
             }
@@ -314,7 +267,7 @@ public static partial class WebLinkService
             default:
             {
                 var exact = Uri.UnescapeDataString(NormalizeSourcePath(rule.SourcePath)).Trim('/');
-                pattern = string.IsNullOrWhiteSpace(exact) ? "^/?$" : $"^/?{EscapeApacheCanonicalPathPattern(exact)}/?$";
+                pattern = string.IsNullOrWhiteSpace(exact) ? "^/?$" : $"^/?{WebApacheRewriteSafety.EscapePathPattern(exact)}/?$";
                 destination = NormalizeDestination(rule.TargetUrl);
                 return rule.Status == 410 || !string.IsNullOrWhiteSpace(destination);
             }
