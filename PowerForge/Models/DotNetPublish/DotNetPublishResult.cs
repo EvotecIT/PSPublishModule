@@ -139,6 +139,10 @@ public sealed class DotNetPublishArtefactResult
     /// <summary>File artifacts represented by this manifest entry.</summary>
     public string[] OutputFiles { get; set; } = Array.Empty<string>();
 
+    // A staged publish owns these deployed files, not every file already present in
+    // the destination. Null retains the whole-directory contract for direct publishes.
+    internal string[]? PublishedChecksumFiles { get; set; }
+
     /// <summary>Total number of files in <see cref="OutputDir"/>.</summary>
     public int Files { get; set; }
 

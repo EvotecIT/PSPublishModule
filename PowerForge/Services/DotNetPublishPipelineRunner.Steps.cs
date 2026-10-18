@@ -466,6 +466,11 @@ public sealed partial class DotNetPublishPipelineRunner
         if (target.Publish.Service is not null)
             servicePackage = TryCreateServicePackage(outputDir, target.Name, rid, target.Publish.Service);
 
+        // Capture the clean payload before the service starts writing runtime state.
+        string[]? publishedChecksumFiles = target.Publish.UseStaging
+            ? CaptureStagedPublishChecksumFiles(publishDir, outputDir, servicePackage)
+            : null;
+
         string[] signedFilePaths = Array.Empty<string>();
         if (target.Publish.Sign?.Enabled == true)
         {
@@ -591,7 +596,8 @@ public sealed partial class DotNetPublishPipelineRunner
             StateTransfer = stateTransfer,
             SignedFiles = signedFilePaths.Length,
             SignedFilePaths = signedFilePaths,
-            EvidencePaths = evidencePaths
+            EvidencePaths = evidencePaths,
+            PublishedChecksumFiles = publishedChecksumFiles
         };
     }
 
