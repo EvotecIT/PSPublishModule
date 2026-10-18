@@ -41,7 +41,7 @@ function Assert-PrivateCaptureController {
         $Run.path -cne $policy.WorkflowPath -or $Run.head_repository.full_name -ine $policy.ControllerRepository -or
         $Run.event -cne 'workflow_dispatch' -or $Run.status -cne 'completed' -or $Run.conclusion -cne 'success' -or
         -not @($Run.referenced_workflows | Where-Object {
-            $_.path -like 'EvotecIT/PSPublishModule/.github/workflows/powerforge-apple-screenshot-capture.yml@*' -and
+            $_.path -like 'EvotecIT/PSPublishModule/.github/workflows/powerforge-apple-private-screenshot-capture.yml@*' -and
             $_.sha -ceq $ExpectedCommit
         }).Count) {
         throw 'Private capture provenance does not match its enrolled controller commit and shared workflow.'

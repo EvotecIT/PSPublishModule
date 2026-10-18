@@ -27,7 +27,7 @@ $base = @{
         run_attempt = 1; event = 'workflow_dispatch'; head_repository = @{ full_name = 'Synthetic/Controller' }; head_branch = 'main'; head_sha = $owner;
         path = '.github/workflows/capture.yml'; actor = @{ login = 'maintainer' }; triggering_actor = @{ login = 'maintainer' };
         status = 'completed'; conclusion = 'success'; referenced_workflows = @(@{
-            path = "EvotecIT/PSPublishModule/.github/workflows/powerforge-apple-screenshot-capture.yml@$owner"; sha = $owner })
+            path = "EvotecIT/PSPublishModule/.github/workflows/powerforge-apple-private-screenshot-capture.yml@$owner"; sha = $owner })
     }
     'repos/Synthetic/Controller/actions/runs/22/attempts/1/jobs?per_page=100&page=1' = @{
         total_count = 1; jobs = @(@{ id = 22; name = 'capture'; head_sha = $owner; status = 'completed'; conclusion = 'success';

@@ -18,7 +18,7 @@ permissions:
 
 jobs:
   capture:
-    uses: EvotecIT/PSPublishModule/.github/workflows/powerforge-apple-screenshot-capture.yml@__REVIEWED_OWNER_COMMIT__
+    uses: EvotecIT/PSPublishModule/.github/workflows/powerforge-apple-private-screenshot-capture.yml@__REVIEWED_OWNER_COMMIT__
     with:
       # These are enrolled policy, not dispatch inputs.
       source_repository: example/public-app
@@ -30,7 +30,6 @@ jobs:
       capture_script: Build/Apple/Capture-Screenshots.ps1
       capture_shell: pwsh
       capture_artifact_path: Artifacts/Apple/screenshots
-      simulator_tool_ref: __REVIEWED_OWNER_COMMIT__
       runner_group: private-apple-capture
       runner_labels_json: '["private-apple-capture"]'
       simulator_devices_json: '{"iphone":"__OWNED_IPHONE_UUID__","ipad":"__OWNED_IPAD_UUID__"}'

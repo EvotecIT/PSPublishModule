@@ -560,7 +560,7 @@ public sealed partial class AppleReleaseWorkflowTests
     public void ManualScreenshotApprovalBindsReviewedRunToAuthorizedActor()
     {
         var root = FindRepoRoot();
-        var capture = Read(root, ".github", "workflows", "powerforge-apple-screenshot-capture.yml");
+        var capture = ReadCaptureImplementation(root);
         var approval = Read(root, ".github", "workflows", "powerforge-apple-screenshot-approve.yml");
 
         Assert.Contains("Exact source commit to capture", capture, StringComparison.Ordinal);
@@ -633,6 +633,7 @@ public sealed partial class AppleReleaseWorkflowTests
         foreach (var workflowName in new[]
                  {
                      "powerforge-apple-screenshots.yml",
+                     "powerforge-apple-screenshot-capture.yml",
                      "powerforge-apple-screenshot-approve.yml",
                      "powerforge-apple-monitor.yml",
                      "powerforge-apple-version-pr.yml",
@@ -692,6 +693,7 @@ public sealed partial class AppleReleaseWorkflowTests
                  {
                      "powerforge-apple-screenshots.yml",
                      "powerforge-apple-screenshot-capture.yml",
+                     "powerforge-apple-private-screenshot-capture.yml",
                      "powerforge-apple-screenshot-approve.yml",
                      "powerforge-apple-monitor.yml",
                      "powerforge-apple-version-pr.yml",
@@ -716,6 +718,7 @@ public sealed partial class AppleReleaseWorkflowTests
                  {
                      "powerforge-apple-screenshots.yml",
                      "powerforge-apple-screenshot-capture.yml",
+                     "powerforge-apple-private-screenshot-capture.yml",
                      "powerforge-apple-screenshot-approve.yml",
                      "powerforge-apple-monitor.yml",
                      "powerforge-apple-version-pr.yml",
@@ -732,6 +735,13 @@ public sealed partial class AppleReleaseWorkflowTests
                 Parser.ParseInput(script, out _, out var errors);
                 Assert.True(errors.Length == 0, $"{workflowName}: {string.Join("; ", errors.Select(error => error.Message))}");
             }
+        }
+        var captureAction = Read(root, ".github", "actions", "apple-screenshot-capture", "action.yml");
+        var actionDocument = new DeserializerBuilder().Build().Deserialize<object>(captureAction);
+        foreach (var script in EnumeratePowerShellRunScripts(actionDocument))
+        {
+            Parser.ParseInput(script, out _, out var errors);
+            Assert.True(errors.Length == 0, $"Capture action: {string.Join("; ", errors.Select(error => error.Message))}");
         }
     }
 

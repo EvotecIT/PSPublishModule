@@ -20,7 +20,7 @@ if ($LASTEXITCODE -ne 0 -or $run.event -cne 'workflow_dispatch' -or
     $run.head_repository.full_name -ine $env:GITHUB_REPOSITORY -or
     $run.head_branch -cne $controller.default_branch -or $run.head_sha -cne $env:GITHUB_SHA -or
     -not @($run.referenced_workflows | Where-Object {
-        $_.path -like 'EvotecIT/PSPublishModule/.github/workflows/powerforge-apple-screenshot-capture.yml@*' -and
+        $_.path -like 'EvotecIT/PSPublishModule/.github/workflows/powerforge-apple-private-screenshot-capture.yml@*' -and
         $_.sha -ceq $ToolCommit
     }).Count) {
     throw 'Private capture controller did not invoke the enrolled shared workflow pin.'

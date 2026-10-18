@@ -20,10 +20,11 @@ required job names, product capture paths, owned simulator UUIDs, and qualified
 runtime. Keep those settings in the reviewed workflow. Dispatch inputs select
 only the exact application commit and marketing version.
 
-Use the same reviewed PowerForge commit for the reusable workflow and
-`simulator_tool_ref`. The hosted preflight verifies the actual referenced workflow
-pin. It rejects public controllers, non-default-branch dispatches, non-maintainer
-requests or reruns, unmerged source, and unsuccessful exact-source qualification.
+Use the private reusable workflow `powerforge-apple-private-screenshot-capture.yml`
+at the reviewed PowerForge commit. The hosted job loads policy from its own
+GitHub-provided `job.workflow_sha`, never an input-selected implementation. It
+always qualifies the request before scheduling native work. It rejects public
+controllers, non-default-branch dispatches, non-maintainer requests or reruns, unmerged source, and unsuccessful exact-source qualification.
 The native job depends on that preflight. A SHA alone identifies bytes; it does not
 establish that they were reviewed or merged.
 
@@ -42,8 +43,9 @@ environment before enabling the job. A separate directory, custom label or
 ephemeral runner registration does not isolate the host operating system.
 
 Enroll the runner in an organization group restricted to the private controller
-repository and the exact reusable capture workflow ref. Public repositories must
-be excluded. The native job accepts an explicit group and labels; the private
+repository and the exact **private** reusable capture workflow ref. Do not
+allowlist the legacy same-repository workflow for this pool. Public repositories
+must be excluded. The native job accepts an explicit group and labels; the private
 route rejects the Default group. Verify actual group access and a real job's
 assignment, rather than inferring isolation from labels. Keep this capture pool
 separate from signing and from ordinary public PR execution.
@@ -85,7 +87,10 @@ simulator shutdown receipts; the private route keeps the existing schema 2 PNG
 inventory and per-file hashes. It does not synthesize provenance from local
 preview files or bypass source-bound screenshot publication.
 
-Same-repository captures retain their existing contract when
-`source_repository` is blank and no private capture policy is enrolled. Private
-capture support does not register a runner, create a controller repository,
+Same-repository captures use the separate legacy
+`powerforge-apple-screenshot-capture.yml` workflow. Both entry points invoke one
+shared composite capture action; only the private workflow can use the enrolled
+private pool. The private entry point has no skipped-qualification route.
+GitHub.com supplies the reusable job identity fields; GitHub Enterprise Server
+is not supported by these entry points. Private capture support does not register a runner, create a controller repository,
 change access, activate a local worker or approve screenshots automatically.
