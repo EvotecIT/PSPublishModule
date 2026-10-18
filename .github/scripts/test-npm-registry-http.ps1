@@ -52,16 +52,23 @@ foreach ($mode in @('complete', 'stalled', 'trickling')) {
         $clock = [Diagnostics.Stopwatch]::StartNew()
         $failed = $false
         $message = ''
-        try { $response = Invoke-NpmRegistryRequest -Url "http://127.0.0.1:$port/metadata" -TimeoutSeconds 1 }
+        $response = $null
+        # The complete response is a connectivity control, not a deadline test.
+        # Allow cold HTTP initialization under CI load; negative cases retain
+        # their one-second total deadlines and independent three-second watchdog.
+        $timeoutSeconds = if ($mode -eq 'complete') { 5 } else { 1 }
+        try { $response = Invoke-NpmRegistryRequest -Url "http://127.0.0.1:$port/metadata" -TimeoutSeconds $timeoutSeconds }
         catch { $failed = $true; $message = $_.Exception.Message }
         $clock.Stop()
         if (-not $headersSent.IsSet) { throw 'The deadline test never received response headers.' }
         if ($mode -eq 'complete') {
-            if ($failed -or $response.StatusCode -ne 200 -or $response.Content -cne '{"verified":true}') { throw 'The real transport did not return complete registry metadata.' }
+            if ($failed -or $response.StatusCode -ne 200 -or $response.Content -cne '{"verified":true}') {
+                throw "The real transport did not return complete registry metadata (failed=$failed; status=$($response.StatusCode); elapsed=$($clock.Elapsed.TotalSeconds)s; error=$message)."
+            }
         } elseif (-not $failed -or $clock.Elapsed.TotalSeconds -ge 3 -or $message -notmatch 'cancel|timeout') {
             throw "The real $mode response was not stopped by the total request deadline: $message"
         }
-        $results.Add([pscustomobject]@{case=$mode;headersReceived=$headersSent.IsSet;failed=$failed;elapsedSeconds=$clock.Elapsed.TotalSeconds;message=$message})
+        $results.Add([pscustomobject]@{case=$mode;headersReceived=$headersSent.IsSet;failed=$failed;timeoutSeconds=$timeoutSeconds;elapsedSeconds=$clock.Elapsed.TotalSeconds;message=$message})
     } finally {
         $listener.Stop()
         if ($worker) { Stop-Job $worker; Remove-Job $worker }

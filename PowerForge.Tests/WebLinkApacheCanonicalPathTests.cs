@@ -133,6 +133,51 @@ public sealed class WebLinkApacheCanonicalPathTests
         }
     }
 
+    [Theory]
+    [InlineData("/space%20report/", @"space\x20report")]
+    [InlineData("/double%22quote/", @"double\x22quote")]
+    [InlineData("/single%27quote/", @"single\x27quote")]
+    public void ExportApache_EncodesDecodedConfigurationDelimiters(string source, string expectedPattern)
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-apache-delimiter-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var path = Path.Combine(root, "links.conf");
+            WebLinkService.ExportApache(new WebLinkDataSet
+            {
+                Redirects = [new LinkRedirectRule { SourceHost = "evotec.pl", SourcePath = source, TargetUrl = "https://evotec.pl" + source }]
+            }, new WebLinkApacheExportOptions { OutputPath = path });
+            Assert.Contains($"RewriteRule ^/?{expectedPattern}/?$", File.ReadAllText(path));
+        }
+        finally
+        {
+            Directory.Delete(root, true);
+        }
+    }
+
+    [Theory]
+    [InlineData(LinkRedirectMatchType.Exact, "/space%20report/", @"/space\%20report/", true)]
+    [InlineData(LinkRedirectMatchType.Query, "/space%20report/", @"/space\%20report/", true)]
+    [InlineData(LinkRedirectMatchType.Exact, "/price$1/", @"/price\$1/", false)]
+    [InlineData(LinkRedirectMatchType.Exact, "/page/#section", "/page/#section", true)]
+    public void ExportApache_PreservesLiteralDestinationCharacters(LinkRedirectMatchType matchType, string destination, string expected, bool noEscape)
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-apache-literal-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var path = Path.Combine(root, "links.conf");
+            WebLinkService.ExportApache(new WebLinkDataSet
+            {
+                Redirects = [new LinkRedirectRule { SourceHost = "evotec.pl", SourcePath = "/old/", TargetUrl = destination, MatchType = matchType }]
+            }, new WebLinkApacheExportOptions { OutputPath = path });
+            Assert.Contains($"RewriteRule ^/?old/?$ {expected} [R=301,L,QSD{(noEscape ? ",NE" : string.Empty)}]", File.ReadAllText(path));
+        }
+        finally
+        {
+            Directory.Delete(root, true);
+        }
+    }
+
     [Fact]
     public void ExportApache_UsesGuardedOrdinaryRuleForCanonicalIndexedShortlink()
     {

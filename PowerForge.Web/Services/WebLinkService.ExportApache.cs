@@ -145,11 +145,15 @@ public static partial class WebLinkService
             "L",
             rule.PreserveQuery && !hasSourceQuery ? "QSA" : "QSD"
         };
-        // Exact destinations are literal URLs. Keep existing percent escapes;
-        // Apache otherwise escapes '%' again when constructing Location.
-        if (rule.MatchType == LinkRedirectMatchType.Exact && destination.Contains('%'))
+        var literalDestination = rule.MatchType is LinkRedirectMatchType.Exact or LinkRedirectMatchType.Query;
+        // Literal URLs must retain URI escapes and fragments without interpreting
+        // percent or dollar characters as rewrite backreferences.
+        if (literalDestination && (destination.Contains('%') || destination.Contains('#')))
             flags.Add("NE");
-        lines.Add($"RewriteRule {pattern} {destination} [{string.Join(",", flags)}]");
+        var substitution = literalDestination
+            ? destination.Replace("%", @"\%", StringComparison.Ordinal).Replace("$", @"\$", StringComparison.Ordinal)
+            : destination;
+        lines.Add($"RewriteRule {pattern} {substitution} [{string.Join(",", flags)}]");
         lines.Add(string.Empty);
         return true;
     }
@@ -287,7 +291,7 @@ public static partial class WebLinkService
                 prefix = prefix.Trim('/');
                 pattern = string.IsNullOrWhiteSpace(prefix)
                     ? "^/?(.*)$"
-                    : $"^/?{Regex.Escape(prefix)}(?:/(.*))?$";
+                    : $"^/?{EscapeApacheCanonicalPathPattern(prefix)}(?:/(.*))?$";
                 destination = NormalizeDestination(rule.TargetUrl).Replace("{path}", "$1", StringComparison.OrdinalIgnoreCase);
                 return rule.Status == 410 || !string.IsNullOrWhiteSpace(destination);
             }
@@ -314,7 +318,7 @@ public static partial class WebLinkService
             default:
             {
                 var exact = Uri.UnescapeDataString(NormalizeSourcePath(rule.SourcePath)).Trim('/');
-                pattern = string.IsNullOrWhiteSpace(exact) ? "^/?$" : $"^/?{Regex.Escape(exact)}/?$";
+                pattern = string.IsNullOrWhiteSpace(exact) ? "^/?$" : $"^/?{EscapeApacheCanonicalPathPattern(exact)}/?$";
                 destination = NormalizeDestination(rule.TargetUrl);
                 return rule.Status == 410 || !string.IsNullOrWhiteSpace(destination);
             }
