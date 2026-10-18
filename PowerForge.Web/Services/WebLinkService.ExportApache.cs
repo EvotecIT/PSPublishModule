@@ -284,11 +284,7 @@ public static partial class WebLinkService
         {
             case LinkRedirectMatchType.Prefix:
             {
-                var prefix = NormalizeSourcePath(rule.SourcePath);
-                var starIndex = prefix.IndexOf('*');
-                if (starIndex >= 0)
-                    prefix = prefix.Substring(0, starIndex);
-                prefix = prefix.Trim('/');
+                var prefix = NormalizeApachePrefixPath(rule.SourcePath);
                 pattern = string.IsNullOrWhiteSpace(prefix)
                     ? "^/?(.*)$"
                     : $"^/?{EscapeApacheCanonicalPathPattern(prefix)}(?:/(.*))?$";
@@ -323,6 +319,16 @@ public static partial class WebLinkService
                 return rule.Status == 410 || !string.IsNullOrWhiteSpace(destination);
             }
         }
+    }
+
+    private static string NormalizeApachePrefixPath(string? sourcePath)
+    {
+        var prefix = NormalizeSourcePath(sourcePath);
+        // Recognize configuration wildcards before decoding literal URI characters.
+        var starIndex = prefix.IndexOf('*');
+        if (starIndex >= 0)
+            prefix = prefix.Substring(0, starIndex);
+        return Uri.UnescapeDataString(prefix).Trim('/');
     }
 
     private static void AppendHostCondition(List<string> lines, string? host)

@@ -50,6 +50,47 @@ public sealed class WebApiDocsStructuredDataTests : IDisposable
         AssertPage(Models(html), "https://product.example/api/", options.Title);
     }
 
+    [Theory]
+    [InlineData("docs", false, "", "/api/")]
+    [InlineData("docs", true, "", "/api/")]
+    [InlineData("simple", false, "", "/")]
+    [InlineData("simple", true, "", "/")]
+    [InlineData("docs", false, "/reference/core", "/reference/core/")]
+    [InlineData("simple", true, "/reference/commands", "/reference/commands/")]
+    public void Generate_BreadcrumbsMatchEffectiveIndexRoute(string template, bool powerShell, string baseUrl, string indexRoute)
+    {
+        var options = Options(template, powerShell);
+        options.BaseUrl = baseUrl;
+        WebApiDocsGenerator.Generate(options);
+        foreach (var file in Directory.GetFiles(options.OutputPath, "*.html", SearchOption.AllDirectories))
+        {
+            var models = Models(File.ReadAllText(file));
+            if (models.Length == 0) // Legacy alias redirects have no page schema.
+                continue;
+            var crumbs = OfType(models, "BreadcrumbList").GetProperty("itemListElement");
+            Assert.Equal("https://product.example" + indexRoute, crumbs[1].GetProperty("item").GetString());
+            Assert.Equal(options.Title, crumbs[1].GetProperty("name").GetString());
+        }
+    }
+
+    [Theory]
+    [InlineData(null, "API Suite")]
+    [InlineData("Product SDKs", "Product SDKs")]
+    public void GenerateSuitePortal_BreadcrumbUsesEffectiveTitle(string? suiteTitle, string expectedTitle)
+    {
+        var options = Options("docs", false);
+        options.Title = " ";
+        options.ApiSuiteTitle = suiteTitle;
+        options.ApiSuiteEntries.Add(new WebApiDocsSuiteEntry { Id = "a", Label = "A", Href = "/api/a/" });
+        options.ApiSuiteEntries.Add(new WebApiDocsSuiteEntry { Id = "b", Label = "B", Href = "/api/b/" });
+        WebApiDocsGenerator.GenerateSuitePortal(options);
+        var models = Models(File.ReadAllText(Path.Combine(options.OutputPath, "index.html")));
+        AssertPage(models, "https://product.example/api/", expectedTitle);
+        var crumbs = OfType(models, "BreadcrumbList").GetProperty("itemListElement");
+        Assert.Equal(expectedTitle, crumbs[1].GetProperty("name").GetString());
+        Assert.Equal("https://product.example/api/", crumbs[1].GetProperty("item").GetString());
+    }
+
     [Fact]
     public void Generate_UsesMergedSiteOriginWithPermissiveJsonAndSeparateNavigation()
     {

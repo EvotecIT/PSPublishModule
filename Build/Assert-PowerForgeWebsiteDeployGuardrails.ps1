@@ -54,9 +54,17 @@ function Get-ResolvedPipelineSteps {
 
     $document = Get-Content -LiteralPath $resolvedPath -Raw | ConvertFrom-Json -AsHashtable
     $steps = @()
-    if ($document.ContainsKey('extends') -and -not [string]::IsNullOrWhiteSpace([string]$document['extends'])) {
-        $parentPath = Join-Path ([IO.Path]::GetDirectoryName($resolvedPath)) ([string]$document['extends'])
-        $steps += @(Get-ResolvedPipelineSteps -PipelinePath $parentPath -Visited $Visited)
+    if ($document.ContainsKey('extends')) {
+        foreach ($parent in @($document['extends'])) {
+            if ($null -eq $parent -or [string]::IsNullOrWhiteSpace([string]$parent)) {
+                continue
+            }
+            if ($parent -isnot [string]) {
+                throw "Pipeline extends entries must be paths: $resolvedPath"
+            }
+            $parentPath = Join-Path ([IO.Path]::GetDirectoryName($resolvedPath)) $parent
+            $steps += @(Get-ResolvedPipelineSteps -PipelinePath $parentPath -Visited $Visited)
+        }
     }
     if ($document.ContainsKey('steps') -and $null -ne $document['steps']) {
         $steps += @($document['steps'])

@@ -32,6 +32,7 @@ public static partial class WebApiDocsGenerator
         string title,
         string description,
         string route,
+        string indexRoute,
         string? entryName = null)
     {
         if (site is null)
@@ -53,7 +54,7 @@ public static partial class WebApiDocsGenerator
         var breadcrumbs = new List<BreadcrumbItem>
         {
             new() { Title = "Home", Url = site.BaseUrl?.TrimEnd('/') + "/" },
-            new() { Title = options.Title, Url = NormalizeApiIndexRoute(options.BaseUrl), IsCurrent = entryName is null }
+            new() { Title = entryName is null ? title : options.Title, Url = indexRoute, IsCurrent = entryName is null }
         };
         if (entryName is not null)
             breadcrumbs.Add(new BreadcrumbItem { Title = entryName, Url = url, IsCurrent = true });

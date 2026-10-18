@@ -154,6 +154,36 @@ public sealed class GitHubWebsiteDeployGuardrailTests
             ["requireHreflangXDefault"] = false
         };
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Guardrail_ShouldReadEveryInheritedPipelineAndRetainContainment(bool array)
+    {
+        var root = Path.Combine(Path.GetTempPath(), "powerforge-guardrail-inheritance-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(root, "presets"));
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "presets", "demos.json"), "{\"steps\":[]}");
+            File.WriteAllText(Path.Combine(root, "presets", "quality.json"),
+                JsonSerializer.Serialize(new { steps = new[] { CreateSafeSeoDoctorStep() } }));
+            File.WriteAllText(Path.Combine(root, "pipeline.json"), array
+                ? "{\"extends\":[\"presets/demos.json\",\"presets/quality.json\",\"presets/quality.json\"]}"
+                : "{\"extends\":\"presets/quality.json\"}");
+            var result = RunGuardrail(root, "pipeline.json");
+            Assert.Equal(0, result.ExitCode);
+            Assert.Contains("1 single-language", result.Output, StringComparison.Ordinal);
+
+            File.WriteAllText(Path.Combine(root, "presets", "quality.json"), "{\"steps\":[]}");
+            Assert.Contains("requires a seo-doctor step", RunGuardrail(root, "pipeline.json").Output, StringComparison.Ordinal);
+            File.WriteAllText(Path.Combine(root, "presets", "quality.json"), "{\"extends\":\"../../outside.json\"}");
+            Assert.Contains("must remain inside", RunGuardrail(root, "pipeline.json").Output, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
     private static (int ExitCode, string Output) RunGuardrailWithStep(Dictionary<string, object?> step)
         => RunGuardrailWithPipeline(JsonSerializer.Serialize(new { steps = new[] { step } }));
 

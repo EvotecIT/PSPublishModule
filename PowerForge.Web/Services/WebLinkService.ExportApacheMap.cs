@@ -211,16 +211,15 @@ public static partial class WebLinkService
                 return;
             }
 
-            var path = Uri.UnescapeDataString(NormalizeSourcePath(rule.SourcePath)).Trim('/');
+            var path = rule.MatchType == LinkRedirectMatchType.Prefix
+                ? NormalizeApachePrefixPath(rule.SourcePath)
+                : Uri.UnescapeDataString(NormalizeSourcePath(rule.SourcePath)).Trim('/');
             if (rule.MatchType != LinkRedirectMatchType.Prefix)
             {
                 _exactPaths.Add(path);
                 return;
             }
 
-            var starIndex = path.IndexOf('*');
-            if (starIndex >= 0)
-                path = path.Substring(0, starIndex).TrimEnd('/');
             if (path.Length == 0)
                 _matchesEveryPath = true;
             else

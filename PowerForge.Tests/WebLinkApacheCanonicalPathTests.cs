@@ -203,4 +203,41 @@ public sealed class WebLinkApacheCanonicalPathTests
             Directory.Delete(root, true);
         }
     }
+
+    [Theory]
+    [InlineData("/docs%20old/*", @"docs\x20old")]
+    [InlineData("/café/*", "café")]
+    [InlineData("/caf%C3%A9/*", "café")]
+    [InlineData("/literal%2A/star/*", @"literal\*/star")]
+    public void ExportApache_DecodesPrefixWithoutTurningEncodedStarIntoWildcard(string source, string expectedPattern)
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-apache-prefix-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var path = Path.Combine(root, "links.conf");
+            var result = WebLinkService.ExportApache(new WebLinkDataSet
+            {
+                Redirects = [new LinkRedirectRule
+                {
+                    SourceHost = "evotec.pl", SourcePath = source, MatchType = LinkRedirectMatchType.Prefix,
+                    TargetUrl = "/current/{path}"
+                }],
+                Shortlinks = [new LinkShortlinkRule
+                {
+                    Host = "evotec.pl", PathPrefix = "/", Slug = "literal-other/star/page", TargetUrl = "/other/"
+                }]
+            }, new WebLinkApacheExportOptions
+            {
+                OutputPath = path, ShortlinkMapOutputPath = Path.Combine(root, "links.map"),
+                ShortlinkMapRuntimePath = "/tmp/pf-test-links.map"
+            });
+            Assert.Contains($"RewriteRule ^/?{expectedPattern}(?:/(.*))?$ /current/$1", File.ReadAllText(path));
+            // An encoded literal star must not suppress unrelated indexed shortlinks.
+            Assert.Equal(1, result.ShortlinkMapEntryCount);
+        }
+        finally
+        {
+            Directory.Delete(root, true);
+        }
+    }
 }
