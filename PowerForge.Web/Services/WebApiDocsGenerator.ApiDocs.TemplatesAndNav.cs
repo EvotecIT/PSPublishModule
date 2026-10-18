@@ -149,8 +149,9 @@ public static partial class WebApiDocsGenerator
 
     private static NavConfig? LoadNavConfig(WebApiDocsOptions options)
     {
-        if (string.IsNullOrWhiteSpace(options.NavJsonPath)) return null;
-        var path = Path.GetFullPath(options.NavJsonPath);
+        var configPath = FirstNonEmpty(options.NavJsonPath, options.SiteConfigPath);
+        if (string.IsNullOrWhiteSpace(configPath)) return null;
+        var path = Path.GetFullPath(configPath);
         if (!File.Exists(path)) return null;
 
         using var stream = File.OpenRead(path);

@@ -133,6 +133,7 @@ public static partial class WebLinkService
         if (!IsSafeApacheRewriteSubstitution(destination))
             throw new InvalidOperationException($"Apache redirect target contains characters that must be URL-encoded before export: {rule.Id ?? rule.SourcePath}");
 
+        AppendApacheCanonicalPathCondition(lines, rule, destination);
         AppendHostCondition(lines, rule.SourceHost);
         AppendQueryCondition(lines, rule.SourceQuery, rule.SourceQueryParameter);
         WebApacheRewriteSafety.AppendOperationalPathCondition(lines);
@@ -147,6 +148,29 @@ public static partial class WebLinkService
         lines.Add($"RewriteRule {pattern} {destination} [{string.Join(",", flags)}]");
         lines.Add(string.Empty);
         return true;
+    }
+
+    private static void AppendApacheCanonicalPathCondition(List<string> lines, LinkRedirectRule rule, string destination)
+    {
+        if (rule.MatchType != LinkRedirectMatchType.Exact || HasSourceQuerySelector(rule))
+            return;
+
+        var path = destination;
+        if (IsHttpUrl(destination))
+        {
+            if (!Uri.TryCreate(destination, UriKind.Absolute, out var target) ||
+                !target.Host.Equals(rule.SourceHost?.Trim(), StringComparison.OrdinalIgnoreCase) ||
+                !target.IsDefaultPort || !string.IsNullOrEmpty(target.Query))
+                return;
+            path = target.AbsolutePath;
+        }
+        else if (!path.StartsWith('/') || path.StartsWith("//", StringComparison.Ordinal) || path.Contains('?'))
+            return;
+
+        // Exact rules match both slash variants. Language-root normalization can
+        // turn an imported target into that same route; never redirect its canonical variant.
+        if (NormalizeSourcePath(rule.SourcePath).Equals(NormalizeSourcePath(path), StringComparison.Ordinal))
+            lines.Add($"RewriteCond %{{REQUEST_URI}} !^{Regex.Escape(path)}$");
     }
 
     private static bool IsSafeApacheRewriteSubstitution(string destination)
