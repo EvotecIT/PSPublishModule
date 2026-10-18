@@ -227,16 +227,16 @@ public static partial class WebApiDocsGenerator
 
         if (TryGetProperty(root, "Head", out var headProp) && headProp.ValueKind == JsonValueKind.Object)
         {
-            if (headProp.TryGetProperty("Links", out var linksProp) && linksProp.ValueKind == JsonValueKind.Array)
+            if (TryGetProperty(headProp, "Links", out var linksProp) && linksProp.ValueKind == JsonValueKind.Array)
             {
                 nav.HeadLinksHtml = RenderHeadLinksHtml(linksProp);
                 foreach (var link in linksProp.EnumerateArray())
                 {
-                    if (!link.TryGetProperty("Rel", out var relProp) || relProp.ValueKind != JsonValueKind.String)
+                    if (!TryGetProperty(link, "Rel", out var relProp) || relProp.ValueKind != JsonValueKind.String)
                         continue;
                     var rel = relProp.GetString() ?? string.Empty;
                     if (!rel.Equals("icon", StringComparison.OrdinalIgnoreCase)) continue;
-                    if (!link.TryGetProperty("Href", out var hrefProp) || hrefProp.ValueKind != JsonValueKind.String)
+                    if (!TryGetProperty(link, "Href", out var hrefProp) || hrefProp.ValueKind != JsonValueKind.String)
                         continue;
                     var href = hrefProp.GetString();
                     if (!string.IsNullOrWhiteSpace(href))

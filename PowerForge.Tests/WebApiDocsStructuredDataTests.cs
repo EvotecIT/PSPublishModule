@@ -76,6 +76,21 @@ public sealed class WebApiDocsStructuredDataTests : IDisposable
     }
 
     [Fact]
+    public void Generate_SiteConfigFallbackRetainsCamelCaseHeadLinks()
+    {
+        var options = Options("docs", false);
+        var config = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(options.SiteConfigPath!))!;
+        config["head"] = System.Text.Json.Nodes.JsonNode.Parse("""
+            {"links":[{"rel":"icon","href":"/brand.svg","type":"image/svg+xml"}]}
+            """);
+        File.WriteAllText(options.SiteConfigPath!, config.ToJsonString());
+        options.NavJsonPath = null;
+        WebApiDocsGenerator.Generate(options);
+        var html = File.ReadAllText(Path.Combine(options.OutputPath, "index.html"));
+        Assert.Contains("rel=\"icon\" href=\"/brand.svg\"", html);
+    }
+
+    [Fact]
     public void GenerateSuitePortal_InheritsLinkedSiteSchema()
     {
         var options = Options("docs", false);
