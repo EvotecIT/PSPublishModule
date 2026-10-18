@@ -2,7 +2,7 @@ namespace PowerForge.Tests;
 
 public sealed partial class AppleTestFlightReadinessTests : IDisposable
 {
-    private readonly string _root = Path.Combine(Path.GetTempPath(), "PowerForge.TestFlightReadiness", Guid.NewGuid().ToString("N"));
+    private readonly string _root = Path.Combine(AppleReleaseArtifactService.ResolvePhysicalPath(Path.GetTempPath()), "PowerForge.TestFlightReadiness", Guid.NewGuid().ToString("N"));
 
     public AppleTestFlightReadinessTests()
     {

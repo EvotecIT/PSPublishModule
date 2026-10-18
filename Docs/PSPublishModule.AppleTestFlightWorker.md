@@ -202,6 +202,17 @@ request and holds any build containing the labelled merged PR, including later
 merges and manual Build now requests. Older already-uploaded builds that do not
 contain the change can finish their beta review and distribution.
 
+Before enabling a hold with an existing label, review **all** merged PRs already
+carrying it. The legacy skip label excluded only a trigger; those old labels now
+hold every later build containing their code. For example, inventory them with:
+
+```sh
+gh api --paginate 'repos/OWNER/REPO/pulls?state=closed&per_page=100' --jq '.[] | select(.merged_at != null and any(.labels[]; .name == "testflight-skip")) | [.number, .title, .html_url] | @tsv'
+```
+
+Remove an old label only after confirming its code is ready, or configure a new
+label dedicated to holds. Preserve labels on changes that still must not ship.
+
 After the correction or revert is merged, remove the label from the original PR
 to acknowledge that main is ready. The queued intent resumes against qualified
 main; no replacement request or manual version number is needed. The label is
