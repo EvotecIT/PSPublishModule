@@ -69,7 +69,7 @@ internal sealed partial class AppleTestFlightWorker
         {
             while (!UpdateGate())
             {
-                SetStage(_running.Stage, "Automatic work is Off, excluded, or locally paused; existing recovery stage is preserved.");
+                SetStage(_running.Stage, _gateDiagnostic ?? "Automatic work is Off, excluded, or locally paused; existing recovery stage is preserved.");
                 if (!_running.Automatic || !IsUnstarted(_running.Stage)) return _state;
                 // An untouched automatic intent must not starve a later explicit
                 // request. A checkpoint or delivery recovery still owns ordering.
@@ -110,10 +110,12 @@ internal sealed partial class AppleTestFlightWorker
                 AppleTestFlightJobStage.CheckpointExecuting => AppleTestFlightJobStage.Planning,
                 AppleTestFlightJobStage.Releasing => releasingFrom == AppleTestFlightJobStage.AppleProcessingPending
                     ? AppleTestFlightJobStage.AppleProcessingPending : AppleTestFlightJobStage.ReleaseReady,
+                AppleTestFlightJobStage.SubmittingBetaReview or AppleTestFlightJobStage.DistributingTestFlight => AppleTestFlightJobStage.AppleProcessingPending,
                 _ => AppleTestFlightJobStage.NeedsOperator
             }
             : exception is AppleTestFlightToolException && stage is not (AppleTestFlightJobStage.CheckpointExecuting or
-            AppleTestFlightJobStage.PublishingCheckpoint or AppleTestFlightJobStage.Releasing)
+            AppleTestFlightJobStage.PublishingCheckpoint or AppleTestFlightJobStage.Releasing or
+            AppleTestFlightJobStage.SubmittingBetaReview or AppleTestFlightJobStage.DistributingTestFlight)
             ? stage : AppleTestFlightJobStage.NeedsOperator;
 
     private AppleTestFlightWorkerState LoadState()
@@ -169,6 +171,9 @@ internal sealed partial class AppleTestFlightWorker
         foreach (var path in policy.PublisherPaths.Append(policy.ConfigPath).Append(policy.WorkflowPath).Append(policy.QualificationWorkflowPath))
             ContainedPath(policy.ConsumerRoot, path);
         if (policy.PublisherPaths.Length == 0) throw new ArgumentException("Publisher checkpoint paths must be explicit.");
+        if (policy.ReleaseHoldLabel.Length > 100 || policy.ReleaseHoldLabel.Any(char.IsControl) ||
+            policy.ReleaseHoldLabel != policy.ReleaseHoldLabel.Trim())
+            throw new ArgumentException("ReleaseHoldLabel must be a bounded, trimmed GitHub label.");
         if (IsWithin(policy.ConsumerRoot, policy.StateRoot) || IsWithin(policy.OwnerRoot, policy.StateRoot))
             throw new ArgumentException("Durable worker state must remain outside source checkouts.");
     }
@@ -188,8 +193,11 @@ internal sealed partial class AppleTestFlightWorker
         PublishStatus(_running);
     }
 
+    private string? _gateDiagnostic;
+
     private bool UpdateGate()
     {
+        _gateDiagnostic = null;
         var allowed = !File.Exists(Path.Combine(_directory, "paused")) &&
                       (_running is null || !_running.Automatic || _state.Mode != AppleTestFlightAutomaticMode.Off);
         if (allowed && _running?.Automatic == true)
@@ -198,7 +206,16 @@ internal sealed partial class AppleTestFlightWorker
             {
                 var pull = Api($"pulls/{number}");
                 var labels = pull.GetProperty("labels").EnumerateArray().Select(value => Text(value, "name")).ToArray();
-                if (labels.Contains("testflight-skip") || (_state.Mode == AppleTestFlightAutomaticMode.SelectedPRs && !labels.Contains("testflight"))) allowed = false;
+                if (ExcludesAutomaticTrigger(labels, _policy) || (_state.Mode == AppleTestFlightAutomaticMode.SelectedPRs && !labels.Contains("testflight"))) allowed = false;
+            }
+        }
+        if (allowed && _running?.Source is not null && !string.IsNullOrEmpty(_policy.ReleaseHoldLabel))
+        {
+            var held = FindReleaseHolds(_running.Source);
+            if (held.Length != 0)
+            {
+                allowed = false;
+                _gateDiagnostic = $"Release held by '{_policy.ReleaseHoldLabel}' on merged PRs {string.Join(", ", held)}. Resolve the code and remove the label to resume this retained intent.";
             }
         }
         foreach (var target in _policy.Targets)

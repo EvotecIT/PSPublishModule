@@ -330,6 +330,14 @@ jobs:
           -c Release --nologo
           --filter 'FullyQualifiedName~BenchmarkServicesTests.History'
 
+      - name: Test merge-to-TestFlight contracts
+        shell: pwsh
+        timeout-minutes: 10
+        run: >
+          dotnet test .\PowerForge.Tests\PowerForge.Tests.csproj
+          -c Release --no-build --no-restore --nologo
+          --filter 'FullyQualifiedName~AppleTestFlightWorkerTests|FullyQualifiedName~AppleTestFlightReadinessTests|FullyQualifiedName~AppleReleaseWorkflowTests.PinnedExistingBetaRecovery'
+
       - name: Test generated module loading
         shell: pwsh
         timeout-minutes: 10
@@ -535,6 +543,14 @@ jobs:
           -c Release --nologo
           --filter 'FullyQualifiedName~BenchmarkServicesTests.History'
 
+      - name: Test merge-to-TestFlight contracts
+        shell: pwsh
+        timeout-minutes: 10
+        run: >
+          dotnet test .\PowerForge.Tests\PowerForge.Tests.csproj
+          -c Release --no-build --no-restore --nologo
+          --filter 'FullyQualifiedName~AppleTestFlightWorkerTests|FullyQualifiedName~AppleTestFlightReadinessTests|FullyQualifiedName~AppleReleaseWorkflowTests.PinnedExistingBetaRecovery'
+
       - name: Test cross-platform website and agent plugin contracts
         shell: pwsh
         timeout-minutes: 10
@@ -629,6 +645,14 @@ jobs:
           dotnet test .\PowerForge.Tests\PowerForge.Tests.csproj
           -c Release --nologo
           --filter 'FullyQualifiedName~BenchmarkServicesTests.History'
+
+      - name: Test merge-to-TestFlight contracts
+        shell: pwsh
+        timeout-minutes: 10
+        run: >
+          dotnet test .\PowerForge.Tests\PowerForge.Tests.csproj
+          -c Release --no-build --no-restore --nologo
+          --filter 'FullyQualifiedName~AppleTestFlightWorkerTests|FullyQualifiedName~AppleTestFlightReadinessTests|FullyQualifiedName~AppleReleaseWorkflowTests.PinnedExistingBetaRecovery'
 
       - name: Test with Pester
         shell: pwsh

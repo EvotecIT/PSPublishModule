@@ -24,6 +24,10 @@ internal sealed class AppleTestFlightWorkerPolicy
     public string BetaGroupName { get; set; } = "Home";
     /// <summary>The enrolled group's audience. Existing internal-only policies retain their behavior.</summary>
     public bool BetaGroupIsInternal { get; set; } = true;
+    /// <summary>Standing local authorization to submit the enrolled exact builds to Beta App Review. Public review remains manual.</summary>
+    public bool SubmitBetaReviewAutomatically { get; set; }
+    /// <summary>Optional PR label that holds releases containing that merged PR until the label is removed.</summary>
+    public string ReleaseHoldLabel { get; set; } = "";
 }
 
 internal sealed class AppleTestFlightWorkerTarget
@@ -36,7 +40,7 @@ internal sealed class AppleTestFlightWorkerTarget
 
 internal enum AppleTestFlightAutomaticMode { Off, SelectedPRs, EveryMergedPR }
 
-internal enum AppleTestFlightJobStage { Queued, WaitingForChecks, Planning, CheckpointExecuting, CheckpointReady, PublishingCheckpoint, ReleaseReady, Releasing, AppleProcessingPending, ReadyInHome, NeedsOperator, Excluded, ReadyInTestFlight }
+internal enum AppleTestFlightJobStage { Queued, WaitingForChecks, Planning, CheckpointExecuting, CheckpointReady, PublishingCheckpoint, ReleaseReady, Releasing, AppleProcessingPending, ReadyInHome, NeedsOperator, Excluded, ReadyInTestFlight, SubmittingBetaReview, DistributingTestFlight }
 
 internal sealed class AppleTestFlightWorkerState
 {
@@ -84,6 +88,11 @@ internal sealed class AppleTestFlightJob
     public string? Build { get; set; }
     public string? Diagnostic { get; set; }
     public bool StatusPending { get; set; }
+    public Dictionary<string, string> BuildIds { get; set; } = new(StringComparer.Ordinal);
+    public string[] UploadedTargets { get; set; } = Array.Empty<string>();
+    public string? BetaPlanSha256 { get; set; }
+    public string[] BetaActionTargets { get; set; } = Array.Empty<string>();
+    public DateTimeOffset? BetaActionStartedAt { get; set; }
     public PowerForgeAppleReleaseTargetReceipt[] Outcomes { get; set; } = Array.Empty<PowerForgeAppleReleaseTargetReceipt>();
     public DateTimeOffset UpdatedAt { get; set; }
 }
