@@ -288,7 +288,7 @@ internal sealed class ScribanTemplateEngine : ITemplateEngine
         }
 
         public int RequiredParameterCount => 0;
-        public int ParameterCount => 5;
+        public int ParameterCount => 7;
         public ScriptVarParamKind VarParamKind => ScriptVarParamKind.None;
         public Type ReturnType => typeof(string);
 
@@ -301,6 +301,8 @@ internal sealed class ScribanTemplateEngine : ITemplateEngine
                 2 => new ScriptParameterInfo(typeof(bool), "include_preview", true),
                 3 => new ScriptParameterInfo(typeof(string), "css_class", string.Empty),
                 4 => new ScriptParameterInfo(typeof(string), "data_path", string.Empty),
+                5 => new ScriptParameterInfo(typeof(bool), "include_links", true),
+                6 => new ScriptParameterInfo(typeof(bool), "include_assets", true),
                 _ => new ScriptParameterInfo(typeof(object), "arg")
             };
         }
@@ -312,7 +314,9 @@ internal sealed class ScribanTemplateEngine : ITemplateEngine
             var includePreview = arguments.Count > 2 ? ScribanThemeHelpers.ParseBool(arguments[2], true) : true;
             var cssClass = arguments.Count > 3 ? arguments[3]?.ToString() : null;
             var dataPath = arguments.Count > 4 ? arguments[4]?.ToString() : null;
-            return _helpers.ReleaseChangelog(product, limit, includePreview, cssClass, dataPath);
+            var includeLinks = arguments.Count > 5 ? ScribanThemeHelpers.ParseBool(arguments[5], true) : true;
+            var includeAssets = arguments.Count > 6 ? ScribanThemeHelpers.ParseBool(arguments[6], true) : true;
+            return _helpers.ReleaseChangelog(product, limit, includePreview, cssClass, dataPath, includeLinks, includeAssets);
         }
 
         public ValueTask<object?> InvokeAsync(TemplateContext context, Scriban.Syntax.ScriptNode? callerContext, ScriptArray arguments, Scriban.Syntax.ScriptBlockStatement? blockStatement)

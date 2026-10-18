@@ -179,7 +179,9 @@ internal sealed partial class ScribanThemeHelpers
         int limit = 20,
         bool includePreview = true,
         string? cssClass = null,
-        string? dataPath = null)
+        string? dataPath = null,
+        bool includeLinks = true,
+        bool includeAssets = true)
     {
         return ReleaseHubRenderer.RenderReleaseChangelog(
             _context.Data,
@@ -188,7 +190,9 @@ internal sealed partial class ScribanThemeHelpers
             limit,
             includePreview,
             cssClass,
-            dataPath);
+            dataPath,
+            includeLinks,
+            includeAssets);
     }
 
     public string EditorialCards(
