@@ -1030,6 +1030,11 @@ and never accepts a branch or tag as capture evidence. This lets CasaRay keep it
 simulator routes while Tactra, EasyControlX, and EmailIMO add small capture scripts with
 the same approval and upload contract.
 
+Public applications can use a private controller and isolated capture runner through
+the [private capture route](PSPublishModule.ApplePrivateCapture.md). Its hosted
+preflight verifies qualified merged application source before scheduling native
+capture; retained evidence identifies both the private controller and app source.
+
 After reviewing the captured images, generate the manifest without hand-copying file
 hashes or dimensions:
 

@@ -3,6 +3,31 @@ name: PowerForge Apple Screenshot Capture
 on:
   workflow_call:
     inputs:
+      source_repository:
+        description: Optional application repository for a private cross-repository controller; blank captures the calling repository.
+        required: false
+        default: ""
+        type: string
+      source_branch:
+        description: Enrolled default branch for private cross-repository qualification.
+        required: false
+        default: main
+        type: string
+      qualification_workflow:
+        description: Application push workflow required before a private capture can reach the Mac.
+        required: false
+        default: ""
+        type: string
+      required_checks_json:
+        description: Exact successful native job names required for private capture.
+        required: false
+        default: '[]'
+        type: string
+      runner_group:
+        description: Restricted private runner group; required for cross-repository capture.
+        required: false
+        default: ""
+        type: string
       source_ref:
         description: Exact source commit to capture.
         required: true
@@ -70,8 +95,59 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  qualify:
+    if: inputs.source_repository != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      qualification: ${{ steps.verify.outputs.qualification }}
+    steps:
+      - name: Require private-controller tool and runner policy
+        shell: pwsh
+        env:
+          TOOL_COMMIT: ${{ inputs.simulator_tool_ref }}
+          RUNNER_GROUP: ${{ inputs.runner_group }}
+          RUNNER_LABELS: ${{ inputs.runner_labels_json }}
+        run: |
+          if ($env:TOOL_COMMIT -cnotmatch '^[0-9a-f]{40}$') { throw 'Private capture requires an exact shared tool pin.' }
+          if ($env:RUNNER_GROUP -cnotmatch '^[A-Za-z0-9][A-Za-z0-9 _-]{0,99}$' -or $env:RUNNER_GROUP -ieq 'Default') { throw 'Private capture requires a restricted runner group.' }
+          $labels = $env:RUNNER_LABELS | ConvertFrom-Json -NoEnumerate
+          if ($labels -isnot [array] -or $labels.Count -eq 0 -or
+              @($labels | Where-Object { $_ -isnot [string] -or $_ -cnotmatch '^[A-Za-z0-9][A-Za-z0-9_-]{0,99}$' }).Count) {
+            throw 'Private capture requires explicit runner labels.'
+          }
+      - name: Checkout the pinned capture policy owner
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+        with:
+          repository: EvotecIT/PSPublishModule
+          ref: ${{ inputs.simulator_tool_ref }}
+          path: capture-policy
+          persist-credentials: false
+      - name: Verify private controller and qualified merged application source
+        id: verify
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_REPOSITORY: ${{ inputs.source_repository }}
+          SOURCE_BRANCH: ${{ inputs.source_branch }}
+          SOURCE_REF: ${{ inputs.source_ref }}
+          QUALIFICATION_WORKFLOW: ${{ inputs.qualification_workflow }}
+          REQUIRED_CHECKS: ${{ inputs.required_checks_json }}
+          TOOL_COMMIT: ${{ inputs.simulator_tool_ref }}
+        run: |
+          $checks = $env:REQUIRED_CHECKS | ConvertFrom-Json -NoEnumerate
+          if ($checks -isnot [array] -or @($checks | Where-Object { $_ -isnot [string] }).Count) { throw 'required_checks_json must be an array of job names.' }
+          ./capture-policy/scripts/Invoke-ApplePrivateCapturePreflight.ps1 -Repository $env:SOURCE_REPOSITORY `
+            -Branch $env:SOURCE_BRANCH -SourceCommit $env:SOURCE_REF -WorkflowPath $env:QUALIFICATION_WORKFLOW `
+            -RequiredChecks $checks -ToolCommit $env:TOOL_COMMIT
+
   capture:
-    runs-on: ${{ fromJson(inputs.runner_labels_json) }}
+    needs: qualify
+    if: ${{ !cancelled() && (needs.qualify.result == 'success' || (inputs.source_repository == '' && needs.qualify.result == 'skipped')) }}
+    runs-on: ${{ fromJSON(inputs.runner_group != '' && format('{{"group":"{0}","labels":{1}}}', inputs.runner_group, inputs.runner_labels_json) || inputs.runner_labels_json) }}
     timeout-minutes: 90
     permissions:
       contents: read
@@ -115,6 +191,7 @@ jobs:
         id: source_checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
         with:
+          repository: ${{ inputs.source_repository || github.repository }}
           ref: ${{ inputs.source_ref }}
           fetch-depth: 1
           path: source
@@ -346,6 +423,8 @@ jobs:
           CAPTURE_SCENARIO: ${{ inputs.scenario }}
           CAPTURE_ARTIFACT_PATH: ${{ inputs.capture_artifact_path }}
           SIMULATOR_DEVICES: ${{ inputs.simulator_devices_json }}
+          SOURCE_REPOSITORY: ${{ inputs.source_repository || github.repository }}
+          CAPTURE_QUALIFICATION: ${{ needs.qualify.outputs.qualification }}
         run: |
           $sourceRoot = [IO.Path]::GetFullPath('${{ github.workspace }}/source')
           $artifactRoot = [IO.Path]::GetFullPath((Join-Path $sourceRoot $env:CAPTURE_ARTIFACT_PATH))
@@ -371,7 +450,11 @@ jobs:
           $provenance = [ordered]@{
             schemaVersion = 2
             repository = $env:GITHUB_REPOSITORY
+            controllerCommit = $env:GITHUB_SHA
+            sourceRepository = $env:SOURCE_REPOSITORY
             captureRunId = $env:GITHUB_RUN_ID
+            captureRunAttempt = [int]$env:GITHUB_RUN_ATTEMPT
+            captureRunner = [ordered]@{ name = $env:RUNNER_NAME; os = $env:RUNNER_OS; architecture = $env:RUNNER_ARCH }
             sourceCommit = $env:SOURCE_REF.ToLowerInvariant()
             marketingVersion = $env:MARKETING_VERSION
             workflowRef = $env:GITHUB_WORKFLOW_REF
@@ -381,6 +464,9 @@ jobs:
             theme = $env:CAPTURE_THEME
             scenario = $env:CAPTURE_SCENARIO
             screenshots = $screenshots
+          }
+          if (-not [string]::IsNullOrWhiteSpace($env:CAPTURE_QUALIFICATION)) {
+            $provenance.qualification = $env:CAPTURE_QUALIFICATION | ConvertFrom-Json -AsHashtable
           }
           if (($env:SIMULATOR_DEVICES | ConvertFrom-Json -AsHashtable).Count -gt 0) {
             $provenance.simulatorCapture = Get-Content -LiteralPath (Join-Path $env:RUNNER_TEMP 'powerforge-apple-simulator-evidence.json') -Raw | ConvertFrom-Json -AsHashtable

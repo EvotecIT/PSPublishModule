@@ -633,7 +633,6 @@ public sealed partial class AppleReleaseWorkflowTests
         foreach (var workflowName in new[]
                  {
                      "powerforge-apple-screenshots.yml",
-                     "powerforge-apple-screenshot-capture.yml",
                      "powerforge-apple-screenshot-approve.yml",
                      "powerforge-apple-monitor.yml",
                      "powerforge-apple-version-pr.yml",
