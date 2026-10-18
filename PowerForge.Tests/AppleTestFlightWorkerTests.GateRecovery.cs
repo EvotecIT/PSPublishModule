@@ -125,4 +125,34 @@ public sealed partial class AppleTestFlightWorkerTests
         receipt.Targets[0].MutationGateClosed = result.MutationGateClosed;
         Assert.Equal(AppleTestFlightJobStage.NeedsOperator, AppleTestFlightWorker.DeliveryOutcome(receipt, policy).Stage);
     }
+
+    [Theory]
+    [InlineData("BETA_REJECTED", false)]
+    [InlineData("MISSING_EXPORT_COMPLIANCE", false)]
+    [InlineData("REJECTED", true)]
+    public void TerminalReviewOrComplianceCannotEnterBetaPlanOrCompletedGateRecovery(string state, bool reviewState)
+    {
+        var (policy, job, receipt) = AutomaticBeta();
+        var target = receipt.Targets[0];
+        if (reviewState) target.TestFlightReviewState = state;
+        else target.TestFlightExternalState = state;
+
+        // Status observation remains possible; selecting or confirming another
+        // beta action must stop immediately on the same processing-valid build.
+        AppleTestFlightWorker.ValidateExistingBetaReceipt(receipt, job, policy, ["Phone", "Mac"], requireValid: false);
+        Assert.Throws<InvalidOperationException>(() => AppleTestFlightWorker.NextBetaAction(receipt, policy));
+        foreach (var action in new[] { PowerForgeAppleReleaseAction.SubmitTestFlightReview, PowerForgeAppleReleaseAction.TestFlight })
+        {
+            receipt.Action = action;
+            receipt.PlanOnly = true;
+            receipt.PlanSha256 = new string('b', 64);
+            Assert.Throws<InvalidOperationException>(() => AppleTestFlightWorker.ValidateBetaPlan(receipt, job, policy, action, ["Phone", "Mac"]));
+            receipt.PlanOnly = false;
+            receipt.Success = false;
+            target.ErrorMessage = receipt.ErrorMessage = "The local mutation gate closed.";
+            target.MutationGateClosed = true;
+            Assert.Throws<InvalidOperationException>(() => AppleTestFlightWorker.ValidateExistingBetaReceipt(receipt, job, policy, ["Phone", "Mac"], requireValid: true));
+            receipt.Success = true;
+        }
+    }
 }

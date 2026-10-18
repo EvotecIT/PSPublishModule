@@ -86,8 +86,7 @@ internal sealed partial class AppleTestFlightWorker
         foreach (var target in targets)
         {
             if (target.BuildProcessingState is not (null or "" or "VALID" or "PROCESSING" or "PROCESSING_PENDING") ||
-                target.BuildExpired == true || target.TestFlightExternalState is "BETA_REJECTED" or "MISSING_EXPORT_COMPLIANCE" ||
-                target.TestFlightReviewState == "REJECTED")
+                target.BuildExpired == true || RequiresBetaOperatorAction(target))
                 throw new InvalidOperationException($"{target.Name}: Apple rejected, expired, or requires compliance for this build. Operator action is required; preserve its delivery history.");
             if (target.BuildProcessingState == "VALID" && target.BuildExpired != false)
                 throw new InvalidOperationException($"{target.Name}: explicit nonexpiry evidence is required before any beta mutation.");
@@ -128,8 +127,17 @@ internal sealed partial class AppleTestFlightWorker
                 (!string.IsNullOrEmpty(priorId) && value.BuildId != priorId) ||
                 (requireValid && (string.IsNullOrWhiteSpace(value.BuildId) || value.BuildProcessingState != "VALID" || value.BuildExpired != false)))
                 throw new InvalidOperationException($"{name}: beta recovery changed the exact enrolled build identity or exceeded beta-only authority.");
+            if (requireValid && RequiresBetaOperatorAction(value))
+                throw new InvalidOperationException($"{name}: Apple rejected this beta build or requires export compliance. Operator action is required before another beta action.");
         }
     }
+
+    // A processing-valid build can still require a human review or compliance
+    // decision. Reject it at both plan and completed-result boundaries, including
+    // a gate-held result, rather than recording a misleading retryable stage.
+    private static bool RequiresBetaOperatorAction(PowerForgeAppleReleaseTargetReceipt target)
+        => target.TestFlightExternalState is "BETA_REJECTED" or "MISSING_EXPORT_COMPLIANCE" ||
+           target.TestFlightReviewState == "REJECTED";
 
     internal static void ValidateBetaPlan(PowerForgeAppleReleaseReceipt plan, AppleTestFlightJob job,
         AppleTestFlightWorkerPolicy policy, PowerForgeAppleReleaseAction action, string[] targets)

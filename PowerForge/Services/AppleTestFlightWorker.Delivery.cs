@@ -32,8 +32,7 @@ internal sealed partial class AppleTestFlightWorker
             return (AppleTestFlightJobStage.NeedsOperator, $"{failed.Name}: {failed.ErrorMessage ?? "Apple build processing ended in " + failed.BuildProcessingState}. Preserve and reconcile this delivery before requesting another build.");
 
         if (!policy.BetaGroupIsInternal && selected.Any(value => value.BuildProcessingState == "VALID" &&
-                (value.TestFlightExternalState is "BETA_REJECTED" or "MISSING_EXPORT_COMPLIANCE" ||
-                 value.TestFlightReviewState == "REJECTED" ||
+                (RequiresBetaOperatorAction(value) ||
                  value.TestFlightExternalState == "READY_FOR_BETA_SUBMISSION" && !IsReviewPending(value) && !policy.SubmitBetaReviewAutomatically)))
             return (AppleTestFlightJobStage.NeedsOperator,
                 "External TestFlight requires operator action. Inspect Beta App Review or export compliance; submit beta review only after separate operator approval. Preserve and reconcile this delivery before requesting another build.");

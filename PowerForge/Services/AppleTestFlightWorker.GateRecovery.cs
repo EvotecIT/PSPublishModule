@@ -59,7 +59,7 @@ internal sealed partial class AppleTestFlightWorker
         if (job.Diagnostic != $"{failed.Name}: {failed.ErrorMessage}. Preserve and reconcile this delivery before requesting another build.") return false;
         return SelectedDeliveryTargets(receipt, policy).All(target => target.Version == job.Version && target.Build == job.Build &&
             target.BuildExpired != true && target.BuildProcessingState is null or "" or "VALID" or "PROCESSING" or "PROCESSING_PENDING" &&
-            target.TestFlightExternalState is not ("BETA_REJECTED" or "MISSING_EXPORT_COMPLIANCE") && target.TestFlightReviewState != "REJECTED");
+            !RequiresBetaOperatorAction(target));
     }
 }
 #endif
