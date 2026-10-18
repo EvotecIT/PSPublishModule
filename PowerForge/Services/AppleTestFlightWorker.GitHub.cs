@@ -113,7 +113,7 @@ internal sealed partial class AppleTestFlightWorker
             if (pull.GetProperty("merged_at").ValueKind == JsonValueKind.Null || Text(pull.GetProperty("base"), "ref") != _policy.DefaultBranch) continue;
             var number = pull.GetProperty("number").GetInt32();
             var labels = pull.GetProperty("labels").EnumerateArray().Select(value => Text(value, "name")).ToArray();
-            if (labels.Contains("testflight-skip")) continue;
+            if (ExcludesAutomaticTrigger(labels, _policy)) continue;
             if (_state.Mode == AppleTestFlightAutomaticMode.EveryMergedPR && pull.GetProperty("merged_at").GetDateTimeOffset() < _state.ModeChangedAt) continue;
             if (_state.Mode == AppleTestFlightAutomaticMode.SelectedPRs && !labels.Contains("testflight")) continue;
             var key = $"pr:{number}:{Text(pull, "merge_commit_sha")}";
@@ -141,7 +141,7 @@ internal sealed partial class AppleTestFlightWorker
         foreach (var request in _state.Requests.Where(value => pending.Contains(value.Key) && value.PullRequest > 0))
         {
             var labels = Api($"pulls/{request.PullRequest}").GetProperty("labels").EnumerateArray().Select(value => Text(value, "name")).ToArray();
-            if (labels.Contains("testflight-skip") || (_state.Mode == AppleTestFlightAutomaticMode.SelectedPRs && !labels.Contains("testflight")))
+            if (ExcludesAutomaticTrigger(labels, _policy) || (_state.Mode == AppleTestFlightAutomaticMode.SelectedPRs && !labels.Contains("testflight")))
                 excluded.Add(request.Key);
         }
         var cancelled = ExcludeUnstartedAutomaticRequests(_state, excluded);

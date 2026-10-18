@@ -129,6 +129,7 @@ internal sealed partial class AppleTestFlightWorker
     private PowerForgeAppleReleaseReceipt InvokeShip(bool plan)
     {
         AssertOwner();
+        if (!plan && !UpdateGate()) throw new AppleTestFlightPreMutationRejectedException();
         if (plan) RetainPreviousSourcePlan();
         var startedAt = DateTimeOffset.UtcNow;
         var arguments = new List<string> { "-NoLogo", "-NoProfile", "-NonInteractive", "-File", Path.Combine(_policy.OwnerRoot, "scripts/Invoke-PinnedPowerForge.ps1"), "-ExpectedCommit", _policy.OwnerCommit,

@@ -3,8 +3,9 @@
 PowerForge provides a request-only GitHub button and a trusted local Mac worker
 for TestFlight builds. Enroll an internal or external group on the Mac. Automatic builds start **Off**. Choose **Selected
 PRs** to build merged PRs labelled `testflight`, or **Every merged PR** to request
-a build after each eligible merge. `testflight-skip` excludes an automatic trigger;
-the label cannot remove code already merged into main. **Build now** works while
+a build after each eligible merge. Configure `ReleaseHoldLabel` to use
+`testflight-skip` as a not-ready exception that holds releases containing that PR.
+The label cannot remove code already merged into main. **Build now** works while
 automatic mode is Off.
 
 The source is latest qualified main containing the requested merged PR. This
@@ -113,7 +114,9 @@ check names and group id are not taken from GitHub request inputs. For example:
   "PublisherPaths": ["project.yml", "Application.xcodeproj/project.pbxproj"],
   "BetaGroupId": "00000000-0000-0000-0000-000000000000",
   "BetaGroupName": "Home",
-  "BetaGroupIsInternal": true
+  "BetaGroupIsInternal": true,
+  "SubmitBetaReviewAutomatically": false,
+  "ReleaseHoldLabel": "testflight-skip"
 }
 ```
 
@@ -141,10 +144,17 @@ For external testers, enroll the existing external group by its exact id and
 name. Internal groups that already receive all builds retain that access.
 External readiness requires Apple’s external testing state and read-back of the
 exact build in the enrolled group; an uploaded build alone is insufficient.
-Beta App Review remains a separately approved `SubmitTestFlightReview` action.
-If Apple requires review, inspect and reconcile the retained delivery before
-retiring a held job or requesting another build. The worker does not invite
-testers, change group membership, enable public links, or submit beta review.
+For unattended external delivery, explicitly set the trusted local policy's
+`SubmitBetaReviewAutomatically` to `true`. That grants standing authority to
+submit only the enrolled uploaded builds to **Beta App Review**. The worker
+observes each platform, submits only builds that still need review, waits for
+Apple, then assigns the exact approved builds to the enrolled group and verifies
+their access. Pending submissions are observed without duplicate submission.
+Public App Store review and public releases remain deliberate local operations.
+The worker does not invite testers, change membership, enable public links, invent
+export-compliance answers, or retry rejected builds as new candidates. Missing
+compliance, rejection, expired builds, or uncertain mutation outcomes hold for an
+operator. Existing policies default to `false` and retain manual beta review.
 
 Run a bounded pass through the existing pinned operator:
 
@@ -161,12 +171,44 @@ already underway finishes before the next stage checks the gate.
 Status and pause acknowledgement remain available during an active worker pass.
 Unstarted automatic intents held by Off or selection labels do not block a later
 manual request. A checkpoint or delivery recovery keeps its place in the queue.
-Removing `testflight` in Selected PRs mode or adding `testflight-skip` cancels that
+Removing `testflight` in Selected PRs mode cancels that
 unstarted trigger without blocking other eligible PRs. Its request history remains
 recorded; a source-bound cancelled job receives a terminal `Excluded` error status.
 Failed status writes are retried from durable state. Use Build now to request the
 trigger again. Turning automatic mode Off preserves
 unstarted intent for the next time automatic mode is enabled.
+
+For default release after merges, deliberately choose **Automatic: Every merged
+PR** in the request workflow. The trusted Mac can also record the same mode
+without a GitHub request artifact, using its pinned entrypoint:
+
+```text
+pwsh -NoProfile -File <owner>/scripts/Invoke-PinnedPowerForge.ps1 -ExpectedCommit <owner-sha> -ConsumerRoot <worker-checkout> -ExpectedConsumerRepository <owner/application> -ExpectedConsumerBranch <main-or-master> apple-testflight mode --automatic-mode EveryMergedPR --confirm-mode-change --policy <absolute-local-policy.json> --config <enrolled-config-path> --output json
+```
+
+`mode` records intent and preserves enrollment, requests, reservations and queue
+history. It does not build or release anything. `Off` and `SelectedPRs` are also
+accepted. A newly selected EveryMergedPR mode covers merges after that intent;
+it does not replay every historical PR.
+
+## Not-ready PR exception
+
+Set `ReleaseHoldLabel` to `testflight-skip` in the local policy. Apply that PR label
+before merging a change that must not reach testers. The worker retains the
+request and holds any build containing the labelled merged PR, including later
+merges and manual Build now requests. Older already-uploaded builds that do not
+contain the change can finish their beta review and distribution.
+
+After the correction or revert is merged, remove the label from the original PR
+to acknowledge that main is ready. The queued intent resumes against qualified
+main; no replacement request or manual version number is needed. The label is
+checked again at mutation boundaries and during long-running children. An upload
+already underway cannot be recalled; add the label before merging whenever possible.
+Unknown ancestry or an unavailable label read closes the mutation gate.
+
+Without `ReleaseHoldLabel`, the legacy `testflight-skip` behavior still cancels
+only its automatic trigger and requires Build now to request it again. It cannot
+keep that code out of a later build. Use the configured hold for not-ready code.
 
 The worker reads Off requests while a release subprocess runs. If GitHub polling
 fails or the worker heartbeat expires, subsequent mutation stages stop. GitHub
@@ -219,8 +261,13 @@ same local operator with `apple-testflight retire --job <id> --confirm-reconcile
 the held intent as Excluded and permits a new request. Retirement is a local
 operator acknowledgement; it does not cancel or roll back an Apple delivery.
 The worker never assumes an interrupted upload failed or blindly allocates a
-replacement. Recovery of a delivered historical source after main advances is
-also an operator hold under the strict latest-main source policy.
+replacement. With automatic beta review enabled, processing recovery observes the
+same uploaded source even when main advances. Only Status, TestFlight and
+SubmitTestFlightReview use that clean ancestor with an explicit full source SHA;
+Ship, archive, upload and public store actions retain latest-main requirements.
+Beta mutations retain their own approved plan hash and exact per-platform build
+IDs. A restart can acknowledge a matching integrity-validated completed canonical
+receipt; an interrupted action without that receipt requires reconciliation.
 Transient tool failures outside a mutation stage retain that stage and retry on
 the next scheduled pass. Terminal validation failures and interrupted mutations
 require reconciliation.

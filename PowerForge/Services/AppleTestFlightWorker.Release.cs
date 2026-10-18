@@ -58,6 +58,11 @@ internal sealed partial class AppleTestFlightWorker
 
     private void Advance(AppleTestFlightJob job)
     {
+        if (job.Stage is AppleTestFlightJobStage.SubmittingBetaReview or AppleTestFlightJobStage.DistributingTestFlight)
+        {
+            RecoverBetaMutation(job);
+            return;
+        }
         if (job.Stage is AppleTestFlightJobStage.CheckpointExecuting or AppleTestFlightJobStage.PublishingCheckpoint or AppleTestFlightJobStage.Releasing)
         {
             // A process exit before journal acknowledgement is an ambiguous mutation.
@@ -73,6 +78,14 @@ internal sealed partial class AppleTestFlightWorker
         Git("fetch", "--quiet", "origin", _policy.DefaultBranch);
         var remote = Git("rev-parse", $"refs/remotes/origin/{_policy.DefaultBranch}");
         var head = Git("rev-parse", "HEAD");
+        if (job.Stage == AppleTestFlightJobStage.AppleProcessingPending && _policy.SubmitBetaReviewAutomatically && !_policy.BetaGroupIsInternal)
+        {
+            if (head != job.Source) throw new InvalidOperationException("Existing beta recovery must retain its exact uploaded source checkout.");
+            Git("merge-base", "--is-ancestor", job.Source!, remote);
+            AssertClean();
+            AdvanceExistingBeta(job);
+            return;
+        }
         if (job.Stage is AppleTestFlightJobStage.ReleaseReady or AppleTestFlightJobStage.AppleProcessingPending)
         {
             if (job.Stage == AppleTestFlightJobStage.ReleaseReady && head == job.Source && remote != job.Source)

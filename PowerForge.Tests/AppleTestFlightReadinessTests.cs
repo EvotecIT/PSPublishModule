@@ -1,6 +1,6 @@
 namespace PowerForge.Tests;
 
-public sealed class AppleTestFlightReadinessTests : IDisposable
+public sealed partial class AppleTestFlightReadinessTests : IDisposable
 {
     private readonly string _root = Path.Combine(Path.GetTempPath(), "PowerForge.TestFlightReadiness", Guid.NewGuid().ToString("N"));
 
@@ -551,7 +551,8 @@ public sealed class AppleTestFlightReadinessTests : IDisposable
 
     private PowerForgeReleaseService Service(
         Func<AppStoreConnectReleaseStateRequest, AppStoreConnectReleaseStateResult>? state = null,
-        Func<AppStoreConnectBetaAppReviewSubmissionRequest, AppStoreConnectBetaAppReviewSubmissionResult>? submit = null)
+        Func<AppStoreConnectBetaAppReviewSubmissionRequest, AppStoreConnectBetaAppReviewSubmissionResult>? submit = null,
+        Func<AppStoreConnectTestFlightDistributionRequest, AppStoreConnectTestFlightDistributionResult>? distribute = null)
         => new(new NullLogger(),
             executePackages: (_, _, _) => throw new InvalidOperationException("Packages must not run."),
             planTools: (_, _, _) => throw new InvalidOperationException("Tools must not run."),
@@ -563,7 +564,7 @@ public sealed class AppleTestFlightReadinessTests : IDisposable
             getAppleReleaseState: state ?? (_ => throw new InvalidOperationException("Archive preview must not query Apple.")),
             generateAppleProject: _ => false,
             prepareAppleDistribution: _ => throw new InvalidOperationException("Beta delivery must not prepare a public version."),
-            distributeTestFlight: _ => throw new InvalidOperationException("Beta distribution must not run during plan validation."),
+            distributeTestFlight: distribute ?? (_ => throw new InvalidOperationException("Beta distribution must not run during plan validation.")),
             submitTestFlightBetaReview: submit ?? (_ => throw new InvalidOperationException("Beta review must not run during plan validation.")),
             appleAppStateRoot: Path.Combine(_root, "state"));
 
