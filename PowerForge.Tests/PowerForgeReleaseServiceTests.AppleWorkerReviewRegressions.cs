@@ -79,6 +79,9 @@ public sealed partial class PowerForgeReleaseServiceTests
             Assert.Equal("Completed", result.AppleReceipt!.OperationPhase);
             Assert.Contains("paused", result.AppleReceipt.ErrorMessage, StringComparison.OrdinalIgnoreCase);
             Assert.True(Assert.Single(result.AppleReceipt.Targets).ArchiveCreated);
+            Assert.True(Assert.Single(result.AppleReceipt.Targets).MutationGateClosed);
+            Assert.True(Assert.Single(result.AppleApps).MutationGateClosed);
+            Assert.Contains(Assert.Single(result.AppleReceipt.Targets).Diagnostics, value => value.Code == "APPLE_MUTATION_HELD");
             Assert.True(Directory.Exists(result.AppleAppPlan!.Apps.Single().ArchivePath));
         }
         finally { TryDelete(root); }

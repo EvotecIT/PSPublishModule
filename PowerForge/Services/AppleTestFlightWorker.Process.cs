@@ -57,7 +57,11 @@ internal sealed partial class AppleTestFlightWorker
             if (apple)
             {
                 try { SyncRequests(); UpdateGate(); }
-                catch { AppleReleaseAppState.AtomicWrite(_gate, new { Allowed = false, ExpiresAt = DateTimeOffset.UtcNow }); }
+                catch (Exception exception)
+                {
+                    AppleReleaseAppState.AtomicWrite(_gate, new { Allowed = false, ExpiresAt = DateTimeOffset.UtcNow.AddMinutes(3),
+                        Reason = SafeDiagnostic("Request or release-hold observation failed: " + exception.Message) });
+                }
             }
         }
         var output = stdout.GetAwaiter().GetResult();

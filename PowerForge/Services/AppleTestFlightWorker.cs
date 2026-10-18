@@ -54,6 +54,7 @@ internal sealed partial class AppleTestFlightWorker
         if (inspectOnly) return _state;
         AssertOwner();
         SyncRequests();
+        RecoverCompletedGateHolds();
         foreach (var pendingStatus in _state.Jobs.Where(value => value.StatusPending).ToArray()) PublishStatus(pendingStatus);
         ReconcileAutomaticSelection();
         EnqueueMergedRequests();
@@ -220,7 +221,8 @@ internal sealed partial class AppleTestFlightWorker
         }
         foreach (var target in _policy.Targets)
             if (File.Exists(Path.Combine(AppleReleaseAppState.AppDirectory(target.BundleId), "paused"))) allowed = false;
-        AppleReleaseAppState.AtomicWrite(_gate, new { Allowed = allowed, ExpiresAt = DateTimeOffset.UtcNow.AddMinutes(3) });
+        AppleReleaseAppState.AtomicWrite(_gate, new { Allowed = allowed, ExpiresAt = DateTimeOffset.UtcNow.AddMinutes(3),
+            Reason = allowed ? null : _gateDiagnostic ?? "Automatic mode, selection labels, or local pause holds the next mutation." });
         return allowed;
     }
 

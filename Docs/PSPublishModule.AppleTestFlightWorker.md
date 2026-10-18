@@ -263,9 +263,18 @@ and remote delivery before resuming with the existing pinned Ship commands.
 A positive child-command app-lease rejection means no mutation started and is
 retryable, including when another checkout acquired the lease after preview.
 A closed or expired gate at child entry is a definitive pre-mutation rejection
-and retains the retryable stage, just like a busy app lease. A gate rejection
-after release work has started, an unrelated state I/O failure, or an interrupted
-or otherwise ambiguous mutation remains NeedsOperator. Off or pause also holds
+and retains the retryable stage, just like a busy app lease. A completed canonical
+receipt that records a known gate hold after delivery starts retains the same
+source and build for recovery. Uploaded platforms remain bound to their receipts;
+an untouched platform still requires normal latest-main Ship recovery. The next
+scheduled pass rechecks requests, hold labels and local pause before continuing.
+An interrupted or otherwise ambiguous mutation, or an unrelated state I/O or
+evidence failure, remains NeedsOperator. The gate receipt distinguishes request
+observation failure from heartbeat expiry so the cause survives the stopped pass.
+A legacy NeedsOperator acknowledgement caused only by this completed gate hold
+can be reconciled from the latest matching integrity-validated immutable attempt. A
+later started mutation, different source/build/plan or ambiguous acknowledgement
+keeps the operator hold. Off or pause also holds
 an unpublished local version checkpoint. If the checkpoint was already committed
 when the stop arrived, its exact commit remains held for operator reconciliation.
 A NeedsOperator job holds the queue, including later manual requests. After

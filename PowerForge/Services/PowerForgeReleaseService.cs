@@ -3053,6 +3053,7 @@ internal sealed partial class PowerForgeReleaseService
                     result.RemoteState = processing.State;
                     result.WaitingForAppleBuildProcessing = processing.WaitingForProcessing;
                 }
+                result.MutationGateClosed = exception is AppleReleaseGateClosedException;
                 return CompleteAppleExecutionFailure(plan, resultsByApp, app);
             }
         }

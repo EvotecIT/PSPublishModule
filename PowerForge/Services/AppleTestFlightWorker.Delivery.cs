@@ -17,27 +17,33 @@ internal sealed partial class AppleTestFlightWorker
             return (policy.BetaGroupIsInternal ? AppleTestFlightJobStage.ReadyInHome : AppleTestFlightJobStage.ReadyInTestFlight, null);
 
         var selected = SelectedDeliveryTargets(receipt, policy).ToArray();
+        var held = IsCompletedGateHeldShip(receipt, policy);
         var deliveryFailure = selected.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value.ErrorMessage) &&
-            !value.WaitingForAppleBuildProcessing);
+            !value.WaitingForAppleBuildProcessing && !(held && IsKnownGateHold(value)));
         if (deliveryFailure is not null)
             return (AppleTestFlightJobStage.NeedsOperator,
                 $"{deliveryFailure.Name}: {deliveryFailure.ErrorMessage}. Preserve and reconcile this delivery before requesting another build.");
-        if (!receipt.Success && !selected.Any(value => value.WaitingForAppleBuildProcessing))
+        if (!receipt.Success && !held && !selected.Any(value => value.WaitingForAppleBuildProcessing))
             return (AppleTestFlightJobStage.NeedsOperator, receipt.ErrorMessage ?? "TestFlight delivery failed; inspect the per-platform outcomes before resuming.");
 
-        var failed = selected.FirstOrDefault(value => !string.IsNullOrEmpty(value.BuildProcessingState) &&
-            value.BuildProcessingState is not ("VALID" or "PROCESSING" or "PROCESSING_PENDING"));
+        var failed = selected.FirstOrDefault(value => value.BuildExpired == true ||
+            !string.IsNullOrEmpty(value.BuildProcessingState) && value.BuildProcessingState is not ("VALID" or "PROCESSING" or "PROCESSING_PENDING"));
         if (failed is not null)
             return (AppleTestFlightJobStage.NeedsOperator, $"{failed.Name}: {failed.ErrorMessage ?? "Apple build processing ended in " + failed.BuildProcessingState}. Preserve and reconcile this delivery before requesting another build.");
 
         if (!policy.BetaGroupIsInternal && selected.Any(value => value.BuildProcessingState == "VALID" &&
                 (value.TestFlightExternalState is "BETA_REJECTED" or "MISSING_EXPORT_COMPLIANCE" ||
+                 value.TestFlightReviewState == "REJECTED" ||
                  value.TestFlightExternalState == "READY_FOR_BETA_SUBMISSION" && !IsReviewPending(value) && !policy.SubmitBetaReviewAutomatically)))
             return (AppleTestFlightJobStage.NeedsOperator,
                 "External TestFlight requires operator action. Inspect Beta App Review or export compliance; submit beta review only after separate operator approval. Preserve and reconcile this delivery before requesting another build.");
 
         if (IsExternalReviewPending(receipt, policy))
             return (AppleTestFlightJobStage.AppleProcessingPending, "Apple Beta App Review is in progress; observe its outcome and verify the enrolled group access before assigning a build.");
+
+        if (held)
+            return (AppleTestFlightJobStage.AppleProcessingPending,
+                "The local mutation gate closed. Retain this exact delivery and resume only after fresh gate checks; do not allocate another build.");
 
         if (receipt.ShipPhase == PowerForgeAppleShipPhase.Release &&
             (receipt.Success || selected.Any(value => value.WaitingForAppleBuildProcessing)) &&

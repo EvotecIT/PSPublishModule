@@ -80,16 +80,25 @@ internal sealed class AppleReleaseAppState : IDisposable
                 throw new AppleReleaseGateClosedException("Apple operations for this app are paused by the local operator.", beforeMutation);
         var gate = Environment.GetEnvironmentVariable("POWERFORGE_APPLE_WORKER_GATE");
         if (string.IsNullOrWhiteSpace(gate)) return;
-        if (!GateAllowsMutation(gate, DateTimeOffset.UtcNow))
-            throw new AppleReleaseGateClosedException("TestFlight worker is Off, paused, or has lost its request heartbeat. The next mutating stage is held.", beforeMutation);
+        if (!GateAllowsMutation(gate, DateTimeOffset.UtcNow, out var reason))
+            throw new AppleReleaseGateClosedException("TestFlight mutation gate closed: " + reason, beforeMutation);
     }
 
     internal static bool GateAllowsMutation(string gate, DateTimeOffset now)
+        => GateAllowsMutation(gate, now, out _);
+
+    internal static bool GateAllowsMutation(string gate, DateTimeOffset now, out string? reason)
     {
         AssertUnlinked(gate);
         using var document = JsonDocument.Parse(File.ReadAllText(gate));
         var value = document.RootElement;
-        return value.GetProperty("Allowed").GetBoolean() && value.GetProperty("ExpiresAt").GetDateTimeOffset() > now;
+        var expires = value.GetProperty("ExpiresAt").GetDateTimeOffset();
+        var allowed = value.GetProperty("Allowed").GetBoolean() && expires > now;
+        var observed = value.TryGetProperty("Reason", out var detail) && detail.ValueKind == JsonValueKind.String ? detail.GetString() : null;
+        reason = allowed ? null : expires <= now ? $"Request observation heartbeat expired at {expires:O}. {observed}" :
+            observed ?? "Automatic mode, selection labels, or local pause holds the next mutation.";
+        if (reason?.Length > 1200) reason = reason.Substring(0, 1200);
+        return allowed;
     }
 
     internal static string AppDirectory(string bundleId) => Path.Combine(Root, "apps", Hash(bundleId.Trim().ToLowerInvariant()));

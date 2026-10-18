@@ -25,8 +25,13 @@ internal static class AppleReleaseFailureClassifier
         string? message,
         string? processingState = null,
         string? standardOutput = null,
-        string? standardError = null)
+        string? standardError = null,
+        bool mutationGateClosed = false)
     {
+        if (mutationGateClosed)
+            return new[] { Create("local-gate", "APPLE_MUTATION_HELD", message ?? "The local mutation gate is closed.",
+                message ?? "The local mutation gate is closed.",
+                "Retain the exact source and build. Resume only after fresh request, label and pause checks reopen the local gate.", true) };
         if (string.IsNullOrWhiteSpace(message) && !IsTerminalProcessingState(processingState))
             return Array.Empty<PowerForgeAppleReleaseDiagnostic>();
 
