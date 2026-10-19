@@ -30,6 +30,9 @@ public sealed class AppStoreConnectVersionLocalizationUpdate
 /// </summary>
 public sealed class AppStoreConnectVersionMetadataSpec
 {
+    /// <summary>Optional version-wide publisher copyright notice. Null leaves the existing value unchanged.</summary>
+    public string? Copyright { get; set; }
+
     /// <summary>App Store Connect app id.</summary>
     public string AppId { get; set; } = string.Empty;
 

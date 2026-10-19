@@ -141,7 +141,7 @@ public sealed partial class AppStoreConnectClientTests
     }
 
     private static SequenceResponse MetadataReadinessVersion()
-        => new(HttpStatusCode.OK, """{"data":[{"id":"version-1","type":"appStoreVersions","attributes":{"versionString":"1.0.0","platform":"IOS"}}]}""");
+        => new(HttpStatusCode.OK, """{"data":[{"id":"version-1","type":"appStoreVersions","attributes":{"versionString":"1.0.0","platform":"IOS","copyright":"2022 Example"}}]}""");
 
     private static SequenceResponse MetadataReadinessLocalization(string locale, string? description, bool single = false)
     {

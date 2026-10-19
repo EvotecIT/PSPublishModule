@@ -20,6 +20,9 @@ public sealed partial class AppStoreConnectReleasePreparationService
             // Validate every target before any version creation or build selection can mutate Apple.
             CreateMetadataSpecForVersion(spec, request.AppId.Trim(), request.VersionString?.Trim() ?? string.Empty, request.Platform, string.Empty);
         }
+        if (specs.Where(static spec => spec.Copyright is not null)
+            .Select(static spec => spec.Copyright!.Trim()).Distinct(StringComparer.Ordinal).Skip(1).Any())
+            throw new ArgumentException("Metadata locales must not declare conflicting version-wide copyright notices.", nameof(request));
         return specs.ToArray();
     }
 
@@ -39,6 +42,8 @@ public sealed partial class AppStoreConnectReleasePreparationService
             throw new InvalidOperationException($"Metadata config VersionString '{source.VersionString}' does not match release version '{versionString}'.");
         if (source.Platform != platform)
             throw new InvalidOperationException($"Metadata config Platform '{source.Platform}' does not match release platform '{platform}'.");
+        if (source.Copyright is not null && string.IsNullOrWhiteSpace(source.Copyright))
+            throw new ArgumentException("Metadata copyright must not be empty when supplied.", nameof(source));
 
         return new AppStoreConnectVersionMetadataSpec
         {
@@ -48,6 +53,7 @@ public sealed partial class AppStoreConnectReleasePreparationService
             UseReleaseVersion = false,
             Platform = platform,
             Locale = source.Locale.Trim(),
+            Copyright = source.Copyright,
             Metadata = source.Metadata
         };
     }

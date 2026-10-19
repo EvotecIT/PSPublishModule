@@ -46,6 +46,9 @@ public sealed class AppStoreConnectVersionInfo
 
     /// <summary>Release policy returned by App Store Connect, including unknown future values.</summary>
     public string? ReleaseType { get; set; }
+
+    /// <summary>Version-wide publisher copyright notice, or null when Apple has not returned it.</summary>
+    public string? Copyright { get; set; }
 }
 
 /// <summary>

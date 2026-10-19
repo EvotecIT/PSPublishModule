@@ -38,8 +38,12 @@ public sealed class AppStoreConnectVersionMetadataSyncService
 
         if (spec.Metadata is null || AppStoreConnectClient.GetSuppliedLocalizationFields(spec.Metadata).Length == 0)
             throw new ArgumentException("Spec.Metadata must supply at least one metadata field.", nameof(request));
+        if (spec.Copyright is not null && string.IsNullOrWhiteSpace(spec.Copyright))
+            throw new ArgumentException("Spec.Copyright must not be empty when supplied.", nameof(request));
 
         var version = await ResolveVersionAsync(spec, cancellationToken).ConfigureAwait(false);
+        if (spec.Copyright is not null)
+            version = await _client.SetVersionCopyrightAsync(version.Id, spec.Copyright, cancellationToken).ConfigureAwait(false);
         var localization = (await _client.GetVersionLocalizationsAsync(
             version.Id,
             spec.Locale,
@@ -56,7 +60,9 @@ public sealed class AppStoreConnectVersionMetadataSyncService
             Before = localization,
             CreatedLocalization = localization is null,
             After = updated,
-            UpdatedFields = AppStoreConnectClient.GetSuppliedLocalizationFields(spec.Metadata)
+            UpdatedFields = spec.Copyright is null
+                ? AppStoreConnectClient.GetSuppliedLocalizationFields(spec.Metadata)
+                : AppStoreConnectClient.GetSuppliedLocalizationFields(spec.Metadata).Concat(new[] { "copyright" }).ToArray()
         };
     }
 

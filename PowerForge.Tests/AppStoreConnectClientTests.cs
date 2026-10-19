@@ -461,7 +461,7 @@ public sealed partial class AppStoreConnectClientTests
                     {
                       "id": "version-1",
                       "type": "appStoreVersions",
-                      "attributes": { "versionString": "1.0.1", "platform": "IOS" }
+                      "attributes": { "versionString": "1.0.1", "platform": "IOS", "copyright": "2022 Example" }
                     }
                   ]
                 }
@@ -635,7 +635,7 @@ public sealed partial class AppStoreConnectClientTests
                 {
                   "id": "version-1",
                   "type": "appStoreVersions",
-                  "attributes": { "versionString": "1.0.5", "platform": "IOS" }
+                  "attributes": { "versionString": "1.0.5", "platform": "IOS", "copyright": "2022 Example" }
                 }
               ]
             }
@@ -1812,7 +1812,7 @@ public sealed partial class AppStoreConnectClientTests
         Assert.Contains("filter%5Bapp%5D=app-1", handler.RequestUris[1].Query, StringComparison.Ordinal);
         Assert.Contains("filter%5Bname%5D=Internal", handler.RequestUris[1].Query, StringComparison.Ordinal);
         Assert.Equal("https://api.appstoreconnect.apple.com/v1/betaGroups/group-1/relationships/builds", handler.RequestUris[3].ToString());
-        Assert.Equal("https://api.appstoreconnect.apple.com/v1/betaTesters?limit=10&filter%5Bemail%5D=tester%40example.test", handler.RequestUris[4].ToString());
+        Assert.Equal("https://api.appstoreconnect.apple.com/v1/apps/app-1/betaTesters?limit=200", handler.RequestUris[4].ToString());
         Assert.Equal("https://api.appstoreconnect.apple.com/v1/betaTesters", handler.RequestUris[5].ToString());
         Assert.Equal("https://api.appstoreconnect.apple.com/v1/betaGroups/group-1/relationships/betaTesters", handler.RequestUris[6].ToString());
     }
@@ -2070,6 +2070,7 @@ public sealed partial class AppStoreConnectClientTests
             new SequenceResponse(HttpStatusCode.NoContent, string.Empty),
             new SequenceResponse(HttpStatusCode.OK, """{ "data": [] }"""),
             new SequenceResponse(HttpStatusCode.NoContent, string.Empty),
+            new SequenceResponse(HttpStatusCode.OK, """{ "data": [] }"""),
             new SequenceResponse(HttpStatusCode.OK, """{ "data": [] }"""));
         using var http = new HttpClient(handler) { BaseAddress = new Uri("https://api.appstoreconnect.apple.com/v1/") };
         using var client = new AppStoreConnectClient(CreateCredential(), http);
@@ -2090,7 +2091,7 @@ public sealed partial class AppStoreConnectClientTests
             }));
 
         Assert.Contains("must already exist in App Store Connect", ex.Message, StringComparison.Ordinal);
-        Assert.Equal(8, handler.RequestUris.Count);
+        Assert.Equal(9, handler.RequestUris.Count);
         Assert.DoesNotContain(handler.RequestUris, uri =>
             string.Equals(uri.AbsolutePath, "/v1/betaTesters", StringComparison.Ordinal) &&
             !string.IsNullOrEmpty(handler.RequestBodies[handler.RequestUris.IndexOf(uri)]));

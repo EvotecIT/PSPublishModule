@@ -63,6 +63,17 @@ public sealed partial class AppStoreConnectClient
         return GetArrayAsync("betaTesters" + BuildQuery(query), ParseBetaTester, cancellationToken);
     }
 
+    /// <summary>Lists tester identities associated with one app, avoiding reuse of another app's tester resource id.</summary>
+    public Task<AppStoreConnectBetaTesterInfo[]> GetBetaTestersForAppAsync(
+        string appId, int limit = 200, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(appId))
+            throw new ArgumentException("App id is required.", nameof(appId));
+        return GetArrayAsync(
+            $"apps/{Uri.EscapeDataString(appId.Trim())}/betaTesters?limit={ClampLimit(limit).ToString(CultureInfo.InvariantCulture)}",
+            ParseBetaTester, cancellationToken);
+    }
+
     /// <summary>
     /// Lists beta testers in a beta group.
     /// </summary>
