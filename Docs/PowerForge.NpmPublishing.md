@@ -28,6 +28,33 @@ that source visibility. The release summary records the applied requirement.
 The workflow does not change versions, commit files, create tags,
 publish GitHub releases or dispatch downstream repositories.
 
+## Join a product release
+
+Set `normal-release-tag-prefix` when npm belongs to an existing product release,
+for example `OfficeIMO-v`. The caller runs on `release: published`, or dispatches
+on that same tag to retry. The shared publisher requires the live published
+release to be stable, its tag to resolve to the workflow commit, and that commit
+to belong to the default branch with a successful push quality run. Semantic
+tags must match the npm version; legacy fourteen-digit timestamp tags use the
+version supplied with the qualified archive. Annotated tags are resolved before
+checking the source identity.
+
+Use a separate protected environment whose only deployment policy is a tag
+pattern consisting of that prefix and `*`. For `OfficeIMO-v`, the exact policy is
+type `tag`, name `OfficeIMO-v*`. Extra branch or tag policies are rejected. The
+default mode continues to require only the exact default branch. A branch
+dispatch cannot use product-tag mode, and a release event cannot enter the
+default mode.
+
+The caller owns its product-specific version bridge and package qualification.
+It may read a version from an immutable artifact in the product release and stamp
+the runner's package metadata before packing. This does not require committing
+publisher-owned version changes before an existing native release. A separate npm
+workflow is a delivery stage with its own retry and registry checks; it does not
+join a native publisher's local checkpoint or make the registries transactional.
+Leave `release-tag-prefix` empty when the product tag owns the release identity;
+no additional npm reservation tag or GitHub release is needed.
+
 ## npm setup
 
 For automatic releases, call the shared `npm-release-version` action after the
@@ -62,7 +89,7 @@ Do not register `powerforge-npm-publish.yml` as the calling workflow. Permit dir
 when that is the intended release mode. GitHub OIDC supplies the short-lived
 publishing identity for ordinary releases without a stored npm token.
 
-Create the GitHub release environment before using the workflow. Configure its
+Create the GitHub release environment before using the workflow. In default mode, configure its
 custom deployment policy to allow exactly the default branch, with no tags or
 wildcard patterns. The publisher verifies that policy before processing the
 archive. Store `NPM_BOOTSTRAP_TOKEN` only as a secret of that environment; do not

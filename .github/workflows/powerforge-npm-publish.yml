@@ -32,6 +32,10 @@ on:
         description: Reservation namespace from npm-release-version; empty for a manually versioned archive.
         type: string
         default: ''
+      normal-release-tag-prefix:
+        description: Opt in to published stable release tags in this namespace; the environment must allow only its tag pattern.
+        type: string
+        default: ''
       publish:
         description: Publish when true; otherwise validate and perform npm's dry run.
         type: boolean
@@ -73,6 +77,7 @@ jobs:
       SOURCE_PRIVATE: ${{ github.event.repository.private }}
       RELEASE_ENVIRONMENT: ${{ inputs.environment-name }}
       RELEASE_TAG_PREFIX: ${{ inputs.release-tag-prefix }}
+      NORMAL_RELEASE_TAG_PREFIX: ${{ inputs.normal-release-tag-prefix }}
       NPM_CONFIG_REGISTRY: https://registry.npmjs.org
     steps:
       - name: Require successful quality checks for this default-branch commit
@@ -80,11 +85,59 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           $sourceSha = $env:GITHUB_SHA
-          if ($env:GITHUB_EVENT_NAME -cnotin @('workflow_dispatch', 'workflow_run') -or
-              $env:GITHUB_REF -ne "refs/heads/$env:DEFAULT_BRANCH") {
-              throw 'npm publication requires a default-branch dispatch or completed quality run.'
+          if ($sourceSha -notmatch '^[a-fA-F0-9]{40}$') { throw 'Invalid workflow source commit.' }
+          $policyType = 'branch'
+          $policyName = $env:DEFAULT_BRANCH
+          if ($env:NORMAL_RELEASE_TAG_PREFIX) {
+              if ($env:NORMAL_RELEASE_TAG_PREFIX -notmatch '^[A-Za-z0-9][A-Za-z0-9._-]*$' -or
+                  $env:GITHUB_EVENT_NAME -cnotin @('release', 'workflow_dispatch') -or
+                  -not $env:GITHUB_REF.StartsWith('refs/tags/', [StringComparison]::Ordinal)) {
+                  throw 'Normal npm releases require a published release event or a dispatch on its tag.'
+              }
+              $tag = $env:GITHUB_REF.Substring('refs/tags/'.Length)
+              $tagPattern = '^' + [Regex]::Escape($env:NORMAL_RELEASE_TAG_PREFIX) + '((?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)|\d{14})$'
+              if ($tag -cnotmatch $tagPattern) { throw 'The release tag is outside the configured version namespace.' }
+              if ($Matches[1] -notmatch '^\d{14}$' -and $Matches[1] -cne $env:NPM_VERSION) {
+                  throw 'The versioned product tag and npm archive must use the same version.'
+              }
+              $releaseJson = & gh api "repos/$env:GITHUB_REPOSITORY/releases/tags/$([Uri]::EscapeDataString($tag))"
+              if ($LASTEXITCODE -ne 0) { throw 'Cannot read the published product release.' }
+              $release = $releaseJson | ConvertFrom-Json
+              if ($release.tag_name -cne $tag -or $release.draft -or $release.prerelease -or -not $release.published_at) {
+                  throw 'npm publication requires the matching published stable product release.'
+              }
+              if ($env:GITHUB_EVENT_NAME -ceq 'release') {
+                  $event = Get-Content -LiteralPath $env:GITHUB_EVENT_PATH -Raw | ConvertFrom-Json
+                  if ($event.action -cne 'published' -or $event.release.id -ne $release.id -or $event.release.tag_name -cne $tag) {
+                      throw 'The event does not identify the published product release.'
+                  }
+              }
+              $refJson = & gh api "repos/$env:GITHUB_REPOSITORY/git/ref/tags/$([Uri]::EscapeDataString($tag))"
+              if ($LASTEXITCODE -ne 0) { throw 'Cannot resolve the product release tag.' }
+              $target = ($refJson | ConvertFrom-Json).object
+              for ($depth = 0; $target.type -ceq 'tag' -and $depth -lt 8; $depth++) {
+                  if ($target.sha -notmatch '^[a-fA-F0-9]{40}$') { throw 'Invalid annotated release tag.' }
+                  $targetJson = & gh api "repos/$env:GITHUB_REPOSITORY/git/tags/$($target.sha)"
+                  if ($LASTEXITCODE -ne 0) { throw 'Cannot resolve the annotated product tag.' }
+                  $target = ($targetJson | ConvertFrom-Json).object
+              }
+              if ($target.type -cne 'commit' -or $target.sha -cne $sourceSha) {
+                  throw 'The product tag must resolve to the workflow source commit.'
+              }
+              $comparisonJson = & gh api "repos/$env:GITHUB_REPOSITORY/compare/$sourceSha...$([Uri]::EscapeDataString($env:DEFAULT_BRANCH))"
+              if ($LASTEXITCODE -ne 0) { throw 'Cannot verify the product source on the default branch.' }
+              if (($comparisonJson | ConvertFrom-Json).status -cnotin @('ahead', 'identical')) {
+                  throw 'The product release source is not contained in the default branch.'
+              }
+              $policyType = 'tag'
+              $policyName = $env:NORMAL_RELEASE_TAG_PREFIX + '*'
+          } else {
+              if ($env:GITHUB_EVENT_NAME -cnotin @('workflow_dispatch', 'workflow_run') -or
+                  $env:GITHUB_REF -ne "refs/heads/$env:DEFAULT_BRANCH") {
+                  throw 'npm publication requires a default-branch dispatch or completed quality run.'
+              }
           }
-          if ($env:GITHUB_EVENT_NAME -eq 'workflow_run') {
+          if (-not $env:NORMAL_RELEASE_TAG_PREFIX -and $env:GITHUB_EVENT_NAME -eq 'workflow_run') {
               $event = Get-Content -LiteralPath $env:GITHUB_EVENT_PATH -Raw | ConvertFrom-Json
               if ($event.action -cne 'completed' -or [string]$event.workflow_run.id -cne $env:QUALITY_RUN -or
                   $event.workflow_run.head_repository.full_name -cne $env:GITHUB_REPOSITORY) {
@@ -101,9 +154,9 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Cannot read release deployment policies.' }
           $policies = $policiesJson | ConvertFrom-Json
           if (-not $environment.deployment_branch_policy.custom_branch_policies -or
-              $policies.total_count -ne 1 -or $policies.branch_policies[0].type -ne 'branch' -or
-              $policies.branch_policies[0].name -cne $env:DEFAULT_BRANCH) {
-              throw 'The release environment must allow only the exact default branch, without tags or patterns.'
+              $policies.total_count -ne 1 -or $policies.branch_policies[0].type -cne $policyType -or
+              $policies.branch_policies[0].name -cne $policyName) {
+              throw 'The release environment must allow only the configured default branch or opted-in product tag namespace.'
           }
           if ($env:QUALITY_RUN -notmatch '^\d+$') { throw 'Invalid quality run ID.' }
           $runJson = & gh api "repos/$env:GITHUB_REPOSITORY/actions/runs/$env:QUALITY_RUN"
