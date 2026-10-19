@@ -613,6 +613,9 @@ internal static partial class WebPipelineRunner
             summary += $", {result.Errors.Length} errors";
         if (result.Errors.Length > 0)
             summary += $", first error: {result.Errors[0]}";
+        var retryNotBefore = result.Requests.Max(static request => request.RetryNotBefore);
+        if (retryNotBefore.HasValue)
+            summary += $", latest retry not before {retryNotBefore.Value.UtcDateTime:O}";
         return summary;
     }
 
@@ -629,6 +632,9 @@ internal static partial class WebPipelineRunner
         builder.AppendLine($"- Failed requests: {result.FailedRequestCount}");
         builder.AppendLine($"- Warnings: {result.Warnings.Length}");
         builder.AppendLine($"- Errors: {result.Errors.Length}");
+        var retryNotBefore = result.Requests.Max(static request => request.RetryNotBefore);
+        if (retryNotBefore.HasValue)
+            builder.AppendLine($"- Latest retry not before (UTC): {retryNotBefore.Value.UtcDateTime:O}");
 
         if (result.Errors.Length > 0)
         {

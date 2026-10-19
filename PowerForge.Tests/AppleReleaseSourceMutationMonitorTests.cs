@@ -91,8 +91,9 @@ public sealed partial class AppleReleaseSourceMutationMonitorTests
                     },
                     "test producer"));
 
-            Assert.Contains("changed", exception.Message, StringComparison.OrdinalIgnoreCase);
-            Assert.Contains("completed", exception.Message, StringComparison.OrdinalIgnoreCase);
+            // Native delivery may reject the write before the final identity comparison.
+            // Both timings must reject the replacement; the incidental diagnostic order is not a contract.
+            Assert.Contains("producer output root changed", exception.Message, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {

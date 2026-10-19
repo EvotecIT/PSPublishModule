@@ -133,8 +133,8 @@ internal sealed class AppleSwiftPackageBuildSnapshot : IDisposable
                 "xcodebuild exact-source build",
                 "Discard the Apple product and resolve the exact package graph again.",
                 enableImmediately: false,
-                unchangedMacOSCloneSource: path => IsUnchangedPackageCloneSource(
-                    sourcePackagesPath, path, Volatile.Read(ref materializedPackagesIdentity)));
+                unchangedMacOSCloneSource: (path, flags) => IsUnchangedPackageCloneSource(
+                    sourcePackagesPath, path, flags, Volatile.Read(ref materializedPackagesIdentity)));
             var processRequest = new ProcessRunRequest(
                 xcodeBuildExecutable,
                 Path.GetDirectoryName(projectPath) ?? Directory.GetCurrentDirectory(),
@@ -262,9 +262,14 @@ internal sealed class AppleSwiftPackageBuildSnapshot : IDisposable
 #endif
            )
             ValidateNoEscapingArtifactLinks(artifactsPath);
+        var bindSymbolicLinks = false;
+#if NET8_0_OR_GREATER
+        bindSymbolicLinks = OperatingSystem.IsMacOS();
+#endif
         return AppleArchiveUploadSnapshot.CaptureCompleteIdentity(
             sourcePackagesPath,
-            "materialized Swift package snapshot");
+            "materialized Swift package snapshot",
+            bindSymbolicLinkIdentities: bindSymbolicLinks);
     }
 
     private static void ValidateNoEscapingArtifactLinks(string artifactsRoot)
@@ -322,17 +327,28 @@ internal sealed class AppleSwiftPackageBuildSnapshot : IDisposable
     }
 
     private static bool IsUnchangedPackageCloneSource(
-        string sourcePackagesPath, string path, AppleArchiveUploadSnapshot.SnapshotIdentity? approved)
+        string sourcePackagesPath, string path, uint flags, AppleArchiveUploadSnapshot.SnapshotIdentity? approved)
     {
 #if NET8_0_OR_GREATER
         if (!OperatingSystem.IsMacOS() || approved?.FileMutationIdentities is not { } identities)
             return false;
         var relative = Path.GetRelativePath(sourcePackagesPath, path).Replace('\\', '/');
         // Xcode also clones binary frameworks committed inside validated package checkouts.
-        // Only previously bound regular files with an unchanged physical identity qualify.
+        // Regular checkout/artifact files and contained artifact links have separately bound
+        // physical identities. A clone never authorizes a new pathname or replacement link.
         if (!(relative.StartsWith("artifacts/", StringComparison.Ordinal) ||
               relative.StartsWith("checkouts/", StringComparison.Ordinal)) ||
             !identities.TryGetValue(relative, out var expected))
+            return false;
+        if (expected.StartsWith("symlink:", StringComparison.Ordinal))
+        {
+            if (!relative.StartsWith("artifacts/", StringComparison.Ordinal) || (flags & 0x00040000) == 0)
+                return false;
+            return expected.Equals(
+                ExistingFilePathIdentityResolver.CapturePrivateSymbolicLinkMutationIdentity(
+                    path, "approved Swift artifact clone source"), StringComparison.Ordinal);
+        }
+        if ((flags & 0x00010000) == 0)
             return false;
         FileSystemPathSafety.RequireRegularFile(path);
         return expected.Equals(

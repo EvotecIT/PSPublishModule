@@ -17,11 +17,13 @@ public static class IndexNowSubmitter
     private const string DefaultEndpoint = "https://api.indexnow.org/indexnow";
     private const int MaxResponsePreviewLength = 300;
     private const int MaxBatchSize = 10_000;
+    private static readonly TimeSpan MaxRetryDelay = TimeSpan.FromMinutes(1);
     /// <summary>Submits synchronously for console and batch callers.</summary>
     public static IndexNowSubmissionResult Submit(IndexNowSubmissionOptions options, Action<string>? logger = null) =>
         SubmitAsync(options, logger: logger).GetAwaiter().GetResult();
 
-    /// <summary>Submits batches asynchronously. The caller retains ownership of an injected HTTP client.</summary>
+    /// <summary>Submits batches asynchronously. The caller retains ownership of an injected HTTP client.
+    /// A received 2xx status acknowledges delivery; optional response-preview failures are warnings.</summary>
     public static async Task<IndexNowSubmissionResult> SubmitAsync(IndexNowSubmissionOptions options, HttpClient? client = null,
         Action<string>? logger = null, CancellationToken cancellationToken = default)
     {
@@ -58,11 +60,13 @@ public static class IndexNowSubmitter
         {
             foreach (var endpoint in endpoints)
             {
+                DateTimeOffset? endpointRetryNotBefore = null;
                 foreach (var group in hostGroups)
                 {
                     var keyLocation = ResolveKeyLocation(options.KeyLocation, group.Scheme, group.Host, normalizedKey);
                     foreach (var batch in Batch(group.Urls, batchSize))
                     {
+                        cancellationToken.ThrowIfCancellationRequested();
                         IndexNowRequestResult requestResult;
                         if (options.DryRun)
                         {
@@ -76,6 +80,19 @@ public static class IndexNowSubmitter
                                 ResponsePreview = "dry-run"
                             };
                         }
+                        else if (endpointRetryNotBefore > DateTimeOffset.UtcNow)
+                        {
+                            requestResult = new IndexNowRequestResult
+                            {
+                                Endpoint = endpoint.ToString(),
+                                Host = group.Host,
+                                UrlCount = batch.Length,
+                                Success = false,
+                                AttemptCount = 0,
+                                RetryNotBefore = endpointRetryNotBefore,
+                                Error = $"endpoint deferred until {endpointRetryNotBefore:O}"
+                            };
+                        }
                         else
                         {
                             requestResult = await SubmitBatchAsync(
@@ -86,7 +103,8 @@ public static class IndexNowSubmitter
                                 batch,
                                 Math.Max(0, options.RetryCount),
                                 Math.Max(0, options.RetryDelayMs),
-                                Math.Max(1, options.TimeoutSeconds), http, cancellationToken).ConfigureAwait(false);
+                                Math.Max(1, options.TimeoutSeconds), http, warnings, cancellationToken).ConfigureAwait(false);
+                            endpointRetryNotBefore = requestResult.RetryNotBefore;
                         }
 
                         requests.Add(requestResult);
@@ -94,7 +112,9 @@ public static class IndexNowSubmitter
                         if (!requestResult.Success)
                         {
                             var endpointLabel = requestResult.Endpoint;
-                            var statusLabel = requestResult.StatusCode.HasValue ? $"HTTP {requestResult.StatusCode.Value}" : "transport";
+                            var statusLabel = requestResult.AttemptCount == 0 && requestResult.RetryNotBefore.HasValue
+                                ? "deferred"
+                                : requestResult.StatusCode.HasValue ? $"HTTP {requestResult.StatusCode.Value}" : "transport";
                             var errorText = string.IsNullOrWhiteSpace(requestResult.Error) ? "unknown error" : requestResult.Error;
                             errors.Add($"indexnow: {statusLabel} failure for {endpointLabel} ({requestResult.Host}): {errorText}");
                         }
@@ -386,22 +406,25 @@ public static class IndexNowSubmitter
         string[] urls,
         int retryCount,
         int retryDelayMs,
-        int timeoutSeconds, HttpClient http, CancellationToken cancellationToken)
+        int timeoutSeconds, HttpClient http, List<string> warnings, CancellationToken cancellationToken)
     {
         var attempts = 0;
         Exception? lastException = null;
         int? lastStatusCode = null;
         string? lastReasonPhrase = null;
         string? lastBody = null;
-        var maxAttempts = Math.Max(1, retryCount + 1);
+        DateTimeOffset? retryNotBefore = null;
+        var maxAttempts = (int)Math.Min(int.MaxValue, (long)retryCount + 1);
 
         for (var attempt = 1; attempt <= maxAttempts; attempt++)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             attempts = attempt;
             lastException = null;
             lastStatusCode = null;
             lastReasonPhrase = null;
             lastBody = null;
+            retryNotBefore = null;
 
             try
             {
@@ -416,32 +439,68 @@ public static class IndexNowSubmitter
                 using var response = await http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, deadline.Token).ConfigureAwait(false);
                 lastStatusCode = (int)response.StatusCode;
                 lastReasonPhrase = response.ReasonPhrase;
+                var retryCondition = response.Headers.RetryAfter;
+                var receivedAt = DateTimeOffset.UtcNow;
+                retryNotBefore = retryCondition?.Date;
+                if (retryCondition?.Delta is TimeSpan delta)
+                    retryNotBefore = delta > DateTimeOffset.MaxValue - receivedAt
+                        ? DateTimeOffset.MaxValue
+                        : receivedAt + delta;
                 lastBody = response.Content is null
                     ? null
                     : await ReadResponsePreviewAsync(response.Content, deadline.Token).ConfigureAwait(false);
-
-                if (response.IsSuccessStatusCode)
-                {
-                    return new IndexNowRequestResult
-                    {
-                        Endpoint = endpoint.ToString(),
-                        Host = host,
-                        UrlCount = urls.Length,
-                        Success = true,
-                        AttemptCount = attempts,
-                        StatusCode = lastStatusCode,
-                        ResponsePreview = TruncateResponse(lastBody)
-                    };
-                }
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
-            catch (Exception ex) when (ex is HttpRequestException or OperationCanceledException or IOException)
+            catch (Exception ex) when (ex is HttpRequestException or OperationCanceledException or IOException ||
+                (lastStatusCode >= 200 && lastStatusCode < 300 && ex is ObjectDisposedException))
             {
                 lastException = ex;
             }
 
-            if (attempt < maxAttempts && retryDelayMs > 0)
-                await Task.Delay(retryDelayMs, cancellationToken).ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
+            // The status acknowledges delivery. An optional preview failure must not resend
+            // an accepted POST or prevent callers from recording successful coverage.
+            if (lastStatusCode >= 200 && lastStatusCode < 300)
+            {
+                if (lastException is not null)
+                    warnings.Add($"indexnow: HTTP {lastStatusCode} delivery accepted for {endpoint} ({host}); " +
+                        $"response preview unavailable: {TruncateResponse(lastException.Message)}");
+                return new IndexNowRequestResult
+                {
+                    Endpoint = endpoint.ToString(),
+                    Host = host,
+                    UrlCount = urls.Length,
+                    Success = true,
+                    AttemptCount = attempts,
+                    StatusCode = lastStatusCode,
+                    ResponsePreview = TruncateResponse(lastBody)
+                };
+            }
+
+            // A known permanent refusal needs corrected input even if its body was unreadable.
+            var retryable = lastStatusCode is null || IsRetryableStatusCode(lastStatusCode.Value);
+            if (!retryable)
+            {
+                retryNotBefore = null;
+                break;
+            }
+            if (retryNotBefore <= DateTimeOffset.UtcNow)
+                retryNotBefore = null;
+            if (attempt >= maxAttempts)
+                break;
+
+            // Never shorten the server's requested quiet period to fit a build-time wait.
+            // Longer deferrals belong to the caller's durable scheduling/checkpoint policy.
+            var retryAfter = retryNotBefore - DateTimeOffset.UtcNow;
+            if (retryAfter > MaxRetryDelay)
+                break;
+
+            var delayMs = Math.Min(MaxRetryDelay.TotalMilliseconds,
+                retryDelayMs * Math.Pow(2, Math.Min(attempt - 1, 31)));
+            if (retryAfter.HasValue)
+                delayMs = Math.Max(delayMs, retryAfter.Value.TotalMilliseconds);
+            if (delayMs > 0)
+                await Task.Delay(TimeSpan.FromMilliseconds(delayMs), cancellationToken).ConfigureAwait(false);
         }
 
         var errorText = lastException?.Message;
@@ -460,10 +519,14 @@ public static class IndexNowSubmitter
             Success = false,
             AttemptCount = attempts,
             StatusCode = lastStatusCode,
+            RetryNotBefore = retryNotBefore > DateTimeOffset.UtcNow ? retryNotBefore : null,
             Error = string.IsNullOrWhiteSpace(errorText) ? "request failed" : TruncateResponse(errorText),
             ResponsePreview = TruncateResponse(lastBody)
         };
     }
+
+    private static bool IsRetryableStatusCode(int statusCode) =>
+        statusCode is 408 or 429 || (statusCode >= 500 && statusCode <= 599);
 
     private static async Task<string> ReadResponsePreviewAsync(HttpContent content, CancellationToken token)
     {
