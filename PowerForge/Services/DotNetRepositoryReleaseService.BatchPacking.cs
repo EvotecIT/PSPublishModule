@@ -264,10 +264,10 @@ public sealed partial class DotNetRepositoryReleaseService
                     new XAttribute("Name", "RestoreSelected"),
                     new XElement("MSBuild",
                         new XAttribute("Projects", "@(PackProject)"),
-                        // Restore and build all selected projects first, then pack without walking project
-                        // references. Otherwise packable project references can be packed twice in parallel.
+                        // Each root restore walks its dependency graph and can rewrite shared obj files.
+                        // Finish one restore graph before starting another; build and pack stay parallel.
                         new XAttribute("Targets", "Restore"),
-                        new XAttribute("BuildInParallel", "true"),
+                        new XAttribute("BuildInParallel", "false"),
                         new XAttribute("StopOnFirstFailure", "true"),
                         new XAttribute("Properties", buildProperties))),
                 new XElement("Target",
