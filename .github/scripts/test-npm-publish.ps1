@@ -57,6 +57,7 @@ $env:NPM_BOOTSTRAP = 'false'
 $env:SOURCE_PRIVATE = 'false'
 $env:RELEASE_ENVIRONMENT = 'npm-release'
 $env:RELEASE_TAG_PREFIX = ''
+$env:NORMAL_RELEASE_TAG_PREFIX = ''
 $env:RUNNER_TEMP = Join-Path $routeRoot 'fixture'
 $env:GITHUB_STEP_SUMMARY = Join-Path $routeRoot 'fixture-summary.md'
 $env:GITHUB_ENV=Join-Path $routeRoot 'job-env'
@@ -84,6 +85,9 @@ function global:gh {
     if ($args[1] -eq 'repos/example/widget/environments/npm-release') { return $global:npmQualification_environment | ConvertTo-Json -Depth 5 -Compress }
     if ($args[1] -eq 'repos/example/widget/environments/npm-release/deployment-branch-policies') { return $global:npmQualification_policies | ConvertTo-Json -Depth 5 -Compress }
     if ($args[1] -eq "repos/example/widget/actions/runs/$env:QUALITY_RUN") { return $global:npmQualification_run | ConvertTo-Json -Compress }
+    if ($args[1] -like 'repos/example/widget/releases/tags/*') { return $global:npmQualification_productRelease | ConvertTo-Json -Compress }
+    if ($args[1] -like 'repos/example/widget/git/ref/tags/*') { return @{object=$global:npmQualification_productTag} | ConvertTo-Json -Compress }
+    if ($args[1] -like 'repos/example/widget/git/tags/*') { return @{object=@{type='commit';sha=$env:GITHUB_SHA}} | ConvertTo-Json -Compress }
     if ($args[1] -eq 'repos/example/widget/git/matching-refs/tags/npm-v') {
         if ('--paginate' -notin $args -or '--slurp' -notin $args) { throw 'Reservation recheck must read all pages.' }
         return ConvertTo-Json -InputObject @($global:npmQualification_reservations) -Depth 10 -Compress
@@ -392,6 +396,55 @@ $env:NPM_EXECUTE='true'; $env:RELEASE_TAG_PREFIX=''
 $env:QUALIFIED_SOURCE_SHA=''
 Invoke-Case 'Missing validated provenance source blocks before upload' { & $publisher } $true
 if ($global:npmQualification_publishCalls -ne 0) { throw 'Unbound source reached publication.' }
+
+$env:GITHUB_SHA=$eventProof.workflow_run.head_sha
+$env:QUALIFIED_SOURCE_SHA=$env:GITHUB_SHA
+$global:npmQualification_run.head_sha=$env:GITHUB_SHA
+$env:NORMAL_RELEASE_TAG_PREFIX='Widget-v'
+$env:GITHUB_REF='refs/tags/Widget-v0.1.0'
+$env:GITHUB_EVENT_NAME='release'
+$global:npmQualification_productRelease=@{id=123;tag_name='Widget-v0.1.0';draft=$false;prerelease=$false;published_at='2026-01-01T00:00:00Z'}
+$global:npmQualification_productTag=@{type='commit';sha=$env:GITHUB_SHA}
+$global:npmQualification_policies=@{total_count=1;branch_policies=@(@{name='Widget-v*';type='tag'})}
+$global:npmQualification_comparison='ahead'
+@{action='published';release=@{id=123;tag_name='Widget-v0.1.0'}} | ConvertTo-Json -Depth 5 | Set-Content $env:GITHUB_EVENT_PATH
+Invoke-Case 'Published stable product release uses the qualified tag commit' { & $gate } $false
+$global:npmQualification_productTag=@{type='tag';sha=('c' * 40)}
+Invoke-Case 'Annotated product tag resolves to the qualified commit' { & $gate } $false
+$global:npmQualification_productTag=@{type='commit';sha=$env:GITHUB_SHA}
+$env:GITHUB_EVENT_NAME='workflow_dispatch'
+Invoke-Case 'Dispatch on a published product tag reconciles the same release' { & $gate } $false
+$env:GITHUB_EVENT_NAME='release'; $env:NORMAL_RELEASE_TAG_PREFIX=''
+Invoke-Case 'Product release requires explicit tag-mode opt in' { & $gate } $true
+$env:NORMAL_RELEASE_TAG_PREFIX='Widget-v'; $env:GITHUB_REF='refs/heads/main'
+Invoke-Case 'Product tag mode does not authorize a branch dispatch' { & $gate } $true
+$env:GITHUB_REF='refs/tags/Other-v0.1.0'
+Invoke-Case 'Unrelated product namespace rejected' { & $gate } $true
+$env:GITHUB_REF='refs/tags/Widget-v0.1.0.1'
+Invoke-Case 'Internal four-part product tag rejected' { & $gate } $true
+$env:GITHUB_REF='refs/tags/Widget-v0.1.1'
+Invoke-Case 'Product tag and archive version mismatch rejected' { & $gate } $true
+$env:GITHUB_REF='refs/tags/Widget-v0.1.0'; $global:npmQualification_productRelease.draft=$true
+Invoke-Case 'Draft product release rejected' { & $gate } $true
+$global:npmQualification_productRelease.draft=$false; $global:npmQualification_productRelease.prerelease=$true
+Invoke-Case 'Prerelease product cannot publish a stable npm version' { & $gate } $true
+$global:npmQualification_productRelease.prerelease=$false; $global:npmQualification_productRelease.id=999
+Invoke-Case 'Event release must match the live published release' { & $gate } $true
+$global:npmQualification_productRelease.id=123; $global:npmQualification_productTag.sha='b' * 40
+Invoke-Case 'Moved product tag rejected before archive publication' { & $gate } $true
+$global:npmQualification_productTag.sha=$env:GITHUB_SHA; $global:npmQualification_comparison='diverged'
+Invoke-Case 'Product source outside default-branch history rejected' { & $gate } $true
+$global:npmQualification_comparison='ahead'; $global:npmQualification_policies.branch_policies[0].name='*'
+Invoke-Case 'Broad tag environment rejected' { & $gate } $true
+$global:npmQualification_policies.branch_policies[0].name='Widget-v*'; $global:npmQualification_policies.total_count=2
+Invoke-Case 'Additional deployment policies rejected for product releases' { & $gate } $true
+$global:npmQualification_policies.total_count=1; $global:npmQualification_run.head_sha='b' * 40
+Invoke-Case 'Product release still requires exact successful push quality source' { & $gate } $true
+$global:npmQualification_run.head_sha=$env:GITHUB_SHA
+$env:GITHUB_REF='refs/tags/Widget-v20260101000000'
+$global:npmQualification_productRelease.tag_name='Widget-v20260101000000'
+@{action='published';release=@{id=123;tag_name='Widget-v20260101000000'}} | ConvertTo-Json -Depth 5 | Set-Content $env:GITHUB_EVENT_PATH
+Invoke-Case 'Legacy timestamp product release accepts the archive version' { & $gate } $false
 
 $resultPath = if ($OutputPath) { $OutputPath } else { Join-Path $routeRoot 'workflow-contract-results.json' }
 $global:npmQualification_results | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $resultPath
