@@ -1,6 +1,6 @@
 namespace PowerForge.Tests;
 
-public sealed class AppleReleaseSourceMutationMonitorTests
+public sealed partial class AppleReleaseSourceMutationMonitorTests
 {
     [Fact]
     public void ValidateNoChanges_keeps_monitoring_during_final_identity_validation()
@@ -101,7 +101,7 @@ public sealed class AppleReleaseSourceMutationMonitorTests
     }
 
     [Fact]
-    public async Task CaptureExpectedProducerOutput_rejects_replacement_during_post_exit_drain()
+    public async Task CaptureExpectedProducerOutput_rejects_asynchronous_replacement_before_final_identity_comparison()
     {
         var root = Directory.CreateDirectory(Path.Combine(
             Path.GetTempPath(),
@@ -116,20 +116,39 @@ public sealed class AppleReleaseSourceMutationMonitorTests
                 "producer output root",
                 "test producer",
                 "Discard the output.");
-            var replacement = Task.Run(async () =>
+            using var firstIdentityCaptured = new ManualResetEventSlim();
+            var replacement = Task.Factory.StartNew(() =>
             {
-                await Task.Delay(50);
+                firstIdentityCaptured.Wait();
                 File.WriteAllText(artifact, "replacement-output");
-            });
+            }, CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
+            var captures = 0;
 
-            var exception = Assert.Throws<InvalidOperationException>(() =>
-                monitor.CaptureExpectedProducerOutput(
-                    () => AppleNotarizationService.ComputeArtifactSha256(artifact),
-                    "test producer"));
-            await replacement;
+            try
+            {
+                var exception = Assert.Throws<InvalidOperationException>(() =>
+                    monitor.CaptureExpectedProducerOutput(
+                        () =>
+                        {
+                            if (++captures > 1)
+                                Assert.True(replacement.Wait(TimeSpan.FromSeconds(10)), "The replacement writer did not finish.");
+                            var identity = AppleNotarizationService.ComputeArtifactSha256(artifact);
+                            // Start the independent writer only after the original identity exists.
+                            // The final capture waits for it, so scheduler load cannot move the
+                            // intended replacement past a successful monitor return.
+                            firstIdentityCaptured.Set();
+                            return identity;
+                        },
+                        "test producer"));
 
-            Assert.Contains("changed", exception.Message, StringComparison.OrdinalIgnoreCase);
-            Assert.Contains("completed", exception.Message, StringComparison.OrdinalIgnoreCase);
+                Assert.Contains("changed", exception.Message, StringComparison.OrdinalIgnoreCase);
+                Assert.Contains("test producer", exception.Message, StringComparison.OrdinalIgnoreCase);
+            }
+            finally
+            {
+                firstIdentityCaptured.Set();
+                await replacement.WaitAsync(TimeSpan.FromSeconds(10));
+            }
         }
         finally
         {

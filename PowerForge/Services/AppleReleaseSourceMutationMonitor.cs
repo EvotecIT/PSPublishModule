@@ -16,6 +16,7 @@ internal sealed class AppleReleaseSourceMutationMonitor : IDisposable {
     private readonly Func<FileSystemEventArgs, bool>? _ignoredMutation;
     private int _enforceMutations;
     private long _mutationSequence;
+    private long _producerContinuitySequence;
     private string? _firstMutation;
     private Exception? _watcherError;
     private bool _disposed;
@@ -54,7 +55,7 @@ internal sealed class AppleReleaseSourceMutationMonitor : IDisposable {
                         OnMutation(this, new AppleMacOSFileChangeObserver.ChangeEventArgs(rootPath, path, flags));
                     }
                     catch (Exception exception) { Interlocked.CompareExchange(ref _watcherError, exception, null); }
-                }, exception => Interlocked.CompareExchange(ref _watcherError, exception, null));
+                }, OnNativeObserverError);
             _observer = native;
             _stopObserving = native.Stop;
             _drainObserving = native.Drain;
@@ -139,6 +140,34 @@ internal sealed class AppleReleaseSourceMutationMonitor : IDisposable {
         }
     }
 
+#if NET8_0_OR_GREATER
+    private void OnNativeObserverError(Exception exception)
+    {
+        // The producer may write freely before any output identity is trusted. A known
+        // buffering loss in that phase requires a fresh, uninterrupted identity capture;
+        // it cannot poison the later consumer boundary or hide a different observer error.
+        if (exception is AppleMacOSFileChangeObserver.ContinuityLossException { Flags: 0x3 or 0x5 or 0x7 } &&
+            Volatile.Read(ref _enforceMutations) == 0)
+        {
+            Interlocked.Increment(ref _producerContinuitySequence);
+            // Pair with the atomic arm and its sequence check. A callback racing the arm
+            // must remain terminal even if it read the producer phase before that arm.
+            if (Volatile.Read(ref _enforceMutations) == 0)
+                return;
+        }
+        Interlocked.CompareExchange(ref _watcherError, exception, null);
+    }
+#endif
+
+    private void RequireProducerContinuity(long expected, string producerDescription)
+    {
+        if (Interlocked.Read(ref _producerContinuitySequence) != expected)
+            throw new InvalidOperationException(
+                $"The {_scopeDescription} lost native event continuity while its {producerDescription} output was being bound. " +
+                _failureInstruction);
+        ThrowIfMutationObserved();
+    }
+
     internal T CaptureExpectedProducerOutput<T>(Func<T> capture, string producerDescription) {
         if (capture is null)
             throw new ArgumentNullException(nameof(capture));
@@ -155,8 +184,14 @@ internal sealed class AppleReleaseSourceMutationMonitor : IDisposable {
         T output;
         if (Volatile.Read(ref _enforceMutations) == 0)
         {
+            // Finish delivery of untrusted producer activity before the first complete
+            // identity capture. No errors or events are cleared, and observation stays live.
+            _drainObserving();
+            ThrowIfMutationObserved();
+            var continuity = Interlocked.Read(ref _producerContinuitySequence);
             output = capture();
             _drainObserving();
+            RequireProducerContinuity(continuity, producerDescription);
             // FileSystemWatcher delivery is asynchronous. The producer's own final writes may still
             // be queued when the process-exit callback runs, so let the already-active observer drain
             // to a quiet sequence before changing those events from producer activity to tampering.
@@ -183,11 +218,13 @@ internal sealed class AppleReleaseSourceMutationMonitor : IDisposable {
                 throw new InvalidOperationException(
                     $"The {_scopeDescription} did not become quiet at the producer completion boundary. {_failureInstruction}");
             }
+            RequireProducerContinuity(continuity, producerDescription);
             // Close the producer-to-consumer transition before the final comparison. A watcher
             // event that lands after the quiet drain but before arming increments the sequence
             // while enforcement is still disabled; comparing the sequence after the atomic arm
             // catches that window. Events that land after the arm are retained in _firstMutation.
             Interlocked.Exchange(ref _enforceMutations, 1);
+            RequireProducerContinuity(continuity, producerDescription);
             if (Interlocked.Read(ref _mutationSequence) != sequence)
             {
                 throw new InvalidOperationException(
