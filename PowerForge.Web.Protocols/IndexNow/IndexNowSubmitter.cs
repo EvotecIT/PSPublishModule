@@ -59,11 +59,13 @@ public static class IndexNowSubmitter
         {
             foreach (var endpoint in endpoints)
             {
+                DateTimeOffset? endpointRetryNotBefore = null;
                 foreach (var group in hostGroups)
                 {
                     var keyLocation = ResolveKeyLocation(options.KeyLocation, group.Scheme, group.Host, normalizedKey);
                     foreach (var batch in Batch(group.Urls, batchSize))
                     {
+                        cancellationToken.ThrowIfCancellationRequested();
                         IndexNowRequestResult requestResult;
                         if (options.DryRun)
                         {
@@ -77,6 +79,19 @@ public static class IndexNowSubmitter
                                 ResponsePreview = "dry-run"
                             };
                         }
+                        else if (endpointRetryNotBefore > DateTimeOffset.UtcNow)
+                        {
+                            requestResult = new IndexNowRequestResult
+                            {
+                                Endpoint = endpoint.ToString(),
+                                Host = group.Host,
+                                UrlCount = batch.Length,
+                                Success = false,
+                                AttemptCount = 0,
+                                RetryNotBefore = endpointRetryNotBefore,
+                                Error = $"endpoint deferred until {endpointRetryNotBefore:O}"
+                            };
+                        }
                         else
                         {
                             requestResult = await SubmitBatchAsync(
@@ -88,6 +103,7 @@ public static class IndexNowSubmitter
                                 Math.Max(0, options.RetryCount),
                                 Math.Max(0, options.RetryDelayMs),
                                 Math.Max(1, options.TimeoutSeconds), http, cancellationToken).ConfigureAwait(false);
+                            endpointRetryNotBefore = requestResult.RetryNotBefore;
                         }
 
                         requests.Add(requestResult);
@@ -95,7 +111,9 @@ public static class IndexNowSubmitter
                         if (!requestResult.Success)
                         {
                             var endpointLabel = requestResult.Endpoint;
-                            var statusLabel = requestResult.StatusCode.HasValue ? $"HTTP {requestResult.StatusCode.Value}" : "transport";
+                            var statusLabel = requestResult.AttemptCount == 0 && requestResult.RetryNotBefore.HasValue
+                                ? "deferred"
+                                : requestResult.StatusCode.HasValue ? $"HTTP {requestResult.StatusCode.Value}" : "transport";
                             var errorText = string.IsNullOrWhiteSpace(requestResult.Error) ? "unknown error" : requestResult.Error;
                             errors.Add($"indexnow: {statusLabel} failure for {endpointLabel} ({requestResult.Host}): {errorText}");
                         }
@@ -394,6 +412,7 @@ public static class IndexNowSubmitter
         int? lastStatusCode = null;
         string? lastReasonPhrase = null;
         string? lastBody = null;
+        DateTimeOffset? retryNotBefore = null;
         var maxAttempts = (int)Math.Min(int.MaxValue, (long)retryCount + 1);
 
         for (var attempt = 1; attempt <= maxAttempts; attempt++)
@@ -404,7 +423,7 @@ public static class IndexNowSubmitter
             lastStatusCode = null;
             lastReasonPhrase = null;
             lastBody = null;
-            TimeSpan? retryAfter = null;
+            retryNotBefore = null;
 
             try
             {
@@ -420,7 +439,12 @@ public static class IndexNowSubmitter
                 lastStatusCode = (int)response.StatusCode;
                 lastReasonPhrase = response.ReasonPhrase;
                 var retryCondition = response.Headers.RetryAfter;
-                retryAfter = retryCondition?.Delta ?? (retryCondition?.Date - DateTimeOffset.UtcNow);
+                var receivedAt = DateTimeOffset.UtcNow;
+                retryNotBefore = retryCondition?.Date;
+                if (retryCondition?.Delta is TimeSpan delta)
+                    retryNotBefore = delta > DateTimeOffset.MaxValue - receivedAt
+                        ? DateTimeOffset.MaxValue
+                        : receivedAt + delta;
                 lastBody = response.Content is null
                     ? null
                     : await ReadResponsePreviewAsync(response.Content, deadline.Token).ConfigureAwait(false);
@@ -449,11 +473,19 @@ public static class IndexNowSubmitter
             // needs corrected input even when its diagnostic body could not be read.
             var retryable = lastStatusCode is null || IsRetryableStatusCode(lastStatusCode.Value) ||
                 (lastException is not null && lastStatusCode >= 200 && lastStatusCode < 300);
-            if (!retryable || attempt >= maxAttempts)
+            if (!retryable)
+            {
+                retryNotBefore = null;
+                break;
+            }
+            if (retryNotBefore <= DateTimeOffset.UtcNow)
+                retryNotBefore = null;
+            if (attempt >= maxAttempts)
                 break;
 
             // Never shorten the server's requested quiet period to fit a build-time wait.
             // Longer deferrals belong to the caller's durable scheduling/checkpoint policy.
+            var retryAfter = retryNotBefore - DateTimeOffset.UtcNow;
             if (retryAfter > MaxRetryDelay)
                 break;
 
@@ -481,6 +513,7 @@ public static class IndexNowSubmitter
             Success = false,
             AttemptCount = attempts,
             StatusCode = lastStatusCode,
+            RetryNotBefore = retryNotBefore > DateTimeOffset.UtcNow ? retryNotBefore : null,
             Error = string.IsNullOrWhiteSpace(errorText) ? "request failed" : TruncateResponse(errorText),
             ResponsePreview = TruncateResponse(lastBody)
         };
