@@ -811,6 +811,7 @@ public sealed partial class AppStoreConnectClient : IDisposable
             ProcessingState = GetString(attrs, "processingState"),
             UploadedDate = GetDateTimeOffset(attrs, "uploadedDate"),
             Expired = GetBool(attrs, "expired"),
+            UsesNonExemptEncryption = GetBool(attrs, "usesNonExemptEncryption"),
             MinOsVersion = GetString(attrs, "minOsVersion")
         };
     }
