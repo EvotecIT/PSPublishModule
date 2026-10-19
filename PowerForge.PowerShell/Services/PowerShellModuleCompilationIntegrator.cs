@@ -185,6 +185,7 @@ internal sealed class PowerShellModuleCompilationIntegrator
             compilationManifestPath,
             finalizedPayloadFiles,
             checkpoint.StagingInputSha256);
+        result.SourceCommitSha = checkpoint.SourceCommitSha;
         var exports = ModuleManifestExportReader.ReadExports(buildResult.ManifestPath);
         return (
             new ModuleBuildResult(stagingPath, buildResult.ManifestPath, exports, buildResult.BuildNotes, finalizedPayloadFiles),
@@ -248,6 +249,7 @@ internal sealed class PowerShellModuleCompilationIntegrator
             EmitIrSnapshots = configuration.EmitIrSnapshots,
             ExpectedPublicAbiSha256 = configuration.ExpectedPublicAbiSha256 ?? string.Empty,
             StagingInputSha256 = result.StagingInputSha256,
+            SourceCommitSha = result.SourceCommitSha,
             SigningCertificateThumbprint = signing is null
                 ? string.Empty
                 : PowerShellCompilationEvidenceAuthenticator.GetSignerThumbprint(signing),
@@ -735,6 +737,7 @@ internal sealed class PowerShellModuleCompilationIntegrator
         public bool EmitIrSnapshots { get; set; }
         public string ExpectedPublicAbiSha256 { get; set; } = string.Empty;
         public string StagingInputSha256 { get; set; } = string.Empty;
+        public string? SourceCommitSha { get; set; }
         public string SigningCertificateThumbprint { get; set; } = string.Empty;
         public CheckpointFile[] Files { get; set; } = Array.Empty<CheckpointFile>();
     }

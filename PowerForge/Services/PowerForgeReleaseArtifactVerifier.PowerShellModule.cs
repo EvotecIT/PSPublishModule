@@ -276,7 +276,8 @@ public sealed partial class PowerForgeReleaseArtifactVerifier
         };
     }
 
-    private static PowerForgeModuleSigningEvidence ReadSigningEvidence(string path)
+    /// <summary>Reads bounded module signing evidence for artifact verification and release preflight.</summary>
+    internal static PowerForgeModuleSigningEvidence ReadSigningEvidence(string path)
     {
         try
         {

@@ -449,6 +449,15 @@ clean working tree: normal version updates and uncommitted inputs remain support
 Directories outside Git, and newly initialized repositories without a first commit, have
 no commit to bind. Generic upload commands for prebuilt assets retain their explicit target.
 
+Modules that reuse ordinary staging retain existing files and may apply new build settings,
+so their source commit is unknown. The run does not infer it from the current checkout.
+Authenticated compiled-staging checkpoints and synchronized cached release payloads restore
+their recorded commit context; older checkpoints without that context remain unbound.
+When `GenerateProvenance` is enabled, publication requires the selected artifact's recorded
+commit to agree with its signing provenance. Unknown or conflicting context stops publication.
+Rebuild the module, restore a coherent cached payload, or use the checkout matching the recorded
+source before generating provenance again.
+
 - `PublishGitHub`: enable GitHub release publishing.
 - `GitHubReleaseMode`:
   - `Single`: one release with all project zips attached.
