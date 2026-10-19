@@ -60,6 +60,7 @@ public sealed partial class DotNetRepositoryReleaseService
                 return result;
             }
             spec.RootPath = root;
+            result.SourceCommitSha = ReleaseSourceCommit.Capture(root, cancellationToken);
             if (spec.Pack && (spec.SignAssemblies || spec.SignPackages) &&
                 string.IsNullOrWhiteSpace(spec.CertificateThumbprint))
             {

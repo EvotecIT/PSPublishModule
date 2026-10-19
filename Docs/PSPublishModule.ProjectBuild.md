@@ -440,6 +440,15 @@ NuGet publishing
 - `SkipDuplicate`: pass `--skip-duplicate` to `dotnet nuget push`.
 
 GitHub releases
+
+Repository-backed builds record their Git commit before building and updating version files.
+GitHub publishing uses that recorded commit for new tags, including deferred publication,
+and refuses to attach assets when an existing tag points to another commit. A later branch
+update does not move the release target. This records source context rather than proving a
+clean working tree: normal version updates and uncommitted inputs remain supported.
+Directories outside Git, and newly initialized repositories without a first commit, have
+no commit to bind. Generic upload commands for prebuilt assets retain their explicit target.
+
 - `PublishGitHub`: enable GitHub release publishing.
 - `GitHubReleaseMode`:
   - `Single`: one release with all project zips attached.

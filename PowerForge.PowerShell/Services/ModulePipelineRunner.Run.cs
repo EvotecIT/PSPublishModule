@@ -51,6 +51,7 @@ public sealed partial class ModulePipelineRunner
 
         try
         {
+            plan.SourceCommitSha = ReleaseSourceCommit.Capture(plan.ProjectRoot);
             if (plan.RequireReleaseSourceUnchanged)
                 ValidateReleaseSourceUnchanged(plan, generatedOutputPaths: null, trackedGeneratedOutputPaths: null);
             ExecutePreparationAndBuildPhases(plan, session, manifestRequiredModules, manifestExternalModuleDependencies, pipeline, state);

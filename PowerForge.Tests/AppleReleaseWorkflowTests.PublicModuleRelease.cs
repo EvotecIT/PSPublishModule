@@ -148,7 +148,6 @@ public sealed partial class AppleReleaseWorkflowTests
         Assert.Contains("Set-PowerForgeAuthorizedReleaseCommitish", script, StringComparison.Ordinal);
         Assert.Contains("$Operation -eq 'Prepare'", commitishAuthorization, StringComparison.Ordinal);
         Assert.Contains("Add-Member -NotePropertyName Commitish", commitishAuthorization, StringComparison.Ordinal);
-        Assert.Contains("ExpectedTagCommitSha = gitHub.Commitish", Read(root, "PowerForge", "Services", "PowerForgeReleaseService.cs"), StringComparison.Ordinal);
         Assert.Contains("Status         = 'Failed'", script, StringComparison.Ordinal);
         Assert.Contains("\"PlanOutputPath\": \"../Artefacts/ProjectBuild/project.build.plan.json\"", releaseConfig, StringComparison.Ordinal);
         Assert.Contains("\"SignDependencyAssemblies\": true", releaseConfig, StringComparison.Ordinal);

@@ -171,6 +171,7 @@ public sealed class ModulePackageReleaseCheckpointServiceTests
     }
 
     [Fact]
+    [Trait("Category", "DotNetPublishPrGate")]
     public void Publish_replays_a_github_only_module_package_checkpoint()
     {
         var root = Path.Combine(
@@ -251,6 +252,7 @@ public sealed class ModulePackageReleaseCheckpointServiceTests
                 {
                     Success = true,
                     ResolvedVersion = "1.2.3",
+                    SourceCommitSha = "0123456789abcdef0123456789abcdef01234567",
                     Projects =
                     [
                         new DotNetRepositoryProjectResult
@@ -281,6 +283,7 @@ public sealed class ModulePackageReleaseCheckpointServiceTests
             Assert.Empty(result.PublishedPackages);
             Assert.Equal("v1.2.3", Assert.Single(result.GitHubReleases).TagName);
             Assert.Equal("checkpointed release archive", capturedReleaseZipContent);
+            Assert.Equal("0123456789abcdef0123456789abcdef01234567", captured!.Release.SourceCommitSha);
             Assert.Equal(Path.GetFileName(releaseZip), Path.GetFileName(Assert.Single(captured!.Release.Projects).ReleaseZipPath));
         }
         finally

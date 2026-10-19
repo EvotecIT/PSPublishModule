@@ -29,6 +29,7 @@ public sealed partial class ModulePipelineRunner
         DeleteStaleSynchronizedReleasePayloadCaches(cachePath);
         if (string.IsNullOrWhiteSpace(checkpoint.PayloadFingerprint))
         {
+            CaptureSynchronizedReleaseSourceCommits(plan, state, checkpoint);
             CreateSynchronizedReleasePayloadCache(cachePath, buildResult, state);
             var payloadComponents = CreateCachedSynchronizedReleasePayloadComponents(
                 cachePath,
@@ -65,6 +66,7 @@ public sealed partial class ModulePipelineRunner
                 "The exact signed payload cache for the incomplete coordinated release is missing or corrupt. Restore that cache or abandon the incomplete release checkpoint explicitly.");
         }
 
+        RestoreSynchronizedReleaseSourceCommits(plan, state, checkpoint);
         RestoreCachedSynchronizedReleasePayloadPaths(cachePath, buildResult, state);
         RefreshFinalizedReleasePayloadIntegrity(plan, state);
         _logger.Info($"Using exact cached payload for the resumed coordinated release from '{cachePath}'.");

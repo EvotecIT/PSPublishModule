@@ -434,6 +434,8 @@ public sealed partial class ModulePipelineRunner
             Repository = repo,
             Token = apiKey,
             TagName = tag,
+            Commitish = plan.SourceCommitSha,
+            ExpectedTagCommitSha = plan.SourceCommitSha,
             ReleaseName = tag,
             GenerateReleaseNotes = publish.GenerateReleaseNotes,
             IsDraft = false,

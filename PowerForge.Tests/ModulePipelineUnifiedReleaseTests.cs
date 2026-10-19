@@ -985,7 +985,7 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
         {
             const string moduleName = "TestModule";
             WriteMinimalModule(root.FullName, moduleName, "1.0.0");
-            Directory.Delete(Path.Combine(root.FullName, ".git"));
+            Directory.Delete(Path.Combine(root.FullName, ".git"), recursive: true);
 
             var events = new List<string>();
             var packageOutput = Path.Combine(root.FullName, "Artifacts", "NuGet");
@@ -1131,7 +1131,7 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
         {
             const string moduleName = "TestModule";
             WriteMinimalModule(root.FullName, moduleName, "1.0.0");
-            Directory.Delete(Path.Combine(root.FullName, ".git"));
+            Directory.Delete(Path.Combine(root.FullName, ".git"), recursive: true);
 
             var events = new List<string>();
             var hostedOperations = new FakeHostedOperations(events);
@@ -1471,7 +1471,7 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
     private static void WriteMinimalModule(string moduleRoot, string moduleName, string version)
     {
         Directory.CreateDirectory(moduleRoot);
-        Directory.CreateDirectory(Path.Combine(moduleRoot, ".git"));
+        RunModuleSourceGit(moduleRoot, "init", "--quiet");
         File.WriteAllText(Path.Combine(moduleRoot, $"{moduleName}.psm1"), "function Get-Test { 'ok' }");
 
         var psd1 = string.Join(Environment.NewLine, new[]

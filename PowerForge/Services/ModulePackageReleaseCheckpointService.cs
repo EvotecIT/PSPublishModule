@@ -174,6 +174,7 @@ internal sealed class ModulePackageReleaseCheckpointService
             Success = source.Success,
             ErrorMessage = source.ErrorMessage,
             ResolvedVersion = source.ResolvedVersion,
+            SourceCommitSha = source.SourceCommitSha,
             Projects = source.Projects.Select(project => new DotNetRepositoryProjectResult
             {
                 ProjectName = project.ProjectName,
