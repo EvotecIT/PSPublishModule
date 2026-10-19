@@ -11,7 +11,7 @@ public sealed class ReleaseSourceCommitEnvironmentTests
         var originalPath = Environment.GetEnvironmentVariable("PATH");
         try
         {
-            var git = new GitClient();
+            var git = GitClient.CreateIsolatedPathClient();
             Assert.True((await git.RunRawAsync(root, ["init", "--quiet"])).Succeeded);
             Assert.True((await git.RunRawAsync(root,
             ["-c", "user.name=Release test", "-c", "user.email=release@example.test",

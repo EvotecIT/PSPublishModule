@@ -108,7 +108,7 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
     {
         var safeArguments = new[] { "-c", "commit.gpgsign=false", "-c", "core.hooksPath=" + (OperatingSystem.IsWindows() ? "NUL" : "/dev/null") }
             .Concat(arguments).ToArray();
-        var result = new GitClient().RunRawAsync(root, safeArguments).GetAwaiter().GetResult();
+        var result = GitClient.CreateIsolatedPathClient().RunRawAsync(root, safeArguments).GetAwaiter().GetResult();
         Assert.True(result.Succeeded, result.StdErr);
     }
 }

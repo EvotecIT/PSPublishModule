@@ -198,7 +198,7 @@ public sealed class GitClientTests
         File.WriteAllText(Path.Combine(home, "system.gitconfig"), string.Empty);
         try
         {
-            var setup = new GitClient();
+            var setup = GitClient.CreateIsolatedPathClient();
             Assert.True((await setup.RunRawAsync(checkout, ["init", "--quiet"])).Succeeded);
             Assert.True((await setup.RunRawAsync(checkout,
                 ["-c", "user.name=Release test", "-c", "user.email=release@example.test",

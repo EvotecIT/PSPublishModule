@@ -125,7 +125,7 @@ public sealed class ProjectBuildSourceCommitTests
 
         private string Git(params string[] arguments)
         {
-            var result = new GitClient().RunRawAsync(Root, arguments).GetAwaiter().GetResult();
+            var result = GitClient.CreateIsolatedPathClient().RunRawAsync(Root, arguments).GetAwaiter().GetResult();
             Assert.Equal(0, result.ExitCode);
             return result.StdOut;
         }
