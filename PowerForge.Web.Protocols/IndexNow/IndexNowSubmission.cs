@@ -22,9 +22,10 @@ public sealed class IndexNowSubmissionOptions
     public bool FailOnRequestError { get; set; } = true;
     /// <summary>Maximum URLs per request, capped at the protocol limit of 10,000.</summary>
     public int BatchSize { get; set; } = 500;
-    /// <summary>Additional attempts after an unsuccessful request.</summary>
+    /// <summary>Additional attempts for HTTP 408/429/5xx or transport failures; permanent HTTP failures are not retried.</summary>
     public int RetryCount { get; set; } = 2;
-    /// <summary>Delay in milliseconds between attempts.</summary>
+    /// <summary>Initial exponential retry delay in milliseconds, capped at 60 seconds. Retry-After is a minimum;
+    /// a server-requested delay above 60 seconds stops the batch for caller-managed rescheduling.</summary>
     public int RetryDelayMs { get; set; } = 500;
     /// <summary>Per-attempt timeout in seconds.</summary>
     public int TimeoutSeconds { get; set; } = 20;

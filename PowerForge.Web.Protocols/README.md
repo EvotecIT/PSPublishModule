@@ -86,3 +86,5 @@ Use JSON-compatible dictionaries, arrays, strings, numbers, booleans and null. S
 ## IndexNow
 
 Reference `PowerForge.Web.Protocols` and import `PowerForge.Web.Protocols.IndexNow`. Existing consumers of the retired `PowerForge.IndexNow` package must update their package reference and namespace, then rebuild. Transport uses an optional caller-owned `HttpClient`; durable queues, checkpoints and operational retry scheduling belong to the application.
+
+`RetryCount` limits additional attempts for HTTP 408, 429, server errors (5xx), and transport failures. Permanent refusals such as 400, 403, and 422 return immediately. `RetryDelayMs` sets the initial delay; subsequent delays double up to 60 seconds. A valid `Retry-After` duration or HTTP date sets a minimum wait even when `RetryDelayMs` is zero. If the server requests more than 60 seconds, the batch returns a failure without another attempt so the application can reschedule it. Caller cancellation interrupts requests and retry waits.

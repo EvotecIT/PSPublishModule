@@ -17,6 +17,7 @@ public static class IndexNowSubmitter
     private const string DefaultEndpoint = "https://api.indexnow.org/indexnow";
     private const int MaxResponsePreviewLength = 300;
     private const int MaxBatchSize = 10_000;
+    private static readonly TimeSpan MaxRetryDelay = TimeSpan.FromMinutes(1);
     /// <summary>Submits synchronously for console and batch callers.</summary>
     public static IndexNowSubmissionResult Submit(IndexNowSubmissionOptions options, Action<string>? logger = null) =>
         SubmitAsync(options, logger: logger).GetAwaiter().GetResult();
@@ -393,15 +394,17 @@ public static class IndexNowSubmitter
         int? lastStatusCode = null;
         string? lastReasonPhrase = null;
         string? lastBody = null;
-        var maxAttempts = Math.Max(1, retryCount + 1);
+        var maxAttempts = (int)Math.Min(int.MaxValue, (long)retryCount + 1);
 
         for (var attempt = 1; attempt <= maxAttempts; attempt++)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             attempts = attempt;
             lastException = null;
             lastStatusCode = null;
             lastReasonPhrase = null;
             lastBody = null;
+            TimeSpan? retryAfter = null;
 
             try
             {
@@ -416,6 +419,8 @@ public static class IndexNowSubmitter
                 using var response = await http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, deadline.Token).ConfigureAwait(false);
                 lastStatusCode = (int)response.StatusCode;
                 lastReasonPhrase = response.ReasonPhrase;
+                var retryCondition = response.Headers.RetryAfter;
+                retryAfter = retryCondition?.Delta ?? (retryCondition?.Date - DateTimeOffset.UtcNow);
                 lastBody = response.Content is null
                     ? null
                     : await ReadResponsePreviewAsync(response.Content, deadline.Token).ConfigureAwait(false);
@@ -440,8 +445,24 @@ public static class IndexNowSubmitter
                 lastException = ex;
             }
 
-            if (attempt < maxAttempts && retryDelayMs > 0)
-                await Task.Delay(retryDelayMs, cancellationToken).ConfigureAwait(false);
+            // Keep response-stream failures retryable, but a known permanent refusal still
+            // needs corrected input even when its diagnostic body could not be read.
+            var retryable = lastStatusCode is null || IsRetryableStatusCode(lastStatusCode.Value) ||
+                (lastException is not null && lastStatusCode >= 200 && lastStatusCode < 300);
+            if (!retryable || attempt >= maxAttempts)
+                break;
+
+            // Never shorten the server's requested quiet period to fit a build-time wait.
+            // Longer deferrals belong to the caller's durable scheduling/checkpoint policy.
+            if (retryAfter > MaxRetryDelay)
+                break;
+
+            var delayMs = Math.Min(MaxRetryDelay.TotalMilliseconds,
+                retryDelayMs * Math.Pow(2, Math.Min(attempt - 1, 31)));
+            if (retryAfter.HasValue)
+                delayMs = Math.Max(delayMs, retryAfter.Value.TotalMilliseconds);
+            if (delayMs > 0)
+                await Task.Delay(TimeSpan.FromMilliseconds(delayMs), cancellationToken).ConfigureAwait(false);
         }
 
         var errorText = lastException?.Message;
@@ -464,6 +485,9 @@ public static class IndexNowSubmitter
             ResponsePreview = TruncateResponse(lastBody)
         };
     }
+
+    private static bool IsRetryableStatusCode(int statusCode) =>
+        statusCode is 408 or 429 || (statusCode >= 500 && statusCode <= 599);
 
     private static async Task<string> ReadResponsePreviewAsync(HttpContent content, CancellationToken token)
     {
