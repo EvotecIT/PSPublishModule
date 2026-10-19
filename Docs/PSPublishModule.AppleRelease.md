@@ -512,7 +512,8 @@ review or export compliance is held for the operator; a review already in progre
 is observed without repeating build assignment. Public App Store distribution
 remains a separate local release decision.
 
-Tester identities are resolved within the target app. When `CreateMissingTesters`
+Internal tester identities are resolved within the target app using app and email
+filters. External enrollment retains the global email lookup. When `CreateMissingTesters`
 is enabled, an internal group can register an app-specific tester record only for
 an existing App Store Connect user with an eligible role and access to that app.
 Distribution does not create team accounts or grant roles or app permissions.
@@ -1318,7 +1319,8 @@ all metadata and screenshot mappings for a target.
 Set the optional root `copyright` field in a version metadata file to the
 publisher's notice, for example `"copyright": "2022 Example"`. This field belongs
 to the whole platform version; localized files must agree when they supply it.
-Omitting it preserves the existing notice. Readiness fails when the remote version
+A copyright-only file does not create or update a localization; its sync result
+has null `Before` and `After` values. Omitting copyright preserves the existing notice. Readiness fails when the remote version
 has no copyright notice. Direct .NET callers can use
 `AppStoreConnectClient.SetVersionCopyrightAsync` to update only this field.
 

@@ -95,7 +95,7 @@ public sealed partial class AppStoreConnectClientTests
         });
         Assert.Equal("2022 Example", result.Version.Copyright);
         Assert.Contains("copyright", result.UpdatedFields);
-        Assert.Equal("Documents", result.After.Description);
+        Assert.Equal("Documents", result.After!.Description);
         Assert.EndsWith("/appStoreVersions/mac-1", handler.RequestUris[0].ToString(), StringComparison.Ordinal);
     }
 
@@ -117,8 +117,30 @@ public sealed partial class AppStoreConnectClientTests
             } }
         });
         Assert.Equal("2022 Example", Assert.Single(result.MetadataResults).Version.Copyright);
+        Assert.Equal("2022 Example", result.Version!.Copyright);
         Assert.Equal(new HttpMethod("PATCH"), handler.Methods[0]);
         Assert.EndsWith("/appStoreVersions/mac-1", handler.RequestUris[0].ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ReleasePreparation_AppliesCopyrightOnlyWithoutTouchingLocalizations()
+    {
+        var handler = new SequenceHandler(new SequenceResponse(HttpStatusCode.OK,
+            """{"data":{"type":"appStoreVersions","id":"mac-1","attributes":{"copyright":"2022 Example"}}}"""));
+        using var http = new HttpClient(handler);
+        using var client = new AppStoreConnectClient(CreateCredential(), http);
+        var result = await new AppStoreConnectReleasePreparationService(client).PrepareAsync(new()
+        {
+            AppId = "app-1", VersionString = "1.0", CreateVersion = false, SelectBuild = false,
+            MetadataSpec = new() { VersionId = "mac-1", Copyright = "2022 Example", Locale = "" }
+        });
+        Assert.Equal("2022 Example", result.Version!.Copyright);
+        var metadata = Assert.Single(result.MetadataResults);
+        Assert.Equal(new[] { "copyright" }, metadata.UpdatedFields);
+        Assert.Null(metadata.Before);
+        Assert.Null(metadata.After);
+        Assert.False(metadata.CreatedLocalization);
+        Assert.Equal("/v1/appStoreVersions/mac-1", Assert.Single(handler.RequestUris).AbsolutePath);
     }
 
     [Fact]

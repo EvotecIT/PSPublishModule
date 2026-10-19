@@ -29,9 +29,11 @@ public sealed partial class AppStoreConnectClientTests
         using var client = new AppStoreConnectClient(CreateCredential(), http);
         var result = await new AppStoreConnectTestFlightDistributionService(client).DistributeAsync(InternalAccessRequest());
         Assert.Equal("studio-tester", Assert.Single(result.Testers).Id);
-        Assert.Equal("/v1/apps/app-1/betaTesters", handler.RequestUris[2].AbsolutePath);
+        Assert.Equal("/v1/betaTesters", handler.RequestUris[2].AbsolutePath);
+        Assert.Contains("filter%5Bapps%5D=app-1", handler.RequestUris[2].Query, StringComparison.Ordinal);
+        Assert.Contains("filter%5Bemail%5D=team%40example.test", handler.RequestUris[2].Query, StringComparison.Ordinal);
         Assert.Contains("studio-tester", handler.RequestBodies[3], StringComparison.Ordinal);
-        Assert.DoesNotContain(handler.RequestUris, uri => uri.AbsolutePath == "/v1/betaTesters");
+        Assert.Single(handler.Methods, method => method == HttpMethod.Post);
     }
 
     [Theory]
@@ -52,7 +54,7 @@ public sealed partial class AppStoreConnectClientTests
         using var client = new AppStoreConnectClient(CreateCredential(), http);
         var result = await new AppStoreConnectTestFlightDistributionService(client).DistributeAsync(InternalAccessRequest());
         Assert.Equal("new-app-tester", Assert.Single(result.Testers).Id);
-        var create = handler.RequestUris.FindIndex(uri => uri.AbsolutePath == "/v1/betaTesters");
+        var create = handler.RequestUris.FindIndex(uri => uri.AbsolutePath == "/v1/betaTesters" && handler.Methods[handler.RequestUris.IndexOf(uri)] == HttpMethod.Post);
         Assert.Equal(HttpMethod.Post, handler.Methods[create]);
         using var body = JsonDocument.Parse(handler.RequestBodies[create]);
         var group = Assert.Single(body.RootElement.GetProperty("data").GetProperty("relationships").GetProperty("betaGroups").GetProperty("data").EnumerateArray());
@@ -77,6 +79,55 @@ public sealed partial class AppStoreConnectClientTests
         using var client = new AppStoreConnectClient(CreateCredential(), http);
         await Assert.ThrowsAsync<InvalidOperationException>(() => new AppStoreConnectTestFlightDistributionService(client).DistributeAsync(InternalAccessRequest()));
         Assert.All(handler.Methods, method => Assert.Equal(HttpMethod.Get, method));
+    }
+
+    [Fact]
+    public async Task InternalDistribution_FiltersEachEmailAndReusesResolvedIdentities()
+    {
+        var handler = new SequenceHandler(InternalAccessBuild(), InternalAccessGroup(),
+            new(HttpStatusCode.OK, """{"data":[{"id":"team","type":"betaTesters","attributes":{"email":"team@example.test"}}]}"""),
+            new(HttpStatusCode.NoContent, ""),
+            new(HttpStatusCode.OK, """{"data":[{"id":"other","type":"betaTesters","attributes":{"email":"other@example.test"}}]}"""),
+            new(HttpStatusCode.NoContent, ""), new(HttpStatusCode.NoContent, ""));
+        using var http = new HttpClient(handler);
+        using var client = new AppStoreConnectClient(CreateCredential(), http);
+        var request = InternalAccessRequest();
+        request.Testers = new[] { new AppStoreConnectBetaTesterSpec { Email = "team@example.test" },
+            new AppStoreConnectBetaTesterSpec { Email = "other@example.test" }, new AppStoreConnectBetaTesterSpec { Email = "TEAM@example.test" } };
+        var result = await new AppStoreConnectTestFlightDistributionService(client).DistributeAsync(request);
+        Assert.Equal(new[] { "team", "other", "team" }, result.Testers.Select(t => t.Id));
+        var lookups = handler.RequestUris.Where(uri => uri.AbsolutePath == "/v1/betaTesters").ToArray();
+        Assert.Equal(2, lookups.Length);
+        Assert.All(lookups, uri =>
+        {
+            Assert.Contains("filter%5Bapps%5D=app-1", uri.Query, StringComparison.Ordinal);
+            Assert.Contains("filter%5Bemail%5D=", uri.Query, StringComparison.Ordinal);
+        });
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ExternalDistribution_ReusesTheGlobalTesterForAnExistingPerson(bool createMissing)
+    {
+        var handler = new SequenceHandler(InternalAccessBuild(),
+            new(HttpStatusCode.OK, """{"data":[{"id":"external-1","type":"betaGroups","attributes":{"isInternalGroup":false}}]}"""),
+            new(HttpStatusCode.OK, """{"data":[{"id":"build-1","type":"builds"}]}"""),
+            new(HttpStatusCode.OK, """{"data":[{"id":"existing-person","type":"betaTesters","attributes":{"email":"team@example.test"}}]}"""),
+            new(HttpStatusCode.NoContent, ""));
+        using var http = new HttpClient(handler);
+        using var client = new AppStoreConnectClient(CreateCredential(), http);
+        var request = InternalAccessRequest();
+        request.BetaGroupIds = new[] { "external-1" };
+        request.TestFlightPolicy = AppleTestFlightPolicy.External;
+        request.CreateMissingTesters = createMissing;
+        var result = await new AppStoreConnectTestFlightDistributionService(client).DistributeAsync(request);
+        Assert.Equal("existing-person", Assert.Single(result.Testers).Id);
+        Assert.Equal("/v1/betaTesters", handler.RequestUris[3].AbsolutePath);
+        Assert.DoesNotContain("filter%5Bapps%5D", handler.RequestUris[3].Query, StringComparison.Ordinal);
+        Assert.Contains("filter%5Bemail%5D=team%40example.test", handler.RequestUris[3].Query, StringComparison.Ordinal);
+        Assert.Equal("/v1/betaGroups/external-1/relationships/betaTesters", handler.RequestUris[4].AbsolutePath);
+        Assert.Single(handler.Methods, method => method == HttpMethod.Post);
     }
 
     [Fact]

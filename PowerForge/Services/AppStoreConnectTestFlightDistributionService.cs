@@ -71,9 +71,10 @@ public sealed class AppStoreConnectTestFlightDistributionService
         }
 
         var testers = new List<AppStoreConnectBetaTesterInfo>();
+        var resolvedTesters = new Dictionary<string, AppStoreConnectBetaTesterInfo>(StringComparer.OrdinalIgnoreCase);
         foreach (var testerSpec in request.Testers ?? Array.Empty<AppStoreConnectBetaTesterSpec>())
         {
-            var resolution = await ResolveTesterAsync(request.AppId, testerSpec, request.CreateMissingTesters, groups, cancellationToken).ConfigureAwait(false);
+            var resolution = await ResolveTesterAsync(request.AppId, testerSpec, request.CreateMissingTesters, groups, resolvedTesters, cancellationToken).ConfigureAwait(false);
             testers.Add(resolution.Tester);
             foreach (var group in resolution.TargetGroups)
                 await _client.AddBetaTestersToBetaGroupAsync(group.Id, new[] { resolution.Tester.Id }, cancellationToken).ConfigureAwait(false);
@@ -165,23 +166,31 @@ public sealed class AppStoreConnectTestFlightDistributionService
         AppStoreConnectBetaTesterSpec testerSpec,
         bool createMissing,
         AppStoreConnectBetaGroupInfo[] groups,
+        Dictionary<string, AppStoreConnectBetaTesterInfo> resolvedTesters,
         CancellationToken cancellationToken)
     {
         if (testerSpec is null || string.IsNullOrWhiteSpace(testerSpec.Email))
             throw new ArgumentException("Every tester requires Email.", nameof(testerSpec));
 
         var email = testerSpec.Email.Trim();
-        var matches = (await _client.GetBetaTestersForAppAsync(appId, cancellationToken: cancellationToken).ConfigureAwait(false))
+        if (resolvedTesters.TryGetValue(email, out var resolved)) return (resolved, groups);
+        var internalAudience = groups.Any(static group => group.IsInternalGroup == true);
+        var matches = (internalAudience
+                ? await _client.GetBetaTestersForAppAsync(appId, email, cancellationToken: cancellationToken).ConfigureAwait(false)
+                : await _client.GetBetaTestersAsync(email, limit: 10, cancellationToken).ConfigureAwait(false))
             .Where(tester => string.Equals(tester.Email, email, StringComparison.OrdinalIgnoreCase)).ToArray();
-        if (matches.Length > 1)
+        if (internalAudience && matches.Length > 1)
             throw new InvalidOperationException($"Multiple tester identities matched '{email}' in app '{appId}'; resolve the ambiguity before assigning testers.");
-        var existing = matches.SingleOrDefault();
+        var existing = matches.FirstOrDefault();
         if (existing is not null)
+        {
+            resolvedTesters[email] = existing;
             return (existing, groups);
+        }
         if (!createMissing)
             throw new InvalidOperationException($"Beta tester '{testerSpec.Email}' was not found and CreateMissingTesters is false.");
 
-        if (groups.Any(static group => group.IsInternalGroup == true))
+        if (internalAudience)
         {
             // Register only the app's tester record for an already-authorized team user, never an App Store Connect account.
             var users = (await _client.GetUsersAsync(email, cancellationToken: cancellationToken).ConfigureAwait(false))
@@ -201,6 +210,7 @@ public sealed class AppStoreConnectTestFlightDistributionService
             testerSpec.LastName,
             groups.Select(static group => group.Id).ToArray(),
             cancellationToken).ConfigureAwait(false);
+        resolvedTesters[email] = created;
         return (created, groups);
     }
 

@@ -9,10 +9,12 @@ internal sealed partial class PowerForgeReleaseService
         (AppStoreConnectVersionMetadataSpec Spec, string ConfigPath)[] metadata,
         (AppStoreConnectScreenshotSyncSpec Spec, string ConfigPath)[] screenshots)
     {
+        var localizedMetadata = metadata.Where(static value => value.Spec.Metadata is not null &&
+            AppStoreConnectClient.GetSuppliedLocalizationFields(value.Spec.Metadata).Length > 0).ToArray();
         return new AppStoreConnectReleaseReadinessRequest
         {
-            Locale = screenshots.FirstOrDefault().Spec?.Locale ?? metadata.FirstOrDefault().Spec?.Locale ?? "en-US",
-            MetadataLocales = AppStoreConnectReleaseReadinessService.NormalizeMetadataLocales(metadata.Select(static value => value.Spec.Locale)),
+            Locale = screenshots.FirstOrDefault().Spec?.Locale ?? localizedMetadata.FirstOrDefault().Spec?.Locale ?? "en-US",
+            MetadataLocales = AppStoreConnectReleaseReadinessService.NormalizeMetadataLocales(localizedMetadata.Select(static value => value.Spec.Locale)),
             ScreenshotSpec = screenshots.Length == 1 ? screenshots[0].Spec : null,
             ScreenshotSpecs = screenshots.Length > 1
                 ? screenshots.Select(static value => value.Spec).ToArray()

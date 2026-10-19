@@ -34,7 +34,7 @@ public sealed partial class AppStoreConnectClientTests
         Assert.Equal("Old", result.MetadataResults[0].Before!.Description);
         Assert.True(result.MetadataResults[1].CreatedLocalization);
         Assert.Null(result.MetadataResults[1].Before);
-        Assert.Equal("Polski", result.MetadataResults[1].After.Description);
+        Assert.Equal("Polski", result.MetadataResults[1].After!.Description);
         Assert.All(result.MetadataResults, value => Assert.Equal("version-2", value.Version.Id));
         Assert.Equal(HttpMethod.Patch, handler.Methods[2]);
         Assert.Equal(HttpMethod.Post, handler.Methods[4]);

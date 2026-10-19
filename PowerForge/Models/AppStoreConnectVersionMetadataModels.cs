@@ -78,8 +78,8 @@ public sealed class AppStoreConnectVersionMetadataSyncResult
     /// <summary>Whether this sync created a previously missing localization.</summary>
     public bool CreatedLocalization { get; set; }
 
-    /// <summary>Localization after the metadata update.</summary>
-    public AppStoreConnectVersionLocalizationInfo After { get; set; } = new();
+    /// <summary>Localization after the metadata update; null for copyright-only synchronization.</summary>
+    public AppStoreConnectVersionLocalizationInfo? After { get; set; }
 
     /// <summary>Updated field names.</summary>
     public string[] UpdatedFields { get; set; } = Array.Empty<string>();

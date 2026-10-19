@@ -77,7 +77,7 @@ public sealed partial class AppStoreConnectClientTests
             Assert.Equal(!missingLocale, result.Readiness!.IsReady);
             Assert.Contains(result.Readiness.Checks, check => check.Name == "pl.localization" && check.Passed == !missingLocale);
             Assert.Equal("pl", Assert.Single(result.Readiness.ScreenshotSets).Locale);
-            Assert.Equal("en-US", Assert.Single(result.MetadataResults).After.Locale);
+            Assert.Equal("en-US", Assert.Single(result.MetadataResults).After!.Locale);
             Assert.Equal("en-US", mapping.Spec.Locale);
         }
         finally { root.Delete(true); }

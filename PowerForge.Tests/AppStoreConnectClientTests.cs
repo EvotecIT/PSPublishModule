@@ -1812,7 +1812,7 @@ public sealed partial class AppStoreConnectClientTests
         Assert.Contains("filter%5Bapp%5D=app-1", handler.RequestUris[1].Query, StringComparison.Ordinal);
         Assert.Contains("filter%5Bname%5D=Internal", handler.RequestUris[1].Query, StringComparison.Ordinal);
         Assert.Equal("https://api.appstoreconnect.apple.com/v1/betaGroups/group-1/relationships/builds", handler.RequestUris[3].ToString());
-        Assert.Equal("https://api.appstoreconnect.apple.com/v1/apps/app-1/betaTesters?limit=200", handler.RequestUris[4].ToString());
+        Assert.Equal("https://api.appstoreconnect.apple.com/v1/betaTesters?limit=10&filter%5Bemail%5D=tester%40example.test", handler.RequestUris[4].ToString());
         Assert.Equal("https://api.appstoreconnect.apple.com/v1/betaTesters", handler.RequestUris[5].ToString());
         Assert.Equal("https://api.appstoreconnect.apple.com/v1/betaGroups/group-1/relationships/betaTesters", handler.RequestUris[6].ToString());
     }

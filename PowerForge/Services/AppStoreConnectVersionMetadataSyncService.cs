@@ -33,17 +33,20 @@ public sealed class AppStoreConnectVersionMetadataSyncService
                     ? "Spec.UseReleaseVersion must be resolved by the unified Apple release workflow before metadata sync."
                     : "Spec.VersionString or Spec.VersionId is required.",
                 nameof(request));
-        if (string.IsNullOrWhiteSpace(spec.Locale))
+        var fields = spec.Metadata is null ? Array.Empty<string>() : AppStoreConnectClient.GetSuppliedLocalizationFields(spec.Metadata);
+        if (fields.Length > 0 && string.IsNullOrWhiteSpace(spec.Locale))
             throw new ArgumentException("Spec.Locale is required.", nameof(request));
 
-        if (spec.Metadata is null || AppStoreConnectClient.GetSuppliedLocalizationFields(spec.Metadata).Length == 0)
-            throw new ArgumentException("Spec.Metadata must supply at least one metadata field.", nameof(request));
+        if (fields.Length == 0 && spec.Copyright is null)
+            throw new ArgumentException("Supply copyright or at least one localized metadata field.", nameof(request));
         if (spec.Copyright is not null && string.IsNullOrWhiteSpace(spec.Copyright))
             throw new ArgumentException("Spec.Copyright must not be empty when supplied.", nameof(request));
 
         var version = await ResolveVersionAsync(spec, cancellationToken).ConfigureAwait(false);
         if (spec.Copyright is not null)
             version = await _client.SetVersionCopyrightAsync(version.Id, spec.Copyright, cancellationToken).ConfigureAwait(false);
+        if (fields.Length == 0)
+            return new AppStoreConnectVersionMetadataSyncResult { Version = version, UpdatedFields = new[] { "copyright" } };
         var localization = (await _client.GetVersionLocalizationsAsync(
             version.Id,
             spec.Locale,
@@ -51,8 +54,8 @@ public sealed class AppStoreConnectVersionMetadataSyncService
             cancellationToken).ConfigureAwait(false)).FirstOrDefault();
 
         var updated = localization is null
-            ? await _client.CreateVersionLocalizationAsync(version.Id, spec.Locale, spec.Metadata, cancellationToken).ConfigureAwait(false)
-            : await _client.UpdateVersionLocalizationAsync(localization.Id, spec.Metadata, cancellationToken).ConfigureAwait(false);
+            ? await _client.CreateVersionLocalizationAsync(version.Id, spec.Locale, spec.Metadata!, cancellationToken).ConfigureAwait(false)
+            : await _client.UpdateVersionLocalizationAsync(localization.Id, spec.Metadata!, cancellationToken).ConfigureAwait(false);
 
         return new AppStoreConnectVersionMetadataSyncResult
         {
@@ -61,8 +64,8 @@ public sealed class AppStoreConnectVersionMetadataSyncService
             CreatedLocalization = localization is null,
             After = updated,
             UpdatedFields = spec.Copyright is null
-                ? AppStoreConnectClient.GetSuppliedLocalizationFields(spec.Metadata)
-                : AppStoreConnectClient.GetSuppliedLocalizationFields(spec.Metadata).Concat(new[] { "copyright" }).ToArray()
+                ? fields
+                : fields.Concat(new[] { "copyright" }).ToArray()
         };
     }
 
