@@ -640,9 +640,11 @@ public sealed class DotNetRepositoryReleaseServiceTests
             Assert.All(msbuildTasks, msbuild =>
             {
                 Assert.Equal("@(PackProject)", msbuild.Attribute("Projects")?.Value);
-                Assert.Equal("true", msbuild.Attribute("BuildInParallel")?.Value);
                 Assert.Equal("true", msbuild.Attribute("StopOnFirstFailure")?.Value);
             });
+            Assert.Equal("false", msbuildTasks[0].Attribute("BuildInParallel")?.Value);
+            Assert.All(msbuildTasks.Skip(1), msbuild =>
+                Assert.Equal("true", msbuild.Attribute("BuildInParallel")?.Value));
             Assert.Equal("Restore", msbuildTasks[0].Attribute("Targets")?.Value);
             Assert.Equal(expectedBuildTarget, msbuildTasks[1].Attribute("Targets")?.Value);
             Assert.Equal("Pack", msbuildTasks[2].Attribute("Targets")?.Value);
