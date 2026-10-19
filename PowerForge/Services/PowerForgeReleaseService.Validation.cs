@@ -204,6 +204,7 @@ internal sealed partial class PowerForgeReleaseService
                 result.DotNetToolPlan,
                 result.DotNetTools,
                 resolvedVersion,
+                ResolveBuiltToolSourceCommit(result),
                 request.CancellationToken);
         }
         else if (result.Tools is not null)
@@ -212,6 +213,7 @@ internal sealed partial class PowerForgeReleaseService
                 spec,
                 configurationDirectory,
                 result.Tools,
+                result.ToolSourceCommitSha,
                 request.CancellationToken);
         }
 

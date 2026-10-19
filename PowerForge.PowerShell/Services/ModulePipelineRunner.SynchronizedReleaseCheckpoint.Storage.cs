@@ -208,6 +208,7 @@ public sealed partial class ModulePipelineRunner
                            SetsEqual(previous.OperationFingerprints, candidate.OperationFingerprints) &&
                            SetsEqual(previous.PlannedLanes, candidate.PlannedLanes);
         if (!sameIdentity ||
+            !CanAdvanceSynchronizedReleaseSourceCommits(previous, candidate) ||
             !CanAdvanceSynchronizedReleaseVersion(previous.Version, candidate.Version) ||
             !CanAdvanceSynchronizedReleaseFingerprint(
                 previous.SourceFingerprint,
@@ -438,6 +439,9 @@ public sealed partial class ModulePipelineRunner
         public string[] SourceComponents { get; set; } = Array.Empty<string>();
         public string PayloadFingerprint { get; set; } = string.Empty;
         public string[] PayloadComponents { get; set; } = Array.Empty<string>();
+        public bool CapturedSourceCommits { get; set; }
+        public string? SourceCommitSha { get; set; }
+        public Dictionary<string, string?> PackageSourceCommitShas { get; set; } = new(StringComparer.OrdinalIgnoreCase);
         public string[] PlannedLanes { get; set; } = Array.Empty<string>();
         public string[] AttemptedLanes { get; set; } = Array.Empty<string>();
         public SynchronizedReleaseLaneCheckpoint[] Lanes { get; set; } = Array.Empty<SynchronizedReleaseLaneCheckpoint>();

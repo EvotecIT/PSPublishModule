@@ -14,7 +14,7 @@ public sealed partial class PowerForgeReleaseServiceTests
             string buildScript = Path.Combine(root, "Build-Module.ps1");
             string releaseConfig = Path.Combine(root, "release.json");
             string scriptOutput = Path.Combine(root, "ScriptOutput");
-            Directory.CreateDirectory(Path.Combine(root, ".git"));
+            RunSnapshotGit(root, "init", "--quiet");
             File.WriteAllText(buildScript, "# module build");
             File.WriteAllText(releaseConfig, "{}");
             var service = new PowerForgeReleaseService(

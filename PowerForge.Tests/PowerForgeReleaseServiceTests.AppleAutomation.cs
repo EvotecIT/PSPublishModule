@@ -551,7 +551,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                   "versionString": "1.2.0",
                   "platform": "iOS",
                   "locale": "en-US",
-                  "metadata": {}
+                  "metadata": { "description": "Test app description" }
                 }
                 """);
             WriteScreenshotConfig(root, "screenshots.json", "6778025328", "1.2.0", "iOS", ".", qualityEnabled: false);

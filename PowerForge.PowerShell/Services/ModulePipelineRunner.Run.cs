@@ -51,6 +51,11 @@ public sealed partial class ModulePipelineRunner
 
         try
         {
+            // Existing staging may contain an earlier or mixed payload. Its owning
+            // compilation or release checkpoint restores commit context when recorded.
+            plan.SourceCommitSha = plan.BuildSpec.ReuseStaging
+                ? null
+                : ReleaseSourceCommit.Capture(plan.ProjectRoot);
             if (plan.RequireReleaseSourceUnchanged)
                 ValidateReleaseSourceUnchanged(plan, generatedOutputPaths: null, trackedGeneratedOutputPaths: null);
             ExecutePreparationAndBuildPhases(plan, session, manifestRequiredModules, manifestExternalModuleDependencies, pipeline, state);

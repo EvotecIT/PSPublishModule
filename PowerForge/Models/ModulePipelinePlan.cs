@@ -29,6 +29,12 @@ public sealed class ModulePipelinePlan
     public string ProjectRoot { get; }
 
     /// <summary>
+    /// Git commit captured before build execution, when the source is a Git checkout.
+    /// This is source context; working-tree changes and build-owned version updates may also be included.
+    /// </summary>
+    public string? SourceCommitSha { get; internal set; }
+
+    /// <summary>
     /// Version input provided by configuration (can be an X-pattern like <c>2.0.X</c>).
     /// </summary>
     public string ExpectedVersion { get; }

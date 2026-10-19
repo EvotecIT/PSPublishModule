@@ -13,6 +13,12 @@ public sealed class DotNetRepositoryReleaseResult
     /// <summary>Whether this result describes a preview rather than executed operations.</summary>
     public bool IsPlan { get; set; }
 
+    /// <summary>
+    /// Full Git commit captured before build and version updates, or null for non-Git input.
+    /// Describes source context; it does not attest that the working tree was clean.
+    /// </summary>
+    public string? SourceCommitSha { get; set; }
+
     /// <summary>Whether publish ordering must be validated from artifacts during execution.</summary>
     public bool PublishOrderDeferred { get; set; }
 

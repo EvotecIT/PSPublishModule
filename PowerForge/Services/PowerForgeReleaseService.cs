@@ -582,6 +582,9 @@ internal sealed partial class PowerForgeReleaseService
 
             if (!request.PlanOnly && !request.ValidateOnly)
             {
+                result.ModuleSourceCommitSha = ReleaseSourceCommit.Capture(
+                    module.ConfigurationContext?.ProjectRoot ?? module.Request.RepositoryRoot,
+                    request.CancellationToken);
                 var releaseCheckpointBuild =
                     deferModulePublishing ||
                     (module.Request.RunMode == ConfigurationGateMode.Build && module.Plan.IncludesProjectPackages);
@@ -774,6 +777,8 @@ internal sealed partial class PowerForgeReleaseService
 
                     if (!request.PlanOnly && !request.ValidateOnly)
                     {
+                        result.ToolSourceCommitSha = CaptureToolSourceCommit(
+                            dotNetPlan.ProjectRoot, request.CancellationToken);
                         request.CancellationToken.ThrowIfCancellationRequested();
                         var toolProgress = request.Progress is IPowerForgeReleaseProgressReporterV2 detailedProgress
                             ? new DotNetPublishReleaseProgressAdapter(detailedProgress, dotNetPlan)
@@ -816,6 +821,7 @@ internal sealed partial class PowerForgeReleaseService
                     if (!request.PlanOnly && !request.ValidateOnly)
                     {
                         request.CancellationToken.ThrowIfCancellationRequested();
+                        result.ToolSourceCommitSha = CaptureToolSourceCommit(toolPlan.ProjectRoot, request.CancellationToken);
                         var tools = _runTools(
                             toolPlan,
                             request.Progress as IPowerForgeReleaseProgressReporterV2,
@@ -1339,6 +1345,7 @@ internal sealed partial class PowerForgeReleaseService
                     builtResult.DotNetToolPlan,
                     builtResult.DotNetTools,
                     sharedReleaseVersion,
+                    ResolveBuiltToolSourceCommit(builtResult),
                     request.CancellationToken);
             }
             else if (builtResult.Tools is not null)
@@ -1347,6 +1354,7 @@ internal sealed partial class PowerForgeReleaseService
                     spec,
                     configDirectory,
                     builtResult.Tools,
+                    builtResult.ToolSourceCommitSha,
                     request.CancellationToken);
             }
 
@@ -4067,6 +4075,7 @@ internal sealed partial class PowerForgeReleaseService
         {
             if (string.Equals(gitHub.Commitish, "HEAD", StringComparison.Ordinal))
                 throw new InvalidOperationException("GitHub.Commitish HEAD requires a verified DotNet publish source checkout before publishing.");
+            var commitish = ResolveBuiltReleaseCommitish(gitHub, result);
             var publishResult = _publishGitHubRelease(
                 new GitHubReleasePublishRequest
                 {
@@ -4075,8 +4084,8 @@ internal sealed partial class PowerForgeReleaseService
                     Token = resolved.Token!,
                     TagName = tagName,
                     ReleaseName = releaseName,
-                    Commitish = gitHub.Commitish,
-                    ExpectedTagCommitSha = gitHub.Commitish,
+                    Commitish = commitish,
+                    ExpectedTagCommitSha = GitObjectId.IsFull(commitish) ? commitish : null,
                     GenerateReleaseNotes = gitHub.GenerateReleaseNotes,
                     IsDraft = gitHub.IsDraft,
                     IsPreRelease = gitHub.IsPreRelease,
@@ -4136,6 +4145,7 @@ internal sealed partial class PowerForgeReleaseService
         PowerForgeReleaseSpec spec,
         string configDirectory,
         PowerForgeToolReleaseResult result,
+        string? sourceCommit,
         CancellationToken cancellationToken)
     {
         var gitHub = spec.Tools?.GitHub ?? new PowerForgeToolReleaseGitHubOptions();
@@ -4189,6 +4199,7 @@ internal sealed partial class PowerForgeReleaseService
                 group.Key.Target,
                 group.Key.Version,
                 assets,
+                ResolveToolReleaseCommitish(spec, sourceCommit),
                 cancellationToken));
         }
 
@@ -4201,6 +4212,7 @@ internal sealed partial class PowerForgeReleaseService
         DotNetPublishPlan plan,
         DotNetPublishResult result,
         string? sharedReleaseVersion,
+        string? sourceCommit,
         CancellationToken cancellationToken)
     {
         var gitHub = spec.Tools?.GitHub ?? new PowerForgeToolReleaseGitHubOptions();
@@ -4293,6 +4305,7 @@ internal sealed partial class PowerForgeReleaseService
                 target.Name,
                 version!,
                 releaseAssets,
+                ResolveToolReleaseCommitish(spec, sourceCommit),
                 cancellationToken));
         }
 
@@ -4307,6 +4320,7 @@ internal sealed partial class PowerForgeReleaseService
         string target,
         string version,
         string[] assets,
+        string? commitish,
         CancellationToken cancellationToken)
     {
         var tagTemplate = string.IsNullOrWhiteSpace(gitHub.TagTemplate)
@@ -4329,6 +4343,8 @@ internal sealed partial class PowerForgeReleaseService
                     Token = token,
                     TagName = tagName,
                     ReleaseName = releaseName,
+                    Commitish = commitish,
+                    ExpectedTagCommitSha = GitObjectId.IsFull(commitish) ? commitish : null,
                     GenerateReleaseNotes = gitHub.GenerateReleaseNotes,
                     IsPreRelease = gitHub.IsPreRelease,
                     ReuseExistingReleaseOnConflict = true,

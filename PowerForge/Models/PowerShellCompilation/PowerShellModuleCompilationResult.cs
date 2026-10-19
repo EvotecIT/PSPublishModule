@@ -9,6 +9,13 @@ public sealed class PowerShellModuleCompilationResult
     /// <summary>Target framework used for the generated assembly.</summary>
     public string TargetFramework { get; set; } = string.Empty;
 
+    /// <summary>
+    /// Source commit captured for the build that produced the compiled staging payload.
+    /// Null means that no commit context was recorded, including legacy checkpoints.
+    /// Working-tree changes may also be included in the compiled payload.
+    /// </summary>
+    public string? SourceCommitSha { get; internal set; }
+
     /// <summary>Number of authored executable units analyzed by the canonical compiler.</summary>
     public int AnalyzedUnits { get; set; }
 

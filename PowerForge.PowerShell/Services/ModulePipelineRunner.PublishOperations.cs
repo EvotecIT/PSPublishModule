@@ -17,6 +17,7 @@ public sealed partial class ModulePipelineRunner
         }
 
         var publishBuildResult = BindSynchronizedReleasePayload(plan, buildResult, state);
+        ValidateSelectedModuleReleaseProvenanceSourceContext(plan, state);
         var publishOrder = ResolvePublishOrder(plan);
         var packageNuGetPublished = false;
         var packageGitHubPublished = false;

@@ -319,6 +319,9 @@ internal sealed class PowerForgeReleaseResult
 
     public ModuleBuildHostExecutionResult? Module { get; set; }
 
+    /// <summary>Module build checkout commit retained for unified GitHub publication without clean-source attestation.</summary>
+    public string? ModuleSourceCommitSha { get; set; }
+
     public ModuleBuildHostExecutionResult? ModulePublication { get; set; }
 
     public string[] ModuleAssets { get; set; } = Array.Empty<string>();
@@ -343,6 +346,9 @@ internal sealed class PowerForgeReleaseResult
 
     /// <summary>Exact source commit bound to the built DotNet release and retained across publish checkpoints.</summary>
     public string? DotNetSourceCommitSha { get; set; }
+
+    /// <summary>Tool build checkout commit retained for later per-target GitHub publication, without requiring clean-source attestation.</summary>
+    public string? ToolSourceCommitSha { get; set; }
 
     public PowerForgeAppleReleasePlan? AppleAppPlan { get; set; }
 

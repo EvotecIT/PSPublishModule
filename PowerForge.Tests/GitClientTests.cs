@@ -148,6 +148,33 @@ public sealed class GitClientTests
         }
     }
 
+    [Fact]
+    [Trait("Category", "DotNetPublishPrGate")]
+    public async Task IsolatedPathClient_PreservesPortableGitResolutionWithoutInheritedGitOverrides()
+    {
+        ProcessRunRequest? captured = null;
+        var runner = new StubProcessRunner(request =>
+        {
+            captured = request;
+            return new ProcessRunResult(0, string.Empty, string.Empty, request.FileName, TimeSpan.Zero, timedOut: false);
+        });
+
+        await GitClient.CreateIsolatedPathClient(runner).RunRawAsync(
+            Directory.GetCurrentDirectory(), ["rev-parse", "--verify", "HEAD^{commit}"]);
+
+        Assert.NotNull(captured);
+        Assert.Equal("git", captured!.FileName);
+        Assert.False(captured.InheritEnvironment);
+        Assert.Equal(Environment.GetEnvironmentVariable("PATH"), captured.EnvironmentVariables!["PATH"]);
+        Assert.False(captured.EnvironmentVariables.ContainsKey("GIT_DIR"));
+        Assert.False(captured.EnvironmentVariables.ContainsKey("GIT_WORK_TREE"));
+        Assert.False(captured.EnvironmentVariables.ContainsKey("GIT_CONFIG_PARAMETERS"));
+        Assert.False(captured.EnvironmentVariables.ContainsKey("GIT_CONFIG_NOSYSTEM"));
+        Assert.False(captured.EnvironmentVariables.ContainsKey("GIT_CONFIG_GLOBAL"));
+        Assert.Equal("0", captured.EnvironmentVariables["GIT_TERMINAL_PROMPT"]);
+        Assert.Equal("core.hooksPath", captured.EnvironmentVariables["GIT_CONFIG_KEY_0"]);
+    }
+
     private sealed class StubProcessRunner : IProcessRunner
     {
         private readonly Func<ProcessRunRequest, ProcessRunResult> _execute;
@@ -159,5 +186,63 @@ public sealed class GitClientTests
 
         public Task<ProcessRunResult> RunAsync(ProcessRunRequest request, CancellationToken cancellationToken = default)
             => Task.FromResult(_execute(request));
+    }
+
+    [Fact]
+    [Trait("Category", "DotNetPublishPrGate")]
+    public async Task IsolatedPathClient_RespectsProtectedCheckoutTrustWithoutChangingExactAttestation()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "pf-protected-git-" + Guid.NewGuid().ToString("N"))).FullName;
+        var checkout = Directory.CreateDirectory(Path.Combine(root, "checkout")).FullName;
+        var home = Directory.CreateDirectory(Path.Combine(root, "home")).FullName;
+        File.WriteAllText(Path.Combine(home, "system.gitconfig"), string.Empty);
+        try
+        {
+            var setup = GitClient.CreateIsolatedPathClient();
+            Assert.True((await setup.RunRawAsync(checkout, ["init", "--quiet"])).Succeeded);
+            Assert.True((await setup.RunRawAsync(checkout,
+                ["-c", "user.name=Release test", "-c", "user.email=release@example.test",
+                 "-c", "commit.gpgsign=false", "-c", "core.hooksPath=" + (OperatingSystem.IsWindows() ? "NUL" : "/dev/null"),
+                 "commit", "--allow-empty", "--quiet", "-m", "source"])).Succeeded);
+            var expected = await setup.RunRawAsync(checkout, ["rev-parse", "HEAD"]);
+            var runner = new ProtectedCheckoutRunner(home);
+            var ordinary = GitClient.CreateIsolatedPathClient(runner);
+
+            // Git's own ownership test switch avoids changing filesystem ownership
+            // or any user configuration. Only this child process sees the switch.
+            var untrusted = await ordinary.RunRawAsync(checkout, ["rev-parse", "HEAD"]);
+            Assert.False(untrusted.Succeeded);
+            Assert.Contains("dubious ownership", untrusted.StdErr, StringComparison.OrdinalIgnoreCase);
+            File.WriteAllText(Path.Combine(home, ".gitconfig"),
+                "[safe]\n\tdirectory = \"" + checkout.Replace('\\', '/').Replace("\"", "\\\"") + "\"\n");
+
+            var trusted = await ordinary.RunRawAsync(checkout, ["rev-parse", "HEAD"]);
+            Assert.True(trusted.Succeeded, trusted.StdErr);
+            Assert.Equal(expected.StdOut, trusted.StdOut);
+            var exact = await GitClient.CreateTrustedSystemClient(runner).RunRawAsync(checkout, ["rev-parse", "HEAD"]);
+            Assert.False(exact.Succeeded);
+            Assert.Contains("dubious ownership", exact.StdErr, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            foreach (var file in Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories))
+                File.SetAttributes(file, File.GetAttributes(file) & ~FileAttributes.ReadOnly);
+            Directory.Delete(root, true);
+        }
+    }
+
+    private sealed class ProtectedCheckoutRunner(string home) : IProcessRunner
+    {
+        public Task<ProcessRunResult> RunAsync(ProcessRunRequest request, CancellationToken cancellationToken = default)
+        {
+            var environment = request.EnvironmentVariables!.ToDictionary(pair => pair.Key, pair => pair.Value);
+            environment["HOME"] = home;
+            environment["XDG_CONFIG_HOME"] = Path.Combine(home, ".config");
+            environment["GIT_CONFIG_SYSTEM"] = Path.Combine(home, "system.gitconfig");
+            environment["GIT_TEST_ASSUME_DIFFERENT_OWNER"] = "1";
+            return new ProcessRunner().RunAsync(new ProcessRunRequest(
+                request.FileName, request.WorkingDirectory, request.Arguments, request.Timeout,
+                environment, request.CaptureOutput, request.CaptureError, inheritEnvironment: false), cancellationToken);
+        }
     }
 }

@@ -43,13 +43,27 @@ public sealed class GitClient
     internal static GitClient CreateTrustedSystemClient(
         IProcessRunner? processRunner = null,
         TimeSpan? defaultTimeout = null)
+        => CreateIsolatedClient(ResolveTrustedSystemExecutable(), processRunner, defaultTimeout, includePath: false);
+
+    /// <summary>
+    /// Uses ordinary PATH executable resolution with isolated non-interactive Git settings.
+    /// Unlike exact-source attestation, ordinary builds support per-user and portable Git.
+    /// </summary>
+    internal static GitClient CreateIsolatedPathClient(
+        IProcessRunner? processRunner = null,
+        TimeSpan? defaultTimeout = null)
+        => CreateIsolatedClient("git", processRunner, defaultTimeout, includePath: true, allowProtectedConfiguration: true);
+
+    private static GitClient CreateIsolatedClient(
+        string executable,
+        IProcessRunner? processRunner,
+        TimeSpan? defaultTimeout,
+        bool includePath,
+        bool allowProtectedConfiguration = false)
     {
-        var executable = ResolveTrustedSystemExecutable();
         const string nullDevice = "/dev/null";
         var environment = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
         {
-            ["GIT_CONFIG_NOSYSTEM"] = "1",
-            ["GIT_CONFIG_GLOBAL"] = nullDevice,
             ["GIT_TERMINAL_PROMPT"] = "0",
             ["GIT_NO_REPLACE_OBJECTS"] = "1",
             ["GCM_INTERACTIVE"] = "Never",
@@ -66,6 +80,23 @@ public sealed class GitClient
             ["LC_ALL"] = "C",
             ["LANG"] = "C"
         };
+        if (!allowProtectedConfiguration)
+        {
+            environment["GIT_CONFIG_NOSYSTEM"] = "1";
+            environment["GIT_CONFIG_GLOBAL"] = nullDevice;
+        }
+        else
+        {
+            // Ordinary builds retain configured checkout trust without accepting
+            // inherited GIT_DIR, GIT_WORK_TREE or command-config overrides.
+            environment["HOME"] = Environment.GetEnvironmentVariable("HOME")
+                ?? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            var configHome = Environment.GetEnvironmentVariable("XDG_CONFIG_HOME");
+            if (!string.IsNullOrWhiteSpace(configHome))
+                environment["XDG_CONFIG_HOME"] = configHome;
+        }
+        if (includePath)
+            environment["PATH"] = Environment.GetEnvironmentVariable("PATH");
         if (Path.DirectorySeparatorChar == '\\')
             environment["SystemRoot"] = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
         var sshAuthSocket = Environment.GetEnvironmentVariable("SSH_AUTH_SOCK");

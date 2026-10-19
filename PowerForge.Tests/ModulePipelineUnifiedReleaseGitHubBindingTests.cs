@@ -74,8 +74,11 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
         }
     }
 
-    [Fact]
-    public void Run_ReusesPackageCreatedGitHubReleaseByExactIdAfterResume()
+    [Theory]
+    [Trait("Category", "DotNetPublishPrGate")]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Run_ReusesPackageCreatedGitHubReleaseByExactIdAfterResume(bool legacyCheckpoint)
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
         var firstStagingPath = Path.Combine(Path.GetTempPath(), "PowerForge.Tests.Staging", Guid.NewGuid().ToString("N"));
@@ -94,6 +97,8 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
                 publishNuGet: false,
                 publishGitHub: true);
 
+            InitializeModuleSourceGit(root.FullName);
+            var originalCommit = ReleaseSourceCommit.Capture(root.FullName);
             var packageGitHubPublishCount = 0;
             var unifiedGitHubRequests = new List<GitHubReleasePublishRequest>();
 
@@ -109,6 +114,7 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
                     Path.Combine(root.FullName, "PackageOutput", "NuGet"),
                     request,
                     configPath);
+                result.Result.Release!.SourceCommitSha = ReleaseSourceCommit.Capture(root.FullName);
                 if (request.PublishGitHub == true)
                 {
                     packageGitHubPublishCount++;
@@ -134,6 +140,9 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
                 Assert.True(request.RequireExpectedExistingRelease);
                 Assert.Equal(packageReleaseId, request.ExpectedExistingReleaseId);
                 Assert.False(request.ReplaceExistingAssets);
+                var expectedSource = legacyCheckpoint && unifiedGitHubRequests.Count > 1 ? null : originalCommit;
+                Assert.Equal(expectedSource, request.Commitish);
+                Assert.Equal(expectedSource, request.ExpectedTagCommitSha);
 
                 if (unifiedGitHubRequests.Count == 1)
                     throw new InvalidOperationException("Simulated unified GitHub interruption.");
@@ -172,6 +181,17 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
                     StringComparer.OrdinalIgnoreCase);
             }
 
+            RunModuleSourceGit(root.FullName, "commit", "--quiet", "--allow-empty", "-m", "Advance branch after interrupted publish");
+            Assert.NotEqual(originalCommit, ReleaseSourceCommit.Capture(root.FullName));
+            if (legacyCheckpoint)
+            {
+                var legacy = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(checkpointPath))!.AsObject();
+                legacy.Remove("CapturedSourceCommits");
+                legacy.Remove("SourceCommitSha");
+                legacy.Remove("PackageSourceCommitShas");
+                File.WriteAllText(checkpointPath, legacy.ToJsonString());
+            }
+
             var secondRunner = CreateRunner(
                 new FakeHostedOperations(new List<string>()),
                 ExecutePackageBuild,
@@ -183,6 +203,9 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
             Assert.Equal(1, packageGitHubPublishCount);
             Assert.Equal(2, unifiedGitHubRequests.Count);
             Assert.All(unifiedGitHubRequests, request => Assert.Equal(packageReleaseId, request.ExpectedExistingReleaseId));
+            Assert.Equal(legacyCheckpoint ? null : originalCommit, result.Plan.SourceCommitSha);
+            Assert.Equal(legacyCheckpoint ? null : originalCommit,
+                Assert.Single(result.ProjectBuildResults).Result.Release!.SourceCommitSha);
             var restoredGitHub = Assert.Single(Assert.Single(result.ProjectBuildResults).Result.GitHub);
             Assert.Equal(moduleName, restoredGitHub.ProjectName);
             Assert.Equal("EvotecIT", restoredGitHub.Owner);
@@ -193,9 +216,9 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
         }
         finally
         {
-            try { root.Delete(recursive: true); } catch { }
             try { if (Directory.Exists(firstStagingPath)) Directory.Delete(firstStagingPath, recursive: true); } catch { }
             try { if (Directory.Exists(secondStagingPath)) Directory.Delete(secondStagingPath, recursive: true); } catch { }
+            DeleteModuleSourceFixture(root);
         }
     }
 

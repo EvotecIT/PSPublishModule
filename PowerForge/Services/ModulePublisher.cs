@@ -764,21 +764,7 @@ public sealed partial class ModulePublisher
 
         _logger.Info($"Publishing GitHub release {owner}/{repo} tag '{tag}' with {assets.Length} asset(s)");
         remotePublishAttempted?.Invoke();
-        var created = _gitHub.PublishRelease(new GitHubReleasePublishRequest
-        {
-            Owner = owner,
-            Repository = repo,
-            Token = publish.ApiKey,
-            TagName = tag,
-            ReleaseName = tag,
-            GenerateReleaseNotes = publish.GenerateReleaseNotes,
-            IsDraft = false,
-            IsPreRelease = isPreRelease,
-            ReuseExistingReleaseOnConflict = publish.ReuseExistingRelease,
-            ReplaceExistingAssets = publish.ReuseExistingRelease && publish.ReplaceExistingAssets,
-            AssetFilePaths = assets,
-            Progress = gitHubProgress
-        });
+        var created = _gitHub.PublishRelease(CreateGitHubReleaseRequest(publish, plan, assets, gitHubProgress));
 
         var releaseUrl = string.IsNullOrWhiteSpace(created.HtmlUrl)
             ? $"https://github.com/{owner}/{repo}/releases/tag/{tag}"

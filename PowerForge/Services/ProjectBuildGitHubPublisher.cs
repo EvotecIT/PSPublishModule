@@ -367,6 +367,8 @@ public sealed class ProjectBuildGitHubPublisher
                 Token = request.Token,
                 TagName = tag,
                 ReleaseName = releaseName,
+                Commitish = request.Release.SourceCommitSha,
+                ExpectedTagCommitSha = request.Release.SourceCommitSha,
                 GenerateReleaseNotes = request.GenerateReleaseNotes,
                 IsPreRelease = request.IsPreRelease,
                 ReuseExistingReleaseOnConflict = reuseExistingReleaseOnConflict,

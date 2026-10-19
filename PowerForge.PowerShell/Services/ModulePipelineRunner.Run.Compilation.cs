@@ -40,6 +40,10 @@ public sealed partial class ModulePipelineRunner
         var integrated = plan.BuildSpec.ReuseStaging
             ? integrator.Restore(state.RequireBuildResult(), configuration, releaseContract, plan.Signing)
             : integrator.Compile(state.RequireBuildResult(), configuration, releaseContract);
+        if (plan.BuildSpec.ReuseStaging)
+            plan.SourceCommitSha = integrated.CompilationResult.SourceCommitSha;
+        else
+            integrated.CompilationResult.SourceCommitSha = plan.SourceCommitSha;
         state.BuildResult = integrated.BuildResult;
         state.PowerShellCompilationResult = integrated.CompilationResult;
         state.PowerShellCompilationReleaseContract = releaseContract;

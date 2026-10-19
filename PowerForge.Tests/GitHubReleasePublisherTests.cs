@@ -62,10 +62,12 @@ public sealed partial class GitHubReleasePublisherTests
     }
 
     [Theory]
-    [InlineData(true, false)]
-    [InlineData(false, false)]
-    [InlineData(true, true)]
-    public async Task PublishRelease_DraftBindsExactTargetBeforeAssetUploadWithoutTagRef(bool matchingTarget, bool preexistingWrongTag)
+    [InlineData(true, false, true)]
+    [InlineData(false, false, true)]
+    [InlineData(true, true, true)]
+    [InlineData(true, true, false)]
+    [Trait("Category", "DotNetPublishPrGate")]
+    public async Task PublishRelease_BindsExactTargetBeforeAssetMutation(bool matchingTarget, bool preexistingWrongTag, bool draft)
     {
         var listener = new HttpListener();
         var apiBaseUrl = $"http://127.0.0.1:{GetAvailablePort()}/";
@@ -87,7 +89,7 @@ public sealed partial class GitHubReleasePublisherTests
                     var path = context.Request.Url!.AbsolutePath;
                     requests.Enqueue($"{context.Request.HttpMethod} {path}");
                     await context.Request.InputStream.CopyToAsync(Stream.Null, stop.Token);
-                    var status = path.Contains("/releases/tags/", StringComparison.Ordinal) ||
+                    var status = path.Contains("/releases/tags/", StringComparison.Ordinal) && draft ||
                                  path.Contains("/git/ref/tags/", StringComparison.Ordinal) && !preexistingWrongTag ? 404 :
                         context.Request.HttpMethod == "POST" ? 201 : 200;
                     var body = path.EndsWith("/assets", StringComparison.Ordinal) ?
@@ -96,7 +98,7 @@ public sealed partial class GitHubReleasePublisherTests
                             "{\"object\":{\"sha\":\"" + new string('f', 40) + "\",\"type\":\"commit\"}}" :
                         path == "/uploads" ?
                             $"{{\"id\":99,\"name\":\"{Path.GetFileName(assetPath)}\",\"state\":\"uploaded\"}}" :
-                            $$"""{"id":42,"tag_name":"v1.2.3","target_commitish":"{{target}}","html_url":"{{apiBaseUrl}}release","upload_url":"{{apiBaseUrl}}uploads{?name,label}","draft":true} """;
+                            $$"""{"id":42,"tag_name":"v1.2.3","target_commitish":"{{target}}","html_url":"{{apiBaseUrl}}release","upload_url":"{{apiBaseUrl}}uploads{?name,label}","draft":{{draft.ToString().ToLowerInvariant()}}} """;
                     var bytes = Encoding.UTF8.GetBytes(body);
                     context.Response.StatusCode = status;
                     context.Response.ContentType = "application/json";
@@ -115,7 +117,7 @@ public sealed partial class GitHubReleasePublisherTests
             {
                 Owner = "EvotecIT", Repository = "example", Token = "token",
                 ApiBaseUrl = apiBaseUrl, TagName = "v1.2.3", Commitish = commit,
-                ExpectedTagCommitSha = commit, IsDraft = true, AssetFilePaths = [assetPath]
+                ExpectedTagCommitSha = commit, IsDraft = draft, AssetFilePaths = [assetPath]
             };
             if (matchingTarget && !preexistingWrongTag)
             {
@@ -129,7 +131,8 @@ public sealed partial class GitHubReleasePublisherTests
                     new GitHubReleasePublisher(new NullLogger()).PublishRelease(request));
                 Assert.Contains("expected commit", error.Message, StringComparison.OrdinalIgnoreCase);
                 Assert.DoesNotContain(requests, item => item == "POST /uploads");
-                if (preexistingWrongTag)
+                Assert.DoesNotContain(requests, item => item.StartsWith("DELETE ", StringComparison.Ordinal));
+                if (preexistingWrongTag && draft)
                     Assert.DoesNotContain(requests, item => item == "POST /repos/EvotecIT/example/releases");
             }
             Assert.Contains(requests, item => item.Contains("/git/ref/tags/", StringComparison.Ordinal));

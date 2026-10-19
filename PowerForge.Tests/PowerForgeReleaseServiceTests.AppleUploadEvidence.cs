@@ -12,6 +12,7 @@ public sealed partial class PowerForgeReleaseServiceTests
             var keyPath = Path.Combine(root, "AuthKey_TEST.p8");
             File.WriteAllText(keyPath, "synthetic private-key fixture");
             var spec = CreateAppleAutomationSpec(root, keyPath);
+            spec.AppleApps!.XcodeBuildExecutable = "/usr/bin/xcodebuild";
             spec.AppleApps!.Automation.MinimumFreeSpaceGB = 0;
             spec.AppleApps.Automation.CleanupBeforeArchive = false;
             spec.AppleApps.Automation.CleanupAfterProcessing = false;
