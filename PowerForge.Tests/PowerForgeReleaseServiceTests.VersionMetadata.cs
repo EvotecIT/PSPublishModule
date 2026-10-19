@@ -8,6 +8,51 @@ public sealed partial class PowerForgeReleaseServiceTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
+    public void Execute_AppleMetadata_AcceptsCopyrightOnlyWithoutInventingALocalization(bool includeLocalizedMetadata)
+    {
+        var root = CreateSandbox();
+        try
+        {
+            CreateXcodeProject(root, "Sample.xcodeproj", "1.2.0", "9");
+            var keyPath = Path.Combine(root, "AuthKey_TEST.p8");
+            File.WriteAllText(keyPath, "private-key");
+            var spec = CreateAppleAutomationSpec(root, keyPath);
+            spec.AppleApps!.Apps[0].ProjectPath = "Sample.xcodeproj";
+            spec.AppleApps.Apps[0].Scheme = "Sample";
+            spec.AppleApps.Apps[0].AppStoreConnectAppId = "1234567890";
+            spec.AppleApps.Archive = false;
+            spec.AppleApps.SyncMetadata = true;
+            spec.AppleApps.CheckReleaseReadiness = true;
+            File.WriteAllText(Path.Combine(root, "copyright.json"), JsonSerializer.Serialize(new AppStoreConnectVersionMetadataSpec
+            {
+                AppId = "1234567890", UseReleaseVersion = true, Copyright = "2022 Example", Locale = ""
+            }));
+            var paths = new List<string> { "copyright.json" };
+            if (includeLocalizedMetadata)
+            {
+                File.WriteAllText(Path.Combine(root, "en.json"), JsonSerializer.Serialize(new AppStoreConnectVersionMetadataSpec
+                {
+                    AppId = "1234567890", UseReleaseVersion = true, Locale = "en-US", Metadata = new() { Description = "Documents" }
+                }));
+                paths.Add("en.json");
+            }
+            spec.AppleApps.MetadataConfigPaths = paths.ToArray();
+            AppStoreConnectReleasePreparationRequest? captured = null;
+            var service = CreateAppleAutomationService(request => CreateReleaseState(request, "VALID"),
+                prepareAppleDistribution: request => { captured = request; return CreateSuccessfulPreparation(request); },
+                checkAppleReleaseReadiness: (_, request) => CreateReadyReleaseReadiness(request));
+            var result = service.Execute(spec, new PowerForgeReleaseRequest { ConfigPath = Path.Combine(root, "powerforge.release.json") });
+            Assert.True(result.Success, result.ErrorMessage ?? result.AppleReceipt?.ErrorMessage);
+            Assert.NotNull(captured);
+            Assert.Equal("2022 Example", captured.MetadataSpecs[0].Copyright);
+            Assert.Equal(includeLocalizedMetadata ? new[] { "en-US" } : Array.Empty<string>(), captured.ReadinessRequest!.MetadataLocales);
+        }
+        finally { TryDelete(root); }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
     public void Execute_AppleMetadata_ResolvesEveryLocaleAndRejectsDuplicates(bool duplicate)
     {
         var root = CreateSandbox();
