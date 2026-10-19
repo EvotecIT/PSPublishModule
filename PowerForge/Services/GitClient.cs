@@ -43,8 +43,23 @@ public sealed class GitClient
     internal static GitClient CreateTrustedSystemClient(
         IProcessRunner? processRunner = null,
         TimeSpan? defaultTimeout = null)
+        => CreateIsolatedClient(ResolveTrustedSystemExecutable(), processRunner, defaultTimeout, includePath: false);
+
+    /// <summary>
+    /// Uses ordinary PATH executable resolution with isolated non-interactive Git settings.
+    /// Unlike exact-source attestation, ordinary builds support per-user and portable Git.
+    /// </summary>
+    internal static GitClient CreateIsolatedPathClient(
+        IProcessRunner? processRunner = null,
+        TimeSpan? defaultTimeout = null)
+        => CreateIsolatedClient("git", processRunner, defaultTimeout, includePath: true);
+
+    private static GitClient CreateIsolatedClient(
+        string executable,
+        IProcessRunner? processRunner,
+        TimeSpan? defaultTimeout,
+        bool includePath)
     {
-        var executable = ResolveTrustedSystemExecutable();
         const string nullDevice = "/dev/null";
         var environment = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
         {
@@ -66,6 +81,8 @@ public sealed class GitClient
             ["LC_ALL"] = "C",
             ["LANG"] = "C"
         };
+        if (includePath)
+            environment["PATH"] = Environment.GetEnvironmentVariable("PATH");
         if (Path.DirectorySeparatorChar == '\\')
             environment["SystemRoot"] = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
         var sshAuthSocket = Environment.GetEnvironmentVariable("SSH_AUTH_SOCK");

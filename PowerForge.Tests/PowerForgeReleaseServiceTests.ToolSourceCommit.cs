@@ -40,7 +40,14 @@ public sealed partial class PowerForgeReleaseServiceTests
                     return ToolSourceLegacyResult(archive);
                 },
                 loadDotNetToolsSpec: (_, path) => (new DotNetPublishSpec(), path),
-                planDotNetTools: (_, _, _, _) => ToolSourceDotNetPlan(root),
+                planDotNetTools: (_, _, _, _) =>
+                {
+                    var plan = ToolSourceDotNetPlan(root);
+                    // Informational plan metadata can refer to an ambient workflow source.
+                    // It must not override the selected checkout actually used for the build.
+                    plan.SourceRevision = new string('f', 40);
+                    return plan;
+                },
                 runDotNetTools: _ =>
                 {
                     CompleteBuild();
@@ -77,9 +84,9 @@ public sealed partial class PowerForgeReleaseServiceTests
     [InlineData("release-branch", "release-branch", null, 0)]
     [InlineData("abcdef0123456789abcdef0123456789abcdef01", "abcdef0123456789abcdef0123456789abcdef01", "abcdef0123456789abcdef0123456789abcdef01", 0)]
     [InlineData(null, "0123456789abcdef0123456789abcdef01234567", "0123456789abcdef0123456789abcdef01234567", 1)]
-    [InlineData(null, "0123456789abcdef0123456789abcdef01234567", "0123456789abcdef0123456789abcdef01234567", 2)]
+    [InlineData(null, null, null, 2)]
     public void PublishBuiltReleaseOutputs_PerTargetToolReleaseRetainsCheckpointAndExplicitOverride(
-        string? configuredCommitish, string expectedCommitish, string? expectedTagCommit, int checkpointSource)
+        string? configuredCommitish, string? expectedCommitish, string? expectedTagCommit, int checkpointSource)
     {
         var root = CreateSandbox();
         try
@@ -95,7 +102,8 @@ public sealed partial class PowerForgeReleaseServiceTests
             };
             if (checkpointSource != 0)
             {
-                // Existing DotNet checkpoints already retain source identity without the new ordinary-tool field.
+                // Only the explicit verified source field on old checkpoints is trusted.
+                // Plan.SourceRevision is informational and can originate in GITHUB_SHA.
                 built.ToolSourceCommitSha = null;
                 if (checkpointSource == 1)
                     built.DotNetSourceCommitSha = "0123456789abcdef0123456789abcdef01234567";

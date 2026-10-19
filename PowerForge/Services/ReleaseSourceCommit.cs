@@ -16,7 +16,7 @@ internal static class ReleaseSourceCommit
 
         // Read the selected checkout, independent of inherited GIT_DIR/configuration.
         // This is only a commit lookup; it does not require a clean working tree.
-        var git = GitClient.CreateTrustedSystemClient();
+        var git = GitClient.CreateIsolatedPathClient();
         var result = git.RunRawAsync(
             root, new[] { "rev-parse", "--verify", "--quiet", "HEAD^{commit}" },
             cancellationToken: cancellationToken).GetAwaiter().GetResult();

@@ -148,6 +148,31 @@ public sealed class GitClientTests
         }
     }
 
+    [Fact]
+    [Trait("Category", "DotNetPublishPrGate")]
+    public async Task IsolatedPathClient_PreservesPortableGitResolutionWithoutInheritedGitOverrides()
+    {
+        ProcessRunRequest? captured = null;
+        var runner = new StubProcessRunner(request =>
+        {
+            captured = request;
+            return new ProcessRunResult(0, string.Empty, string.Empty, request.FileName, TimeSpan.Zero, timedOut: false);
+        });
+
+        await GitClient.CreateIsolatedPathClient(runner).RunRawAsync(
+            Directory.GetCurrentDirectory(), ["rev-parse", "--verify", "HEAD^{commit}"]);
+
+        Assert.NotNull(captured);
+        Assert.Equal("git", captured!.FileName);
+        Assert.False(captured.InheritEnvironment);
+        Assert.Equal(Environment.GetEnvironmentVariable("PATH"), captured.EnvironmentVariables!["PATH"]);
+        Assert.False(captured.EnvironmentVariables.ContainsKey("GIT_DIR"));
+        Assert.False(captured.EnvironmentVariables.ContainsKey("GIT_WORK_TREE"));
+        Assert.False(captured.EnvironmentVariables.ContainsKey("GIT_CONFIG_PARAMETERS"));
+        Assert.Equal("0", captured.EnvironmentVariables["GIT_TERMINAL_PROMPT"]);
+        Assert.Equal("core.hooksPath", captured.EnvironmentVariables["GIT_CONFIG_KEY_0"]);
+    }
+
     private sealed class StubProcessRunner : IProcessRunner
     {
         private readonly Func<ProcessRunRequest, ProcessRunResult> _execute;

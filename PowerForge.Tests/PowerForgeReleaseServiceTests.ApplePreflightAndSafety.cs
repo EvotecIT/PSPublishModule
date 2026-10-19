@@ -131,12 +131,12 @@ public sealed partial class PowerForgeReleaseServiceTests
                   "versionString": "1.2.0",
                   "platform": "iOS",
                   "locale": "en-US",
-                  "metadata": {}
+                  "metadata": { "description": "Test app description" }
                 }
                 """);
             var macVersion = failureKind == "mapping" ? "9.9.9" : "1.2.0";
             var macLocale = failureKind == "locale" ? string.Empty : "en-US";
-            var macMetadata = failureKind == "metadata" ? "null" : "{}";
+            var macMetadata = failureKind == "metadata" ? "null" : "{\"description\":\"Test app description\"}";
             File.WriteAllText(
                 Path.Combine(root, "metadata-mac.json"),
                 $$"""
@@ -214,7 +214,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                 {
                     "mapping" => "No App Store metadata config matches",
                     "locale" => "must declare Locale",
-                    _ => "must declare a Metadata object"
+                    _ => "must declare copyright or localized metadata"
                 },
                 Assert.IsType<string>(result.AppleReceipt.ErrorMessage),
                 StringComparison.OrdinalIgnoreCase);

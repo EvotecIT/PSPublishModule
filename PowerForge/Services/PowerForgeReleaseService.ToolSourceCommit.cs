@@ -13,9 +13,7 @@ internal sealed partial class PowerForgeReleaseService
             return builtResult.ToolSourceCommitSha;
         if (GitObjectId.IsFull(builtResult.DotNetSourceCommitSha))
             return builtResult.DotNetSourceCommitSha;
-        return GitObjectId.IsFull(builtResult.DotNetToolPlan?.SourceRevision)
-            ? builtResult.DotNetToolPlan!.SourceRevision
-            : null;
+        return null;
     }
 
     private static string? ResolveBuiltReleaseCommitish(

@@ -141,7 +141,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                   "versionString": "1.2.0",
                   "platform": "iOS",
                   "locale": "en-US",
-                  "metadata": {}
+                  "metadata": { "description": "Test app description" }
                 }
                 """);
             var validationPath = Path.Combine(root, "validate.ps1");

@@ -777,9 +777,8 @@ internal sealed partial class PowerForgeReleaseService
 
                     if (!request.PlanOnly && !request.ValidateOnly)
                     {
-                        result.ToolSourceCommitSha = GitObjectId.IsFull(dotNetPlan.SourceRevision)
-                            ? dotNetPlan.SourceRevision
-                            : CaptureToolSourceCommit(dotNetPlan.ProjectRoot, request.CancellationToken);
+                        result.ToolSourceCommitSha = CaptureToolSourceCommit(
+                            dotNetPlan.ProjectRoot, request.CancellationToken);
                         request.CancellationToken.ThrowIfCancellationRequested();
                         var toolProgress = request.Progress is IPowerForgeReleaseProgressReporterV2 detailedProgress
                             ? new DotNetPublishReleaseProgressAdapter(detailedProgress, dotNetPlan)
