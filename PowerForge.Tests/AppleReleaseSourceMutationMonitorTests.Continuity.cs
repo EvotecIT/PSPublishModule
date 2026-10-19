@@ -96,6 +96,33 @@ public sealed partial class AppleReleaseSourceMutationMonitorTests
         Assert.Contains("unreadable native event path", exception.Message, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData(0x20u, "lost continuity")]
+    [InlineData(0x20003u, "lost continuity")]
+    [InlineData(0x100u, "unreadable path")]
+    public void Producer_buffer_loss_cannot_discard_terminal_suffix_in_same_native_batch(uint suffix, string diagnostic)
+    {
+        if (!OperatingSystem.IsMacOS()) return;
+        using var fixture = new NativeContinuityFixture();
+        fixture.NativeEvents(0x3, suffix);
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            fixture.Monitor.CaptureExpectedProducerOutput(fixture.Capture, "test producer"));
+
+        Assert.Contains(diagnostic, exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Producer_buffer_loss_only_batch_permits_fresh_complete_binding()
+    {
+        if (!OperatingSystem.IsMacOS()) return;
+        using var fixture = new NativeContinuityFixture();
+        fixture.NativeEvents(0x3, 0x5, 0x7);
+
+        Assert.Equal(fixture.Capture(), fixture.Monitor.CaptureExpectedProducerOutput(fixture.Capture, "test producer"));
+        fixture.Monitor.ValidateNoChanges();
+    }
+
     private sealed class NativeContinuityFixture : IDisposable
     {
         private readonly DirectoryInfo _root;
@@ -103,6 +130,7 @@ public sealed partial class AppleReleaseSourceMutationMonitorTests
         internal AppleReleaseSourceMutationMonitor Monitor { get; }
         internal Action<Exception> Error { get; }
         internal Action<uint> NativeError { get; }
+        private readonly Action<uint[]> _nativeEvents;
 
         internal NativeContinuityFixture()
         {
@@ -121,22 +149,34 @@ public sealed partial class AppleReleaseSourceMutationMonitorTests
             Error = (Action<Exception>)observer.GetType().GetField("_error", access)!.GetValue(observer)!;
             var self = (GCHandle)observer.GetType().GetField("_self", access)!.GetValue(observer)!;
             var receive = observer.GetType().GetMethod("ReceiveEvents", BindingFlags.Static | BindingFlags.NonPublic)!;
-            NativeError = flags =>
+            _nativeEvents = flags =>
             {
-                // Continuity flags are processed before event paths. Supply the actual native
-                // flag word so this also covers classification by the native callback itself.
-                var word = Marshal.AllocHGlobal(sizeof(uint));
+                // Supply actual native batches. Null path entries exercise managed path failure
+                // safely after any continuity flags, without an invalid native memory address.
+                var words = Marshal.AllocHGlobal(checked(flags.Length * sizeof(uint)));
+                var paths = Marshal.AllocHGlobal(checked(flags.Length * IntPtr.Size));
                 try
                 {
-                    Marshal.WriteInt32(word, unchecked((int)flags));
+                    for (var index = 0; index < flags.Length; index++)
+                    {
+                        Marshal.WriteInt32(words, index * sizeof(uint), unchecked((int)flags[index]));
+                        Marshal.WriteIntPtr(paths, index * IntPtr.Size, IntPtr.Zero);
+                    }
                     receive.Invoke(null, new object[]
                     {
-                        IntPtr.Zero, GCHandle.ToIntPtr(self), (nuint)1, IntPtr.Zero, word, IntPtr.Zero
+                        IntPtr.Zero, GCHandle.ToIntPtr(self), (nuint)flags.Length, paths, words, IntPtr.Zero
                     });
                 }
-                finally { Marshal.FreeHGlobal(word); }
+                finally
+                {
+                    Marshal.FreeHGlobal(paths);
+                    Marshal.FreeHGlobal(words);
+                }
             };
+            NativeError = flags => _nativeEvents(new[] { flags });
         }
+
+        internal void NativeEvents(params uint[] flags) => _nativeEvents(flags);
 
         internal string Capture() => AppleNotarizationService.ComputeArtifactSha256(_artifact);
 

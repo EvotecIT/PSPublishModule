@@ -77,9 +77,9 @@ internal sealed class AppleMacOSFileChangeObserver : IDisposable
     private static void ReceiveEvents(IntPtr stream, IntPtr info, nuint count, IntPtr paths, IntPtr flags, IntPtr ids)
     {
         var observer = (AppleMacOSFileChangeObserver)GCHandle.FromIntPtr(info).Target!;
-        try
+        for (nuint index = 0; index < count; index++)
         {
-            for (nuint index = 0; index < count; index++)
+            try
             {
                 var eventFlags = unchecked((uint)Marshal.ReadInt32(flags, checked((int)index * sizeof(uint))));
                 if ((eventFlags & (0x01 | 0x02 | 0x04 | 0x08 | 0x20)) != 0)
@@ -92,11 +92,12 @@ internal sealed class AppleMacOSFileChangeObserver : IDisposable
                     throw new IOException("The native file mutation observer reported a path outside its root.");
                 observer._changed(path, eventFlags);
             }
-        }
-        catch (Exception exception)
-        {
-            // Exceptions cannot cross the native callback boundary.
-            try { observer._error(exception); } catch { }
+            catch (Exception exception)
+            {
+                // A producer-only overflow can be recoverable, but it must not discard a
+                // later terminal event in this batch. No exception may cross the native boundary.
+                try { observer._error(exception); } catch { }
+            }
         }
     }
 
