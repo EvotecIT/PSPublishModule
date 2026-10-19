@@ -414,7 +414,7 @@ internal static class ExistingFilePathIdentityResolver
         internal long RawDevice;
         internal long Inode;
         internal uint UserFlags;
-        internal int HardLinkCount;
+        // System.Native FileStatus ends at UserFlags; the remaining bytes are ABI padding.
     }
 #endif
 
