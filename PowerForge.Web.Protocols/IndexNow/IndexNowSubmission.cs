@@ -22,9 +22,10 @@ public sealed class IndexNowSubmissionOptions
     public bool FailOnRequestError { get; set; } = true;
     /// <summary>Maximum URLs per request, capped at the protocol limit of 10,000.</summary>
     public int BatchSize { get; set; } = 500;
-    /// <summary>Additional attempts after an unsuccessful request.</summary>
+    /// <summary>Additional attempts for HTTP 408/429/5xx or transport failures; permanent HTTP failures are not retried.</summary>
     public int RetryCount { get; set; } = 2;
-    /// <summary>Delay in milliseconds between attempts.</summary>
+    /// <summary>Initial exponential retry delay in milliseconds, capped at 60 seconds. Retry-After is a minimum;
+    /// a server-requested delay above 60 seconds stops the batch for caller-managed rescheduling.</summary>
     public int RetryDelayMs { get; set; } = 500;
     /// <summary>Per-attempt timeout in seconds.</summary>
     public int TimeoutSeconds { get; set; } = 20;
@@ -41,13 +42,13 @@ public sealed class IndexNowSubmissionResult
     public int UrlCount { get; set; }
     /// <summary>Number of distinct destination website hosts.</summary>
     public int HostCount { get; set; }
-    /// <summary>Number of host batches across all submission endpoints.</summary>
+    /// <summary>Number of host batches across all submission endpoints, including deferred batches.</summary>
     public int RequestCount { get; set; }
-    /// <summary>Number of batches that failed after retry attempts.</summary>
+    /// <summary>Number of failed or deferred batches.</summary>
     public int FailedRequestCount { get; set; }
     /// <summary>Validation and request failures reported during submission.</summary>
     public string[] Errors { get; set; } = Array.Empty<string>();
-    /// <summary>Nonfatal input normalization and configuration diagnostics.</summary>
+    /// <summary>Nonfatal input, configuration, and accepted-response preview diagnostics.</summary>
     public string[] Warnings { get; set; } = Array.Empty<string>();
     /// <summary>Per-batch submission outcomes.</summary>
     public IndexNowRequestResult[] Requests { get; set; } = Array.Empty<IndexNowRequestResult>();
@@ -64,12 +65,15 @@ public sealed class IndexNowRequestResult
     public int UrlCount { get; set; }
     /// <summary>Whether this operation satisfied its configured success policy.</summary>
     public bool Success { get; set; }
-    /// <summary>Number of HTTP attempts; zero for a dry run.</summary>
+    /// <summary>Number of HTTP attempts; zero for a dry run or a deferred batch.</summary>
     public int AttemptCount { get; set; }
     /// <summary>Last HTTP status code, or null when no response was received.</summary>
     public int? StatusCode { get; set; }
     /// <summary>Bounded failure diagnostic when the request did not succeed.</summary>
     public string? Error { get; set; }
+    /// <summary>Earliest retry time for this endpoint after a failure or deferral, or null when no server quiet period remains.
+    /// Callers must preserve and enforce this deadline across separate submission operations if needed.</summary>
+    public DateTimeOffset? RetryNotBefore { get; set; }
     /// <summary>Bounded preview of the endpoint response.</summary>
     public string? ResponsePreview { get; set; }
 }
