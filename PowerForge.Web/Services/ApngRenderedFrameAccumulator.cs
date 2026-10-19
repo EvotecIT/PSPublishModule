@@ -71,7 +71,7 @@ internal sealed class ApngRenderedFrameAccumulator
         {
             using var image = new MagickImage(png);
             image.ColorSpace = ColorSpace.sRGB;
-            image.Alpha(AlphaOption.Activate);
+            image.Alpha(AlphaAction.Activate);
             var pixels = image.GetPixels().ToByteArray(PixelMapping.RGBA);
             var expected = checked((int)((ulong)width * height * 4UL));
             if (pixels is null || pixels.Length != expected)

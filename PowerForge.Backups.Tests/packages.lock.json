@@ -31,15 +31,15 @@
       },
       "DBAClientX.Core": {
         "type": "Transitive",
-        "resolved": "1.0.14",
-        "contentHash": "PxTqEReEIhcFYAuSRN73qzGonlXFnws3dQti71k35BPpXco8ozmFjZ3DbFPn2h1GRp4GMXIj738NY3a9Qra3kQ=="
+        "resolved": "1.0.15",
+        "contentHash": "Mquob0jxrlLwNmzhhYXPdmRU2+gKG7EV7+AJKruXDZ+LOrQXqe/mCioO9qMEPydHIcpJLpamnZBuqXOmXlABjQ=="
       },
       "DBAClientX.SQLite": {
         "type": "Transitive",
-        "resolved": "1.0.14",
-        "contentHash": "mCmGwWj8U22vZptJUXST1y4ESLs9knIZTPVoYkjbHmdGuWOQq0xSLW+RbcKp4fbAQ6ThuDwrlzNen5LvqWBjOg==",
+        "resolved": "1.0.15",
+        "contentHash": "IrXNMSAbHsNA9Uix3bxzzCk8KJjB4e/3FmfYT/frt0Jyzo1AqYnc4TSiIeRiW+xwcpdVXaiC7y/5bDcID2f3rA==",
         "dependencies": {
-          "DBAClientX.Core": "1.0.14",
+          "DBAClientX.Core": "1.0.15",
           "Microsoft.Data.Sqlite": "10.0.10",
           "SQLitePCLRaw.bundle_e_sqlite3": "3.0.5",
           "SQLitePCLRaw.core": "3.0.5"
@@ -47,11 +47,12 @@
       },
       "DBAClientX.SqlServer": {
         "type": "Transitive",
-        "resolved": "1.0.14",
-        "contentHash": "8058oAXH2HNEEBWNKSbEyFbQQr0dW1a4O4AjfJwoeWXqzJ8UqzxhCVh7Vt7te/BV6jgr59gorEhiwCPdTE0OgA==",
+        "resolved": "1.0.15",
+        "contentHash": "i3B6UgPtfKKtFGPOBuv5n0EfQNiC5HuhOpZB1acSX0JUNZl3mUR1YeGe1hBuK3WXflwE4kujADVulR5fb4enGw==",
         "dependencies": {
-          "DBAClientX.Core": "1.0.14",
-          "Microsoft.Data.SqlClient": "7.0.2"
+          "DBAClientX.Core": "1.0.15",
+          "Microsoft.Data.SqlClient": "7.0.2",
+          "System.Security.Cryptography.Pkcs": "10.0.13"
         }
       },
       "Microsoft.Bcl.Cryptography": {
@@ -289,8 +290,8 @@
       },
       "System.Security.Cryptography.Pkcs": {
         "type": "Transitive",
-        "resolved": "9.0.13",
-        "contentHash": "dxJhkuoaelvWy588wPXjShNks+ZMiSgXnN75/u+DPbER5PqKrLPDftE0BvGM7nDK/scQAVlD+gRXlCAAjWi58Q=="
+        "resolved": "10.0.13",
+        "contentHash": "a+EovgC1fBnwdlQ6cn3j4JFBfKqiFaFvoAhjisOoSvazLAcIznaBzPQP0oYnvccmeXfqUH1KebVZOxSeH6rMaw=="
       },
       "System.Security.Cryptography.ProtectedData": {
         "type": "Transitive",
@@ -340,8 +341,8 @@
       "powerforge.backups": {
         "type": "Project",
         "dependencies": {
-          "DBAClientX.SQLite": "[1.0.14, )",
-          "DBAClientX.SqlServer": "[1.0.14, )"
+          "DBAClientX.SQLite": "[1.0.15, )",
+          "DBAClientX.SqlServer": "[1.0.15, )"
         }
       }
     }
