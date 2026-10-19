@@ -461,7 +461,7 @@ public sealed partial class AppStoreConnectClientTests
                     {
                       "id": "version-1",
                       "type": "appStoreVersions",
-                      "attributes": { "versionString": "1.0.1", "platform": "IOS" }
+                      "attributes": { "versionString": "1.0.1", "platform": "IOS", "copyright": "2022 Example" }
                     }
                   ]
                 }
@@ -635,7 +635,7 @@ public sealed partial class AppStoreConnectClientTests
                 {
                   "id": "version-1",
                   "type": "appStoreVersions",
-                  "attributes": { "versionString": "1.0.5", "platform": "IOS" }
+                  "attributes": { "versionString": "1.0.5", "platform": "IOS", "copyright": "2022 Example" }
                 }
               ]
             }
@@ -2070,6 +2070,7 @@ public sealed partial class AppStoreConnectClientTests
             new SequenceResponse(HttpStatusCode.NoContent, string.Empty),
             new SequenceResponse(HttpStatusCode.OK, """{ "data": [] }"""),
             new SequenceResponse(HttpStatusCode.NoContent, string.Empty),
+            new SequenceResponse(HttpStatusCode.OK, """{ "data": [] }"""),
             new SequenceResponse(HttpStatusCode.OK, """{ "data": [] }"""));
         using var http = new HttpClient(handler) { BaseAddress = new Uri("https://api.appstoreconnect.apple.com/v1/") };
         using var client = new AppStoreConnectClient(CreateCredential(), http);
@@ -2090,7 +2091,7 @@ public sealed partial class AppStoreConnectClientTests
             }));
 
         Assert.Contains("must already exist in App Store Connect", ex.Message, StringComparison.Ordinal);
-        Assert.Equal(8, handler.RequestUris.Count);
+        Assert.Equal(9, handler.RequestUris.Count);
         Assert.DoesNotContain(handler.RequestUris, uri =>
             string.Equals(uri.AbsolutePath, "/v1/betaTesters", StringComparison.Ordinal) &&
             !string.IsNullOrEmpty(handler.RequestBodies[handler.RequestUris.IndexOf(uri)]));

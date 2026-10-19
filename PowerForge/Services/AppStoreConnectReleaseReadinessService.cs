@@ -57,6 +57,10 @@ public sealed partial class AppStoreConnectReleaseReadinessService
 
         if (version is not null)
         {
+            AddCheck(checks, "version.copyright", !string.IsNullOrWhiteSpace(version.Copyright),
+                string.IsNullOrWhiteSpace(version.Copyright)
+                    ? "The App Store version is missing its required publisher copyright notice."
+                    : "The App Store version has a publisher copyright notice.");
             if (!string.IsNullOrWhiteSpace(request.BuildNumber))
             {
                 build = (await _client.GetBuildsAsync(

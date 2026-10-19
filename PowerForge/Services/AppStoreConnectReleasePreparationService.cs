@@ -153,10 +153,14 @@ public sealed partial class AppStoreConnectReleasePreparationService
         {
             await AuthorizeFirstRemoteMutationAsync().ConfigureAwait(false);
             var metadataSpec = CreateMetadataSpecForVersion(sourceSpec, appId, versionString, request.Platform, version!.Id);
-            metadataResults.Add(await new AppStoreConnectVersionMetadataSyncService(_client).SyncAsync(
+            var metadataResult = await new AppStoreConnectVersionMetadataSyncService(_client).SyncAsync(
                 new AppStoreConnectVersionMetadataSyncRequest { Spec = metadataSpec },
-                cancellationToken).ConfigureAwait(false));
-            messages.Add($"Synchronized App Store version metadata for locale '{metadataSpec.Locale}'.");
+                cancellationToken).ConfigureAwait(false);
+            metadataResults.Add(metadataResult);
+            if (metadataSpec.Copyright is not null) version!.Copyright = metadataResult.Version.Copyright;
+            messages.Add(metadataResult.After is null
+                ? "Synchronized App Store version copyright."
+                : $"Synchronized App Store version metadata for locale '{metadataSpec.Locale}'.");
         }
 
         var appInfoMetadataResults = new List<AppStoreConnectAppInfoMetadataSyncResult>();
@@ -191,7 +195,8 @@ public sealed partial class AppStoreConnectReleasePreparationService
                 request.Platform,
                 screenshotMappings.Select(static mapping => mapping.Spec).ToArray(),
                 request.ScreenshotSpec is not null && screenshotMappings.Length == 1,
-                metadataSpecs.Select(static spec => spec.Locale));
+                metadataSpecs.Where(static spec => spec.Metadata is not null && AppStoreConnectClient.GetSuppliedLocalizationFields(spec.Metadata).Length > 0)
+                    .Select(static spec => spec.Locale));
             readiness = await new AppStoreConnectReleaseReadinessService(_client)
                 .CheckAsync(readinessRequest, cancellationToken)
                 .ConfigureAwait(false);

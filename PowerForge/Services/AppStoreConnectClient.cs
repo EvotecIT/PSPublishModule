@@ -797,7 +797,9 @@ public sealed partial class AppStoreConnectClient : IDisposable
             AppStoreState = GetString(attrs, "appStoreState"),
             AppVersionState = GetString(attrs, "appVersionState"),
             Platform = GetString(attrs, "platform"),
-            ReleaseType = GetString(attrs, "releaseType")
+            ReleaseType = GetString(attrs, "releaseType"),
+            Copyright = attrs.ValueKind == JsonValueKind.Object && attrs.TryGetProperty("copyright", out var copyright) && copyright.ValueKind == JsonValueKind.String
+                ? copyright.GetString() : null
         };
     }
 

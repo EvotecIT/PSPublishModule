@@ -26,16 +26,20 @@ internal sealed partial class PowerForgeReleaseService
     private static void ValidateAppleMetadataPreflight(
         (AppStoreConnectVersionMetadataSpec Spec, string ConfigPath) configured)
     {
-        if (string.IsNullOrWhiteSpace(configured.Spec.Locale))
+        var localized = configured.Spec.Metadata is not null &&
+            AppStoreConnectClient.GetSuppliedLocalizationFields(configured.Spec.Metadata).Length > 0;
+        if (localized && string.IsNullOrWhiteSpace(configured.Spec.Locale))
         {
             throw new InvalidOperationException(
                 $"App Store version metadata config must declare Locale: {configured.ConfigPath}");
         }
-        if (configured.Spec.Metadata is null)
+        if (!localized && configured.Spec.Copyright is null)
         {
             throw new InvalidOperationException(
-                $"App Store version metadata config must declare a Metadata object: {configured.ConfigPath}");
+                $"App Store version metadata config must declare copyright or localized metadata: {configured.ConfigPath}");
         }
+        if (configured.Spec.Copyright is not null && string.IsNullOrWhiteSpace(configured.Spec.Copyright))
+            throw new InvalidOperationException($"App Store version metadata copyright cannot be empty: {configured.ConfigPath}");
     }
 
     private static (AppStoreConnectVersionMetadataSpec Spec, string ConfigPath)[] ResolveMatchingMetadataSpecs(
@@ -47,7 +51,9 @@ internal sealed partial class PowerForgeReleaseService
         var matches = specs
             .Where(candidate => MetadataSpecMatches(candidate.Spec, app, marketingVersion))
             .ToArray();
-        var duplicateLocale = matches.GroupBy(candidate => candidate.Spec.Locale?.Trim() ?? string.Empty, StringComparer.OrdinalIgnoreCase)
+        var duplicateLocale = matches.Where(candidate => candidate.Spec.Metadata is not null &&
+                AppStoreConnectClient.GetSuppliedLocalizationFields(candidate.Spec.Metadata).Length > 0)
+            .GroupBy(candidate => candidate.Spec.Locale?.Trim() ?? string.Empty, StringComparer.OrdinalIgnoreCase)
             .FirstOrDefault(group => group.Count() > 1);
         if (duplicateLocale is not null)
             throw new InvalidOperationException($"Multiple App Store metadata configs match Apple app '{app.Name}' version '{marketingVersion}' platform '{app.Platform}' locale '{duplicateLocale.Key}'.");
