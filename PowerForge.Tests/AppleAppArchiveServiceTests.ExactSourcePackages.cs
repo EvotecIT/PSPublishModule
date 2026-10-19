@@ -357,7 +357,8 @@ public sealed partial class AppleAppArchiveServiceTests
             bool materializeXcodeMirrorOrigin = false,
             bool linkXcodeMirrorConfig = false,
             bool includeExternalXcodeMirrorConfig = false,
-            bool linkXcodeMirrorObjectsInfo = false)
+            bool linkXcodeMirrorObjectsInfo = false,
+            string? checkoutCloneScenario = null)
         {
             _fixtureRoot = fixtureRoot;
             _mutateDuringArchive = mutateDuringArchive;
@@ -370,6 +371,7 @@ public sealed partial class AppleAppArchiveServiceTests
             _linkXcodeMirrorConfig = linkXcodeMirrorConfig;
             _includeExternalXcodeMirrorConfig = includeExternalXcodeMirrorConfig;
             _linkXcodeMirrorObjectsInfo = linkXcodeMirrorObjectsInfo;
+            _checkoutCloneScenario = checkoutCloneScenario;
             _remoteSourceRoot = Directory.CreateDirectory(Path.Combine(fixtureRoot, "RemoteShared")).FullName;
             RunGit(_remoteSourceRoot, "init", "--quiet");
             RunGit(_remoteSourceRoot, "config", "user.name", "PowerForge Tests");
@@ -377,12 +379,19 @@ public sealed partial class AppleAppArchiveServiceTests
             File.WriteAllText(
                 Path.Combine(_remoteSourceRoot, "Package.swift"),
                 "// swift-tools-version: 6.0\nimport PackageDescription\nlet package = Package(name: \"Shared\")\n");
+            if (checkoutCloneScenario is not null)
+            {
+                var binary = Directory.CreateDirectory(Path.Combine(_remoteSourceRoot, "Engine.xcframework", "watchos-arm64"));
+                File.WriteAllText(Path.Combine(binary.FullName, "libEngine.a"), "approved binary");
+            }
             RunGit(_remoteSourceRoot, "add", ".");
             RunGit(_remoteSourceRoot, "commit", "--quiet", "-m", "Package fixture");
             ApprovedRevision = ReadGit(_remoteSourceRoot, "rev-parse", "HEAD").Trim();
         }
 
         internal List<ProcessRunRequest> Requests { get; } = new();
+
+        private readonly string? _checkoutCloneScenario;
 
         internal string SourcePackagesRoot { get; private set; } = string.Empty;
 
@@ -403,7 +412,21 @@ public sealed partial class AppleAppArchiveServiceTests
                 DerivedDataRoot = request.Arguments[derivedIndex + 1];
                 var checkouts = Directory.CreateDirectory(Path.Combine(SourcePackagesRoot, "checkouts")).FullName;
                 var checkout = Path.Combine(checkouts, "Shared");
-                RunGit(checkouts, "clone", "--quiet", "--no-hardlinks", _remoteSourceRoot, checkout);
+                if (_checkoutCloneScenario is null)
+                    RunGit(checkouts, "clone", "--quiet", "--no-hardlinks", _remoteSourceRoot, checkout);
+                else
+                {
+                    RunGit(checkouts, "clone", "--quiet", "--no-hardlinks", "--no-checkout", _remoteSourceRoot, checkout);
+                    RunGit(checkout, "read-tree", "HEAD");
+                    // Materialize by cloning so this fast resolver's initial creation events do
+                    // not coalesce old writes with the separate reader clone being exercised.
+                    foreach (var relative in new[] { "Package.swift", "Engine.xcframework/watchos-arm64/libEngine.a" })
+                    {
+                        var destination = Path.Combine(checkout, relative);
+                        Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
+                        Assert.Equal(0, ClonePackageFile(Path.Combine(_remoteSourceRoot, relative), destination, 0));
+                    }
+                }
                 if (_materializeXcodeMirrorOrigin)
                 {
                     var repositories = Directory.CreateDirectory(Path.Combine(SourcePackagesRoot, "repositories")).FullName;
@@ -452,6 +475,24 @@ public sealed partial class AppleAppArchiveServiceTests
                 {
                     var artifact = Directory.CreateDirectory(Path.Combine(SourcePackagesRoot, "artifacts", "Shared", "Framework.xcframework"));
                     File.WriteAllText(Path.Combine(artifact.FullName, "payload"), "approved binary artifact");
+                }
+            }
+            else if (_checkoutCloneScenario is not null)
+            {
+                var binary = Path.Combine(SourcePackagesRoot, "checkouts", "Shared", "Engine.xcframework", "watchos-arm64", "libEngine.a");
+                var destination = _checkoutCloneScenario == "new-clone"
+                    ? Path.Combine(Path.GetDirectoryName(binary)!, "new.a")
+                    : Path.Combine(_fixtureRoot, "clone.a");
+                Assert.Equal(0, ClonePackageFile(binary, destination, 0));
+                if (_checkoutCloneScenario == "replacement-clone")
+                {
+                    File.Delete(binary);
+                    File.Move(destination, binary);
+                }
+                else if (_checkoutCloneScenario == "clone-and-write-restore")
+                {
+                    File.WriteAllText(binary, "unapproved binary");
+                    File.WriteAllText(binary, "approved binary");
                 }
             }
             else if (_mutateDuringArchive)

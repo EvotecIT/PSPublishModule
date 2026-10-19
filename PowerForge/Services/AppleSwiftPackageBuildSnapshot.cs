@@ -133,7 +133,7 @@ internal sealed class AppleSwiftPackageBuildSnapshot : IDisposable
                 "xcodebuild exact-source build",
                 "Discard the Apple product and resolve the exact package graph again.",
                 enableImmediately: false,
-                unchangedMacOSCloneSource: path => IsUnchangedArtifactCloneSource(
+                unchangedMacOSCloneSource: path => IsUnchangedPackageCloneSource(
                     sourcePackagesPath, path, Volatile.Read(ref materializedPackagesIdentity)));
             var processRequest = new ProcessRunRequest(
                 xcodeBuildExecutable,
@@ -321,19 +321,22 @@ internal sealed class AppleSwiftPackageBuildSnapshot : IDisposable
         }
     }
 
-    private static bool IsUnchangedArtifactCloneSource(
+    private static bool IsUnchangedPackageCloneSource(
         string sourcePackagesPath, string path, AppleArchiveUploadSnapshot.SnapshotIdentity? approved)
     {
 #if NET8_0_OR_GREATER
         if (!OperatingSystem.IsMacOS() || approved?.FileMutationIdentities is not { } identities)
             return false;
         var relative = Path.GetRelativePath(sourcePackagesPath, path).Replace('\\', '/');
-        if (!relative.StartsWith("artifacts/", StringComparison.Ordinal) ||
+        // Xcode also clones binary frameworks committed inside validated package checkouts.
+        // Only previously bound regular files with an unchanged physical identity qualify.
+        if (!(relative.StartsWith("artifacts/", StringComparison.Ordinal) ||
+              relative.StartsWith("checkouts/", StringComparison.Ordinal)) ||
             !identities.TryGetValue(relative, out var expected))
             return false;
         FileSystemPathSafety.RequireRegularFile(path);
         return expected.Equals(
-            ExistingFilePathIdentityResolver.CapturePrivateFileMutationIdentity(path, "approved Swift binary artifact clone source"),
+            ExistingFilePathIdentityResolver.CapturePrivateFileMutationIdentity(path, "approved Swift package clone source"),
             StringComparison.Ordinal);
 #else
         return false;
