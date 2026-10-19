@@ -31,9 +31,9 @@
       },
       "xunit.runner.visualstudio": {
         "type": "Direct",
-        "requested": "[4.0.0, )",
-        "resolved": "4.0.0",
-        "contentHash": "kzLFyBYUnoidpGOXvpNOfIo8C92gVgVR6X8ncHwhcrDYugiOut5rrhDkr0L3cWHd7J2pKXf6LgaeXoBBDlx1ag=="
+        "requested": "[4.0.1, )",
+        "resolved": "4.0.1",
+        "contentHash": "8CoAaZkniVekR1ycJyxn+hOz+6ZQCDPcoIsIs6ujd4WyFcBMlxGNU15Qb8Uxd4iO4UmOuETb0M6vzBbwX/mfLA=="
       },
       "Acornima": {
         "type": "Transitive",
@@ -86,15 +86,15 @@
       },
       "DBAClientX.Core": {
         "type": "Transitive",
-        "resolved": "1.0.10",
-        "contentHash": "mUKD79jltUjOYLAOUu+nG8f0bH+GeHuBo42ltTI6Im/coVXPiZ2HyU1ysrWHhJGZGeI2KkYR66I+avTyOFEerA=="
+        "resolved": "1.0.12",
+        "contentHash": "UVz6qliYgymtMAUJXuwY9Y2U1f9zDMGU+xPj/6BcXqm3QrrHrt1KNSsd0iIF5qI3KvLsY8/LfNJ1VgRdFyXHng=="
       },
       "DBAClientX.SQLite": {
         "type": "Transitive",
-        "resolved": "1.0.10",
-        "contentHash": "0lMfLGmDwdEQzKyt+EqcRebq+wdSlxjSNhkTXU//WOhMrcy90qH0pVmrlWcRoCQRGRqsscbDubxKVfnp93Oj3A==",
+        "resolved": "1.0.12",
+        "contentHash": "E334bNJEVB28J+j1uhvxUl5yJfoc8lMSn9J6DpWyrY2Em0qswfbUcb9AALGpj0/SrqLYgf/aGPOy07XxyuWYHA==",
         "dependencies": {
-          "DBAClientX.Core": "1.0.10",
+          "DBAClientX.Core": "1.0.12",
           "Microsoft.Data.Sqlite": "10.0.10",
           "SQLitePCLRaw.bundle_e_sqlite3": "3.0.5",
           "SQLitePCLRaw.core": "3.0.5"
@@ -133,16 +133,16 @@
       },
       "HtmlForgeX": {
         "type": "Transitive",
-        "resolved": "1.2.0",
-        "contentHash": "rXmjplPb5sgpqsc+ta0m/myRkYPE+Ri5VMT7F11DqLXHXZhiEv5asLrTy93bGVaXhVJYB0jxnR8qNVC2KIxhQA=="
+        "resolved": "1.4.0",
+        "contentHash": "iZYhgl4weq0WPo0BA9tdaXPXBlPrLE1f8hRefw+6aOMkyLPdl0Y4dv2rvfaHByqmBiJ3B5gKxF/pLPYitxBIQw=="
       },
       "HtmlForgeX.Markdown": {
         "type": "Transitive",
-        "resolved": "1.1.0",
-        "contentHash": "n/g7/mjGqR2LlPsN7WO3dULPE36QxHrGwNc0a9Zld1YnhBJH1o9FXNDVeU4pGTvb9pJfjgUT6wbOntZ6iOXKEw==",
+        "resolved": "1.4.0",
+        "contentHash": "Qf4eeYUZ3n6Cyu8pkIv/CPSE8u3zilwqiIL5Wk+qCyIC20k8pm2UKMn36lF4iQGccjJZ1oIkLzVhfbr5V4AWHA==",
         "dependencies": {
-          "HtmlForgeX": "1.1.0",
-          "OfficeIMO.Markdown": "3.4.3"
+          "HtmlForgeX": "1.4.0",
+          "OfficeIMO.Markdown": "3.4.4"
         }
       },
       "HtmlTinkerX": {
@@ -202,16 +202,16 @@
       },
       "Magick.NET-Q8-AnyCPU": {
         "type": "Transitive",
-        "resolved": "14.17.2",
-        "contentHash": "AIvpBH4fvP3/NUwvWsVj9SxAA6hrU4p5/RNfColyrDn4jipl7loR6y4ZgYLXfBQgjmSEc7m2D2DbkWMnZt+brg==",
+        "resolved": "15.0.0",
+        "contentHash": "yECRj8M7/D7dIndVmvEbMsolIBC+lyd+Er3wM/p8MSCaTAqjXjYvqmfETu9u/QuJBKM/ofgZBUtRs4HqRicrow==",
         "dependencies": {
-          "Magick.NET.Core": "14.17.2"
+          "Magick.NET.Core": "15.0.0"
         }
       },
       "Magick.NET.Core": {
         "type": "Transitive",
-        "resolved": "14.17.2",
-        "contentHash": "KKvR6eBUcfgkZpfHfN/UKRcK/FjHW6NXXoRRf5HJdhFk5bYLEEFuKu6op0zfNo6Msah51Yw42p599pz3A0CDQQ=="
+        "resolved": "15.0.0",
+        "contentHash": "mP/VovMRuXBX2Rcnn1wWu0Zur6cjsf8IQhmTUCrasEk8cyAtN5sjHE7NxiH88whw8/2mjRvuphKUwj6bAZslpQ=="
       },
       "Markdig.Signed": {
         "type": "Transitive",
@@ -583,8 +583,8 @@
       },
       "OfficeIMO.Core": {
         "type": "Transitive",
-        "resolved": "3.4.4",
-        "contentHash": "s1MD3wvn2DSj6rPHKrIfq3qzfVefQrrS2hfl7+OZOWvFsWyuZwzCGC3TxVWevQdPwHUKPs5kzJaWY0vRGDHyqw=="
+        "resolved": "3.4.5",
+        "contentHash": "Lr23rPvS9di7UtYnhIVGpQRfDt0hYCusoYJA72On764VLSyv38hHXZ3teyfKlmX683mI7fGQCddEgmMOlFLyaw=="
       },
       "OfficeIMO.Html": {
         "type": "Transitive",
@@ -614,10 +614,10 @@
       },
       "OfficeIMO.Markdown": {
         "type": "Transitive",
-        "resolved": "3.4.4",
-        "contentHash": "ZDzXqNzGaaI+6959gqZvIcBrYXBFnVjP8ksDRn+xrtVNJ4czcBsCvSr185BOQgp9gA3UJbYIVDD4zVRNshv30g==",
+        "resolved": "3.4.5",
+        "contentHash": "rPr7actSDDYzJMkYfLp7scCpefieY/AUM1+fuiAehOyK1aZ4826HcPbjvVoAswUt03mxzlS8gZellr3k359LEg==",
         "dependencies": {
-          "OfficeIMO.Core": "3.4.4"
+          "OfficeIMO.Core": "3.4.5"
         }
       },
       "OfficeIMO.Markdown.Html": {
@@ -1207,9 +1207,9 @@
         "dependencies": {
           "Google.Apis.Auth": "[1.77.0, )",
           "HtmlTinkerX": "[3.0.4, )",
-          "Magick.NET-Q8-AnyCPU": "[14.17.2, )",
+          "Magick.NET-Q8-AnyCPU": "[15.0.0, )",
           "Microsoft.CodeAnalysis.CSharp": "[5.9.0, )",
-          "OfficeIMO.Markdown": "[3.4.4, )",
+          "OfficeIMO.Markdown": "[3.4.5, )",
           "PowerForge": "[3.0.169, )",
           "PowerForge.Web.Protocols": "[3.0.170, )",
           "Scriban": "[7.5.0, )",
@@ -1219,7 +1219,7 @@
       "PowerForge.Web.Build": {
         "type": "Project",
         "dependencies": {
-          "DBAClientX.SQLite": "[1.0.10, )",
+          "DBAClientX.SQLite": "[1.0.12, )",
           "NuGet.Versioning": "[7.9.0, )",
           "PowerForge.Web": "[3.0.169, )",
           "PowerForge.Web.Protocols": "[3.0.170, )"
@@ -1234,9 +1234,9 @@
       "pspublishmodule": {
         "type": "Project",
         "dependencies": {
-          "HtmlForgeX": "[1.2.0, )",
-          "HtmlForgeX.Markdown": "[1.1.0, )",
-          "OfficeIMO.Markdown": "[3.4.4, )",
+          "HtmlForgeX": "[1.4.0, )",
+          "HtmlForgeX.Markdown": "[1.4.0, )",
+          "OfficeIMO.Markdown": "[3.4.5, )",
           "PowerForge": "[3.0.169, )",
           "PowerForge.PowerShell": "[3.0.169, )",
           "Spectre.Console": "[0.57.2, )",

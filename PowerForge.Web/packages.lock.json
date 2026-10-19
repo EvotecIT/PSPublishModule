@@ -36,11 +36,11 @@
       },
       "Magick.NET-Q8-AnyCPU": {
         "type": "Direct",
-        "requested": "[14.17.2, )",
-        "resolved": "14.17.2",
-        "contentHash": "AIvpBH4fvP3/NUwvWsVj9SxAA6hrU4p5/RNfColyrDn4jipl7loR6y4ZgYLXfBQgjmSEc7m2D2DbkWMnZt+brg==",
+        "requested": "[15.0.0, )",
+        "resolved": "15.0.0",
+        "contentHash": "yECRj8M7/D7dIndVmvEbMsolIBC+lyd+Er3wM/p8MSCaTAqjXjYvqmfETu9u/QuJBKM/ofgZBUtRs4HqRicrow==",
         "dependencies": {
-          "Magick.NET.Core": "14.17.2"
+          "Magick.NET.Core": "15.0.0"
         }
       },
       "Microsoft.CodeAnalysis.CSharp": {
@@ -55,11 +55,11 @@
       },
       "OfficeIMO.Markdown": {
         "type": "Direct",
-        "requested": "[3.4.4, )",
-        "resolved": "3.4.4",
-        "contentHash": "ZDzXqNzGaaI+6959gqZvIcBrYXBFnVjP8ksDRn+xrtVNJ4czcBsCvSr185BOQgp9gA3UJbYIVDD4zVRNshv30g==",
+        "requested": "[3.4.5, )",
+        "resolved": "3.4.5",
+        "contentHash": "rPr7actSDDYzJMkYfLp7scCpefieY/AUM1+fuiAehOyK1aZ4826HcPbjvVoAswUt03mxzlS8gZellr3k359LEg==",
         "dependencies": {
-          "OfficeIMO.Core": "3.4.4"
+          "OfficeIMO.Core": "3.4.5"
         }
       },
       "Scriban": {
@@ -154,8 +154,8 @@
       },
       "Magick.NET.Core": {
         "type": "Transitive",
-        "resolved": "14.17.2",
-        "contentHash": "KKvR6eBUcfgkZpfHfN/UKRcK/FjHW6NXXoRRf5HJdhFk5bYLEEFuKu6op0zfNo6Msah51Yw42p599pz3A0CDQQ=="
+        "resolved": "15.0.0",
+        "contentHash": "mP/VovMRuXBX2Rcnn1wWu0Zur6cjsf8IQhmTUCrasEk8cyAtN5sjHE7NxiH88whw8/2mjRvuphKUwj6bAZslpQ=="
       },
       "Microsoft.Bcl.AsyncInterfaces": {
         "type": "Transitive",
@@ -234,8 +234,8 @@
       },
       "OfficeIMO.Core": {
         "type": "Transitive",
-        "resolved": "3.4.4",
-        "contentHash": "s1MD3wvn2DSj6rPHKrIfq3qzfVefQrrS2hfl7+OZOWvFsWyuZwzCGC3TxVWevQdPwHUKPs5kzJaWY0vRGDHyqw=="
+        "resolved": "3.4.5",
+        "contentHash": "Lr23rPvS9di7UtYnhIVGpQRfDt0hYCusoYJA72On764VLSyv38hHXZ3teyfKlmX683mI7fGQCddEgmMOlFLyaw=="
       },
       "OfficeIMO.Html": {
         "type": "Transitive",
@@ -374,11 +374,11 @@
       },
       "Magick.NET-Q8-AnyCPU": {
         "type": "Direct",
-        "requested": "[14.17.2, )",
-        "resolved": "14.17.2",
-        "contentHash": "AIvpBH4fvP3/NUwvWsVj9SxAA6hrU4p5/RNfColyrDn4jipl7loR6y4ZgYLXfBQgjmSEc7m2D2DbkWMnZt+brg==",
+        "requested": "[15.0.0, )",
+        "resolved": "15.0.0",
+        "contentHash": "yECRj8M7/D7dIndVmvEbMsolIBC+lyd+Er3wM/p8MSCaTAqjXjYvqmfETu9u/QuJBKM/ofgZBUtRs4HqRicrow==",
         "dependencies": {
-          "Magick.NET.Core": "14.17.2"
+          "Magick.NET.Core": "15.0.0"
         }
       },
       "Microsoft.CodeAnalysis.CSharp": {
@@ -395,11 +395,11 @@
       },
       "OfficeIMO.Markdown": {
         "type": "Direct",
-        "requested": "[3.4.4, )",
-        "resolved": "3.4.4",
-        "contentHash": "ZDzXqNzGaaI+6959gqZvIcBrYXBFnVjP8ksDRn+xrtVNJ4czcBsCvSr185BOQgp9gA3UJbYIVDD4zVRNshv30g==",
+        "requested": "[3.4.5, )",
+        "resolved": "3.4.5",
+        "contentHash": "rPr7actSDDYzJMkYfLp7scCpefieY/AUM1+fuiAehOyK1aZ4826HcPbjvVoAswUt03mxzlS8gZellr3k359LEg==",
         "dependencies": {
-          "OfficeIMO.Core": "3.4.4"
+          "OfficeIMO.Core": "3.4.5"
         }
       },
       "Scriban": {
@@ -494,8 +494,8 @@
       },
       "Magick.NET.Core": {
         "type": "Transitive",
-        "resolved": "14.17.2",
-        "contentHash": "KKvR6eBUcfgkZpfHfN/UKRcK/FjHW6NXXoRRf5HJdhFk5bYLEEFuKu6op0zfNo6Msah51Yw42p599pz3A0CDQQ=="
+        "resolved": "15.0.0",
+        "contentHash": "mP/VovMRuXBX2Rcnn1wWu0Zur6cjsf8IQhmTUCrasEk8cyAtN5sjHE7NxiH88whw8/2mjRvuphKUwj6bAZslpQ=="
       },
       "Microsoft.Bcl.AsyncInterfaces": {
         "type": "Transitive",
@@ -583,8 +583,8 @@
       },
       "OfficeIMO.Core": {
         "type": "Transitive",
-        "resolved": "3.4.4",
-        "contentHash": "s1MD3wvn2DSj6rPHKrIfq3qzfVefQrrS2hfl7+OZOWvFsWyuZwzCGC3TxVWevQdPwHUKPs5kzJaWY0vRGDHyqw=="
+        "resolved": "3.4.5",
+        "contentHash": "Lr23rPvS9di7UtYnhIVGpQRfDt0hYCusoYJA72On764VLSyv38hHXZ3teyfKlmX683mI7fGQCddEgmMOlFLyaw=="
       },
       "OfficeIMO.Html": {
         "type": "Transitive",

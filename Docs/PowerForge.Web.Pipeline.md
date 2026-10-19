@@ -3,6 +3,11 @@
 This guide documents the JSON formats used by `powerforge-web pipeline` and
 `powerforge-web publish`, with examples and field meanings.
 
+Image processing uses Magick.NET 15. On macOS, image optimization and APNG
+visual-story validation require Apple silicon (Arm64); Intel macOS is not
+supported by the native image library. Windows and Linux retain their supported
+native runtimes. The managed web engine continues to target .NET 8 and .NET 10.
+
 ## Pipeline spec (`powerforge-web pipeline`)
 
 Pipeline specs execute a list of steps in order. Paths are resolved relative to
