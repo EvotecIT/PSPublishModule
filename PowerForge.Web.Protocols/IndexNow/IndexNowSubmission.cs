@@ -48,7 +48,7 @@ public sealed class IndexNowSubmissionResult
     public int FailedRequestCount { get; set; }
     /// <summary>Validation and request failures reported during submission.</summary>
     public string[] Errors { get; set; } = Array.Empty<string>();
-    /// <summary>Nonfatal input normalization and configuration diagnostics.</summary>
+    /// <summary>Nonfatal input, configuration, and accepted-response preview diagnostics.</summary>
     public string[] Warnings { get; set; } = Array.Empty<string>();
     /// <summary>Per-batch submission outcomes.</summary>
     public IndexNowRequestResult[] Requests { get; set; } = Array.Empty<IndexNowRequestResult>();

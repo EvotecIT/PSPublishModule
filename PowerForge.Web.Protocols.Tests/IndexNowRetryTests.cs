@@ -90,15 +90,21 @@ public sealed class IndexNowRetryTests
     }
 
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task TransportFailureAndTimeoutCanRecover(bool timeout)
+    [InlineData("http")]
+    [InlineData("timeout")]
+    [InlineData("io")]
+    public async Task TransportFailureAndTimeoutCanRecover(string failure)
     {
         int calls = 0;
         using var client = new HttpClient(new Handler(_ =>
         {
             if (++calls == 1)
-                throw timeout ? new TaskCanceledException("request timed out") : new HttpRequestException("connection closed");
+                throw failure switch
+                {
+                    "timeout" => new TaskCanceledException("request timed out"),
+                    "io" => new IOException("connection closed before response headers"),
+                    _ => new HttpRequestException("connection closed")
+                };
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK));
         }));
 

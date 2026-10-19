@@ -22,7 +22,8 @@ public static class IndexNowSubmitter
     public static IndexNowSubmissionResult Submit(IndexNowSubmissionOptions options, Action<string>? logger = null) =>
         SubmitAsync(options, logger: logger).GetAwaiter().GetResult();
 
-    /// <summary>Submits batches asynchronously. The caller retains ownership of an injected HTTP client.</summary>
+    /// <summary>Submits batches asynchronously. The caller retains ownership of an injected HTTP client.
+    /// A received 2xx status acknowledges delivery; optional response-preview failures are warnings.</summary>
     public static async Task<IndexNowSubmissionResult> SubmitAsync(IndexNowSubmissionOptions options, HttpClient? client = null,
         Action<string>? logger = null, CancellationToken cancellationToken = default)
     {
@@ -102,7 +103,7 @@ public static class IndexNowSubmitter
                                 batch,
                                 Math.Max(0, options.RetryCount),
                                 Math.Max(0, options.RetryDelayMs),
-                                Math.Max(1, options.TimeoutSeconds), http, cancellationToken).ConfigureAwait(false);
+                                Math.Max(1, options.TimeoutSeconds), http, warnings, cancellationToken).ConfigureAwait(false);
                             endpointRetryNotBefore = requestResult.RetryNotBefore;
                         }
 
@@ -405,7 +406,7 @@ public static class IndexNowSubmitter
         string[] urls,
         int retryCount,
         int retryDelayMs,
-        int timeoutSeconds, HttpClient http, CancellationToken cancellationToken)
+        int timeoutSeconds, HttpClient http, List<string> warnings, CancellationToken cancellationToken)
     {
         var attempts = 0;
         Exception? lastException = null;
@@ -448,31 +449,36 @@ public static class IndexNowSubmitter
                 lastBody = response.Content is null
                     ? null
                     : await ReadResponsePreviewAsync(response.Content, deadline.Token).ConfigureAwait(false);
-
-                if (response.IsSuccessStatusCode)
-                {
-                    return new IndexNowRequestResult
-                    {
-                        Endpoint = endpoint.ToString(),
-                        Host = host,
-                        UrlCount = urls.Length,
-                        Success = true,
-                        AttemptCount = attempts,
-                        StatusCode = lastStatusCode,
-                        ResponsePreview = TruncateResponse(lastBody)
-                    };
-                }
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
-            catch (Exception ex) when (ex is HttpRequestException or OperationCanceledException or IOException)
+            catch (Exception ex) when (ex is HttpRequestException or OperationCanceledException or IOException ||
+                (lastStatusCode >= 200 && lastStatusCode < 300 && ex is ObjectDisposedException))
             {
                 lastException = ex;
             }
 
-            // Keep response-stream failures retryable, but a known permanent refusal still
-            // needs corrected input even when its diagnostic body could not be read.
-            var retryable = lastStatusCode is null || IsRetryableStatusCode(lastStatusCode.Value) ||
-                (lastException is not null && lastStatusCode >= 200 && lastStatusCode < 300);
+            cancellationToken.ThrowIfCancellationRequested();
+            // The status acknowledges delivery. An optional preview failure must not resend
+            // an accepted POST or prevent callers from recording successful coverage.
+            if (lastStatusCode >= 200 && lastStatusCode < 300)
+            {
+                if (lastException is not null)
+                    warnings.Add($"indexnow: HTTP {lastStatusCode} delivery accepted for {endpoint} ({host}); " +
+                        $"response preview unavailable: {TruncateResponse(lastException.Message)}");
+                return new IndexNowRequestResult
+                {
+                    Endpoint = endpoint.ToString(),
+                    Host = host,
+                    UrlCount = urls.Length,
+                    Success = true,
+                    AttemptCount = attempts,
+                    StatusCode = lastStatusCode,
+                    ResponsePreview = TruncateResponse(lastBody)
+                };
+            }
+
+            // A known permanent refusal needs corrected input even if its body was unreadable.
+            var retryable = lastStatusCode is null || IsRetryableStatusCode(lastStatusCode.Value);
             if (!retryable)
             {
                 retryNotBefore = null;

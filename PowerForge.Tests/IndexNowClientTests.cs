@@ -6,25 +6,30 @@ namespace PowerForge.Tests;
 
 public sealed class IndexNowClientTests
 {
-    [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task ResponseStreamFailure_RetriesAndPreservesFailurePolicy(bool recover)
+    [Fact]
+    public async Task AcceptedResponseStreamFailure_IsNonfatalAndDoesNotResend()
     {
         int calls = 0;
-        using var http = new HttpClient(new Handler((_, _) => Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+        using var http = new HttpClient(new Handler((_, _) =>
         {
-            Content = ++calls == 2 && recover ? new StringContent("accepted") : new StreamContent(new BrokenResponseStream())
-        })));
+            calls++;
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StreamContent(new BrokenResponseStream())
+            });
+        }));
         var result = await IndexNowSubmitter.SubmitAsync(new()
         {
             Key = "test-key", Urls = ["https://example.com/one"], RetryCount = 1,
             RetryDelayMs = 0, FailOnRequestError = false
         }, http);
-        Assert.Equal(2, calls);
+        Assert.Equal(1, calls);
         Assert.True(result.Success);
-        Assert.Equal(recover ? 0 : 1, result.FailedRequestCount);
-        Assert.Equal(recover, Assert.Single(result.Requests).Success);
+        Assert.Equal(0, result.FailedRequestCount);
+        Assert.True(Assert.Single(result.Requests).Success);
+        Assert.Equal(1, result.Requests[0].AttemptCount);
+        Assert.Single(result.Warnings);
+        Assert.Empty(result.Errors);
     }
 
     private sealed class BrokenResponseStream : MemoryStream
