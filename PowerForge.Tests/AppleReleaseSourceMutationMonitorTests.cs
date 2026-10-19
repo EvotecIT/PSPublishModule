@@ -1,6 +1,6 @@
 namespace PowerForge.Tests;
 
-public sealed class AppleReleaseSourceMutationMonitorTests
+public sealed partial class AppleReleaseSourceMutationMonitorTests
 {
     [Fact]
     public void ValidateNoChanges_keeps_monitoring_during_final_identity_validation()

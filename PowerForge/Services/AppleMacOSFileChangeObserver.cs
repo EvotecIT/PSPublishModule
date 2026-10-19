@@ -67,6 +67,13 @@ internal sealed class AppleMacOSFileChangeObserver : IDisposable
         internal uint Flags { get; } = flags;
     }
 
+    /// <summary>Retains the native continuity reason without treating every observer failure as a buffer overflow.</summary>
+    internal sealed class ContinuityLossException(uint flags)
+        : IOException($"The native file mutation observer lost continuity (flags 0x{flags:X}).")
+    {
+        internal uint Flags { get; } = flags;
+    }
+
     private static void ReceiveEvents(IntPtr stream, IntPtr info, nuint count, IntPtr paths, IntPtr flags, IntPtr ids)
     {
         var observer = (AppleMacOSFileChangeObserver)GCHandle.FromIntPtr(info).Target!;
@@ -76,7 +83,7 @@ internal sealed class AppleMacOSFileChangeObserver : IDisposable
             {
                 var eventFlags = unchecked((uint)Marshal.ReadInt32(flags, checked((int)index * sizeof(uint))));
                 if ((eventFlags & (0x01 | 0x02 | 0x04 | 0x08 | 0x20)) != 0)
-                    throw new IOException($"The native file mutation observer lost continuity (flags 0x{eventFlags:X}).");
+                    throw new ContinuityLossException(eventFlags);
                 if (eventFlags == 0x10) continue; // HistoryDone contains no pathname mutation.
                 var path = Marshal.PtrToStringUTF8(Marshal.ReadIntPtr(paths, checked((int)index * IntPtr.Size)))
                     ?? throw new IOException("The native file mutation observer returned an unreadable path.");

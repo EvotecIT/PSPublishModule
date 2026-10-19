@@ -660,7 +660,7 @@ jobs:
         run: >
           dotnet test .\PowerForge.Tests\PowerForge.Tests.csproj
           -c Release --no-build --no-restore --nologo
-          --filter 'FullyQualifiedName~AppleSwiftPackageBuildSnapshotTests|FullyQualifiedName~AppleAppArchiveServiceTests|FullyQualifiedName~AppleDeviceDeploymentServiceTests'
+          --filter 'FullyQualifiedName~AppleSwiftPackageBuildSnapshotTests|FullyQualifiedName~AppleAppArchiveServiceTests|FullyQualifiedName~AppleDeviceDeploymentServiceTests|FullyQualifiedName~AppleReleaseSourceMutationMonitorTests'
 
       - name: Test with Pester
         shell: pwsh
