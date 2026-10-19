@@ -477,10 +477,17 @@ public sealed partial class AppleDeviceDeploymentServiceTests
                         XcrunExecutable = "/usr/bin/xcrun"
                     }));
 
-            Assert.Contains(
-                "private Swift package snapshot directory changed",
-                error.Message,
-                StringComparison.OrdinalIgnoreCase);
+            // Either observer may report the replaced root first. A child observer which
+            // loses its root must fail closed just as the parent's rename observation does.
+            var parentObservedReplacement = error.Message.Contains(
+                "private Swift package snapshot directory changed", StringComparison.OrdinalIgnoreCase);
+            var childLostRoot = error.Message.StartsWith(
+                    "The materialized Swift package root mutation monitor failed; its output cannot be trusted.",
+                    StringComparison.Ordinal) &&
+                error.InnerException is IOException observerError &&
+                (observerError.Message.Contains("lost continuity", StringComparison.Ordinal) ||
+                 observerError.Message.Contains("outside its root", StringComparison.Ordinal));
+            Assert.True(parentObservedReplacement || childLostRoot, error.ToString());
             Assert.Equal(2, runner.Requests.Count);
             Assert.False(Directory.Exists(runner.SourcePackagesRoot));
         }
