@@ -654,6 +654,14 @@ jobs:
           -c Release --no-build --no-restore --nologo
           --filter 'FullyQualifiedName~AppleTestFlightWorkerTests|FullyQualifiedName~AppleTestFlightReadinessTests|FullyQualifiedName~AppleReleaseWorkflowTests.PinnedExistingBetaRecovery'
 
+      - name: Test exact Apple package snapshots
+        shell: pwsh
+        timeout-minutes: 10
+        run: >
+          dotnet test .\PowerForge.Tests\PowerForge.Tests.csproj
+          -c Release --no-build --no-restore --nologo
+          --filter 'FullyQualifiedName~AppleSwiftPackageBuildSnapshotTests|FullyQualifiedName~AppleAppArchiveServiceTests|FullyQualifiedName~AppleDeviceDeploymentServiceTests'
+
       - name: Test with Pester
         shell: pwsh
         timeout-minutes: 10
