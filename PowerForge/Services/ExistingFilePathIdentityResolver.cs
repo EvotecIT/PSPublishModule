@@ -220,6 +220,32 @@ internal static class ExistingFilePathIdentityResolver
         return ResolveStatus(fullPath).MutationIdentity;
     }
 
+    /// <summary>Captures a private Unix link's own inode, change token and target text without following it.</summary>
+    internal static string CapturePrivateSymbolicLinkMutationIdentity(string path, string description)
+    {
+#if NET8_0_OR_GREATER
+        if (OperatingSystem.IsWindows())
+            throw new PlatformNotSupportedException("Private symbolic-link identity requires Unix lstat.");
+        var fullPath = System.IO.Path.GetFullPath(path);
+        if (SystemNativeLStat(fullPath, out var before) != 0)
+            throw new Win32Exception(Marshal.GetLastWin32Error());
+        if ((before.Mode & 0xF000) != 0xA000 || ResolveHardLinkCounts(new[] { fullPath })[0] != 1)
+            throw new InvalidOperationException($"The {description} must be one private symbolic link: {fullPath}");
+        var target = new FileInfo(fullPath).LinkTarget;
+        if (string.IsNullOrEmpty(target))
+            throw new InvalidOperationException($"The {description} has no readable symbolic-link target: {fullPath}");
+        if (SystemNativeLStat(fullPath, out var after) != 0)
+            throw new Win32Exception(Marshal.GetLastWin32Error());
+        var identity = FormatUnixFileStatus(before).MutationIdentity;
+        if ((after.Mode & 0xF000) != 0xA000 ||
+            !identity.Equals(FormatUnixFileStatus(after).MutationIdentity, StringComparison.Ordinal))
+            throw new InvalidOperationException($"The {description} changed while its symbolic-link identity was captured: {fullPath}");
+        return $"symlink:{identity}:{target.Length}:{target}";
+#else
+        throw new PlatformNotSupportedException("Private symbolic-link identity requires .NET 8 or newer.");
+#endif
+    }
+
     private static ExistingFilePhysicalStatus ReadWindowsFileStatus(SafeFileHandle handle)
     {
         var identity = ReadWindowsFileIdentity(handle);
@@ -303,7 +329,11 @@ internal static class ExistingFilePathIdentityResolver
     {
         if (SystemNativeFStat(handle, out var status) != 0)
             throw new Win32Exception(Marshal.GetLastWin32Error());
+        return FormatUnixFileStatus(status);
+    }
 
+    private static ExistingFilePhysicalStatus FormatUnixFileStatus(UnixFileStatus status)
+    {
         var identity = $"unix:{unchecked((ulong)status.Device):X16}:{unchecked((ulong)status.Inode):X16}";
         var changeToken = $"{status.ChangeTime:X16}:{status.ChangeTimeNanoseconds:X16}";
         return new ExistingFilePhysicalStatus(identity, changeToken);
@@ -384,7 +414,7 @@ internal static class ExistingFilePathIdentityResolver
         internal long RawDevice;
         internal long Inode;
         internal uint UserFlags;
-        internal int HardLinkCount;
+        // System.Native FileStatus ends at UserFlags; the remaining bytes are ABI padding.
     }
 #endif
 

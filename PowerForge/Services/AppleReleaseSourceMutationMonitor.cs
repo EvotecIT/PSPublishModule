@@ -30,7 +30,7 @@ internal sealed class AppleReleaseSourceMutationMonitor : IDisposable {
         string? exactPath = null,
         bool includeExactPathDescendants = false,
         Func<FileSystemEventArgs, bool>? ignoredMutation = null,
-        Func<string, bool>? unchangedMacOSCloneSource = null) {
+        Func<string, uint, bool>? unchangedMacOSCloneSource = null) {
         _scopeDescription = scopeDescription;
         _readerDescription = readerDescription;
         _failureInstruction = failureInstruction;
@@ -45,12 +45,13 @@ internal sealed class AppleReleaseSourceMutationMonitor : IDisposable {
                 (path, flags) =>
                 {
                     // APFS reports both clone destinations and unchanged clone sources as Created.
-                    // Only pure clone flags (optionally Created) on a bound, still-identical regular
-                    // artifact file is read activity. Mixed flags and every other path still fail.
+                    // Only pure clone flags (optionally Created) on a bound, still-identical input
+                    // qualify as read activity. The package owner binds regular files and contained
+                    // artifact links independently. Mixed flags and every other path still fail.
                     try
                     {
                         if (AppleMacOSFileChangeObserver.IsCloneSourceCandidate(flags) &&
-                            unchangedMacOSCloneSource(path))
+                            unchangedMacOSCloneSource(path, flags))
                             return;
                         OnMutation(this, new AppleMacOSFileChangeObserver.ChangeEventArgs(rootPath, path, flags));
                     }

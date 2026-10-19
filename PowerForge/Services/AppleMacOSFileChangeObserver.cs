@@ -7,9 +7,11 @@ namespace PowerForge;
 internal sealed class AppleMacOSFileChangeObserver : IDisposable
 {
     private const uint CloneFile = 0x00400000 | 0x00010000;
+    private const uint CloneSymbolicLink = 0x00400000 | 0x00040000;
 
     internal static bool IsCloneSourceCandidate(uint flags)
-        => flags == CloneFile || flags == (CloneFile | 0x00000100);
+        => flags == CloneFile || flags == (CloneFile | 0x00000100) ||
+           flags == CloneSymbolicLink || flags == (CloneSymbolicLink | 0x00000100);
     private const string Events = "/System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/FSEvents.framework/FSEvents";
     private const string Foundation = "/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation";
     private const string SystemLibrary = "/usr/lib/libSystem.B.dylib";

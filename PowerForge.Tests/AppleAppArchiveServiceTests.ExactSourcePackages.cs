@@ -592,6 +592,12 @@ public sealed partial class AppleAppArchiveServiceTests
             RedirectStandardError = true,
             UseShellExecute = false
         };
+        // These fixtures model a completed package producer. Do not let Git
+        // detach automatic maintenance that mutates .git after the command exits.
+        startInfo.ArgumentList.Add("-c");
+        startInfo.ArgumentList.Add("maintenance.auto=false");
+        startInfo.ArgumentList.Add("-c");
+        startInfo.ArgumentList.Add("gc.auto=0");
         foreach (var argument in arguments)
             startInfo.ArgumentList.Add(argument);
         using var process = Process.Start(startInfo)
@@ -605,22 +611,5 @@ public sealed partial class AppleAppArchiveServiceTests
     }
 
     private static void RunGit(string workingDirectory, params string[] arguments)
-    {
-        var startInfo = new ProcessStartInfo("git")
-        {
-            WorkingDirectory = workingDirectory,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false
-        };
-        foreach (var argument in arguments)
-            startInfo.ArgumentList.Add(argument);
-        using var process = Process.Start(startInfo)
-            ?? throw new InvalidOperationException("Unable to start git fixture process.");
-        var output = process.StandardOutput.ReadToEnd();
-        var error = process.StandardError.ReadToEnd();
-        process.WaitForExit();
-        if (process.ExitCode != 0)
-            throw new InvalidOperationException($"git {string.Join(' ', arguments)} failed: {output}{error}");
-    }
+        => _ = ReadGit(workingDirectory, arguments);
 }
