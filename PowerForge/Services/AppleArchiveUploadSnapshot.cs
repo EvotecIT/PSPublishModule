@@ -164,7 +164,8 @@ internal sealed class AppleArchiveUploadSnapshot : IDisposable
 
     internal static SnapshotIdentity CaptureCompleteIdentity(
         string archivePath,
-        string description = "private Apple upload archive snapshot")
+        string description = "private Apple upload archive snapshot",
+        bool bindSymbolicLinkIdentities = false)
     {
         var rootAttributes = File.GetAttributes(archivePath);
         if ((rootAttributes & FileAttributes.ReparsePoint) != 0)
@@ -181,7 +182,7 @@ internal sealed class AppleArchiveUploadSnapshot : IDisposable
                 ExistingFilePathIdentityResolver.CapturePrivateFileMutationIdentity(archivePath, description),
                 new HashSet<string>(GetPathComparer(archivePath)));
         }
-        var identities = CaptureFileMutationIdentities(archivePath, description);
+        var identities = CaptureFileMutationIdentities(archivePath, description, bindSymbolicLinkIdentities);
         var digest = ComputeMutationDigest(identities, includeRoot: true);
         var approvedFileMutationDigest = ComputeMutationDigest(identities, includeRoot: false);
         return new SnapshotIdentity(
@@ -334,7 +335,8 @@ internal sealed class AppleArchiveUploadSnapshot : IDisposable
 
     private static IReadOnlyDictionary<string, string> CaptureFileMutationIdentities(
         string archivePath,
-        string description)
+        string description,
+        bool bindSymbolicLinkIdentities)
     {
         var result = new Dictionary<string, string>(GetPathComparer(archivePath));
         result.Add(
@@ -351,7 +353,12 @@ internal sealed class AppleArchiveUploadSnapshot : IDisposable
                 var relativePath = FrameworkCompatibility.GetRelativePath(archivePath, entry).Replace('\\', '/');
                 var attributes = File.GetAttributes(entry);
                 if ((attributes & FileAttributes.ReparsePoint) != 0)
+                {
+                    if (bindSymbolicLinkIdentities)
+                        result.Add(relativePath,
+                            ExistingFilePathIdentityResolver.CapturePrivateSymbolicLinkMutationIdentity(entry, description));
                     continue;
+                }
                 if ((attributes & FileAttributes.Directory) != 0)
                 {
                     result.Add(

@@ -140,7 +140,7 @@ public sealed partial class AppleReleaseSourceMutationMonitorTests
             _artifact = Path.Combine(_root.FullName, "producer.bin");
             File.WriteAllText(_artifact, "producer output");
             Monitor = new AppleReleaseSourceMutationMonitor(
-                _root.FullName, enableImmediately: false, unchangedMacOSCloneSource: _ => false);
+                _root.FullName, enableImmediately: false, unchangedMacOSCloneSource: (_, _) => false);
 
             // Inject at the existing native observer error boundary. No production test hook,
             // OS-global event flood, callback timing assumption or observer replacement is needed.
