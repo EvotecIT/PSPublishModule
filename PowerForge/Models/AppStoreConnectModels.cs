@@ -68,6 +68,9 @@ public sealed class AppStoreConnectBuildInfo
     /// <summary>Expired flag when available.</summary>
     public bool? Expired { get; set; }
 
+    /// <summary>Publisher's non-exempt encryption declaration, or null when Apple has not returned a value.</summary>
+    public bool? UsesNonExemptEncryption { get; set; }
+
     /// <summary>Minimum OS version when available.</summary>
     public string? MinOsVersion { get; set; }
 
