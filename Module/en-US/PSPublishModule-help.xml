@@ -22799,6 +22799,19 @@ When provided, conflict findings can participate in diagnostics baselines and po
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>IncludeModulePublishing</maml:name>
+          <maml:description>
+            <maml:para>Controls whether module repository and GitHub publish segments are included for DSL, legacy dictionary,&#xD;
+or JSON configuration input. Disabling them preserves project/package publishing, including NuGet.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Boolean</command:parameterValue>
+          <dev:type>
+            <maml:name>Boolean</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>$true</dev:defaultValue>
+        </command:parameter>
         <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="None">
           <maml:name>IncludePS1</maml:name>
           <maml:description>
@@ -23284,15 +23297,15 @@ When provided, conflict findings can participate in diagnostics baselines and po
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
           <maml:name>IncludeModulePublishing</maml:name>
           <maml:description>
-            <maml:para>Controls whether module repository and GitHub publish segments declared by a JSON configuration are included.&#xD;
-Parent release hosts disable them when publishing signed checkpointed module artifacts directly.</maml:para>
+            <maml:para>Controls whether module repository and GitHub publish segments are included for DSL, legacy dictionary,&#xD;
+or JSON configuration input. Disabling them preserves project/package publishing, including NuGet.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">Boolean</command:parameterValue>
           <dev:type>
             <maml:name>Boolean</maml:name>
             <maml:uri />
           </dev:type>
-          <dev:defaultValue>None</dev:defaultValue>
+          <dev:defaultValue>$true</dev:defaultValue>
         </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
           <maml:name>IncludeProjectPackages</maml:name>
@@ -23661,6 +23674,19 @@ When provided, conflict findings can participate in diagnostics baselines and po
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>IncludeModulePublishing</maml:name>
+          <maml:description>
+            <maml:para>Controls whether module repository and GitHub publish segments are included for DSL, legacy dictionary,&#xD;
+or JSON configuration input. Disabling them preserves project/package publishing, including NuGet.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Boolean</command:parameterValue>
+          <dev:type>
+            <maml:name>Boolean</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>$true</dev:defaultValue>
         </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
           <maml:name>JsonOnly</maml:name>
@@ -24045,15 +24071,15 @@ When provided, conflict findings can participate in diagnostics baselines and po
       <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
         <maml:name>IncludeModulePublishing</maml:name>
         <maml:description>
-          <maml:para>Controls whether module repository and GitHub publish segments declared by a JSON configuration are included.&#xD;
-Parent release hosts disable them when publishing signed checkpointed module artifacts directly.</maml:para>
+          <maml:para>Controls whether module repository and GitHub publish segments are included for DSL, legacy dictionary,&#xD;
+or JSON configuration input. Disabling them preserves project/package publishing, including NuGet.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">Boolean</command:parameterValue>
         <dev:type>
           <maml:name>Boolean</maml:name>
           <maml:uri />
         </dev:type>
-        <dev:defaultValue>None</dev:defaultValue>
+        <dev:defaultValue>$true</dev:defaultValue>
       </command:parameter>
       <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
         <maml:name>IncludeProjectPackages</maml:name>

@@ -172,6 +172,7 @@ public sealed partial class InvokeModuleBuildCommand : PSCmdlet
     [Parameter(ParameterSetName = ParameterSetModern)]
     [Parameter(ParameterSetName = ParameterSetConfiguration)]
     [Parameter(ParameterSetName = ParameterSetConfig)]
+    [PSDefaultValue(Value = true)]
     public bool IncludeModulePublishing { get; set; } = true;
 
     /// <summary>
