@@ -1942,6 +1942,7 @@ Notes:
   - exclude: `exclude`/`excludes`/`excludeNames`
 - Safety defaults:
   - `dryRun:true`, `keep:5`, `maxAgeDays:7`, `maxDelete:200`
+- If concurrent uploads or removals shift the paginated inventory, cleanup discards the partial listing and starts again, up to three attempts. Deletions begin only after every page and selected name has been validated. Persistent instability, malformed artifact data, and API failures stop the run before deletion.
 - Use `apiBaseUrl` for GitHub Enterprise API endpoints or local integration testing.
 - `continueOnError:true` keeps pipeline green if API errors or delete failures occur.
 - `reportPath`/`summaryPath` write JSON + Markdown outputs for CI diagnostics.
