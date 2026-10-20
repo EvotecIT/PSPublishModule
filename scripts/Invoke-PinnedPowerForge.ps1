@@ -655,7 +655,9 @@ function Invoke-RedactedProcess {
         PATH = $(if ($IsMacOS) { '/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin' } elseif ($IsWindows) { "$env:SystemRoot\System32;$env:SystemRoot" } else { '/usr/bin:/bin:/usr/sbin:/sbin' })
         TMPDIR = [IO.Path]::GetTempPath()
     }
-    foreach ($name in @('USER', 'LOGNAME', 'SHELL', 'SSH_AUTH_SOCK', 'HTTPS_PROXY', 'HTTP_PROXY', 'NO_PROXY', 'SSL_CERT_FILE', 'SSL_CERT_DIR', 'POWERFORGE_APPLE_STATE_ROOT', 'POWERFORGE_APPLE_WORKER_GATE')) {
+    # NuGet coordinates shared HTTP-cache access beneath this directory,
+    # independently of each invocation's private packages and temporary root.
+    foreach ($name in @('USER', 'LOGNAME', 'SHELL', 'SSH_AUTH_SOCK', 'HTTPS_PROXY', 'HTTP_PROXY', 'NO_PROXY', 'SSL_CERT_FILE', 'SSL_CERT_DIR', 'NUGET_SCRATCH', 'POWERFORGE_APPLE_STATE_ROOT', 'POWERFORGE_APPLE_WORKER_GATE')) {
         $value = [Environment]::GetEnvironmentVariable($name)
         if (-not [string]::IsNullOrWhiteSpace($value)) { $safeEnvironment[$name] = $value }
     }
