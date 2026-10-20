@@ -102,6 +102,7 @@ internal sealed class ModuleBuildPreparationService
         };
 
         spec.Build.Version = ResolveBaseVersion(projectRoot, moduleName!, segments);
+        ModuleBuildPublishOwnershipPolicy.Apply(spec, request.IncludeModulePublishing);
 
         return new ModuleBuildPreparedContext
         {
@@ -128,6 +129,7 @@ internal sealed class ModuleBuildPreparationService
         spec.SourceInputPaths = new[] { configFullPath };
         ResolvePipelineSpecPaths(spec, configFullPath);
         ApplyConfigOverrides(spec, request);
+        ModuleBuildPublishOwnershipPolicy.Apply(spec, request.IncludeModulePublishing);
         spec.Segments = AddRunModeSegment(spec.Segments ?? Array.Empty<IConfigurationSegment>(), request.RunMode);
 
         if (spec.Build is null)
@@ -250,14 +252,6 @@ internal sealed class ModuleBuildPreparationService
                     segment is not ConfigurationPackageBuildSegment)
                 .ToArray();
             ModuleBuildPackageOwnershipPolicy.RemoveUnavailableVersionSources(segments);
-            spec.Segments = segments;
-        }
-
-        if (!request.IncludeModulePublishing)
-        {
-            segments = segments
-                .Where(static segment => segment is not ConfigurationPublishSegment)
-                .ToArray();
             spec.Segments = segments;
         }
 

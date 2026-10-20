@@ -564,6 +564,15 @@ present, `Invoke-ModuleBuild` now keeps those segments in the module pipeline pl
 That means consumer repos can stay with one script and one DSL block, while PowerForge still keeps one reusable
 implementation for package build, module build, and GitHub publishing.
 
+For a package-only publication through the module pipeline, pass
+`-IncludeModulePublishing:$false` to `Build-Module` / `Invoke-ModuleBuild`. This removes
+module repository and module GitHub publish segments before the `Publish` gate can enable
+them. Project and package publishers, including NuGet, keep their configured behavior;
+select their destinations in the project/package configuration. The switch works with
+`-Settings`, legacy `-Configuration`, and JSON `-ConfigPath` input, and defaults to `$true`.
+Use `-JsonOnly -JsonPath ...` with the same selection to inspect the retained segments
+without building, signing, or publishing.
+
 ## Runtime Contract
 
 - `New-ConfigurationProjectBuild` references existing `project.build.json` files from `Build-Module {}`.

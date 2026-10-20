@@ -166,9 +166,11 @@ public sealed partial class InvokeModuleBuildCommand : PSCmdlet
     public bool IncludeProjectPackages { get; set; } = true;
 
     /// <summary>
-    /// Controls whether module repository and GitHub publish segments declared by a JSON configuration are included.
-    /// Parent release hosts disable them when publishing signed checkpointed module artifacts directly.
+    /// Controls whether module repository and GitHub publish segments are included for DSL, legacy dictionary,
+    /// or JSON configuration input. Disabling them preserves project/package publishing, including NuGet.
     /// </summary>
+    [Parameter(ParameterSetName = ParameterSetModern)]
+    [Parameter(ParameterSetName = ParameterSetConfiguration)]
     [Parameter(ParameterSetName = ParameterSetConfig)]
     public bool IncludeModulePublishing { get; set; } = true;
 
