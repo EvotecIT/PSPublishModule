@@ -237,6 +237,32 @@ public sealed class GitHubArtifactCleanupService
 
     private GitHubArtifactRecord[] ListArtifacts(Uri apiBaseUri, string repository, string token, int pageSize, string[] exactIncludeNames)
     {
+        const int maxAttempts = 3;
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                return ListArtifactsAttempt(apiBaseUri, repository, token, pageSize, exactIncludeNames);
+            }
+            catch (ArtifactListingChangedException exception)
+            {
+                if (attempt == maxAttempts)
+                    throw new InvalidOperationException($"GitHub artifact listing remained unstable after {maxAttempts} attempts. {exception.Message}", exception);
+
+                // Offset pages can shift while another workflow uploads or removes artifacts.
+                // Discard the entire inventory, including earlier exact-name queries, before retrying.
+                _logger.Warn($"GitHub artifact inventory changed during listing (attempt {attempt}/{maxAttempts}); restarting from the first page. No deletions were attempted.");
+            }
+        }
+    }
+
+    private sealed class ArtifactListingChangedException : Exception
+    {
+        public ArtifactListingChangedException(string message) : base(message) { }
+    }
+
+    private GitHubArtifactRecord[] ListArtifactsAttempt(Uri apiBaseUri, string repository, string token, int pageSize, string[] exactIncludeNames)
+    {
         var records = new List<GitHubArtifactRecord>();
         var seenIds = new HashSet<long>();
         var names = exactIncludeNames.Length == 0 ? new string?[] { null } : exactIncludeNames;
@@ -267,7 +293,7 @@ public sealed class GitHubArtifactCleanupService
                     throw new InvalidOperationException("GitHub artifact listing did not contain a valid total_count.");
                 totalCount ??= currentTotal;
                 if (currentTotal != totalCount.Value)
-                    throw new InvalidOperationException("GitHub artifact total_count changed during listing; no deletions were attempted.");
+                    throw new ArtifactListingChangedException("GitHub artifact total_count changed during listing; no deletions were attempted.");
 
                 if (!root.TryGetProperty("artifacts", out var artifactsElement) || artifactsElement.ValueKind != JsonValueKind.Array)
                     throw new InvalidOperationException("GitHub artifact listing did not contain an artifacts array.");
@@ -283,18 +309,18 @@ public sealed class GitHubArtifactCleanupService
                     if (name is not null && !string.Equals(artifact.Name, name, StringComparison.Ordinal))
                         throw new InvalidOperationException($"GitHub artifact name filter returned an unexpected name for '{name}'.");
                     if (!seenIds.Add(artifact.Id))
-                        throw new InvalidOperationException($"GitHub artifact listing repeated artifact #{artifact.Id}; no deletions were attempted.");
+                        throw new ArtifactListingChangedException($"GitHub artifact listing repeated artifact #{artifact.Id}; no deletions were attempted.");
                     records.Add(artifact);
                     pageCount++;
                 }
 
                 listedForName += pageCount;
                 if (listedForName > totalCount.Value)
-                    throw new InvalidOperationException("GitHub artifact listing exceeded total_count; no deletions were attempted.");
+                    throw new ArtifactListingChangedException("GitHub artifact listing exceeded total_count; no deletions were attempted.");
                 if (listedForName == totalCount.Value)
                     break;
                 if (pageCount < pageSize)
-                    throw new InvalidOperationException("GitHub artifact listing ended before total_count was reached; no deletions were attempted.");
+                    throw new ArtifactListingChangedException("GitHub artifact listing ended before total_count was reached; no deletions were attempted.");
                 page++;
             }
         }
