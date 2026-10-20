@@ -11,7 +11,7 @@ Creates/updates a module structure and triggers the build pipeline (legacy DSL c
 ## SYNTAX
 ### Modern (Default)
 ```powershell
-Invoke-ModuleBuild [[-Settings] <scriptblock>] -ModuleName <string> [-Path <string>] [-RunMode <ConfigurationGateMode>] [-FunctionsToExportFolder <string>] [-AliasesToExportFolder <string>] [-ExcludeFromPackage <string[]>] [-ExcludeDirectories <string[]>] [-ExcludeFiles <string[]>] [-IncludeRoot <string[]>] [-IncludePS1 <string[]>] [-IncludeAll <string[]>] [-IncludeCustomCode <scriptblock>] [-IncludeToArray <IDictionary>] [-LibrariesCore <string>] [-LibrariesDefault <string>] [-LibrariesStandard <string>] [-Legacy] [-NoInteractive] [-Quiet] [-PassThru] [-StagingPath <string>] [-CsprojPath <string>] [-DotNetConfiguration <string>] [-DotNetFramework <string[]>] [-SkipInstall] [-InstallStrategy <InstallationStrategy>] [-KeepVersions <int>] [-InstallRoots <string[]>] [-LegacyFlatHandling <LegacyFlatModuleHandling>] [-PreserveInstallVersions <string[]>] [-KeepStaging] [-JsonOnly] [-JsonPath <string>] [-DiagnosticsBaselinePath <string>] [-GenerateDiagnosticsBaseline] [-UpdateDiagnosticsBaseline] [-FailOnNewDiagnostics] [-FailOnDiagnosticsSeverity <BuildDiagnosticSeverity>] [-DiagnosticsBinaryConflictSearchRoot <string[]>] [-ExitCode] [<CommonParameters>]
+Invoke-ModuleBuild [[-Settings] <scriptblock>] -ModuleName <string> [-Path <string>] [-RunMode <ConfigurationGateMode>] [-IncludeModulePublishing <bool>] [-FunctionsToExportFolder <string>] [-AliasesToExportFolder <string>] [-ExcludeFromPackage <string[]>] [-ExcludeDirectories <string[]>] [-ExcludeFiles <string[]>] [-IncludeRoot <string[]>] [-IncludePS1 <string[]>] [-IncludeAll <string[]>] [-IncludeCustomCode <scriptblock>] [-IncludeToArray <IDictionary>] [-LibrariesCore <string>] [-LibrariesDefault <string>] [-LibrariesStandard <string>] [-Legacy] [-NoInteractive] [-Quiet] [-PassThru] [-StagingPath <string>] [-CsprojPath <string>] [-DotNetConfiguration <string>] [-DotNetFramework <string[]>] [-SkipInstall] [-InstallStrategy <InstallationStrategy>] [-KeepVersions <int>] [-InstallRoots <string[]>] [-LegacyFlatHandling <LegacyFlatModuleHandling>] [-PreserveInstallVersions <string[]>] [-KeepStaging] [-JsonOnly] [-JsonPath <string>] [-DiagnosticsBaselinePath <string>] [-GenerateDiagnosticsBaseline] [-UpdateDiagnosticsBaseline] [-FailOnNewDiagnostics] [-FailOnDiagnosticsSeverity <BuildDiagnosticSeverity>] [-DiagnosticsBinaryConflictSearchRoot <string[]>] [-ExitCode] [<CommonParameters>]
 ```
 
 ### Config
@@ -21,7 +21,7 @@ Invoke-ModuleBuild -ConfigPath <string> [-RunMode <ConfigurationGateMode>] [-Mod
 
 ### Configuration
 ```powershell
-Invoke-ModuleBuild -Configuration <IDictionary> [-RunMode <ConfigurationGateMode>] [-ExcludeDirectories <string[]>] [-ExcludeFiles <string[]>] [-Legacy] [-NoInteractive] [-Quiet] [-PassThru] [-JsonOnly] [-JsonPath <string>] [-DiagnosticsBaselinePath <string>] [-GenerateDiagnosticsBaseline] [-UpdateDiagnosticsBaseline] [-FailOnNewDiagnostics] [-FailOnDiagnosticsSeverity <BuildDiagnosticSeverity>] [-DiagnosticsBinaryConflictSearchRoot <string[]>] [-ExitCode] [<CommonParameters>]
+Invoke-ModuleBuild -Configuration <IDictionary> [-RunMode <ConfigurationGateMode>] [-IncludeModulePublishing <bool>] [-ExcludeDirectories <string[]>] [-ExcludeFiles <string[]>] [-Legacy] [-NoInteractive] [-Quiet] [-PassThru] [-JsonOnly] [-JsonPath <string>] [-DiagnosticsBaselinePath <string>] [-GenerateDiagnosticsBaseline] [-UpdateDiagnosticsBaseline] [-FailOnNewDiagnostics] [-FailOnDiagnosticsSeverity <BuildDiagnosticSeverity>] [-DiagnosticsBinaryConflictSearchRoot <string[]>] [-ExitCode] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -431,18 +431,18 @@ Accept wildcard characters: False
 ```
 
 ### -IncludeModulePublishing
-Controls whether module repository and GitHub publish segments declared by a JSON configuration are included.
-Parent release hosts disable them when publishing signed checkpointed module artifacts directly.
+Controls whether module repository and GitHub publish segments are included for DSL, legacy dictionary,
+or JSON configuration input. Disabling them preserves project/package publishing, including NuGet.
 
 ```yaml
 Type: Boolean
-Parameter Sets: Config
+Parameter Sets: Modern, Config, Configuration
 Aliases: None
 Possible values:
 
 Required: False
 Position: named
-Default value: None
+Default value: $true
 Accept pipeline input: False
 Accept wildcard characters: False
 ```
