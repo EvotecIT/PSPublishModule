@@ -8,25 +8,26 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
 {
     [Theory]
     [Trait("Category", "DotNetPublishPrGate")]
-    [InlineData(false, false, false)]
-    [InlineData(false, true, false)]
-    [InlineData(true, false, false)]
-    [InlineData(true, true, false)]
-    [InlineData(true, true, true)]
-    public void Run_ReleaseProvenanceRequiresKnownMatchingReusedSource(bool compiled, bool unified, bool synchronized)
+    [InlineData(false, false, false, false)]
+    [InlineData(false, true, false, false)]
+    [InlineData(true, false, false, false)]
+    [InlineData(true, true, false, false)]
+    [InlineData(true, true, true, true)]
+    [InlineData(true, true, true, false)]
+    public void Run_ReleaseProvenanceRequiresKnownMatchingReusedSource(bool compiled, bool unified, bool synchronized, bool nestedModule)
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
         var checkoutRoot = Path.Combine(root.FullName, "source");
-        var sourceRoot = synchronized ? Path.Combine(checkoutRoot, "module") : checkoutRoot;
+        var sourceRoot = synchronized && nestedModule ? Path.Combine(checkoutRoot, "module") : checkoutRoot;
         var staging = Path.Combine(root.FullName, "staging");
         var artifacts = Path.Combine(root.FullName, "artifacts");
         try
         {
             const string moduleName = "TestModule";
             WriteMinimalModule(sourceRoot, moduleName, "1.0.0");
-            if (synchronized)
+            if (synchronized && nestedModule)
             {
-                // Keep coordinated-release state outside the nested module compilation inputs.
+                // Also cover coordinated-release state outside the nested module compilation inputs.
                 Directory.Delete(Path.Combine(sourceRoot, ".git"), recursive: true);
                 RunModuleSourceGit(checkoutRoot, "init", "--quiet");
             }

@@ -46,7 +46,7 @@ public sealed partial class PowerShellCompilationDependencyPlanner
         {
             var ignoreInaccessibleOptionalPayload = resourceMode != PowerShellCompilationResourceMode.CompleteModule &&
                                                     includePatterns.Length == 0;
-            foreach (var file in EnumerateContainedFiles(moduleRoot, ignoreInaccessibleOptionalPayload))
+            foreach (var file in EnumerateContainedFiles(moduleRoot, ignoreInaccessibleOptionalPayload, skipGitMetadata: true))
             {
                 var fullPath = Path.GetFullPath(file);
                 if (generatedRoots.Any(root => IsSameOrContained(root, fullPath))) continue;
@@ -74,7 +74,7 @@ public sealed partial class PowerShellCompilationDependencyPlanner
             {
                 PowerShellCompilationPathSafety.EnsureContained(moduleRoot, directory, $"Included resource directory '{directory}' escapes the script root.");
                 PowerShellCompilationPathSafety.EnsureNoLinks(moduleRoot, directory, $"Included resource directory '{directory}' traverses a symbolic link or junction.");
-                foreach (var file in EnumerateContainedFiles(directory, ignoreInaccessible: false))
+                foreach (var file in EnumerateContainedFiles(directory, ignoreInaccessible: false, skipGitMetadata: true))
                 {
                     var fullPath = Path.GetFullPath(file);
                     if (generatedRoots.Any(root => IsSameOrContained(root, fullPath))) continue;
@@ -84,7 +84,7 @@ public sealed partial class PowerShellCompilationDependencyPlanner
             }
             foreach (var pattern in includePatterns.Where(HasWildcards))
             {
-                foreach (var file in EnumerateContainedFiles(moduleRoot, ignoreInaccessible: false).Where(file => GlobMatches(pattern, FrameworkCompatibility.GetRelativePath(moduleRoot, file).Replace('\\', '/'))))
+                foreach (var file in EnumerateContainedFiles(moduleRoot, ignoreInaccessible: false, skipGitMetadata: true).Where(file => GlobMatches(pattern, FrameworkCompatibility.GetRelativePath(moduleRoot, file).Replace('\\', '/'))))
                 {
                     var fullPath = Path.GetFullPath(file);
                     if (generatedRoots.Any(root => IsSameOrContained(root, fullPath))) continue;
@@ -182,7 +182,7 @@ public sealed partial class PowerShellCompilationDependencyPlanner
         }
     }
 
-    private static IEnumerable<string> EnumerateContainedFiles(string root, bool ignoreInaccessible)
+    private static IEnumerable<string> EnumerateContainedFiles(string root, bool ignoreInaccessible, bool skipGitMetadata = false)
     {
         var pending = new Stack<string>();
         pending.Push(root);
@@ -203,10 +203,16 @@ public sealed partial class PowerShellCompilationDependencyPlanner
                     $"Resource payload directory '{current}' could not be enumerated. Explicit and CompleteModule resource contracts fail closed when contained input is inaccessible.",
                     exception);
             }
+            // Administrative entries are not implicit payload, including linked-worktree pointer files.
+            // Explicit manifest directory expansion keeps its required, fail-closed contract.
             foreach (var file in files)
+            {
+                if (skipGitMetadata && Path.GetFileName(file).Equals(".git", StringComparison.OrdinalIgnoreCase)) continue;
                 yield return Path.GetFullPath(file);
+            }
             foreach (var directory in directories)
             {
+                if (skipGitMetadata && Path.GetFileName(directory).Equals(".git", StringComparison.OrdinalIgnoreCase)) continue;
                 if ((File.GetAttributes(directory) & FileAttributes.ReparsePoint) != 0)
                     throw new InvalidOperationException($"Resource payload directory '{directory}' is a symbolic link or junction.");
                 pending.Push(directory);
@@ -226,6 +232,9 @@ public sealed partial class PowerShellCompilationDependencyPlanner
                 Path.IsPathRooted(raw) || LooksLikeWindowsRootedPath(raw) ||
                 pattern.Split('/').Any(static segment => segment == ".."))
                 throw new ArgumentException($"Resource pattern '{pattern}' must be a contained path relative to the source root.", parameterName);
+            if (parameterName == "includeResource" &&
+                pattern.Split('/').Any(static segment => segment.Equals(".git", StringComparison.OrdinalIgnoreCase)))
+                throw new ArgumentException($"Git metadata is not optional resource payload: '{pattern}'.", parameterName);
             if (pattern.Length == 0 || pattern == ".")
                 throw new ArgumentException("Resource patterns must identify a file, directory, or contained glob.", parameterName);
             if (!normalized.Contains(pattern, StringComparer.OrdinalIgnoreCase)) normalized.Add(pattern);
