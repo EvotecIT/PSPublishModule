@@ -4,11 +4,11 @@
     "net10.0": {
       "DBAClientX.SQLite": {
         "type": "Direct",
-        "requested": "[1.0.12, )",
-        "resolved": "1.0.12",
-        "contentHash": "E334bNJEVB28J+j1uhvxUl5yJfoc8lMSn9J6DpWyrY2Em0qswfbUcb9AALGpj0/SrqLYgf/aGPOy07XxyuWYHA==",
+        "requested": "[1.0.14, )",
+        "resolved": "1.0.14",
+        "contentHash": "mCmGwWj8U22vZptJUXST1y4ESLs9knIZTPVoYkjbHmdGuWOQq0xSLW+RbcKp4fbAQ6ThuDwrlzNen5LvqWBjOg==",
         "dependencies": {
-          "DBAClientX.Core": "1.0.12",
+          "DBAClientX.Core": "1.0.14",
           "Microsoft.Data.Sqlite": "10.0.10",
           "SQLitePCLRaw.bundle_e_sqlite3": "3.0.5",
           "SQLitePCLRaw.core": "3.0.5"
@@ -71,8 +71,8 @@
       },
       "DBAClientX.Core": {
         "type": "Transitive",
-        "resolved": "1.0.12",
-        "contentHash": "UVz6qliYgymtMAUJXuwY9Y2U1f9zDMGU+xPj/6BcXqm3QrrHrt1KNSsd0iIF5qI3KvLsY8/LfNJ1VgRdFyXHng=="
+        "resolved": "1.0.14",
+        "contentHash": "PxTqEReEIhcFYAuSRN73qzGonlXFnws3dQti71k35BPpXco8ozmFjZ3DbFPn2h1GRp4GMXIj738NY3a9Qra3kQ=="
       },
       "Google.Apis": {
         "type": "Transitive",
