@@ -129,13 +129,13 @@ public static partial class WebApiDocsGenerator
 
         // Punctuation must end a sentence, rather than a version, URL, or .NET name.
         var sentenceEnd = 0;
-        foreach (Match sentence in Regex.Matches(description, @"[.!?](?=\s|$)", RegexOptions.CultureInvariant, RegexTimeout))
+        foreach (Match sentence in Regex.Matches(description, """[.!?][\p{Pe}\p{Pf}"']*(?=\s|$)""", RegexOptions.CultureInvariant, RegexTimeout))
         {
             var end = sentence.Index + sentence.Length;
             if (end > ApiSeoDescriptionMaximumLength)
                 break;
             // Common prose abbreviations and dotted initialisms continue the sentence.
-            if (description[sentence.Index] == '.' && Regex.IsMatch(description[..end],
+            if (description[sentence.Index] == '.' && Regex.IsMatch(description[..(sentence.Index + 1)],
                 @"(?:\b(?:[a-z]\.){2,}|\b(?:etc|vs|dr|mr|mrs|ms|prof|sr|jr|st|mt|fig|eq|no|approx|cf|viz|al)\.)\z",
                 RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, RegexTimeout))
                 continue;

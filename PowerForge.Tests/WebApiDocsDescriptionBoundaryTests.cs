@@ -7,22 +7,25 @@ namespace PowerForge.Tests;
 public sealed class WebApiDocsDescriptionBoundaryTests
 {
     [Theory]
-    [InlineData(ApiDocsType.CSharp, "docs", true)]
-    [InlineData(ApiDocsType.CSharp, "simple", true)]
-    [InlineData(ApiDocsType.PowerShell, "docs", true)]
-    [InlineData(ApiDocsType.PowerShell, "simple", true)]
-    [InlineData(ApiDocsType.CSharp, "docs", false)]
-    [InlineData(ApiDocsType.CSharp, "simple", false)]
-    [InlineData(ApiDocsType.PowerShell, "docs", false)]
-    [InlineData(ApiDocsType.PowerShell, "simple", false)]
-    public void Generate_LongSummariesEndCleanlyInEveryDescriptionTag(ApiDocsType source, string template, bool hasSentences)
+    [InlineData(ApiDocsType.CSharp, "docs", true, false)]
+    [InlineData(ApiDocsType.CSharp, "simple", true, false)]
+    [InlineData(ApiDocsType.PowerShell, "docs", true, false)]
+    [InlineData(ApiDocsType.PowerShell, "simple", true, false)]
+    [InlineData(ApiDocsType.CSharp, "docs", false, false)]
+    [InlineData(ApiDocsType.CSharp, "simple", false, false)]
+    [InlineData(ApiDocsType.PowerShell, "docs", false, false)]
+    [InlineData(ApiDocsType.PowerShell, "simple", false, false)]
+    [InlineData(ApiDocsType.CSharp, "docs", true, true)]
+    [InlineData(ApiDocsType.PowerShell, "simple", true, true)]
+    public void Generate_LongSummariesEndCleanlyInEveryDescriptionTag(ApiDocsType source, string template, bool hasSentences, bool quotedSentence)
     {
         const string sentences = "Formats pipeline objects as a width-aware table. Preserves explicit column widths and readable terminal output.";
         const string wordPrefix = "Formats pipeline objects as a width-aware table while preserving column widths, terminal colors, readable headings, and predictable pipeline output";
+        var completeSentences = quotedSentence ? $"\"{sentences}\"" : sentences;
         var summary = hasSentences
-            ? sentences + " Additional reference guidance explains configuration, formatting, pipeline handling, and all available environment settings."
+            ? completeSentences + " Additional reference guidance explains configuration, formatting, pipeline handling, and all available environment settings."
             : wordPrefix + " in the configured terminal environment and every supported pipeline invocation";
-        var expected = hasSentences ? sentences : wordPrefix + "…";
+        var expected = hasSentences ? completeSentences : wordPrefix + "…";
         var root = Path.Combine(Path.GetTempPath(), "pf-apidocs-description-boundary-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
         try
@@ -99,6 +102,40 @@ public sealed class WebApiDocsDescriptionBoundaryTests
         var sentence = "Documents " + new string('x', 149) + ".";
         Assert.Equal(160, sentence.Length);
         Assert.Equal(sentence, Fit(sentence + " Additional guidance extends beyond the metadata limit."));
+    }
+
+    [Theory]
+    [InlineData("\"", "\"")]
+    [InlineData("“", "”")]
+    [InlineData("(", ")")]
+    [InlineData("(\"", "\")")]
+    public void FitApiSeoDescription_IncludesClosingDelimitersInTheSentence(string opening, string closing)
+    {
+        var sentence = opening + "The terminal preserves configured formatting." + closing;
+        Assert.Equal(sentence, Fit(sentence + " Additional reference guidance explains configuration, formatting, pipeline handling, and all available environment settings."));
+    }
+
+    [Fact]
+    public void FitApiSeoDescription_CountsClosingDelimitersWithinTheLimit()
+    {
+        var sentence = "\"" + new string('x', 157) + ".\"";
+        Assert.Equal(160, sentence.Length);
+        Assert.Equal(sentence, Fit(sentence + " Additional guidance extends beyond the metadata limit."));
+    }
+
+    [Fact]
+    public void FitApiSeoDescription_ClosingDelimiterBeyondTheLimitRequiresFallback()
+    {
+        var sentence = "\"" + new string('x', 158) + ".\"";
+        Assert.Equal(161, sentence.Length);
+        Assert.Equal("\"" + new string('x', 158) + "…", Fit(sentence + " Additional guidance extends beyond the metadata limit."));
+    }
+
+    [Fact]
+    public void FitApiSeoDescription_ClosingDelimiterDoesNotTurnAnAbbreviationIntoASentence()
+    {
+        var prefix = "Use (e.g.) " + new string('x', 120) + " output";
+        Assert.Equal(prefix + "…", Fit(prefix + " " + new string('y', 100)));
     }
 
     private static string Fit(string value)
