@@ -5,7 +5,7 @@ namespace PowerForge.Web;
 public static partial class WebSiteAuditor
 {
     private static readonly Regex EscapedMediaTagPattern = new(
-        "&lt;\\s*(img|iframe|video|source|picture)\\b(?=[^&]*?=)",
+        "<\\s*(img|iframe|video|source|picture)\\b(?=[^<>]*?=)",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
     /// <summary>
@@ -17,18 +17,19 @@ public static partial class WebSiteAuditor
         string relativePath,
         Action<string, string, string?, string, string?> addIssue)
     {
-        if (string.IsNullOrWhiteSpace(rawHtml) || !EscapedMediaTagPattern.IsMatch(rawHtml))
+        if (string.IsNullOrWhiteSpace(rawHtml))
             return;
 
-        var content = doc.DocumentElement?.Clone(true) as AngleSharp.Dom.IElement;
+        var content = (doc.QuerySelector("body") ?? doc.DocumentElement)?.Clone(true) as AngleSharp.Dom.IElement;
         if (content is null)
             return;
 
-        // DOM removal handles normalized entities and leaves identical text outside examples intact.
-        foreach (var codeElement in content.QuerySelectorAll("code,pre"))
+        // The parser normalizes named and numeric entities. TextContent excludes comments
+        // and attributes; remove examples and inert text without changing later audit checks.
+        foreach (var codeElement in content.QuerySelectorAll("code,pre,script,style,template,noscript"))
             codeElement.Remove();
 
-        var matches = EscapedMediaTagPattern.Matches(content.InnerHtml);
+        var matches = EscapedMediaTagPattern.Matches(content.TextContent);
         if (matches.Count == 0)
             return;
 

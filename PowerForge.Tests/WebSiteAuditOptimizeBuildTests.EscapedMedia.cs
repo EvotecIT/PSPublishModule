@@ -4,6 +4,41 @@ namespace PowerForge.Tests;
 
 public partial class WebSiteAuditOptimizeBuildTests
 {
+    [Theory]
+    [InlineData("<p>&#60;img src=\"hero.png\"&#62;</p>", true)]
+    [InlineData("<p>&#x3c;iframe src=\"video.html\"&#x3e;</p>", true)]
+    [InlineData("<!-- &lt;img src=\"hero.png\"&gt; -->", false)]
+    [InlineData("<script>const example = '&lt;img src=\"hero.png\"&gt;';</script>", false)]
+    [InlineData("<style>body::before { content: '&lt;img src=\"hero.png\"&gt;'; }</style>", false)]
+    [InlineData("<template>&lt;img src=\"hero.png\"&gt;</template>", false)]
+    [InlineData("<p data-example=\"&lt;img src='hero.png'&gt;\">Example</p>", false)]
+    public void Audit_ChecksRenderedMediaTextAfterEntityNormalization(string content, bool expectsWarning)
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-audit-media-text-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "index.html"),
+                "<!doctype html><html><head><title>Media text</title></head><body>" + content + "</body></html>");
+            var result = WebSiteAuditor.Audit(new WebAuditOptions
+            {
+                SiteRoot = root,
+                CheckLinks = false,
+                CheckAssets = false,
+                IgnoreMediaFor = Array.Empty<string>()
+            });
+
+            Assert.True(result.Success);
+            Assert.Equal(expectsWarning, result.Issues.Any(issue => issue.Hint == "media-escaped-html-tag"));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
     [Fact]
     public void Audit_WarnsWhenRenderedContentContainsEscapedMediaTags()
     {
