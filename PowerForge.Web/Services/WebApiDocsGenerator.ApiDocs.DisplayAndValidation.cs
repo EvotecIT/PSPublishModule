@@ -14,25 +14,25 @@ public static partial class WebApiDocsGenerator
         List<string>? warnings)
     {
         var mode = ResolveDisplayNameMode(options?.DisplayNameMode, warnings);
-        var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var map = new ApiTypeDisplayNameMap();
 
         foreach (var type in types)
         {
             if (string.Equals(mode, "full", StringComparison.Ordinal))
             {
-                map[type.Slug] = !string.IsNullOrWhiteSpace(type.FullName) ? type.FullName : type.Name;
+                map[type.Slug] = GetTypeDefinitionName(type, qualified: true);
                 continue;
             }
 
-            map[type.Slug] = !string.IsNullOrWhiteSpace(type.Name) ? type.Name : type.FullName;
+            map[type.Slug] = GetTypeDefinitionName(type);
         }
 
         if (!string.Equals(mode, "namespace-suffix", StringComparison.Ordinal))
-            return map;
+            return map.IndexCollisions();
 
         var duplicateGroups = types
             .Where(type => !string.IsNullOrWhiteSpace(type.Name))
-            .GroupBy(type => type.Name, StringComparer.OrdinalIgnoreCase)
+            .GroupBy(type => GetTypeDefinitionName(type), StringComparer.OrdinalIgnoreCase)
             .Where(group => group.Count() > 1);
 
         foreach (var group in duplicateGroups)
@@ -72,11 +72,11 @@ public static partial class WebApiDocsGenerator
             {
                 if (hasUniqueNamespaceLabels && namespaceLabels.TryGetValue(type.Slug, out var namespaceLabel))
                 {
-                    map[type.Slug] = $"{type.Name} ({namespaceLabel})";
+                    map[type.Slug] = $"{GetTypeDefinitionName(type)} ({namespaceLabel})";
                 }
                 else if (!string.IsNullOrWhiteSpace(type.FullName))
                 {
-                    map[type.Slug] = type.FullName;
+                    map[type.Slug] = GetTypeDefinitionName(type, qualified: true);
                 }
                 else
                 {
@@ -85,7 +85,7 @@ public static partial class WebApiDocsGenerator
             }
         }
 
-        return map;
+        return map.IndexCollisions();
     }
 
     private static IReadOnlyDictionary<string, string[]> BuildTypeAliasMap(

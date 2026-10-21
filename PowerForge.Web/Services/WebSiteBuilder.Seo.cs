@@ -12,6 +12,14 @@ public static partial class WebSiteBuilder
         RegexOptions.Compiled | RegexOptions.CultureInvariant,
         RegexTimeout);
 
+    /// <summary>Removes a matching title followed by a colon from a description.</summary>
+    internal static string StripMatchingTitlePrefix(string title, string description)
+    {
+        var trimmed = description.TrimStart();
+        var prefix = title.Trim() + ":";
+        return trimmed.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) ? trimmed[prefix.Length..].TrimStart() : description;
+    }
+
     private static void WriteSeoPreviewReport(SiteSpec spec, IReadOnlyList<ContentItem> items, string metaDir)
     {
         if (spec is null || items is null || string.IsNullOrWhiteSpace(metaDir))

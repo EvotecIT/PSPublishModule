@@ -78,14 +78,14 @@ public static partial class WebApiDocsGenerator
         Directory.CreateDirectory(typesDir);
         foreach (var type in types)
         {
-            var typeTitle = $"{type.FullName} - {options.Title}";
+            var typeTitle = $"{GetTypeDefinitionName(type, qualified: true)} - {options.Title}";
             var typeDescription = BuildApiTypeSeoDescription(options, type, type.FullName);
             var typeTemplate = LoadTemplate(options, "type.html", options.TypeTemplatePath);
             var typeRoute = $"{NormalizeApiRoute(options.BaseUrl).TrimEnd('/')}/types/{type.Slug}.html";
             var typeHtml = ApplyTemplate(typeTemplate, new Dictionary<string, string?>
             {
                 ["TYPE_TITLE"] = System.Web.HttpUtility.HtmlEncode(typeTitle),
-                ["TYPE_FULLNAME"] = System.Web.HttpUtility.HtmlEncode(type.FullName),
+                ["TYPE_FULLNAME"] = System.Web.HttpUtility.HtmlEncode(GetTypeDefinitionName(type, qualified: true)),
                 ["DESCRIPTION_META"] = BuildDescriptionMetaTag(typeDescription),
                 ["OPEN_GRAPH_META"] = BuildApiOpenGraphMetaTags(options, social, typeTitle, typeDescription, typeRoute, type, cardContext),
                 ["HEAD_HTML"] = BuildApiPageHeadHtml(head, structuredDataSite, options, social, typeTitle, typeDescription, typeRoute, indexRoute, type.FullName),
@@ -926,7 +926,7 @@ $@"<!doctype html>
         var html = new HtmlFragmentBuilder(initialIndent: 6);
         foreach (var type in types)
         {
-            html.Line($"<a class=\"pf-api-type\" href=\"types/{type.Slug}.html\">{System.Web.HttpUtility.HtmlEncode(type.FullName)}</a>");
+            html.Line($"<a class=\"pf-api-type\" href=\"types/{type.Slug}.html\">{System.Web.HttpUtility.HtmlEncode(GetTypeDefinitionName(type, qualified: true))}</a>");
         }
 
         return html.ToString().TrimEnd();
@@ -1295,7 +1295,7 @@ $@"<!doctype html>
         var icon = RenderApiGlyphSpan($"type-icon {kind}", "type-icon-glyph", GetTypeIcon(type.Kind));
         var ns = System.Web.HttpUtility.HtmlEncode(string.IsNullOrWhiteSpace(type.Namespace) ? "(global)" : type.Namespace);
         var href = BuildDocsTypeUrl(baseUrl, type.Slug);
-        var aliasAttr = BuildAliasTitleAttribute(type);
+        var aliasAttr = BuildTypeLinkAttributes(type, typeDisplayNames);
         var freshnessBadge = BuildFreshnessBadgeHtml(type.Freshness, "type-list-freshness");
         return $"<a href=\"{href}\" class=\"type-item{active}\" data-search=\"{searchAttr}\" data-kind=\"{kind}\" data-namespace=\"{ns}\"{aliasAttr}>" +
                $"{icon}<span class=\"type-name\">{name}</span>{freshnessBadge}</a>";
@@ -1356,7 +1356,7 @@ $@"<!doctype html>
                                 var displayName = ResolveTypeDisplayName(type, typeDisplayNames);
                                 var quickHref = BuildDocsTypeUrl(baseUrl, type.Slug);
                                 var quickIcon = RenderApiGlyphSpan($"type-icon large {NormalizeKind(type.Kind)}", "type-icon-glyph", GetTypeIcon(type.Kind));
-                                html.Line($"<a href=\"{quickHref}\" class=\"quick-card\">");
+                                html.Line($"<a href=\"{quickHref}\" class=\"quick-card\"{BuildTypeLinkAttributes(type, typeDisplayNames)}>");
                                 using (html.Indent())
                                 {
                                     html.Line("<div class=\"quick-card-header\">");
@@ -1482,7 +1482,7 @@ $@"<!doctype html>
                     var nsValue = System.Web.HttpUtility.HtmlEncode(string.IsNullOrWhiteSpace(type.Namespace) ? "(global)" : type.Namespace);
                     var chipHref = BuildDocsTypeUrl(baseUrl, type.Slug);
                     var chipIcon = RenderApiGlyphSpan("chip-icon", "chip-icon-glyph", GetTypeIcon(type.Kind));
-                    var aliasAttr = BuildAliasTitleAttribute(type);
+                    var aliasAttr = BuildTypeLinkAttributes(type, typeDisplayNames);
                     var overflowAttr = hasOverflow && index >= visibleLimit ? " data-overview-extra hidden" : string.Empty;
                     var freshnessBadge = BuildFreshnessBadgeHtml(type.Freshness, "type-chip-freshness");
                     html.Line($"<a href=\"{chipHref}\" class=\"type-chip {kind}\" data-search=\"{searchAttr}\" data-kind=\"{kind}\" data-namespace=\"{nsValue}\"{aliasAttr}{overflowAttr}>");

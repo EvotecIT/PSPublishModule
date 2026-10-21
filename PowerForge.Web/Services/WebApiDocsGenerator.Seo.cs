@@ -59,7 +59,7 @@ public static partial class WebApiDocsGenerator
             ? $"Explore {name} in {title}, including {referenceDetails}."
             : $"{name}: {summary.TrimEnd('.', '!', '?')}. Review {referenceDetails} in {title}.";
 
-        return FitApiSeoDescription(description);
+        return FitApiSeoDescription(WebSiteBuilder.StripMatchingTitlePrefix(name, description));
     }
 
     private static string BuildApiSuiteSeoDescription(
