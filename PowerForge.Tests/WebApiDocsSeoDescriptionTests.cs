@@ -51,8 +51,7 @@ public sealed class WebApiDocsSeoDescriptionTests
             var typeHtml = File.ReadAllText(typePath);
             var typeDescription = ReadMetaContent(typeHtml, "description");
             Assert.InRange(typeDescription.Length, 120, 160);
-            Assert.StartsWith("ReportBuilder:", typeDescription, StringComparison.Ordinal);
-            Assert.Contains("Builds validated reports", typeDescription, StringComparison.Ordinal);
+            Assert.StartsWith("Builds validated reports", typeDescription, StringComparison.Ordinal);
             Assert.Contains("parameters", typeDescription, StringComparison.Ordinal);
             Assert.DoesNotContain("examples", typeDescription, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain("source links", typeDescription, StringComparison.OrdinalIgnoreCase);
@@ -114,14 +113,50 @@ public sealed class WebApiDocsSeoDescriptionTests
                 Path.Combine(outputPath, "save-samplereport", "index.html"),
                 "description");
             Assert.InRange(cmdletDescription.Length, 120, 160);
-            Assert.Contains("Saves a validated report", cmdletDescription, StringComparison.Ordinal);
-            Assert.Contains("Save-SampleReport", cmdletDescription, StringComparison.Ordinal);
+            Assert.StartsWith("Saves a validated report", cmdletDescription, StringComparison.Ordinal);
         }
         finally
         {
             if (Directory.Exists(root))
                 Directory.Delete(root, true);
         }
+    }
+
+    [Theory]
+    [InlineData(ApiDocsType.CSharp, "docs", "Terminal", "The print-once entry point for terminal output.")]
+    [InlineData(ApiDocsType.CSharp, "simple", "Terminal", "The print-once entry point for terminal output.")]
+    [InlineData(ApiDocsType.PowerShell, "docs", "Format-ConsoleTable", "Formats pipeline objects as a width-aware table.")]
+    [InlineData(ApiDocsType.PowerShell, "simple", "Format-ConsoleTable", "Formats pipeline objects as a width-aware table.")]
+    [InlineData(ApiDocsType.CSharp, "docs", "Terminal", "TerminalWidth: The display width for terminal output.")]
+    public void Generate_DescriptionMetadataRemovesOnlyTheMatchingEntryPrefix(ApiDocsType source, string template, string name, string summary)
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-apidocs-seo-prefix-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var input = Path.Combine(root, "help.xml");
+            File.WriteAllText(input, source == ApiDocsType.CSharp
+                ? $$"""
+                    <doc><members><member name="T:Sample.{{name}}"><summary>{{summary}}</summary></member></members></doc>
+                    """
+                : $$"""
+                    <helpItems xmlns="http://msh" xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10">
+                      <command:command><command:details><command:name>{{name}}</command:name><maml:description><maml:para>{{summary}}</maml:para></maml:description></command:details></command:command>
+                    </helpItems>
+                    """);
+            var output = Path.Combine(root, "api");
+            WebApiDocsGenerator.Generate(new WebApiDocsOptions { Type = source, XmlPath = input, HelpPath = input,
+                OutputPath = output, Title = "Sample Reference", BaseUrl = "/api", Format = "html", Template = template });
+            var slug = (source == ApiDocsType.CSharp ? "sample-" : string.Empty) + name.ToLowerInvariant();
+            var path = template == "simple" ? Path.Combine(output, "types", slug + ".html") : Path.Combine(output, slug, "index.html");
+            var html = File.ReadAllText(path);
+            var description = ReadMetaContent(html, "description");
+            Assert.StartsWith(summary, description, StringComparison.Ordinal);
+            Assert.Equal(description, ReadMetaContent(html, "og:description", propertyAttribute: true));
+            Assert.Equal(description, ReadMetaContent(html, "twitter:description"));
+            Assert.InRange(description.Length, 120, 160);
+        }
+        finally { Directory.Delete(root, true); }
     }
 
     [Fact]
