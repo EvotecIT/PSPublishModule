@@ -1235,11 +1235,23 @@ public static partial class WebSiteBuilder
         return combined;
     }
 
+    /// <summary>Normalizes legacy web aliases without treating rooted paths as file URIs.</summary>
     private static string NormalizeAlias(string alias)
     {
-        if (Uri.TryCreate(alias, UriKind.Absolute, out var uri))
-            return uri.AbsolutePath + uri.Query;
-        return alias;
+        var normalized = alias.Trim();
+        var hashIndex = normalized.IndexOf('#');
+        if (hashIndex >= 0)
+            normalized = normalized[..hashIndex];
+
+        if (IsExternalUrl(normalized))
+        {
+            var absoluteValue = normalized.StartsWith("//", StringComparison.Ordinal)
+                ? "https:" + normalized
+                : normalized;
+            if (Uri.TryCreate(absoluteValue, UriKind.Absolute, out var uri))
+                return uri.AbsolutePath + uri.Query;
+        }
+        return normalized;
     }
 
     private static string[] ExpandAliasRedirectSources(string alias)
