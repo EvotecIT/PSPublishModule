@@ -106,6 +106,22 @@ public sealed class ServiceInstallAdoptionProcessTests
     [InlineData("powershell.exe", "disabled")]
     [InlineData("pwsh", "preserve-equals")]
     [InlineData("powershell.exe", "preserve-equals")]
+    [InlineData("pwsh", "preserve-binpath")]
+    [InlineData("powershell.exe", "preserve-binpath")]
+    [InlineData("pwsh", "preserve-binpath-bare")]
+    [InlineData("powershell.exe", "preserve-binpath-bare")]
+    [InlineData("pwsh", "missing-binpath")]
+    [InlineData("powershell.exe", "missing-binpath")]
+    [InlineData("pwsh", "new-gmsa-literal")]
+    [InlineData("powershell.exe", "new-gmsa-literal")]
+    [InlineData("pwsh", "preserve-quoted-option")]
+    [InlineData("powershell.exe", "preserve-quoted-option")]
+    [InlineData("pwsh", "preserve-config-decoy")]
+    [InlineData("powershell.exe", "preserve-config-decoy")]
+    [InlineData("pwsh", "preserve-whole-equals")]
+    [InlineData("powershell.exe", "preserve-whole-equals")]
+    [InlineData("pwsh", "preserve-whole-space")]
+    [InlineData("powershell.exe", "preserve-whole-space")]
     public async Task RegistrationPreservesExistingIdentityOrUsesPasswordlessManagedAccount(string executable, string mode)
     {
         if (executable == "powershell.exe" && !OperatingSystem.IsWindows()) return;
@@ -113,15 +129,21 @@ public sealed class ServiceInstallAdoptionProcessTests
         try
         {
             var renderer = typeof(DotNetPublishPipelineRunner).GetMethod("BuildInstallServiceScript", BindingFlags.Static | BindingFlags.NonPublic)!;
-            var script = (string)renderer.Invoke(null, new object?[] { "AdoptionFixture", "Fixture", "Fixture", "fixture.exe", "--default value", null })!;
+            var script = (string)renderer.Invoke(null, new object?[] { "AdoptionFixture", "Fixture", "Fixture", "fixture.exe", "--default value --config=default.json", null })!;
             File.WriteAllText(Path.Combine(root.FullName, "Install.ps1"), script);
             File.WriteAllText(Path.Combine(root.FullName, "fixture.exe"), "inert payload; process never executed");
             File.WriteAllText(Path.Combine(root.FullName, "Verify.ps1"), """
                 $ErrorActionPreference = 'Stop'
                 $mode = $args[0]
                 $global:changes = $null
-                function Get-Service { param($Name,$ErrorAction) if($mode -ne 'new-gmsa'){ [pscustomobject]@{Name=$Name;Status='Stopped'} } }
-                function Get-CimInstance { param($ClassName,$Filter) [pscustomobject]@{PathName=('"C:\Legacy Files\Old.exe" --config="D:\Private Config\active.json" --custom retained'+$(if($mode -eq 'preserve-equals'){' --service-name=Previous'}else{''}));StartName='DOMAIN\ServiceAccount';StartMode=$(if($mode -eq 'disabled'){'Disabled'}else{'Manual'})} }
+                $previousCommand='"C:\Legacy Files\Old.exe" --config="D:\Private Config\active.json" --custom retained'
+                if($mode -eq 'preserve-equals'){$previousCommand+=' --service-name=Previous'}
+                if($mode -eq 'preserve-quoted-option'){$previousCommand='"C:\Legacy Files\Old.exe" --config="D:\Configs\active --service-name=Previous.json" --label "escaped \" --service-name=Decoy" --root "D:\Directory Path\\" --custom retained'}
+                if($mode -eq 'preserve-config-decoy'){$previousCommand='"C:\Legacy Files\Old.exe" --label "text --config=fake.json" --custom retained'}
+                if($mode -eq 'preserve-whole-equals'){$previousCommand='"C:\Legacy Files\Old.exe" "--config=D:\Private Config\active.json" "--service-name=Previous" --custom retained'}
+                if($mode -eq 'preserve-whole-space'){$previousCommand='"C:\Legacy Files\Old.exe" "--config" "D:\Private Config\active.json" "--service-name" "Previous" --custom retained'}
+                function Get-Service { param($Name,$ErrorAction) if($mode -notlike 'new-gmsa*' -and $mode -ne 'missing-binpath'){ [pscustomobject]@{Name=$Name;Status='Stopped'} } }
+                function Get-CimInstance { param($ClassName,$Filter) [pscustomobject]@{PathName=$previousCommand;StartName='DOMAIN\ServiceAccount';StartMode=$(if($mode -eq 'disabled'){'Disabled'}else{'Manual'})} }
                 function Get-Credential { throw 'Existing credentials must not be requested.' }
                 function Stop-Service { throw 'Stopped service must not be stopped again.' }
                 function Start-Service { throw 'Disabled service must not be started during an update.' }
@@ -133,17 +155,44 @@ public sealed class ServiceInstallAdoptionProcessTests
                 }
                 function Set-Service { param($Name,$DisplayName,$Description,$StartupType) if($PSBoundParameters.ContainsKey('StartupType')){throw 'Existing startup mode must be preserved.'} }
                 $install = @{}
-                if($mode -ne 'new-gmsa'){$install.UpgradeMode=$true;$install.PreserveExistingServiceArguments=$true}
-                if($mode -notin @('preserve','preserve-equals','disabled')){$install.Account='DOMAIN\ManagedService$'}
+                if($mode -notlike 'new-gmsa*'){$install.UpgradeMode=$true;$install.PreserveExistingServiceArguments=$true}
+                if($mode -like '*binpath*'){
+                    $install.Remove('PreserveExistingServiceArguments')
+                    $install.PreserveExistingServiceBinPath=$true
+                    $install.BackupPath=Join-Path $PSScriptRoot 'backup.txt'
+                    $preserved='"C:\Protected Backup\Original.exe"'
+                    if($mode -ne 'preserve-binpath-bare'){$preserved+=' --config="D:\Original Config\active.json" --service-name=Original --custom retained'}
+                    Set-Content -LiteralPath $install.BackupPath -Value $preserved
+                }
+                if($mode -like 'new-gmsa*' -or $mode -eq 'change-gmsa'){$install.Account='DOMAIN\ManagedService$'}
                 if($mode -eq 'disabled'){$install.Start=$true}
-                & (Join-Path $PSScriptRoot 'Install.ps1') @install -ConfigPath 'D:\New Default\config.json' | Out-Null
+                if($mode -eq 'missing-binpath'){
+                    try{& (Join-Path $PSScriptRoot 'Install.ps1') @install;throw 'Missing registration was accepted.'}
+                    catch{if($_.Exception.Message -notlike '*registration is missing*'){throw}}
+                    if($null -ne $global:changes){throw 'A missing service must not be recreated with a fallback identity.'}
+                    'ADOPTION_OK';return
+                }
+                $configPath=if($mode -eq 'new-gmsa-literal'){'D:\$1\$&\config.json'}else{'D:\New Default\config.json'}
+                & (Join-Path $PSScriptRoot 'Install.ps1') @install -ConfigPath $configPath | Out-Null
                 if($null -eq $global:changes){throw 'No in-place update was performed.'}
-                if($mode -notin @('preserve','preserve-equals','disabled')){
+                if($mode -like 'new-gmsa*' -or $mode -eq 'change-gmsa'){
                     if($global:changes.StartName -ne 'DOMAIN\ManagedService$' -or $global:changes.StartPassword -ne ''){throw 'Managed account was not registered passwordlessly.'}
+                    if($mode -eq 'new-gmsa-literal'){
+                        $expected='"'+(Join-Path $PSScriptRoot 'fixture.exe')+'" --default value --config "'+$configPath+'" --service-name "AdoptionFixture"'
+                        if($global:changes.PathName -cne $expected){throw 'Literal config path characters were interpreted as regex substitutions.'}
+                    }
                     'ADOPTION_OK'; return
                 }
                 if($global:changes.ContainsKey('StartName') -or $global:changes.ContainsKey('StartPassword') -or $global:changes.ContainsKey('StartMode')){throw 'Existing identity or startup was replaced.'}
+                if($mode -like 'preserve-binpath*'){
+                    if($global:changes.PathName -cne $preserved){throw 'The complete protected command line was modified.'}
+                    'ADOPTION_OK';return
+                }
                 $expected='"'+(Join-Path $PSScriptRoot 'fixture.exe')+'" --config="D:\Private Config\active.json" --custom retained --service-name "AdoptionFixture"'
+                if($mode -eq 'preserve-quoted-option'){$expected='"'+(Join-Path $PSScriptRoot 'fixture.exe')+'" --config="D:\Configs\active --service-name=Previous.json" --label "escaped \" --service-name=Decoy" --root "D:\Directory Path\\" --custom retained --service-name "AdoptionFixture"'}
+                if($mode -eq 'preserve-config-decoy'){$expected='"'+(Join-Path $PSScriptRoot 'fixture.exe')+'" --label "text --config=fake.json" --custom retained --config "D:\New Default\config.json" --service-name "AdoptionFixture"'}
+                if($mode -eq 'preserve-whole-equals'){$expected='"'+(Join-Path $PSScriptRoot 'fixture.exe')+'" "--config=D:\Private Config\active.json" --service-name "AdoptionFixture" --custom retained'}
+                if($mode -eq 'preserve-whole-space'){$expected='"'+(Join-Path $PSScriptRoot 'fixture.exe')+'" "--config" "D:\Private Config\active.json" --service-name "AdoptionFixture" --custom retained'}
                 if($global:changes.PathName -ne $expected){throw 'The new executable did not retain the active config and arguments.'}
                 'ADOPTION_OK'
                 """);

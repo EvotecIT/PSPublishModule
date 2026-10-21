@@ -64,6 +64,36 @@ if (-not (Test-Path -LiteralPath $exePath)) {
     throw "Service binary not found: $exePath"
 }
 
+function Get-CommandLineTokens {
+    param([string]$CommandLine)
+
+    # Keep original spans; option-like text inside a quoted value is never an option.
+    # A quote changes the Windows argument boundary only after an even number of backslashes.
+    $tokenStart = -1
+    $quoted = $false
+    $backslashes = 0
+    for ($index = 0; $index -le $CommandLine.Length; $index++) {
+        if ($index -eq $CommandLine.Length -or ([char]::IsWhiteSpace($CommandLine[$index]) -and -not $quoted)) {
+            if ($tokenStart -ge 0) {
+                $text = $CommandLine.Substring($tokenStart, $index - $tokenStart)
+                $equals = $text.IndexOf('=')
+                $optionName = if ($equals -ge 0) { $text.Substring(0, $equals) } else { $text }
+                # Classify only fixed option names, including whole-token quotes. Values stay raw.
+                # Escaped literal quotes leave a backslash and cannot match these ASCII names.
+                [pscustomobject]@{ Index = $tokenStart; Length = $index - $tokenStart; OptionName = $optionName.Replace('"', ''); HasEquals = $equals -ge 0 }
+                $tokenStart = -1
+            }
+            $backslashes = 0
+            continue
+        }
+        if ($tokenStart -lt 0) { $tokenStart = $index }
+        $character = $CommandLine[$index]
+        if ($character -eq '"' -and $backslashes % 2 -eq 0) { $quoted = -not $quoted }
+        if ($character -eq '\') { $backslashes++ } else { $backslashes = 0 }
+    }
+    if ($quoted) { throw 'The service command line contains an unterminated quoted argument.' }
+}
+
 function Set-CommandLineOption {
     param(
         [Parameter(Mandatory)]
@@ -77,10 +107,19 @@ function Set-CommandLineOption {
     )
 
     $escapedValue = $Value.Replace('"', '\"')
-    $pattern = '(?i)(^|\s)' + [regex]::Escape($Name) + '(?:\s+|=)(".*?"|\S+)'
-    if ($CommandLine -match $pattern) {
-        return [regex]::Replace($CommandLine, $pattern, '$1' + $Name + ' "' + $escapedValue + '"', 1)
+    $tokens = @(Get-CommandLineTokens -CommandLine $CommandLine)
+    $found = $false
+    for ($index = $tokens.Count - 1; $index -ge 0; $index--) {
+        $token = $tokens[$index]
+        if ($token.OptionName -ine $Name) { continue }
+        $end = $token.Index + $token.Length
+        if (-not $token.HasEquals -and $index + 1 -lt $tokens.Count) {
+            $end = $tokens[$index + 1].Index + $tokens[$index + 1].Length
+        }
+        $CommandLine = $CommandLine.Substring(0, $token.Index) + $Name + ' "' + $escapedValue + '"' + $CommandLine.Substring($end)
+        $found = $true
     }
+    if ($found) { return $CommandLine }
 
     return ($CommandLine + ' ' + $Name + ' "' + $escapedValue + '"').Trim()
 }
@@ -125,7 +164,7 @@ if ($existing) {
 if ($PreserveExistingServiceArguments -and $PreserveExistingServiceBinPath) {
     throw 'Preserve either the existing arguments or the entire command line, not both.'
 }
-if ($UpgradeMode -and $PreserveExistingServiceArguments -and -not $service) {
+if ($UpgradeMode -and ($PreserveExistingServiceArguments -or $PreserveExistingServiceBinPath) -and -not $service) {
     throw 'The existing service registration is missing; its account cannot be preserved safely.'
 }
 if ($PreserveExistingServiceArguments -and $service) {
@@ -152,19 +191,21 @@ if ($UpgradeMode -and $PreserveExistingServiceBinPath) {
     $binaryPathName = $preservedBinaryPathName
 }
 
-$hasPreservedConfig = $PreserveExistingServiceArguments -and
-    $binaryPathName -match '(?i)(?:^|\s)--config(?:-path)?(?:\s|=)'
-if (-not [string]::IsNullOrWhiteSpace($ConfigPath) -and -not $hasPreservedConfig) {
-    $resolvedConfigPath = $ConfigPath
-    if (-not [System.IO.Path]::IsPathRooted($resolvedConfigPath)) {
-        $resolvedConfigPath = Join-Path -Path $packageRoot -ChildPath $resolvedConfigPath
+if (-not ($UpgradeMode -and $PreserveExistingServiceBinPath)) {
+    $hasPreservedConfig = $PreserveExistingServiceArguments -and
+        @(Get-CommandLineTokens -CommandLine $binaryPathName | Where-Object { $_.OptionName -match '(?i)^--config(?:-path)?$' }).Count -gt 0
+    if (-not [string]::IsNullOrWhiteSpace($ConfigPath) -and -not $hasPreservedConfig) {
+        $resolvedConfigPath = $ConfigPath
+        if (-not [System.IO.Path]::IsPathRooted($resolvedConfigPath)) {
+            $resolvedConfigPath = Join-Path -Path $packageRoot -ChildPath $resolvedConfigPath
+        }
+
+        $binaryPathName = Set-CommandLineOption -CommandLine $binaryPathName -Name '--config' -Value $resolvedConfigPath
     }
 
-    $binaryPathName = Set-CommandLineOption -CommandLine $binaryPathName -Name '--config' -Value $resolvedConfigPath
-}
-
-if (-not [string]::IsNullOrWhiteSpace($ServiceName)) {
-    $binaryPathName = Set-CommandLineOption -CommandLine $binaryPathName -Name '--service-name' -Value $ServiceName
+    if (-not [string]::IsNullOrWhiteSpace($ServiceName)) {
+        $binaryPathName = Set-CommandLineOption -CommandLine $binaryPathName -Name '--service-name' -Value $ServiceName
+    }
 }
 
 $newServiceParams = @{
