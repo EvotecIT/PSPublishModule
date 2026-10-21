@@ -316,10 +316,11 @@ internal static class PowerForgeWixInstallerServiceScriptEmitter
     {
         string serviceName = EscapePowerShellSingleQuoted(service.ServiceName);
         string backup = EscapePowerShellSingleQuoted(backupPath);
+        // ImagePath alone cannot recreate a missing service's identity or startup policy safely.
         string command = "$b='" + backup +
                          "';$n='" + serviceName +
-                         "';$p=gc -Raw $b;&sc.exe config $n binPath= $p>$null;" +
-                         "if(!$?){&sc.exe create $n binPath= $p>$null};if(!$?){exit 1};rm $b -ea 0";
+                         "';$p=gc -Raw $b;&sc.exe config $n binPath= $p >$null;" +
+                         "if(!$?){exit 1};rm $b -ea 0";
         return BuildPowerShellCommand(service, "rollback", command);
     }
 

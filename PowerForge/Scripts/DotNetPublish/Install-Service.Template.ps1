@@ -77,7 +77,7 @@ function Set-CommandLineOption {
     )
 
     $escapedValue = $Value.Replace('"', '\"')
-    $pattern = '(?i)(^|\s)' + [regex]::Escape($Name) + '\s+(".*?"|\S+)'
+    $pattern = '(?i)(^|\s)' + [regex]::Escape($Name) + '(?:\s+|=)(".*?"|\S+)'
     if ($CommandLine -match $pattern) {
         return [regex]::Replace($CommandLine, $pattern, '$1' + $Name + ' "' + $escapedValue + '"', 1)
     }
