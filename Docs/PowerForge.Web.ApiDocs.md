@@ -97,6 +97,14 @@ hyphenated names. Custom index templates can use `{{INDEX_LEAD}}` and
 `{{INDEX_DESCRIPTION}}`; `{{DESCRIPTION_META}}` includes the description meta tag.
 An explicit description is preserved without automatic length padding or truncation.
 
+Generated API and command descriptions share a 160-character limit across
+`description`, `og:description`, and `twitter:description`. When text exceeds
+the limit, the generator keeps the last complete sentence that fits, even when
+that produces fewer than 120 characters. If no complete sentence fits, it ends
+at a word boundary with an ellipsis (`…`), removing trailing commas, colons,
+and dangling English articles, prepositions, or conjunctions. A single token
+longer than the available space is shortened without splitting a Unicode scalar.
+
 Without an explicit lead, C# references use assembly descriptions from either
 `assembly` or `assemblies`, then a product-specific introduction using `packageId`,
 the page title, or the assembly name. PowerShell references use the description

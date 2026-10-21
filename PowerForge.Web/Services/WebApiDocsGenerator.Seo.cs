@@ -125,27 +125,37 @@ public static partial class WebApiDocsGenerator
         }
 
         if (description.Length <= ApiSeoDescriptionMaximumLength)
-            return description;
+            return description.TrimEnd(',', ':');
+
+        // Punctuation must end a sentence, rather than a version, URL, or .NET name.
+        var sentenceEnd = 0;
+        foreach (Match sentence in Regex.Matches(description, @"[.!?](?=\s|$)", RegexOptions.CultureInvariant, RegexTimeout))
+        {
+            var end = sentence.Index + sentence.Length;
+            if (end > ApiSeoDescriptionMaximumLength)
+                break;
+            sentenceEnd = end;
+        }
+        if (sentenceEnd > 0)
+            return description[..sentenceEnd];
 
         var limit = ApiSeoDescriptionMaximumLength - 1;
         var wordBoundary = description.LastIndexOf(' ', limit);
-        if (wordBoundary < ApiSeoDescriptionMinimumLength)
+        if (wordBoundary < 0)
             wordBoundary = ClampToUnicodeScalarBoundary(description, limit);
 
         var truncated = description[..wordBoundary].TrimEnd(' ', ',', ';', ':', '-', '.', '!', '?');
-        var withoutDanglingWord = Regex.Replace(
-            truncated,
-            @"(?:,\s*)?\b(?:and|or|with|including|from|to)\z",
-            string.Empty,
-            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant).TrimEnd(' ', ',', ';', ':', '-');
-        if (withoutDanglingWord.Length + 1 >= ApiSeoDescriptionMinimumLength)
-            return withoutDanglingWord + ".";
-
-        var completed = withoutDanglingWord + " reference details";
-        if (completed.Length <= limit)
-            return completed + ".";
-
-        return truncated + ".";
+        // Repeat to remove chains such as "in the" without inventing a sentence ending.
+        while (true)
+        {
+            var cleaned = Regex.Replace(truncated,
+                @"(?<!\S)(?:a|an|the|and|or|but|nor|for|as|at|by|in|of|on|to|up|via|with|within|without|about|above|across|after|against|along|among|around|before|behind|below|beneath|beside|between|beyond|despite|down|during|except|from|inside|into|near|off|onto|out|outside|over|past|per|since|through|throughout|toward|towards|under|underneath|until|upon|versus|including)\z",
+                string.Empty, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, RegexTimeout)
+                .TrimEnd(' ', ',', ';', ':', '-');
+            if (cleaned == truncated)
+                return truncated + "…";
+            truncated = cleaned;
+        }
     }
 
     private static int ClampToUnicodeScalarBoundary(string value, int boundary)
