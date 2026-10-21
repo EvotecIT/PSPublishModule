@@ -134,8 +134,12 @@ public sealed class WebSocialCardRenderingTests : IDisposable
         options.TextFit = true;
         options.Title = "Everyday output in one line. The monster when you need it.";
         options.Description = "Readable PowerShell output in one line with tables, live dashboards, menus and forms when you need them.";
+        options.Fonts = WebSocialCardGenerator.ResolveFontFiles(new[] { new SocialCardFontSpec
+        {
+            Family = "Fixture Display", Path = "Fixtures/SocialCards/SpaceGrotesk-Bold.ttf", Weight = 700
+        } }, AppContext.BaseDirectory);
         options.ThemeTokens = Tokens(("titleFontSize", 56), ("accent", "#123456"), ("backgroundStart", "#101010"),
-            ("surface", "#202020"), ("textPrimary", "#ffffff"), ("textSecondary", "#9ba6b6"));
+            ("surface", "#202020"), ("textPrimary", "#ffffff"), ("textSecondary", "#9ba6b6"), ("fontDisplay", "Fixture Display"));
         var svg = XDocument.Parse(WebSocialCardGenerator.RenderSvg(options));
         var text = svg.Descendants().Where(element => element.Name.LocalName == "text").ToArray();
         var titles = text.Where(element => element.Attribute("font-weight")?.Value == "800" &&

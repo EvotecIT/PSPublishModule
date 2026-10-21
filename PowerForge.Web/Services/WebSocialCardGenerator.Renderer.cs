@@ -15,7 +15,9 @@ namespace PowerForge.Web;
 internal static partial class WebSocialCardGenerator
 {
     // Bump whenever raster-visible rendering or media sanitization changes.
-    internal const string RendererVersion = "social-card-renderer-v10";
+    internal static string RendererVersion => OperatingSystem.IsLinux()
+        ? "social-card-renderer-v10-linux-raster-v1"
+        : "social-card-renderer-v10";
     internal const int MaxRemoteImageBytes = 10 * 1024 * 1024;
     internal const int MaxRemoteImageCacheEntries = 128;
     internal const long MaxRemoteImageCacheBytes = 100L * 1024 * 1024;
@@ -116,139 +118,6 @@ internal static partial class WebSocialCardGenerator
         return command is null
             ? $"linux-unavailable:{RendererVersion}"
             : $"external:{command.Executable}:{RendererVersion}";
-    }
-
-    private static byte[]? TryRenderPngWithExternalImageMagick(string svg, int width, int height)
-    {
-        if (string.IsNullOrWhiteSpace(svg))
-            return null;
-
-        var command = ResolveExternalImageMagickCommand();
-        if (command is null)
-            return null;
-
-        var tempRoot = Path.Combine(Path.GetTempPath(), "powerforge-social-card-" + Guid.NewGuid().ToString("N"));
-        var svgPath = Path.Combine(tempRoot, "card.svg");
-        var pngPath = Path.Combine(tempRoot, "card.png");
-
-        try
-        {
-            Directory.CreateDirectory(tempRoot);
-            File.WriteAllText(svgPath, svg, Encoding.UTF8);
-
-            var arguments = new[] { "-background", "none", "-size", $"{width}x{height}", svgPath, $"PNG32:{pngPath}" };
-            var startInfo = new ProcessStartInfo(command.Executable)
-            {
-                UseShellExecute = false,
-                RedirectStandardError = true,
-                CreateNoWindow = true
-            };
-            foreach (var argument in arguments)
-                startInfo.ArgumentList.Add(argument);
-
-            using var process = Process.Start(startInfo);
-            if (process is null)
-                return null;
-
-            var errorTask = process.StandardError.ReadToEndAsync();
-            var exited = process.WaitForExit(30_000);
-            if (!exited)
-            {
-                try
-                {
-                    process.Kill(entireProcessTree: true);
-                }
-                catch
-                {
-                    // Best-effort cleanup for a timed-out renderer process.
-                }
-
-                Trace.TraceWarning("Social card external ImageMagick render timed out.");
-                return null;
-            }
-
-            if (process.ExitCode != 0 || !File.Exists(pngPath))
-            {
-                var error = errorTask.GetAwaiter().GetResult().Trim();
-                if (!string.IsNullOrWhiteSpace(error))
-                    Trace.TraceWarning($"Social card external ImageMagick render failed: {error}");
-                return null;
-            }
-
-            return File.ReadAllBytes(pngPath);
-        }
-        catch (Exception ex)
-        {
-            Trace.TraceWarning($"Social card external ImageMagick render failed: {ex.GetType().Name}: {ex.Message}");
-            return null;
-        }
-        finally
-        {
-            try
-            {
-                if (Directory.Exists(tempRoot))
-                    Directory.Delete(tempRoot, recursive: true);
-            }
-            catch
-            {
-                // Temp cleanup is best-effort.
-            }
-        }
-    }
-
-    private static ExternalImageMagickCommand? ResolveExternalImageMagickCommand()
-    {
-        if (OperatingSystem.IsWindows())
-            return null;
-
-        var magick = FindExecutableOnPath("magick");
-        if (!string.IsNullOrWhiteSpace(magick))
-            return new ExternalImageMagickCommand(magick);
-
-        var convert = FindExecutableOnPath("convert");
-        if (!string.IsNullOrWhiteSpace(convert))
-            return new ExternalImageMagickCommand(convert);
-
-        return null;
-    }
-
-    private static string? FindExecutableOnPath(string name)
-    {
-        var path = Environment.GetEnvironmentVariable("PATH");
-        if (string.IsNullOrWhiteSpace(path))
-            return null;
-
-        foreach (var directory in path.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
-        {
-            try
-            {
-                var candidate = Path.Combine(directory, name);
-                if (File.Exists(candidate) && IsExecutable(candidate))
-                    return candidate;
-            }
-            catch
-            {
-                // Ignore malformed PATH entries.
-            }
-        }
-
-        return null;
-    }
-
-    private static bool IsExecutable(string path)
-    {
-        if (OperatingSystem.IsWindows())
-            return true;
-
-        try
-        {
-            var mode = File.GetUnixFileMode(path);
-            return (mode & (UnixFileMode.UserExecute | UnixFileMode.GroupExecute | UnixFileMode.OtherExecute)) != 0;
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or PlatformNotSupportedException)
-        {
-            return false;
-        }
     }
 
     internal static string RenderSvg(SocialCardRenderOptions options)
@@ -767,7 +636,7 @@ internal static partial class WebSocialCardGenerator
             return value;
 
         return ResolveCenteredTextInkOffset(state.Typography.TitleFontFamily, fontSize, monogram) -
-               GetScaledPixels(state.Width, state.Height, 2, 1);
+               (OperatingSystem.IsLinux() ? 0 : GetScaledPixels(state.Width, state.Height, 2, 1));
     }
 
     private static void AppendSeparator(StringBuilder svg, SocialCardRenderState state, int x, int y, int width)
@@ -2101,7 +1970,7 @@ internal static partial class WebSocialCardGenerator
 
     private sealed record SocialRect(int X, int Y, int Width, int Height, int Radius);
 
-    private sealed record ExternalImageMagickCommand(string Executable);
+
 
     // ── Compatibility shims for old Append* names used in tests ────────
 

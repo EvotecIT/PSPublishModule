@@ -1091,6 +1091,7 @@ options opt a site into page titles, concise text, and convention-based artwork:
   "SocialCardsRequired": true,
   "GeneratedCardFonts": [
     { "Family": "Display Face", "Weight": 700, "Path": "static/fonts/display-bold.ttf" },
+    { "Family": "Display Face", "Weight": 400, "Path": "static/fonts/display-regular.ttf" },
     { "Family": "Code Face", "Weight": "100 800", "Path": "static/fonts/code-variable.ttf" }
   ],
   "GeneratedCardTheme": "split-docs",
@@ -1101,6 +1102,7 @@ options opt a site into page titles, concise text, and convention-based artwork:
       "Tokens": {
         "socialCard": {
           "fontDisplay": "Display Face",
+          "fontBody": "Display Face",
           "fontMono": "Code Face",
           "imageShare": 0.48,
           "imageFit": "cover",

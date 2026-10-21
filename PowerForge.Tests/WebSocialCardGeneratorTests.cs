@@ -307,6 +307,14 @@ public class WebSocialCardGeneratorTests
 
         Assert.NotNull(bytes);
 
+        using (var image = new MagickImage(bytes!))
+        {
+            var background = image.GetPixels().GetPixel(0, 350).ToColor()!;
+            Assert.True(background.R > 240 && background.G > 240 && background.B > 240,
+                "The light gradient must cover the canvas; a black background is not title ink.");
+            var tint = image.GetPixels().GetPixel(900, 190).ToColor()!;
+            Assert.True(tint.R > 200 && tint.G > 200, "The brand decoration must retain its translucent fill.");
+        }
         var eyebrowLeft = MeasureInkLeft(bytes!, 260, 305, static pixel => pixel.B > 180 && pixel.R < 80);
         var titleLeft = MeasureInkLeft(bytes!, 320, 385, static pixel => pixel.R < 45 && pixel.G < 55 && pixel.B < 85);
         var descriptionLeft = MeasureInkLeft(bytes!, 395, 435, static pixel => pixel.R < 80 && pixel.G < 100 && pixel.B < 140);
