@@ -804,6 +804,13 @@ public static partial class WebApiDocsGenerator
         string commandName,
         IReadOnlyList<ApiParameterModel> parameters,
         bool includeCommonParameters = false)
+        => string.Join(" ", BuildPowerShellSyntaxParts(commandName, parameters, includeCommonParameters));
+
+    /// <summary>Keeps each Get-Help parameter group intact for text and wrapped HTML syntax.</summary>
+    private static IReadOnlyList<string> BuildPowerShellSyntaxParts(
+        string commandName,
+        IReadOnlyList<ApiParameterModel> parameters,
+        bool includeCommonParameters)
     {
         var parts = new List<string> { commandName };
         foreach (var parameter in parameters)
@@ -833,7 +840,7 @@ public static partial class WebApiDocsGenerator
         if (includeCommonParameters)
             parts.Add("[<CommonParameters>]");
 
-        return string.Join(" ", parts);
+        return parts;
     }
 
     private static string GetPowerShellSyntaxParameterPlaceholder(ApiParameterModel parameter)

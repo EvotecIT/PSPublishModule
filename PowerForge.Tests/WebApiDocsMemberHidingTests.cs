@@ -23,16 +23,16 @@ namespace PowerForge.Tests
                     var own = fluent.Single(member => member.GetProperty("returnType").GetString() == "HidingMiddle");
                     Assert.Equal("PowerForge.Tests.ApiHiding.HidingMiddle", own.GetProperty("declaringType").GetString());
                     Assert.Equal(document == leaf, own.GetProperty("isInherited").GetBoolean());
-                    Assert.Equal("String", ParameterType(own));
-                    Assert.Contains(fluent, member => ParameterType(member) == "Int32");
+                    Assert.Equal("string", ParameterType(own));
+                    Assert.Contains(fluent, member => ParameterType(member) == "int");
 
                     AssertMember(type, "properties", "Value", "HidingMiddle", "HidingMiddle");
                     var indexers = type.GetProperty("properties").EnumerateArray()
                         .Where(member => member.GetProperty("name").GetString() == "Item").ToArray();
                     Assert.Equal(2, indexers.Length);
-                    Assert.Contains(indexers, member => member.GetProperty("returnType").GetString() == "String");
-                    Assert.Contains(indexers, member => member.GetProperty("returnType").GetString() == "Boolean");
-                    AssertMember(type, "fields", "Caption", "String", "HidingMiddle");
+                    Assert.Contains(indexers, member => member.GetProperty("returnType").GetString() == "string");
+                    Assert.Contains(indexers, member => member.GetProperty("returnType").GetString() == "bool");
+                    AssertMember(type, "fields", "Caption", "string", "HidingMiddle");
                     AssertMember(type, "events", "Changed", "Action", "HidingMiddle");
                 }
                 if (withXmlMembers)
@@ -53,9 +53,9 @@ namespace PowerForge.Tests
                 using var document = ReadType(output, "private");
                 var type = document.RootElement;
                 Assert.DoesNotContain("Private secret marker", type.GetRawText(), StringComparison.Ordinal);
-                AssertMember(type, "methods", "Fluent", "HidingBase", "HidingBase", "String");
+                AssertMember(type, "methods", "Fluent", "HidingBase", "HidingBase", "string");
                 AssertMember(type, "properties", "Value", "HidingBase", "HidingBase");
-                AssertMember(type, "fields", "Caption", "Int32", "HidingBase");
+                AssertMember(type, "fields", "Caption", "int", "HidingBase");
             });
         }
 

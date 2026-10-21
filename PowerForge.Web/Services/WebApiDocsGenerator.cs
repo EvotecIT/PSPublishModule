@@ -258,6 +258,9 @@ public sealed class WebApiDocsOptions
     /// Enables fallback code examples for PowerShell commands when help XML does not provide examples.
     /// </summary>
     public bool GeneratePowerShellFallbackExamples { get; set; } = true;
+
+    /// <summary>Show example provenance badges in generated HTML. Defaults to false for published references.</summary>
+    public bool ShowExampleOrigins { get; set; }
     /// <summary>
     /// Optional path to PowerShell example scripts (file or directory). When omitted, generator probes common module paths.
     /// </summary>
@@ -360,8 +363,6 @@ public static partial class WebApiDocsGenerator
         ".filter-button",
         ".member-card",
         ".member-signature",
-        ".example-origin",
-        ".example-origin-badge",
         ".example-media-meta",
         ".member-toggle input",
         ".member-header pre.member-signature",
@@ -369,6 +370,7 @@ public static partial class WebApiDocsGenerator
         ".member-card pre::-webkit-scrollbar-track",
         ".member-card pre::-webkit-scrollbar-thumb"
     };
+    private static readonly string[] RequiredSelectorsDocsExampleOrigins = { ".example-origin", ".example-origin-badge" };
     private static readonly string[] RequiredSelectorsDocsSuite =
     {
         ".api-suite-switcher",

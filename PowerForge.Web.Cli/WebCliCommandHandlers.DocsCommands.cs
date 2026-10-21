@@ -201,6 +201,7 @@ internal static partial class WebCliCommandHandlers
             MemberXrefMaxPerType = memberXrefMaxPerType <= 0 ? 0 : memberXrefMaxPerType,
             XrefMapPath = xrefMapPath,
             GeneratePowerShellFallbackExamples = generatePowerShellFallbackExamples,
+            ShowExampleOrigins = HasOption(subArgs, "--show-example-origins"),
             PowerShellExamplesPath = powerShellExamplesPath,
             PowerShellFallbackExampleLimitPerCommand = powerShellFallbackLimit > 0 ? powerShellFallbackLimit : 2,
             ApiSuiteTitle = suiteTitle,

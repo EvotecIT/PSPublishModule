@@ -267,21 +267,16 @@ public static partial class WebApiDocsGenerator
     {
         if (string.IsNullOrWhiteSpace(name))
             return string.Empty;
-        var cleaned = name.Replace("+", ".").Trim();
-        var display = GetDisplayTypeName(cleaned);
-        if (slugMap.TryGetValue(cleaned, out var slug))
+        return FormatCSharpTypeName(name, shortNames: true, renderName: (identity, display) =>
         {
-            var href = BuildDocsTypeUrl(baseUrl, slug);
-            var safeHref = System.Web.HttpUtility.HtmlAttributeEncode(href);
-            return $"<a href=\"{safeHref}\">{System.Web.HttpUtility.HtmlEncode(display)}</a>";
-        }
-        if (slugMap.TryGetValue(display, out var shortSlug))
-        {
-            var href = BuildDocsTypeUrl(baseUrl, shortSlug);
-            var safeHref = System.Web.HttpUtility.HtmlAttributeEncode(href);
-            return $"<a href=\"{safeHref}\">{System.Web.HttpUtility.HtmlEncode(display)}</a>";
-        }
-        return System.Web.HttpUtility.HtmlEncode(display);
+            var label = System.Web.HttpUtility.HtmlEncode(display);
+            // Never resolve a framework alias through a library-owned short name such as String.
+            var isKeyword = GetCSharpKeyword(identity) is not null ||
+                GetCSharpKeyword(NormalizeCSharpPrimitiveType(identity)) == identity || identity is "nint" or "nuint";
+            if (isKeyword || !slugMap.TryGetValue(identity, out var slug)) return label;
+            var href = System.Web.HttpUtility.HtmlAttributeEncode(BuildDocsTypeUrl(baseUrl, slug));
+            return $"<a href=\"{href}\">{label}</a>";
+        });
     }
 
     private static string RenderSourceLink(ApiSourceLink link)
@@ -325,11 +320,11 @@ public static partial class WebApiDocsGenerator
         if (TryBuildGitHubEditUrl(link.Url, out var editUrl))
         {
             var href = System.Web.HttpUtility.HtmlAttributeEncode(editUrl);
-            return $"<a class=\"type-source-action\" href=\"{href}\" target=\"_blank\" rel=\"noopener\">Edit on GitHub</a>";
+            return $"<a class=\"type-source-action type-edit-action\" href=\"{href}\" target=\"_blank\" rel=\"noopener\">Edit on GitHub</a>";
         }
 
         var sourceHref = System.Web.HttpUtility.HtmlAttributeEncode(link.Url);
-        return $"<a class=\"type-source-action\" href=\"{sourceHref}\" target=\"_blank\" rel=\"noopener\">View source</a>";
+        return $"<a class=\"type-source-action type-view-source-action\" href=\"{sourceHref}\" target=\"_blank\" rel=\"noopener\">View source</a>";
     }
 
     private static bool TryBuildGitHubEditUrl(string sourceUrl, out string editUrl)
@@ -386,11 +381,7 @@ public static partial class WebApiDocsGenerator
     }
     private static string GetDisplayTypeName(string name)
     {
-        if (string.IsNullOrWhiteSpace(name)) return name;
-        var normalized = name.Replace("{", "<").Replace("}", ">");
-        normalized = GenericArityRegex.Replace(normalized, string.Empty);
-        var lastDot = normalized.LastIndexOf('.');
-        return lastDot >= 0 ? normalized.Substring(lastDot + 1) : normalized;
+        return FormatCSharpTypeName(name, shortNames: true);
     }
 
     private static IReadOnlyList<ApiTypeModel> GetMainTypes(IReadOnlyList<ApiTypeModel> types, WebApiDocsOptions options)
@@ -700,11 +691,16 @@ public static partial class WebApiDocsGenerator
           return $"/docs{suffix}";
       }
 
-      private static string ResolveBodyClass(string? value)
+      private static string ResolveBodyClass(WebApiDocsOptions options)
       {
-          var trimmed = value?.Trim();
-          if (string.IsNullOrWhiteSpace(trimmed))
-              return "pf-api-docs";
-          return trimmed;
+          var classes = (options.BodyClass ?? string.Empty).Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries).ToList();
+          classes.Add("pf-api-docs");
+          classes.Add(options.Type == ApiDocsType.PowerShell ? "pf-api-docs--powershell" : "pf-api-docs--dotnet");
+          if (!string.IsNullOrWhiteSpace(options.ApiSuiteCurrentId))
+          {
+              var suiteId = Regex.Replace(options.ApiSuiteCurrentId.Trim().ToLowerInvariant(), "[^a-z0-9_-]+", "-").Trim('-');
+              if (suiteId.Length > 0) classes.Add($"pf-api-docs--suite-{suiteId}");
+          }
+          return System.Web.HttpUtility.HtmlAttributeEncode(string.Join(" ", classes.Distinct(StringComparer.Ordinal)));
       }
 }

@@ -93,16 +93,16 @@ public class WebApiDocsGeneratorMemberSignatureWarningsTests
             AssertIndexerProperties(
                 xmlOnlyOutputPath,
                 "WebApiDocsOverloadedIndexerFixture",
-                "this[System.String key]",
-                "System.String",
-                "this[System.Int32 index]",
-                "System.Int32");
+                "this[string key]",
+                "string",
+                "this[int index]",
+                "int");
             var xmlOnlyHtml = string.Join(
                 Environment.NewLine,
                 Directory.GetFiles(xmlOnlyOutputPath, "*.html", SearchOption.AllDirectories)
                     .Select(File.ReadAllText));
-            Assert.Contains("this[System.String key]", xmlOnlyHtml, StringComparison.Ordinal);
-            Assert.Contains("this[System.Int32 index]", xmlOnlyHtml, StringComparison.Ordinal);
+            Assert.Contains("this[string key]", xmlOnlyHtml, StringComparison.Ordinal);
+            Assert.Contains("this[int index]", xmlOnlyHtml, StringComparison.Ordinal);
 
             var reflectedOutputPath = Path.Combine(root, "reflected-api");
             var reflectedResult = WebApiDocsGenerator.Generate(new WebApiDocsOptions
@@ -118,10 +118,10 @@ public class WebApiDocsGeneratorMemberSignatureWarningsTests
             AssertIndexerProperties(
                 reflectedOutputPath,
                 "WebApiDocsOverloadedIndexerFixture",
-                "this[String key]",
-                "System.String",
-                "this[Int32 index]",
-                "System.Int32");
+                "this[string key]",
+                "string",
+                "this[int index]",
+                "int");
         }
         finally
         {

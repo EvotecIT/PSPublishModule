@@ -137,12 +137,12 @@ public static partial class WebApiDocsGenerator
             if (sourceLinks is not null)
                 model.Source = sourceLinks.TryGetSource(type);
             model.BaseType = type.BaseType != null && type.BaseType != typeof(object)
-                ? GetReadableTypeName(type.BaseType)
+                ? GetAnnotatedTypeName(type.BaseType, (NullabilityInfo?)null, qualified: true)
                 : null;
             model.Interfaces.Clear();
             foreach (var iface in type.GetInterfaces())
             {
-                model.Interfaces.Add(GetReadableTypeName(iface));
+                model.Interfaces.Add(GetAnnotatedTypeName(iface, (NullabilityInfo?)null, qualified: true));
             }
             if (type.IsGenericTypeDefinition || type.ContainsGenericParameters)
             {
@@ -351,7 +351,7 @@ public static partial class WebApiDocsGenerator
         if (parameters.Count != infos.Length) return false;
         for (var i = 0; i < parameters.Count; i++)
         {
-            var left = NormalizeTypeName(parameters[i].Type);
+            var left = NormalizeTypeName(parameters[i].AnchorType ?? parameters[i].Type);
             var right = NormalizeTypeName(GetDocumentationTypeName(infos[i].ParameterType));
             if (!string.Equals(left, right, StringComparison.OrdinalIgnoreCase))
                 return false;

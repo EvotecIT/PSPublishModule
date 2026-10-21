@@ -1013,7 +1013,8 @@ public static partial class WebApiDocsGenerator
             results.Add(new ApiParameterModel
             {
                 Name = paramName,
-                Type = type,
+                Type = FormatCSharpTypeName(type),
+                AnchorType = type,
                 Summary = summary
             });
         }

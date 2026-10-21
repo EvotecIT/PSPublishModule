@@ -1,3 +1,5 @@
+using System.Text.RegularExpressions;
+
 namespace PowerForge.Web;
 
 /// <summary>Generates API documentation artifacts from XML docs.</summary>
@@ -9,20 +11,21 @@ public static partial class WebApiDocsGenerator
     /// <summary>Section labels used by the generated reference chrome (breadcrumb, sidebar, overview, type meta).</summary>
     private sealed class ApiDocsChromeLabels
     {
-        private ApiDocsChromeLabels(string sectionLabel, bool isPowerShell)
+        private ApiDocsChromeLabels(string sectionLabel, bool isPowerShell, bool showExampleOrigins)
         {
             SectionLabel = sectionLabel;
             IsPowerShell = isPowerShell;
+            ShowExampleOrigins = showExampleOrigins;
         }
 
         public string SectionLabel { get; }
         public bool IsPowerShell { get; }
-        public bool ShowTypeEyebrow => !IsPowerShell;
+        public bool ShowExampleOrigins { get; }
         public string GroupLabel => IsPowerShell ? "Module" : "Namespace";
         public string GroupPluralLabel => IsPowerShell ? "modules" : "namespaces";
 
         public static ApiDocsChromeLabels From(WebApiDocsOptions? options)
-            => new(ResolveApiSectionLabel(options), options?.Type == ApiDocsType.PowerShell);
+            => new(ResolveApiSectionLabel(options), options?.Type == ApiDocsType.PowerShell, options?.ShowExampleOrigins == true);
     }
 
     private static string ResolveApiSectionLabel(WebApiDocsOptions? options)
@@ -44,7 +47,8 @@ public static partial class WebApiDocsGenerator
         IReadOnlyDictionary<string, string> slugMap,
         ApiTypeUsageModel? usage,
         ApiTypeRelatedContentModel? relatedContent,
-        string codeLanguage)
+        string codeLanguage,
+        bool showExampleOrigins)
     {
         if (!string.IsNullOrWhiteSpace(type.Summary))
             body.Line($"<p class=\"type-summary\">{RenderLinkedText(type.Summary, baseUrl, slugMap)}</p>");
@@ -57,11 +61,11 @@ public static partial class WebApiDocsGenerator
 
         if (HasDistinctPowerShellDescription(type))
         {
-            body.Line("<section class=\"remarks\" id=\"remarks\">");
+            body.Line("<section class=\"command-description\" id=\"remarks\">");
             using (body.Indent())
             {
                 body.Line("<h2>Description</h2>");
-                foreach (var paragraph in SplitExampleParagraphs(type.Remarks!))
+                foreach (var paragraph in SplitExampleParagraphs(GetPowerShellDescription(type)))
                     body.Line($"<p>{RenderLinkedText(paragraph, baseUrl, slugMap)}</p>");
             }
             body.Line("</section>");
@@ -89,7 +93,7 @@ public static partial class WebApiDocsGenerator
             using (body.Indent())
             {
                 body.Line("<h2>Examples</h2>");
-                AppendExamples(body, type.Examples, baseUrl, slugMap, codeLanguage);
+                AppendExamples(body, type.Examples, baseUrl, slugMap, codeLanguage, showExampleOrigins);
             }
             body.Line("</section>");
         }
@@ -263,10 +267,10 @@ public static partial class WebApiDocsGenerator
             chips.Add($"<span class=\"param-meta-chip required\">required in {System.Web.HttpUtility.HtmlEncode(string.Join(", ", entry.RequiredSets))}</span>");
 
         if (IsPowerShellPositionalParameter(parameter.Position))
-            chips.Add($"<span class=\"param-meta-chip\">position: {System.Web.HttpUtility.HtmlEncode(parameter.Position!.Trim())}</span>");
+            chips.Add($"<span class=\"param-meta-chip param-meta-chip--position\">position: {System.Web.HttpUtility.HtmlEncode(parameter.Position!.Trim())}</span>");
         if (!string.IsNullOrWhiteSpace(parameter.PipelineInput) &&
             !string.Equals(parameter.PipelineInput.Trim(), "false", StringComparison.OrdinalIgnoreCase))
-            chips.Add($"<span class=\"param-meta-chip pipeline\">pipeline: {System.Web.HttpUtility.HtmlEncode(parameter.PipelineInput.Trim())}</span>");
+            chips.Add($"<span class=\"param-meta-chip pipeline param-meta-chip--pipeline\">pipeline: {System.Web.HttpUtility.HtmlEncode(parameter.PipelineInput.Trim())}</span>");
 
         var aliases = parameter.Aliases
             .Where(static alias => !string.IsNullOrWhiteSpace(alias) && !IsPowerShellNoneValue(alias))
@@ -283,8 +287,26 @@ public static partial class WebApiDocsGenerator
 
     /// <summary>Help generators often copy the synopsis into the description; repeating it adds nothing.</summary>
     private static bool HasDistinctPowerShellDescription(ApiTypeModel type)
-        => !string.IsNullOrWhiteSpace(type.Remarks) &&
-           !string.Equals(type.Remarks.Trim(), type.Summary?.Trim(), StringComparison.Ordinal);
+        => !string.IsNullOrWhiteSpace(GetPowerShellDescription(type));
+
+    /// <summary>Removes a normalized synopsis prefix while retaining the original text of the remainder.</summary>
+    private static string GetPowerShellDescription(ApiTypeModel type)
+    {
+        var description = type.Remarks?.Trim() ?? string.Empty;
+        var synopsis = type.Summary?.Trim();
+        if (description.Length == 0 || string.IsNullOrWhiteSpace(synopsis))
+            return description;
+
+        // Match words, allowing help exporters to fold whitespace or change casing.
+        // A word boundary prevents "Reads a file" from consuming "Reads a filename".
+        var words = Regex.Split(synopsis, @"\s+", RegexOptions.CultureInvariant, RegexTimeout);
+        var pattern = @"\A" + string.Join(@"\s+", words.Select(Regex.Escape));
+        var match = Regex.Match(description, pattern, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, RegexTimeout);
+        if (!match.Success ||
+            (match.Length < description.Length && char.IsLetterOrDigit(description[match.Length]) && char.IsLetterOrDigit(synopsis[^1])))
+            return description;
+        return description[match.Length..].TrimStart();
+    }
 
     private static bool IsPowerShellNoneValue(string? value)
         => string.Equals(value?.Trim(), "None", StringComparison.OrdinalIgnoreCase);

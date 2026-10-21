@@ -25,10 +25,11 @@ public static partial class WebApiDocsGenerator
         var footer = LoadOptionalHtml(options.FooterHtmlPath);
         ApplyNavFallback(options, warnings, ref header, ref footer);
         ApplyNavTokens(options, warnings, ref header, ref footer);
-        var bodyClass = ResolveBodyClass(options.BodyClass);
+        var bodyClass = ResolveBodyClass(options);
         var criticalCss = BuildApiDocsCriticalCss(options, warnings);
         var cssLinks = BuildCssLinks(options.CssHref);
         var fallbackCss = LoadAsset(options, "fallback.css", null);
+        File.WriteAllText(Path.Combine(outputPath, "powerforge-api.css"), fallbackCss, Encoding.UTF8);
         var cssBlock = BuildCssBlockWithFallback(fallbackCss, cssLinks);
         var docsScript = WrapScript(LoadAsset(options, "docs.js", options.DocsScriptPath));
         var social = ResolveApiSocialProfile(options);

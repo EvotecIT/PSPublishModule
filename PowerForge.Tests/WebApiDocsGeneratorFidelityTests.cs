@@ -40,13 +40,13 @@ public sealed class WebApiDocsGeneratorFidelityTests
             Assert.StartsWith("https://example.invalid/repo/blob/main/Fixtures/DocsFidelityFixture.cs#L",
                 type.GetProperty("source").GetProperty("url").GetString());
             var method = type.GetProperty("methods").EnumerateArray().Single(m => m.GetProperty("name").GetString() == "Create");
-            Assert.Contains("String? Create(String? text = null)", method.GetProperty("signature").GetString());
-            Assert.Equal("System.String?", method.GetProperty("parameters")[0].GetProperty("type").GetString());
+            Assert.Contains("string? Create(string? text = null)", method.GetProperty("signature").GetString());
+            Assert.Equal("string?", method.GetProperty("parameters")[0].GetProperty("type").GetString());
             Assert.Equal("text", method.GetProperty("parameters")[0].GetProperty("name").GetString());
             var inspect = type.GetProperty("methods").EnumerateArray().Single(m => m.GetProperty("name").GetString() == "Inspect");
-            Assert.Contains("Int32? count", inspect.GetProperty("signature").GetString());
-            Assert.Contains("String?[]? names", inspect.GetProperty("signature").GetString());
-            Assert.Contains("Dictionary<String, List<Fixture?[]?>?>? values", inspect.GetProperty("signature").GetString());
+            Assert.Contains("int? count", inspect.GetProperty("signature").GetString());
+            Assert.Contains("string?[]? names", inspect.GetProperty("signature").GetString());
+            Assert.Contains("Dictionary<string, List<Fixture?[]?>?>? values", inspect.GetProperty("signature").GetString());
             var html = File.ReadAllText(Path.Combine(options.OutputPath, "powerforge-tests-docsfidelity-fixture", "index.html"));
             Assert.Contains("id=\"method-open-powerforge-tests-docsfidelity-fixture\"", html);
             using var xref = JsonDocument.Parse(File.ReadAllText(result.XrefPath!));
@@ -61,11 +61,11 @@ public sealed class WebApiDocsGeneratorFidelityTests
                 Assert.Contains($"id=\"{anchor}\"", html);
             }
             var properties = type.GetProperty("properties").EnumerateArray().ToDictionary(p => p.GetProperty("name").GetString()!);
-            Assert.Contains("String?[,]?", properties["Matrix"].GetProperty("signature").GetString());
-            Assert.Contains("Dictionary<String, List<String?>?>?", properties["Values"].GetProperty("signature").GetString());
-            Assert.Contains("String? name = null", type.GetProperty("constructors")[0].GetProperty("signature").GetString());
-            Assert.Contains("String?", type.GetProperty("fields")[0].GetProperty("signature").GetString());
-            Assert.Contains("Action<String?>?", type.GetProperty("events")[0].GetProperty("signature").GetString());
+            Assert.Contains("string?[,]?", properties["Matrix"].GetProperty("signature").GetString());
+            Assert.Contains("Dictionary<string, List<string?>?>?", properties["Values"].GetProperty("signature").GetString());
+            Assert.Contains("string? name = null", type.GetProperty("constructors")[0].GetProperty("signature").GetString());
+            Assert.Contains("string?", type.GetProperty("fields")[0].GetProperty("signature").GetString());
+            Assert.Contains("Action<string?>?", type.GetProperty("events")[0].GetProperty("signature").GetString());
             Assert.Equal(JsonValueKind.Null, type.GetProperty("methods").EnumerateArray()
                 .Single(m => m.GetProperty("name").GetString() == "Generated").GetProperty("source").ValueKind);
             Assert.All(type.GetProperty("methods").EnumerateArray()
