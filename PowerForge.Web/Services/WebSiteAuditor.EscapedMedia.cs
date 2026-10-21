@@ -20,7 +20,11 @@ public static partial class WebSiteAuditor
         if (string.IsNullOrWhiteSpace(rawHtml))
             return;
 
-        var content = (doc.QuerySelector("body") ?? doc.DocumentElement)?.Clone(true) as AngleSharp.Dom.IElement;
+        var body = doc.QuerySelector("body") ?? doc.DocumentElement;
+        if (body is null || !EscapedMediaTagPattern.IsMatch(body.TextContent))
+            return;
+
+        var content = body.Clone(true) as AngleSharp.Dom.IElement;
         if (content is null)
             return;
 
