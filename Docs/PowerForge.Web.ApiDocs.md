@@ -102,7 +102,8 @@ Generated API and command descriptions share a 160-character limit across
 the limit, the generator keeps the last complete sentence that fits, even when
 that produces fewer than 120 characters. Closing quotation marks and brackets
 stay with the sentence and count toward the limit. Common abbreviations do not
-end a sentence. If no complete sentence fits, the description ends
+end a sentence. Common nullable-type, postfix-expression, and PowerShell variable
+notation is treated as technical text. If no complete sentence fits, the description ends
 at a word boundary with an ellipsis (`…`), removing trailing commas, colons,
 and dangling English articles, prepositions, or conjunctions. A single token
 longer than the available space is shortened without splitting a Unicode scalar.

@@ -134,6 +134,8 @@ public static partial class WebApiDocsGenerator
             var end = sentence.Index + sentence.Length;
             if (end > ApiSeoDescriptionMaximumLength)
                 break;
+            if (IsApiTechnicalPostfixPunctuation(description, sentence, sentenceEnd))
+                continue;
             // Common prose abbreviations and dotted initialisms continue the sentence.
             if (description[sentence.Index] == '.' && Regex.IsMatch(description[..(sentence.Index + 1)],
                 @"(?:\b(?:[a-z]\.){2,}|\b(?:etc|vs|dr|mr|mrs|ms|prof|sr|jr|st|mt|fig|eq|no|approx|cf|viz|al)\.)\z",
@@ -170,6 +172,37 @@ public static partial class WebApiDocsGenerator
             }
             truncated = cleaned;
         }
+    }
+
+    // Plain-text API summaries mix prose with nullable types and postfix expressions.
+    // Require technical-token evidence so ordinary prose questions still terminate.
+    private static bool IsApiTechnicalPostfixPunctuation(string description, Match sentence, int sentenceStart)
+    {
+        var punctuation = description[sentence.Index];
+        if (punctuation is not ('?' or '!'))
+            return false;
+
+        var prefix = description[..sentence.Index];
+        var token = Regex.Match(prefix, @"[\w.$<>\[\]`()]+\z", RegexOptions.CultureInvariant, RegexTimeout).Value;
+        if (token.StartsWith('$'))
+            return true;
+
+        var following = description.AsSpan(sentence.Index + sentence.Length).TrimStart();
+        if (following.IsEmpty || !char.IsLower(following[0]) || token.Length == 0)
+            return false;
+
+        if (GetCSharpKeyword(NormalizeCSharpPrimitiveType(token)) is not null ||
+            token is "nint" or "nuint" ||
+            (punctuation == '!' && token is "null" or "default" or "value") ||
+            (token.Length == 1 && char.IsUpper(token[0])) ||
+            token.Any(c => c is '.' or '_' or '<' or '>' or '[' or ']' or '(' or ')' or '`'))
+            return true;
+
+        var typeStyleIdentifier = token.Any(char.IsUpper) && token.Any(char.IsLower);
+        var proseQuestion = punctuation == '?' && Regex.IsMatch(description[sentenceStart..sentence.Index],
+            """^[\s\p{Ps}\p{Pi}"']*(?:who|what|when|where|why|how|which|whose|is|are|am|was|were|can|could|do|does|did|will|would|shall|should|may|might|must|has|have|had)\b""",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, RegexTimeout);
+        return typeStyleIdentifier && !proseQuestion;
     }
 
     private static int ClampToUnicodeScalarBoundary(string value, int boundary)

@@ -26,16 +26,36 @@ public sealed class WebApiDocsDescriptionBoundaryTests
             ? completeSentences + " Additional reference guidance explains configuration, formatting, pipeline handling, and all available environment settings."
             : wordPrefix + " in the configured terminal environment and every supported pipeline invocation";
         var expected = hasSentences ? completeSentences : wordPrefix + "…";
+        GenerateAndAssertMetadata(source, template, summary, expected);
+    }
+
+    [Theory]
+    [InlineData(ApiDocsType.CSharp, "docs", "Represents nullable T? with configurable conversion settings")]
+    [InlineData(ApiDocsType.CSharp, "simple", "Represents nullable int? with configurable conversion settings")]
+    [InlineData(ApiDocsType.CSharp, "docs", "Represents nullable IReadOnlyList<T>? with configurable conversion settings")]
+    [InlineData(ApiDocsType.CSharp, "simple", "Uses result.Value! with configurable conversion settings")]
+    [InlineData(ApiDocsType.PowerShell, "docs", "Reads $? with configurable pipeline status settings")]
+    [InlineData(ApiDocsType.PowerShell, "simple", "Reads $? Status with configurable pipeline settings")]
+    public void Generate_TechnicalPunctuationDoesNotReplaceTheLastCompleteSentence(ApiDocsType source, string template, string phrase)
+    {
+        var expected = source == ApiDocsType.CSharp ? "Wraps nullable values." : "Reports pipeline execution status.";
+        var summary = expected + " " + phrase + " that preserve source values and apply formatting rules consistently across synchronous and asynchronous serialization operations.";
+        GenerateAndAssertMetadata(source, template, summary, expected);
+    }
+
+    private static void GenerateAndAssertMetadata(ApiDocsType source, string template, string summary, string expected)
+    {
         var root = Path.Combine(Path.GetTempPath(), "pf-apidocs-description-boundary-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
         try
         {
             var input = Path.Combine(root, "help.xml");
+            var summaryXml = WebUtility.HtmlEncode(summary);
             File.WriteAllText(input, source == ApiDocsType.CSharp
-                ? $"<doc><members><member name=\"T:Sample.Terminal\"><summary>{summary}</summary></member></members></doc>"
+                ? $"<doc><members><member name=\"T:Sample.Terminal\"><summary>{summaryXml}</summary></member></members></doc>"
                 : $$"""
                   <helpItems xmlns="http://msh" xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10">
-                    <command:command><command:details><command:name>Format-ConsoleTable</command:name><maml:description><maml:para>{{summary}}</maml:para></maml:description></command:details></command:command>
+                    <command:command><command:details><command:name>Format-ConsoleTable</command:name><maml:description><maml:para>{{summaryXml}}</maml:para></maml:description></command:details></command:command>
                   </helpItems>
                   """);
             var output = Path.Combine(root, "api");
@@ -136,6 +156,30 @@ public sealed class WebApiDocsDescriptionBoundaryTests
     {
         var prefix = "Use (e.g.) " + new string('x', 120) + " output";
         Assert.Equal(prefix + "…", Fit(prefix + " " + new string('y', 100)));
+    }
+
+    [Fact]
+    public void FitApiSeoDescription_TechnicalPunctuationWithoutACompleteSentenceUsesEllipsis()
+    {
+        var prefix = "Represents nullable T? with configurable conversion settings and consistent formatting";
+        Assert.Equal(prefix + "…", Fit(prefix + " " + new string('y', 100)));
+    }
+
+    [Theory]
+    [InlineData("Is the configured value ready?", false)]
+    [InlineData("Configuration is ready!", false)]
+    [InlineData("Is the configured value ready?", true)]
+    [InlineData("Configuration is ready!", true)]
+    [InlineData("Can this emit JSON?", true)]
+    [InlineData("What is PowerForge?", true)]
+    public void FitApiSeoDescription_PreservesProseQuestionsAndExclamations(string sentence, bool lowercaseContinuation)
+    {
+        var details = "Additional reference guidance explains configuration, formatting, pipeline handling, all available environment settings, and cross-platform integration workflows.";
+        if (lowercaseContinuation)
+            details = char.ToLowerInvariant(details[0]) + details[1..];
+        var summary = sentence + " " + details;
+        Assert.True(summary.Length > 160);
+        Assert.Equal(sentence, Fit(summary));
     }
 
     private static string Fit(string value)
