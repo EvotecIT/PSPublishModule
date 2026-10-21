@@ -4,7 +4,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <LangVersion>latest</LangVersion>
-    <VersionPrefix>3.0.172</VersionPrefix>
+    <VersionPrefix>3.0.173</VersionPrefix>
     <Description>Dependency-free web interchange: IndexNow, sitemaps, syndication feeds and JSON-LD serialization.</Description>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
