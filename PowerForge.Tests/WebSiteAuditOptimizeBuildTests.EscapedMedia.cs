@@ -174,7 +174,7 @@ public partial class WebSiteAuditOptimizeBuildTests
             });
 
             Assert.True(result.Success);
-            var issue = Assert.Single(result.Issues.Where(issue => issue.Hint.Equals("media-escaped-html-tag", StringComparison.OrdinalIgnoreCase)));
+            var issue = Assert.Single(result.Issues, issue => issue.Hint.Equals("media-escaped-html-tag", StringComparison.OrdinalIgnoreCase));
             Assert.Contains("(img)", issue.Message, StringComparison.Ordinal);
         }
         finally
@@ -234,7 +234,7 @@ public partial class WebSiteAuditOptimizeBuildTests
             var after = WebSiteAuditor.Audit(auditOptions);
 
             Assert.True(after.Success);
-            var escapedMedia = Assert.Single(after.Issues.Where(issue => issue.Hint == "media-escaped-html-tag"));
+            var escapedMedia = Assert.Single(after.Issues, issue => issue.Hint == "media-escaped-html-tag");
             Assert.Equal("mixed.html", escapedMedia.Path);
             Assert.Contains("(img)", escapedMedia.Message, StringComparison.Ordinal);
             Assert.Contains(after.Issues, issue => issue.Path == "code.html" && issue.Category == "duplicate-id");
