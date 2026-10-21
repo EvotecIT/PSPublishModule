@@ -101,13 +101,31 @@ internal sealed class AppleSwiftPackageBuildSnapshot : IDisposable
             var derivedDataPath = Path.Combine(root, "ResolverDerivedData");
             Directory.CreateDirectory(sourcePackagesPath);
             Directory.CreateDirectory(derivedDataPath);
+            Directory.CreateDirectory(Path.Combine(root, "ArchiveDerivedData"));
             rootMonitor = new AppleReleaseSourceMutationMonitor(
                 parent,
                 "private Swift package snapshot directory",
                 "xcodebuild exact-source package resolution and build",
                 "Discard the Apple product and resolve the exact package graph again.",
+                enableImmediately: false,
                 exactPath: root,
-                includeExactPathDescendants: false);
+                includeExactPathDescendants: false,
+                // Use the same synchronously drainable native boundary as package inputs.
+                // FileSystemWatcher offers no flush for delayed macOS setup notifications.
+                useNativeMacOSObserver: true);
+            // FSEvents may deliver this directory's own create/chmod notifications after
+            // subscription. Drain them during setup, while binding the ORIGINAL directory
+            // and its private permissions, then arm before any resolver process can start.
+            rootMonitor.CaptureExpectedProducerOutput(() =>
+            {
+                rootDirectory.ValidateUnchanged();
+#if NET8_0_OR_GREATER
+                if (!OperatingSystem.IsWindows() && File.GetUnixFileMode(root) !=
+                    (UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute))
+                    throw new InvalidOperationException("The private Swift package snapshot directory permissions changed during setup.");
+#endif
+                return true;
+            }, "private directory setup");
             var environmentVariables = AppleTrustedExecutionEnvironment.Create(isolateGitConfiguration: true);
             var arguments = new[]
             {
