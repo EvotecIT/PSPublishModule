@@ -161,6 +161,12 @@ public sealed class WebApiDocsOptions
     public int SocialCardWidth { get; set; } = 1200;
     /// <summary>Height of generated API social card PNG files.</summary>
     public int SocialCardHeight { get; set; } = 630;
+    /// <summary>Optional named theme from the site's Social.GeneratedCardThemes. Requires SiteConfigPath.</summary>
+    public string? SocialCardTheme { get; set; }
+    /// <summary>API card title source: seo (default) or name (type/command name without namespace or SEO suffix).</summary>
+    public string? SocialCardTitle { get; set; }
+    /// <summary>Fail generation when a requested API social card cannot be rendered.</summary>
+    public bool SocialCardsRequired { get; set; }
     /// <summary>Optional brand URL override.</summary>
     public string? BrandUrl { get; set; }
     /// <summary>Optional brand icon URL override.</summary>

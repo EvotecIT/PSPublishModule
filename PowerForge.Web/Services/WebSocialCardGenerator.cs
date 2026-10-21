@@ -1170,6 +1170,8 @@ internal static partial class WebSocialCardGenerator
             "connect" => "connect",
             "contact" => "connect",
             "panel" => "panel",
+            "split" => "split",
+            "code-led" => "code-led",
             "metrics" => "metrics",
             "stats" => "metrics",
             "statistics" => "metrics",

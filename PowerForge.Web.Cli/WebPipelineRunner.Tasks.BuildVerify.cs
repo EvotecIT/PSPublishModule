@@ -30,6 +30,11 @@ internal static partial class WebPipelineRunner
 
         var (spec, specPath) = WebSiteSpecLoader.LoadWithPath(config, WebCliJson.Options);
         ApplyBuildStepOverrides(spec, socialAutoGenerate);
+        if (GetBool(step, "socialCardsRequired") is { } socialCardsRequired)
+        {
+            spec.Social ??= new SocialSpec();
+            spec.Social.SocialCardsRequired = socialCardsRequired;
+        }
         var plan = WebSitePlanner.Plan(spec, specPath, WebCliJson.Options);
         WebOutputPathGuard.ValidateSite(spec, plan, outPath, baseDir, cleanOutput);
         if (cleanOutput)

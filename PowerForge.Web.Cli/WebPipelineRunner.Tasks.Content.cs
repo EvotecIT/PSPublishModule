@@ -410,6 +410,9 @@ internal static partial class WebPipelineRunner
                 SocialCardPath = socialCardPath,
                 SocialCardWidth = socialCardWidth ?? 1200,
                 SocialCardHeight = socialCardHeight ?? 630,
+                SocialCardTheme = GetString(step, "socialCardTheme"),
+                SocialCardTitle = GetString(step, "socialCardTitle"),
+                SocialCardsRequired = GetBool(step, "socialCardsRequired") ?? false,
                 BrandUrl = brandUrl,
                 BrandIcon = brandIcon
             };

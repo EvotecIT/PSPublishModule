@@ -102,8 +102,8 @@ internal static partial class WebSocialCardGenerator
 
         // Title: steps down from 54 to 44 when it is truncated or needs more than two lines.
         var baseTitleFontSize = ResolveTokenPixels(state.ThemeTokens, state.Width, state.Height, 54, 30, "socialCard", "panelTitleFontSize");
-        var (titleFontSize, titleLineHeight, titleLines) = AdaptTitleSize(state.Title, baseTitleFontSize, PanelPixels(state, 59), textWidth, 3, state.Width, state.Height);
-        if (titleLines.Count > 2 && titleFontSize == baseTitleFontSize)
+        var (titleFontSize, titleLineHeight, titleLines) = FitCardTitle(state, baseTitleFontSize, PanelPixels(state, 59), textWidth);
+        if (!state.TextFit && titleLines.Count > 2 && titleFontSize == baseTitleFontSize)
         {
             titleFontSize = Math.Max(24, (int)Math.Round(baseTitleFontSize * 0.82));
             titleLineHeight = EnsureReadableLineHeight(titleFontSize, (int)Math.Round(titleFontSize * 1.12));
@@ -127,7 +127,7 @@ internal static partial class WebSocialCardGenerator
             : Math.Clamp(((descBottom - descTop - descFontSize) / Math.Max(1, descLineHeight)) + 1, 0, 3);
         if (descLineCount > 0)
         {
-            var descLines = WrapText(state.Description, GetDescriptionWrapWidth(textWidth, descFontSize), descLineCount);
+            var descLines = WrapCardDescription(state, textWidth, descFontSize, descLineCount);
             AppendDescription(svg, state, descLines, x, descTop + descFontSize, descFontSize, descLineHeight);
         }
 
