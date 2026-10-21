@@ -143,7 +143,7 @@ public static partial class WebApiDocsGenerator
             Collection = collection,
             Meta = new Dictionary<string, object?>
             {
-                ["social_card_badge"] = options.Type == ApiDocsType.PowerShell ? "PS" : "API",
+                ["social_card_badge"] = options.Type == ApiDocsType.PowerShell ? "POWERSHELL" : "API",
                 ["social_card_code"] = type is null ? null : BuildApiCardCode(options, type)
             }
         };

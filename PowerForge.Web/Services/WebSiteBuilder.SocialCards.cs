@@ -196,6 +196,9 @@ public static partial class WebSiteBuilder
         var styleKey = ResolveSocialCardStyle(spec, item, badge, routeForSlug, cardTheme);
         var inlineImageCandidate = ResolveConfiguredCardImage(spec, item, rootPath);
         var variantKey = ResolveSocialCardVariant(spec, item, styleKey, routeForSlug, cardTheme);
+        if ((spec.Social.GeneratedCardTextFit || variantKey == "code-led") &&
+            (item.Collection.Equals("api", StringComparison.OrdinalIgnoreCase) || item.Collection.Equals("powershell", StringComparison.OrdinalIgnoreCase)))
+            description = StripMatchingCardTitlePrefix(title, description);
         var colorScheme = ResolveSocialCardColorScheme(spec, item, cardTheme) ?? string.Empty;
         var allowRemoteMediaFetch = ResolveSocialCardAllowRemoteMediaFetch(spec, item, cardTheme);
         var logoSource = ResolveSocialCardAssetDataUri(spec, item, ResolveSocialCardLogoCandidate(spec, item, cardTheme), rootPath);

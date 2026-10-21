@@ -79,9 +79,10 @@ public sealed class WebApiSocialCardThemeTests : IDisposable
         var item = new ContentItem
         {
             Title = powerShell ? "Format-ConsoleTable" : "Terminal", OutputPath = route, Collection = powerShell ? "powershell" : "api",
-            Meta = new() { ["social_title"] = powerShell ? "Format-ConsoleTable" : "Terminal", ["social_card_badge"] = powerShell ? "PS" : "API", ["social_card_code"] = code }
+            Meta = new() { ["social_title"] = powerShell ? "Format-ConsoleTable" : "Terminal", ["social_card_badge"] = powerShell ? "POWERSHELL" : "API", ["social_card_code"] = code }
         };
         var expected = WebSiteBuilder.CreateSocialCardGenerationPlan(spec, item, Meta("og:title"), Meta("og:description"), "Example", _root)!;
+        Assert.Equal(powerShell ? "POWERSHELL" : "API", expected.RenderOptions.Badge);
         Assert.Equal("/" + expected.RelativePath, image);
         using var actualPng = new MagickImage(Path.Combine(_root, "_site", image.TrimStart('/')));
         using var expectedPng = new MagickImage(WebSocialCardGenerator.RenderPng(expected.RenderOptions)!);

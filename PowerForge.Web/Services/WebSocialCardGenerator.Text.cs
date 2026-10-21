@@ -54,12 +54,28 @@ internal static partial class WebSocialCardGenerator
             ? WrapWordsToWidth(state.Description, width, maxLines, text => MeasureCardText(state, text, fontSize, mono: false, title: false))
             : WrapText(state.Description, GetDescriptionWrapWidth(width, fontSize), maxLines);
 
+    private static (int FontSize, int LineHeight, List<string> Lines) FitSplitDescription(
+        SocialCardRenderState state, int width, int baseFontSize)
+    {
+        // Spend the description's size allowance before reducing the headline. Keep the
+        // remaining copy concise once it reaches its readable floor.
+        var minimum = Math.Min(baseFontSize, PanelPixels(state, 20));
+        var size = baseFontSize;
+        var lines = WrapCardDescription(state, width, size, 2);
+        while (size > minimum && lines[^1].EndsWith('…'))
+        {
+            size = Math.Max(minimum, size - 2);
+            lines = WrapCardDescription(state, width, size, 2);
+        }
+        return (size, (int)Math.Ceiling(size * 1.4), lines);
+    }
+
     private static (int FontSize, int LineHeight, List<string> Lines) FitCardTitle(SocialCardRenderState state,
         int baseFontSize, int baseLineHeight, int width, int maxLines = 3)
     {
         if (!state.TextFit && state.LayoutKey is not ("split" or "code-led"))
             return AdaptTitleSize(state.Title, baseFontSize, baseLineHeight, width, maxLines, state.Width, state.Height);
-        var minSize = Math.Min(baseFontSize, ResolveTokenPixels(state.ThemeTokens, state.Width, state.Height, 30, 16, "socialCard", "titleMinFontSize"));
+        var minSize = Math.Min(baseFontSize, ResolveTokenPixels(state.ThemeTokens, state.Width, state.Height, 48, 30, "socialCard", "titleMinFontSize"));
         var fontSize = baseFontSize;
         List<string> lines;
         while (true)
@@ -76,7 +92,7 @@ internal static partial class WebSocialCardGenerator
     {
         var family = mono ? state.Typography.MonoFontFamily : title ? state.Typography.TitleFontFamily : state.Typography.BodyFontFamily;
         var name = ParseFontFamilyStack(family).FirstOrDefault() ?? family;
-        var weight = title ? 800 : mono ? 400 : 500;
+        var weight = title ? 800 : mono || state.TextFit || state.LayoutKey is "split" or "code-led" ? 400 : 500;
         var file = state.Fonts is null ? null : SelectFontFile(name, weight, state.Fonts);
         var path = file?.Path;
         if (file is not null)

@@ -70,13 +70,13 @@ internal static partial class WebSocialCardGenerator
         svg.AppendLine($@"  <text x=""{logo.X + logo.Width + PanelPixels(state, 14)}"" y=""{GetCenteredTextBaseline(logo.Y, logo.Height, nameSize)}"" fill=""{state.Palette.TextPrimary}"" font-family=""{EscapeXml(state.Typography.TitleFontFamily)}"" font-size=""{nameSize}"" font-weight=""700"">{EscapeXml(TrimSingleLine(state.Eyebrow, 28))}</text>");
         svg.AppendLine($@"  <text x=""{x}"" y=""{PanelPixels(state, 184)}"" fill=""{state.Palette.AccentSoft}"" font-family=""{EscapeXml(state.Typography.EyebrowFontFamily)}"" font-size=""{PanelPixels(state, 20)}"" font-weight=""700"" letter-spacing=""1.5"">{EscapeXml(state.Badge.ToUpperInvariant())}</text>");
         var baseSize = ResolveTokenPixels(state.ThemeTokens, state.Width, state.Height, 56, 30, "socialCard", "titleFontSize");
+        var baseDescSize = ResolveTokenPixels(state.ThemeTokens, state.Width, state.Height, 24, 14, "socialCard", "descriptionFontSize");
+        var (descSize, descLineHeight, descLines) = FitSplitDescription(state, textWidth, baseDescSize);
         var (size, lineHeight, lines) = FitCardTitle(state, baseSize, PanelPixels(state, 64), textWidth, 2);
         var baseline = PanelPixels(state, 220) + (int)Math.Round(size * 0.86);
         AppendTitle(svg, state, lines, x, baseline, size, lineHeight);
-        var descSize = ResolveTokenPixels(state.ThemeTokens, state.Width, state.Height, 24, 14, "socialCard", "descriptionFontSize");
         var descY = baseline + (lines.Count - 1) * lineHeight + PanelPixels(state, 34) + descSize;
-        var descLines = WrapCardDescription(state, textWidth, descSize, 2);
-        AppendDescription(svg, state, descLines, x, descY, descSize, PanelPixels(state, 34));
+        AppendDescription(svg, state, descLines, x, descY, descSize, descLineHeight);
         svg.AppendLine($@"  <text x=""{x}"" y=""{state.Height - PanelPixels(state, 55)}"" fill=""{state.Palette.TextSecondary}"" font-family=""{EscapeXml(state.Typography.FooterFontFamily)}"" font-size=""{PanelPixels(state, 18)}"" font-weight=""500"">{EscapeXml(string.IsNullOrWhiteSpace(state.SiteAddress) ? state.FooterLabel : state.SiteAddress)}</text>");
 
         svg.AppendLine($@"  <rect x=""{column.X}"" y=""0"" width=""{column.Width}"" height=""{column.Height}"" fill=""{state.Palette.Surface}""/>");
@@ -102,7 +102,8 @@ internal static partial class WebSocialCardGenerator
             text => MeasureCardText(state, text, size, mono: true, title: false));
         var lineHeight = (int)Math.Ceiling(size * 1.6);
         var startY = (state.Height - lines.Count * lineHeight) / 2 + size;
-        svg.AppendLine($@"  <text x=""{column.X + inset}"" y=""{startY - PanelPixels(state, 48)}"" fill=""{state.Palette.TextSecondary}"" font-family=""{EscapeXml(state.Typography.MonoFontFamily)}"" font-size=""{PanelPixels(state, 16)}"">{(state.Badge == "PS" ? "POWERSHELL" : "C#")}</text>");
+        var language = state.Badge.Equals("PS", StringComparison.OrdinalIgnoreCase) || state.Badge.Equals("POWERSHELL", StringComparison.OrdinalIgnoreCase) ? "POWERSHELL" : "C#";
+        svg.AppendLine($@"  <text x=""{column.X + inset}"" y=""{startY - PanelPixels(state, 48)}"" fill=""{state.Palette.TextSecondary}"" font-family=""{EscapeXml(state.Typography.MonoFontFamily)}"" font-size=""{PanelPixels(state, 16)}"">{language}</text>");
         for (var i = 0; i < lines.Count; i++)
             svg.AppendLine($@"  <text x=""{column.X + inset}"" y=""{startY + i * lineHeight}"" fill=""{state.Palette.AccentSoft}"" font-family=""{EscapeXml(state.Typography.MonoFontFamily)}"" font-size=""{size}"" font-weight=""400"">{EscapeXml(lines[i])}</text>");
     }

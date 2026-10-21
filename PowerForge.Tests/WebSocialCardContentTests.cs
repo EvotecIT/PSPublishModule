@@ -10,6 +10,25 @@ public sealed class WebSocialCardContentTests : IDisposable
     public WebSocialCardContentTests() => Directory.CreateDirectory(_root);
     public void Dispose() => Directory.Delete(_root, recursive: true);
 
+    [Theory]
+    [InlineData("api", "Terminal", "Terminal: The print-once entry point.", "The print-once entry point.")]
+    [InlineData("powershell", "Format-ConsoleTable", "Format-ConsoleTable: Formats pipeline objects.", "Formats pipeline objects.")]
+    [InlineData("api", "Terminal", "TerminalWidth: The display width.", "TerminalWidth: The display width.")]
+    public void ApiDescriptions_RemoveOnlyTheMatchingTitlePrefix(string collection, string title, string description, string expected)
+    {
+        var spec = Site();
+        spec.Social!.GeneratedCardTitle = "page";
+        spec.Social.GeneratedCardTextFit = true;
+        var page = Page();
+        page.Collection = collection;
+        page.Title = title;
+        page.Description = description;
+        Assert.Equal(expected, Plan(spec, page).Description);
+        spec.Social.GeneratedCardTextFit = false;
+        var legacy = WebSiteBuilder.CreateSocialCardGenerationPlan(spec, page, title, description, "Example", _root)!;
+        Assert.Equal(description, legacy.RenderOptions.Description);
+    }
+
     [Fact]
     public void CardTitle_PageAndCollectionSources_PreserveSeoAndExplicitOverride()
     {

@@ -546,8 +546,9 @@ internal static partial class WebSocialCardGenerator
 
     private static void AppendDescription(StringBuilder svg, SocialCardRenderState state, IReadOnlyList<string> lines, int x, int y, int fontSize, int lineHeight)
     {
+        var weight = state.TextFit || state.LayoutKey is "split" or "code-led" ? 400 : 500;
         for (var i = 0; i < lines.Count; i++)
-            svg.AppendLine($@"  <text x=""{x}"" y=""{y + (i * lineHeight)}"" fill=""{state.Palette.TextSecondary}"" font-size=""{fontSize}"" font-family=""{EscapeXml(state.Typography.BodyFontFamily)}"" font-weight=""500"">{EscapeXml(lines[i])}</text>");
+            svg.AppendLine($@"  <text x=""{x}"" y=""{y + (i * lineHeight)}"" fill=""{state.Palette.TextSecondary}"" font-size=""{fontSize}"" font-family=""{EscapeXml(state.Typography.BodyFontFamily)}"" font-weight=""{weight}"">{EscapeXml(lines[i])}</text>");
     }
 
     private static void AppendFooterRoute(StringBuilder svg, SocialCardRenderState state, int x, int y)

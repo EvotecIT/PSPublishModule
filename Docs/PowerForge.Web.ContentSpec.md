@@ -1130,7 +1130,10 @@ options opt a site into page titles, concise text, and convention-based artwork:
   truncates at whole-word boundaries with an ellipsis. If a title still exceeds
   the minimum readable size, it is truncated to two lines. Split and code-led
   layouts use this fitting rule automatically. `socialCard.titleMinFontSize`
-  sets the fitting floor (30 px at 1200×630 by default).
+  sets the fitting floor (48 px at 1200×630 by default). Split layouts reduce
+  description size first, to a 20 px floor, and use regular-weight muted copy.
+  Code-led API cards remove a leading `Name:` description prefix when it matches
+  the card title; PowerShell cards use the `POWERSHELL` badge.
 - `split` uses a full-height right image column. `imageShare` is its fraction of
   the card width, from `0.2` to `0.65`. `imageFit` accepts `cover` or `contain`;
   `imageAnchor` accepts combinations of left/center/right and top/center/bottom.

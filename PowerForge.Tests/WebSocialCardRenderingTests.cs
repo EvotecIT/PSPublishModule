@@ -123,8 +123,39 @@ public sealed class WebSocialCardRenderingTests : IDisposable
         var titleLines = svg.Descendants().Where(element => element.Name.LocalName == "text" && element.Attribute("font-weight")?.Value == "800" &&
             int.TryParse(element.Attribute("y")?.Value, out var y) && y > 180).ToArray();
         Assert.InRange(titleLines.Length, 1, 2);
-        Assert.All(titleLines, line => Assert.DoesNotContain("…", line.Value, StringComparison.Ordinal));
-        Assert.True(int.Parse(titleLines[0].Attribute("font-size")!.Value, System.Globalization.CultureInfo.InvariantCulture) < 64);
+        Assert.InRange(int.Parse(titleLines[0].Attribute("font-size")!.Value, System.Globalization.CultureInfo.InvariantCulture), 48, 63);
+    }
+
+    [Fact]
+    public void SplitText_PreservesHeadlineFloor_AndFitsRegularMutedDescriptionFirst()
+    {
+        var options = Options();
+        options.VariantKey = "split";
+        options.TextFit = true;
+        options.Title = "Everyday output in one line. The monster when you need it.";
+        options.Description = "Readable PowerShell output in one line with tables, live dashboards, menus and forms when you need them.";
+        options.ThemeTokens = Tokens(("titleFontSize", 56), ("accent", "#123456"), ("backgroundStart", "#101010"),
+            ("surface", "#202020"), ("textPrimary", "#ffffff"), ("textSecondary", "#9ba6b6"));
+        var svg = XDocument.Parse(WebSocialCardGenerator.RenderSvg(options));
+        var text = svg.Descendants().Where(element => element.Name.LocalName == "text").ToArray();
+        var titles = text.Where(element => element.Attribute("font-weight")?.Value == "800" &&
+            int.TryParse(element.Attribute("y")?.Value, out var y) && y > 180).ToArray();
+        Assert.InRange(titles.Length, 1, 2);
+        Assert.All(titles, line => Assert.Equal("48", line.Attribute("font-size")?.Value));
+        Assert.EndsWith("…", titles[^1].Value);
+        var descriptions = text.Where(element => element.Attribute("font-weight")?.Value == "400").ToArray();
+        Assert.InRange(descriptions.Length, 1, 2);
+        Assert.All(descriptions, line =>
+        {
+            Assert.Equal("20", line.Attribute("font-size")?.Value);
+            Assert.Equal("#9ba6b6", line.Attribute("fill")?.Value);
+        });
+        options.Title = "The monster when you need it.";
+        options.Description = "Everyday output in one line.";
+        svg = XDocument.Parse(WebSocialCardGenerator.RenderSvg(options));
+        Assert.All(svg.Descendants().Where(element => element.Attribute("font-weight")?.Value == "800" &&
+                int.TryParse(element.Attribute("y")?.Value, out var y) && y > 180),
+            line => Assert.Equal("56", line.Attribute("font-size")?.Value));
     }
 
     [Fact]

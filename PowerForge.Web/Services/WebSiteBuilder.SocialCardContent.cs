@@ -5,6 +5,13 @@ namespace PowerForge.Web;
 
 public static partial class WebSiteBuilder
 {
+    private static string StripMatchingCardTitlePrefix(string title, string description)
+    {
+        var trimmed = description.TrimStart();
+        var prefix = title.Trim() + ":";
+        return trimmed.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) ? trimmed[prefix.Length..].TrimStart() : description;
+    }
+
     private static string ResolveCardTitle(SiteSpec spec, ContentItem item, string seoTitle)
     {
         var explicitTitle = GetMetaString(item.Meta, "social_title");
