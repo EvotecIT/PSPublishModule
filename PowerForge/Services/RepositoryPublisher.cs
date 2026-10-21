@@ -259,7 +259,7 @@ public sealed class RepositoryPublisher
         if (repoConfig?.CredentialProvider is null ||
             repoConfig.CredentialProvider.Kind == RepositoryCredentialProviderKind.None)
         {
-            return repoConfig?.Credential;
+            return RepositoryCredentialResolver.Resolve(repoConfig?.Credential);
         }
 
         if (repoConfig.Credential is not null)

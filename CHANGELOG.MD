@@ -2,6 +2,7 @@
 
 ## Unreleased
 ### What's Changed
+- Defer repository credential file and environment lookups until repository operations, so local builds and configuration exports do not require publishing secrets. Preserve the source through JSON configuration and resolve relative secret files against the project root.
 - Fixed framework inheritdoc resolution for multi-assembly API references, added built-in summaries for common object/equality members when targeting-pack XML is unavailable, and added per-step API/command index copy. Pre-rendered headers and footers no longer warn about absent navigation placeholders.
 - PowerForge.Web PowerShell command references now read like Get-Help: syntax first, each parameter listed once with set-aware chips, Get-Help positional syntax, `Module` instead of `Namespace`, no stray `PS>` example lines, dedented example code, and new `sectionLabel` / `moduleName` apidocs options (with a `{{SECTION_LABEL}}` template token). Example code blocks no longer render a blank first line or an indented closing line.
 - Made generated module-scoped AssemblyLoadContext loaders deterministic and removed machine-specific temporary build paths from their embedded debug metadata.

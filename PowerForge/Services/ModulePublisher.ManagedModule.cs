@@ -133,7 +133,7 @@ public sealed partial class ModulePublisher
                 "Managed module publishing does not use external runtime credential providers. Provide ApiKey or static repository credentials, or use a compatibility publish tool.");
         }
 
-        return repoConfig?.Credential;
+        return RepositoryCredentialResolver.Resolve(repoConfig?.Credential);
     }
 
     private static RepositoryCredential? ResolveManagedPublishCredential(

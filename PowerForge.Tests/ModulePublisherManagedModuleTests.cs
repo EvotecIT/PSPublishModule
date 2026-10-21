@@ -172,7 +172,7 @@ public sealed partial class ModulePublisherManagedModuleTests
     }
 
     [Fact]
-    public void Publish_ManagedModule_ResolvesRelativeRepositoryAgainstProjectRoot()
+    public void Publish_ManagedModule_ResolvesRelativeRepositoryAndCredentialFileAgainstProjectRoot()
     {
         using var root = new TemporaryDirectory();
         var stagingRoot = Path.Combine(root.Path, "staging");
@@ -182,6 +182,8 @@ public sealed partial class ModulePublisherManagedModuleTests
             manifestPath,
             "@{ ModuleVersion = '3.0.15'; RootModule = 'PSPublishModule.psm1'; Author = 'Evotec'; Description = 'Relative managed publish test.' }");
         File.WriteAllText(Path.Combine(stagingRoot, "PSPublishModule.psm1"), string.Empty);
+
+        File.WriteAllText(Path.Combine(root.Path, "publish-secret.txt"), "local-publish-token");
 
         var publisher = new ModulePublisher(
             new NullLogger(),
@@ -195,7 +197,8 @@ public sealed partial class ModulePublisherManagedModuleTests
             Repository = new PublishRepositoryConfiguration
             {
                 Name = "Local",
-                Uri = "./feed"
+                Uri = "./feed",
+                Credential = new RepositoryCredential { UserName = "publisher", SecretFilePath = "publish-secret.txt" }
             }
         };
         var buildResult = new ModuleBuildResult(

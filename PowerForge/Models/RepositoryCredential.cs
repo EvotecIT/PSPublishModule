@@ -10,5 +10,11 @@ public sealed class RepositoryCredential
 
     /// <summary>Password or token for basic authentication.</summary>
     public string? Secret { get; set; }
+
+    /// <summary>Secret file read only when a repository operation needs credentials.</summary>
+    public string? SecretFilePath { get; set; }
+
+    /// <summary>Process environment variable read only when a repository operation needs credentials.</summary>
+    public string? SecretEnvironmentVariable { get; set; }
 }
 

@@ -10,6 +10,31 @@ namespace PowerForge.Tests;
 [Collection(ProcessEnvironmentCollection.Name)]
 public sealed class RepositoryPublisherTests
 {
+    [Theory]
+    [InlineData(PublishTool.PSResourceGet)]
+    [InlineData(PublishTool.PowerShellGet)]
+    public void Publish_resolves_environment_credential_for_the_selected_transport(PublishTool tool)
+    {
+        var variable = "POWERFORGE_PUBLISH_" + Guid.NewGuid().ToString("N");
+        var credential = new RepositoryCredential { UserName = "publisher", SecretEnvironmentVariable = variable };
+        try
+        {
+            Environment.SetEnvironmentVariable(variable, "current-publish-token");
+            var runner = new StubPowerShellRunner(_ => new PowerShellRunResult(0, "PFPSRG::PUBLISH::OK", string.Empty, "pwsh.exe"));
+            new RepositoryPublisher(new NullLogger(), runner).Publish(new RepositoryPublishRequest
+            {
+                Path = Path.Combine(Path.GetTempPath(), "staging-module"),
+                Tool = tool,
+                Repository = new PublishRepositoryConfiguration { Name = "Company", EnsureRegistered = false, Credential = credential }
+            });
+            var request = Assert.Single(runner.Requests);
+            Assert.Contains("publisher", request.Arguments);
+            Assert.Contains("current-publish-token", request.Arguments);
+            Assert.Null(credential.Secret);
+        }
+        finally { Environment.SetEnvironmentVariable(variable, null); }
+    }
+
     [Fact]
     public void Publish_exchanges_jfrog_oidc_token_before_psresourceget_publish()
     {

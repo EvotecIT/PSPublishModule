@@ -113,13 +113,14 @@ internal sealed class PublishConfigurationFactory
                 repositoryApiVersion = RepositoryApiVersion.V3;
         }
 
-        var repositorySecret = ResolveSecret(
-            request.RepositoryCredentialSecretSpecified,
-            request.RepositoryCredentialSecret,
-            request.RepositoryCredentialSecretFilePathSpecified,
-            request.RepositoryCredentialSecretFilePath,
-            request.RepositoryCredentialSecretEnvironmentVariableSpecified,
-            request.RepositoryCredentialSecretEnvironmentVariable);
+        var secretFilePath = request.RepositoryCredentialSecretFilePathSpecified && !string.IsNullOrWhiteSpace(request.RepositoryCredentialSecretFilePath)
+            ? Path.GetFullPath(request.RepositoryCredentialSecretFilePath!.Trim()) : null;
+        var secretEnvironmentVariable = request.RepositoryCredentialSecretEnvironmentVariableSpecified && !string.IsNullOrWhiteSpace(request.RepositoryCredentialSecretEnvironmentVariable)
+            ? request.RepositoryCredentialSecretEnvironmentVariable!.Trim() : null;
+        var repositorySecret = secretFilePath is null && secretEnvironmentVariable is null && request.RepositoryCredentialSecretSpecified
+            ? ValidateSingleLineSecret(request.RepositoryCredentialSecret?.Trim() ?? string.Empty, nameof(PublishConfigurationRequest.RepositoryCredentialSecret))
+            : string.Empty;
+        var hasDeferredSecret = secretFilePath is not null || secretEnvironmentVariable is not null;
         var hasJfrogOidcProvider = !string.IsNullOrWhiteSpace(request.JFrogOidcProvider);
         var hasJfrogOidcOptions =
             hasJfrogOidcProvider ||
@@ -176,10 +177,10 @@ internal sealed class PublishConfigurationFactory
             }
         }
 
-        if (repositorySecretSourceSpecified && string.IsNullOrWhiteSpace(repositorySecret))
+        if (repositorySecretSourceSpecified && !hasDeferredSecret && string.IsNullOrWhiteSpace(repositorySecret))
             throw new ArgumentException("Repository credential secret could not be resolved. Check RepositoryCredentialSecret, RepositoryCredentialSecretFilePath, or RepositoryCredentialSecretEnvironmentVariable.", nameof(request));
 
-        var hasRepoCredentialSecret = !string.IsNullOrWhiteSpace(repositorySecret);
+        var hasRepoCredentialSecret = hasDeferredSecret || !string.IsNullOrWhiteSpace(repositorySecret);
         if (hasRepoCredentialSecret && string.IsNullOrWhiteSpace(request.RepositoryCredentialUserName))
             throw new ArgumentException("RepositoryCredentialUserName is required when RepositoryCredentialSecret, RepositoryCredentialSecretFilePath, or RepositoryCredentialSecretEnvironmentVariable is provided.", nameof(request));
 
@@ -225,7 +226,9 @@ internal sealed class PublishConfigurationFactory
                     ? new RepositoryCredential
                     {
                         UserName = request.RepositoryCredentialUserName!.Trim(),
-                        Secret = repositorySecret
+                        Secret = repositorySecret,
+                        SecretFilePath = secretFilePath,
+                        SecretEnvironmentVariable = secretFilePath is null ? secretEnvironmentVariable : null
                     }
                     : null);
 
@@ -249,7 +252,9 @@ internal sealed class PublishConfigurationFactory
                     ? new RepositoryCredential
                     {
                         UserName = request.RepositoryCredentialUserName,
-                        Secret = repositorySecret
+                        Secret = repositorySecret,
+                        SecretFilePath = secretFilePath,
+                        SecretEnvironmentVariable = secretFilePath is null ? secretEnvironmentVariable : null
                     }
                     : null,
                 CredentialProvider = runtimeCredentialProvider
@@ -303,35 +308,6 @@ internal sealed class PublishConfigurationFactory
         if (Uri.TryCreate(source, UriKind.Absolute, out var uri))
             return uri.IsFile;
         return true;
-    }
-
-    private static string ResolveSecret(
-        bool secretSpecified,
-        string? secret,
-        bool secretFileSpecified,
-        string? secretFilePath,
-        bool secretEnvironmentVariableSpecified,
-        string? secretEnvironmentVariable)
-    {
-        if (secretFileSpecified && !string.IsNullOrWhiteSpace(secretFilePath))
-            return ReadSingleLineSecretFile(secretFilePath!, nameof(PublishConfigurationRequest.RepositoryCredentialSecretFilePath));
-
-        if (secretEnvironmentVariableSpecified && !string.IsNullOrWhiteSpace(secretEnvironmentVariable))
-            return ValidateSingleLineSecret(
-                Environment.GetEnvironmentVariable(secretEnvironmentVariable!.Trim())?.Trim() ?? string.Empty,
-                nameof(PublishConfigurationRequest.RepositoryCredentialSecretEnvironmentVariable));
-
-        if (secretSpecified && !string.IsNullOrWhiteSpace(secret))
-            return ValidateSingleLineSecret(secret!.Trim(), nameof(PublishConfigurationRequest.RepositoryCredentialSecret));
-
-        return string.Empty;
-    }
-
-    private static string ReadSingleLineSecretFile(string filePath, string parameterName)
-    {
-        var path = filePath.Trim();
-        var value = File.ReadAllText(path).Trim();
-        return ValidateSingleLineSecret(value, parameterName, path);
     }
 
     private static string ValidateSingleLineSecret(string value, string parameterName, string? path = null)
