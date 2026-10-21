@@ -144,6 +144,7 @@
           "type": "boolean",
           "description": "When true, delete existing output contents before writing new build artifacts."
         },
+        "socialCardsRequired": { "type": "boolean" },
         "socialAutoGenerate": {
           "type": "boolean",
           "description": "Override site social.autoGenerateCards for this build step."
@@ -2525,7 +2526,10 @@
         "socialTwitterCreator": { "type": "string" },
         "social-twitter-creator": { "type": "string" },
         "socialAutoGenerate": { "type": "boolean" },
+        "socialCardsRequired": { "type": "boolean" },
         "social-auto-generate": { "type": "boolean" },
+        "socialCardTheme": { "type": "string", "description": "Named theme in the site Social.GeneratedCardThemes." },
+        "socialCardTitle": { "type": "string", "enum": ["name", "seo"] },
         "socialCardPath": { "type": "string" },
         "social-card-path": { "type": "string" },
         "socialCardWidth": { "type": "integer", "minimum": 600, "maximum": 2400 },
@@ -2953,6 +2957,9 @@
         "social-twitter-creator": { "type": "string", "description": "Alias of socialTwitterCreator." },
         "socialAutoGenerate": { "type": "boolean", "description": "Generate per-page API social card PNG files from API page content." },
         "social-auto-generate": { "type": "boolean", "description": "Alias of socialAutoGenerate." },
+        "socialCardTheme": { "type": "string", "description": "Named theme in the site Social.GeneratedCardThemes." },
+        "socialCardTitle": { "type": "string", "enum": ["name", "seo"] },
+        "socialCardsRequired": { "type": "boolean" },
         "socialCardPath": { "type": "string", "description": "Output URL prefix for generated API social card files." },
         "social-card-path": { "type": "string", "description": "Alias of socialCardPath." },
         "socialCardWidth": { "type": "integer", "minimum": 600, "maximum": 2400, "description": "Generated API social card width in pixels." },

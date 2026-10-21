@@ -30,7 +30,8 @@ internal sealed class AppleReleaseSourceMutationMonitor : IDisposable {
         string? exactPath = null,
         bool includeExactPathDescendants = false,
         Func<FileSystemEventArgs, bool>? ignoredMutation = null,
-        Func<string, uint, bool>? unchangedMacOSCloneSource = null) {
+        Func<string, uint, bool>? unchangedMacOSCloneSource = null,
+        bool useNativeMacOSObserver = false) {
         _scopeDescription = scopeDescription;
         _readerDescription = readerDescription;
         _failureInstruction = failureInstruction;
@@ -39,7 +40,7 @@ internal sealed class AppleReleaseSourceMutationMonitor : IDisposable {
         _ignoredMutation = ignoredMutation;
         _enforceMutations = enableImmediately ? 1 : 0;
 #if NET8_0_OR_GREATER
-        if (OperatingSystem.IsMacOS() && unchangedMacOSCloneSource is not null)
+        if (OperatingSystem.IsMacOS() && (unchangedMacOSCloneSource is not null || useNativeMacOSObserver))
         {
             var native = new AppleMacOSFileChangeObserver(rootPath,
                 (path, flags) =>
@@ -51,7 +52,7 @@ internal sealed class AppleReleaseSourceMutationMonitor : IDisposable {
                     try
                     {
                         if (AppleMacOSFileChangeObserver.IsCloneSourceCandidate(flags) &&
-                            unchangedMacOSCloneSource(path, flags))
+                            unchangedMacOSCloneSource?.Invoke(path, flags) == true)
                             return;
                         OnMutation(this, new AppleMacOSFileChangeObserver.ChangeEventArgs(rootPath, path, flags));
                     }

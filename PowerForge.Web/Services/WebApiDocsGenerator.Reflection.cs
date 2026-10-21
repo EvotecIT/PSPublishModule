@@ -132,6 +132,7 @@ public static partial class WebApiDocsGenerator
             model.IsAbstract = type.IsAbstract;
             model.IsSealed = type.IsSealed;
             model.IsStatic = type.IsAbstract && type.IsSealed;
+            model.DelegateDeclaration = BuildDelegateDeclaration(type, nullability);
             model.Attributes.Clear();
             model.Attributes.AddRange(GetAttributeList(type));
             if (sourceLinks is not null)

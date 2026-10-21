@@ -43,7 +43,7 @@ public static partial class WebApiDocsGenerator
         {
             ["TITLE"] = System.Web.HttpUtility.HtmlEncode(title),
             ["DESCRIPTION_META"] = BuildDescriptionMetaTag(description),
-            ["OPEN_GRAPH_META"] = BuildApiOpenGraphMetaTags(options, social, title, description, baseUrl),
+            ["OPEN_GRAPH_META"] = BuildApiOpenGraphMetaTags(options, social, title, description, baseUrl, context: LoadApiSocialCardContext(options, social.SiteBaseUrl)),
             ["HEAD_HTML"] = BuildApiPageHeadHtml(head, structuredDataSite, options, social, title, description, NormalizeApiIndexRoute(baseUrl), NormalizeApiIndexRoute(baseUrl)),
             ["CRITICAL_CSS"] = criticalCss,
             ["CSS"] = cssBlock,

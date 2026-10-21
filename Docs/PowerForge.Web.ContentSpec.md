@@ -1069,6 +1069,92 @@ Generated card typography/layout can also follow theme tokens:
   - supported metric keys: `metricRowHeight`, `descriptionToMetricsGap`, `metricValueFontSize`, `metricLabelFontSize`, `metricIconSize`
   - optional optical alignment: title text uses measured glyph ink alignment by default; set `titleOpticalOffset` explicitly to override, set `titleInkAlignInset` to tune the target visible inset, or set `titleOpticalOffsetMode: "none"` to force raw SVG text-origin alignment; set `monogramOpticalOffset` to tune fallback logo/monogram centering
 
+### Page titles, artwork, fonts, and split cards
+
+Existing cards keep their title, text fitting, and layout defaults. The following
+options opt a site into page titles, concise text, and convention-based artwork:
+
+```json
+"Social": {
+  "AutoGenerateCards": true,
+  "GeneratedCardCollections": ["pages", "docs", "guides"],
+  "GeneratedCardTitle": "page",
+  "GeneratedCardTitlesByCollection": { "guides": "seo" },
+  "GeneratedCardTextFit": true,
+  "GeneratedCardBadges": { "/widgets/": "WIDGETS", "/docs/": "DOCS", "guides": "GUIDE" },
+  "GeneratedCardBadgeKey": "group",
+  "GeneratedCardImages": {
+    "docs": { "Pattern": "/site/cards/{meta.card}.svg", "Fallback": "/site/nav/docs-dark.svg" },
+    "pages": { "Pattern": "/site/nav/{slug}-dark.svg", "Fallback": "/site/nav/home-dark.svg" }
+  },
+  "GeneratedCardImagesRequired": true,
+  "SocialCardsRequired": true,
+  "GeneratedCardFonts": [
+    { "Family": "Display Face", "Weight": 700, "Path": "static/fonts/display-bold.ttf" },
+    { "Family": "Display Face", "Weight": 400, "Path": "static/fonts/display-regular.ttf" },
+    { "Family": "Code Face", "Weight": "100 800", "Path": "static/fonts/code-variable.ttf" }
+  ],
+  "GeneratedCardTheme": "split-docs",
+  "GeneratedCardThemes": {
+    "split-docs": {
+      "Style": "docs",
+      "Variant": "split",
+      "Tokens": {
+        "socialCard": {
+          "fontDisplay": "Display Face",
+          "fontBody": "Display Face",
+          "fontMono": "Code Face",
+          "imageShare": 0.48,
+          "imageFit": "cover",
+          "imageAnchor": "left top",
+          "imagePadding": 0
+        }
+      }
+    }
+  }
+}
+```
+
+- `GeneratedCardTitle` accepts `seo` (the default) or `page`. Collection overrides
+  take precedence over the site setting. `social_title` wins over both. These
+  options affect the image title; page titles and OpenGraph text keep their SEO rules.
+- Badges resolve from `social_card_badge` / `social.badge`, then the configured
+  front-matter key, then the longest matching route prefix, then the collection
+  label, then the existing inferred label. Route prefixes match whole segments:
+  `/docs/` matches `/docs/install/`, but not `/docs-extra/`.
+- Explicit `social_card_image` artwork wins over an image pattern. Patterns can
+  use `{meta.key}`, `{slug}`, and `{title}`. Local paths resolve through the same
+  site/static/content roots as other card assets. A missing placeholder or file
+  produces a warning and uses the fallback. `GeneratedCardImagesRequired` fails
+  when neither artwork nor fallback is available.
+- `GeneratedCardTextFit` uses `social_description` when present, otherwise the
+  first sentence of the page description. It fits titles down to two lines and
+  truncates at whole-word boundaries with an ellipsis. A single token wider than
+  the line keeps a fitting prefix and ellipsis without splitting Unicode text
+  elements. If a title still exceeds the minimum readable size, it is truncated
+  to two lines. Split and code-led
+  layouts use this fitting rule automatically. `socialCard.titleMinFontSize`
+  sets the fitting floor (48 px at 1200×630 by default). Split layouts reduce
+  description size first, to a 20 px floor, and use regular-weight muted copy.
+  Code-led API cards remove a leading `Name:` description prefix when it matches
+  the card title; PowerShell cards use the `POWERSHELL` badge.
+- `split` uses a full-height right image column. `imageShare` is its fraction of
+  the card width, from `0.2` to `0.65`. `imageFit` accepts `cover` or `contain`;
+  `imageAnchor` accepts combinations of left/center/right and top/center/bottom.
+  Padding is optional and defaults to zero. SVG artwork is rasterized at the
+  fitted size before embedding, including on Linux.
+- Font paths are local TTF/OTF files inside the site root. Convert WOFF2 files to
+  TTF/OTF before declaring them. Weight accepts a number or a variable-font
+  range. The renderer selects the nearest declared weight and draws through the
+  exact file without installing fonts. When fonts are declared, missing files,
+  unreadable fonts, and unavailable selected families fail explicitly instead
+  of silently substituting another face. Font bytes participate in card hashes.
+- `SocialCardsRequired` fails when an eligible card cannot be rendered. Opted-out
+  pages do not require cards. Optional rendering failures warn and use the normal
+  social-image fallback; declared-font failures remain explicit errors. Linux PNG generation requires the ImageMagick
+  executable (`magick` or `convert`) on the build runner. The build pipeline step
+  can also set `socialCardsRequired: true` to enforce the same rule in CI.
+
 Generated card data widgets:
 - Metric chips can be defined at site level (`Social.GeneratedCardMetrics`), named-theme level (`Social.GeneratedCardThemes.<name>.Metrics`), or page level (`meta.social_card_metrics` / `meta.social.metrics`).
 - Page-level metrics replace theme/site metrics for that page. Named-theme metrics replace site defaults when the theme is selected.

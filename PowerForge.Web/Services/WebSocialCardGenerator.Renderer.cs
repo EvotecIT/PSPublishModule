@@ -15,7 +15,9 @@ namespace PowerForge.Web;
 internal static partial class WebSocialCardGenerator
 {
     // Bump whenever raster-visible rendering or media sanitization changes.
-    internal const string RendererVersion = "social-card-renderer-v10";
+    internal static string RendererVersion => OperatingSystem.IsLinux()
+        ? "social-card-renderer-v10-linux-raster-v1"
+        : "social-card-renderer-v10";
     internal const int MaxRemoteImageBytes = 10 * 1024 * 1024;
     internal const int MaxRemoteImageCacheEntries = 128;
     internal const long MaxRemoteImageCacheBytes = 100L * 1024 * 1024;
@@ -33,16 +35,34 @@ internal static partial class WebSocialCardGenerator
     private static readonly ConcurrentDictionary<string, int> TitleGlyphInsetCache = new(StringComparer.Ordinal);
     private static readonly ConcurrentDictionary<string, int> CenteredTextOffsetCache = new(StringComparer.Ordinal);
 
-    internal static byte[]? RenderPng(SocialCardRenderOptions options)
+    private static byte[]? RenderPngCore(SocialCardRenderOptions options)
     {
-        var embeddedOptions = CloneRenderOptions(options, embedReferencedMediaInSvg: true);
+        if (OperatingSystem.IsLinux() && ResolveExternalImageMagickCommand() is null)
+        {
+            Trace.TraceWarning("Social card PNG render skipped: external ImageMagick is unavailable on Linux.");
+            return null;
+        }
+        var compositeNewLayout = NormalizeVariant(options.VariantKey) is "split" or "code-led";
+        var embeddedOptions = CloneRenderOptions(options, embedReferencedMediaInSvg: !compositeNewLayout);
         var embeddedState = CreateState(embeddedOptions);
-        var embeddedSvg = RenderSvg(embeddedState);
+        var embeddedSvg = PrepareConfiguredFontText(RenderSvg(embeddedState), embeddedOptions, out var embeddedText);
         if (!string.IsNullOrWhiteSpace(embeddedSvg))
         {
             var externalPng = TryRenderPngWithExternalImageMagick(embeddedSvg, embeddedState.Width, embeddedState.Height);
             if (externalPng is { Length: > 0 })
+            {
+                if (embeddedText.Count > 0 || compositeNewLayout)
+                {
+                    using var rendered = new MagickImage(externalPng);
+                    if (compositeNewLayout)
+                        CompositeMedia(rendered, embeddedState);
+                    DrawConfiguredFontText(rendered, embeddedText, embeddedOptions);
+                    rendered.Format = MagickFormat.Png;
+                    rendered.Strip();
+                    return rendered.ToByteArray();
+                }
                 return externalPng;
+            }
         }
 
         if (OperatingSystem.IsLinux())
@@ -53,7 +73,7 @@ internal static partial class WebSocialCardGenerator
 
         var rasterOptions = CloneRenderOptions(options, embedReferencedMediaInSvg: false);
         var state = CreateState(rasterOptions);
-        var svg = RenderSvg(state);
+        var svg = PrepareConfiguredFontText(RenderSvg(state), rasterOptions, out var rasterText);
         if (string.IsNullOrWhiteSpace(svg))
             return null;
 
@@ -69,11 +89,16 @@ internal static partial class WebSocialCardGenerator
 
             using var image = new MagickImage(Encoding.UTF8.GetBytes(svg), settings);
             CompositeMedia(image, state);
+            DrawConfiguredFontText(image, rasterText, rasterOptions);
             image.Format = MagickFormat.Png;
             image.Strip();
             using var stream = new MemoryStream();
             image.Write(stream);
             return stream.ToArray();
+        }
+        catch (ConfiguredCardFontException)
+        {
+            throw;
         }
         catch (Exception ex)
         {
@@ -96,141 +121,9 @@ internal static partial class WebSocialCardGenerator
             : $"external:{command.Executable}:{RendererVersion}";
     }
 
-    private static byte[]? TryRenderPngWithExternalImageMagick(string svg, int width, int height)
-    {
-        if (string.IsNullOrWhiteSpace(svg))
-            return null;
-
-        var command = ResolveExternalImageMagickCommand();
-        if (command is null)
-            return null;
-
-        var tempRoot = Path.Combine(Path.GetTempPath(), "powerforge-social-card-" + Guid.NewGuid().ToString("N"));
-        var svgPath = Path.Combine(tempRoot, "card.svg");
-        var pngPath = Path.Combine(tempRoot, "card.png");
-
-        try
-        {
-            Directory.CreateDirectory(tempRoot);
-            File.WriteAllText(svgPath, svg, Encoding.UTF8);
-
-            var arguments = new[] { "-background", "none", "-size", $"{width}x{height}", svgPath, $"PNG32:{pngPath}" };
-            var startInfo = new ProcessStartInfo(command.Executable)
-            {
-                UseShellExecute = false,
-                RedirectStandardError = true,
-                CreateNoWindow = true
-            };
-            foreach (var argument in arguments)
-                startInfo.ArgumentList.Add(argument);
-
-            using var process = Process.Start(startInfo);
-            if (process is null)
-                return null;
-
-            var errorTask = process.StandardError.ReadToEndAsync();
-            var exited = process.WaitForExit(30_000);
-            if (!exited)
-            {
-                try
-                {
-                    process.Kill(entireProcessTree: true);
-                }
-                catch
-                {
-                    // Best-effort cleanup for a timed-out renderer process.
-                }
-
-                Trace.TraceWarning("Social card external ImageMagick render timed out.");
-                return null;
-            }
-
-            if (process.ExitCode != 0 || !File.Exists(pngPath))
-            {
-                var error = errorTask.GetAwaiter().GetResult().Trim();
-                if (!string.IsNullOrWhiteSpace(error))
-                    Trace.TraceWarning($"Social card external ImageMagick render failed: {error}");
-                return null;
-            }
-
-            return File.ReadAllBytes(pngPath);
-        }
-        catch (Exception ex)
-        {
-            Trace.TraceWarning($"Social card external ImageMagick render failed: {ex.GetType().Name}: {ex.Message}");
-            return null;
-        }
-        finally
-        {
-            try
-            {
-                if (Directory.Exists(tempRoot))
-                    Directory.Delete(tempRoot, recursive: true);
-            }
-            catch
-            {
-                // Temp cleanup is best-effort.
-            }
-        }
-    }
-
-    private static ExternalImageMagickCommand? ResolveExternalImageMagickCommand()
-    {
-        if (OperatingSystem.IsWindows())
-            return null;
-
-        var magick = FindExecutableOnPath("magick");
-        if (!string.IsNullOrWhiteSpace(magick))
-            return new ExternalImageMagickCommand(magick);
-
-        var convert = FindExecutableOnPath("convert");
-        if (!string.IsNullOrWhiteSpace(convert))
-            return new ExternalImageMagickCommand(convert);
-
-        return null;
-    }
-
-    private static string? FindExecutableOnPath(string name)
-    {
-        var path = Environment.GetEnvironmentVariable("PATH");
-        if (string.IsNullOrWhiteSpace(path))
-            return null;
-
-        foreach (var directory in path.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
-        {
-            try
-            {
-                var candidate = Path.Combine(directory, name);
-                if (File.Exists(candidate) && IsExecutable(candidate))
-                    return candidate;
-            }
-            catch
-            {
-                // Ignore malformed PATH entries.
-            }
-        }
-
-        return null;
-    }
-
-    private static bool IsExecutable(string path)
-    {
-        if (OperatingSystem.IsWindows())
-            return true;
-
-        try
-        {
-            var mode = File.GetUnixFileMode(path);
-            return (mode & (UnixFileMode.UserExecute | UnixFileMode.GroupExecute | UnixFileMode.OtherExecute)) != 0;
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or PlatformNotSupportedException)
-        {
-            return false;
-        }
-    }
-
     internal static string RenderSvg(SocialCardRenderOptions options)
     {
+        ValidateConfiguredFontFamilies(options);
         var state = CreateState(options);
         return RenderSvg(state);
     }
@@ -242,6 +135,8 @@ internal static partial class WebSocialCardGenerator
         svg.AppendLine($@"  <!-- renderer:{RendererVersion} layout:{state.LayoutKey} style:{state.StyleKey} variant:{state.VariantKey} -->");
         svg.AppendLine(@"  <defs>");
         AppendDefs(svg, state);
+        if (state.LayoutKey is "split" or "code-led")
+            AppendSplitDefs(svg, state);
         if (string.Equals(state.LayoutKey, "panel", StringComparison.OrdinalIgnoreCase))
             AppendPanelDefs(svg, state);
         if (string.Equals(state.LayoutKey, "inline-image", StringComparison.OrdinalIgnoreCase))
@@ -252,13 +147,19 @@ internal static partial class WebSocialCardGenerator
             svg.AppendLine(@"    </clipPath>");
         }
         svg.AppendLine(@"  </defs>");
-        if (string.Equals(state.LayoutKey, "panel", StringComparison.OrdinalIgnoreCase))
+        if (state.LayoutKey is "split" or "code-led")
+            svg.AppendLine($@"  <rect width=""{state.Width}"" height=""{state.Height}"" fill=""url(#bg)""/>");
+        else if (string.Equals(state.LayoutKey, "panel", StringComparison.OrdinalIgnoreCase))
             AppendPanelBackground(svg, state);
         else
             AppendBackground(svg, state);
 
         switch (state.LayoutKey)
         {
+            case "split":
+            case "code-led":
+                AppendSplitLayout(svg, state);
+                break;
             case "panel":
                 AppendPanelLayout(svg, state);
                 break;
@@ -328,7 +229,10 @@ internal static partial class WebSocialCardGenerator
             Palette = ApplyAccentOverride(
                 SelectPalette(styleKey, string.Join("|", styleKey, variantKey, title, description, eyebrow, normalizedBadge, normalizedFooter, width, height), options.ThemeTokens, options.ColorScheme),
                 options.AccentColor),
-            Typography = ResolveTypography(options.ThemeTokens, options.PreferRasterSafeFonts),
+            Typography = ResolveTypography(options.ThemeTokens, options.PreferRasterSafeFonts && options.Fonts is not { Count: > 0 }),
+            TextFit = options.TextFit,
+            Code = options.Code,
+            Fonts = options.Fonts,
             ThemeTokens = options.ThemeTokens,
             LogoDataUri = options.LogoDataUri,
             InlineImageDataUri = options.InlineImageDataUri,
@@ -350,6 +254,8 @@ internal static partial class WebSocialCardGenerator
 
     private static string ResolveLayoutKey(string styleKey, string variantKey, bool hasInlineImage)
     {
+        if (variantKey is "split" or "code-led")
+            return variantKey;
         if (string.Equals(variantKey, "spotlight", StringComparison.OrdinalIgnoreCase))
             return "spotlight";
         if (string.Equals(variantKey, "shelf", StringComparison.OrdinalIgnoreCase))
@@ -431,6 +337,9 @@ internal static partial class WebSocialCardGenerator
             StyleKey = options.StyleKey,
             VariantKey = options.VariantKey,
             ThemeTokens = options.ThemeTokens,
+            Fonts = options.Fonts,
+            TextFit = options.TextFit,
+            Code = options.Code,
             LogoDataUri = options.LogoDataUri,
             InlineImageDataUri = options.InlineImageDataUri,
             Metrics = options.Metrics,
@@ -507,8 +416,9 @@ internal static partial class WebSocialCardGenerator
 
     private static void AppendDescription(StringBuilder svg, SocialCardRenderState state, IReadOnlyList<string> lines, int x, int y, int fontSize, int lineHeight)
     {
+        var weight = state.TextFit || state.LayoutKey is "split" or "code-led" ? 400 : 500;
         for (var i = 0; i < lines.Count; i++)
-            svg.AppendLine($@"  <text x=""{x}"" y=""{y + (i * lineHeight)}"" fill=""{state.Palette.TextSecondary}"" font-size=""{fontSize}"" font-family=""{EscapeXml(state.Typography.BodyFontFamily)}"" font-weight=""500"">{EscapeXml(lines[i])}</text>");
+            svg.AppendLine($@"  <text x=""{x}"" y=""{y + (i * lineHeight)}"" fill=""{state.Palette.TextSecondary}"" font-size=""{fontSize}"" font-family=""{EscapeXml(state.Typography.BodyFontFamily)}"" font-weight=""{weight}"">{EscapeXml(lines[i])}</text>");
     }
 
     private static void AppendFooterRoute(StringBuilder svg, SocialCardRenderState state, int x, int y)
@@ -694,7 +604,17 @@ internal static partial class WebSocialCardGenerator
         if (!string.IsNullOrWhiteSpace(state.LogoDataUri) && state.EmbedReferencedMediaInSvg)
         {
             var inset = Math.Max(6, size / 8);
-            svg.AppendLine($@"  <image href=""{EscapeXml(state.LogoDataUri)}"" xlink:href=""{EscapeXml(state.LogoDataUri)}"" x=""{x + inset}"" y=""{y + inset}"" width=""{Math.Max(12, size - (inset * 2))}"" height=""{Math.Max(12, size - (inset * 2))}"" preserveAspectRatio=""xMidYMid meet""/>");
+            var source = state.LogoDataUri;
+            if (state.LayoutKey is "split" or "code-led")
+            {
+                using var logo = LoadSplitImage(source, size, size, cover: false, state.AllowRemoteMediaFetch);
+                if (logo is not null)
+                {
+                    logo.Format = MagickFormat.Png;
+                    source = "data:image/png;base64," + Convert.ToBase64String(logo.ToByteArray());
+                }
+            }
+            svg.AppendLine($@"  <image href=""{EscapeXml(source)}"" xlink:href=""{EscapeXml(source)}"" x=""{x + inset}"" y=""{y + inset}"" width=""{Math.Max(12, size - (inset * 2))}"" height=""{Math.Max(12, size - (inset * 2))}"" preserveAspectRatio=""xMidYMid meet""/>");
             return;
         }
 
@@ -717,7 +637,7 @@ internal static partial class WebSocialCardGenerator
             return value;
 
         return ResolveCenteredTextInkOffset(state.Typography.TitleFontFamily, fontSize, monogram) -
-               GetScaledPixels(state.Width, state.Height, 2, 1);
+               (OperatingSystem.IsLinux() ? 0 : GetScaledPixels(state.Width, state.Height, 2, 1));
     }
 
     private static void AppendSeparator(StringBuilder svg, SocialCardRenderState state, int x, int y, int width)
@@ -1007,8 +927,8 @@ internal static partial class WebSocialCardGenerator
             ? ResolveTokenPixels(state.ThemeTokens, state.Width, state.Height, 54, 30, "socialCard", "descriptionToFooterGap")
             : 0;
 
-        var (titleFontSize, titleLineHeight, titleLines) = AdaptTitleSize(state.Title, baseTitleFontSize, baseTitleLineHeight, contentWidth, 3, state.Width, state.Height);
-        var descLines = WrapText(state.Description, GetDescriptionWrapWidth(contentWidth, descFontSize), 3);
+        var (titleFontSize, titleLineHeight, titleLines) = FitCardTitle(state, baseTitleFontSize, baseTitleLineHeight, contentWidth);
+        var descLines = WrapCardDescription(state, contentWidth, descFontSize, 3);
 
         var blockHeight = badgeHeight +
                           gapBadgeToEyebrow +
@@ -1098,12 +1018,12 @@ internal static partial class WebSocialCardGenerator
 
         // Title
         var titleY = eyebrowY + GetScaledPixels(state.Width, state.Height, 50, 30);
-        var (titleFontSize, titleLineHeight, titleLines) = AdaptTitleSize(state.Title, baseTitleFontSize, baseTitleLineHeight, contentWidth, 3, state.Width, state.Height);
+        var (titleFontSize, titleLineHeight, titleLines) = FitCardTitle(state, baseTitleFontSize, baseTitleLineHeight, contentWidth);
         AppendTitle(svg, state, titleLines, x, titleY, titleFontSize, titleLineHeight);
 
         // Description
         var descY = titleY + (titleLines.Count * titleLineHeight) + GetScaledPixels(state.Width, state.Height, 24, 14);
-        var descLines = WrapText(state.Description, GetDescriptionWrapWidth(contentWidth, descFontSize), 3);
+        var descLines = WrapCardDescription(state, contentWidth, descFontSize, 3);
         AppendDescription(svg, state, descLines, x, descY, descFontSize, descLineHeight);
     }
 
@@ -1135,12 +1055,12 @@ internal static partial class WebSocialCardGenerator
 
         // Title
         var titleY = eyebrowY + GetScaledPixels(state.Width, state.Height, 50, 30);
-        var (titleFontSize, titleLineHeight, titleLines) = AdaptTitleSize(state.Title, baseTitleFontSize, baseTitleLineHeight, contentWidth, 3, state.Width, state.Height);
+        var (titleFontSize, titleLineHeight, titleLines) = FitCardTitle(state, baseTitleFontSize, baseTitleLineHeight, contentWidth);
         AppendTitle(svg, state, titleLines, x, titleY, titleFontSize, titleLineHeight);
 
         // Description
         var descY = titleY + (titleLines.Count * titleLineHeight) + GetScaledPixels(state.Width, state.Height, 24, 14);
-        var descLines = WrapText(state.Description, GetDescriptionWrapWidth(contentWidth, descFontSize), 3);
+        var descLines = WrapCardDescription(state, contentWidth, descFontSize, 3);
         AppendDescription(svg, state, descLines, x, descY, descFontSize, descLineHeight);
 
         // Footer route
@@ -1178,12 +1098,12 @@ internal static partial class WebSocialCardGenerator
 
         // Title
         var titleY = eyebrowY + GetScaledPixels(state.Width, state.Height, 50, 30);
-        var (titleFontSize, titleLineHeight, titleLines) = AdaptTitleSize(state.Title, baseTitleFontSize, baseTitleLineHeight, contentWidth, 3, state.Width, state.Height);
+        var (titleFontSize, titleLineHeight, titleLines) = FitCardTitle(state, baseTitleFontSize, baseTitleLineHeight, contentWidth);
         AppendTitle(svg, state, titleLines, x, titleY, titleFontSize, titleLineHeight);
 
         // Description
         var descY = titleY + (titleLines.Count * titleLineHeight) + GetScaledPixels(state.Width, state.Height, 24, 14);
-        var descLines = WrapText(state.Description, GetDescriptionWrapWidth(contentWidth, descFontSize), 4);
+        var descLines = WrapCardDescription(state, contentWidth, descFontSize, 4);
         AppendDescription(svg, state, descLines, x, descY, descFontSize, descLineHeight);
 
         // Footer route
@@ -1228,12 +1148,12 @@ internal static partial class WebSocialCardGenerator
 
         // Title
         var titleY = eyebrowY + GetScaledPixels(state.Width, state.Height, 50, 30);
-        var (titleFontSize, titleLineHeight, titleLines) = AdaptTitleSize(state.Title, baseTitleFontSize, baseTitleLineHeight, contentWidth, 3, state.Width, state.Height);
+        var (titleFontSize, titleLineHeight, titleLines) = FitCardTitle(state, baseTitleFontSize, baseTitleLineHeight, contentWidth);
         AppendTitle(svg, state, titleLines, x, titleY, titleFontSize, titleLineHeight);
 
         // Description
         var descY = titleY + (titleLines.Count * titleLineHeight) + GetScaledPixels(state.Width, state.Height, 24, 14);
-        var descLines = WrapText(state.Description, GetDescriptionWrapWidth(contentWidth, descFontSize), 4);
+        var descLines = WrapCardDescription(state, contentWidth, descFontSize, 4);
         AppendDescription(svg, state, descLines, x, descY, descFontSize, descLineHeight);
 
         // Footer route
@@ -1317,8 +1237,8 @@ internal static partial class WebSocialCardGenerator
             ? ResolveTokenPixels(state.ThemeTokens, state.Width, state.Height, 50, 28, "socialCard", "descriptionToFooterGap")
             : 0;
 
-        var (titleFontSize, titleLineHeight, titleLines) = AdaptTitleSize(state.Title, baseTitleFontSize, baseTitleLineHeight, contentWidth, 3, state.Width, state.Height);
-        var descLines = WrapText(state.Description, GetDescriptionWrapWidth(contentWidth, descFontSize), 4);
+        var (titleFontSize, titleLineHeight, titleLines) = FitCardTitle(state, baseTitleFontSize, baseTitleLineHeight, contentWidth);
+        var descLines = WrapCardDescription(state, contentWidth, descFontSize, 4);
 
         var blockHeight = badgeHeight +
                           gapBadgeToEyebrow +
@@ -1559,6 +1479,8 @@ internal static partial class WebSocialCardGenerator
 
     private static void CompositeMedia(MagickImage canvas, SocialCardRenderState state)
     {
+        if (state.LayoutKey == "split" && PanelShowsImage(state))
+            CompositeSplitImage(canvas, state);
         if (!string.IsNullOrWhiteSpace(state.InlineImageDataUri) &&
             string.Equals(state.LayoutKey, "inline-image", StringComparison.OrdinalIgnoreCase))
         {
@@ -1593,7 +1515,9 @@ internal static partial class WebSocialCardGenerator
         if (frame is null)
             return;
 
-        using var logo = TryLoadImageSource(state.LogoDataUri, frame.Width, frame.Height, state.AllowRemoteMediaFetch);
+        using var logo = state.LayoutKey is "split" or "code-led"
+            ? LoadSplitImage(state.LogoDataUri, frame.Width, frame.Height, cover: false, state.AllowRemoteMediaFetch)
+            : TryLoadImageSource(state.LogoDataUri, frame.Width, frame.Height, state.AllowRemoteMediaFetch);
         if (logo is null)
             return;
 
@@ -1608,6 +1532,8 @@ internal static partial class WebSocialCardGenerator
 
     private static SocialRect? ResolveLogoFrame(SocialCardRenderState state)
     {
+        if (state.LayoutKey is "split" or "code-led")
+            return new SocialRect(PanelPixels(state, 64), PanelPixels(state, 54), PanelPixels(state, 48), PanelPixels(state, 48), PanelPixels(state, 12));
         var padX = state.SafeMarginX;
         var padY = state.SafeMarginY;
         var radius = GetScaledPixels(state.Width, state.Height, 20, 10);
@@ -2003,6 +1929,9 @@ internal static partial class WebSocialCardGenerator
         public bool AllowRemoteMediaFetch { get; set; }
         public bool EmbedReferencedMediaInSvg { get; set; } = true;
         public bool PreferRasterSafeFonts { get; set; }
+        public IReadOnlyList<CardFontFile>? Fonts { get; set; }
+        public bool TextFit { get; set; }
+        public string? Code { get; set; }
     }
 
     private sealed class SocialCardRenderState
@@ -2035,11 +1964,14 @@ internal static partial class WebSocialCardGenerator
         public required IReadOnlyList<SocialCardMetricSpec> Metrics { get; init; }
         public IReadOnlyList<string> Chips { get; init; } = Array.Empty<string>();
         public string SiteAddress { get; init; } = string.Empty;
+        public IReadOnlyList<CardFontFile>? Fonts { get; init; }
+        public bool TextFit { get; init; }
+        public string? Code { get; init; }
     }
 
     private sealed record SocialRect(int X, int Y, int Width, int Height, int Radius);
 
-    private sealed record ExternalImageMagickCommand(string Executable);
+
 
     // ── Compatibility shims for old Append* names used in tests ────────
 

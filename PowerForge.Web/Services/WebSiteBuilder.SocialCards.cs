@@ -75,7 +75,7 @@ public static partial class WebSiteBuilder
         return string.Empty;
     }
 
-    private static string TryGenerateSocialCardPath(
+    internal static string TryGenerateSocialCardPath(
         SiteSpec spec,
         ContentItem item,
         string outputRoot,
@@ -99,6 +99,10 @@ public static partial class WebSiteBuilder
         if (bytes is null || bytes.Length == 0)
         {
             RecordGeneratedSocialCardRenderObservation(route, fullPath, rendered: false);
+            var message = $"Social card not rendered for '{item.OutputPath}'. Install ImageMagick on Linux and check renderer diagnostics.";
+            if (spec.Social.SocialCardsRequired)
+                throw new InvalidOperationException(message);
+            ReportCardWarning(message);
             return string.Empty;
         }
 
@@ -164,16 +168,20 @@ public static partial class WebSiteBuilder
         return plan is null ? string.Empty : "/" + plan.RelativePath.Replace('\\', '/');
     }
 
-    private static SocialCardGenerationPlan? CreateSocialCardGenerationPlan(
+    internal static SocialCardGenerationPlan? CreateSocialCardGenerationPlan(
         SiteSpec spec,
         ContentItem item,
         string title,
         string description,
         string siteName,
-        string? rootPath = null)
+        string? rootPath = null,
+        string? entryName = null)
     {
         if (spec.Social is null)
             return null;
+
+        title = ResolveCardTitle(spec, item, title);
+        description = ResolveCardDescription(spec, item, description);
 
         var generatedPath = NormalizeGeneratedCardsPath(spec.Social.GeneratedCardsPath);
         var routeForSlug = BuildSocialRouteLabel(item);
@@ -182,15 +190,18 @@ public static partial class WebSiteBuilder
         if (string.IsNullOrWhiteSpace(routeSlug))
             routeSlug = "page";
 
-        var badge = ResolveSocialBadge(item, routeForSlug);
+        var badge = ResolveConfiguredCardBadge(spec, item, routeForSlug);
         var themeKey = ResolveSocialCardThemeKey(spec, item);
         var cardTheme = ResolveSocialCardTheme(spec.Social, themeKey);
         var hashThemeKey = cardTheme is null ? string.Empty : themeKey;
         var styleKey = ResolveSocialCardStyle(spec, item, badge, routeForSlug, cardTheme);
-        var inlineImageCandidate = ResolveSocialCardInlineImageCandidate(item);
-        var variantKey = ResolveSocialCardVariant(spec, item, styleKey, routeForSlug, cardTheme);
-        var colorScheme = ResolveSocialCardColorScheme(spec, item, cardTheme) ?? string.Empty;
         var allowRemoteMediaFetch = ResolveSocialCardAllowRemoteMediaFetch(spec, item, cardTheme);
+        var inlineImageCandidate = ResolveConfiguredCardImage(spec, item, rootPath, allowRemoteMediaFetch);
+        var variantKey = ResolveSocialCardVariant(spec, item, styleKey, routeForSlug, cardTheme);
+        if ((spec.Social.GeneratedCardTextFit || variantKey == "code-led") &&
+            (item.Collection.Equals("api", StringComparison.OrdinalIgnoreCase) || item.Collection.Equals("powershell", StringComparison.OrdinalIgnoreCase)))
+            description = StripMatchingCardTitlePrefix(entryName ?? item.Title, description);
+        var colorScheme = ResolveSocialCardColorScheme(spec, item, cardTheme) ?? string.Empty;
         var logoSource = ResolveSocialCardAssetDataUri(spec, item, ResolveSocialCardLogoCandidate(spec, item, cardTheme), rootPath);
         var inlineImageSource = ShouldRenderSocialCardInlineImage(item, styleKey, variantKey, inlineImageCandidate)
             ? ResolveSocialCardAssetDataUri(spec, item, inlineImageCandidate, rootPath)
@@ -200,6 +211,7 @@ public static partial class WebSiteBuilder
         var accentColor = ResolveSocialCardAccent(item);
         var siteAddress = ResolveSocialCardSiteAddress(spec, item);
         var themeTokens = MergeSocialCardThemeTokens(ResolveSocialCardSiteThemeTokens(spec, rootPath), cardTheme?.Tokens);
+        var fonts = WebSocialCardGenerator.ResolveFontFiles(spec.Social.GeneratedCardFonts, rootPath ?? BuildRootPathScope.Value);
         var themeTokenFingerprint = ComputeThemeTokenFingerprint(themeTokens);
         var metricsFingerprint = ComputeSocialCardMetricsFingerprint(metrics);
         var hashInput = string.Join("|", new[]
@@ -224,6 +236,12 @@ public static partial class WebSiteBuilder
             inlineImageSource
         });
         var hash = ComputeSocialHash(hashInput);
+        var code = GetMetaString(item.Meta, "social_card_code");
+        if (!string.IsNullOrWhiteSpace(code))
+            hashInput += "|code=" + code;
+        // Keep legacy file names and bytes stable until a new rendering option is selected.
+        if (fonts.Count > 0 || spec.Social.GeneratedCardTextFit || !string.IsNullOrWhiteSpace(code))
+            hash = ComputeSocialHash(hashInput + "|text-fit=" + spec.Social.GeneratedCardTextFit + "|fonts=" + string.Join(";", fonts.Select(font => $"{font.Family}:{font.MinWeight}:{font.MaxWeight}:{font.Fingerprint}")));
         var fileName = $"{routeSlug}-{hash}.png";
         var relativePath = $"{generatedPath.TrimStart('/')}/{fileName}".TrimStart('/');
         var renderOptions = new WebSocialCardGenerator.SocialCardRenderOptions
@@ -239,6 +257,9 @@ public static partial class WebSiteBuilder
             VariantKey = variantKey,
             ColorScheme = colorScheme,
             ThemeTokens = themeTokens,
+            Fonts = fonts,
+            TextFit = spec.Social.GeneratedCardTextFit,
+            Code = code,
             AllowRemoteMediaFetch = allowRemoteMediaFetch,
             LogoDataUri = logoSource,
             InlineImageDataUri = inlineImageSource,
@@ -312,7 +333,7 @@ public static partial class WebSiteBuilder
         return manifest?.Tokens;
     }
 
-    private sealed record SocialCardGenerationPlan(
+    internal sealed record SocialCardGenerationPlan(
         string RelativePath,
         WebSocialCardGenerator.SocialCardRenderOptions RenderOptions);
 
@@ -1066,6 +1087,7 @@ public static partial class WebSiteBuilder
             return explicitInline;
 
         if (string.Equals(variantKey, "inline-image", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(variantKey, "split", StringComparison.OrdinalIgnoreCase) ||
             string.Equals(variantKey, "panel", StringComparison.OrdinalIgnoreCase))
             return true;
 

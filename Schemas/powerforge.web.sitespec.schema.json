@@ -658,6 +658,15 @@
         "GeneratedCardVariant": { "type": "string" },
         "GeneratedCardTheme": { "type": "string" },
         "GeneratedCardLogo": { "type": "string" },
+        "GeneratedCardFonts": { "type": "array", "items": { "$ref": "#/$defs/SocialCardFontSpec" } },
+        "GeneratedCardTitle": { "type": "string", "enum": ["page", "seo"] },
+        "GeneratedCardTitlesByCollection": { "type": "object", "additionalProperties": { "type": "string", "enum": ["page", "seo"] } },
+        "GeneratedCardBadges": { "type": "object", "additionalProperties": { "type": "string" } },
+        "GeneratedCardBadgeKey": { "type": "string" },
+        "GeneratedCardImages": { "type": "object", "additionalProperties": { "$ref": "#/$defs/SocialCardImageSpec" } },
+        "GeneratedCardImagesRequired": { "type": "boolean" },
+        "GeneratedCardTextFit": { "type": "boolean" },
+        "SocialCardsRequired": { "type": "boolean" },
         "GeneratedCardThemes": { "type": "object", "additionalProperties": { "$ref": "#/$defs/SocialCardThemeSpec" } },
         "GeneratedCardThemesByCollection": { "type": "object", "additionalProperties": { "type": "string" } },
         "GeneratedCardStylesByCollection": { "type": "object", "additionalProperties": { "type": "string" } },
@@ -667,6 +676,24 @@
         "GeneratedCardColorSchemesByCollection": { "type": "object", "additionalProperties": { "type": "string" } },
         "GeneratedCardAllowRemoteMediaFetch": { "type": "boolean" },
         "GeneratedCardMetrics": { "type": "array", "items": { "$ref": "#/$defs/SocialCardMetricSpec" } }
+      }
+    },
+    "SocialCardFontSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["Family", "Path"],
+      "properties": {
+        "Family": { "type": "string", "minLength": 1 },
+        "Weight": { "oneOf": [{ "type": "integer", "minimum": 1, "maximum": 1000 }, { "type": "string", "pattern": "^[0-9]{1,4}( [0-9]{1,4})?$" }] },
+        "Path": { "type": "string", "minLength": 1 }
+      }
+    },
+    "SocialCardImageSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Pattern": { "type": "string" },
+        "Fallback": { "type": "string" }
       }
     },
     "SocialCardThemeSpec": {

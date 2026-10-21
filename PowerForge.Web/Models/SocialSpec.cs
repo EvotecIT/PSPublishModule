@@ -29,7 +29,7 @@ public sealed class SocialSpec
     public int GeneratedCardHeight { get; set; } = 630;
     /// <summary>Optional default style key for generated social cards (home/default/docs/api/blog/contact).</summary>
     public string? GeneratedCardStyle { get; set; }
-    /// <summary>Optional default layout variant for generated social cards (product/panel/spotlight/shelf/reference/editorial/inline-image/connect).</summary>
+    /// <summary>Optional default layout variant for generated social cards (product/panel/split/code-led/spotlight/shelf/reference/editorial/inline-image/connect).</summary>
     public string? GeneratedCardVariant { get; set; }
     /// <summary>Optional named theme applied to generated social cards.</summary>
     public string? GeneratedCardTheme { get; set; }
@@ -57,6 +57,24 @@ public sealed class SocialSpec
     public bool GeneratedCardAllowRemoteMediaFetch { get; set; }
     /// <summary>Optional default metric chips rendered on generated social cards.</summary>
     public List<SocialCardMetricSpec>? GeneratedCardMetrics { get; set; }
+    /// <summary>Local TTF/OTF files used without installing fonts on the build machine. Declared files and selected families must resolve.</summary>
+    public List<SocialCardFontSpec>? GeneratedCardFonts { get; set; }
+    /// <summary>Card title source: seo (default) or page. Explicit social_title always wins.</summary>
+    public string? GeneratedCardTitle { get; set; }
+    /// <summary>Per-collection title source overrides (seo or page).</summary>
+    public Dictionary<string, string>? GeneratedCardTitlesByCollection { get; set; }
+    /// <summary>Badge labels by route prefix (longest segment match wins) or collection name.</summary>
+    public Dictionary<string, string>? GeneratedCardBadges { get; set; }
+    /// <summary>Optional front-matter key used after social_card_badge and before badge maps.</summary>
+    public string? GeneratedCardBadgeKey { get; set; }
+    /// <summary>Per-collection image patterns with {meta.key}, {slug}, and {title} placeholders.</summary>
+    public Dictionary<string, SocialCardImageSpec>? GeneratedCardImages { get; set; }
+    /// <summary>Fail when a configured card image and its fallback cannot be resolved; otherwise report a warning.</summary>
+    public bool GeneratedCardImagesRequired { get; set; }
+    /// <summary>Opt into word-boundary truncation, first-sentence descriptions, and fitting titles to two lines.</summary>
+    public bool GeneratedCardTextFit { get; set; }
+    /// <summary>Fail the build when a requested card cannot be rendered instead of using the default social image.</summary>
+    public bool SocialCardsRequired { get; set; }
 }
 
 /// <summary>Reusable generated social card theme defaults.</summary>
@@ -64,7 +82,7 @@ public sealed class SocialCardThemeSpec
 {
     /// <summary>Optional style key for this theme (home/default/docs/api/blog/contact).</summary>
     public string? Style { get; set; }
-    /// <summary>Optional layout variant for this theme (product/panel/spotlight/shelf/reference/editorial/inline-image/connect).</summary>
+    /// <summary>Optional layout variant for this theme (product/panel/split/code-led/spotlight/shelf/reference/editorial/inline-image/connect).</summary>
     public string? Variant { get; set; }
     /// <summary>Optional color scheme for this theme (dark/light).</summary>
     public string? ColorScheme { get; set; }

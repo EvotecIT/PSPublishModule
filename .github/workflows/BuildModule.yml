@@ -551,13 +551,16 @@ jobs:
           -c Release --no-build --no-restore --nologo
           --filter 'FullyQualifiedName~AppleTestFlightWorkerTests|FullyQualifiedName~AppleTestFlightReadinessTests|FullyQualifiedName~AppleReleaseWorkflowTests.PinnedExistingBetaRecovery'
 
+      - name: Install social card renderer
+        run: sudo apt-get update && sudo apt-get install -y imagemagick
+
       - name: Test cross-platform website and agent plugin contracts
         shell: pwsh
         timeout-minutes: 10
         run: >
           dotnet test .\PowerForge.Tests\PowerForge.Tests.csproj
           -c Release --nologo
-          --filter 'FullyQualifiedName~WebPipelineRunnerCloudflareTests|FullyQualifiedName~WebApiDocsGenerator|FullyQualifiedName~WebApiMemberSearchTests|FullyQualifiedName~WebApiSourceRevisionTests|FullyQualifiedName~WebPipelineProjectSetTests|FullyQualifiedName~WebSiteApiSearchTests|FullyQualifiedName~AgentPluginPackageServiceTests|FullyQualifiedName~AgentPluginReleaseVersionBindingTests|FullyQualifiedName~RedirectedProcessOutputTests|FullyQualifiedName~ProcessOutputShutdownTests|FullyQualifiedName~ModulePipelinePackageBuild|FullyQualifiedName~AppleSimulatorSessionServiceTests|FullyQualifiedName~WebDotNetProcessLifetimeTests|FullyQualifiedName~DotNetBuildEnvironmentLifetimeTests|FullyQualifiedName~ProcessRunnerEnvironmentTests|FullyQualifiedName~DotNetReleaseBuildContractTests|FullyQualifiedName~DotnetPublisherTests|FullyQualifiedName~PowerForgePluginCatalogServiceTests|FullyQualifiedName~PowerForgeToolReleaseServiceTests|FullyQualifiedName~WebWebsiteRunnerTests'
+          --filter 'FullyQualifiedName~WebPipelineRunnerCloudflareTests|FullyQualifiedName~WebApiDocsGenerator|FullyQualifiedName~WebApiMemberSearchTests|FullyQualifiedName~WebApiSourceRevisionTests|FullyQualifiedName~WebPipelineProjectSetTests|FullyQualifiedName~WebSiteApiSearchTests|FullyQualifiedName~AgentPluginPackageServiceTests|FullyQualifiedName~AgentPluginReleaseVersionBindingTests|FullyQualifiedName~RedirectedProcessOutputTests|FullyQualifiedName~ProcessOutputShutdownTests|FullyQualifiedName~ModulePipelinePackageBuild|FullyQualifiedName~AppleSimulatorSessionServiceTests|FullyQualifiedName~WebDotNetProcessLifetimeTests|FullyQualifiedName~DotNetBuildEnvironmentLifetimeTests|FullyQualifiedName~ProcessRunnerEnvironmentTests|FullyQualifiedName~DotNetReleaseBuildContractTests|FullyQualifiedName~DotnetPublisherTests|FullyQualifiedName~PowerForgePluginCatalogServiceTests|FullyQualifiedName~PowerForgeToolReleaseServiceTests|FullyQualifiedName~WebWebsiteRunnerTests|FullyQualifiedName~WebSocialCard|FullyQualifiedName~WebApiSocialCard'
 
       - name: Test Linux executable package and runtime closure
         shell: pwsh

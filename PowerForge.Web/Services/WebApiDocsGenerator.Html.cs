@@ -44,6 +44,7 @@ public static partial class WebApiDocsGenerator
         File.WriteAllText(Path.Combine(outputPath, "powerforge-api.css"), fallbackCss, Encoding.UTF8);
         var cssBlock = BuildCssBlockWithFallback(fallbackCss, cssLinks, prismCss);
         var social = ResolveApiSocialProfile(options);
+        var cardContext = LoadApiSocialCardContext(options, social.SiteBaseUrl);
         var structuredDataSite = LoadApiStructuredDataSite(options, social);
         var indexRoute = NormalizeApiIndexRoute(options.BaseUrl);
         var indexDescription = BuildApiIndexSeoDescription(options, types.Count);
@@ -58,7 +59,7 @@ public static partial class WebApiDocsGenerator
             ["INDEX_LEAD"] = System.Web.HttpUtility.HtmlEncode(ResolveApiIndexLead(options)),
             ["INDEX_DESCRIPTION"] = System.Web.HttpUtility.HtmlEncode(indexDescription),
             ["DESCRIPTION_META"] = BuildDescriptionMetaTag(indexDescription),
-            ["OPEN_GRAPH_META"] = BuildApiOpenGraphMetaTags(options, social, options.Title, indexDescription, indexRoute),
+            ["OPEN_GRAPH_META"] = BuildApiOpenGraphMetaTags(options, social, options.Title, indexDescription, indexRoute, context: cardContext),
             ["HEAD_HTML"] = BuildApiPageHeadHtml(head, structuredDataSite, options, social, options.Title, indexDescription, indexRoute, indexRoute),
             ["CRITICAL_CSS"] = criticalCss,
             ["CSS"] = cssBlock,
@@ -86,7 +87,7 @@ public static partial class WebApiDocsGenerator
                 ["TYPE_TITLE"] = System.Web.HttpUtility.HtmlEncode(typeTitle),
                 ["TYPE_FULLNAME"] = System.Web.HttpUtility.HtmlEncode(type.FullName),
                 ["DESCRIPTION_META"] = BuildDescriptionMetaTag(typeDescription),
-                ["OPEN_GRAPH_META"] = BuildApiOpenGraphMetaTags(options, social, typeTitle, typeDescription, typeRoute),
+                ["OPEN_GRAPH_META"] = BuildApiOpenGraphMetaTags(options, social, typeTitle, typeDescription, typeRoute, type, cardContext),
                 ["HEAD_HTML"] = BuildApiPageHeadHtml(head, structuredDataSite, options, social, typeTitle, typeDescription, typeRoute, indexRoute, type.FullName),
                 ["CRITICAL_CSS"] = criticalCss,
                 ["CSS"] = cssBlock,
@@ -137,6 +138,7 @@ public static partial class WebApiDocsGenerator
         var docsHomeUrl = NormalizeDocsHomeUrl(options.DocsHomeUrl, baseUrl);
         var legacyAliasMode = ResolveLegacyAliasMode(options.LegacyAliasMode);
         var social = ResolveApiSocialProfile(options);
+        var cardContext = LoadApiSocialCardContext(options, social.SiteBaseUrl);
         var structuredDataSite = LoadApiStructuredDataSite(options, social);
         var typeDisplayNames = BuildTypeDisplayNameMap(types, options, warnings);
         var labels = ApiDocsChromeLabels.From(options);
@@ -157,7 +159,7 @@ public static partial class WebApiDocsGenerator
             ["INDEX_LEAD"] = System.Web.HttpUtility.HtmlEncode(ResolveApiIndexLead(options)),
             ["INDEX_DESCRIPTION"] = System.Web.HttpUtility.HtmlEncode(indexDescription),
             ["DESCRIPTION_META"] = BuildDescriptionMetaTag(indexDescription),
-            ["OPEN_GRAPH_META"] = BuildApiOpenGraphMetaTags(options, social, options.Title, indexDescription, NormalizeApiIndexRoute(baseUrl)),
+            ["OPEN_GRAPH_META"] = BuildApiOpenGraphMetaTags(options, social, options.Title, indexDescription, NormalizeApiIndexRoute(baseUrl), context: cardContext),
             ["HEAD_HTML"] = BuildApiPageHeadHtml(head, structuredDataSite, options, social, options.Title, indexDescription, NormalizeApiIndexRoute(baseUrl), NormalizeApiIndexRoute(baseUrl)),
             ["CRITICAL_CSS"] = criticalCss,
             ["CSS"] = cssBlock,
@@ -189,7 +191,7 @@ public static partial class WebApiDocsGenerator
             {
                 ["TITLE"] = System.Web.HttpUtility.HtmlEncode(pageTitle),
                 ["DESCRIPTION_META"] = BuildDescriptionMetaTag(typeDescription),
-                ["OPEN_GRAPH_META"] = BuildApiOpenGraphMetaTags(options, social, pageTitle, typeDescription, typeRoute),
+                ["OPEN_GRAPH_META"] = BuildApiOpenGraphMetaTags(options, social, pageTitle, typeDescription, typeRoute, type, cardContext),
                 ["HEAD_HTML"] = BuildApiPageHeadHtml(head, structuredDataSite, options, social, pageTitle, typeDescription, typeRoute, NormalizeApiIndexRoute(baseUrl), displayName),
                 ["CRITICAL_CSS"] = criticalCss,
                 ["CSS"] = cssBlock,
@@ -438,7 +440,8 @@ $@"<!doctype html>
         return $"<meta name=\"description\" content=\"{encoded}\" />";
     }
 
-    private static string BuildApiOpenGraphMetaTags(WebApiDocsOptions options, ApiSocialProfile social, string pageTitle, string description, string route)
+    private static string BuildApiOpenGraphMetaTags(WebApiDocsOptions options, ApiSocialProfile social, string pageTitle, string description, string route,
+        ApiTypeModel? type = null, ApiCardContext? context = null)
     {
         if (string.IsNullOrWhiteSpace(pageTitle))
             pageTitle = options.Title;
@@ -447,7 +450,7 @@ $@"<!doctype html>
         var desc = description?.Trim() ?? string.Empty;
         var siteName = string.IsNullOrWhiteSpace(social.SiteName) ? options.Title : social.SiteName;
         var url = ResolveApiAbsoluteUrl(social.SiteBaseUrl, route);
-        var imagePath = ResolveApiSocialImagePath(options, social, title, desc, route);
+        var imagePath = ResolveApiSocialImagePath(options, social, title, desc, route, type, context);
         var image = ResolveApiAbsoluteUrl(social.SiteBaseUrl, imagePath);
         var (imageWidth, imageHeight) = ResolveApiSocialImageDimensions(options, social, imagePath);
         var imageAlt = title;
