@@ -51,7 +51,9 @@ public static partial class WebApiDocsGenerator
                 position++;
             var identity = text[start..position];
             var keyword = GetCSharpKeyword(identity);
-            var display = keyword ?? StripGenericArity(shortNames ? identity[(identity.LastIndexOf('.') + 1)..] : identity);
+            // Standalone `0 / ``0 are XML type/method parameter references, not named-type arity.
+            var display = identity[0] == '`' ? identity :
+                keyword ?? StripGenericArity(shortNames ? identity[(identity.LastIndexOf('.') + 1)..] : identity);
             var rendered = renderName?.Invoke(identity, display) ?? display;
 
             if (position < text.Length && text[position] == '{')

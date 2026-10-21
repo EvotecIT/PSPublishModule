@@ -104,6 +104,28 @@ public sealed class WebApiDocsCSharpAliasTests : IDisposable
                 item.GetProperty("aliases").EnumerateArray().Any(alias => alias.GetString() == "T:PowerForge.Tests.CSharpAliases.String"));
     }
 
+    [Fact]
+    public void Generate_XmlOnlyPreservesTypeAndMethodGenericParameterReferences()
+    {
+        const string genericOwner = "PowerForge.Tests.CSharpAliases.Generic`1";
+        const string uid = "M:" + genericOwner + ".Echo``1(`0,``0,System.Collections.Generic.Dictionary{System.String,System.Collections.Generic.List{``0}})";
+        var output = Generate(false, Member("T:" + genericOwner), Member(uid));
+        var path = Directory.GetFiles(Path.Combine(output, "types"), "*.json")
+            .Single(file => Path.GetFileName(file).StartsWith("powerforge-tests-csharpaliases-generic", StringComparison.Ordinal));
+        using var json = JsonDocument.Parse(File.ReadAllText(path));
+        var method = Method(json, "Echo``1");
+        Assert.Equal(new[] { "`0", "``0", "System.Collections.Generic.Dictionary<string, System.Collections.Generic.List<``0>>" },
+            method.GetProperty("parameters").EnumerateArray().Select(parameter => parameter.GetProperty("type").GetString()));
+        // XML-only JSON has parameter types; its display signature is composed by the HTML renderer.
+        var html = File.ReadAllText(Path.Combine(output, Path.GetFileNameWithoutExtension(path), "index.html"));
+        Assert.Contains("`0 arg1", html);
+        Assert.Contains("``0 arg2", html);
+        Assert.Contains("List&lt;``0&gt;", html);
+        using var xref = JsonDocument.Parse(File.ReadAllText(Path.Combine(output, "xrefmap.json")));
+        Assert.Contains(xref.RootElement.GetProperty("references").EnumerateArray(),
+            item => item.GetProperty("uid").GetString() == uid);
+    }
+
     private string Generate(bool useReflection, params XElement[] members)
     {
         Directory.CreateDirectory(root);

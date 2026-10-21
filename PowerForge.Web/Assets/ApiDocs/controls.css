@@ -95,7 +95,9 @@ body.pf-api-docs .api-suite-search-filter {
 .pf-api-docs .type-header .type-title-row > .type-badge {
   top: auto;
 }
-.pf-api-docs .type-header .type-title-row > h1 {
+/* Commands have no adjacent namespace. Keep their long names beside the kind;
+   .NET titles retain natural width so the namespace moves to another flex line. */
+.pf-api-docs--powershell .type-header .type-title-row > h1 {
   flex: 1 1 0;
   min-width: 0;
   max-width: max-content;
