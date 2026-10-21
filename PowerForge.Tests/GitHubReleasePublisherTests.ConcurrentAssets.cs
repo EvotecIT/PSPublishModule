@@ -111,7 +111,7 @@ public sealed partial class GitHubReleasePublisherTests
         }
         finally
         {
-            listener.Stop();
+            listener.Close();
             try
             {
                 await server.WaitAsync(TimeSpan.FromSeconds(10));
