@@ -186,7 +186,7 @@ public sealed class PowerForgeInstallerAuthoringTests
         Assert.NotNull(doc.Descendants(Wix + "CustomAction").SingleOrDefault(e =>
             (string?)e.Attribute("Id") == "ServiceComponent.SetBackupCommand" &&
             (string?)e.Attribute("Property") == "ServiceComponent.BackupImagePath" &&
-            ((string?)e.Attribute("Value"))?.Contains("powershell.exe -nop -c", StringComparison.Ordinal) == true &&
+            ((string?)e.Attribute("Value"))?.StartsWith("\"powershell.exe\" -nop -c", StringComparison.Ordinal) == true &&
             ((string?)e.Attribute("Value"))?.Contains("Name -eq 'TestimoX.Monitoring'", StringComparison.Ordinal) == true &&
             ((string?)e.Attribute("Value"))?.Contains("$b='[WindowsFolder]Installer\\tmx-svc-[ProductCode].txt'", StringComparison.Ordinal) == true &&
             ((string?)e.Attribute("Value"))?.Contains("gwmi win32_service", StringComparison.Ordinal) == true &&

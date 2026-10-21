@@ -336,7 +336,7 @@ internal static class PowerForgeWixInstallerServiceScriptEmitter
         string purpose,
         string command)
     {
-        string result = "powershell.exe -nop -c \"" +
+        string result = "\"powershell.exe\" -nop -c \"" +
                         EscapeCommandDoubleQuoted(command) +
                         "\"";
         if (result.Length > 255)
