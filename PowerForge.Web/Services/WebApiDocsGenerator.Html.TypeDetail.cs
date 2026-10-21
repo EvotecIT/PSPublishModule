@@ -76,7 +76,7 @@ public static partial class WebApiDocsGenerator
                     {
                         detailBody.Line($"<li>{LinkifyType(entry, baseUrl, slugMap)}</li>");
                     }
-                    detailBody.Line($"<li class=\"inheritance-current\">{System.Web.HttpUtility.HtmlEncode(type.Name)}</li>");
+                    detailBody.Line($"<li class=\"inheritance-current\">{System.Web.HttpUtility.HtmlEncode(displayName)}</li>");
                 }
                 detailBody.Line("</ul>");
             }
@@ -275,14 +275,14 @@ public static partial class WebApiDocsGenerator
                 "Inputs",
                 type.InputTypes.Distinct(StringComparer.OrdinalIgnoreCase),
                 "type-meta-inputs",
-                value => $"<code>{System.Web.HttpUtility.HtmlEncode(value)}</code>");
+                value => $"<code>{RenderPowerShellTypeReference(value, baseUrl, slugMap)}</code>");
 
             AppendTypeMetaListRow(
                 html,
                 "Outputs",
                 type.OutputTypes.Distinct(StringComparer.OrdinalIgnoreCase),
                 "type-meta-outputs",
-                value => $"<code>{System.Web.HttpUtility.HtmlEncode(value)}</code>");
+                value => $"<code>{RenderPowerShellTypeReference(value, baseUrl, slugMap)}</code>");
 
             if (!string.IsNullOrWhiteSpace(type.Assembly))
                 AppendTypeMetaHtmlRow(html, "Assembly", $"<code>{System.Web.HttpUtility.HtmlEncode(type.Assembly)}</code>");

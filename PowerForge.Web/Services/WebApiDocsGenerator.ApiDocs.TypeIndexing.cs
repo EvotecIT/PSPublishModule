@@ -39,23 +39,31 @@ public static partial class WebApiDocsGenerator
 
     private static IReadOnlyDictionary<string, string> BuildTypeSlugMap(IReadOnlyList<ApiTypeModel> types)
     {
-        var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        var shortNameCounts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        var map = new ApiTypeLinkMap();
         foreach (var type in types)
         {
             if (!string.IsNullOrWhiteSpace(type.FullName))
-                map[type.FullName] = type.Slug;
-            if (!string.IsNullOrWhiteSpace(type.Name))
             {
-                shortNameCounts.TryGetValue(type.Name, out var count);
-                shortNameCounts[type.Name] = count + 1;
+                map[type.FullName] = type.Slug;
+                map.DefinitionNames[type.FullName] = GetTypeDefinitionName(type);
+                map.QualifiedNames[type.FullName] = GetTypeDefinitionName(type, qualified: true);
             }
         }
-        foreach (var type in types)
+        // Parameter names do not distinguish constructed types: A.Prompt<T> and
+        // B.Prompt<TValue> can both be referenced as Prompt<int>.
+        foreach (var group in types.GroupBy(type => type.FullName[(type.FullName.LastIndexOf('.') + 1)..], StringComparer.OrdinalIgnoreCase)
+                     .Where(group => group.Count() > 1))
+            foreach (var type in group) map.AmbiguousIdentities.Add(type.FullName);
+        var aliases = types.SelectMany(type => new[] { type.Name, type.FullName[(type.FullName.LastIndexOf('.') + 1)..] }
+            .Distinct(StringComparer.OrdinalIgnoreCase).Select(name => (Name: name, Type: type)));
+        foreach (var group in aliases.Where(alias => !string.IsNullOrWhiteSpace(alias.Name)).GroupBy(alias => alias.Name, StringComparer.OrdinalIgnoreCase))
         {
-            if (string.IsNullOrWhiteSpace(type.Name)) continue;
-            if (shortNameCounts.TryGetValue(type.Name, out var count) && count == 1)
-                map[type.Name] = type.Slug;
+            if (group.Count() != 1) continue;
+            var (name, type) = group.Single();
+            map[name] = type.Slug;
+            map.DefinitionNames[name] = map.DefinitionNames[type.FullName];
+            map.QualifiedNames[name] = map.QualifiedNames[type.FullName];
+            if (map.AmbiguousIdentities.Contains(type.FullName)) map.AmbiguousIdentities.Add(name);
         }
         return map;
     }
@@ -275,8 +283,19 @@ public static partial class WebApiDocsGenerator
                 GetCSharpKeyword(NormalizeCSharpPrimitiveType(identity)) == identity || identity is "nint" or "nuint";
             if (isKeyword || !slugMap.TryGetValue(identity, out var slug)) return label;
             var href = System.Web.HttpUtility.HtmlAttributeEncode(BuildDocsTypeUrl(baseUrl, slug));
-            return $"<a href=\"{href}\">{label}</a>";
-        });
+            var links = slugMap as ApiTypeLinkMap;
+            var qualified = links is not null && links.QualifiedNames.TryGetValue(identity, out var fullName)
+                ? fullName : FormatCSharpTypeName(identity);
+            if (display.Contains('<') && links is not null && links.DefinitionNames.TryGetValue(identity, out var definitionName) &&
+                qualified.EndsWith(definitionName, StringComparison.Ordinal))
+                qualified = qualified[..^definitionName.Length] + display;
+            var ambiguous = links is not null && links.AmbiguousIdentities.Contains(identity);
+            var title = identity.Contains('`') || display.Contains('<') || ambiguous
+                ? $" title=\"{System.Web.HttpUtility.HtmlAttributeEncode(qualified)}\"" : string.Empty;
+            var accessible = ambiguous ? $" aria-label=\"{System.Web.HttpUtility.HtmlAttributeEncode(qualified)}\"" : string.Empty;
+            return $"<a href=\"{href}\"{title}{accessible}>{label}</a>";
+        }, resolveDefinition: identity => slugMap is ApiTypeLinkMap links && links.DefinitionNames.TryGetValue(identity, out var definition)
+            ? definition : null);
     }
 
     private static string RenderSourceLink(ApiSourceLink link)

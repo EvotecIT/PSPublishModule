@@ -238,7 +238,7 @@ public static partial class WebApiDocsGenerator
                         : $" = {parameter.DefaultValue}";
                     body.Line(
                         $"<dt id=\"{System.Web.HttpUtility.HtmlAttributeEncode(anchor)}\"><span class=\"param-name\">-{System.Web.HttpUtility.HtmlEncode(parameter.Name)}</span> " +
-                        $"<span class=\"param-type{(entry.RequiredSets.Count == 0 ? " optional" : string.Empty)}\">{System.Web.HttpUtility.HtmlEncode(parameter.Type)}</span>" +
+                        $"<span class=\"param-type{(entry.RequiredSets.Count == 0 ? " optional" : string.Empty)}\">{RenderPowerShellTypeReference(parameter.Type, baseUrl, slugMap)}</span>" +
                         $"<span class=\"param-default\">{System.Web.HttpUtility.HtmlEncode(defaultText)}</span>{BuildPowerShellParameterChips(entry, setCount)}</dt>");
                     if (!string.IsNullOrWhiteSpace(entry.Summary))
                         body.Line($"<dd>{RenderLinkedText(entry.Summary, baseUrl, slugMap)}</dd>");

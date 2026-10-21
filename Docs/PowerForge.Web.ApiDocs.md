@@ -184,6 +184,10 @@ Overview identity and quick start:
   - `short` keeps short names only
   - `namespace-suffix` (default) disambiguates duplicates as `Type (Namespace.Part)`
   - `full` uses full type names
+- Generic labels retain C# parameter names, such as `Prompt<T>` and `Dictionary<TKey, TValue>`.
+  Generic links include the complete type in their text and title. When short labels collide across
+  namespaces, links receive namespace-qualified accessible names. Type identities and routes stay unchanged.
+  PowerShell input, output, and parameter metadata also retain generic type arguments.
 - `generateGitFreshness` (pipeline) / `--git-freshness` (CLI) enables opt-in git freshness metadata:
   - `gitFreshnessNewDays` / `--git-freshness-new-days` controls the `new` window (default `14`)
   - `gitFreshnessUpdatedDays` / `--git-freshness-updated-days` controls the `updated` window (default `90`)

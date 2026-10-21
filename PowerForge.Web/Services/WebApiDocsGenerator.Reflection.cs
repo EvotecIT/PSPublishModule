@@ -465,12 +465,16 @@ public static partial class WebApiDocsGenerator
 
     private static void MergeTypeParameters(List<ApiTypeParameterModel> target, IEnumerable<string> names)
     {
+        var ordered = new List<ApiTypeParameterModel>();
         foreach (var name in names)
         {
             if (string.IsNullOrWhiteSpace(name)) continue;
-            if (target.Any(tp => string.Equals(tp.Name, name, StringComparison.OrdinalIgnoreCase))) continue;
-            target.Add(new ApiTypeParameterModel { Name = name });
+            ordered.Add(target.FirstOrDefault(tp => string.Equals(tp.Name, name, StringComparison.OrdinalIgnoreCase))
+                ?? new ApiTypeParameterModel { Name = name });
         }
+        ordered.AddRange(target.Where(parameter => !ordered.Contains(parameter)));
+        target.Clear();
+        target.AddRange(ordered);
     }
 
     private static string GetAccessModifier(MethodBase method)
