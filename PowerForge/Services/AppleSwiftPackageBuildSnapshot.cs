@@ -101,13 +101,27 @@ internal sealed class AppleSwiftPackageBuildSnapshot : IDisposable
             var derivedDataPath = Path.Combine(root, "ResolverDerivedData");
             Directory.CreateDirectory(sourcePackagesPath);
             Directory.CreateDirectory(derivedDataPath);
+            var initializedRootIdentity = ExistingFilePathIdentityResolver.ResolveDirectoryStatus(root).MutationIdentity;
             rootMonitor = new AppleReleaseSourceMutationMonitor(
                 parent,
                 "private Swift package snapshot directory",
                 "xcodebuild exact-source package resolution and build",
                 "Discard the Apple product and resolve the exact package graph again.",
+                enableImmediately: false,
                 exactPath: root,
-                includeExactPathDescendants: false);
+                includeExactPathDescendants: false,
+                useNativeMacOSObserver: true);
+            // macOS can deliver our directory creation/chmod notifications after subscription.
+            // Drain those before the resolver starts, while binding both physical identity and
+            // metadata so an actual replacement or chmod during initialization cannot be accepted.
+            rootMonitor.CaptureExpectedProducerOutput(() =>
+            {
+                rootDirectory.ValidateUnchanged();
+                var currentIdentity = ExistingFilePathIdentityResolver.ResolveDirectoryStatus(root).MutationIdentity;
+                if (!currentIdentity.Equals(initializedRootIdentity, StringComparison.Ordinal))
+                    throw new InvalidOperationException("The private Swift package snapshot directory changed during initialization.");
+                return currentIdentity;
+            }, "private snapshot directory initialization");
             var environmentVariables = AppleTrustedExecutionEnvironment.Create(isolateGitConfiguration: true);
             var arguments = new[]
             {

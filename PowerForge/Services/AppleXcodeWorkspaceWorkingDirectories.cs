@@ -26,7 +26,12 @@ internal static class AppleXcodeWorkspaceWorkingDirectories
             return false;
         var paths = GetMetadataDirectories(projectPath, isWorkspace);
         var comparison = FrameworkCompatibility.GetPathStringComparisonForPath(paths[0]);
-        if (!paths.Any(path => args.FullPath.Equals(path, comparison))) return false;
+        // Creating the allowed metadata folders can also update their existing workspace
+        // container's timestamp (notably with Windows directory notifications).
+        var workspace = isWorkspace ? projectPath : Path.Combine(projectPath, "project.xcworkspace");
+        var workspaceMetadataChanged = args.ChangeType == WatcherChangeTypes.Changed &&
+            args.FullPath.Equals(workspace, comparison);
+        if (!workspaceMetadataChanged && !paths.Any(path => args.FullPath.Equals(path, comparison))) return false;
         try
         {
             var attributes = File.GetAttributes(args.FullPath);

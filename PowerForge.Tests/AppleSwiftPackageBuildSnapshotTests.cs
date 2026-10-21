@@ -5,6 +5,45 @@ namespace PowerForge.Tests;
 public sealed class AppleSwiftPackageBuildSnapshotTests
 {
     [Theory]
+    [InlineData("replacement")]
+    [InlineData("permissions")]
+    public async Task Resolution_rejects_transient_snapshot_root_changes_after_initialization(string scenario)
+    {
+        if (!OperatingSystem.IsMacOS()) return;
+        var fixture = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForgeTests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var runner = new ArtifactRunner(source =>
+            {
+                var root = Directory.GetParent(source)!.FullName;
+                if (scenario == "replacement")
+                {
+                    var moved = root + "-moved";
+                    Directory.Move(root, moved);
+                    Directory.Move(moved, root);
+                }
+                else if (OperatingSystem.IsMacOS())
+                {
+                    var original = File.GetUnixFileMode(root);
+                    File.SetUnixFileMode(root, original | UnixFileMode.GroupRead);
+                    File.SetUnixFileMode(root, original);
+                }
+                MaterializeFramework(source);
+            });
+            var error = await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            {
+                using var snapshot = await CreateSnapshot(fixture.FullName, runner);
+                snapshot.ValidateUnchanged();
+            });
+            var parentObservedChange = error.Message.Contains("private Swift package snapshot directory changed", StringComparison.OrdinalIgnoreCase);
+            var childLostRoot = error.Message.StartsWith("The materialized Swift package root mutation monitor failed;", StringComparison.Ordinal) &&
+                error.InnerException is IOException;
+            Assert.True(parentObservedChange || childLostRoot, error.ToString());
+        }
+        finally { fixture.Delete(recursive: true); }
+    }
+
+    [Theory]
     [InlineData("root")]
     [InlineData("broken-root")]
     [InlineData("chained-escape")]
