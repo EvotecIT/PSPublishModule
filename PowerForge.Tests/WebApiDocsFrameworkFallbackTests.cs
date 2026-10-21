@@ -64,7 +64,7 @@ public sealed class WebApiDocsFrameworkFallbackTests
             {
                 // Reference XML has parameter/return contracts; the built-in summary does not.
                 var equals = methods.Single(method => method.GetProperty("name").GetString() == "Equals" &&
-                    method.GetProperty("parameters")[0].GetProperty("type").GetString() == "System.Object");
+                    method.GetProperty("parameters")[0].GetProperty("type").GetString() == "object");
                 Assert.False(string.IsNullOrWhiteSpace(equals.GetProperty("returns").GetString()));
             }
             else

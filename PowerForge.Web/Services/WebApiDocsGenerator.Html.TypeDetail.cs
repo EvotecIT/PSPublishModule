@@ -51,9 +51,8 @@ public static partial class WebApiDocsGenerator
             if (type.IsAbstract) flags.Add("abstract");
             if (type.IsSealed) flags.Add("sealed");
         }
-        sb.AppendLine(BuildTypeMetaHtml(type, baseUrl, slugMap, isPowerShellCommand, sourceAction, flags, labels).TrimEnd());
-
         var detailBody = new HtmlFragmentBuilder(initialIndent: 6);
+        detailBody.AppendRaw(BuildTypeMetaHtml(type, baseUrl, slugMap, isPowerShellCommand, sourceAction, flags, labels));
         if (isPowerShellCommand)
         {
             AppendPowerShellCommandBody(detailBody, type, baseUrl, slugMap, usage, relatedContent, codeLanguage, labels.ShowExampleOrigins);
@@ -755,7 +754,7 @@ public static partial class WebApiDocsGenerator
             html.Line("<div class=\"member-header\">");
             using (html.Indent())
             {
-                html.Line(BuildMemberSignatureHtml(signature, sectionLabel, codeLanguage));
+                html.Line(BuildMemberSignatureHtml(signature, sectionLabel, codeLanguage, member));
                 html.Line($"<a class=\"member-anchor\" href=\"#{searchAnchor}\" aria-label=\"Link to {System.Web.HttpUtility.HtmlEncode(member.Name)}\">#</a>");
             }
             html.Line("</div>");
@@ -1337,7 +1336,7 @@ public static partial class WebApiDocsGenerator
         return chips.Count == 0 ? string.Empty : $" <span class=\"param-meta\">{string.Join(string.Empty, chips)}</span>";
     }
 
-    private static string BuildMemberSignatureHtml(string signature, string sectionLabel, string codeLanguage)
+    private static string BuildMemberSignatureHtml(string signature, string sectionLabel, string codeLanguage, ApiMemberModel member)
     {
         var encoded = System.Web.HttpUtility.HtmlEncode(signature);
         if (!string.Equals(sectionLabel, "Syntax", StringComparison.OrdinalIgnoreCase))
@@ -1346,8 +1345,13 @@ public static partial class WebApiDocsGenerator
         var language = string.IsNullOrWhiteSpace(codeLanguage)
             ? "powershell"
             : codeLanguage.Trim().ToLowerInvariant();
-        var languageClass = $"language-{language}";
-        return $"<pre class=\"member-signature {languageClass}\"><code class=\"{languageClass}\">{encoded}</code></pre>";
+        var commandName = string.IsNullOrWhiteSpace(member.DisplayName) ? member.Name : member.DisplayName;
+        var parts = BuildPowerShellSyntaxParts(commandName, member.Parameters, member.IncludesCommonParameters);
+        var lines = parts.Select((part, index) =>
+            $"<span class=\"{(index == 0 ? "syntax-command" : "syntax-parameter")}\">{System.Web.HttpUtility.HtmlEncode(part).Replace("|", "|<wbr>", StringComparison.Ordinal)}</span>");
+        // This is a structured help synopsis, not executable code. Language classes let
+        // host highlighters replace these spans and destroy the parameter-group layout.
+        return $"<pre class=\"member-signature powershell-syntax\" data-language=\"{System.Web.HttpUtility.HtmlAttributeEncode(language)}\"><code>{string.Join("\n", lines)}</code></pre>";
     }
 
     private static string RenderPowerShellPossibleValues(IReadOnlyList<string> values)

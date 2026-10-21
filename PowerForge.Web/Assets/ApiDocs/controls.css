@@ -56,3 +56,51 @@ body.pf-api-docs .api-suite-search-filter {
 .pf-api-docs .api-sidebar .sidebar-status > :is(.sidebar-count, .sidebar-browse-all, .sidebar-tools) {
   margin: 0;
 }
+
+/* Syntax is structured from the same parameter groups used by text/JSON output. */
+.pf-api-docs #syntax pre.powershell-syntax,
+.pf-api-docs #syntax pre.powershell-syntax > code {
+  white-space: normal;
+  overflow-x: visible;
+  overflow-wrap: anywhere;
+  min-width: 0;
+  max-width: 100%;
+}
+.pf-api-docs #syntax .powershell-syntax > code,
+.pf-api-docs #syntax :is(.syntax-command, .syntax-parameter) {
+  display: block;
+}
+.pf-api-docs #syntax .syntax-parameter {
+  padding-inline-start: calc(2 * var(--pf-syntax-indent, 2ch));
+  text-indent: calc(-1 * var(--pf-syntax-indent, 2ch));
+}
+.pf-api-docs .type-detail .command-description {
+  margin-block: var(--pf-space-5, 1.5rem);
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.pf-api-docs .type-detail .command-description > h2 {
+  margin-top: 0;
+}
+/* Description-list values must not inherit the browser's default 40px inset. */
+.pf-api-docs .type-meta .type-meta-row > dd {
+  margin-inline: 0;
+}
+.pf-api-docs .type-detail .type-header .type-title-row {
+  align-items: center;
+}
+.pf-api-docs .type-header .type-title-row > .type-badge {
+  top: auto;
+}
+.pf-api-docs .type-header .type-title-row > h1 {
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: max-content;
+}
+.pf-api-docs .type-header .type-title-row > .type-namespace,
+.pf-api-docs .type-header .type-title-row > .type-namespace code {
+  color: var(--pf-muted, var(--pf-ink, currentColor));
+}

@@ -46,7 +46,8 @@ public static partial class WebApiDocsGenerator
                     ? info.GenericTypeArguments[index] : null, qualified));
             name = StripGenericArity(qualified ? type.GetGenericTypeDefinition().FullName?.Replace('+', '.') ?? type.Name : type.Name) + "<" + string.Join(", ", args) + ">";
         }
-        else name = qualified ? type.FullName?.Replace('+', '.') ?? type.Name : type.Name;
+        else name = (type.IsGenericParameter ? null : GetCSharpKeyword(type.FullName)) ??
+            (qualified ? type.FullName?.Replace('+', '.') ?? type.Name : type.Name);
 
         var state = info?.ReadState == NullabilityState.Unknown ? info.WriteState : info?.ReadState;
         return !type.IsValueType && state == NullabilityState.Nullable ? name + "?" : name;

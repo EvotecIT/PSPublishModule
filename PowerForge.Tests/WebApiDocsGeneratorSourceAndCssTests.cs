@@ -871,7 +871,7 @@ public class WebApiDocsGeneratorSourceAndCssTests
             Assert.Contains("href=\"https://www.nuget.org/packages/PowerForge.Fixtures\"", html, StringComparison.Ordinal);
             Assert.Contains("dotnet add package PowerForge.Fixtures", html, StringComparison.Ordinal);
             // Method crefs in quick-start summaries read as Type.Member, not a parameter-list fragment.
-            Assert.Contains("Join with String.Join first.", html, StringComparison.Ordinal);
+            Assert.Contains("Join with string.Join first.", html, StringComparison.Ordinal);
             Assert.DoesNotContain("String[])", html, StringComparison.Ordinal);
             Assert.DoesNotContain("[[cref:", html, StringComparison.Ordinal);
             var typePage = File.ReadAllText(Path.Combine(outputPath, "powerforge-tests-apidocssourcefixtures-sourcefixturederived", "index.html"));

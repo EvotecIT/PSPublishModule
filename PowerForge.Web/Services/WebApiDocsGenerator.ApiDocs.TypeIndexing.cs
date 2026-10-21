@@ -267,21 +267,16 @@ public static partial class WebApiDocsGenerator
     {
         if (string.IsNullOrWhiteSpace(name))
             return string.Empty;
-        var cleaned = name.Replace("+", ".").Trim();
-        var display = GetDisplayTypeName(cleaned);
-        if (slugMap.TryGetValue(cleaned, out var slug))
+        return FormatCSharpTypeName(name, shortNames: true, renderName: (identity, display) =>
         {
-            var href = BuildDocsTypeUrl(baseUrl, slug);
-            var safeHref = System.Web.HttpUtility.HtmlAttributeEncode(href);
-            return $"<a href=\"{safeHref}\">{System.Web.HttpUtility.HtmlEncode(display)}</a>";
-        }
-        if (slugMap.TryGetValue(display, out var shortSlug))
-        {
-            var href = BuildDocsTypeUrl(baseUrl, shortSlug);
-            var safeHref = System.Web.HttpUtility.HtmlAttributeEncode(href);
-            return $"<a href=\"{safeHref}\">{System.Web.HttpUtility.HtmlEncode(display)}</a>";
-        }
-        return System.Web.HttpUtility.HtmlEncode(display);
+            var label = System.Web.HttpUtility.HtmlEncode(display);
+            // Never resolve a framework alias through a library-owned short name such as String.
+            var isKeyword = GetCSharpKeyword(identity) is not null ||
+                GetCSharpKeyword(NormalizeCSharpPrimitiveType(identity)) == identity || identity is "nint" or "nuint";
+            if (isKeyword || !slugMap.TryGetValue(identity, out var slug)) return label;
+            var href = System.Web.HttpUtility.HtmlAttributeEncode(BuildDocsTypeUrl(baseUrl, slug));
+            return $"<a href=\"{href}\">{label}</a>";
+        });
     }
 
     private static string RenderSourceLink(ApiSourceLink link)
@@ -386,11 +381,7 @@ public static partial class WebApiDocsGenerator
     }
     private static string GetDisplayTypeName(string name)
     {
-        if (string.IsNullOrWhiteSpace(name)) return name;
-        var normalized = name.Replace("{", "<").Replace("}", ">");
-        normalized = GenericArityRegex.Replace(normalized, string.Empty);
-        var lastDot = normalized.LastIndexOf('.');
-        return lastDot >= 0 ? normalized.Substring(lastDot + 1) : normalized;
+        return FormatCSharpTypeName(name, shortNames: true);
     }
 
     private static IReadOnlyList<ApiTypeModel> GetMainTypes(IReadOnlyList<ApiTypeModel> types, WebApiDocsOptions options)

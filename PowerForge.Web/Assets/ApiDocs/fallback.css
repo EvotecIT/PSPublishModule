@@ -18,6 +18,7 @@
   --pf-page-width:96rem; --pf-page-gutter:clamp(1rem,3vw,2.5rem); --pf-layout-gap:clamp(1.5rem,3vw,3rem);
   --pf-sidebar-width:17rem; --pf-toc-width:12rem; --pf-header-offset:0px; --pf-measure:72ch;
   --pf-facts-label-width:7.5rem; --pf-search-width:13.75rem; --pf-card-min-width:13rem; --pf-drawer-width:21rem;
+  --pf-syntax-indent:2ch;
   --pf-combobox-max-height:18rem; --pf-scrollbar-size:.5rem; --pf-motion:.18s;
   --pf-color-scheme:dark; --pf-inline-code-padding:.1em .35em; --pf-inline-code-size:.9em; --pf-underline-offset:.18em;
   --pf-z-menu:70; --pf-z-overlay:1001; --pf-z-drawer:1002;
@@ -127,8 +128,8 @@
 /* Type heading, light facts and source actions. */
 :where(body.pf-api-docs) .breadcrumb { display:flex; flex-wrap:wrap; gap:var(--pf-space-2); margin-bottom:var(--pf-space-5); color:var(--pf-dim); font-size:var(--pf-text-sm); }
 :where(body.pf-api-docs) .type-header { margin-bottom:var(--pf-space-5); }
-:where(body.pf-api-docs) .type-title-row { display:flex; flex-wrap:wrap; align-items:baseline; gap:var(--pf-space-2) var(--pf-space-3); }
-:where(body.pf-api-docs) .type-namespace { margin:0; min-width:0; color:var(--pf-dim); font-size:var(--pf-text-sm); }
+:where(body.pf-api-docs) .type-title-row { display:flex; flex-wrap:wrap; align-items:center; gap:var(--pf-space-2) var(--pf-space-3); }
+:where(body.pf-api-docs) .type-namespace { margin:0; min-width:0; color:var(--pf-muted); font-size:var(--pf-text-sm); }
 :where(body.pf-api-docs) .type-namespace code { padding:0; background:transparent; color:inherit; }
 :where(body.pf-api-docs) :is(.type-badge,.freshness-badge,.param-meta-chip,.example-origin-badge,.usage-kind,.related-content-kind) { display:inline-flex; align-items:center; gap:var(--pf-space-1); min-height:var(--pf-chip-height); padding:0 var(--pf-space-2); border:var(--pf-line) solid var(--pf-border); border-radius:var(--pf-radius-pill); background:transparent; color:var(--pf-kind,var(--pf-muted)); font-size:var(--pf-text-xs); line-height:var(--pf-leading-tight); font-weight:var(--pf-weight-medium); }
 :where(body.pf-api-docs) .type-actions { display:flex; flex-wrap:wrap; gap:var(--pf-space-3); margin-top:var(--pf-space-2); font-size:var(--pf-text-sm); }

@@ -529,6 +529,7 @@ No font download is required by the shared theme.
 | `--pf-sidebar-width`, `--pf-toc-width`, `--pf-header-offset` | Tree width `17rem`, right rail `12rem`, host sticky-header offset `0px`. |
 | `--pf-measure`, `--pf-facts-label-width` | Summary reading width `72ch`; facts label column `7.5rem`. |
 | `--pf-search-width`, `--pf-card-min-width`, `--pf-drawer-width` | Member search flex basis `13.75rem`, index card minimum `13rem`, phone drawer maximum `21rem`. |
+| `--pf-syntax-indent` | PowerShell parameter-group indentation `2ch`; continuation lines hang a further `2ch` inside each group. |
 | `--pf-combobox-max-height`, `--pf-scrollbar-size`, `--pf-motion` | Namespace popup maximum `18rem` (also bounded to 40dvh), scrollbar `.5rem`, transition `.18s`. Reduced-motion preferences disable transitions. |
 | `--pf-z-menu`, `--pf-z-overlay`, `--pf-z-drawer` | Popup, scrim and drawer stacking levels: `70`, `1001`, `1002`; map these if host chrome uses a different stacking scheme. |
 
@@ -537,8 +538,9 @@ No font download is required by the shared theme.
 Type headers place the kind, name and namespace in `.type-title-row`, with a
 `.type-namespace` paragraph after the heading. The breadcrumb supplies the
 reference context, so type headers do not repeat an API Reference eyebrow.
-Facts use `dl.type-meta`, `dt.type-meta-label` and `dd`. Existing row classes
-remain available to site styles. Source actions retain `.type-source-action`
+Facts use `dl.type-meta`, `dt.type-meta-label` and `dd` inside the main content
+column, before the lead paragraph. Stacked values align with their labels.
+Existing row classes remain available to site styles. Source actions retain `.type-source-action`
 and add `.type-edit-action` or `.type-view-source-action`.
 
 Sidebar and member searches have associated screen-reader labels and positioned
@@ -555,6 +557,18 @@ is conveyed by the signature. PowerShell positional and pipeline metadata have
 `.param-meta-chip--position` and `.param-meta-chip--pipeline` hooks.
 Bodies expose `.pf-api-docs--dotnet` or `.pf-api-docs--powershell` alongside
 `.pf-api-docs`, so sites can style either language without inspecting descendants.
+
+PowerShell syntax uses `.powershell-syntax`, with a `.syntax-command` span and
+one `.syntax-parameter` span per parameter group. Groups begin on separate lines;
+long groups wrap with a hanging indent. The Description section uses
+`.command-description` as ordinary content. When its text starts with the synopsis,
+the matching prefix is removed after whitespace and case normalization.
+The syntax block identifies its language through `data-language`; it omits code
+highlighter classes so host highlighters preserve its parameter-group markup.
+
+C# signatures and displayed type references use keyword aliases such as `void`,
+`string` and `int?`. Documentation IDs and cross-reference targets retain their
+qualified identities, and similarly named library types keep their names.
 
 Example titles use sentence case. Example provenance badges are hidden by
 default; set `showExampleOrigins: true` on the `apidocs` pipeline step,

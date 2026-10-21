@@ -1,3 +1,5 @@
+using System.Text.RegularExpressions;
+
 namespace PowerForge.Web;
 
 /// <summary>Generates API documentation artifacts from XML docs.</summary>
@@ -59,11 +61,11 @@ public static partial class WebApiDocsGenerator
 
         if (HasDistinctPowerShellDescription(type))
         {
-            body.Line("<section class=\"remarks\" id=\"remarks\">");
+            body.Line("<section class=\"command-description\" id=\"remarks\">");
             using (body.Indent())
             {
                 body.Line("<h2>Description</h2>");
-                foreach (var paragraph in SplitExampleParagraphs(type.Remarks!))
+                foreach (var paragraph in SplitExampleParagraphs(GetPowerShellDescription(type)))
                     body.Line($"<p>{RenderLinkedText(paragraph, baseUrl, slugMap)}</p>");
             }
             body.Line("</section>");
@@ -285,8 +287,26 @@ public static partial class WebApiDocsGenerator
 
     /// <summary>Help generators often copy the synopsis into the description; repeating it adds nothing.</summary>
     private static bool HasDistinctPowerShellDescription(ApiTypeModel type)
-        => !string.IsNullOrWhiteSpace(type.Remarks) &&
-           !string.Equals(type.Remarks.Trim(), type.Summary?.Trim(), StringComparison.Ordinal);
+        => !string.IsNullOrWhiteSpace(GetPowerShellDescription(type));
+
+    /// <summary>Removes a normalized synopsis prefix while retaining the original text of the remainder.</summary>
+    private static string GetPowerShellDescription(ApiTypeModel type)
+    {
+        var description = type.Remarks?.Trim() ?? string.Empty;
+        var synopsis = type.Summary?.Trim();
+        if (description.Length == 0 || string.IsNullOrWhiteSpace(synopsis))
+            return description;
+
+        // Match words, allowing help exporters to fold whitespace or change casing.
+        // A word boundary prevents "Reads a file" from consuming "Reads a filename".
+        var words = Regex.Split(synopsis, @"\s+", RegexOptions.CultureInvariant, RegexTimeout);
+        var pattern = @"\A" + string.Join(@"\s+", words.Select(Regex.Escape));
+        var match = Regex.Match(description, pattern, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, RegexTimeout);
+        if (!match.Success ||
+            (match.Length < description.Length && char.IsLetterOrDigit(description[match.Length]) && char.IsLetterOrDigit(synopsis[^1])))
+            return description;
+        return description[match.Length..].TrimStart();
+    }
 
     private static bool IsPowerShellNoneValue(string? value)
         => string.Equals(value?.Trim(), "None", StringComparison.OrdinalIgnoreCase);
