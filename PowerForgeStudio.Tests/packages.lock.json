@@ -114,42 +114,50 @@
         "resolved": "7.9.0",
         "contentHash": "r4sZuVpVqwSBLe4qYDrnpScqdyctlRXg0HSF5OoCGkeBc8b+o8BBYHuI/u1RoWYX78PbieijU13TBt71/Xf3lw=="
       },
+      "SQLite": {
+        "type": "Transitive",
+        "resolved": "3.53.4",
+        "contentHash": "KN7jeWqgUPeBRe1FlcpZURzxomuKKEKHmBBQfg+Nx7NkY1LjKhzHvH+3ASkNvhayESE34nMBinL9CV21JfPRJw=="
+      },
       "SQLitePCLRaw.bundle_e_sqlite3": {
         "type": "Transitive",
-        "resolved": "2.1.13",
-        "contentHash": "NlDixlC7uHmo+ojXRgkNvN0tQtVGpLDZ3x2OpgNj+G07VHh5cXSszFDrAiC4BpUiPwkcaeuQkMV9WQ123xVtmQ==",
+        "resolved": "3.0.5",
+        "contentHash": "SW8iASIyWMrLzqabUHYQRvALhvD4ylSBsj4PgEVGwc36kQjc9xT5kSV/XQ9rU7nIpBWD+LPyX3Hlw5FzyUzGeQ==",
         "dependencies": {
-          "SQLitePCLRaw.lib.e_sqlite3": "2.1.13",
-          "SQLitePCLRaw.provider.e_sqlite3": "2.1.13"
+          "SQLite": "3.53.4",
+          "SQLitePCLRaw.config.e_sqlite3": "3.0.5"
+        }
+      },
+      "SQLitePCLRaw.config.e_sqlite3": {
+        "type": "Transitive",
+        "resolved": "3.0.5",
+        "contentHash": "aSk8WE5tF2MybESMgtZAEyMVCAWA0nBqOMc48HFoa9UoSdtm3goDXVzNRnefeKIwE6bV9NaNXptn1F9ReMQI0Q==",
+        "dependencies": {
+          "SQLitePCLRaw.provider.e_sqlite3": "3.0.5"
         }
       },
       "SQLitePCLRaw.core": {
         "type": "Transitive",
-        "resolved": "2.1.13",
-        "contentHash": "2joofoinuHBFs0nMX3nKuXgxpXryRkCOdM2Ua6HBqQLLy6IW+5f28ZI+HAvMyF8vG7XfNz/lwfBfE6V4juru8Q=="
-      },
-      "SQLitePCLRaw.lib.e_sqlite3": {
-        "type": "Transitive",
-        "resolved": "2.1.13",
-        "contentHash": "D2UAuiGxFYBqeRXjjjGgvJ5UQifzn6wefmSqeKU7XcNGKLbJRP6X7kcPZ6opOBJGdCIlgbSxTvDpBbLvsN594A=="
+        "resolved": "3.0.5",
+        "contentHash": "k81AYXXRCw3Zj8rOhyBoCsx/U97KYDFI2CSKr/ijl5BwpsW/hX/4kBiDmerFaoust8nxBwa0IHQFw8MmSHRtnQ=="
       },
       "SQLitePCLRaw.provider.e_sqlite3": {
         "type": "Transitive",
-        "resolved": "2.1.13",
-        "contentHash": "ZU60dSqoSNRe49KcQDUmOVgdRtjITOssVXFtiISs+zJXDI4D2Sndwpn2NOtzDQNPu0ZAvpoLPQ+GLKv6iEZn8Q==",
+        "resolved": "3.0.5",
+        "contentHash": "um8YSWduhhuskTG2bHfZrBqMNQOydfU8pcseT+cu5RivOGyoUbCrGXxgoRNTmRYw2VbMWnEZVVFcneZT/5dsBg==",
         "dependencies": {
-          "SQLitePCLRaw.core": "2.1.13"
+          "SQLitePCLRaw.core": "3.0.5"
         }
       },
       "System.IO.Packaging": {
         "type": "Transitive",
-        "resolved": "10.0.12",
-        "contentHash": "Bsop0fosps100BOj1s9uIM3XaUpoLok5s0LTuEeKXvKse1XvpYvnzeC/7AZXCs3MkFurRkLe9k9XwKNZz2retw=="
+        "resolved": "10.0.13",
+        "contentHash": "FgYKAXorO7YEaWXaoK0toZ6qz73xtv4Zj+J0ykw/2iHaLJK0Fk4llKRa/YnyQGnOM6zc7PiOErzhPvgy5ehRZQ=="
       },
       "System.Reflection.MetadataLoadContext": {
         "type": "Transitive",
-        "resolved": "10.0.12",
-        "contentHash": "+DWu1fzj75I1FgdHSg3crgeZmfF2z55x1+OXF2IO2Lcq/iNgM9tL734pxAG0vo5iE82FVPHwbqUt31o8ipPBWg=="
+        "resolved": "10.0.13",
+        "contentHash": "DFY3NXZNZRbWSvvNq5oHsWjpyiYmGqceuvNDhEGkHnadBNJKEfsZpXDB1W0sFjCgtbWOL6UKLw9LeA/KhKnevA=="
       },
       "System.Security.Cryptography.Pkcs": {
         "type": "Transitive",
@@ -158,8 +166,8 @@
       },
       "System.Security.Cryptography.ProtectedData": {
         "type": "Transitive",
-        "resolved": "10.0.12",
-        "contentHash": "wO0W8VDMeRJZakRySOmemAnrBZMwEFRlbfBtATxUiLf2I3IhSRnCp1Vt157NWptdE4IJ7eftd5n8q9LtaKHFTQ=="
+        "resolved": "10.0.13",
+        "contentHash": "aUSmC6cPjFLSE0rDTsmkR3wvUOnscqewebOaaELEToh12sNmoltZqT3f0C81mJ1zhxKjWco25soHTvYwsXCsUw=="
       },
       "VirusTotalAnalyzer": {
         "type": "Transitive",
@@ -206,15 +214,27 @@
           "xunit.extensibility.core": "[2.9.3]"
         }
       },
+      "dbaclientx.core": {
+        "type": "Project"
+      },
+      "dbaclientx.sqlite": {
+        "type": "Project",
+        "dependencies": {
+          "DBAClientX.Core": "[1.0.12, )",
+          "Microsoft.Data.Sqlite": "[10.0.10, )",
+          "SQLitePCLRaw.bundle_e_sqlite3": "[3.0.5, )",
+          "SQLitePCLRaw.core": "[3.0.5, )"
+        }
+      },
       "powerforge": {
         "type": "Project",
         "dependencies": {
           "NuGet.Configuration": "[7.9.0, )",
           "NuGet.Packaging": "[7.9.0, )",
-          "System.IO.Packaging": "[10.0.12, )",
-          "System.Reflection.MetadataLoadContext": "[10.0.12, )",
+          "System.IO.Packaging": "[10.0.13, )",
+          "System.Reflection.MetadataLoadContext": "[10.0.13, )",
           "System.Security.Cryptography.Pkcs": "[10.0.13, )",
-          "System.Security.Cryptography.ProtectedData": "[10.0.12, )",
+          "System.Security.Cryptography.ProtectedData": "[10.0.13, )",
           "VirusTotalAnalyzer": "[1.0.0, )"
         }
       },
@@ -224,6 +244,8 @@
       "powerforgestudio.orchestrator": {
         "type": "Project",
         "dependencies": {
+          "DBAClientX.Core": "[1.0.12, )",
+          "DBAClientX.SQLite": "[1.0.12, )",
           "Microsoft.Data.Sqlite": "[10.0.13, )",
           "PowerForge": "[3.0.171, )",
           "PowerForgeStudio.Domain": "[1.0.0, )"
