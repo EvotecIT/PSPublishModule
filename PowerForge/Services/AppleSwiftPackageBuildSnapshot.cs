@@ -101,6 +101,7 @@ internal sealed class AppleSwiftPackageBuildSnapshot : IDisposable
             var derivedDataPath = Path.Combine(root, "ResolverDerivedData");
             Directory.CreateDirectory(sourcePackagesPath);
             Directory.CreateDirectory(derivedDataPath);
+            Directory.CreateDirectory(Path.Combine(root, "ArchiveDerivedData"));
             var initializedRootIdentity = ExistingFilePathIdentityResolver.ResolveDirectoryStatus(root).MutationIdentity;
             rootMonitor = new AppleReleaseSourceMutationMonitor(
                 parent,
@@ -110,13 +111,20 @@ internal sealed class AppleSwiftPackageBuildSnapshot : IDisposable
                 enableImmediately: false,
                 exactPath: root,
                 includeExactPathDescendants: false,
+                // Use the same synchronously drainable native boundary as package inputs.
+                // FileSystemWatcher offers no flush for delayed macOS setup notifications.
                 useNativeMacOSObserver: true);
-            // macOS can deliver our directory creation/chmod notifications after subscription.
-            // Drain those before the resolver starts, while binding both physical identity and
-            // metadata so an actual replacement or chmod during initialization cannot be accepted.
+            // FSEvents may deliver this directory's own create/chmod notifications after
+            // subscription. Drain them during setup, while binding the ORIGINAL directory
+            // and its private permissions, then arm before any resolver process can start.
             rootMonitor.CaptureExpectedProducerOutput(() =>
             {
                 rootDirectory.ValidateUnchanged();
+#if NET8_0_OR_GREATER
+                if (!OperatingSystem.IsWindows() && File.GetUnixFileMode(root) !=
+                    (UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute))
+                    throw new InvalidOperationException("The private Swift package snapshot directory permissions changed during setup.");
+#endif
                 var currentIdentity = ExistingFilePathIdentityResolver.ResolveDirectoryStatus(root).MutationIdentity;
                 if (!currentIdentity.Equals(initializedRootIdentity, StringComparison.Ordinal))
                     throw new InvalidOperationException("The private Swift package snapshot directory changed during initialization.");

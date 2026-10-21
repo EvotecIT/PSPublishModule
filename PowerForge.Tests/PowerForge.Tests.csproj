@@ -11,7 +11,7 @@
     <!-- VSTest runs from external artifacts; preserve the repository SDK policy there. -->
     <None Include="..\global.json" Link="global.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="Never" />
     <PackageReference Include="coverlet.collector" Version="10.1.0" />
-    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.10.1" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.11.0" />
     <PackageReference Include="xunit" Version="2.9.3" />
     <PackageReference Include="xunit.runner.visualstudio" Version="4.0.1" />
   </ItemGroup>
@@ -52,6 +52,7 @@
     <None Update="Fixtures\PowerShellCompilationRegistryWorkflow\*.ps1" CopyToOutputDirectory="PreserveNewest" />
     <None Update="Fixtures\PowerShellCompilationInventoryWorkflow\*.ps1" CopyToOutputDirectory="PreserveNewest" />
     <None Update="Fixtures\PowerShellCompilationSavedStateWorkflow\*.ps1" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="Fixtures\SocialCards\*" CopyToOutputDirectory="PreserveNewest" />
     <None Update="Fixtures\PowerShellCompilationReservationWorkflow\*.psm1" CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\Benchmarks\PowerShellCompilation\Corpus\ExternalWorkflows\**\*"
           Link="Benchmarks\PowerShellCompilation\Corpus\ExternalWorkflows\%(RecursiveDir)%(Filename)%(Extension)"

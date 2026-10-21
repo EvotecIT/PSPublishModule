@@ -200,6 +200,25 @@ public static partial class WebApiDocsGenerator
         return $"{prefix}{returnType} {name}({string.Join(", ", parameters)})".Trim();
     }
 
+    private static string? BuildDelegateDeclaration(Type type, NullabilityInfoContext nullability)
+    {
+        if (type.BaseType != typeof(MulticastDelegate) || type.GetMethod("Invoke") is not { } invoke)
+            return null;
+        var returnType = GetAnnotatedTypeName(invoke.ReturnType, invoke.ReturnParameter, nullability);
+        var parameters = invoke.GetParameters().Select(parameter => BuildParameterSignature(parameter, nullability));
+        var name = StripGenericArity(type.Name);
+        if (type.IsGenericType)
+            name += "<" + string.Join(", ", type.GetGenericArguments().Select(argument =>
+                (argument.GenericParameterAttributes & GenericParameterAttributes.VarianceMask) switch
+                {
+                    GenericParameterAttributes.Covariant => "out " + argument.Name,
+                    GenericParameterAttributes.Contravariant => "in " + argument.Name,
+                    _ => argument.Name
+                })) + ">";
+        var returnPrefix = invoke.ReturnType.IsByRef ? "ref " : string.Empty;
+        return $"public delegate {returnPrefix}{returnType} {name}({string.Join(", ", parameters)});";
+    }
+
     private static string BuildParameterSignature(ParameterInfo parameter, NullabilityInfoContext nullability)
     {
         var prefix = parameter.IsOut ? "out " : parameter.ParameterType.IsByRef ? "ref " : string.Empty;
@@ -1013,7 +1032,8 @@ public static partial class WebApiDocsGenerator
             results.Add(new ApiParameterModel
             {
                 Name = paramName,
-                Type = type,
+                Type = FormatCSharpTypeName(type),
+                AnchorType = type,
                 Summary = summary
             });
         }

@@ -172,7 +172,7 @@ public sealed class ServiceInstallAdoptionProcessTests
                     if($null -ne $global:changes){throw 'A missing service must not be recreated with a fallback identity.'}
                     'ADOPTION_OK';return
                 }
-                $configPath=if($mode -eq 'new-gmsa-literal'){'D:\$1\$&\config.json'}else{'D:\New Default\config.json'}
+                $configPath=if($mode -eq 'new-gmsa-literal'){Join-Path $PSScriptRoot '$1\$&\config.json'}else{Join-Path $PSScriptRoot 'New Default\config.json'}
                 & (Join-Path $PSScriptRoot 'Install.ps1') @install -ConfigPath $configPath | Out-Null
                 if($null -eq $global:changes){throw 'No in-place update was performed.'}
                 if($mode -like 'new-gmsa*' -or $mode -eq 'change-gmsa'){
@@ -190,7 +190,7 @@ public sealed class ServiceInstallAdoptionProcessTests
                 }
                 $expected='"'+(Join-Path $PSScriptRoot 'fixture.exe')+'" --config="D:\Private Config\active.json" --custom retained --service-name "AdoptionFixture"'
                 if($mode -eq 'preserve-quoted-option'){$expected='"'+(Join-Path $PSScriptRoot 'fixture.exe')+'" --config="D:\Configs\active --service-name=Previous.json" --label "escaped \" --service-name=Decoy" --root "D:\Directory Path\\" --custom retained --service-name "AdoptionFixture"'}
-                if($mode -eq 'preserve-config-decoy'){$expected='"'+(Join-Path $PSScriptRoot 'fixture.exe')+'" --label "text --config=fake.json" --custom retained --config "D:\New Default\config.json" --service-name "AdoptionFixture"'}
+                if($mode -eq 'preserve-config-decoy'){$expected='"'+(Join-Path $PSScriptRoot 'fixture.exe')+'" --label "text --config=fake.json" --custom retained --config "'+$configPath+'" --service-name "AdoptionFixture"'}
                 if($mode -eq 'preserve-whole-equals'){$expected='"'+(Join-Path $PSScriptRoot 'fixture.exe')+'" "--config=D:\Private Config\active.json" --service-name "AdoptionFixture" --custom retained'}
                 if($mode -eq 'preserve-whole-space'){$expected='"'+(Join-Path $PSScriptRoot 'fixture.exe')+'" "--config" "D:\Private Config\active.json" --service-name "AdoptionFixture" --custom retained'}
                 if($global:changes.PathName -ne $expected){throw 'The new executable did not retain the active config and arguments.'}

@@ -45,6 +45,7 @@ public static partial class WebApiDocsGenerator
         public bool IsStatic { get; set; }
         public bool IsAbstract { get; set; }
         public bool IsSealed { get; set; }
+        internal string? DelegateDeclaration { get; set; }
         public List<string> OriginFiles { get; } = new();
         public List<ApiMemberModel> Methods { get; } = new();
         public List<ApiMemberModel> Constructors { get; } = new();

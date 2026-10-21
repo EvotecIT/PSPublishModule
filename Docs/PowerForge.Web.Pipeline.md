@@ -150,6 +150,10 @@ Notes:
 - `language: "pl"` builds a single language slice.
 - `languages: ["en","fr","de","es"]` builds a selected multi-language subset into one artifact.
 - `languageAsRoot: true` only applies to single-language domain-style builds (for example `example.pl` as Polish at `/`).
+- `socialCardsRequired: true` fails when an eligible generated social card cannot
+  be rendered, rather than deploying a default-image fallback. Install ImageMagick
+  (`magick` or `convert`) on Linux runners that generate PNG cards. This setting
+  can also be declared as `Social.SocialCardsRequired` in the site configuration.
 
 #### nav-export
 Exports a deterministic `site-nav.json` payload (including `surfaces` + `profiles`) from `site.json` + discovered content, without building HTML output.
@@ -309,6 +313,11 @@ Notes:
     - `socialAutoGenerate: true` enables per-page API social card PNG generation
     - `socialCardPath` sets output URL prefix (default `/assets/social/generated/api`)
     - `socialCardWidth` / `socialCardHeight` control generated card dimensions (default `1200x630`)
+    - `socialCardTheme` selects a named theme from the config's `Social.GeneratedCardThemes`, including its tokens, logo, and font files
+    - `socialCardTitle: "name"` uses the type or command name without a namespace or SEO suffix; `"seo"` preserves the full SEO title
+    - `socialCardsRequired: true` fails if a requested API card cannot be rendered; the site's `Social.SocialCardsRequired` also applies
+    - a theme with `Variant: "code-led"` shows the type declaration or first command syntax line in the image column, using `socialCard.fontMono`
+    - `socialCard.codeFontSize` and `socialCard.codeMaxLines` tune that code excerpt (25 px and six lines by default at `1200x630`)
   - `sourceRoot` / `sourceUrl` enable source links in the API docs (requires PDB)
   - `sourcePathPrefix` prepends a stable prefix to resolved source paths before URL token expansion (useful for mixed-repo or nested-source layouts)
 - `includeUndocumented` (default `true`) adds public types/members missing from XML docs

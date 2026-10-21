@@ -161,6 +161,12 @@ public sealed class WebApiDocsOptions
     public int SocialCardWidth { get; set; } = 1200;
     /// <summary>Height of generated API social card PNG files.</summary>
     public int SocialCardHeight { get; set; } = 630;
+    /// <summary>Optional named theme from the site's Social.GeneratedCardThemes. Requires SiteConfigPath.</summary>
+    public string? SocialCardTheme { get; set; }
+    /// <summary>API card title source: seo (default) or name (type/command name without namespace or SEO suffix).</summary>
+    public string? SocialCardTitle { get; set; }
+    /// <summary>Fail generation when a requested API social card cannot be rendered.</summary>
+    public bool SocialCardsRequired { get; set; }
     /// <summary>Optional brand URL override.</summary>
     public string? BrandUrl { get; set; }
     /// <summary>Optional brand icon URL override.</summary>
@@ -258,6 +264,9 @@ public sealed class WebApiDocsOptions
     /// Enables fallback code examples for PowerShell commands when help XML does not provide examples.
     /// </summary>
     public bool GeneratePowerShellFallbackExamples { get; set; } = true;
+
+    /// <summary>Show example provenance badges in generated HTML. Defaults to false for published references.</summary>
+    public bool ShowExampleOrigins { get; set; }
     /// <summary>
     /// Optional path to PowerShell example scripts (file or directory). When omitted, generator probes common module paths.
     /// </summary>
@@ -360,8 +369,6 @@ public static partial class WebApiDocsGenerator
         ".filter-button",
         ".member-card",
         ".member-signature",
-        ".example-origin",
-        ".example-origin-badge",
         ".example-media-meta",
         ".member-toggle input",
         ".member-header pre.member-signature",
@@ -369,6 +376,7 @@ public static partial class WebApiDocsGenerator
         ".member-card pre::-webkit-scrollbar-track",
         ".member-card pre::-webkit-scrollbar-thumb"
     };
+    private static readonly string[] RequiredSelectorsDocsExampleOrigins = { ".example-origin", ".example-origin-badge" };
     private static readonly string[] RequiredSelectorsDocsSuite =
     {
         ".api-suite-switcher",

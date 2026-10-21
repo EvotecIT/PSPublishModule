@@ -36,7 +36,7 @@ public sealed class AppleSwiftPackageBuildSnapshotTests
                 snapshot.ValidateUnchanged();
             });
             var parentObservedChange = error.Message.Contains("private Swift package snapshot directory changed", StringComparison.OrdinalIgnoreCase);
-            var childLostRoot = error.Message.StartsWith("The materialized Swift package root mutation monitor failed;", StringComparison.Ordinal) &&
+            var childLostRoot = error.Message.StartsWith("The materialized Swift package root mutation monitor failed", StringComparison.Ordinal) &&
                 error.InnerException is IOException;
             Assert.True(parentObservedChange || childLostRoot, error.ToString());
         }
@@ -241,6 +241,54 @@ public sealed class AppleSwiftPackageBuildSnapshotTests
         File.WriteAllText(Path.Combine(version.FullName, "Engine"), "approved binary");
         Directory.CreateSymbolicLink(Path.Combine(version.Parent!.FullName, "Current"), "A");
         File.CreateSymbolicLink(Path.Combine(version.Parent.Parent!.FullName, "Engine"), "Versions/Current/Engine");
+    }
+
+    [Fact]
+    public async Task Snapshot_roots_allow_concurrent_package_materialization_without_false_mutations()
+    {
+        if (!OperatingSystem.IsMacOS()) return;
+        var fixture = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForgeTests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            await Task.WhenAll(Enumerable.Range(0, 4).Select(index => Task.Run(async () =>
+            {
+                var project = Directory.CreateDirectory(Path.Combine(fixture.FullName, index.ToString()));
+                using var snapshot = await CreateSnapshot(project.FullName, new ArtifactRunner(MaterializeFramework));
+                // Derived output is outside the immutable package input. Sibling snapshots may
+                // be created concurrently under the shared parent without changing this root.
+                Directory.CreateDirectory(snapshot.ArchiveDerivedDataPath);
+                File.WriteAllText(Path.Combine(snapshot.ArchiveDerivedDataPath, "build.log"), "build output");
+                snapshot.ValidateUnchanged();
+            })));
+        }
+        finally { fixture.Delete(recursive: true); }
+    }
+
+    [Theory]
+    [InlineData("rename-restore")]
+    [InlineData("permissions-restore")]
+    public async Task Snapshot_root_rejects_transient_mutations_even_when_identity_is_restored(string mutation)
+    {
+        if (!OperatingSystem.IsMacOS()) return;
+        var fixture = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForgeTests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            using var snapshot = await CreateSnapshot(fixture.FullName, new ArtifactRunner(MaterializeFramework));
+            if (mutation == "rename-restore")
+            {
+                var moved = snapshot.RootPath + "-moved";
+                Directory.Move(snapshot.RootPath, moved);
+                Directory.Move(moved, snapshot.RootPath);
+            }
+            else
+            {
+                var original = File.GetUnixFileMode(snapshot.RootPath);
+                File.SetUnixFileMode(snapshot.RootPath, original | UnixFileMode.GroupRead);
+                File.SetUnixFileMode(snapshot.RootPath, original);
+            }
+            Assert.Throws<InvalidOperationException>(snapshot.ValidateUnchanged);
+        }
+        finally { fixture.Delete(recursive: true); }
     }
 
     private static void ReportNativeChange(AppleSwiftPackageBuildSnapshot snapshot, string path, uint flags)

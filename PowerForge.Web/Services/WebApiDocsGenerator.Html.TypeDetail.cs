@@ -51,12 +51,11 @@ public static partial class WebApiDocsGenerator
             if (type.IsAbstract) flags.Add("abstract");
             if (type.IsSealed) flags.Add("sealed");
         }
-        sb.AppendLine(BuildTypeMetaHtml(type, baseUrl, slugMap, isPowerShellCommand, sourceAction, flags, labels).TrimEnd());
-
         var detailBody = new HtmlFragmentBuilder(initialIndent: 6);
+        detailBody.AppendRaw(BuildTypeMetaHtml(type, baseUrl, slugMap, isPowerShellCommand, sourceAction, flags, labels));
         if (isPowerShellCommand)
         {
-            AppendPowerShellCommandBody(detailBody, type, baseUrl, slugMap, usage, relatedContent, codeLanguage);
+            AppendPowerShellCommandBody(detailBody, type, baseUrl, slugMap, usage, relatedContent, codeLanguage, labels.ShowExampleOrigins);
             sb.Append(BuildTypeDetailShellHtml(detailBody.ToString(), toc));
             sb.AppendLine("    </article>");
             return sb.ToString().TrimEnd();
@@ -158,7 +157,7 @@ public static partial class WebApiDocsGenerator
             using (detailBody.Indent())
             {
                 detailBody.Line("<h2>Examples</h2>");
-                AppendExamples(detailBody, type.Examples, baseUrl, slugMap, codeLanguage);
+                AppendExamples(detailBody, type.Examples, baseUrl, slugMap, codeLanguage, labels.ShowExampleOrigins);
             }
             detailBody.Line("</section>");
         }
@@ -223,15 +222,15 @@ public static partial class WebApiDocsGenerator
         html.Line("<header class=\"type-header ev-docs-header\" id=\"overview\">");
         using (html.Indent())
         {
-            // The breadcrumb already names the section; PowerShell pages skip the repeated eyebrow.
-            if (labels.ShowTypeEyebrow)
-                html.Line($"<p class=\"ev-eyebrow\">{System.Web.HttpUtility.HtmlEncode(labels.SectionLabel)}</p>");
+            // The breadcrumb already names the reference section.
             html.Line("<div class=\"type-title-row\">");
             using (html.Indent())
             {
                 html.Line($"<span class=\"type-badge {NormalizeKind(type.Kind)}\">{System.Web.HttpUtility.HtmlEncode(kindLabel)}</span>");
                 AppendFreshnessBadge(html, type.Freshness, "type-freshness-badge");
                 html.Line($"<h1>{System.Web.HttpUtility.HtmlEncode(displayName)}</h1>");
+                if (!isPowerShellCommand && !string.IsNullOrWhiteSpace(type.Namespace))
+                    html.Line($"<p class=\"type-namespace\"><code>{System.Web.HttpUtility.HtmlEncode(type.Namespace)}</code></p>");
             }
             html.Line("</div>");
             AppendAliasInlineMeta(html, type, "type-header-meta", "type-header-aliases");
@@ -259,7 +258,7 @@ public static partial class WebApiDocsGenerator
         ApiDocsChromeLabels labels)
     {
         var html = new HtmlFragmentBuilder(initialIndent: 6);
-        html.Line("<div class=\"type-meta\">");
+        html.Line("<dl class=\"type-meta\">");
         using (html.Indent())
         {
             AppendTypeMetaHtmlRow(html, labels.GroupLabel, $"<code>{System.Web.HttpUtility.HtmlEncode(type.Namespace)}</code>", labels.IsPowerShell ? "type-meta-module" : null);
@@ -332,7 +331,7 @@ public static partial class WebApiDocsGenerator
                 "type-meta-attributes",
                 value => $"<code>{System.Web.HttpUtility.HtmlEncode(value)}</code>");
         }
-        html.Line("</div>");
+        html.Line("</dl>");
         return html.ToString();
     }
 
@@ -345,8 +344,8 @@ public static partial class WebApiDocsGenerator
         html.Line($"<div class=\"type-meta-row{classSuffix}\">");
         using (html.Indent())
         {
-            html.Line($"<span class=\"type-meta-label\">{System.Web.HttpUtility.HtmlEncode(label)}</span>");
-            html.Line(valueHtml);
+            html.Line($"<dt class=\"type-meta-label\">{System.Web.HttpUtility.HtmlEncode(label)}</dt>");
+            html.Line($"<dd>{valueHtml}</dd>");
         }
         html.Line("</div>");
     }
@@ -372,8 +371,8 @@ public static partial class WebApiDocsGenerator
         html.Line($"<div class=\"type-meta-row {rowClass}\">");
         using (html.Indent())
         {
-            html.Line($"<span class=\"type-meta-label\">{System.Web.HttpUtility.HtmlEncode(label)}</span>");
-            html.Line($"<div class=\"{listClass}\">");
+            html.Line($"<dt class=\"type-meta-label\">{System.Web.HttpUtility.HtmlEncode(label)}</dt>");
+            html.Line($"<dd class=\"{listClass}\">");
             using (html.Indent())
             {
                 foreach (var item in items)
@@ -381,7 +380,7 @@ public static partial class WebApiDocsGenerator
                     html.Line(item);
                 }
             }
-            html.Line("</div>");
+            html.Line("</dd>");
         }
         html.Line("</div>");
     }
@@ -482,27 +481,28 @@ public static partial class WebApiDocsGenerator
             html.Line("<div class=\"member-filter\">");
             using (html.Indent())
             {
-                html.Line($"<label for=\"api-member-filter\">{System.Web.HttpUtility.HtmlEncode(memberFilterLabel)}</label>");
-                html.Line($"<input id=\"api-member-filter\" type=\"text\" placeholder=\"{System.Web.HttpUtility.HtmlAttributeEncode(memberFilterPlaceholder)}\" />");
+                html.Line($"<label class=\"sr-only\" for=\"api-member-filter\">{System.Web.HttpUtility.HtmlEncode(memberFilterLabel)}</label>");
+                html.Line("<span class=\"sidebar-search-icon member-filter-icon\" aria-hidden=\"true\"><svg viewBox=\"0 0 24 24\" width=\"16\" height=\"16\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><circle cx=\"11\" cy=\"11\" r=\"8\"/><path d=\"M21 21l-4.35-4.35\"/></svg></span>");
+                html.Line($"<input id=\"api-member-filter\" type=\"search\" placeholder=\"{System.Web.HttpUtility.HtmlAttributeEncode(memberFilterPlaceholder)}\" />");
             }
             html.Line("</div>");
 
-            html.Line("<div class=\"member-kind-filter\">");
+            html.Line("<div class=\"member-kind-filter\" role=\"group\" aria-label=\"Member kinds\">");
             using (html.Indent())
             {
-                html.Line($"<button class=\"member-kind active\" type=\"button\" data-member-kind=\"\">All ({totalMembers})</button>");
+                html.Line($"<button class=\"member-kind active\" type=\"button\" aria-pressed=\"true\" data-member-kind=\"\">All ({totalMembers})</button>");
                 if (type.Constructors.Count > 0)
-                    html.Line($"<button class=\"member-kind\" type=\"button\" data-member-kind=\"constructor\">Constructors ({type.Constructors.Count})</button>");
+                    html.Line($"<button class=\"member-kind\" type=\"button\" aria-pressed=\"false\" data-member-kind=\"constructor\">Constructors ({type.Constructors.Count})</button>");
                 if (type.Methods.Count > 0)
-                    html.Line($"<button class=\"member-kind\" type=\"button\" data-member-kind=\"method\">{System.Web.HttpUtility.HtmlEncode(methodSectionLabel)} ({type.Methods.Count})</button>");
+                    html.Line($"<button class=\"member-kind\" type=\"button\" aria-pressed=\"false\" data-member-kind=\"method\">{System.Web.HttpUtility.HtmlEncode(methodSectionLabel)} ({type.Methods.Count})</button>");
                 if (type.Properties.Count > 0)
-                    html.Line($"<button class=\"member-kind\" type=\"button\" data-member-kind=\"property\">Properties ({type.Properties.Count})</button>");
+                    html.Line($"<button class=\"member-kind\" type=\"button\" aria-pressed=\"false\" data-member-kind=\"property\">Properties ({type.Properties.Count})</button>");
                 if (type.Fields.Count > 0)
-                    html.Line($"<button class=\"member-kind\" type=\"button\" data-member-kind=\"field\">{System.Web.HttpUtility.HtmlEncode(type.Kind == "Enum" ? "Values" : "Fields")} ({type.Fields.Count})</button>");
+                    html.Line($"<button class=\"member-kind\" type=\"button\" aria-pressed=\"false\" data-member-kind=\"field\">{System.Web.HttpUtility.HtmlEncode(type.Kind == "Enum" ? "Values" : "Fields")} ({type.Fields.Count})</button>");
                 if (type.Events.Count > 0)
-                    html.Line($"<button class=\"member-kind\" type=\"button\" data-member-kind=\"event\">Events ({type.Events.Count})</button>");
+                    html.Line($"<button class=\"member-kind\" type=\"button\" aria-pressed=\"false\" data-member-kind=\"event\">Events ({type.Events.Count})</button>");
                 if (type.ExtensionMethods.Count > 0)
-                    html.Line($"<button class=\"member-kind\" type=\"button\" data-member-kind=\"extension\">Extensions ({type.ExtensionMethods.Count})</button>");
+                    html.Line($"<button class=\"member-kind\" type=\"button\" aria-pressed=\"false\" data-member-kind=\"extension\">Extensions ({type.ExtensionMethods.Count})</button>");
             }
             html.Line("</div>");
 
@@ -622,7 +622,9 @@ public static partial class WebApiDocsGenerator
             return;
 
         var collapsed = inheritedSection ? " collapsed" : string.Empty;
-        var idAttribute = string.IsNullOrWhiteSpace(sectionId) ? string.Empty : $" id=\"{sectionId}\"";
+        sectionId = string.IsNullOrWhiteSpace(sectionId) ? $"members-{memberKind}{(inheritedSection ? "-inherited" : string.Empty)}" : sectionId;
+        var idAttribute = $" id=\"{sectionId}\"";
+        var bodyId = $"{sectionId}-body";
         html.Line($"<section class=\"member-section{collapsed}\" data-kind=\"{memberKind}\"{idAttribute}>");
         using (html.Indent())
         {
@@ -630,7 +632,7 @@ public static partial class WebApiDocsGenerator
             using (html.Indent())
             {
                 html.Line($"<h2>{System.Web.HttpUtility.HtmlEncode(label)}</h2>");
-                html.Line("<button class=\"member-section-toggle\" type=\"button\" aria-label=\"Toggle section\">");
+                html.Line($"<button class=\"member-section-toggle\" type=\"button\" aria-label=\"Toggle {System.Web.HttpUtility.HtmlAttributeEncode(label)}\" aria-expanded=\"{(inheritedSection ? "false" : "true")}\" aria-controls=\"{bodyId}\">");
                 using (html.Indent())
                 {
                     html.Line("<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\">");
@@ -644,8 +646,8 @@ public static partial class WebApiDocsGenerator
             }
             html.Line("</div>");
 
-        var hidden = inheritedSection ? " hidden" : string.Empty;
-            html.Line($"<div class=\"member-section-body\"{hidden}>");
+            var hidden = inheritedSection ? " hidden" : string.Empty;
+            html.Line($"<div class=\"member-section-body\" id=\"{bodyId}\"{hidden}>");
             using (html.Indent())
             {
                 if (groupOverloads)
@@ -752,7 +754,7 @@ public static partial class WebApiDocsGenerator
             html.Line("<div class=\"member-header\">");
             using (html.Indent())
             {
-                html.Line(BuildMemberSignatureHtml(signature, sectionLabel, codeLanguage));
+                html.Line(BuildMemberSignatureHtml(signature, sectionLabel, codeLanguage, member));
                 html.Line($"<a class=\"member-anchor\" href=\"#{searchAnchor}\" aria-label=\"Link to {System.Web.HttpUtility.HtmlEncode(member.Name)}\">#</a>");
             }
             html.Line("</div>");
@@ -763,8 +765,6 @@ public static partial class WebApiDocsGenerator
             if (member.Source is not null)
                 html.Line($"<div class=\"member-source\">{RenderSourceLink(member.Source)}</div>");
 
-            if (!string.IsNullOrWhiteSpace(member.ReturnType) && (sectionLabel.Contains("Method") || memberKind == "extension"))
-                html.Line($"<div class=\"member-return\">Returns: <code>{System.Web.HttpUtility.HtmlEncode(member.ReturnType)}</code></div>");
 
             if (!string.IsNullOrWhiteSpace(inheritedNote))
             {
@@ -797,7 +797,7 @@ public static partial class WebApiDocsGenerator
 
             if (member.TypeParameters.Count > 0)
             {
-                html.Line("<h3>Type Parameters</h3>");
+                html.Line("<p class=\"member-subhead\">Type Parameters</p>");
                 html.Line("<dl class=\"typeparam-list\">");
                 using (html.Indent())
                 {
@@ -815,7 +815,7 @@ public static partial class WebApiDocsGenerator
             var isPowerShellSyntax = string.Equals(sectionLabel, "Syntax", StringComparison.OrdinalIgnoreCase);
             if (member.Parameters.Count > 0 && !isPowerShellSyntax)
             {
-                html.Line("<h3>Parameters</h3>");
+                html.Line("<p class=\"member-subhead\">Parameters</p>");
                 html.Line("<dl class=\"param-list\">");
                 using (html.Indent())
                 {
@@ -836,7 +836,7 @@ public static partial class WebApiDocsGenerator
 
             if (!string.IsNullOrWhiteSpace(member.ValueSummary))
             {
-                html.Line("<h3>Value</h3>");
+                html.Line("<p class=\"member-subhead\">Value</p>");
                 html.Line($"<p>{RenderLinkedText(member.ValueSummary, baseUrl, slugMap)}</p>");
             }
 
@@ -846,15 +846,27 @@ public static partial class WebApiDocsGenerator
                     html.Line($"<div class=\"member-value\">Value: <code>{System.Web.HttpUtility.HtmlEncode(member.Value)}</code></div>");
             }
 
-            if (!string.IsNullOrWhiteSpace(member.Returns) && !isPowerShellSyntax)
+            var isVoid = string.Equals(member.ReturnType, "void", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(member.ReturnType, "System.Void", StringComparison.OrdinalIgnoreCase);
+            if (!isPowerShellSyntax && !isVoid &&
+                (!string.IsNullOrWhiteSpace(member.Returns) ||
+                 (!string.IsNullOrWhiteSpace(member.ReturnType) && memberKind is "method" or "extension")))
             {
-                html.Line("<h3>Returns</h3>");
-                html.Line($"<p>{RenderLinkedText(member.Returns, baseUrl, slugMap)}</p>");
+                html.Line("<div class=\"member-returns\">");
+                using (html.Indent())
+                {
+                    html.Line("<p class=\"member-subhead\">Returns</p>");
+                    if (!string.IsNullOrWhiteSpace(member.ReturnType))
+                        html.Line($"<span class=\"member-returns-type\"><code>{LinkifyType(member.ReturnType, baseUrl, slugMap)}</code></span>");
+                    if (!string.IsNullOrWhiteSpace(member.Returns))
+                        html.Line($"<span class=\"member-returns-text\">{RenderLinkedText(member.Returns, baseUrl, slugMap)}</span>");
+                }
+                html.Line("</div>");
             }
 
             if (member.Exceptions.Count > 0)
             {
-                html.Line("<h3>Exceptions</h3>");
+                html.Line("<p class=\"member-subhead\">Exceptions</p>");
                 html.Line("<ul class=\"exception-list\">");
                 using (html.Indent())
                 {
@@ -870,13 +882,13 @@ public static partial class WebApiDocsGenerator
 
             if (member.Examples.Count > 0)
             {
-                html.Line("<h3>Examples</h3>");
+                html.Line("<p class=\"member-subhead\">Examples</p>");
                 AppendExamples(html, member.Examples, baseUrl, slugMap, codeLanguage);
             }
 
             if (member.SeeAlso.Count > 0)
             {
-                html.Line("<h3>See Also</h3>");
+                html.Line("<p class=\"member-subhead\">See Also</p>");
                 html.Line("<ul class=\"see-also-list\">");
                 using (html.Indent())
                 {
@@ -896,13 +908,14 @@ public static partial class WebApiDocsGenerator
         List<ApiExampleModel> examples,
         string baseUrl,
         IReadOnlyDictionary<string, string> slugMap,
-        string codeLanguage)
+        string codeLanguage,
+        bool showExampleOrigins = false)
     {
         if (sb is null)
             return;
 
         var html = new HtmlFragmentBuilder(initialIndent: 8);
-        AppendExamples(html, examples, baseUrl, slugMap, codeLanguage);
+        AppendExamples(html, examples, baseUrl, slugMap, codeLanguage, showExampleOrigins);
         if (!html.IsEmpty)
             sb.AppendLine(html.ToString().TrimEnd());
     }
@@ -912,7 +925,8 @@ public static partial class WebApiDocsGenerator
         List<ApiExampleModel> examples,
         string baseUrl,
         IReadOnlyDictionary<string, string> slugMap,
-        string codeLanguage)
+        string codeLanguage,
+        bool showExampleOrigins = false)
     {
         if (html is null || examples is null || examples.Count == 0)
             return;
@@ -920,7 +934,8 @@ public static partial class WebApiDocsGenerator
         string? lastOrigin = null;
         foreach (var example in examples)
         {
-            AppendExampleOriginBadge(html, example, ref lastOrigin);
+            if (showExampleOrigins)
+                AppendExampleOriginBadge(html, example, ref lastOrigin);
             if (string.Equals(example.Kind, "media", StringComparison.OrdinalIgnoreCase) && example.Media is not null)
             {
                 AppendExampleMedia(html, example.Media, baseUrl, slugMap);
@@ -934,7 +949,7 @@ public static partial class WebApiDocsGenerator
             }
             else if (string.Equals(example.Kind, "heading", StringComparison.OrdinalIgnoreCase))
             {
-                html.Line($"<h3 class=\"example-title\">{System.Web.HttpUtility.HtmlEncode(example.Text)}</h3>");
+                html.Line($"<h3 class=\"example-title\">{System.Web.HttpUtility.HtmlEncode(Regex.Replace(example.Text, @"^EXAMPLE(?=\s|$)", "Example", RegexOptions.CultureInvariant))}</h3>");
             }
             else
             {
@@ -1300,10 +1315,6 @@ public static partial class WebApiDocsGenerator
             $"<span class=\"param-meta-chip {(param.IsOptional ? "optional" : "required")}\">{(param.IsOptional ? "optional" : "required")}</span>"
         };
 
-        if (!string.IsNullOrWhiteSpace(param.Position))
-            chips.Add($"<span class=\"param-meta-chip\">position: {System.Web.HttpUtility.HtmlEncode(param.Position)}</span>");
-        if (!string.IsNullOrWhiteSpace(param.PipelineInput))
-            chips.Add($"<span class=\"param-meta-chip\">pipeline: {System.Web.HttpUtility.HtmlEncode(param.PipelineInput)}</span>");
         if (param.Aliases.Count > 0)
         {
             var aliases = string.Join(", ", param.Aliases
@@ -1325,7 +1336,7 @@ public static partial class WebApiDocsGenerator
         return chips.Count == 0 ? string.Empty : $" <span class=\"param-meta\">{string.Join(string.Empty, chips)}</span>";
     }
 
-    private static string BuildMemberSignatureHtml(string signature, string sectionLabel, string codeLanguage)
+    private static string BuildMemberSignatureHtml(string signature, string sectionLabel, string codeLanguage, ApiMemberModel member)
     {
         var encoded = System.Web.HttpUtility.HtmlEncode(signature);
         if (!string.Equals(sectionLabel, "Syntax", StringComparison.OrdinalIgnoreCase))
@@ -1334,8 +1345,13 @@ public static partial class WebApiDocsGenerator
         var language = string.IsNullOrWhiteSpace(codeLanguage)
             ? "powershell"
             : codeLanguage.Trim().ToLowerInvariant();
-        var languageClass = $"language-{language}";
-        return $"<pre class=\"member-signature {languageClass}\"><code class=\"{languageClass}\">{encoded}</code></pre>";
+        var commandName = string.IsNullOrWhiteSpace(member.DisplayName) ? member.Name : member.DisplayName;
+        var parts = BuildPowerShellSyntaxParts(commandName, member.Parameters, member.IncludesCommonParameters);
+        var lines = parts.Select((part, index) =>
+            $"<span class=\"{(index == 0 ? "syntax-command" : "syntax-parameter")}\">{System.Web.HttpUtility.HtmlEncode(part).Replace("|", "|<wbr>", StringComparison.Ordinal)}</span>");
+        // This is a structured help synopsis, not executable code. Language classes let
+        // host highlighters replace these spans and destroy the parameter-group layout.
+        return $"<pre class=\"member-signature powershell-syntax\" data-language=\"{System.Web.HttpUtility.HtmlAttributeEncode(language)}\"><code>{string.Join("\n", lines)}</code></pre>";
     }
 
     private static string RenderPowerShellPossibleValues(IReadOnlyList<string> values)

@@ -1,0 +1,287 @@
+using ImageMagick;
+using PowerForge.Web;
+using System.Xml.Linq;
+
+namespace PowerForge.Tests;
+
+public sealed class WebSocialCardRenderingTests : IDisposable
+{
+    private readonly string _root = Path.Combine(Path.GetTempPath(), "pf-social-render-" + Guid.NewGuid().ToString("N"));
+
+    public WebSocialCardRenderingTests() => Directory.CreateDirectory(_root);
+    public void Dispose() => Directory.Delete(_root, recursive: true);
+
+    [Fact]
+    public void ConfiguredFonts_RenderExactFileWithoutInstallation_AndRejectUnavailableFamilies()
+    {
+        var fontPath = Path.Combine(AppContext.BaseDirectory, "Fixtures", "SocialCards", "SpaceGrotesk-Bold.ttf");
+        File.Copy(fontPath, Path.Combine(_root, "display.ttf"));
+        var fonts = WebSocialCardGenerator.ResolveFontFiles(new[] { new SocialCardFontSpec { Family = "Fixture Display", Path = "display.ttf", Weight = "100 800" } }, _root);
+        var options = Options();
+        options.VariantKey = "code-led";
+        options.Code = "public static class Terminal";
+        options.SiteAddress = "example.test";
+        options.ThemeTokens = Tokens(("fontDisplay", "Fixture Display"), ("fontBody", "Fixture Display"));
+        options.Fonts = fonts;
+        var svg = WebSocialCardGenerator.RenderSvg(options);
+        Assert.Contains("Fixture Display", svg, StringComparison.Ordinal);
+        if (WebSocialCardGenerator.IsPngRenderingAvailable())
+        {
+            var exactFile = WebSocialCardGenerator.RenderPng(options);
+            Assert.NotNull(exactFile);
+            using var rendered = new MagickImage(exactFile);
+            using var pixels = rendered.GetPixels();
+            int LightPixels(int left, int top, int right, int bottom)
+            {
+                var count = 0;
+                for (var y = top; y < bottom; y++)
+                    for (var x = left; x < right; x++)
+                    {
+                        var color = pixels.GetPixel(x, y).ToColor()!;
+                        if (color.R > 160 && color.G > 160 && color.B > 160)
+                            count++;
+                    }
+                return count;
+            }
+            Assert.True(LightPixels(115, 50, 400, 110) > 80, "The configured font must retain the brand identity row.");
+            Assert.True(LightPixels(60, 550, 400, 590) > 50, "The configured font must retain the footer.");
+            options.Fonts = null;
+            var fallback = WebSocialCardGenerator.RenderPng(options);
+            Assert.NotNull(fallback);
+            Assert.False(exactFile.AsSpan().SequenceEqual(fallback), "The declared uninstalled font must change the raster output.");
+        }
+        options.Fonts = fonts;
+        options.ThemeTokens = Tokens(("fontDisplay", "Unavailable Fixture Font, sans-serif"));
+        Assert.Contains("Unavailable Fixture Font", Assert.Throws<InvalidOperationException>(() => WebSocialCardGenerator.RenderPng(options)).Message);
+        options.ThemeTokens = new Dictionary<string, object?> { ["font"] = new Dictionary<string, object?> { ["display"] = "Unavailable Theme Font, sans-serif" } };
+        Assert.Contains("Unavailable Theme Font", Assert.Throws<InvalidOperationException>(() => WebSocialCardGenerator.RenderPng(options)).Message);
+    }
+
+    [Theory]
+    [InlineData("reference", 0.6)]
+    [InlineData("shelf", 0.5)]
+    public void ConfiguredFonts_PreserveFooterTextOpacity(string variant, double opacity)
+    {
+        if (!WebSocialCardGenerator.IsPngRenderingAvailable()) return;
+        File.Copy(Path.Combine(AppContext.BaseDirectory, "Fixtures", "SocialCards", "SpaceGrotesk-Bold.ttf"), Path.Combine(_root, "footer.ttf"));
+        var options = Options();
+        options.VariantKey = variant;
+        options.StyleKey = "api";
+        options.FooterLabel = "/readable-footer";
+        options.Fonts = WebSocialCardGenerator.ResolveFontFiles(new[] { new SocialCardFontSpec { Family = "Fixture Footer", Path = "footer.ttf", Weight = 500 } }, _root);
+        options.ThemeTokens = Tokens(("fontFooter", "Fixture Footer"));
+        var svg = XDocument.Parse(WebSocialCardGenerator.RenderSvg(options));
+        var text = svg.Descendants().Single(element => element.Name.LocalName == "text" && element.Value == options.FooterLabel);
+        var foreground = new MagickColor(text.Attribute("fill")!.Value);
+        Assert.Equal(opacity, double.Parse(text.Attribute("fill-opacity")!.Value, System.Globalization.CultureInfo.InvariantCulture));
+        using var image = new MagickImage(WebSocialCardGenerator.RenderPng(options)!);
+        options.FooterLabel = "/";
+        using var background = new MagickImage(WebSocialCardGenerator.RenderPng(options)!);
+        using var pixels = image.GetPixels();
+        using var backgroundPixels = background.GetPixels();
+        double maximumAlpha = 0;
+        var changedPixels = 0;
+        for (var y = 0; y < image.Height; y++)
+            for (var x = 0; x < image.Width; x++)
+            {
+                var actual = pixels.GetPixel(x, y).ToColor()!;
+                var backdrop = backgroundPixels.GetPixel(x, y).ToColor()!;
+                var difference = (double)actual.R - backdrop.R;
+                var contrast = (double)foreground.R - backdrop.R;
+                if (difference <= 5 || contrast <= 50) continue;
+                changedPixels++;
+                maximumAlpha = Math.Max(maximumAlpha, difference / contrast);
+            }
+        Assert.True(changedPixels > 50, "The configured footer must be visible.");
+        Assert.InRange(maximumAlpha, opacity - 0.03, opacity + 0.03);
+    }
+
+    [Fact]
+    public void ConfiguredFonts_MissingInvalidOrUnsupportedFiles_FailLoudly_AndContentChangesInvalidateCard()
+    {
+        var declaration = new SocialCardFontSpec { Family = "Fixture Display", Path = "missing.ttf", Weight = 700 };
+        Assert.Contains("not found", Assert.Throws<InvalidOperationException>(() => WebSocialCardGenerator.ResolveFontFiles(new[] { declaration }, _root)).Message);
+        File.WriteAllText(Path.Combine(_root, "invalid.ttf"), "not a font");
+        declaration.Path = "invalid.ttf";
+        var options = Options();
+        options.Fonts = WebSocialCardGenerator.ResolveFontFiles(new[] { declaration }, _root);
+        options.ThemeTokens = Tokens(("fontDisplay", "Fixture Display"));
+        Assert.Contains("could not be rendered", Assert.Throws<InvalidOperationException>(() => WebSocialCardGenerator.RenderPng(options)).Message);
+        var first = options.Fonts[0].Fingerprint;
+        File.WriteAllText(Path.Combine(_root, "invalid.ttf"), "different font bytes");
+        Assert.NotEqual(first, WebSocialCardGenerator.ResolveFontFiles(new[] { declaration }, _root)[0].Fingerprint);
+        declaration.Path = "../outside.ttf";
+        Assert.Contains("site root", Assert.Throws<InvalidOperationException>(() => WebSocialCardGenerator.ResolveFontFiles(new[] { declaration }, _root)).Message);
+        File.WriteAllText(Path.Combine(_root, "web.woff2"), "web font");
+        declaration.Path = "web.woff2";
+        Assert.Contains("TTF or OTF", Assert.Throws<InvalidOperationException>(() => WebSocialCardGenerator.ResolveFontFiles(new[] { declaration }, _root)).Message);
+    }
+
+    [Fact]
+    public void ConfiguredFonts_DoNotTurnArtworkFailuresIntoFontFailures()
+    {
+        if (!WebSocialCardGenerator.IsPngRenderingAvailable()) return;
+        var options = Options();
+        options.VariantKey = "split";
+        options.Fonts = WebSocialCardGenerator.ResolveFontFiles(new[] { new SocialCardFontSpec
+        {
+            Family = "Fixture Display", Path = "Fixtures/SocialCards/SpaceGrotesk-Bold.ttf", Weight = 700
+        } }, AppContext.BaseDirectory);
+        options.ThemeTokens = Tokens(("fontDisplay", "Fixture Display"));
+        const string invalidArtwork = "<svg xmlns=\"http://www.w3.org/2000/svg\"><rect width=\"20\" height=\"20\"/></svg>";
+        options.InlineImageDataUri = "data:image/svg+xml;base64," + Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(invalidArtwork));
+        Assert.Null(WebSocialCardGenerator.RenderPng(options));
+    }
+
+    [Theory]
+    [InlineData("cover", "left top", "xMinYMin slice")]
+    [InlineData("contain", "right bottom", "xMaxYMax meet")]
+    public void SplitLayout_UsesFullBleedColumnAndConfiguredFitAnchor(string fit, string anchor, string expected)
+    {
+        var options = Options();
+        options.VariantKey = "split";
+        options.InlineImageDataUri = TestImage();
+        options.ThemeTokens = Tokens(("imageShare", 0.48), ("imageFit", fit), ("imageAnchor", anchor), ("imagePadding", 0));
+        var svg = XDocument.Parse(WebSocialCardGenerator.RenderSvg(options));
+        var media = svg.Descendants().Single(element => element.Name.LocalName == "image" && element.Attribute("clip-path")?.Value == "url(#splitMediaClip)");
+        Assert.Equal("624", media.Attribute("x")!.Value);
+        Assert.Equal("0", media.Attribute("y")!.Value);
+        Assert.Equal("576", media.Attribute("width")!.Value);
+        Assert.Equal("630", media.Attribute("height")!.Value);
+        Assert.Equal(expected, media.Attribute("preserveAspectRatio")!.Value);
+        if (WebSocialCardGenerator.IsPngRenderingAvailable())
+        {
+            using var image = new MagickImage(WebSocialCardGenerator.RenderPng(options)!);
+            Assert.Equal(1200u, image.Width);
+            Assert.Equal(630u, image.Height);
+            // Top-left cover keeps the red half; bottom-right contain aligns the image to the bottom edge.
+            var pixels = image.GetPixels();
+            var corner = pixels.GetPixel(630, fit == "cover" ? 3 : 620).ToColor()!;
+            Assert.True(corner.R > corner.B, "The anchored red half should be visible at the expected image edge.");
+        }
+    }
+
+    [Fact]
+    public void ConciseText_TruncatesAtWordBoundary_AndFitsTitleBeforeExceedingTwoLines()
+    {
+        Assert.Equal(new[] { "arrays and…" }, WebSocialCardGenerator.WrapWords("arrays and groups with PowerShell", 14, 1));
+        var options = Options();
+        options.Title = "Build readable console tables and live dashboards";
+        options.InlineImageDataUri = TestImage();
+        options.Fonts = WebSocialCardGenerator.ResolveFontFiles(new[] { new SocialCardFontSpec
+        {
+            Family = "Fixture Display", Path = "Fixtures/SocialCards/SpaceGrotesk-Bold.ttf", Weight = 700
+        } }, AppContext.BaseDirectory);
+        options.ThemeTokens = Tokens(("fontDisplay", "Fixture Display"), ("panelTitleFontSize", 64));
+        options.TextFit = true;
+        var svg = XDocument.Parse(WebSocialCardGenerator.RenderSvg(options));
+        var titleLines = svg.Descendants().Where(element => element.Name.LocalName == "text" && element.Attribute("font-weight")?.Value == "800" &&
+            int.TryParse(element.Attribute("y")?.Value, out var y) && y > 180).ToArray();
+        Assert.InRange(titleLines.Length, 1, 2);
+        Assert.InRange(int.Parse(titleLines[0].Attribute("font-size")!.Value, System.Globalization.CultureInfo.InvariantCulture), 48, 63);
+    }
+
+    [Theory]
+    [InlineData("WebSocialCardGeneratorRenderOptions", 1, "WebSoci…")]
+    [InlineData("Before WebSocialCardGeneratorRenderOptions", 2, "Before|WebSoci…")]
+    [InlineData("Terminal extra", 1, "Termina…")]
+    [InlineData("😀😀😀😀😀", 1, "😀😀😀…")]
+    [InlineData("e\u0301e\u0301e\u0301e\u0301e\u0301", 1, "e\u0301e\u0301e\u0301…")]
+    public void ConciseText_PreservesOverlongTokenPrefixes_AndUnicodeBoundaries(string text, int lines, string expected)
+        => Assert.Equal(expected.Split('|'), WebSocialCardGenerator.WrapWords(text, 8, lines));
+
+    [Theory]
+    [InlineData("split")]
+    [InlineData("code-led")]
+    public void LongApiIdentifiers_RetainVisibleHeadlineAtTheTitleFloor(string variant)
+    {
+        var options = Options();
+        options.VariantKey = variant;
+        options.Title = "WebSocialCardGeneratorRenderOptions";
+        options.InlineImageDataUri = TestImage();
+        options.Fonts = WebSocialCardGenerator.ResolveFontFiles(new[] { new SocialCardFontSpec
+        {
+            Family = "Fixture Display", Path = "Fixtures/SocialCards/SpaceGrotesk-Bold.ttf", Weight = 700
+        } }, AppContext.BaseDirectory);
+        options.ThemeTokens = Tokens(("fontDisplay", "Fixture Display"));
+        var document = XDocument.Parse(WebSocialCardGenerator.RenderSvg(options));
+        var title = document.Descendants().Single(element => element.Name.LocalName == "text" && element.Attribute("font-weight")?.Value == "800" &&
+            int.TryParse(element.Attribute("y")?.Value, out var y) && y > 180);
+        Assert.StartsWith("WebSocial", title.Value);
+        Assert.EndsWith("…", title.Value);
+        Assert.Equal("48", title.Attribute("font-size")!.Value);
+        if (WebSocialCardGenerator.IsPngRenderingAvailable())
+        {
+            using var image = new MagickImage(WebSocialCardGenerator.RenderPng(options)!);
+            Assert.Equal(1200u, image.Width);
+            Assert.Equal(630u, image.Height);
+        }
+    }
+
+    [Fact]
+    public void SplitText_PreservesHeadlineFloor_AndFitsRegularMutedDescriptionFirst()
+    {
+        var options = Options();
+        options.VariantKey = "split";
+        options.TextFit = true;
+        options.Title = "Everyday output in one line. The monster when you need it.";
+        options.Description = "Readable PowerShell output in one line with tables, live dashboards, menus and forms when you need them.";
+        options.Fonts = WebSocialCardGenerator.ResolveFontFiles(new[] { new SocialCardFontSpec
+        {
+            Family = "Fixture Display", Path = "Fixtures/SocialCards/SpaceGrotesk-Bold.ttf", Weight = 700
+        } }, AppContext.BaseDirectory);
+        options.ThemeTokens = Tokens(("titleFontSize", 56), ("accent", "#123456"), ("backgroundStart", "#101010"),
+            ("surface", "#202020"), ("textPrimary", "#ffffff"), ("textSecondary", "#9ba6b6"), ("fontDisplay", "Fixture Display"));
+        var svg = XDocument.Parse(WebSocialCardGenerator.RenderSvg(options));
+        var text = svg.Descendants().Where(element => element.Name.LocalName == "text").ToArray();
+        var titles = text.Where(element => element.Attribute("font-weight")?.Value == "800" &&
+            int.TryParse(element.Attribute("y")?.Value, out var y) && y > 180).ToArray();
+        Assert.InRange(titles.Length, 1, 2);
+        Assert.All(titles, line => Assert.Equal("48", line.Attribute("font-size")?.Value));
+        Assert.EndsWith("…", titles[^1].Value);
+        var descriptions = text.Where(element => element.Attribute("font-weight")?.Value == "400").ToArray();
+        Assert.InRange(descriptions.Length, 1, 2);
+        Assert.All(descriptions, line =>
+        {
+            Assert.Equal("20", line.Attribute("font-size")?.Value);
+            Assert.Equal("#9ba6b6", line.Attribute("fill")?.Value);
+        });
+        options.Title = "The monster when you need it.";
+        options.Description = "Everyday output in one line.";
+        svg = XDocument.Parse(WebSocialCardGenerator.RenderSvg(options));
+        Assert.All(svg.Descendants().Where(element => element.Attribute("font-weight")?.Value == "800" &&
+                int.TryParse(element.Attribute("y")?.Value, out var y) && y > 180),
+            line => Assert.Equal("56", line.Attribute("font-size")?.Value));
+    }
+
+    [Fact]
+    public void CodeLedLayout_RendersSignatureWithMonoTheme_AndNoReferenceWatermark()
+    {
+        var options = Options();
+        options.Title = "Terminal";
+        options.VariantKey = "code-led";
+        options.Code = "public static class Terminal";
+        options.ThemeTokens = Tokens(("fontMono", "Fixture Mono"), ("accent", "#123456"), ("accentSoft", "#123456"),
+            ("backgroundStart", "#101010"), ("surface", "#202020"), ("textPrimary", "#ffffff"));
+        var svg = XDocument.Parse(WebSocialCardGenerator.RenderSvg(options));
+        var code = svg.Descendants().Where(element => element.Name.LocalName == "text" && element.Attribute("font-family")?.Value == "Fixture Mono").ToArray();
+        Assert.Contains(code, element => element.Value.Contains("public static class", StringComparison.Ordinal));
+        Assert.Contains(code, element => element.Value.Contains("Terminal", StringComparison.Ordinal));
+        Assert.Contains(code, element => element.Attribute("fill")?.Value == "#123456");
+        Assert.DoesNotContain(svg.Descendants(), element => element.Name.LocalName == "text" && element.Attribute("font-size")?.Value == "120");
+    }
+
+    private static WebSocialCardGenerator.SocialCardRenderOptions Options() => new()
+    {
+        Title = "Terminal", Description = "Build readable console output.", Eyebrow = "Example", Badge = "DOCS", VariantKey = "panel"
+    };
+
+    private static Dictionary<string, object?> Tokens(params (string Key, object? Value)[] pairs)
+        => new() { ["socialCard"] = pairs.ToDictionary(pair => pair.Key, pair => pair.Value) };
+
+    private static string TestImage()
+    {
+        const string svg = "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"1000\" height=\"200\"><rect width=\"500\" height=\"200\" fill=\"red\"/><rect x=\"500\" width=\"500\" height=\"200\" fill=\"blue\"/></svg>";
+        return "data:image/svg+xml;base64," + Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(svg));
+    }
+}

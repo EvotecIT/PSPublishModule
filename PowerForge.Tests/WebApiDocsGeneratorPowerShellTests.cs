@@ -75,6 +75,7 @@ public class WebApiDocsGeneratorPowerShellTests
             var outputPath = Path.Combine(root, "_site", "api", "powershell");
             var options = new WebApiDocsOptions
             {
+                ShowExampleOrigins = true,
                 Type = ApiDocsType.PowerShell,
                 HelpPath = helpPath,
                 OutputPath = outputPath,
@@ -131,7 +132,7 @@ public class WebApiDocsGeneratorPowerShellTests
             var html = File.ReadAllText(htmlPath);
             Assert.Contains("type-examples", html, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("New-SampleCmdlet -Name", html, StringComparison.Ordinal);
-            Assert.Contains("<pre class=\"member-signature language-powershell\"><code class=\"language-powershell\">", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("<pre class=\"member-signature powershell-syntax\" data-language=\"powershell\"><code>", html, StringComparison.OrdinalIgnoreCase);
             // Code sits directly between the tags so <pre> renders no blank first line or trailing indentation line.
             Assert.Contains("<pre class=\"language-powershell example-code-block\"><code class=\"language-powershell\">New-SampleCmdlet -Name &quot;Demo&quot;</code></pre>", html, StringComparison.Ordinal);
             Assert.Contains("window.Prism=window.Prism||{};window.Prism.manual=true;", html, StringComparison.Ordinal);
@@ -1095,6 +1096,7 @@ public class WebApiDocsGeneratorPowerShellTests
             var outputPath = Path.Combine(root, "_site", "api", "powershell");
             var options = new WebApiDocsOptions
             {
+                ShowExampleOrigins = true,
                 Type = ApiDocsType.PowerShell,
                 HelpPath = root,
                 OutputPath = outputPath,
@@ -1304,6 +1306,7 @@ public class WebApiDocsGeneratorPowerShellTests
             var outputPath = Path.Combine(root, "_site", "api", "powershell");
             var options = new WebApiDocsOptions
             {
+                ShowExampleOrigins = true,
                 Type = ApiDocsType.PowerShell,
                 HelpPath = helpPath,
                 OutputPath = outputPath,

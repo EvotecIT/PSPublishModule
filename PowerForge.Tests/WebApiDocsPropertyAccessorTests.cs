@@ -6,18 +6,18 @@ namespace PowerForge.Tests
     public sealed class WebApiDocsPropertyAccessorTests
     {
         [Theory]
-        [InlineData("PrivateSetter", "public Int32 PrivateSetter { get; private set; }")]
-        [InlineData("PrivateGetter", "public Int32 PrivateGetter { private get; set; }")]
-        [InlineData("ProtectedSetter", "public Int32 ProtectedSetter { get; protected set; }")]
-        [InlineData("InternalSetter", "public Int32 InternalSetter { get; internal set; }")]
-        [InlineData("ProtectedInternalSetter", "public Int32 ProtectedInternalSetter { get; protected internal set; }")]
-        [InlineData("PrivateProtectedSetter", "public Int32 PrivateProtectedSetter { get; private protected set; }")]
-        [InlineData("InitialValue", "public Int32 InitialValue { get; init; }")]
-        [InlineData("PrivateInitialValue", "public Int32 PrivateInitialValue { get; private init; }")]
-        [InlineData("Item", "public Int32 this[Int32 key] { get; private set; }")]
-        [InlineData("Mutable", "public Int32 Mutable { get; set; }")]
-        [InlineData("ReadOnly", "public Int32 ReadOnly { get; }")]
-        [InlineData("WriteOnly", "public Int32 WriteOnly { set; }")]
+        [InlineData("PrivateSetter", "public int PrivateSetter { get; private set; }")]
+        [InlineData("PrivateGetter", "public int PrivateGetter { private get; set; }")]
+        [InlineData("ProtectedSetter", "public int ProtectedSetter { get; protected set; }")]
+        [InlineData("InternalSetter", "public int InternalSetter { get; internal set; }")]
+        [InlineData("ProtectedInternalSetter", "public int ProtectedInternalSetter { get; protected internal set; }")]
+        [InlineData("PrivateProtectedSetter", "public int PrivateProtectedSetter { get; private protected set; }")]
+        [InlineData("InitialValue", "public int InitialValue { get; init; }")]
+        [InlineData("PrivateInitialValue", "public int PrivateInitialValue { get; private init; }")]
+        [InlineData("Item", "public int this[int key] { get; private set; }")]
+        [InlineData("Mutable", "public int Mutable { get; set; }")]
+        [InlineData("ReadOnly", "public int ReadOnly { get; }")]
+        [InlineData("WriteOnly", "public int WriteOnly { set; }")]
         public void Generate_PreservesAccessorContractInJsonAndHtml(string name, string signature)
         {
             var root = Path.Combine(Path.GetTempPath(), "pf-web-accessors-" + Guid.NewGuid().ToString("N"));

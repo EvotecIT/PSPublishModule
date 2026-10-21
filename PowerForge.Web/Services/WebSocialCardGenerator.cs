@@ -809,6 +809,12 @@ internal static partial class WebSocialCardGenerator
             if (TryMapGenericFontFamily(family, intent, out var mapped))
                 return mapped;
 
+            // Match the Arial alias used by ImageMagick/fontconfig on Linux so native
+            // measurements and external SVG text use the same installed face.
+            if (OperatingSystem.IsLinux() && family.Equals("Arial", StringComparison.OrdinalIgnoreCase) &&
+                IsFontFamilyAvailable("Liberation Sans"))
+                return "Liberation Sans";
+
             if (IsFontFamilyAvailable(family))
                 return family;
         }
@@ -1170,6 +1176,8 @@ internal static partial class WebSocialCardGenerator
             "connect" => "connect",
             "contact" => "connect",
             "panel" => "panel",
+            "split" => "split",
+            "code-led" => "code-led",
             "metrics" => "metrics",
             "stats" => "metrics",
             "statistics" => "metrics",

@@ -40,7 +40,7 @@ internal sealed class AppleReleaseSourceMutationMonitor : IDisposable {
         _ignoredMutation = ignoredMutation;
         _enforceMutations = enableImmediately ? 1 : 0;
 #if NET8_0_OR_GREATER
-        if (OperatingSystem.IsMacOS() && (useNativeMacOSObserver || unchangedMacOSCloneSource is not null))
+        if (OperatingSystem.IsMacOS() && (unchangedMacOSCloneSource is not null || useNativeMacOSObserver))
         {
             var native = new AppleMacOSFileChangeObserver(rootPath,
                 (path, flags) =>
