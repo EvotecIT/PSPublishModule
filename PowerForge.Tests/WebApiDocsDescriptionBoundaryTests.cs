@@ -74,6 +74,25 @@ public sealed class WebApiDocsDescriptionBoundaryTests
         Assert.Equal(prefix + "…", Fit(prefix + " " + new string('y', 100)));
     }
 
+    [Theory]
+    [InlineData("e.g.")]
+    [InlineData("i.e.")]
+    [InlineData("etc.")]
+    [InlineData("Dr.")]
+    [InlineData("U.S.")]
+    public void FitApiSeoDescription_AbbreviationsDoNotEndASentence(string abbreviation)
+    {
+        var prefix = "Use " + abbreviation + " " + new string('x', 120) + " output";
+        Assert.Equal(prefix + "…", Fit(prefix + " " + new string('y', 100)));
+    }
+
+    [Fact]
+    public void FitApiSeoDescription_LeadingArticleDoesNotHideAnOversizedToken()
+    {
+        var token = new string('界', 158) + "😀tail";
+        Assert.Equal(new string('界', 158) + "…", Fit("The " + token));
+    }
+
     [Fact]
     public void FitApiSeoDescription_KeepsASentenceEndingExactlyAtTheLimit()
     {

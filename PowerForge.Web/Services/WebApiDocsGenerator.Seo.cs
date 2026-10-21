@@ -134,6 +134,11 @@ public static partial class WebApiDocsGenerator
             var end = sentence.Index + sentence.Length;
             if (end > ApiSeoDescriptionMaximumLength)
                 break;
+            // Common prose abbreviations and dotted initialisms continue the sentence.
+            if (description[sentence.Index] == '.' && Regex.IsMatch(description[..end],
+                @"(?:\b(?:[a-z]\.){2,}|\b(?:etc|vs|dr|mr|mrs|ms|prof|sr|jr|st|mt|fig|eq|no|approx|cf|viz|al)\.)\z",
+                RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, RegexTimeout))
+                continue;
             sentenceEnd = end;
         }
         if (sentenceEnd > 0)
@@ -153,7 +158,16 @@ public static partial class WebApiDocsGenerator
                 string.Empty, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, RegexTimeout)
                 .TrimEnd(' ', ',', ';', ':', '-');
             if (cleaned == truncated)
-                return truncated + "…";
+            {
+                if (truncated.Length > 0)
+                    return truncated + "…";
+
+                // An article before a long identifier must not hide all useful content.
+                var tokenStart = wordBoundary + 1;
+                var tokenEnd = description.IndexOf(' ', tokenStart);
+                var token = tokenEnd < 0 ? description[tokenStart..] : description[tokenStart..tokenEnd];
+                return token[..ClampToUnicodeScalarBoundary(token, limit)] + "…";
+            }
             truncated = cleaned;
         }
     }
