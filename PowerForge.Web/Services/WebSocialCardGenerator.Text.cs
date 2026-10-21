@@ -24,11 +24,16 @@ internal static partial class WebSocialCardGenerator
             }
             if (current.Length > 0)
                 lines.Add(current);
-            if (lines.Count >= maxLines || measure(word) > maxWidth)
+            if (lines.Count >= maxLines)
             {
                 omitted = true;
                 current = string.Empty;
                 break;
+            }
+            if (measure(word) > maxWidth)
+            {
+                lines.Add(TruncateCardToken(word, maxWidth, measure));
+                return lines;
             }
             current = word;
         }
@@ -42,11 +47,36 @@ internal static partial class WebSocialCardGenerator
             while (last.Length > 0 && measure(last + "…") > maxWidth)
             {
                 var boundary = last.LastIndexOf(' ');
-                last = boundary < 0 ? string.Empty : last[..boundary];
+                if (boundary < 0)
+                {
+                    lines[^1] = TruncateCardToken(last, maxWidth, measure);
+                    return lines;
+                }
+                last = last[..boundary];
             }
             lines[^1] = last.TrimEnd() + "…";
         }
         return lines.Count == 0 ? new List<string> { string.Empty } : lines;
+    }
+
+    private static string TruncateCardToken(string token, double maxWidth, Func<string, double> measure)
+    {
+        // Keep a useful prefix for identifiers that cannot fit as a whole word. Search
+        // text-element boundaries so truncation preserves surrogate pairs and combining marks.
+        var starts = System.Globalization.StringInfo.ParseCombiningCharacters(token);
+        var low = 0;
+        var high = starts.Length;
+        while (low < high)
+        {
+            var count = low + (high - low + 1) / 2;
+            var end = count == starts.Length ? token.Length : starts[count];
+            if (measure(token[..end] + "…") <= maxWidth)
+                low = count;
+            else
+                high = count - 1;
+        }
+        var length = low == starts.Length ? token.Length : starts[low];
+        return token[..length] + "…";
     }
 
     private static List<string> WrapCardDescription(SocialCardRenderState state, int width, int fontSize, int maxLines)

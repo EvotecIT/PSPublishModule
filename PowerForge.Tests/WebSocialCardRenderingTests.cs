@@ -117,6 +117,22 @@ public sealed class WebSocialCardRenderingTests : IDisposable
         Assert.Contains("TTF or OTF", Assert.Throws<InvalidOperationException>(() => WebSocialCardGenerator.ResolveFontFiles(new[] { declaration }, _root)).Message);
     }
 
+    [Fact]
+    public void ConfiguredFonts_DoNotTurnArtworkFailuresIntoFontFailures()
+    {
+        if (!WebSocialCardGenerator.IsPngRenderingAvailable()) return;
+        var options = Options();
+        options.VariantKey = "split";
+        options.Fonts = WebSocialCardGenerator.ResolveFontFiles(new[] { new SocialCardFontSpec
+        {
+            Family = "Fixture Display", Path = "Fixtures/SocialCards/SpaceGrotesk-Bold.ttf", Weight = 700
+        } }, AppContext.BaseDirectory);
+        options.ThemeTokens = Tokens(("fontDisplay", "Fixture Display"));
+        const string invalidArtwork = "<svg xmlns=\"http://www.w3.org/2000/svg\"><rect width=\"20\" height=\"20\"/></svg>";
+        options.InlineImageDataUri = "data:image/svg+xml;base64," + Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(invalidArtwork));
+        Assert.Null(WebSocialCardGenerator.RenderPng(options));
+    }
+
     [Theory]
     [InlineData("cover", "left top", "xMinYMin slice")]
     [InlineData("contain", "right bottom", "xMaxYMax meet")]
@@ -163,6 +179,43 @@ public sealed class WebSocialCardRenderingTests : IDisposable
             int.TryParse(element.Attribute("y")?.Value, out var y) && y > 180).ToArray();
         Assert.InRange(titleLines.Length, 1, 2);
         Assert.InRange(int.Parse(titleLines[0].Attribute("font-size")!.Value, System.Globalization.CultureInfo.InvariantCulture), 48, 63);
+    }
+
+    [Theory]
+    [InlineData("WebSocialCardGeneratorRenderOptions", 1, "WebSoci…")]
+    [InlineData("Before WebSocialCardGeneratorRenderOptions", 2, "Before|WebSoci…")]
+    [InlineData("Terminal extra", 1, "Termina…")]
+    [InlineData("😀😀😀😀😀", 1, "😀😀😀…")]
+    [InlineData("e\u0301e\u0301e\u0301e\u0301e\u0301", 1, "e\u0301e\u0301e\u0301…")]
+    public void ConciseText_PreservesOverlongTokenPrefixes_AndUnicodeBoundaries(string text, int lines, string expected)
+        => Assert.Equal(expected.Split('|'), WebSocialCardGenerator.WrapWords(text, 8, lines));
+
+    [Theory]
+    [InlineData("split")]
+    [InlineData("code-led")]
+    public void LongApiIdentifiers_RetainVisibleHeadlineAtTheTitleFloor(string variant)
+    {
+        var options = Options();
+        options.VariantKey = variant;
+        options.Title = "WebSocialCardGeneratorRenderOptions";
+        options.InlineImageDataUri = TestImage();
+        options.Fonts = WebSocialCardGenerator.ResolveFontFiles(new[] { new SocialCardFontSpec
+        {
+            Family = "Fixture Display", Path = "Fixtures/SocialCards/SpaceGrotesk-Bold.ttf", Weight = 700
+        } }, AppContext.BaseDirectory);
+        options.ThemeTokens = Tokens(("fontDisplay", "Fixture Display"));
+        var document = XDocument.Parse(WebSocialCardGenerator.RenderSvg(options));
+        var title = document.Descendants().Single(element => element.Name.LocalName == "text" && element.Attribute("font-weight")?.Value == "800" &&
+            int.TryParse(element.Attribute("y")?.Value, out var y) && y > 180);
+        Assert.StartsWith("WebSocial", title.Value);
+        Assert.EndsWith("…", title.Value);
+        Assert.Equal("48", title.Attribute("font-size")!.Value);
+        if (WebSocialCardGenerator.IsPngRenderingAvailable())
+        {
+            using var image = new MagickImage(WebSocialCardGenerator.RenderPng(options)!);
+            Assert.Equal(1200u, image.Width);
+            Assert.Equal(630u, image.Height);
+        }
     }
 
     [Fact]

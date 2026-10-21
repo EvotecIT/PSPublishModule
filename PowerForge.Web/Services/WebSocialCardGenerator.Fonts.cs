@@ -10,6 +10,9 @@ internal static partial class WebSocialCardGenerator
 {
     internal sealed record CardFontFile(string Family, int MinWeight, int MaxWeight, string Path, string Fingerprint);
 
+    private sealed class ConfiguredCardFontException(string message, Exception innerException)
+        : InvalidOperationException(message, innerException) { }
+
     internal static IReadOnlyList<CardFontFile> ResolveFontFiles(IReadOnlyList<SocialCardFontSpec>? fonts, string? siteRoot)
     {
         if (fonts is not { Count: > 0 })
@@ -117,7 +120,7 @@ internal static partial class WebSocialCardGenerator
             }
             catch (Exception ex)
             {
-                throw new InvalidOperationException($"Social card font '{font.Family}' could not be rendered from '{font.Path}': {ex.Message}", ex);
+                throw new ConfiguredCardFontException($"Social card font '{font.Family}' could not be rendered from '{font.Path}': {ex.Message}", ex);
             }
         }
     }

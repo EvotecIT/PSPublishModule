@@ -1129,8 +1129,10 @@ options opt a site into page titles, concise text, and convention-based artwork:
   when neither artwork nor fallback is available.
 - `GeneratedCardTextFit` uses `social_description` when present, otherwise the
   first sentence of the page description. It fits titles down to two lines and
-  truncates at whole-word boundaries with an ellipsis. If a title still exceeds
-  the minimum readable size, it is truncated to two lines. Split and code-led
+  truncates at whole-word boundaries with an ellipsis. A single token wider than
+  the line keeps a fitting prefix and ellipsis without splitting Unicode text
+  elements. If a title still exceeds the minimum readable size, it is truncated
+  to two lines. Split and code-led
   layouts use this fitting rule automatically. `socialCard.titleMinFontSize`
   sets the fitting floor (48 px at 1200×630 by default). Split layouts reduce
   description size first, to a 20 px floor, and use regular-weight muted copy.
@@ -1148,7 +1150,8 @@ options opt a site into page titles, concise text, and convention-based artwork:
   unreadable fonts, and unavailable selected families fail explicitly instead
   of silently substituting another face. Font bytes participate in card hashes.
 - `SocialCardsRequired` fails when an eligible card cannot be rendered. Opted-out
-  pages do not require cards. Linux PNG generation requires the ImageMagick
+  pages do not require cards. Optional rendering failures warn and use the normal
+  social-image fallback; declared-font failures remain explicit errors. Linux PNG generation requires the ImageMagick
   executable (`magick` or `convert`) on the build runner. The build pipeline step
   can also set `socialCardsRequired: true` to enforce the same rule in CI.
 

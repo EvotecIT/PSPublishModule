@@ -35,9 +35,8 @@ internal static partial class WebSocialCardGenerator
     private static readonly ConcurrentDictionary<string, int> TitleGlyphInsetCache = new(StringComparer.Ordinal);
     private static readonly ConcurrentDictionary<string, int> CenteredTextOffsetCache = new(StringComparer.Ordinal);
 
-    internal static byte[]? RenderPng(SocialCardRenderOptions options)
+    private static byte[]? RenderPngCore(SocialCardRenderOptions options)
     {
-        ValidateConfiguredFontFamilies(options);
         if (OperatingSystem.IsLinux() && ResolveExternalImageMagickCommand() is null)
         {
             Trace.TraceWarning("Social card PNG render skipped: external ImageMagick is unavailable on Linux.");
@@ -97,10 +96,12 @@ internal static partial class WebSocialCardGenerator
             image.Write(stream);
             return stream.ToArray();
         }
+        catch (ConfiguredCardFontException)
+        {
+            throw;
+        }
         catch (Exception ex)
         {
-            if (rasterOptions.Fonts is { Count: > 0 })
-                throw new InvalidOperationException($"Social card with configured fonts could not be rendered: {ex.Message}", ex);
             Trace.TraceWarning($"Social card PNG render failed: {ex.GetType().Name}: {ex.Message}");
             return null;
         }

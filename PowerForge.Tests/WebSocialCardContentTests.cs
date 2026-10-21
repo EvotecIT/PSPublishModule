@@ -225,6 +225,35 @@ public sealed class WebSocialCardContentTests : IDisposable
             WebSiteBuilder.TryGenerateSocialCardPath(spec, page, _root, page.Title, "Description", "Example")).Message);
     }
 
+    [Theory]
+    [InlineData("malformed-svg")]
+    [InlineData("missing-size")]
+    [InlineData("extreme-cover")]
+    [InlineData("corrupt-raster")]
+    public void SplitArtworkFailures_RespectOptionalAndRequiredCardPolicy(string scenario)
+    {
+        if (!WebSocialCardGenerator.IsPngRenderingAvailable()) return;
+        var spec = Site();
+        spec.Social!.GeneratedCardVariant = "split";
+        var page = Page();
+        var artwork = scenario switch
+        {
+            "malformed-svg" => "<svg",
+            "missing-size" => "<svg xmlns=\"http://www.w3.org/2000/svg\"><rect width=\"20\" height=\"20\"/></svg>",
+            "extreme-cover" => "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"1\" height=\"200000\"><rect width=\"1\" height=\"200000\"/></svg>",
+            _ => "not a PNG"
+        };
+        var mime = scenario == "corrupt-raster" ? "image/png" : "image/svg+xml";
+        page.Meta["social_card_image"] = $"data:{mime};base64," + Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(artwork));
+        var warnings = new List<string>();
+        using var listener = new SocialTraceListener(warnings);
+        Assert.Equal(string.Empty, WebSiteBuilder.TryGenerateSocialCardPath(spec, page, _root, page.Title, "Description", "Example"));
+        Assert.Contains(warnings, warning => warning.Contains("not rendered", StringComparison.Ordinal));
+        spec.Social.SocialCardsRequired = true;
+        Assert.Contains("not rendered", Assert.Throws<InvalidOperationException>(() =>
+            WebSiteBuilder.TryGenerateSocialCardPath(spec, page, _root, page.Title, "Description", "Example")).Message);
+    }
+
     private WebSocialCardGenerator.SocialCardRenderOptions Plan(SiteSpec spec, ContentItem page)
         => WebSiteBuilder.CreateSocialCardGenerationPlan(spec, page, "Terminal | Example", "Use .NET 10.0 today. Then add a widget.", "Example", _root)!.RenderOptions;
 
