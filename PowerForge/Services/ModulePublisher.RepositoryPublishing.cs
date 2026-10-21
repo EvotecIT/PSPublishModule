@@ -21,7 +21,7 @@ public sealed partial class ModulePublisher
         var credential = repoConfig?.Credential;
         var hasCredential = credential is not null &&
                             !string.IsNullOrWhiteSpace(credential.UserName) &&
-                            !string.IsNullOrWhiteSpace(credential.Secret);
+                            RepositoryCredentialResolver.HasSecretSource(credential);
         var hasRuntimeCredentialProvider = repoConfig?.CredentialProvider is { Kind: not RepositoryCredentialProviderKind.None };
 
         if (isPsGallery && string.IsNullOrWhiteSpace(publish.ApiKey))

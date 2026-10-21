@@ -374,7 +374,9 @@
       "additionalProperties": false,
       "properties": {
         "UserName": { "type": ["string", "null"] },
-        "Secret": { "type": ["string", "null"] }
+        "Secret": { "type": ["string", "null"] },
+        "SecretFilePath": { "type": ["string", "null"] },
+        "SecretEnvironmentVariable": { "type": ["string", "null"] }
       }
     },
 

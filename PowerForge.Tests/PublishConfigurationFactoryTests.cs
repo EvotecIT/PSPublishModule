@@ -286,7 +286,7 @@ public sealed partial class PublishConfigurationFactoryTests
     }
 
     [Fact]
-    public void Create_rejects_multiline_repository_credential_secret_file()
+    public void Create_defers_multiline_repository_credential_validation_until_resolution()
     {
         var path = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N") + ".txt");
         File.WriteAllText(path, "line-one" + Environment.NewLine + "line-two");
@@ -294,7 +294,7 @@ public sealed partial class PublishConfigurationFactoryTests
         {
             var factory = new PublishConfigurationFactory();
 
-            var ex = Assert.Throws<ArgumentException>(() => factory.Create(new PublishConfigurationRequest
+            var segment = factory.Create(new PublishConfigurationRequest
             {
                 ParameterSetName = "JFrog",
                 Type = PublishDestination.PowerShellGallery,
@@ -306,7 +306,8 @@ public sealed partial class PublishConfigurationFactoryTests
                 RepositoryCredentialSecretFilePath = path,
                 RepositoryCredentialSecretFilePathSpecified = true,
                 Enabled = true
-            }));
+            });
+            var ex = Assert.Throws<InvalidOperationException>(() => RepositoryCredentialResolver.Resolve(segment.Configuration.Repository!.Credential));
 
             Assert.Contains("multi-line secret", ex.Message, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("single line", ex.Message, StringComparison.OrdinalIgnoreCase);
@@ -363,7 +364,7 @@ public sealed partial class PublishConfigurationFactoryTests
 
         var credential = Assert.IsType<RepositoryCredential>(repository.Credential);
         Assert.Equal("user@contoso.com", credential.UserName);
-        Assert.Equal("pat", credential.Secret);
+        Assert.Equal("pat", RepositoryCredentialResolver.Resolve(credential)!.Secret);
     }
 
     [Fact]
@@ -420,7 +421,7 @@ public sealed partial class PublishConfigurationFactoryTests
 
             var credential = Assert.IsType<RepositoryCredential>(repository.Credential);
             Assert.Equal("name@company.com", credential.UserName);
-            Assert.Equal("pat", credential.Secret);
+            Assert.Equal("pat", RepositoryCredentialResolver.Resolve(credential)!.Secret);
         }
         finally
         {
@@ -460,7 +461,7 @@ public sealed partial class PublishConfigurationFactoryTests
 
             var credential = Assert.IsType<RepositoryCredential>(repository.Credential);
             Assert.Equal("name@company.com", credential.UserName);
-            Assert.Equal("pat", credential.Secret);
+            Assert.Equal("pat", RepositoryCredentialResolver.Resolve(credential)!.Secret);
         }
         finally
         {
@@ -470,7 +471,7 @@ public sealed partial class PublishConfigurationFactoryTests
     }
 
     [Fact]
-    public void Create_reads_repository_credential_secret_from_environment()
+    public void Create_defers_repository_credential_environment_resolution()
     {
         var envName = "POWERFORGE_TEST_JFROG_PAT_" + Guid.NewGuid().ToString("N");
         try
@@ -495,7 +496,10 @@ public sealed partial class PublishConfigurationFactoryTests
             var repository = Assert.IsType<PublishRepositoryConfiguration>(segment.Configuration.Repository);
             var credential = Assert.IsType<RepositoryCredential>(repository.Credential);
             Assert.Equal("name@company.com", credential.UserName);
-            Assert.Equal("env-pat", credential.Secret);
+            Assert.True(string.IsNullOrEmpty(credential.Secret));
+            Assert.Equal(envName, credential.SecretEnvironmentVariable);
+            Environment.SetEnvironmentVariable(envName, "rotated-pat");
+            Assert.Equal("rotated-pat", RepositoryCredentialResolver.Resolve(credential)!.Secret);
         }
         finally
         {

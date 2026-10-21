@@ -633,3 +633,9 @@ JFrog SSO/credential evidence helper:
 
 Keep real organization, feed, repository, and module names in secure run notes
 or test tickets when they are not safe for committed docs.
+
+### Build without publishing credentials
+
+Repository credential files and environment variables are resolved only when a repository operation needs them. Declaring `-RepositoryCredentialSecretEnvironmentVariable` or `-RepositoryCredentialSecretFilePath` does not read its value while compiling configuration or running a local Build gate. Publish resolves the current value and fails before the repository operation if it is missing, blank, unreadable or multiline. The serialized configuration retains the source name/path without copying the resolved secret. Inline `-RepositoryCredentialSecret` remains supported, but environment variables or secret files keep tokens out of build scripts.
+
+The `PowerShellGallery` destination selects the PowerShell repository publishing protocol. An explicit JFrog repository selects Artifactory; it does not publish to PSGallery. Use the Build gate to create local packages and the Publish gate to build and upload to the configured destination.

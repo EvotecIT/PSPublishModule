@@ -5,6 +5,23 @@ namespace PowerForge.Tests;
 public sealed class ModulePublishConfigurationReaderTests
 {
     [Theory]
+    [InlineData("SecretFilePath", ".secrets/publish.txt")]
+    [InlineData("SecretEnvironmentVariable", "PUBLISH_TOKEN")]
+    public void ReadFromJson_preserves_deferred_repository_credentials(string property, string source)
+    {
+        var json = """
+            { "Segments": [{ "Type": "GalleryNuget", "Configuration": {
+              "Repository": { "Name": "Company", "Credential": {
+                "UserName": "publisher", "__PROPERTY__": "__SOURCE__" } }
+            } }] }
+            """.Replace("__PROPERTY__", property).Replace("__SOURCE__", source);
+        var credential = Assert.Single(new ModulePublishConfigurationReader().ReadFromJson(json)).Repository!.Credential!;
+        Assert.Equal("publisher", credential.UserName);
+        Assert.Null(credential.Secret);
+        Assert.Equal(source, property == "SecretFilePath" ? credential.SecretFilePath : credential.SecretEnvironmentVariable);
+    }
+
+    [Theory]
     [InlineData(false, false)]
     [InlineData(false, true)]
     [InlineData(true, false)]

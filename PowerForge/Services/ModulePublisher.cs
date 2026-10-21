@@ -696,7 +696,15 @@ public sealed partial class ModulePublisher
                 ApiVersion = repository.ApiVersion,
                 EnsureRegistered = repository.EnsureRegistered,
                 UnregisterAfterUse = repository.UnregisterAfterUse,
-                Credential = repository.Credential,
+                Credential = repository.Credential is null ? null : new RepositoryCredential
+                {
+                    UserName = repository.Credential.UserName,
+                    Secret = repository.Credential.Secret,
+                    SecretFilePath = string.IsNullOrWhiteSpace(repository.Credential.SecretFilePath)
+                        ? repository.Credential.SecretFilePath
+                        : Path.GetFullPath(Path.Combine(projectRoot, repository.Credential.SecretFilePath!)),
+                    SecretEnvironmentVariable = repository.Credential.SecretEnvironmentVariable
+                },
                 CredentialProvider = CloneCredentialProvider(repository.CredentialProvider)
             };
 
