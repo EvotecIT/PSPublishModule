@@ -186,7 +186,7 @@ public sealed class PowerForgeInstallerAuthoringTests
         Assert.NotNull(doc.Descendants(Wix + "CustomAction").SingleOrDefault(e =>
             (string?)e.Attribute("Id") == "ServiceComponent.SetBackupCommand" &&
             (string?)e.Attribute("Property") == "ServiceComponent.BackupImagePath" &&
-            ((string?)e.Attribute("Value"))?.Contains("powershell.exe -nop -c", StringComparison.Ordinal) == true &&
+            ((string?)e.Attribute("Value"))?.StartsWith("\"powershell.exe\" -nop -c", StringComparison.Ordinal) == true &&
             ((string?)e.Attribute("Value"))?.Contains("Name -eq 'TestimoX.Monitoring'", StringComparison.Ordinal) == true &&
             ((string?)e.Attribute("Value"))?.Contains("$b='[WindowsFolder]Installer\\tmx-svc-[ProductCode].txt'", StringComparison.Ordinal) == true &&
             ((string?)e.Attribute("Value"))?.Contains("gwmi win32_service", StringComparison.Ordinal) == true &&
@@ -202,7 +202,7 @@ public sealed class PowerForgeInstallerAuthoringTests
             (string?)e.Attribute("Id") == "ServiceComponent.SetRollbackCommand" &&
             (string?)e.Attribute("Property") == "ServiceComponent.RollbackImagePath" &&
             ((string?)e.Attribute("Value"))?.Contains("sc.exe config", StringComparison.Ordinal) == true &&
-            ((string?)e.Attribute("Value"))?.Contains("sc.exe create", StringComparison.Ordinal) == true &&
+            ((string?)e.Attribute("Value"))?.Contains("sc.exe create", StringComparison.Ordinal) == false &&
             ((string?)e.Attribute("Value"))?.Contains("if(!$?){exit 1};rm $b", StringComparison.Ordinal) == true &&
             ((string?)e.Attribute("Value"))?.Contains("rm $b -ea 0", StringComparison.Ordinal) == true &&
             ((string?)e.Attribute("Value"))?.Length <= 255));

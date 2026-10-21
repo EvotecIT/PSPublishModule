@@ -316,10 +316,12 @@ internal static class PowerForgeWixInstallerServiceScriptEmitter
     {
         string serviceName = EscapePowerShellSingleQuoted(service.ServiceName);
         string backup = EscapePowerShellSingleQuoted(backupPath);
+        // ImagePath alone cannot recreate a missing service's identity or startup policy safely.
+        // Windows PowerShell's native argument binder also requires escaping embedded ImagePath quotes.
+        const string nativeImagePath = """($p -replace '(\\*)"', '$1$1\"' -replace '(\\+)$','$1$1')""";
         string command = "$b='" + backup +
-                         "';$n='" + serviceName +
-                         "';$p=gc -Raw $b;&sc.exe config $n binPath= $p>$null;" +
-                         "if(!$?){&sc.exe create $n binPath= $p>$null};if(!$?){exit 1};rm $b -ea 0";
+                         "';$p=gc -Raw $b;&sc.exe config '" + serviceName + "' binPath= " + nativeImagePath + " >$null;" +
+                         "if(!$?){exit 1};rm $b -ea 0";
         return BuildPowerShellCommand(service, "rollback", command);
     }
 
@@ -336,9 +338,7 @@ internal static class PowerForgeWixInstallerServiceScriptEmitter
         string purpose,
         string command)
     {
-        string result = "powershell.exe -nop -c \"" +
-                        EscapeCommandDoubleQuoted(command) +
-                        "\"";
+        string result = "\"powershell.exe\" -nop -c " + ProcessRunner.QuoteArgument(command);
         if (result.Length > 255)
         {
             throw new InvalidOperationException(
@@ -402,9 +402,6 @@ internal static class PowerForgeWixInstallerServiceScriptEmitter
             Regex.Escape(token),
             _ => replacement,
             RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
-
-    private static string EscapeCommandDoubleQuoted(string value)
-        => (value ?? string.Empty).Replace("\"", "\\\"");
 
     private static string EscapePowerShellSingleQuoted(string value)
         => (value ?? string.Empty).Replace("'", "''");

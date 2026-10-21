@@ -102,6 +102,7 @@ internal sealed class AppleSwiftPackageBuildSnapshot : IDisposable
             Directory.CreateDirectory(sourcePackagesPath);
             Directory.CreateDirectory(derivedDataPath);
             Directory.CreateDirectory(Path.Combine(root, "ArchiveDerivedData"));
+            var initializedRootIdentity = ExistingFilePathIdentityResolver.ResolveDirectoryStatus(root).MutationIdentity;
             rootMonitor = new AppleReleaseSourceMutationMonitor(
                 parent,
                 "private Swift package snapshot directory",
@@ -124,8 +125,11 @@ internal sealed class AppleSwiftPackageBuildSnapshot : IDisposable
                     (UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute))
                     throw new InvalidOperationException("The private Swift package snapshot directory permissions changed during setup.");
 #endif
-                return true;
-            }, "private directory setup");
+                var currentIdentity = ExistingFilePathIdentityResolver.ResolveDirectoryStatus(root).MutationIdentity;
+                if (!currentIdentity.Equals(initializedRootIdentity, StringComparison.Ordinal))
+                    throw new InvalidOperationException("The private Swift package snapshot directory changed during initialization.");
+                return currentIdentity;
+            }, "private snapshot directory initialization");
             var environmentVariables = AppleTrustedExecutionEnvironment.Create(isolateGitConfiguration: true);
             var arguments = new[]
             {

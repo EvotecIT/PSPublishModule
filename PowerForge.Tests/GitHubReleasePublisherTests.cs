@@ -56,7 +56,6 @@ public sealed partial class GitHubReleasePublisherTests
         }
         finally
         {
-            listener.Stop();
             listener.Close();
         }
     }
@@ -140,7 +139,6 @@ public sealed partial class GitHubReleasePublisherTests
         finally
         {
             stop.Cancel();
-            listener.Stop();
             listener.Close();
             await server.WaitAsync(TimeSpan.FromSeconds(10));
             File.Delete(assetPath);
@@ -197,7 +195,6 @@ public sealed partial class GitHubReleasePublisherTests
         }
         finally
         {
-            listener.Stop();
             listener.Close();
         }
     }
@@ -279,7 +276,6 @@ public sealed partial class GitHubReleasePublisherTests
         }
         finally
         {
-            listener.Stop();
             listener.Close();
             File.Delete(assetPath);
         }
@@ -341,7 +337,6 @@ public sealed partial class GitHubReleasePublisherTests
         }
         finally
         {
-            listener.Stop();
             listener.Close();
             File.Delete(firstAssetPath);
             File.Delete(secondAssetPath);
@@ -403,7 +398,6 @@ public sealed partial class GitHubReleasePublisherTests
         }
         finally
         {
-            listener.Stop();
             listener.Close();
             File.Delete(assetPath);
         }
@@ -466,7 +460,6 @@ public sealed partial class GitHubReleasePublisherTests
         }
         finally
         {
-            listener.Stop();
             listener.Close();
             File.Delete(assetPath);
         }
@@ -607,7 +600,6 @@ public sealed partial class GitHubReleasePublisherTests
         }
         finally
         {
-            listener.Stop();
             listener.Close();
             File.Delete(assetPath);
         }
@@ -674,7 +666,6 @@ public sealed partial class GitHubReleasePublisherTests
         }
         finally
         {
-            listener.Stop();
             listener.Close();
             File.Delete(assetPath);
         }
@@ -743,7 +734,6 @@ public sealed partial class GitHubReleasePublisherTests
         }
         finally
         {
-            listener.Stop();
             listener.Close();
             File.Delete(assetPath);
         }
@@ -809,7 +799,6 @@ public sealed partial class GitHubReleasePublisherTests
         }
         finally
         {
-            listener.Stop();
             listener.Close();
             File.Delete(assetPath);
         }

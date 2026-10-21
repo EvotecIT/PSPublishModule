@@ -1,4 +1,37 @@
 ﻿#requires -Version 5.1
+<#
+.SYNOPSIS
+    Installs a packaged service or updates its existing registration in place.
+.DESCRIPTION
+    Validates the new executable before changing registration. Existing service accounts and
+    startup modes are retained unless an account change is explicitly requested.
+.PARAMETER ServiceName
+    Windows service name.
+.PARAMETER DisplayName
+    Service display name.
+.PARAMETER Description
+    Service description.
+.PARAMETER ConfigPath
+    Configuration path for a new registration, or a fallback when preserved arguments have no config option.
+.PARAMETER Account
+    Explicit account change, or the account for a new service. New services default to LocalSystem.
+.PARAMETER Password
+    Password for an explicitly selected account.
+.PARAMETER BackupPath
+    Protected ImagePath backup supplied by the MSI upgrade workflow.
+.PARAMETER UpgradeMode
+    Enables upgrade behavior and validation.
+.PARAMETER PreserveExistingServiceBinPath
+    Retains the complete command line from the required protected backup.
+.PARAMETER PreserveExistingServiceArguments
+    Uses the new executable with the existing arguments and active configuration option.
+.PARAMETER Start
+    Starts the service after registration succeeds.
+.EXAMPLE
+    .\Install-Service.ps1 -UpgradeMode -PreserveExistingServiceArguments -Start
+.OUTPUTS
+    System.ServiceProcess.ServiceController
+#>
 [CmdletBinding()]
 param(
     [string]$ServiceName = '{{ServiceName}}',
@@ -10,6 +43,7 @@ param(
     [string]$BackupPath,
     [switch]$UpgradeMode,
     [switch]$PreserveExistingServiceBinPath,
+    [switch]$PreserveExistingServiceArguments,
     [switch]$Start
 )
 $ErrorActionPreference = 'Stop'
@@ -30,6 +64,36 @@ if (-not (Test-Path -LiteralPath $exePath)) {
     throw "Service binary not found: $exePath"
 }
 
+function Get-CommandLineTokens {
+    param([string]$CommandLine)
+
+    # Keep original spans; option-like text inside a quoted value is never an option.
+    # A quote changes the Windows argument boundary only after an even number of backslashes.
+    $tokenStart = -1
+    $quoted = $false
+    $backslashes = 0
+    for ($index = 0; $index -le $CommandLine.Length; $index++) {
+        if ($index -eq $CommandLine.Length -or ([char]::IsWhiteSpace($CommandLine[$index]) -and -not $quoted)) {
+            if ($tokenStart -ge 0) {
+                $text = $CommandLine.Substring($tokenStart, $index - $tokenStart)
+                $equals = $text.IndexOf('=')
+                $optionName = if ($equals -ge 0) { $text.Substring(0, $equals) } else { $text }
+                # Classify only fixed option names, including whole-token quotes. Values stay raw.
+                # Escaped literal quotes leave a backslash and cannot match these ASCII names.
+                [pscustomobject]@{ Index = $tokenStart; Length = $index - $tokenStart; OptionName = $optionName.Replace('"', ''); HasEquals = $equals -ge 0 }
+                $tokenStart = -1
+            }
+            $backslashes = 0
+            continue
+        }
+        if ($tokenStart -lt 0) { $tokenStart = $index }
+        $character = $CommandLine[$index]
+        if ($character -eq '"' -and $backslashes % 2 -eq 0) { $quoted = -not $quoted }
+        if ($character -eq '\') { $backslashes++ } else { $backslashes = 0 }
+    }
+    if ($quoted) { throw 'The service command line contains an unterminated quoted argument.' }
+}
+
 function Set-CommandLineOption {
     param(
         [Parameter(Mandatory)]
@@ -43,10 +107,19 @@ function Set-CommandLineOption {
     )
 
     $escapedValue = $Value.Replace('"', '\"')
-    $pattern = '(?i)(^|\s)' + [regex]::Escape($Name) + '\s+(".*?"|\S+)'
-    if ($CommandLine -match $pattern) {
-        return [regex]::Replace($CommandLine, $pattern, '$1' + $Name + ' "' + $escapedValue + '"', 1)
+    $tokens = @(Get-CommandLineTokens -CommandLine $CommandLine)
+    $found = $false
+    for ($index = $tokens.Count - 1; $index -ge 0; $index--) {
+        $token = $tokens[$index]
+        if ($token.OptionName -ine $Name) { continue }
+        $end = $token.Index + $token.Length
+        if (-not $token.HasEquals -and $index + 1 -lt $tokens.Count) {
+            $end = $tokens[$index + 1].Index + $tokens[$index + 1].Length
+        }
+        $CommandLine = $CommandLine.Substring(0, $token.Index) + $Name + ' "' + $escapedValue + '"' + $CommandLine.Substring($end)
+        $found = $true
     }
+    if ($found) { return $CommandLine }
 
     return ($CommandLine + ' ' + $Name + ' "' + $escapedValue + '"').Trim()
 }
@@ -81,6 +154,30 @@ if (-not [string]::IsNullOrWhiteSpace($arguments)) {
 }
 
 $existing = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
+$service = $null
+if ($existing) {
+    $service = Get-CimInstance -ClassName Win32_Service -Filter "Name='$($ServiceName.Replace("'", "''"))'"
+    if ($null -eq $service) {
+        throw "Unable to resolve existing service '$ServiceName' for an in-place update."
+    }
+}
+if ($PreserveExistingServiceArguments -and $PreserveExistingServiceBinPath) {
+    throw 'Preserve either the existing arguments or the entire command line, not both.'
+}
+if ($UpgradeMode -and ($PreserveExistingServiceArguments -or $PreserveExistingServiceBinPath) -and -not $service) {
+    throw 'The existing service registration is missing; its account cannot be preserved safely.'
+}
+if ($PreserveExistingServiceArguments -and $service) {
+    $previousCommand = $service.PathName
+    if ($UpgradeMode -and -not [string]::IsNullOrWhiteSpace($BackupPath)) {
+        $previousCommand = (Get-Content -LiteralPath $BackupPath -Raw -ErrorAction Stop).Trim()
+    }
+    $match = [regex]::Match($previousCommand, '^\s*(?:"[^"\r\n]+\.exe"|[^"\r\n]+?\.exe)(?<arguments>\s.*)?$', 'IgnoreCase')
+    if (-not $match.Success) {
+        throw 'The existing service executable and arguments could not be resolved safely.'
+    }
+    $binaryPathName = '"' + $exePath + '"' + $match.Groups['arguments'].Value
+}
 if ($UpgradeMode -and $PreserveExistingServiceBinPath) {
     if ([string]::IsNullOrWhiteSpace($BackupPath) -or -not (Test-Path -LiteralPath $BackupPath -PathType Leaf)) {
         throw 'The existing service command line backup is required for this upgrade.'
@@ -94,17 +191,21 @@ if ($UpgradeMode -and $PreserveExistingServiceBinPath) {
     $binaryPathName = $preservedBinaryPathName
 }
 
-if (-not [string]::IsNullOrWhiteSpace($ConfigPath)) {
-    $resolvedConfigPath = $ConfigPath
-    if (-not [System.IO.Path]::IsPathRooted($resolvedConfigPath)) {
-        $resolvedConfigPath = Join-Path -Path $packageRoot -ChildPath $resolvedConfigPath
+if (-not ($UpgradeMode -and $PreserveExistingServiceBinPath)) {
+    $hasPreservedConfig = $PreserveExistingServiceArguments -and
+        @(Get-CommandLineTokens -CommandLine $binaryPathName | Where-Object { $_.OptionName -match '(?i)^--config(?:-path)?$' }).Count -gt 0
+    if (-not [string]::IsNullOrWhiteSpace($ConfigPath) -and -not $hasPreservedConfig) {
+        $resolvedConfigPath = $ConfigPath
+        if (-not [System.IO.Path]::IsPathRooted($resolvedConfigPath)) {
+            $resolvedConfigPath = Join-Path -Path $packageRoot -ChildPath $resolvedConfigPath
+        }
+
+        $binaryPathName = Set-CommandLineOption -CommandLine $binaryPathName -Name '--config' -Value $resolvedConfigPath
     }
 
-    $binaryPathName = Set-CommandLineOption -CommandLine $binaryPathName -Name '--config' -Value $resolvedConfigPath
-}
-
-if (-not [string]::IsNullOrWhiteSpace($ServiceName)) {
-    $binaryPathName = Set-CommandLineOption -CommandLine $binaryPathName -Name '--service-name' -Value $ServiceName
+    if (-not [string]::IsNullOrWhiteSpace($ServiceName)) {
+        $binaryPathName = Set-CommandLineOption -CommandLine $binaryPathName -Name '--service-name' -Value $ServiceName
+    }
 }
 
 $newServiceParams = @{
@@ -117,7 +218,15 @@ $newServiceParams = @{
 
 $credential = $null
 $servicePassword = $Password
-if (-not [string]::IsNullOrWhiteSpace($Account) -and $Account -ne 'LocalSystem') {
+if ($Account -eq 'NT AUTHORITY\SYSTEM') { $Account = 'LocalSystem' }
+if ($Account -eq 'LocalService') { $Account = 'NT AUTHORITY\LocalService' }
+if ($Account -eq 'NetworkService') { $Account = 'NT AUTHORITY\NetworkService' }
+$passwordlessAccount = $Account -in @('LocalSystem', 'NT AUTHORITY\SYSTEM', 'LocalService', 'NT AUTHORITY\LocalService', 'NetworkService', 'NT AUTHORITY\NetworkService') -or $Account.EndsWith('$')
+$changeAccount = $PSBoundParameters.ContainsKey('Account') -and
+    ($null -eq $service -or $Account -ne $service.StartName -or $PSBoundParameters.ContainsKey('Password'))
+$needsCredential = ($null -eq $service -or $changeAccount) -and
+    -not [string]::IsNullOrWhiteSpace($Account) -and -not $passwordlessAccount
+if ($needsCredential) {
     if ([string]::IsNullOrWhiteSpace($Password)) {
         $credential = Get-Credential -UserName $Account -Message 'Enter password for service account'
         $servicePassword = $credential.GetNetworkCredential().Password
@@ -130,25 +239,21 @@ if (-not [string]::IsNullOrWhiteSpace($Account) -and $Account -ne 'LocalSystem')
 
 if ($existing) {
     if ($existing.Status -ne 'Stopped') {
-        Stop-Service -Name $ServiceName -Force -ErrorAction SilentlyContinue
-    }
-
-    $service = Get-CimInstance -ClassName Win32_Service |
-        Where-Object Name -EQ $ServiceName |
-        Select-Object -First 1
-    if ($null -eq $service) {
-        throw "Unable to resolve existing service '$ServiceName' for an in-place update."
+        Stop-Service -Name $ServiceName -Force -ErrorAction Stop
+        $existing.WaitForStatus('Stopped', [TimeSpan]::FromSeconds(30))
     }
 
     $changeArguments = @{
         PathName    = $binaryPathName
         DisplayName = $DisplayName
-        StartMode   = 'Automatic'
-        StartName   = $Account
     }
-    if (-not [string]::IsNullOrWhiteSpace($servicePassword)) {
+    if ($changeAccount) {
+        $changeArguments.StartName = $Account
+    }
+    if ($changeAccount -and -not [string]::IsNullOrWhiteSpace($servicePassword)) {
         $changeArguments.StartPassword = $servicePassword
     }
+    if ($changeAccount -and $passwordlessAccount) { $changeArguments.StartPassword = '' }
 
     $changeResult = Invoke-CimMethod -InputObject $service -MethodName Change -Arguments $changeArguments
     if ($null -eq $changeResult -or $changeResult.ReturnValue -ne 0) {
@@ -156,9 +261,22 @@ if ($existing) {
         throw "Failed to update existing service '$ServiceName' (Win32_Service.Change=$returnValue)."
     }
 
-    Set-Service -Name $ServiceName -DisplayName $DisplayName -Description $Description -StartupType Automatic
+    Set-Service -Name $ServiceName -DisplayName $DisplayName -Description $Description
 } else {
-    New-Service @newServiceParams | Out-Null
+    if ($passwordlessAccount -and $Account -notin @('LocalSystem', 'NT AUTHORITY\SYSTEM')) {
+        $createArguments = @{
+            Name=$ServiceName; DisplayName=$DisplayName; PathName=$binaryPathName
+            ServiceType=[byte]16; ErrorControl=[byte]1; StartMode='Automatic'
+            DesktopInteract=$false; StartName=$Account; StartPassword=''
+        }
+        $createResult = Invoke-CimMethod -ClassName Win32_Service -MethodName Create -Arguments $createArguments
+        if ($null -eq $createResult -or $createResult.ReturnValue -ne 0) {
+            throw "Failed to create passwordless service '$ServiceName' (Win32_Service.Create=$($createResult.ReturnValue))."
+        }
+        Set-Service -Name $ServiceName -Description $Description
+    } else {
+        New-Service @newServiceParams | Out-Null
+    }
 }
 
 if ($recoveryConfigured) {
@@ -180,7 +298,11 @@ if ($recoveryConfigured) {
 }
 
 if ($Start) {
-    Start-Service -Name $ServiceName
+    if ($service -and $service.StartMode -eq 'Disabled') {
+        Write-Verbose 'The existing disabled startup mode is retained; the service remains stopped.'
+    } else {
+        Start-Service -Name $ServiceName
+    }
 }
 
 Get-Service -Name $ServiceName

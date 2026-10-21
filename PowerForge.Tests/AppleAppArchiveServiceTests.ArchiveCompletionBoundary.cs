@@ -77,7 +77,10 @@ public sealed partial class AppleAppArchiveServiceTests
                         XcodeBuildExecutable = "xcodebuild-test"
                     }));
 
-            Assert.Contains("private Apple archive output changed", exception.Message, StringComparison.OrdinalIgnoreCase);
+            // Either the live observer or the final archive identity may detect the alias write first.
+            var observerRejected = exception.Message.Contains("private Apple archive output changed", StringComparison.OrdinalIgnoreCase);
+            var identityRejected = exception.Message.Contains("private Apple archive changed after xcodebuild completed", StringComparison.OrdinalIgnoreCase);
+            Assert.True(observerRejected || identityRejected, exception.ToString());
         }
         finally
         {
