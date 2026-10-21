@@ -174,7 +174,8 @@ public static partial class WebSiteBuilder
         string title,
         string description,
         string siteName,
-        string? rootPath = null)
+        string? rootPath = null,
+        string? entryName = null)
     {
         if (spec.Social is null)
             return null;
@@ -194,13 +195,13 @@ public static partial class WebSiteBuilder
         var cardTheme = ResolveSocialCardTheme(spec.Social, themeKey);
         var hashThemeKey = cardTheme is null ? string.Empty : themeKey;
         var styleKey = ResolveSocialCardStyle(spec, item, badge, routeForSlug, cardTheme);
-        var inlineImageCandidate = ResolveConfiguredCardImage(spec, item, rootPath);
+        var allowRemoteMediaFetch = ResolveSocialCardAllowRemoteMediaFetch(spec, item, cardTheme);
+        var inlineImageCandidate = ResolveConfiguredCardImage(spec, item, rootPath, allowRemoteMediaFetch);
         var variantKey = ResolveSocialCardVariant(spec, item, styleKey, routeForSlug, cardTheme);
         if ((spec.Social.GeneratedCardTextFit || variantKey == "code-led") &&
             (item.Collection.Equals("api", StringComparison.OrdinalIgnoreCase) || item.Collection.Equals("powershell", StringComparison.OrdinalIgnoreCase)))
-            description = StripMatchingCardTitlePrefix(title, description);
+            description = StripMatchingCardTitlePrefix(entryName ?? item.Title, description);
         var colorScheme = ResolveSocialCardColorScheme(spec, item, cardTheme) ?? string.Empty;
-        var allowRemoteMediaFetch = ResolveSocialCardAllowRemoteMediaFetch(spec, item, cardTheme);
         var logoSource = ResolveSocialCardAssetDataUri(spec, item, ResolveSocialCardLogoCandidate(spec, item, cardTheme), rootPath);
         var inlineImageSource = ShouldRenderSocialCardInlineImage(item, styleKey, variantKey, inlineImageCandidate)
             ? ResolveSocialCardAssetDataUri(spec, item, inlineImageCandidate, rootPath)

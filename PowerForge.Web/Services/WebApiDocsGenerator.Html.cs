@@ -44,7 +44,7 @@ public static partial class WebApiDocsGenerator
         File.WriteAllText(Path.Combine(outputPath, "powerforge-api.css"), fallbackCss, Encoding.UTF8);
         var cssBlock = BuildCssBlockWithFallback(fallbackCss, cssLinks, prismCss);
         var social = ResolveApiSocialProfile(options);
-        var cardContext = LoadApiSocialCardContext(options);
+        var cardContext = LoadApiSocialCardContext(options, social.SiteBaseUrl);
         var structuredDataSite = LoadApiStructuredDataSite(options, social);
         var indexRoute = NormalizeApiIndexRoute(options.BaseUrl);
         var indexDescription = BuildApiIndexSeoDescription(options, types.Count);
@@ -138,7 +138,7 @@ public static partial class WebApiDocsGenerator
         var docsHomeUrl = NormalizeDocsHomeUrl(options.DocsHomeUrl, baseUrl);
         var legacyAliasMode = ResolveLegacyAliasMode(options.LegacyAliasMode);
         var social = ResolveApiSocialProfile(options);
-        var cardContext = LoadApiSocialCardContext(options);
+        var cardContext = LoadApiSocialCardContext(options, social.SiteBaseUrl);
         var structuredDataSite = LoadApiStructuredDataSite(options, social);
         var typeDisplayNames = BuildTypeDisplayNameMap(types, options, warnings);
         var labels = ApiDocsChromeLabels.From(options);

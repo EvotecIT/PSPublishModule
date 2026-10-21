@@ -112,6 +112,7 @@ internal static partial class WebSocialCardGenerator
                     y += size * 0.35;
                 new Drawables().Font(font.Path, FontStyleType.Normal, (FontWeight)requestedWeight, FontStretch.Normal).FontPointSize(size)
                     .FillColor(new MagickColor((string?)text.Attribute("fill") ?? "#ffffff"))
+                    .FillOpacity(new Percentage(Math.Clamp(Number("fill-opacity", 1) * Number("opacity", 1), 0, 1) * 100))
                     .TextAlignment(align).TextKerning(Number("letter-spacing")).Text(x, y, text.Value).Draw(image);
             }
             catch (Exception ex)

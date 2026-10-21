@@ -91,7 +91,7 @@ public static partial class WebApiDocsGenerator
 
     private sealed record ApiCardContext(SiteSpec Site, string Root);
 
-    private static ApiCardContext? LoadApiSocialCardContext(WebApiDocsOptions options)
+    private static ApiCardContext? LoadApiSocialCardContext(WebApiDocsOptions options, string effectiveSiteBaseUrl)
     {
         if (!options.AutoGenerateSocialCards)
             return null;
@@ -125,6 +125,8 @@ public static partial class WebApiDocsGenerator
         site.Social.GeneratedCardsPath = NormalizeApiSocialCardPath(options.SocialCardPath);
         site.Social.GeneratedCardWidth = options.SocialCardWidth;
         site.Social.GeneratedCardHeight = options.SocialCardHeight;
+        if (!string.IsNullOrWhiteSpace(effectiveSiteBaseUrl))
+            site.BaseUrl = effectiveSiteBaseUrl;
         return new ApiCardContext(site, root);
     }
 
@@ -151,7 +153,10 @@ public static partial class WebApiDocsGenerator
             item.Meta["social_title"] = item.Title;
         else if (titleSource?.Equals("seo", StringComparison.OrdinalIgnoreCase) == true)
             item.Meta["social_title"] = title;
-        var plan = WebSiteBuilder.CreateSocialCardGenerationPlan(context.Site, item, title, description, siteName, context.Root)!;
+        // SEO descriptions use the displayed entry name, which may be qualified or generic.
+        var titleSuffix = " - " + options.Title;
+        var entryName = NormalizeApiSeoText(title.EndsWith(titleSuffix, StringComparison.Ordinal) ? title[..^titleSuffix.Length] : item.Title);
+        var plan = WebSiteBuilder.CreateSocialCardGenerationPlan(context.Site, item, title, description, siteName, context.Root, entryName)!;
         var fullPath = Path.GetFullPath(Path.Combine(siteRoot, plan.RelativePath.Replace('/', Path.DirectorySeparatorChar)));
         if (!IsApiPathWithinRoot(siteRoot, fullPath))
             throw new InvalidOperationException("API social card output must be within the site output root.");
@@ -172,7 +177,10 @@ public static partial class WebApiDocsGenerator
     {
         if (options.Type == ApiDocsType.PowerShell)
             return type.Methods.FirstOrDefault(method => !string.IsNullOrWhiteSpace(method.Signature))?.Signature ?? type.Name;
-        var modifiers = type.IsStatic ? "static " : type.IsAbstract ? "abstract " : type.IsSealed && type.Kind.Equals("Class", StringComparison.OrdinalIgnoreCase) ? "sealed " : string.Empty;
+        if (type.Kind.Equals("Delegate", StringComparison.OrdinalIgnoreCase))
+            return type.DelegateDeclaration ?? type.Name;
+        var modifiers = !type.Kind.Equals("Class", StringComparison.OrdinalIgnoreCase) ? string.Empty :
+            type.IsStatic ? "static " : type.IsAbstract ? "abstract " : type.IsSealed ? "sealed " : string.Empty;
         var parameters = type.TypeParameters.Count == 0 ? string.Empty : "<" + string.Join(", ", type.TypeParameters.Select(parameter => parameter.Name)) + ">";
         return $"public {modifiers}{type.Kind.ToLowerInvariant()} {StripGenericArity(type.Name)}{parameters}";
     }

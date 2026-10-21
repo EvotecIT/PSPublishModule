@@ -10,6 +10,77 @@ public sealed class WebSocialCardContentTests : IDisposable
     public WebSocialCardContentTests() => Directory.CreateDirectory(_root);
     public void Dispose() => Directory.Delete(_root, recursive: true);
 
+    [Fact]
+    public async Task RemoteArtwork_UsesFallbackOrFailsWhenDisabledOrUnavailable_AndHonorsEnabledSources()
+    {
+        var port = LoopbackHttpListener.GetCandidatePort();
+        using var listener = LoopbackHttpListener.Start(ref port);
+        using var stop = new CancellationTokenSource();
+        var requests = 0;
+        var server = Task.Run(async () =>
+        {
+            try
+            {
+                while (!stop.IsCancellationRequested)
+                {
+                    var request = await listener.GetContextAsync().WaitAsync(stop.Token);
+                    Interlocked.Increment(ref requests);
+                    var valid = request.Request.Url!.AbsolutePath == "/image.svg";
+                    request.Response.StatusCode = valid ? 200 : 404;
+                    request.Response.ContentType = "image/svg+xml";
+                    var bytes = System.Text.Encoding.UTF8.GetBytes("<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"20\" height=\"20\"><rect width=\"20\" height=\"20\" fill=\"red\"/></svg>");
+                    request.Response.ContentLength64 = bytes.Length;
+                    await request.Response.OutputStream.WriteAsync(bytes);
+                    request.Response.Close();
+                }
+            }
+            catch (OperationCanceledException) { }
+            catch (System.Net.HttpListenerException) when (stop.IsCancellationRequested) { }
+            catch (ObjectDisposedException) when (stop.IsCancellationRequested) { }
+        });
+        try
+        {
+            var remote = $"http://127.0.0.1:{port}/image.svg";
+            var missing = $"http://127.0.0.1:{port}/missing.svg";
+            var spec = Site();
+            spec.Social!.GeneratedCardVariant = "split";
+            spec.Social.GeneratedCardImagesRequired = true;
+            spec.Social.GeneratedCardImages = new() { ["docs"] = new() { Pattern = "/unused.svg", Fallback = "/cards/fallback.svg" } };
+            WriteSvg("cards/fallback.svg", "#0000ff");
+            var page = Page();
+            page.Meta["social_card_image"] = remote;
+            var disabledSource = Plan(spec, page).InlineImageDataUri;
+            Assert.StartsWith("data:image/", disabledSource);
+            Assert.Contains("#0000ff", Decode(disabledSource));
+            Assert.Equal(0, requests);
+            spec.Social.GeneratedCardAllowRemoteMediaFetch = true;
+            Assert.Equal(remote, Plan(spec, page).InlineImageDataUri);
+            Assert.True(requests > 0);
+            page.Meta["social_card_image"] = missing;
+            Assert.Contains("#0000ff", Decode(Plan(spec, page).InlineImageDataUri));
+            spec.Social.GeneratedCardImages["docs"].Fallback = missing;
+            Assert.Throws<InvalidOperationException>(() => Plan(spec, page));
+            spec.Social.GeneratedCardImages = null;
+            Assert.Throws<InvalidOperationException>(() => Plan(spec, page));
+            spec.Social.GeneratedCardImages = new() { ["docs"] = new() { Pattern = remote } };
+            page.Meta.Remove("social_card_image");
+            Assert.Equal(remote, Plan(spec, page).InlineImageDataUri);
+            spec.Social.GeneratedCardAllowRemoteMediaFetch = false;
+            spec.Social.GeneratedCardImages["docs"].Pattern = "/missing.svg";
+            spec.Social.GeneratedCardImages["docs"].Fallback = remote;
+            Assert.Throws<InvalidOperationException>(() => Plan(spec, page));
+            spec.Social.GeneratedCardThemes = new() { ["remote"] = new SocialCardThemeSpec { AllowRemoteMediaFetch = true } };
+            spec.Social.GeneratedCardTheme = "remote";
+            Assert.Equal(remote, Plan(spec, page).InlineImageDataUri);
+        }
+        finally
+        {
+            stop.Cancel();
+            listener.Stop();
+            await server;
+        }
+    }
+
     [Theory]
     [InlineData("api", "Terminal", "Terminal: The print-once entry point.", "The print-once entry point.")]
     [InlineData("powershell", "Format-ConsoleTable", "Format-ConsoleTable: Formats pipeline objects.", "Formats pipeline objects.")]

@@ -57,6 +57,45 @@ public sealed class WebSocialCardRenderingTests : IDisposable
         Assert.Contains("Unavailable Theme Font", Assert.Throws<InvalidOperationException>(() => WebSocialCardGenerator.RenderPng(options)).Message);
     }
 
+    [Theory]
+    [InlineData("reference", 0.6)]
+    [InlineData("shelf", 0.5)]
+    public void ConfiguredFonts_PreserveFooterTextOpacity(string variant, double opacity)
+    {
+        if (!WebSocialCardGenerator.IsPngRenderingAvailable()) return;
+        File.Copy(Path.Combine(AppContext.BaseDirectory, "Fixtures", "SocialCards", "SpaceGrotesk-Bold.ttf"), Path.Combine(_root, "footer.ttf"));
+        var options = Options();
+        options.VariantKey = variant;
+        options.StyleKey = "api";
+        options.FooterLabel = "/readable-footer";
+        options.Fonts = WebSocialCardGenerator.ResolveFontFiles(new[] { new SocialCardFontSpec { Family = "Fixture Footer", Path = "footer.ttf", Weight = 500 } }, _root);
+        options.ThemeTokens = Tokens(("fontFooter", "Fixture Footer"));
+        var svg = XDocument.Parse(WebSocialCardGenerator.RenderSvg(options));
+        var text = svg.Descendants().Single(element => element.Name.LocalName == "text" && element.Value == options.FooterLabel);
+        var foreground = new MagickColor(text.Attribute("fill")!.Value);
+        Assert.Equal(opacity, double.Parse(text.Attribute("fill-opacity")!.Value, System.Globalization.CultureInfo.InvariantCulture));
+        using var image = new MagickImage(WebSocialCardGenerator.RenderPng(options)!);
+        options.FooterLabel = "/";
+        using var background = new MagickImage(WebSocialCardGenerator.RenderPng(options)!);
+        using var pixels = image.GetPixels();
+        using var backgroundPixels = background.GetPixels();
+        double maximumAlpha = 0;
+        var changedPixels = 0;
+        for (var y = 0; y < image.Height; y++)
+            for (var x = 0; x < image.Width; x++)
+            {
+                var actual = pixels.GetPixel(x, y).ToColor()!;
+                var backdrop = backgroundPixels.GetPixel(x, y).ToColor()!;
+                var difference = (double)actual.R - backdrop.R;
+                var contrast = (double)foreground.R - backdrop.R;
+                if (difference <= 5 || contrast <= 50) continue;
+                changedPixels++;
+                maximumAlpha = Math.Max(maximumAlpha, difference / contrast);
+            }
+        Assert.True(changedPixels > 50, "The configured footer must be visible.");
+        Assert.InRange(maximumAlpha, opacity - 0.03, opacity + 0.03);
+    }
+
     [Fact]
     public void ConfiguredFonts_MissingInvalidOrUnsupportedFiles_FailLoudly_AndContentChangesInvalidateCard()
     {

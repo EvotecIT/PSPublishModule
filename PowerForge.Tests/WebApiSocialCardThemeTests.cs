@@ -7,18 +7,21 @@ using ImageMagick;
 
 namespace PowerForge.Tests;
 
-public sealed class WebApiSocialCardThemeTests : IDisposable
+public sealed partial class WebApiSocialCardThemeTests : IDisposable
 {
     private readonly string _root = Path.Combine(Path.GetTempPath(), "pf-api-card-theme-" + Guid.NewGuid().ToString("N"));
     public WebApiSocialCardThemeTests() => Directory.CreateDirectory(_root);
     public void Dispose() => Directory.Delete(_root, recursive: true);
 
     [Theory]
-    [InlineData("docs", false, false)]
-    [InlineData("simple", false, false)]
-    [InlineData("docs", true, false)]
-    [InlineData("docs", false, true)]
-    public void ApiCards_UseNamedThemeAndNameOnlyTitle_KeepSeoMetadata(string template, bool powerShell, bool collectionTitle)
+    [InlineData("docs", false, false, false, false)]
+    [InlineData("simple", false, false, false, false)]
+    [InlineData("docs", true, false, false, false)]
+    [InlineData("docs", false, true, false, false)]
+    [InlineData("docs", false, false, true, true)]
+    [InlineData("docs", true, false, true, true)]
+    public void ApiCards_UseNamedThemeAndSelectedTitleSource_KeepEffectiveHostAndSeoMetadata(
+        string template, bool powerShell, bool collectionTitle, bool seoTitle, bool alternateHost)
     {
         if (!WebSocialCardGenerator.IsPngRenderingAvailable())
             return;
@@ -58,7 +61,8 @@ public sealed class WebApiSocialCardThemeTests : IDisposable
             XmlPath = xmlPath, HelpPath = helpPath, OutputPath = outPath, SiteConfigPath = config,
             Title = "Example API reference", BaseUrl = "/api", SiteName = "Example",
             Template = template, Format = "both", AutoGenerateSocialCards = true,
-            SocialCardTheme = "quiet-api", SocialCardTitle = collectionTitle ? null : "name", SocialCardsRequired = true
+            SocialCardTheme = "quiet-api", SocialCardTitle = seoTitle ? "seo" : collectionTitle ? null : "name", SocialCardsRequired = true,
+            SiteBaseUrl = alternateHost ? "https://preview.example.test" : null
         };
         var result = WebApiDocsGenerator.Generate(options);
         Assert.Equal(1, result.TypeCount);
@@ -70,19 +74,23 @@ public sealed class WebApiSocialCardThemeTests : IDisposable
         Assert.EndsWith(" - Example API reference", Meta("og:title"));
         var route = new Uri(Meta("og:url")).AbsolutePath;
         var image = new Uri(Meta("og:image")).AbsolutePath;
+        Assert.Equal(alternateHost ? "preview.example.test" : "example.test", new Uri(Meta("og:url")).Host);
         var typeJson = Directory.EnumerateFiles(Path.Combine(outPath, "types"), "*.json").Single();
         using var typeModel = JsonDocument.Parse(File.ReadAllText(typeJson));
         var code = powerShell ? typeModel.RootElement.GetProperty("methods")[0].GetProperty("signature").GetString()! : collectionTitle ? "public class Terminal<T>" : "public class Terminal";
         Assert.Contains(powerShell ? "InputObject" : "Terminal", code, StringComparison.Ordinal);
         spec.Social.GeneratedCardTheme = "quiet-api";
         spec.Social.GeneratedCardsPath = "/assets/social/generated/api";
+        spec.BaseUrl = options.SiteBaseUrl ?? spec.BaseUrl;
         var item = new ContentItem
         {
-            Title = powerShell ? "Format-ConsoleTable" : "Terminal", OutputPath = route, Collection = powerShell ? "powershell" : "api",
-            Meta = new() { ["social_title"] = powerShell ? "Format-ConsoleTable" : "Terminal", ["social_card_badge"] = powerShell ? "POWERSHELL" : "API", ["social_card_code"] = code }
+            Title = powerShell ? "Format-ConsoleTable" : "Terminal", Description = "Build readable output.", OutputPath = route, Collection = powerShell ? "powershell" : "api",
+            Meta = new() { ["social_title"] = seoTitle ? Meta("og:title") : powerShell ? "Format-ConsoleTable" : "Terminal", ["social_card_badge"] = powerShell ? "POWERSHELL" : "API", ["social_card_code"] = code }
         };
         var expected = WebSiteBuilder.CreateSocialCardGenerationPlan(spec, item, Meta("og:title"), Meta("og:description"), "Example", _root)!;
         Assert.Equal(powerShell ? "POWERSHELL" : "API", expected.RenderOptions.Badge);
+        Assert.Equal(alternateHost ? "preview.example.test" : "example.test", expected.RenderOptions.SiteAddress);
+        Assert.Equal("Build readable output.", expected.RenderOptions.Description);
         Assert.Equal("/" + expected.RelativePath, image);
         using var actualPng = new MagickImage(Path.Combine(_root, "_site", image.TrimStart('/')));
         using var expectedPng = new MagickImage(WebSocialCardGenerator.RenderPng(expected.RenderOptions)!);

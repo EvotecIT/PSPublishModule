@@ -71,7 +71,7 @@ public static partial class WebSiteBuilder
         return ResolveSocialBadge(item, route);
     }
 
-    private static string ResolveConfiguredCardImage(SiteSpec spec, ContentItem item, string? rootPath)
+    private static string ResolveConfiguredCardImage(SiteSpec spec, ContentItem item, string? rootPath, bool allowRemoteMediaFetch)
     {
         // Explicit card artwork wins over a convention; generic social/cover images remain the legacy fallback.
         var explicitImage = FirstNonEmpty(GetMetaString(item.Meta, "social_card_image"), GetMetaString(item.Meta, "social.card_image"),
@@ -82,7 +82,7 @@ public static partial class WebSiteBuilder
         {
             var directCandidate = hasExplicitImage ? explicitImage! : ResolveSocialCardInlineImageCandidate(item);
             if (!string.IsNullOrWhiteSpace(directCandidate) && spec.Social?.GeneratedCardImagesRequired == true &&
-                !IsRemoteCardImage(directCandidate) && !CardImageExists(spec, item, directCandidate, rootPath))
+                !CardImageAvailable(spec, item, directCandidate, rootPath, allowRemoteMediaFetch))
                 throw new InvalidOperationException($"Required social card image '{directCandidate}' could not be resolved for '{item.OutputPath}'.");
             return directCandidate;
         }
@@ -97,11 +97,11 @@ public static partial class WebSiteBuilder
         // An unresolved placeholder never becomes an accidental /cards/.svg match.
         var missingKey = !hasExplicitImage && Regex.Matches(rule.Pattern ?? string.Empty, @"\{meta\.([^{}]+)\}", RegexOptions.CultureInvariant, SocialRegexTimeout)
             .Any(match => string.IsNullOrWhiteSpace(GetMetaString(item.Meta, match.Groups[1].Value)));
-        if (!missingKey && (CardImageExists(spec, item, candidate, rootPath) || hasExplicitImage && IsRemoteCardImage(candidate)))
+        if (!missingKey && CardImageAvailable(spec, item, candidate, rootPath, allowRemoteMediaFetch))
             return candidate;
         ReportCardWarning($"Social card image missing for '{item.OutputPath}': '{(hasExplicitImage ? explicitImage : rule.Pattern)}' (resolved '{candidate}').");
         var fallback = Expand(rule.Fallback);
-        if (CardImageExists(spec, item, fallback, rootPath))
+        if (CardImageAvailable(spec, item, fallback, rootPath, allowRemoteMediaFetch))
             return fallback;
         if (!string.IsNullOrWhiteSpace(rule.Fallback))
             ReportCardWarning($"Social card fallback image missing for '{item.OutputPath}': '{fallback}'.");
@@ -114,6 +114,11 @@ public static partial class WebSiteBuilder
         => !string.IsNullOrWhiteSpace(candidate) &&
            (candidate.StartsWith("data:image/", StringComparison.OrdinalIgnoreCase) ||
             File.Exists(TryResolveSocialCardAssetPath(spec, item, candidate, rootPath)));
+
+    private static bool CardImageAvailable(SiteSpec spec, ContentItem item, string candidate, string? rootPath, bool allowRemoteMediaFetch)
+        => IsRemoteCardImage(candidate)
+            ? WebSocialCardGenerator.IsRenderableImageSource(candidate, allowRemoteMediaFetch)
+            : CardImageExists(spec, item, candidate, rootPath);
 
     private static bool IsRemoteCardImage(string candidate)
         => Uri.TryCreate(candidate, UriKind.Absolute, out var uri) && uri.Scheme is "http" or "https";
