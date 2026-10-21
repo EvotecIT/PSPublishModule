@@ -154,7 +154,9 @@ Sidebar position (`docs` template):
 - Default is `left`.
 Body class:
 - `bodyClass` (pipeline) or `--body-class` (CLI) to set the `<body>` class.
-- Default: `pf-api-docs` (used by fallback CSS to align theme tokens).
+- The generator retains `pf-api-docs` and adds `pf-api-docs--dotnet` or
+  `pf-api-docs--powershell` alongside the configured classes. A suite current ID
+  adds a normalized `pf-api-docs--suite-<id>` class.
 
 To customize templates, copy the embedded defaults from:
 `PowerForge.Web/Assets/ApiDocs` into your own folder and pass it as
@@ -330,7 +332,9 @@ Member layout:
 - `.member-signature` – signature code line
 - `.member-anchor` – anchor link
 - `.member-source` – source link row (optional)
-- `.member-return` – return type row
+- `.member-returns` – combined return type and documentation (omitted for void)
+- `.member-returns-type`, `.member-returns-text` – return block content
+- `.member-subhead` – per-member detail label without a page heading
 - `.member-inherited` – inherited badge row
 - `.member-value` – enum value row
 - `.param-default` – parameter default value
@@ -413,15 +417,149 @@ When assembly reflection is available, the generator emits:
 If you change class names or IDs, provide your own JS via `docsScript` /
 `searchScript`.
 
-## Fallback CSS
+## Default theme and CSS variables
 
-When `css` is not provided, the generator inlines `fallback.css`.
-To fully control the visuals, provide `css` or supply a custom `fallback.css`
-via `templateRoot`.
+The shared theme styles API indexes, classes, structs, enums, PowerShell commands
+and suite portals. It provides a rail tree, compact filters, member rows with
+boxed signatures, a facts list with hairline rules, and a slide-in phone sidebar.
+Only the type tree scrolls inside the desktop sidebar. The table of contents sits
+in a sticky right rail from 1240px; below that width it is hidden. The navigation
+drawer replaces the desktop sidebar at 960px and below. These two breakpoints
+are structural CSS media queries, rather than custom properties.
 
-`css` may be a single href or a comma/whitespace-separated list of hrefs. When
-multiple are provided, the generator emits multiple `<link rel="stylesheet" ...>`
-tags (for example `"/css/app.css,/css/api.css"`).
+Without `css`, generation inlines the theme. Each HTML output directory also
+receives `powerforge-api.css`, containing the same stylesheet. Load that generated
+asset followed by your site's token map to reuse the theme without keeping a
+copy of its selectors:
+
+```json
+{
+  "task": "apidocs",
+  "template": "docs",
+  "out": "./_site/api",
+  "baseUrl": "/api",
+  "css": "/css/site-tokens.css,/api/powerforge-api.css,/css/api-theme.css"
+}
+```
+
+Use the corresponding output URL for each reference. A PowerShell reference at
+`/powershell/commands` emits `/powershell/commands/powerforge-api.css`. Each output
+also supports `templateRoot/fallback.css` as the source of its inline and emitted
+theme. Keep these generated assets with their pages when deploying a reference.
+
+Providing `css` still replaces the inline theme. Existing sites that supply a
+complete stylesheet keep that behavior. The small `controls.css` asset is always
+inlined to keep screen-reader labels hidden, icons inside their controls and
+grouped status links free of offsets from older themes. It contains control
+layout, without a color palette or page composition. `css` accepts a single href or a comma-
+or whitespace-separated list, rendered in the supplied order. To migrate a
+copied stylesheet, include the generated theme explicitly, then the token map;
+remove only the site's duplicated layout rules after reviewing the result.
+This does not require a separate theme package.
+
+Map properties on `body.pf-api-docs`. Palette defaults use zero-specificity root
+selectors; derived defaults such as kind colors and the heading font resolve on
+the API body, so they follow body-level accent and font overrides. Components
+use `:where(body.pf-api-docs)` so ordinary site rules can override
+them. Light and dark selectors assign variables only; they do not restyle each
+component. The default is dark. Set `data-theme="light"` or `data-theme="dark"`
+on `html`; an explicit `data-theme="light"` on the API body is also supported.
+The host owns its theme preference and toggle. Map theme-dependent site tokens
+on the body once, so switching the host theme updates every reference component.
+
+For example, a site with an existing token layer can use this small map. The
+`--site-*` names below represent that site's own tokens; define them in the site's
+token stylesheet or substitute its actual names.
+
+```css
+body.pf-api-docs {
+  --pf-bg: var(--site-page);
+  --pf-bg-alt: var(--site-sunken);
+  --pf-panel: var(--site-panel);
+  --pf-card-bg: var(--site-surface);
+  --pf-ink: var(--site-ink);
+  --pf-muted: var(--site-muted);
+  --pf-dim: var(--site-dim);
+  --pf-border: var(--site-line);
+  --pf-border-strong: var(--site-line-strong);
+  --pf-accent: var(--site-link);
+  --pf-code-bg: var(--site-code-bg);
+  --pf-code-ink: var(--site-code-ink);
+  --pf-font-body: var(--site-sans);
+  --pf-font-heading: var(--site-display);
+  --pf-font-mono: var(--site-mono);
+  --pf-header-offset: var(--site-header-height);
+  --pf-page-width: var(--site-width);
+  --pf-page-gutter: var(--site-gutter);
+  --pf-radius: var(--site-radius);
+  --pf-kind-class: var(--site-link);
+  --pf-kind-struct: var(--site-warning);
+  --pf-kind-enum: var(--site-mark);
+  --pf-kind-interface: var(--site-success);
+  --pf-kind-delegate: var(--site-success);
+  --pf-kind-command: var(--site-link);
+}
+```
+
+All properties are optional. Override the palette, fonts and header offset first;
+keep the spacing and size defaults unless the site's composition needs more.
+No font download is required by the shared theme.
+
+| Properties | Meaning and defaults |
+| --- | --- |
+| `--pf-bg`, `--pf-bg-alt`, `--pf-panel`, `--pf-card-bg` | Page and surface palette. Dark defaults: `#111318`, `#181b22`, `#1c2029`, `#181b22`; light: `#fcfcfd`, `#f3f4f7`, `#eceef3`, `#f7f8fa`. `panel` and `card-bg` remain available to site extensions. |
+| `--pf-ink`, `--pf-muted`, `--pf-dim` | Main, secondary and metadata text. Dark: `#ecedf1`, `#b6bdcc`, `#9ca7ba`; light: `#202530`, `#515b6d`, `#626d80`. |
+| `--pf-border`, `--pf-border-strong` | Hairlines and control boundaries; also scrollbar colors. Dark: `#343b49`, `#515d71`; light: `#dce0e8`, `#aab3c3`. |
+| `--pf-accent`, `--pf-accent-soft` | Links, selected controls and current tree item. Dark accent `#c4b5fd`, light `#6743b5`; soft is a 12% mix with transparent. |
+| `--pf-code-bg`, `--pf-code-ink` | Signature and example palette. Dark: `#161920`, `#e2e8f0`; light: `#f3f4f7`, `#253047`. |
+| `--pf-overlay`, `--pf-shadow`, `--pf-color-scheme` | Drawer scrim, popup shadow and native control scheme. Dark: `#080b12aa`, `0 12px 32px #0004`, `dark`; light: `#10182777`, `0 12px 32px #1820331a`, `light`. |
+| `--pf-kind-class`, `--pf-kind-struct`, `--pf-kind-enum`, `--pf-kind-interface`, `--pf-kind-delegate`, `--pf-kind-command` | Kind glyph and badge colors; each defaults to the accent. Component-local `--pf-kind` selects the corresponding color. |
+| `--pf-font-body`, `--pf-font-heading`, `--pf-font-mono` | System sans, the body font, and system monospace, respectively. |
+| `--pf-text-xs`, `--pf-text-sm`, `--pf-text-code`, `--pf-text-base`, `--pf-text-lead` | Text sizes: `.75rem`, `.8125rem`, `.84375rem`, `.9375rem`, `1.0625rem`. |
+| `--pf-text-h3`, `--pf-text-h2`, `--pf-text-h1` | Heading sizes: `1rem`, `1.25rem`, `clamp(1.75rem, 1.2rem + 1.6vw, 2.5rem)`. |
+| `--pf-leading`, `--pf-leading-tight` | Body and heading line heights: `1.65`, `1.3`. |
+| `--pf-weight`, `--pf-weight-medium`, `--pf-weight-heading` | Body, emphasis and heading weights: `400`, `600`, `700`. |
+| `--pf-space-1` through `--pf-space-8` | Spacing scale: `.25rem`, `.5rem`, `.75rem`, `1rem`, `1.5rem`, `2rem`, `2.5rem`, `3rem`. |
+| `--pf-radius`, `--pf-radius-sm`, `--pf-radius-pill` | Control, inline and chip corners: `.5rem`, `.25rem`, `999px`. |
+| `--pf-line`, `--pf-focus-width` | Hairline and focus/current-item widths: `1px`, `2px`. |
+| `--pf-control-height`, `--pf-chip-height` | Search/select height `2.5rem`; compact chip height `1.625rem` (26px at the default root font size). |
+| `--pf-icon-size`, `--pf-glyph-size` | Search/action icons `1rem`; kind glyph boxes `1.125rem`. |
+| `--pf-inline-code-padding`, `--pf-inline-code-size`, `--pf-underline-offset` | Inline code inset `.1em .35em`, relative size `.9em`, link underline offset `.18em`. |
+| `--pf-page-width`, `--pf-page-gutter`, `--pf-layout-gap` | Maximum frame `96rem`; page inset `clamp(1rem, 3vw, 2.5rem)`; column gap `clamp(1.5rem, 3vw, 3rem)`. |
+| `--pf-sidebar-width`, `--pf-toc-width`, `--pf-header-offset` | Tree width `17rem`, right rail `12rem`, host sticky-header offset `0px`. |
+| `--pf-measure`, `--pf-facts-label-width` | Summary reading width `72ch`; facts label column `7.5rem`. |
+| `--pf-search-width`, `--pf-card-min-width`, `--pf-drawer-width` | Member search flex basis `13.75rem`, index card minimum `13rem`, phone drawer maximum `21rem`. |
+| `--pf-combobox-max-height`, `--pf-scrollbar-size`, `--pf-motion` | Namespace popup maximum `18rem` (also bounded to 40dvh), scrollbar `.5rem`, transition `.18s`. Reduced-motion preferences disable transitions. |
+| `--pf-z-menu`, `--pf-z-overlay`, `--pf-z-drawer` | Popup, scrim and drawer stacking levels: `70`, `1001`, `1002`; map these if host chrome uses a different stacking scheme. |
+
+## Template semantics and control state
+
+Type headers place the kind, name and namespace in `.type-title-row`, with a
+`.type-namespace` paragraph after the heading. The breadcrumb supplies the
+reference context, so type headers do not repeat an API Reference eyebrow.
+Facts use `dl.type-meta`, `dt.type-meta-label` and `dd`. Existing row classes
+remain available to site styles. Source actions retain `.type-source-action`
+and add `.type-edit-action` or `.type-view-source-action`.
+
+Sidebar and member searches have associated screen-reader labels and positioned
+icon spans. `.sidebar-status` groups the count, browse-all link and tree tools.
+Kind buttons expose `aria-pressed`; their groups have accessible names. Script
+updates the pressed state when filters change, reset or restore from navigation.
+Member section toggles expose `aria-expanded` and `aria-controls` for their body,
+including after expand/collapse-all or saved-state restoration.
+
+Member detail labels use `.member-subhead` paragraphs rather than page headings.
+One `.member-returns` block combines `.member-returns-type` and
+`.member-returns-text`; void methods have no returns block. .NET parameter order
+is conveyed by the signature. PowerShell positional and pipeline metadata have
+`.param-meta-chip--position` and `.param-meta-chip--pipeline` hooks.
+Bodies expose `.pf-api-docs--dotnet` or `.pf-api-docs--powershell` alongside
+`.pf-api-docs`, so sites can style either language without inspecting descendants.
+
+Example titles use sentence case. Example provenance badges are hidden by
+default; set `showExampleOrigins: true` on the `apidocs` pipeline step,
+`--show-example-origins` on the CLI or `ShowExampleOrigins = true` on
+`WebApiDocsOptions` for help-authoring views. Provenance remains in JSON output.
 
 ## XML docs vs reflection
 

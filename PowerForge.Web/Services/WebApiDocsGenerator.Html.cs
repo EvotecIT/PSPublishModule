@@ -35,12 +35,13 @@ public static partial class WebApiDocsGenerator
         var footer = LoadOptionalHtml(options.FooterHtmlPath);
         ApplyNavFallback(options, warnings, ref header, ref footer);
         ApplyNavTokens(options, warnings, ref header, ref footer);
-        var bodyClass = ResolveBodyClass(options.BodyClass);
+        var bodyClass = ResolveBodyClass(options);
         var criticalCss = BuildApiDocsCriticalCss(options, warnings);
         var codeLanguage = GetDefaultCodeLanguage(options);
         var (prismCss, prismScripts) = BuildApiPrismAssets(options, codeLanguage);
         var cssLinks = BuildCssLinks(options.CssHref);
         var fallbackCss = LoadAsset(options, "fallback.css", null);
+        File.WriteAllText(Path.Combine(outputPath, "powerforge-api.css"), fallbackCss, Encoding.UTF8);
         var cssBlock = BuildCssBlockWithFallback(fallbackCss, cssLinks, prismCss);
         var social = ResolveApiSocialProfile(options);
         var structuredDataSite = LoadApiStructuredDataSite(options, social);
@@ -119,12 +120,13 @@ public static partial class WebApiDocsGenerator
         var footer = LoadOptionalHtml(options.FooterHtmlPath);
         ApplyNavFallback(options, warnings, ref header, ref footer);
         ApplyNavTokens(options, warnings, ref header, ref footer);
-        var bodyClass = ResolveBodyClass(options.BodyClass);
+        var bodyClass = ResolveBodyClass(options);
         var criticalCss = BuildApiDocsCriticalCss(options, warnings);
         var codeLanguage = GetDefaultCodeLanguage(options);
         var (prismCss, prismScripts) = BuildApiPrismAssets(options, codeLanguage);
         var cssLinks = BuildCssLinks(options.CssHref);
         var fallbackCss = LoadAsset(options, "fallback.css", null);
+        File.WriteAllText(Path.Combine(outputPath, "powerforge-api.css"), fallbackCss, Encoding.UTF8);
         var cssBlock = BuildCssBlockWithFallback(fallbackCss, cssLinks, prismCss);
 
         var baseUrl = string.IsNullOrWhiteSpace(options.BaseUrl) ? "/api" : options.BaseUrl.TrimEnd('/');
@@ -395,6 +397,8 @@ $@"<!doctype html>
             return RequiredSelectorsSimple;
 
         var selectors = new List<string>(RequiredSelectorsDocs);
+        if (options.ShowExampleOrigins)
+            AddRequiredCssSelectors(selectors, RequiredSelectorsDocsExampleOrigins);
         var suite = BuildApiSuiteContext(options, options.BaseUrl);
         if (suite?.HasEntries == true)
             AddRequiredCssSelectors(selectors, RequiredSelectorsDocsSuite);
@@ -641,29 +645,10 @@ $@"<!doctype html>
         return null;
     }
 
-    private const string ApiDocsLayoutStabilityCss = """
-/* PowerForge API docs first-paint control stability. */
-body.pf-api-docs .namespace-select,
-body.pf-api-docs .pf-combobox-trigger{
-  box-sizing:border-box;
-  width:100%;
-  min-height:2.45rem;
-  line-height:1.2;
-}
-body.pf-api-docs .filter-button,
-body.pf-api-docs .sidebar-reset,
-body.pf-api-docs .sidebar-tools button,
-body.pf-api-docs .api-suite-search-filter{
-  box-sizing:border-box;
-  min-height:1.9rem;
-  line-height:1.2;
-}
-""";
-
     private static string BuildApiDocsCriticalCss(WebApiDocsOptions options, List<string> warnings) =>
         JoinHtmlFragments(
             ResolveCriticalCss(options, warnings),
-            WrapStyle(ApiDocsLayoutStabilityCss),
+            WrapStyle(LoadAsset(options, "controls.css", null)),
             WrapStyle(ApiDocsResponsiveCss));
 
     private static string ResolveCriticalCss(WebApiDocsOptions options, List<string> warnings)
@@ -1120,6 +1105,8 @@ body.pf-api-docs .api-suite-search-filter{
             html.Line("<div class=\"sidebar-search\">");
             using (html.Indent())
             {
+                html.Line($"<label class=\"sr-only\" for=\"api-filter\">Filter {primaryKindPluralLabel}</label>");
+                html.Line("<span class=\"sidebar-search-icon\" aria-hidden=\"true\">");
                 html.Line("<svg viewBox=\"0 0 24 24\" width=\"16\" height=\"16\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\">");
                 using (html.Indent())
                 {
@@ -1127,7 +1114,8 @@ body.pf-api-docs .api-suite-search-filter{
                     html.Line("<path d=\"M21 21l-4.35-4.35\"/>");
                 }
                 html.Line("</svg>");
-                html.Line($"<input id=\"api-filter\" type=\"text\" placeholder=\"Filter {primaryKindPluralLabel} ({totalTypes})...\" />");
+                html.Line("</span>");
+                html.Line($"<input id=\"api-filter\" type=\"search\" placeholder=\"Filter {primaryKindPluralLabel} ({totalTypes})...\" />");
                 html.Line("<button class=\"clear-search\" type=\"button\" aria-label=\"Clear search\">");
                 using (html.Indent())
                 {
@@ -1153,13 +1141,13 @@ body.pf-api-docs .api-suite-search-filter{
                     {
                         var kindFilterLabel = labels.IsPowerShell ? "Command type" : $"{primaryKindFilterLabel} filters";
                         html.Line($"<div class=\"filter-label\">{System.Web.HttpUtility.HtmlEncode(kindFilterLabel)}</div>");
-                        html.Line("<div class=\"filter-buttons\">");
+                        html.Line("<div class=\"filter-buttons\" role=\"group\" aria-label=\"Type kinds\">");
                         using (html.Indent())
                         {
-                            html.Line("<button class=\"filter-button active\" type=\"button\" data-kind=\"\">All</button>");
+                            html.Line("<button class=\"filter-button active\" type=\"button\" aria-pressed=\"true\" data-kind=\"\">All</button>");
                             foreach (var kind in kindFilters)
                             {
-                                html.Line($"<button class=\"filter-button\" type=\"button\" data-kind=\"{kind.Kind}\">{GetKindLabel(kind.Kind, kind.Count)}</button>");
+                                html.Line($"<button class=\"filter-button\" type=\"button\" aria-pressed=\"false\" data-kind=\"{kind.Kind}\">{GetKindLabel(kind.Kind, kind.Count)}</button>");
                             }
                         }
                         html.Line("</div>");
@@ -1193,14 +1181,19 @@ body.pf-api-docs .api-suite-search-filter{
                 }
                 html.Line("</div>");
             }
-            html.Line($"<div class=\"sidebar-count\" data-total=\"{totalTypes}\" data-unit=\"{primaryKindPluralLabel}\">Showing {totalTypes} of {totalTypes} {primaryKindPluralLabel}</div>");
-            if (lazyCatalog)
-                html.Line($"<a class=\"sidebar-browse-all\" href=\"{indexUrl}\">Browse all {totalTypes} {primaryKindPluralLabel}</a>");
-            html.Line("<div class=\"sidebar-tools\">");
+            html.Line("<div class=\"sidebar-status\">");
             using (html.Indent())
             {
-                html.Line("<button class=\"sidebar-expand-all\" type=\"button\">Expand all</button>");
-                html.Line("<button class=\"sidebar-collapse-all\" type=\"button\">Collapse all</button>");
+                html.Line($"<div class=\"sidebar-count\" data-total=\"{totalTypes}\" data-unit=\"{primaryKindPluralLabel}\">Showing {totalTypes} of {totalTypes} {primaryKindPluralLabel}</div>");
+                if (lazyCatalog)
+                    html.Line($"<a class=\"sidebar-browse-all\" href=\"{indexUrl}\">Browse all {totalTypes} {primaryKindPluralLabel}</a>");
+                html.Line("<div class=\"sidebar-tools\">");
+                using (html.Indent())
+                {
+                    html.Line("<button class=\"sidebar-expand-all\" type=\"button\">Expand all</button>");
+                    html.Line("<button class=\"sidebar-collapse-all\" type=\"button\">Collapse all</button>");
+                }
+                html.Line("</div>");
             }
             html.Line("</div>");
             html.Line("<nav class=\"sidebar-nav\">");

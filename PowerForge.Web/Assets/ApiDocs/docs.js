@@ -712,7 +712,22 @@
     syncApiLinksWithState(hash);
   }
 
+  function syncPressed(buttons) {
+    buttons.forEach(function(button) {
+      button.setAttribute('aria-pressed', button.classList.contains('active') ? 'true' : 'false');
+    });
+  }
+
+  function syncMemberSection(section) {
+    var button = section.querySelector('.member-section-toggle');
+    var body = section.querySelector('.member-section-body');
+    if (!button || !body) return;
+    button.setAttribute('aria-expanded', body.hidden ? 'false' : 'true');
+    if (body.id) button.setAttribute('aria-controls', body.id);
+  }
+
   function applyFilter(query) {
+    syncPressed(kindButtons);
     loadTypeCatalog();
     var q = normalize(query);
     var items = Array.prototype.slice.call(document.querySelectorAll('.type-item'));
@@ -908,6 +923,7 @@
   }
 
   function applyMemberFilter() {
+    syncPressed(memberKindButtons);
     var q = normalize(memberFilter ? memberFilter.value : '');
     var showInherited = inheritedToggle ? inheritedToggle.checked : true;
     var cards = Array.prototype.slice.call(document.querySelectorAll('.member-card'));
@@ -937,6 +953,7 @@
         if (card.style.display !== 'none') visible = true;
       });
       section.style.display = visible ? '' : 'none';
+      syncMemberSection(section);
     });
     saveState();
   }
@@ -970,6 +987,7 @@
   function updateMemberCollapsedState() {
     var collapsedKeys = [];
     document.querySelectorAll('.member-section').forEach(function(section) {
+      syncMemberSection(section);
       if (section.classList.contains('collapsed')) {
         var id = section.getAttribute('id');
         if (id) collapsedKeys.push(id);
@@ -986,6 +1004,7 @@
       if (!body) return;
       var collapsed = section.classList.toggle('collapsed');
       body.hidden = collapsed;
+      syncMemberSection(section);
       updateMemberCollapsedState();
       saveState();
     });
@@ -1099,6 +1118,7 @@
   if (memberKindButtons.length) {
     memberKindButtons.forEach(function(b) { b.classList.remove('active'); });
     var activeMemberBtn = memberKindButtons.find(function(b) { return (b.dataset.memberKind || '') === activeMemberKind; });
+    if (!activeMemberBtn) activeMemberKind = '';
     (activeMemberBtn || memberKindButtons[0]).classList.add('active');
   }
   initSuiteSearch();

@@ -41,6 +41,7 @@
 
   <ItemGroup>
     <EmbeddedResource Include="Assets\ApiDocs\fallback.css" />
+    <EmbeddedResource Include="Assets\ApiDocs\controls.css" />
     <EmbeddedResource Include="Assets\ApiDocs\search.js" />
     <EmbeddedResource Include="Assets\ApiDocs\index.html" />
     <EmbeddedResource Include="Assets\ApiDocs\type.html" />

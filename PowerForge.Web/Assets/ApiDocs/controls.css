@@ -1,0 +1,58 @@
+/* PowerForge API docs first-paint control stability.
+   Intrinsic control layout also accompanies a site's complete CSS replacement. */
+body.pf-api-docs .namespace-select,
+body.pf-api-docs .pf-combobox-trigger {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: var(--pf-control-height, 2.5rem);
+  line-height: 1.2;
+}
+body.pf-api-docs .filter-button,
+body.pf-api-docs .sidebar-reset,
+body.pf-api-docs .sidebar-tools button,
+body.pf-api-docs .api-suite-search-filter {
+  box-sizing: border-box;
+  min-height: var(--pf-chip-height, 1.625rem);
+  line-height: 1.2;
+}
+:where(body.pf-api-docs) .sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+:where(body.pf-api-docs) :is(.sidebar-search, .member-filter) {
+  position: relative;
+}
+:where(body.pf-api-docs) :is(.sidebar-search-icon, .member-filter-icon) {
+  position: absolute;
+  inset-inline-start: var(--pf-space-3, .75rem);
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  pointer-events: none;
+}
+:where(body.pf-api-docs) :is(.sidebar-search-icon, .member-filter-icon) svg {
+  width: var(--pf-icon-size, 1rem);
+  height: var(--pf-icon-size, 1rem);
+}
+/* This inset belongs to the icon control, including hosts with older input rules. */
+.pf-api-docs .member-toolbar .member-filter > #api-member-filter,
+.pf-api-docs .api-sidebar .sidebar-search > #api-filter {
+  padding-inline-start: var(--pf-space-6, 2rem);
+}
+:where(body.pf-api-docs) .sidebar-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--pf-space-1, .25rem) var(--pf-space-3, .75rem);
+}
+/* Old themes may offset these formerly separate rows with negative margins. */
+.pf-api-docs .api-sidebar .sidebar-status > :is(.sidebar-count, .sidebar-browse-all, .sidebar-tools) {
+  margin: 0;
+}

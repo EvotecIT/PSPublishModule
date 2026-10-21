@@ -383,6 +383,7 @@ internal static partial class WebPipelineRunner
                 MemberXrefMaxPerType = memberXrefMaxPerType <= 0 ? 0 : memberXrefMaxPerType,
                 XrefMapPath = xrefMapPath,
                 GeneratePowerShellFallbackExamples = generatePowerShellFallbackExamples,
+                ShowExampleOrigins = GetBool(step, "showExampleOrigins") ?? GetBool(step, "show-example-origins") ?? false,
                 PowerShellExamplesPath = powerShellExamplesPath,
                 PowerShellFallbackExampleLimitPerCommand = powerShellFallbackExampleLimit > 0 ? powerShellFallbackExampleLimit : 2,
                 GenerateGitFreshness = generateGitFreshness,

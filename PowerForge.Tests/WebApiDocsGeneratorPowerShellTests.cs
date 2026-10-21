@@ -75,6 +75,7 @@ public class WebApiDocsGeneratorPowerShellTests
             var outputPath = Path.Combine(root, "_site", "api", "powershell");
             var options = new WebApiDocsOptions
             {
+                ShowExampleOrigins = true,
                 Type = ApiDocsType.PowerShell,
                 HelpPath = helpPath,
                 OutputPath = outputPath,
@@ -1095,6 +1096,7 @@ public class WebApiDocsGeneratorPowerShellTests
             var outputPath = Path.Combine(root, "_site", "api", "powershell");
             var options = new WebApiDocsOptions
             {
+                ShowExampleOrigins = true,
                 Type = ApiDocsType.PowerShell,
                 HelpPath = root,
                 OutputPath = outputPath,
@@ -1304,6 +1306,7 @@ public class WebApiDocsGeneratorPowerShellTests
             var outputPath = Path.Combine(root, "_site", "api", "powershell");
             var options = new WebApiDocsOptions
             {
+                ShowExampleOrigins = true,
                 Type = ApiDocsType.PowerShell,
                 HelpPath = helpPath,
                 OutputPath = outputPath,

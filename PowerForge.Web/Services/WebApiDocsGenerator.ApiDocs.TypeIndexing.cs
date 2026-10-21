@@ -325,11 +325,11 @@ public static partial class WebApiDocsGenerator
         if (TryBuildGitHubEditUrl(link.Url, out var editUrl))
         {
             var href = System.Web.HttpUtility.HtmlAttributeEncode(editUrl);
-            return $"<a class=\"type-source-action\" href=\"{href}\" target=\"_blank\" rel=\"noopener\">Edit on GitHub</a>";
+            return $"<a class=\"type-source-action type-edit-action\" href=\"{href}\" target=\"_blank\" rel=\"noopener\">Edit on GitHub</a>";
         }
 
         var sourceHref = System.Web.HttpUtility.HtmlAttributeEncode(link.Url);
-        return $"<a class=\"type-source-action\" href=\"{sourceHref}\" target=\"_blank\" rel=\"noopener\">View source</a>";
+        return $"<a class=\"type-source-action type-view-source-action\" href=\"{sourceHref}\" target=\"_blank\" rel=\"noopener\">View source</a>";
     }
 
     private static bool TryBuildGitHubEditUrl(string sourceUrl, out string editUrl)
@@ -700,11 +700,16 @@ public static partial class WebApiDocsGenerator
           return $"/docs{suffix}";
       }
 
-      private static string ResolveBodyClass(string? value)
+      private static string ResolveBodyClass(WebApiDocsOptions options)
       {
-          var trimmed = value?.Trim();
-          if (string.IsNullOrWhiteSpace(trimmed))
-              return "pf-api-docs";
-          return trimmed;
+          var classes = (options.BodyClass ?? string.Empty).Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries).ToList();
+          classes.Add("pf-api-docs");
+          classes.Add(options.Type == ApiDocsType.PowerShell ? "pf-api-docs--powershell" : "pf-api-docs--dotnet");
+          if (!string.IsNullOrWhiteSpace(options.ApiSuiteCurrentId))
+          {
+              var suiteId = Regex.Replace(options.ApiSuiteCurrentId.Trim().ToLowerInvariant(), "[^a-z0-9_-]+", "-").Trim('-');
+              if (suiteId.Length > 0) classes.Add($"pf-api-docs--suite-{suiteId}");
+          }
+          return System.Web.HttpUtility.HtmlAttributeEncode(string.Join(" ", classes.Distinct(StringComparer.Ordinal)));
       }
 }

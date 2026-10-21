@@ -106,7 +106,7 @@ public class WebApiDocsPowerShellCommandPageTests
             Assert.Contains("<a href=\"/powershell/commands/\">Commands</a>", typeHtml, StringComparison.Ordinal);
             Assert.DoesNotContain("API Reference", typeHtml, StringComparison.Ordinal);
             Assert.DoesNotContain("class=\"ev-eyebrow\"", typeHtml, StringComparison.Ordinal);
-            Assert.Contains("<span class=\"type-meta-label\">Module</span>", typeHtml, StringComparison.Ordinal);
+            Assert.Contains("<dt class=\"type-meta-label\">Module</dt>", typeHtml, StringComparison.Ordinal);
             Assert.Contains("<code>DemoModule</code>", typeHtml, StringComparison.Ordinal);
             Assert.DoesNotContain(">Namespace<", typeHtml, StringComparison.Ordinal);
 
@@ -223,8 +223,8 @@ public class WebApiDocsPowerShellCommandPageTests
             Assert.Equal(1, CountOccurrences(typeHtml, "<dt id=\"parameter-path\">"));
             Assert.Equal(1, CountOccurrences(typeHtml, "<dd>Output path.</dd>"));
             Assert.Contains("required in By Definition + Path", typeHtml, StringComparison.Ordinal);
-            Assert.Contains("<span class=\"param-meta-chip\">position: 0</span>", typeHtml, StringComparison.Ordinal);
-            Assert.Contains("<span class=\"param-meta-chip pipeline\">pipeline: True (ByValue)</span>", typeHtml, StringComparison.Ordinal);
+            Assert.Contains("<span class=\"param-meta-chip param-meta-chip--position\">position: 0</span>", typeHtml, StringComparison.Ordinal);
+            Assert.Contains("<span class=\"param-meta-chip pipeline param-meta-chip--pipeline\">pipeline: True (ByValue)</span>", typeHtml, StringComparison.Ordinal);
             Assert.Contains("<span class=\"param-meta-chip sets\">sets: By Chart</span>", typeHtml, StringComparison.Ordinal);
             Assert.DoesNotContain("position: named", typeHtml, StringComparison.Ordinal);
             Assert.DoesNotContain("pipeline: False", typeHtml, StringComparison.Ordinal);
@@ -331,11 +331,11 @@ public class WebApiDocsPowerShellCommandPageTests
             var typeHtml = File.ReadAllText(Path.Combine(outputPath, "mynamespace-sample", "index.html"));
             var indexHtml = File.ReadAllText(Path.Combine(outputPath, "index.html"));
             Assert.Contains("<a href=\"/api/\">API Reference</a>", typeHtml, StringComparison.Ordinal);
-            Assert.Contains("<p class=\"ev-eyebrow\">API Reference</p>", typeHtml, StringComparison.Ordinal);
-            Assert.Contains("<span class=\"type-meta-label\">Namespace</span>", typeHtml, StringComparison.Ordinal);
+            Assert.DoesNotContain("<p class=\"ev-eyebrow\">API Reference</p>", typeHtml, StringComparison.Ordinal);
+            Assert.Contains("<dt class=\"type-meta-label\">Namespace</dt>", typeHtml, StringComparison.Ordinal);
             Assert.Contains("<label for=\"api-namespace\" class=\"filter-label\">Namespace</label>", typeHtml, StringComparison.Ordinal);
             Assert.Contains("class=\"member-toolbar\"", typeHtml, StringComparison.Ordinal);
-            Assert.Contains("<h3>Parameters</h3>", typeHtml, StringComparison.Ordinal);
+            Assert.Contains("<p class=\"member-subhead\">Parameters</p>", typeHtml, StringComparison.Ordinal);
             // Example code renders without the blank first line and indented closing tag inside <pre>.
             Assert.Contains("<pre class=\"language-csharp example-code-block\"><code class=\"language-csharp\">var sample = new Sample();</code></pre>", typeHtml, StringComparison.Ordinal);
             Assert.Contains("<h2>All Namespaces</h2>", indexHtml, StringComparison.Ordinal);

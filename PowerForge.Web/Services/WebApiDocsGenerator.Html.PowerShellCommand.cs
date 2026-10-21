@@ -9,20 +9,21 @@ public static partial class WebApiDocsGenerator
     /// <summary>Section labels used by the generated reference chrome (breadcrumb, sidebar, overview, type meta).</summary>
     private sealed class ApiDocsChromeLabels
     {
-        private ApiDocsChromeLabels(string sectionLabel, bool isPowerShell)
+        private ApiDocsChromeLabels(string sectionLabel, bool isPowerShell, bool showExampleOrigins)
         {
             SectionLabel = sectionLabel;
             IsPowerShell = isPowerShell;
+            ShowExampleOrigins = showExampleOrigins;
         }
 
         public string SectionLabel { get; }
         public bool IsPowerShell { get; }
-        public bool ShowTypeEyebrow => !IsPowerShell;
+        public bool ShowExampleOrigins { get; }
         public string GroupLabel => IsPowerShell ? "Module" : "Namespace";
         public string GroupPluralLabel => IsPowerShell ? "modules" : "namespaces";
 
         public static ApiDocsChromeLabels From(WebApiDocsOptions? options)
-            => new(ResolveApiSectionLabel(options), options?.Type == ApiDocsType.PowerShell);
+            => new(ResolveApiSectionLabel(options), options?.Type == ApiDocsType.PowerShell, options?.ShowExampleOrigins == true);
     }
 
     private static string ResolveApiSectionLabel(WebApiDocsOptions? options)
@@ -44,7 +45,8 @@ public static partial class WebApiDocsGenerator
         IReadOnlyDictionary<string, string> slugMap,
         ApiTypeUsageModel? usage,
         ApiTypeRelatedContentModel? relatedContent,
-        string codeLanguage)
+        string codeLanguage,
+        bool showExampleOrigins)
     {
         if (!string.IsNullOrWhiteSpace(type.Summary))
             body.Line($"<p class=\"type-summary\">{RenderLinkedText(type.Summary, baseUrl, slugMap)}</p>");
@@ -89,7 +91,7 @@ public static partial class WebApiDocsGenerator
             using (body.Indent())
             {
                 body.Line("<h2>Examples</h2>");
-                AppendExamples(body, type.Examples, baseUrl, slugMap, codeLanguage);
+                AppendExamples(body, type.Examples, baseUrl, slugMap, codeLanguage, showExampleOrigins);
             }
             body.Line("</section>");
         }
@@ -263,10 +265,10 @@ public static partial class WebApiDocsGenerator
             chips.Add($"<span class=\"param-meta-chip required\">required in {System.Web.HttpUtility.HtmlEncode(string.Join(", ", entry.RequiredSets))}</span>");
 
         if (IsPowerShellPositionalParameter(parameter.Position))
-            chips.Add($"<span class=\"param-meta-chip\">position: {System.Web.HttpUtility.HtmlEncode(parameter.Position!.Trim())}</span>");
+            chips.Add($"<span class=\"param-meta-chip param-meta-chip--position\">position: {System.Web.HttpUtility.HtmlEncode(parameter.Position!.Trim())}</span>");
         if (!string.IsNullOrWhiteSpace(parameter.PipelineInput) &&
             !string.Equals(parameter.PipelineInput.Trim(), "false", StringComparison.OrdinalIgnoreCase))
-            chips.Add($"<span class=\"param-meta-chip pipeline\">pipeline: {System.Web.HttpUtility.HtmlEncode(parameter.PipelineInput.Trim())}</span>");
+            chips.Add($"<span class=\"param-meta-chip pipeline param-meta-chip--pipeline\">pipeline: {System.Web.HttpUtility.HtmlEncode(parameter.PipelineInput.Trim())}</span>");
 
         var aliases = parameter.Aliases
             .Where(static alias => !string.IsNullOrWhiteSpace(alias) && !IsPowerShellNoneValue(alias))
