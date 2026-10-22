@@ -8,8 +8,14 @@ public static partial class WebSiteAuditor
 {
     private static readonly Uri LinkPurposeUnknownOrigin = new("https://powerforge-audit.invalid/");
 
-    /// <summary>Reads the declared site URL once; absent or unusable metadata leaves page canonical fallback available.</summary>
-    private static Uri? LoadLinkPurposeSiteBaseUri(string siteRoot)
+    private sealed class LinkPurposeSiteContext
+    {
+        public Uri? BaseUri { get; init; }
+        public IReadOnlyDictionary<string, Uri> LanguageBaseUris { get; init; } = new Dictionary<string, Uri>();
+    }
+
+    /// <summary>Reads declared global and enabled language URLs once, without making an undeclared canonical authoritative.</summary>
+    private static LinkPurposeSiteContext? LoadLinkPurposeSiteContext(string siteRoot)
     {
         try
         {
@@ -18,7 +24,28 @@ public static partial class WebSiteAuditor
                 return null;
 
             var spec = JsonSerializer.Deserialize<SiteSpec>(File.ReadAllText(specPath), WebJson.Options);
-            return ParseLinkPurposeHttpUri(spec?.BaseUrl);
+            if (spec is null)
+                return null;
+
+            var languageBases = new Dictionary<string, Uri>(StringComparer.OrdinalIgnoreCase);
+            if (spec.Localization?.Enabled == true)
+            {
+                foreach (var language in spec.Localization.Languages)
+                {
+                    if (language is null || language.Disabled)
+                        continue;
+                    var code = WebSiteBuilder.NormalizeLanguageToken(language.Code);
+                    var baseUri = ParseLinkPurposeHttpUri(language.BaseUrl);
+                    if (!string.IsNullOrWhiteSpace(code) && baseUri is not null)
+                        languageBases.TryAdd(code, baseUri);
+                }
+            }
+
+            return new LinkPurposeSiteContext
+            {
+                BaseUri = ParseLinkPurposeHttpUri(spec.BaseUrl),
+                LanguageBaseUris = languageBases
+            };
         }
         catch
         {
@@ -29,14 +56,14 @@ public static partial class WebSiteAuditor
     private static void ValidateLinkPurposeConsistency(
         AngleSharp.Dom.IDocument doc,
         string relativePath,
-        Uri? siteBaseUri,
+        LinkPurposeSiteContext? siteContext,
         IReadOnlyDictionary<string, string[]> redirectMap,
         Action<string, string, string?, string, string?> addIssue)
     {
         var labelTargets = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
         var labelDisplay = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         var languagePrefix = ResolveAuditLanguagePrefix(relativePath);
-        var baseUri = ResolveLinkPurposeBaseUri(doc, relativePath, siteBaseUri, out var siteOrigin);
+        var baseUri = ResolveLinkPurposeBaseUri(doc, relativePath, siteContext, out var siteOrigin);
 
         foreach (var anchor in doc.QuerySelectorAll("a[href]"))
         {
@@ -84,19 +111,36 @@ public static partial class WebSiteAuditor
     private static Uri ResolveLinkPurposeBaseUri(
         AngleSharp.Dom.IDocument doc,
         string relativePath,
-        Uri? siteBaseUri,
+        LinkPurposeSiteContext? siteContext,
         out Uri? siteOrigin)
     {
-        siteOrigin = siteBaseUri;
-        if (siteOrigin is null)
+        Uri? canonicalUri = null;
+        if (siteContext is null || siteContext.BaseUri is null || siteContext.LanguageBaseUris.Count > 0)
         {
             var canonicals = GetHeadLinkValues(doc, "canonical");
             if (canonicals.Length == 1)
-                siteOrigin = ParseLinkPurposeHttpUri(canonicals[0]);
+                canonicalUri = ParseLinkPurposeHttpUri(canonicals[0]);
         }
 
+        Uri? declaredBase = null;
+        var languageCode = WebSiteBuilder.NormalizeLanguageToken(doc.DocumentElement?.GetAttribute("lang"));
+        if (siteContext is not null)
+        {
+            if (siteContext.LanguageBaseUris.TryGetValue(languageCode, out var languageBase))
+                declaredBase = languageBase;
+            else if (canonicalUri is not null)
+            {
+                declaredBase = siteContext.LanguageBaseUris.Values
+                    .Where(baseUri => LinkPurposeBaseMatchesUri(baseUri, canonicalUri))
+                    .OrderByDescending(baseUri => baseUri.AbsolutePath.TrimEnd('/').Length)
+                    .FirstOrDefault();
+            }
+            declaredBase ??= siteContext.BaseUri;
+        }
+
+        siteOrigin = declaredBase ?? canonicalUri;
         // A canonical supplies only an origin; its path can intentionally name a different document.
-        var pageBase = siteBaseUri?.AbsoluteUri
+        var pageBase = declaredBase?.AbsoluteUri
             ?? siteOrigin?.GetLeftPart(UriPartial.Authority)
             ?? LinkPurposeUnknownOrigin.AbsoluteUri;
         var pageUri = new Uri(CombineUrl(pageBase, ToRoutePath(relativePath)));
@@ -109,6 +153,16 @@ public static partial class WebSiteAuditor
         }
 
         return pageUri;
+    }
+
+    private static bool LinkPurposeBaseMatchesUri(Uri declaredBase, Uri uri)
+    {
+        if (!LinkPurposeOriginsMatch(declaredBase, uri))
+            return false;
+        var basePath = declaredBase.AbsolutePath.TrimEnd('/');
+        return basePath.Length == 0 ||
+               uri.AbsolutePath.Equals(basePath, StringComparison.OrdinalIgnoreCase) ||
+               uri.AbsolutePath.StartsWith(basePath + "/", StringComparison.OrdinalIgnoreCase);
     }
 
     private static string GetAccessibleLinkLabel(AngleSharp.Dom.IElement anchor)
@@ -145,17 +199,35 @@ public static partial class WebSiteAuditor
 
         var hasExplicitOrigin = normalized.StartsWith("//", StringComparison.Ordinal) ||
                                 ParseLinkPurposeHttpUri(normalized) is not null;
-        var isLocal = siteOrigin is not null
-            ? LinkPurposeOriginsMatch(destination, siteOrigin)
-            : !hasExplicitOrigin && LinkPurposeOriginsMatch(destination, LinkPurposeUnknownOrigin);
-        if (isLocal)
-            return ResolveRedirectTarget(destination.AbsolutePath, redirectMap, languagePrefix);
+        if (IsLocalLinkPurposeDestination(destination, siteOrigin, hasExplicitOrigin))
+        {
+            var target = ResolveRedirectTarget(destination.AbsolutePath, redirectMap, languagePrefix);
+            // The bounded resolver has already followed redirects; format its result without following them again.
+            if (!Uri.TryCreate(destination, target, out var finalDestination) || !IsLinkPurposeHttpUri(finalDestination))
+                return NormalizeNavHref(target);
+            var targetHasExplicitOrigin = target.StartsWith("//", StringComparison.Ordinal) ||
+                                          ParseLinkPurposeHttpUri(target) is not null;
+            return FormatLinkPurposeDestination(finalDestination, siteOrigin, targetHasExplicitOrigin);
+        }
+
+        return FormatLinkPurposeDestination(destination, siteOrigin, hasExplicitOrigin);
+    }
+
+    private static string FormatLinkPurposeDestination(Uri destination, Uri? siteOrigin, bool hasExplicitOrigin)
+    {
+        if (IsLocalLinkPurposeDestination(destination, siteOrigin, hasExplicitOrigin))
+            return NormalizeNavHref(destination.AbsolutePath);
 
         var path = destination.AbsolutePath;
         if (path.Length > 1 && path.EndsWith("/", StringComparison.Ordinal))
             path = path.TrimEnd('/');
         return $"{destination.Scheme}://{destination.Host}{(destination.IsDefaultPort ? string.Empty : ":" + destination.Port)}{path}";
     }
+
+    private static bool IsLocalLinkPurposeDestination(Uri destination, Uri? siteOrigin, bool hasExplicitOrigin) =>
+        siteOrigin is not null
+            ? LinkPurposeOriginsMatch(destination, siteOrigin)
+            : !hasExplicitOrigin && LinkPurposeOriginsMatch(destination, LinkPurposeUnknownOrigin);
 
     private static Uri? ParseLinkPurposeHttpUri(string? value)
     {
