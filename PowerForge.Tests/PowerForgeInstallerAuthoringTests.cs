@@ -434,10 +434,13 @@ public sealed class PowerForgeInstallerAuthoringTests
         Assert.NotNull(doc.Descendants(Wix + "CustomAction").SingleOrDefault(e =>
             (string?)e.Attribute("Id") == "InitMonitoringConfig" &&
             (string?)e.Attribute("FileRef") == "MonitoringExe" &&
-            (string?)e.Attribute("ExeCommand") == "[CustomActionData]" &&
+            (string?)e.Attribute("ExeCommand") == "[InitMonitoringConfig]" &&
             (string?)e.Attribute("Execute") == "deferred" &&
             (string?)e.Attribute("Impersonate") == "no" &&
             (string?)e.Attribute("HideTarget") == "yes"));
+        Assert.NotNull(doc.Descendants(Wix + "CustomAction").SingleOrDefault(e =>
+            (string?)e.Attribute("Id") == "InstallMonitoringLicense" &&
+            (string?)e.Attribute("ExeCommand") == "[InstallMonitoringLicense]"));
         var sequenceRows = doc.Descendants(Wix + "InstallExecuteSequence")
             .Descendants(Wix + "Custom")
             .ToArray();
