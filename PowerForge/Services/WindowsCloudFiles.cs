@@ -19,7 +19,7 @@ internal static class WindowsCloudFiles
         const uint openReparsePoint = 0x00200000;
         const uint backupSemantics = 0x02000000;
         using var handle = CreateFile(
-            path, 0, FileShare.ReadWrite | FileShare.Delete, IntPtr.Zero,
+            WindowsNativePath.GetExtendedPath(path), 0, FileShare.ReadWrite | FileShare.Delete, IntPtr.Zero,
             FileMode.Open, openReparsePoint | backupSemantics, IntPtr.Zero);
         if (handle.IsInvalid)
             throw MetadataError(path);

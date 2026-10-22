@@ -83,6 +83,39 @@ public sealed class ArtefactBuilderCloudInputTests
     }
 
     [WindowsFact]
+    public void NativeMetadata_PreservesLongCloudPathsAndDirectoryCaseFlags()
+    {
+        using var fixture = new WindowsCloudFilesFixture();
+        string directory = fixture.CloudRoot;
+        while (directory.Length < 280)
+            directory = Path.Combine(directory, "long-module-path-component");
+        Directory.CreateDirectory(directory);
+        string file = Path.Combine(directory, "payload.psm1");
+        File.WriteAllText(file, "'long-cloud-content'");
+        fixture.Convert(directory);
+        fixture.Convert(file);
+
+        Assert.True(WindowsCloudFiles.IsPlaceholder(directory));
+        Assert.True(WindowsCloudFiles.IsPlaceholder(file));
+        Assert.Equal("'long-cloud-content'", File.ReadAllText(file));
+        Assert.True(WindowsDirectoryCaseSensitivity.TryGet(directory, out bool caseSensitive));
+        Assert.Equal(!File.Exists(Path.Combine(directory, "PAYLOAD.PSM1")), caseSensitive);
+    }
+
+    [WindowsFact]
+    public void NativePath_UsesExtendedLocalAndUncSyntaxWithoutDoublePrefixing()
+    {
+        string local = Path.GetFullPath(Path.Combine(Path.GetTempPath(), "cloud-input"));
+        string extended = @"\\?\" + local;
+        Assert.Equal(extended, WindowsNativePath.GetExtendedPath(local));
+        Assert.Equal(extended, WindowsNativePath.GetExtendedPath(extended));
+        Assert.Equal(@"\\?\UNC\server\share\cloud-input",
+            WindowsNativePath.GetExtendedPath(@"\\server\share\cloud-input"));
+        Assert.Equal(@"\\?\UNC\server\share\cloud-input",
+            WindowsNativePath.GetExtendedPath(@"\\?\UNC\server\share\cloud-input"));
+    }
+
+    [WindowsFact]
     public void PlaceholderDetection_FailsClosedWhenMetadataCannotBeOpened()
     {
         string path = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"), "missing");

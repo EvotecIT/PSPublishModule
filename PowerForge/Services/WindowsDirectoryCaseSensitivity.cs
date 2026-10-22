@@ -13,7 +13,7 @@ internal static class WindowsDirectoryCaseSensitivity
             return false;
 
         const uint backupSemantics = 0x02000000;
-        using var handle = CreateFile(directory, 0, FileShare.ReadWrite | FileShare.Delete,
+        using var handle = CreateFile(WindowsNativePath.GetExtendedPath(directory), 0, FileShare.ReadWrite | FileShare.Delete,
             IntPtr.Zero, FileMode.Open, backupSemantics, IntPtr.Zero);
         const int fileCaseSensitiveInfo = 23;
         if (handle.IsInvalid || !GetFileInformationByHandleEx(handle, fileCaseSensitiveInfo,

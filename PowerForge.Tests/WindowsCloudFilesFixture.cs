@@ -59,7 +59,7 @@ internal sealed class WindowsCloudFilesFixture : IDisposable
     internal void Convert(string path)
     {
         byte[] identity = Encoding.UTF8.GetBytes(Path.GetRelativePath(CloudRoot, path));
-        using (var handle = CreateFile(path, 0x40000000, FileShare.ReadWrite | FileShare.Delete,
+        using (var handle = CreateFile(@"\\?\" + Path.GetFullPath(path), 0x40000000, FileShare.ReadWrite | FileShare.Delete,
                    IntPtr.Zero, FileMode.Open, 0x02000000, IntPtr.Zero))
         {
             if (handle.IsInvalid)
