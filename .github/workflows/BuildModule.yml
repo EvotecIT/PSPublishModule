@@ -86,6 +86,7 @@ jobs:
         run: |
           ./.github/scripts/test-npm-release-version.ps1
           ./.github/scripts/test-npm-publish.ps1
+          ./.github/scripts/test-website-social-card-dependencies.ps1
 
       - name: Test pinned XcodeGen setup
         run: python3 .github/scripts/test-xcodegen-setup.py
@@ -560,7 +561,15 @@ jobs:
           --filter 'FullyQualifiedName~AppleTestFlightWorkerTests|FullyQualifiedName~AppleTestFlightReadinessTests|FullyQualifiedName~AppleReleaseWorkflowTests.PinnedExistingBetaRecovery'
 
       - name: Install social card renderer
-        run: sudo apt-get update && sudo apt-get install -y imagemagick
+        shell: pwsh
+        run: ./.github/scripts/Install-WebsiteSocialCardDependencies.ps1 -Enabled $true
+
+      - name: Smoke test required Linux social cards
+        shell: pwsh
+        run: >
+          dotnet test ./PowerForge.Tests/PowerForge.Tests.csproj
+          -c Release --no-build --no-restore --nologo
+          --filter 'FullyQualifiedName~WebSocialCardLinuxTests'
 
       - name: Test cross-platform website and agent plugin contracts
         shell: pwsh

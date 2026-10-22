@@ -18,13 +18,31 @@ internal static partial class WebCliCommandHandlers
 
         try
         {
+            var pipelineMode = TryGetOptionValue(subArgs, "--pipeline-mode") ?? TryGetOptionValue(subArgs, "--pipelineMode") ?? "ci";
+            if (HasOption(subArgs, "--check-social-cards"))
+            {
+                var enabled = WebPipelineRunner.RequiresSocialCardDependencies(pipelineConfig, pipelineMode);
+                if (outputJson)
+                    WebCliJsonWriter.Write(new WebCliJsonEnvelope
+                    {
+                        SchemaVersion = outputSchemaVersion,
+                        Command = "web.website-runner",
+                        Success = true,
+                        ExitCode = 0,
+                        Result = WebCliJson.SerializeToElement(enabled, WebCliJson.Context.Boolean)
+                    });
+                else
+                    Console.WriteLine(enabled ? "true" : "false");
+                return 0;
+            }
+
             var result = WebWebsiteRunner.Run(
                 new WebWebsiteRunnerOptions
                 {
                     WebsiteRoot = websiteRoot,
                     PipelineConfig = pipelineConfig,
                     EngineMode = TryGetOptionValue(subArgs, "--engine-mode") ?? TryGetOptionValue(subArgs, "--engineMode") ?? string.Empty,
-                    PipelineMode = TryGetOptionValue(subArgs, "--pipeline-mode") ?? TryGetOptionValue(subArgs, "--pipelineMode") ?? "ci",
+                    PipelineMode = pipelineMode,
                     PowerForgeLockPath = TryGetOptionValue(subArgs, "--powerforge-lock-path") ?? TryGetOptionValue(subArgs, "--powerforgeLockPath"),
                     PowerForgeRepository = TryGetOptionValue(subArgs, "--powerforge-repository") ?? TryGetOptionValue(subArgs, "--powerforgeRepository"),
                     PowerForgeRef = TryGetOptionValue(subArgs, "--powerforge-ref") ?? TryGetOptionValue(subArgs, "--powerforgeRef"),

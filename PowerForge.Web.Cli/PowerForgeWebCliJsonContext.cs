@@ -10,6 +10,7 @@ namespace PowerForge.Web.Cli;
     WriteIndented = false,
     UseStringEnumConverter = true)]
 [JsonSerializable(typeof(JsonElement))]
+[JsonSerializable(typeof(bool))]
 [JsonSerializable(typeof(SiteSpec))]
 [JsonSerializable(typeof(ProjectSpec))]
 [JsonSerializable(typeof(WebSitePlan))]

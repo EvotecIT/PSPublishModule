@@ -342,9 +342,40 @@ public sealed class GitHubWebsiteRunWorkflowTests
         Assert.Contains("--artifact $env:POWERFORGE_SITE_ARTIFACT --out $env:POWERFORGE_DEPLOYMENT_MANIFEST", runWorkflow, StringComparison.Ordinal);
     }
 
-    private static string FindRepoRoot()
+    [Theory]
+    [InlineData("powerforge-website-ci.yml")]
+    [InlineData("powerforge-website-deploy.yml")]
+    [InlineData("powerforge-website-maintenance.yml")]
+    public void WebsiteWorkflows_ForwardAutomaticSocialCardSetup(string fileName)
     {
-        var current = new DirectoryInfo(AppContext.BaseDirectory);
+        var yaml = new YamlDotNet.RepresentationModel.YamlStream();
+        using var reader = File.OpenText(Path.Combine(FindRepoRoot(), ".github", "workflows", fileName));
+        yaml.Load(reader);
+        var root = (YamlDotNet.RepresentationModel.YamlMappingNode)yaml.Documents[0].RootNode;
+        var on = (YamlDotNet.RepresentationModel.YamlMappingNode)root.Children["on"];
+        var call = (YamlDotNet.RepresentationModel.YamlMappingNode)on.Children["workflow_call"];
+        var inputs = (YamlDotNet.RepresentationModel.YamlMappingNode)call.Children["inputs"];
+        var social = (YamlDotNet.RepresentationModel.YamlMappingNode)inputs.Children["social-cards"];
+        Assert.Equal("auto", social.Children["default"].ToString());
+        Assert.Equal("string", social.Children["type"].ToString());
+        var jobs = (YamlDotNet.RepresentationModel.YamlMappingNode)root.Children["jobs"];
+        var runners = jobs.Children.Values.Cast<YamlDotNet.RepresentationModel.YamlMappingNode>()
+            .Where(job => job.Children.TryGetValue("uses", out var uses) &&
+                uses.ToString() == "./.github/workflows/powerforge-website-run.yml").ToArray();
+        Assert.NotEmpty(runners);
+        foreach (var runner in runners)
+        {
+            var with = (YamlDotNet.RepresentationModel.YamlMappingNode)runner.Children["with"];
+            Assert.Equal("${{ inputs.social-cards }}", with.Children["social-cards"].ToString());
+        }
+    }
+
+    private static string FindRepoRoot([System.Runtime.CompilerServices.CallerFilePath] string sourcePath = "")
+    {
+        // External artifacts paths need not be descendants of the source checkout.
+        if (File.Exists(Path.Combine(Directory.GetCurrentDirectory(), "PowerForge", "PowerForge.csproj")))
+            return Directory.GetCurrentDirectory();
+        var current = new DirectoryInfo(Path.GetDirectoryName(sourcePath) ?? AppContext.BaseDirectory);
         for (var i = 0; i < 12 && current is not null; i++)
         {
             var marker = Path.Combine(current.FullName, "PowerForge", "PowerForge.csproj");
