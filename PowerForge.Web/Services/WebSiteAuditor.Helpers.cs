@@ -1262,58 +1262,6 @@ public static partial class WebSiteAuditor
         return false;
     }
 
-    private static void ValidateLinkPurposeConsistency(
-        AngleSharp.Dom.IDocument doc,
-        string relativePath,
-        IReadOnlyDictionary<string, string[]> redirectMap,
-        Action<string, string, string?, string, string?> addIssue)
-    {
-        var labelTargets = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
-        var labelDisplay = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        var languagePrefix = ResolveAuditLanguagePrefix(relativePath);
-
-        foreach (var anchor in doc.QuerySelectorAll("a[href]"))
-        {
-            var href = anchor.GetAttribute("href");
-            if (string.IsNullOrWhiteSpace(href) || ShouldSkipLink(href))
-                continue;
-
-            var label = GetAccessibleLinkLabel(anchor);
-            if (string.IsNullOrWhiteSpace(label))
-                continue;
-
-            var destination = NormalizeLinkPurposeDestination(href, redirectMap, languagePrefix);
-            if (string.IsNullOrWhiteSpace(destination))
-                continue;
-
-            var normalizedLabel = label.Trim();
-            if (!labelTargets.TryGetValue(normalizedLabel, out var targets))
-            {
-                targets = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                labelTargets[normalizedLabel] = targets;
-                labelDisplay[normalizedLabel] = normalizedLabel;
-            }
-            targets.Add(destination);
-        }
-
-        foreach (var pair in labelTargets)
-        {
-            if (pair.Value.Count <= 1)
-                continue;
-
-            var targets = pair.Value
-                .OrderBy(value => value, StringComparer.OrdinalIgnoreCase)
-                .ToArray();
-            var label = labelDisplay.TryGetValue(pair.Key, out var value)
-                ? value
-                : pair.Key;
-
-            addIssue("warning", "link-purpose", relativePath,
-                $"link label '{label}' points to multiple destinations: {string.Join(", ", targets)}.",
-                $"link-purpose:{label}:{string.Join("|", targets)}");
-        }
-    }
-
     private static int ParseHeadingLevel(string? tagName)
     {
         if (string.IsNullOrWhiteSpace(tagName) || tagName.Length != 2)
@@ -1347,52 +1295,6 @@ public static partial class WebSiteAuditor
         if (string.IsNullOrWhiteSpace(value))
             return string.Empty;
         return Regex.Replace(value, "\\s+", " ").Trim();
-    }
-
-    private static string GetAccessibleLinkLabel(AngleSharp.Dom.IElement anchor)
-    {
-        var ariaLabel = anchor.GetAttribute("aria-label");
-        if (!string.IsNullOrWhiteSpace(ariaLabel))
-            return Regex.Replace(ariaLabel, "\\s+", " ").Trim();
-
-        var text = anchor.TextContent;
-        if (!string.IsNullOrWhiteSpace(text))
-            return Regex.Replace(text, "\\s+", " ").Trim();
-
-        var title = anchor.GetAttribute("title");
-        if (!string.IsNullOrWhiteSpace(title))
-            return Regex.Replace(title, "\\s+", " ").Trim();
-
-        return string.Empty;
-    }
-
-    private static string NormalizeLinkPurposeDestination(string href, IReadOnlyDictionary<string, string[]> redirectMap, string languagePrefix)
-    {
-        var normalized = StripQueryAndFragment(href).Trim();
-        if (string.IsNullOrWhiteSpace(normalized))
-            return string.Empty;
-
-        if (normalized.StartsWith("//", StringComparison.Ordinal))
-            normalized = "https:" + normalized;
-
-        if (Uri.TryCreate(normalized, UriKind.Absolute, out var absolute) &&
-            (absolute.Scheme.Equals(Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase) ||
-             absolute.Scheme.Equals(Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)))
-        {
-            var path = string.IsNullOrWhiteSpace(absolute.AbsolutePath) ? "/" : absolute.AbsolutePath;
-            if (path.Length > 1 && path.EndsWith("/", StringComparison.Ordinal))
-                path = path.TrimEnd('/');
-            var normalizedPath = NormalizeNavHref(path);
-            var redirectedPath = ResolveRedirectTarget(path, redirectMap, languagePrefix);
-            if (!string.IsNullOrWhiteSpace(redirectedPath) &&
-                !string.Equals(redirectedPath, normalizedPath, StringComparison.OrdinalIgnoreCase))
-            {
-                return redirectedPath;
-            }
-            return $"{absolute.Scheme}://{absolute.Host}{(absolute.IsDefaultPort ? string.Empty : ":" + absolute.Port)}{path}";
-        }
-
-        return ResolveRedirectTarget(normalized, redirectMap, languagePrefix);
     }
 
     private static IReadOnlyDictionary<string, string[]> LoadAuditRedirectMap(string siteRoot)
@@ -1445,8 +1347,8 @@ public static partial class WebSiteAuditor
                 continue;
             }
 
-            var from = NormalizeNavHref(fromProperty.GetString());
-            var to = NormalizeNavHref(toProperty.GetString());
+            var from = NormalizeLinkPurposeRedirectHref(fromProperty.GetString());
+            var to = NormalizeLinkPurposeRedirectHref(toProperty.GetString());
             if (string.IsNullOrWhiteSpace(from) || string.IsNullOrWhiteSpace(to))
                 continue;
 

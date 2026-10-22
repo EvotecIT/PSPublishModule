@@ -167,6 +167,7 @@ public static partial class WebSiteAuditor
         var navProfiles = NormalizeNavProfiles(options.NavProfiles);
         var mediaProfiles = NormalizeMediaProfiles(options.MediaProfiles);
         var redirectMap = LoadAuditRedirectMap(siteRoot);
+        var linkPurposeSiteContext = options.CheckLinkPurposeConsistency ? LoadLinkPurposeSiteContext(siteRoot) : null;
         var canonicalNavLinks = Array.Empty<string>();
 
         if (options.CheckNavConsistency && !string.IsNullOrWhiteSpace(options.NavCanonicalPath))
@@ -424,7 +425,7 @@ public static partial class WebSiteAuditor
                 ValidateSeoMetadata(doc, html, relativePath, AddIssue);
 
             if (options.CheckLinkPurposeConsistency)
-                ValidateLinkPurposeConsistency(doc, relativePath, redirectMap, AddIssue);
+                ValidateLinkPurposeConsistency(doc, relativePath, linkPurposeSiteContext, redirectMap, AddIssue);
 
             var navProfile = ResolveNavProfile(relativePath, navProfiles);
             var navSelector = !string.IsNullOrWhiteSpace(navProfile?.Selector)
