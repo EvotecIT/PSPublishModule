@@ -127,5 +127,25 @@ The shared runner workflow accepts:
 - `powerforge_lock_path` for source-mode commit locks
 - `powerforge_web_tag` for the normal binary pin
 - `powerforge_tool_lock_path` for binary-mode release locks
+- `social-cards: 'auto'|'true'|'false'` in the CI, deploy, maintenance, and shared runner workflows
+
+`social-cards` defaults to `'auto'`. Before running the pipeline, the shared runner
+inspects active `build`, `doctor` (when building), `apidocs` and `project-apidocs` steps, including API batches, pipeline/site `extends`,
+`socialAutoGenerate` overrides, and `social.autoGenerateCards` in the referenced
+site configuration. It installs ImageMagick on Linux when those steps generate
+social cards. API steps without an explicit config use the pipeline's `site.json`.
+No caller workflow change is needed when automatic detection applies.
+
+Use `social-cards: 'true'` for generation performed by a custom script or task that
+the inspector cannot discover. Use `'false'` to skip dependency setup on a managed
+runner. This input controls setup only; it does not enable or disable generation
+or relax `socialCardsRequired`. Quote these values because the workflow input is
+a string with an automatic default.
+
+Linux setup reuses an existing ImageMagick executable or installs the distribution
+package with apt. Package installation is not cached. Windows and macOS log that
+installation is skipped because the bundled Magick.NET renderer supports those
+platforms. Self-hosted Linux runners need apt and sudo access when ImageMagick is
+not already installed. Dependency installation failures stop the job.
 
 That keeps consuming repos small: the repo-level workflow can usually choose only the website path, pipeline config, and published tag, while the shared `powerforge-web website-runner` command performs the actual resolution and execution.

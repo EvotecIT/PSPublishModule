@@ -61,6 +61,11 @@ on:
         required: false
         type: string
         default: "10.0.x"
+      social-cards:
+        description: 'Install social card dependencies: auto detects active site/pipeline settings; true forces setup; false skips setup.'
+        required: false
+        type: string
+        default: 'auto'
       dotnet_workloads:
         description: Optional comma, semicolon, or whitespace-separated .NET workloads to install before running the website pipeline.
         required: false
@@ -272,6 +277,30 @@ jobs:
         with:
           dotnet-version: ${{ inputs.dotnet_version }}
           global-json-file: ${{ hashFiles('global.json') != '' && 'global.json' || '' }}
+
+      - name: Prepare social card renderer
+        shell: pwsh
+        env:
+          POWERFORGE_SOCIAL_CARDS: ${{ inputs.social-cards }}
+          POWERFORGE_PIPELINE_CONFIG: ${{ inputs.pipeline_config }}
+          POWERFORGE_PIPELINE_MODE: ${{ inputs.pipeline_mode }}
+          POWERFORGE_WEBSITE_ROOT: ${{ inputs.website_root }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $selection = $env:POWERFORGE_SOCIAL_CARDS.ToLowerInvariant()
+          if ($selection -notin @('auto', 'true', 'false')) {
+            throw 'social-cards must be auto, true or false.'
+          }
+          $enabled = $selection -eq 'true'
+          if ($selection -eq 'auto') {
+            $restoreConfig = Join-Path $env:GITHUB_WORKSPACE '.powerforge-runner/.github/nuget.public.config'
+            $output = @(dotnet run --framework net10.0 -p:RestoreLockedMode=false "-p:RestoreConfigFile=$restoreConfig" --project ./.powerforge-runner/PowerForge.Web.Cli/PowerForge.Web.Cli.csproj -- website-runner --website-root $env:POWERFORGE_WEBSITE_ROOT --pipeline-config $env:POWERFORGE_PIPELINE_CONFIG --pipeline-mode $env:POWERFORGE_PIPELINE_MODE --check-social-cards)
+            if ($LASTEXITCODE -ne 0 -or $output.Count -eq 0 -or $output[-1] -notin @('true', 'false')) {
+              throw 'Unable to determine social card requirements from the website pipeline.'
+            }
+            $enabled = $output[-1] -eq 'true'
+          }
+          & ./.powerforge-runner/.github/scripts/Install-WebsiteSocialCardDependencies.ps1 -Enabled $enabled
 
       - name: Install requested .NET workloads
         if: ${{ inputs.dotnet_workloads != '' }}

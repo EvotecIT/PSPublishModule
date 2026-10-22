@@ -18,6 +18,14 @@ internal static partial class WebCliCommandHandlers
 
         try
         {
+            if (HasOption(subArgs, "--check-social-cards"))
+            {
+                var enabled = WebPipelineRunner.RequiresSocialCardDependencies(
+                    pipelineConfig, TryGetOptionValue(subArgs, "--pipeline-mode") ?? "ci");
+                Console.WriteLine(enabled ? "true" : "false");
+                return 0;
+            }
+
             var result = WebWebsiteRunner.Run(
                 new WebWebsiteRunnerOptions
                 {
