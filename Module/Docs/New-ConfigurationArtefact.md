@@ -11,7 +11,7 @@ Tells the module to create an artefact of a specified type.
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-New-ConfigurationArtefact [[-PostScriptMerge] <scriptblock>] [[-PreScriptMerge] <scriptblock>] -Type <ArtefactType> [-Enable] [-IncludeTagName] [-Path <string>] [-AddRequiredModules] [-RequiredModulesExcludeModuleName <string[]>] [-ModulesPath <string>] [-RequiredModulesPath <string>] [-RequiredModulesRepository <string>] [-RequiredModulesTool <ModuleSaveTool>] [-RequiredModulesSource <RequiredModulesSource>] [-RequiredModulesCredentialUserName <string>] [-RequiredModulesCredentialSecret <string>] [-RequiredModulesCredentialSecretFilePath <string>] [-CopyDirectories <ArtefactCopyMapping[]>] [-CopyFiles <ArtefactCopyMapping[]>] [-CopyDirectoriesRelative] [-CopyFilesRelative] [-DoNotClear] [-ArtefactName <string>] [-ScriptName <string>] [-ID <string>] [-PostScriptMergePath <string>] [-PreScriptMergePath <string>] [<CommonParameters>]
+New-ConfigurationArtefact [[-PostScriptMerge] <scriptblock>] [[-PreScriptMerge] <scriptblock>] -Type <ArtefactType> [-Layout <ArtefactLayout>] [-Enable] [-IncludeTagName] [-Path <string>] [-AddRequiredModules] [-RequiredModulesExcludeModuleName <string[]>] [-ModulesPath <string>] [-RequiredModulesPath <string>] [-RequiredModulesRepository <string>] [-RequiredModulesTool <ModuleSaveTool>] [-RequiredModulesSource <RequiredModulesSource>] [-RequiredModulesCredentialUserName <string>] [-RequiredModulesCredentialSecret <string>] [-RequiredModulesCredentialSecretFilePath <string>] [-CopyDirectories <ArtefactCopyMapping[]>] [-CopyFiles <ArtefactCopyMapping[]>] [-CopyDirectoriesRelative] [-CopyFilesRelative] [-DoNotClear] [-ArtefactName <string>] [-ScriptName <string>] [-ID <string>] [-PostScriptMergePath <string>] [-PreScriptMergePath <string>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -43,18 +43,25 @@ New-ConfigurationArtefact -Type Packed -Enable -Path 'Artefacts\Packed' -ID 'Pac
 
 ### EXAMPLE 2
 ```powershell
+New-ConfigurationArtefact -Type Packed -Layout Delivery -Enable -Path 'Artefacts\Packed' -AddRequiredModules -IncludeTagName
+```
+
+Requires enabled New-ConfigurationDelivery. Delivery files are copied to the bundle root; the complete module and remaining dependencies default to Modules.
+
+### EXAMPLE 3
+```powershell
 New-ConfigurationArtefact -Type Unpacked -Enable -AddRequiredModules -Path 'Artefacts\Unpacked' -RequiredModulesRepository 'PSGallery'
 ```
 
 
-### EXAMPLE 3
+### EXAMPLE 4
 ```powershell
 New-ConfigurationArtefact -Type Packed -Enable -AddRequiredModules -RequiredModulesSource Download -RequiredModulesRepository 'PSGallery'
 ```
 
 Use this when you want packaging to ignore whatever is already installed on the build machine.
 
-### EXAMPLE 4
+### EXAMPLE 5
 ```powershell
 New-ConfigurationArtefact -Type Unpacked -Enable -AddRequiredModules -RequiredModulesSource Auto -RequiredModulesTool Auto
 ```
@@ -216,6 +223,23 @@ Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
 Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -Layout
+Package layout. Delivery copies the configured delivery internals to the artefact root
+and defaults main and required modules to Modules. Supported by Packed and Unpacked.
+
+```yaml
+Type: ArtefactLayout
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values: Module, Delivery
 
 Required: False
 Position: named
