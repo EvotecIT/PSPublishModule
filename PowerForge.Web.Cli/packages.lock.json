@@ -407,8 +407,8 @@
           "Magick.NET-Q8-AnyCPU": "[15.0.0, )",
           "Microsoft.CodeAnalysis.CSharp": "[5.9.0, )",
           "OfficeIMO.Markdown": "[3.4.5, )",
-          "PowerForge": "[3.0.174, )",
-          "PowerForge.Web.Protocols": "[3.0.174, )",
+          "PowerForge": "[3.0.175, )",
+          "PowerForge.Web.Protocols": "[3.0.175, )",
           "Scriban": "[7.5.0, )",
           "YamlDotNet": "[18.1.0, )"
         }
