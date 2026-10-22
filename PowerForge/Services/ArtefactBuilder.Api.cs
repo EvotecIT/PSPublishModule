@@ -293,7 +293,11 @@ public sealed partial class ArtefactBuilder
                     entryPointPath,
                     zipPath,
                     moduleName,
-                    version);
+                    version)
+                {
+                    PromotedDeliveryFilePaths = ResolveDeliveryOutputPaths(cfg, stagingPath, tempRoot,
+                        information, delivery, includeScriptFolders, finalizedPayloadFiles)
+                };
                 evidencePaths = FinalizeArtefactLayout(finalizePackedArtefact, context);
             }
 

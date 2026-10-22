@@ -11,6 +11,67 @@ namespace PowerForge.Tests;
 public sealed class ApprovedModuleDependencyPruningTests
 {
     [Theory]
+    [InlineData("$script:SharedSetting='shared'; Export-ModuleMember -Variable SharedSetting", "$SharedSetting")]
+    [InlineData("$script:SharedSetting='shared'; function Get-SharedHelper { 'shared' }; Export-ModuleMember -Function Get-SharedHelper -Variable SharedSetting", "Get-SharedHelper; $SharedSetting")]
+    [InlineData("function Get-SharedHelper { 'shared' }; Set-Alias SharedAlias Get-SharedHelper; Export-ModuleMember -Function Get-SharedHelper -Alias SharedAlias", "Get-Alias SharedAlias")]
+    public void Analyze_PreservesDonorsWithExportedRuntimeState(string body, string code)
+    {
+        string root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
+        try
+        {
+            WriteModule(root, "SharedHelpers", body);
+            var result = new PowerShellMissingFunctionAnalysisService().Analyze(null, code,
+                new MissingFunctionsOptions(approvedModules: new[] { "SharedHelpers" },
+                    approvedModuleSources: new[] { new ApprovedModuleSource("SharedHelpers", "1.0.0", Path.Combine(root, "SharedHelpers")) },
+                    requireApprovedModuleSources: true));
+            Assert.Empty(result.FullyInlinedApprovedModules);
+        }
+        finally { if (Directory.Exists(root)) Directory.Delete(root, recursive: true); }
+    }
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    public void Analyze_PreservesBinaryRuntimeSurfaceWithoutCommandReferences(bool nested, bool required)
+    {
+        string root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
+        try
+        {
+            var initialState = System.Management.Automation.Runspaces.InitialSessionState.CreateDefault();
+            initialState.AuthorizationManager = new System.Management.Automation.AuthorizationManager("PowerForge.Tests");
+            using var runspace = System.Management.Automation.Runspaces.RunspaceFactory.CreateRunspace(initialState);
+            runspace.Open();
+            using var ps = System.Management.Automation.PowerShell.Create();
+            ps.Runspace = runspace;
+            var command = Assert.IsAssignableFrom<System.Management.Automation.CmdletInfo>(
+                Assert.Single(ps.AddCommand("Get-Command").AddParameter("Name", "Get-Item").Invoke()).BaseObject);
+            string binary = command.ImplementingType.Assembly.Location.Replace("'", "''");
+            WriteModule(root, "SharedHelpers", "Export-ModuleMember");
+            string providerManifest = Path.Combine(root, "SharedHelpers", "Provider.psd1");
+            File.WriteAllText(providerManifest, "@{RootModule='" + binary + "';ModuleVersion='1.0.0'}");
+            File.WriteAllText(Path.Combine(root, "SharedHelpers", "SharedHelpers.psd1"), required
+                ? "@{RootModule='SharedHelpers.psm1';ModuleVersion='1.0.0';RequiredModules=@('" + providerManifest.Replace("'", "''") + "')}"
+                : nested
+                ? "@{RootModule='SharedHelpers.psm1';ModuleVersion='1.0.0';NestedModules=@('" + binary + "')}"
+                : "@{RootModule='" + binary + "';ModuleVersion='1.0.0'}");
+            ps.Commands.Clear();
+            var imported = Assert.IsType<System.Management.Automation.PSModuleInfo>(Assert.Single(
+                ps.AddCommand("Import-Module").AddParameter("Name", Path.Combine(root, "SharedHelpers", "SharedHelpers.psd1"))
+                    .AddParameter("PassThru").AddParameter("Force").AddParameter("ErrorAction", "Stop").Invoke()).BaseObject);
+            Assert.Equal("SharedHelpers", imported.Name);
+            Assert.True(imported.ModuleType == System.Management.Automation.ModuleType.Binary ||
+                imported.NestedModules.Concat(imported.RequiredModules).Any(module => module.ModuleType == System.Management.Automation.ModuleType.Binary));
+            var result = new PowerShellMissingFunctionAnalysisService().Analyze(null, "Get-Item Demo:\\x",
+                new MissingFunctionsOptions(approvedModules: new[] { "SharedHelpers" },
+                    approvedModuleSources: new[] { new ApprovedModuleSource("SharedHelpers", "1.0.0", Path.Combine(root, "SharedHelpers")) },
+                    requireApprovedModuleSources: true));
+            Assert.Empty(result.FullyInlinedApprovedModules);
+        }
+        finally { if (Directory.Exists(root)) Directory.Delete(root, recursive: true); }
+    }
+
+    [Theory]
     [InlineData("(Get-Module 'SharedHelpers').Version")]
     [InlineData("Get-Module -ListAvailable -Name 'Shared*'")]
     [InlineData("Microsoft.PowerShell.Core\\Get-Module -Name SharedHelpers")]
@@ -221,13 +282,27 @@ public sealed class ApprovedModuleDependencyPruningTests
     [Fact]
     public void Analyze_PrunesApprovedDependencyWhoseHelperIsAlreadyLocal()
     {
-        var service = new PowerShellMissingFunctionAnalysisService();
-        var result = service.Analyze(null,
-            "function Get-LocalHelper { 'local' }; Get-LocalHelper",
-            new MissingFunctionsOptions(approvedModules: new[] { "SharedHelpers" }));
+        string root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
+        try
+        {
+            WriteModule(root, "SharedHelpers", "function Get-LocalHelper { 'donor' }; Export-ModuleMember Get-LocalHelper");
+            var result = new PowerShellMissingFunctionAnalysisService().Analyze(null,
+                "function Get-LocalHelper { 'local' }; Get-LocalHelper",
+                new MissingFunctionsOptions(approvedModules: new[] { "SharedHelpers" },
+                    approvedModuleSources: new[] { new ApprovedModuleSource("SharedHelpers", "1.0.0", Path.Combine(root, "SharedHelpers")) },
+                    requireApprovedModuleSources: true));
+            Assert.Equal(new[] { "SharedHelpers" }, result.FullyInlinedApprovedModules);
+            Assert.Empty(result.Functions);
+        }
+        finally { if (Directory.Exists(root)) Directory.Delete(root, recursive: true); }
+    }
 
-        Assert.Equal(new[] { "SharedHelpers" }, result.FullyInlinedApprovedModules);
-        Assert.Empty(result.Functions);
+    [Fact]
+    public void Analyze_PreservesAbsentDonorWhenItsRuntimeSurfaceCannotBeInspected()
+    {
+        var result = new PowerShellMissingFunctionAnalysisService().Analyze(null, "'consumer'",
+            new MissingFunctionsOptions(approvedModules: new[] { "UnavailableDonor" }));
+        Assert.Empty(result.FullyInlinedApprovedModules);
     }
 
     [Fact]

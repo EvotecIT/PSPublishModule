@@ -72,6 +72,9 @@ public sealed partial class ModulePipelineRunner
         string[] packageFiles = Directory.EnumerateFiles(context.RootPath, "*", SearchOption.AllDirectories)
             .Select(Path.GetFullPath)
             .Except(loadedContentFiles, StringComparer.OrdinalIgnoreCase)
+            .Except(signing.IncludeInternals == true || plan.Delivery?.Sign == true
+                    ? Array.Empty<string>() : context.PromotedDeliveryFilePaths,
+                FrameworkCompatibility.PathComparer)
             .ToArray();
         string[] includePatterns = BuildSigningIncludePatterns(signing);
         string[] excludeSubstrings = BuildSigningExcludeSubstrings(

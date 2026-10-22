@@ -40,8 +40,8 @@ internal sealed class PowerShellMissingFunctionAnalysisService : IMissingFunctio
             .ToDictionary(group => group.Key, group => group.ToArray(), StringComparer.OrdinalIgnoreCase);
 
         // A dependency can be satisfied without contributing a new function: the consumer or
-        // another approved donor may already contain its helpers. Complete analysis with no
-        // remaining module references is sufficient; an absent donor group is not a runtime need.
+        // another approved donor may already contain its helpers. Complete analysis also
+        // excludes donors whose inspected runtime surface cannot be replaced by function merging.
         return approved
             .Where(module => !nonInlineable.Contains(module) &&
                              (!commandsByModule.TryGetValue(module, out var commands) ||

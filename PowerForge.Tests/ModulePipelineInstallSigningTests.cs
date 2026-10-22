@@ -6,7 +6,7 @@ using System.Security.Cryptography;
 
 namespace PowerForge.Tests;
 
-public sealed class ModulePipelineInstallSigningTests
+public sealed partial class ModulePipelineInstallSigningTests
 {
     [Fact]
     public void SignedAutoRevisionInstall_ResignsOnlyChangedManifestBeforeDelivery()
@@ -505,6 +505,8 @@ public sealed class ModulePipelineInstallSigningTests
     private sealed class RecordingHostedOperations : IModulePipelineHostedOperations
     {
         public List<SigningCall> SigningCalls { get; } = new();
+        public List<string> SignedFilePaths { get; } = new();
+        public bool MarkSignedFiles { get; set; }
         public bool FailInstallManifestSigning { get; set; }
         public bool HonorSigningPatterns { get; set; }
         public Action<string, string>? AfterInstallManifestVersionObserved { get; set; }
@@ -535,6 +537,10 @@ public sealed class ModulePipelineInstallSigningTests
             }
 
             SigningCalls.Add(new SigningCall(paths, signing.OverwriteSigned == true, manifestVersion));
+            SignedFilePaths.AddRange(verifiedPaths);
+            if (MarkSignedFiles)
+                foreach (string path in verifiedPaths)
+                    File.AppendAllText(path, Environment.NewLine + "# synthetic delivery signature");
             if (manifestVersion is not null)
             {
                 if (FailInstallManifestSigning)

@@ -61,6 +61,10 @@ before the builder: unsigned builds need no certificate, and unattended builds
 need an explicit signing identity. Keep delivery and module signing controlled by
 the same operator setting when both are intended to be signed.
 
+`Packed` and `Unpacked` preserve the delivery signing preference. With delivery
+signing disabled (and `IncludeInternals` not enabled), promoted launcher files
+remain unsigned while module signing still applies to module payloads.
+
 ## Publishing to private repositories
 
 Artefact layout is independent of repository publication. `Build` can produce
