@@ -142,8 +142,11 @@ runner. This input controls setup only; it does not enable or disable generation
 or relax `socialCardsRequired`. Quote these values because the workflow input is
 a string with an automatic default.
 
-Linux setup reuses an existing ImageMagick executable or installs the distribution
-package with apt. Package installation is not cached. Windows and macOS log that
+Linux setup reuses an existing ImageMagick executable with SVG/MVG/PNG support or
+installs or repairs the distribution package with apt recommendations enabled. Ubuntu ships
+the SVG coder in a recommended extra package; a minimal executable-only install
+is insufficient. Setup verifies the required formats after installation.
+Package installation is not cached. Windows and macOS log that
 installation is skipped because the bundled Magick.NET renderer supports those
 platforms. Self-hosted Linux runners need apt and sudo access when ImageMagick is
 not already installed. Dependency installation failures stop the job.
