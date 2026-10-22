@@ -107,6 +107,8 @@ notation is treated as technical text. If no complete sentence fits, the descrip
 at a word boundary with an ellipsis (`…`), removing trailing commas, colons,
 and dangling English articles, prepositions, or conjunctions. A single token
 longer than the available space is shortened without splitting a Unicode scalar.
+Completing a summary preserves its original punctuation, including terminal type
+and variable markers.
 
 Without an explicit lead, C# references use assembly descriptions from either
 `assembly` or `assemblies`, then a product-specific introduction using `packageId`,

@@ -33,8 +33,10 @@ public sealed class WebApiDocsDescriptionBoundaryTests
     [InlineData(ApiDocsType.CSharp, "docs", "Represents nullable T? with configurable conversion settings")]
     [InlineData(ApiDocsType.CSharp, "simple", "Represents nullable int? with configurable conversion settings")]
     [InlineData(ApiDocsType.CSharp, "docs", "Represents nullable IReadOnlyList<T>? with configurable conversion settings")]
+    [InlineData(ApiDocsType.CSharp, "docs", "Can this use nullable T? with configurable conversion settings")]
     [InlineData(ApiDocsType.CSharp, "simple", "Uses result.Value! with configurable conversion settings")]
     [InlineData(ApiDocsType.PowerShell, "docs", "Reads $? with configurable pipeline status settings")]
+    [InlineData(ApiDocsType.PowerShell, "docs", "Reads ${?} with configurable pipeline status settings")]
     [InlineData(ApiDocsType.PowerShell, "simple", "Reads $? Status with configurable pipeline settings")]
     public void Generate_TechnicalPunctuationDoesNotReplaceTheLastCompleteSentence(ApiDocsType source, string template, string phrase)
     {
@@ -43,7 +45,21 @@ public sealed class WebApiDocsDescriptionBoundaryTests
         GenerateAndAssertMetadata(source, template, summary, expected);
     }
 
-    private static void GenerateAndAssertMetadata(ApiDocsType source, string template, string summary, string expected)
+    [Theory]
+    [InlineData(ApiDocsType.CSharp, "docs", "Represents nullable T?.", "Represents nullable T?.")]
+    [InlineData(ApiDocsType.CSharp, "simple", "Represents nullable T?", "Represents nullable T?.")]
+    [InlineData(ApiDocsType.CSharp, "simple", "Evaluates value!.", "Evaluates value!.")]
+    [InlineData(ApiDocsType.CSharp, "docs", "Represents nullable List<T>?.", "Represents nullable List<T>?.")]
+    [InlineData(ApiDocsType.PowerShell, "docs", "Reports $?.", "Reports $?.")]
+    [InlineData(ApiDocsType.PowerShell, "simple", "Reports $?", "Reports $?.")]
+    [InlineData(ApiDocsType.CSharp, "docs", "Is the configured value ready?", "Is the configured value ready?")]
+    [InlineData(ApiDocsType.CSharp, "simple", "Configuration is ready!", "Configuration is ready!")]
+    public void Generate_PreservesSummaryEndingSyntax(ApiDocsType source, string template, string summary, string expected)
+    {
+        GenerateAndAssertMetadata(source, template, summary, expected, prefixOnly: true);
+    }
+
+    private static void GenerateAndAssertMetadata(ApiDocsType source, string template, string summary, string expected, bool prefixOnly = false)
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-apidocs-description-boundary-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
@@ -64,11 +80,24 @@ public sealed class WebApiDocsDescriptionBoundaryTests
             var slug = source == ApiDocsType.CSharp ? "sample-terminal" : "format-consoletable";
             var path = template == "simple" ? Path.Combine(output, "types", slug + ".html") : Path.Combine(output, slug, "index.html");
             var html = File.ReadAllText(path);
+            string? firstDescription = null;
             foreach (var tag in new[] { "description", "og:description", "twitter:description" })
             {
                 var match = Regex.Match(html, $"<meta\\s+(?:name|property)=\"{Regex.Escape(tag)}\"\\s+content=\"([^\"]*)\"");
                 Assert.True(match.Success, $"Expected {tag} in generated HTML.");
-                Assert.Equal(expected, WebUtility.HtmlDecode(match.Groups[1].Value));
+                var content = WebUtility.HtmlDecode(match.Groups[1].Value);
+                if (prefixOnly)
+                {
+                    Assert.StartsWith(expected, content, StringComparison.Ordinal);
+                    if (firstDescription is not null)
+                        Assert.Equal(firstDescription, content);
+                    firstDescription = content;
+                    Assert.InRange(content.Length, 1, 160);
+                }
+                else
+                {
+                    Assert.Equal(expected, content);
+                }
             }
         }
         finally { Directory.Delete(root, true); }
@@ -172,6 +201,10 @@ public sealed class WebApiDocsDescriptionBoundaryTests
     [InlineData("Configuration is ready!", true)]
     [InlineData("Can this emit JSON?", true)]
     [InlineData("What is PowerForge?", true)]
+    [InlineData("Can this return int?", true)]
+    [InlineData("Can this return List<T>?", true)]
+    [InlineData("Can this return System.Int32?", true)]
+    [InlineData("What is $value?", true)]
     public void FitApiSeoDescription_PreservesProseQuestionsAndExclamations(string sentence, bool lowercaseContinuation)
     {
         var details = "Additional reference guidance explains configuration, formatting, pipeline handling, all available environment settings, and cross-platform integration workflows.";
