@@ -11,7 +11,7 @@ Tells the module to create an artefact of a specified type.
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-New-ConfigurationArtefact [[-PostScriptMerge] <scriptblock>] [[-PreScriptMerge] <scriptblock>] -Type <ArtefactType> [-Layout <ArtefactLayout>] [-Enable] [-IncludeTagName] [-Path <string>] [-AddRequiredModules] [-RequiredModulesExcludeModuleName <string[]>] [-ModulesPath <string>] [-RequiredModulesPath <string>] [-RequiredModulesRepository <string>] [-RequiredModulesTool <ModuleSaveTool>] [-RequiredModulesSource <RequiredModulesSource>] [-RequiredModulesCredentialUserName <string>] [-RequiredModulesCredentialSecret <string>] [-RequiredModulesCredentialSecretFilePath <string>] [-CopyDirectories <ArtefactCopyMapping[]>] [-CopyFiles <ArtefactCopyMapping[]>] [-CopyDirectoriesRelative] [-CopyFilesRelative] [-DoNotClear] [-ArtefactName <string>] [-ScriptName <string>] [-ID <string>] [-PostScriptMergePath <string>] [-PreScriptMergePath <string>] [<CommonParameters>]
+New-ConfigurationArtefact [[-PostScriptMerge] <scriptblock>] [[-PreScriptMerge] <scriptblock>] -Type <ArtefactType> [-Layout <ArtefactLayout>] [-DeliveryPath <string>] [-Enable] [-IncludeTagName] [-Path <string>] [-AddRequiredModules] [-RequiredModulesExcludeModuleName <string[]>] [-ModulesPath <string>] [-RequiredModulesPath <string>] [-RequiredModulesRepository <string>] [-RequiredModulesTool <ModuleSaveTool>] [-RequiredModulesSource <RequiredModulesSource>] [-RequiredModulesCredentialUserName <string>] [-RequiredModulesCredentialSecret <string>] [-RequiredModulesCredentialSecretFilePath <string>] [-CopyDirectories <ArtefactCopyMapping[]>] [-CopyFiles <ArtefactCopyMapping[]>] [-CopyDirectoriesRelative] [-CopyFilesRelative] [-DoNotClear] [-ArtefactName <string>] [-ScriptName <string>] [-ID <string>] [-PostScriptMergePath <string>] [-PreScriptMergePath <string>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -167,6 +167,24 @@ Accept pipeline input: False
 Accept wildcard characters: False
 ```
 
+### -DeliveryPath
+Relative folder inside a Delivery artefact for launcher and configuration files.
+Omit this parameter or use dot for the artefact root. Absolute and parent-traversal paths are rejected.
+Module locations remain controlled by ModulesPath and RequiredModulesPath; launcher contents are not rewritten.
+
+```yaml
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
 ### -DoNotClear
 Do not clear artefact output directory before creating artefact.
 
@@ -232,7 +250,7 @@ Accept wildcard characters: False
 ```
 
 ### -Layout
-Package layout. Delivery copies the configured delivery internals to the artefact root
+Package layout. Delivery copies the configured delivery internals to DeliveryPath (the root by default)
 and defaults main and required modules to Modules. Supported by Packed and Unpacked.
 
 ```yaml
