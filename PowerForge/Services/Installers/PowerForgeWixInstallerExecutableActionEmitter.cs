@@ -29,7 +29,9 @@ internal static class PowerForgeWixInstallerExecutableActionEmitter
                 WixNamespace + "CustomAction",
                 new XAttribute("Id", action.Id),
                 new XAttribute("FileRef", action.FileRef),
-                new XAttribute("ExeCommand", "[CustomActionData]"),
+                // Installed-file EXE arguments are formatted while the action is
+                // scheduled, before its deferred CustomActionData session exists.
+                new XAttribute("ExeCommand", "[" + action.Id + "]"),
                 new XAttribute("Execute", "deferred"),
                 new XAttribute("Return", action.Return));
             if (action.ImpersonateNo)
