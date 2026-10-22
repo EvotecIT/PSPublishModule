@@ -229,6 +229,18 @@ public static partial class WebSiteAuditor
             ? LinkPurposeOriginsMatch(destination, siteOrigin)
             : !hasExplicitOrigin && LinkPurposeOriginsMatch(destination, LinkPurposeUnknownOrigin);
 
+    /// <summary>Matches local redirect metadata to resolved escaped paths without decoding reserved separators or external URLs.</summary>
+    private static string NormalizeLinkPurposeRedirectHref(string? href)
+    {
+        var normalized = NormalizeNavHref(href);
+        if (string.IsNullOrWhiteSpace(normalized) || WebLinkClassifier.IsExternalLink(normalized))
+            return normalized;
+
+        return Uri.TryCreate(LinkPurposeUnknownOrigin, normalized, out var destination) && IsLinkPurposeHttpUri(destination)
+            ? NormalizeNavHref(destination.AbsolutePath)
+            : normalized;
+    }
+
     private static Uri? ParseLinkPurposeHttpUri(string? value)
     {
         return Uri.TryCreate(value, UriKind.Absolute, out var uri) && IsLinkPurposeHttpUri(uri)

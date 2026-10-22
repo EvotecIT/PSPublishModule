@@ -1347,8 +1347,8 @@ public static partial class WebSiteAuditor
                 continue;
             }
 
-            var from = NormalizeNavHref(fromProperty.GetString());
-            var to = NormalizeNavHref(toProperty.GetString());
+            var from = NormalizeLinkPurposeRedirectHref(fromProperty.GetString());
+            var to = NormalizeLinkPurposeRedirectHref(toProperty.GetString());
             if (string.IsNullOrWhiteSpace(from) || string.IsNullOrWhiteSpace(to))
                 continue;
 
