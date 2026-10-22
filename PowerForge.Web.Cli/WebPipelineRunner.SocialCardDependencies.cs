@@ -44,15 +44,15 @@ internal static partial class WebPipelineRunner
 
         // Doctor builds its loaded site directly and does not apply build-step overrides.
         var generate = doctor ? null : GetBool(step, "socialAutoGenerate") ?? GetBool(step, "social-auto-generate");
-        if (generate is not null)
+        if (api && generate is not null)
             return generate.Value;
 
         var configPath = ResolvePath(baseDir, GetString(step, "config"));
         if (string.IsNullOrWhiteSpace(configPath) && api)
             configPath = Path.Combine(baseDir, "site.json");
         if (string.IsNullOrWhiteSpace(configPath) || !File.Exists(configPath))
-            return false;
+            return generate == true;
         var (spec, _) = WebSiteSpecLoader.LoadWithPath(configPath, WebCliJson.Options);
-        return spec.Social?.AutoGenerateCards == true;
+        return (api || (spec.Social?.Enabled ?? true)) && (generate ?? spec.Social?.AutoGenerateCards) == true;
     }
 }

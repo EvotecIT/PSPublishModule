@@ -11,6 +11,38 @@ if (-not $IsLinux) {
     return
 }
 
+function Test-SocialCardRender([string] $Executable, [bool] $Legacy) {
+    $root = Join-Path ([IO.Path]::GetTempPath()) ('pf-renderer-probe-' + [Guid]::NewGuid().ToString('N'))
+    try {
+        [IO.Directory]::CreateDirectory($root) | Out-Null
+        $svg = Join-Path $root 'card.svg'
+        $png = Join-Path $root 'card.png'
+        [IO.File]::WriteAllText($svg, '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"><rect width="16" height="16" fill="#345678"/></svg>')
+        $inputPath = $svg
+        if ($Legacy) {
+            $mvg = Join-Path $root 'card.mvg'
+            $diagnostic = & $Executable $svg "MVG:$mvg" 2>&1
+            if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $mvg)) {
+                Write-Host "ImageMagick SVG-to-MVG probe failed: $diagnostic"
+                return $false
+            }
+            # The runtime removes the SVG compliance directive on the same IM6 path.
+            $text = [IO.File]::ReadAllText($mvg) -replace '(?m)^compliance "SVG"\r?$', ''
+            [IO.File]::WriteAllText($mvg, $text)
+            $inputPath = "MVG:$mvg"
+        }
+        $diagnostic = & $Executable -background none -size 16x16 $inputPath "PNG32:$png" 2>&1
+        if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $png)) {
+            Write-Host "ImageMagick PNG probe failed: $diagnostic"
+            return $false
+        }
+        $bytes = [IO.File]::ReadAllBytes($png)
+        return $bytes.Length -ge 8 -and [Convert]::ToHexString($bytes[0..7]) -eq '89504E470D0A1A0A'
+    } finally {
+        if ([IO.Directory]::Exists($root)) { [IO.Directory]::Delete($root, $true) }
+    }
+}
+
 function Get-SocialCardRenderer {
     foreach ($name in @('magick', 'convert')) {
         $command = Get-Command $name -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
@@ -20,11 +52,13 @@ function Get-SocialCardRenderer {
                 throw "Preferred renderer '$($command.Source)' is not a working ImageMagick executable. Check the runner PATH."
             }
             $formats = (& $command.Source -list format 2>&1) -join "`n"
+            $legacy = ($version -join "`n") -match 'ImageMagick 6\.'
             if ($LASTEXITCODE -eq 0 -and
                 $formats -match '(?m)^\s*SVG\*?\s+(?:\S+\s+)?r[w-][+\-]?(?:\s|$)' -and
-                $formats -match '(?m)^\s*MVG\*?\s+(?:\S+\s+)?r[w-][+\-]?(?:\s|$)' -and
+                (-not $legacy -or $formats -match '(?m)^\s*MVG\*?\s+(?:\S+\s+)?rw[+\-]?(?:\s|$)') -and
                 $formats -match '(?m)^\s*PNG\*?\s+(?:\S+\s+)?rw[+\-]?(?:\s|$)') {
-                return $command.Source
+                if (Test-SocialCardRender $command.Source $legacy) { return $command.Source }
+                throw "ImageMagick at $($command.Source) failed the SVG-to-PNG rendering probe. Check renderer diagnostics and runner policy; setup does not modify security policy."
             }
             Write-Host "ImageMagick at $($command.Source) lacks required SVG, MVG or PNG support."
             # Runtime also selects the first magick executable before convert.
@@ -35,7 +69,7 @@ function Get-SocialCardRenderer {
 
 $renderer = Get-SocialCardRenderer
 if ($renderer) {
-    Write-Host "Social card renderer already available: $renderer (SVG/MVG/PNG verified)."
+    Write-Host "Social card renderer already available: $renderer (SVG-to-PNG render verified)."
     return
 }
 
@@ -69,4 +103,4 @@ if (-not $renderer) {
     $renderer = Get-SocialCardRenderer
 }
 if (-not $renderer) { throw 'ImageMagick installation did not provide required SVG, MVG and PNG support.' }
-Write-Host "Social card renderer ready: $renderer (SVG/MVG/PNG verified)."
+Write-Host "Social card renderer ready: $renderer (SVG-to-PNG render verified)."

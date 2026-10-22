@@ -5,6 +5,50 @@ namespace PowerForge.Tests;
 public sealed class WebSocialCardDependencyTests
 {
     [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void BuildOverrideCreatesDefaultSocialSettingsWhenAbsent(bool generate)
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-social-override-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "site.json"), "{}");
+            var pipeline = Path.Combine(root, "pipeline.json");
+            File.WriteAllText(pipeline, System.Text.Json.JsonSerializer.Serialize(new
+            {
+                steps = new[] { new { task = "build", config = "site.json", socialAutoGenerate = generate } }
+            }));
+            Assert.Equal(generate, WebPipelineRunner.RequiresSocialCardDependencies(pipeline, "ci"));
+        }
+        finally { Directory.Delete(root, recursive: true); }
+    }
+
+    [Theory]
+    [InlineData("build", null, false)]
+    [InlineData("build", true, false)]
+    [InlineData("doctor", null, false)]
+    [InlineData("doctor", true, false)]
+    [InlineData("apidocs", null, true)]
+    [InlineData("project-apidocs", true, true)]
+    public void DisabledSocialOutputSkipsSiteSetupButPreservesApiGeneration(string task, bool? generate, bool expected)
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-social-disabled-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "base.json"), """{"social":{"autoGenerateCards":true}}""");
+            File.WriteAllText(Path.Combine(root, "site.json"), """{"extends":"base.json","social":{"enabled":false}}""");
+            var step = new Dictionary<string, object?> { ["task"] = task, ["config"] = "site.json" };
+            if (generate is not null) step["socialAutoGenerate"] = generate;
+            var pipeline = Path.Combine(root, "pipeline.json");
+            File.WriteAllText(pipeline, System.Text.Json.JsonSerializer.Serialize(new { steps = new[] { step } }));
+            Assert.Equal(expected, WebPipelineRunner.RequiresSocialCardDependencies(pipeline, "ci"));
+        }
+        finally { Directory.Delete(root, recursive: true); }
+    }
+
+    [Theory]
     [InlineData("--pipeline-mode", false)]
     [InlineData("--pipelineMode", false)]
     [InlineData("--pipeline-mode", true)]

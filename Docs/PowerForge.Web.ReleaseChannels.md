@@ -133,7 +133,8 @@ The shared runner workflow accepts:
 inspects active `build`, `doctor` (when building), `apidocs` and `project-apidocs` steps, including API batches, pipeline/site `extends`,
 `socialAutoGenerate` overrides, and `social.autoGenerateCards` in the referenced
 site configuration. It installs ImageMagick on Linux when those steps generate
-social cards. API steps without an explicit config use the pipeline's `site.json`.
+social cards. Site builds and building doctor steps skip setup when `social.enabled`
+is false; API generation follows its own generation setting. API steps without an explicit config use the pipeline's `site.json`.
 No caller workflow change is needed when automatic detection applies.
 
 Use `social-cards: 'true'` for generation performed by a custom script or task that
@@ -142,10 +143,14 @@ runner. This input controls setup only; it does not enable or disable generation
 or relax `socialCardsRequired`. Quote these values because the workflow input is
 a string with an automatic default.
 
-Linux setup reuses an existing ImageMagick executable with SVG/MVG/PNG support or
+Linux setup reuses an existing ImageMagick executable with the required format support or
 installs or repairs the distribution package with apt recommendations enabled. Ubuntu ships
 the SVG coder in a recommended extra package; a minimal executable-only install
-is insufficient. Setup verifies the required formats after installation.
+is insufficient. Setup verifies the required formats and renders a small SVG to PNG
+before reporting readiness. ImageMagick 6 uses the same SVG-to-MVG-to-PNG route as
+card generation and requires both MVG reading and writing; ImageMagick 7 renders
+SVG directly. A failed render probe stops setup with a diagnostic; setup does not
+change the runner's ImageMagick security policy.
 Package installation is not cached. Windows and macOS log that
 installation is skipped because the bundled Magick.NET renderer supports those
 platforms. Self-hosted Linux runners need apt and sudo access when ImageMagick is
