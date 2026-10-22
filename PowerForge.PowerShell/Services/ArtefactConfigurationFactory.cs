@@ -31,6 +31,9 @@ public sealed class ArtefactConfigurationFactory
             ArtefactType = request.Type,
             Configuration = new ArtefactConfiguration
             {
+                Layout = request.Layout,
+                DeliveryPath = request.DeliveryPath,
+                DeliveryMappings = request.DeliveryMappings,
                 RequiredModules = new ArtefactRequiredModulesConfiguration()
             }
         };

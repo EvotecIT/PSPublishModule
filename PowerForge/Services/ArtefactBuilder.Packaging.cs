@@ -80,9 +80,8 @@ public sealed partial class ArtefactBuilder
         if (delivery?.Enable != true)
             return includeAll ?? Array.Empty<string>();
 
-        var internalsPath = string.IsNullOrWhiteSpace(delivery.InternalsPath)
-            ? "Internals"
-            : delivery.InternalsPath.Trim().TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var internalsPath = ArtefactLayoutPathResolver.NormalizeDeliveryInternalsPath(delivery.InternalsPath)
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
 
         if (string.IsNullOrWhiteSpace(internalsPath))
             return includeAll ?? Array.Empty<string>();

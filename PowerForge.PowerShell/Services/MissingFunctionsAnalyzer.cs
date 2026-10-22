@@ -13,7 +13,7 @@ namespace PowerForge;
 /// Analyzes a PowerShell script (file or code) and reports referenced commands that are not declared locally,
 /// optionally returning inlineable helper function definitions sourced from approved modules.
 /// </summary>
-public sealed class MissingFunctionsAnalyzer
+public sealed partial class MissingFunctionsAnalyzer
 {
     private static readonly object ModulePathImportLock = new();
 
@@ -85,7 +85,7 @@ public sealed class MissingFunctionsAnalyzer
 
         try
         {
-            return AnalyzeInternal(
+            var report = AnalyzeInternal(
                 filePath: filePath,
                 code: code,
                 knownFunctions: known,
@@ -97,6 +97,7 @@ public sealed class MissingFunctionsAnalyzer
                 requireApprovedModuleSources: options.RequireApprovedModuleSources,
                 ignoreFunctions: ignore,
                 includeFunctionsRecursively: options.IncludeFunctionsRecursively);
+            return PreserveNonFunctionRuntimeSurfaces(report, approved, approvedSources);
         }
         finally
         {
@@ -906,7 +907,8 @@ try {
             var created = new ModuleScopeSession(
                 runspace,
                 imported.ModuleBase,
-                imported.ExportedCommands.Keys);
+                imported.ExportedCommands.Keys,
+                HasNonFunctionRuntimeSurface(imported));
             _moduleScopeSessions[key] = created;
             return created;
         }
@@ -991,14 +993,17 @@ try {
         internal Runspace Runspace { get; }
         internal string ModuleBase { get; }
         internal HashSet<string> ExportedCommandNames { get; }
+        internal bool HasNonFunctionRuntimeSurface { get; }
 
         internal ModuleScopeSession(
             Runspace runspace,
             string moduleBase,
-            IEnumerable<string> exportedCommandNames)
+            IEnumerable<string> exportedCommandNames,
+            bool hasNonFunctionRuntimeSurface)
         {
             Runspace = runspace;
             ModuleBase = moduleBase;
+            HasNonFunctionRuntimeSurface = hasNonFunctionRuntimeSurface;
             ExportedCommandNames = new HashSet<string>(
                 exportedCommandNames ?? Array.Empty<string>(),
                 StringComparer.OrdinalIgnoreCase);

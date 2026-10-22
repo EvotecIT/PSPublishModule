@@ -20,6 +20,18 @@ public sealed class ConfigurationArtefactSegment : IConfigurationSegment
 /// </summary>
 public sealed class ArtefactConfiguration
 {
+    /// <summary>Optional module or runnable delivery bundle layout (Packed and Unpacked).</summary>
+    public ArtefactLayout? Layout { get; set; }
+
+    /// <summary>Relative destination for delivery files inside a Delivery artefact; null or dot uses its root.</summary>
+    public string? DeliveryPath { get; set; }
+
+    /// <summary>
+    /// Optional file or directory mappings from packaged delivery internals to paths beneath DeliveryPath.
+    /// When nonempty, only mapped content is promoted; the complete module payload remains unchanged.
+    /// </summary>
+    public ArtefactCopyMapping[]? DeliveryMappings { get; set; }
+
     /// <summary>Enable artefact creation.</summary>
     public bool? Enabled { get; set; }
 

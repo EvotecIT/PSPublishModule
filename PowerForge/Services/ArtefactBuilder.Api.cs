@@ -126,6 +126,9 @@ public sealed partial class ArtefactBuilder
 
         var root = ResolveOutputRoot(cfg.Path, projectRoot, moduleName, moduleVersion, preRelease, segment.ArtefactType);
 
+        ValidateDeliveryLayout(segment.ArtefactType, cfg, root, stagingPath, moduleName,
+            moduleVersion, preRelease, information, delivery, includeScriptFolders, finalizedPayloadFiles);
+
         return segment.ArtefactType switch
         {
             ArtefactType.Unpacked => BuildUnpacked(cfg, root, projectRoot, stagingPath, moduleName, moduleVersion, preRelease, requiredModules, information, delivery, includeScriptFolders, finalizedPayloadFiles),
@@ -196,6 +199,7 @@ public sealed partial class ArtefactBuilder
             }
         }
 
+        CopyDeliveryFiles(cfg, stagingPath, outputRoot, information, delivery, includeScriptFolders, finalizedPayloadFiles, copied);
         CopyExtraMappings(
             cfg,
             projectRoot,
@@ -265,6 +269,7 @@ public sealed partial class ArtefactBuilder
                 }
             }
 
+            CopyDeliveryFiles(cfg, stagingPath, tempRoot, information, delivery, includeScriptFolders, finalizedPayloadFiles, copied);
             CopyExtraMappings(
                 cfg,
                 projectRoot,
@@ -288,7 +293,11 @@ public sealed partial class ArtefactBuilder
                     entryPointPath,
                     zipPath,
                     moduleName,
-                    version);
+                    version)
+                {
+                    PromotedDeliveryFilePaths = ResolveDeliveryOutputPaths(cfg, stagingPath, tempRoot,
+                        information, delivery, includeScriptFolders, finalizedPayloadFiles)
+                };
                 evidencePaths = FinalizeArtefactLayout(finalizePackedArtefact, context);
             }
 

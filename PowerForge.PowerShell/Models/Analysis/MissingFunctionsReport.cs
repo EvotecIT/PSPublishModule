@@ -25,7 +25,7 @@ public sealed class MissingFunctionsReport
 
     /// <summary>
     /// Approved modules that remain runtime dependencies because the analyzed source contains a
-    /// module-qualified command, using-module declaration, or owned type reference.
+    /// runtime module references or the selected donor exposes non-function runtime state.
     /// </summary>
     public string[] NonInlineableApprovedModules { get; }
 

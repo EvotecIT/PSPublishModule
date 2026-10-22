@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Management.Automation;
 using System.Management.Automation.Language;
 using System.Text.RegularExpressions;
 using Microsoft.PowerShell.Commands;
@@ -14,16 +15,19 @@ namespace PowerForge;
 /// </summary>
 internal static class ApprovedModuleRuntimeReferenceAnalyzer
 {
-    private static readonly HashSet<string> ImportModuleSwitchParameters = new(StringComparer.OrdinalIgnoreCase)
+    private static readonly HashSet<string> ModuleManagementSwitchParameters = new(StringComparer.OrdinalIgnoreCase)
     {
+        "All",
         "AsCustomObject",
         "Confirm",
         "Debug",
         "DisableNameChecking",
         "Force",
         "Global",
+        "ListAvailable",
         "NoClobber",
         "PassThru",
+        "Refresh",
         "SkipEditionCheck",
         "UseWindowsPowerShell",
         "Verbose",
@@ -70,13 +74,13 @@ internal static class ApprovedModuleRuntimeReferenceAnalyzer
                      searchNestedScriptBlocks: true)
                  .Cast<CommandAst>())
         {
-            if (!IsImportModuleCommand(command))
+            if (!IsModuleManagementCommand(command, out bool moduleFilter))
                 continue;
 
-            var targets = GetImportModuleTargetExpressions(command).ToArray();
+            var targets = GetModuleTargetExpressions(command, moduleFilter).ToArray();
             if (targets.Length == 0)
             {
-                // Import-Module can receive its name from pipeline input. With no target in the
+                // Module-management commands can receive their name from pipeline input. With no target in the
                 // command AST, the runtime module cannot be proven and every approved donor must
                 // remain available to the generated module.
                 blocked.UnionWith(approvedModuleSources.Keys);
@@ -87,8 +91,8 @@ internal static class ApprovedModuleRuntimeReferenceAnalyzer
             {
                 foreach (var importedModule in GetStaticModuleNames(target))
                 {
-                    if (approvedModuleSources.ContainsKey(importedModule))
-                        blocked.Add(importedModule);
+                    var pattern = new WildcardPattern(importedModule, WildcardOptions.IgnoreCase);
+                    blocked.UnionWith(approvedModuleSources.Keys.Where(pattern.IsMatch));
                 }
 
                 if (!IsFullyStaticModuleReference(target))
@@ -170,25 +174,40 @@ internal static class ApprovedModuleRuntimeReferenceAnalyzer
         return trimmed;
     }
 
-    private static bool IsImportModuleCommand(CommandAst command)
+    private static bool IsModuleManagementCommand(CommandAst command, out bool moduleFilter)
     {
+        moduleFilter = false;
         var commandName = command.GetCommandName();
         if (string.IsNullOrWhiteSpace(commandName))
             return false;
 
         var leafName = commandName!.Split('\\').Last();
+        moduleFilter = (leafName.Equals("Get-Command", StringComparison.OrdinalIgnoreCase) ||
+                        leafName.Equals("gcm", StringComparison.OrdinalIgnoreCase)) &&
+                       (command.CommandElements.OfType<CommandParameterAst>().Any(parameter =>
+                            IsModuleFilterParameter(parameter.ParameterName)) ||
+                        command.CommandElements.OfType<VariableExpressionAst>().Any(variable => variable.Splatted));
         return leafName.Equals("Import-Module", StringComparison.OrdinalIgnoreCase) ||
-               leafName.Equals("ipmo", StringComparison.OrdinalIgnoreCase);
+               leafName.Equals("ipmo", StringComparison.OrdinalIgnoreCase) ||
+               leafName.Equals("Get-Module", StringComparison.OrdinalIgnoreCase) ||
+               leafName.Equals("gmo", StringComparison.OrdinalIgnoreCase) ||
+               leafName.Equals("Remove-Module", StringComparison.OrdinalIgnoreCase) ||
+               leafName.Equals("rmo", StringComparison.OrdinalIgnoreCase) || moduleFilter;
     }
 
-    private static IEnumerable<ExpressionAst> GetImportModuleTargetExpressions(CommandAst command)
+    private static bool IsModuleFilterParameter(string parameterName)
+        => parameterName.Length > 0 &&
+           ("Module".StartsWith(parameterName, StringComparison.OrdinalIgnoreCase) ||
+            "FullyQualifiedModule".StartsWith(parameterName, StringComparison.OrdinalIgnoreCase));
+
+    private static IEnumerable<ExpressionAst> GetModuleTargetExpressions(CommandAst command, bool moduleFilter)
     {
         var positionalFound = false;
         for (var index = 1; index < command.CommandElements.Count; index++)
         {
             if (command.CommandElements[index] is not CommandParameterAst parameter)
             {
-                if (!positionalFound && command.CommandElements[index] is ExpressionAst positional)
+                if (!moduleFilter && !positionalFound && command.CommandElements[index] is ExpressionAst positional)
                 {
                     yield return positional;
                     positionalFound = true;
@@ -196,9 +215,10 @@ internal static class ApprovedModuleRuntimeReferenceAnalyzer
                 continue;
             }
 
-            var isModuleNameParameter =
-                parameter.ParameterName.Equals("Name", StringComparison.OrdinalIgnoreCase) ||
-                parameter.ParameterName.Equals("FullyQualifiedName", StringComparison.OrdinalIgnoreCase);
+            var isModuleNameParameter = moduleFilter
+                ? IsModuleFilterParameter(parameter.ParameterName)
+                : parameter.ParameterName.Equals("Name", StringComparison.OrdinalIgnoreCase) ||
+                  parameter.ParameterName.Equals("FullyQualifiedName", StringComparison.OrdinalIgnoreCase);
             if (isModuleNameParameter && parameter.Argument is not null)
             {
                 yield return parameter.Argument;
@@ -211,7 +231,7 @@ internal static class ApprovedModuleRuntimeReferenceAnalyzer
                 index++;
             }
             else if (parameter.Argument is null &&
-                     !ImportModuleSwitchParameters.Contains(parameter.ParameterName) &&
+                     !ModuleManagementSwitchParameters.Contains(parameter.ParameterName) &&
                      index + 1 < command.CommandElements.Count &&
                      command.CommandElements[index + 1] is ExpressionAst)
             {
@@ -219,6 +239,18 @@ internal static class ApprovedModuleRuntimeReferenceAnalyzer
                 index++;
             }
         }
+    }
+
+    internal static bool TryReadStaticModuleNames(StatementAst statement, out string[] names)
+    {
+        names = Array.Empty<string>();
+        ExpressionAst? expression = GetHashtableValueExpression(statement);
+        if (expression is ArrayExpressionAst emptyArray && emptyArray.SubExpression.Statements.Count == 0)
+            return true;
+        if (expression is null || !IsFullyStaticModuleReference(expression))
+            return false;
+        names = GetStaticModuleNames(expression).ToArray();
+        return true;
     }
 
     private static bool IsFullyStaticModuleReference(ExpressionAst expression)

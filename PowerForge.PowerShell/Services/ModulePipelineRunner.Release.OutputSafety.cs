@@ -8,7 +8,8 @@ public sealed partial class ModulePipelineRunner
 {
     private static void AddArtefactOutputPathConflicts(
         ModulePipelinePlan plan,
-        ICollection<string> conflicts)
+        ICollection<string> conflicts,
+        ModulePipelineRunState state)
     {
         var priorOutputs = new List<ArtefactOutputOperations>();
         foreach (ConfigurationArtefactSegment artefact in plan.Artefacts
@@ -16,7 +17,7 @@ public sealed partial class ModulePipelineRunner
         {
             var current = new ArtefactOutputOperations(
                 artefact,
-                CollectPersistentArtefactDestructivePaths(plan, artefact, artefact.Configuration!));
+                CollectPersistentArtefactDestructivePaths(plan, artefact, artefact.Configuration!, state));
 
             foreach (ArtefactOutputOperations prior in priorOutputs)
             {
@@ -47,10 +48,11 @@ public sealed partial class ModulePipelineRunner
     private static IReadOnlyList<ArtefactDestructivePath> CollectPersistentArtefactDestructivePaths(
         ModulePipelinePlan plan,
         ConfigurationArtefactSegment artefact,
-        ArtefactConfiguration configuration)
+        ArtefactConfiguration configuration,
+        ModulePipelineRunState state)
     {
         if (artefact.ArtefactType is ArtefactType.Unpacked or ArtefactType.Script)
-            return CollectArtefactDestructivePaths(plan, artefact, configuration);
+            return CollectArtefactDestructivePaths(plan, artefact, configuration, state);
 
         string outputRoot = ArtefactLayoutPathResolver.ResolveOutputRoot(
             configuration.Path,

@@ -240,13 +240,8 @@ public sealed partial class ModulePipelineRunner
     }
 
     private static string ResolveDeliveryInternalsPath(DeliveryOptionsConfiguration? delivery)
-    {
-        var value = delivery?.InternalsPath;
-        if (string.IsNullOrWhiteSpace(value))
-            return "Internals";
-
-        return value!.Trim().TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-    }
+        => ArtefactLayoutPathResolver.NormalizeDeliveryInternalsPath(delivery?.InternalsPath)
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
 
     private static bool ShouldRemoveInternalsExcludePath(string? value, string internalsPath)
     {
@@ -431,9 +426,7 @@ public sealed partial class ModulePipelineRunner
 
         try
         {
-            var internals = string.IsNullOrWhiteSpace(delivery.InternalsPath)
-                ? "Internals"
-                : delivery.InternalsPath.Trim();
+            var internals = ArtefactLayoutPathResolver.NormalizeDeliveryInternalsPath(delivery.InternalsPath);
 
             void ApplyTo(string parentKey)
             {

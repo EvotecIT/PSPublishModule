@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Linq;
+using System.Collections.Generic;
 using Xunit;
 
 namespace PowerForge.Tests;
@@ -34,7 +35,7 @@ public sealed class ModulePipelineApprovedModulesTests
     }
 
     [Fact]
-    public void Run_KeepsApprovedModulesInManifest_WhenMergeMissingFindsNoFunctionsToInline()
+    public void Run_KeepsApprovedModuleWhenItsRuntimeSurfaceCannotBeInspected()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
         try
@@ -43,7 +44,8 @@ public sealed class ModulePipelineApprovedModulesTests
             WriteMinimalModule(root.FullName, moduleName, "1.0.0");
 
             var spec = BuildSpec(root.FullName, moduleName, mergeMissing: true);
-            var runner = new ModulePipelineRunner(new NullLogger());
+            var runner = new ModulePipelineRunner(new NullLogger(), powerShellRunner: null,
+                moduleDependencyMetadataProvider: new UnavailableMetadataProvider());
             var plan = runner.Plan(spec);
             var result = runner.Run(spec, plan);
 
@@ -84,7 +86,7 @@ public sealed class ModulePipelineApprovedModulesTests
     }
 
     [Fact]
-    public void Run_ClearsStaleSourceDependencies_ButKeepsApprovedDependencyWhenNothingWasInlined()
+    public void Run_ClearsStaleSourceDependenciesButKeepsUninspectedApprovedDependency()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
         try
@@ -141,7 +143,8 @@ public sealed class ModulePipelineApprovedModulesTests
                 }
             };
 
-            var runner = new ModulePipelineRunner(new NullLogger());
+            var runner = new ModulePipelineRunner(new NullLogger(), powerShellRunner: null,
+                moduleDependencyMetadataProvider: new UnavailableMetadataProvider());
             var plan = runner.Plan(spec);
             var result = runner.Run(spec, plan);
             var requiredNames = ReadRequiredModuleNames(result.BuildResult.ManifestPath);
@@ -339,5 +342,16 @@ public sealed class ModulePipelineApprovedModulesTests
             .Where(n => !string.IsNullOrWhiteSpace(n))
             .Select(n => n!.Trim())
             .ToArray();
+    }
+
+    private sealed class UnavailableMetadataProvider : IModuleDependencyMetadataProvider
+    {
+        public IReadOnlyDictionary<string, InstalledModuleMetadata> GetLatestInstalledModules(IReadOnlyList<string> names)
+            => new Dictionary<string, InstalledModuleMetadata>();
+        public IReadOnlyList<RequiredModuleReference> GetRequiredModulesForInstalledModule(string moduleName)
+            => Array.Empty<RequiredModuleReference>();
+        public IReadOnlyDictionary<string, (string? Version, string? Guid)> ResolveLatestOnlineVersions(
+            IReadOnlyCollection<string> names, string? repository, RepositoryCredential? credential, bool prerelease)
+            => new Dictionary<string, (string? Version, string? Guid)>();
     }
 }

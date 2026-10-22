@@ -18,8 +18,9 @@ public sealed class MissingFunctionAnalysisResult
     public string[] FunctionsTopLevelOnly { get; }
 
     /// <summary>
-    /// Approved modules for which every referenced command was resolved to an inlineable PowerShell function.
-    /// A module is listed only when at least one of its functions was referenced.
+    /// Approved modules whose requirements are satisfied by complete analysis of the input.
+    /// Includes unused donors and helpers already defined locally, while excluding unresolved
+    /// dynamic or module-owned runtime references. Retained manifest content is checked separately.
     /// </summary>
     public string[] FullyInlinedApprovedModules { get; }
 

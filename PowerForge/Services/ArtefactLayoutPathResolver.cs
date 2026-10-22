@@ -8,6 +8,18 @@ namespace PowerForge;
 /// </summary>
 internal static class ArtefactLayoutPathResolver
 {
+    /// <summary>Resolves a portable relative delivery folder within its trusted artefact root.</summary>
+    internal static string ResolveDeliveryRoot(ArtefactConfiguration configuration, string artefactRoot)
+    {
+        string path = PathValueResolver.Clean(configuration.DeliveryPath ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(path) || path == ".")
+            return Path.GetFullPath(artefactRoot);
+        if (Path.IsPathRooted(path) || path.Split(Path.DirectorySeparatorChar)
+                .Where(static segment => segment.Length > 0).Any(segment => !IsPortableFileName(segment)))
+            throw new InvalidOperationException("DeliveryPath must be a relative folder inside the artefact root without parent traversal.");
+        return Path.GetFullPath(Path.Combine(artefactRoot, path));
+    }
+
     internal static string ResolveScriptName(
         string? configuredName,
         string moduleName,
@@ -133,7 +145,7 @@ internal static class ArtefactLayoutPathResolver
     {
         var path = cfg.RequiredModules.Path;
         if (string.IsNullOrWhiteSpace(path))
-            return outputRoot;
+            return cfg.Layout == ArtefactLayout.Delivery ? Path.Combine(outputRoot, "Modules") : outputRoot;
 
         var replaced = ModulePathTokenFormatter.ReplacePathTokens(path, moduleName, moduleVersion, preRelease);
         replaced = PathValueResolver.Clean(replaced);
@@ -174,7 +186,7 @@ internal static class ArtefactLayoutPathResolver
             cfg.RequiredModules.Path,
             outputRoot,
             packedRoot,
-            packedRoot,
+            cfg.Layout == ArtefactLayout.Delivery ? Path.Combine(packedRoot, "Modules") : packedRoot,
             moduleName,
             moduleVersion,
             preRelease);

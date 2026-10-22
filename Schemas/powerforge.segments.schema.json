@@ -826,10 +826,23 @@
       }
     },
 
+    "DeliveryMapping": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["Source", "Destination"],
+      "properties": {
+        "Source": { "type": "string", "minLength": 1, "description": "Literal file or directory path relative to packaged Delivery.InternalsPath. Dot selects all packaged delivery files. Wildcards and parent traversal are not supported." },
+        "Destination": { "type": "string", "minLength": 1, "description": "Literal path relative to the artefact DeliveryPath. For a file source include its target file name; for a directory source its contents are copied recursively into this folder. Dot is valid for directory destinations." }
+      }
+    },
+
     "ArtefactConfiguration": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
+        "Layout": { "type": ["string", "null"], "enum": ["Module", "Delivery", null] },
+        "DeliveryPath": { "type": ["string", "null"], "description": "Relative destination for delivery files within a Delivery artefact. Omit or use dot for the artefact root. Absolute and parent-traversal paths are rejected." },
+        "DeliveryMappings": { "type": ["array", "null"], "items": { "$ref": "#/$defs/DeliveryMapping" }, "description": "Optional selection and placement of packaged delivery files. Nonempty mappings replace whole-tree promotion; unmapped files remain only in the complete module payload. Destinations are relative to DeliveryPath. Null or empty uses the whole-tree default." },
         "Enabled": { "type": ["boolean", "null"] },
         "IncludeTagName": { "type": ["boolean", "null"] },
         "Path": { "type": ["string", "null"] },

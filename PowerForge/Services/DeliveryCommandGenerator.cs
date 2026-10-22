@@ -150,7 +150,7 @@ public sealed class DeliveryCommandGenerator
         string moduleName,
         DeliveryOptionsConfiguration delivery)
     {
-        var internalsPath = string.IsNullOrWhiteSpace(delivery.InternalsPath) ? "Internals" : delivery.InternalsPath.Trim();
+        var internalsPath = ArtefactLayoutPathResolver.NormalizeDeliveryInternalsPath(delivery.InternalsPath);
         var includeRootReadme = delivery.IncludeRootReadme ? "$true" : "$false";
         var includeRootChangelog = delivery.IncludeRootChangelog ? "$true" : "$false";
         var includeRootLicense = delivery.IncludeRootLicense ? "$true" : "$false";

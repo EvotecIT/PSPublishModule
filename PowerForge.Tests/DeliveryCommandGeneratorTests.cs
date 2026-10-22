@@ -8,6 +8,37 @@ namespace PowerForge.Tests;
 
 public sealed class DeliveryCommandGeneratorTests
 {
+    [Theory]
+    [InlineData(" Files ")]
+    [InlineData("\"Files\"")]
+    public void GeneratedInstall_UsesNormalizedDeliveryInternalsPath(string internalsPath)
+    {
+        string? powerShell = FindPowerShellExecutable();
+        if (powerShell is null)
+            return;
+        string root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(root, "Files"));
+            File.WriteAllText(Path.Combine(root, "Files", "config.json"), "package configuration");
+            new DeliveryCommandGenerator(new NullLogger()).Generate(root, "ExampleDelivery",
+                new DeliveryOptionsConfiguration { Enable = true, InternalsPath = internalsPath, GenerateInstallCommand = true });
+            string module = Path.Combine(root, "ExampleDelivery.psm1");
+            File.WriteAllText(module, ". \"$PSScriptRoot/Public/Install-ExampleDelivery.ps1\"");
+            string destination = Path.Combine(root, "installed");
+            string script = Path.Combine(root, "install.ps1");
+            File.WriteAllText(script, $$"""
+                $ErrorActionPreference = 'Stop'
+                Import-Module '{{EscapePowerShellString(module)}}' -Force
+                Install-ExampleDelivery -Path '{{EscapePowerShellString(destination)}}' -OnExists Overwrite | Out-Null
+                """);
+            var result = RunPowerShell(powerShell, script);
+            Assert.True(result.ExitCode == 0, result.StandardError);
+            Assert.Equal("package configuration", File.ReadAllText(Path.Combine(destination, "config.json")));
+        }
+        finally { if (Directory.Exists(root)) Directory.Delete(root, recursive: true); }
+    }
+
     [Fact]
     public void Generate_CreatesInstallAndUpdateScripts()
     {

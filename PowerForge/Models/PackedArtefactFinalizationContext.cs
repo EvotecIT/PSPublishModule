@@ -5,6 +5,9 @@ namespace PowerForge;
 /// </summary>
 public sealed class PackedArtefactFinalizationContext
 {
+    // Exact promoted destinations from the builder's copy plan; separate from module payload files.
+    internal string[] PromotedDeliveryFilePaths { get; set; } = System.Array.Empty<string>();
+
     /// <summary>Kind of artefact whose completed layout is being finalized.</summary>
     public ArtefactType ArtefactType { get; }
 

@@ -9,6 +9,8 @@ namespace PSPublishModule;
 
 internal sealed class ArtefactCopyMappingsTransformationAttribute : ArgumentTransformationAttribute
 {
+    public bool Strict { get; set; }
+
     public override object Transform(EngineIntrinsics engineIntrinsics, object inputData)
     {
         if (inputData is null) return Array.Empty<ArtefactCopyMapping>();
@@ -18,7 +20,7 @@ internal sealed class ArtefactCopyMappingsTransformationAttribute : ArgumentTran
         if (inputData is ArtefactCopyMapping single) return new[] { single };
 
         if (inputData is IDictionary dict)
-            return ConvertDictionary(dict);
+            return ConvertDictionary(dict, Strict);
 
         if (inputData is IEnumerable enumerable && inputData is not string)
         {
@@ -26,7 +28,11 @@ internal sealed class ArtefactCopyMappingsTransformationAttribute : ArgumentTran
             foreach (var item in enumerable)
             {
                 var unwrapped = item is null ? null : Unwrap(item);
-                if (unwrapped is null) continue;
+                if (unwrapped is null)
+                {
+                    if (Strict) throw new ArgumentTransformationMetadataException("Copy mappings must not contain null entries.");
+                    continue;
+                }
 
                 if (unwrapped is ArtefactCopyMapping m)
                 {
@@ -36,8 +42,9 @@ internal sealed class ArtefactCopyMappingsTransformationAttribute : ArgumentTran
 
                 if (unwrapped is IDictionary d)
                 {
-                    list.AddRange(ConvertDictionary(d));
+                    list.AddRange(ConvertDictionary(d, Strict));
                 }
+                else if (Strict) throw new ArgumentTransformationMetadataException("Each copy mapping must specify Source and Destination.");
             }
             return list.ToArray();
         }
@@ -45,17 +52,29 @@ internal sealed class ArtefactCopyMappingsTransformationAttribute : ArgumentTran
         throw new ArgumentTransformationMetadataException($"Unsupported value for copy mappings: {inputData.GetType().FullName}");
     }
 
-    private static ArtefactCopyMapping[] ConvertDictionary(IDictionary dict)
+    private static ArtefactCopyMapping[] ConvertDictionary(IDictionary dict, bool strict)
     {
+        if (strict && dict.Count == 0)
+            throw new ArgumentTransformationMetadataException("A copy mapping requires Source and Destination; use an empty array for the default layout.");
         if (TryGetString(dict, "Source", out var source) && TryGetString(dict, "Destination", out var destination))
+        {
+            if (strict && dict.Count != 2)
+                throw new ArgumentTransformationMetadataException("A copy mapping accepts only Source and Destination.");
             return new[] { new ArtefactCopyMapping { Source = source!, Destination = destination! } };
+        }
+        if (strict && (dict.Contains("Source") || dict.Contains("Destination")))
+            throw new ArgumentTransformationMetadataException("Each copy mapping requires nonempty Source and Destination.");
 
         var list = new List<ArtefactCopyMapping>();
         foreach (DictionaryEntry entry in dict)
         {
             var src = entry.Key?.ToString();
             var dst = entry.Value?.ToString();
-            if (string.IsNullOrWhiteSpace(src) || string.IsNullOrWhiteSpace(dst)) continue;
+            if (string.IsNullOrWhiteSpace(src) || string.IsNullOrWhiteSpace(dst))
+            {
+                if (strict) throw new ArgumentTransformationMetadataException("Each copy mapping requires nonempty Source and Destination.");
+                continue;
+            }
             list.Add(new ArtefactCopyMapping { Source = src!, Destination = dst! });
         }
         return list.ToArray();

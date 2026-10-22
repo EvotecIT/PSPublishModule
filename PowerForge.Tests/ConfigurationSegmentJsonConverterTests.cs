@@ -6,6 +6,42 @@ namespace PowerForge.Tests;
 public sealed class ConfigurationSegmentJsonConverterTests
 {
     [Fact]
+    public void Artefact_DeliveryLayoutIsPreservedBySegmentJsonAndDeclaredBySchema()
+    {
+        const string json = """
+            {"Build":{"Name":"Demo"},"Segments":[{"Type":"Packed","Configuration":{"Enabled":true,"Layout":"Delivery","DeliveryPath":"Launchers","DeliveryMappings":[{"Source":"Run.ps1","Destination":"bin/Start.ps1"}]}}]}
+            """;
+        var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+        options.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
+        options.Converters.Add(new ConfigurationSegmentJsonConverter());
+        var spec = JsonSerializer.Deserialize<ModulePipelineSpec>(json, options)!;
+        Assert.Equal(ArtefactLayout.Delivery,
+            Assert.IsType<ConfigurationArtefactSegment>(Assert.Single(spec.Segments)).Configuration.Layout);
+        Assert.Equal("Launchers", Assert.IsType<ConfigurationArtefactSegment>(Assert.Single(spec.Segments)).Configuration.DeliveryPath);
+
+        using var schema = JsonDocument.Parse(File.ReadAllText(SchemaPath("powerforge.segments.schema.json")));
+        var layout = schema.RootElement.GetProperty("$defs").GetProperty("ArtefactConfiguration")
+            .GetProperty("properties").GetProperty("Layout");
+        Assert.Contains(layout.GetProperty("enum").EnumerateArray(), value => value.ValueKind == JsonValueKind.String && value.GetString() == "Delivery");
+        var deliveryPath = schema.RootElement.GetProperty("$defs").GetProperty("ArtefactConfiguration")
+            .GetProperty("properties").GetProperty("DeliveryPath");
+        Assert.Contains(deliveryPath.GetProperty("type").EnumerateArray(), value => value.GetString() == "string");
+        var mapping = Assert.Single(Assert.IsType<ConfigurationArtefactSegment>(Assert.Single(spec.Segments)).Configuration.DeliveryMappings!);
+        Assert.Equal("Run.ps1", mapping.Source);
+        Assert.Equal("bin/Start.ps1", mapping.Destination);
+        string roundTrip = JsonSerializer.Serialize(spec, options);
+        Assert.Contains("DeliveryMappings", roundTrip);
+        var restored = JsonSerializer.Deserialize<ModulePipelineSpec>(roundTrip, options)!;
+        Assert.Equal("bin/Start.ps1", Assert.Single(Assert.IsType<ConfigurationArtefactSegment>(Assert.Single(restored.Segments)).Configuration.DeliveryMappings!).Destination);
+        var mappingSchema = schema.RootElement.GetProperty("$defs").GetProperty("DeliveryMapping");
+        Assert.Equal(new[] { "Source", "Destination" }, mappingSchema.GetProperty("required").EnumerateArray().Select(value => value.GetString()));
+        Assert.False(mappingSchema.GetProperty("additionalProperties").GetBoolean());
+        Assert.Equal(1, mappingSchema.GetProperty("properties").GetProperty("Source").GetProperty("minLength").GetInt32());
+        Assert.Equal("#/$defs/DeliveryMapping", schema.RootElement.GetProperty("$defs").GetProperty("ArtefactConfiguration")
+            .GetProperty("properties").GetProperty("DeliveryMappings").GetProperty("items").GetProperty("$ref").GetString());
+    }
+
+    [Fact]
     public void ModuleDependency_DefaultsToInstalled_AndJsonCanSelectPSGallery()
     {
         Assert.Equal(ModuleDependencyVersionSource.Installed, new ModuleDependencyConfiguration().VersionSource);
