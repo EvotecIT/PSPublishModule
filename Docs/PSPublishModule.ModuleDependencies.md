@@ -25,6 +25,21 @@ the module package should not force PowerShell dependency resolution.
 `ApprovedModule` is a build-time helper contract for merge and missing-command
 workflows. It is not a runtime dependency declaration.
 
+When a dependency is both required and approved, `-MergeFunctionsFromApprovedModules`
+removes its runtime requirement once complete analysis proves that the merged
+output satisfies it. This includes helpers already present in the consumer or
+another approved donor; a donor does not need to contribute another copy of a
+function to become unnecessary. Artefacts with `-AddRequiredModules` copy the
+remaining runtime dependencies after that pruning.
+
+Module-qualified calls, module-owned types and unresolved dynamic invocation can
+still require the original module. Approval permits merging; it does not make an
+unresolved runtime reference safe to remove. Builds with merging disabled keep
+their configured required modules.
+
+For launcher/configuration ZIPs with the main module and remaining dependencies
+under `Modules`, use the native [delivery bundle layout](PSPublishModule.ModuleDelivery.md).
+
 `EmbeddedModule` is the private-runtime contract. Use it when the module should
 carry selected dependency payloads without adding those modules to PSD1
 `RequiredModules`.

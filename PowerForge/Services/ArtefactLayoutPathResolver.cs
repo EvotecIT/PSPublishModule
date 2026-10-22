@@ -133,7 +133,7 @@ internal static class ArtefactLayoutPathResolver
     {
         var path = cfg.RequiredModules.Path;
         if (string.IsNullOrWhiteSpace(path))
-            return outputRoot;
+            return cfg.Layout == ArtefactLayout.Delivery ? Path.Combine(outputRoot, "Modules") : outputRoot;
 
         var replaced = ModulePathTokenFormatter.ReplacePathTokens(path, moduleName, moduleVersion, preRelease);
         replaced = PathValueResolver.Clean(replaced);
@@ -174,7 +174,7 @@ internal static class ArtefactLayoutPathResolver
             cfg.RequiredModules.Path,
             outputRoot,
             packedRoot,
-            packedRoot,
+            cfg.Layout == ArtefactLayout.Delivery ? Path.Combine(packedRoot, "Modules") : packedRoot,
             moduleName,
             moduleVersion,
             preRelease);

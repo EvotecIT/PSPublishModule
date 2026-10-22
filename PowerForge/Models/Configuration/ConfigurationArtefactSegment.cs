@@ -20,6 +20,9 @@ public sealed class ConfigurationArtefactSegment : IConfigurationSegment
 /// </summary>
 public sealed class ArtefactConfiguration
 {
+    /// <summary>Optional module or runnable delivery bundle layout (Packed and Unpacked).</summary>
+    public ArtefactLayout? Layout { get; set; }
+
     /// <summary>Enable artefact creation.</summary>
     public bool? Enabled { get; set; }
 

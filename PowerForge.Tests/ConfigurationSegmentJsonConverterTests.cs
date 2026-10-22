@@ -6,6 +6,25 @@ namespace PowerForge.Tests;
 public sealed class ConfigurationSegmentJsonConverterTests
 {
     [Fact]
+    public void Artefact_DeliveryLayoutIsPreservedBySegmentJsonAndDeclaredBySchema()
+    {
+        const string json = """
+            {"Build":{"Name":"Demo"},"Segments":[{"Type":"Packed","Configuration":{"Enabled":true,"Layout":"Delivery"}}]}
+            """;
+        var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+        options.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
+        options.Converters.Add(new ConfigurationSegmentJsonConverter());
+        var spec = JsonSerializer.Deserialize<ModulePipelineSpec>(json, options)!;
+        Assert.Equal(ArtefactLayout.Delivery,
+            Assert.IsType<ConfigurationArtefactSegment>(Assert.Single(spec.Segments)).Configuration.Layout);
+
+        using var schema = JsonDocument.Parse(File.ReadAllText(SchemaPath("powerforge.segments.schema.json")));
+        var layout = schema.RootElement.GetProperty("$defs").GetProperty("ArtefactConfiguration")
+            .GetProperty("properties").GetProperty("Layout");
+        Assert.Contains(layout.GetProperty("enum").EnumerateArray(), value => value.ValueKind == JsonValueKind.String && value.GetString() == "Delivery");
+    }
+
+    [Fact]
     public void ModuleDependency_DefaultsToInstalled_AndJsonCanSelectPSGallery()
     {
         Assert.Equal(ModuleDependencyVersionSource.Installed, new ModuleDependencyConfiguration().VersionSource);

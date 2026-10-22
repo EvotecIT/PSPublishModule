@@ -38,6 +38,11 @@ namespace PSPublishModule;
 /// <code>New-ConfigurationArtefact -Type Packed -Enable -Path 'Artefacts\Packed' -ID 'Packed'</code>
 /// </example>
 /// <example>
+/// <summary>Create a runnable delivery ZIP with launcher files at its root</summary>
+/// <code>New-ConfigurationArtefact -Type Packed -Layout Delivery -Enable -Path 'Artefacts\Packed' -AddRequiredModules -IncludeTagName</code>
+/// <para>Requires enabled New-ConfigurationDelivery. Delivery files are copied to the bundle root; the complete module and remaining dependencies default to Modules.</para>
+/// </example>
+/// <example>
 /// <summary>Create an unpacked artefact including required modules</summary>
 /// <code>New-ConfigurationArtefact -Type Unpacked -Enable -AddRequiredModules -Path 'Artefacts\Unpacked' -RequiredModulesRepository 'PSGallery'</code>
 /// </example>
@@ -65,6 +70,13 @@ public sealed class NewConfigurationArtefactCommand : PSCmdlet
     /// <summary>Artefact type to generate.</summary>
     [Parameter(Mandatory = true)]
     public ArtefactType Type { get; set; }
+
+    /// <summary>
+    /// Package layout. Delivery copies the configured delivery internals to the artefact root
+    /// and defaults main and required modules to Modules. Supported by Packed and Unpacked.
+    /// </summary>
+    [Parameter]
+    public ArtefactLayout? Layout { get; set; }
 
     /// <summary>Enable artefact creation. By default artefact creation is disabled.</summary>
     [Parameter]
@@ -189,6 +201,7 @@ public sealed class NewConfigurationArtefactCommand : PSCmdlet
         var request = new ArtefactConfigurationRequest
         {
             Type = Type,
+            Layout = Layout,
             EnableSpecified = MyInvocation.BoundParameters.ContainsKey(nameof(Enable)),
             Enable = Enable.IsPresent,
             IncludeTagNameSpecified = MyInvocation.BoundParameters.ContainsKey(nameof(IncludeTagName)),

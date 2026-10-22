@@ -8,6 +8,9 @@ public sealed class ArtefactConfigurationRequest
     /// <summary>Artefact type to generate.</summary>
     public ArtefactType Type { get; set; }
 
+    /// <summary>Optional module or runnable delivery bundle layout.</summary>
+    public ArtefactLayout? Layout { get; set; }
+
     /// <summary>Whether Enable was explicitly provided.</summary>
     public bool EnableSpecified { get; set; }
     /// <summary>Enable artefact creation.</summary>

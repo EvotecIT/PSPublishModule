@@ -830,6 +830,7 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
+        "Layout": { "type": ["string", "null"], "enum": ["Module", "Delivery", null] },
         "Enabled": { "type": ["boolean", "null"] },
         "IncludeTagName": { "type": ["boolean", "null"] },
         "Path": { "type": ["string", "null"] },

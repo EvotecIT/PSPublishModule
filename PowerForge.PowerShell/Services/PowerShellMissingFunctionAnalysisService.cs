@@ -34,13 +34,18 @@ internal sealed class PowerShellMissingFunctionAnalysisService : IMissingFunctio
             report.NonInlineableApprovedModules ?? Array.Empty<string>(),
             StringComparer.OrdinalIgnoreCase);
 
-        return (report.Summary ?? Array.Empty<MissingFunctionCommand>())
+        var commandsByModule = (report.Summary ?? Array.Empty<MissingFunctionCommand>())
             .Where(command => !string.IsNullOrWhiteSpace(command.Source) && approved.Contains(command.Source))
             .GroupBy(command => command.Source.Trim(), StringComparer.OrdinalIgnoreCase)
-            .Where(group => !nonInlineable.Contains(group.Key) &&
-                            group.Any() &&
-                            group.All(command => command.ScriptBlock is not null))
-            .Select(group => group.Key)
+            .ToDictionary(group => group.Key, group => group.ToArray(), StringComparer.OrdinalIgnoreCase);
+
+        // A dependency can be satisfied without contributing a new function: the consumer or
+        // another approved donor may already contain its helpers. Complete analysis with no
+        // remaining module references is sufficient; an absent donor group is not a runtime need.
+        return approved
+            .Where(module => !nonInlineable.Contains(module) &&
+                             (!commandsByModule.TryGetValue(module, out var commands) ||
+                              commands.All(command => command.ScriptBlock is not null)))
             .OrderBy(static name => name, StringComparer.OrdinalIgnoreCase)
             .ToArray();
     }

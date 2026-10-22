@@ -2,6 +2,8 @@
 
 ## Unreleased
 ### What's Changed
+- Remove redundant approved runtime dependencies when their helpers are already present in the consumer or another merged donor; dependency bundling follows the pruned runtime manifest.
+- Add native Packed/Unpacked delivery bundle layouts with launcher/configuration files at the root and complete modules under Modules, replacing manual package relocation and ZIP creation.
 - Allow locally available Windows Cloud Files inputs, including OneDrive-backed installed modules, when building artefacts while retaining strict link and finalized-output checks.
 - Read Windows directory case flags when validating artefact destinations, so empty output directories cannot hide case-only payload collisions.
 - Defer repository credential file and environment lookups until repository operations, so local builds and configuration exports do not require publishing secrets. Preserve the source through JSON configuration and resolve relative secret files against the project root.

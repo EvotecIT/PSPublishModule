@@ -34,7 +34,7 @@ public sealed class ModulePipelineApprovedModulesTests
     }
 
     [Fact]
-    public void Run_KeepsApprovedModulesInManifest_WhenMergeMissingFindsNoFunctionsToInline()
+    public void Run_RemovesUnusedApprovedModuleFromManifest_WhenAnalysisIsComplete()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
         try
@@ -50,7 +50,7 @@ public sealed class ModulePipelineApprovedModulesTests
             var requiredNames = ReadRequiredModuleNames(result.BuildResult.ManifestPath);
 
             Assert.Contains("PSWriteHTML", requiredNames, StringComparer.OrdinalIgnoreCase);
-            Assert.Contains("Graphimo", requiredNames, StringComparer.OrdinalIgnoreCase);
+            Assert.DoesNotContain("Graphimo", requiredNames, StringComparer.OrdinalIgnoreCase);
         }
         finally
         {
@@ -84,7 +84,7 @@ public sealed class ModulePipelineApprovedModulesTests
     }
 
     [Fact]
-    public void Run_ClearsStaleSourceDependencies_ButKeepsApprovedDependencyWhenNothingWasInlined()
+    public void Run_ClearsStaleSourceDependenciesAndUnusedApprovedDependency()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
         try
@@ -149,7 +149,7 @@ public sealed class ModulePipelineApprovedModulesTests
             Assert.DoesNotContain("LegacyOnly", requiredNames, StringComparer.OrdinalIgnoreCase);
             // Source manifest dependencies are not authoritative; build configuration owns the generated manifest.
             Assert.DoesNotContain("Microsoft.PowerShell.Utility", requiredNames, StringComparer.OrdinalIgnoreCase);
-            Assert.Contains("Graphimo", requiredNames, StringComparer.OrdinalIgnoreCase);
+            Assert.DoesNotContain("Graphimo", requiredNames, StringComparer.OrdinalIgnoreCase);
         }
         finally
         {
