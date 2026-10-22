@@ -199,7 +199,7 @@ public sealed partial class ArtefactBuilder
             }
         }
 
-        CopyDeliveryFiles(cfg, stagingPath, outputRoot, information, delivery, includeScriptFolders, finalizedPayloadFiles);
+        CopyDeliveryFiles(cfg, stagingPath, outputRoot, information, delivery, includeScriptFolders, finalizedPayloadFiles, copied);
         CopyExtraMappings(
             cfg,
             projectRoot,
@@ -269,7 +269,7 @@ public sealed partial class ArtefactBuilder
                 }
             }
 
-            CopyDeliveryFiles(cfg, stagingPath, tempRoot, information, delivery, includeScriptFolders, finalizedPayloadFiles);
+            CopyDeliveryFiles(cfg, stagingPath, tempRoot, information, delivery, includeScriptFolders, finalizedPayloadFiles, copied);
             CopyExtraMappings(
                 cfg,
                 projectRoot,

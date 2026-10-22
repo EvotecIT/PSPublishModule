@@ -5,6 +5,7 @@ using Xunit;
 
 namespace PowerForge.Tests;
 
+[Collection(ProcessEnvironmentCollection.Name)]
 public sealed class MissingFunctionsAnalyzerBoundSourceTests
 {
     [Fact]

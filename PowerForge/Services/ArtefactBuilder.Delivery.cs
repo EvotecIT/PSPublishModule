@@ -53,11 +53,11 @@ public sealed partial class ArtefactBuilder
                 IsSameOrBelowPath(modulesRoot, entry.DestinationPath) ||
                 IsSameOrBelowPath(requiredRoot, entry.DestinationPath))
                 throw new InvalidOperationException("Delivery files conflict with the configured modules directory.");
-            ValidateScriptDestinationDoesNotTraverseReparsePoint(entry.DestinationPath, null, "Delivery artefact files");
+            ValidateScriptDestinationDoesNotTraverseReparsePoint(entry.DestinationPath, outputRoot, "Delivery artefact files");
         }
-        ValidateScriptDestinationDoesNotTraverseReparsePoint(outputRoot, null, "Delivery artefact output");
-        ValidateScriptDestinationDoesNotTraverseReparsePoint(modulesRoot, null, "Delivery module directory");
-        ValidateScriptDestinationDoesNotTraverseReparsePoint(requiredRoot, null, "Delivery dependency directory");
+        ValidateScriptDestinationDoesNotTraverseReparsePoint(outputRoot, outputRoot, "Delivery artefact output");
+        ValidateScriptDestinationDoesNotTraverseReparsePoint(modulesRoot, outputRoot, "Delivery module directory");
+        ValidateScriptDestinationDoesNotTraverseReparsePoint(requiredRoot, outputRoot, "Delivery dependency directory");
     }
 
     private static void ValidateDeliveryModulePath(string? path)
@@ -99,13 +99,15 @@ public sealed partial class ArtefactBuilder
         InformationConfiguration? information,
         DeliveryOptionsConfiguration? delivery,
         bool includeScriptFolders,
-        IReadOnlyList<string>? finalizedPayloadFiles)
+        IReadOnlyList<string>? finalizedPayloadFiles,
+        List<ArtefactCopyEntry> copied)
     {
         foreach (var entry in ResolveDeliveryCopyPlan(cfg, stagingPath, destinationRoot, information, delivery,
                      includeScriptFolders, finalizedPayloadFiles))
         {
             Directory.CreateDirectory(Path.GetDirectoryName(entry.DestinationPath)!);
             File.Copy(entry.SourcePath, entry.DestinationPath, overwrite: true);
+            copied.Add(new ArtefactCopyEntry(entry.SourcePath, entry.DestinationPath, isDirectory: false));
         }
     }
 }

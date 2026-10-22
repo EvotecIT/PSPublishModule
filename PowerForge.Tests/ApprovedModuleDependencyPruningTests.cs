@@ -10,6 +10,64 @@ namespace PowerForge.Tests;
 [Collection(ProcessEnvironmentCollection.Name)]
 public sealed class ApprovedModuleDependencyPruningTests
 {
+    [Theory]
+    [InlineData("ScriptsToProcess", "Classes/Initialize.ps1", "SharedHelpers\\Get-SharedHelper")]
+    [InlineData("ScriptsToProcess", "Classes/Initialize.ps1", "Get-SharedHelper")]
+    [InlineData("NestedModules", "Nested.psm1", "SharedHelpers\\Get-SharedHelper")]
+    [InlineData("NestedModules", "Nested.psm1", "Get-SharedHelper")]
+    [InlineData("NestedModules", "Nested.psd1", "'nested'")]
+    public void Run_PreservesApprovedDependencyUsedByRetainedManifestContent(string key, string relativePath, string script)
+    {
+        string root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            string modules = Path.Combine(root, "installed");
+            WriteModule(modules, "SharedHelpers", "function Get-SharedHelper { 'shared' }; Export-ModuleMember Get-SharedHelper");
+            WriteModule(root, "source", "function Get-ConsumerThing { 'consumer' }");
+            string source = Path.Combine(root, "source");
+            string retained = Path.Combine(source, relativePath);
+            Directory.CreateDirectory(Path.GetDirectoryName(retained)!);
+            if (relativePath.EndsWith(".psd1", StringComparison.OrdinalIgnoreCase))
+            {
+                File.WriteAllText(retained, "@{RootModule='NestedRuntime.psm1';ModuleVersion='1.0.0';RequiredModules=@('SharedHelpers')}");
+                File.WriteAllText(Path.Combine(source, "NestedRuntime.psm1"), script);
+            }
+            else
+                File.WriteAllText(retained, script);
+            Assert.True(ManifestEditor.TrySetTopLevelStringArray(Path.Combine(source, "source.psd1"), key, new[] { relativePath }));
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec { Name = "source", SourcePath = source, Version = "1.0.0", KeepStaging = true },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationBuildSegment { BuildModule = new BuildModuleConfiguration { Merge = true, MergeMissing = true } },
+                    new ConfigurationModuleSegment
+                    {
+                        Kind = ModuleDependencyKind.RequiredModule,
+                        Configuration = new ModuleDependencyConfiguration { ModuleName = "SharedHelpers", RequiredVersion = "1.0.0", VersionSource = ModuleDependencyVersionSource.Installed }
+                    },
+                    new ConfigurationModuleSegment
+                    {
+                        Kind = ModuleDependencyKind.ApprovedModule,
+                        Configuration = new ModuleDependencyConfiguration { ModuleName = "SharedHelpers", VersionSource = ModuleDependencyVersionSource.Installed }
+                    }
+                }
+            };
+            var runner = new ModulePipelineRunner(new NullLogger(), powerShellRunner: null,
+                moduleDependencyMetadataProvider: new FixtureMetadataProvider(modules),
+                missingFunctionAnalysisService: new PowerShellMissingFunctionAnalysisService());
+            var result = runner.Run(spec, runner.Plan(spec));
+            Assert.Contains("SharedHelpers", File.ReadAllText(result.BuildResult.ManifestPath));
+            Assert.True(File.Exists(Path.Combine(result.BuildResult.StagingPath, relativePath)));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
     [Fact]
     public void Run_FinalManifestAndArchiveContainOnlyRemainingRuntimeDependencies()
     {

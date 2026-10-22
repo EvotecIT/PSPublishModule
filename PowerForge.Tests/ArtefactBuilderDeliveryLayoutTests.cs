@@ -85,7 +85,49 @@ public sealed class ArtefactBuilderDeliveryLayoutTests
             Assert.Equal(expected.OrderBy(path => path), Directory.GetFiles(result.OutputPath, "*", SearchOption.AllDirectories)
                 .Select(path => Path.GetRelativePath(result.OutputPath, path).Replace('\\', '/')).OrderBy(path => path));
             Assert.Equal("launcher", File.ReadAllText(Path.Combine(result.OutputPath, "Run.ps1")));
+            Assert.Contains(result.CopiedItems, item => item.Destination == Path.Combine(result.OutputPath, "Run.ps1") && !item.IsDirectory);
         }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Run_RejectsRootDeliveryFileMutationByAfterModuleProducer(bool removeFile)
+    {
+        using var fixture = new Fixture();
+        var runner = new ModulePipelineRunner(new NullLogger(), powerShellRunner: null,
+            moduleDependencyMetadataProvider: null, hostedOperations: null, manifestMutator: null,
+            missingFunctionAnalysisService: null, scriptFunctionExportDetector: null,
+            packageBuildExecutor: (request, configuration, configPath) =>
+        {
+            string launcher = Path.Combine(fixture.Output, "Run.ps1");
+            Assert.True(File.Exists(launcher));
+            if (removeFile)
+                File.Delete(launcher);
+            else
+                File.WriteAllText(launcher, "replacement");
+            return new ProjectBuildHostExecutionResult
+            {
+                Success = true, RootPath = fixture.Staging, ConfigPath = configPath ?? string.Empty,
+                Result = new ProjectBuildResult { Success = true, Release = new DotNetRepositoryReleaseResult { Success = true } }
+            };
+        });
+        var spec = new ModulePipelineSpec
+        {
+            Build = new ModuleBuildSpec { Name = "DemoModule", SourcePath = fixture.Staging, Version = "1.2.3", KeepStaging = true },
+            Install = new ModulePipelineInstallOptions { Enabled = false },
+            Segments = new IConfigurationSegment[]
+            {
+                new ConfigurationOptionsSegment { Options = new ConfigurationOptions { Delivery = fixture.Delivery } },
+                fixture.Segment(ArtefactType.Unpacked),
+                new ConfigurationPackageBuildSegment
+                {
+                    Configuration = new PackageBuildConfiguration { Name = "AfterModule", RootPath = ".", BuildBeforeModule = false }
+                }
+            }
+        };
+        var error = Assert.Throws<InvalidOperationException>(() => runner.Run(spec, runner.Plan(spec)));
+        Assert.Contains("finalized artefact", error.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Theory]
