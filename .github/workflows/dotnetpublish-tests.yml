@@ -30,7 +30,8 @@ on:
 jobs:
   DotNetPublishTests:
     runs-on: ${{ fromJSON(github.event.repository.private && '["self-hosted","linux"]' || '["ubuntu-latest"]') }}
-    timeout-minutes: 60
+    # Include headroom for the cold NuGet cache upload after the focused matrix.
+    timeout-minutes: 90
 
     steps:
       - uses: actions/checkout@v7
