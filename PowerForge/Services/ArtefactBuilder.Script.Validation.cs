@@ -535,9 +535,11 @@ public sealed partial class ArtefactBuilder
         {
             ValidateDirectoryTreeContainsNoReparsePoints(
                 source,
-                $"Script artefact directory copy source '{Path.GetFullPath(source)}'");
+                $"Script artefact directory copy source '{Path.GetFullPath(source)}'",
+                allowCloudPlaceholders: true);
         }
-        else if ((File.GetAttributes(source) & FileAttributes.ReparsePoint) != 0)
+        else if ((File.GetAttributes(source) & FileAttributes.ReparsePoint) != 0 &&
+                 !WindowsCloudFiles.IsPlaceholder(source))
         {
             throw new InvalidOperationException(
                 $"Script artefact file copy source '{Path.GetFullPath(source)}' must not be a symbolic link or reparse point.");

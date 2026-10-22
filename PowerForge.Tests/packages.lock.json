@@ -1166,7 +1166,7 @@
         "type": "Project",
         "dependencies": {
           "Microsoft.PowerShell.SDK": "[7.6.6, )",
-          "PowerForge": "[3.0.173, )",
+          "PowerForge": "[3.0.174, )",
           "System.Security.Cryptography.Xml": "[10.0.13, )"
         }
       },
@@ -1179,8 +1179,8 @@
       "powerforge.powershell.provider.directory.runtime": {
         "type": "Project",
         "dependencies": {
-          "PowerForge.PowerShell.Provider.Directory": "[3.0.173, )",
-          "PowerForge.PowerShell.ProviderSdk": "[3.0.173, )"
+          "PowerForge.PowerShell.Provider.Directory": "[3.0.174, )",
+          "PowerForge.PowerShell.ProviderSdk": "[3.0.174, )"
         }
       },
       "powerforge.powershell.provider.management": {
@@ -1192,14 +1192,14 @@
       "powerforge.powershell.provider.management.runtime": {
         "type": "Project",
         "dependencies": {
-          "PowerForge.PowerShell.Provider.Management": "[3.0.173, )",
-          "PowerForge.PowerShell.ProviderSdk": "[3.0.173, )"
+          "PowerForge.PowerShell.Provider.Management": "[3.0.174, )",
+          "PowerForge.PowerShell.ProviderSdk": "[3.0.174, )"
         }
       },
       "powerforge.powershell.providersdk": {
         "type": "Project",
         "dependencies": {
-          "PowerForge": "[3.0.173, )"
+          "PowerForge": "[3.0.174, )"
         }
       },
       "powerforge.web": {
@@ -1210,8 +1210,8 @@
           "Magick.NET-Q8-AnyCPU": "[15.0.0, )",
           "Microsoft.CodeAnalysis.CSharp": "[5.9.0, )",
           "OfficeIMO.Markdown": "[3.4.5, )",
-          "PowerForge": "[3.0.173, )",
-          "PowerForge.Web.Protocols": "[3.0.173, )",
+          "PowerForge": "[3.0.174, )",
+          "PowerForge.Web.Protocols": "[3.0.174, )",
           "Scriban": "[7.5.0, )",
           "YamlDotNet": "[18.1.0, )"
         }
@@ -1221,8 +1221,8 @@
         "dependencies": {
           "DBAClientX.SQLite": "[1.0.14, )",
           "NuGet.Versioning": "[7.9.0, )",
-          "PowerForge.Web": "[3.0.173, )",
-          "PowerForge.Web.Protocols": "[3.0.173, )"
+          "PowerForge.Web": "[3.0.174, )",
+          "PowerForge.Web.Protocols": "[3.0.174, )"
         }
       },
       "powerforge.web.protocols": {
@@ -1237,8 +1237,8 @@
           "HtmlForgeX": "[1.4.0, )",
           "HtmlForgeX.Markdown": "[1.4.0, )",
           "OfficeIMO.Markdown": "[3.4.5, )",
-          "PowerForge": "[3.0.173, )",
-          "PowerForge.PowerShell": "[3.0.173, )",
+          "PowerForge": "[3.0.174, )",
+          "PowerForge.PowerShell": "[3.0.174, )",
           "Spectre.Console": "[0.57.2, )",
           "Spectre.Console.Json": "[0.57.2, )",
           "System.IO.Packaging": "[10.0.13, )",

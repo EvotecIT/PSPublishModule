@@ -138,7 +138,7 @@ public sealed partial class ArtefactBuilder
     {
         var plan = new List<ModulePackageCopyEntry>();
         StringComparer destinationComparer =
-            FrameworkCompatibility.GetPathStringComparisonForPath(destinationRoot) == StringComparison.OrdinalIgnoreCase
+            GetArtefactPathComparison(destinationRoot) == StringComparison.OrdinalIgnoreCase
                 ? StringComparer.OrdinalIgnoreCase
                 : StringComparer.Ordinal;
         var destinations = new Dictionary<string, string>(destinationComparer);

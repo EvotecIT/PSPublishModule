@@ -964,7 +964,7 @@ public partial class WebSiteAuditOptimizeBuildTests
                 """
                 <!doctype html>
                 <html>
-                <head><title>Home</title></head>
+                <head><title>Home</title><link rel="canonical" href="https://evotec.xyz/" /></head>
                 <body>
                   <main>
                     <a href="/blog/finding-gpos/">Learn more</a>
@@ -1027,7 +1027,7 @@ public partial class WebSiteAuditOptimizeBuildTests
                 """
                 <!doctype html>
                 <html>
-                <head><title>Home</title></head>
+                <head><title>Home</title><link rel="canonical" href="https://evotec.xyz/blog/" /></head>
                 <body>
                   <main>
                     <a href="/blog/finding-gpos/">Learn more</a>

@@ -18,7 +18,7 @@ public sealed partial class ArtefactBuilder
         if (!Directory.Exists(sourceDir))
             throw new DirectoryNotFoundException($"Directory not found: {sourceDir}");
 
-        ValidateDirectoryTreeContainsNoReparsePoints(sourceDir);
+        ValidateDirectoryTreeContainsNoReparsePoints(sourceDir, "Artefact copy sources", allowCloudPlaceholders: true);
 
         if (Directory.Exists(destDir))
             Directory.Delete(destDir, recursive: true);
@@ -128,13 +128,15 @@ public sealed partial class ArtefactBuilder
 
     private static void ValidateDirectoryTreeContainsNoReparsePoints(
         string rootPath,
-        string description)
+        string description,
+        bool allowCloudPlaceholders = false)
     {
         string root = Path.GetFullPath(rootPath);
         if (!Directory.Exists(root))
             throw new DirectoryNotFoundException($"Directory not found: {root}");
 
-        if ((File.GetAttributes(root) & FileAttributes.ReparsePoint) != 0)
+        if ((File.GetAttributes(root) & FileAttributes.ReparsePoint) != 0 &&
+            !(allowCloudPlaceholders && WindowsCloudFiles.IsPlaceholder(root)))
         {
             throw new InvalidOperationException(
                 $"{description} must not contain symbolic links or reparse points: '{root}'.");
@@ -148,7 +150,8 @@ public sealed partial class ArtefactBuilder
             foreach (string entry in Directory.EnumerateFileSystemEntries(current, "*", SearchOption.TopDirectoryOnly))
             {
                 FileAttributes attributes = File.GetAttributes(entry);
-                if ((attributes & FileAttributes.ReparsePoint) != 0)
+                if ((attributes & FileAttributes.ReparsePoint) != 0 &&
+                    !(allowCloudPlaceholders && WindowsCloudFiles.IsPlaceholder(entry)))
                 {
                     throw new InvalidOperationException(
                         $"{description} must not contain symbolic links or reparse points: '{entry}'.");

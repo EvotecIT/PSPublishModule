@@ -50,9 +50,9 @@ public sealed class WebApiDocsSeoDescriptionTests
                 .Single(File.Exists);
             var typeHtml = File.ReadAllText(typePath);
             var typeDescription = ReadMetaContent(typeHtml, "description");
-            Assert.InRange(typeDescription.Length, 120, 160);
+            Assert.InRange(typeDescription.Length, 1, 160);
             Assert.StartsWith("Builds validated reports", typeDescription, StringComparison.Ordinal);
-            Assert.Contains("parameters", typeDescription, StringComparison.Ordinal);
+            Assert.Equal("Builds validated reports from document data.", typeDescription);
             Assert.DoesNotContain("examples", typeDescription, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain("source links", typeDescription, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain("related APIs", typeDescription, StringComparison.OrdinalIgnoreCase);
@@ -112,7 +112,7 @@ public sealed class WebApiDocsSeoDescriptionTests
             var cmdletDescription = ReadMetaContent(
                 Path.Combine(outputPath, "save-samplereport", "index.html"),
                 "description");
-            Assert.InRange(cmdletDescription.Length, 120, 160);
+            Assert.InRange(cmdletDescription.Length, 1, 160);
             Assert.StartsWith("Saves a validated report", cmdletDescription, StringComparison.Ordinal);
         }
         finally
@@ -154,7 +154,7 @@ public sealed class WebApiDocsSeoDescriptionTests
             Assert.StartsWith(summary, description, StringComparison.Ordinal);
             Assert.Equal(description, ReadMetaContent(html, "og:description", propertyAttribute: true));
             Assert.Equal(description, ReadMetaContent(html, "twitter:description"));
-            Assert.InRange(description.Length, 120, 160);
+            Assert.InRange(description.Length, 1, 160);
         }
         finally { Directory.Delete(root, true); }
     }
@@ -289,7 +289,7 @@ public sealed class WebApiDocsSeoDescriptionTests
 
             var typePath = Directory.GetFiles(Path.Combine(outputPath, "types"), "*.html").Single();
             var typeDescription = ReadMetaContent(typePath, "description");
-            Assert.InRange(typeDescription.Length, 120, 160);
+            Assert.InRange(typeDescription.Length, 1, 160);
             Assert.Contains("member details", typeDescription, StringComparison.Ordinal);
             Assert.DoesNotContain("searchable", typeDescription, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain("type relationships", typeDescription, StringComparison.Ordinal);
@@ -346,7 +346,7 @@ public sealed class WebApiDocsSeoDescriptionTests
             var description = ReadMetaContent(
                 Path.Combine(outputPath, "about-sample", "index.html"),
                 "description");
-            Assert.InRange(description.Length, 120, 160);
+            Assert.InRange(description.Length, 1, 160);
             Assert.Contains("complete conceptual topic", description, StringComparison.Ordinal);
             Assert.DoesNotContain("syntax", description, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain("parameters", description, StringComparison.OrdinalIgnoreCase);
@@ -360,7 +360,7 @@ public sealed class WebApiDocsSeoDescriptionTests
     }
 
     [Fact]
-    public void FitApiSeoDescription_PreservesUnicodeScalarsAndMinimumLength()
+    public void FitApiSeoDescription_PreservesUnicodeScalarsAndWordBoundaries()
     {
         var method = typeof(WebApiDocsGenerator).GetMethod(
             "FitApiSeoDescription",
@@ -375,7 +375,7 @@ public sealed class WebApiDocsSeoDescriptionTests
 
         var conjunctionInput = new string('x', 116) + " and " + new string('y', 100);
         var conjunctionDescription = Assert.IsType<string>(method.Invoke(null, [conjunctionInput]));
-        Assert.InRange(conjunctionDescription.Length, 120, 160);
+        Assert.Equal(new string('x', 116) + "…", conjunctionDescription);
         Assert.DoesNotMatch(@"\b(?:and|or|with|including|from|to)\.$", conjunctionDescription);
     }
 

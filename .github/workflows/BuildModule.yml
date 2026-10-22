@@ -330,6 +330,14 @@ jobs:
           -c Release --nologo
           --filter 'FullyQualifiedName~BenchmarkServicesTests.History'
 
+      - name: Test artefact inputs and output safety
+        shell: pwsh
+        timeout-minutes: 10
+        run: >
+          dotnet test .\PowerForge.Tests\PowerForge.Tests.csproj
+          -c Release --no-build --no-restore --nologo
+          --filter 'FullyQualifiedName~ArtefactBuilder'
+
       - name: Test merge-to-TestFlight contracts
         shell: pwsh
         timeout-minutes: 10

@@ -115,9 +115,11 @@ public sealed partial class ArtefactBuilderScriptClosureTests
     }
 
     [Theory]
-    [InlineData(ArtefactType.Script)]
-    [InlineData(ArtefactType.ScriptPacked)]
-    public void Build_ScriptNamePackageCollisionUsesOutputFileSystemSemantics(ArtefactType artefactType)
+    [InlineData(ArtefactType.Script, false)]
+    [InlineData(ArtefactType.ScriptPacked, false)]
+    [InlineData(ArtefactType.Script, true)]
+    [InlineData(ArtefactType.ScriptPacked, true)]
+    public void Build_ScriptNamePackageCollisionUsesOutputFileSystemSemantics(ArtefactType artefactType, bool emptyOutput)
     {
         var root = CreateRoot();
         string? extractionRoot = null;
@@ -135,6 +137,8 @@ public sealed partial class ArtefactBuilderScriptClosureTests
             var information = CreateFocusedPackagingInformation(includeRoot: "Tool.ps1");
             bool outputIsCaseInsensitive =
                 FrameworkCompatibility.GetPathStringComparisonForPath(outputRoot) == StringComparison.OrdinalIgnoreCase;
+            if (emptyOutput)
+                File.Delete(marker);
 
             if (outputIsCaseInsensitive)
             {
@@ -151,7 +155,10 @@ public sealed partial class ArtefactBuilderScriptClosureTests
 
                 Assert.Contains("ScriptName", exception.Message, StringComparison.Ordinal);
                 Assert.Contains("output filesystem", exception.Message, StringComparison.OrdinalIgnoreCase);
-                Assert.Equal("preserve", File.ReadAllText(marker));
+                if (emptyOutput)
+                    Assert.Empty(Directory.GetFileSystemEntries(outputRoot));
+                else
+                    Assert.Equal("preserve", File.ReadAllText(marker));
                 return;
             }
 
