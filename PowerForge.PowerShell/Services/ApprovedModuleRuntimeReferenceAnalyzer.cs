@@ -185,7 +185,7 @@ internal static class ApprovedModuleRuntimeReferenceAnalyzer
         moduleFilter = (leafName.Equals("Get-Command", StringComparison.OrdinalIgnoreCase) ||
                         leafName.Equals("gcm", StringComparison.OrdinalIgnoreCase)) &&
                        (command.CommandElements.OfType<CommandParameterAst>().Any(parameter =>
-                            "Module".StartsWith(parameter.ParameterName, StringComparison.OrdinalIgnoreCase)) ||
+                            IsModuleFilterParameter(parameter.ParameterName)) ||
                         command.CommandElements.OfType<VariableExpressionAst>().Any(variable => variable.Splatted));
         return leafName.Equals("Import-Module", StringComparison.OrdinalIgnoreCase) ||
                leafName.Equals("ipmo", StringComparison.OrdinalIgnoreCase) ||
@@ -194,6 +194,11 @@ internal static class ApprovedModuleRuntimeReferenceAnalyzer
                leafName.Equals("Remove-Module", StringComparison.OrdinalIgnoreCase) ||
                leafName.Equals("rmo", StringComparison.OrdinalIgnoreCase) || moduleFilter;
     }
+
+    private static bool IsModuleFilterParameter(string parameterName)
+        => parameterName.Length > 0 &&
+           ("Module".StartsWith(parameterName, StringComparison.OrdinalIgnoreCase) ||
+            "FullyQualifiedModule".StartsWith(parameterName, StringComparison.OrdinalIgnoreCase));
 
     private static IEnumerable<ExpressionAst> GetModuleTargetExpressions(CommandAst command, bool moduleFilter)
     {
@@ -211,7 +216,7 @@ internal static class ApprovedModuleRuntimeReferenceAnalyzer
             }
 
             var isModuleNameParameter = moduleFilter
-                ? "Module".StartsWith(parameter.ParameterName, StringComparison.OrdinalIgnoreCase)
+                ? IsModuleFilterParameter(parameter.ParameterName)
                 : parameter.ParameterName.Equals("Name", StringComparison.OrdinalIgnoreCase) ||
                   parameter.ParameterName.Equals("FullyQualifiedName", StringComparison.OrdinalIgnoreCase);
             if (isModuleNameParameter && parameter.Argument is not null)

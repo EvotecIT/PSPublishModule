@@ -110,7 +110,7 @@ public sealed partial class ModulePipelineRunner
                 }
             }
 
-            if (artefact.ArtefactType == ArtefactType.Unpacked && cfg.Layout == ArtefactLayout.Delivery)
+            if (artefact.ArtefactType == ArtefactType.Unpacked && cfg.Layout == ArtefactLayout.Delivery && plan.Delivery?.Enable == true)
             {
                 ModuleBuildResult build = state.RequireBuildResult();
                 foreach (string destination in ArtefactBuilder.ResolveDeliveryOutputPaths(cfg, build.StagingPath, outputRoot,

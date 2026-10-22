@@ -9,7 +9,7 @@ using Xunit;
 namespace PowerForge.Tests;
 
 [Collection(ProcessEnvironmentCollection.Name)]
-public sealed class ArtefactBuilderDeliveryLayoutTests
+public sealed partial class ArtefactBuilderDeliveryLayoutTests
 {
     [Theory]
     [InlineData(ArtefactType.Packed, null, "")]
@@ -317,9 +317,16 @@ public sealed class ArtefactBuilderDeliveryLayoutTests
     public void Factory_PreservesDeliveryLayoutInConfiguration()
     {
         var segment = new ArtefactConfigurationFactory(new NullLogger()).Create(
-            new ArtefactConfigurationRequest { Type = ArtefactType.Packed, Layout = ArtefactLayout.Delivery, DeliveryPath = "Launchers" });
+            new ArtefactConfigurationRequest
+            {
+                Type = ArtefactType.Packed, Layout = ArtefactLayout.Delivery, DeliveryPath = "Launchers",
+                DeliveryMappings = new[] { new ArtefactCopyMapping { Source = "Run.ps1", Destination = "bin/Start.ps1" } }
+            });
         Assert.Equal(ArtefactLayout.Delivery, segment.Configuration.Layout);
         Assert.Equal("Launchers", segment.Configuration.DeliveryPath);
+        var mapping = Assert.Single(segment.Configuration.DeliveryMappings!);
+        Assert.Equal("Run.ps1", mapping.Source);
+        Assert.Equal("bin/Start.ps1", mapping.Destination);
     }
 
     [Fact]

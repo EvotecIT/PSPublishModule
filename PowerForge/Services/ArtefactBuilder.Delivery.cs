@@ -22,6 +22,8 @@ public sealed partial class ArtefactBuilder
     {
         if (!string.IsNullOrWhiteSpace(cfg.DeliveryPath) && cfg.Layout != ArtefactLayout.Delivery)
             throw new InvalidOperationException("DeliveryPath requires the Delivery layout.");
+        if (cfg.DeliveryMappings is { Length: > 0 } && cfg.Layout != ArtefactLayout.Delivery)
+            throw new InvalidOperationException("DeliveryMappings requires the Delivery layout.");
         if (cfg.Layout is null || cfg.Layout == ArtefactLayout.Module)
             return;
         if (cfg.Layout != ArtefactLayout.Delivery)
@@ -95,7 +97,7 @@ public sealed partial class ArtefactBuilder
         string internalsPath = ArtefactLayoutPathResolver.NormalizeDeliveryInternalsPath(delivery?.InternalsPath);
         string internalsRoot = Path.GetFullPath(Path.Combine(stagingPath, PathValueResolver.NormalizeSeparators(internalsPath)));
         if (!IsSameOrBelowPath(internalsRoot, stagingPath) ||
-            string.Equals(internalsRoot, Path.GetFullPath(stagingPath), GetArtefactPathComparison(stagingPath)))
+            IsSameOrBelowPath(stagingPath, internalsRoot))
             throw new InvalidOperationException("Delivery internals must name a subdirectory inside module staging.");
 
         string[] files = ResolveModulePackageSourceFiles(stagingPath, information, delivery, includeScriptFolders, finalizedPayloadFiles)
@@ -104,6 +106,8 @@ public sealed partial class ArtefactBuilder
         if (files.Length == 0)
             throw new InvalidOperationException("Delivery layout has no packaged delivery files to copy to the artefact root.");
         string deliveryRoot = ArtefactLayoutPathResolver.ResolveDeliveryRoot(cfg, destinationRoot);
+        if (cfg.DeliveryMappings is { Length: > 0 })
+            return ResolveMappedDeliveryCopyPlan(cfg.DeliveryMappings, internalsRoot, deliveryRoot, files);
         return CreateModulePackageCopyPlan(internalsRoot, deliveryRoot, files);
     }
 

@@ -43,6 +43,11 @@ namespace PSPublishModule;
 /// <para>Requires enabled New-ConfigurationDelivery. Delivery files are copied to the bundle root; the complete module and remaining dependencies default to Modules.</para>
 /// </example>
 /// <example>
+/// <summary>Select and rearrange packaged delivery files</summary>
+/// <code>New-ConfigurationArtefact -Type Packed -Layout Delivery -Enable -Path 'Artefacts/Packed' -DeliveryMappings @(@{ Source = 'Start.ps1'; Destination = 'bin/Run.ps1' }, @{ Source = 'Configuration'; Destination = 'etc' }) -AddRequiredModules</code>
+/// <para>Sources are relative to the packaged delivery InternalsPath. Destinations are relative to DeliveryPath, which defaults to the bundle root. Directory contents are copied recursively; unmapped files remain only in the complete module payload.</para>
+/// </example>
+/// <example>
 /// <summary>Create an unpacked artefact including required modules</summary>
 /// <code>New-ConfigurationArtefact -Type Unpacked -Enable -AddRequiredModules -Path 'Artefacts\Unpacked' -RequiredModulesRepository 'PSGallery'</code>
 /// </example>
@@ -85,6 +90,18 @@ public sealed class NewConfigurationArtefactCommand : PSCmdlet
     /// </summary>
     [Parameter]
     public string? DeliveryPath { get; set; }
+
+    /// <summary>
+    /// File or directory mappings from packaged delivery internals to paths relative to DeliveryPath.
+    /// A file destination includes its file name; a directory destination receives its contents recursively.
+    /// Mappings replace the default whole-tree copy. Omit or pass an empty array to copy all delivery files.
+    /// Sources and destinations are literal relative paths, not wildcards; dot selects the delivery root.
+    /// Accepts a Source/Destination hashtable array or a legacy source-to-destination hashtable.
+    /// The complete module payload and authored launcher contents remain unchanged.
+    /// </summary>
+    [Parameter]
+    [ArtefactCopyMappingsTransformation(Strict = true)]
+    public ArtefactCopyMapping[]? DeliveryMappings { get; set; }
 
     /// <summary>Enable artefact creation. By default artefact creation is disabled.</summary>
     [Parameter]
@@ -211,6 +228,7 @@ public sealed class NewConfigurationArtefactCommand : PSCmdlet
             Type = Type,
             Layout = Layout,
             DeliveryPath = DeliveryPath,
+            DeliveryMappings = DeliveryMappings,
             EnableSpecified = MyInvocation.BoundParameters.ContainsKey(nameof(Enable)),
             Enable = Enable.IsPresent,
             IncludeTagNameSpecified = MyInvocation.BoundParameters.ContainsKey(nameof(IncludeTagName)),

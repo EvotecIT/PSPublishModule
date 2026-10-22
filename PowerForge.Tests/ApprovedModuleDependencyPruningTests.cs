@@ -81,6 +81,9 @@ public sealed class ApprovedModuleDependencyPruningTests
     [InlineData("Get-Module -Name $moduleName")]
     [InlineData("Get-Command -Module SharedHelpers")]
     [InlineData("Get-Command -Mod SharedHelpers")]
+    [InlineData("Get-Command -FullyQualifiedModule @{ModuleName='SharedHelpers';ModuleVersion='1.0.0'}")]
+    [InlineData("Get-Command -FullyQualifiedM @{ModuleName='SharedHelpers'}")]
+    [InlineData("gcm -FullyQualifiedModule @{ModuleName='SharedHelpers'}")]
     [InlineData("Get-Command @parameters")]
     public void Analyze_PreservesApprovedModuleIdentityUsedByModuleManagement(string code)
     {

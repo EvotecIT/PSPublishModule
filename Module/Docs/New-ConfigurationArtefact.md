@@ -11,7 +11,7 @@ Tells the module to create an artefact of a specified type.
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-New-ConfigurationArtefact [[-PostScriptMerge] <scriptblock>] [[-PreScriptMerge] <scriptblock>] -Type <ArtefactType> [-Layout <ArtefactLayout>] [-DeliveryPath <string>] [-Enable] [-IncludeTagName] [-Path <string>] [-AddRequiredModules] [-RequiredModulesExcludeModuleName <string[]>] [-ModulesPath <string>] [-RequiredModulesPath <string>] [-RequiredModulesRepository <string>] [-RequiredModulesTool <ModuleSaveTool>] [-RequiredModulesSource <RequiredModulesSource>] [-RequiredModulesCredentialUserName <string>] [-RequiredModulesCredentialSecret <string>] [-RequiredModulesCredentialSecretFilePath <string>] [-CopyDirectories <ArtefactCopyMapping[]>] [-CopyFiles <ArtefactCopyMapping[]>] [-CopyDirectoriesRelative] [-CopyFilesRelative] [-DoNotClear] [-ArtefactName <string>] [-ScriptName <string>] [-ID <string>] [-PostScriptMergePath <string>] [-PreScriptMergePath <string>] [<CommonParameters>]
+New-ConfigurationArtefact [[-PostScriptMerge] <scriptblock>] [[-PreScriptMerge] <scriptblock>] -Type <ArtefactType> [-Layout <ArtefactLayout>] [-DeliveryPath <string>] [-DeliveryMappings <ArtefactCopyMapping[]>] [-Enable] [-IncludeTagName] [-Path <string>] [-AddRequiredModules] [-RequiredModulesExcludeModuleName <string[]>] [-ModulesPath <string>] [-RequiredModulesPath <string>] [-RequiredModulesRepository <string>] [-RequiredModulesTool <ModuleSaveTool>] [-RequiredModulesSource <RequiredModulesSource>] [-RequiredModulesCredentialUserName <string>] [-RequiredModulesCredentialSecret <string>] [-RequiredModulesCredentialSecretFilePath <string>] [-CopyDirectories <ArtefactCopyMapping[]>] [-CopyFiles <ArtefactCopyMapping[]>] [-CopyDirectoriesRelative] [-CopyFilesRelative] [-DoNotClear] [-ArtefactName <string>] [-ScriptName <string>] [-ID <string>] [-PostScriptMergePath <string>] [-PreScriptMergePath <string>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -50,18 +50,25 @@ Requires enabled New-ConfigurationDelivery. Delivery files are copied to the bun
 
 ### EXAMPLE 3
 ```powershell
+New-ConfigurationArtefact -Type Packed -Layout Delivery -Enable -Path 'Artefacts/Packed' -DeliveryMappings @(@{ Source = 'Start.ps1'; Destination = 'bin/Run.ps1' }, @{ Source = 'Configuration'; Destination = 'etc' }) -AddRequiredModules
+```
+
+Sources are relative to the packaged delivery InternalsPath. Destinations are relative to DeliveryPath, which defaults to the bundle root. Directory contents are copied recursively; unmapped files remain only in the complete module payload.
+
+### EXAMPLE 4
+```powershell
 New-ConfigurationArtefact -Type Unpacked -Enable -AddRequiredModules -Path 'Artefacts\Unpacked' -RequiredModulesRepository 'PSGallery'
 ```
 
 
-### EXAMPLE 4
+### EXAMPLE 5
 ```powershell
 New-ConfigurationArtefact -Type Packed -Enable -AddRequiredModules -RequiredModulesSource Download -RequiredModulesRepository 'PSGallery'
 ```
 
 Use this when you want packaging to ignore whatever is already installed on the build machine.
 
-### EXAMPLE 5
+### EXAMPLE 6
 ```powershell
 New-ConfigurationArtefact -Type Unpacked -Enable -AddRequiredModules -RequiredModulesSource Auto -RequiredModulesTool Auto
 ```
@@ -156,6 +163,27 @@ Define if destination files should be relative to artefact root.
 
 ```yaml
 Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -DeliveryMappings
+File or directory mappings from packaged delivery internals to paths relative to DeliveryPath.
+A file destination includes its file name; a directory destination receives its contents recursively.
+Mappings replace the default whole-tree copy. Omit or pass an empty array to copy all delivery files.
+Sources and destinations are literal relative paths, not wildcards; dot selects the delivery root.
+Accepts a Source/Destination hashtable array or a legacy source-to-destination hashtable.
+The complete module payload and authored launcher contents remain unchanged.
+
+```yaml
+Type: ArtefactCopyMapping[]
 Parameter Sets: __AllParameterSets
 Aliases: None
 Possible values:

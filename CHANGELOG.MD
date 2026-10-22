@@ -2,6 +2,7 @@
 
 ## Unreleased
 ### What's Changed
+- Add per-artefact delivery source/destination mappings for selecting, renaming and rearranging packaged files and directories, with schema, collision checks and a packaging guide; keep DeliveryPath whole-tree copying as the default.
 - Remove redundant approved runtime dependencies when their helpers are already present in the consumer or another merged donor; preserve non-function runtime exports, module-management references and computed manifest requirements, and bundle the remaining runtime dependencies.
 - Add native Packed/Unpacked delivery bundle layouts with launcher/configuration files at the root or a per-artefact DeliveryPath and complete modules under configurable directories, replacing manual package relocation and ZIP creation. Validate promoted-file collisions before writing output, normalize delivery paths consistently and honor delivery signing preferences in both formats.
 - Allow locally available Windows Cloud Files inputs, including OneDrive-backed installed modules, when building artefacts while retaining strict link and finalized-output checks.

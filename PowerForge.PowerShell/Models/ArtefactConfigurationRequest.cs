@@ -14,6 +14,9 @@ public sealed class ArtefactConfigurationRequest
     /// <summary>Relative delivery file destination within the artefact; null or dot uses its root.</summary>
     public string? DeliveryPath { get; set; }
 
+    /// <summary>File or directory mappings relative to delivery internals and DeliveryPath respectively.</summary>
+    public ArtefactCopyMapping[]? DeliveryMappings { get; set; }
+
     /// <summary>Whether Enable was explicitly provided.</summary>
     public bool EnableSpecified { get; set; }
     /// <summary>Enable artefact creation.</summary>

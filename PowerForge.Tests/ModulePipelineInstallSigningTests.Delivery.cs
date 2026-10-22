@@ -18,6 +18,10 @@ public sealed partial class ModulePipelineInstallSigningTests
     [InlineData(ArtefactType.Packed, true, false, "Launchers")]
     [InlineData(ArtefactType.Unpacked, false, false, "Launchers")]
     [InlineData(ArtefactType.Unpacked, true, false, "Launchers")]
+    [InlineData(ArtefactType.Packed, false, false, "Mapped")]
+    [InlineData(ArtefactType.Packed, true, false, "Mapped")]
+    [InlineData(ArtefactType.Unpacked, false, false, "Mapped")]
+    [InlineData(ArtefactType.Unpacked, true, false, "Mapped")]
     public void SignedDeliveryArtefacts_PreserveDeliverySigningPreference(ArtefactType type, bool deliverySign, bool includeInternals, string? deliveryPath)
     {
         string root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
@@ -33,12 +37,18 @@ public sealed partial class ModulePipelineInstallSigningTests
             var options = spec.Segments.OfType<ConfigurationOptionsSegment>().Single().Options;
             options.Signing!.IncludeInternals = includeInternals;
             options.Delivery = new DeliveryOptionsConfiguration { Enable = true, Sign = deliverySign, InternalsPath = "Files" };
+            bool mapped = deliveryPath == "Mapped";
+            string launcherName = mapped ? "bin/Start.ps1" : "Run.ps1";
             spec.Segments = spec.Segments.Concat(new IConfigurationSegment[]
             {
                 new ConfigurationArtefactSegment
                 {
                     ArtefactType = type,
-                    Configuration = new ArtefactConfiguration { Enabled = true, Layout = ArtefactLayout.Delivery, DeliveryPath = deliveryPath, Path = Path.Combine(root, "packed") }
+                    Configuration = new ArtefactConfiguration
+                    {
+                        Enabled = true, Layout = ArtefactLayout.Delivery, DeliveryPath = deliveryPath, Path = Path.Combine(root, "packed"),
+                        DeliveryMappings = mapped ? new[] { new ArtefactCopyMapping { Source = "Run.ps1", Destination = launcherName } } : null
+                    }
                 }
             }).ToArray();
             var hosted = new RecordingHostedOperations { HonorSigningPatterns = true, MarkSignedFiles = true };
@@ -49,11 +59,11 @@ public sealed partial class ModulePipelineInstallSigningTests
             if (type == ArtefactType.Packed)
             {
                 using var zip = ZipFile.OpenRead(output);
-                using var reader = new StreamReader(Assert.IsType<ZipArchiveEntry>(zip.GetEntry((deliveryPath is null ? "" : deliveryPath + "/") + "Run.ps1")).Open());
+                using var reader = new StreamReader(Assert.IsType<ZipArchiveEntry>(zip.GetEntry((deliveryPath is null ? "" : deliveryPath + "/") + launcherName)).Open());
                 launcher = reader.ReadToEnd();
             }
             else
-                launcher = File.ReadAllText(Path.Combine(output, deliveryPath ?? ".", "Run.ps1"));
+                launcher = File.ReadAllText(Path.Combine(output, deliveryPath ?? ".", launcherName));
             Assert.Equal(deliverySign || includeInternals, launcher.Contains("# synthetic delivery signature", StringComparison.Ordinal));
             if (!deliverySign && !includeInternals)
                 Assert.Equal("'launcher'", launcher);
