@@ -21,7 +21,7 @@ public sealed partial class ModulePipelineRunner
             return satisfiedByRoot;
 
         var candidates = new HashSet<string>(satisfiedByRoot, StringComparer.OrdinalIgnoreCase);
-        var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var visited = new HashSet<string>(FrameworkCompatibility.PathComparer);
         var manifests = new Stack<string>();
         manifests.Push(result.ManifestPath);
         while (manifests.Count > 0 && candidates.Count > 0)
@@ -29,17 +29,18 @@ public sealed partial class ModulePipelineRunner
             string manifest = manifests.Pop();
             if (!visited.Add(manifest))
                 continue;
-            if (!string.Equals(manifest, result.ManifestPath, StringComparison.OrdinalIgnoreCase))
+            if (!FrameworkCompatibility.PathComparer.Equals(manifest, result.ManifestPath))
             {
                 // A nested manifest can explicitly import a donor even when its own code is empty.
                 candidates.ExceptWith(ModuleManifestValueReader.ReadTopLevelModuleReferencePaths(manifest, "RequiredModules"));
             }
-            foreach (string reference in ModuleManifestLoadedContent.ReadRelativePaths(manifest))
+            // Preserve case variants until they are resolved to actual filesystem paths.
+            foreach (string reference in ModuleManifestLoadedContent.ReadRelativePaths(manifest, StringComparer.Ordinal))
             {
                 string? path = ResolveManifestScriptPath(Path.GetDirectoryName(manifest)!, reference);
                 if (path is null || !IsSameOrChildPath(result.StagingPath, path) || !File.Exists(path))
                     return Array.Empty<string>();
-                if (string.Equals(path, mergedRootPath, StringComparison.OrdinalIgnoreCase) || visited.Contains(path))
+                if (FrameworkCompatibility.PathComparer.Equals(path, mergedRootPath) || visited.Contains(path))
                     continue;
 
                 string extension = Path.GetExtension(path);

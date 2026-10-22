@@ -12,13 +12,13 @@ internal static class ModuleManifestLoadedContent
         "FormatsToProcess"
     };
 
-    internal static string[] ReadRelativePaths(string manifestPath)
+    internal static string[] ReadRelativePaths(string manifestPath, StringComparer? comparer = null)
     {
         var paths = new List<string>();
         foreach (string key in Keys)
             paths.AddRange(ModuleManifestValueReader.ReadTopLevelStringOrArray(manifestPath, key));
         paths.AddRange(ModuleManifestValueReader.ReadTopLevelModuleReferencePaths(manifestPath, "NestedModules"));
-        return Normalize(paths);
+        return Normalize(paths, comparer);
     }
 
     internal static string[] ReadRelativePathsFromText(string manifestText)
@@ -30,10 +30,10 @@ internal static class ModuleManifestLoadedContent
         return Normalize(paths);
     }
 
-    private static string[] Normalize(IEnumerable<string> paths)
+    private static string[] Normalize(IEnumerable<string> paths, StringComparer? comparer = null)
         => paths
             .Where(static path => !string.IsNullOrWhiteSpace(path))
             .Select(static path => path.Trim())
-            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Distinct(comparer ?? StringComparer.OrdinalIgnoreCase)
             .ToArray();
 }

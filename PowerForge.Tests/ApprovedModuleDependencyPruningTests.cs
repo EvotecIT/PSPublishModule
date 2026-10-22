@@ -17,6 +17,31 @@ public sealed class ApprovedModuleDependencyPruningTests
     [InlineData("NestedModules", "Nested.psm1", "Get-SharedHelper")]
     [InlineData("NestedModules", "Nested.psd1", "'nested'")]
     public void Run_PreservesApprovedDependencyUsedByRetainedManifestContent(string key, string relativePath, string script)
+        => AssertRetainedDependency(key, relativePath, script);
+
+    [Theory]
+    [InlineData("ScriptsToProcess", "Hooks/initialize.ps1", "Hooks/Initialize.ps1")]
+    [InlineData("NestedModules", "Nested.psm1", "nested.psm1")]
+    [InlineData("NestedModules", "SOURCE.psm1", null)]
+    public void Run_PreservesApprovedDependencyUsedByCaseDistinctRetainedContent(
+        string key, string relativePath, string? predecessor)
+        => AssertRetainedDependency(key, relativePath, "SharedHelpers\\Get-SharedHelper", predecessor, requireCaseSensitiveStorage: true);
+
+    [Fact]
+    public void ReadRelativePaths_PreservesCaseDistinctReferencesForFilesystemResolution()
+    {
+        string manifest = Path.GetTempFileName();
+        try
+        {
+            File.WriteAllText(manifest, "@{ScriptsToProcess=@('Hooks/Initialize.ps1','Hooks/initialize.ps1')}");
+            Assert.Equal(new[] { "Hooks/Initialize.ps1", "Hooks/initialize.ps1" },
+                ModuleManifestLoadedContent.ReadRelativePaths(manifest, StringComparer.Ordinal));
+        }
+        finally { File.Delete(manifest); }
+    }
+
+    private static void AssertRetainedDependency(string key, string relativePath, string script,
+        string? predecessor = null, bool requireCaseSensitiveStorage = false)
     {
         string root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
@@ -26,6 +51,15 @@ public sealed class ApprovedModuleDependencyPruningTests
             WriteModule(modules, "SharedHelpers", "function Get-SharedHelper { 'shared' }; Export-ModuleMember Get-SharedHelper");
             WriteModule(root, "source", "function Get-ConsumerThing { 'consumer' }");
             string source = Path.Combine(root, "source");
+            if (requireCaseSensitiveStorage)
+            {
+                string probe = Path.Combine(source, "CaseProbe");
+                File.WriteAllText(probe, "probe");
+                bool caseSensitive = !File.Exists(Path.Combine(source, "caseprobe"));
+                File.Delete(probe);
+                if (!caseSensitive)
+                    return; // The same fixtures execute against real case-sensitive storage on Linux CI.
+            }
             string retained = Path.Combine(source, relativePath);
             Directory.CreateDirectory(Path.GetDirectoryName(retained)!);
             if (relativePath.EndsWith(".psd1", StringComparison.OrdinalIgnoreCase))
@@ -35,7 +69,10 @@ public sealed class ApprovedModuleDependencyPruningTests
             }
             else
                 File.WriteAllText(retained, script);
-            Assert.True(ManifestEditor.TrySetTopLevelStringArray(Path.Combine(source, "source.psd1"), key, new[] { relativePath }));
+            if (predecessor is not null)
+                File.WriteAllText(Path.Combine(source, predecessor), "'no dependency'");
+            Assert.True(ManifestEditor.TrySetTopLevelStringArray(Path.Combine(source, "source.psd1"), key,
+                predecessor is null ? new[] { relativePath } : new[] { predecessor, relativePath }));
             var spec = new ModulePipelineSpec
             {
                 Build = new ModuleBuildSpec { Name = "source", SourcePath = source, Version = "1.0.0", KeepStaging = true },
