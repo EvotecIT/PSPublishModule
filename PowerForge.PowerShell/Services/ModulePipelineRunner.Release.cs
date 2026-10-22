@@ -15,7 +15,7 @@ public sealed partial class ModulePipelineRunner
 
         var conflicts = new List<string>();
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        AddArtefactOutputPathConflicts(plan, conflicts);
+        AddArtefactOutputPathConflicts(plan, conflicts, state);
 
         var protectedPaths = CollectReleaseProtectedPaths(plan, state);
 
@@ -27,7 +27,7 @@ public sealed partial class ModulePipelineRunner
                 if (cfg.Enabled != true)
                     continue;
 
-                foreach (var destructivePath in CollectArtefactDestructivePaths(plan, artefact, cfg))
+                foreach (var destructivePath in CollectArtefactDestructivePaths(plan, artefact, cfg, state))
                 {
                     foreach (var protectedPath in protectedPaths)
                     {
@@ -57,7 +57,8 @@ public sealed partial class ModulePipelineRunner
     private static List<ArtefactDestructivePath> CollectArtefactDestructivePaths(
         ModulePipelinePlan plan,
         ConfigurationArtefactSegment artefact,
-        ArtefactConfiguration cfg)
+        ArtefactConfiguration cfg,
+        ModulePipelineRunState state)
     {
         var paths = new List<ArtefactDestructivePath>();
         var outputRoot = ArtefactLayoutPathResolver.ResolveOutputRoot(
@@ -109,6 +110,14 @@ public sealed partial class ModulePipelineRunner
                 }
             }
 
+            if (artefact.ArtefactType == ArtefactType.Unpacked && cfg.Layout == ArtefactLayout.Delivery)
+            {
+                ModuleBuildResult build = state.RequireBuildResult();
+                foreach (string destination in ArtefactBuilder.ResolveDeliveryOutputPaths(cfg, build.StagingPath, outputRoot,
+                             plan.Information, plan.Delivery, !state.PackageWithoutScriptFolders, build.FinalizedPayloadFiles))
+                    paths.Add(new ArtefactDestructivePath(destination,
+                        "delivery file copy", ArtefactDestructivePathKind.ExactFile));
+            }
             AddArtefactCopyMappingDestructivePaths(paths, cfg, plan, outputRoot, enforceRelativeDestination: false);
             return paths;
         }

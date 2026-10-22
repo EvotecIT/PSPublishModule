@@ -12,6 +12,8 @@ internal static class ModuleManifestLoadedContent
         "FormatsToProcess"
     };
 
+    internal static IEnumerable<string> PropertyNames => Keys.Concat(new[] { "NestedModules" });
+
     internal static string[] ReadRelativePaths(string manifestPath, StringComparer? comparer = null)
     {
         var paths = new List<string>();

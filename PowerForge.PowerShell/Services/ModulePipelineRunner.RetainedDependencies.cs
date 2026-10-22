@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Management.Automation.Language;
 
 namespace PowerForge;
 
@@ -29,13 +30,31 @@ public sealed partial class ModulePipelineRunner
             string manifest = manifests.Pop();
             if (!visited.Add(manifest))
                 continue;
+            string manifestText = File.ReadAllText(manifest);
+            foreach (string property in ModuleManifestLoadedContent.PropertyNames)
+            {
+                if (!TryReadStaticManifestModuleReferences(manifestText, property, out _))
+                    return Array.Empty<string>();
+            }
             if (!FrameworkCompatibility.PathComparer.Equals(manifest, result.ManifestPath))
             {
                 // A nested manifest can explicitly import a donor even when its own code is empty.
-                candidates.ExceptWith(ModuleManifestValueReader.ReadTopLevelModuleReferencePaths(manifest, "RequiredModules"));
+                if (!TryReadStaticManifestModuleReferences(manifestText, "RequiredModules", out string[] requirements))
+                    return Array.Empty<string>();
+                candidates.ExceptWith(requirements);
             }
-            // Preserve case variants until they are resolved to actual filesystem paths.
-            foreach (string reference in ModuleManifestLoadedContent.ReadRelativePaths(manifest, StringComparer.Ordinal))
+            string[] references;
+            try
+            {
+                // Preserve case variants until they are resolved to actual filesystem paths.
+                references = ModuleManifestLoadedContent.ReadRelativePaths(manifest, StringComparer.Ordinal);
+            }
+            catch (InvalidDataException)
+            {
+                // Computed nested-module references cannot prove any donor unused.
+                return Array.Empty<string>();
+            }
+            foreach (string reference in references)
             {
                 string? path = ResolveManifestScriptPath(Path.GetDirectoryName(manifest)!, reference);
                 if (path is null || !IsSameOrChildPath(result.StagingPath, path) || !File.Exists(path))
@@ -63,5 +82,15 @@ public sealed partial class ModulePipelineRunner
             }
         }
         return candidates.OrderBy(static name => name, StringComparer.OrdinalIgnoreCase).ToArray();
+    }
+
+    private static bool TryReadStaticManifestModuleReferences(string manifestText, string property, out string[] names)
+    {
+        names = Array.Empty<string>();
+        if (!ModuleManifestTextParser.TryReadTopLevelAssignedExpressionByKey(manifestText, property, out string? expression))
+            return true;
+        var ast = Parser.ParseInput(expression!, out _, out ParseError[] errors);
+        return errors.Length == 0 && ast.EndBlock?.Statements.Count == 1 &&
+               ApprovedModuleRuntimeReferenceAnalyzer.TryReadStaticModuleNames(ast.EndBlock.Statements[0], out names);
     }
 }

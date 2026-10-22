@@ -11,6 +11,47 @@ namespace PowerForge.Tests;
 public sealed class ApprovedModuleDependencyPruningTests
 {
     [Theory]
+    [InlineData("(Get-Module 'SharedHelpers').Version")]
+    [InlineData("Get-Module -ListAvailable -Name 'Shared*'")]
+    [InlineData("Microsoft.PowerShell.Core\\Get-Module -Name SharedHelpers")]
+    [InlineData("gmo SharedHelpers")]
+    [InlineData("Remove-Module -Name SharedHelpers")]
+    [InlineData("rmo SharedHelpers")]
+    [InlineData("Get-Module -Name $moduleName")]
+    [InlineData("Get-Command -Module SharedHelpers")]
+    [InlineData("Get-Command -Mod SharedHelpers")]
+    [InlineData("Get-Command @parameters")]
+    public void Analyze_PreservesApprovedModuleIdentityUsedByModuleManagement(string code)
+    {
+        string root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
+        try
+        {
+            WriteModule(root, "SharedHelpers", "function Get-SharedHelper { 'shared' }; Export-ModuleMember Get-SharedHelper");
+            var result = new PowerShellMissingFunctionAnalysisService().Analyze(null, code,
+                new MissingFunctionsOptions(approvedModules: new[] { "SharedHelpers" },
+                    approvedModuleSources: new[] { new ApprovedModuleSource("SharedHelpers", "1.0.0", Path.Combine(root, "SharedHelpers")) },
+                    requireApprovedModuleSources: true));
+            Assert.Empty(result.FullyInlinedApprovedModules);
+        }
+        finally { if (Directory.Exists(root)) Directory.Delete(root, recursive: true); }
+    }
+
+    [Theory]
+    [InlineData("@(\"$env:PF_DEPENDENCY\")")]
+    [InlineData("@(@{ModuleName=\"$env:PF_DEPENDENCY\";ModuleVersion='1.0.0'})")]
+    [InlineData("@($env:PF_DEPENDENCY)")]
+    public void Run_PreservesApprovedDependenciesWhenNestedRequirementsAreComputed(string requirements)
+        => AssertRetainedDependency("NestedModules", "Nested.psd1", "'nested'", nestedRequirements: requirements);
+
+    [Theory]
+    [InlineData("NestedModules", "@($env:PF_NESTED_MODULE)")]
+    [InlineData("ScriptsToProcess", "@($env:PF_HOOK)")]
+    [InlineData("RootModule", "$env:PF_ROOT_MODULE")]
+    public void Run_PreservesApprovedDependenciesWhenManifestLoadedContentIsComputed(string property, string expression)
+        => AssertRetainedDependency("NestedModules", "Nested.psd1", "'nested'", nestedRequirements: "@()",
+            computedProperty: property, computedExpression: expression);
+
+    [Theory]
     [InlineData("ScriptsToProcess", "Classes/Initialize.ps1", "SharedHelpers\\Get-SharedHelper")]
     [InlineData("ScriptsToProcess", "Classes/Initialize.ps1", "Get-SharedHelper")]
     [InlineData("NestedModules", "Nested.psm1", "SharedHelpers\\Get-SharedHelper")]
@@ -41,7 +82,8 @@ public sealed class ApprovedModuleDependencyPruningTests
     }
 
     private static void AssertRetainedDependency(string key, string relativePath, string script,
-        string? predecessor = null, bool requireCaseSensitiveStorage = false)
+        string? predecessor = null, bool requireCaseSensitiveStorage = false,
+        string nestedRequirements = "@('SharedHelpers')", string? computedProperty = null, string? computedExpression = null)
     {
         string root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
@@ -64,7 +106,9 @@ public sealed class ApprovedModuleDependencyPruningTests
             Directory.CreateDirectory(Path.GetDirectoryName(retained)!);
             if (relativePath.EndsWith(".psd1", StringComparison.OrdinalIgnoreCase))
             {
-                File.WriteAllText(retained, "@{RootModule='NestedRuntime.psm1';ModuleVersion='1.0.0';RequiredModules=@('SharedHelpers')}");
+                string rootExpression = computedProperty == "RootModule" ? computedExpression! : "'NestedRuntime.psm1'";
+                File.WriteAllText(retained, "@{RootModule=" + rootExpression + ";ModuleVersion='1.0.0';RequiredModules=" + nestedRequirements +
+                    (computedProperty is null || computedProperty == "RootModule" ? string.Empty : ";" + computedProperty + "=" + computedExpression) + "}");
                 File.WriteAllText(Path.Combine(source, "NestedRuntime.psm1"), script);
             }
             else

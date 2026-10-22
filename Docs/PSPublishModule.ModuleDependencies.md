@@ -32,7 +32,7 @@ another approved donor; a donor does not need to contribute another copy of a
 function to become unnecessary. Artefacts with `-AddRequiredModules` copy the
 remaining runtime dependencies after that pruning.
 
-Module-qualified calls, module-owned types and unresolved dynamic invocation can
+Module-qualified calls, module-management lookups, module-owned types and unresolved dynamic invocation can
 still require the original module. Approval permits merging; it does not make an
 unresolved runtime reference safe to remove. Builds with merging disabled keep
 their configured required modules.

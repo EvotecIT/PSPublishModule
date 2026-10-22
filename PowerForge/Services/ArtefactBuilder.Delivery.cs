@@ -66,6 +66,18 @@ public sealed partial class ArtefactBuilder
             throw new InvalidOperationException("Delivery module paths must be relative to the artefact root.");
     }
 
+    internal static string[] ResolveDeliveryOutputPaths(
+        ArtefactConfiguration cfg,
+        string stagingPath,
+        string destinationRoot,
+        InformationConfiguration? information,
+        DeliveryOptionsConfiguration? delivery,
+        bool includeScriptFolders,
+        IReadOnlyList<string>? finalizedPayloadFiles)
+        => ResolveDeliveryCopyPlan(cfg, stagingPath, destinationRoot, information, delivery,
+                includeScriptFolders, finalizedPayloadFiles)
+            .Select(entry => entry.DestinationPath).ToArray();
+
     private static IReadOnlyList<ModulePackageCopyEntry> ResolveDeliveryCopyPlan(
         ArtefactConfiguration cfg,
         string stagingPath,
@@ -78,7 +90,7 @@ public sealed partial class ArtefactBuilder
         if (cfg.Layout != ArtefactLayout.Delivery)
             return Array.Empty<ModulePackageCopyEntry>();
 
-        string internalsPath = string.IsNullOrWhiteSpace(delivery?.InternalsPath) ? "Internals" : delivery!.InternalsPath!;
+        string internalsPath = ArtefactLayoutPathResolver.NormalizeDeliveryInternalsPath(delivery?.InternalsPath);
         string internalsRoot = Path.GetFullPath(Path.Combine(stagingPath, PathValueResolver.NormalizeSeparators(internalsPath)));
         if (!IsSameOrBelowPath(internalsRoot, stagingPath) ||
             string.Equals(internalsRoot, Path.GetFullPath(stagingPath), GetArtefactPathComparison(stagingPath)))

@@ -12,9 +12,69 @@ namespace PowerForge.Tests;
 public sealed class ArtefactBuilderDeliveryLayoutTests
 {
     [Theory]
-    [InlineData(ArtefactType.Packed)]
-    [InlineData(ArtefactType.Unpacked)]
-    public void Build_DeliveryLayoutBundlesRemainingInstalledDependenciesUnderModules(ArtefactType type)
+    [InlineData(ArtefactType.Packed, " Files ")]
+    [InlineData(ArtefactType.Unpacked, " Files ")]
+    [InlineData(ArtefactType.Packed, "\"Files\"")]
+    [InlineData(ArtefactType.Unpacked, "\"Files\"")]
+    public void Build_DeliveryLayoutUsesNormalizedInternalsPath(ArtefactType type, string internalsPath)
+    {
+        using var fixture = new Fixture();
+        fixture.Delivery.InternalsPath = internalsPath;
+        var result = fixture.Build(fixture.Segment(type));
+        if (type == ArtefactType.Packed)
+        {
+            using var archive = ZipFile.OpenRead(result.OutputPath);
+            Assert.NotNull(archive.GetEntry("Run.ps1"));
+        }
+        else
+            Assert.Equal("launcher", File.ReadAllText(Path.Combine(result.OutputPath, "Run.ps1")));
+    }
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    public void Run_RejectsPromotedDeliveryFileConflictingWithAnotherArtefactBeforeChangingOutput(
+        bool packedFirst, bool nestedDestination)
+    {
+        using var fixture = new Fixture();
+        string subdirectory = nestedDestination ? "archives" : string.Empty;
+        Directory.CreateDirectory(Path.Combine(fixture.Staging, "Files", subdirectory));
+        File.WriteAllText(Path.Combine(fixture.Staging, "Files", subdirectory, "Bundle.zip"), "delivery file");
+        string marker = Path.Combine(fixture.Output, "keep.txt");
+        File.WriteAllText(marker, "existing output");
+        var loose = fixture.Segment(ArtefactType.Unpacked);
+        loose.Configuration.DoNotClear = true;
+        var packed = fixture.Segment(ArtefactType.Packed);
+        packed.Configuration.Path = Path.Combine(fixture.Output, subdirectory);
+        packed.Configuration.ArtefactName = "Bundle.zip";
+        packed.Configuration.DoNotClear = true;
+        var spec = new ModulePipelineSpec
+        {
+            Build = new ModuleBuildSpec { Name = "DemoModule", SourcePath = fixture.Staging, Version = "1.2.3", KeepStaging = true },
+            Install = new ModulePipelineInstallOptions { Enabled = false },
+            Segments = new IConfigurationSegment[]
+            {
+                new ConfigurationOptionsSegment { Options = new ConfigurationOptions { Delivery = fixture.Delivery } },
+                packedFirst ? packed : loose,
+                packedFirst ? loose : packed
+            }
+        };
+        var runner = new ModulePipelineRunner(new NullLogger());
+        var error = Assert.Throws<InvalidOperationException>(() => runner.Run(spec, runner.Plan(spec)));
+        Assert.Contains("unsafe", error.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal("existing output", File.ReadAllText(marker));
+        Assert.False(File.Exists(Path.Combine(fixture.Output, subdirectory, "Bundle.zip")));
+        Assert.False(Directory.Exists(Path.Combine(fixture.Output, "Modules")));
+    }
+
+    [Theory]
+    [InlineData(ArtefactType.Packed, false)]
+    [InlineData(ArtefactType.Unpacked, false)]
+    [InlineData(ArtefactType.Packed, true)]
+    [InlineData(ArtefactType.Unpacked, true)]
+    public void Build_DeliveryLayoutBundlesRemainingInstalledDependenciesAtConfiguredLocations(ArtefactType type, bool customPaths)
     {
         using var fixture = new Fixture();
         string installed = Path.Combine(fixture.Root, "installed");
@@ -27,19 +87,26 @@ public sealed class ArtefactBuilderDeliveryLayoutTests
         {
             Environment.SetEnvironmentVariable("PSModulePath", installed + Path.PathSeparator + previous);
             var segment = fixture.Segment(type);
+            segment.Configuration.RequiredModules.ModulesPath = customPaths ? "Application/Modules" : null;
+            segment.Configuration.RequiredModules.Path = customPaths ? "Shared/Modules" : null;
             segment.Configuration.RequiredModules.Enabled = true;
             segment.Configuration.RequiredModules.Source = RequiredModulesSource.Installed;
             var result = new ArtefactBuilder(new NullLogger()).Build(segment, fixture.Root, fixture.Staging,
                 "DemoModule", "1.2.3", null, new[] { new RequiredModuleReference("RuntimeDependency", requiredVersion: "1.0.0") },
                 delivery: fixture.Delivery);
-            const string relative = "Modules/RuntimeDependency/RuntimeDependency.psm1";
+            string relative = (customPaths ? "Shared/Modules" : "Modules") + "/RuntimeDependency/RuntimeDependency.psm1";
+            string main = (customPaths ? "Application/Modules" : "Modules") + "/DemoModule/DemoModule.psd1";
             if (type == ArtefactType.Packed)
             {
                 using var zip = ZipFile.OpenRead(result.OutputPath);
                 Assert.NotNull(zip.GetEntry(relative));
+                Assert.NotNull(zip.GetEntry(main));
             }
             else
+            {
                 Assert.True(File.Exists(Path.Combine(result.OutputPath, relative)));
+                Assert.True(File.Exists(Path.Combine(result.OutputPath, main)));
+            }
         }
         finally
         {
