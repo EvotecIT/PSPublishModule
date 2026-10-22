@@ -307,7 +307,7 @@ internal static partial class WebCliCommandHandlers
             }
         }
 
-        var audit = runAudit ? RunDoctorAudit(siteRoot!, subArgs) : null;
+        var audit = runAudit ? RunDoctorAudit(siteRoot!, subArgs, spec.OwnedLinks) : null;
         if (verify is not null && filteredVerifyWarnings.Length != verify.Warnings.Length)
         {
             verify = new WebVerifyResult
@@ -419,11 +419,13 @@ internal static partial class WebCliCommandHandlers
                        TryGetOptionValue(subArgs, "--path") ??
                        TryGetOptionValue(subArgs, "--out");
         var configPath = TryGetOptionValue(subArgs, "--config");
+        WebOwnedLinkAuditOptions? ownedLinks = null;
 
         if (!string.IsNullOrWhiteSpace(configPath))
         {
             var fullConfigPath = ResolveExistingFilePath(configPath);
             var (spec, specPath) = WebSiteSpecLoader.LoadWithPath(fullConfigPath, WebCliJson.Options);
+            ownedLinks = spec.OwnedLinks;
             var plan = WebSitePlanner.Plan(spec, specPath, WebCliJson.Options);
             var outPath = TryGetOptionValue(subArgs, "--out") ??
                           TryGetOptionValue(subArgs, "--out-path") ??
@@ -532,6 +534,7 @@ internal static partial class WebCliCommandHandlers
         var result = WebSiteAuditor.Audit(new WebAuditOptions
         {
             SiteRoot = siteRoot,
+            OwnedLinks = ownedLinks,
             BaselineRoot = baselineRoot,
             Include = include.ToArray(),
             Exclude = exclude.ToArray(),

@@ -4016,6 +4016,7 @@
         "only-modes": { "type": "array", "items": { "type": "string" } },
         "skipModes": { "type": "array", "items": { "type": "string" } },
         "skip-modes": { "type": "array", "items": { "type": "string" } },
+        "config": { "type": "string", "description": "Optional site.json supplying opt-in OwnedLinks network audit policy. Configured audits bypass pipeline caching." },
         "siteRoot": { "type": "string" },
         "include": { "type": "string" },
         "exclude": { "type": "string" },

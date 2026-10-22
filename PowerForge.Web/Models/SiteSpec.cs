@@ -104,6 +104,8 @@ public sealed class SiteSpec
 
     /// <summary>Documentation versioning configuration.</summary>
     public VersioningSpec? Versioning { get; set; }
+    /// <summary>Opt-in audit of links and assets on explicitly owned domains.</summary>
+    public WebOwnedLinkAuditOptions? OwnedLinks { get; set; }
     /// <summary>Link checking configuration.</summary>
     public LinkCheckSpec? LinkCheck { get; set; }
     /// <summary>Cross-reference link configuration (docs/API xref map).</summary>

@@ -46,6 +46,8 @@ public sealed class WebAuditOptions
     public bool CheckSeoMeta { get; set; }
     /// <summary>When true, warn when the same link label points to multiple destinations.</summary>
     public bool CheckLinkPurposeConsistency { get; set; } = true;
+    /// <summary>Optional network audit of explicitly owned domains. Disabled by default.</summary>
+    public WebOwnedLinkAuditOptions? OwnedLinks { get; set; }
     /// <summary>When true, validate internal links.</summary>
     public bool CheckLinks { get; set; } = true;
     /// <summary>When true, validate local assets (CSS/JS/images).</summary>

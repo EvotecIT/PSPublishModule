@@ -111,6 +111,9 @@ public static partial class WebSiteAuditor
                 warnings.Add(issueLine);
         }
 
+        using var ownedLinks = options.OwnedLinks?.Enabled == true
+            ? new WebOwnedLinkAuditor(options.OwnedLinks, AddIssue) : null;
+
         if (htmlFiles.Count == 0)
             AddIssue("warning", "general", null, "No HTML files found to audit.", "no-html");
 
@@ -484,65 +487,8 @@ public static partial class WebSiteAuditor
                 }
             }
 
-            var baseHref = ResolveBaseHref(doc);
-            var baseDir = string.IsNullOrWhiteSpace(baseHref)
-                ? Path.GetDirectoryName(file) ?? siteRoot
-                : Path.GetFullPath(Path.Combine(siteRoot, baseHref.TrimStart('/').Replace('/', Path.DirectorySeparatorChar)));
-
-            if (options.CheckLinks)
-            {
-                foreach (var link in doc.QuerySelectorAll("a[href]"))
-                {
-                    var href = link.GetAttribute("href") ?? string.Empty;
-                    if (ShouldSkipLink(href)) continue;
-                    if (WebLinkClassifier.IsExternalLink(href)) continue;
-
-                    if (TryResolveLocalTarget(siteRoot, baseDir, href, out var resolvedPath))
-                    {
-                        linkCount++;
-                        if (!File.Exists(resolvedPath))
-                        {
-                            brokenLinkCount++;
-                            AddIssue("error", "link", relativePath, $"broken link '{href}' -> {ToRelative(siteRoot, resolvedPath)}", href);
-                        }
-                    }
-                }
-            }
-
-            if (options.CheckAssets)
-            {
-                foreach (var href in GetAssetHrefs(doc))
-                {
-                    if (ShouldSkipLink(href)) continue;
-                    if (WebLinkClassifier.IsExternalLink(href)) continue;
-                    if (!TryResolveLocalTarget(siteRoot, baseDir, href, out var resolvedPath)) continue;
-
-                    assetCount++;
-                    if (!File.Exists(resolvedPath))
-                    {
-                        missingAssetCount++;
-                        AddIssue("error", "asset", relativePath, $"missing asset '{href}' -> {ToRelative(siteRoot, resolvedPath)}", href);
-                    }
-                }
-
-                foreach (var srcset in GetAssetSrcSets(doc))
-                {
-                    var urls = ParseSrcSet(srcset);
-                    foreach (var src in urls)
-                    {
-                        if (ShouldSkipLink(src)) continue;
-                        if (WebLinkClassifier.IsExternalLink(src)) continue;
-                        if (!TryResolveLocalTarget(siteRoot, baseDir, src, out var resolvedPath)) continue;
-
-                        assetCount++;
-                        if (!File.Exists(resolvedPath))
-                        {
-                            missingAssetCount++;
-                            AddIssue("error", "asset", relativePath, $"missing asset '{src}' -> {ToRelative(siteRoot, resolvedPath)}", src);
-                        }
-                    }
-                }
-            }
+            AuditPageTargets(doc, siteRoot, file, relativePath, options, ownedLinks, AddIssue,
+                ref linkCount, ref brokenLinkCount, ref assetCount, ref missingAssetCount);
         }
 
         if (navMissing.Count > 0)

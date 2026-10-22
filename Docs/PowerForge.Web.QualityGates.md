@@ -202,3 +202,13 @@ Example:
   "checkAgentContentSecurity": true
 }
 ```
+
+## Links between owned sites
+
+Enable [OwnedLinks](PowerForge.Web.ContentSpec.md#owned-domain-link-audit) in
+`site.json` and provide `config` on the pipeline audit step. Sitemaps provide a
+cached page inventory; bounded HTTP checks confirm missing entries and follow
+redirects. Set `Severity` to `error` to fail on confirmed 404/410 destinations.
+Network failures and incomplete checks are unknown warnings, which remain
+subject to existing warning/new-issue gates and baselines. Builds without this
+opt-in policy do not acquire network checks.

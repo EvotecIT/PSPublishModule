@@ -1528,3 +1528,86 @@ outputs:
 - JSON data for repeated blocks
 - Avoid HTML in markdown except for edge cases
 - Keep layouts in themes, not in content
+
+## Owned-domain link audit
+
+`OwnedLinks` enables network validation during audits of generated HTML. It is
+independent of the build-time `LinkCheck` option and disabled by default, even
+when domains are listed. Other external domains remain skipped.
+
+```json
+{
+  "OwnedLinks": {
+    "Enabled": true,
+    "Domains": [
+      { "Domain": "evotec.xyz", "SitemapUrl": "https://evotec.xyz/sitemap.xml" },
+      { "Domain": "powerbginfo.com" }
+    ],
+    "Severity": "error",
+    "TimeoutSeconds": 10,
+    "MaxDurationSeconds": 60,
+    "MaxSitemapBytes": 5242880,
+    "MaxSitemaps": 20,
+    "MaxLinkChecks": 100
+  }
+}
+```
+
+`Domain` is an exact hostname with an optional port, without a scheme or path.
+List subdomains separately. `SitemapUrl` defaults to
+`https://{Domain}/sitemap.xml` and must be HTTP(S) on that domain. At most 20
+domains are accepted. Configuration and property names follow the usual
+case-insensitive site loader; severity values are `warning` (default) or `error`.
+
+The audit loads each referenced domain's sitemap once per audit invocation,
+using the shared sitemap parser. XML URL sets, indexes (including gzip files),
+and up to five levels of child indexes are supported. Each document is fetched
+at most once; cycles and duplicate child references are skipped. Cache entries
+are kept only for that invocation, including failures and HTTP fallback results.
+
+Exact sitemap URL matches establish page presence. Fragments are ignored:
+anchors on existing pages pass, but the remote element ID is not inspected.
+Paths, case, locale prefixes, query strings, schemes, and ports retain their
+meaning. Slash, `index.html`, and legacy-path variants use bounded HTTP GETs
+with response headers only when absent from the sitemap. The audit follows up
+to five redirects, only to configured owned domains. A successful response
+accepts unlisted pages and downloads; only HTTP 404/410 is classified as broken.
+Assets (`href`/`src` and `srcset`) use HTTP rather than sitemap membership.
+An absolute HTTP(S) HTML `<base>` also resolves relative and protocol-relative
+destinations for the enabled owned-domain check.
+
+Sitemaps reduce network work for normal page links; they are not an exhaustive
+inventory or proof that a listed URL currently serves successfully. An absent
+entry alone never establishes a broken link. Soft 404 pages returning HTTP 200
+and broken remote fragment IDs are outside this check's scope.
+
+Unavailable/invalid sitemaps, blocked redirects, other HTTP statuses (including
+403/429/5xx), timeouts, and exhausted budgets emit distinct `owned-link` unknown
+warnings. A sitemap failure remains visible even if fallback requests succeed.
+Unknown results never increment broken-link or missing-asset counts. Confirmed
+404/410 findings use `Severity`; all findings participate in normal baselines,
+`suppressIssues`, category/code gates, JSON summaries, and SARIF. For example,
+`PFAUDIT.OWNED-LINK` suppresses the category; a URL substring can make an
+exception narrower. Existing `failOnWarnings`/`failOnNewIssues` policy can still
+fail a run containing unknown warnings.
+
+Limits apply across the complete audit: `TimeoutSeconds` is 1–120 per request
+(including sitemap body reads), `MaxDurationSeconds` is 1–600 for all network
+work, `MaxSitemapBytes` is 1–52,428,800 per document (both transferred and expanded gzip data),
+`MaxSitemaps` is 1–100, and `MaxLinkChecks` is 0–10,000 distinct fallback URLs.
+HTTP response bodies for fallback probes are not downloaded. Only domains
+actually referenced by selected HTML are fetched. `checkLinks` and `checkAssets`
+continue to control their respective checks.
+
+Pass this site configuration to `audit` or `doctor`. A pipeline audit does not
+build the site when reading `config`:
+
+```json
+{ "task": "audit", "config": "./site.json", "siteRoot": "./_site" }
+```
+
+Standalone `powerforge-web audit --config ./site.json` retains its usual
+build-then-audit behavior. `doctor --config ./site.json --no-build` audits
+existing output. An audit without site configuration keeps the offline default.
+Configured pipeline audits bypass the pipeline result cache, so each invocation
+reevaluates live evidence.
