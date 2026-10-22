@@ -23,6 +23,9 @@ public sealed class ArtefactConfiguration
     /// <summary>Optional module or runnable delivery bundle layout (Packed and Unpacked).</summary>
     public ArtefactLayout? Layout { get; set; }
 
+    /// <summary>Relative destination for delivery files inside a Delivery artefact; null or dot uses its root.</summary>
+    public string? DeliveryPath { get; set; }
+
     /// <summary>Enable artefact creation.</summary>
     public bool? Enabled { get; set; }
 

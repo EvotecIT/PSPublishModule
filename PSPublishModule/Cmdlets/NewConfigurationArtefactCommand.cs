@@ -72,11 +72,19 @@ public sealed class NewConfigurationArtefactCommand : PSCmdlet
     public ArtefactType Type { get; set; }
 
     /// <summary>
-    /// Package layout. Delivery copies the configured delivery internals to the artefact root
+    /// Package layout. Delivery copies the configured delivery internals to DeliveryPath (the root by default)
     /// and defaults main and required modules to Modules. Supported by Packed and Unpacked.
     /// </summary>
     [Parameter]
     public ArtefactLayout? Layout { get; set; }
+
+    /// <summary>
+    /// Relative folder inside a Delivery artefact for launcher and configuration files.
+    /// Omit this parameter or use dot for the artefact root. Absolute and parent-traversal paths are rejected.
+    /// Module locations remain controlled by ModulesPath and RequiredModulesPath; launcher contents are not rewritten.
+    /// </summary>
+    [Parameter]
+    public string? DeliveryPath { get; set; }
 
     /// <summary>Enable artefact creation. By default artefact creation is disabled.</summary>
     [Parameter]
@@ -202,6 +210,7 @@ public sealed class NewConfigurationArtefactCommand : PSCmdlet
         {
             Type = Type,
             Layout = Layout,
+            DeliveryPath = DeliveryPath,
             EnableSpecified = MyInvocation.BoundParameters.ContainsKey(nameof(Enable)),
             Enable = Enable.IsPresent,
             IncludeTagNameSpecified = MyInvocation.BoundParameters.ContainsKey(nameof(IncludeTagName)),

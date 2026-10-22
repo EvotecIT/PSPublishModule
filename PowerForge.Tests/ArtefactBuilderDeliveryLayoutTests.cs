@@ -12,6 +12,69 @@ namespace PowerForge.Tests;
 public sealed class ArtefactBuilderDeliveryLayoutTests
 {
     [Theory]
+    [InlineData(ArtefactType.Packed, null, "")]
+    [InlineData(ArtefactType.Unpacked, null, "")]
+    [InlineData(ArtefactType.Packed, ".", "")]
+    [InlineData(ArtefactType.Unpacked, ".", "")]
+    [InlineData(ArtefactType.Packed, "Launchers/Operations", "Launchers/Operations/")]
+    [InlineData(ArtefactType.Unpacked, "Launchers/Operations", "Launchers/Operations/")]
+    [InlineData(ArtefactType.Packed, " \"Launchers\\Tasks\" ", "Launchers/Tasks/")]
+    [InlineData(ArtefactType.Unpacked, " \"Launchers\\Tasks\" ", "Launchers/Tasks/")]
+    public void Build_DeliveryPathPlacesFilesWithoutMovingModulePayload(ArtefactType type, string? path, string prefix)
+    {
+        using var fixture = new Fixture();
+        var segment = fixture.Segment(type);
+        segment.Configuration.DeliveryPath = path;
+        var result = fixture.Build(segment);
+        if (type == ArtefactType.Packed)
+        {
+            using var zip = ZipFile.OpenRead(result.OutputPath);
+            Assert.NotNull(zip.GetEntry(prefix + "Run.ps1"));
+            Assert.NotNull(zip.GetEntry(prefix + "config.json"));
+            Assert.NotNull(zip.GetEntry("Modules/DemoModule/DemoModule.psm1"));
+            Assert.NotNull(zip.GetEntry("Modules/DemoModule/Files/Run.ps1"));
+            if (prefix.Length > 0) Assert.Null(zip.GetEntry("Run.ps1"));
+        }
+        else
+        {
+            Assert.Equal("launcher", File.ReadAllText(Path.Combine(result.OutputPath, prefix, "Run.ps1")));
+            Assert.Equal("{}", File.ReadAllText(Path.Combine(result.OutputPath, prefix, "config.json")));
+            Assert.True(File.Exists(Path.Combine(result.OutputPath, "Modules/DemoModule/Files/Run.ps1")));
+            if (prefix.Length > 0) Assert.False(File.Exists(Path.Combine(result.OutputPath, "Run.ps1")));
+        }
+    }
+
+    [Theory]
+    [InlineData(ArtefactType.Packed, "../outside")]
+    [InlineData(ArtefactType.Unpacked, "../outside")]
+    [InlineData(ArtefactType.Packed, "/outside")]
+    [InlineData(ArtefactType.Unpacked, "/outside")]
+    [InlineData(ArtefactType.Packed, "C:\\outside")]
+    [InlineData(ArtefactType.Unpacked, "C:\\outside")]
+    [InlineData(ArtefactType.Packed, "Modules")]
+    [InlineData(ArtefactType.Unpacked, "Modules")]
+    public void Build_RejectsUnsafeDeliveryPathBeforeChangingOutput(ArtefactType type, string path)
+    {
+        using var fixture = new Fixture();
+        string marker = Path.Combine(fixture.Output, "existing.txt");
+        File.WriteAllText(marker, "keep");
+        var segment = fixture.Segment(type);
+        segment.Configuration.DeliveryPath = path;
+        Assert.Throws<InvalidOperationException>(() => fixture.Build(segment));
+        Assert.Equal("keep", File.ReadAllText(marker));
+    }
+
+    [Fact]
+    public void Build_RejectsDeliveryPathWithoutDeliveryLayout()
+    {
+        using var fixture = new Fixture();
+        var segment = fixture.Segment(ArtefactType.Unpacked);
+        segment.Configuration.Layout = ArtefactLayout.Module;
+        segment.Configuration.DeliveryPath = "Launchers";
+        Assert.Contains("requires the Delivery layout", Assert.Throws<InvalidOperationException>(() => fixture.Build(segment)).Message);
+    }
+
+    [Theory]
     [InlineData(ArtefactType.Packed, " Files ")]
     [InlineData(ArtefactType.Unpacked, " Files ")]
     [InlineData(ArtefactType.Packed, "\"Files\"")]
@@ -31,12 +94,16 @@ public sealed class ArtefactBuilderDeliveryLayoutTests
     }
 
     [Theory]
-    [InlineData(false, false)]
-    [InlineData(true, false)]
-    [InlineData(false, true)]
-    [InlineData(true, true)]
+    [InlineData(false, false, false)]
+    [InlineData(true, false, false)]
+    [InlineData(false, true, false)]
+    [InlineData(true, true, false)]
+    [InlineData(false, false, true)]
+    [InlineData(true, false, true)]
+    [InlineData(false, true, true)]
+    [InlineData(true, true, true)]
     public void Run_RejectsPromotedDeliveryFileConflictingWithAnotherArtefactBeforeChangingOutput(
-        bool packedFirst, bool nestedDestination)
+        bool packedFirst, bool nestedDestination, bool customDeliveryPath)
     {
         using var fixture = new Fixture();
         string subdirectory = nestedDestination ? "archives" : string.Empty;
@@ -45,9 +112,10 @@ public sealed class ArtefactBuilderDeliveryLayoutTests
         string marker = Path.Combine(fixture.Output, "keep.txt");
         File.WriteAllText(marker, "existing output");
         var loose = fixture.Segment(ArtefactType.Unpacked);
+        loose.Configuration.DeliveryPath = customDeliveryPath ? "Launchers" : null;
         loose.Configuration.DoNotClear = true;
         var packed = fixture.Segment(ArtefactType.Packed);
-        packed.Configuration.Path = Path.Combine(fixture.Output, subdirectory);
+        packed.Configuration.Path = Path.Combine(fixture.Output, customDeliveryPath ? "Launchers" : string.Empty, subdirectory);
         packed.Configuration.ArtefactName = "Bundle.zip";
         packed.Configuration.DoNotClear = true;
         var spec = new ModulePipelineSpec
@@ -65,7 +133,7 @@ public sealed class ArtefactBuilderDeliveryLayoutTests
         var error = Assert.Throws<InvalidOperationException>(() => runner.Run(spec, runner.Plan(spec)));
         Assert.Contains("unsafe", error.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Equal("existing output", File.ReadAllText(marker));
-        Assert.False(File.Exists(Path.Combine(fixture.Output, subdirectory, "Bundle.zip")));
+        Assert.False(File.Exists(Path.Combine(packed.Configuration.Path, "Bundle.zip")));
         Assert.False(Directory.Exists(Path.Combine(fixture.Output, "Modules")));
     }
 
@@ -249,8 +317,9 @@ public sealed class ArtefactBuilderDeliveryLayoutTests
     public void Factory_PreservesDeliveryLayoutInConfiguration()
     {
         var segment = new ArtefactConfigurationFactory(new NullLogger()).Create(
-            new ArtefactConfigurationRequest { Type = ArtefactType.Packed, Layout = ArtefactLayout.Delivery });
+            new ArtefactConfigurationRequest { Type = ArtefactType.Packed, Layout = ArtefactLayout.Delivery, DeliveryPath = "Launchers" });
         Assert.Equal(ArtefactLayout.Delivery, segment.Configuration.Layout);
+        Assert.Equal("Launchers", segment.Configuration.DeliveryPath);
     }
 
     [Fact]

@@ -1,7 +1,7 @@
 # Runnable module delivery bundles
 
 Use `New-ConfigurationArtefact -Layout Delivery` to create a deployment folder or
-ZIP containing launcher and configuration files at its root. This layout supports
+ZIP containing launcher and configuration files at its root by default. This layout supports
 `Unpacked` and `Packed`; the module remains a module with its manifest and runtime
 assets. `Script` and `ScriptPacked` generate script entry points and use their own
 layout instead.
@@ -55,13 +55,38 @@ needed. Use relative `ModulesPath` and `RequiredModulesPath` only when a differe
 module subdirectory is required. Delivery files cannot overwrite those module
 directories. Layout validation runs before existing output is cleared.
 
+### Choosing a different bundle structure
+
+Set `DeliveryPath` on each artefact to put delivery files in a relative folder.
+Omit it or use `.` to keep them at the bundle root. Configure the module folders
+independently with `ModulesPath` and `RequiredModulesPath`:
+
+```powershell
+New-ConfigurationArtefact -Type Packed -Layout Delivery -Enable `
+    -Path 'Artefacts/Packed' -DeliveryPath 'Launchers/Operations' `
+    -ModulesPath 'Application/Modules' -RequiredModulesPath 'Shared/Modules' `
+    -AddRequiredModules -RequiredModulesSource Installed
+```
+
+This produces `Launchers/Operations/Run.ps1` and configuration files beside it,
+the main module under `Application/Modules`, and remaining dependencies under
+`Shared/Modules`. The original delivery files remain inside the module payload.
+Each artefact can choose a different destination without changing its source
+`InternalsPath` or the module layout.
+
+`DeliveryPath` accepts a relative folder; absolute paths, parent traversal and
+collisions with module directories are rejected before output is changed.
+Launcher contents are copied as authored. A launcher in the example folder can
+refer to the main module with a path such as
+`../../Application/Modules/DemoTool/DemoTool.psd1` relative to `$PSScriptRoot`.
+
 Use one build declaration and pass the selected certificate thumbprint as build
 configuration. Certificate enumeration and interactive selection do not belong
 before the builder: unsigned builds need no certificate, and unattended builds
 need an explicit signing identity. Keep delivery and module signing controlled by
 the same operator setting when both are intended to be signed.
 
-`Packed` and `Unpacked` preserve the delivery signing preference. With delivery
+`Packed` and `Unpacked` preserve the delivery signing preference at default and custom destinations. With delivery
 signing disabled (and `IncludeInternals` not enabled), promoted launcher files
 remain unsigned while module signing still applies to module payloads.
 

@@ -831,6 +831,7 @@
       "additionalProperties": false,
       "properties": {
         "Layout": { "type": ["string", "null"], "enum": ["Module", "Delivery", null] },
+        "DeliveryPath": { "type": ["string", "null"], "description": "Relative destination for delivery files within a Delivery artefact. Omit or use dot for the artefact root. Absolute and parent-traversal paths are rejected." },
         "Enabled": { "type": ["boolean", "null"] },
         "IncludeTagName": { "type": ["boolean", "null"] },
         "Path": { "type": ["string", "null"] },

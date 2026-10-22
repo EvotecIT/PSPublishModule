@@ -20,6 +20,8 @@ public sealed partial class ArtefactBuilder
         bool includeScriptFolders,
         IReadOnlyList<string>? finalizedPayloadFiles)
     {
+        if (!string.IsNullOrWhiteSpace(cfg.DeliveryPath) && cfg.Layout != ArtefactLayout.Delivery)
+            throw new InvalidOperationException("DeliveryPath requires the Delivery layout.");
         if (cfg.Layout is null || cfg.Layout == ArtefactLayout.Module)
             return;
         if (cfg.Layout != ArtefactLayout.Delivery)
@@ -101,7 +103,8 @@ public sealed partial class ArtefactBuilder
             .ToArray();
         if (files.Length == 0)
             throw new InvalidOperationException("Delivery layout has no packaged delivery files to copy to the artefact root.");
-        return CreateModulePackageCopyPlan(internalsRoot, destinationRoot, files);
+        string deliveryRoot = ArtefactLayoutPathResolver.ResolveDeliveryRoot(cfg, destinationRoot);
+        return CreateModulePackageCopyPlan(internalsRoot, deliveryRoot, files);
     }
 
     private static void CopyDeliveryFiles(

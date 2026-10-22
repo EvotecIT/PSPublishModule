@@ -9,7 +9,7 @@ public sealed class ConfigurationSegmentJsonConverterTests
     public void Artefact_DeliveryLayoutIsPreservedBySegmentJsonAndDeclaredBySchema()
     {
         const string json = """
-            {"Build":{"Name":"Demo"},"Segments":[{"Type":"Packed","Configuration":{"Enabled":true,"Layout":"Delivery"}}]}
+            {"Build":{"Name":"Demo"},"Segments":[{"Type":"Packed","Configuration":{"Enabled":true,"Layout":"Delivery","DeliveryPath":"Launchers"}}]}
             """;
         var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
         options.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
@@ -17,11 +17,15 @@ public sealed class ConfigurationSegmentJsonConverterTests
         var spec = JsonSerializer.Deserialize<ModulePipelineSpec>(json, options)!;
         Assert.Equal(ArtefactLayout.Delivery,
             Assert.IsType<ConfigurationArtefactSegment>(Assert.Single(spec.Segments)).Configuration.Layout);
+        Assert.Equal("Launchers", Assert.IsType<ConfigurationArtefactSegment>(Assert.Single(spec.Segments)).Configuration.DeliveryPath);
 
         using var schema = JsonDocument.Parse(File.ReadAllText(SchemaPath("powerforge.segments.schema.json")));
         var layout = schema.RootElement.GetProperty("$defs").GetProperty("ArtefactConfiguration")
             .GetProperty("properties").GetProperty("Layout");
         Assert.Contains(layout.GetProperty("enum").EnumerateArray(), value => value.ValueKind == JsonValueKind.String && value.GetString() == "Delivery");
+        var deliveryPath = schema.RootElement.GetProperty("$defs").GetProperty("ArtefactConfiguration")
+            .GetProperty("properties").GetProperty("DeliveryPath");
+        Assert.Contains(deliveryPath.GetProperty("type").EnumerateArray(), value => value.GetString() == "string");
     }
 
     [Fact]

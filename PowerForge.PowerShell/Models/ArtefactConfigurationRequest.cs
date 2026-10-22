@@ -11,6 +11,9 @@ public sealed class ArtefactConfigurationRequest
     /// <summary>Optional module or runnable delivery bundle layout.</summary>
     public ArtefactLayout? Layout { get; set; }
 
+    /// <summary>Relative delivery file destination within the artefact; null or dot uses its root.</summary>
+    public string? DeliveryPath { get; set; }
+
     /// <summary>Whether Enable was explicitly provided.</summary>
     public bool EnableSpecified { get; set; }
     /// <summary>Enable artefact creation.</summary>
