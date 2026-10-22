@@ -423,7 +423,9 @@ public sealed class ArtefactBuilderScriptTests
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
         try
         {
-            if (FrameworkCompatibility.GetPathStringComparison(root.FullName) != StringComparison.Ordinal)
+            string caseProbe = Path.Combine(root.FullName, "case-probe");
+            File.WriteAllText(caseProbe, "probe");
+            if (File.Exists(Path.Combine(root.FullName, "CASE-PROBE")))
                 return;
 
             const string moduleName = "DemoModule";

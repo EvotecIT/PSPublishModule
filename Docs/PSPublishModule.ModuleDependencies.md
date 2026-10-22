@@ -29,6 +29,19 @@ workflows. It is not a runtime dependency declaration.
 carry selected dependency payloads without adding those modules to PSD1
 `RequiredModules`.
 
+## Installed Modules In Cloud-Synced Folders
+
+Artefact builds can copy locally available installed dependencies from Windows
+Cloud Files folders, including OneDrive-backed `Documents/PowerShell/Modules`.
+No special build option is required. The input checks recognize the documented
+Windows cloud reparse tags; symbolic links, junctions and unknown reparse tags
+remain rejected, including links nested inside a cloud-backed input folder.
+
+The cloud provider must make each selected file available for normal reads.
+An offline or unavailable file still causes the copy to fail. Dependencies are
+copied into ordinary local package files; finalized layouts, archives and
+signing evidence retain their strict reparse-point checks.
+
 ## Optional Binary References
 
 Binary dependency preflight checks the assemblies delivered with the module.

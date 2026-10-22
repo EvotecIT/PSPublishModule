@@ -333,7 +333,7 @@ public sealed partial class ArtefactBuilder
     {
         string candidate = Path.GetFullPath(path);
         string fullRoot = Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-        StringComparison comparison = FrameworkCompatibility.GetPathStringComparison(fullRoot);
+        StringComparison comparison = GetArtefactPathComparison(fullRoot);
         return string.Equals(candidate, fullRoot, comparison) ||
                candidate.StartsWith(fullRoot + Path.DirectorySeparatorChar, comparison);
     }
@@ -367,8 +367,8 @@ public sealed partial class ArtefactBuilder
     }
 
     private static StringComparison GetPathComparison(string firstPath, string secondPath)
-        => FrameworkCompatibility.GetPathStringComparisonForPath(firstPath) == StringComparison.OrdinalIgnoreCase ||
-           FrameworkCompatibility.GetPathStringComparisonForPath(secondPath) == StringComparison.OrdinalIgnoreCase
+        => GetArtefactPathComparison(firstPath) == StringComparison.OrdinalIgnoreCase ||
+           GetArtefactPathComparison(secondPath) == StringComparison.OrdinalIgnoreCase
             ? StringComparison.OrdinalIgnoreCase
             : StringComparison.Ordinal;
 
