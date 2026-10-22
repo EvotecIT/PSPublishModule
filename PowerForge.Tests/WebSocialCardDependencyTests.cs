@@ -5,6 +5,47 @@ namespace PowerForge.Tests;
 public sealed class WebSocialCardDependencyTests
 {
     [Theory]
+    [InlineData("--pipeline-mode", false)]
+    [InlineData("--pipelineMode", false)]
+    [InlineData("--pipeline-mode", true)]
+    [InlineData("--pipelineMode", true)]
+    public async Task InspectionPreservesModeAliasesAndOutputContracts(string modeOption, bool json)
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-social-cli-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var pipeline = Path.Combine(root, "pipeline.json");
+            File.WriteAllText(pipeline, """{"steps":[{"task":"build","modes":["dev"],"socialAutoGenerate":true}]}""");
+            var start = new System.Diagnostics.ProcessStartInfo("dotnet")
+            {
+                RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false
+            };
+            foreach (var argument in new[] { typeof(WebPipelineRunner).Assembly.Location, "website-runner",
+                "--website-root", root, "--pipeline-config", pipeline, modeOption, "dev", "--check-social-cards" })
+                start.ArgumentList.Add(argument);
+            if (json) start.ArgumentList.Add("--json");
+            using var process = System.Diagnostics.Process.Start(start)!;
+            var output = process.StandardOutput.ReadToEndAsync();
+            var error = process.StandardError.ReadToEndAsync();
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+            try { await process.WaitForExitAsync(timeout.Token); }
+            catch (OperationCanceledException) { process.Kill(entireProcessTree: true); throw; }
+            Assert.True(process.ExitCode == 0, await error);
+            var text = await output;
+            if (json)
+            {
+                using var document = System.Text.Json.JsonDocument.Parse(text);
+                Assert.Equal("web.website-runner", document.RootElement.GetProperty("command").GetString());
+                Assert.True(document.RootElement.GetProperty("success").GetBoolean());
+                Assert.True(document.RootElement.GetProperty("result").GetBoolean());
+            }
+            else Assert.Equal("true", text.Trim());
+        }
+        finally { Directory.Delete(root, recursive: true); }
+    }
+
+    [Theory]
     [InlineData("{\"task\":\"apidocs\",\"socialAutoGenerate\":false,\"inputs\":[{\"socialAutoGenerate\":true}]}", "ci", true)]
     [InlineData("{\"task\":\"apidocs\",\"entries\":[{\"config\":\"site.json\"}]}", "ci", true)]
     [InlineData("{\"task\":\"apidocs\",\"socialAutoGenerate\":true,\"inputs\":[{\"socialAutoGenerate\":false}]}", "ci", false)]

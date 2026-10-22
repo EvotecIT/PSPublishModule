@@ -16,15 +16,19 @@ function Get-SocialCardRenderer {
         $command = Get-Command $name -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
         if ($command) {
             $version = & $command.Source -version 2>&1
-            if ($LASTEXITCODE -ne 0 -or ($version -join "`n") -notmatch 'ImageMagick') { continue }
+            if ($LASTEXITCODE -ne 0 -or ($version -join "`n") -notmatch 'ImageMagick') {
+                throw "Preferred renderer '$($command.Source)' is not a working ImageMagick executable. Check the runner PATH."
+            }
             $formats = (& $command.Source -list format 2>&1) -join "`n"
             if ($LASTEXITCODE -eq 0 -and
-                $formats -match '(?m)^\s+SVG\s+\S+\s+r' -and
-                $formats -match '(?m)^\s+MVG\*?\s+\S+\s+r' -and
-                $formats -match '(?m)^\s+PNG\*?\s+\S+\s+rw') {
+                $formats -match '(?m)^\s*SVG\*?\s+(?:\S+\s+)?r[w-][+\-]?(?:\s|$)' -and
+                $formats -match '(?m)^\s*MVG\*?\s+(?:\S+\s+)?r[w-][+\-]?(?:\s|$)' -and
+                $formats -match '(?m)^\s*PNG\*?\s+(?:\S+\s+)?rw[+\-]?(?:\s|$)') {
                 return $command.Source
             }
             Write-Host "ImageMagick at $($command.Source) lacks required SVG, MVG or PNG support."
+            # Runtime also selects the first magick executable before convert.
+            return $null
         }
     }
 }
