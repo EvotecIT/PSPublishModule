@@ -19,17 +19,34 @@ internal static class RecoveryFileReplacementTransaction
 
         try
         {
-            foreach (var rewrite in rewrites)
+            for (var index = 0; index < rewrites.Count; index++)
             {
+                var rewrite = rewrites[index];
                 cancellationToken.ThrowIfCancellationRequested();
-                copyFile(rewrite.OriginalPath, rewrite.BackupPath, false);
+                try
+                {
+                    copyFile(rewrite.OriginalPath, rewrite.BackupPath, false);
+                }
+                catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+                {
+                    throw CreateFailure("backup", rewrite, index, rewrites.Count, exception);
+                }
                 rewrite.BackupCreated = true;
             }
 
-            foreach (var rewrite in rewrites)
+            for (var index = 0; index < rewrites.Count; index++)
             {
+                var rewrite = rewrites[index];
                 cancellationToken.ThrowIfCancellationRequested();
-                replaceFile(rewrite.ReplacementPath, rewrite.OriginalPath);
+                var attempts = 0;
+                try
+                {
+                    ReplaceWithRetry(rewrite, replaceFile, cancellationToken, out attempts);
+                }
+                catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+                {
+                    throw CreateFailure("replace", rewrite, index, rewrites.Count, exception, attempts);
+                }
                 rewrite.ReplacementApplied = true;
             }
 
@@ -42,7 +59,7 @@ internal static class RecoveryFileReplacementTransaction
             {
                 if (!rewrite.BackupCreated)
                     continue;
-                if (!rewrite.ReplacementApplied)
+                if (!rewrite.ReplacementAttempted)
                 {
                     rewrite.DeleteBackupOnCleanup = true;
                     continue;
@@ -62,6 +79,47 @@ internal static class RecoveryFileReplacementTransaction
             throw;
         }
     }
+
+    private static void ReplaceWithRetry(
+        RecoveryFileRewrite rewrite,
+        Action<string, string> replaceFile,
+        CancellationToken cancellationToken,
+        out int attempts)
+    {
+        // ERROR_UNABLE_TO_REMOVE_REPLACED retains both original file names.
+        // Other ReplaceFile errors can leave a partially renamed transaction;
+        // they must reach rollback instead of being retried.
+        for (attempts = 1; ; attempts++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            try
+            {
+                rewrite.ReplacementAttempted = true;
+                replaceFile(rewrite.ReplacementPath, rewrite.OriginalPath);
+                return;
+            }
+            catch (IOException exception) when (
+                exception.HResult == unchecked((int)0x80070497) && attempts < 5)
+            {
+                if (cancellationToken.WaitHandle.WaitOne(100 * (1 << (attempts - 1))))
+                    cancellationToken.ThrowIfCancellationRequested();
+            }
+        }
+    }
+
+    private static IOException CreateFailure(
+        string operation,
+        RecoveryFileRewrite rewrite,
+        int index,
+        int count,
+        Exception exception,
+        int attempts = 1)
+        => new(
+            $"Recovery {operation} failed at rewrite {index + 1}/{count} after {attempts} attempt(s): " +
+            $"original '{rewrite.OriginalPath}', replacement '{rewrite.ReplacementPath}', " +
+            $"backup '{rewrite.BackupPath}'; native error 0x{exception.HResult:X8}. " +
+            exception.Message,
+            exception);
 }
 
 /// <summary>One prepared local replacement in a recovery transaction.</summary>
@@ -83,6 +141,8 @@ internal sealed class RecoveryFileRewrite
     internal bool BackupCreated { get; set; }
 
     internal bool ReplacementApplied { get; set; }
+
+    internal bool ReplacementAttempted { get; set; }
 
     internal bool DeleteBackupOnCleanup { get; set; }
 }
