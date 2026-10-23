@@ -86,15 +86,15 @@
       },
       "DBAClientX.Core": {
         "type": "Transitive",
-        "resolved": "1.0.14",
-        "contentHash": "PxTqEReEIhcFYAuSRN73qzGonlXFnws3dQti71k35BPpXco8ozmFjZ3DbFPn2h1GRp4GMXIj738NY3a9Qra3kQ=="
+        "resolved": "1.0.15",
+        "contentHash": "Mquob0jxrlLwNmzhhYXPdmRU2+gKG7EV7+AJKruXDZ+LOrQXqe/mCioO9qMEPydHIcpJLpamnZBuqXOmXlABjQ=="
       },
       "DBAClientX.SQLite": {
         "type": "Transitive",
-        "resolved": "1.0.14",
-        "contentHash": "mCmGwWj8U22vZptJUXST1y4ESLs9knIZTPVoYkjbHmdGuWOQq0xSLW+RbcKp4fbAQ6ThuDwrlzNen5LvqWBjOg==",
+        "resolved": "1.0.15",
+        "contentHash": "IrXNMSAbHsNA9Uix3bxzzCk8KJjB4e/3FmfYT/frt0Jyzo1AqYnc4TSiIeRiW+xwcpdVXaiC7y/5bDcID2f3rA==",
         "dependencies": {
-          "DBAClientX.Core": "1.0.14",
+          "DBAClientX.Core": "1.0.15",
           "Microsoft.Data.Sqlite": "10.0.10",
           "SQLitePCLRaw.bundle_e_sqlite3": "3.0.5",
           "SQLitePCLRaw.core": "3.0.5"
@@ -767,8 +767,8 @@
       },
       "Scriban": {
         "type": "Transitive",
-        "resolved": "7.5.0",
-        "contentHash": "5Dk6VXG6dimWQFRtCs202cYYkdE1GeOqpUgCwNSp4C4NhpjeMaVNssxe6Ifb1Z3HCfabvrbk9XLbvQXeZXG91w=="
+        "resolved": "7.5.1",
+        "contentHash": "endr1CBb2oMIbuNlrkEtVLS3Pvo7QsmB8Ael+v0qRIodJeZRV7CCshnxPxeD+UlBj7A2+Z08XaGSlR8x9McxSA=="
       },
       "Spectre.Console": {
         "type": "Transitive",
@@ -1166,7 +1166,7 @@
         "type": "Project",
         "dependencies": {
           "Microsoft.PowerShell.SDK": "[7.6.6, )",
-          "PowerForge": "[3.0.175, )",
+          "PowerForge": "[3.0.176, )",
           "System.Security.Cryptography.Xml": "[10.0.13, )"
         }
       },
@@ -1179,8 +1179,8 @@
       "powerforge.powershell.provider.directory.runtime": {
         "type": "Project",
         "dependencies": {
-          "PowerForge.PowerShell.Provider.Directory": "[3.0.175, )",
-          "PowerForge.PowerShell.ProviderSdk": "[3.0.175, )"
+          "PowerForge.PowerShell.Provider.Directory": "[3.0.176, )",
+          "PowerForge.PowerShell.ProviderSdk": "[3.0.176, )"
         }
       },
       "powerforge.powershell.provider.management": {
@@ -1192,14 +1192,14 @@
       "powerforge.powershell.provider.management.runtime": {
         "type": "Project",
         "dependencies": {
-          "PowerForge.PowerShell.Provider.Management": "[3.0.175, )",
-          "PowerForge.PowerShell.ProviderSdk": "[3.0.175, )"
+          "PowerForge.PowerShell.Provider.Management": "[3.0.176, )",
+          "PowerForge.PowerShell.ProviderSdk": "[3.0.176, )"
         }
       },
       "powerforge.powershell.providersdk": {
         "type": "Project",
         "dependencies": {
-          "PowerForge": "[3.0.175, )"
+          "PowerForge": "[3.0.176, )"
         }
       },
       "powerforge.web": {
@@ -1210,19 +1210,19 @@
           "Magick.NET-Q8-AnyCPU": "[15.0.0, )",
           "Microsoft.CodeAnalysis.CSharp": "[5.9.0, )",
           "OfficeIMO.Markdown": "[3.4.5, )",
-          "PowerForge": "[3.0.175, )",
-          "PowerForge.Web.Protocols": "[3.0.175, )",
-          "Scriban": "[7.5.0, )",
+          "PowerForge": "[3.0.176, )",
+          "PowerForge.Web.Protocols": "[3.0.176, )",
+          "Scriban": "[7.5.1, )",
           "YamlDotNet": "[18.1.0, )"
         }
       },
       "PowerForge.Web.Build": {
         "type": "Project",
         "dependencies": {
-          "DBAClientX.SQLite": "[1.0.14, )",
+          "DBAClientX.SQLite": "[1.0.15, )",
           "NuGet.Versioning": "[7.9.0, )",
-          "PowerForge.Web": "[3.0.175, )",
-          "PowerForge.Web.Protocols": "[3.0.175, )"
+          "PowerForge.Web": "[3.0.176, )",
+          "PowerForge.Web.Protocols": "[3.0.176, )"
         }
       },
       "powerforge.web.protocols": {
@@ -1237,8 +1237,8 @@
           "HtmlForgeX": "[1.4.0, )",
           "HtmlForgeX.Markdown": "[1.4.0, )",
           "OfficeIMO.Markdown": "[3.4.5, )",
-          "PowerForge": "[3.0.175, )",
-          "PowerForge.PowerShell": "[3.0.175, )",
+          "PowerForge": "[3.0.176, )",
+          "PowerForge.PowerShell": "[3.0.176, )",
           "Spectre.Console": "[0.57.2, )",
           "Spectre.Console.Json": "[0.57.2, )",
           "System.IO.Packaging": "[10.0.13, )",
