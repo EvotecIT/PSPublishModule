@@ -101,6 +101,45 @@ public sealed class RepositoryDiagnosticProcessTests
         Assert.False(File.Exists(host.RepositoryStore));
     }
 
+    [WindowsTheory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Registration_inspection_distinguishes_missing_names_from_unreadable_entries(bool windowsPowerShell)
+    {
+        using var host = new IsolatedRepositoryHost(windowsPowerShell);
+        var registered = host.RunScript("""
+            Import-Module Microsoft.PowerShell.PSResourceGet -ErrorAction Stop
+            Register-PSResourceRepository -Name KnownDiagnostics -Uri 'https://packages.example.test/v3/index.json' -Trusted -ErrorAction Stop
+            """);
+        Assert.True(registered.ExitCode == 0, registered.StdErr);
+        var original = File.ReadAllText(host.RepositoryStore);
+        var service = new RepositoryDiagnosticService(host);
+        var present = service.Inspect(new RepositoryDiagnosticRequest { RepositoryName = "KnownDiagnostics" });
+        Assert.True(present.RepositoryFound);
+        Assert.Equal(IsolatedRepositoryHost.FeedUri, present.RegisteredUri);
+
+        var missing = service.Inspect(new RepositoryDiagnosticRequest { RepositoryName = "MissingDiagnostics" });
+        Assert.False(missing.RepositoryFound);
+        Assert.Contains(missing.Findings, finding => finding.Code == "PFREPO006");
+        Assert.Equal(original, File.ReadAllText(host.RepositoryStore));
+
+        Assert.Contains(IsolatedRepositoryHost.FeedUri, original);
+        var malformed = original.Replace(IsolatedRepositoryHost.FeedUri, "::malformed-uri::");
+        File.WriteAllText(host.RepositoryStore, malformed);
+        var unreadable = service.Inspect(new RepositoryDiagnosticRequest { RepositoryName = "KnownDiagnostics" });
+        Assert.Null(unreadable.RepositoryFound);
+        Assert.DoesNotContain(unreadable.Findings, finding => finding.Code == "PFREPO006");
+        Assert.Equal(malformed, File.ReadAllText(host.RepositoryStore));
+
+        // A non-file store is a read failure, not evidence that the named repository is absent.
+        File.Delete(host.RepositoryStore);
+        Directory.CreateDirectory(host.RepositoryStore);
+        var invalidStore = service.Inspect(new RepositoryDiagnosticRequest { RepositoryName = "KnownDiagnostics" });
+        Assert.Null(invalidStore.RepositoryFound);
+        Assert.DoesNotContain(invalidStore.Findings, finding => finding.Code == "PFREPO006");
+        Assert.True(Directory.Exists(host.RepositoryStore));
+    }
+
     /// <summary>Real PowerShell boundary with process-local stores, caches, and synthetic credentials.</summary>
     internal sealed class IsolatedRepositoryHost : IPowerShellRunner, IDisposable
     {

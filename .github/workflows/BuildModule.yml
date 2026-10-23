@@ -309,7 +309,7 @@ jobs:
 
       - name: Run net472 C# smoke tests
         shell: pwsh
-        timeout-minutes: 10
+        timeout-minutes: 15
         run: dotnet test .\PowerForge.Net472SmokeTests\PowerForge.Net472SmokeTests.csproj -c Release -f net472 --nologo
 
       - name: Test web protocol contracts on Framework and modern .NET

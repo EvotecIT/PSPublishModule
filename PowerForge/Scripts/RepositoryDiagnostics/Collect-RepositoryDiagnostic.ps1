@@ -10,7 +10,11 @@ function ConvertTo-PFDiagnosticUri {
 
 function Get-PFDiagnosticFileStatus {
     param([string]$Path)
-    try { $null = [IO.File]::GetAttributes($Path); return 'Present' }
+    try {
+        $attributes = [IO.File]::GetAttributes($Path)
+        if (($attributes -band [IO.FileAttributes]::Directory) -ne 0) { return 'Unreadable' }
+        return 'Present'
+    }
     catch [IO.FileNotFoundException] { return 'Missing' }
     catch [IO.DirectoryNotFoundException] { return 'Missing' }
     catch { return 'Unreadable' }
@@ -56,10 +60,13 @@ function Write-PFRepositoryDiagnostic {
         # Legacy Get-PSRepository initializes and migrates stores, including endpoint requests.
         # Leave its registration unknown rather than invoking a getter with side effects.
         $usesPSResourceGet = $Tool -eq 'PSResourceGet' -or ($module -and $module.Version.Major -ge 3)
-        $canReadRegistration = $usesPSResourceGet -and [IO.File]::Exists($registrationPath)
+        $registrationStatus = Get-PFDiagnosticFileStatus $registrationPath
+        $canReadRegistration = $usesPSResourceGet -and $registrationStatus -eq 'Present'
         if ($module -and $canReadRegistration) {
             try {
-                $registration = Get-PSResourceRepository -Name $Repository -ErrorAction Stop
+                # A named miss and an invalid entry share a backend error ID.
+                # Enumerate successfully before treating an absent literal name as missing.
+                $registration = @(Get-PSResourceRepository -ErrorAction Stop) | Where-Object { [string]::Equals($_.Name, $Repository, [StringComparison]::OrdinalIgnoreCase) } | Select-Object -First 1
                 $report.RepositoryFound = $null -ne $registration
                 if ($registration) {
                     $registeredUri = [string]$registration.Uri
@@ -68,7 +75,7 @@ function Write-PFRepositoryDiagnostic {
                     $runtime.CredentialReferenceConfigured = $null -ne $registration.PSObject.Properties['CredentialInfo'] -and $null -ne $registration.CredentialInfo
                 }
             } catch { $report.RepositoryFound = $null }
-        } elseif ($module -and $usesPSResourceGet) {
+        } elseif ($module -and $usesPSResourceGet -and $registrationStatus -eq 'Missing') {
             $report.RepositoryFound = $false
         }
         $target = if ($registeredUri) { $registeredUri } else { $ExpectedUri }
