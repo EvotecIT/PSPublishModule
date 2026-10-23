@@ -1,7 +1,8 @@
-﻿# PSPublishModule Changelog
+# PSPublishModule Changelog
 
 ## Unreleased
 ### What's Changed
+- Add secret-free repository authentication diagnostics for native registrations, saved NuGet settings and publishing invocations, including safe failure reports and credential source metadata without decrypting stored secrets.
 - Retry Windows recovery replacements only when the native error guarantees unchanged file names; bound the delay, preserve cancellation and restore attempted partial replacements. Include the operation, asset paths and native error in recovery failures while retaining backups when rollback cannot finish.
 - Add per-artefact delivery source/destination mappings for selecting, renaming and rearranging packaged files and directories, with schema, collision checks and a packaging guide; keep DeliveryPath whole-tree copying as the default.
 - Remove redundant approved runtime dependencies when their helpers are already present in the consumer or another merged donor; preserve non-function runtime exports, module-management references and computed manifest requirements, and bundle the remaining runtime dependencies.

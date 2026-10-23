@@ -32,6 +32,9 @@ public sealed class RepositoryPublishRequest
     /// </summary>
     public string? ApiKey { get; set; }
 
+    /// <summary>Optional non-secret origin of the explicit API key, used in diagnostics.</summary>
+    public string? ApiKeySource { get; set; }
+
     /// <summary>
     /// Optional repository definition and registration settings (private feeds, custom URLs, credentials).
     /// </summary>

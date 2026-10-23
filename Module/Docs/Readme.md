@@ -162,6 +162,9 @@ Resolves documentation files from an installed module (root or Internals folder)
 ### [Get-ModuleInformation](Get-ModuleInformation.md)
 Gets module manifest information from a project directory.
 
+### [Get-ModuleRepositoryDiagnostic](Get-ModuleRepositoryDiagnostic.md)
+Inspects native repository registrations and authentication inputs without contacting the feed.
+
 ### [Get-ModuleTestFailures](Get-ModuleTestFailures.md)
 Analyzes and summarizes failed Pester tests from either a Pester results object or an NUnit XML result file.
 

@@ -109,6 +109,7 @@ public sealed class RepositoryPublisher
         bool unregisteredRepository = false;
         var repositoryParameter = repositorySpecified ? repositoryName : null;
         var temporaryRepository = false;
+        RepositoryDiagnosticReport? diagnosticReport = null;
 
         try
         {
@@ -142,12 +143,12 @@ public sealed class RepositoryPublisher
                     throw new PowerShellToolNotAvailableException("PowerShellGet", availabilityMessage ?? "PowerShellGet is not available.");
 
                 request.RemotePublishAttempted?.Invoke();
-                _powerShellGet.Publish(
+                diagnosticReport = _powerShellGet.PublishWithDiagnostics(
                     new PowerShellGetPublishOptions(
                         path: fullPath,
                         repository: repositoryParameter,
                         apiKey: request.ApiKey,
-                        credential: credential),
+                        credential: credential) { ApiKeySource = request.ApiKeySource },
                     cancellationToken: request.CancellationToken);
             }
             else
@@ -157,7 +158,7 @@ public sealed class RepositoryPublisher
                     throw new PowerShellToolNotAvailableException("PSResourceGet", availabilityMessage ?? "PSResourceGet is not available.");
 
                 request.RemotePublishAttempted?.Invoke();
-                _psResourceGet.Publish(
+                diagnosticReport = _psResourceGet.PublishWithDiagnostics(
                     new PSResourcePublishOptions(
                         path: fullPath,
                         isNupkg: request.IsNupkg,
@@ -166,7 +167,7 @@ public sealed class RepositoryPublisher
                         destinationPath: request.DestinationPath,
                         skipDependenciesCheck: request.SkipDependenciesCheck,
                         skipModuleManifestValidate: request.SkipModuleManifestValidate,
-                        credential: credential),
+                        credential: credential) { ApiKeySource = request.ApiKeySource },
                     cancellationToken: request.CancellationToken);
             }
         }
@@ -192,7 +193,7 @@ public sealed class RepositoryPublisher
             repositoryName: repositoryName,
             tool: tool,
             repositoryCreated: createdRepository,
-            repositoryUnregistered: unregisteredRepository);
+            repositoryUnregistered: unregisteredRepository) { DiagnosticReport = diagnosticReport };
     }
 
     private static bool HasRepositoryUris(PublishRepositoryConfiguration repo)
@@ -349,7 +350,8 @@ public sealed class RepositoryPublisher
             return new RepositoryCredential
             {
                 UserName = TryGetJsonString(root, "username") ?? fallbackUserName,
-                Secret = TryGetJsonString(root, "access_token")
+                Secret = TryGetJsonString(root, "access_token"),
+                Source = "JFrog OIDC runtime provider"
             };
         }
 
@@ -370,7 +372,8 @@ public sealed class RepositoryPublisher
         return new RepositoryCredential
         {
             UserName = userName ?? fallbackUserName,
-            Secret = accessToken
+            Secret = accessToken,
+            Source = "JFrog OIDC runtime provider"
         };
     }
 

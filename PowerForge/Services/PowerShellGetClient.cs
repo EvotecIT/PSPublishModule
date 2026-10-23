@@ -38,6 +38,8 @@ public sealed class PowerShellGetFindOptions
 /// </summary>
 public sealed class PowerShellGetPublishOptions
 {
+    /// <summary>Optional non-secret origin of the explicit API key.</summary>
+    public string? ApiKeySource { get; set; }
     /// <summary>Module path passed to <c>-Path</c>.</summary>
     public string Path { get; }
     /// <summary>Repository name passed to <c>-Repository</c>.</summary>
@@ -235,6 +237,11 @@ public sealed class PowerShellGetClient
         PowerShellGetPublishOptions options,
         TimeSpan? timeout = null,
         CancellationToken cancellationToken = default)
+        => PublishWithDiagnostics(options, timeout, cancellationToken);
+
+    /// <summary>Runs the publish and returns metadata captured by the same child process.</summary>
+    internal RepositoryDiagnosticReport PublishWithDiagnostics(PowerShellGetPublishOptions options,
+        TimeSpan? timeout = null, CancellationToken cancellationToken = default)
     {
         if (options is null) throw new ArgumentNullException(nameof(options));
         if (string.IsNullOrWhiteSpace(options.Path)) throw new ArgumentException("Path is required.", nameof(options));
@@ -253,14 +260,18 @@ public sealed class PowerShellGetClient
         if (result.ExitCode != 0)
         {
             var message = TryExtractError(result.StdOut) ?? result.StdErr;
-            var full = $"Publish-Module failed (exit {result.ExitCode}). {message}".Trim();
+            var failure = RepositoryDiagnosticService.PublishFailure(PublishTool.PowerShellGet, result.ExitCode,
+                message, result.StdOut, options.Repository, options.Path, options.ApiKey, options.Credential, options.ApiKeySource);
+            var full = failure.Message;
             _logger.Error(full);
-            if (_logger.IsVerbose && !string.IsNullOrWhiteSpace(result.StdOut)) _logger.Verbose(result.StdOut.Trim());
-            if (_logger.IsVerbose && !string.IsNullOrWhiteSpace(result.StdErr)) _logger.Verbose(result.StdErr.Trim());
             if (result.ExitCode == 3)
                 throw new PowerShellToolNotAvailableException("PowerShellGet", full);
-            throw new InvalidOperationException(full);
+            throw failure;
         }
+        var report = RepositoryDiagnosticService.PublishReport(PublishTool.PowerShellGet, result.StdOut,
+            options.Repository, options.Path, options.ApiKey, options.Credential, options.ApiKeySource);
+        RepositoryDiagnosticService.WriteSummary(report, _logger);
+        return report;
     }
 
     /// <summary>
@@ -497,7 +508,7 @@ public sealed class PowerShellGetClient
 
     private static string BuildPublishScript()
     {
-        return EmbeddedScripts.Load("Scripts/PowerShellGet/Publish-Module.ps1");
+        return RepositoryDiagnosticService.Compose(EmbeddedScripts.Load("Scripts/PowerShellGet/Publish-Module.ps1"));
     }
 
     private static string BuildSaveScript()

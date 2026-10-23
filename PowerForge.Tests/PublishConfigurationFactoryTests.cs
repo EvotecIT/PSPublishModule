@@ -422,6 +422,7 @@ public sealed partial class PublishConfigurationFactoryTests
             var credential = Assert.IsType<RepositoryCredential>(repository.Credential);
             Assert.Equal("name@company.com", credential.UserName);
             Assert.Equal("pat", RepositoryCredentialResolver.Resolve(credential)!.Secret);
+            Assert.Equal("Secret file: " + secretPath, credential.Source);
         }
         finally
         {
@@ -500,6 +501,7 @@ public sealed partial class PublishConfigurationFactoryTests
             Assert.Equal(envName, credential.SecretEnvironmentVariable);
             Environment.SetEnvironmentVariable(envName, "rotated-pat");
             Assert.Equal("rotated-pat", RepositoryCredentialResolver.Resolve(credential)!.Secret);
+            Assert.Equal("Environment variable: " + envName, credential.Source);
         }
         finally
         {

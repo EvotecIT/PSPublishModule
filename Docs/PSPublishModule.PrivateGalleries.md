@@ -1,5 +1,65 @@
 # PSPublishModule Private Galleries
 
+## Inspect repository authentication
+
+Use `Get-ModuleRepositoryDiagnostic` to inspect the native publisher's local
+registration, actual PowerShell and publisher versions, and relevant saved or
+inherited authentication inputs:
+
+```powershell
+Import-Module PSPublishModule
+$report = Get-ModuleRepositoryDiagnostic -RepositoryName CompanyFeed -Tool PSResourceGet
+$report.Runtime
+$report.ConfigurationFiles
+$report.AuthenticationInputs
+$report.Findings | Format-Table Code, Severity, Message -Wrap
+```
+
+Inspection does not contact the feed, register a repository, acquire a login,
+decrypt stored credentials, or change configuration files. `CredentialSupplied`
+and `ApiKeySupplied` are unknown during standalone inspection because no publish
+invocation is being observed. Use `-RepositoryUri` to compare an expected URL
+with the repository registration.
+`PublishSourceUri` shows the source passed to NuGet after the native backend's
+URL rewriting. A v3 service index can resolve a separate upload endpoint later.
+
+Reports distinguish entries found on disk from entries remaining in NuGet's
+merged settings. A saved API key matching the endpoint can affect a push when
+no explicit API key is supplied. A credential environment variable can also
+affect authentication. Neither finding proves which credential the native
+publisher selected: `AuthenticationSelection` records that limitation.
+
+PSResourceGet inspection uses the NuGet library in the publisher's own assembly
+context. Its null settings root includes user settings and additional user
+configuration files, rather than assuming that every project or machine-wide
+NuGet file affects this operation. API key environment variable reporting is
+version-aware. Legacy PowerShellGet registration is left unknown because its
+repository getter can migrate settings and contact endpoints. It returns limited runtime metadata;
+unavailable evidence is not reported as an absence of saved credentials.
+
+Export the structured report without copying secret-bearing configuration files:
+
+```powershell
+$report | ConvertTo-Json -Depth 10 |
+    Set-Content -LiteralPath ./repository-diagnostics.json -Encoding UTF8
+```
+
+Reports omit credential values, usernames stored in source credentials, and URL
+credentials or query parameters. Profile paths use a placeholder. Repository
+names, hostnames, and project paths remain visible; review those identifiers
+before sharing a report outside your organization.
+
+Native publish failures carry a `RepositoryPublishDiagnosticException` with a
+`Report` property captured immediately before uploading in the publishing
+process (`CollectionPhase = BeforePublish`). Backend-owned writes or credential
+cache changes after that snapshot are not observed. Successful native
+repository publishes return that report as `RepositoryPublishResult.DiagnosticReport`.
+Build output warns about relevant competing authentication inputs and includes
+publisher runtime metadata in verbose output. Existing authentication precedence
+is preserved.
+
+## Choose a private gallery workflow
+
 This guide explains how to consume and publish private PowerShell modules with
 PSPublishModule and PowerForge. It is written for the common operator decision:
 "I have a private NuGet-compatible feed. Which command shape should I use?"

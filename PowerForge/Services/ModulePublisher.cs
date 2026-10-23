@@ -703,7 +703,8 @@ public sealed partial class ModulePublisher
                     SecretFilePath = string.IsNullOrWhiteSpace(repository.Credential.SecretFilePath)
                         ? repository.Credential.SecretFilePath
                         : Path.GetFullPath(Path.Combine(projectRoot, repository.Credential.SecretFilePath!)),
-                    SecretEnvironmentVariable = repository.Credential.SecretEnvironmentVariable
+                    SecretEnvironmentVariable = repository.Credential.SecretEnvironmentVariable,
+                    Source = repository.Credential.Source
                 },
                 CredentialProvider = CloneCredentialProvider(repository.CredentialProvider)
             };
