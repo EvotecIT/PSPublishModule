@@ -473,7 +473,7 @@ internal static partial class WebCliHelpers
             .ToArray();
     }
 
-    internal static WebAuditResult RunDoctorAudit(string siteRoot, string[] argv)
+    internal static WebAuditResult RunDoctorAudit(string siteRoot, string[] argv, WebOwnedLinkAuditOptions? ownedLinks = null)
     {
         var include = ReadOptionList(argv, "--include");
         var exclude = ReadOptionList(argv, "--exclude");
@@ -558,6 +558,7 @@ internal static partial class WebCliHelpers
         return WebSiteAuditor.Audit(new WebAuditOptions
         {
             SiteRoot = siteRoot,
+            OwnedLinks = ownedLinks,
             Include = include.ToArray(),
             Exclude = exclude.ToArray(),
             UseDefaultExcludes = useDefaultExclude,

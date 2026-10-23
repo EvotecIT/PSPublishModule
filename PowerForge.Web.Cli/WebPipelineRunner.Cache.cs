@@ -96,6 +96,11 @@ internal static partial class WebPipelineRunner
             return string.Equals(GetString(step, "source"), "file", StringComparison.OrdinalIgnoreCase);
         }
 
+        // A configured audit can check live owned domains even with unchanged local inputs.
+        if ((task.Equals("audit", StringComparison.OrdinalIgnoreCase) || task.Equals("doctor", StringComparison.OrdinalIgnoreCase)) &&
+            !string.IsNullOrWhiteSpace(GetString(step, "config")))
+            return false;
+
         if (task.Equals("audit", StringComparison.OrdinalIgnoreCase) &&
             (GetBool(step, "checkAgentContentSecurity") ?? GetBool(step, "check-agent-content-security") ?? false))
         {
