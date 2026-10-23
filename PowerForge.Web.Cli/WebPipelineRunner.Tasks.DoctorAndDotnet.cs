@@ -235,6 +235,7 @@ internal static partial class WebPipelineRunner
             audit = WebSiteAuditor.Audit(new WebAuditOptions
             {
                 SiteRoot = effectiveSiteRoot!,
+                OwnedLinks = spec.OwnedLinks,
                 BaselineRoot = baseDir,
                 Include = CliPatternHelper.SplitPatterns(include),
                 Exclude = CliPatternHelper.SplitPatterns(exclude),

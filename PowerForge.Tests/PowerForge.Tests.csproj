@@ -52,6 +52,7 @@
     <None Update="Fixtures\PowerShellCompilationRegistryWorkflow\*.ps1" CopyToOutputDirectory="PreserveNewest" />
     <None Update="Fixtures\PowerShellCompilationInventoryWorkflow\*.ps1" CopyToOutputDirectory="PreserveNewest" />
     <None Update="Fixtures\PowerShellCompilationSavedStateWorkflow\*.ps1" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="Fixtures\OwnedDomainAudit\*" CopyToOutputDirectory="PreserveNewest" />
     <None Update="Fixtures\SocialCards\*" CopyToOutputDirectory="PreserveNewest" />
     <None Update="Fixtures\PowerShellCompilationReservationWorkflow\*.psm1" CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\Benchmarks\PowerShellCompilation\Corpus\ExternalWorkflows\**\*"

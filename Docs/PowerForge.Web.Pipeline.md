@@ -1023,6 +1023,12 @@ Build and publish steps always invoke MSBuild; its dependency
 graph determines which work can be skipped rather than the pipeline cache.
 
 #### audit
+
+Optional `config` reads the site's opt-in `OwnedLinks` policy without building.
+See [owned-domain link audit](PowerForge.Web.ContentSpec.md#owned-domain-link-audit)
+for sitemap resolution, HTTP fallback, severity, unknown results, and limits.
+Configured audits bypass pipeline result caching. `doctor` uses the same policy
+from its required site configuration.
 Runs static (and optional rendered) checks against generated HTML.
 ```json
 {

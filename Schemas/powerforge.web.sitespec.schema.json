@@ -37,6 +37,75 @@
         }
       }
     },
+    "OwnedLinks": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Enabled": {
+          "type": "boolean",
+          "default": false
+        },
+        "Domains": {
+          "type": "array",
+          "maxItems": 20,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "Domain"
+            ],
+            "properties": {
+              "Domain": {
+                "type": "string",
+                "minLength": 1
+              },
+              "SitemapUrl": {
+                "type": "string",
+                "format": "uri"
+              }
+            }
+          }
+        },
+        "Severity": {
+          "type": "string",
+          "enum": [
+            "warning",
+            "error"
+          ],
+          "default": "warning"
+        },
+        "TimeoutSeconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 120,
+          "default": 10
+        },
+        "MaxDurationSeconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 600,
+          "default": 60
+        },
+        "MaxSitemapBytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 52428800,
+          "default": 5242880
+        },
+        "MaxSitemaps": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100,
+          "default": 20
+        },
+        "MaxLinkChecks": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10000,
+          "default": 100
+        }
+      }
+    },
     "BaseUrl": { "type": "string" },
     "Extends": {
       "oneOf": [

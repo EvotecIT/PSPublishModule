@@ -23,6 +23,9 @@ internal static partial class WebPipelineRunner
         if (string.IsNullOrWhiteSpace(siteRoot))
             throw new InvalidOperationException("audit requires siteRoot.");
 
+        var siteConfig = ResolvePath(baseDir, GetString(step, "config"));
+        var ownedLinks = string.IsNullOrWhiteSpace(siteConfig) ? null :
+            WebSiteSpecLoader.LoadWithPath(siteConfig, WebCliJson.Options).Spec.OwnedLinks;
         var include = GetString(step, "include");
         var exclude = GetString(step, "exclude");
         var budgetExclude = GetString(step, "budgetExclude") ?? GetString(step, "budget-exclude");
@@ -202,6 +205,7 @@ internal static partial class WebPipelineRunner
         var audit = WebSiteAuditor.Audit(new WebAuditOptions
         {
             SiteRoot = siteRoot,
+            OwnedLinks = ownedLinks,
             BaselineRoot = baseDir,
             Include = CliPatternHelper.SplitPatterns(include),
             Exclude = CliPatternHelper.SplitPatterns(exclude),
