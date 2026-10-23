@@ -37,6 +37,12 @@ version-aware. Legacy PowerShellGet registration is left unknown because its
 repository getter can migrate settings and contact endpoints. It returns limited runtime metadata;
 unavailable evidence is not reported as an absence of saved credentials.
 
+Repository presence is unknown when the PSResourceGet registration store is
+missing or unreadable. Querying a missing store can initialize default
+repositories such as PSGallery, so inspection leaves it untouched. A repository
+is reported as unregistered only after the native backend successfully reads
+an existing store and the requested name is absent.
+
 Export the structured report without copying secret-bearing configuration files:
 
 ```powershell

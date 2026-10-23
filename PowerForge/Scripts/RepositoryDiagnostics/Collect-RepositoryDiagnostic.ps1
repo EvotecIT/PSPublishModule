@@ -75,9 +75,10 @@ function Write-PFRepositoryDiagnostic {
                     $runtime.CredentialReferenceConfigured = $null -ne $registration.PSObject.Properties['CredentialInfo'] -and $null -ne $registration.CredentialInfo
                 }
             } catch { $report.RepositoryFound = $null }
-        } elseif ($module -and $usesPSResourceGet -and $registrationStatus -eq 'Missing') {
-            $report.RepositoryFound = $false
         }
+        # A missing store is not a complete repository list: the backend can
+        # initialize defaults when queried. Leave registration unknown without
+        # calling that initializer or reproducing its default-repository rules.
         $target = if ($registeredUri) { $registeredUri } else { $ExpectedUri }
         # PSResourceGet passes this source to NuGet after its v2 publish rewrite.
         if ($usesPSResourceGet -and $target.EndsWith('/v2', [StringComparison]::OrdinalIgnoreCase)) { $target += '/package' }

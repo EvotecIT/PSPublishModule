@@ -97,8 +97,38 @@ public sealed class RepositoryDiagnosticProcessTests
             new RepositoryDiagnosticRequest { RepositoryName = "SyntheticDiagnostics", Tool = PublishTool.PowerShellGet });
         Assert.Equal("3.0.0", report.Runtime.ModuleVersion);
         Assert.Equal("Complete", report.Runtime.SettingsInspection);
+        Assert.Null(report.RepositoryFound);
+        Assert.DoesNotContain(report.Findings, finding => finding.Code == "PFREPO006");
         Assert.False(File.Exists(host.NuGetConfig));
         Assert.False(File.Exists(host.RepositoryStore));
+    }
+
+    [WindowsTheory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Missing_registration_store_does_not_claim_repository_absence(bool windowsPowerShell)
+    {
+        using var host = new IsolatedRepositoryHost(windowsPowerShell);
+        var service = new RepositoryDiagnosticService(host);
+        foreach (var name in new[] { "PSGallery", "SyntheticDiagnostics" })
+        {
+            var report = service.Inspect(new RepositoryDiagnosticRequest { RepositoryName = name });
+            Assert.True(report.Runtime.ModuleAvailable);
+            Assert.Null(report.RepositoryFound);
+            Assert.DoesNotContain(report.Findings, finding => finding.Code == "PFREPO006");
+            Assert.False(File.Exists(host.RepositoryStore));
+            Assert.False(File.Exists(host.NuGetConfig));
+        }
+
+        // Prove why absence cannot be inferred: the native getter materializes a default.
+        var native = host.RunScript("""
+            Import-Module Microsoft.PowerShell.PSResourceGet -ErrorAction Stop
+            if (@(Get-PSResourceRepository -ErrorAction Stop | Where-Object Name -eq PSGallery).Count -ne 1) {
+                throw 'Expected the native default repository'
+            }
+            """);
+        Assert.True(native.ExitCode == 0, native.StdErr);
+        Assert.True(File.Exists(host.RepositoryStore));
     }
 
     [WindowsTheory]

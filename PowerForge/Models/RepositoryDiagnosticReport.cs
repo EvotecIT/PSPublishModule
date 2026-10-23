@@ -21,7 +21,7 @@ public sealed class RepositoryDiagnosticReport
     public string? RegisteredUri { get; set; }
     /// <summary>Publish source passed to NuGet after native URL rewriting. A v3 index can resolve an upload endpoint later.</summary>
     public string? PublishSourceUri { get; set; }
-    /// <summary>Whether the selected backend has this repository registered; null means inspection failed.</summary>
+    /// <summary>Whether the selected backend has this repository registered; null means registration could not be determined without changing settings.</summary>
     public bool? RepositoryFound { get; set; }
     /// <summary>Package or module path associated with the operation.</summary>
     public string? PackagePath { get; set; }
