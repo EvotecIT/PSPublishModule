@@ -16,5 +16,7 @@ public sealed class RepositoryCredential
 
     /// <summary>Process environment variable read only when a repository operation needs credentials.</summary>
     public string? SecretEnvironmentVariable { get; set; }
+    /// <summary>Optional non-secret origin, such as an environment variable name or runtime provider.</summary>
+    public string? Source { get; set; }
 }
 

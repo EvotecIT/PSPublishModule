@@ -93,6 +93,7 @@ public sealed partial class ModulePublisher
         string? temporaryPackagePath = null;
         var repositoryCreated = false;
         var temporaryRepository = false;
+        RepositoryDiagnosticReport? diagnosticReport = null;
         var uploadRepositoryName = repositoryName;
         PublishRepositoryConfiguration? repositoryForPublish = repoConfig is null
             ? null
@@ -211,7 +212,7 @@ public sealed partial class ModulePublisher
                 }
             }
 
-            _repositoryPublisher.Publish(
+            var repositoryPublishResult = _repositoryPublisher.Publish(
                 new RepositoryPublishRequest
                 {
                     Path = modulePath,
@@ -219,6 +220,7 @@ public sealed partial class ModulePublisher
                     RepositoryName = uploadRepositoryName,
                     Tool = tool,
                     ApiKey = string.IsNullOrWhiteSpace(publish.ApiKey) ? null : publish.ApiKey,
+                    ApiKeySource = string.IsNullOrWhiteSpace(publish.ApiKeyFilePath) ? "Supplied configuration" : "Secret file: " + publish.ApiKeyFilePath,
                     Repository = repositoryForPublish,
                     DestinationPath = null,
                     SkipDependenciesCheck = tool != PublishTool.PowerShellGet,
@@ -226,6 +228,7 @@ public sealed partial class ModulePublisher
                     RemotePublishAttempted = remotePublishAttempted,
                     CancellationToken = cancellationToken
                 });
+            diagnosticReport = repositoryPublishResult.DiagnosticReport;
 
             _logger.Info($"Published {plan.ModuleName} {versionText} to repository '{repositoryName}' using {tool}.");
 
@@ -252,10 +255,10 @@ public sealed partial class ModulePublisher
                 CleanupTemporaryPublishPath(temporaryPackagePath);
         }
 
-        return CreateRepositoryPublishResult(repositoryName, versionText, tool);
+        return CreateRepositoryPublishResult(repositoryName, versionText, tool, diagnosticReport);
     }
 
-    private static ModulePublishResult CreateRepositoryPublishResult(string repositoryName, string versionText, PublishTool tool)
+    private static ModulePublishResult CreateRepositoryPublishResult(string repositoryName, string versionText, PublishTool tool, RepositoryDiagnosticReport? diagnosticReport = null)
     {
         return new ModulePublishResult(
             destination: PublishDestination.PowerShellGallery,
@@ -268,7 +271,7 @@ public sealed partial class ModulePublisher
             releaseUrl: null,
             succeeded: true,
             errorMessage: null,
-            tool: tool);
+            tool: tool) { DiagnosticReport = diagnosticReport };
     }
 
 }

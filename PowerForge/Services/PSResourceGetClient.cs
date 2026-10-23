@@ -88,6 +88,8 @@ public sealed class PSResourceFindOptions
 /// </summary>
 public sealed class PSResourcePublishOptions
 {
+    /// <summary>Optional non-secret origin of the explicit API key.</summary>
+    public string? ApiKeySource { get; set; }
     /// <summary>Path to a module folder (<c>-Path</c>) or a .nupkg file (<c>-NupkgPath</c>).</summary>
     public string Path { get; }
     /// <summary>When true, uses <c>-NupkgPath</c> instead of <c>-Path</c>.</summary>
@@ -373,6 +375,11 @@ public sealed partial class PSResourceGetClient
         PSResourcePublishOptions options,
         TimeSpan? timeout = null,
         CancellationToken cancellationToken = default)
+        => PublishWithDiagnostics(options, timeout, cancellationToken);
+
+    /// <summary>Runs the publish and returns metadata captured by the same child process.</summary>
+    internal RepositoryDiagnosticReport PublishWithDiagnostics(PSResourcePublishOptions options,
+        TimeSpan? timeout = null, CancellationToken cancellationToken = default)
     {
         if (options is null) throw new ArgumentNullException(nameof(options));
         if (string.IsNullOrWhiteSpace(options.Path)) throw new ArgumentException("Path is required.", nameof(options));
@@ -395,14 +402,18 @@ public sealed partial class PSResourceGetClient
         if (result.ExitCode != 0)
         {
             var message = TryExtractError(result.StdOut) ?? result.StdErr;
-            var full = $"Publish-PSResource failed (exit {result.ExitCode}). {message}".Trim();
+            var failure = RepositoryDiagnosticService.PublishFailure(PublishTool.PSResourceGet, result.ExitCode,
+                message, result.StdOut, options.Repository, options.Path, options.ApiKey, options.Credential, options.ApiKeySource);
+            var full = failure.Message;
             if (_logger.IsVerbose) _logger.Verbose(full);
-            if (_logger.IsVerbose && !string.IsNullOrWhiteSpace(result.StdOut)) _logger.Verbose(result.StdOut.Trim());
-            if (_logger.IsVerbose && !string.IsNullOrWhiteSpace(result.StdErr)) _logger.Verbose(result.StdErr.Trim());
             if (result.ExitCode == 3)
                 throw new PowerShellToolNotAvailableException("PSResourceGet", full);
-            throw new InvalidOperationException(full);
+            throw failure;
         }
+        var report = RepositoryDiagnosticService.PublishReport(PublishTool.PSResourceGet, result.StdOut,
+            options.Repository, options.Path, options.ApiKey, options.Credential, options.ApiKeySource);
+        RepositoryDiagnosticService.WriteSummary(report, _logger);
+        return report;
     }
 
     /// <summary>
@@ -611,7 +622,7 @@ public sealed partial class PSResourceGetClient
 
     private static string BuildPublishScript()
     {
-        return EmbeddedScripts.Load("Scripts/PSResourceGet/Publish-PSResource.ps1");
+        return RepositoryDiagnosticService.Compose(EmbeddedScripts.Load("Scripts/PSResourceGet/Publish-PSResource.ps1"));
     }
 
     private static string BuildInstallScript()

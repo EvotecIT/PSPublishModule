@@ -11,10 +11,12 @@
 )
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
+# POWERFORGE_REPOSITORY_DIAGNOSTICS
 
 try {
   Import-Module Microsoft.PowerShell.PSResourceGet -ErrorAction Stop | Out-Null
 } catch {
+  Write-PFRepositoryDiagnostic -Repository $Repository -Tool PSResourceGet
   $msg = 'Microsoft.PowerShell.PSResourceGet not available: ' + $_.Exception.Message
   $b64 = [System.Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($msg))
   Write-Output ('PFPSRG::ERROR::' + $b64)
@@ -34,6 +36,7 @@ if (-not [string]::IsNullOrWhiteSpace($CredentialUser) -and -not [string]::IsNul
 }
 
 try {
+  Write-PFRepositoryDiagnostic -Repository $Repository -Tool PSResourceGet
   Publish-PSResource @params | Out-Null
   Write-Output 'PFPSRG::PUBLISH::OK'
   exit 0

@@ -36,6 +36,13 @@ internal static class RepositoryCredentialResolver
             throw new InvalidOperationException("Repository credential source resolved to a multi-line secret. Repository credential secrets must be a single line.");
 
         // Return a fresh value; never persist a resolved secret into the build configuration.
-        return new RepositoryCredential { UserName = credential.UserName, Secret = secret };
+        return new RepositoryCredential
+        {
+            UserName = credential.UserName,
+            Secret = secret,
+            Source = credential.Source ?? (!string.IsNullOrWhiteSpace(credential.SecretFilePath)
+                ? "Secret file: " + credential.SecretFilePath
+                : "Environment variable: " + credential.SecretEnvironmentVariable)
+        };
     }
 }

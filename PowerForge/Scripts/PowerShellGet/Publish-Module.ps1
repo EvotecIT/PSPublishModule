@@ -7,6 +7,7 @@
 )
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
+# POWERFORGE_REPOSITORY_DIAGNOSTICS
 
 function Enc([string]$s) {
   return [System.Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes(([string]$s)))
@@ -15,6 +16,7 @@ function Enc([string]$s) {
 try {
   Import-Module PowerShellGet -ErrorAction Stop | Out-Null
 } catch {
+  Write-PFRepositoryDiagnostic -Repository $Repository -Tool PowerShellGet
   $msg = 'PowerShellGet not available: ' + $_.Exception.Message
   $b64 = Enc $msg
   Write-Output ('PFPWSGET::ERROR::' + $b64)
@@ -31,6 +33,7 @@ if (-not [string]::IsNullOrWhiteSpace($CredentialUser) -and -not [string]::IsNul
 }
 
 try {
+  Write-PFRepositoryDiagnostic -Repository $Repository -Tool PowerShellGet
   Publish-Module @params | Out-Null
   Write-Output 'PFPWSGET::PUBLISH::OK'
   exit 0

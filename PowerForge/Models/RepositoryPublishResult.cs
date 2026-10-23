@@ -5,6 +5,8 @@ namespace PowerForge;
 /// </summary>
 public sealed class RepositoryPublishResult
 {
+    /// <summary>Secret-free metadata captured by the native publisher, when available.</summary>
+    public RepositoryDiagnosticReport? DiagnosticReport { get; internal set; }
     /// <summary>Full path that was published.</summary>
     public string Path { get; }
 

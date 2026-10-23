@@ -228,7 +228,8 @@ internal sealed class PublishConfigurationFactory
                         UserName = request.RepositoryCredentialUserName!.Trim(),
                         Secret = repositorySecret,
                         SecretFilePath = secretFilePath,
-                        SecretEnvironmentVariable = secretFilePath is null ? secretEnvironmentVariable : null
+                        SecretEnvironmentVariable = secretFilePath is null ? secretEnvironmentVariable : null,
+                        Source = RepositorySecretSource(request)
                     }
                     : null);
 
@@ -254,7 +255,8 @@ internal sealed class PublishConfigurationFactory
                         UserName = request.RepositoryCredentialUserName,
                         Secret = repositorySecret,
                         SecretFilePath = secretFilePath,
-                        SecretEnvironmentVariable = secretFilePath is null ? secretEnvironmentVariable : null
+                        SecretEnvironmentVariable = secretFilePath is null ? secretEnvironmentVariable : null,
+                        Source = RepositorySecretSource(request)
                     }
                     : null,
                 CredentialProvider = runtimeCredentialProvider
@@ -293,6 +295,13 @@ internal sealed class PublishConfigurationFactory
             }
         };
     }
+
+    private static string RepositorySecretSource(PublishConfigurationRequest request)
+        => request.RepositoryCredentialSecretFilePathSpecified && !string.IsNullOrWhiteSpace(request.RepositoryCredentialSecretFilePath)
+            ? "Secret file: " + request.RepositoryCredentialSecretFilePath!.Trim()
+            : request.RepositoryCredentialSecretEnvironmentVariableSpecified && !string.IsNullOrWhiteSpace(request.RepositoryCredentialSecretEnvironmentVariable)
+                ? "Environment variable: " + request.RepositoryCredentialSecretEnvironmentVariable!.Trim()
+                : "Supplied parameter";
 
     private static bool IsManagedLocalRepositoryRequest(
         PublishConfigurationRequest request,

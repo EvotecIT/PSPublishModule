@@ -106,7 +106,8 @@ public sealed class ModulePublishConfigurationReader
                     UserName = repository.Credential.UserName,
                     Secret = repository.Credential.Secret,
                     SecretFilePath = repository.Credential.SecretFilePath,
-                    SecretEnvironmentVariable = repository.Credential.SecretEnvironmentVariable
+                    SecretEnvironmentVariable = repository.Credential.SecretEnvironmentVariable,
+                    Source = repository.Credential.Source
                 },
             CredentialProvider = repository.CredentialProvider is null
                 ? null

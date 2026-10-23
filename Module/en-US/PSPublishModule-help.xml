@@ -11789,6 +11789,142 @@ containing common fields such as module name, version, required modules, and the
   </command:command>
   <command:command xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10" xmlns:MSHelp="http://msdn.microsoft.com/mshelp" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10">
     <command:details>
+      <command:name>Get-ModuleRepositoryDiagnostic</command:name>
+      <command:verb>Get</command:verb>
+      <command:noun>ModuleRepositoryDiagnostic</command:noun>
+      <maml:description>
+        <maml:para>Inspects native repository registrations and authentication inputs without contacting the feed.</maml:para>
+      </maml:description>
+    </command:details>
+    <maml:description>
+      <maml:para>Reports contain presence and origin metadata. Secret values are never exported or decrypted.</maml:para>
+    </maml:description>
+    <command:syntax>
+      <command:syntaxItem parameterSetName="__AllParameterSets">
+        <maml:name>Get-ModuleRepositoryDiagnostic</maml:name>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="0" aliases="Name">
+          <maml:name>RepositoryName</maml:name>
+          <maml:description>
+            <maml:para>Name registered with the selected native backend.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>'PSGallery'</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>RepositoryUri</maml:name>
+          <maml:description>
+            <maml:para>Optional expected endpoint for comparison with the registered repository.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Tool</maml:name>
+          <maml:description>
+            <maml:para>Native backend to inspect. Inspection does not register repositories or acquire credentials.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">PublishTool</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">PSResourceGet</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">PowerShellGet</command:parameterValue>
+          </command:parameterValueGroup>
+          <dev:type>
+            <maml:name>PublishTool</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>[PowerForge.PublishTool]::PSResourceGet</dev:defaultValue>
+        </command:parameter>
+      </command:syntaxItem>
+    </command:syntax>
+    <command:parameters>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="0" aliases="Name">
+        <maml:name>RepositoryName</maml:name>
+        <maml:description>
+          <maml:para>Name registered with the selected native backend.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>'PSGallery'</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>RepositoryUri</maml:name>
+        <maml:description>
+          <maml:para>Optional expected endpoint for comparison with the registered repository.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>Tool</maml:name>
+        <maml:description>
+          <maml:para>Native backend to inspect. Inspection does not register repositories or acquire credentials.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">PublishTool</command:parameterValue>
+        <command:parameterValueGroup>
+          <command:parameterValue required="false" variableLength="false">PSResourceGet</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">PowerShellGet</command:parameterValue>
+        </command:parameterValueGroup>
+        <dev:type>
+          <maml:name>PublishTool</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>[PowerForge.PublishTool]::PSResourceGet</dev:defaultValue>
+      </command:parameter>
+    </command:parameters>
+    <command:inputTypes>
+      <command:inputType>
+        <dev:type>
+          <maml:name>None</maml:name>
+        </dev:type>
+      </command:inputType>
+    </command:inputTypes>
+    <command:returnValues>
+      <command:returnValue>
+        <dev:type>
+          <maml:name>PowerForge.RepositoryDiagnosticReport</maml:name>
+        </dev:type>
+      </command:returnValue>
+    </command:returnValues>
+    <maml:alertSet>
+      <maml:alert>
+        <maml:para></maml:para>
+      </maml:alert>
+    </maml:alertSet>
+    <command:examples>
+      <command:example>
+        <maml:title>Inspect a PSResourceGet repository</maml:title>
+        <dev:code>Get-ModuleRepositoryDiagnostic -RepositoryName CompanyFeed -Tool PSResourceGet</dev:code>
+        <dev:remarks>
+          <maml:para></maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>Export a secret-free report</maml:title>
+        <dev:code>Get-ModuleRepositoryDiagnostic -RepositoryName CompanyFeed | ConvertTo-Json -Depth 10 | Set-Content .\repository-diagnostics.json</dev:code>
+        <dev:remarks>
+          <maml:para></maml:para>
+        </dev:remarks>
+      </command:example>
+    </command:examples>
+    <command:relatedLinks />
+  </command:command>
+  <command:command xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10" xmlns:MSHelp="http://msdn.microsoft.com/mshelp" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10">
+    <command:details>
       <command:name>Get-ModuleTestFailures</command:name>
       <command:verb>Get</command:verb>
       <command:noun>ModuleTestFailures</command:noun>
@@ -34813,6 +34949,37 @@ ExternalModule dependencies.</maml:para>
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
+        <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>DeliveryMappings</maml:name>
+          <maml:description>
+            <maml:para>File or directory mappings from packaged delivery internals to paths relative to DeliveryPath.&#xD;
+A file destination includes its file name; a directory destination receives its contents recursively.&#xD;
+Mappings replace the default whole-tree copy. Omit or pass an empty array to copy all delivery files.&#xD;
+Sources and destinations are literal relative paths, not wildcards; dot selects the delivery root.&#xD;
+Accepts a Source/Destination hashtable array or a legacy source-to-destination hashtable.&#xD;
+The complete module payload and authored launcher contents remain unchanged.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">ArtefactCopyMapping[]</command:parameterValue>
+          <dev:type>
+            <maml:name>ArtefactCopyMapping[]</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>DeliveryPath</maml:name>
+          <maml:description>
+            <maml:para>Relative folder inside a Delivery artefact for launcher and configuration files.&#xD;
+Omit this parameter or use dot for the artefact root. Absolute and parent-traversal paths are rejected.&#xD;
+Module locations remain controlled by ModulesPath and RequiredModulesPath; launcher contents are not rewritten.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
           <maml:name>DoNotClear</maml:name>
           <maml:description>
@@ -34857,6 +35024,23 @@ ExternalModule dependencies.</maml:para>
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
           <dev:type>
             <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>Layout</maml:name>
+          <maml:description>
+            <maml:para>Package layout. Delivery copies the configured delivery internals to DeliveryPath (the root by default)&#xD;
+and defaults main and required modules to Modules. Supported by Packed and Unpacked.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">ArtefactLayout</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">Module</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Delivery</command:parameterValue>
+          </command:parameterValueGroup>
+          <dev:type>
+            <maml:name>ArtefactLayout</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -35151,6 +35335,37 @@ ExternalModule dependencies.</maml:para>
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
       </command:parameter>
+      <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>DeliveryMappings</maml:name>
+        <maml:description>
+          <maml:para>File or directory mappings from packaged delivery internals to paths relative to DeliveryPath.&#xD;
+A file destination includes its file name; a directory destination receives its contents recursively.&#xD;
+Mappings replace the default whole-tree copy. Omit or pass an empty array to copy all delivery files.&#xD;
+Sources and destinations are literal relative paths, not wildcards; dot selects the delivery root.&#xD;
+Accepts a Source/Destination hashtable array or a legacy source-to-destination hashtable.&#xD;
+The complete module payload and authored launcher contents remain unchanged.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">ArtefactCopyMapping[]</command:parameterValue>
+        <dev:type>
+          <maml:name>ArtefactCopyMapping[]</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>DeliveryPath</maml:name>
+        <maml:description>
+          <maml:para>Relative folder inside a Delivery artefact for launcher and configuration files.&#xD;
+Omit this parameter or use dot for the artefact root. Absolute and parent-traversal paths are rejected.&#xD;
+Module locations remain controlled by ModulesPath and RequiredModulesPath; launcher contents are not rewritten.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
       <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
         <maml:name>DoNotClear</maml:name>
         <maml:description>
@@ -35195,6 +35410,23 @@ ExternalModule dependencies.</maml:para>
         <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
         <dev:type>
           <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>Layout</maml:name>
+        <maml:description>
+          <maml:para>Package layout. Delivery copies the configured delivery internals to DeliveryPath (the root by default)&#xD;
+and defaults main and required modules to Modules. Supported by Packed and Unpacked.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">ArtefactLayout</command:parameterValue>
+        <command:parameterValueGroup>
+          <command:parameterValue required="false" variableLength="false">Module</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Delivery</command:parameterValue>
+        </command:parameterValueGroup>
+        <dev:type>
+          <maml:name>ArtefactLayout</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
@@ -35433,6 +35665,20 @@ PSResourceGet and falls back to PowerShellGet when necessary.</maml:para>
         <dev:code>New-ConfigurationArtefact -Type Packed -Enable -Path 'Artefacts\Packed' -ID 'Packed'</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>Create a runnable delivery ZIP with launcher files at its root</maml:title>
+        <dev:code>New-ConfigurationArtefact -Type Packed -Layout Delivery -Enable -Path 'Artefacts\Packed' -AddRequiredModules -IncludeTagName</dev:code>
+        <dev:remarks>
+          <maml:para>Requires enabled New-ConfigurationDelivery. Delivery files are copied to the bundle root; the complete module and remaining dependencies default to Modules.</maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>Select and rearrange packaged delivery files</maml:title>
+        <dev:code>New-ConfigurationArtefact -Type Packed -Layout Delivery -Enable -Path 'Artefacts/Packed' -DeliveryMappings @(@{ Source = 'Start.ps1'; Destination = 'bin/Run.ps1' }, @{ Source = 'Configuration'; Destination = 'etc' }) -AddRequiredModules</dev:code>
+        <dev:remarks>
+          <maml:para>Sources are relative to the packaged delivery InternalsPath. Destinations are relative to DeliveryPath, which defaults to the bundle root. Directory contents are copied recursively; unmapped files remain only in the complete module payload.</maml:para>
         </dev:remarks>
       </command:example>
       <command:example>

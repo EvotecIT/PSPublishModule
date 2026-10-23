@@ -148,7 +148,9 @@ if ($usingResult.Succeeded -or $usingResult.Error -notlike '*using module/assemb
                 host, root, new[] { "-NoProfile", "-NonInteractive", "-File", script,
                     "-CompilerAssembly", compiler, "-ExpectedCompilerMvid", typeof(PowerShellCompilationArtifactBuilder).Module.ModuleVersionId.ToString(),
                     "-Source", source, "-Output", Path.Combine(root, "out"), "-SdkPolicy", sdkPolicy },
-                TimeSpan.FromMinutes(6), new Dictionary<string, string?>
+                // Cold hosted Windows disks must hash the SDK and reference packs before compilation.
+                // Keep the full runtime assertions and phase diagnostics within a bounded child lifetime.
+                TimeSpan.FromMinutes(12), new Dictionary<string, string?>
                 {
                     ["TEMP"] = childTemp, ["TMP"] = childTemp,
                     ["NUGET_SCRATCH"] = Environment.GetEnvironmentVariable("NUGET_SCRATCH") ??

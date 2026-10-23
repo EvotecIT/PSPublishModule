@@ -50,6 +50,7 @@ public sealed class RepositoryCredentialResolverTests
             Assert.Equal("second-token", RepositoryCredentialResolver.Resolve(credential)!.Secret);
             Assert.Null(credential.Secret);
             Assert.Equal("publisher", RepositoryCredentialResolver.Resolve(credential)!.UserName);
+            Assert.Equal("Environment variable: " + name, RepositoryCredentialResolver.Resolve(credential)!.Source);
         }
         finally { Environment.SetEnvironmentVariable(name, null); }
     }
@@ -63,6 +64,7 @@ public sealed class RepositoryCredentialResolverTests
         {
             File.WriteAllText(path, " first-token \n");
             Assert.Equal("first-token", RepositoryCredentialResolver.Resolve(credential)!.Secret);
+            Assert.Equal("Secret file: " + path, RepositoryCredentialResolver.Resolve(credential)!.Source);
             foreach (var invalid in new[] { " ", "sensitive-marker\nsecond-line" })
             {
                 File.WriteAllText(path, invalid);

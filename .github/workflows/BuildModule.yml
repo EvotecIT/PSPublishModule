@@ -309,7 +309,7 @@ jobs:
 
       - name: Run net472 C# smoke tests
         shell: pwsh
-        timeout-minutes: 10
+        timeout-minutes: 15
         run: dotnet test .\PowerForge.Net472SmokeTests\PowerForge.Net472SmokeTests.csproj -c Release -f net472 --nologo
 
       - name: Test web protocol contracts on Framework and modern .NET
@@ -330,6 +330,18 @@ jobs:
           dotnet test .\PowerForge.Tests\PowerForge.Tests.csproj
           -c Release --nologo
           --filter 'FullyQualifiedName~BenchmarkServicesTests.History'
+
+      - name: Install native repository diagnostic test backend
+        shell: pwsh
+        run: Install-Module Microsoft.PowerShell.PSResourceGet -RequiredVersion 1.2.0 -Scope CurrentUser -Force -AllowClobber -ErrorAction Stop
+
+      - name: Test repository authentication diagnostics
+        shell: pwsh
+        timeout-minutes: 10
+        run: >
+          dotnet test .\PowerForge.Tests\PowerForge.Tests.csproj
+          -c Release --no-build --no-restore --nologo
+          --filter 'FullyQualifiedName~RepositoryDiagnostic|FullyQualifiedName~RepositoryCredentialResolverTests|FullyQualifiedName~PublishConfigurationFactoryTests|FullyQualifiedName~ModulePublishConfigurationReaderTests'
 
       - name: Test artefact safety and approved dependency pruning
         shell: pwsh
@@ -570,6 +582,14 @@ jobs:
           dotnet test ./PowerForge.Tests/PowerForge.Tests.csproj
           -c Release --no-build --no-restore --nologo
           --filter 'FullyQualifiedName~WebSocialCardLinuxTests'
+
+      - name: Test repository authentication diagnostic contracts
+        shell: pwsh
+        timeout-minutes: 10
+        run: >
+          dotnet test .\PowerForge.Tests\PowerForge.Tests.csproj
+          -c Release --no-build --no-restore --nologo
+          --filter 'FullyQualifiedName~RepositoryDiagnostic|FullyQualifiedName~RepositoryCredentialResolverTests|FullyQualifiedName~PublishConfigurationFactoryTests|FullyQualifiedName~ModulePublishConfigurationReaderTests'
 
       - name: Test delivery bundles and approved dependency pruning
         shell: pwsh
