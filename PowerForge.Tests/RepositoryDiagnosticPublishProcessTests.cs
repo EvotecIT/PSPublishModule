@@ -17,6 +17,7 @@ public sealed class RepositoryDiagnosticPublishProcessTests
         using var host = new RepositoryDiagnosticProcessTests.IsolatedRepositoryHost();
         var port = LoopbackHttpListener.GetCandidatePort();
         using var listener = LoopbackHttpListener.Start(ref port);
+        using var shutdown = new CancellationTokenSource();
         var root = $"http://127.0.0.1:{port}/";
         var index = root + (v2 ? "api/v2" : "v3/index.json");
         var publishSource = v2 ? index + "/package" : index;
@@ -26,12 +27,13 @@ public sealed class RepositoryDiagnosticPublishProcessTests
         var authentications = new ConcurrentQueue<string>();
         var server = Task.Run(async () =>
         {
-            while (listener.IsListening)
+            while (!shutdown.IsCancellationRequested)
             {
                 HttpListenerContext context;
-                try { context = await listener.GetContextAsync(); }
-                catch (HttpListenerException) when (!listener.IsListening) { break; }
-                catch (ObjectDisposedException) { break; }
+                try { context = await listener.GetContextAsync().WaitAsync(shutdown.Token); }
+                catch (OperationCanceledException) when (shutdown.IsCancellationRequested) { break; }
+                catch (HttpListenerException) when (shutdown.IsCancellationRequested) { break; }
+                catch (ObjectDisposedException) when (shutdown.IsCancellationRequested) { break; }
                 await context.Request.InputStream.CopyToAsync(Stream.Null);
                 var validCredential = context.Request.Headers["Authorization"] == basic;
                 var validKey = context.Request.Headers["X-NuGet-ApiKey"] == apiKey;
@@ -114,6 +116,7 @@ public sealed class RepositoryDiagnosticPublishProcessTests
         }
         finally
         {
+            shutdown.Cancel();
             listener.Stop();
             await server.WaitAsync(TimeSpan.FromSeconds(5));
         }

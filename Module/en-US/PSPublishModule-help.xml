@@ -11812,7 +11812,7 @@ containing common fields such as module name, version, required modules, and the
             <maml:name>String</maml:name>
             <maml:uri />
           </dev:type>
-          <dev:defaultValue>None</dev:defaultValue>
+          <dev:defaultValue>'PSGallery'</dev:defaultValue>
         </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
           <maml:name>RepositoryUri</maml:name>
@@ -11840,7 +11840,7 @@ containing common fields such as module name, version, required modules, and the
             <maml:name>PublishTool</maml:name>
             <maml:uri />
           </dev:type>
-          <dev:defaultValue>None</dev:defaultValue>
+          <dev:defaultValue>[PowerForge.PublishTool]::PSResourceGet</dev:defaultValue>
         </command:parameter>
       </command:syntaxItem>
     </command:syntax>
@@ -11855,7 +11855,7 @@ containing common fields such as module name, version, required modules, and the
           <maml:name>String</maml:name>
           <maml:uri />
         </dev:type>
-        <dev:defaultValue>None</dev:defaultValue>
+        <dev:defaultValue>'PSGallery'</dev:defaultValue>
       </command:parameter>
       <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
         <maml:name>RepositoryUri</maml:name>
@@ -11883,7 +11883,7 @@ containing common fields such as module name, version, required modules, and the
           <maml:name>PublishTool</maml:name>
           <maml:uri />
         </dev:type>
-        <dev:defaultValue>None</dev:defaultValue>
+        <dev:defaultValue>[PowerForge.PublishTool]::PSResourceGet</dev:defaultValue>
       </command:parameter>
     </command:parameters>
     <command:inputTypes>

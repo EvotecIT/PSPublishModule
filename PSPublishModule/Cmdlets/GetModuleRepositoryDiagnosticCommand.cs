@@ -24,11 +24,13 @@ public sealed class GetModuleRepositoryDiagnosticCommand : PSCmdlet
     [Parameter(Position = 0)]
     [Alias("Name")]
     [ValidateNotNullOrEmpty]
+    [PSDefaultValue(Value = "PSGallery")]
     public string RepositoryName { get; set; } = "PSGallery";
 
     /// <summary>Native backend to inspect. Inspection does not register repositories or acquire credentials.</summary>
     [Parameter]
     [ValidateSet("PSResourceGet", "PowerShellGet")]
+    [PSDefaultValue(Value = PublishTool.PSResourceGet)]
     public PublishTool Tool { get; set; } = PublishTool.PSResourceGet;
 
     /// <summary>Optional expected endpoint for comparison with the registered repository.</summary>

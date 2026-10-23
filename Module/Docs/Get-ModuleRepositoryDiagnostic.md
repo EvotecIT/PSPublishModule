@@ -44,7 +44,7 @@ Possible values:
 
 Required: False
 Position: 0
-Default value: None
+Default value: 'PSGallery'
 Accept pipeline input: False
 Accept wildcard characters: False
 ```
@@ -76,7 +76,7 @@ Possible values: PSResourceGet, PowerShellGet
 
 Required: False
 Position: named
-Default value: None
+Default value: [PowerForge.PublishTool]::PSResourceGet
 Accept pipeline input: False
 Accept wildcard characters: False
 ```
