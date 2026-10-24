@@ -122,16 +122,53 @@ public sealed class AppleStoreArtTests : IDisposable
         Assert.Empty(Directory.GetDirectories(root, "*.staging-*"));
     }
 
-    [Fact]
-    public async Task FontTokenCannotUseAnUnbundledSystemFont()
+    [Theory]
+    [InlineData("'Arial',sans-serif")]
+    [InlineData("var(--brand-font)")]
+    public async Task FontTokenCannotUseAnUnbundledSystemFont(string display)
     {
         WritePng("raw.png", 12, 16);
         var config = Path.Combine(root, "store-art.json");
-        File.WriteAllText(config, """{"theme":{"name":"casaray","tokens":{"--font-display":"'Arial',sans-serif"}},"devices":["iphone-69"],"frames":[{"id":"home","layout":"hero","capture":"raw.png","headlineKey":"title"}]}""");
+        File.WriteAllText(config, JsonSerializer.Serialize(new
+        {
+            theme = new { name = "casaray", tokens = new Dictionary<string, string>
+                { ["--font-display"] = display, ["--brand-font"] = "'Arial',sans-serif" } },
+            devices = new[] { "iphone-69" },
+            frames = new[] { new { id = "home", layout = "hero", capture = "raw.png", headlineKey = "title" } }
+        }));
         File.WriteAllText(Path.Combine(root, "store-captions.en-US.json"), """{"title":"Home"}""");
         var failure = await Assert.ThrowsAsync<InvalidOperationException>(() => new AppleStoreArtComposer()
             .ComposeAsync(config, Path.Combine(root, "output"), browserExecutablePath: Path.Combine(root, "no-browser")));
         Assert.Contains("Locale 'en-US', frame 'home': missing offline font 'Arial'", failure.Message);
+        Assert.False(Directory.Exists(Path.Combine(root, "output")));
+    }
+
+    [Theory]
+    [InlineData("var(--font-body)", "var(--font-body)")]
+    [InlineData("VAR(--font-body)", "var(--font-body)")]
+    [InlineData("var(--brand-font)", "var(--font-body)")]
+    [InlineData("var(--missing, var(--font-body))", "var(--font-body)")]
+    [InlineData("var(--font-body, var(--missing))", "var(--font-body)")]
+    [InlineData("var(--missing, 'Inter','Noto Sans CJK',sans-serif)", "var(--font-body)")]
+    [InlineData("var(--brand-font, var(--font-body))", "var(--optional-brand-font)")]
+    [InlineData("var(--brand-font, var(--font-body))", "initial")]
+    public async Task FontAliasesAndFallbacksReachGlyphValidation(string display, string brand)
+    {
+        WritePng("raw.png", 12, 16);
+        var config = Path.Combine(root, "store-art.json");
+        File.WriteAllText(config, JsonSerializer.Serialize(new
+        {
+            theme = new { name = "casaray", tokens = new Dictionary<string, string>
+            {
+                ["--font-display"] = display, ["--brand-font"] = brand, ["--font-eyebrow"] = "var(--font-display)"
+            } },
+            devices = new[] { "iphone-69" },
+            frames = new[] { new { id = "home", layout = "hero", capture = "raw.png", headlineKey = "title" } }
+        }));
+        File.WriteAllText(Path.Combine(root, "store-captions.en-US.json"), """{"title":"Home البيت"}""");
+        var failure = await Assert.ThrowsAsync<InvalidOperationException>(() => new AppleStoreArtComposer()
+            .ComposeAsync(config, Path.Combine(root, "output"), browserExecutablePath: Path.Combine(root, "no-browser")));
+        Assert.Contains("Locale 'en-US', frame 'home': missing offline font 'Noto Sans Arabic'", failure.Message);
         Assert.False(Directory.Exists(Path.Combine(root, "output")));
     }
 

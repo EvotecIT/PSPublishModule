@@ -18,11 +18,42 @@ public sealed partial class AppleStoreArtComposer
 
     private static Dictionary<string, string[]> CaptionFonts(string themeStyle)
     {
-        var result = new Dictionary<string, string[]>(StringComparer.Ordinal);
-        foreach (Match match in Regex.Matches(themeStyle, @"(--font-(?:display|body|eyebrow))\s*:\s*([^;}]+)"))
-            result[match.Groups[1].Value] = match.Groups[2].Value.Split(',')
-                .Select(name => name.Trim().Trim('\'', '"')).ToArray();
-        return result;
+        var tokens = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (Match match in Regex.Matches(themeStyle, @"(--[a-z][a-z0-9-]*)\s*:\s*([^;}]+)"))
+            tokens[match.Groups[1].Value] = match.Groups[2].Value;
+
+        string? Resolve(string value, HashSet<string> path)
+        {
+            if (value.Trim().ToLowerInvariant() is "initial" or "inherit" or "unset" or "revert" or "revert-layer") return null;
+            int start;
+            while ((start = value.IndexOf("var(", StringComparison.OrdinalIgnoreCase)) >= 0)
+            {
+                var depth = 1; var end = start + 4; var comma = -1;
+                for (; end < value.Length; end++)
+                {
+                    if (value[end] == '(') depth++;
+                    else if (value[end] == ')' && --depth == 0) break;
+                    else if (value[end] == ',' && depth == 1 && comma < 0) comma = end;
+                }
+                if (depth != 0) throw new ArgumentException("Unclosed var() in a store art font token.");
+                var name = value[(start + 4)..(comma < 0 ? end : comma)].Trim();
+                string? replacement = null;
+                if (tokens.TryGetValue(name, out var referenced))
+                {
+                    if (!path.Add(name)) throw new ArgumentException($"Cyclic store art font token '{name}'.");
+                    replacement = Resolve(referenced, path); path.Remove(name);
+                }
+                if (replacement is null && comma >= 0) replacement = Resolve(value[(comma + 1)..end], path);
+                if (replacement is null) return null;
+                value = value[..start] + replacement + value[(end + 1)..];
+            }
+            return value;
+        }
+
+        return new[] { "--font-display", "--font-body", "--font-eyebrow" }.ToDictionary(name => name,
+            name => (Resolve(tokens[name], new HashSet<string>(StringComparer.Ordinal) { name }) ??
+                throw new ArgumentException($"Missing or invalid store art font token '{name}' without a usable fallback.")).Split(',')
+                .Select(family => family.Trim().Trim('\'', '"')).ToArray(), StringComparer.Ordinal);
     }
 
     private static void ValidateCaptionFont(string text, string[] families, string locale, string frame)
