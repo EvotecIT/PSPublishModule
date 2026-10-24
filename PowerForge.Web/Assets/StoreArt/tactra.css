@@ -1,0 +1,6 @@
+/* Tactra: hi-fi black, amber light, a machined knob. */
+:root{--font-display:'Inter','Noto Sans CJK',sans-serif;--font-body:'Inter','Noto Sans CJK',sans-serif;--font-eyebrow:'JetBrains Mono','Noto Sans CJK',monospace;--eyebrow-track:.18em;
+--bg:#0c0d10;--ink:#eceef1;--muted:#a3a8b3;--accent:#ff9a1f;
+--glow:radial-gradient(70% 40% at 50% 72%,rgba(255,154,31,.20),transparent 70%),repeating-radial-gradient(circle at 50% 78%,rgba(255,255,255,.035) 0 2px,transparent 2px 120px);
+--shell:#121317;--shell-hi:#45484f;--shell-edge:rgba(255,255,255,.16);--device-shadow:0 60px 160px rgba(0,0,0,.6),0 0 140px rgba(255,154,31,.10);
+--lens-ring:rgba(255,154,31,.7);--lens-shadow:0 40px 120px rgba(0,0,0,.6)}

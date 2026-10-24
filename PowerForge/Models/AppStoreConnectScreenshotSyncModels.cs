@@ -162,6 +162,10 @@ public sealed class AppStoreConnectScreenshotApprovalEntry
     /// <summary>PNG height.</summary>
     public int Height { get; set; }
 
+    /// <summary>Optional v3 composition lineage; exact output bytes remain bound by Sha256.</summary>
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public AppleStoreArtLineage? Composition { get; set; }
+
     /// <summary>Optional perceptual hash emitted by the capture pipeline for visual-diff tooling.</summary>
     public string? PerceptualHash { get; set; }
 }

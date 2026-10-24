@@ -1,0 +1,53 @@
+/* Store art base. Units scale from the canvas width so one template serves every size. */
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:var(--W);height:var(--H);overflow:hidden}
+body{font-family:var(--font-display);color:var(--ink);background:var(--bg);-webkit-font-smoothing:antialiased;position:relative}
+body::before{content:"";position:absolute;inset:0;background:var(--glow);pointer-events:none}
+body::after{content:"";position:absolute;inset:0;background:var(--grain, none);opacity:.5;pointer-events:none}
+.stage{position:relative;width:100%;height:100%;display:flex;flex-direction:column;align-items:center}
+header{position:relative;z-index:3;width:100%;padding:calc(170px*var(--u)) calc(96px*var(--u)) 0;text-align:var(--align,center)}
+.eyebrow{font-family:var(--font-eyebrow);font-size:calc(36px*var(--u));font-weight:600;letter-spacing:var(--eyebrow-track,.14em);text-transform:uppercase;color:var(--accent);margin-bottom:calc(30px*var(--u))}
+h1{font-size:calc(var(--h1,112px)*var(--u));line-height:1.02;font-weight:var(--h1w,760);letter-spacing:-.035em;text-wrap:balance}
+h1 em{font-style:normal;color:var(--accent)}
+.sub{margin:calc(30px*var(--u)) auto 0;max-width:calc(1000px*var(--u));font-family:var(--font-body);font-size:calc(46px*var(--u));line-height:1.3;color:var(--muted);font-weight:450;text-wrap:balance}
+.dev-wrap{position:absolute;left:0;right:0;bottom:0;display:flex;justify-content:center;align-items:flex-end;z-index:2}
+
+/* Phone: drawn shell, real capture inside. */
+.phone{--b:calc(var(--w)*0.034);width:var(--w);aspect-ratio:1320/2868;padding:var(--b);border-radius:calc(var(--w)*0.155);
+  background:linear-gradient(145deg,var(--shell-hi),var(--shell) 30%,var(--shell) 70%,var(--shell-hi));
+  box-shadow:0 0 0 calc(var(--w)*0.004) var(--shell-edge),var(--device-shadow);position:relative}
+.phone-screen{position:relative;width:100%;height:100%;border-radius:calc(var(--w)*0.124);overflow:hidden;background:#000}
+.phone-screen img{display:block;width:100%;height:100%;object-fit:cover}
+.island{position:absolute;top:calc(var(--w)*0.032);left:50%;transform:translateX(-50%);width:calc(var(--w)*0.30);height:calc(var(--w)*0.088);border-radius:999px;background:#000}
+.hero .dev-wrap{transform:translateY(calc(var(--W)*0.20))}
+.focus .dev-wrap{transform:translateY(calc(var(--W)*0.18))}
+.dim .phone-screen img{filter:brightness(.62) saturate(.8)}
+.lens{position:absolute;left:var(--lx);top:var(--ly);width:var(--lw);height:var(--lh);border-radius:calc(48px*var(--u));overflow:hidden;
+  box-shadow:0 0 0 calc(5px*var(--u)) var(--lens-ring),var(--lens-shadow);background:#000;z-index:4}
+.lens img{position:absolute;max-width:none}
+
+/* Watch */
+.watch{width:var(--w);aspect-ratio:416/496;padding:calc(var(--w)*0.075);border-radius:calc(var(--w)*0.30);background:linear-gradient(150deg,var(--shell-hi),var(--shell) 45%);box-shadow:0 0 0 calc(var(--w)*0.006) var(--shell-edge),var(--device-shadow);position:relative}
+.watch-screen{width:100%;height:100%;border-radius:calc(var(--w)*0.22);overflow:hidden;background:#000}
+.watch-screen img{width:100%;height:100%;object-fit:cover;display:block}
+.crown{position:absolute;right:calc(var(--w)*-0.035);top:28%;width:calc(var(--w)*0.06);height:calc(var(--w)*0.17);border-radius:calc(var(--w)*0.02);background:var(--shell-hi)}
+.pair .dev-wrap{transform:translateY(calc(var(--W)*0.24))}
+.pair .back{transform:translateX(calc(var(--W)*-0.17))}
+.pair .front{position:absolute;right:calc(var(--W)*0.035);bottom:calc(var(--W)*0.42)}
+
+/* iPad */
+.tablet{width:var(--w);aspect-ratio:2064/2752;padding:calc(var(--w)*0.022);border-radius:calc(var(--w)*0.055);background:linear-gradient(145deg,var(--shell-hi),var(--shell) 35%);box-shadow:0 0 0 calc(var(--w)*0.003) var(--shell-edge),var(--device-shadow)}
+.tablet-screen{width:100%;height:100%;border-radius:calc(var(--w)*0.036);overflow:hidden;background:#000}
+.tablet-screen img{width:100%;height:100%;object-fit:cover;display:block}
+.ipad .dev-wrap{transform:translateY(calc(var(--W)*0.20))}
+
+/* Mac window: macOS captures already include the window chrome. */
+.mac img{width:var(--w);display:block;border-radius:calc(var(--w)*0.012);box-shadow:var(--device-shadow)}
+.macl .dev-wrap{transform:translateY(calc(var(--W)*0.03))}
+.mac-size header{padding-top:calc(110px*var(--u))}
+
+/* Production layouts use the same staging grammar. Captures remain image elements. */
+.statement .dev-wrap{transform:translateY(calc(var(--W)*.20))}
+.surfaces .dev-wrap{bottom:calc(150px*var(--u));gap:calc(50px*var(--u));flex-direction:column;align-items:center}
+.surface img{display:block;max-width:calc(1120px*var(--u));max-height:calc(660px*var(--u));box-shadow:var(--device-shadow);border-radius:calc(40px*var(--u))}
+*{animation:none!important;transition:none!important;caret-color:transparent!important}

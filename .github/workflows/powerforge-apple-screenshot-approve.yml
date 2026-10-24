@@ -98,6 +98,7 @@ jobs:
       actions: read
     outputs:
       source_ref: ${{ steps.resolve.outputs.source_ref }}
+      capture_workflow_ref: ${{ steps.resolve.outputs.capture_workflow_ref }}
     steps:
       - name: Resolve exact source from reviewed capture
         id: resolve
@@ -186,6 +187,7 @@ jobs:
             exit 1
           }
           expected_workflow_ref="${GITHUB_REPOSITORY}/${CAPTURE_WORKFLOW_PATH}@refs/heads/${default_branch}"
+          echo "capture_workflow_ref=$expected_workflow_ref" >> "$GITHUB_OUTPUT"
           jq -e \
             --arg repository "$GITHUB_REPOSITORY" \
             --arg run_id "$CAPTURE_RUN_ID" \
@@ -195,7 +197,7 @@ jobs:
             --arg device "$EXPECTED_DEVICE" \
             --arg theme "$EXPECTED_THEME" \
             --arg scenario "$EXPECTED_SCENARIO" \
-            '.schemaVersion == 2 and .repository == $repository and (.captureRunId | tostring) == $run_id and .sourceCommit == $source and .marketingVersion == $marketing_version and .workflowRef == $workflow_ref and .device == $device and .theme == $theme and .scenario == $scenario and (.xcodeVersion | length) > 0 and (.runtime | length) > 0' \
+            '(.schemaVersion == 2 or .schemaVersion == 3) and .repository == $repository and (.captureRunId | tostring) == $run_id and .sourceCommit == $source and .marketingVersion == $marketing_version and .workflowRef == $workflow_ref and .device == $device and .theme == $theme and .scenario == $scenario and (.xcodeVersion | length) > 0 and (.runtime | length) > 0' \
             "$provenance_path" >/dev/null || {
               echo 'Capture provenance does not match the successful dedicated workflow run, source commit, version, and capture matrix.' >&2
               exit 1
@@ -374,7 +376,7 @@ jobs:
           $trackedInputValidator = '${{ github.workspace }}/powerforge-shared/.github/actions/apple-release/Assert-TrackedAppleReleaseInputs.ps1'
           & $trackedInputValidator -ConfigPath $releaseConfigPath -SourceCommit $env:SOURCE_REF -SkipToolManifest
           $captureProvenance = Get-Content -LiteralPath '${{ runner.temp }}/powerforge-apple-screenshot-provenance/powerforge-apple-screenshot-provenance.json' -Raw | ConvertFrom-Json -Depth 10
-          if ($captureProvenance.schemaVersion -ne 2 -or
+          if ($captureProvenance.schemaVersion -notin @(2, 3) -or
               ([string] $captureProvenance.captureRunId) -ne $env:CAPTURE_RUN_ID -or
               -not ([string] $captureProvenance.sourceCommit).Equals($env:SOURCE_REF, [StringComparison]::OrdinalIgnoreCase) -or
               ([string] $captureProvenance.marketingVersion) -ne $env:MARKETING_VERSION) {
@@ -404,6 +406,9 @@ jobs:
             $manifestArguments = @(
               'apple-screenshots', 'manifest',
               '--config', $configPath,
+              '--capture-provenance', '${{ runner.temp }}/powerforge-apple-screenshot-provenance/powerforge-apple-screenshot-provenance.json',
+              '--expected-repository', '${{ github.repository }}',
+              '--expected-workflow-ref', '${{ needs.resolve-source.outputs.capture_workflow_ref }}',
               '--release-config', $releaseConfigPath,
               '--version', $env:MARKETING_VERSION,
               '--source-commit', $env:SOURCE_REF,

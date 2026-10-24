@@ -1,0 +1,103 @@
+{
+  "$schema": "../../Schemas/powerforge.apple.storeart.schema.json",
+  "schemaVersion": 1,
+  "theme": {
+    "name": "casaray",
+    "tokens": {
+      "--accent": "#8cb4ff"
+    }
+  },
+  "captureRoot": "../../build/appstore-screenshots",
+  "captionsPath": ".",
+  "locales": [
+    "en-US"
+  ],
+  "devices": [
+    "iphone-69",
+    "iphone-63",
+    "duo-outer",
+    "duo-inner",
+    "ipad-13",
+    "mac",
+    "watch"
+  ],
+  "captures": {
+    "home@en-US": {
+      "file": "raw/en-US/iphone-home.png",
+      "scenario": "store-home",
+      "locale": "en-US"
+    },
+    "wrist": {
+      "file": "raw/{locale}/watch-home.png",
+      "scenario": "store-home"
+    }
+  },
+  "frames": [
+    {
+      "id": "home",
+      "layout": "hero",
+      "capture": "home",
+      "headlineKey": "home.headline",
+      "eyebrowKey": "home.eyebrow",
+      "deviceWidth": 1080,
+      "island": false
+    },
+    {
+      "id": "energy",
+      "layout": "focus",
+      "capture": "raw/{locale}/iphone-energy.png",
+      "headlineKey": "energy.headline",
+      "lens": {
+        "rect": [
+          60,
+          560,
+          1200,
+          620
+        ],
+        "scale": 1.15
+      },
+      "deviceWidth": 1000,
+      "island": false
+    },
+    {
+      "id": "pair",
+      "layout": "pair",
+      "capture": "home",
+      "watch": "wrist",
+      "headlineKey": "pair.headline",
+      "island": false
+    },
+    {
+      "id": "surfaces",
+      "layout": "surfaces",
+      "capture": "raw/{locale}/widget.png",
+      "surfaces": [
+        "raw/{locale}/live-activity.png"
+      ],
+      "headlineKey": "surfaces.headline"
+    },
+    {
+      "id": "free",
+      "layout": "statement",
+      "capture": "raw/{locale}/settings.png",
+      "headlineKey": "free.headline"
+    },
+    {
+      "id": "tablet",
+      "layout": "ipad",
+      "capture": "raw/{locale}/ipad-home.png",
+      "headlineKey": "tablet.headline"
+    },
+    {
+      "id": "desktop",
+      "layout": "mac",
+      "capture": "raw/{locale}/mac-home.png",
+      "headlineKey": "desktop.headline"
+    },
+    {
+      "id": "wrist",
+      "layout": "watch",
+      "capture": "wrist"
+    }
+  ]
+}
