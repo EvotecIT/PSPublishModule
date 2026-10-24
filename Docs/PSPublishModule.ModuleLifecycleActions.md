@@ -54,6 +54,7 @@ Invoke-ModuleBuild -ModuleName 'MyModule' -Path . -Settings {
 ```
 
 Relative `-FilePath` and `-WorkingDirectory` values resolve from the module project root.
+Both accept backslashes or forward slashes on Windows, macOS and Linux, so `'.\Build'` and `'./Build'` select the same directory.
 
 ## Context Contract
 
