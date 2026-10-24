@@ -374,6 +374,7 @@ jobs:
           MARKETING_VERSION: ${{ inputs.marketing_version }}
           SOURCE_REF: ${{ inputs.source_ref }}
           APPROVAL_ENVIRONMENT: ${{ inputs.approval_environment }}
+          CAPTURE_WORKFLOW_REF: ${{ github.workflow_ref }}
           TARGET_INPUT: ${{ inputs.target }}
         run: |
           $configs = @($env:SCREENSHOT_CONFIGS_JSON | ConvertFrom-Json -Depth 10)
@@ -415,7 +416,7 @@ jobs:
               '--config', $configPath,
               '--capture-provenance', '${{ runner.temp }}/powerforge-apple-screenshot-provenance/powerforge-apple-screenshot-provenance.json',
               '--expected-repository', '${{ github.repository }}',
-              '--expected-workflow-ref', '${{ github.workflow_ref }}',
+              '--expected-workflow-ref', $env:CAPTURE_WORKFLOW_REF,
               '--release-config', $releaseConfigPath,
               '--version', $env:MARKETING_VERSION,
               '--source-commit', $env:SOURCE_REF,

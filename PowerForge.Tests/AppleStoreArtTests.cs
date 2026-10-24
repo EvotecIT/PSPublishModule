@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using System.Diagnostics;
 using System.Text.Json;
 using ImageMagick;
 using PowerForge.Web;
@@ -39,10 +40,13 @@ public sealed class AppleStoreArtTests : IDisposable
         }
     }
 
-    [Fact]
-    public void PerceptualHashIsStableAndDistinguishesMirroredGradients()
+    [Theory]
+    [InlineData("white")]
+    [InlineData("lime")]
+    [InlineData("blue")]
+    public void PerceptualHashIsStableAndDistinguishesMirroredGradients(string color)
     {
-        using var gradient = new MagickImage("gradient:black-white", 90, 80);
+        using var gradient = new MagickImage("gradient:black-" + color, 90, 80);
         gradient.Rotate(90); gradient.Write(Path.Combine(root, "first.png"), MagickFormat.Png24);
         gradient.Flop(); gradient.Write(Path.Combine(root, "second.png"), MagickFormat.Png24);
         var first = AppleStoreArtComposer.PerceptualHash(Path.Combine(root, "first.png"));
@@ -85,6 +89,87 @@ public sealed class AppleStoreArtTests : IDisposable
         Assert.Equal("passthrough", result.Renderer);
         Assert.True(File.Exists(Path.Combine(output, "_review", "en-US-watch.png")));
         AppleStoreArtLineageValidator.Validate([result], [Input("watch.png", 416, 496)], root);
+    }
+
+    [Theory]
+    [InlineData("ar", "headlineKey", "المنزل", "Noto Sans Arabic")]
+    [InlineData("he", "eyebrowKey", "בית", "Noto Sans Hebrew")]
+    [InlineData("hi", "sublineKey", "घर", "Noto Sans Devanagari")]
+    [InlineData("th", "headlineKey", "บ้าน", "Noto Sans Thai")]
+    [InlineData("en-US", "headlineKey", "Home البيت", "Noto Sans Arabic")]
+    [InlineData("en-US", "sublineKey", "Zażółć gęślą jaźń. Français Ελληνικά Русский 日本語 한국어 繁體中文 😀", "U+1F600")]
+    public async Task UnsupportedCaptionGlyphFailsBeforeBrowserAndPublishesNothing(string locale, string field, string text, string missing)
+    {
+        WritePng("raw.png", 12, 16);
+        var config = Path.Combine(root, "store-art.json");
+        File.WriteAllText(config, JsonSerializer.Serialize(new
+        {
+            locales = new[] { locale }, devices = new[] { "iphone-69" },
+            frames = new[] { new Dictionary<string, string>
+            {
+                ["id"] = "home", ["layout"] = "hero", ["capture"] = "raw.png", ["headlineKey"] = "title", [field] = "unsupported"
+            } }
+        }));
+        File.WriteAllText(Path.Combine(root, $"store-captions.{locale}.json"),
+            JsonSerializer.Serialize(new { title = "Home", unsupported = text }));
+        var failure = await Assert.ThrowsAsync<InvalidOperationException>(() => new AppleStoreArtComposer()
+            .ComposeAsync(config, Path.Combine(root, "output"), browserExecutablePath: Path.Combine(root, "no-browser")));
+        Assert.Contains($"locale '{locale}'", failure.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("frame 'home'", failure.Message);
+        Assert.Contains("missing offline font", failure.Message);
+        Assert.Contains(missing, failure.Message);
+        Assert.False(Directory.Exists(Path.Combine(root, "output")));
+        Assert.Empty(Directory.GetDirectories(root, "*.staging-*"));
+    }
+
+    [Fact]
+    public async Task FontTokenCannotUseAnUnbundledSystemFont()
+    {
+        WritePng("raw.png", 12, 16);
+        var config = Path.Combine(root, "store-art.json");
+        File.WriteAllText(config, """{"theme":{"name":"casaray","tokens":{"--font-display":"'Arial',sans-serif"}},"devices":["iphone-69"],"frames":[{"id":"home","layout":"hero","capture":"raw.png","headlineKey":"title"}]}""");
+        File.WriteAllText(Path.Combine(root, "store-captions.en-US.json"), """{"title":"Home"}""");
+        var failure = await Assert.ThrowsAsync<InvalidOperationException>(() => new AppleStoreArtComposer()
+            .ComposeAsync(config, Path.Combine(root, "output"), browserExecutablePath: Path.Combine(root, "no-browser")));
+        Assert.Contains("Locale 'en-US', frame 'home': missing offline font 'Arial'", failure.Message);
+        Assert.False(Directory.Exists(Path.Combine(root, "output")));
+    }
+
+    [Fact]
+    public async Task ComposeCliJsonUsesTheSameCamelCaseLineageContractAsTheArtifact()
+    {
+        WritePng("watch.png", 416, 496);
+        var config = Path.Combine(root, "store-art.json");
+        File.WriteAllText(config, """{"devices":["watch"],"frames":[{"id":"home","layout":"watch","capture":"watch.png"}]}""");
+        File.WriteAllText(Path.Combine(root, "store-captions.en-US.json"), "{}");
+        var output = Path.Combine(root, "output");
+        var start = new ProcessStartInfo("dotnet")
+        {
+            RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false, WorkingDirectory = root
+        };
+        foreach (var argument in new[] { typeof(PowerForge.Web.Cli.WebPipelineRunner).Assembly.Location,
+            "apple-store-art", "compose", "--config", config, "--out", output, "--output", "json" })
+            start.ArgumentList.Add(argument);
+        using var process = Process.Start(start)!;
+        try
+        {
+            var stdout = process.StandardOutput.ReadToEndAsync();
+            var stderr = process.StandardError.ReadToEndAsync();
+            await process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(60));
+            var text = await stdout;
+            Assert.True(process.ExitCode == 0, (await stderr) + text);
+            using var json = JsonDocument.Parse(text);
+            var frame = Assert.Single(json.RootElement.GetProperty("result").GetProperty("frames").EnumerateArray());
+            using var artifact = JsonDocument.Parse(File.ReadAllText(Path.Combine(output, "store-art.lineage.json")));
+            var expected = artifact.RootElement[0];
+            foreach (var name in new[] { "path", "sha256", "perceptualHash", "locale" })
+                Assert.Equal(expected.GetProperty(name).GetString(), frame.GetProperty(name).GetString());
+            Assert.False(frame.TryGetProperty("Path", out _));
+        }
+        finally
+        {
+            if (!process.HasExited) { process.Kill(entireProcessTree: true); await process.WaitForExitAsync(); }
+        }
     }
 
     [Fact]

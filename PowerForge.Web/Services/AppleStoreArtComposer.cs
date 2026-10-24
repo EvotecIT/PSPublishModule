@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Text;
 using System.Text.Json;
 using HtmlTinkerX;
 using ImageMagick;
@@ -40,6 +41,7 @@ public sealed partial class AppleStoreArtComposer
             throw new IOException("Store art output must be a fresh, empty directory distinct from CaptureRoot.");
         ValidateSpec(spec);
         var themeStyle = Asset("theme-base.css") + ThemeCss(spec.Theme);
+        var captionFonts = CaptionFonts(themeStyle);
         var templateHash = TemplateHash();
         var staging = Inside(captureRoot, output + ".staging-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(staging);
@@ -52,8 +54,10 @@ public sealed partial class AppleStoreArtComposer
                 Unlinked(captionPath);
                 var captionBytes = File.ReadAllBytes(captionPath);
                 var captions = JsonSerializer.Deserialize<Dictionary<string, string>>(captionBytes, Json) ?? throw new ArgumentException($"Empty captions: {locale}");
-                var includeCjk = captions.Values.Any(text => text.Any(c => c >= '\u2e80' || c is >= '\u1100' and <= '\u11ff')) ||
-                    spec.Theme.Tokens.Values.Any(value => value.Contains("Noto", StringComparison.Ordinal));
+                var includeCjk = captions.Values.Any(text => text.EnumerateRunes().Any(rune =>
+                    FontGlyphs.Value["Noto Sans CJK"].Contains(rune.Value) && FontGlyphs.Value
+                        .Where(font => font.Key != "Noto Sans CJK").Any(font => !font.Value.Contains(rune.Value)))) ||
+                    spec.Theme.Tokens.Values.Any(value => value.Contains("Noto", StringComparison.OrdinalIgnoreCase));
                 var style = FontCss(includeCjk) + themeStyle;
                 foreach (var device in spec.Devices)
                 {
@@ -86,7 +90,7 @@ public sealed partial class AppleStoreArtComposer
                             }
                             else
                             {
-                                var html = BuildHtml(frame, locale, device, size, captions, style, primary, watch, surfaces);
+                                var html = BuildHtml(frame, locale, device, size, captions, captionFonts, style, primary, watch, surfaces);
                                 renderHash = Hash(html);
                                 var htmlFile = Path.Combine(staging, "frame.html"); File.WriteAllText(htmlFile, html);
                                 try

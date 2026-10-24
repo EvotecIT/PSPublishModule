@@ -204,7 +204,7 @@
                   "minimum": 1
                 },
                 "scenario": {
-                  "type": "string"
+                  "type": ["string", "null"]
                 }
               },
               "additionalProperties": true

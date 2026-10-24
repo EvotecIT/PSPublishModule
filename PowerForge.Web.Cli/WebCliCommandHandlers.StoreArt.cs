@@ -1,4 +1,3 @@
-using System.Text.Json;
 using PowerForge.Web;
 using static PowerForge.Web.Cli.WebCliHelpers;
 
@@ -19,7 +18,8 @@ internal static partial class WebCliCommandHandlers
         var result = new AppleStoreArtComposer().ComposeAsync(config, output, TryGetOptionValue(args, "--browser-executable")).GetAwaiter().GetResult();
         if (outputJson)
             WebCliJsonWriter.Write(new WebCliJsonEnvelope { SchemaVersion = schemaVersion, Command = "apple-store-art.compose",
-                Success = true, ExitCode = 0, Result = JsonSerializer.SerializeToElement(new { outputPath = Path.GetFullPath(output), frames = result }) });
+                Success = true, ExitCode = 0, Result = WebCliJson.SerializeToElement(
+                    new WebStoreArtComposeResult(Path.GetFullPath(output), result), WebCliJson.Context.WebStoreArtComposeResult) });
         else logger.Success($"Composed {result.Length} store frame(s): {Path.GetFullPath(output)}");
         return 0;
     }

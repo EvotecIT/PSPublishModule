@@ -268,8 +268,6 @@ public sealed partial class AppleReleaseWorkflowTests
         Assert.Contains("expected-plan-sha256: ${{ steps.plan.outputs.plan-sha256 }}", advance, StringComparison.Ordinal);
         Assert.Contains("Apple state or release inputs changed after review", approval, StringComparison.Ordinal);
         Assert.Contains("allowed_dispatchers_json", approval, StringComparison.Ordinal);
-        Assert.Contains("'--capture-provenance'", approval, StringComparison.Ordinal);
-        Assert.Contains("capture_workflow_ref: ${{ steps.resolve.outputs.capture_workflow_ref }}", approval, StringComparison.Ordinal);
         Assert.Contains("authorized Apple release dispatcher", approval, StringComparison.Ordinal);
         Assert.Contains("DISPATCHER: ${{ github.triggering_actor }}", approval, StringComparison.Ordinal);
         Assert.Contains("ORIGINAL_DISPATCHER: ${{ github.actor }}", approval, StringComparison.Ordinal);
@@ -525,7 +523,8 @@ public sealed partial class AppleReleaseWorkflowTests
         Assert.Contains("schemaVersion = 2", workflow, StringComparison.Ordinal);
         Assert.Contains("screenshots = $screenshots", workflow, StringComparison.Ordinal);
         Assert.Contains("'--capture-provenance'", workflow, StringComparison.Ordinal);
-        Assert.Contains("'--expected-workflow-ref', '${{ github.workflow_ref }}'", workflow, StringComparison.Ordinal);
+        Assert.Contains("CAPTURE_WORKFLOW_REF: ${{ github.workflow_ref }}", workflow, StringComparison.Ordinal);
+        Assert.Contains("'--expected-workflow-ref', $env:CAPTURE_WORKFLOW_REF", workflow, StringComparison.Ordinal);
         Assert.Contains("xcodeVersion = $xcodeVersion", workflow, StringComparison.Ordinal);
         Assert.Contains("'--runtime', $captureRuntime", workflow, StringComparison.Ordinal);
         Assert.Contains("'apple-screenshots', 'manifest'", workflow, StringComparison.Ordinal);
@@ -567,6 +566,11 @@ public sealed partial class AppleReleaseWorkflowTests
         var root = FindRepoRoot();
         var capture = ReadCaptureImplementation(root);
         var approval = Read(root, ".github", "workflows", "powerforge-apple-screenshot-approve.yml");
+
+        Assert.Contains("'--capture-provenance'", approval, StringComparison.Ordinal);
+        Assert.Contains("capture_workflow_ref: ${{ steps.resolve.outputs.capture_workflow_ref }}", approval, StringComparison.Ordinal);
+        Assert.Contains("CAPTURE_WORKFLOW_REF: ${{ needs.resolve-source.outputs.capture_workflow_ref }}", approval, StringComparison.Ordinal);
+        Assert.Contains("'--expected-workflow-ref', $env:CAPTURE_WORKFLOW_REF", approval, StringComparison.Ordinal);
 
         Assert.Contains("Exact source commit to capture", capture, StringComparison.Ordinal);
         Assert.Contains("powerforge-apple-screenshots-${{ inputs.source_ref }}", capture, StringComparison.Ordinal);

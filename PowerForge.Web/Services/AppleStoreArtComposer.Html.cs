@@ -9,7 +9,7 @@ public sealed partial class AppleStoreArtComposer
         public string Uri => "data:image/png;base64," + Convert.ToBase64String(Bytes);
     }
     private static string BuildHtml(AppleStoreArtFrame frame, string locale, string device, AppleStoreArtDisplay size,
-        Dictionary<string, string> captions, string styles, Capture primary, Capture? watch, Capture[] surfaces)
+        Dictionary<string, string> captions, Dictionary<string, string[]> fonts, string styles, Capture primary, Capture? watch, Capture[] surfaces)
     {
         string Caption(string? key, bool required = false)
         {
@@ -21,6 +21,9 @@ public sealed partial class AppleStoreArtComposer
         var headline = Caption(frame.HeadlineKey, true);
         var eyebrow = Caption(frame.EyebrowKey);
         var subline = Caption(frame.SublineKey);
+        ValidateCaptionFont(headline, fonts["--font-display"], locale, frame.Id);
+        ValidateCaptionFont(eyebrow + eyebrow.ToUpperInvariant(), fonts["--font-eyebrow"], locale, frame.Id);
+        ValidateCaptionFont(subline, fonts["--font-body"], locale, frame.Id);
         var header = "<header dir=\"auto\">" + (eyebrow.Length == 0 ? "" : "<p class=\"eyebrow\">" + Escape(eyebrow) + "</p>") +
             "<h1>" + Headline(headline) + "</h1>" +
             (subline.Length == 0 ? "" : "<p class=\"sub\">" + Escape(subline) + "</p>") + "</header>";

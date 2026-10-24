@@ -6,4 +6,4 @@ Start with the [PowerForge repository documentation](https://github.com/EvotecIT
 
 The package is licensed under the [MIT License](https://github.com/EvotecIT/PSPublishModule/blob/main/LICENSE).
 
-Store artwork: [compose real Apple captures with localized captions](../Docs/PowerForge.AppleStoreArt.md).
+Store artwork: [compose real Apple captures with localized captions](https://github.com/EvotecIT/PSPublishModule/blob/main/Docs/PowerForge.AppleStoreArt.md).
