@@ -1,0 +1,7 @@
+/* OfficeIMO Studio: paper and ink, the blue of the icon. */
+:root{--font-display:'Hanken Grotesk','Inter','Noto Sans CJK',sans-serif;--font-body:'Inter','Noto Sans CJK',sans-serif;--font-eyebrow:'Inter','Noto Sans CJK',sans-serif;
+--bg:#f4f6fb;--ink:#101a33;--muted:#4a5672;--accent:#145df5;--h1w:720;
+--glow:radial-gradient(110% 55% at 50% 0%,rgba(20,93,245,.13),transparent 62%),radial-gradient(90% 45% at 50% 100%,rgba(11,138,135,.12),transparent 70%);
+--shell:#1a1c22;--shell-hi:#50545e;--shell-edge:rgba(16,26,51,.18);--device-shadow:0 60px 140px rgba(16,26,51,.28);
+--lens-ring:rgba(20,93,245,.55);--lens-shadow:0 40px 100px rgba(16,26,51,.30)}
+body.dark{--bg:#0d1326;--ink:#eef2fb;--muted:#a9b4cc;--accent:#7aa2ff;--glow:radial-gradient(110% 55% at 50% 0%,rgba(49,95,219,.35),transparent 62%);--device-shadow:0 60px 160px rgba(0,0,0,.55)}

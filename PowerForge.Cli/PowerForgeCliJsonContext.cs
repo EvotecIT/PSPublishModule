@@ -108,6 +108,7 @@ namespace PowerForge.Cli;
 [JsonSerializable(typeof(AppleReleaseLocalEvidence))]
 [JsonSerializable(typeof(AppStoreConnectScreenshotSyncSpec))]
 [JsonSerializable(typeof(AppStoreConnectScreenshotApprovalManifest))]
+[JsonSerializable(typeof(AppleStoreArtLineage[]))]
 [JsonSerializable(typeof(AppStoreConnectGovernanceSpec))]
 [JsonSerializable(typeof(AppStoreConnectGovernancePlan))]
 [JsonSerializable(typeof(AppStoreConnectGovernanceApplyResult))]
