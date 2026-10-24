@@ -439,6 +439,11 @@ public sealed partial class ModulePipelineRunner
         ModuleBuildResult buildResult,
         ModulePipelinePlan plan)
     {
+        // Documentation refreshes must not replace source loader fixes with this tool's template.
+        // Staging has its own bootstrapper; normal builds still refresh or clear the source loader.
+        if (plan.GateMode == ConfigurationGateMode.Documentation)
+            return;
+
         var sourceIsSingleFileModule = IsSourceSingleFileModule(plan);
         var sourcePsm1Path = Path.Combine(plan.BuildSpec.SourcePath, plan.ModuleName + ".psm1");
         var sourceHasCustomIncludeScripts = HasCustomIncludeScriptFiles(plan.BuildSpec.SourcePath, plan.Information);
