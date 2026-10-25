@@ -33,6 +33,8 @@ For docs-only refreshes, use the documentation run mode instead of a full build:
 
 This regenerates command Markdown and external help without validation, tests, signing, artefacts, publishing, or install phases. The build also verifies parity between exported commands, generated command Markdown pages, and MAML command entries.
 
+Documentation mode preserves the source module's `.psm1` bootstrapper byte-for-byte, including its development loader and host-assembly guards. It can refresh the source manifest's exports from staging, but source loader regeneration belongs to the normal build mode.
+
 ## Authoring Sources
 
 - Cmdlet help pages come from PowerShell help metadata plus XML docs comments on cmdlets.

@@ -93,6 +93,8 @@ New-ConfigurationBuild `
 
 ## Source PSM1 maintenance
 
+Documentation mode leaves the source `.psm1` unchanged, even when development binaries are disabled for that run. Use build mode to regenerate the source loader or clear development loading logic.
+
 PowerForge only overwrites source `.psm1` files when the layout is generated-safe:
 
 - Standard script folders: `Classes`, `Enums`, `Private`, `Public`.

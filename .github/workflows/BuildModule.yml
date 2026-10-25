@@ -572,6 +572,14 @@ jobs:
           -c Release --no-build --no-restore --nologo
           --filter 'FullyQualifiedName~AppleTestFlightWorkerTests|FullyQualifiedName~AppleTestFlightReadinessTests|FullyQualifiedName~AppleReleaseWorkflowTests.PinnedExistingBetaRecovery'
 
+      - name: Test documentation loader preservation
+        shell: pwsh
+        timeout-minutes: 5
+        run: >
+          dotnet test ./PowerForge.Tests/PowerForge.Tests.csproj
+          -c Release --no-build --no-restore --nologo
+          --filter 'FullyQualifiedName~Run_DocumentationGate_PreservesSourceDevelopmentBootstrapper|FullyQualifiedName~ModulePipelineDevelopmentBootstrapperTests|FullyQualifiedName~ModulePipelineRefreshManifestOnlyTests|FullyQualifiedName~ModulePipelineDocumentationSyncTests'
+
       - name: Install social card renderer
         shell: pwsh
         run: ./.github/scripts/Install-WebsiteSocialCardDependencies.ps1 -Enabled $true
