@@ -121,7 +121,7 @@ public static partial class WebAgentReadiness
         {
             var markdownArtifacts = WriteMarkdownArtifacts(siteRoot, spec.MarkdownArtifacts, warnings);
             markdownArtifactPaths = markdownArtifacts.Paths;
-            written.AddRange(markdownArtifacts.Paths);
+            written.AddRange(markdownArtifacts.WrittenPaths);
             if (!string.IsNullOrWhiteSpace(markdownArtifacts.RootRoute))
                 linkTargets.Add(new HeaderLinkTarget(markdownArtifacts.RootRoute!, "alternate", "text/markdown"));
         }
@@ -1120,50 +1120,6 @@ public static partial class WebAgentReadiness
         Directory.CreateDirectory(Path.GetDirectoryName(outputPath)!);
         File.WriteAllText(outputPath, root.ToJsonString(WebJson.Options));
         return outputPath;
-    }
-
-    private static MarkdownArtifactWriteResult WriteMarkdownArtifacts(string siteRoot, AgentMarkdownArtifactsSpec spec, List<string> warnings)
-    {
-        if (!Directory.Exists(siteRoot))
-            return new MarkdownArtifactWriteResult(Array.Empty<string>(), null);
-
-        var extension = NormalizeMarkdownExtension(spec.Extension);
-        var candidates = Directory.EnumerateFiles(siteRoot, "*.html", SearchOption.AllDirectories)
-            .Where(path => !ShouldSkipMarkdownArtifactCandidate(siteRoot, path))
-            .OrderBy(static path => path, StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-
-        var maxPages = spec.MaxPages;
-        if (maxPages > 0 && candidates.Length > maxPages)
-        {
-            warnings.Add($"Markdown artifact generation limited to {maxPages} of {candidates.Length} HTML pages.");
-            candidates = candidates.Take(maxPages).ToArray();
-        }
-
-        var written = new List<string>();
-        foreach (var htmlPath in candidates)
-        {
-            var markdown = ConvertHtmlDocumentToMarkdown(File.ReadAllText(htmlPath, Encoding.UTF8), spec);
-            if (string.IsNullOrWhiteSpace(markdown))
-                continue;
-
-            var outputPath = Path.ChangeExtension(htmlPath, extension);
-            File.WriteAllText(outputPath, markdown, Encoding.UTF8);
-            written.Add(outputPath);
-        }
-
-        var rootMarkdown = Path.Combine(siteRoot, "index" + extension);
-        var rootRoute = File.Exists(rootMarkdown) ? ToSiteRoute(siteRoot, rootMarkdown) : null;
-        return new MarkdownArtifactWriteResult(written.ToArray(), rootRoute);
-    }
-
-    private static bool ShouldSkipMarkdownArtifactCandidate(string siteRoot, string path)
-    {
-        var relative = Path.GetRelativePath(siteRoot, path).Replace('\\', '/');
-        return relative.EndsWith(".head.html", StringComparison.OrdinalIgnoreCase) ||
-               relative.EndsWith(".scripts.html", StringComparison.OrdinalIgnoreCase) ||
-               relative.Contains("/api-fragments/", StringComparison.OrdinalIgnoreCase) ||
-               relative.StartsWith("api-fragments/", StringComparison.OrdinalIgnoreCase);
     }
 
     internal static string NormalizeMarkdownExtension(string? extension)
@@ -2894,7 +2850,7 @@ public static partial class WebAgentReadiness
 
     private sealed record HeaderLinkTarget(string Href, string Rel, string Type);
     private sealed record RemoteLinkExpectation(string TargetUrl, string Relation);
-    private sealed record MarkdownArtifactWriteResult(string[] Paths, string? RootRoute);
+    private sealed record MarkdownArtifactWriteResult(string[] Paths, string[] WrittenPaths, string? RootRoute);
     private sealed record HtmlReadResult(string Text, string Path);
     private sealed record OpenApiScanResult(bool Success, string? Url);
     private sealed record HttpTextResult(bool Success, string Message, string Text, HttpResponseMessage? Response);

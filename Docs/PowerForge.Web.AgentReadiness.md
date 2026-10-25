@@ -345,6 +345,15 @@ These files are useful directly and can be served by host-level rules for
 `Accept: text/markdown`. Keep this disabled on very large sites unless the
 extra files are expected; use `maxPages` for staged rollouts.
 
+Existing authored Markdown files are preserved byte for byte. For example, a
+downloadable `recordings/session.md` beside `recordings/session.html` keeps its
+full transcript instead of being replaced by the HTML page's extracted text.
+Preparation reports the collision as a warning. Generated sidecars include a
+content checksum in a trailing HTML comment, so subsequent preparation runs can
+refresh unchanged generated files while preserving edited ones. Unmarked files
+from older builds are also preserved; rebuild a clean output directory to
+regenerate those sidecars. A missing sidecar is generated normally.
+
 If `apache.enabled` is true, `agent-ready prepare` appends a managed block to
 `.htaccess` (or `apache.outputPath`). The block emits homepage discovery Link
 headers with `mod_headers`, sets Content Signals as a response header when
