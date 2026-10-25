@@ -16,21 +16,22 @@ namespace {identity.Namespace};
 
 public sealed class ModuleAssemblyLoadContext : AssemblyLoadContext
 {{
+{BuildModulePathIdentitySource()}
     private static readonly object Sync = new();
     // Module contexts are intentionally non-collectible. A process restart is required to load a replaced DLL at the same path.
-    private static readonly Dictionary<string, ModuleAssemblyLoadContext> Contexts = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly Dictionary<string, ModuleAssemblyLoadContext> Contexts = new(ModulePathComparer);
 
     private readonly string[] _assemblyDirectories;
     private readonly AssemblyDependencyResolver[] _resolvers;
     private readonly DependencyManifestResolver[] _manifestResolvers;
-    private readonly Dictionary<string, Assembly> _moduleAssemblies = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, Assembly> _moduleAssemblies = new(ModulePathComparer);
 
     private ModuleAssemblyLoadContext(string[] moduleAssemblyPaths, string contextName)
         : base(contextName, isCollectible: false)
     {{
         _assemblyDirectories = moduleAssemblyPaths
             .Select(path => Path.GetDirectoryName(path) ?? string.Empty)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Distinct(ModulePathComparer)
             .ToArray();
         _resolvers = moduleAssemblyPaths
             .Select(TryCreateResolver)
@@ -48,11 +49,11 @@ public sealed class ModuleAssemblyLoadContext : AssemblyLoadContext
     public static Assembly LoadModuleFromGroup(string[] moduleAssemblyPaths, string moduleAssemblyPath, string? contextName)
     {{
         var fullPaths = NormalizeModuleAssemblyPaths(moduleAssemblyPaths);
-        var requestedPath = Path.GetFullPath(moduleAssemblyPath ?? throw new ArgumentNullException(nameof(moduleAssemblyPath)));
-        if (!fullPaths.Contains(requestedPath, StringComparer.OrdinalIgnoreCase))
+        var requestedPath = ResolveModulePath(moduleAssemblyPath ?? throw new ArgumentNullException(nameof(moduleAssemblyPath)));
+        if (!fullPaths.Contains(requestedPath, ModulePathComparer))
             throw new ArgumentException(""The requested module assembly must belong to the configured module group."", nameof(moduleAssemblyPath));
 
-        var contextKey = string.Join(""|"", fullPaths.OrderBy(path => path, StringComparer.OrdinalIgnoreCase));
+        var contextKey = string.Join(""|"", fullPaths.OrderBy(path => path, ModulePathComparer));
         lock (Sync)
         {{
             var context = GetOrCreateContext(fullPaths, contextKey, contextName);
@@ -63,7 +64,7 @@ public sealed class ModuleAssemblyLoadContext : AssemblyLoadContext
     public static Assembly[] LoadModules(string[] moduleAssemblyPaths, string? contextName)
     {{
         var fullPaths = NormalizeModuleAssemblyPaths(moduleAssemblyPaths);
-        var contextKey = string.Join(""|"", fullPaths.OrderBy(path => path, StringComparer.OrdinalIgnoreCase));
+        var contextKey = string.Join(""|"", fullPaths.OrderBy(path => path, ModulePathComparer));
 
         // The global lock keeps context creation and all configured export assembly loads single-shot for each module group.
         lock (Sync)
@@ -80,17 +81,11 @@ public sealed class ModuleAssemblyLoadContext : AssemblyLoadContext
 
         var fullPaths = moduleAssemblyPaths
             .Where(path => !string.IsNullOrWhiteSpace(path))
-            .Select(Path.GetFullPath)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Select(ResolveModulePath)
+            .Distinct(ModulePathComparer)
             .ToArray();
         if (fullPaths.Length == 0)
             throw new ArgumentException(""At least one module assembly path is required."", nameof(moduleAssemblyPaths));
-        foreach (var fullPath in fullPaths)
-        {{
-            if (!File.Exists(fullPath))
-                throw new FileNotFoundException(""Module assembly was not found."", fullPath);
-        }}
-
         return fullPaths;
     }}
 
@@ -184,7 +179,7 @@ public sealed class ModuleAssemblyLoadContext : AssemblyLoadContext
         loaded = Assemblies.FirstOrDefault(assembly =>
             !assembly.IsDynamic &&
             !string.IsNullOrWhiteSpace(assembly.Location) &&
-            string.Equals(Path.GetFullPath(assembly.Location), fullPath, StringComparison.OrdinalIgnoreCase))
+            ModulePathComparer.Equals(ResolveModulePath(assembly.Location), fullPath))
             ?? LoadFromAssemblyPath(fullPath);
         _moduleAssemblies[fullPath] = loaded;
         return loaded;

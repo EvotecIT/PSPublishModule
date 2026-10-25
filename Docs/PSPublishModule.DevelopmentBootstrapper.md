@@ -64,6 +64,13 @@ When no environment names are supplied, PowerForge derives:
 
 The generated source `.psm1` probes `bin\<Configuration>\<TFM>\<Module>.dll`, preferring Core-compatible TFMs in PowerShell Core and desktop-compatible TFMs in Windows PowerShell. PowerShell Core uses the generated development ALC loader when `NETAssemblyLoadContext` is enabled; Windows PowerShell keeps the direct-import compatibility path.
 
+Both development and packaged ALC loaders identify module DLLs by their physical
+paths, resolving symbolic links and Windows directory junctions. Importing the
+same module through a physical directory and an alias reuses its assembly and
+cmdlet types; aliases in an export group also identify one member. Separate
+physical module copies keep separate contexts. Contexts remain non-collectible:
+restart the process to use a replaced DLL at the same physical path.
+
 ## Opt-in import flow
 
 With the default `Environment` mode, a maintainer opts into local binaries per shell:

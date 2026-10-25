@@ -207,8 +207,9 @@ namespace {identity.Namespace}
 {{
     public sealed class ModuleAssemblyLoadContext : AssemblyLoadContext
     {{
+{BuildModulePathIdentitySource()}
         private static readonly object Sync = new object();
-        private static readonly Dictionary<string, ModuleAssemblyLoadContext> Contexts = new Dictionary<string, ModuleAssemblyLoadContext>(StringComparer.OrdinalIgnoreCase);
+        private static readonly Dictionary<string, ModuleAssemblyLoadContext> Contexts = new Dictionary<string, ModuleAssemblyLoadContext>(ModulePathComparer);
 
         private readonly string _assemblyDirectory;
         private readonly string _moduleAssemblyPath;
@@ -228,9 +229,7 @@ namespace {identity.Namespace}
             if (string.IsNullOrWhiteSpace(moduleAssemblyPath))
                 throw new ArgumentException(""Module assembly path is required."", nameof(moduleAssemblyPath));
 
-            var fullPath = Path.GetFullPath(moduleAssemblyPath);
-            if (!File.Exists(fullPath))
-                throw new FileNotFoundException(""Module assembly was not found."", fullPath);
+            var fullPath = ResolveModulePath(moduleAssemblyPath);
 
             lock (Sync)
             {{
