@@ -27,6 +27,14 @@ inputs:
     description: Repository-relative folder produced by the capture script.
     required: false
     default: build/appstore-screenshots
+  store_art_spec:
+    description: Optional tracked source-relative store-art JSON. Blank preserves raw-only capture.
+    required: false
+    default: ""
+  store_art_tool_ref:
+    description: Exact PowerForge commit providing the store-art compositor; required with store_art_spec.
+    required: false
+    default: ""
   simulator_tool_ref:
     description: Exact PowerForge commit providing enforced Shutdown policy and guarded session results; blank does not provision a lifecycle tool.
     required: false
@@ -67,7 +75,11 @@ runs:
       SIMULATOR_TOOL_REF: ${{ inputs.simulator_tool_ref }}
       SIMULATOR_DEVICES: ${{ inputs.simulator_devices_json }}
       XCODEGEN_VERSION_FILE: ${{ inputs.xcodegen_version_file }}
+      STORE_ART_SPEC: ${{ inputs.store_art_spec }}
+      STORE_ART_TOOL_REF: ${{ inputs.store_art_tool_ref }}
     run: |
+      if (($env:STORE_ART_SPEC -ne '') -ne ($env:STORE_ART_TOOL_REF -ne '')) { throw 'store_art_spec and store_art_tool_ref must be configured together.' }
+      if ($env:STORE_ART_TOOL_REF -and $env:STORE_ART_TOOL_REF -notmatch '^[0-9A-Fa-f]{40}$') { throw 'store_art_tool_ref must be an exact commit SHA.' }
       if ($env:SIMULATOR_TOOL_REF -and $env:SIMULATOR_TOOL_REF -notmatch '^[0-9A-Fa-f]{40}$') { throw 'simulator_tool_ref must be an exact commit SHA.' }
       $devices = $env:SIMULATOR_DEVICES | ConvertFrom-Json -AsHashtable
       if ($devices -isnot [Collections.IDictionary]) { throw 'simulator_devices_json must be an object.' }
@@ -151,6 +163,36 @@ runs:
       }
       "POWERFORGE_DOTNET=$dotnet" | Add-Content $env:GITHUB_ENV
       "POWERFORGE_SIMULATOR_CLI=$cli" | Add-Content $env:GITHUB_ENV
+
+  - name: Checkout pinned store art tool
+    if: inputs.store_art_spec != ''
+    uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+    with:
+      repository: EvotecIT/PSPublishModule
+      ref: ${{ inputs.store_art_tool_ref }}
+      fetch-depth: 1
+      path: store-art-tool
+      persist-credentials: false
+
+  - name: Build store art tool
+    if: inputs.store_art_spec != ''
+    shell: pwsh
+    env:
+      STORE_ART_TOOL_REF: ${{ inputs.store_art_tool_ref }}
+      MSBUILDDISABLENODEREUSE: '1'
+      DOTNET_CLI_USE_MSBUILD_SERVER: '0'
+    run: |
+      $ErrorActionPreference = 'Stop'
+      $toolRoot = Join-Path '${{ github.workspace }}' 'store-art-tool'
+      $commit = (& git -C $toolRoot rev-parse HEAD).Trim()
+      if ($LASTEXITCODE -ne 0 -or $commit -cne $env:STORE_ART_TOOL_REF.ToLowerInvariant()) { throw 'Store art tool checkout differs from its pin.' }
+      $output = Join-Path $env:RUNNER_TEMP 'powerforge-store-art-cli'
+      Push-Location $toolRoot
+      try {
+        & dotnet build PowerForge.Web.Cli/PowerForge.Web.Cli.csproj -c Release -o $output --verbosity quiet
+        if ($LASTEXITCODE -ne 0) { throw 'Store art tool build failed.' }
+      } finally { Pop-Location }
+      "POWERFORGE_STORE_ART_CLI=$(Join-Path $output 'PowerForge.Web.Cli.dll')" | Add-Content $env:GITHUB_ENV
 
   - name: Capture deterministic App Store screenshots
     shell: pwsh
@@ -330,6 +372,9 @@ runs:
       SIMULATOR_DEVICES: ${{ inputs.simulator_devices_json }}
       SOURCE_REPOSITORY: ${{ inputs.source_repository || github.repository }}
       CAPTURE_QUALIFICATION: ${{ inputs.qualification_json }}
+      STORE_ART_SPEC: ${{ inputs.store_art_spec }}
+      MSBUILDDISABLENODEREUSE: '1'
+      DOTNET_CLI_USE_MSBUILD_SERVER: '0'
     run: |
       $sourceRoot = [IO.Path]::GetFullPath('${{ github.workspace }}/source')
       $artifactRoot = [IO.Path]::GetFullPath((Join-Path $sourceRoot $env:CAPTURE_ARTIFACT_PATH))
@@ -349,6 +394,24 @@ runs:
         }
       })
       if ($screenshots.Count -eq 0) { throw 'Capture provenance requires at least one PNG screenshot.' }
+      $compositions = @()
+      if (-not [string]::IsNullOrWhiteSpace($env:STORE_ART_SPEC)) {
+        $specPath = [IO.Path]::GetFullPath((Join-Path $sourceRoot $env:STORE_ART_SPEC))
+        if (-not $specPath.StartsWith($sourceRoot.TrimEnd('/') + '/', [StringComparison]::Ordinal)) { throw 'store_art_spec escapes source.' }
+        $relativeSpec = [IO.Path]::GetRelativePath($sourceRoot, $specPath).Replace('\', '/')
+        & git -C $sourceRoot ls-files --error-unmatch -- $relativeSpec *> $null
+        if ($LASTEXITCODE -ne 0) { throw 'store_art_spec must be tracked.' }
+        & git -C $sourceRoot diff --quiet HEAD -- $relativeSpec
+        if ($LASTEXITCODE -ne 0) { throw 'store_art_spec differs from capture source.' }
+        $spec = Get-Content -LiteralPath $specPath -Raw | ConvertFrom-Json
+        $specCaptureRoot = [IO.Path]::GetFullPath((Join-Path (Split-Path -Parent $specPath) $spec.captureRoot))
+        if ($specCaptureRoot -cne $artifactRoot) { throw 'Store art CaptureRoot must equal capture_artifact_path.' }
+        $artOutput = Join-Path $artifactRoot 'store-art'
+        & dotnet $env:POWERFORGE_STORE_ART_CLI apple-store-art compose --config $specPath --out $artOutput
+        if ($LASTEXITCODE -ne 0) { throw 'Store art composition failed.' }
+        $compositions = @(Get-Content -LiteralPath (Join-Path $artOutput 'store-art.lineage.json') -Raw | ConvertFrom-Json -Depth 20)
+        if ($compositions.Count -eq 0) { throw 'Store art produced no composition lineage.' }
+      }
       $xcodeVersion = (& xcodebuild -version) -join ' '
       if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($xcodeVersion)) { throw 'Unable to record the capture Xcode version.' }
       $captureRuntime = $env:CAPTURE_RUNTIME.Trim()
@@ -370,13 +433,17 @@ runs:
         scenario = $env:CAPTURE_SCENARIO
         screenshots = $screenshots
       }
+      if ($compositions.Count -gt 0) {
+        $provenance.schemaVersion = 3
+        $provenance.compositions = $compositions
+      }
       if (-not [string]::IsNullOrWhiteSpace($env:CAPTURE_QUALIFICATION)) {
         $provenance.qualification = $env:CAPTURE_QUALIFICATION | ConvertFrom-Json -AsHashtable
       }
       if (($env:SIMULATOR_DEVICES | ConvertFrom-Json -AsHashtable).Count -gt 0) {
         $provenance.simulatorCapture = Get-Content -LiteralPath (Join-Path $env:RUNNER_TEMP 'powerforge-apple-simulator-evidence.json') -Raw | ConvertFrom-Json -AsHashtable
       }
-      $provenance | ConvertTo-Json -Depth 8 -Compress |
+      $provenance | ConvertTo-Json -Depth 20 -Compress |
         Set-Content -LiteralPath (Join-Path $env:RUNNER_TEMP 'powerforge-apple-screenshot-provenance.json') -Encoding utf8
 
   - name: Retain compact capture provenance

@@ -196,7 +196,26 @@ jobs:
           CAPTURE_DEVICE: ${{ inputs.device }}
           CAPTURE_THEME: ${{ inputs.theme }}
           CAPTURE_SCENARIO: ${{ inputs.scenario }}
+          CAPTURE_ARTIFACT_PATH: ${{ inputs.capture_artifact_path }}
         run: |
+          $sourceRoot = [IO.Path]::GetFullPath('${{ github.workspace }}/source')
+          $artifactRoot = [IO.Path]::GetFullPath((Join-Path $sourceRoot $env:CAPTURE_ARTIFACT_PATH))
+          $screenshots = @(Get-ChildItem -LiteralPath $artifactRoot -File -Filter '*.png' -Recurse | Sort-Object FullName | ForEach-Object {
+            $dimensions = @(& sips -g pixelWidth -g pixelHeight $_.FullName 2>&1)
+            if ($LASTEXITCODE -ne 0) { throw "Unable to read PNG dimensions: $($_.FullName)" }
+            $widthLine = $dimensions | Where-Object { $_ -match '^\s*pixelWidth:\s*(\d+)\s*$' } | Select-Object -First 1
+            $heightLine = $dimensions | Where-Object { $_ -match '^\s*pixelHeight:\s*(\d+)\s*$' } | Select-Object -First 1
+            if (-not $widthLine -or -not $heightLine) { throw "Unable to parse PNG dimensions: $($_.FullName)" }
+            $width = [int]([regex]::Match($widthLine, '(\d+)\s*$').Groups[1].Value)
+            $height = [int]([regex]::Match($heightLine, '(\d+)\s*$').Groups[1].Value)
+            [ordered]@{
+              path = [IO.Path]::GetRelativePath($artifactRoot, $_.FullName).Replace('\\', '/')
+              sha256 = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+              width = $width
+              height = $height
+            }
+          })
+          if ($screenshots.Count -eq 0) { throw 'Capture provenance requires at least one PNG screenshot.' }
           $xcodeVersion = (& xcodebuild -version) -join ' '
           if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($xcodeVersion)) { throw 'Unable to record the capture Xcode version.' }
           $captureRuntime = "$(& sw_vers -productName) $(& sw_vers -productVersion) ($([Runtime.InteropServices.RuntimeInformation]::OSArchitecture))"
@@ -212,6 +231,7 @@ jobs:
             device = $env:CAPTURE_DEVICE
             theme = $env:CAPTURE_THEME
             scenario = $env:CAPTURE_SCENARIO
+            screenshots = $screenshots
           }
           $provenance | ConvertTo-Json -Depth 5 -Compress |
             Set-Content -LiteralPath (Join-Path $env:RUNNER_TEMP 'powerforge-apple-screenshot-provenance.json') -Encoding utf8
@@ -354,6 +374,7 @@ jobs:
           MARKETING_VERSION: ${{ inputs.marketing_version }}
           SOURCE_REF: ${{ inputs.source_ref }}
           APPROVAL_ENVIRONMENT: ${{ inputs.approval_environment }}
+          CAPTURE_WORKFLOW_REF: ${{ github.workflow_ref }}
           TARGET_INPUT: ${{ inputs.target }}
         run: |
           $configs = @($env:SCREENSHOT_CONFIGS_JSON | ConvertFrom-Json -Depth 10)
@@ -365,7 +386,7 @@ jobs:
           $trackedInputValidator = '${{ github.workspace }}/powerforge-shared/.github/actions/apple-release/Assert-TrackedAppleReleaseInputs.ps1'
           & $trackedInputValidator -ConfigPath $releaseConfigPath -SourceCommit $env:SOURCE_REF -SkipToolManifest
           $captureProvenance = Get-Content -LiteralPath '${{ runner.temp }}/powerforge-apple-screenshot-provenance/powerforge-apple-screenshot-provenance.json' -Raw | ConvertFrom-Json -Depth 10
-          if ($captureProvenance.schemaVersion -ne 2 -or
+          if ($captureProvenance.schemaVersion -notin @(2, 3) -or
               -not ([string] $captureProvenance.sourceCommit).Equals($env:SOURCE_REF, [StringComparison]::OrdinalIgnoreCase) -or
               ([string] $captureProvenance.marketingVersion) -ne $env:MARKETING_VERSION) {
             throw 'Capture provenance does not match the approved source and marketing version.'
@@ -393,6 +414,9 @@ jobs:
             $manifestArguments = @(
               'apple-screenshots', 'manifest',
               '--config', $configPath,
+              '--capture-provenance', '${{ runner.temp }}/powerforge-apple-screenshot-provenance/powerforge-apple-screenshot-provenance.json',
+              '--expected-repository', '${{ github.repository }}',
+              '--expected-workflow-ref', $env:CAPTURE_WORKFLOW_REF,
               '--release-config', $releaseConfigPath,
               '--version', $env:MARKETING_VERSION,
               '--source-commit', $env:SOURCE_REF,

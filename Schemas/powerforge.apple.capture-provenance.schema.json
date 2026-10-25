@@ -1,0 +1,241 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "PowerForge Apple screenshot capture provenance",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "repository",
+    "captureRunId",
+    "sourceCommit",
+    "marketingVersion",
+    "workflowRef",
+    "xcodeVersion",
+    "runtime",
+    "device",
+    "theme",
+    "scenario",
+    "screenshots"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "enum": [
+        2,
+        3
+      ]
+    },
+    "repository": {
+      "type": "string",
+      "minLength": 1
+    },
+    "captureRunId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "sourceCommit": {
+      "type": "string",
+      "minLength": 1
+    },
+    "marketingVersion": {
+      "type": "string",
+      "minLength": 1
+    },
+    "workflowRef": {
+      "type": "string",
+      "minLength": 1
+    },
+    "xcodeVersion": {
+      "type": "string",
+      "minLength": 1
+    },
+    "runtime": {
+      "type": "string",
+      "minLength": 1
+    },
+    "device": {
+      "type": "string",
+      "minLength": 1
+    },
+    "theme": {
+      "type": "string",
+      "minLength": 1
+    },
+    "scenario": {
+      "type": "string",
+      "minLength": 1
+    },
+    "screenshots": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "path",
+          "sha256",
+          "width",
+          "height"
+        ],
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.?(/|$))[^:\\\\]+$"
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-fA-F]{64}$"
+          },
+          "width": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "height": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "scenario": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "compositions": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "path",
+          "sha256",
+          "width",
+          "height",
+          "perceptualHash",
+          "frame",
+          "locale",
+          "device",
+          "theme",
+          "specSha256",
+          "captionsSha256",
+          "templateSha256",
+          "renderSha256",
+          "renderer",
+          "inputs"
+        ],
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.?(/|$))[^:\\\\]+$"
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-fA-F]{64}$"
+          },
+          "width": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "height": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "perceptualHash": {
+            "type": "string",
+            "pattern": "^dhash-v1:[0-9a-f]{16}$"
+          },
+          "frame": {
+            "type": "string"
+          },
+          "locale": {
+            "type": "string"
+          },
+          "device": {
+            "type": "string"
+          },
+          "theme": {
+            "type": "string"
+          },
+          "specSha256": {
+            "type": "string",
+            "pattern": "^[0-9a-fA-F]{64}$"
+          },
+          "captionsSha256": {
+            "type": "string",
+            "pattern": "^[0-9a-fA-F]{64}$"
+          },
+          "templateSha256": {
+            "type": "string",
+            "pattern": "^[0-9a-fA-F]{64}$"
+          },
+          "renderSha256": {
+            "type": "string",
+            "pattern": "^[0-9a-fA-F]{64}$"
+          },
+          "renderer": {
+            "type": "string"
+          },
+          "inputs": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "required": [
+                "path",
+                "sha256",
+                "width",
+                "height"
+              ],
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "minLength": 1,
+                  "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.?(/|$))[^:\\\\]+$"
+                },
+                "sha256": {
+                  "type": "string",
+                  "pattern": "^[0-9a-fA-F]{64}$"
+                },
+                "width": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "height": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "scenario": {
+                  "type": ["string", "null"]
+                }
+              },
+              "additionalProperties": true
+            }
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "schemaVersion": {
+            "const": 3
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "compositions"
+        ]
+      },
+      "else": {
+        "not": {
+          "required": [
+            "compositions"
+          ]
+        }
+      }
+    }
+  ]
+}

@@ -19,6 +19,7 @@ collection: {{collection}}
     {
         return subCommand switch
         {
+            "apple-store-art" => HandleStoreArt(subArgs, outputJson, logger, outputSchemaVersion),
             "plan" => HandlePlan(subArgs, outputJson, logger, outputSchemaVersion),
             "build" => HandleBuild(subArgs, outputJson, logger, outputSchemaVersion),
             "nav-export" => HandleNavExport(subArgs, outputJson, logger, outputSchemaVersion),

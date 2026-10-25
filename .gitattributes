@@ -62,3 +62,9 @@ Benchmarks/PowerShellCompilation/Corpus/ExternalWorkflows/PSScriptTools/EventRec
 Benchmarks/PowerShellCompilation/Corpus/ExternalWorkflows/PSScriptTools/EventRecord/license.txt -text -eol -whitespace
 Benchmarks/PowerShellCompilation/Corpus/ExternalWorkflows/ControlFlow/Format-Stream.ps1 -text -eol -whitespace
 Benchmarks/PowerShellCompilation/Corpus/ExternalWorkflows/ControlFlow/Out-More.ps1 -text -eol -whitespace
+# Keep embedded store-art templates and licensed fonts stable across checkouts.
+PowerForge.Web/Assets/StoreArt/*.css text eol=lf
+PowerForge.Web/Assets/StoreArt/*.js text eol=lf
+PowerForge.Web/Assets/StoreArt/*.html text eol=lf
+PowerForge.Web/Assets/StoreArt/Fonts/sources.json text eol=lf
+PowerForge.Web/Assets/StoreArt/Fonts/*-OFL.txt -text -eol -whitespace

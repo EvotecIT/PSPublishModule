@@ -521,6 +521,10 @@ public sealed partial class AppleReleaseWorkflowTests
         Assert.Contains("Remove-Item -Force", workflow, StringComparison.Ordinal);
         Assert.Contains("Materialized screenshot set does not exactly match the reviewed PNG set", workflow, StringComparison.Ordinal);
         Assert.Contains("schemaVersion = 2", workflow, StringComparison.Ordinal);
+        Assert.Contains("screenshots = $screenshots", workflow, StringComparison.Ordinal);
+        Assert.Contains("'--capture-provenance'", workflow, StringComparison.Ordinal);
+        Assert.Contains("CAPTURE_WORKFLOW_REF: ${{ github.workflow_ref }}", workflow, StringComparison.Ordinal);
+        Assert.Contains("'--expected-workflow-ref', $env:CAPTURE_WORKFLOW_REF", workflow, StringComparison.Ordinal);
         Assert.Contains("xcodeVersion = $xcodeVersion", workflow, StringComparison.Ordinal);
         Assert.Contains("'--runtime', $captureRuntime", workflow, StringComparison.Ordinal);
         Assert.Contains("'apple-screenshots', 'manifest'", workflow, StringComparison.Ordinal);
@@ -562,6 +566,11 @@ public sealed partial class AppleReleaseWorkflowTests
         var root = FindRepoRoot();
         var capture = ReadCaptureImplementation(root);
         var approval = Read(root, ".github", "workflows", "powerforge-apple-screenshot-approve.yml");
+
+        Assert.Contains("'--capture-provenance'", approval, StringComparison.Ordinal);
+        Assert.Contains("capture_workflow_ref: ${{ steps.resolve.outputs.capture_workflow_ref }}", approval, StringComparison.Ordinal);
+        Assert.Contains("CAPTURE_WORKFLOW_REF: ${{ needs.resolve-source.outputs.capture_workflow_ref }}", approval, StringComparison.Ordinal);
+        Assert.Contains("'--expected-workflow-ref', $env:CAPTURE_WORKFLOW_REF", approval, StringComparison.Ordinal);
 
         Assert.Contains("Exact source commit to capture", capture, StringComparison.Ordinal);
         Assert.Contains("powerforge-apple-screenshots-${{ inputs.source_ref }}", capture, StringComparison.Ordinal);

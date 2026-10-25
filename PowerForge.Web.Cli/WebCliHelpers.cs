@@ -18,6 +18,7 @@ internal static partial class WebCliHelpers
     {
         Console.WriteLine("PowerForge.Web CLI");
         Console.WriteLine("Usage:");
+        Console.WriteLine("  powerforge-web apple-store-art compose --config <store-art.json> --out <fresh-directory> [--browser-executable <chromium>] [--output json]");
         Console.WriteLine("  powerforge-web plan --config <site.json> [--output json]");
         Console.WriteLine("  powerforge-web build --config <site.json> --out <path> [--clean] [--language <code>] [--language-as-root] [--output json]");
         Console.WriteLine("                     [--sync-sources]");

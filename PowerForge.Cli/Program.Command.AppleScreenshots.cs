@@ -6,7 +6,7 @@ internal static partial class Program
 {
     private const string AppleScreenshotsUsage =
         "Usage: powerforge apple-screenshots <manifest --config <screenshots.json> | manifests --release-config <powerforge.release.json>> " +
-        "[--capture-provenance <json> --expected-repository <owner/repo> --expected-workflow-ref <workflow-ref> | --version <x.y|x.y.z> --source-commit <sha>] " +
+        "[--store-art-lineage <json>] [--capture-provenance <json> --expected-repository <owner/repo> --expected-workflow-ref <workflow-ref> | --version <x.y|x.y.z> --source-commit <sha>] " +
         "--approved-by <identity> --allowed-root <reviewed-capture-root> [--out <manifest.json>] " +
         "[--write-root <trusted-output-root>] " +
         "[--app-id <asc-app-id> | --release-config <powerforge.release.json> [--target <name-or-scheme>]] " +
@@ -81,6 +81,8 @@ internal static partial class Program
         var appId = ResolveScreenshotApprovalAppId(argv, spec);
         var allowedRoot = Path.GetFullPath(RequiredOption(argv, "--allowed-root"));
         var provenance = ResolveScreenshotCaptureProvenance(argv);
+        if (provenance is null && !string.IsNullOrWhiteSpace(TryGetOptionValue(argv, "--store-art-lineage")))
+            throw new InvalidOperationException("--store-art-lineage requires --capture-provenance.");
         var manifest = new AppStoreConnectScreenshotApprovalService().Create(
             new AppStoreConnectScreenshotApprovalRequest
             {
@@ -103,7 +105,7 @@ internal static partial class Program
                 Scenario = ResolveProvenanceBoundOption(argv, "--scenario", provenance?.Scenario, required: false)
             });
         if (provenance is not null)
-            ValidateScreenshotCaptureInventory(provenance, manifest, baseDirectory, allowedRoot);
+            ValidateScreenshotCaptureInventory(provenance, manifest, baseDirectory, allowedRoot, argv);
         var configuredOutput = spec.Quality?.ApprovalManifestPath;
         var outputPath = ResolvePathFromBase(
             baseDirectory,
@@ -158,8 +160,8 @@ internal static partial class Program
         using var document = JsonDocument.Parse(File.ReadAllText(path));
         var root = document.RootElement;
         if (root.ValueKind != JsonValueKind.Object ||
-            !root.TryGetProperty("schemaVersion", out var schema) || schema.GetInt32() != 2)
-            throw new InvalidOperationException("Screenshot capture provenance must use schemaVersion 2.");
+            !root.TryGetProperty("schemaVersion", out var schema) || schema.GetInt32() is not (2 or 3))
+            throw new InvalidOperationException("Screenshot capture provenance must use schemaVersion 2 or 3.");
 
         static string RequiredString(JsonElement value, string name)
         {
@@ -206,6 +208,12 @@ internal static partial class Program
         if (screenshots.Length == 0 || screenshots.Select(static item => item.Path).Distinct(StringComparer.Ordinal).Count() != screenshots.Length)
             throw new InvalidOperationException("Screenshot capture provenance must contain a non-empty inventory with unique paths.");
 
+        if (schema.GetInt32() == 3 && (!root.TryGetProperty("compositions", out var compositionInventory) ||
+            compositionInventory.ValueKind != JsonValueKind.Array || compositionInventory.GetArrayLength() == 0))
+            throw new InvalidOperationException("Screenshot capture provenance v3 requires a non-empty compositions inventory.");
+        if (schema.GetInt32() == 2 && root.TryGetProperty("compositions", out _))
+            throw new InvalidOperationException("Composition inventory requires screenshot capture provenance schemaVersion 3.");
+
         return new ScreenshotCaptureProvenance(
             repository,
             captureRunId,
@@ -217,14 +225,18 @@ internal static partial class Program
             RequiredString(root, "device"),
             RequiredString(root, "theme"),
             RequiredString(root, "scenario"),
-            screenshots);
+            screenshots,
+            schema.GetInt32() == 3 && root.TryGetProperty("compositions", out var compositions)
+                ? JsonSerializer.Deserialize(compositions.GetRawText(), CliJson.Context.AppleStoreArtLineageArray) ?? throw new InvalidOperationException("Empty compositions inventory.")
+                : Array.Empty<AppleStoreArtLineage>());
     }
 
     private static void ValidateScreenshotCaptureInventory(
         ScreenshotCaptureProvenance provenance,
         AppStoreConnectScreenshotApprovalManifest manifest,
         string baseDirectory,
-        string allowedRoot)
+        string allowedRoot,
+        string[] argv)
     {
         var retained = provenance.Screenshots
             .ToHashSet();
@@ -237,8 +249,29 @@ internal static partial class Program
             return new ScreenshotCaptureInventoryEntry(relative, item.Sha256.ToLowerInvariant(), item.Width, item.Height);
         }).ToArray();
 
-        if (actual.Distinct().Count() != actual.Length || actual.Any(item => !retained.Contains(item)))
-            throw new InvalidOperationException("Selected screenshots are not an exact byte-for-byte subset of the retained capture provenance inventory.");
+        var compositions = provenance.Compositions;
+        var lineagePath = TryGetOptionValue(argv, "--store-art-lineage");
+        if (!string.IsNullOrWhiteSpace(lineagePath))
+        {
+            if (compositions.Length != 0) throw new InvalidOperationException("Use retained v3 compositions or --store-art-lineage, not both.");
+            EnsureTrustedScreenshotManifestPath(Path.GetFullPath(lineagePath), allowedRoot);
+            compositions = JsonSerializer.Deserialize(File.ReadAllText(lineagePath), CliJson.Context.AppleStoreArtLineageArray)
+                ?? throw new InvalidOperationException("Empty store art lineage.");
+        }
+        AppleStoreArtLineageValidator.Validate(compositions, provenance.Screenshots.Select(item => new AppleStoreArtInput
+            { Path = item.Path, Sha256 = item.Sha256, Width = item.Width, Height = item.Height }).ToArray(), allowedRoot);
+        var derived = compositions.ToDictionary(item => new ScreenshotCaptureInventoryEntry(item.Path, item.Sha256.ToLowerInvariant(), item.Width, item.Height));
+        if (actual.Distinct().Count() != actual.Length || actual.Any(item => !retained.Contains(item) && !derived.ContainsKey(item)))
+            throw new InvalidOperationException("Selected screenshots are not an exact byte-for-byte subset of the retained capture provenance inventory or its validated compositions.");
+        for (var index = 0; index < actual.Length; index++)
+        {
+            if (!derived.TryGetValue(actual[index], out var composition)) continue;
+            if (!string.Equals(composition.Locale, manifest.Locale, StringComparison.Ordinal))
+                throw new InvalidOperationException($"Composed frame '{composition.Frame}' locale does not match the approved listing locale.");
+            manifest.SchemaVersion = 3;
+            manifest.Screenshots[index].Composition = composition;
+            manifest.Screenshots[index].PerceptualHash = composition.PerceptualHash;
+        }
     }
 
     private static string? ResolveProvenanceBoundOption(
@@ -271,7 +304,8 @@ internal static partial class Program
         string Device,
         string Theme,
         string Scenario,
-        ScreenshotCaptureInventoryEntry[] Screenshots);
+        ScreenshotCaptureInventoryEntry[] Screenshots,
+        AppleStoreArtLineage[] Compositions);
 
     private sealed record ScreenshotCaptureInventoryEntry(string Path, string Sha256, int Width, int Height);
 

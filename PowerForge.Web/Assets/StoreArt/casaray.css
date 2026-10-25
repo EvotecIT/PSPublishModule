@@ -1,0 +1,9 @@
+/* CasaRay: deep navy night, soft blue light, the calm of a house that is fine. */
+:root{--font-display:'Inter','Noto Sans CJK',sans-serif;--font-body:'Inter','Noto Sans CJK',sans-serif;--font-eyebrow:'Inter','Noto Sans CJK',sans-serif;
+--bg:#0b0d14;--ink:#f5f6fa;--muted:#aeb5c6;--accent:#8cb4ff;
+--glow:radial-gradient(120% 60% at 50% 0%,rgba(124,109,224,.30),transparent 60%),radial-gradient(90% 50% at 50% 100%,rgba(140,180,255,.22),transparent 70%);
+--shell:#15171d;--shell-hi:#3a3f4b;--shell-edge:rgba(236,240,255,.22);--device-shadow:0 60px 160px rgba(0,0,0,.55),0 0 120px rgba(140,180,255,.12);
+--lens-ring:rgba(140,180,255,.65);--lens-shadow:0 40px 120px rgba(0,0,0,.6)}
+body.light{--bg:#eef2fb;--ink:#171a23;--muted:#4c5466;--accent:#2856cb;
+--glow:radial-gradient(120% 60% at 50% 0%,rgba(124,109,224,.16),transparent 60%),radial-gradient(90% 50% at 50% 100%,rgba(40,86,203,.14),transparent 70%);
+--shell:#1b1d23;--shell-hi:#4b505c;--device-shadow:0 60px 140px rgba(23,26,35,.30);--lens-ring:rgba(40,86,203,.55);--lens-shadow:0 40px 100px rgba(23,26,35,.35)}

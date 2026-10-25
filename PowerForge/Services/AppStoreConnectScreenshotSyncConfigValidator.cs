@@ -113,8 +113,8 @@ public sealed class AppStoreConnectScreenshotSyncConfigValidator
             return new[] { "Screenshot approval manifest could not be read." };
 
         var messages = new List<string>();
-        if (manifest.SchemaVersion != 2)
-            messages.Add($"Screenshot approval manifest SchemaVersion must be 2, not {manifest.SchemaVersion}.");
+        if (manifest.SchemaVersion is not (2 or 3))
+            messages.Add($"Screenshot approval manifest SchemaVersion must be 2 or 3, not {manifest.SchemaVersion}.");
         if (manifest.ApprovedAt == default)
             messages.Add("Screenshot approval manifest ApprovedAt is required.");
         if (string.IsNullOrWhiteSpace(manifest.ApprovedBy))
@@ -189,6 +189,19 @@ public sealed class AppStoreConnectScreenshotSyncConfigValidator
                 }
 
                 var entry = matches[0].Entry;
+                if (entry.Composition is not null)
+                {
+                    try
+                    {
+                        if (manifest.SchemaVersion != 3) throw new InvalidOperationException("Composition lineage requires approval schemaVersion 3.");
+                        AppleStoreArtLineageValidator.ValidateMetadata(entry.Composition);
+                        if (!string.Equals(entry.Composition.Sha256, entry.Sha256, StringComparison.OrdinalIgnoreCase) ||
+                            entry.Composition.Width != entry.Width || entry.Composition.Height != entry.Height ||
+                            entry.Composition.Locale != manifest.Locale || entry.PerceptualHash != entry.Composition.PerceptualHash)
+                            throw new InvalidOperationException("Composition lineage does not match the exact approved screenshot identity.");
+                    }
+                    catch (InvalidOperationException ex) { messages.Add(ex.Message); }
+                }
                 var sha256 = ComputeSha256(file);
                 if (!string.Equals(entry.Sha256, sha256, StringComparison.OrdinalIgnoreCase))
                     messages.Add($"Screenshot '{Path.GetFileName(file)}' changed after approval (SHA-256 mismatch).");

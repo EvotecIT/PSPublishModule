@@ -351,6 +351,16 @@ jobs:
           -c Release --no-build --no-restore --nologo
           --filter 'FullyQualifiedName~ArtefactBuilder|FullyQualifiedName~ApprovedModuleDependencyPruning|FullyQualifiedName~ModulePipelineApprovedModules'
 
+      - name: Test Apple store art and screenshot provenance
+        shell: pwsh
+        timeout-minutes: 10
+        env:
+          MAGICK_THREAD_LIMIT: '2'
+        run: >
+          dotnet test ./PowerForge.Tests/PowerForge.Tests.csproj
+          -c Release --no-build --no-restore --nologo
+          --filter 'FullyQualifiedName~AppleStoreArtTests|FullyQualifiedName~PowerForgeCliAppleReleaseTests.AppleScreenshots|FullyQualifiedName~AppStoreConnectScreenshot|FullyQualifiedName~AppleReleaseWorkflowTests.ScreenshotWorkflowRequires|FullyQualifiedName~AppleReleaseWorkflowTests.ManualScreenshotApproval'
+
       - name: Test merge-to-TestFlight contracts
         shell: pwsh
         timeout-minutes: 10
@@ -564,6 +574,16 @@ jobs:
           -c Release --nologo
           --filter 'FullyQualifiedName~BenchmarkServicesTests.History'
 
+      - name: Test Apple store art and screenshot provenance
+        shell: pwsh
+        timeout-minutes: 10
+        env:
+          MAGICK_THREAD_LIMIT: '2'
+        run: >
+          dotnet test ./PowerForge.Tests/PowerForge.Tests.csproj
+          -c Release --no-build --no-restore --nologo
+          --filter 'FullyQualifiedName~AppleStoreArtTests|FullyQualifiedName~PowerForgeCliAppleReleaseTests.AppleScreenshots|FullyQualifiedName~AppStoreConnectScreenshot|FullyQualifiedName~AppleReleaseWorkflowTests.ScreenshotWorkflowRequires|FullyQualifiedName~AppleReleaseWorkflowTests.ManualScreenshotApproval'
+
       - name: Test merge-to-TestFlight contracts
         shell: pwsh
         timeout-minutes: 10
@@ -709,6 +729,16 @@ jobs:
           dotnet test .\PowerForge.Tests\PowerForge.Tests.csproj
           -c Release --nologo
           --filter 'FullyQualifiedName~BenchmarkServicesTests.History'
+
+      - name: Test Apple store art and screenshot provenance
+        shell: pwsh
+        timeout-minutes: 10
+        env:
+          MAGICK_THREAD_LIMIT: '2'
+        run: >
+          dotnet test ./PowerForge.Tests/PowerForge.Tests.csproj
+          -c Release --no-build --no-restore --nologo
+          --filter 'FullyQualifiedName~AppleStoreArtTests|FullyQualifiedName~PowerForgeCliAppleReleaseTests.AppleScreenshots|FullyQualifiedName~AppStoreConnectScreenshot|FullyQualifiedName~AppleReleaseWorkflowTests.ScreenshotWorkflowRequires|FullyQualifiedName~AppleReleaseWorkflowTests.ManualScreenshotApproval'
 
       - name: Test merge-to-TestFlight contracts
         shell: pwsh
