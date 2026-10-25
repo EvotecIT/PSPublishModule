@@ -136,7 +136,7 @@ internal sealed class PowerShellModulePipelineHostedOperations :
         if (string.IsNullOrWhiteSpace(contextPath)) throw new ArgumentException("Context path is required.", nameof(contextPath));
 
         var name = string.IsNullOrWhiteSpace(action.Name) ? action.At.ToString() : action.Name!.Trim();
-        var workingDirectory = ResolveActionPath(projectRoot, action.WorkingDirectory) ?? projectRoot;
+        var workingDirectory = PathValueResolver.ResolveNullable(projectRoot, action.WorkingDirectory) ?? projectRoot;
         var timeoutSeconds = action.TimeoutSeconds.GetValueOrDefault(300);
         if (timeoutSeconds < 1) timeoutSeconds = 1;
 
@@ -160,7 +160,7 @@ internal sealed class PowerShellModulePipelineHostedOperations :
         environment["POWERFORGE_RESOLVED_VERSION"] = context.ResolvedVersion;
 
         PowerShellRunRequest request;
-        var filePath = ResolveActionPath(projectRoot, action.FilePath);
+        var filePath = PathValueResolver.ResolveNullable(projectRoot, action.FilePath);
         var hasFile = !string.IsNullOrWhiteSpace(filePath);
         var hasInline = !string.IsNullOrWhiteSpace(action.InlineScript);
         if (hasFile && hasInline)
@@ -431,15 +431,6 @@ internal sealed class PowerShellModulePipelineHostedOperations :
         {
             try { File.Delete(scriptPath); } catch { /* best effort */ }
         }
-    }
-
-    private static string? ResolveActionPath(string projectRoot, string? path)
-    {
-        if (string.IsNullOrWhiteSpace(path)) return null;
-        var trimmed = path!.Trim();
-        return Path.IsPathRooted(trimmed)
-            ? Path.GetFullPath(trimmed)
-            : Path.GetFullPath(Path.Combine(projectRoot, trimmed));
     }
 
     private static string EncodeLines(IEnumerable<string> lines)
