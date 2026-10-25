@@ -8,6 +8,7 @@ namespace PowerForge.Web;
 
 internal sealed class ScribanTemplateEngine : ITemplateEngine
 {
+    private const int RenderCharacterLimit = 32 * 1024 * 1024;
     private static readonly ConcurrentDictionary<string, Template> ParsedTemplateCache = new(StringComparer.Ordinal);
     private static readonly ConditionalWeakTable<IReadOnlyDictionary<string, object?>, object> DataScriptCache = new();
 
@@ -92,6 +93,12 @@ internal sealed class ScribanTemplateEngine : ITemplateEngine
         {
             TemplateLoader = new InlineTemplateLoader(partialResolver),
             StrictVariables = false,
+            // Nested partials and captures share this budget. The default silently truncates
+            // ordinary large galleries; exhaustion must fail the build, not publish broken HTML.
+            LimitToString = RenderCharacterLimit,
+            OutputLimit = RenderCharacterLimit,
+            OnStringLimit = ScriptLimitBehavior.Throw,
+            OnOutputLimit = ScriptLimitBehavior.Throw,
             // HTML fragments such as rendered Markdown and code samples already carry
             // intentional whitespace. Scriban's automatic indentation would otherwise
             // inject the template line's leading spaces after every newline in a fragment.

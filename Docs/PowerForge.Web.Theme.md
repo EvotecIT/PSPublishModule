@@ -274,6 +274,12 @@ Two engines are supported:
 - **simple**: token replacement + partials (`{{TITLE}}`, `{{CONTENT}}`, `{{> header}}`).
 - **scriban**: full templates with includes and data.
 
+Scriban page rendering allows 32 Mi UTF-16 characters for string conversions and
+cumulative output. Nested includes and captures share the output budget, so it
+can exceed the final HTML length. Large galleries render within this bound;
+exhausting either budget fails the build with the template location instead of
+publishing an ellipsis or incomplete markup.
+
 Engine selection order:
 1) Site `site.json` `ThemeEngine` override (if set)
 2) Theme `theme.json` `engine`
