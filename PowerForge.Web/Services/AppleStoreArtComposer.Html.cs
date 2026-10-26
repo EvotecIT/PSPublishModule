@@ -28,13 +28,18 @@ public sealed partial class AppleStoreArtComposer
             "<h1>" + Headline(headline) + "</h1>" +
             (subline.Length == 0 ? "" : "<p class=\"sub\">" + Escape(subline) + "</p>") + "</header>";
         // Widths in the prototype are expressed on each native base canvas.
-        var ratio = size.Width / (device == "ipad-13" ? 2064d : device == "mac" ? 2880d : 1320d);
-        if (device is "duo-outer" or "duo-inner")
+        var ratio = size.Width / (device == "ipad-13" ? 2064d : device == "mac" ? 2880d : device == "mac-1440" ? 1440d : 1320d);
+        var nativePhone = device is "duo-outer" or "duo-inner" && frame.Layout is "hero" or "focus" or "pair" or "statement";
+        if (device is "duo-outer" or "duo-inner" && !nativePhone)
             ratio *= (size.Height / (double)size.Width) / (2868d / 1320);
-        var width = (frame.DeviceWidth ?? (frame.Layout switch { "focus" => 900, "pair" => 880, "ipad" => 1720, "mac" => 2400, _ => 1010 })) * ratio;
+        var width = (frame.DeviceWidth ?? (frame.Layout switch { "focus" => 900, "pair" => 880, "ipad" => 1720, "mac" => device == "mac-1440" ? 1120 : 2400, _ => 1010 })) * ratio;
+        // The shell includes two 3.4% bezels. Size its outer box so the inner
+        // screen has the real Duo capture aspect ratio, without cover-cropping.
+        var phoneAspect = nativePhone ? "--phone-aspect:" + Number(primary.Input.Width /
+            (primary.Input.Height * .932 + primary.Input.Width * .068)) + ";" : "";
         string Image(Capture capture) => "<img draggable=\"false\" src=\"" + capture.Uri + "\">";
         string Phone(string extra = "", string cls = "") => "<div class=\"phone " + cls + "\" style=\"--w:" + Number(width) +
-            "px;transform:rotate(0deg)\"><div class=\"phone-screen\">" + Image(primary) +
+            "px;" + phoneAspect + "\"><div class=\"phone-screen\">" + Image(primary) +
             (frame.Island ? "<i class=\"island\"></i>" : "") + "</div>" + extra + "</div>";
         var layoutClass = frame.Layout == "mac" ? "macl" : frame.Layout;
         var content = frame.Layout switch
@@ -49,10 +54,11 @@ public sealed partial class AppleStoreArtComposer
             _ => throw new ArgumentException($"Unsupported layout '{frame.Layout}'.")
         };
         var body = "<div class=\"stage " + layoutClass + "\">" + header + "<div class=\"dev-wrap" +
-            (frame.Layout == "focus" ? " dim" : "") + "\">" + content + "</div></div>";
+            (frame.Layout == "focus" ? " dim" : "") + "\"" +
+            (frame.Lift.HasValue ? " style=\"transform:translateY(calc(var(--W)*" + Number(frame.Lift.Value) + "))\"" : "") + ">" + content + "</div></div>";
         return Asset("frame.html").Replace("{{locale}}", Escape(locale)).Replace("{{mood}}", Escape(frame.Mood))
             .Replace("{{device}}", device == "mac" ? "mac-size" : device).Replace("{{body}}", body)
-            .Replace("{{styles}}", ":root{--W:" + size.Width + "px;--H:" + size.Height + "px;--u:" + Number(size.Width / 1320d) + "}" + styles);
+            .Replace("{{styles}}", ":root{--W:" + size.Width + "px;--H:" + size.Height + "px;--u:" + Number(size.Width / (device == "mac-1440" ? 1200d : 1320d)) + "}" + styles);
     }
     private static string Lens(AppleStoreArtFrame frame, double width, Capture capture)
     {

@@ -16,8 +16,13 @@ public sealed partial class AppleStoreArtComposer
         {
             ["iphone-69"] = new(1320, 2868), ["iphone-63"] = new(1206, 2622),
             ["duo-outer"] = new(1398, 2034), ["duo-inner"] = new(2007, 2853),
-            ["ipad-13"] = new(2064, 2752), ["mac"] = new(2880, 1800), ["watch"] = new(416, 496)
+            ["ipad-13"] = new(2064, 2752), ["mac"] = new(2880, 1800), ["mac-1440"] = new(1440, 900), ["watch"] = new(416, 496)
         });
+
+    /// <summary>Renders all configured locales and displays, preserving the released four-argument API.</summary>
+    public Task<AppleStoreArtLineage[]> ComposeAsync(string specPath, string outputPath,
+        string? browserExecutablePath = null, CancellationToken cancellationToken = default)
+        => ComposeAsync(specPath, outputPath, browserExecutablePath, cancellationToken, null, null);
 
     /// <summary>
     /// Renders into a new, empty directory inside CaptureRoot. Publishes only after every frame passes.
@@ -26,9 +31,12 @@ public sealed partial class AppleStoreArtComposer
     /// <param name="specPath">Per-app JSON specification.</param>
     /// <param name="outputPath">Fresh output directory inside the capture inventory root.</param>
     /// <param name="browserExecutablePath">Optional qualified Chromium executable; otherwise HtmlTinkerX uses its shared installation.</param>
+    /// <param name="locales">Optional nonempty subset of configured locales.</param>
+    /// <param name="devices">Optional nonempty subset of configured output devices.</param>
     /// <param name="cancellationToken">Cancels composition and tears down the owned browser session.</param>
     public async Task<AppleStoreArtLineage[]> ComposeAsync(string specPath, string outputPath,
-        string? browserExecutablePath = null, CancellationToken cancellationToken = default)
+        string? browserExecutablePath, CancellationToken cancellationToken,
+        string[]? locales, string[]? devices)
     {
         specPath = Path.GetFullPath(specPath); Unlinked(specPath);
         var specBytes = File.ReadAllBytes(specPath);
@@ -40,6 +48,8 @@ public sealed partial class AppleStoreArtComposer
         if (output == captureRoot || File.Exists(output) || (Directory.Exists(output) && Directory.EnumerateFileSystemEntries(output).Any()))
             throw new IOException("Store art output must be a fresh, empty directory distinct from CaptureRoot.");
         ValidateSpec(spec);
+        locales = Select(spec.Locales, locales, "locale");
+        devices = Select(spec.Devices, devices, "device");
         var themeStyle = Asset("theme-base.css") + ThemeCss(spec.Theme);
         var captionFonts = CaptionFonts(themeStyle);
         var templateHash = TemplateHash();
@@ -48,85 +58,89 @@ public sealed partial class AppleStoreArtComposer
         var outputs = new List<AppleStoreArtLineage>();
         try
         {
-            foreach (var locale in spec.Locales)
+            foreach (var locale in locales)
             {
                 var captionPath = Path.GetFullPath(Path.Combine(baseDirectory, spec.CaptionsPath, $"store-captions.{locale}.json"));
                 Unlinked(captionPath);
                 var captionBytes = File.ReadAllBytes(captionPath);
                 var captions = JsonSerializer.Deserialize<Dictionary<string, string>>(captionBytes, Json) ?? throw new ArgumentException($"Empty captions: {locale}");
-                var includeCjk = captions.Values.Any(text => text.EnumerateRunes().Any(rune =>
-                    FontGlyphs.Value["Noto Sans CJK"].Contains(rune.Value) && FontGlyphs.Value
-                        .Where(font => font.Key != "Noto Sans CJK").Any(font => !font.Value.Contains(rune.Value)))) ||
-                    spec.Theme.Tokens.Values.Any(value => value.Contains("Noto", StringComparison.OrdinalIgnoreCase));
-                var style = FontCss(includeCjk) + themeStyle;
-                foreach (var device in spec.Devices)
+                var style = CaptionStyle(spec, captions, themeStyle);
+                foreach (var device in devices)
                 {
                     var size = Displays[device];
                     var frames = spec.Frames.Where(f => Applies(f, device)).ToArray();
                     if (frames.Length == 0) throw new ArgumentException($"No frames select device '{device}'.");
                     if (device == "watch" && frames.Length > 5) throw new ArgumentException("Watch permits at most five raw frames.");
                     var folder = Path.Combine(staging, locale, device); Directory.CreateDirectory(folder);
-                    for (var index = 0; index < frames.Length; index++)
+                    HtmlBrowserSession? session = null;
+                    try
                     {
-                        cancellationToken.ThrowIfCancellationRequested();
-                        var frame = frames[index];
-                        try
+                        for (var index = 0; index < frames.Length; index++)
                         {
-                            var primary = ReadCapture(spec, captureRoot, frame.Capture, locale);
-                            var watch = frame.Layout == "pair" ? ReadCapture(spec, captureRoot, frame.Watch!, locale) : null;
-                            var surfaces = frame.Layout == "surfaces" ? frame.Surfaces.Select(s => ReadCapture(spec, captureRoot, s, locale)).ToArray() : [];
-                            var name = $"{index + 1:00}-{frame.Id}.png";
-                            var file = Path.Combine(folder, name);
-                            string renderHash, renderer;
-                            if (device == "watch")
+                            cancellationToken.ThrowIfCancellationRequested();
+                            var frame = frames[index];
+                            try
                             {
-                                if (frame.Layout != "watch" || primary.Input.Width != size.Width || primary.Input.Height != size.Height)
-                                    throw new InvalidOperationException("Watch output requires a watch layout and an exact 416x496 raw PNG.");
-                                using var image = new MagickImage(primary.Bytes);
-                                if (!image.IsOpaque) throw new InvalidOperationException("Watch passthrough PNG must be opaque; transparent captures cannot preserve RGB pixels in a no alpha output.");
-                                File.WriteAllBytes(file, primary.Bytes);
-                                if (image.HasAlpha) NormalizePng(file, size);
-                                renderHash = primary.Input.Sha256; renderer = "passthrough";
-                            }
-                            else
-                            {
-                                var html = BuildHtml(frame, locale, device, size, captions, captionFonts, style, primary, watch, surfaces);
-                                renderHash = Hash(html);
-                                var htmlFile = Path.Combine(staging, "frame.html"); File.WriteAllText(htmlFile, html);
-                                try
+                                var primary = ReadCapture(spec, captureRoot, frame.Capture, locale);
+                                var watch = frame.Layout == "pair" ? ReadCapture(spec, captureRoot, frame.Watch!, locale) : null;
+                                var surfaces = frame.Layout == "surfaces" ? frame.Surfaces.Select(s => ReadCapture(spec, captureRoot, s, locale)).ToArray() : [];
+                                var name = $"{index + 1:00}-{frame.Id}.png";
+                                var file = Path.Combine(folder, name);
+                                string renderHash, renderer;
+                                if (device == "watch")
                                 {
-                                    await using var session = await HtmlBrowser.OpenSessionAsync(new Uri(htmlFile).AbsoluteUri,
-                                        new HtmlBrowserLaunchOptions
-                                        {
-                                            Browser = HtmlBrowserEngine.Chromium, Headless = true,
-                                            BrowserExecutablePath = browserExecutablePath, ViewportWidth = size.Width, ViewportHeight = size.Height,
-                                            DeviceScaleFactor = 1, Locale = locale, Timezone = "UTC", Timeout = 30000
-                                        }, cancellationToken).ConfigureAwait(false);
-                                    await HtmlBrowser.EvaluateAsync<string>(session, Asset("fit.js"), cancellationToken).ConfigureAwait(false);
-                                    await HtmlBrowser.CaptureScreenshotAsync(session.Page, file,
-                                        new ScreenshotOptions { FullPage = false }, cancellationToken).ConfigureAwait(false);
-                                    renderer = "Chromium " + session.Page.Context.Browser!.Version;
+                                    if (frame.Layout != "watch" || primary.Input.Width != size.Width || primary.Input.Height != size.Height)
+                                        throw new InvalidOperationException("Watch output requires a watch layout and an exact 416x496 raw PNG.");
+                                    using var image = new MagickImage(primary.Bytes);
+                                    if (!image.IsOpaque) throw new InvalidOperationException("Watch passthrough PNG must be opaque; transparent captures cannot preserve RGB pixels in a no alpha output.");
+                                    File.WriteAllBytes(file, primary.Bytes);
+                                    if (image.HasAlpha) NormalizePng(file, size);
+                                    renderHash = primary.Input.Sha256; renderer = "passthrough";
                                 }
-                                finally { File.Delete(htmlFile); }
-                                NormalizePng(file, size);
+                                else
+                                {
+                                    var html = BuildHtml(frame, locale, device, size, captions, captionFonts, style, primary, watch, surfaces);
+                                    renderHash = Hash(html);
+                                    var htmlFile = Path.Combine(staging, "frame.html"); File.WriteAllText(htmlFile, html);
+                                    try
+                                    {
+                                        if (session is null)
+                                            session = await HtmlBrowser.OpenSessionAsync(new Uri(htmlFile).AbsoluteUri,
+                                            new HtmlBrowserLaunchOptions
+                                            {
+                                                Browser = HtmlBrowserEngine.Chromium, Headless = true,
+                                                BrowserExecutablePath = browserExecutablePath, ViewportWidth = size.Width, ViewportHeight = size.Height,
+                                                DeviceScaleFactor = 1, Locale = locale, Timezone = "UTC", Timeout = 30000
+                                            }, cancellationToken).ConfigureAwait(false);
+                                        else
+                                            await HtmlBrowser.NavigateAsync(session, new Uri(htmlFile).AbsoluteUri, 30000, cancellationToken).ConfigureAwait(false);
+                                        await HtmlBrowser.EvaluateAsync<string>(session, Asset("fit.js"), cancellationToken).ConfigureAwait(false);
+                                        await HtmlBrowser.CaptureScreenshotAsync(session.Page, file,
+                                            new ScreenshotOptions { FullPage = false }, cancellationToken).ConfigureAwait(false);
+                                        renderer = "Chromium " + session.Page.Context.Browser!.Version;
+                                    }
+                                    finally { File.Delete(htmlFile); }
+                                    NormalizePng(file, size);
+                                }
+                                var inputs = new[] { primary }.Concat(watch is null ? [] : new[] { watch }).Concat(surfaces)
+                                    .Select(c => c.Input).DistinctBy(i => i.Path).ToArray();
+                                var lineage = new AppleStoreArtLineage
+                                {
+                                    Path = Path.GetRelativePath(captureRoot, Path.Combine(output, locale, device, name)).Replace('\\', '/'),
+                                    Sha256 = Hash(File.ReadAllBytes(file)), Width = size.Width, Height = size.Height,
+                                    PerceptualHash = PerceptualHash(file), Frame = frame.Id, Locale = locale, Device = device, Theme = spec.Theme.Name,
+                                    SpecSha256 = Hash(specBytes), CaptionsSha256 = Hash(captionBytes), TemplateSha256 = templateHash,
+                                    RenderSha256 = renderHash, Renderer = renderer, Inputs = inputs
+                                };
+                                outputs.Add(lineage);
                             }
-                            var inputs = new[] { primary }.Concat(watch is null ? [] : new[] { watch }).Concat(surfaces)
-                                .Select(c => c.Input).DistinctBy(i => i.Path).ToArray();
-                            var lineage = new AppleStoreArtLineage
+                            catch (Exception ex) when (ex is not OperationCanceledException)
                             {
-                                Path = Path.GetRelativePath(captureRoot, Path.Combine(output, locale, device, name)).Replace('\\', '/'),
-                                Sha256 = Hash(File.ReadAllBytes(file)), Width = size.Width, Height = size.Height,
-                                PerceptualHash = PerceptualHash(file), Frame = frame.Id, Locale = locale, Device = device, Theme = spec.Theme.Name,
-                                SpecSha256 = Hash(specBytes), CaptionsSha256 = Hash(captionBytes), TemplateSha256 = templateHash,
-                                RenderSha256 = renderHash, Renderer = renderer, Inputs = inputs
-                            };
-                            outputs.Add(lineage);
-                        }
-                        catch (Exception ex) when (ex is not OperationCanceledException)
-                        {
-                            throw new InvalidOperationException($"Store art locale '{locale}', frame '{frame.Id}', device '{device}': {ex.Message}", ex);
+                                throw new InvalidOperationException($"Store art locale '{locale}', frame '{frame.Id}', device '{device}': {ex.Message}", ex);
+                            }
                         }
                     }
+                    finally { if (session is not null) await session.DisposeAsync().ConfigureAwait(false); }
                     ContactSheet(folder, Path.Combine(staging, "_review", locale + "-" + device + ".png"));
                 }
             }
@@ -140,9 +154,27 @@ public sealed partial class AppleStoreArtComposer
         finally { if (Directory.Exists(staging)) Directory.Delete(staging, recursive: true); }
     }
 
+    private static string CaptionStyle(AppleStoreArtSpec spec, Dictionary<string, string> captions, string themeStyle)
+    {
+        var includeCjk = captions.Values.Any(text => text.EnumerateRunes().Any(rune =>
+            FontGlyphs.Value["Noto Sans CJK"].Contains(rune.Value) && FontGlyphs.Value
+                .Where(font => font.Key != "Noto Sans CJK").Any(font => !font.Value.Contains(rune.Value)))) ||
+            spec.Theme.Tokens.Values.Any(value => value.Contains("Noto", StringComparison.OrdinalIgnoreCase));
+        return FontCss(includeCjk) + themeStyle;
+    }
+
+    private static string[] Select(string[] configured, string[]? selected, string name)
+    {
+        if (selected is null) return configured;
+        if (selected.Length == 0 || selected.Distinct(StringComparer.Ordinal).Count() != selected.Length ||
+            selected.Any(value => !configured.Contains(value, StringComparer.Ordinal)))
+            throw new ArgumentException($"Selected {name}s must be a nonempty, unique subset of the spec.");
+        return selected;
+    }
+
     private static bool Applies(AppleStoreArtFrame frame, string device) => frame.Devices.Length > 0
         ? frame.Devices.Contains(device, StringComparer.Ordinal)
-        : frame.Layout switch { "watch" => device == "watch", "ipad" => device == "ipad-13", "mac" => device == "mac", _ => device is not ("watch" or "ipad-13" or "mac") };
+        : frame.Layout switch { "watch" => device == "watch", "ipad" => device == "ipad-13", "mac" => device is "mac" or "mac-1440", _ => device is not ("watch" or "ipad-13" or "mac" or "mac-1440") };
 
     private static void ValidateSpec(AppleStoreArtSpec spec)
     {
@@ -158,6 +190,8 @@ public sealed partial class AppleStoreArtComposer
             if (frame.Mood is not ("" or "light" or "dark") || frame.DeviceWidth is <= 0 or > 6000 ||
                 (frame.DeviceWidth.HasValue && !double.IsFinite(frame.DeviceWidth.Value)) || !double.IsFinite(frame.WatchWidth) || frame.WatchWidth <= 0 || frame.WatchWidth > 2000)
                 throw new ArgumentException($"Invalid options for frame '{frame.Id}'.");
+            if (frame.Lift.HasValue && (!double.IsFinite(frame.Lift.Value) || frame.Lift.Value is < -.5 or > .5))
+                throw new ArgumentException($"Invalid lift for frame '{frame.Id}'.");
             if (frame.Devices.Any(d => !spec.Devices.Contains(d, StringComparer.Ordinal))) throw new ArgumentException($"Frame '{frame.Id}' selects a device absent from devices.");
             if (!spec.Devices.Any(d => Applies(frame, d))) throw new ArgumentException($"Frame '{frame.Id}' has no output device.");
         }

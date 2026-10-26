@@ -13,6 +13,9 @@ param(
     [ValidateSet('main', 'master')]
     [string] $ExpectedConsumerBranch = 'main',
 
+    [ValidateSet('Apple', 'Web')]
+    [string] $Tool = 'Apple',
+
     [switch] $LoadFixedLocalAppleProfile,
 
     [string] $CapturePolicyPath,
@@ -663,6 +666,8 @@ function Invoke-RedactedProcess {
     }
     foreach ($entry in $safeEnvironment.GetEnumerator()) { $start.Environment[$entry.Key] = [string]$entry.Value }
     $start.Environment['NUGET_PACKAGES'] = $NuGetPackagesPath
+    $start.Environment['MSBUILDDISABLENODEREUSE'] = '1'
+    $start.Environment['DOTNET_CLI_USE_MSBUILD_SERVER'] = '0'
     if ($IncludeAppleCredentials) {
         foreach ($entry in $script:validatedCredentialEnvironment.GetEnumerator()) {
             $start.Environment[$entry.Key] = [string]$entry.Value
@@ -693,10 +698,20 @@ function Invoke-RedactedProcess {
 try {
     New-Item -ItemType Directory -Path $temporaryRoot -Force | Out-Null
     $savedCredentialEnvironment = Suspend-AppleCredentialEnvironment
+    if ($Tool -eq 'Web' -and ($LoadFixedLocalAppleProfile -or $CapturePolicyPath)) {
+        throw 'Offline Web composition cannot load an Apple profile or capture policy.'
+    }
     if ($LoadFixedLocalAppleProfile) { $savedCredentialEnvironment = Read-FixedLocalAppleProfile }
     Set-SafeGitEnvironment
     $script:gitPath = Resolve-FixedTool -Name git
     $toolHead = Assert-CleanRepository -Root $toolRoot -Name 'PSPublishModule source' -RequiredCommit $ExpectedCommit -ExpectedRepository 'EvotecIT/PSPublishModule'
+    if ($Tool -eq 'Web') {
+        $webSupport = Join-Path $PSScriptRoot 'Invoke-PinnedPowerForge.StoreArt.ps1'
+        Invoke-GitText -Root $toolRoot -Arguments @('ls-files', '--error-unmatch', '--', 'scripts/Invoke-PinnedPowerForge.StoreArt.ps1') | Out-Null
+        . $webSupport
+        Invoke-PinnedStoreArt
+        exit $LASTEXITCODE
+    }
     $consumerHead = Assert-ConsumerSourceRepository
     Assert-NoReplaceRefs -Root $toolRoot -Name 'PSPublishModule source'
     Assert-NoReplaceRefs -Root $consumer -Name 'Consumer source'

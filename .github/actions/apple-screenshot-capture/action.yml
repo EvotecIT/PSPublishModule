@@ -193,6 +193,7 @@ runs:
         if ($LASTEXITCODE -ne 0) { throw 'Store art tool build failed.' }
       } finally { Pop-Location }
       "POWERFORGE_STORE_ART_CLI=$(Join-Path $output 'PowerForge.Web.Cli.dll')" | Add-Content $env:GITHUB_ENV
+      "PSPUBLISHMODULE_ROOT=$toolRoot" | Add-Content $env:GITHUB_ENV
 
   - name: Capture deterministic App Store screenshots
     shell: pwsh
@@ -378,7 +379,11 @@ runs:
     run: |
       $sourceRoot = [IO.Path]::GetFullPath('${{ github.workspace }}/source')
       $artifactRoot = [IO.Path]::GetFullPath((Join-Path $sourceRoot $env:CAPTURE_ARTIFACT_PATH))
-      $screenshots = @(Get-ChildItem -LiteralPath $artifactRoot -File -Filter '*.png' -Recurse | Sort-Object FullName | ForEach-Object {
+      $artOutput = Join-Path $artifactRoot 'store-art'
+      $screenshots = @(Get-ChildItem -LiteralPath $artifactRoot -File -Filter '*.png' -Recurse | Where-Object {
+        [string]::IsNullOrWhiteSpace($env:STORE_ART_SPEC) -or
+          -not $_.FullName.StartsWith($artOutput + [IO.Path]::DirectorySeparatorChar, [StringComparison]::Ordinal)
+      } | Sort-Object FullName | ForEach-Object {
         $dimensions = @(& sips -g pixelWidth -g pixelHeight $_.FullName 2>&1)
         if ($LASTEXITCODE -ne 0) { throw "Unable to read PNG dimensions: $($_.FullName)" }
         $widthLine = $dimensions | Where-Object { $_ -match '^\s*pixelWidth:\s*(\d+)\s*$' } | Select-Object -First 1
@@ -406,8 +411,11 @@ runs:
         $spec = Get-Content -LiteralPath $specPath -Raw | ConvertFrom-Json
         $specCaptureRoot = [IO.Path]::GetFullPath((Join-Path (Split-Path -Parent $specPath) $spec.captureRoot))
         if ($specCaptureRoot -cne $artifactRoot) { throw 'Store art CaptureRoot must equal capture_artifact_path.' }
-        $artOutput = Join-Path $artifactRoot 'store-art'
-        & dotnet $env:POWERFORGE_STORE_ART_CLI apple-store-art compose --config $specPath --out $artOutput
+        # A consumer can compose through its pinned helper in the capture lane.
+        # Verify the retained bytes and current spec instead of rendering twice.
+        $storeArtArguments = @('apple-store-art', 'compose', '--config', $specPath, '--out', $artOutput)
+        if (Test-Path -LiteralPath $artOutput) { $storeArtArguments += '--verify-existing' }
+        & dotnet $env:POWERFORGE_STORE_ART_CLI @storeArtArguments
         if ($LASTEXITCODE -ne 0) { throw 'Store art composition failed.' }
         $compositions = @(Get-Content -LiteralPath (Join-Path $artOutput 'store-art.lineage.json') -Raw | ConvertFrom-Json -Depth 20)
         if ($compositions.Count -eq 0) { throw 'Store art produced no composition lineage.' }

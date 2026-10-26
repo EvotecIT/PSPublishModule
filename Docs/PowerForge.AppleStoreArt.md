@@ -36,6 +36,7 @@ Headlines use two lines at most. The compositor waits for fonts and decoded imag
 | `duo-inner` | 2007 × 2853 |
 | `ipad-13` | 2064 × 2752 |
 | `mac` | 2880 × 1800 |
+| `mac-1440` | 1440 × 900 |
 | `watch` | 416 × 496 |
 
 Duo keys describe local geometry; they do not add App Store Connect display types. Map output folders to supported display types in the existing screenshot sync config. Phone layouts select phone/Duo devices by default; `ipad`, `mac`, and `watch` select their corresponding device. Explicit frame `devices` overrides that selection.
@@ -59,6 +60,46 @@ powerforge apple-screenshots manifest --config screenshots.json \
 
 Every composed input must be an exact member of the raw provenance inventory and still match its retained bytes. Every selected output must match its composition hash and listing locale. The approval manifest uses schema v3 for composed entries and retains the complete lineage and perceptual hash. Upload still requires exact approved output bytes. Existing raw-only schema v2 inventories and manifests remain supported.
 
-The reusable `apple-screenshot-capture` action accepts opt-in `store_art_spec` and `store_art_tool_ref` inputs. The latter pins the exact PowerForge commit containing this command. The action inventories raw PNGs first, composes into `<capture_artifact_path>/store-art`, then records capture provenance v3 with separate `screenshots` and `compositions` inventories. Its spec must be tracked at the captured commit and `captureRoot` must equal `capture_artifact_path`. With both inputs blank, capture remains raw-only. The existing approval readers accept v3; no upload or publication operation is added.
+The reusable `apple-screenshot-capture` action accepts opt-in `store_art_spec` and `store_art_tool_ref` inputs. The latter pins the exact PowerForge commit containing this command. The action inventories raw PNGs separately, composes or verifies retained output in `<capture_artifact_path>/store-art`, then records capture provenance v3 with separate `screenshots` and `compositions` inventories. Its spec must be tracked at the captured commit and `captureRoot` must equal `capture_artifact_path`. With both inputs blank, capture remains raw-only. The existing approval readers accept v3; no upload or publication operation is added.
 
 App repositories own their scenarios, captions and adoption. This compositor does not create missing UI states or assemble preview videos.
+
+## Pinned consumer capture lanes
+
+A consumer calls the exact reviewed helper with an explicit argument array, so
+PowerShell forwards CLI flags such as `--out` without binding common parameters:
+
+```powershell
+$arguments = @('apple-store-art', 'compose', '--config', 'store-art.json',
+    '--out', 'build/appstore-screenshots/store-art')
+& ./scripts/Invoke-PinnedPowerForge.ps1 -Tool Web -ExpectedCommit $reviewedCommit `
+    -ConsumerRoot $appRoot -ExpectedConsumerRepository 'EvotecIT/MyApp' `
+    -ArgumentList $arguments
+```
+
+This offline path accepts feature branches and local caption/spec edits. It
+never loads the local Apple profile; the existing Apple release path keeps its
+clean-main and credential checks. Shell callers can use PowerShell's
+`-CommandWithArgs` to pass the same literal array through a thin consumer wrapper.
+
+`--locales en-US,pl,de-DE,ja` and `--devices iphone-69,iphone-63,watch` select
+nonempty subsets of the spec for local proof. The unchanged spec bytes remain
+part of lineage. `--verify-existing` checks the exact selected output inventory,
+current raw captures, captions, spec and shipped template without rerendering.
+
+The reusable screenshot workflow forwards `store_art_spec` and
+`store_art_tool_ref`. When the capture script has already produced `store-art/`,
+the pinned shared tool verifies it before recording provenance v3. Composed
+outputs and `_review` sheets never enter the raw capture inventory. Approval
+continues to bind every composed output to the retained raw capture hashes.
+
+For compact Mac window stories, `mac-1440` produces a 1440x900 canvas using the
+1200px design grid, a 64px headline with a 52px fitting floor, and the existing
+window bleed, with a default window width of 1120px. `mac` retains its 2880x1800 geometry. A frame's optional `lift`
+sets vertical device translation as a fraction of canvas width; `0` raises a
+whole phone above the lower edge. It changes framing, never raw capture pixels.
+
+Duo phone layouts use the actual raw capture aspect ratio inside the drawn shell,
+accounting for bezel padding. Native outer/inner captures keep their horizontal
+content rather than being cover-cropped into a tall iPhone viewport. These local
+output geometries still do not assert App Store Connect upload support.
