@@ -13,6 +13,7 @@
 )
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
+# POWERFORGE_PUBLIC_GALLERY_FAILURE_DIAGNOSTICS
 
 try {
   Import-Module Microsoft.PowerShell.PSResourceGet -ErrorAction Stop | Out-Null
@@ -49,6 +50,8 @@ try {
   exit 0
 } catch {
   $msg = $_.Exception.Message
+  $diagnostic = Get-PFPublicGalleryFailureDiagnostic -Repositories @($Repository) -Failure $_ -HasCredential ($CredentialUser -or $CredentialSecret)
+  if ($diagnostic) { $msg += "`n" + $diagnostic }
   $b64 = [System.Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($msg))
   Write-Output ('PFPSRG::ERROR::' + $b64)
   exit 1

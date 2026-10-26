@@ -612,7 +612,7 @@ public sealed partial class PSResourceGetClient
 
     private static string BuildFindScript()
     {
-        return EmbeddedScripts.Load("Scripts/PSResourceGet/Find-PSResource.ps1");
+        return ComposePublicGalleryFailureDiagnostics(EmbeddedScripts.Load("Scripts/PSResourceGet/Find-PSResource.ps1"));
     }
 
     private static string BuildAvailabilityScript()
@@ -632,7 +632,7 @@ public sealed partial class PSResourceGetClient
 
     private static string BuildSaveScript()
     {
-        return EmbeddedScripts.Load("Scripts/PSResourceGet/Save-PSResource.ps1");
+        return ComposePublicGalleryFailureDiagnostics(EmbeddedScripts.Load("Scripts/PSResourceGet/Save-PSResource.ps1"));
     }
 
     private static bool ParseAvailability(string stdout)
