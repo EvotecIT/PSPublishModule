@@ -51,6 +51,10 @@ Adopt the shared setup the next time a repository's CI needs work:
   ```
 
 - Preserve the repository's triggers, runners, check names and review settings.
+- When adopting a website reusable workflow, set `powerforge_repository` to
+  `EvotecIT/PSPublishModule` and `powerforge_ref` to the same action channel.
+  The workflow resolves that channel to the checked-out commit before execution.
+  Callers without an explicit channel keep their existing engine-lock selection.
 - Use major tags for GitHub-owned actions. Keep third-party action decisions
   with their shared owner; retain a SHA and version comment where one is needed.
 - Run the repository's normal CI and verify each supported OS before merging.

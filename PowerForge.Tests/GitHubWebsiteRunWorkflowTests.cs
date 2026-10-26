@@ -3,7 +3,7 @@ namespace PowerForge.Tests;
 public sealed class GitHubWebsiteRunWorkflowTests
 {
     [Fact]
-    public void WebsiteRunWorkflow_ShouldBindChannelExecutionToCheckedOutCommit()
+    public void WebsiteRunWorkflow_ShouldBindExplicitChannelsWithoutReplacingLockedEngines()
     {
         var path = Path.Combine(FindRepoRoot(), ".github", "workflows", "powerforge-website-run.yml");
         var yaml = File.ReadAllText(path);
@@ -19,9 +19,9 @@ public sealed class GitHubWebsiteRunWorkflowTests
 
         Assert.Equal("${{ steps.workflow_source.outputs.repository }}", inputs.Children["repository"].ToString());
         Assert.Equal("${{ steps.workflow_source.outputs.ref }}", inputs.Children["ref"].ToString());
-        Assert.Contains("'--powerforge-repository', '${{ steps.workflow_source.outputs.repository }}'", yaml, StringComparison.Ordinal);
-        Assert.Contains("'--powerforge-ref', '${{ steps.shared_runner.outputs.commit }}'", yaml, StringComparison.Ordinal);
-        Assert.DoesNotContain("'--powerforge-ref', '${{ inputs.powerforge_ref }}'", yaml, StringComparison.Ordinal);
+        Assert.Contains("'--powerforge-repository', '${{ inputs.powerforge_repository }}'", yaml, StringComparison.Ordinal);
+        Assert.Contains("'--powerforge-ref', '${{ startsWith(inputs.powerforge_ref, 'actions-') && steps.shared_runner.outputs.commit || inputs.powerforge_ref }}'", yaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("'--powerforge-ref', '${{ steps.shared_runner.outputs.commit }}'", yaml, StringComparison.Ordinal);
     }
 
     [Theory]
