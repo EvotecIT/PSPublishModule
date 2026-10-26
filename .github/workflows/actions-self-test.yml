@@ -54,5 +54,6 @@ jobs:
           $parent = [IO.Path]::GetFullPath($env:RUNNER_TEMP) + [IO.Path]::DirectorySeparatorChar
           if (-not $target.StartsWith($parent, [StringComparison]::OrdinalIgnoreCase)) { throw 'Unexpected SDK test cleanup path.' }
           if (Test-Path -LiteralPath $target) {
-            Remove-Item -LiteralPath $target -Recurse -ErrorAction Stop
+            # Installed SDKs contain hidden metadata files on Unix.
+            Remove-Item -LiteralPath $target -Recurse -Force -ErrorAction Stop
           }

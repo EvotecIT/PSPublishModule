@@ -42,7 +42,8 @@ if (Test-Path -LiteralPath $target) {
         throw 'The SDK staging directory belongs to another workspace operation.'
     }
     if ($Remove) {
-        Remove-Item -LiteralPath $target -Recurse -ErrorAction Stop
+        # The owned marker is a hidden file on Unix and requires -Force.
+        Remove-Item -LiteralPath $target -Recurse -Force -ErrorAction Stop
         return
     }
 } elseif ($Remove) {
