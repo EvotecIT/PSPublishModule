@@ -30,6 +30,16 @@ on:
         required: false
         default: build/appstore-screenshots
         type: string
+      store_art_spec:
+        description: Optional tracked store-art spec; composition remains in capture approval provenance v3.
+        required: false
+        default: ""
+        type: string
+      store_art_tool_ref:
+        description: Exact PowerForge commit providing composition and retained-output verification.
+        required: false
+        default: ""
+        type: string
       simulator_tool_ref:
         description: Exact PowerForge commit providing enforced Shutdown policy and guarded session results; blank does not provision a lifecycle tool.
         required: false
@@ -105,6 +115,8 @@ jobs:
           capture_shell: ${{ inputs.capture_shell }}
           xcodegen_version_file: ${{ inputs.xcodegen_version_file }}
           capture_artifact_path: ${{ inputs.capture_artifact_path }}
+          store_art_spec: ${{ inputs.store_art_spec }}
+          store_art_tool_ref: ${{ inputs.store_art_tool_ref }}
           simulator_tool_ref: ${{ inputs.simulator_tool_ref }}
           simulator_devices_json: ${{ inputs.simulator_devices_json }}
           device: ${{ inputs.device }}

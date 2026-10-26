@@ -83,7 +83,8 @@
           "duo-inner",
           "ipad-13",
           "mac",
-          "watch"
+          "watch",
+          "mac-1440"
         ]
       }
     },
@@ -147,7 +148,8 @@
               "duo-inner",
               "ipad-13",
               "mac",
-              "watch"
+              "watch",
+              "mac-1440"
             ]
           }
         },
@@ -207,6 +209,11 @@
               }
             }
           }
+        },
+        "lift": {
+          "type": "number",
+          "minimum": -0.5,
+          "maximum": 0.5
         }
       }
     }

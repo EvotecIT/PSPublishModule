@@ -7,7 +7,7 @@ using Xunit;
 
 namespace PowerForge.Tests;
 
-public sealed class AppleStoreArtTests : IDisposable
+public sealed partial class AppleStoreArtTests : IDisposable
 {
     private readonly string root = Path.Combine(Path.GetTempPath(), "powerforge-store-art-tests-" + Guid.NewGuid().ToString("N"));
     public AppleStoreArtTests() => Directory.CreateDirectory(root);

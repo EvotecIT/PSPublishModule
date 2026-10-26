@@ -67,8 +67,10 @@ public sealed class AppleStoreArtFrame
     public string? SublineKey { get; set; }
     /// <summary>light or dark variant, or empty for the theme default.</summary>
     public string Mood { get; set; } = "";
-    /// <summary>Device width in prototype canvas pixels (1320 phone; 2064 tablet; 2880 Mac).</summary>
+    /// <summary>Device width in prototype canvas pixels (1320 phone; 2064 tablet; 2880 Mac or 1440 compact Mac).</summary>
     public double? DeviceWidth { get; set; }
+    /// <summary>Optional vertical device translation as a fraction of canvas width; zero keeps the whole device raised.</summary>
+    public double? Lift { get; set; }
     /// <summary>Watch width on the 1320 canvas.</summary>
     public double WatchWidth { get; set; } = 560;
     /// <summary>Draw a synthetic island only when the capture does not already include one.</summary>
