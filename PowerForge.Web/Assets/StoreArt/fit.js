@@ -9,6 +9,7 @@ async () => {
     const floor = (Number(getComputedStyle(document.body).getPropertyValue('--headline-floor')) || 88) * unit;
     const header = document.querySelector('header');
     const device = document.querySelector('.dev-wrap > *');
+    const mac = document.querySelector('.mac');
     // Two headline lines are the frame grammar; reserve the upper third for all captions.
     const fits = () => header.scrollWidth <= header.clientWidth + 1 &&
         [...header.querySelectorAll('p')].every(p => p.scrollWidth <= p.clientWidth + 1) &&
@@ -16,8 +17,8 @@ async () => {
         (document.body.classList.contains('mac-size') || header.getBoundingClientRect().bottom <= device.getBoundingClientRect().top - 36 * unit) &&
         headline.scrollWidth <= headline.clientWidth + 1 &&
         headline.getBoundingClientRect().height <= 2.05 * parseFloat(getComputedStyle(headline).lineHeight) &&
-        header.getBoundingClientRect().bottom <= (compactMac
-            ? document.querySelector('.mac').getBoundingClientRect().top - 36 * unit
+        header.getBoundingClientRect().bottom <= (compactMac && mac
+            ? mac.getBoundingClientRect().top - 36 * unit
             : innerHeight * (document.body.classList.contains('mac-size') ? .52 : .36));
     let size = Math.max(floor, parseFloat(getComputedStyle(headline).fontSize));
     headline.style.fontSize = `${size}px`;
@@ -26,7 +27,6 @@ async () => {
         headline.style.fontSize = `${size}px`;
     }
     if (!fits()) throw new Error(`Headline or caption block overflows at the ${floor / unit}px headline floor.`);
-    const mac = document.querySelector('.mac');
     if (mac && !compactMac) {
         const image = mac.querySelector('img');
         const gap = 48 * unit;
