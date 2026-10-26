@@ -121,9 +121,9 @@ function resolveInstallRoot(explicit, existing, cacheBase, architecture, platfor
   const fallback = platform === 'darwin' ? path.join(home, '.dotnet') : path.join(cacheBase, 'evotec-dotnet', architecture);
   let root = path.resolve(explicit || existing[0]?.root || fallback);
   const executable = path.join(root, process.platform === 'win32' ? 'dotnet.exe' : 'dotnet');
-  if (explicit && fs.existsSync(executable) && !existing.some(candidate => path.resolve(candidate.root) === root)) {
-    // DOTNET_INSTALL_DIR may have been exported by an earlier invocation for
-    // another architecture. Keep that installation and isolate this request.
+  if (fs.existsSync(executable) && !existing.some(candidate => path.resolve(candidate.root) === root)) {
+    // Both an explicit directory and the normal macOS fallback may already
+    // contain another architecture. Keep it and isolate this request.
     root = path.join(root, architecture);
   }
   return root;

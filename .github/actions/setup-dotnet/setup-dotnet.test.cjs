@@ -69,7 +69,7 @@ test('Windows and POSIX installers receive exact SDKs and only the official CDN'
   assert.throws(() => installerArguments('script', 'root', '10.0.x', 'x64'), /exact SDK version/);
 });
 
-test('an inherited install directory cannot satisfy a request with the wrong architecture', () => {
+test('existing SDK directories cannot satisfy a request with the wrong architecture', () => {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'dotnet-root-test-'));
   const sdk = path.join(directory, 'sdk', '8.0.426');
   fs.mkdirSync(sdk, {recursive: true});
@@ -82,6 +82,12 @@ test('an inherited install directory cannot satisfy a request with the wrong arc
     assert.equal(fs.existsSync(path.join(isolated, 'sdk', '8.0.426')), false);
     assert.equal(resolveInstallRoot(directory, [{root: directory, installed: ['8.0.426']}], directory, 'x64'), directory);
     assert.equal(fs.existsSync(sdk), true);
+    const macHome = path.join(directory, 'mac-user');
+    const macRoot = path.join(macHome, '.dotnet');
+    fs.mkdirSync(path.join(macRoot, 'sdk', '8.0.426'), {recursive: true});
+    fs.writeFileSync(path.join(macRoot, process.platform === 'win32' ? 'dotnet.exe' : 'dotnet'), 'arm64 installation');
+    assert.equal(resolveInstallRoot('', [], directory, 'x64', 'darwin', macHome), path.join(macRoot, 'x64'));
+    assert.equal(fs.existsSync(path.join(macRoot, 'sdk', '8.0.426')), true);
   } finally { fs.rmSync(directory, {recursive: true, force: true}); }
 });
 
