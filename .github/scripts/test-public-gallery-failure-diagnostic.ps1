@@ -1,3 +1,4 @@
+param([ValidateSet('All', 'Deadline', 'Redaction', 'Redirect')][string]$Case = 'All')
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Net.Http
 . (Join-Path $PSScriptRoot '../../PowerForge/Scripts/RepositoryDiagnostics/Collect-PublicGalleryFailure.ps1')
@@ -19,6 +20,7 @@ function Assert-Contract {
     if (-not $Condition) { throw $Message }
 }
 
+if ($Case -eq 'All') {
 $savedFlag = $env:POWERFORGE_PUBLIC_GALLERY_DIAGNOSTICS
 $response = [Net.Http.HttpResponseMessage]::new([Net.HttpStatusCode]::NotFound)
 $response.RequestMessage = [Net.Http.HttpRequestMessage]::new([Net.Http.HttpMethod]::Get, 'https://www.powershellgallery.com/api/v2/package/PSWriteColor/1.0.7')
@@ -69,3 +71,88 @@ try {
     $response.RequestMessage.Dispose()
     $response.Dispose()
 }
+}
+
+if ($Case -in @('All', 'Redaction')) {
+    $response = [Net.Http.HttpResponseMessage]::new([Net.HttpStatusCode]::NotFound)
+    try {
+        $response.Content = [Net.Http.StringContent]::new(@'
+public-error
+Authorization: Basic fixture-basic
+Authorization: Digest username="fixture-user", response="fixture-digest"
+Authorization: Negotiate fixture-negotiate
+Authorization: NTLM fixture-ntlm
+{"Authorization":"Basic fixture-json"}
+{"Proxy-Authorization":"Digest username=\"fixture-proxy-user\", response=\"fixture-proxy\""}
+'@)
+        $result = Get-PFPublicGalleryResponse $response
+        Assert-Contract ($result.ErrorBody -notmatch 'fixture-') 'Authorization credentials must be completely redacted for every supported scheme.'
+        Assert-Contract ($result.ErrorBody -match 'public-error' -and $result.ErrorBody -match '\[REDACTED\]') 'Redaction must preserve useful public error text.'
+    } finally { $response.Dispose() }
+}
+
+if ($Case -in @('All', 'Deadline')) {
+    Add-Type -TypeDefinition @'
+using System;
+using System.IO;
+using System.Threading;
+using System.Threading.Tasks;
+public sealed class GalleryNonCancellingStream : Stream {
+    public bool WasDisposed { get; private set; }
+    public override bool CanRead { get { return true; } }
+    public override bool CanSeek { get { return false; } }
+    public override bool CanWrite { get { return false; } }
+    public override long Length { get { throw new NotSupportedException(); } }
+    public override long Position { get { throw new NotSupportedException(); } set { throw new NotSupportedException(); } }
+    public override Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken token) {
+        return Task.Delay(6000).ContinueWith(task => 0);
+    }
+    protected override void Dispose(bool disposing) { WasDisposed = true; base.Dispose(disposing); }
+    public override int Read(byte[] buffer, int offset, int count) { throw new NotSupportedException(); }
+    public override void Flush() { }
+    public override long Seek(long offset, SeekOrigin origin) { throw new NotSupportedException(); }
+    public override void SetLength(long value) { throw new NotSupportedException(); }
+    public override void Write(byte[] buffer, int offset, int count) { throw new NotSupportedException(); }
+}
+'@
+    $stream = [GalleryNonCancellingStream]::new()
+    $response = [Net.Http.HttpResponseMessage]::new([Net.HttpStatusCode]::NotFound)
+    $response.Content = [Net.Http.StreamContent]::new($stream)
+    $watch = [Diagnostics.Stopwatch]::StartNew()
+    try {
+        $result = Get-PFPublicGalleryResponse $response
+        Assert-Contract ($result.BodyStatus -eq 'TimedOut' -and $stream.WasDisposed) 'A read that ignores cancellation must time out and release its stream.'
+        Assert-Contract ($watch.ElapsedMilliseconds -lt 5500) 'The independent deadline must beat the six-second non-canceling read.'
+    } finally { $response.Dispose() }
+}
+
+if ($Case -in @('All', 'Redirect')) {
+    $cdn = 'https://cdn.powershellgallery.com/packages/pssharedgoods.0.0.313.nupkg'
+    Assert-Contract ($null -ne (ConvertTo-PFPublicGalleryUri $cdn)) 'The observed public CDN package route must be accepted.'
+    foreach ($uri in @($cdn + '?token=secret', 'https://cdn.powershellgallery.com/private', 'https://cdn.powershellgallery.com.evil/packages/a.1.0.0.nupkg')) {
+        Assert-Contract ($null -eq (ConvertTo-PFPublicGalleryUri $uri)) 'Unrecognized CDN routes and query data must be rejected.'
+    }
+    $script:controlRequests = [Collections.Generic.List[string]]::new()
+    function Invoke-PFPublicGalleryControl {
+        param([Uri]$Uri)
+        $script:controlRequests.Add($Uri.AbsoluteUri)
+        if ($Uri.Host -eq 'www.powershellgallery.com') {
+            return @{ Status = 302; CdnRedirectUri = $cdn; CollectionPhase = 'SeparateUnauthenticatedHttpClientAfterFailure' }
+        }
+        # Even a second redirect must not cause a third request.
+        return @{ Status = 302; CdnRedirectUri = $cdn; CollectionPhase = 'SeparateUnauthenticatedHttpClientAfterFailure' }
+    }
+    $savedFlag = $env:POWERFORGE_PUBLIC_GALLERY_DIAGNOSTICS
+    try {
+        $env:POWERFORGE_PUBLIC_GALLERY_DIAGNOSTICS = '1'
+        $script:repositoryUri = 'https://www.powershellgallery.com/api/v2'
+        $script:credentialInfo = $null
+        $exception = [Exception]::new("Request sent: 'https://www.powershellgallery.com/api/v2/package/PSSharedGoods/0.0.313'")
+        $failure = [Management.Automation.ErrorRecord]::new($exception, 'FixtureRedirect', [Management.Automation.ErrorCategory]::ResourceUnavailable, $null)
+        $text = Get-PFPublicGalleryFailureDiagnostic @('PSGallery') $failure $false
+        $report = $text.Substring('PFPSRG-DIAGNOSTIC: '.Length) | ConvertFrom-Json
+        Assert-Contract ($script:controlRequests.Count -eq 2 -and $script:controlRequests[1] -eq $cdn) 'The control chain must stop after its single allowlisted CDN hop.'
+        Assert-Contract ($report.OriginalResponse.BodyStatus -eq 'NotExposedByBackend' -and $report.CdnControl.CollectionPhase -eq 'SeparateUnauthenticatedHttpClientAfterFailure') 'Separate controls must not be presented as the original response.'
+    } finally { $env:POWERFORGE_PUBLIC_GALLERY_DIAGNOSTICS = $savedFlag }
+}
+Write-Output "Requested public Gallery diagnostic contracts passed: $Case"

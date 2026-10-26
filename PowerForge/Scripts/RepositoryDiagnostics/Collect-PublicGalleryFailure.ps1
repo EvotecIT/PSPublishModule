@@ -3,7 +3,11 @@ function ConvertTo-PFPublicGalleryUri {
     param([string]$Value)
     $uri = $null
     if ($Value.Length -gt 2048 -or -not [Uri]::TryCreate($Value, [UriKind]::Absolute, [ref]$uri)) { return $null }
-    if ($uri.Scheme -ne 'https' -or $uri.Host -ne 'www.powershellgallery.com' -or -not $uri.IsDefaultPort -or $uri.UserInfo -or $uri.Fragment) { return $null }
+    if ($uri.Scheme -ne 'https' -or $uri.Host -notin @('www.powershellgallery.com', 'cdn.powershellgallery.com') -or -not $uri.IsDefaultPort -or $uri.UserInfo -or $uri.Fragment) { return $null }
+    if ($uri.Host -eq 'cdn.powershellgallery.com') {
+        if ($uri.AbsolutePath -match '^/packages/[A-Za-z0-9_.+-]+\.nupkg$' -and -not $uri.Query) { return $uri }
+        return $null
+    }
     if ($uri.AbsolutePath -match '^/api/v2/package/[A-Za-z0-9_.-]+/[A-Za-z0-9_.+-]+$' -and -not $uri.Query) { return $uri }
     if ($uri.AbsolutePath -ne '/api/v2/FindPackagesById()') { return $null }
     $query = @{}
@@ -34,18 +38,62 @@ function Get-PFPublicGalleryResponse {
     if (-not $Response.IsSuccessStatusCode) {
         $bodyStatus = 'Unavailable'
         $timeout = [Threading.CancellationTokenSource]::new(3000)
+        $watch = [Diagnostics.Stopwatch]::StartNew()
+        $stream = $null
         try {
-            $stream = $Response.Content.ReadAsStreamAsync().GetAwaiter().GetResult()
+            $open = $Response.Content.ReadAsStreamAsync()
+            if (-not $open.Wait(3000)) { $Response.Content.Dispose(); throw [TimeoutException]::new() }
+            $stream = $open.GetAwaiter().GetResult()
+            $remaining = [int][Math]::Max(0, 3000 - $watch.ElapsedMilliseconds)
+            if ($remaining -eq 0) { $stream.Dispose(); throw [TimeoutException]::new() }
             $buffer = [byte[]]::new(1024)
-            $count = $stream.ReadAsync($buffer, 0, $buffer.Length, $timeout.Token).GetAwaiter().GetResult()
+            $read = $stream.ReadAsync($buffer, 0, $buffer.Length, $timeout.Token)
+            # Legacy streams can ignore cancellation after starting a read.
+            if (-not $read.Wait($remaining)) { $stream.Dispose(); throw [TimeoutException]::new() }
+            $count = $read.GetAwaiter().GetResult()
             $body = [Text.Encoding]::UTF8.GetString($buffer, 0, $count) -replace '[\x00-\x08\x0B\x0C\x0E-\x1F]', ''
             $body = $body -replace '(?i)(bearer\s+)[A-Za-z0-9._~+/-]+=*', '$1[REDACTED]'
+            $body = $body -replace '(?i)("(?:proxy-)?authorization"\s*:\s*")(?:\\.|[^"\\])*', '$1[REDACTED]'
+            $body = $body -replace '(?im)(\b(?:proxy-)?authorization\s*[:=]\s*)[^\r\n<>]+', '$1[REDACTED]'
             $body = $body -replace '(?i)((?:token|secret|password|api[-_]?key|authorization|cookie)["'']?\s*[=:]\s*["'']?)[^\s<>"'']+', '$1[REDACTED]'
             $body = $body.Substring(0, [Math]::Min(1024, $body.Length))
             $bodyStatus = 'BoundedTo1024Bytes'
-        } catch { $body = '' } finally { $timeout.Dispose() }
+        } catch [TimeoutException] { $body = ''; $bodyStatus = 'TimedOut' }
+        catch { $body = '' } finally { $timeout.Dispose() }
     }
     return @{ Status = [int]$Response.StatusCode; Headers = $headers; ErrorBody = $body; BodyStatus = $bodyStatus }
+}
+
+function Invoke-PFPublicGalleryControl {
+    param([Uri]$Uri)
+    $safeUri = ConvertTo-PFPublicGalleryUri ([string]$Uri)
+    if (-not $safeUri) { return $null }
+    $handler = [Net.Http.HttpClientHandler]::new()
+    $handler.AllowAutoRedirect = $false
+    $handler.UseCookies = $false
+    $handler.UseDefaultCredentials = $false
+    $handler.MaxResponseHeadersLength = 16
+    $client = [Net.Http.HttpClient]::new($handler)
+    $timeout = [Threading.CancellationTokenSource]::new(5000)
+    $request = [Net.Http.HttpRequestMessage]::new([Net.Http.HttpMethod]::Get, $safeUri)
+    $response = $null
+    try {
+        $pending = $client.SendAsync($request, [Net.Http.HttpCompletionOption]::ResponseHeadersRead, $timeout.Token)
+        if (-not $pending.Wait(5000)) { throw [TimeoutException]::new() }
+        $response = $pending.GetAwaiter().GetResult()
+        $result = Get-PFPublicGalleryResponse $response
+        $result.Uri = $safeUri.AbsoluteUri
+        $result.CollectionPhase = 'SeparateUnauthenticatedHttpClientAfterFailure'
+        $redirect = ConvertTo-PFPublicGalleryUri ([string]$response.Headers.Location)
+        if ($safeUri.Host -eq 'www.powershellgallery.com' -and $result.Status -in @(301, 302, 303, 307, 308) -and $redirect -and $redirect.Host -eq 'cdn.powershellgallery.com') {
+            $result.CdnRedirectUri = $redirect.AbsoluteUri
+        }
+        return $result
+    } catch { return @{ CollectionPhase = 'SeparateUnauthenticatedHttpClientAfterFailure'; Result = 'Unavailable' } }
+    finally {
+        if ($response) { $response.Dispose() }
+        $request.Dispose(); $timeout.Dispose(); $client.Dispose()
+    }
 }
 
 function Get-PFPublicGalleryFailureDiagnostic {
@@ -66,6 +114,7 @@ function Get-PFPublicGalleryFailureDiagnostic {
             ErrorType = $Failure.Exception.GetType().FullName
             OriginalResponse = @{ BodyStatus = 'NotExposedByBackend' }
             PostFailureControl = $null
+            CdnControl = $null
         }
         $response = $null
         $exception = $Failure.Exception
@@ -88,26 +137,12 @@ function Get-PFPublicGalleryFailureDiagnostic {
         # PSResourceGet can discard the original response. A separate GET is
         # explicitly labeled a control and never retries the failed operation.
         if (-not $response) {
-            $match = [regex]::Match($Failure.Exception.Message, "https://www\.powershellgallery\.com/api/v2/[^\s'\""<>]+")
+            $match = [regex]::Match($Failure.Exception.Message, "https://(?:www|cdn)\.powershellgallery\.com/(?:api/v2/|packages/)[^\s'\""<>]+")
             $uri = ConvertTo-PFPublicGalleryUri $match.Value
             if ($uri) {
-                $handler = [Net.Http.HttpClientHandler]::new()
-                $handler.AllowAutoRedirect = $false
-                $handler.UseCookies = $false
-                $handler.UseDefaultCredentials = $false
-                $client = [Net.Http.HttpClient]::new($handler)
-                $timeout = [Threading.CancellationTokenSource]::new(5000)
-                $request = [Net.Http.HttpRequestMessage]::new([Net.Http.HttpMethod]::Get, $uri)
-                $control = $null
-                try {
-                    $control = $client.SendAsync($request, [Net.Http.HttpCompletionOption]::ResponseHeadersRead, $timeout.Token).GetAwaiter().GetResult()
-                    $report.PostFailureControl = Get-PFPublicGalleryResponse $control
-                    $report.PostFailureControl.Uri = $uri.AbsoluteUri
-                    $report.PostFailureControl.CollectionPhase = 'SeparateUnauthenticatedHttpClientAfterFailure'
-                } catch { $report.PostFailureControl = @{ CollectionPhase = 'SeparateUnauthenticatedHttpClientAfterFailure'; Result = 'Unavailable' } }
-                finally {
-                    if ($control) { $control.Dispose() }
-                    $request.Dispose(); $timeout.Dispose(); $client.Dispose()
+                $report.PostFailureControl = Invoke-PFPublicGalleryControl $uri
+                if ($report.PostFailureControl.CdnRedirectUri) {
+                    $report.CdnControl = Invoke-PFPublicGalleryControl ([Uri]$report.PostFailureControl.CdnRedirectUri)
                 }
             }
         }
