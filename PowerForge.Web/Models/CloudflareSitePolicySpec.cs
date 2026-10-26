@@ -24,8 +24,8 @@ public sealed class CloudflareSitePolicySpec
     public string[] ImmutablePaths { get; set; } = Array.Empty<string>();
 
     /// <summary>
-    /// When set, PowerForge manages the zone's Smart Tiered Cache setting as part of the recoverable site policy.
-    /// Leave null to preserve the operator-managed zone setting.
+    /// When true, PowerForge enables both zone-level Tiered Cache and Smart Topology as part of the recoverable site policy.
+    /// False disables Smart Topology while preserving the parent Tiered Cache setting; null preserves both settings.
     /// </summary>
     public bool? SmartTieredCache { get; set; }
 }

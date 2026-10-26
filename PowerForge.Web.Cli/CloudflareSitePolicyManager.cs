@@ -185,8 +185,8 @@ internal static class CloudflareSitePolicyManager
         if (applied?.Changed != true || applied.PreviousEnabled is null)
             return (true, string.Empty);
 
-        var rollback = CloudflareSmartTieredCacheManager.Apply(
-            zoneId, apiToken, applied.PreviousEnabled.Value, dryRun: false, httpClient);
+        var rollback = CloudflareSmartTieredCacheManager.Restore(
+            zoneId, apiToken, applied, httpClient);
         return rollback.Success
             ? (true, $" Smart Tiered Cache rollback: {rollback.Message}")
             : (false, $" Smart Tiered Cache rollback was incomplete: {rollback.Message}");
