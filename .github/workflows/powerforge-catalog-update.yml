@@ -85,7 +85,7 @@ jobs:
           ref: ${{ job.workflow_sha }}
           path: catalog-owner
           persist-credentials: false
-      - uses: EvotecIT/PSPublishModule/.github/actions/setup-dotnet@6d2eef9cb69e2d93f89e7f22e9c39fa294260d19
+      - uses: EvotecIT/PSPublishModule/.github/actions/setup-dotnet@97c8ff542123b3e2feae0a9d0ea2639a5f0c7c24
         with:
           global-json-file: catalog-owner/global.json
       - name: Build pinned catalog owner
