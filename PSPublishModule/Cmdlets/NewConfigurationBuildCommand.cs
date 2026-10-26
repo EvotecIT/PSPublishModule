@@ -1,4 +1,6 @@
 using System;
+using System.Collections;
+using System.Collections.Generic;
 using System.IO;
 using System.Management.Automation;
 using PowerForge;
@@ -271,6 +273,10 @@ public sealed class NewConfigurationBuildCommand : PSCmdlet
     /// <summary>Handle runtimes folder when copying libraries.</summary>
     [Parameter] public SwitchParameter NETHandleRuntimes { get; set; }
 
+    /// <summary>Maps NuGet package IDs to explicitly selected Desktop asset TFMs. Initially supports netstandard2.0 assets for .NET Framework 4.7.2 or later; Core assets are unchanged.</summary>
+    [Parameter]
+    public Hashtable? NETDesktopDependencyAssetFrameworks { get; set; }
+
     /// <summary>Load the binary module through a custom AssemblyLoadContext on PowerShell Core.</summary>
     [Parameter]
     [Alias("UseAssemblyLoadContext")]
@@ -379,6 +385,22 @@ public sealed class NewConfigurationBuildCommand : PSCmdlet
     [Parameter] public SwitchParameter AutoSwitchExactOnPublish { get; set; }
 
     /// <summary>Emits one or more configuration objects for the build pipeline.</summary>
+    private static Dictionary<string, string>? ConvertDesktopDependencyAssetFrameworks(Hashtable? values)
+    {
+        if (values is null) return null;
+        var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (DictionaryEntry entry in values)
+        {
+            string key = LanguagePrimitives.ConvertTo<string>(entry.Key);
+            string value = LanguagePrimitives.ConvertTo<string>(entry.Value);
+            if (string.IsNullOrWhiteSpace(key) || string.IsNullOrWhiteSpace(value))
+                throw new PSArgumentException("Desktop dependency package IDs and asset frameworks must be nonempty strings.");
+            result.Add(key, value);
+        }
+        return result;
+    }
+
+    /// <inheritdoc />
     protected override void ProcessRecord()
     {
         var bound = MyInvocation.BoundParameters;
@@ -482,6 +504,8 @@ public sealed class NewConfigurationBuildCommand : PSCmdlet
             NETSearchClass = NETSearchClass,
             NETHandleRuntimesSpecified = bound.ContainsKey(nameof(NETHandleRuntimes)),
             NETHandleRuntimes = NETHandleRuntimes.IsPresent,
+            NETDesktopDependencyAssetFrameworksSpecified = bound.ContainsKey(nameof(NETDesktopDependencyAssetFrameworks)),
+            NETDesktopDependencyAssetFrameworks = ConvertDesktopDependencyAssetFrameworks(NETDesktopDependencyAssetFrameworks),
             NETAssemblyLoadContextSpecified = bound.ContainsKey(nameof(NETAssemblyLoadContext)),
             NETAssemblyLoadContext = NETAssemblyLoadContext.IsPresent,
             NETDevelopmentBinariesSpecified = bound.ContainsKey(nameof(NETDevelopmentBinaries)),

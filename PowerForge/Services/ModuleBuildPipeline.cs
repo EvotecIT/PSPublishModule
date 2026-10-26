@@ -199,7 +199,7 @@ public sealed class ModuleBuildPipeline
         if (useAssemblyLoadContext && !spec.UseAssemblyLoadContext)
             _logger.Info("Assembly type accelerators requested; UseAssemblyLoadContext automatically enabled.");
 
-        var resolvedCsprojPath = spec.RefreshManifestOnly || string.IsNullOrWhiteSpace(spec.CsprojPath)
+        var resolvedCsprojPath = spec.RefreshManifestOnly || spec.SkipDotNetBuild || string.IsNullOrWhiteSpace(spec.CsprojPath)
             ? string.Empty
             : Path.GetFullPath(spec.CsprojPath);
         var forceBootstrapperWrite = ShouldCleanReplaceSingleFileBinaryPayload(spec);
@@ -239,6 +239,9 @@ public sealed class ModuleBuildPipeline
             ExcludeLibraryFilter = spec.ExcludeLibraryFilter ?? Array.Empty<string>(),
             DoNotCopyLibrariesRecursively = spec.DoNotCopyLibrariesRecursively,
             HandleRuntimes = spec.HandleRuntimes,
+            DesktopDependencyAssetFrameworks = spec.RefreshManifestOnly || spec.SkipDotNetBuild
+                ? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                : new Dictionary<string, string>(spec.DesktopDependencyAssetFrameworks, StringComparer.OrdinalIgnoreCase),
             CsprojRequiredReasons = spec.RefreshManifestOnly || spec.SkipDotNetBuild
                 ? Array.Empty<string>()
                 : spec.CsprojRequiredReasons ?? Array.Empty<string>(),

@@ -71,6 +71,7 @@ public sealed partial class ModulePipelineRunner
         var ignoreLibraryOnLoadFromSegments = inputs.IgnoreLibraryOnLoadFromSegments;
         var doNotCopyLibrariesRecursivelyFromSegments = inputs.DoNotCopyLibrariesRecursivelyFromSegments;
         var handleRuntimesFromSegments = inputs.HandleRuntimesFromSegments;
+        var desktopDependencyAssetFrameworks = inputs.DesktopDependencyAssetFrameworksFromSegments ?? spec.Build.DesktopDependencyAssetFrameworks;
         var useAssemblyLoadContextFromSegments = inputs.UseAssemblyLoadContextFromSegments;
         var developmentBinariesEnabledFromSegments = inputs.DevelopmentBinariesEnabledFromSegments;
         var developmentBinariesModeFromSegments = inputs.DevelopmentBinariesModeFromSegments;
@@ -278,6 +279,7 @@ public sealed partial class ModulePipelineRunner
                 excludeLibraryFilterFromSegments,
                 doNotCopyLibrariesRecursivelyFromSegments,
                 handleRuntimesFromSegments,
+                desktopDependencyAssetFrameworks,
                 requestedUseAssemblyLoadContext,
                 typeAcceleratorsRequireAlc,
                 resolveBinaryConflictsProjectName,
@@ -313,6 +315,7 @@ public sealed partial class ModulePipelineRunner
             ExcludeLibraryFilter = excludeLibraryFilterFromSegments ?? spec.Build.ExcludeLibraryFilter ?? Array.Empty<string>(),
             DoNotCopyLibrariesRecursively = doNotCopyLibrariesRecursivelyFromSegments ?? spec.Build.DoNotCopyLibrariesRecursively,
             HandleRuntimes = handleRuntimesFromSegments ?? spec.Build.HandleRuntimes,
+            DesktopDependencyAssetFrameworks = desktopDependencyAssetFrameworks,
             UseAssemblyLoadContext = effectiveUseAssemblyLoadContext,
             DevelopmentBinariesMode = developmentBinariesMode,
             DevelopmentBinariesPath = developmentBinariesPath,
