@@ -152,11 +152,11 @@ public sealed class CloudflareDnsRecordTests
         using var client = NewClient(handler);
 
         var result = CloudflareDnsRecordManager.Apply(
-            "tÃƒÂ¤st.example",
+            "täst.example",
             "secret-token",
             "CNAME",
-            "control.tÃƒÂ¤st.example",
-            "target.tÃƒÂ¤st.example",
+            "control.täst.example",
+            "target.täst.example",
             proxied: true,
             ttl: 1,
             comment: "Managed by PowerForge",

@@ -119,7 +119,7 @@ public sealed class CloudflareCachePolicyTests
         var rules = CloudflareCachePolicyBuilder.BuildManagedRules(
             "example.com",
             "Project",
-            ["/release notes/zaÃ…Â¼ÃƒÂ³Ã…â€šÃ„â€¡"],
+            ["/release notes/zażółć"],
             basePath: "/product docs/");
 
         Assert.Contains("/product%20docs/css/*", rules[2]!["expression"]!.GetValue<string>(), StringComparison.Ordinal);
