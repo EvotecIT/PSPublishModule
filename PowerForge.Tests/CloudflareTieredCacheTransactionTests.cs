@@ -106,6 +106,27 @@ public sealed class CloudflareTieredCacheTransactionTests
         Assert.Empty(handler.Writes);
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void Restore_ShouldRecoverEditableSettingWhenTheOtherSettingBecomesLocked(bool lockParent)
+    {
+        var handler = new SettingsHandler(parent: false, topology: false);
+        using var client = NewClient(handler);
+        var applied = CloudflareSmartTieredCacheManager.Apply(ZoneId, "test-token", true, false, client);
+        Assert.True(applied.Success, applied.Message);
+        handler.ParentEditable = !lockParent;
+        handler.TopologyEditable = lockParent;
+
+        var restored = CloudflareSmartTieredCacheManager.Restore(ZoneId, "test-token", applied, client);
+
+        Assert.False(restored.Success);
+        Assert.Contains("recovery was incomplete", restored.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(lockParent, handler.Parent);
+        Assert.Equal(!lockParent, handler.Topology);
+        Assert.Equal(3, handler.Writes.Count);
+    }
+
     [Fact]
     public void SitePolicy_ShouldRestoreBothDisabledSettingsAfterHeaderFailure()
     {
@@ -128,7 +149,8 @@ public sealed class CloudflareTieredCacheTransactionTests
     {
         internal bool Parent { get; private set; } = parent;
         internal bool Topology { get; private set; } = topology;
-        internal bool ParentEditable { get; init; } = true;
+        internal bool ParentEditable { get; set; } = true;
+        internal bool TopologyEditable { get; set; } = true;
         internal bool RejectTopologyWrite { get; init; }
         internal bool RejectHeaderWrite { get; init; }
         internal List<string> Writes { get; } = [];
@@ -163,7 +185,7 @@ public sealed class CloudflareTieredCacheTransactionTests
                 ["result"] = new JsonObject
                 {
                     ["value"] = (isParent ? Parent : Topology) ? "on" : "off",
-                    ["editable"] = !isParent || ParentEditable
+                    ["editable"] = isParent ? ParentEditable : TopologyEditable
                 }
             }.ToJsonString());
         }

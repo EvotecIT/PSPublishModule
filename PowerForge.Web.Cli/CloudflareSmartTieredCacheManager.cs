@@ -64,19 +64,21 @@ internal static class CloudflareSmartTieredCacheManager
                 ? new[] { (parent.Setting, targetParent), (topology.Setting, enabled) }
                 : new[] { (topology.Setting, enabled), (parent.Setting, targetParent) };
             var changes = targets.Where(target => target.Setting.Enabled != target.Item2).ToArray();
-            var locked = changes.FirstOrDefault(target => !target.Setting.Editable).Setting;
-            if (locked is not null)
-                return Finish(false, false, $"Cloudflare reports that {locked.Name} is not editable for this zone.");
+            var locked = changes.Where(target => !target.Setting.Editable).ToArray();
+            if (!restoring && locked.Length > 0)
+                return Finish(false, false, $"Cloudflare reports that {locked[0].Setting.Name} is not editable for this zone.");
             if (changes.Length == 0)
                 return Finish(true, false, $"Smart Tiered Cache is already {(enabled ? "enabled" : "disabled")}.");
             if (dryRun)
                 return Finish(true, false, $"Smart Tiered Cache would be {(enabled ? "enabled" : "disabled")}; its Tiered Cache prerequisite is included.");
 
             var attempted = new List<Setting>();
-            var failures = new List<string>();
+            var failures = locked.Select(target => $"Cloudflare reports that {target.Setting.Name} is not editable for this zone.").ToList();
             var ambiguous = false;
             foreach (var (setting, desired) in changes)
             {
+                if (!setting.Editable)
+                    continue;
                 var write = WriteAndVerify(httpClient, setting, desired, apiToken);
                 ambiguous |= write.Ambiguous;
                 if (write.MayHaveChanged)
