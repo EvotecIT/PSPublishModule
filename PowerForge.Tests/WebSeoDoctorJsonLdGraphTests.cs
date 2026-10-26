@@ -8,6 +8,7 @@ public class WebSeoDoctorJsonLdGraphTests
     [InlineData("graph")]
     [InlineData("graph-in-array")]
     [InlineData("nested-graph")]
+    [InlineData("type-array")]
     public void Analyze_AcceptsTypesDeclaredInsideJsonLdGraph(string shape)
     {
         const string graph = """{"@context":"https://schema.org","@graph":[{"@type":"Organization","name":"Example"},{"@type":"WebSite","name":"Example","url":"https://example.com/"}]}""";
@@ -15,6 +16,7 @@ public class WebSeoDoctorJsonLdGraphTests
         {
             "graph-in-array" => $"[{graph}]",
             "nested-graph" => """{"@context":"https://schema.org","@graph":[{"@graph":[{"@type":"Organization","name":"Example"}]}]}""",
+            "type-array" => """{"@context":"https://schema.org","@graph":[{"@type":["Organization","Corporation"],"name":"Example"}]}""",
             _ => graph
         };
 
@@ -45,6 +47,24 @@ public class WebSeoDoctorJsonLdGraphTests
 
         Assert.Contains(result.Issues, issue => issue.Hint == "structured-data-breadcrumb-items");
         Assert.DoesNotContain(result.Issues, issue => issue.Hint == "structured-data-missing-type");
+    }
+
+    [Theory]
+    [InlineData("graph-boolean")]
+    [InlineData("graph-object-array")]
+    [InlineData("standalone-boolean")]
+    public void Analyze_DoesNotTreatNonStringValuesAsDeclaredTypes(string shape)
+    {
+        var payload = shape switch
+        {
+            "graph-object-array" => """{"@context":"https://schema.org","@graph":[{"@type":[{"name":"Organization"}]}]}""",
+            "standalone-boolean" => """{"@context":"https://schema.org","@type":true}""",
+            _ => """{"@context":"https://schema.org","@graph":[{"@type":true}]}"""
+        };
+
+        var result = Analyze(payload);
+
+        Assert.Contains(result.Issues, issue => issue.Hint == "structured-data-missing-type");
     }
 
     private static WebSeoDoctorResult Analyze(string payload)

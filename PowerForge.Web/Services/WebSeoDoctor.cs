@@ -1834,7 +1834,7 @@ public static partial class WebSeoDoctor
             foreach (var item in EnumerateJsonLdObjects(root))
             {
                 hasContext |= JsonLdObjectHasNonEmptyValue(item, "@context");
-                hasType |= JsonLdObjectHasNonEmptyValue(item, "@type");
+                hasType |= GetJsonLdTypes(item).Length > 0;
             }
             return true;
         }
