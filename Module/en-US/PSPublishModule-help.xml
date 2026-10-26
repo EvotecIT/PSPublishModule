@@ -36118,6 +36118,18 @@ should resolve dependencies from a named private feed or alternate gallery.</mam
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>NETDesktopDependencyAssetFrameworks</maml:name>
+          <maml:description>
+            <maml:para>Maps NuGet package IDs to explicitly selected Desktop asset TFMs. Initially supports netstandard2.0 assets for .NET Framework 4.7.2 or later; Core assets are unchanged.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Hashtable</command:parameterValue>
+          <dev:type>
+            <maml:name>Hashtable</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
           <maml:name>NETDevelopmentBinaries</maml:name>
           <maml:description>
             <maml:para>Generate checked-in source bootstrapper logic for local development binary outputs.</maml:para>
@@ -37137,6 +37149,18 @@ should resolve dependencies from a named private feed or alternate gallery.</mam
         </command:parameterValueGroup>
         <dev:type>
           <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>NETDesktopDependencyAssetFrameworks</maml:name>
+        <maml:description>
+          <maml:para>Maps NuGet package IDs to explicitly selected Desktop asset TFMs. Initially supports netstandard2.0 assets for .NET Framework 4.7.2 or later; Core assets are unchanged.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">Hashtable</command:parameterValue>
+        <dev:type>
+          <maml:name>Hashtable</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
