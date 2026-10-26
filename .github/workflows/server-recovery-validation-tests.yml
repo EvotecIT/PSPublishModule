@@ -52,7 +52,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: EvotecIT/PSPublishModule/.github/actions/setup-dotnet@104f1222e5418de117b71482d19c12b574f6612f
+      - uses: EvotecIT/PSPublishModule/.github/actions/setup-dotnet@a3924e02bb38c53e844d1c43c5b95c0dbb3777ba
         with:
           global-json-file: global.json
 
