@@ -91,6 +91,9 @@ jobs:
       - name: Test pinned XcodeGen setup
         run: python3 .github/scripts/test-xcodegen-setup.py
 
+      - name: Test .NET SDK setup
+        run: node --test .github/actions/setup-dotnet/setup-dotnet.test.cjs
+
       - name: Validate website workflows
         shell: bash
         run: |
@@ -153,10 +156,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 2
-      - uses: actions/setup-dotnet@v6
-        with:
-          global-json-file: global.json
-
+      - uses: ./.github/actions/setup-dotnet
       - name: Cache NuGet packages
         uses: actions/cache@v6
         with:
@@ -179,10 +179,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: actions/setup-dotnet@v6
-        with:
-          global-json-file: global.json
-
+      - uses: ./.github/actions/setup-dotnet
       - name: Cache NuGet packages
         uses: actions/cache@v6
         with:
@@ -281,11 +278,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - uses: actions/setup-dotnet@v6
-        with:
-          global-json-file: global.json
-          dotnet-version: 8.0.x
-
+      - uses: ./.github/actions/setup-dotnet
       - name: Cache NuGet packages
         uses: actions/cache@v6
         with:
@@ -405,11 +398,7 @@ jobs:
           repository: EvotecIT/DbaClientX
           path: _dependencies/DbaClientX
 
-      - uses: actions/setup-dotnet@v6
-        with:
-          global-json-file: global.json
-          dotnet-version: 8.0.x
-
+      - uses: ./.github/actions/setup-dotnet
       - name: Cache NuGet packages
         uses: actions/cache@v6
         with:
@@ -549,10 +538,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - uses: actions/setup-dotnet@v6
-        with:
-          global-json-file: global.json
-
+      - uses: ./.github/actions/setup-dotnet
       - name: Cache NuGet packages
         uses: actions/cache@v6
         with:
@@ -705,10 +691,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - uses: actions/setup-dotnet@v6
-        with:
-          global-json-file: global.json
-
+      - uses: ./.github/actions/setup-dotnet
       - name: Cache NuGet packages
         uses: actions/cache@v6
         with:

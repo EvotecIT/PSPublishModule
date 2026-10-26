@@ -1,0 +1,13 @@
+name: Exercise same-payload SDK composition
+description: Integration fixture for SDK setup nested inside a composite action.
+runs:
+  using: composite
+  steps:
+    - shell: pwsh
+      run: >-
+        & '${{ github.action_path }}/../Stage-SetupDotNet.ps1'
+    - uses: ./.powerforge-sdk
+    - if: always()
+      shell: pwsh
+      run: >-
+        & '${{ github.action_path }}/../Stage-SetupDotNet.ps1' -Remove

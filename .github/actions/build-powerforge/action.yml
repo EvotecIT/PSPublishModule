@@ -22,10 +22,18 @@ runs:
   using: composite
   steps:
     - name: Setup .NET 10
-      uses: actions/setup-dotnet@c2fa09f4bde5ebb9d1777cf28262a3eb3db3ced7 # v5.2.0
+      shell: pwsh
+      run: >-
+        & '${{ github.action_path }}/../setup-dotnet/Stage-SetupDotNet.ps1'
+    - name: Run the staged SDK action
+      uses: ./.powerforge-sdk
       with:
-        dotnet-version: 10.0.x
-
+        global-json-file: ${{ github.action_path }}/../../../global.json
+    - name: Remove staged SDK action
+      if: always()
+      shell: pwsh
+      run: >-
+        & '${{ github.action_path }}/../setup-dotnet/Stage-SetupDotNet.ps1' -Remove
     - name: Build immutable self-contained PowerForge
       id: build
       shell: pwsh

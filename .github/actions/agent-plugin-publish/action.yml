@@ -16,9 +16,18 @@ inputs:
 runs:
   using: composite
   steps:
-    - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
+    - shell: pwsh
+      run: >-
+        & '${{ github.action_path }}/../setup-dotnet/Stage-SetupDotNet.ps1'
+    - name: Run the staged SDK action
+      uses: ./.powerforge-sdk
       with:
         global-json-file: ${{ github.action_path }}/../../../global.json
+    - name: Remove staged SDK action
+      if: always()
+      shell: pwsh
+      run: >-
+        & '${{ github.action_path }}/../setup-dotnet/Stage-SetupDotNet.ps1' -Remove
     - name: Build shared plugin validation
       shell: pwsh
       working-directory: ${{ github.action_path }}/../../..

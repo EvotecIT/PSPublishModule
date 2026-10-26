@@ -206,7 +206,7 @@ public sealed class CloudflareDnsRecordTests
 
         Assert.Contains("Reject pull request DNS changes", action, StringComparison.Ordinal);
         Assert.Contains("Zone > DNS > Edit and Zone > Zone > Read", action, StringComparison.Ordinal);
-        Assert.Contains("actions/setup-dotnet@c2fa09f4bde5ebb9d1777cf28262a3eb3db3ced7", action, StringComparison.Ordinal);
+        Assert.Contains("../setup-dotnet/Stage-SetupDotNet.ps1", action, StringComparison.Ordinal);
         Assert.Contains("Invoke-PowerForgeCloudflareDnsRecord.ps1", action, StringComparison.Ordinal);
         Assert.Contains("--token-env', 'POWERFORGE_CLOUDFLARE_API_TOKEN'", script, StringComparison.Ordinal);
         Assert.DoesNotContain("--token', $env:POWERFORGE_CLOUDFLARE_API_TOKEN", script, StringComparison.Ordinal);

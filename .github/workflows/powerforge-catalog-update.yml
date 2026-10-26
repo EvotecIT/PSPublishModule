@@ -85,9 +85,9 @@ jobs:
           ref: ${{ job.workflow_sha }}
           path: catalog-owner
           persist-credentials: false
-      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
+      - uses: ./catalog-owner/.github/actions/setup-dotnet
         with:
-          global-json-file: catalog-owner/global.json
+          global-json-file: ${{ hashFiles('global.json') != '' && 'global.json' || 'catalog-owner/global.json' }}
       - name: Build pinned catalog owner
         shell: pwsh
         working-directory: catalog-owner
