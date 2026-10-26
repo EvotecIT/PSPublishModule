@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using System.Linq;
 using System.Net.Http;
 using System.Text.Json;
@@ -15,157 +14,107 @@ internal sealed class CloudflareSmartTieredCacheResult
     internal bool Changed { get; init; }
     internal bool Enabled { get; init; }
     internal bool? PreviousEnabled { get; init; }
-    internal bool? PreviousTieredCacheEnabled { get; init; }
     internal string Message { get; init; } = string.Empty;
 }
 
-/// <summary>Reconciles Smart Topology together with its zone-level Tiered Cache prerequisite.</summary>
+/// <summary>Reconciles Smart Tiered Cache through Cloudflare's current Smart Shield API.</summary>
 internal static class CloudflareSmartTieredCacheManager
 {
-    private const string ParentSuffix = "argo/tiered_caching";
-    private const string TopologySuffix = "cache/tiered_cache_smart_topology_enable";
-
     internal static CloudflareSmartTieredCacheResult Apply(
-        string zoneId, string apiToken, bool enabled, bool dryRun, HttpClient? httpClient = null) =>
-        Reconcile(zoneId, apiToken, enabled, parentEnabled: enabled ? true : null, dryRun, restoring: false, httpClient);
-
-    /// <summary>Restores both settings, including a parent disabled before the site-policy transaction.</summary>
-    internal static CloudflareSmartTieredCacheResult Restore(
-        string zoneId, string apiToken, CloudflareSmartTieredCacheResult applied, HttpClient httpClient)
-    {
-        if (applied.PreviousEnabled is null || applied.PreviousTieredCacheEnabled is null)
-            return Result(false, false, false, false, applied.Enabled, null, null, "The previous Tiered Cache snapshot is unavailable.");
-        return Reconcile(zoneId, apiToken, applied.PreviousEnabled.Value, applied.PreviousTieredCacheEnabled,
-            dryRun: false, restoring: true, httpClient);
-    }
-
-    private static CloudflareSmartTieredCacheResult Reconcile(
-        string zoneId, string apiToken, bool enabled, bool? parentEnabled, bool dryRun, bool restoring, HttpClient? httpClient)
+        string zoneId, string apiToken, bool enabled, bool dryRun, HttpClient? httpClient = null)
     {
         var normalizedZoneId = (zoneId ?? string.Empty).Trim();
         if (normalizedZoneId.Length != 32 || normalizedZoneId.Any(character => !Uri.IsHexDigit(character)))
-            return Result(false, dryRun, false, false, enabled, null, null, "Cloudflare zoneId must be a 32-character hexadecimal identifier.");
+            return Result(false, false, null, "Cloudflare zoneId must be a 32-character hexadecimal identifier.");
         if (string.IsNullOrWhiteSpace(apiToken))
-            return Result(false, dryRun, false, false, enabled, null, null, "Missing apiToken.");
+            return Result(false, false, null, "Missing apiToken.");
 
         var ownsHttpClient = httpClient is null;
         httpClient ??= new HttpClient { BaseAddress = new Uri("https://api.cloudflare.com/client/v4/") };
         try
         {
-            var parent = Read(httpClient, $"zones/{normalizedZoneId}/{ParentSuffix}", "Tiered Cache", apiToken);
-            if (parent.Setting is null)
-                return Result(false, dryRun, false, false, enabled, null, null, parent.Error);
-            var topology = Read(httpClient, $"zones/{normalizedZoneId}/{TopologySuffix}", "Smart Tiered Cache", apiToken);
-            if (topology.Setting is null)
-                return Result(false, dryRun, false, false, enabled, null, parent.Setting.Enabled, topology.Error);
-
-            var targetParent = parentEnabled ?? parent.Setting.Enabled;
-            var targets = targetParent
-                ? new[] { (parent.Setting, targetParent), (topology.Setting, enabled) }
-                : new[] { (topology.Setting, enabled), (parent.Setting, targetParent) };
-            var changes = targets.Where(target => target.Setting.Enabled != target.Item2).ToArray();
-            var locked = changes.Where(target => !target.Setting.Editable).ToArray();
-            if (!restoring && locked.Length > 0)
-                return Finish(false, false, $"Cloudflare reports that {locked[0].Setting.Name} is not editable for this zone.");
-            if (changes.Length == 0)
-                return Finish(true, false, $"Smart Tiered Cache is already {(enabled ? "enabled" : "disabled")}.");
+            var path = $"zones/{normalizedZoneId}/smart_shield";
+            var current = Read(httpClient, path, apiToken);
+            if (current.Setting is null)
+                return Result(false, false, null, current.Error);
+            var previous = current.Setting.Enabled;
+            if (previous == enabled)
+                return Result(true, false, previous, $"Smart Tiered Cache is already {(enabled ? "enabled" : "disabled")}.");
+            if (!current.Setting.Editable)
+                return Result(false, false, previous, "Cloudflare reports that Smart Tiered Cache is not editable for this zone.");
             if (dryRun)
-                return Finish(true, false, $"Smart Tiered Cache would be {(enabled ? "enabled" : "disabled")}; its Tiered Cache prerequisite is included.");
+                return Result(true, false, previous, $"Smart Tiered Cache would be {(enabled ? "enabled" : "disabled")}.");
 
-            var attempted = new List<Setting>();
-            var failures = locked.Select(target => $"Cloudflare reports that {target.Setting.Name} is not editable for this zone.").ToList();
-            var ambiguous = false;
-            foreach (var (setting, desired) in changes)
-            {
-                if (!setting.Editable)
-                    continue;
-                var write = WriteAndVerify(httpClient, setting, desired, apiToken);
-                ambiguous |= write.Ambiguous;
-                if (write.MayHaveChanged)
-                    attempted.Add(setting);
-                if (write.Success)
-                    continue;
-                failures.Add(write.Error);
-                if (restoring)
-                    continue;
+            var write = WriteAndVerify(httpClient, path, enabled, previous, apiToken);
+            if (write.Success)
+                return Result(true, true, previous, write.Ambiguous
+                    ? "Smart Tiered Cache reached the requested state after an ambiguous API response."
+                    : $"Smart Tiered Cache was {(enabled ? "enabled" : "disabled")}.");
+            if (!write.MayHaveChanged)
+                return Result(false, false, previous, $"Smart Tiered Cache update failed: {write.Error} The previous state remained active.");
 
-                var recoveryErrors = new List<string>();
-                foreach (var previous in attempted.AsEnumerable().Reverse())
-                {
-                    var recovery = WriteAndVerify(httpClient, previous, previous.Enabled, apiToken);
-                    if (!recovery.Success)
-                        recoveryErrors.Add(recovery.Error);
-                }
-                var recoveryMessage = recoveryErrors.Count > 0
-                    ? $"Tiered Cache recovery was incomplete: {string.Join(" ", recoveryErrors)}"
-                    : attempted.Count > 0
-                        ? "The previous Smart Tiered Cache state was restored, including the Tiered Cache prerequisite."
-                        : "The previous state remained active.";
-                return Finish(false, false, $"Smart Tiered Cache update failed: {write.Error} {recoveryMessage}");
-            }
-
-            if (failures.Count > 0)
-                return Finish(false, attempted.Count > 0, $"Tiered Cache recovery was incomplete: {string.Join(" ", failures)}");
-            return Finish(true, true, ambiguous
-                ? "Smart Tiered Cache reached the requested state after an ambiguous API response."
-                : $"Smart Tiered Cache was {(enabled ? "enabled" : "disabled")}; its Tiered Cache prerequisite was reconciled.");
-
-            CloudflareSmartTieredCacheResult Finish(bool success, bool changed, string message) =>
-                Result(success, dryRun, changes.Length > 0, changed, enabled,
-                    topology.Setting.Enabled, parent.Setting.Enabled, message);
+            var recovery = WriteAndVerify(httpClient, path, previous, previous, apiToken);
+            return Result(false, false, previous, recovery.Success
+                ? $"Smart Tiered Cache update failed: {write.Error} The previous Smart Tiered Cache state was restored."
+                : $"Smart Tiered Cache update failed: {write.Error} Recovery was incomplete: {recovery.Error}");
         }
         finally
         {
             if (ownsHttpClient)
                 httpClient.Dispose();
         }
+
+        CloudflareSmartTieredCacheResult Result(bool success, bool changed, bool? previous, string message) => new()
+        {
+            Success = success,
+            DryRun = dryRun,
+            ChangesRequired = previous.HasValue && previous.Value != enabled,
+            Changed = changed,
+            Enabled = enabled,
+            PreviousEnabled = previous,
+            Message = message
+        };
     }
 
-    private static (Setting? Setting, string Error) Read(HttpClient client, string path, string name, string token)
+    /// <summary>Restores only the Smart Tiered Cache value changed by this site-policy transaction.</summary>
+    internal static CloudflareSmartTieredCacheResult Restore(
+        string zoneId, string apiToken, CloudflareSmartTieredCacheResult applied, HttpClient httpClient) =>
+        applied.PreviousEnabled.HasValue
+            ? Apply(zoneId, apiToken, applied.PreviousEnabled.Value, dryRun: false, httpClient)
+            : new CloudflareSmartTieredCacheResult { Message = "The previous Smart Tiered Cache snapshot is unavailable." };
+
+    private static (Setting? Setting, string Error) Read(HttpClient client, string path, string token)
     {
         var response = CloudflareApiClient.Send(client, HttpMethod.Get, path, token, body: null);
         if (!response.Success)
-            return (null, $"{name}: {response.ErrorMessage}");
+            return (null, $"Smart Tiered Cache: {response.ErrorMessage}");
         if (response.Result is not { ValueKind: JsonValueKind.Object } result ||
-            !result.TryGetProperty("value", out var valueElement) || valueElement.ValueKind != JsonValueKind.String)
-            return (null, $"Cloudflare {name} response omitted its value.");
+            !result.TryGetProperty("smart_tiered_cache", out var setting) || setting.ValueKind != JsonValueKind.Object ||
+            !setting.TryGetProperty("value", out var valueElement) || valueElement.ValueKind != JsonValueKind.String)
+            return (null, "Cloudflare Smart Shield response omitted its Smart Tiered Cache value.");
         var value = valueElement.GetString();
         if (value is not ("on" or "off"))
-            return (null, $"Cloudflare {name} returned an unsupported value '{value}'.");
-        var editable = !result.TryGetProperty("editable", out var editableElement) || editableElement.ValueKind != JsonValueKind.False;
-        return (new Setting(path, name, value == "on", editable), string.Empty);
+            return (null, $"Cloudflare Smart Tiered Cache returned an unsupported value '{value}'.");
+        var editable = !setting.TryGetProperty("editable", out var editableElement) || editableElement.ValueKind != JsonValueKind.False;
+        return (new Setting(value == "on", editable), string.Empty);
     }
 
     private static (bool Success, bool MayHaveChanged, bool Ambiguous, string Error) WriteAndVerify(
-        HttpClient client, Setting setting, bool enabled, string token)
+        HttpClient client, string path, bool enabled, bool previous, string token)
     {
-        var write = CloudflareApiClient.Send(client, HttpMethod.Patch, setting.Path, token,
-            new JsonObject { ["value"] = enabled ? "on" : "off" });
+        var write = CloudflareApiClient.Send(client, HttpMethod.Patch, path, token,
+            new JsonObject { ["smart_tiered_cache"] = new JsonObject { ["value"] = enabled ? "on" : "off" } });
         var ambiguous = !write.Success && (write.TransportError is not null || (int)write.StatusCode >= 500);
         if (!write.Success && !ambiguous)
-            return (false, false, false, $"{setting.Name}: {write.ErrorMessage}");
+            return (false, false, false, write.ErrorMessage);
 
-        var verified = Read(client, setting.Path, setting.Name, token);
+        var verified = Read(client, path, token);
         if (verified.Setting?.Enabled == enabled)
             return (true, true, ambiguous, string.Empty);
-        var mayHaveChanged = verified.Setting is null || verified.Setting.Enabled != setting.Enabled;
+        var mayHaveChanged = verified.Setting is null || verified.Setting.Enabled != previous;
         var error = verified.Setting is null ? verified.Error : "the requested state was not observed";
-        return (false, mayHaveChanged, ambiguous, $"{setting.Name}: {(write.Success ? error : write.ErrorMessage)}");
+        return (false, mayHaveChanged, ambiguous, write.Success ? error : write.ErrorMessage);
     }
 
-    private static CloudflareSmartTieredCacheResult Result(
-        bool success, bool dryRun, bool changesRequired, bool changed, bool enabled,
-        bool? previousEnabled, bool? previousParent, string message) => new()
-    {
-        Success = success,
-        DryRun = dryRun,
-        ChangesRequired = changesRequired,
-        Changed = changed,
-        Enabled = enabled,
-        PreviousEnabled = previousEnabled,
-        PreviousTieredCacheEnabled = previousParent,
-        Message = message
-    };
-
-    private sealed record Setting(string Path, string Name, bool Enabled, bool Editable);
+    private sealed record Setting(bool Enabled, bool Editable);
 }
