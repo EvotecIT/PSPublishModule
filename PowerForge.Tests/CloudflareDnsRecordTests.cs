@@ -152,11 +152,11 @@ public sealed class CloudflareDnsRecordTests
         using var client = NewClient(handler);
 
         var result = CloudflareDnsRecordManager.Apply(
-            "täst.example",
+            "tÃƒÂ¤st.example",
             "secret-token",
             "CNAME",
-            "control.täst.example",
-            "target.täst.example",
+            "control.tÃƒÂ¤st.example",
+            "target.tÃƒÂ¤st.example",
             proxied: true,
             ttl: 1,
             comment: "Managed by PowerForge",
@@ -206,7 +206,7 @@ public sealed class CloudflareDnsRecordTests
 
         Assert.Contains("Reject pull request DNS changes", action, StringComparison.Ordinal);
         Assert.Contains("Zone > DNS > Edit and Zone > Zone > Read", action, StringComparison.Ordinal);
-        Assert.Contains("../setup-dotnet/setup-dotnet.cjs", action, StringComparison.Ordinal);
+        Assert.Contains("../setup-dotnet/Stage-SetupDotNet.ps1", action, StringComparison.Ordinal);
         Assert.Contains("Invoke-PowerForgeCloudflareDnsRecord.ps1", action, StringComparison.Ordinal);
         Assert.Contains("--token-env', 'POWERFORGE_CLOUDFLARE_API_TOKEN'", script, StringComparison.Ordinal);
         Assert.DoesNotContain("--token', $env:POWERFORGE_CLOUDFLARE_API_TOKEN", script, StringComparison.Ordinal);

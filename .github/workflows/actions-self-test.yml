@@ -36,7 +36,7 @@ jobs:
       - name: Run SDK policy contracts
         run: node --test .github/actions/setup-dotnet/setup-dotnet.test.cjs
       - name: Install SDKs from repository global.json
-        uses: ./.github/actions/setup-dotnet
+        uses: ./.github/actions/setup-dotnet/self-test-composite
         env:
           DOTNET_INSTALL_DIR: ${{ runner.temp }}/powerforge-sdk-self-test
       - name: Verify installed SDKs and network-free reuse

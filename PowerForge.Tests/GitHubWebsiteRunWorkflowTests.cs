@@ -2,6 +2,28 @@ namespace PowerForge.Tests;
 
 public sealed class GitHubWebsiteRunWorkflowTests
 {
+    [Fact]
+    public void WebsiteRunWorkflow_ShouldBindChannelExecutionToCheckedOutCommit()
+    {
+        var path = Path.Combine(FindRepoRoot(), ".github", "workflows", "powerforge-website-run.yml");
+        var yaml = File.ReadAllText(path);
+        var document = new YamlDotNet.RepresentationModel.YamlStream();
+        document.Load(new StringReader(yaml));
+        var root = (YamlDotNet.RepresentationModel.YamlMappingNode)document.Documents[0].RootNode;
+        var jobs = (YamlDotNet.RepresentationModel.YamlMappingNode)root.Children["jobs"];
+        var job = (YamlDotNet.RepresentationModel.YamlMappingNode)jobs.Children["website-run"];
+        var steps = (YamlDotNet.RepresentationModel.YamlSequenceNode)job.Children["steps"];
+        var checkout = steps.Children.OfType<YamlDotNet.RepresentationModel.YamlMappingNode>()
+            .Single(step => step.Children.TryGetValue("id", out var id) && id.ToString() == "shared_runner");
+        var inputs = (YamlDotNet.RepresentationModel.YamlMappingNode)checkout.Children["with"];
+
+        Assert.Equal("${{ steps.workflow_source.outputs.repository }}", inputs.Children["repository"].ToString());
+        Assert.Equal("${{ steps.workflow_source.outputs.ref }}", inputs.Children["ref"].ToString());
+        Assert.Contains("'--powerforge-repository', '${{ steps.workflow_source.outputs.repository }}'", yaml, StringComparison.Ordinal);
+        Assert.Contains("'--powerforge-ref', '${{ steps.shared_runner.outputs.commit }}'", yaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("'--powerforge-ref', '${{ inputs.powerforge_ref }}'", yaml, StringComparison.Ordinal);
+    }
+
     [Theory]
     [InlineData("powerforge-website-deploy.yml")]
     [InlineData("powerforge-website-maintenance.yml")]

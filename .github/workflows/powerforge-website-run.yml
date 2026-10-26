@@ -263,6 +263,7 @@ jobs:
           "ref=$resolvedRef" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
 
       - name: Checkout shared PowerForge runner
+        id: shared_runner
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ${{ steps.workflow_source.outputs.repository }}
@@ -273,12 +274,9 @@ jobs:
           fetch-depth: 1
 
       - name: Setup .NET
-        shell: pwsh
-        env:
-          INPUT_GLOBAL-JSON-FILE: ${{ hashFiles('global.json') != '' && 'global.json' || '.powerforge-runner/global.json' }}
-        run: |
-          & node ./.powerforge-runner/.github/actions/setup-dotnet/setup-dotnet.cjs
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        uses: ./.powerforge-runner/.github/actions/setup-dotnet
+        with:
+          global-json-file: ${{ hashFiles('global.json') != '' && 'global.json' || '.powerforge-runner/global.json' }}
       - name: Prepare social card renderer
         shell: pwsh
         env:
@@ -393,8 +391,8 @@ jobs:
             '--engine-mode', '${{ inputs.engine_mode }}',
             '--pipeline-mode', '${{ inputs.pipeline_mode }}',
             '--powerforge-lock-path', '${{ inputs.powerforge_lock_path }}',
-            '--powerforge-repository', '${{ inputs.powerforge_repository }}',
-            '--powerforge-ref', '${{ inputs.powerforge_ref }}',
+            '--powerforge-repository', '${{ steps.workflow_source.outputs.repository }}',
+            '--powerforge-ref', '${{ steps.shared_runner.outputs.commit }}',
             '--powerforge-repository-override', '${{ inputs.powerforge_repository_override }}',
             '--powerforge-ref-override', '${{ inputs.powerforge_ref_override }}',
             '--powerforge-tool-lock-path', '${{ inputs.powerforge_tool_lock_path }}',

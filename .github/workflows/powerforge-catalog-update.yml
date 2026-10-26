@@ -85,12 +85,9 @@ jobs:
           ref: ${{ job.workflow_sha }}
           path: catalog-owner
           persist-credentials: false
-      - shell: pwsh
-        env:
-          INPUT_GLOBAL-JSON-FILE: ${{ hashFiles('global.json') != '' && 'global.json' || 'catalog-owner/global.json' }}
-        run: |
-          & node ./catalog-owner/.github/actions/setup-dotnet/setup-dotnet.cjs
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - uses: ./catalog-owner/.github/actions/setup-dotnet
+        with:
+          global-json-file: ${{ hashFiles('global.json') != '' && 'global.json' || 'catalog-owner/global.json' }}
       - name: Build pinned catalog owner
         shell: pwsh
         working-directory: catalog-owner

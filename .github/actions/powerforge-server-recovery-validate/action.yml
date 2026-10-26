@@ -39,9 +39,17 @@ runs:
 
     - name: Setup .NET
       shell: pwsh
-      env:
-        INPUT_GLOBAL-JSON-FILE: ${{ github.action_path }}/../../../global.json
-      run: node "${{ github.action_path }}/../setup-dotnet/setup-dotnet.cjs"
+      run: >-
+        & '${{ github.action_path }}/../setup-dotnet/Stage-SetupDotNet.ps1'
+    - name: Run the staged SDK action
+      uses: ./.powerforge-sdk
+      with:
+        global-json-file: ${{ github.action_path }}/../../../global.json
+    - name: Remove staged SDK action
+      if: always()
+      shell: pwsh
+      run: >-
+        & '${{ github.action_path }}/../setup-dotnet/Stage-SetupDotNet.ps1' -Remove
     - name: Validate recovery manifest and generated plans
       id: validate
       shell: pwsh

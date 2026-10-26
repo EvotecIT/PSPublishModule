@@ -119,7 +119,7 @@ public sealed class CloudflareCachePolicyTests
         var rules = CloudflareCachePolicyBuilder.BuildManagedRules(
             "example.com",
             "Project",
-            ["/release notes/zażółć"],
+            ["/release notes/zaÃ…Â¼ÃƒÂ³Ã…â€šÃ„â€¡"],
             basePath: "/product docs/");
 
         Assert.Contains("/product%20docs/css/*", rules[2]!["expression"]!.GetValue<string>(), StringComparison.Ordinal);
@@ -541,7 +541,7 @@ public sealed class CloudflareCachePolicyTests
         Assert.Contains("actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd", action, StringComparison.Ordinal);
         Assert.Contains("checkout-caller:", action, StringComparison.Ordinal);
         Assert.Contains("inputs.checkout-caller == 'true'", action, StringComparison.Ordinal);
-        Assert.Contains("../setup-dotnet/setup-dotnet.cjs", action, StringComparison.Ordinal);
+        Assert.Contains("../setup-dotnet/Stage-SetupDotNet.ps1", action, StringComparison.Ordinal);
         Assert.Contains("Zone > Cache Rules > Edit", action, StringComparison.Ordinal);
         Assert.Contains("Invoke-PowerForgeCloudflareCachePolicy.ps1", action, StringComparison.Ordinal);
         Assert.Contains("--token-env', 'POWERFORGE_CLOUDFLARE_API_TOKEN'", script, StringComparison.Ordinal);
