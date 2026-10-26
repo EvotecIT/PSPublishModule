@@ -21,7 +21,11 @@ internal sealed class CloudflareSmartTieredCacheResult
 internal static class CloudflareSmartTieredCacheManager
 {
     internal static CloudflareSmartTieredCacheResult Apply(
-        string zoneId, string apiToken, bool enabled, bool dryRun, HttpClient? httpClient = null)
+        string zoneId, string apiToken, bool enabled, bool dryRun, HttpClient? httpClient = null) =>
+        Reconcile(zoneId, apiToken, enabled, dryRun, restoring: false, httpClient);
+
+    private static CloudflareSmartTieredCacheResult Reconcile(
+        string zoneId, string apiToken, bool enabled, bool dryRun, bool restoring, HttpClient? httpClient)
     {
         var normalizedZoneId = (zoneId ?? string.Empty).Trim();
         if (normalizedZoneId.Length != 32 || normalizedZoneId.Any(character => !Uri.IsHexDigit(character)))
@@ -50,6 +54,10 @@ internal static class CloudflareSmartTieredCacheManager
                 return Result(true, true, previous, write.Ambiguous
                     ? "Smart Tiered Cache reached the requested state after an ambiguous API response."
                     : $"Smart Tiered Cache was {(enabled ? "enabled" : "disabled")}.");
+            // A rollback must remain directed toward the original snapshot. A failed
+            // verification cannot make the failed transaction's value a recovery target.
+            if (restoring)
+                return Result(false, false, previous, $"Smart Tiered Cache recovery was incomplete: {write.Error}");
             if (!write.MayHaveChanged)
                 return Result(false, false, previous, $"Smart Tiered Cache update failed: {write.Error} The previous state remained active.");
 
@@ -80,7 +88,7 @@ internal static class CloudflareSmartTieredCacheManager
     internal static CloudflareSmartTieredCacheResult Restore(
         string zoneId, string apiToken, CloudflareSmartTieredCacheResult applied, HttpClient httpClient) =>
         applied.PreviousEnabled.HasValue
-            ? Apply(zoneId, apiToken, applied.PreviousEnabled.Value, dryRun: false, httpClient)
+            ? Reconcile(zoneId, apiToken, applied.PreviousEnabled.Value, dryRun: false, restoring: true, httpClient)
             : new CloudflareSmartTieredCacheResult { Message = "The previous Smart Tiered Cache snapshot is unavailable." };
 
     private static (Setting? Setting, string Error) Read(HttpClient client, string path, string token)

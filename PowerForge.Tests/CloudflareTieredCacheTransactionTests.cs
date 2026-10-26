@@ -147,6 +147,45 @@ public sealed class CloudflareTieredCacheTransactionTests
         Assert.Single(handler.Writes);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Restore_ShouldKeepOriginalTargetWhenVerificationIsUnavailable(bool loseWriteResponse)
+    {
+        var handler = new SettingsHandler(false)
+        {
+            LoseRestoreVerification = true,
+            LoseRestoreWriteResponse = loseWriteResponse
+        };
+        using var client = NewClient(handler);
+        var applied = CloudflareSmartTieredCacheManager.Apply(ZoneId, "test-token", true, false, client);
+        Assert.True(applied.Success, applied.Message);
+
+        var restored = CloudflareSmartTieredCacheManager.Restore(ZoneId, "test-token", applied, client);
+
+        Assert.False(restored.Success);
+        Assert.False(handler.Enabled);
+        Assert.Equal(2, handler.Writes.Count);
+        Assert.Equal("off", JsonNode.Parse(handler.Writes[1])!["smart_tiered_cache"]!["value"]!.GetValue<string>());
+    }
+
+    [Fact]
+    public void SitePolicy_ShouldNotUndoRestorationAfterLostVerification()
+    {
+        var handler = new SettingsHandler(false) { RejectHeaderWrite = true, LoseRestoreVerification = true };
+        using var client = NewClient(handler);
+
+        var result = CloudflareSitePolicyManager.Apply(ZoneId, "test-token", "example.com", "Example",
+            htmlPaths: null, securityHeaders: new AgentSecurityHeadersSpec { Hsts = false },
+            dryRun: false, httpClient: client, cache: new CloudflareCacheSpec(), smartTieredCache: true);
+
+        Assert.False(result.Success);
+        Assert.Contains("Rollback was incomplete", result.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("previous site-policy state was restored", result.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.False(handler.Enabled);
+        Assert.Equal(2, handler.Writes.Count);
+    }
+
     [Fact]
     public void SitePolicy_ShouldRestoreSmartTieredCacheAfterHeaderFailure()
     {
@@ -177,6 +216,8 @@ public sealed class CloudflareTieredCacheTransactionTests
         internal bool LoseWriteResponse { get; init; }
         internal bool CommitLostWrite { get; init; }
         internal bool LoseFirstVerification { get; init; }
+        internal bool LoseRestoreVerification { get; init; }
+        internal bool LoseRestoreWriteResponse { get; init; }
         internal List<string> Writes { get; } = [];
         internal List<string> Paths { get; } = [];
         private bool verificationLost;
@@ -207,9 +248,11 @@ public sealed class CloudflareTieredCacheTransactionTests
                     return Response(HttpStatusCode.Forbidden, """{"success":false,"errors":[{"message":"setting locked"}]}""");
                 if (!LoseWriteResponse || CommitLostWrite)
                     Enabled = JsonNode.Parse(body)!["smart_tiered_cache"]!["value"]!.GetValue<string>() == "on";
-                if (LoseWriteResponse)
+                if (LoseWriteResponse || (LoseRestoreWriteResponse && Writes.Count == 2))
                     throw new HttpRequestException("response lost");
             }
+            else if (LoseRestoreVerification && Writes.Count == 2)
+                return Response(HttpStatusCode.InternalServerError, """{"success":false,"errors":[{"message":"verification unavailable"}]}""");
             else if (LoseFirstVerification && Writes.Count == 1 && !verificationLost)
             {
                 verificationLost = true;
