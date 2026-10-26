@@ -44,7 +44,7 @@ runs:
       run: throw 'PowerForge protected Cloudflare DNS changes cannot run from pull request events.'
 
     - name: Setup .NET
-      uses: EvotecIT/PSPublishModule/.github/actions/setup-dotnet@a3924e02bb38c53e844d1c43c5b95c0dbb3777ba
+      uses: EvotecIT/PSPublishModule/.github/actions/setup-dotnet@e791734b7816adcbdc42df91617bf3369576d9b7
       with:
         global-json-file: ${{ github.action_path }}/../../../global.json
 
