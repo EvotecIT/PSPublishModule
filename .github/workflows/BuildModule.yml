@@ -91,6 +91,9 @@ jobs:
       - name: Test pinned XcodeGen setup
         run: python3 .github/scripts/test-xcodegen-setup.py
 
+      - name: Test .NET SDK setup
+        run: node --test .github/actions/setup-dotnet/setup-dotnet.test.cjs
+
       - name: Validate website workflows
         shell: bash
         run: |

@@ -1,0 +1,26 @@
+name: Setup .NET from the official CDN
+description: Reuse installed SDKs or run Microsoft's pinned installer with exact versions and the official CDN feed.
+
+inputs:
+  dotnet-version:
+    description: SDK version, channel, or newline-separated versions (for example 10.0.x or 10.0.403).
+    required: false
+  global-json-file:
+    description: Optional global.json path; its exact SDK version is installed alongside dotnet-version.
+    required: false
+  dotnet-quality:
+    description: Optional preview or GA quality; exact SDK versions take precedence.
+    required: false
+  architecture:
+    description: SDK architecture; defaults to the runner architecture.
+    required: false
+
+outputs:
+  dotnet-version:
+    description: Highest selected SDK version.
+  dotnet-root:
+    description: Directory containing the selected dotnet executable and SDKs.
+
+runs:
+  using: node24
+  main: setup-dotnet.cjs
