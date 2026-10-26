@@ -5,7 +5,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const {versionRequest, selectVersion, sdksFromMetadata, parseGlobalJson} = require('./sdk-versions.cjs');
-const {getMetadata, requestedVersions, inspectInstallation, installerArguments, downloadInstaller, resolveInstallRoot, discoverInstallations} = require('./setup-dotnet.cjs');
+const {getMetadata, requestedVersions, inspectInstallation, installerArguments, downloadInstaller, resolveInstallRoot, discoverInstallations, installationTargets, expose} = require('./setup-dotnet.cjs');
 
 test('SDK requests preserve pins and feature bands while excluding previews by default', () => {
   const versions = ['10.0.303', '10.0.402', '10.0.403', '10.0.404-preview.1', '11.0.100'];
@@ -96,11 +96,42 @@ test('read-only system SDKs do not become implicit installation targets', () => 
   const user = '/Users/runner/.dotnet';
   const inspect = root => ({root, installed: ['10.0.401']});
   const writable = root => root === user;
-  assert.deepEqual(discoverInstallations([stock, user], 'arm64', '', inspect, writable), [{root: user, installed: ['10.0.401']}]);
-  assert.deepEqual(discoverInstallations([stock], 'arm64', '', inspect, writable), []);
+  const existing = discoverInstallations([stock, user], 'arm64', inspect);
+  assert.equal(selectVersion(existing[0].installed, versionRequest('10.0.x')), '10.0.401');
+  assert.deepEqual(installationTargets(existing, '', writable), [{root: user, installed: ['10.0.401']}]);
+  assert.deepEqual(installationTargets([existing[0]], '', writable), []);
   // An explicit directory remains the caller's choice, including read-only reuse.
-  assert.deepEqual(discoverInstallations([stock], 'arm64', stock, inspect, writable), [{root: stock, installed: ['10.0.401']}]);
+  assert.deepEqual(installationTargets([existing[0]], stock, writable), [{root: stock, installed: ['10.0.401']}]);
   assert.equal(resolveInstallRoot('', [], '/toolcache', 'arm64', 'darwin', path.join(os.tmpdir(), 'mac-user')), path.resolve(os.tmpdir(), 'mac-user', '.dotnet'));
+});
+
+test('a reused read-only root does not force later writes and earlier SDKs survive a root change', () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'dotnet-sequence-test-'));
+  const keys = ['GITHUB_ENV', 'GITHUB_PATH', 'GITHUB_OUTPUT', 'INPUT_DOTNET-VERSION', 'INPUT_GLOBAL-JSON-FILE', 'EVOTEC_DOTNET_SDKS_X64', 'EVOTEC_DOTNET_SDKS_ARM64'];
+  const previous = Object.fromEntries(keys.map(key => [key, process.env[key]]));
+  try {
+    process.env.GITHUB_ENV = path.join(directory, 'env');
+    delete process.env.GITHUB_PATH;
+    delete process.env.GITHUB_OUTPUT;
+    expose('/read-only/sdk', ['8.0.426'], 'x64');
+    const exported = fs.readFileSync(process.env.GITHUB_ENV, 'utf8');
+    assert.equal(exported.includes('DOTNET_INSTALL_DIR='), false);
+    for (const line of exported.trim().split(/\r?\n/)) {
+      const split = line.indexOf('=');
+      if (line.startsWith('EVOTEC_DOTNET_SDKS_')) process.env[line.slice(0, split)] = line.slice(split + 1);
+    }
+    process.env['INPUT_DOTNET-VERSION'] = '10.0.403';
+    delete process.env['INPUT_GLOBAL-JSON-FILE'];
+    delete process.env.EVOTEC_DOTNET_SDKS_ARM64;
+    assert.deepEqual(requestedVersions('x64').map(r => r.value), ['10.0.403', '8.0.426']);
+    assert.deepEqual(requestedVersions('arm64').map(r => r.value), ['10.0.403']);
+    assert.equal(selectVersion(['10.0.403'], requestedVersions('x64')[1]), undefined);
+  } finally {
+    for (const [key, value] of Object.entries(previous)) {
+      if (value === undefined) delete process.env[key]; else process.env[key] = value;
+    }
+    fs.rmSync(directory, {recursive: true, force: true});
+  }
 });
 
 test('metadata refuses origin and aka.ms before network access and rejects redirects', async () => {

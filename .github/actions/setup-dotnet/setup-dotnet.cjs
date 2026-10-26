@@ -72,13 +72,15 @@ function writableInstallation(root) {
   } catch { return false; }
 }
 
-function discoverInstallations(roots, architecture, explicit, inspect = inspectInstallation, writable = writableInstallation) {
-  // A read-only stock installation must not become the active target: a later
-  // SDK request would either fail or lose earlier SDKs by switching roots.
-  return roots.filter(root => explicit || writable(root)).map(root => inspect(root, architecture)).filter(Boolean);
+function discoverInstallations(roots, architecture, inspect = inspectInstallation) {
+  return roots.map(root => inspect(root, architecture)).filter(Boolean);
 }
 
-function requestedVersions() {
+function installationTargets(existing, explicit, writable = writableInstallation) {
+  return existing.filter(candidate => explicit || writable(candidate.root));
+}
+
+function requestedVersions(architecture) {
   const versions = input('dotnet-version').split(/\r?\n/).map(v => v.trim()).filter(Boolean);
   let globalFile = input('global-json-file');
   if (!globalFile && !versions.length && fs.existsSync('global.json')) globalFile = 'global.json';
@@ -88,11 +90,15 @@ function requestedVersions() {
     versions.push(global.sdk.version);
   }
   if (!versions.length) throw new Error('Provide dotnet-version or a global.json containing sdk.version.');
+  // A later action may need a writable root instead of a reused system root.
+  // Carry earlier requested SDKs into that installation without changing it.
+  if (architecture) versions.push(...(process.env[`EVOTEC_DOTNET_SDKS_${architecture.toUpperCase()}`] || '').split(',').filter(Boolean));
   return [...new Set(versions)].map(versionRequest);
 }
 
 function expose(root, versions, architecture) {
-  const variables = {DOTNET_ROOT: root, DOTNET_INSTALL_DIR: root, [`DOTNET_ROOT_${architecture.toUpperCase()}`]: root};
+  const variables = {DOTNET_ROOT: root, [`DOTNET_ROOT_${architecture.toUpperCase()}`]: root,
+    [`EVOTEC_DOTNET_SDKS_${architecture.toUpperCase()}`]: versions.join(',')};
   for (const [name, value] of Object.entries(variables)) {
     if (/[\r\n]/.test(value)) throw new Error(`Invalid .NET directory for ${name}`);
     if (process.env.GITHUB_ENV) fs.appendFileSync(process.env.GITHUB_ENV, `${name}=${value}${os.EOL}`);
@@ -118,7 +124,9 @@ function installerArguments(script, root, version, architecture, windows = proce
 }
 
 function resolveInstallRoot(explicit, existing, cacheBase, architecture, platform = process.platform, home = os.homedir()) {
-  const fallback = platform === 'darwin' ? path.join(home, '.dotnet') : path.join(cacheBase, 'evotec-dotnet', architecture);
+  const cached = path.join(cacheBase, 'evotec-dotnet', architecture);
+  const macDefault = path.join(home, '.dotnet');
+  const fallback = platform === 'darwin' && (!fs.existsSync(macDefault) || writableInstallation(macDefault)) ? macDefault : cached;
   let root = path.resolve(explicit || existing[0]?.root || fallback);
   const executable = path.join(root, process.platform === 'win32' ? 'dotnet.exe' : 'dotnet');
   if (fs.existsSync(executable) && !existing.some(candidate => path.resolve(candidate.root) === root)) {
@@ -141,13 +149,13 @@ async function downloadInstaller(directory, windows = process.platform === 'win3
 }
 
 async function main() {
-  const requests = requestedVersions();
   const requestedArchitecture = input('architecture') || process.arch;
   const architecture = ({amd64: 'x64', ia32: 'x86'})[requestedArchitecture] || requestedArchitecture;
   if (!['x64', 'x86', 'arm64', 'arm'].includes(architecture)) throw new Error(`Unsupported SDK architecture: ${architecture}`);
+  const requests = requestedVersions(architecture);
   const quality = input('dotnet-quality').toLowerCase();
   if (quality && !['ga', 'preview'].includes(quality)) throw new Error(`Unsupported SDK quality: ${quality}`);
-  const existing = discoverInstallations(installationRoots(architecture), architecture, process.env.DOTNET_INSTALL_DIR);
+  const existing = discoverInstallations(installationRoots(architecture), architecture);
   for (const {root, installed} of existing) {
     const selected = requests.map(request => selectVersion(installed, request, quality === 'preview'));
     if (selected.every(Boolean)) return expose(root, selected, architecture);
@@ -169,7 +177,8 @@ async function main() {
   const versions = [...new Set(selected)].sort(compareVersions);
   const cacheBase = process.env.RUNNER_TOOL_CACHE || process.env.RUNNER_TEMP;
   if (!cacheBase) throw new Error('RUNNER_TOOL_CACHE or RUNNER_TEMP is required.');
-  const root = resolveInstallRoot(process.env.DOTNET_INSTALL_DIR, existing, cacheBase, architecture);
+  const targets = installationTargets(existing, process.env.DOTNET_INSTALL_DIR);
+  const root = resolveInstallRoot(process.env.DOTNET_INSTALL_DIR, targets, cacheBase, architecture);
   const temporary = fs.mkdtempSync(path.join(process.env.RUNNER_TEMP || os.tmpdir(), 'evotec-dotnet-install-'));
   try {
     const script = await downloadInstaller(temporary);
@@ -191,4 +200,4 @@ async function main() {
 }
 
 if (require.main === module) main().catch(error => { console.error(error); process.exitCode = 1; });
-module.exports = {main, getMetadata, requestedVersions, inspectInstallation, installerArguments, downloadInstaller, resolveInstallRoot, discoverInstallations};
+module.exports = {main, getMetadata, requestedVersions, inspectInstallation, installerArguments, downloadInstaller, resolveInstallRoot, discoverInstallations, installationTargets, expose};

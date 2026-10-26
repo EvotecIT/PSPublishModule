@@ -27,12 +27,16 @@ settings when a subsequent build selects its SDK.
 `architecture` defaults to the runner architecture and supports x64, x86,
 arm64 and arm. `dotnet-quality: preview` permits preview SDKs for a channel;
 exact versions are always honored. The action exports DOTNET_ROOT,
-DOTNET_INSTALL_DIR, the architecture-specific root, and PATH. Its outputs are
+the architecture-specific root, and PATH. Its outputs are
 `dotnet-version` (highest selected SDK) and `dotnet-root`.
 
 The existing writable matching-architecture installation remains the target so other SDKs,
 test runtimes and workloads stay available. An explicit DOTNET_INSTALL_DIR takes
-precedence. Read-only system installations are left alone. macOS falls back to
+precedence. Matching read-only system installations can satisfy a request without
+downloads; missing SDKs use a writable target. Earlier requested SDK versions
+are carried forward per architecture if a later setup step needs another root.
+The action never exports an automatically selected root as DOTNET_INSTALL_DIR,
+so it cannot turn read-only reuse into an explicit write target. macOS falls back to
 the user's `~/.dotnet`, matching Microsoft's normal installer default. With no
 installation on other platforms, the action uses
 `RUNNER_TOOL_CACHE/evotec-dotnet/<architecture>`. These installations persist on
