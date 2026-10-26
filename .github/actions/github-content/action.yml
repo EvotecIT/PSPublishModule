@@ -22,7 +22,7 @@ runs:
   using: composite
   steps:
     - name: Setup .NET SDK
-      uses: EvotecIT/PSPublishModule/.github/actions/setup-dotnet@97c8ff542123b3e2feae0a9d0ea2639a5f0c7c24
+      uses: EvotecIT/PSPublishModule/.github/actions/setup-dotnet@104f1222e5418de117b71482d19c12b574f6612f
       with:
         global-json-file: ${{ github.action_path }}/../../../global.json
 
