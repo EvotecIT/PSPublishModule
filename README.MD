@@ -665,6 +665,7 @@ Start here:
 - [Docs/PSPublishModule.ManagedModules.ReleaseReadiness.md](Docs/PSPublishModule.ManagedModules.ReleaseReadiness.md)
 - [Benchmarks/ManagedModules/README.md](Benchmarks/ManagedModules/README.md)
 - [Docs/PSPublishModule.ModuleIsolation.md](Docs/PSPublishModule.ModuleIsolation.md)
+- [Docs/PSPublishModule.DesktopDependencyAssets.md](Docs/PSPublishModule.DesktopDependencyAssets.md)
 - [Docs/PSPublishModule.DevelopmentBootstrapper.md](Docs/PSPublishModule.DevelopmentBootstrapper.md)
 - [Docs/PowerForge.PowerShellCompilation.md](Docs/PowerForge.PowerShellCompilation.md)
 - [Docs/PowerForge.Web.WebsiteStarter.md](Docs/PowerForge.Web.WebsiteStarter.md)

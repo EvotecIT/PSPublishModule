@@ -64,6 +64,15 @@ public sealed class BuildLibrariesConfiguration
     /// <summary>Handle runtimes folder when copying libraries.</summary>
     public bool? HandleRuntimes { get; set; }
 
+    private Dictionary<string, string>? _desktopDependencyAssetFrameworks;
+
+    /// <summary>Explicit NuGet package IDs mapped to Desktop asset TFMs; null leaves previous configuration unchanged.</summary>
+    public Dictionary<string, string>? DesktopDependencyAssetFrameworks
+    {
+        get => _desktopDependencyAssetFrameworks;
+        set => _desktopDependencyAssetFrameworks = value is null ? null : new(value, StringComparer.OrdinalIgnoreCase);
+    }
+
     /// <summary>Load the binary module and its dependencies through a custom AssemblyLoadContext on PowerShell Core.</summary>
     public bool? UseAssemblyLoadContext { get; set; }
 

@@ -35,29 +35,33 @@ if ($PSEdition -ne 'Core' -and $PowerForgeDesktopAssemblyRoots.Count -gt 0) {
     # A CLR callback must not execute a PowerShell scriptblock: AssemblyResolve
     # also runs on worker threads that have no runspace. Compile this BCL-only
     # implementation with the host's built-in Add-Type, once per process.
-    $PowerForgeDesktopResolverTypeLock = [string]::Intern('PowerForge.Generated.DesktopAssemblyResolverV1')
+    $PowerForgeDesktopResolverTypeLock = [string]::Intern('PowerForge.Generated.DesktopAssemblyResolverV2')
     [Threading.Monitor]::Enter($PowerForgeDesktopResolverTypeLock)
     try {
-      if (-not ('PowerForge.Generated.DesktopAssemblyResolverV1' -as [type])) {
+      if (-not ('PowerForge.Generated.DesktopAssemblyResolverV2' -as [type])) {
         Add-Type -TypeDefinition @'
 using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
+using System.Security.Cryptography;
 using System.Threading;
 
 namespace PowerForge.Generated {
-    public sealed class DesktopAssemblyResolverV1 {
+    public sealed class DesktopAssemblyResolverV2 {
         private readonly string[] roots;
         private readonly object lifetime = new object();
+        private readonly Dictionary<string, string[]> facadeBindings = new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase);
         private volatile bool bootstrapActive = true;
         private int registered;
-        [ThreadStatic] private static HashSet<DesktopAssemblyResolverV1> resolving;
+        [ThreadStatic] private static HashSet<DesktopAssemblyResolverV2> resolving;
 
-        public DesktopAssemblyResolverV1(string[] assemblyRoots) {
+        public DesktopAssemblyResolverV2(string[] assemblyRoots) {
             roots = new string[assemblyRoots.Length];
-            for (int i = 0; i < roots.Length; i++)
+            for (int i = 0; i < roots.Length; i++) {
                 roots[i] = Path.GetFullPath(assemblyRoots[i]).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+                ReadFacadeBindings(roots[i]);
+            }
         }
         public bool BootstrapActive { get { return bootstrapActive; } set { bootstrapActive = value; } }
         public bool Registered { get { return Thread.VolatileRead(ref registered) != 0; } }
@@ -101,9 +105,50 @@ namespace PowerForge.Generated {
             for (int i = 0; i < expected.Length; i++) if (expected[i] != actual[i]) return false;
             return true;
         }
+        private static string Token(AssemblyName identity) {
+            return BitConverter.ToString(identity.GetPublicKeyToken() ?? new byte[0]).Replace("-", "").ToLowerInvariant();
+        }
+        private static bool QualifiedFacadeVersions(string name, string before, string after) {
+            if (name == "System.Memory" || name == "System.Buffers") return before == "4.0.5.0" && after == "4.0.2.0";
+            return name == "System.Threading.Tasks.Extensions" && before == "4.2.4.0" && after == "4.2.1.0";
+        }
+        private static string Hash(string path) {
+            using (SHA256 algorithm = SHA256.Create())
+            using (FileStream stream = File.OpenRead(path))
+                return BitConverter.ToString(algorithm.ComputeHash(stream)).Replace("-", "");
+        }
+        private void ReadFacadeBindings(string root) {
+            string manifest = Path.Combine(root, ".powerforge-desktop-bindings");
+            if (!File.Exists(manifest)) return;
+            foreach (string line in File.ReadAllLines(manifest)) {
+                if (String.IsNullOrWhiteSpace(line)) continue;
+                string[] policy = line.Split('|');
+                if (policy.Length != 5 || !QualifiedFacadeVersions(policy[0], policy[1], policy[2]) ||
+                    policy[3] != "cc7b13ffcd2ddd51" || policy[4].Length != 64)
+                    throw new InvalidDataException("Invalid Desktop facade binding policy.");
+                string candidate = Path.GetFullPath(Path.Combine(root, policy[0] + ".dll"));
+                if (!candidate.StartsWith(root, StringComparison.OrdinalIgnoreCase) || !File.Exists(candidate))
+                    throw new InvalidDataException("Desktop facade binding asset is missing.");
+                AssemblyName identity = AssemblyName.GetAssemblyName(candidate);
+                if (identity.Name != policy[0] || identity.Version.ToString() != policy[2] ||
+                    !String.IsNullOrEmpty(identity.CultureName) || Token(identity) != policy[3] ||
+                    !String.Equals(Hash(candidate), policy[4], StringComparison.Ordinal))
+                    throw new InvalidDataException("Desktop facade binding asset does not match its packaged identity and hash.");
+                if (facadeBindings.ContainsKey(candidate)) throw new InvalidDataException("Duplicate Desktop facade binding policy.");
+                facadeBindings.Add(candidate, policy);
+            }
+        }
+        private bool MatchesFacadeBinding(AssemblyName requested, AssemblyName candidate, string path) {
+            string[] policy;
+            return facadeBindings.TryGetValue(path, out policy) && requested.Name == policy[0] &&
+                requested.Version != null && requested.Version.ToString() == policy[1] &&
+                candidate.Name == policy[0] && candidate.Version != null && candidate.Version.ToString() == policy[2] &&
+                String.IsNullOrEmpty(requested.CultureName) && String.IsNullOrEmpty(candidate.CultureName) &&
+                Token(requested) == policy[3] && Token(candidate) == policy[3];
+        }
         private Assembly Resolve(object sender, ResolveEventArgs args) {
             if (!Registered || args == null) return null;
-            if (resolving == null) resolving = new HashSet<DesktopAssemblyResolverV1>();
+            if (resolving == null) resolving = new HashSet<DesktopAssemblyResolverV2>();
             if (!resolving.Add(this)) return null;
             try {
                 // Null callers cannot be attributed within an AppDomain. Accept
@@ -121,7 +166,12 @@ namespace PowerForge.Generated {
                 foreach (string root in roots) {
                     string candidate = Path.GetFullPath(Path.Combine(root, name + ".dll"));
                     if (!candidate.StartsWith(root, StringComparison.OrdinalIgnoreCase) || !File.Exists(candidate)) continue;
-                    if (SameIdentity(requested, AssemblyName.GetAssemblyName(candidate))) return Assembly.LoadFrom(candidate);
+                    string[] packagedPolicy;
+                    if (facadeBindings.TryGetValue(candidate, out packagedPolicy) &&
+                        !String.Equals(Hash(candidate), packagedPolicy[4], StringComparison.Ordinal)) continue;
+                    AssemblyName identity = AssemblyName.GetAssemblyName(candidate);
+                    if (SameIdentity(requested, identity) || MatchesFacadeBinding(requested, identity, candidate))
+                        return Assembly.LoadFrom(candidate);
                 }
                 return null;
             } catch { return null; }
@@ -134,7 +184,7 @@ namespace PowerForge.Generated {
     } finally {
         [Threading.Monitor]::Exit($PowerForgeDesktopResolverTypeLock)
     }
-    $PowerForgeDesktopAssemblyResolverState = [PowerForge.Generated.DesktopAssemblyResolverV1]::new([string[]]$PowerForgeDesktopAssemblyRoots)
+    $PowerForgeDesktopAssemblyResolverState = [PowerForge.Generated.DesktopAssemblyResolverV2]::new([string[]]$PowerForgeDesktopAssemblyRoots)
     $PowerForgeDesktopAssemblyResolver = $PowerForgeDesktopAssemblyResolverState.Handler
     $PowerForgeDesktopAssemblyResolverState.Register()
     $UnregisterPowerForgeDesktopAssemblyResolver = {

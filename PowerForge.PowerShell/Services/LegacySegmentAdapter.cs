@@ -125,6 +125,7 @@ public static class LegacySegmentAdapter
                         Framework = GetStringArray(buildLibraries, "Framework"),
                         ProjectName = GetString(buildLibraries, "ProjectName"),
                         NETProjectPath = GetString(buildLibraries, "NETProjectPath"),
+                        DesktopDependencyAssetFrameworks = GetStringDictionary(buildLibraries, "DesktopDependencyAssetFrameworks"),
                         ExcludeLibraryFilter = GetStringArray(buildLibraries, "ExcludeLibraryFilter") ?? GetStringArray(buildLibraries, "NETExcludeLibraryFilter"),
                         IgnoreLibraryOnLoad = GetStringArray(buildLibraries, "IgnoreLibraryOnLoad") ?? GetStringArray(buildLibraries, "NETIgnoreLibraryOnLoad"),
                         UseAssemblyLoadContext = HasKey(buildLibraries, "UseAssemblyLoadContext")
@@ -215,6 +216,7 @@ public static class LegacySegmentAdapter
                     Framework = GetStringArray(conf, "Framework"),
                     ProjectName = GetString(conf, "ProjectName"),
                     NETProjectPath = GetString(conf, "NETProjectPath"),
+                    DesktopDependencyAssetFrameworks = GetStringDictionary(conf, "DesktopDependencyAssetFrameworks"),
                     ExcludeLibraryFilter = GetStringArray(conf, "ExcludeLibraryFilter") ?? GetStringArray(conf, "NETExcludeLibraryFilter"),
                     IgnoreLibraryOnLoad = GetStringArray(conf, "IgnoreLibraryOnLoad") ?? GetStringArray(conf, "NETIgnoreLibraryOnLoad"),
                     UseAssemblyLoadContext = HasKey(conf, "UseAssemblyLoadContext")
@@ -328,6 +330,22 @@ public static class LegacySegmentAdapter
         var trimmed = value.Trim();
         if (trimmed.Length == 0) return null;
         return Enum.TryParse<ModuleDevelopmentSourceBootstrapperMode>(trimmed, ignoreCase: true, out var parsed) ? parsed : null;
+    }
+
+    private static Dictionary<string, string>? GetStringDictionary(IDictionary dict, string key)
+    {
+        IDictionary? values = GetDictionary(dict, key);
+        if (values is null) return null;
+        var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (DictionaryEntry entry in values)
+        {
+            string name = LanguagePrimitives.ConvertTo<string>(entry.Key);
+            string value = LanguagePrimitives.ConvertTo<string>(entry.Value);
+            if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(value))
+                throw new ArgumentException("Desktop dependency package IDs and asset frameworks must be nonempty strings.");
+            result.Add(name, value);
+        }
+        return result;
     }
 
     private static IDictionary? GetDictionary(IDictionary dict, string key)

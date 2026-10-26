@@ -32,6 +32,12 @@
     "DisableBinaryCmdletScan": { "type": "boolean" },
     "IgnoreLibraryOnLoad": { "type": "array", "items": { "type": "string" } },
     "UseAssemblyLoadContext": { "type": "boolean" },
+    "DesktopDependencyAssetFrameworks": {
+      "type": "object",
+      "description": "Explicit NuGet package ID to Desktop asset TFM selections for .NET Framework 4.7.2 or later; Core assets are unchanged.",
+      "propertyNames": { "minLength": 1 },
+      "additionalProperties": { "type": "string", "enum": ["netstandard2.0"] }
+    },
     "DevelopmentBinariesMode": { "type": "string", "enum": ["Off", "Environment", "Auto"] },
     "DevelopmentBinariesPath": { "type": ["string", "null"] },
     "DevelopmentBinariesEnvironmentVariable": { "type": ["string", "null"] },

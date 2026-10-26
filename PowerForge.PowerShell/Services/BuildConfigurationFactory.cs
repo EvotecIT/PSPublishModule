@@ -236,6 +236,7 @@ internal sealed class BuildConfigurationFactory
         if (request.NETSearchClassSpecified) { EnsureBuildLibraries(); buildLibraries!.SearchClass = request.NETSearchClass; }
         if (request.NETBinaryModuleDocumentationSpecified) { EnsureBuildLibraries(); buildLibraries!.NETBinaryModuleDocumentation = request.NETBinaryModuleDocumentation; }
         if (request.NETHandleRuntimesSpecified) { EnsureBuildLibraries(); buildLibraries!.HandleRuntimes = request.NETHandleRuntimes; }
+        if (request.NETDesktopDependencyAssetFrameworksSpecified) { EnsureBuildLibraries(); buildLibraries!.DesktopDependencyAssetFrameworks = request.NETDesktopDependencyAssetFrameworks ?? new(StringComparer.OrdinalIgnoreCase); }
         if (request.NETAssemblyLoadContextSpecified) { EnsureBuildLibraries(); buildLibraries!.UseAssemblyLoadContext = request.NETAssemblyLoadContext; }
         if (request.NETDevelopmentBinariesSpecified)
         {
