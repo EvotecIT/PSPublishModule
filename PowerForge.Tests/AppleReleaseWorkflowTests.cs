@@ -550,7 +550,7 @@ public sealed partial class AppleReleaseWorkflowTests
         var root = FindRepoRoot();
         var action = Read(root, ".github", "actions", "build-powerforge", "action.yml");
 
-        Assert.Matches(@"uses:\s*EvotecIT/PSPublishModule/\.github/actions/setup-dotnet@[0-9a-f]{40}(?:\s|$)", action);
+        Assert.Contains("../setup-dotnet/setup-dotnet.cjs", action, StringComparison.Ordinal);
         Assert.Contains("Build/Build-Project.ps1", action, StringComparison.Ordinal);
         Assert.Contains("'-Target', 'PowerForge'", action, StringComparison.Ordinal);
         Assert.Contains("'-Flavors', 'Portable'", action, StringComparison.Ordinal);

@@ -4,7 +4,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const {versionRequest, selectVersion, sdksFromMetadata, parseGlobalJson} = require('./sdk-versions.cjs');
+const {versionRequest, selectVersion, sdksFromMetadata, parseGlobalJson, globalSdkRequest} = require('./sdk-versions.cjs');
 const {getMetadata, requestedVersions, inspectInstallation, installerArguments, downloadInstaller, resolveInstallRoot, discoverInstallations, installationTargets, expose} = require('./setup-dotnet.cjs');
 
 test('SDK requests preserve pins and feature bands while excluding previews by default', () => {
@@ -23,17 +23,17 @@ test('metadata includes every servicing SDK', () => {
   assert.deepEqual([...sdks.keys()], ['10.0.403', '10.0.303', '10.0.113']);
 });
 
-test('commented global.json pins are additive and remain unchanged', () => {
+test('global.json owns primary and additional SDK policy without workflow version overrides', () => {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'dotnet-global-test-'));
   const file = path.join(directory, 'global.json');
   const previousVersion = process.env['INPUT_DOTNET-VERSION'];
   const previousGlobal = process.env['INPUT_GLOBAL-JSON-FILE'];
-  const document = '{ // SDK policy\n "sdk": { "version": "10.0.303" /* CI pin */ }, "note": "https://example.com/a/*b*/", "quote": "a\\\"//b" }';
+  const document = '{ // SDK policy\n "sdk": { "version": "10.0.300", "rollForward": "latestFeature" /* CI policy */ }, "powerforge": { "sdks": [{"version":"8.0.400", "rollForward":"latestPatch"}] }, "note": "https://example.com/a/*b*/", "quote": "a\\\"//b" }';
   fs.writeFileSync(file, document);
   try {
     process.env['INPUT_DOTNET-VERSION'] = '8.0.x\n10.0.x';
     process.env['INPUT_GLOBAL-JSON-FILE'] = file;
-    assert.deepEqual(requestedVersions().map(r => r.value), ['8.0.x', '10.0.x', '10.0.303']);
+    assert.deepEqual(requestedVersions().map(r => r.value), ['10.0.300', '8.0.400']);
     assert.equal(fs.readFileSync(file, 'utf8'), document);
     assert.equal(parseGlobalJson(document).note, 'https://example.com/a/*b*/');
     assert.equal(parseGlobalJson(document).quote, 'a"//b');
@@ -44,6 +44,16 @@ test('commented global.json pins are additive and remain unchanged', () => {
     else process.env['INPUT_GLOBAL-JSON-FILE'] = previousGlobal;
     fs.rmSync(directory, {recursive: true, force: true});
   }
+});
+
+test('global.json rollForward selects available feature bands and required servicing floors', () => {
+  const versions = ['10.0.100', '10.0.302', '10.0.303', '10.0.403', '10.0.404-preview.1', '11.0.100'];
+  assert.equal(selectVersion(versions, globalSdkRequest({version: '10.0.300', rollForward: 'latestFeature'})), '10.0.403');
+  assert.equal(selectVersion(versions, globalSdkRequest({version: '10.0.300', rollForward: 'latestPatch'})), '10.0.303');
+  assert.equal(selectVersion(versions, globalSdkRequest({version: '10.0.300'})), '10.0.303');
+  assert.equal(selectVersion(['10.0.302'], globalSdkRequest({version: '10.0.303', rollForward: 'latestPatch'})), undefined);
+  assert.equal(selectVersion(versions, globalSdkRequest({version: '10.0.303', rollForward: 'disable'})), '10.0.303');
+  assert.throws(() => globalSdkRequest({version: '10.0.300', rollForward: 'unknown'}), /rollForward/);
 });
 
 test('installation discovery checks architecture and retains runtime-only roots', () => {
@@ -121,10 +131,12 @@ test('a reused read-only root does not force later writes and earlier SDKs survi
       if (line.startsWith('EVOTEC_DOTNET_SDKS_')) process.env[line.slice(0, split)] = line.slice(split + 1);
     }
     process.env['INPUT_DOTNET-VERSION'] = '10.0.403';
-    delete process.env['INPUT_GLOBAL-JSON-FILE'];
+    const globalFile = path.join(directory, 'global.json');
+    fs.writeFileSync(globalFile, JSON.stringify({sdk: {version: '10.0.300', rollForward: 'latestFeature'}}));
+    process.env['INPUT_GLOBAL-JSON-FILE'] = globalFile;
     delete process.env.EVOTEC_DOTNET_SDKS_ARM64;
-    assert.deepEqual(requestedVersions('x64').map(r => r.value), ['10.0.403', '8.0.426']);
-    assert.deepEqual(requestedVersions('arm64').map(r => r.value), ['10.0.403']);
+    assert.deepEqual(requestedVersions('x64').map(r => r.value), ['10.0.300', '8.0.426']);
+    assert.deepEqual(requestedVersions('arm64').map(r => r.value), ['10.0.300']);
     assert.equal(selectVersion(['10.0.403'], requestedVersions('x64')[1]), undefined);
   } finally {
     for (const [key, value] of Object.entries(previous)) {

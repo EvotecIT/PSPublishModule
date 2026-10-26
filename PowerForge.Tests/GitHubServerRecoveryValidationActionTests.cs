@@ -15,7 +15,7 @@ public sealed class GitHubServerRecoveryValidationActionTests
         Assert.DoesNotContain("${{ secrets.", action, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd", action, StringComparison.Ordinal);
         Assert.Contains("fetch-depth: 0", action, StringComparison.Ordinal);
-        Assert.Matches(@"uses:\s*EvotecIT/PSPublishModule/\.github/actions/setup-dotnet@[0-9a-f]{40}(?:\s|$)", action);
+        Assert.Contains("../setup-dotnet/setup-dotnet.cjs", action, StringComparison.Ordinal);
         Assert.Contains("POWERFORGE_ENGINE_REF: ${{ github.action_ref }}", action, StringComparison.Ordinal);
         Assert.Contains("POWERFORGE_ENGINE_REPOSITORY: ${{ github.action_repository }}", action, StringComparison.Ordinal);
         Assert.Contains("POWERFORGE_CAPTURE_USER: ${{ inputs.capture-user }}", action, StringComparison.Ordinal);
@@ -154,7 +154,7 @@ public sealed class GitHubServerRecoveryValidationActionTests
         Assert.Contains("FullyQualifiedName~ServerRecovery", workflow, StringComparison.Ordinal);
         Assert.Contains("FullyQualifiedName~ServerScaffoldTests", workflow, StringComparison.Ordinal);
         Assert.Contains("actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1", workflow, StringComparison.Ordinal);
-        Assert.Matches(@"uses:\s*EvotecIT/PSPublishModule/\.github/actions/setup-dotnet@[0-9a-f]{40}(?:\s|$)", workflow);
+        Assert.Contains("uses: ./.github/actions/setup-dotnet", workflow, StringComparison.Ordinal);
     }
 
     private static string ReadRepoFile(params string[] relativePath)

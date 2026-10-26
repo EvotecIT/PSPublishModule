@@ -22,10 +22,10 @@ runs:
   using: composite
   steps:
     - name: Setup .NET SDK
-      uses: EvotecIT/PSPublishModule/.github/actions/setup-dotnet@e791734b7816adcbdc42df91617bf3369576d9b7
-      with:
-        global-json-file: ${{ github.action_path }}/../../../global.json
-
+      shell: pwsh
+      env:
+        INPUT_GLOBAL-JSON-FILE: ${{ github.action_path }}/../../../global.json
+      run: node "${{ github.action_path }}/../setup-dotnet/setup-dotnet.cjs"
     - name: Build PowerForge CLI
       shell: pwsh
       run: |

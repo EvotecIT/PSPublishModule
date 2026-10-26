@@ -2,15 +2,10 @@ name: Setup .NET from the official CDN
 description: Reuse installed SDKs or run Microsoft's pinned installer with exact versions and the official CDN feed.
 
 inputs:
-  dotnet-version:
-    description: SDK version, channel, or newline-separated versions (for example 10.0.x or 10.0.403).
-    required: false
   global-json-file:
-    description: Optional global.json path; its exact SDK version is installed alongside dotnet-version.
+    description: Repository global.json containing sdk.version, rollForward and optional powerforge.sdks declarations.
     required: false
-  dotnet-quality:
-    description: Optional preview or GA quality; exact SDK versions take precedence.
-    required: false
+    default: global.json
   architecture:
     description: SDK architecture; defaults to the runner architecture.
     required: false

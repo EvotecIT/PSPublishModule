@@ -52,10 +52,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: EvotecIT/PSPublishModule/.github/actions/setup-dotnet@e791734b7816adcbdc42df91617bf3369576d9b7
-        with:
-          global-json-file: global.json
-
+      - uses: ./.github/actions/setup-dotnet
       - name: Restore focused test graph
         run: dotnet restore ./PowerForge.Tests/PowerForge.Tests.csproj --force-evaluate
 

@@ -1,32 +1,30 @@
 # Set up .NET from the official CDN
 
 This action reuses matching SDKs already installed on a runner. Otherwise it
-resolves channel requests through Microsoft's release metadata, then calls
+resolves the repository's `global.json` policy through Microsoft's release metadata, then calls
 Microsoft's pinned dotnet-install script with an exact SDK version and both
 feeds set to `https://builds.dotnet.microsoft.com/dotnet`. Exact versions bypass
 `aka.ms`; there is no separate floating LTS runtime installation.
 
 ```yaml
 - uses: actions/checkout@v7
-- uses: EvotecIT/PSPublishModule/.github/actions/setup-dotnet@main
-  with:
-    dotnet-version: |
-      8.0.x
-      10.0.x
-    global-json-file: global.json
+- uses: EvotecIT/PSPublishModule/.github/actions/setup-dotnet@actions-v1
 ```
 
-Use an immutable commit instead of `main` when a workflow pins its actions.
-`dotnet-version` accepts exact SDK versions, major/minor channels such as
-`10.x` or `10.0.x`, and feature bands such as `10.0.3xx`. An explicit
-`global-json-file` adds its SDK pin. With neither input, a root `global.json`
-supplies the version. Comments in global.json are supported. The action never
-edits global.json; the .NET CLI applies its rollForward and allowPrerelease
-settings when a subsequent build selects its SDK.
+The default input is `global-json-file: global.json`. Its `sdk.version` and
+`sdk.rollForward` select the primary SDK. `latestFeature` permits newer feature
+bands in the same major/minor release; `latestPatch` stays within one feature
+band and never selects a version below the configured minimum. `disable`
+honors an exact version. An omitted roll-forward setting stays within the
+configured feature band. Stable SDKs are preferred unless `allowPrerelease` is
+enabled. Comments in global.json are supported, and the action never edits it.
+
+Additional SDKs required by test runtimes use the same declaration shape in
+`powerforge.sdks`, an array within global.json. The action contains no SDK
+version defaults, and workflow inputs cannot override repository SDK policy.
 
 `architecture` defaults to the runner architecture and supports x64, x86,
-arm64 and arm. `dotnet-quality: preview` permits preview SDKs for a channel;
-exact versions are always honored. The action exports DOTNET_ROOT,
+arm64 and arm. The action exports DOTNET_ROOT,
 the architecture-specific root, and PATH. Its outputs are
 `dotnet-version` (highest selected SDK) and `dotnet-root`.
 

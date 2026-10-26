@@ -36,11 +36,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: EvotecIT/PSPublishModule/.github/actions/setup-dotnet@e791734b7816adcbdc42df91617bf3369576d9b7
-        with:
-          global-json-file: global.json
-          dotnet-version: 8.0.x
-
+      - uses: ./.github/actions/setup-dotnet
       - name: Cache NuGet packages
         uses: actions/cache@v6
         with:
@@ -70,10 +66,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: EvotecIT/PSPublishModule/.github/actions/setup-dotnet@e791734b7816adcbdc42df91617bf3369576d9b7
-        with:
-          global-json-file: global.json
-
+      - uses: ./.github/actions/setup-dotnet
       - name: Cache NuGet packages
         uses: actions/cache@v6
         with:

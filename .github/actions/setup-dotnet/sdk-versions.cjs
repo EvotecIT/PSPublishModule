@@ -1,7 +1,7 @@
 'use strict';
 
-// Only the supported setup inputs are interpreted here. global.json rollForward
-// remains the dotnet CLI's responsibility; its requested version is never repinned.
+// SDK matching follows repository global.json policy. The same file governs
+// the dotnet CLI after setup; no workflow SDK version overrides it.
 function compareVersions(a, b) {
   const [an, ap] = a.split('-', 2);
   const [bn, bp] = b.split('-', 2);
@@ -28,7 +28,26 @@ function matches(version, request, allowPreview = false) {
   if (request.exact) return version === request.value;
   if (!allowPreview && version.includes('-')) return false;
   if (!version.startsWith(`${request.channel}.`)) return false;
+  if (request.minimum && compareVersions(version, request.minimum) < 0) return false;
   return !request.band || version.split('.')[2].startsWith(request.band);
+}
+
+function globalSdkRequest(sdk) {
+  if (!sdk || !versionRequest(sdk.version).exact || sdk.version.includes('-')) {
+    throw new Error('global.json SDK declarations require a stable three-part version.');
+  }
+  const policy = sdk.rollForward || 'latestPatch';
+  if (!['latestFeature', 'latestPatch', 'disable'].includes(policy)) {
+    throw new Error(`Unsupported SDK rollForward policy: ${policy}`);
+  }
+  const request = versionRequest(sdk.version);
+  if (policy !== 'disable') {
+    request.exact = false;
+    request.minimum = sdk.version;
+    request.band = policy === 'latestPatch' ? String(Math.floor(Number(sdk.version.split('.')[2]) / 100)) : null;
+  }
+  request.allowPreview = sdk.allowPrerelease === true;
+  return request;
 }
 
 function selectVersion(versions, request, allowPreview = false) {
@@ -55,4 +74,4 @@ function parseGlobalJson(text) {
   return JSON.parse(withoutComments);
 }
 
-module.exports = {compareVersions, versionRequest, matches, selectVersion, sdksFromMetadata, parseGlobalJson};
+module.exports = {compareVersions, versionRequest, matches, selectVersion, sdksFromMetadata, parseGlobalJson, globalSdkRequest};

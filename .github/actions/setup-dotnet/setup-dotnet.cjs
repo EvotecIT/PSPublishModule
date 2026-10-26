@@ -5,7 +5,7 @@ const path = require('node:path');
 const os = require('node:os');
 const crypto = require('node:crypto');
 const {spawnSync} = require('node:child_process');
-const {compareVersions, versionRequest, selectVersion, sdksFromMetadata, parseGlobalJson} = require('./sdk-versions.cjs');
+const {compareVersions, versionRequest, selectVersion, sdksFromMetadata, parseGlobalJson, globalSdkRequest} = require('./sdk-versions.cjs');
 
 const CDN = 'https://builds.dotnet.microsoft.com/dotnet';
 const INSTALLER_COMMIT = 'da3ce11ba63f3dbb0fb835d41bda2665d5c48e84'; // dotnet/install-scripts v2026.07.21
@@ -84,19 +84,16 @@ function installationTargets(existing, explicit, writable = writableInstallation
 }
 
 function requestedVersions(architecture) {
-  const versions = input('dotnet-version').split(/\r?\n/).map(v => v.trim()).filter(Boolean);
-  let globalFile = input('global-json-file');
-  if (!globalFile && !versions.length && fs.existsSync('global.json')) globalFile = 'global.json';
-  if (globalFile) {
-    const global = parseGlobalJson(fs.readFileSync(globalFile, 'utf8'));
-    if (!global.sdk?.version) throw new Error(`No sdk.version in ${globalFile}`);
-    versions.push(global.sdk.version);
-  }
-  if (!versions.length) throw new Error('Provide dotnet-version or a global.json containing sdk.version.');
+  const globalFile = input('global-json-file') || 'global.json';
+  const global = parseGlobalJson(fs.readFileSync(globalFile, 'utf8'));
+  if (!global.sdk?.version) throw new Error(`No sdk.version in ${globalFile}`);
+  const additional = global.powerforge?.sdks || [];
+  if (!Array.isArray(additional)) throw new Error('global.json powerforge.sdks must be an array of SDK declarations.');
+  const requests = [global.sdk, ...additional].map(globalSdkRequest);
   // A later action may need a writable root instead of a reused system root.
   // Carry earlier requested SDKs into that installation without changing it.
-  if (architecture) versions.push(...(process.env[`EVOTEC_DOTNET_SDKS_${architecture.toUpperCase()}`] || '').split(',').filter(Boolean));
-  return [...new Set(versions)].map(versionRequest);
+  if (architecture) requests.push(...(process.env[`EVOTEC_DOTNET_SDKS_${architecture.toUpperCase()}`] || '').split(',').filter(Boolean).map(versionRequest));
+  return requests;
 }
 
 function expose(root, versions, architecture) {
@@ -156,11 +153,9 @@ async function main() {
   const architecture = ({amd64: 'x64', ia32: 'x86'})[requestedArchitecture] || requestedArchitecture;
   if (!['x64', 'x86', 'arm64', 'arm'].includes(architecture)) throw new Error(`Unsupported SDK architecture: ${architecture}`);
   const requests = requestedVersions(architecture);
-  const quality = input('dotnet-quality').toLowerCase();
-  if (quality && !['ga', 'preview'].includes(quality)) throw new Error(`Unsupported SDK quality: ${quality}`);
   const existing = discoverInstallations(installationRoots(architecture), architecture);
   for (const {root, installed} of existing) {
-    const selected = requests.map(request => selectVersion(installed, request, quality === 'preview'));
+    const selected = requests.map(request => selectVersion(installed, request, request.allowPreview));
     if (selected.every(Boolean)) return expose(root, selected, architecture);
   }
   const metadata = new Map();
@@ -173,7 +168,7 @@ async function main() {
     if (!metadata.has(request.channel)) {
       metadata.set(request.channel, sdksFromMetadata(await getMetadata(`${CDN}/release-metadata/${request.channel}/releases.json`)));
     }
-    const version = selectVersion([...metadata.get(request.channel).keys()], request, quality === 'preview');
+    const version = selectVersion([...metadata.get(request.channel).keys()], request, request.allowPreview);
     if (!version) throw new Error(`No published SDK matches ${request.value} in the official release metadata.`);
     selected.push(version);
   }

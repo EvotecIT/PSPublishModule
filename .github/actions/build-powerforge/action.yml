@@ -22,10 +22,10 @@ runs:
   using: composite
   steps:
     - name: Setup .NET 10
-      uses: EvotecIT/PSPublishModule/.github/actions/setup-dotnet@e791734b7816adcbdc42df91617bf3369576d9b7
-      with:
-        dotnet-version: 10.0.x
-
+      shell: pwsh
+      env:
+        INPUT_GLOBAL-JSON-FILE: ${{ github.action_path }}/../../../global.json
+      run: node "${{ github.action_path }}/../setup-dotnet/setup-dotnet.cjs"
     - name: Build immutable self-contained PowerForge
       id: build
       shell: pwsh

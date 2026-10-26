@@ -541,7 +541,7 @@ public sealed class CloudflareCachePolicyTests
         Assert.Contains("actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd", action, StringComparison.Ordinal);
         Assert.Contains("checkout-caller:", action, StringComparison.Ordinal);
         Assert.Contains("inputs.checkout-caller == 'true'", action, StringComparison.Ordinal);
-        Assert.Matches(@"uses:\s*EvotecIT/PSPublishModule/\.github/actions/setup-dotnet@[0-9a-f]{40}(?:\s|$)", action);
+        Assert.Contains("../setup-dotnet/setup-dotnet.cjs", action, StringComparison.Ordinal);
         Assert.Contains("Zone > Cache Rules > Edit", action, StringComparison.Ordinal);
         Assert.Contains("Invoke-PowerForgeCloudflareCachePolicy.ps1", action, StringComparison.Ordinal);
         Assert.Contains("--token-env', 'POWERFORGE_CLOUDFLARE_API_TOKEN'", script, StringComparison.Ordinal);

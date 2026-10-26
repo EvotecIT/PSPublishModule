@@ -34,9 +34,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
-      - uses: EvotecIT/PSPublishModule/.github/actions/setup-dotnet@e791734b7816adcbdc42df91617bf3369576d9b7
-        with:
-          dotnet-version: '10.0.303'
+      - uses: ./.github/actions/setup-dotnet
       - uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python }}

@@ -273,11 +273,12 @@ jobs:
           fetch-depth: 1
 
       - name: Setup .NET
-        uses: EvotecIT/PSPublishModule/.github/actions/setup-dotnet@e791734b7816adcbdc42df91617bf3369576d9b7
-        with:
-          dotnet-version: ${{ inputs.dotnet_version }}
-          global-json-file: ${{ hashFiles('global.json') != '' && 'global.json' || '' }}
-
+        shell: pwsh
+        env:
+          INPUT_GLOBAL-JSON-FILE: ${{ hashFiles('global.json') != '' && 'global.json' || '.powerforge-runner/global.json' }}
+        run: |
+          & node ./.powerforge-runner/.github/actions/setup-dotnet/setup-dotnet.cjs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Prepare social card renderer
         shell: pwsh
         env:
