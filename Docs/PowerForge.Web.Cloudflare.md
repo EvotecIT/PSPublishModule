@@ -40,7 +40,7 @@ token in a protected environment or secret and pass only its environment-variabl
 name to the CLI.
 
 The command manages two Cloudflare ruleset phases and, when configured, the
-zone's Smart Tiered Cache setting:
+zone's Tiered Cache and Smart Topology settings:
 
 - `http_request_cache_settings`: three cache rules followed by a negotiated Markdown bypass
 - `http_response_headers_transform`: zero to six response-header rules (site-wide security, homepage discovery links, API Catalog media type/CORS, JSON discovery media type/CORS, Markdown artifact media type/CORS, and immutable browser caching for `Cloudflare.ImmutablePaths`, as configured)
@@ -52,6 +52,15 @@ current. The combined command preflights every managed surface before its first
 write. If a later write fails, it restores the snapshots and the previous Smart
 Tiered Cache state taken before the operation and reports any incomplete rollback
 explicitly.
+
+`Cloudflare.SmartTieredCache: true` enables both Tiered Cache
+(`argo/tiered_caching`) and Smart Topology
+(`cache/tiered_cache_smart_topology_enable`). Cloudflare exposes these as separate
+settings; selecting Smart Topology alone does not enable Tiered Cache. Both are
+available on Free and paid plans. `false` disables Smart Topology while preserving
+the parent Tiered Cache setting, and an omitted value preserves both. Rollback
+restores both original values, including a previously disabled parent. See
+[Cloudflare's Tiered Cache setup](https://developers.cloudflare.com/cache/how-to/tiered-cache/).
 
 ## HSTS must be an explicit site decision
 
