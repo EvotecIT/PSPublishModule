@@ -1829,8 +1829,13 @@ public static partial class WebSeoDoctor
 
         if (root.ValueKind == JsonValueKind.Object)
         {
-            hasContext = JsonLdObjectHasNonEmptyValue(root, "@context");
-            hasType = JsonLdObjectHasNonEmptyValue(root, "@type");
+            // A graph container supplies context while its entities supply types.
+            // Use the same graph traversal as the entity-profile checks below.
+            foreach (var item in EnumerateJsonLdObjects(root))
+            {
+                hasContext |= JsonLdObjectHasNonEmptyValue(item, "@context");
+                hasType |= JsonLdObjectHasNonEmptyValue(item, "@type");
+            }
             return true;
         }
 
@@ -1843,10 +1848,9 @@ public static partial class WebSeoDoctor
             if (item.ValueKind != JsonValueKind.Object)
                 continue;
             anyObject = true;
-            if (JsonLdObjectHasNonEmptyValue(item, "@context"))
-                hasContext = true;
-            if (JsonLdObjectHasNonEmptyValue(item, "@type"))
-                hasType = true;
+            TryValidateJsonLdElement(item, out var itemHasContext, out var itemHasType);
+            hasContext |= itemHasContext;
+            hasType |= itemHasType;
         }
 
         return anyObject;
