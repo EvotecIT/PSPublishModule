@@ -30,9 +30,11 @@ exact versions are always honored. The action exports DOTNET_ROOT,
 DOTNET_INSTALL_DIR, the architecture-specific root, and PATH. Its outputs are
 `dotnet-version` (highest selected SDK) and `dotnet-root`.
 
-The existing matching-architecture installation remains the target so other SDKs,
+The existing writable matching-architecture installation remains the target so other SDKs,
 test runtimes and workloads stay available. An explicit DOTNET_INSTALL_DIR takes
-precedence. With no installation, the action uses
+precedence. Read-only system installations are left alone. macOS falls back to
+the user's `~/.dotnet`, matching Microsoft's normal installer default. With no
+installation on other platforms, the action uses
 `RUNNER_TOOL_CACHE/evotec-dotnet/<architecture>`. These installations persist on
 self-hosted runners and are reused across jobs; no large SDK cache archives are
 uploaded to GitHub. A matching preinstalled SDK is preferred over downloading a

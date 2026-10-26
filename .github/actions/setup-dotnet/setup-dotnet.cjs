@@ -51,15 +51,31 @@ function inspectInstallation(root, architecture, execute = spawnSync) {
   return {root, installed}; // A runtime-only installation is also a valid target.
 }
 
-function installationRoots() {
+function installationRoots(architecture) {
   const explicit = process.env.DOTNET_INSTALL_DIR;
   if (explicit) return [path.resolve(explicit)];
   const roots = new Set([process.env.DOTNET_ROOT]);
+  if (process.platform === 'darwin') roots.add(path.join(os.homedir(), '.dotnet'));
+  const cacheBase = process.env.RUNNER_TOOL_CACHE || process.env.RUNNER_TEMP;
+  if (cacheBase) roots.add(path.join(cacheBase, 'evotec-dotnet', architecture));
   for (const directory of (process.env.PATH || '').split(path.delimiter)) {
     const executable = path.join(directory, process.platform === 'win32' ? 'dotnet.exe' : 'dotnet');
     if (fs.existsSync(executable)) roots.add(path.dirname(fs.realpathSync(executable)));
   }
   return [...roots].filter(Boolean);
+}
+
+function writableInstallation(root) {
+  try {
+    fs.accessSync(root, fs.constants.W_OK);
+    return true;
+  } catch { return false; }
+}
+
+function discoverInstallations(roots, architecture, explicit, inspect = inspectInstallation, writable = writableInstallation) {
+  // A read-only stock installation must not become the active target: a later
+  // SDK request would either fail or lose earlier SDKs by switching roots.
+  return roots.filter(root => explicit || writable(root)).map(root => inspect(root, architecture)).filter(Boolean);
 }
 
 function requestedVersions() {
@@ -101,8 +117,9 @@ function installerArguments(script, root, version, architecture, windows = proce
       '--azure-feed', CDN, '--uncached-feed', CDN, '--no-path', '--skip-non-versioned-files'];
 }
 
-function resolveInstallRoot(explicit, existing, cacheBase, architecture) {
-  let root = path.resolve(explicit || existing[0]?.root || path.join(cacheBase, 'evotec-dotnet', architecture));
+function resolveInstallRoot(explicit, existing, cacheBase, architecture, platform = process.platform, home = os.homedir()) {
+  const fallback = platform === 'darwin' ? path.join(home, '.dotnet') : path.join(cacheBase, 'evotec-dotnet', architecture);
+  let root = path.resolve(explicit || existing[0]?.root || fallback);
   const executable = path.join(root, process.platform === 'win32' ? 'dotnet.exe' : 'dotnet');
   if (explicit && fs.existsSync(executable) && !existing.some(candidate => path.resolve(candidate.root) === root)) {
     // DOTNET_INSTALL_DIR may have been exported by an earlier invocation for
@@ -130,7 +147,7 @@ async function main() {
   if (!['x64', 'x86', 'arm64', 'arm'].includes(architecture)) throw new Error(`Unsupported SDK architecture: ${architecture}`);
   const quality = input('dotnet-quality').toLowerCase();
   if (quality && !['ga', 'preview'].includes(quality)) throw new Error(`Unsupported SDK quality: ${quality}`);
-  const existing = installationRoots().map(root => inspectInstallation(root, architecture)).filter(Boolean);
+  const existing = discoverInstallations(installationRoots(architecture), architecture, process.env.DOTNET_INSTALL_DIR);
   for (const {root, installed} of existing) {
     const selected = requests.map(request => selectVersion(installed, request, quality === 'preview'));
     if (selected.every(Boolean)) return expose(root, selected, architecture);
@@ -174,4 +191,4 @@ async function main() {
 }
 
 if (require.main === module) main().catch(error => { console.error(error); process.exitCode = 1; });
-module.exports = {getMetadata, requestedVersions, inspectInstallation, installerArguments, downloadInstaller, resolveInstallRoot};
+module.exports = {getMetadata, requestedVersions, inspectInstallation, installerArguments, downloadInstaller, resolveInstallRoot, discoverInstallations};

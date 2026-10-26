@@ -5,7 +5,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const {versionRequest, selectVersion, sdksFromMetadata, parseGlobalJson} = require('./sdk-versions.cjs');
-const {getMetadata, requestedVersions, inspectInstallation, installerArguments, downloadInstaller, resolveInstallRoot} = require('./setup-dotnet.cjs');
+const {getMetadata, requestedVersions, inspectInstallation, installerArguments, downloadInstaller, resolveInstallRoot, discoverInstallations} = require('./setup-dotnet.cjs');
 
 test('SDK requests preserve pins and feature bands while excluding previews by default', () => {
   const versions = ['10.0.303', '10.0.402', '10.0.403', '10.0.404-preview.1', '11.0.100'];
@@ -83,6 +83,18 @@ test('an inherited install directory cannot satisfy a request with the wrong arc
     assert.equal(resolveInstallRoot(directory, [{root: directory, installed: ['8.0.426']}], directory, 'x64'), directory);
     assert.equal(fs.existsSync(sdk), true);
   } finally { fs.rmSync(directory, {recursive: true, force: true}); }
+});
+
+test('read-only system SDKs do not become implicit installation targets', () => {
+  const stock = '/usr/local/share/dotnet';
+  const user = '/Users/runner/.dotnet';
+  const inspect = root => ({root, installed: ['10.0.401']});
+  const writable = root => root === user;
+  assert.deepEqual(discoverInstallations([stock, user], 'arm64', '', inspect, writable), [{root: user, installed: ['10.0.401']}]);
+  assert.deepEqual(discoverInstallations([stock], 'arm64', '', inspect, writable), []);
+  // An explicit directory remains the caller's choice, including read-only reuse.
+  assert.deepEqual(discoverInstallations([stock], 'arm64', stock, inspect, writable), [{root: stock, installed: ['10.0.401']}]);
+  assert.equal(resolveInstallRoot('', [], '/toolcache', 'arm64', 'darwin', path.join(os.tmpdir(), 'mac-user')), path.resolve(os.tmpdir(), 'mac-user', '.dotnet'));
 });
 
 test('metadata refuses origin and aka.ms before network access and rejects redirects', async () => {
