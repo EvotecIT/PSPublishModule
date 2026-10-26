@@ -73,7 +73,10 @@ function writableInstallation(root) {
 }
 
 function discoverInstallations(roots, architecture, inspect = inspectInstallation) {
-  return roots.map(root => inspect(root, architecture)).filter(Boolean);
+  // Mixed-architecture roots use a child for installation. Discover that same
+  // child on the next job before deciding that a download is necessary.
+  const candidates = [...new Set(roots.flatMap(root => [root, path.join(root, architecture)]))];
+  return candidates.map(root => inspect(root, architecture)).filter(Boolean);
 }
 
 function installationTargets(existing, explicit, writable = writableInstallation) {

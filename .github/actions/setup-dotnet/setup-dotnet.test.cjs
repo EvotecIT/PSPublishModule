@@ -134,6 +134,18 @@ test('a reused read-only root does not force later writes and earlier SDKs survi
   }
 });
 
+test('architecture children remain discoverable for explicit and macOS roots on later jobs', () => {
+  for (const parent of [path.resolve('explicit-sdk'), path.resolve('mac-user', '.dotnet')]) {
+    const child = path.join(parent, 'x86');
+    const inspect = (root, architecture) => root === child && architecture === 'x86'
+      ? {root, installed: ['8.0.426']} : null;
+    const existing = discoverInstallations([parent], 'x86', inspect);
+    assert.deepEqual(existing, [{root: child, installed: ['8.0.426']}]);
+    assert.equal(selectVersion(existing[0].installed, versionRequest('8.0.426')), '8.0.426');
+    assert.deepEqual(discoverInstallations([parent], 'arm64', inspect), []);
+  }
+});
+
 test('metadata refuses origin and aka.ms before network access and rejects redirects', async () => {
   const previousFetch = global.fetch;
   const calls = [];
