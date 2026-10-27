@@ -224,6 +224,8 @@ The schema requires both `Source` and `Destination` on each mapping and rejects 
 
 ### Dependencies and signing
 
+See [module signing configuration](PSPublishModule.Signing.md) for approved signing identities and PFX secret references.
+
 `AddRequiredModules` bundles dependencies that remain required at runtime. An approved donor
 whose eligible helpers have been merged and which has no remaining runtime requirement is removed
 from the built manifest and is not copied into the bundle. Approval alone does not make a module

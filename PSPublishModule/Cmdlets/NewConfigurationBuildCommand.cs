@@ -198,6 +198,9 @@ public sealed class NewConfigurationBuildCommand : PSCmdlet
     /// <summary>Thumbprint of a code-signing certificate from the local cert store.</summary>
     [Parameter] public string? CertificateThumbprint { get; set; }
 
+    /// <summary>Ordered approved signing thumbprints. Selects the first usable approved certificate when no explicit certificate is supplied; explicit certificates and PFX inputs must also be approved.</summary>
+    [Parameter] public string[]? AllowedCertificateThumbprints { get; set; }
+
     /// <summary>Path to a PFX containing a code-signing certificate.</summary>
     [Parameter] public string? CertificatePFXPath { get; set; }
 
@@ -206,6 +209,12 @@ public sealed class NewConfigurationBuildCommand : PSCmdlet
 
     /// <summary>Password for the PFX provided via CertificatePFXPath or CertificatePFXBase64.</summary>
     [Parameter] public string? CertificatePFXPassword { get; set; }
+
+    /// <summary>Name of the environment variable read only when signing to obtain the PFX password.</summary>
+    [Parameter] public string? CertificatePFXPasswordEnvironmentVariable { get; set; }
+
+    /// <summary>Name of the environment variable read only when signing to obtain the PFX Base64 payload.</summary>
+    [Parameter] public string? CertificatePFXBase64EnvironmentVariable { get; set; }
 
     /// <summary>Path to the .NET project to build (useful when not in Sources folder).</summary>
     [Parameter] public string? NETProjectPath { get; set; }
@@ -461,13 +470,19 @@ public sealed class NewConfigurationBuildCommand : PSCmdlet
             DoNotAttemptToFixRelativePathsSpecified = bound.ContainsKey(nameof(DoNotAttemptToFixRelativePaths)),
             DoNotAttemptToFixRelativePaths = DoNotAttemptToFixRelativePaths.IsPresent,
             CertificateThumbprintSpecified = bound.ContainsKey(nameof(CertificateThumbprint)),
+            AllowedCertificateThumbprintsSpecified = bound.ContainsKey(nameof(AllowedCertificateThumbprints)),
             CertificateThumbprint = CertificateThumbprint,
+            AllowedCertificateThumbprints = AllowedCertificateThumbprints,
             CertificatePFXPathSpecified = bound.ContainsKey(nameof(CertificatePFXPath)),
             CertificatePFXPath = CertificatePFXPath,
             CertificatePFXBase64Specified = bound.ContainsKey(nameof(CertificatePFXBase64)),
             CertificatePFXBase64 = CertificatePFXBase64,
             CertificatePFXPasswordSpecified = bound.ContainsKey(nameof(CertificatePFXPassword)),
             CertificatePFXPassword = CertificatePFXPassword,
+            CertificatePFXPasswordEnvironmentVariableSpecified = bound.ContainsKey(nameof(CertificatePFXPasswordEnvironmentVariable)),
+            CertificatePFXPasswordEnvironmentVariable = CertificatePFXPasswordEnvironmentVariable,
+            CertificatePFXBase64EnvironmentVariableSpecified = bound.ContainsKey(nameof(CertificatePFXBase64EnvironmentVariable)),
+            CertificatePFXBase64EnvironmentVariable = CertificatePFXBase64EnvironmentVariable,
             NETProjectPathSpecified = bound.ContainsKey(nameof(NETProjectPath)),
             NETProjectPath = NETProjectPath,
             NETConfigurationSpecified = bound.ContainsKey(nameof(NETConfiguration)),
