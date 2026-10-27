@@ -34,10 +34,15 @@ public sealed partial class ModulePipelineScriptExecutionSeamTests
             File.AppendAllText(sourceLoader, "\n# Retained source loader revision.\n", new UTF8Encoding(false));
             var original = File.ReadAllBytes(sourceLoader);
             RunGit(source, "init", "--quiet");
+            // The source guard uses isolated Git configuration. Commit the exact
+            // fixture bytes instead of inheriting runner-global line conversion.
+            RunGit(source, "config", "core.autocrlf", "false");
             RunGit(source, "config", "user.email", "powerforge-tests@example.invalid");
             RunGit(source, "config", "user.name", "PowerForge Tests");
             RunGit(source, "add", ".");
             RunGit(source, "commit", "--quiet", "-m", "fixture");
+            // Force Git to inspect bytes rather than accept its cached stat data.
+            File.SetLastWriteTimeUtc(sourceLoader, File.GetLastWriteTimeUtc(sourceLoader).AddSeconds(-5));
 
             var staging = Path.Combine(root.FullName, "staging");
             var packed = Path.Combine(root.FullName, "packed");
