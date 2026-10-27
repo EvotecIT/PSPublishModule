@@ -40,6 +40,7 @@ public sealed class PSResourceGetFailureDiagnosticsTests
             Assert.Equal(404, native.GetProperty("Status").GetInt32());
             Assert.Equal("OriginalNativeHttpClientResponseStop", native.GetProperty("CollectionPhase").GetString());
             Assert.Equal("fixture-MISS", native.GetProperty("Headers").GetProperty("X-Cache").GetString());
+            Assert.Equal("[REDACTED]", native.GetProperty("Headers").GetProperty("X-Azure-Ref").GetString());
             Assert.Equal("NotCollected", native.GetProperty("RequestQuery").GetString());
         }
         else
@@ -74,6 +75,7 @@ public sealed class PSResourceGetFailureDiagnosticsTests
                         using (var response = new HttpResponseMessage(HttpStatusCode.NotFound)) {
                             response.RequestMessage = request;
                             response.Headers.TryAddWithoutValidation("X-Cache", "fixture-MISS");
+                            response.Headers.TryAddWithoutValidation("X-Azure-Ref", "trace=public secret=do-not-copy");
                             response.Headers.TryAddWithoutValidation("Set-Cookie", "do-not-copy");
                             response.Content = new StringContent("do-not-copy");
                             listener.Write("System.Net.Http.HttpRequestOut.Stop", new { Response = response });

@@ -1,4 +1,5 @@
 # Opt-in failure evidence for unauthenticated public Gallery reads only.
+$script:PFPublicGalleryHeaderCredentialPattern = '(?i)\b(?:Basic|Bearer|Digest|Negotiate|NTLM)\s+\S+|(?:token|secret|password|api[-_]?key|(?:proxy[-_]?)?authorization|cookie)["''\\]*\s*[:=]'
 function ConvertTo-PFPublicGalleryUri {
     param([string]$Value)
     $uri = $null
@@ -30,6 +31,7 @@ function Get-PFPublicGalleryResponse {
     foreach ($header in @($Response.Headers) + @($Response.Content.Headers)) {
         if ($header.Key -in @('Date', 'Server', 'Content-Type', 'Content-Length', 'Cache-Control', 'ETag', 'Retry-After', 'X-Cache', 'X-Azure-Ref', 'X-Ms-Error-Code')) {
             $value = ([string]::Join(', ', [string[]]$header.Value) -replace '[\r\n]', ' ')
+            if ([regex]::IsMatch($value, $script:PFPublicGalleryHeaderCredentialPattern, [Text.RegularExpressions.RegexOptions]::CultureInvariant, [TimeSpan]::FromMilliseconds(100))) { $value = '[REDACTED]' }
             $headers[$header.Key] = $value.Substring(0, [Math]::Min(256, $value.Length))
         }
     }
@@ -122,8 +124,12 @@ public sealed class PFPublicGalleryResponseTrace : IObserver<DiagnosticListener>
     readonly object gate = new object();
     readonly List<IDisposable> subscriptions = new List<IDisposable>();
     readonly List<Dictionary<string,object>> failures = new List<Dictionary<string,object>>();
+    readonly Regex headerCredentialPattern;
     bool disposed;
-    public PFPublicGalleryResponseTrace() { lock (gate) subscriptions.Add(DiagnosticListener.AllListeners.Subscribe(this)); }
+    public PFPublicGalleryResponseTrace(string credentialPattern) {
+        headerCredentialPattern = new Regex(credentialPattern, RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(100));
+        lock (gate) subscriptions.Add(DiagnosticListener.AllListeners.Subscribe(this));
+    }
     public void OnNext(DiagnosticListener listener) {
         if (listener.Name != "HttpHandlerDiagnosticListener") return;
         lock (gate) { if (!disposed) subscriptions.Add(listener.Subscribe(this)); }
@@ -147,7 +153,7 @@ public sealed class PFPublicGalleryResponseTrace : IObserver<DiagnosticListener>
                 IEnumerable<string> values;
                 if (!response.Headers.TryGetValues(name, out values)) continue;
                 string value = string.Join(", ", values).Replace("\r", " ").Replace("\n", " ");
-                headers[name] = value.Substring(0, Math.Min(256, value.Length));
+                headers[name] = headerCredentialPattern.IsMatch(value) ? "[REDACTED]" : value.Substring(0, Math.Min(256, value.Length));
             }
             var record = new Dictionary<string,object> {
                 {"Status", (int)response.StatusCode}, {"Headers", headers},
@@ -168,7 +174,7 @@ public sealed class PFPublicGalleryResponseTrace : IObserver<DiagnosticListener>
 }
 '@
         }
-        return [PFPublicGalleryResponseTrace]::new()
+        return [PFPublicGalleryResponseTrace]::new($script:PFPublicGalleryHeaderCredentialPattern)
     } catch { return $null }
 }
 

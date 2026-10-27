@@ -1,4 +1,4 @@
-param([ValidateSet('All', 'Deadline', 'Redaction', 'Redirect', 'Trace')][string]$Case = 'All')
+param([ValidateSet('All', 'Deadline', 'Redaction', 'Redirect', 'Trace', 'Headers')][string]$Case = 'All')
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Net.Http
 . (Join-Path $PSScriptRoot '../../PowerForge/Scripts/RepositoryDiagnostics/Collect-PublicGalleryFailure.ps1')
@@ -18,6 +18,23 @@ function Get-Module {
 function Assert-Contract {
     param([bool]$Condition, [string]$Message)
     if (-not $Condition) { throw $Message }
+}
+
+$headerCredentialValues = @('Bearer fixture-bearer', 'Authorization: Basic fixture-basic', 'trace=public token=fixture-token cookie=fixture-cookie', (('x' * 300) + ' password=fixture-password'))
+if ($Case -in @('All', 'Headers')) {
+    $response = [Net.Http.HttpResponseMessage]::new([Net.HttpStatusCode]::OK)
+    $response.Content = [Net.Http.StringContent]::new('successful-body-must-not-be-read')
+    try {
+        $response.Headers.TryAddWithoutValidation('X-Cache', 'MISS') | Out-Null
+        foreach ($value in $headerCredentialValues) {
+            $response.Headers.Remove('X-Azure-Ref') | Out-Null
+            $response.Headers.TryAddWithoutValidation('X-Azure-Ref', $value) | Out-Null
+            $projection = Get-PFPublicGalleryResponse $response
+            Assert-Contract ($projection.Headers['X-Azure-Ref'] -eq '[REDACTED]') 'Response/control headers must mask the complete credential-bearing field before truncation.'
+            Assert-Contract ($projection.Headers['X-Cache'] -eq 'MISS') 'Ordinary correlation/cache headers must remain useful.'
+        }
+        Write-Output 'Public Gallery response/control header redaction passed.'
+    } finally { $response.Dispose() }
 }
 
 if ($Case -in @('All', 'Trace') -and $PSVersionTable.PSVersion.Major -ge 7) {
@@ -61,6 +78,13 @@ if ($Case -in @('All', 'Trace') -and $PSVersionTable.PSVersion.Major -ge 7) {
         $listener.Write('System.Net.Http.HttpRequestOut.Stop', $payload)
         Assert-Contract (@($trace.GetFailures()).Count -eq 1) 'Authenticated HTTP requests must be excluded even on a public host.'
         $response.RequestMessage.Headers.Authorization = $null
+        foreach ($value in $headerCredentialValues) {
+            $response.Headers.Remove('X-Azure-Ref') | Out-Null
+            $response.Headers.TryAddWithoutValidation('X-Azure-Ref', $value) | Out-Null
+            $listener.Write('System.Net.Http.HttpRequestOut.Stop', $payload)
+            $native = @($trace.GetFailures())[-1]
+            Assert-Contract ($native.Headers['X-Azure-Ref'] -eq '[REDACTED]') 'Native response headers must mask the complete credential-bearing field before truncation.'
+        }
         for ($index = 0; $index -lt 6; $index++) { $listener.Write('System.Net.Http.HttpRequestOut.Stop', $payload) }
         Assert-Contract (@($trace.GetFailures()).Count -eq 4) 'Native response retention must be bounded.'
         $trace.Dispose()
