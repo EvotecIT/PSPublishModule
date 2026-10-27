@@ -172,28 +172,28 @@ internal sealed class BuildConfigurationFactory
         if (request.SignExcludePathsSpecified) { EnsureSigning(); signing!.ExcludePaths = request.SignExcludePaths; }
         if (request.SignOverwriteSignedSpecified) { EnsureSigning(); signing!.OverwriteSigned = request.SignOverwriteSigned; }
 
-        if (request.CertificateThumbprintSpecified)
+        if (request.AllowedCertificateThumbprintsSpecified)
         {
             EnsureSigning();
-            signing!.CertificateThumbprint = request.CertificateThumbprint;
+            signing!.AllowedCertificateThumbprints = request.AllowedCertificateThumbprints?.ToArray();
         }
-        else if (request.CertificatePFXPathSpecified)
-        {
-            if (!request.CertificatePFXPasswordSpecified)
-                throw new ArgumentException("CertificatePFXPassword is required when using CertificatePFXPath", nameof(request));
 
-            EnsureSigning();
-            signing!.CertificatePFXPath = request.CertificatePFXPath;
-            signing.CertificatePFXPassword = request.CertificatePFXPassword;
-        }
-        else if (request.CertificatePFXBase64Specified)
+        if (request.CertificateThumbprintSpecified || request.CertificatePFXPathSpecified ||
+            request.CertificatePFXBase64Specified || request.CertificatePFXBase64EnvironmentVariableSpecified ||
+            request.CertificatePFXPasswordSpecified || request.CertificatePFXPasswordEnvironmentVariableSpecified)
         {
-            if (!request.CertificatePFXPasswordSpecified)
-                throw new ArgumentException("CertificatePFXPassword is required when using CertificatePFXBase64", nameof(request));
-
             EnsureSigning();
-            signing!.CertificatePFXBase64 = request.CertificatePFXBase64;
-            signing.CertificatePFXPassword = request.CertificatePFXPassword;
+            if (request.CertificateThumbprintSpecified) signing!.CertificateThumbprint = request.CertificateThumbprint;
+            if (request.CertificatePFXPathSpecified) signing!.CertificatePFXPath = request.CertificatePFXPath;
+            if (request.CertificatePFXBase64Specified) signing!.CertificatePFXBase64 = request.CertificatePFXBase64;
+            if (request.CertificatePFXPasswordSpecified) signing!.CertificatePFXPassword = request.CertificatePFXPassword;
+            if (request.CertificatePFXBase64EnvironmentVariableSpecified)
+                signing!.CertificatePFXBase64EnvironmentVariable = request.CertificatePFXBase64EnvironmentVariable;
+            if (request.CertificatePFXPasswordEnvironmentVariableSpecified)
+                signing!.CertificatePFXPasswordEnvironmentVariable = request.CertificatePFXPasswordEnvironmentVariable;
+            if ((request.CertificatePFXPathSpecified || request.CertificatePFXBase64Specified || request.CertificatePFXBase64EnvironmentVariableSpecified) &&
+                !request.CertificatePFXPasswordSpecified && !request.CertificatePFXPasswordEnvironmentVariableSpecified)
+                throw new ArgumentException("CertificatePFXPassword or CertificatePFXPasswordEnvironmentVariable is required when using a PFX", nameof(request));
         }
 
         return signing is null

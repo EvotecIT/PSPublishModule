@@ -214,15 +214,6 @@ internal static partial class WebPipelineRunner
         }
 
         var finalResult = CloneResultWith(issues, errors, warnings, result);
-        finalResult.IssueCount = issues.Count;
-        finalResult.ErrorCount = errors.Count;
-        finalResult.WarningCount = warnings.Count;
-        finalResult.NewIssueCount = issues.Count(issue => issue.IsNew);
-        finalResult.NewErrorCount = issues.Count(issue =>
-            issue.IsNew && issue.Severity.Equals("error", StringComparison.OrdinalIgnoreCase));
-        finalResult.NewWarningCount = issues.Count(issue =>
-            issue.IsNew && issue.Severity.Equals("warning", StringComparison.OrdinalIgnoreCase));
-        finalResult.Success = errors.Count == 0;
 
         stepResult.Success = finalResult.Success;
         stepResult.Message = BuildSeoDoctorSummary(finalResult);
@@ -320,7 +311,7 @@ internal static partial class WebPipelineRunner
     {
         return new WebSeoDoctorResult
         {
-            Success = source.Success,
+            Success = errors.Count == 0,
             HtmlFileCount = source.HtmlFileCount,
             HtmlSelectedFileCount = source.HtmlSelectedFileCount,
             PageCount = source.PageCount,
@@ -328,9 +319,9 @@ internal static partial class WebPipelineRunner
             IssueCount = issues.Count,
             ErrorCount = errors.Count,
             WarningCount = warnings.Count,
-            NewIssueCount = source.NewIssueCount,
-            NewErrorCount = source.NewErrorCount,
-            NewWarningCount = source.NewWarningCount,
+            NewIssueCount = issues.Count(issue => issue.IsNew),
+            NewErrorCount = issues.Count(issue => issue.IsNew && issue.Severity.Equals("error", StringComparison.OrdinalIgnoreCase)),
+            NewWarningCount = issues.Count(issue => issue.IsNew && issue.Severity.Equals("warning", StringComparison.OrdinalIgnoreCase)),
             BaselinePath = source.BaselinePath,
             BaselineIssueCount = source.BaselineIssueCount,
             ReportPath = source.ReportPath,

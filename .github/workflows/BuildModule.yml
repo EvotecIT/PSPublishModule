@@ -345,7 +345,7 @@ jobs:
         run: >
           dotnet test .\PowerForge.Tests\PowerForge.Tests.csproj
           -c Release --no-build --no-restore --nologo
-          --filter 'FullyQualifiedName~ArtefactBuilder|FullyQualifiedName~ApprovedModuleDependencyPruning|FullyQualifiedName~ModulePipelineApprovedModules'
+          --filter 'FullyQualifiedName~ApprovedSigningPolicyTests|FullyQualifiedName~OpenAuthenticodeAdapterTests|FullyQualifiedName~ModuleSigningCertificateResolverTests|FullyQualifiedName~ModuleSigningEvidencePolicyTests|FullyQualifiedName~ArtefactBuilder|FullyQualifiedName~ApprovedModuleDependencyPruning|FullyQualifiedName~ModulePipelineApprovedModules'
 
       - name: Test Apple store art and screenshot provenance
         shell: pwsh
@@ -622,7 +622,7 @@ jobs:
         run: >
           dotnet test .\PowerForge.Tests\PowerForge.Tests.csproj
           -c Release --no-build --no-restore --nologo
-          --filter 'FullyQualifiedName~ArtefactBuilderDeliveryLayout|FullyQualifiedName~ApprovedModuleDependencyPruning|FullyQualifiedName~ModulePipelineApprovedModules'
+          --filter 'FullyQualifiedName~ApprovedSigningPolicyTests|FullyQualifiedName~OpenAuthenticodeAdapterTests|FullyQualifiedName~ModuleSigningCertificateResolverTests|FullyQualifiedName~ModuleSigningEvidencePolicyTests|FullyQualifiedName~ArtefactBuilderDeliveryLayout|FullyQualifiedName~ApprovedModuleDependencyPruning|FullyQualifiedName~ModulePipelineApprovedModules'
 
       - name: Test cross-platform website and agent plugin contracts
         shell: pwsh
@@ -725,6 +725,14 @@ jobs:
           dotnet test ./PowerForge.Tests/PowerForge.Tests.csproj
           -c Release --no-build --no-restore --nologo
           --filter 'FullyQualifiedName~AppleStoreArtTests|FullyQualifiedName~PowerForgeCliAppleReleaseTests.AppleScreenshots|FullyQualifiedName~AppStoreConnectScreenshot|FullyQualifiedName~AppleReleaseWorkflowTests.ScreenshotWorkflowRequires|FullyQualifiedName~AppleReleaseWorkflowTests.ManualScreenshotApproval'
+
+      - name: Test approved signing policy and ephemeral PFX limitation
+        shell: pwsh
+        timeout-minutes: 5
+        run: >
+          dotnet test ./PowerForge.Tests/PowerForge.Tests.csproj
+          -c Release --no-build --no-restore --nologo
+          --filter 'FullyQualifiedName~ApprovedSigningPolicyTests|FullyQualifiedName~ModuleSigningCertificateResolverTests|FullyQualifiedName~ModuleSigningEvidencePolicyTests'
 
       - name: Test merge-to-TestFlight contracts
         shell: pwsh

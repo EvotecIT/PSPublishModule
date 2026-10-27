@@ -120,8 +120,10 @@ public class WebPipelineRunnerSeoDoctorTests
         }
     }
 
-    [Fact]
-    public void RunPipeline_SeoDoctor_RequireCanonical_WithFailOnWarnings_Fails()
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void RunPipeline_SeoDoctor_ReportMatchesWarningGateOutcome(bool failOnWarnings)
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-seo-doctor-require-canonical-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
@@ -146,7 +148,7 @@ public class WebPipelineRunnerSeoDoctorTests
 
             var pipelinePath = Path.Combine(root, "pipeline.json");
             File.WriteAllText(pipelinePath,
-                """
+                $$"""
                 {
                   "steps": [
                     {
@@ -156,17 +158,25 @@ public class WebPipelineRunnerSeoDoctorTests
                       "requireCanonical": true,
                       "checkHreflang": false,
                       "checkStructuredData": false,
-                      "failOnWarnings": true
+                      "failOnWarnings": {{failOnWarnings.ToString().ToLowerInvariant()}},
+                      "reportPath": "./seo-report.json"
                     }
                   ]
                 }
                 """);
 
             var result = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
-            Assert.False(result.Success);
+            Assert.Equal(!failOnWarnings, result.Success);
             Assert.Single(result.Steps);
-            Assert.False(result.Steps[0].Success);
-            Assert.Contains("warnings", result.Steps[0].Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal(!failOnWarnings, result.Steps[0].Success);
+            using var report = System.Text.Json.JsonDocument.Parse(File.ReadAllText(Path.Combine(root, "seo-report.json")));
+            var snapshot = report.RootElement;
+            Assert.Equal(result.Steps[0].Success, snapshot.GetProperty("Success").GetBoolean());
+            var issues = snapshot.GetProperty("Issues").EnumerateArray().ToArray();
+            Assert.Equal(issues.Count(issue => issue.GetProperty("IsNew").GetBoolean()), snapshot.GetProperty("NewIssueCount").GetInt32());
+            Assert.Equal(issues.Count(issue => issue.GetProperty("IsNew").GetBoolean() && issue.GetProperty("Severity").GetString() == "error"), snapshot.GetProperty("NewErrorCount").GetInt32());
+            if (failOnWarnings)
+                Assert.Contains("warnings", result.Steps[0].Message, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {
