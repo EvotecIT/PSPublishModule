@@ -77,7 +77,7 @@ internal static partial class PowerForgeWixInstallerServiceScriptEmitter
         var ids = BuildIds(service.Id);
         var resolvedBackupPath = ResolveBackupPath(service, script);
         bool hasUninstallCommand = !string.IsNullOrWhiteSpace(script.UninstallCommand);
-        string? serviceExistsProperty = string.IsNullOrWhiteSpace(script.UpgradeCommand) && !hasUninstallCommand
+        string? serviceExistsProperty = string.IsNullOrWhiteSpace(script.UpgradeCommand) && !hasUninstallCommand && !script.BackupExistingImagePath
             ? null
             : ids.ServiceExistsPropertyId;
         var existingServiceUpgradeSignal = !string.IsNullOrWhiteSpace(serviceExistsProperty) &&
@@ -150,7 +150,10 @@ internal static partial class PowerForgeWixInstallerServiceScriptEmitter
             uninstallCondition,
             upgradePreparationActions);
         if (script.BackupExistingImagePath && script.StopServiceForUpgrade)
-            EmitServiceStateActions(service, ids, resolvedBackupPath, actions, sequence, upgradePreparationActions, upgradeCondition);
+            // An older MSI can exist after its service was removed. Restore availability
+            // only when AppSearch found a registration to preserve, not for a repair/create.
+            EmitServiceStateActions(service, ids, resolvedBackupPath, actions, sequence, upgradePreparationActions,
+                CombineConditions(upgradeCondition, serviceExistsProperty!));
     }
 
     private static void AddSequenceRows(

@@ -125,4 +125,26 @@ public sealed class ServiceAdoptionStateProcessTests
         var setter = elements.Single(x => (string?)x.Attribute("Id") == "Fixture.SetStopService");
         Assert.Equal("WixQuietExecCmdLine", (string?)setter.Attribute("Property"));
     }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void StateRecoveryRequiresAnExistingRegistrationEvenWhenAnOlderMsiWasDetected(bool hasUpgradeCommand)
+    {
+        var service = new PowerForgeInstallerServiceComponent { Id = "Fixture", ServiceName = "Fixture",
+            ScriptInstall = new PowerForgeInstallerServiceScriptInstall { Command = "install", UpgradeCommand = hasUpgradeCommand ? "upgrade" : null,
+                BackupExistingImagePath = true, StopServiceForUpgrade = true } };
+        var definition = new PowerForgeInstallerDefinition(); definition.Components.Add(service);
+        definition.Product.MajorUpgradeSchedule = PowerForgeInstallerMajorUpgradeSchedule.AfterInstallExecute;
+        var emitter = typeof(DotNetPublishPipelineRunner).Assembly.GetType("PowerForge.PowerForgeWixInstallerServiceScriptEmitter")!;
+        var emit = emitter.GetMethod("EmitScriptInstallActions", BindingFlags.Static | BindingFlags.NonPublic)!;
+        var elements = ((IEnumerable<XElement>)emit.Invoke(null, new object[] { definition })!).ToArray();
+        XNamespace wix = "http://wixtoolset.org/schemas/v4/wxs";
+        var search = elements.Single(x => x.Name == wix + "Property" && x.Element(wix + "RegistrySearch") != null);
+        string registration = (string)search.Attribute("Id")!;
+        var recovery = elements.Where(x => x.Name == wix + "InstallExecuteSequence").Elements(wix + "Custom")
+            .Where(x => ((string)x.Attribute("Action")!).EndsWith("State", StringComparison.Ordinal) || ((string)x.Attribute("Action")!).EndsWith("Stop", StringComparison.Ordinal)).ToArray();
+        Assert.Equal(6, recovery.Length);
+        Assert.All(recovery, row => Assert.EndsWith("AND (" + registration + ")", (string)row.Attribute("Condition")!));
+    }
 }
