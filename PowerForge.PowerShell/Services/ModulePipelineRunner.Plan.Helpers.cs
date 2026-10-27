@@ -13,6 +13,7 @@ public sealed partial class ModulePipelineRunner
         string[]? excludeLibraryFilterFromSegments,
         bool? doNotCopyLibrariesRecursivelyFromSegments,
         bool? handleRuntimesFromSegments,
+        Dictionary<string, string> desktopDependencyAssetFrameworks,
         bool useAssemblyLoadContextRequested,
         bool typeAcceleratorsRequireAlc,
         string? resolveBinaryConflictsProjectName,
@@ -40,6 +41,7 @@ public sealed partial class ModulePipelineRunner
             || HasAnyConfiguredValues(spec.Build.ExcludeLibraryFilter)
             || effectiveDoNotCopyLibrariesRecursively
             || effectiveHandleRuntimes
+            || desktopDependencyAssetFrameworks.Count > 0
             || useAssemblyLoadContextRequested
             || typeAcceleratorsRequireAlc
             || binaryModuleDocumentationRequested
@@ -65,6 +67,9 @@ public sealed partial class ModulePipelineRunner
 
         if (effectiveHandleRuntimes)
             reasons.Add("NETHandleRuntimes");
+
+        if (desktopDependencyAssetFrameworks.Count > 0)
+            reasons.Add("NETDesktopDependencyAssetFrameworks");
 
         if (useAssemblyLoadContextRequested)
             reasons.Add("UseAssemblyLoadContext");

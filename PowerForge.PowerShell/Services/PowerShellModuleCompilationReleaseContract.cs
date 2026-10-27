@@ -109,6 +109,10 @@ internal sealed class PowerShellModuleCompilationReleaseContract
                 exportAssemblies = NormalizeStrings(plan.BuildSpec.ExportAssemblies, StringComparer.OrdinalIgnoreCase),
                 plan.BuildSpec.UseAssemblyLoadContext,
                 plan.BuildSpec.HandleRuntimes,
+                desktopDependencyAssetFrameworks = plan.BuildSpec.DesktopDependencyAssetFrameworks
+                    .OrderBy(static pair => pair.Key, StringComparer.OrdinalIgnoreCase)
+                    .Select(static pair => new { packageId = pair.Key.ToLowerInvariant(), assetFramework = pair.Value })
+                    .ToArray(),
                 plan.BuildSpec.DisableBinaryCmdletScan,
                 excludeDirectories = NormalizeStrings(plan.BuildSpec.ExcludeDirectories, StringComparer.OrdinalIgnoreCase),
                 excludeFiles = NormalizeStrings(plan.BuildSpec.ExcludeFiles, StringComparer.OrdinalIgnoreCase),

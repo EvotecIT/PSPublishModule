@@ -141,6 +141,17 @@ public sealed class ModuleBuildSpec
     /// </summary>
     public bool HandleRuntimes { get; set; }
 
+    private Dictionary<string, string> _desktopDependencyAssetFrameworks = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Explicit NuGet package IDs mapped to asset TFMs for .NET Framework Desktop publishing.</summary>
+    public Dictionary<string, string> DesktopDependencyAssetFrameworks
+    {
+        get => _desktopDependencyAssetFrameworks;
+        set => _desktopDependencyAssetFrameworks = value is null
+            ? new(StringComparer.OrdinalIgnoreCase)
+            : new(value, StringComparer.OrdinalIgnoreCase);
+    }
+
     /// <summary>
     /// When true, the generated binary bootstrapper loads the binary module through a custom AssemblyLoadContext on
     /// PowerShell Core, isolating the module's managed dependency graph from other modules in the session.

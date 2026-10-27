@@ -36,11 +36,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: actions/setup-dotnet@v6
-        with:
-          global-json-file: global.json
-          dotnet-version: 8.0.x
-
+      - uses: ./.github/actions/setup-dotnet
       - name: Cache NuGet packages
         uses: actions/cache@v6
         with:
@@ -70,10 +66,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: actions/setup-dotnet@v6
-        with:
-          global-json-file: global.json
-
+      - uses: ./.github/actions/setup-dotnet
       - name: Cache NuGet packages
         uses: actions/cache@v6
         with:

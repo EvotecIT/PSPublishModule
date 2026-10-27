@@ -4,6 +4,79 @@ PSPublishModule started as the Evotec module builder. It has grown into the Powe
 
 Use it when you want repeatable PowerShell module builds, .NET publish matrices, MSI/MSIX/Store packaging, NuGet and PSGallery releases, generated PowerShell help, private gallery onboarding, GitHub housekeeping, or PowerForge.Web static site pipelines without rewriting the same build logic in every repository.
 
+## Shared GitHub Actions
+
+Shared actions and reusable workflows ship independently of the PowerShell module.
+They stay in this repository and use a separate tag family:
+
+| Reference | Purpose |
+| --- | --- |
+| `actions-next` | Moving canary channel for the next action release. |
+| `actions-v1` | Moving stable channel for compatible v1 action changes. |
+| `actions-v1.0.0` | Immutable first action release, retained for diagnosis and reproducibility. |
+
+These tags are separate from module/package release tags. The workflow triggers
+do not match `actions-*`; creating or moving an action tag starts no release or
+deployment workflow.
+
+The release flow is:
+
+1. Merge the action change after its normal checks and review.
+2. Wait for the shared-action self-test on that merged commit to pass on Windows,
+   Linux and macOS. It exercises a clean CDN installation and network-free reuse.
+3. Move `actions-next` to that commit and build **consolemonster.dev** through
+   its `actions-next` canary workflow. There is no separate PSPublishModule site.
+4. After the canary is green, create the next immutable `actions-v1.x.y` tag and
+   move `actions-v1` to the same qualified commit. Never move an immutable tag.
+
+SDK servicing updates do not require a new action tag. Each adopting repository
+owns its SDK feature band and roll-forward policy in `global.json`; the shared
+setup action resolves available SDKs from Microsoft's official CDN. Breaking
+action changes use a new major channel, such as `actions-v2`, with a migration
+note while `actions-v1` remains available.
+
+### Adopting @actions-v1
+
+Adopt the shared setup the next time a repository's CI needs work:
+
+- Add or review `global.json`. Use a feature band and `latestFeature`, or
+  `latestPatch` when the repository needs to remain in one feature band.
+- Declare additional SDKs needed by test runtimes in `powerforge.sdks` in that
+  same file; keep SDK versions out of workflow steps.
+- After checkout, use the shared setup action:
+
+  ```yaml
+  - uses: actions/checkout@v7
+  - uses: EvotecIT/PSPublishModule/.github/actions/setup-dotnet@actions-v1
+  ```
+
+- Preserve the repository's triggers, runners, check names and review settings.
+- When adopting a website reusable workflow, set `powerforge_repository` to
+  `EvotecIT/PSPublishModule` and `powerforge_ref` to the same action channel.
+  The workflow resolves that channel to the checked-out commit before execution.
+  Callers without an explicit channel keep their existing engine-lock selection.
+- Use major tags for GitHub-owned actions. Keep third-party action decisions
+  with their shared owner; retain a SHA and version comment where one is needed.
+- Run the repository's normal CI and verify each supported OS before merging.
+  Only the consolemonster.dev canary follows `actions-next`.
+
+For example, a repository that builds with .NET 10 and runs .NET 8 tests can use:
+
+```json
+{
+  "sdk": {
+    "version": "10.0.300",
+    "rollForward": "latestFeature",
+    "allowPrerelease": false
+  },
+  "powerforge": {
+    "sdks": [
+      { "version": "8.0.400", "rollForward": "latestFeature" }
+    ]
+  }
+}
+```
+
 ## Packages
 
 ### PowerShell Module
@@ -665,6 +738,7 @@ Start here:
 - [Docs/PSPublishModule.ManagedModules.ReleaseReadiness.md](Docs/PSPublishModule.ManagedModules.ReleaseReadiness.md)
 - [Benchmarks/ManagedModules/README.md](Benchmarks/ManagedModules/README.md)
 - [Docs/PSPublishModule.ModuleIsolation.md](Docs/PSPublishModule.ModuleIsolation.md)
+- [Docs/PSPublishModule.DesktopDependencyAssets.md](Docs/PSPublishModule.DesktopDependencyAssets.md)
 - [Docs/PSPublishModule.DevelopmentBootstrapper.md](Docs/PSPublishModule.DevelopmentBootstrapper.md)
 - [Docs/PowerForge.PowerShellCompilation.md](Docs/PowerForge.PowerShellCompilation.md)
 - [Docs/PowerForge.Web.WebsiteStarter.md](Docs/PowerForge.Web.WebsiteStarter.md)

@@ -39,9 +39,19 @@ if (-not [string]::IsNullOrWhiteSpace($CredentialUser) -and -not [string]::IsNul
   $params.Credential = New-Object System.Management.Automation.PSCredential($CredentialUser, $sec)
 }
 
+# PSResourceGet can report a package-query 404 only on its verbose stream,
+# then throw a generic InstallPackageFailure. Keep the cause for retry decisions.
+$providerMessages = [System.Collections.Generic.List[string]]::new()
+$Error.Clear()
 $galleryTrace = Start-PFPublicGalleryResponseTrace -Repositories @($Repository) -HasCredential ($CredentialUser -or $CredentialSecret)
 try {
-  $saved = Save-PSResource @params -PassThru
+  $saved = Save-PSResource @params -PassThru -Verbose 4>&1 | ForEach-Object {
+    if ($_ -is [System.Management.Automation.VerboseRecord]) {
+      $providerMessages.Add($_.Message)
+    } else {
+      $_
+    }
+  }
   foreach ($r in @($saved)) {
     $n = [string]$r.Name
     $v = [string]$r.Version
@@ -50,8 +60,10 @@ try {
   }
   exit 0
 } catch {
-  $msg = $_.Exception.Message
-  $diagnostic = Get-PFPublicGalleryFailureDiagnostic -Repositories @($Repository) -Failure $_ -HasCredential ($CredentialUser -or $CredentialSecret) -Trace $galleryTrace
+  $failure = $_
+  $messages = @($failure.Exception.Message) + @($Error | ForEach-Object { $_.Exception.Message }) + @($providerMessages)
+  $msg = ($messages | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -Unique) -join "`n"
+  $diagnostic = Get-PFPublicGalleryFailureDiagnostic -Repositories @($Repository) -Failure $failure -HasCredential ($CredentialUser -or $CredentialSecret) -Trace $galleryTrace
   if ($diagnostic) { $msg += "`n" + $diagnostic }
   $b64 = [System.Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($msg))
   Write-Output ('PFPSRG::ERROR::' + $b64)

@@ -100,6 +100,10 @@ internal sealed class BuildConfigurationRequest
     public string? NETSearchClass { get; set; }
     public bool NETHandleRuntimesSpecified { get; set; }
     public bool NETHandleRuntimes { get; set; }
+    /// <summary>Whether the caller explicitly supplied Desktop dependency asset selections.</summary>
+    public bool NETDesktopDependencyAssetFrameworksSpecified { get; set; }
+    /// <summary>NuGet package IDs mapped to explicitly selected Desktop asset TFMs.</summary>
+    public Dictionary<string, string>? NETDesktopDependencyAssetFrameworks { get; set; }
     public bool NETAssemblyLoadContextSpecified { get; set; }
     public bool NETAssemblyLoadContext { get; set; }
     public bool NETDevelopmentBinariesSpecified { get; set; }

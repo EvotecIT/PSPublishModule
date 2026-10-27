@@ -1,0 +1,59 @@
+name: Shared actions self-test
+
+on:
+  pull_request:
+    paths:
+      - '.github/actions/setup-dotnet/**'
+      - '.github/workflows/actions-self-test.yml'
+      - 'global.json'
+  push:
+    branches: [main]
+    paths:
+      - '.github/actions/setup-dotnet/**'
+      - '.github/workflows/actions-self-test.yml'
+      - 'global.json'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  setup-dotnet:
+    name: SDK setup (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    env:
+      DOTNET_GENERATE_ASPNET_CERTIFICATE: 'false'
+      DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+      MSBUILDDISABLENODEREUSE: '1'
+      DOTNET_CLI_USE_MSBUILD_SERVER: '0'
+    steps:
+      - uses: actions/checkout@v7
+      - name: Run SDK policy contracts
+        run: node --test .github/actions/setup-dotnet/setup-dotnet.test.cjs
+      - name: Install SDKs from repository global.json
+        uses: ./.github/actions/setup-dotnet/self-test-composite
+        env:
+          DOTNET_INSTALL_DIR: ${{ runner.temp }}/powerforge-sdk-self-test
+      - name: Verify installed SDKs and network-free reuse
+        shell: pwsh
+        run: |
+          dotnet --info
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node -e "global.fetch=async()=>{throw new Error('Warm reuse unexpectedly accessed the network')};require('./.github/actions/setup-dotnet/setup-dotnet.cjs').main().catch(e=>{console.error(e);process.exitCode=1})"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Remove owned SDK self-test directory
+        if: always()
+        shell: pwsh
+        run: |
+          $target = [IO.Path]::GetFullPath((Join-Path $env:RUNNER_TEMP 'powerforge-sdk-self-test'))
+          $parent = [IO.Path]::GetFullPath($env:RUNNER_TEMP) + [IO.Path]::DirectorySeparatorChar
+          if (-not $target.StartsWith($parent, [StringComparison]::OrdinalIgnoreCase)) { throw 'Unexpected SDK test cleanup path.' }
+          if (Test-Path -LiteralPath $target) {
+            # Installed SDKs contain hidden metadata files on Unix.
+            Remove-Item -LiteralPath $target -Recurse -Force -ErrorAction Stop
+          }

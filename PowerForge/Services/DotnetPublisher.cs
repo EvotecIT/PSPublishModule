@@ -16,6 +16,10 @@ public sealed class DotnetPublisher
     // Microsoft.Common targets append this list to RemoveProperties for every project-reference traversal.
     private const string ProjectReferenceVersionProperties = "%3BVersion%3BAssemblyVersion%3BFileVersion";
     private readonly ILogger _logger;
+    private readonly Dictionary<string, string> _projectAssetsFiles = new(StringComparer.OrdinalIgnoreCase);
+
+    internal string? GetProjectAssetsFile(string framework)
+        => _projectAssetsFiles.TryGetValue(framework, out string? path) ? path : null;
 
     /// <summary>
     /// Creates a new publisher that will log build output to the provided <paramref name="logger"/>.
@@ -76,6 +80,8 @@ public sealed class DotnetPublisher
         projectPath = Path.GetFullPath(projectPath);
         if (!File.Exists(projectPath))
             throw new FileNotFoundException($"Project file not found: {projectPath}");
+
+        _projectAssetsFiles.Clear();
 
         var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         var projDir = Path.GetDirectoryName(projectPath)!;
@@ -236,6 +242,9 @@ public sealed class DotnetPublisher
                 configuration,
                 request.TargetFramework,
                 artifacts);
+            if (string.Equals(request.ProjectPath, Path.GetFullPath(projectPath), StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(request.TargetFramework, tfm, StringComparison.OrdinalIgnoreCase))
+                _projectAssetsFiles[tfm] = evaluation.ProjectAssetsFile;
             var pathMap = evaluation.PathMap.Trim().TrimEnd(',');
             if (!string.IsNullOrWhiteSpace(pathMap) && seenPathMaps.Add(pathMap))
                 pathMaps.Add(pathMap);
@@ -275,6 +284,7 @@ public sealed class DotnetPublisher
             "-verbosity:quiet",
             "-getProperty:PathMap",
             "-getProperty:TargetFrameworks",
+            "-getProperty:ProjectAssetsFile",
             "-getItem:ProjectReference",
             $"-p:Configuration={configuration}",
             "-p:UseArtifactsOutput=true",
@@ -350,7 +360,12 @@ public sealed class DotnetPublisher
                     .Distinct(StringComparer.OrdinalIgnoreCase)
                     .ToArray();
 
-            return new ProjectBuildContext(pathMap, projectReferences, declaredTargetFrameworks);
+            string assetsFile = root.GetProperty("Properties").TryGetProperty("ProjectAssetsFile", out JsonElement assets)
+                ? assets.GetString() ?? string.Empty
+                : string.Empty;
+            if (!string.IsNullOrWhiteSpace(assetsFile) && !Path.IsPathRooted(assetsFile))
+                assetsFile = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(projectPath)!, assetsFile));
+            return new ProjectBuildContext(pathMap, projectReferences, declaredTargetFrameworks, assetsFile);
         }
 
         _logger.Error(
@@ -380,11 +395,13 @@ public sealed class DotnetPublisher
         internal ProjectBuildContext(
             string pathMap,
             IReadOnlyList<string> projectReferences,
-            IReadOnlyList<string> targetFrameworks)
+            IReadOnlyList<string> targetFrameworks,
+            string projectAssetsFile)
         {
             PathMap = pathMap;
             ProjectReferences = projectReferences;
             TargetFrameworks = targetFrameworks;
+            ProjectAssetsFile = projectAssetsFile;
         }
 
         internal string PathMap { get; }
@@ -392,6 +409,7 @@ public sealed class DotnetPublisher
         internal IReadOnlyList<string> ProjectReferences { get; }
 
         internal IReadOnlyList<string> TargetFrameworks { get; }
+        internal string ProjectAssetsFile { get; }
     }
 
     private void RunDotnet(string workingDirectory, IReadOnlyList<string> args, string tfm, string phase)

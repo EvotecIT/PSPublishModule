@@ -128,6 +128,9 @@ public sealed class ModuleBuilder
         /// </summary>
         public IReadOnlyList<string> ExcludeLibraryFilter { get; set; } = Array.Empty<string>();
 
+        /// <summary>Explicit same-package dependency asset frameworks for the Desktop payload; Core assets are preserved.</summary>
+        public IReadOnlyDictionary<string, string> DesktopDependencyAssetFrameworks { get; set; } = new Dictionary<string, string>();
+
         /// <summary>
         /// When true, copies only top-level published binaries and skips recursive runtime/native payload folders.
         /// </summary>
@@ -207,6 +210,8 @@ public sealed class ModuleBuilder
                             opts.ExcludeLibraryFilter,
                             opts.DoNotCopyLibrariesRecursively,
                             opts.HandleRuntimes));
+                    DesktopDependencyAssetNormalizer.Normalize(target, publisher.GetProjectAssetsFile(tfm),
+                        tfm, opts.DesktopDependencyAssetFrameworks);
                     File.WriteAllText(
                         Path.Combine(target, ModuleBinaryPayloadLayout.TargetFrameworkMarkerFileName),
                         tfm);
@@ -228,6 +233,9 @@ public sealed class ModuleBuilder
         else
         {
             var csprojRequiredReasons = (opts.CsprojRequiredReasons ?? Array.Empty<string>())
+                .Concat(opts.DesktopDependencyAssetFrameworks.Count > 0
+                    ? new[] { "NETDesktopDependencyAssetFrameworks" }
+                    : Array.Empty<string>())
                 .Where(static reason => !string.IsNullOrWhiteSpace(reason))
                 .Select(static reason => reason.Trim())
                 .Distinct(StringComparer.OrdinalIgnoreCase)

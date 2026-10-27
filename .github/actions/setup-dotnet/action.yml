@@ -1,0 +1,21 @@
+name: Setup .NET from the official CDN
+description: Reuse installed SDKs or run Microsoft's pinned installer with exact versions and the official CDN feed.
+
+inputs:
+  global-json-file:
+    description: Repository global.json containing sdk.version, rollForward and optional powerforge.sdks declarations.
+    required: false
+    default: global.json
+  architecture:
+    description: SDK architecture; defaults to the runner architecture.
+    required: false
+
+outputs:
+  dotnet-version:
+    description: Highest selected SDK version.
+  dotnet-root:
+    description: Directory containing the selected dotnet executable and SDKs.
+
+runs:
+  using: node24
+  main: setup-dotnet.cjs
