@@ -53,6 +53,8 @@ public sealed class ModuleRepositoryRetryPolicyTests
     [InlineData("Destination file not found: C:\\modules\\404\\PSUnifi.psd1", false)]
     [InlineData("Package(s) 'PSUnifi' could not be installed from repository 'PSGallery'.", false)]
     [InlineData("Destination file not found: /tmp/modules/Pester.psd1", false)]
+    [InlineData("Destination file not found: C:\\modules\\404\\PSUnifi.psd1", false)]
+    [InlineData("Package(s) 'PSUnifi' could not be installed from repository 'PSGallery'.", false)]
     public void Child_install_retries_only_transient_repository_failures(string message, bool transient)
     {
         Assert.Equal(transient, ModuleRepositoryRetryPolicy.IsTransientError(message));

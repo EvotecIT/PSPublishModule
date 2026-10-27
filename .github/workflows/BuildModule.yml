@@ -344,7 +344,7 @@ jobs:
         run: >
           dotnet test .\PowerForge.Tests\PowerForge.Tests.csproj
           -c Release --no-build --no-restore --nologo
-          --filter 'FullyQualifiedName~RepositoryDiagnostic|FullyQualifiedName~RepositoryCredentialResolverTests|FullyQualifiedName~PublishConfigurationFactoryTests|FullyQualifiedName~ModulePublishConfigurationReaderTests|FullyQualifiedName~ManagedModuleInstallCycleTests|FullyQualifiedName~ManagedModuleInstallCoalescingTests|FullyQualifiedName~ManagedModuleInstallContextTests'
+          --filter 'FullyQualifiedName~RepositoryDiagnostic|FullyQualifiedName~RepositoryCredentialResolverTests|FullyQualifiedName~PublishConfigurationFactoryTests|FullyQualifiedName~ModulePublishConfigurationReaderTests|FullyQualifiedName~ManagedModuleInstallCycleTests|FullyQualifiedName~ManagedModuleInstallCoalescingTests|FullyQualifiedName~ManagedModuleInstallContextTests|FullyQualifiedName~ModuleRepositoryRetryPolicyTests|FullyQualifiedName~PSResourceGetInstallDiagnosticsTests'
 
       - name: Test artefact safety and approved dependency pruning
         shell: pwsh
@@ -625,7 +625,7 @@ jobs:
         run: >
           dotnet test .\PowerForge.Tests\PowerForge.Tests.csproj
           -c Release --no-build --no-restore --nologo
-          --filter 'FullyQualifiedName~RepositoryDiagnostic|FullyQualifiedName~RepositoryCredentialResolverTests|FullyQualifiedName~PublishConfigurationFactoryTests|FullyQualifiedName~ModulePublishConfigurationReaderTests|FullyQualifiedName~ManagedModuleInstallCycleTests|FullyQualifiedName~ManagedModuleInstallCoalescingTests|FullyQualifiedName~ManagedModuleInstallContextTests'
+          --filter 'FullyQualifiedName~RepositoryDiagnostic|FullyQualifiedName~RepositoryCredentialResolverTests|FullyQualifiedName~PublishConfigurationFactoryTests|FullyQualifiedName~ModulePublishConfigurationReaderTests|FullyQualifiedName~ManagedModuleInstallCycleTests|FullyQualifiedName~ManagedModuleInstallCoalescingTests|FullyQualifiedName~ManagedModuleInstallContextTests|FullyQualifiedName~ModuleRepositoryRetryPolicyTests|FullyQualifiedName~PSResourceGetInstallDiagnosticsTests'
 
       - name: Test delivery bundles and approved dependency pruning
         shell: pwsh
