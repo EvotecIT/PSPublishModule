@@ -2,6 +2,7 @@
 
 ## Unreleased
 ### What's Changed
+- Remove each dotnet publish invocation's temporary staging directory after success or failure, retaining deployed output, checksum inputs, service state and other invocations' staging.
 - Add secret-free repository authentication diagnostics for native registrations, saved NuGet settings and publishing invocations, including safe failure reports and credential source metadata without decrypting stored secrets.
 - Retry Windows recovery replacements only when the native error guarantees unchanged file names; bound the delay, preserve cancellation and restore attempted partial replacements. Include the operation, asset paths and native error in recovery failures while retaining backups when rollback cannot finish.
 - Add per-artefact delivery source/destination mappings for selecting, renaming and rearranging packaged files and directories, with schema, collision checks and a packaging guide; keep DeliveryPath whole-tree copying as the default.
