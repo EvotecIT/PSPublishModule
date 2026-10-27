@@ -4,21 +4,22 @@
     ".NETFramework,Version=v4.7.2": {
       "HtmlForgeX": {
         "type": "Direct",
-        "requested": "[1.4.0, )",
-        "resolved": "1.4.0",
-        "contentHash": "iZYhgl4weq0WPo0BA9tdaXPXBlPrLE1f8hRefw+6aOMkyLPdl0Y4dv2rvfaHByqmBiJ3B5gKxF/pLPYitxBIQw==",
+        "requested": "[2.0.0, )",
+        "resolved": "2.0.0",
+        "contentHash": "8USuIDZXsq6i+fOVTEMQAPs4r5pzYTc4WWSLSGlrnfcw6ssBYsQqYDWl4SRj/nVfDDt6aqCeliq1HG4jy1Q3+A==",
         "dependencies": {
           "System.ComponentModel.Annotations": "5.0.0",
-          "System.Text.Json": "10.0.12"
+          "System.Text.Json": "10.0.12",
+          "TimeZoneConverter": "7.2.0"
         }
       },
       "HtmlForgeX.Markdown": {
         "type": "Direct",
-        "requested": "[1.4.0, )",
-        "resolved": "1.4.0",
-        "contentHash": "Qf4eeYUZ3n6Cyu8pkIv/CPSE8u3zilwqiIL5Wk+qCyIC20k8pm2UKMn36lF4iQGccjJZ1oIkLzVhfbr5V4AWHA==",
+        "requested": "[2.0.0, )",
+        "resolved": "2.0.0",
+        "contentHash": "NbWlbWrQFLJsnEfPrNHKJOeI51269Z9kkQonOY2JvmvyGcVTAdo29eiL9mpWT7mGbSTU9x5d/hq1B8HQnmy/aw==",
         "dependencies": {
-          "HtmlForgeX": "1.4.0",
+          "HtmlForgeX": "2.0.0",
           "OfficeIMO.Markdown": "3.4.4",
           "System.Text.Json": "10.0.12"
         }
@@ -250,6 +251,11 @@
         "resolved": "6.1.2",
         "contentHash": "2hBr6zdbIBTDE3EhK7NSVNdX58uTK6iHW/P/Axmm9sl1xoGSLqDvMtpecn226TNwHByFokYwJmt/aQQNlO5CRw=="
       },
+      "System.Runtime.InteropServices.RuntimeInformation": {
+        "type": "Transitive",
+        "resolved": "4.3.0",
+        "contentHash": "cbz4YJMqRDR7oLeMRbdYv7mYzc++17lNhScCX0goO2XpGWdvAt60CGN+FHdePUEHCe/Jy9jUlvNAiNdM+7jsOw=="
+      },
       "System.Security.Cryptography.Pkcs": {
         "type": "Transitive",
         "resolved": "10.0.13",
@@ -294,6 +300,15 @@
         "resolved": "4.6.2",
         "contentHash": "yQgmjfFximrNm9LIV3mL6T5MzjeC+epeE5rl4hXxAlYmxby7RM1dPSkIKXk9HNkl6G54h2JHOmLD46+Pey+IRg=="
       },
+      "TimeZoneConverter": {
+        "type": "Transitive",
+        "resolved": "7.2.0",
+        "contentHash": "4Poqu79dTmacVETqUJ53g3x4U21V/cmWPSlehdsVE4Q00akavvlRq+SRjcg/CmfO9ibOCjRl6TeUV7hkC5RC4w==",
+        "dependencies": {
+          "System.Runtime.InteropServices.RuntimeInformation": "4.3.0",
+          "System.ValueTuple": "4.6.1"
+        }
+      },
       "VirusTotalAnalyzer": {
         "type": "Transitive",
         "resolved": "1.0.0",
@@ -328,17 +343,20 @@
     "net10.0": {
       "HtmlForgeX": {
         "type": "Direct",
-        "requested": "[1.4.0, )",
-        "resolved": "1.4.0",
-        "contentHash": "iZYhgl4weq0WPo0BA9tdaXPXBlPrLE1f8hRefw+6aOMkyLPdl0Y4dv2rvfaHByqmBiJ3B5gKxF/pLPYitxBIQw=="
+        "requested": "[2.0.0, )",
+        "resolved": "2.0.0",
+        "contentHash": "8USuIDZXsq6i+fOVTEMQAPs4r5pzYTc4WWSLSGlrnfcw6ssBYsQqYDWl4SRj/nVfDDt6aqCeliq1HG4jy1Q3+A==",
+        "dependencies": {
+          "TimeZoneConverter": "7.2.0"
+        }
       },
       "HtmlForgeX.Markdown": {
         "type": "Direct",
-        "requested": "[1.4.0, )",
-        "resolved": "1.4.0",
-        "contentHash": "Qf4eeYUZ3n6Cyu8pkIv/CPSE8u3zilwqiIL5Wk+qCyIC20k8pm2UKMn36lF4iQGccjJZ1oIkLzVhfbr5V4AWHA==",
+        "requested": "[2.0.0, )",
+        "resolved": "2.0.0",
+        "contentHash": "NbWlbWrQFLJsnEfPrNHKJOeI51269Z9kkQonOY2JvmvyGcVTAdo29eiL9mpWT7mGbSTU9x5d/hq1B8HQnmy/aw==",
         "dependencies": {
-          "HtmlForgeX": "1.4.0",
+          "HtmlForgeX": "2.0.0",
           "OfficeIMO.Markdown": "3.4.4"
         }
       },
@@ -1107,6 +1125,11 @@
         "resolved": "10.0.5",
         "contentHash": "5hVP2TIgEqqA590MnKmMN5+Fgzl6xBRjR1wbgC3M1znrZZJe63TwBPN+ymaMgwT0vjsiXk95AjMAe8SAhhJSTg=="
       },
+      "TimeZoneConverter": {
+        "type": "Transitive",
+        "resolved": "7.2.0",
+        "contentHash": "4Poqu79dTmacVETqUJ53g3x4U21V/cmWPSlehdsVE4Q00akavvlRq+SRjcg/CmfO9ibOCjRl6TeUV7hkC5RC4w=="
+      },
       "VirusTotalAnalyzer": {
         "type": "Transitive",
         "resolved": "1.0.0",
@@ -1136,17 +1159,20 @@
     "net8.0": {
       "HtmlForgeX": {
         "type": "Direct",
-        "requested": "[1.4.0, )",
-        "resolved": "1.4.0",
-        "contentHash": "iZYhgl4weq0WPo0BA9tdaXPXBlPrLE1f8hRefw+6aOMkyLPdl0Y4dv2rvfaHByqmBiJ3B5gKxF/pLPYitxBIQw=="
+        "requested": "[2.0.0, )",
+        "resolved": "2.0.0",
+        "contentHash": "8USuIDZXsq6i+fOVTEMQAPs4r5pzYTc4WWSLSGlrnfcw6ssBYsQqYDWl4SRj/nVfDDt6aqCeliq1HG4jy1Q3+A==",
+        "dependencies": {
+          "TimeZoneConverter": "7.2.0"
+        }
       },
       "HtmlForgeX.Markdown": {
         "type": "Direct",
-        "requested": "[1.4.0, )",
-        "resolved": "1.4.0",
-        "contentHash": "Qf4eeYUZ3n6Cyu8pkIv/CPSE8u3zilwqiIL5Wk+qCyIC20k8pm2UKMn36lF4iQGccjJZ1oIkLzVhfbr5V4AWHA==",
+        "requested": "[2.0.0, )",
+        "resolved": "2.0.0",
+        "contentHash": "NbWlbWrQFLJsnEfPrNHKJOeI51269Z9kkQonOY2JvmvyGcVTAdo29eiL9mpWT7mGbSTU9x5d/hq1B8HQnmy/aw==",
         "dependencies": {
-          "HtmlForgeX": "1.4.0",
+          "HtmlForgeX": "2.0.0",
           "OfficeIMO.Markdown": "3.4.4"
         }
       },
@@ -1875,6 +1901,11 @@
         "type": "Transitive",
         "resolved": "8.0.0",
         "contentHash": "Obg3a90MkOw9mYKxrardLpY2u0axDMrSmy4JCdq2cYbelM2cUwmUir5Bomvd1yxmPL9h5LVHU1tuKBZpUjfASg=="
+      },
+      "TimeZoneConverter": {
+        "type": "Transitive",
+        "resolved": "7.2.0",
+        "contentHash": "4Poqu79dTmacVETqUJ53g3x4U21V/cmWPSlehdsVE4Q00akavvlRq+SRjcg/CmfO9ibOCjRl6TeUV7hkC5RC4w=="
       },
       "VirusTotalAnalyzer": {
         "type": "Transitive",

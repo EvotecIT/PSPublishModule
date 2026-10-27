@@ -350,7 +350,9 @@ public sealed partial class PSResourceGetClient
             options.Credential?.Secret ?? string.Empty
         };
 
-        var result = RunScript(script, args, timeout ?? TimeSpan.FromMinutes(2));
+        var result = new ModuleRepositoryRetryPolicy(_logger).RunPowerShell(
+            $"Find-PSResource {string.Join(", ", names)}",
+            () => RunScript(script, args, timeout ?? TimeSpan.FromMinutes(2)));
         var items = ParseFindOutput(result.StdOut);
 
         if (result.ExitCode != 0)
@@ -442,7 +444,9 @@ public sealed partial class PSResourceGetClient
             options.Credential?.Secret ?? string.Empty
         };
 
-        var result = RunScript(script, args, timeout ?? TimeSpan.FromMinutes(10));
+        var result = new ModuleRepositoryRetryPolicy(_logger).RunPowerShell(
+            $"Install-PSResource {options.Name} {options.Version}",
+            () => RunScript(script, args, timeout ?? TimeSpan.FromMinutes(10)));
         if (result.ExitCode != 0)
         {
             var message = TryExtractError(result.StdOut) ?? result.StdErr;
@@ -487,7 +491,9 @@ public sealed partial class PSResourceGetClient
             options.Credential?.Secret ?? string.Empty
         };
 
-        var result = RunScript(script, args, timeout ?? TimeSpan.FromMinutes(10));
+        var result = new ModuleRepositoryRetryPolicy(_logger).RunPowerShell(
+            $"Save-PSResource {options.Name} {options.Version}",
+            () => RunScript(script, args, timeout ?? TimeSpan.FromMinutes(10)));
         var items = ParseSaveOutput(result.StdOut);
 
         if (result.ExitCode != 0)

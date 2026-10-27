@@ -38,8 +38,18 @@ if (-not [string]::IsNullOrWhiteSpace($CredentialUser) -and -not [string]::IsNul
   $params.Credential = New-Object System.Management.Automation.PSCredential($CredentialUser, $sec)
 }
 
+# PSResourceGet can report a package-query 404 only on its verbose stream,
+# then throw a generic InstallPackageFailure. Keep the cause for retry decisions.
+$providerMessages = [System.Collections.Generic.List[string]]::new()
+$Error.Clear()
 try {
-  $saved = Save-PSResource @params -PassThru
+  $saved = Save-PSResource @params -PassThru -Verbose 4>&1 | ForEach-Object {
+    if ($_ -is [System.Management.Automation.VerboseRecord]) {
+      $providerMessages.Add($_.Message)
+    } else {
+      $_
+    }
+  }
   foreach ($r in @($saved)) {
     $n = [string]$r.Name
     $v = [string]$r.Version
@@ -48,7 +58,9 @@ try {
   }
   exit 0
 } catch {
-  $msg = $_.Exception.Message
+  $failure = $_
+  $messages = @($failure.Exception.Message) + @($Error | ForEach-Object { $_.Exception.Message }) + @($providerMessages)
+  $msg = ($messages | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -Unique) -join "`n"
   $b64 = [System.Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($msg))
   Write-Output ('PFPSRG::ERROR::' + $b64)
   exit 1
