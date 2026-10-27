@@ -5,14 +5,16 @@ namespace PowerForge.Tests;
 public sealed class PSResourceGetFailureDiagnosticsTests
 {
     [Theory]
-    [InlineData(false, false)]
-    [InlineData(false, true)]
-    [InlineData(true, false)]
-    [InlineData(true, true)]
-    public void Failed_public_reads_preserve_failure_and_collect_opt_in_child_context(bool save, bool enabled)
+    [InlineData(false, false, true)]
+    [InlineData(false, true, true)]
+    [InlineData(true, false, true)]
+    [InlineData(true, true, true)]
+    [InlineData(false, true, false)]
+    [InlineData(true, true, false)]
+    public void Failed_public_reads_preserve_failure_and_collect_opt_in_child_context(bool save, bool enabled, bool preferPwsh)
     {
         using var root = new TemporaryDirectory();
-        var client = new PSResourceGetClient(new FailureFixtureRunner(root.Path, enabled), new NullLogger());
+        var client = new PSResourceGetClient(new FailureFixtureRunner(root.Path, enabled, preferPwsh), new NullLogger());
         var failure = Assert.Throws<InvalidOperationException>(() =>
         {
             if (save)
@@ -28,19 +30,27 @@ public sealed class PSResourceGetFailureDiagnosticsTests
         if (!enabled) return;
         using var report = JsonDocument.Parse(failure.Message[(offset + marker.Length)..]);
         Assert.Equal("1.2.0", report.RootElement.GetProperty("ModuleVersion").GetString());
-        Assert.True(Version.TryParse(report.RootElement.GetProperty("PowerShellVersion").GetString(), out _));
+        Assert.True(Version.TryParse(report.RootElement.GetProperty("PowerShellVersion").GetString(), out var powerShellVersion));
         Assert.Equal("https://www.powershellgallery.com/api/v2", report.RootElement.GetProperty("RepositoryUri").GetString());
         Assert.Equal("NotExposedByBackend", report.RootElement.GetProperty("OriginalResponse").GetProperty("BodyStatus").GetString());
         Assert.Equal(JsonValueKind.Null, report.RootElement.GetProperty("PostFailureControl").ValueKind);
-        var native = Assert.Single(report.RootElement.GetProperty("NativeFailureResponses").EnumerateArray());
-        Assert.Equal(404, native.GetProperty("Status").GetInt32());
-        Assert.Equal("OriginalNativeHttpClientResponseStop", native.GetProperty("CollectionPhase").GetString());
-        Assert.Equal("fixture-MISS", native.GetProperty("Headers").GetProperty("X-Cache").GetString());
-        Assert.Equal("NotCollected", native.GetProperty("RequestQuery").GetString());
+        if (powerShellVersion.Major >= 7)
+        {
+            var native = Assert.Single(report.RootElement.GetProperty("NativeFailureResponses").EnumerateArray());
+            Assert.Equal(404, native.GetProperty("Status").GetInt32());
+            Assert.Equal("OriginalNativeHttpClientResponseStop", native.GetProperty("CollectionPhase").GetString());
+            Assert.Equal("fixture-MISS", native.GetProperty("Headers").GetProperty("X-Cache").GetString());
+            Assert.Equal("NotCollected", native.GetProperty("RequestQuery").GetString());
+        }
+        else
+        {
+            Assert.Equal("UnsupportedHost", report.RootElement.GetProperty("NativeResponseTrace").GetString());
+            Assert.Empty(report.RootElement.GetProperty("NativeFailureResponses").EnumerateArray());
+        }
         Assert.DoesNotContain("do-not-copy", failure.Message);
     }
 
-    private sealed class FailureFixtureRunner(string root, bool enabled) : IPowerShellRunner
+    private sealed class FailureFixtureRunner(string root, bool enabled, bool preferPwsh) : IPowerShellRunner
     {
         public PowerShellRunResult Run(PowerShellRunRequest request)
         {
@@ -52,6 +62,7 @@ public sealed class PSResourceGetFailureDiagnosticsTests
                 function Get-Module { param($Name) [pscustomobject]@{ Version = [Version]'1.2.0'; Path = 'fixture/PSResourceGet.psd1' } }
                 function Get-PSResourceRepository { param($Name, $ErrorAction) [pscustomobject]@{ Uri = 'https://www.powershellgallery.com/api/v2' } }
                 function Send-FixtureFailure {
+                    if ($PSVersionTable.PSVersion.Major -ge 7) {
                     Add-Type @'
                 using System.Diagnostics;
                 using System.Net;
@@ -71,6 +82,7 @@ public sealed class PSResourceGetFailureDiagnosticsTests
                 }
                 '@
                     [PFNativeFailureFixture]::Emit()
+                    }
                     throw 'fixture-network-failure'
                 }
                 function Save-PSResource { Send-FixtureFailure }
@@ -81,7 +93,7 @@ public sealed class PSResourceGetFailureDiagnosticsTests
             File.WriteAllText(scriptPath, script.Replace("$ProgressPreference = 'SilentlyContinue'",
                 "$ProgressPreference = 'SilentlyContinue'\n" + fixture));
             return new PowerShellRunner().Run(new PowerShellRunRequest(scriptPath, request.Arguments,
-                TimeSpan.FromSeconds(30), workingDirectory: root));
+                TimeSpan.FromSeconds(30), preferPwsh: preferPwsh, workingDirectory: root));
         }
     }
 }
