@@ -39,6 +39,7 @@ if (-not [string]::IsNullOrWhiteSpace($CredentialUser) -and -not [string]::IsNul
   $params.Credential = New-Object System.Management.Automation.PSCredential($CredentialUser, $sec)
 }
 
+$galleryTrace = Start-PFPublicGalleryResponseTrace -Repositories @($Repository) -HasCredential ($CredentialUser -or $CredentialSecret)
 try {
   $saved = Save-PSResource @params -PassThru
   foreach ($r in @($saved)) {
@@ -50,10 +51,12 @@ try {
   exit 0
 } catch {
   $msg = $_.Exception.Message
-  $diagnostic = Get-PFPublicGalleryFailureDiagnostic -Repositories @($Repository) -Failure $_ -HasCredential ($CredentialUser -or $CredentialSecret)
+  $diagnostic = Get-PFPublicGalleryFailureDiagnostic -Repositories @($Repository) -Failure $_ -HasCredential ($CredentialUser -or $CredentialSecret) -Trace $galleryTrace
   if ($diagnostic) { $msg += "`n" + $diagnostic }
   $b64 = [System.Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($msg))
   Write-Output ('PFPSRG::ERROR::' + $b64)
   exit 1
+} finally {
+  if ($galleryTrace) { $galleryTrace.Dispose() }
 }
 

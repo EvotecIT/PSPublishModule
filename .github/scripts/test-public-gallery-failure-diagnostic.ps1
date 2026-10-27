@@ -1,4 +1,4 @@
-param([ValidateSet('All', 'Deadline', 'Redaction', 'Redirect')][string]$Case = 'All')
+param([ValidateSet('All', 'Deadline', 'Redaction', 'Redirect', 'Trace')][string]$Case = 'All')
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Net.Http
 . (Join-Path $PSScriptRoot '../../PowerForge/Scripts/RepositoryDiagnostics/Collect-PublicGalleryFailure.ps1')
@@ -18,6 +18,63 @@ function Get-Module {
 function Assert-Contract {
     param([bool]$Condition, [string]$Message)
     if (-not $Condition) { throw $Message }
+}
+
+if ($Case -in @('All', 'Trace') -and $PSVersionTable.PSVersion.Major -ge 7) {
+    $savedFlag = $env:POWERFORGE_PUBLIC_GALLERY_DIAGNOSTICS
+    $savedRepositoryReads = $script:repositoryReads
+    $trace = $null
+    $listener = $null
+    try {
+        $env:POWERFORGE_PUBLIC_GALLERY_DIAGNOSTICS = $null
+        Assert-Contract ($null -eq (Start-PFPublicGalleryResponseTrace @('PSGallery') $false)) 'Opt-out must not subscribe to native responses.'
+        $env:POWERFORGE_PUBLIC_GALLERY_DIAGNOSTICS = '1'
+        Assert-Contract ($null -eq (Start-PFPublicGalleryResponseTrace @('PSGallery') $true)) 'Explicit credentials must exclude native tracing.'
+        Assert-Contract ($null -eq (Start-PFPublicGalleryResponseTrace @('Private') $false)) 'Private repositories must exclude native tracing.'
+        $trace = Start-PFPublicGalleryResponseTrace @('PSGallery') $false
+        Assert-Contract ($null -ne $trace) 'The supported opt-in host must start native observation.'
+        $listener = [Diagnostics.DiagnosticListener]::new('HttpHandlerDiagnosticListener')
+        if (-not ('PFNativeResponsePayload' -as [type])) {
+            Add-Type 'public sealed class PFNativeResponsePayload { public System.Net.Http.HttpResponseMessage Response { get; set; } }'
+        }
+        $payload = [PFNativeResponsePayload]::new()
+        foreach ($uri in @('https://private.example/api/v2/package/A/1.0.0', 'https://www.powershellgallery.com/private/token', 'https://www.powershellgallery.com/api/v2/package/A/1.0.0?token=do-not-copy')) {
+            $response = [Net.Http.HttpResponseMessage]::new([Net.HttpStatusCode]::NotFound)
+            $response.RequestMessage = [Net.Http.HttpRequestMessage]::new([Net.Http.HttpMethod]::Get, $uri)
+            $response.Headers.TryAddWithoutValidation('Set-Cookie', 'do-not-copy') | Out-Null
+            $response.Headers.TryAddWithoutValidation('X-Cache', 'MISS') | Out-Null
+            $response.Content = [Net.Http.StringContent]::new('private-body-do-not-copy')
+            $payload.Response = $response
+            $listener.Write('System.Net.Http.HttpRequestOut.Stop', $payload)
+            $response.Dispose()
+        }
+        # Only the allowlisted endpoint metadata survives; queries, cookies and bodies never enter the snapshot.
+        $records = @($trace.GetFailures())
+        Assert-Contract ($records.Count -eq 1 -and $records[0].Status -eq 404) 'Only public endpoint failure metadata should be retained.'
+        $snapshot = $records | ConvertTo-Json -Depth 5 -Compress
+        Assert-Contract ($snapshot -notmatch 'do-not-copy|private.example|private-body|Set-Cookie|\?token') 'Native observation must exclude private paths, query strings, cookies and response bodies.'
+        Assert-Contract ($records[0].Headers['X-Cache'] -eq 'MISS' -and $records[0].CollectionPhase -eq 'OriginalNativeHttpClientResponseStop') 'Original native response headers must stay distinguishable from separate controls.'
+        $response = [Net.Http.HttpResponseMessage]::new([Net.HttpStatusCode]::NotFound)
+        $response.RequestMessage = [Net.Http.HttpRequestMessage]::new([Net.Http.HttpMethod]::Get, 'https://www.powershellgallery.com/api/v2/package/A/1.0.0')
+        $response.RequestMessage.Headers.Authorization = [Net.Http.Headers.AuthenticationHeaderValue]::new('Bearer', 'do-not-copy')
+        $payload.Response = $response
+        $listener.Write('System.Net.Http.HttpRequestOut.Stop', $payload)
+        Assert-Contract (@($trace.GetFailures()).Count -eq 1) 'Authenticated HTTP requests must be excluded even on a public host.'
+        $response.RequestMessage.Headers.Authorization = $null
+        for ($index = 0; $index -lt 6; $index++) { $listener.Write('System.Net.Http.HttpRequestOut.Stop', $payload) }
+        Assert-Contract (@($trace.GetFailures()).Count -eq 4) 'Native response retention must be bounded.'
+        $trace.Dispose()
+        $listener.Write('System.Net.Http.HttpRequestOut.Stop', $payload)
+        Assert-Contract (@($trace.GetFailures()).Count -eq 4) 'Disposal must detach the owned subscriptions.'
+        $response.RequestMessage.Dispose()
+        $response.Dispose()
+        Write-Output 'Public Gallery native response trace: opt-in, privacy, original headers, bounds and disposal passed.'
+    } finally {
+        if ($trace) { $trace.Dispose() }
+        if ($listener) { $listener.Dispose() }
+        $env:POWERFORGE_PUBLIC_GALLERY_DIAGNOSTICS = $savedFlag
+        $script:repositoryReads = $savedRepositoryReads
+    }
 }
 
 if ($Case -eq 'All') {

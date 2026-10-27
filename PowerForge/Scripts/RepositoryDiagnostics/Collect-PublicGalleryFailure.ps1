@@ -96,13 +96,86 @@ function Invoke-PFPublicGalleryControl {
     }
 }
 
-function Get-PFPublicGalleryFailureDiagnostic {
-    param([string[]]$Repositories, [Management.Automation.ErrorRecord]$Failure, [bool]$HasCredential)
-    if ($env:POWERFORGE_PUBLIC_GALLERY_DIAGNOSTICS -ne '1' -or $HasCredential -or $Repositories.Count -ne 1 -or $Repositories[0] -ne 'PSGallery') { return '' }
+function Test-PFPublicGalleryDiagnosticAllowed {
+    param([string[]]$Repositories, [bool]$HasCredential)
+    if ($env:POWERFORGE_PUBLIC_GALLERY_DIAGNOSTICS -ne '1' -or $HasCredential -or $Repositories.Count -ne 1 -or $Repositories[0] -ne 'PSGallery') { return $false }
     try {
         $repository = Get-PSResourceRepository -Name PSGallery -ErrorAction Stop
-        if ([string]$repository.Uri -notmatch '^https://www\.powershellgallery\.com/api/v2/?$') { return '' }
-        if (($repository.PSObject.Properties['CredentialInfo'] -and $repository.CredentialInfo) -or ($repository.PSObject.Properties['CredentialProvider'] -and $repository.CredentialProvider)) { return '' }
+        return [string]$repository.Uri -match '^https://www\.powershellgallery\.com/api/v2/?$' -and
+            -not ($repository.PSObject.Properties['CredentialInfo'] -and $repository.CredentialInfo) -and
+            -not ($repository.PSObject.Properties['CredentialProvider'] -and $repository.CredentialProvider)
+    } catch { return $false }
+}
+
+function Start-PFPublicGalleryResponseTrace {
+    param([string[]]$Repositories, [bool]$HasCredential)
+    if ($PSVersionTable.PSVersion.Major -lt 7 -or -not (Test-PFPublicGalleryDiagnosticAllowed $Repositories $HasCredential)) { return $null }
+    try {
+        if (-not ('PFPublicGalleryResponseTrace' -as [type])) {
+            Add-Type -TypeDefinition @'
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.Net.Http;
+using System.Text.RegularExpressions;
+public sealed class PFPublicGalleryResponseTrace : IObserver<DiagnosticListener>, IObserver<KeyValuePair<string,object>>, IDisposable {
+    readonly object gate = new object();
+    readonly List<IDisposable> subscriptions = new List<IDisposable>();
+    readonly List<Dictionary<string,object>> failures = new List<Dictionary<string,object>>();
+    bool disposed;
+    public PFPublicGalleryResponseTrace() { lock (gate) subscriptions.Add(DiagnosticListener.AllListeners.Subscribe(this)); }
+    public void OnNext(DiagnosticListener listener) {
+        if (listener.Name != "HttpHandlerDiagnosticListener") return;
+        lock (gate) { if (!disposed) subscriptions.Add(listener.Subscribe(this)); }
+    }
+    public void OnNext(KeyValuePair<string,object> item) {
+        if (item.Key != "System.Net.Http.HttpRequestOut.Stop" || item.Value == null) return;
+        try {
+            var property = item.Value.GetType().GetProperty("Response");
+            var response = property == null ? null : property.GetValue(item.Value) as HttpResponseMessage;
+            var request = response == null ? null : response.RequestMessage;
+            var uri = request == null ? null : request.RequestUri;
+            if (uri == null || response.IsSuccessStatusCode || (int)response.StatusCode < 400 ||
+                uri.Scheme != "https" || !uri.IsDefaultPort || uri.UserInfo.Length != 0 || uri.Fragment.Length != 0 ||
+                request.Headers.Authorization != null || request.Headers.Contains("Proxy-Authorization") || request.Headers.Contains("Cookie")) return;
+            bool api = uri.Host == "www.powershellgallery.com" && (uri.AbsolutePath == "/api/v2/FindPackagesById()" ||
+                Regex.IsMatch(uri.AbsolutePath, @"^/api/v2/package/[A-Za-z0-9_.-]+/[A-Za-z0-9_.+-]+$"));
+            bool cdn = uri.Host == "cdn.powershellgallery.com" && Regex.IsMatch(uri.AbsolutePath, @"^/packages/[A-Za-z0-9_.+-]+\.nupkg$");
+            if (!api && !cdn) return;
+            var headers = new Dictionary<string,string>();
+            foreach (var name in new [] {"Date", "Server", "X-Cache", "X-Azure-Ref", "Retry-After", "X-Ms-Error-Code"}) {
+                IEnumerable<string> values;
+                if (!response.Headers.TryGetValues(name, out values)) continue;
+                string value = string.Join(", ", values).Replace("\r", " ").Replace("\n", " ");
+                headers[name] = value.Substring(0, Math.Min(256, value.Length));
+            }
+            var record = new Dictionary<string,object> {
+                {"Status", (int)response.StatusCode}, {"Headers", headers},
+                {"Endpoint", uri.GetLeftPart(UriPartial.Path)}, {"RequestQuery", "NotCollected"},
+                {"BodyStatus", "NotReadByDiagnosticListener"}, {"CollectionPhase", "OriginalNativeHttpClientResponseStop"}
+            };
+            lock (gate) { if (!disposed) { if (failures.Count == 4) failures.RemoveAt(0); failures.Add(record); } }
+        } catch { }
+    }
+    public Dictionary<string,object>[] GetFailures() { lock (gate) return failures.ToArray(); }
+    public void OnError(Exception error) { }
+    public void OnCompleted() { }
+    public void Dispose() {
+        IDisposable[] owned;
+        lock (gate) { if (disposed) return; disposed = true; owned = subscriptions.ToArray(); subscriptions.Clear(); }
+        foreach (var value in owned) value.Dispose();
+    }
+}
+'@
+        }
+        return [PFPublicGalleryResponseTrace]::new()
+    } catch { return $null }
+}
+
+function Get-PFPublicGalleryFailureDiagnostic {
+    param([string[]]$Repositories, [Management.Automation.ErrorRecord]$Failure, [bool]$HasCredential, [object]$Trace = $null)
+    if (-not (Test-PFPublicGalleryDiagnosticAllowed $Repositories $HasCredential)) { return '' }
+    try {
         $module = Get-Module Microsoft.PowerShell.PSResourceGet | Select-Object -First 1
         $report = [ordered]@{
             PowerShellVersion = $PSVersionTable.PSVersion.ToString()
@@ -113,6 +186,8 @@ function Get-PFPublicGalleryFailureDiagnostic {
             RepositoryUri = 'https://www.powershellgallery.com/api/v2'
             ErrorType = $Failure.Exception.GetType().FullName
             OriginalResponse = @{ BodyStatus = 'NotExposedByBackend' }
+            NativeResponseTrace = if ($Trace) { 'Enabled' } elseif ($PSVersionTable.PSVersion.Major -lt 7) { 'UnsupportedHost' } else { 'Unavailable' }
+            NativeFailureResponses = @(if ($Trace) { $Trace.GetFailures() })
             PostFailureControl = $null
             CdnControl = $null
         }
