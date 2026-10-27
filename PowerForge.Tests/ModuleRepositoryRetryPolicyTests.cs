@@ -43,11 +43,15 @@ public sealed class ModuleRepositoryRetryPolicyTests
     [Theory]
     [InlineData("HTTP 429 Too Many Requests", true)]
     [InlineData("HTTP 503 Service Unavailable", true)]
+    [InlineData("Response returned status code package: Not Found.", true)]
+    [InlineData("The remote server returned an error: (404) Not Found.", true)]
     [InlineData("The operation has timed out.", true)]
     [InlineData("HTTP 401 Unauthorized", false)]
     [InlineData("HTTP 403 Forbidden", false)]
     [InlineData("No match was found for the specified search criteria.", false)]
     [InlineData("Invalid version range.", false)]
+    [InlineData("Destination file not found: C:\\modules\\404\\PSUnifi.psd1", false)]
+    [InlineData("Package(s) 'PSUnifi' could not be installed from repository 'PSGallery'.", false)]
     [InlineData("Destination file not found: /tmp/modules/Pester.psd1", false)]
     public void Child_install_retries_only_transient_repository_failures(string message, bool transient)
     {

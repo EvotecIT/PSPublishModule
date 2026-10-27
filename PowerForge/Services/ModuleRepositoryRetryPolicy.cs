@@ -87,5 +87,7 @@ internal sealed class ModuleRepositoryRetryPolicy
 
     internal static bool IsTransientError(string message)
         => Regex.IsMatch(message ?? string.Empty,
-            @"(?i)(?<!\d)(404|408|429|5\d\d)(?!\d)|\btoo many requests\b|\b(timed?\s*out|timeout)\b|temporarily unavailable|service unavailable|bad gateway|gateway timeout");
+            @"(?i)(?:\bHTTP(?:/\d(?:\.\d)?)?\s*[:=]?\s*|\b(?:status(?:\s+code)?|remote server returned an error:)[^\r\n\d]{0,80})(404|408|429|5\d\d)(?!\d)|" +
+            @"\bResponse returned status code(?: package)?:\s*(Not Found|Request Timeout|Too Many Requests|Internal Server Error|Bad Gateway|Service Unavailable|Gateway Timeout)\b|" +
+            @"\btoo many requests\b|\b(timed?\s*out|timeout)\b|temporarily unavailable|service unavailable|bad gateway|gateway timeout");
 }
