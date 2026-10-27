@@ -9,7 +9,7 @@ using System.Xml.Linq;
 
 namespace PowerForge;
 
-internal static class PowerForgeWixInstallerServiceScriptEmitter
+internal static partial class PowerForgeWixInstallerServiceScriptEmitter
 {
     private static readonly XNamespace WixNamespace = "http://wixtoolset.org/schemas/v4/wxs";
 
@@ -61,6 +61,10 @@ internal static class PowerForgeWixInstallerServiceScriptEmitter
         yield return ids.SetInstallUpgradeId;
         yield return ids.UninstallServiceId;
         yield return ids.SetUninstallServiceId;
+        if (service.ScriptInstall.BackupExistingImagePath && service.ScriptInstall.StopServiceForUpgrade)
+        {
+            foreach (var id in GetStateActionIds(ids)) yield return id;
+        }
     }
 
     private static void EmitServiceActions(
@@ -117,8 +121,10 @@ internal static class PowerForgeWixInstallerServiceScriptEmitter
 
         if (script.StopServiceForUpgrade)
         {
-            actions.Add(CreateQuietExecAction(ids.StopServiceId, execute: "immediate"));
-            actions.Add(CreateSetQuietExecCommand(ids.SetStopServiceId, BuildStopCommand(service, script)));
+            // Only the protected-backup path guarantees an in-script preparation anchor.
+            // Legacy no-backup definitions may run before InstallInitialize.
+            actions.Add(CreateQuietExecAction(ids.StopServiceId, execute: script.BackupExistingImagePath ? "deferred" : "immediate", hideTarget: script.BackupExistingImagePath));
+            actions.Add(CreateSetInstallCommand(ids.SetStopServiceId, script.BackupExistingImagePath ? ids.StopServiceId : "WixQuietExecCmdLine", BuildStopCommand(service, script)));
         }
 
         actions.Add(CreateQuietExecAction(ids.InstallServiceId, execute: "deferred", hideTarget: true));
@@ -143,6 +149,8 @@ internal static class PowerForgeWixInstallerServiceScriptEmitter
             upgradeCondition,
             uninstallCondition,
             upgradePreparationActions);
+        if (script.BackupExistingImagePath && script.StopServiceForUpgrade)
+            EmitServiceStateActions(service, ids, resolvedBackupPath, actions, sequence, upgradePreparationActions, upgradeCondition);
     }
 
     private static void AddSequenceRows(
@@ -295,9 +303,6 @@ internal static class PowerForgeWixInstallerServiceScriptEmitter
             new XAttribute("Value", command),
             new XAttribute("Execute", "immediate"));
 
-    private static XElement CreateSetQuietExecCommand(string id, string command)
-        => CreateSetInstallCommand(id, "WixQuietExecCmdLine", command);
-
     private static string BuildBackupCommand(
         PowerForgeInstallerServiceComponent service,
         string backupPath)
@@ -330,7 +335,7 @@ internal static class PowerForgeWixInstallerServiceScriptEmitter
         string backupPath)
     {
         string backup = EscapePowerShellSingleQuoted(backupPath);
-        return BuildPowerShellCommand(service, "cleanup", "rm '" + backup + "' -ea 0");
+        return BuildPowerShellCommand(service, "cleanup", "$b='" + backup + "';rm $b -ea 0;if(Test-Path ($b+'.s')){rm ($b+'.s') -ea 0}");
     }
 
     private static string BuildPowerShellCommand(
