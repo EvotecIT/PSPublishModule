@@ -393,6 +393,8 @@ public sealed partial class ModulePipelineRunner
                 assemblyTypeAcceleratorAssemblies: plan?.BuildSpec.AssemblyTypeAcceleratorAssemblies,
                 ignoreLibrariesOnLoad: plan?.BuildSpec.IgnoreLibraryOnLoad,
                 conditionalFunctionDependencies: conditionalExportDependencies,
+                sharedAssemblies: plan?.BuildSpec.SharedAssemblies,
+                preloadSharedAssemblies: plan?.BuildSpec.PreloadSharedAssemblies,
                 targetFrameworks: plan?.BuildSpec.Frameworks,
                 log: message => _logger.Info(message));
         }
@@ -506,6 +508,8 @@ public sealed partial class ModulePipelineRunner
                 ignoreLibrariesOnLoad: plan.BuildSpec.IgnoreLibraryOnLoad,
                 conditionalFunctionDependencies: conditionalExportDependencies,
                 developmentBinaries: developmentOptions,
+                sharedAssemblies: plan.BuildSpec.SharedAssemblies,
+                preloadSharedAssemblies: plan.BuildSpec.PreloadSharedAssemblies,
                 targetFrameworks: plan.BuildSpec.Frameworks,
                 log: message => _logger.Info(message));
 
@@ -717,6 +721,8 @@ public sealed partial class ModulePipelineRunner
                 assemblyTypeAcceleratorAssemblies: plan.BuildSpec.AssemblyTypeAcceleratorAssemblies,
                 ignoreLibrariesOnLoad: plan.BuildSpec.IgnoreLibraryOnLoad,
                 conditionalFunctionDependencies: conditionalExportDependencies,
+                sharedAssemblies: plan.BuildSpec.SharedAssemblies,
+                preloadSharedAssemblies: plan.BuildSpec.PreloadSharedAssemblies,
                 targetFrameworks: plan.BuildSpec.Frameworks,
                 forceBootstrapperWrite: true,
                 log: message => _logger.Info(message));

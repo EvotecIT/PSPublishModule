@@ -64,6 +64,22 @@ When no environment names are supplied, PowerForge derives:
 
 The generated source `.psm1` probes `bin\<Configuration>\<TFM>\<Module>.dll`, preferring Core-compatible TFMs in PowerShell Core and desktop-compatible TFMs in Windows PowerShell. PowerShell Core uses the generated development ALC loader when `NETAssemblyLoadContext` is enabled; Windows PowerShell keeps the direct-import compatibility path.
 
+### Process-shared dependencies
+
+Modules that intentionally exchange types from a common dependency can declare exact assembly simple names with `New-ConfigurationBuild -NETSharedAssemblies 'Common.Runtime', 'Common.Display'`. `SharedAssemblies` is an alias. The corresponding build-spec and `BuildLibraries` JSON property is `SharedAssemblies`.
+
+Use `-NETPreloadSharedAssemblies 'Common.Runtime'` (alias `PreloadSharedAssemblies`, with the same JSON property name) for the subset that must load before the binary data host initializes. Declaration alone does not preload a dependency, export its commands, or scan its types. Shared dependencies are excluded from the generated blanket library preload. Empty lists preserve the existing loading policy.
+
+On PowerShell Core, the module's private ALC checks declared shared names before its dependency resolvers and adjacent files. A single process policy reuses an already loaded copy before looking in the selected module payload. The first loaded shared dependency establishes the non-collectible shared context; a fresh process uses Default. This also allows an older dependency loaded by an earlier private loader to remain the shared runtime. Other dependencies stay private. Already duplicated shared names, collectible contexts, or shared dependencies spread across different contexts are rejected rather than creating another runtime. Windows PowerShell reuses the first loaded AppDomain copy. Removing a module does not unload or replace shared assemblies; start a new process to change versions.
+
+Sharing requires a compatible assembly identity and ABI for the process lifetime. Keep shared dependencies out of `NETBinaryModule`; binary exports must remain product data hosts. Names cannot contain paths, filename extensions, wildcards or display-name qualifiers, and system/PowerShell host assemblies cannot be opted in. `PreloadSharedAssemblies` must be a subset of `SharedAssemblies`.
+
+Nonempty shared policies give packaged and development loader helpers distinct assembly and type identities, based on the policy capability and a deterministic, case-insensitive name-set hash. Importing a newer module from a different physical version directory therefore cannot reuse an older helper that lacks its shared policy. Empty policies retain the historical helper identities.
+
+The process policy registers exact shared names and their selected payload paths without loading them. A CLR resolver attached to the chosen shared context resolves lazy shared-to-shared references from that registered map; Desktop also checks the requesting shared assembly's provenance. These callbacks last for the process lifetime, so removing the product module does not break later use of a loaded shared adapter. Empty and partial preload lists remain lazy; registration does not preload all declared dependencies.
+
+For optional presentation, preload only the runtime needed before data-host import. Keep the optional adapter in `SharedAssemblies` and any private presentation assembly in `NETIgnoreLibraryOnLoad`. Product code reads the loaded runtime's metadata before loading those optional assemblies or calling new members. If the loaded feature level is insufficient, the product keeps native formatting and its data cmdlets available. PowerForge does not select product feature levels or load optional presentation on a product's behalf.
+
 Both development and packaged ALC loaders identify module DLLs by their physical
 paths, resolving symbolic links and Windows directory junctions. Importing the
 same module through a physical directory and an alias reuses its assembly and

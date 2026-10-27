@@ -60,6 +60,8 @@ public sealed partial class ModulePipelineRunner
         bool? doNotCopyLibrariesRecursivelyFromSegments = null;
         bool? handleRuntimesFromSegments = null;
         Dictionary<string, string>? desktopDependencyAssetFrameworksFromSegments = null;
+        string[]? sharedAssembliesFromSegments = null;
+        string[]? preloadSharedAssembliesFromSegments = null;
         bool? useAssemblyLoadContextFromSegments = null;
         bool? developmentBinariesEnabledFromSegments = null;
         ModuleDevelopmentBinaryMode? developmentBinariesModeFromSegments = null;
@@ -252,6 +254,8 @@ public sealed partial class ModulePipelineRunner
                     if (bl.HandleRuntimes.HasValue) handleRuntimesFromSegments = bl.HandleRuntimes.Value;
                     if (bl.DesktopDependencyAssetFrameworks is not null)
                         desktopDependencyAssetFrameworksFromSegments = new(bl.DesktopDependencyAssetFrameworks, StringComparer.OrdinalIgnoreCase);
+                    if (bl.SharedAssemblies is not null) sharedAssembliesFromSegments = bl.SharedAssemblies;
+                    if (bl.PreloadSharedAssemblies is not null) preloadSharedAssembliesFromSegments = bl.PreloadSharedAssemblies;
                     if (bl.UseAssemblyLoadContext.HasValue)
                         useAssemblyLoadContextFromSegments = bl.UseAssemblyLoadContext.Value;
                     else if (bl.NETAssemblyLoadContext.HasValue)
@@ -633,6 +637,8 @@ public sealed partial class ModulePipelineRunner
             DoNotCopyLibrariesRecursivelyFromSegments = doNotCopyLibrariesRecursivelyFromSegments,
             HandleRuntimesFromSegments = handleRuntimesFromSegments,
             DesktopDependencyAssetFrameworksFromSegments = desktopDependencyAssetFrameworksFromSegments,
+            SharedAssembliesFromSegments = sharedAssembliesFromSegments,
+            PreloadSharedAssembliesFromSegments = preloadSharedAssembliesFromSegments,
             UseAssemblyLoadContextFromSegments = useAssemblyLoadContextFromSegments,
             DevelopmentBinariesEnabledFromSegments = developmentBinariesEnabledFromSegments,
             DevelopmentBinariesModeFromSegments = developmentBinariesModeFromSegments,
@@ -730,6 +736,8 @@ public sealed partial class ModulePipelineRunner
         internal bool? DoNotCopyLibrariesRecursivelyFromSegments { get; init; } = default!;
         internal bool? HandleRuntimesFromSegments { get; init; } = default!;
         internal Dictionary<string, string>? DesktopDependencyAssetFrameworksFromSegments { get; init; }
+        internal string[]? SharedAssembliesFromSegments { get; init; }
+        internal string[]? PreloadSharedAssembliesFromSegments { get; init; }
         internal bool? UseAssemblyLoadContextFromSegments { get; init; } = default!;
         internal bool? DevelopmentBinariesEnabledFromSegments { get; init; } = default!;
         internal ModuleDevelopmentBinaryMode? DevelopmentBinariesModeFromSegments { get; init; } = default!;

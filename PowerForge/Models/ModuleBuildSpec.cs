@@ -158,6 +158,12 @@ public sealed class ModuleBuildSpec
     /// </summary>
     public bool UseAssemblyLoadContext { get; set; }
 
+    /// <summary>Exact assembly simple names shared process-wide; empty preserves private dependency loading.</summary>
+    public string[] SharedAssemblies { get; set; } = Array.Empty<string>();
+
+    /// <summary>Subset of shared names to preload before the binary data host. Other shared assemblies remain lazy.</summary>
+    public string[] PreloadSharedAssemblies { get; set; } = Array.Empty<string>();
+
     /// <summary>
     /// Controls whether the checked-in source module bootstrapper should load binaries from local build output.
     /// Packaged/staged bootstrapper generation remains production-only.

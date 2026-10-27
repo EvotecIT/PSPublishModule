@@ -13,7 +13,9 @@ internal static partial class ModuleBootstrapperGenerator
         IReadOnlyList<string>? assemblyTypeAccelerators,
         IReadOnlyList<string>? assemblyTypeAcceleratorAssemblies,
         IReadOnlyList<string>? ignoreLibrariesOnLoad,
-        ModuleDevelopmentBinaryBootstrapperOptions options)
+        ModuleDevelopmentBinaryBootstrapperOptions options,
+        IReadOnlyList<string>? sharedAssemblies = null,
+        IReadOnlyList<string>? preloadSharedAssemblies = null)
     {
         var binaryRootExpression = BuildPowerShellPathExpression(moduleRoot, options.BinaryRootPath);
         var coreFrameworks = BuildPowerShellArrayLiteral(NormalizePowerShellStringArray(options.CoreFrameworkCandidates));
@@ -24,6 +26,8 @@ internal static partial class ModuleBootstrapperGenerator
             "Scripts/ModuleBootstrapper/DevelopmentBinaryLoader.Template.ps1",
             new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
+                ["SharedAssembliesBlock"] = BuildSharedAssembliesBlock(sharedAssemblies, preloadSharedAssemblies,
+                    "@([IO.Path]::GetDirectoryName($PowerForgeDevelopmentBinaryPath))"),
                 ["BinaryRootExpression"] = binaryRootExpression,
                 ["DevelopmentBinaryMode"] = EscapePsSingleQuoted(options.Mode.ToString()),
                 ["DevelopmentBinaryEnvironmentVariable"] = EscapePsSingleQuoted(options.EnvironmentVariable),
@@ -51,7 +55,7 @@ internal static partial class ModuleBootstrapperGenerator
                     loaderIdentity,
                     assemblyTypeAcceleratorMode,
                     assemblyTypeAccelerators,
-                    assemblyTypeAcceleratorAssemblies)
+                    assemblyTypeAcceleratorAssemblies, sharedAssemblies)
             });
     }
 
@@ -62,7 +66,7 @@ internal static partial class ModuleBootstrapperGenerator
         AssemblyLoadContextLoaderIdentity? loaderIdentity,
         AssemblyTypeAcceleratorExportMode assemblyTypeAcceleratorMode,
         IReadOnlyList<string>? assemblyTypeAccelerators,
-        IReadOnlyList<string>? assemblyTypeAcceleratorAssemblies)
+        IReadOnlyList<string>? assemblyTypeAcceleratorAssemblies, IReadOnlyList<string>? sharedAssemblies = null)
     {
         if (!useAssemblyLoadContext || loaderIdentity is null)
             return "                & $ImportModule $PowerForgeDevelopmentBinaryPath -ErrorAction Stop";
@@ -83,7 +87,7 @@ internal static partial class ModuleBootstrapperGenerator
             new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
                 ["LoaderTypeName"] = loaderIdentity.TypeName,
-                ["LoaderSource"] = BuildDevelopmentAssemblyLoadContextSource(loaderIdentity).TrimEnd(),
+                ["LoaderSource"] = BuildDevelopmentAssemblyLoadContextSource(loaderIdentity, sharedAssemblies).TrimEnd(),
                 ["DevelopmentContextName"] = EscapePsSingleQuoted(moduleName + ".Development"),
                 ["TypeAcceleratorSetupBlock"] = typeAcceleratorSetupBlock,
                 ["ExportBridgeBlock"] = IndentPowerShell(
@@ -196,10 +200,11 @@ internal static partial class ModuleBootstrapperGenerator
                     ? line : prefix + line));
     }
 
-    private static string BuildDevelopmentAssemblyLoadContextSource(AssemblyLoadContextLoaderIdentity identity)
+    private static string BuildDevelopmentAssemblyLoadContextSource(AssemblyLoadContextLoaderIdentity identity, IReadOnlyList<string>? sharedAssemblies = null)
         => $@"using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Reflection;
 using System.Runtime.Loader;
 
@@ -208,6 +213,7 @@ namespace {identity.Namespace}
     public sealed class ModuleAssemblyLoadContext : AssemblyLoadContext
     {{
 {BuildModulePathIdentitySource()}
+{BuildSharedAssemblyContextMembers(sharedAssemblies)}
         private static readonly object Sync = new object();
         private static readonly Dictionary<string, ModuleAssemblyLoadContext> Contexts = new Dictionary<string, ModuleAssemblyLoadContext>(ModulePathComparer);
 
@@ -249,6 +255,7 @@ namespace {identity.Namespace}
             if (assemblyName == null || string.IsNullOrWhiteSpace(assemblyName.Name))
                 return null;
 
+            {BuildSharedAssemblyResolve(sharedAssemblies, "new[] { _assemblyDirectory }")}
             // Cmdlet and attribute types must come from the PowerShell host. Development
             // outputs can include SDK runtime copies that have a different ALC identity.
             if (string.Equals(assemblyName.Name, ""System.Management.Automation"", StringComparison.OrdinalIgnoreCase))

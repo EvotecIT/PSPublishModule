@@ -291,6 +291,16 @@ public sealed class NewConfigurationBuildCommand : PSCmdlet
     [Alias("UseAssemblyLoadContext")]
     public SwitchParameter NETAssemblyLoadContext { get; set; }
 
+    /// <summary>Exact non-system assembly simple names to share process-wide. These dependencies are not binary exports or blanket preloads.</summary>
+    [Parameter]
+    [Alias("SharedAssemblies")]
+    public string[] NETSharedAssemblies { get; set; } = Array.Empty<string>();
+
+    /// <summary>Subset of NETSharedAssemblies to load before the data host; leave optional presentation dependencies lazy until product preflight succeeds.</summary>
+    [Parameter]
+    [Alias("PreloadSharedAssemblies")]
+    public string[] NETPreloadSharedAssemblies { get; set; } = Array.Empty<string>();
+
     /// <summary>Generate checked-in source bootstrapper logic for local development binary outputs.</summary>
     [Parameter]
     public SwitchParameter NETDevelopmentBinaries { get; set; }
@@ -523,6 +533,10 @@ public sealed class NewConfigurationBuildCommand : PSCmdlet
             NETDesktopDependencyAssetFrameworks = ConvertDesktopDependencyAssetFrameworks(NETDesktopDependencyAssetFrameworks),
             NETAssemblyLoadContextSpecified = bound.ContainsKey(nameof(NETAssemblyLoadContext)),
             NETAssemblyLoadContext = NETAssemblyLoadContext.IsPresent,
+            NETSharedAssembliesSpecified = bound.ContainsKey(nameof(NETSharedAssemblies)),
+            NETSharedAssemblies = NETSharedAssemblies,
+            NETPreloadSharedAssembliesSpecified = bound.ContainsKey(nameof(NETPreloadSharedAssemblies)),
+            NETPreloadSharedAssemblies = NETPreloadSharedAssemblies,
             NETDevelopmentBinariesSpecified = bound.ContainsKey(nameof(NETDevelopmentBinaries)),
             NETDevelopmentBinaries = NETDevelopmentBinaries.IsPresent,
             NETDevelopmentBinariesModeSpecified = bound.ContainsKey(nameof(NETDevelopmentBinariesMode)),

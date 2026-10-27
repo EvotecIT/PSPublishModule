@@ -316,6 +316,8 @@ public sealed partial class ModulePipelineRunner
             DoNotCopyLibrariesRecursively = doNotCopyLibrariesRecursivelyFromSegments ?? spec.Build.DoNotCopyLibrariesRecursively,
             HandleRuntimes = handleRuntimesFromSegments ?? spec.Build.HandleRuntimes,
             DesktopDependencyAssetFrameworks = desktopDependencyAssetFrameworks,
+            SharedAssemblies = inputs.SharedAssembliesFromSegments ?? spec.Build.SharedAssemblies,
+            PreloadSharedAssemblies = inputs.PreloadSharedAssembliesFromSegments ?? spec.Build.PreloadSharedAssemblies,
             UseAssemblyLoadContext = effectiveUseAssemblyLoadContext,
             DevelopmentBinariesMode = developmentBinariesMode,
             DevelopmentBinariesPath = developmentBinariesPath,
@@ -341,6 +343,7 @@ public sealed partial class ModulePipelineRunner
                 powerShellCompilationFromSegments ?? spec.Build.PowerShellCompilation)
         };
 
+        SharedAssemblyOptions.Validate(buildSpec.SharedAssemblies, buildSpec.PreloadSharedAssemblies, buildSpec.ExportAssemblies);
         ValidatePowerShellModuleCompilation(buildSpec);
 
         var stagingWasGenerated = string.IsNullOrWhiteSpace(spec.Build.StagingPath);

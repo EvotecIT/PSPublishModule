@@ -2,7 +2,7 @@ namespace PowerForge;
 
 internal static partial class ModuleBootstrapperGenerator
 {
-    internal static string BuildAssemblyLoadContextSource(AssemblyLoadContextLoaderIdentity identity)
+    internal static string BuildAssemblyLoadContextSource(AssemblyLoadContextLoaderIdentity identity, IReadOnlyList<string>? sharedAssemblies = null)
         => $@"using System;
 using System.Collections.Generic;
 using System.IO;
@@ -17,6 +17,7 @@ namespace {identity.Namespace};
 public sealed class ModuleAssemblyLoadContext : AssemblyLoadContext
 {{
 {BuildModulePathIdentitySource()}
+{BuildSharedAssemblyContextMembers(sharedAssemblies)}
     private static readonly object Sync = new();
     // Module contexts are intentionally non-collectible. A process restart is required to load a replaced DLL at the same path.
     private static readonly Dictionary<string, ModuleAssemblyLoadContext> Contexts = new(ModulePathComparer);
@@ -104,6 +105,7 @@ public sealed class ModuleAssemblyLoadContext : AssemblyLoadContext
         if (assemblyName is null || string.IsNullOrWhiteSpace(assemblyName.Name))
             return null;
 
+        {BuildSharedAssemblyResolve(sharedAssemblies, "_assemblyDirectories")}
         var loaderAssembly = typeof(ModuleAssemblyLoadContext).Assembly.GetName();
         if (AssemblyName.ReferenceMatchesDefinition(loaderAssembly, assemblyName))
             return typeof(ModuleAssemblyLoadContext).Assembly;

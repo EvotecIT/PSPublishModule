@@ -238,6 +238,8 @@ internal sealed class BuildConfigurationFactory
         if (request.NETHandleRuntimesSpecified) { EnsureBuildLibraries(); buildLibraries!.HandleRuntimes = request.NETHandleRuntimes; }
         if (request.NETDesktopDependencyAssetFrameworksSpecified) { EnsureBuildLibraries(); buildLibraries!.DesktopDependencyAssetFrameworks = request.NETDesktopDependencyAssetFrameworks ?? new(StringComparer.OrdinalIgnoreCase); }
         if (request.NETAssemblyLoadContextSpecified) { EnsureBuildLibraries(); buildLibraries!.UseAssemblyLoadContext = request.NETAssemblyLoadContext; }
+        if (request.NETSharedAssembliesSpecified) { EnsureBuildLibraries(); buildLibraries!.SharedAssemblies = request.NETSharedAssemblies ?? Array.Empty<string>(); }
+        if (request.NETPreloadSharedAssembliesSpecified) { EnsureBuildLibraries(); buildLibraries!.PreloadSharedAssemblies = request.NETPreloadSharedAssemblies ?? Array.Empty<string>(); }
         if (request.NETDevelopmentBinariesSpecified)
         {
             EnsureBuildLibraries();
