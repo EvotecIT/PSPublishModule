@@ -142,14 +142,16 @@ public sealed partial class ModulePipelineRunner
         }
 
         var hasCertificate =
+            signing.AllowedCertificateThumbprints is { Length: > 0 } ||
             !string.IsNullOrWhiteSpace(signing.CertificateThumbprint) ||
             !string.IsNullOrWhiteSpace(signing.CertificatePFXPath) ||
-            !string.IsNullOrWhiteSpace(signing.CertificatePFXBase64);
+            !string.IsNullOrWhiteSpace(signing.CertificatePFXBase64) ||
+            !string.IsNullOrWhiteSpace(signing.CertificatePFXBase64EnvironmentVariable);
         if (!hasCertificate)
         {
             throw new InvalidOperationException(
                 "Signing is enabled but no signing certificate was configured. " +
-                "Configure CertificateThumbprint, CertificatePFXPath, or CertificatePFXBase64 before enabling delivery/module signing.");
+                "Configure AllowedCertificateThumbprints, CertificateThumbprint, CertificatePFXPath, or CertificatePFXBase64 before enabling delivery/module signing.");
         }
 
         var packageFilePaths = ArtefactBuilder.ResolveModulePackageSourceFiles(
@@ -233,8 +235,11 @@ public sealed partial class ModulePipelineRunner
             ExcludePaths = signing.ExcludePaths?.ToArray(),
             OverwriteSigned = signing.OverwriteSigned,
             CertificateThumbprint = signing.CertificateThumbprint,
+            AllowedCertificateThumbprints = signing.AllowedCertificateThumbprints?.ToArray(),
             CertificatePFXPath = signing.CertificatePFXPath,
             CertificatePFXBase64 = signing.CertificatePFXBase64,
+            CertificatePFXBase64EnvironmentVariable = signing.CertificatePFXBase64EnvironmentVariable,
+            CertificatePFXPasswordEnvironmentVariable = signing.CertificatePFXPasswordEnvironmentVariable,
             CertificatePFXPassword = signing.CertificatePFXPassword
         };
     }

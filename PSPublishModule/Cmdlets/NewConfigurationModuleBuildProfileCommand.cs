@@ -113,6 +113,10 @@ public sealed class NewConfigurationModuleBuildProfileCommand : PSCmdlet
     [Parameter]
     public string? CertificateThumbprint { get; set; }
 
+    /// <summary>Ordered approved signing thumbprints. Selects the first usable approved certificate when no explicit certificate is supplied; explicit certificates must also be approved.</summary>
+    [Parameter]
+    public string[]? AllowedCertificateThumbprints { get; set; }
+
     /// <summary>Skip built-in placeholder replacements during build.</summary>
     [Parameter]
     public SwitchParameter SkipBuiltinReplacements { get; set; }
@@ -234,6 +238,7 @@ public sealed class NewConfigurationModuleBuildProfileCommand : PSCmdlet
             MergeFunctionsFromApprovedModules = MergeFunctionsFromApprovedModules,
             SignModule = SignModule,
             CertificateThumbprint = CertificateThumbprint,
+            AllowedCertificateThumbprints = AllowedCertificateThumbprints,
             SkipBuiltinReplacements = SkipBuiltinReplacements.IsPresent,
             DoNotAttemptToFixRelativePaths = DoNotAttemptToFixRelativePaths.IsPresent,
             DotSourceLibraries = DotSourceLibraries.IsPresent,

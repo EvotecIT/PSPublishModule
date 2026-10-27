@@ -3,6 +3,10 @@
 ## Unreleased
 ### What's Changed
 - Remove each dotnet publish invocation's temporary staging directory after success or failure, retaining deployed output, checksum inputs, service state and other invocations' staging.
+- Decode approved signing lists consistently in Windows PowerShell 5.1 and PowerShell 7, and report macOS PFX imports as unsupported rather than falling back to keychain storage.
+- Use OpenAuthenticode's CMS result and explicit unsigned-file error contracts on non-Windows, pass supported signing parameters, and verify the selected signer after writing each signature.
+- Select module code-signing certificates from an ordered approved-thumbprint list, enforce the list for explicit certificates and PFX inputs, and report unusable candidates without probing private keys.
+- Keep PFX passwords and Base64 payloads out of signing child command lines; support lazy environment-variable references in build JSON and PowerShell configuration, clear child secret variables before provider operations, and import PFX keys ephemerally.
 - Add secret-free repository authentication diagnostics for native registrations, saved NuGet settings and publishing invocations, including safe failure reports and credential source metadata without decrypting stored secrets.
 - Retry Windows recovery replacements only when the native error guarantees unchanged file names; bound the delay, preserve cancellation and restore attempted partial replacements. Include the operation, asset paths and native error in recovery failures while retaining backups when rollback cannot finish.
 - Add per-artefact delivery source/destination mappings for selecting, renaming and rearranging packaged files and directories, with schema, collision checks and a packaging guide; keep DeliveryPath whole-tree copying as the default.
