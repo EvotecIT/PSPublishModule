@@ -1,0 +1,37 @@
+name: Module Test Workflow Self-Test
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/powerforge-module-test.yml'
+      - '.github/workflows/module-test-self-test.yml'
+      - '.github/scripts/Invoke-ModuleTestCI.ps1'
+      - 'PowerForge/**'
+      - 'PowerForge.PowerShell/**'
+      - 'PowerForge.Cli/**'
+      - 'PSPublishModule/**'
+      - 'Tests/ModuleTestSample/**'
+      - 'Tests/ModuleTestSampleDependency/**'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/powerforge-module-test.yml'
+      - '.github/workflows/module-test-self-test.yml'
+      - '.github/scripts/Invoke-ModuleTestCI.ps1'
+      - 'Tests/ModuleTestSample/**'
+      - 'Tests/ModuleTestSampleDependency/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  sample:
+    uses: ./.github/workflows/powerforge-module-test.yml
+    with:
+      project_path: Tests/ModuleTestSample
+      test_path: Tests/ModuleTestSample/Tests
+      pester_version: '6.1.0'
+      matrix_json: '{"include":[{"os":"ubuntu-latest","shell":"pwsh"},{"os":"macos-15","shell":"pwsh"},{"os":"windows-latest","shell":"pwsh"},{"os":"windows-latest","shell":"powershell"}]}'
+      build_script: ./Tests/ModuleTestSample/Build.ps1
+      result_artifact_name: module-test-sample

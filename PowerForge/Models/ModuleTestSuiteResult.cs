@@ -76,6 +76,12 @@ public sealed class ModuleTestSuiteResult
     /// <summary>Path to the NUnit XML results file when it was kept; otherwise null.</summary>
     public string? ResultsXmlPath { get; }
 
+    /// <summary>Path to the optional JUnit XML results file.</summary>
+    public string? JUnitResultsPath { get; internal set; }
+
+    /// <summary>Path to the optional Markdown summary file.</summary>
+    public string? SummaryPath { get; internal set; }
+
     /// <summary>
     /// Creates a new instance.
     /// </summary>

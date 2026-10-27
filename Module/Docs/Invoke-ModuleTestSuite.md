@@ -1,7 +1,7 @@
 ---
 external help file: PSPublishModule-help.xml
 Module Name: PSPublishModule
-online version: https://github.com/EvotecIT/PSPublishModule
+online version:
 schema: 2.0.0
 ---
 # Invoke-ModuleTestSuite
@@ -11,7 +11,7 @@ Complete module testing suite that handles dependencies, imports, and test execu
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-Invoke-ModuleTestSuite [-ProjectPath <string>] [-AdditionalModules <string[]>] [-SkipModules <string[]>] [-TestPath <string>] [-OutputFormat <ModuleTestSuiteOutputFormat>] [-TimeoutSeconds <int>] [-EnableCodeCoverage] [-Force] [-ExitOnFailure] [-SkipDependencies] [-SkipImport] [-PassThru] [-CICD] [-ShowFailureSummary] [-FailureSummaryFormat <ModuleTestSuiteFailureSummaryFormat>] [<CommonParameters>]
+Invoke-ModuleTestSuite [-ProjectPath <string>] [-AdditionalModules <string[]>] [-SkipModules <string[]>] [-TestPath <string>] [-PesterVersion <string>] [-ResultsPath <string>] [-JUnitResultsPath <string>] [-SummaryPath <string>] [-WindowsPowerShell] [-FailIfNoTests] [-OutputFormat <ModuleTestSuiteOutputFormat>] [-TimeoutSeconds <int>] [-EnableCodeCoverage] [-Force] [-ExitOnFailure] [-SkipDependencies] [-SkipImport] [-PassThru] [-CICD] [-ShowFailureSummary] [-FailureSummaryFormat <ModuleTestSuiteFailureSummaryFormat>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -42,6 +42,13 @@ PS> Invoke-ModuleTestSuite -ProjectPath 'C:\Git\MyModule' -PassThru | Get-Module
 ```
 
 Produces a concise failure summary that can be used in CI logs.
+
+### EXAMPLE 4
+```powershell
+Invoke-ModuleTestSuite -ProjectPath . -PesterVersion 6.1.0 -ResultsPath TestResults/nunit.xml -JUnitResultsPath TestResults/junit.xml -SummaryPath TestResults/summary.md -WindowsPowerShell -FailIfNoTests
+```
+
+Saves pinned Pester and runs tests in Windows PowerShell 5.1, retaining reports and a failure summary.
 
 ## PARAMETERS
 
@@ -109,6 +116,22 @@ Accept pipeline input: False
 Accept wildcard characters: False
 ```
 
+### -FailIfNoTests
+Fail when Pester discovers no tests. Defaults to false for existing callers.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
 ### -FailureSummaryFormat
 Format for failure summary display.
 
@@ -130,6 +153,22 @@ Force reinstall of modules and reimport of the target module.
 
 ```yaml
 Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -JUnitResultsPath
+Optional JUnit XML output path, relative to ProjectPath. Requires Pester 5 or newer.
+
+```yaml
+Type: String
 Parameter Sets: __AllParameterSets
 Aliases: None
 Possible values:
@@ -173,8 +212,40 @@ Accept pipeline input: False
 Accept wildcard characters: False
 ```
 
+### -PesterVersion
+Exact Pester version to save and import. Omit to retain installed-version selection.
+
+```yaml
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
 ### -ProjectPath
 Path to the PowerShell module project directory.
+
+```yaml
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -ResultsPath
+Explicit NUnit XML output path, relative to ProjectPath. Specifying it keeps the result.
 
 ```yaml
 Type: String
@@ -253,6 +324,22 @@ Accept pipeline input: False
 Accept wildcard characters: False
 ```
 
+### -SummaryPath
+Optional Markdown summary output path, relative to ProjectPath.
+
+```yaml
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
 ### -TestPath
 Custom path to test files (defaults to Tests folder in project).
 
@@ -274,6 +361,22 @@ Timeout for the out-of-process test execution, in seconds.
 
 ```yaml
 Type: Int32
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -WindowsPowerShell
+Require Windows PowerShell 5.1 for tests without falling back to PowerShell 7.
+
+```yaml
+Type: SwitchParameter
 Parameter Sets: __AllParameterSets
 Aliases: None
 Possible values:

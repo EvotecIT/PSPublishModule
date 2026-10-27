@@ -65,6 +65,9 @@ internal static partial class Program
         if (!string.IsNullOrWhiteSpace(spec.ProjectPath))
             spec.ProjectPath = ResolvePathFromBase(baseDir, spec.ProjectPath);
         spec.TestPath = ResolvePathFromBaseNullable(baseDir, spec.TestPath);
+        spec.ResultsPath = ResolvePathFromBaseNullable(baseDir, spec.ResultsPath);
+        spec.JUnitResultsPath = ResolvePathFromBaseNullable(baseDir, spec.JUnitResultsPath);
+        spec.SummaryPath = ResolvePathFromBaseNullable(baseDir, spec.SummaryPath);
     }
 
     static void ResolvePipelineSpecPaths(ModulePipelineSpec spec, string configFullPath)

@@ -69,6 +69,8 @@ internal static partial class Program
       powerforge format <files...>      Format scripts via PSScriptAnalyzer (out-of-proc) [--output json]
       powerforge test [--project-root <path>] [--test-path <path>] [--format Detailed|Normal|Minimal] [--coverage] [--force]
                       [--skip-dependencies] [--skip-import] [--keep-xml] [--timeout <seconds>] [--output json]
+                     [--pester-version <x.y.z>] [--windows-powershell] [--fail-if-no-tests]
+                     [--results-path <nunit.xml>] [--junit-results-path <junit.xml>] [--summary-path <summary.md>]
       powerforge test --config <TestSpec.json>
       powerforge install --name <ModuleName> --version <X.Y.Z> --staging <path> [--strategy exact|autorevision] [--keep N] [--root path]*
       powerforge install --config <InstallSpec.json>

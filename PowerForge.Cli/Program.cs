@@ -360,9 +360,9 @@ internal static partial class Program
             {
                 var (cmdLogger, logBuffer) = CreateCommandLogger(outputJson, cli, logger);
                 var service = new ModuleTestSuiteService(new PowerShellRunner(), cmdLogger);
-                var res = RunWithStatus(outputJson, cli, "Running test suite", () => service.Run(spec), value => value.FailedCount == 0);
+                var res = RunWithStatus(outputJson, cli, "Running test suite", () => service.Run(spec), value => value.FailedCount == 0 && value.ExitCode == 0);
 
-                var success = res.FailedCount == 0;
+                var success = res.FailedCount == 0 && res.ExitCode == 0;
                 var exitCode = success ? 0 : 1;
 
                 if (outputJson)

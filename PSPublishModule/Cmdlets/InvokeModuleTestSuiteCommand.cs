@@ -60,6 +60,11 @@ public enum ModuleTestSuiteFailureSummaryFormat
 /// <code>Invoke-ModuleTestSuite -ProjectPath 'C:\Git\MyModule' -PassThru | Get-ModuleTestFailures -OutputFormat Summary</code>
 /// <para>Produces a concise failure summary that can be used in CI logs.</para>
 /// </example>
+/// <example>
+/// <summary>Run a pinned Pester version and keep CI reports</summary>
+/// <code>Invoke-ModuleTestSuite -ProjectPath . -PesterVersion 6.1.0 -ResultsPath TestResults/nunit.xml -JUnitResultsPath TestResults/junit.xml -SummaryPath TestResults/summary.md -WindowsPowerShell -FailIfNoTests</code>
+/// <para>Saves pinned Pester and runs tests in Windows PowerShell 5.1, retaining reports and a failure summary.</para>
+/// </example>
 [Cmdlet(VerbsLifecycle.Invoke, "ModuleTestSuite")]
 public sealed class InvokeModuleTestSuiteCommand : PSCmdlet
 {
@@ -78,6 +83,30 @@ public sealed class InvokeModuleTestSuiteCommand : PSCmdlet
     /// <summary>Custom path to test files (defaults to Tests folder in project).</summary>
     [Parameter]
     public string? TestPath { get; set; }
+
+    /// <summary>Exact Pester version to save and import. Omit to retain installed-version selection.</summary>
+    [Parameter]
+    public string? PesterVersion { get; set; }
+
+    /// <summary>Explicit NUnit XML output path, relative to ProjectPath. Specifying it keeps the result.</summary>
+    [Parameter]
+    public string? ResultsPath { get; set; }
+
+    /// <summary>Optional JUnit XML output path, relative to ProjectPath. Requires Pester 5 or newer.</summary>
+    [Parameter]
+    public string? JUnitResultsPath { get; set; }
+
+    /// <summary>Optional Markdown summary output path, relative to ProjectPath.</summary>
+    [Parameter]
+    public string? SummaryPath { get; set; }
+
+    /// <summary>Require Windows PowerShell 5.1 for tests without falling back to PowerShell 7.</summary>
+    [Parameter]
+    public SwitchParameter WindowsPowerShell { get; set; }
+
+    /// <summary>Fail when Pester discovers no tests. Defaults to false for existing callers.</summary>
+    [Parameter]
+    public SwitchParameter FailIfNoTests { get; set; }
 
     /// <summary>Test output format.</summary>
     [Parameter]
@@ -137,6 +166,12 @@ public sealed class InvokeModuleTestSuiteCommand : PSCmdlet
                 AdditionalModules = AdditionalModules,
                 SkipModules = SkipModules,
                 TestPath = TestPath,
+                PesterVersion = PesterVersion,
+                ResultsPath = ResultsPath,
+                JUnitResultsPath = JUnitResultsPath,
+                SummaryPath = SummaryPath,
+                WindowsPowerShell = WindowsPowerShell.IsPresent,
+                FailIfNoTests = FailIfNoTests.IsPresent,
                 OutputFormat = MapOutputFormat(OutputFormat),
                 TimeoutSeconds = TimeoutSeconds,
                 EnableCodeCoverage = EnableCodeCoverage.IsPresent,
@@ -159,7 +194,7 @@ public sealed class InvokeModuleTestSuiteCommand : PSCmdlet
             WriteDisplayLines(display.CreateModuleInfoDetails(moduleInfo));
 
             WriteDisplayLines(display.CreateExecutionHeader());
-            var logger = new CmdletLogger(this, MyInvocation.BoundParameters.ContainsKey("Verbose"), warningsAsVerbose: true);
+            var logger = new CmdletLogger(this, MyInvocation.BoundParameters.ContainsKey("Verbose"), warningsAsVerbose: false);
             var workflow = new ModuleTestSuiteWorkflowService(logger).Execute(preparation);
             var result = workflow.Result;
 
@@ -177,7 +212,7 @@ public sealed class InvokeModuleTestSuiteCommand : PSCmdlet
 
             WriteDisplayLines(display.CreateCompletionSummary(result));
 
-            if (result.FailedCount > 0)
+            if (!workflow.Success)
             {
                 if (ShowFailureSummary.IsPresent || CICD.IsPresent)
                 {

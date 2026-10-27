@@ -24748,7 +24748,7 @@ and Publish enables configured publish destinations.</maml:para>
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>Executes module tests out-of-process, installs required dependencies, and provides a summary that is suitable for both&#xD;
+      <maml:para>Executes module tests out-of-process, installs required dependencies, and provides a summary that is suitable for both
 local development and CI pipelines.</maml:para>
       <maml:para>For post-processing failures (e.g. emitting JSON summaries), combine it with Get-ModuleTestFailures.</maml:para>
     </maml:description>
@@ -24831,6 +24831,18 @@ local development and CI pipelines.</maml:para>
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>JUnitResultsPath</maml:name>
+          <maml:description>
+            <maml:para>Optional JUnit XML output path, relative to ProjectPath. Requires Pester 5 or newer.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="none">
           <maml:name>OutputFormat</maml:name>
           <maml:description>
@@ -24864,6 +24876,18 @@ local development and CI pipelines.</maml:para>
           <maml:name>ProjectPath</maml:name>
           <maml:description>
             <maml:para>Path to the PowerShell module project directory.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>ResultsPath</maml:name>
+          <maml:description>
+            <maml:para>Explicit NUnit XML output path, relative to ProjectPath. Specifying it keeps the result.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
@@ -24940,6 +24964,18 @@ local development and CI pipelines.</maml:para>
           <command:parameterValue required="false" variableLength="false">Int32</command:parameterValue>
           <dev:type>
             <maml:name>Int32</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>WindowsPowerShell</maml:name>
+          <maml:description>
+            <maml:para>Require Windows PowerShell 5.1 for tests without falling back to PowerShell 7.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -25023,6 +25059,18 @@ local development and CI pipelines.</maml:para>
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
       </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>JUnitResultsPath</maml:name>
+        <maml:description>
+          <maml:para>Optional JUnit XML output path, relative to ProjectPath. Requires Pester 5 or newer.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
       <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="none">
         <maml:name>OutputFormat</maml:name>
         <maml:description>
@@ -25056,6 +25104,18 @@ local development and CI pipelines.</maml:para>
         <maml:name>ProjectPath</maml:name>
         <maml:description>
           <maml:para>Path to the PowerShell module project directory.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>ResultsPath</maml:name>
+        <maml:description>
+          <maml:para>Explicit NUnit XML output path, relative to ProjectPath. Specifying it keeps the result.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
         <dev:type>
@@ -25136,6 +25196,18 @@ local development and CI pipelines.</maml:para>
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
       </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>WindowsPowerShell</maml:name>
+        <maml:description>
+          <maml:para>Require Windows PowerShell 5.1 for tests without falling back to PowerShell 7.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
     </command:parameters>
     <command:inputTypes>
       <command:inputType>
@@ -25179,6 +25251,13 @@ local development and CI pipelines.</maml:para>
         <dev:code>Invoke-ModuleTestSuite -ProjectPath 'C:\Git\MyModule' -PassThru | Get-ModuleTestFailures -OutputFormat Summary</dev:code>
         <dev:remarks>
           <maml:para>Produces a concise failure summary that can be used in CI logs.</maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>Run a pinned Pester version and keep CI reports</maml:title>
+        <dev:code>Invoke-ModuleTestSuite -ProjectPath . -PesterVersion 6.1.0 -ResultsPath TestResults/nunit.xml -JUnitResultsPath TestResults/junit.xml -SummaryPath TestResults/summary.md -WindowsPowerShell -FailIfNoTests</dev:code>
+        <dev:remarks>
+          <maml:para>Saves pinned Pester and runs tests in Windows PowerShell 5.1, retaining reports and a failure summary.</maml:para>
         </dev:remarks>
       </command:example>
     </command:examples>

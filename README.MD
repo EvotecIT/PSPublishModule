@@ -733,6 +733,7 @@ Start here:
 - [Docs/PSPublishModule.ProjectBuild.md](Docs/PSPublishModule.ProjectBuild.md)
 - [Docs/PSPublishModule.VirusTotalMonitor.md](Docs/PSPublishModule.VirusTotalMonitor.md)
 - [Docs/PSPublishModule.ModuleDocumentation.md](Docs/PSPublishModule.ModuleDocumentation.md)
+- [Docs/PSPublishModule.ModuleTestCI.md](Docs/PSPublishModule.ModuleTestCI.md)
 - [Docs/PSPublishModule.PrivateGalleries.md](Docs/PSPublishModule.PrivateGalleries.md)
 - [Docs/PSPublishModule.ManagedModules.Compatibility.md](Docs/PSPublishModule.ManagedModules.Compatibility.md)
 - [Docs/PSPublishModule.PSResourceGetParity.md](Docs/PSPublishModule.PSResourceGetParity.md)

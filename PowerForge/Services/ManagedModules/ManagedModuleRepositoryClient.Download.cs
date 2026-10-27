@@ -1,3 +1,4 @@
+using System.Net.Http;
 using System.Security.Cryptography;
 
 namespace PowerForge;
@@ -10,7 +11,8 @@ public sealed partial class ManagedModuleRepositoryClient
         Stream source,
         string destinationPath,
         long maxPackageBytes,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool networkResponse = false)
     {
         using var sha256 = SHA256.Create();
         var buffer = new byte[PackageCopyBufferSize];
@@ -18,28 +20,92 @@ public sealed partial class ManagedModuleRepositoryClient
 
         using (var destination = CreatePackageFileStream(destinationPath, FileMode.Create, FileAccess.Write, FileShare.None))
         {
-            while (true)
+            try
             {
-                var bytesRead = await source.ReadAsync(buffer, 0, buffer.Length, cancellationToken).ConfigureAwait(false);
-                if (bytesRead == 0)
-                    break;
-
-                if (maxPackageBytes > 0 && bytesWritten + bytesRead > maxPackageBytes)
+                while (true)
                 {
-                    destination.Dispose();
-                    TryDeleteFile(destinationPath);
-                    throw new InvalidOperationException(
-                        $"Package download exceeded the managed module package size limit of {maxPackageBytes} bytes.");
+                    var bytesRead = networkResponse
+                        ? await ReadPackageBytesAsync(source, buffer, cancellationToken, networkResponse: true).ConfigureAwait(false)
+                        : await source.ReadAsync(buffer, 0, buffer.Length, cancellationToken).ConfigureAwait(false);
+                    if (bytesRead == 0) break;
+                    if (maxPackageBytes > 0 && bytesWritten + bytesRead > maxPackageBytes)
+                        throw new InvalidOperationException($"Package download exceeded the managed module package size limit of {maxPackageBytes} bytes.");
+                    await destination.WriteAsync(buffer, 0, bytesRead, cancellationToken).ConfigureAwait(false);
+                    sha256.TransformBlock(buffer, 0, bytesRead, null, 0);
+                    bytesWritten += bytesRead;
                 }
-
-                await destination.WriteAsync(buffer, 0, bytesRead, cancellationToken).ConfigureAwait(false);
-                sha256.TransformBlock(buffer, 0, bytesRead, null, 0);
-                bytesWritten += bytesRead;
+            }
+            catch
+            {
+                // Cleanup only after this attempt successfully opened its destination.
+                destination.Dispose();
+                TryDeleteFile(destinationPath);
+                throw;
             }
         }
 
         sha256.TransformFinalBlock(Array.Empty<byte>(), 0, 0);
         return new PackageCopyResult(bytesWritten, FormatSha256(sha256.Hash));
+    }
+
+    private static async Task<Stream> OpenPackageResponseStreamAsync(HttpContent content, CancellationToken cancellationToken)
+    {
+        try { return await ReadContentStreamAsync(content, cancellationToken).ConfigureAwait(false); }
+        catch (IOException ex) { throw new HttpRequestException("Unable to open the package response body.", ex); }
+    }
+
+    private static async Task<int> ReadPackageBytesAsync(Stream source, byte[] buffer, CancellationToken cancellationToken, bool networkResponse)
+    {
+        try { return await source.ReadAsync(buffer, 0, buffer.Length, cancellationToken).ConfigureAwait(false); }
+        catch (IOException ex) when (networkResponse)
+        {
+            throw new HttpRequestException("Package response body transfer failed.", ex);
+        }
+    }
+
+    private Task<ManagedModuleDownloadResult?> DownloadHttpPackageToFileAsync(
+        ManagedModuleRepository repository,
+        Uri packageUri,
+        string packageId,
+        string version,
+        string destinationDirectory,
+        RepositoryCredential? credential,
+        bool allowMissing,
+        CancellationToken cancellationToken)
+    {
+        var destinationPath = BuildDestinationPath(destinationDirectory, repository, packageId, version);
+        return SendWithPolicyAsync<ManagedModuleDownloadResult?>(
+            () => CreateRequest(HttpMethod.Get, packageUri, credential, "application/octet-stream"),
+            async (response, readToken) =>
+            {
+                if (!response.IsSuccessStatusCode)
+                {
+                    if (allowMissing) return null;
+                    throw CreateRepositoryHttpException(repository, "Download", response.StatusCode,
+                        $"Unable to download package '{packageId}' version '{version}'.");
+                }
+                using var source = await OpenPackageResponseStreamAsync(response.Content, readToken).ConfigureAwait(false);
+                var copy = await CopyPackageStreamWithHashAsync(source, destinationPath, _options.MaxPackageBytes, readToken, networkResponse: true).ConfigureAwait(false);
+                try
+                {
+                    return new ManagedModuleDownloadResult
+                    {
+                        Name = packageId,
+                        Version = version,
+                        RepositoryName = repository.Name,
+                        Source = packageUri.ToString(),
+                        PackagePath = destinationPath,
+                        BytesWritten = copy.BytesWritten,
+                        PackageSha256 = copy.Sha256,
+                        Metadata = ReadDownloadedPackageMetadata(packageId, version, destinationPath)
+                    };
+                }
+                catch
+                {
+                    TryDeleteFile(destinationPath);
+                    throw;
+                }
+            }, cancellationToken);
     }
 
 #if !NET472
@@ -141,13 +207,11 @@ public sealed partial class ManagedModuleRepositoryClient
         RepositoryCredential? credential,
         CancellationToken cancellationToken)
     {
-        using var response = await SendWithPolicyAsync(
+        return await SendWithPolicyAsync<ManagedModuleBufferedPackage?>(
             () => CreateRequest(HttpMethod.Get, packageUri, credential, "application/octet-stream"),
+            async (response, readToken) => !response.IsSuccessStatusCode ? null :
+                await ReadHttpPackageToMemoryAsync(repository, packageUri, packageId, version, response, readToken).ConfigureAwait(false),
             cancellationToken).ConfigureAwait(false);
-        if (!response.IsSuccessStatusCode)
-            return null;
-
-        return await ReadHttpPackageToMemoryAsync(repository, packageUri, packageId, version, response, cancellationToken).ConfigureAwait(false);
     }
 
     private async Task<ManagedModuleBufferedPackage> DownloadHttpPackageToMemoryAsync(
@@ -158,13 +222,15 @@ public sealed partial class ManagedModuleRepositoryClient
         RepositoryCredential? credential,
         CancellationToken cancellationToken)
     {
-        using var response = await SendWithPolicyAsync(
+        return await SendWithPolicyAsync(
             () => CreateRequest(HttpMethod.Get, packageUri, credential, "application/octet-stream"),
-            cancellationToken).ConfigureAwait(false);
-        if (!response.IsSuccessStatusCode)
-            throw CreateRepositoryHttpException(repository, "Download", response.StatusCode, $"Unable to download package '{packageId}' version '{version}'.");
-
-        return await ReadHttpPackageToMemoryAsync(repository, packageUri, packageId, version, response, cancellationToken).ConfigureAwait(false);
+            async (response, readToken) =>
+            {
+                if (!response.IsSuccessStatusCode)
+                    throw CreateRepositoryHttpException(repository, "Download", response.StatusCode,
+                        $"Unable to download package '{packageId}' version '{version}'.");
+                return await ReadHttpPackageToMemoryAsync(repository, packageUri, packageId, version, response, readToken).ConfigureAwait(false);
+            }, cancellationToken).ConfigureAwait(false);
     }
 
     private async Task<ManagedModuleBufferedPackage> ReadHttpPackageToMemoryAsync(
@@ -184,7 +250,7 @@ public sealed partial class ManagedModuleRepositoryClient
                 $"Package '{packageId}' version '{version}' is {contentLength.Value} bytes, which exceeds the in-memory extraction cap of {MaximumBufferedPackageBytes} bytes.");
 
         BufferedPackageCopyResult packageCopy;
-        using (var source = await ReadContentStreamAsync(response.Content, cancellationToken).ConfigureAwait(false))
+        using (var source = await OpenPackageResponseStreamAsync(response.Content, cancellationToken).ConfigureAwait(false))
         {
             packageCopy = await CopyPackageStreamToMemoryWithHashAsync(
                     source,
@@ -231,7 +297,7 @@ public sealed partial class ManagedModuleRepositoryClient
         {
             while (true)
             {
-                var bytesRead = await source.ReadAsync(buffer, 0, buffer.Length, cancellationToken).ConfigureAwait(false);
+                var bytesRead = await ReadPackageBytesAsync(source, buffer, cancellationToken, networkResponse: true).ConfigureAwait(false);
                 if (bytesRead == 0)
                     break;
 

@@ -23,6 +23,24 @@ public sealed class ModuleTestSuiteSpec
     /// <summary>When true, enables verbose output while importing modules.</summary>
     public bool ImportModulesVerbose { get; set; }
 
+    /// <summary>Exact Pester version to save and import. Omit to retain installed-version selection.</summary>
+    public string? PesterVersion { get; set; }
+
+    /// <summary>Explicit NUnit XML output path, relative to ProjectPath. Specifying it keeps the result.</summary>
+    public string? ResultsPath { get; set; }
+
+    /// <summary>Optional JUnit XML output path, relative to ProjectPath. Requires Pester 5 or newer.</summary>
+    public string? JUnitResultsPath { get; set; }
+
+    /// <summary>Optional Markdown summary output path, relative to ProjectPath.</summary>
+    public string? SummaryPath { get; set; }
+
+    /// <summary>Require Windows PowerShell 5.1 for tests without falling back to PowerShell 7.</summary>
+    public bool WindowsPowerShell { get; set; }
+
+    /// <summary>Fail when Pester discovers no tests. Defaults to false for existing callers.</summary>
+    public bool FailIfNoTests { get; set; }
+
     /// <summary>Test output verbosity.</summary>
     public ModuleTestSuiteOutputFormat OutputFormat { get; set; } = ModuleTestSuiteOutputFormat.Detailed;
 

@@ -36,6 +36,17 @@ public sealed class BufferedLogSupportServiceTests
             });
     }
 
+    [Fact]
+    public void BufferedLogger_preserves_concurrent_entries_before_replay_on_the_calling_thread()
+    {
+        var logger = new BufferedLogger();
+        Parallel.For(0, 100, index => logger.Warn(index.ToString()));
+        var replay = new BufferedLogger();
+        new BufferedLogSupportService().WriteTail(logger.Entries, replay, maxEntries: 100);
+        Assert.Equal(100, logger.Entries.Select(entry => entry.Message).Distinct().Count());
+        Assert.Equal(logger.Entries.Select(entry => entry.Message), replay.Entries.Skip(1).Select(entry => entry.Message));
+    }
+
     [Theory]
     [InlineData(150, "150ms")]
     [InlineData(1250, "1s 250ms")]

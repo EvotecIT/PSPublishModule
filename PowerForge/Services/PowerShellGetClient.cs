@@ -212,7 +212,9 @@ public sealed class PowerShellGetClient
             options.Credential?.Secret ?? string.Empty
         };
 
-        var result = RunScript(script, args, timeout ?? TimeSpan.FromMinutes(2));
+        var result = new ModuleRepositoryRetryPolicy(_logger).RunPowerShell(
+            $"Find-Module {string.Join(", ", names)}",
+            () => RunScript(script, args, timeout ?? TimeSpan.FromMinutes(2)));
         var items = ParseFindOutput(result.StdOut);
 
         if (result.ExitCode != 0)
@@ -300,7 +302,9 @@ public sealed class PowerShellGetClient
             options.Credential?.Secret ?? string.Empty
         };
 
-        var result = RunScript(script, args, timeout ?? TimeSpan.FromMinutes(10));
+        var result = new ModuleRepositoryRetryPolicy(_logger).RunPowerShell(
+            $"Save-Module {options.Name} {options.RequiredVersion}",
+            () => RunScript(script, args, timeout ?? TimeSpan.FromMinutes(10)));
         var items = ParseSaveOutput(result.StdOut);
 
         if (result.ExitCode != 0)

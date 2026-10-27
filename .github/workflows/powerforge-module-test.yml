@@ -1,0 +1,146 @@
+name: PowerForge Module Tests
+
+on:
+  workflow_call:
+    inputs:
+      project_path:
+        description: Module project directory containing its manifest (or a Module subdirectory).
+        type: string
+        default: '.'
+      test_path:
+        description: Test file or directory, relative to the checked-out repository.
+        type: string
+        default: 'Tests'
+      pester_version:
+        description: Exact stable Pester version (5 or newer).
+        type: string
+        default: '6.1.0'
+      matrix_json:
+        description: Matrix with os and shell entries; powershell selects Windows PowerShell 5.1.
+        type: string
+        default: '{"include":[{"os":"ubuntu-latest","shell":"pwsh"},{"os":"windows-latest","shell":"pwsh"},{"os":"windows-latest","shell":"powershell"}]}'
+      build_script:
+        description: Optional PowerShell build commands, executed in the selected shell before tests.
+        type: string
+        default: ''
+      result_artifact_name:
+        description: Artifact prefix; each matrix job appends its job index.
+        type: string
+        default: 'module-test-results'
+      timeout_minutes:
+        type: number
+        default: 30
+      test_timeout_seconds:
+        type: number
+        default: 1200
+    outputs:
+      result_artifact_prefix:
+        description: Prefix of the per-matrix artifacts containing NUnit, JUnit and summary files.
+        value: ${{ jobs.test.outputs.artifact-prefix }}
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Pester (${{ matrix.os }}, ${{ matrix.shell }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: ${{ inputs.timeout_minutes }}
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(inputs.matrix_json) }}
+    defaults:
+      run:
+        shell: ${{ matrix.shell }}
+    outputs:
+      artifact-prefix: ${{ steps.results.outputs.artifact-prefix }}
+    env:
+      DOTNET_NOLOGO: 'true'
+      DOTNET_CLI_TELEMETRY_OPTOUT: 'true'
+      MSBUILDDISABLENODEREUSE: '1'
+      DOTNET_CLI_USE_MSBUILD_SERVER: '0'
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      # Build the engine from this workflow's exact revision, so a Gallery release
+      # is not required to use a newly pinned workflow.
+      - name: Checkout shared test runner
+        uses: actions/checkout@v7
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: .powerforge-module-test
+          persist-credentials: false
+
+      - name: Stage shared SDK setup
+        shell: pwsh
+        run: ./.powerforge-module-test/.github/actions/setup-dotnet/Stage-SetupDotNet.ps1
+
+      - name: Setup engine SDKs
+        uses: ./.powerforge-sdk
+        with:
+          global-json-file: .powerforge-module-test/global.json
+
+      - name: Setup consumer SDK
+        if: hashFiles('global.json') != ''
+        uses: ./.powerforge-sdk
+        with:
+          global-json-file: global.json
+
+      - name: Build shared test runner
+        shell: pwsh
+        working-directory: .powerforge-module-test
+        run: |
+          dotnet build PowerForge.Cli/PowerForge.Cli.csproj -c Release -f net10.0 --nologo -nodeReuse:false
+          if ($LASTEXITCODE -ne 0) { throw 'PowerForge test runner build failed.' }
+
+      - name: Build module
+        if: inputs.build_script != ''
+        env:
+          MODULE_BUILD_SCRIPT: ${{ inputs.build_script }}
+        run: |
+          & ([scriptblock]::Create($env:MODULE_BUILD_SCRIPT))
+          if ($LASTEXITCODE) { throw "Module build failed with exit code $LASTEXITCODE." }
+
+      - name: Run module tests
+        shell: pwsh
+        env:
+          MODULE_PROJECT_PATH: ${{ inputs.project_path }}
+          MODULE_TEST_PATH: ${{ inputs.test_path }}
+          MODULE_PESTER_VERSION: ${{ inputs.pester_version }}
+          MODULE_TEST_SHELL: ${{ matrix.shell }}
+          MODULE_TEST_TIMEOUT: ${{ inputs.test_timeout_seconds }}
+        run: ./.powerforge-module-test/.github/scripts/Invoke-ModuleTestCI.ps1
+
+      - name: Publish job summary
+        id: results
+        if: always()
+        shell: pwsh
+        env:
+          ARTIFACT_PREFIX: ${{ inputs.result_artifact_name }}
+        run: |
+          $summary = Join-Path $env:RUNNER_TEMP 'powerforge-module-test-results/summary.md'
+          if (Test-Path -LiteralPath $summary) {
+            Get-Content -LiteralPath $summary -Raw | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          } else {
+            "## Module tests`n`nSetup or build failed before Pester produced results. Check the job log." | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          }
+          "artifact-prefix=$env:ARTIFACT_PREFIX" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ inputs.result_artifact_name }}-${{ strategy.job-index }}
+          path: ${{ runner.temp }}/powerforge-module-test-results/
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Remove staged SDK setup
+        if: always()
+        shell: pwsh
+        run: |
+          $stage = './.powerforge-module-test/.github/actions/setup-dotnet/Stage-SetupDotNet.ps1'
+          if (Test-Path -LiteralPath $stage) { & $stage -Remove }

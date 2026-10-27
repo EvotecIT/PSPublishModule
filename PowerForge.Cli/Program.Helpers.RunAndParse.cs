@@ -192,6 +192,28 @@ internal static partial class Program
                         return null;
                     spec.OutputFormat = fmt;
                     break;
+                case "--pester-version":
+                    if (++i >= argv.Length) return null;
+                    spec.PesterVersion = argv[i];
+                    break;
+                case "--results-path":
+                    if (++i >= argv.Length) return null;
+                    spec.ResultsPath = argv[i];
+                    break;
+                case "--junit-results-path":
+                    if (++i >= argv.Length) return null;
+                    spec.JUnitResultsPath = argv[i];
+                    break;
+                case "--summary-path":
+                    if (++i >= argv.Length) return null;
+                    spec.SummaryPath = argv[i];
+                    break;
+                case "--windows-powershell":
+                    spec.WindowsPowerShell = true;
+                    break;
+                case "--fail-if-no-tests":
+                    spec.FailIfNoTests = true;
+                    break;
                 case "--additional-modules":
                 case "--modules":
                     if (++i >= argv.Length) return null;

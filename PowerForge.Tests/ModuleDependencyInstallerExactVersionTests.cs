@@ -461,6 +461,7 @@ public sealed class ModuleDependencyInstallerExactVersionTests
         try
         {
             Uri? downloadedUri = null;
+            var downloadAttempts = 0;
             var runner = new ToolUnavailablePowerShellRunner();
             var installer = new ModuleDependencyInstaller(
                 runner,
@@ -473,6 +474,8 @@ public sealed class ModuleDependencyInstallerExactVersionTests
                 directPackageDownloader: (uri, destination, timeout) =>
                 {
                     downloadedUri = uri;
+                    if (++downloadAttempts == 1)
+                        throw new ModuleRepositoryRetryPolicy.TransientRepositoryFailure("HTTP 404 Not Found");
                     CreatePSResourceGetPackage(destination, "1.2.0");
                 },
                 currentUserModuleRootResolver: () => moduleRoot.FullName);
@@ -485,6 +488,7 @@ public sealed class ModuleDependencyInstallerExactVersionTests
             var result = Assert.Single(results);
             Assert.Equal(ModuleDependencyInstallStatus.Installed, result.Status);
             Assert.Equal("DirectPowerShellGallery", result.Installer);
+            Assert.Equal(2, downloadAttempts);
             Assert.NotNull(downloadedUri);
             Assert.Contains("/Microsoft.PowerShell.PSResourceGet/1.2.0", downloadedUri!.AbsoluteUri, StringComparison.OrdinalIgnoreCase);
             Assert.True(File.Exists(Path.Combine(

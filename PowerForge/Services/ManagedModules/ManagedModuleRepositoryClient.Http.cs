@@ -98,42 +98,74 @@ public sealed partial class ManagedModuleRepositoryClient
         handler.Proxy = proxy;
     }
 
-    private async Task<HttpResponseMessage> SendWithPolicyAsync(
+    private Task<HttpResponseMessage> SendWithPolicyAsync(
         Func<HttpRequestMessage> requestFactory,
         CancellationToken cancellationToken)
+        => SendWithPolicyAsync(requestFactory, (response, _) => Task.FromResult(response), cancellationToken, disposeResponse: false);
+
+    // A package attempt includes headers and its complete body; readers receive the
+    // remaining request budget and each retry starts with a fresh response and destination.
+    private async Task<T> SendWithPolicyAsync<T>(
+        Func<HttpRequestMessage> requestFactory,
+        Func<HttpResponseMessage, CancellationToken, Task<T>> readResponse,
+        CancellationToken cancellationToken,
+        bool disposeResponse = true)
     {
         var attempts = Math.Max(0, _options.MaxRetries) + 1;
         for (var attempt = 1; attempt <= attempts; attempt++)
         {
             using var request = requestFactory();
+            HttpResponseMessage? response = null;
+            CancellationTokenSource? readTimeout = null;
+            var transferResponse = false;
             try
             {
-                var response = await SendAttemptAsync(request, cancellationToken).ConfigureAwait(false);
-                if (!IsTransientStatus(response.StatusCode) || attempt == attempts)
-                    return response;
-
-                response.Dispose();
-                await DelayBeforeRetryAsync(attempt, cancellationToken).ConfigureAwait(false);
+                response = await SendAttemptAsync(request, cancellationToken).ConfigureAwait(false);
+                var transient = ModuleRepositoryRetryPolicy.IsTransientStatus(response.StatusCode,
+                    includeNotFound: request.Method == HttpMethod.Get || request.Method == HttpMethod.Head);
+                if (transient && attempt < attempts)
+                {
+                    _logger.Warn($"Repository {request.Method}: HTTP {(int)response.StatusCode} on attempt {attempt}/{attempts}.");
+                }
+                else
+                {
+                    if (transient)
+                        _logger.Warn($"Repository {request.Method} failed with HTTP {(int)response.StatusCode} after {attempt}/{attempts} attempts. Verify the repository and requested package version; retry later if the feed is unavailable.");
+                    if (disposeResponse)
+                        readTimeout = CreateRepositoryResponseReadTimeout(response, cancellationToken);
+                    var readToken = readTimeout?.Token ?? cancellationToken;
+                    // Disposing the response also aborts native streams which do not
+                    // implement cancellation of an outstanding ReadAsync themselves.
+                    using var abort = disposeResponse ? readToken.Register(response.Dispose) : default;
+                    var value = await readResponse(response, readToken).ConfigureAwait(false);
+                    if (readToken.IsCancellationRequested)
+                    {
+                        (value as IDisposable)?.Dispose();
+                        readToken.ThrowIfCancellationRequested();
+                    }
+                    transferResponse = !disposeResponse;
+                    return value;
+                }
             }
-            catch (HttpRequestException) when (attempt < attempts)
+            catch (Exception ex) when (ex is HttpRequestException or OperationCanceledException ||
+                                       (ex is ObjectDisposedException && readTimeout?.IsCancellationRequested == true))
             {
-                await DelayBeforeRetryAsync(attempt, cancellationToken).ConfigureAwait(false);
+                cancellationToken.ThrowIfCancellationRequested();
+                var timedOut = ex is OperationCanceledException || readTimeout?.IsCancellationRequested == true;
+                if (attempt == attempts)
+                {
+                    if (timedOut) throw new TimeoutException($"Managed module repository transfer timed out after {attempt} attempts: {FormatRequest(request)}. Check repository availability and the request timeout.", ex);
+                    throw new HttpRequestException($"Managed module repository transfer failed after {attempt} attempts: {FormatRequest(request)}. Check repository availability and network/proxy access. {ex.Message}", ex);
+                }
+                _logger.Warn($"Managed module repository {(timedOut ? "timeout" : "transport failure")} on attempt {attempt}/{attempts}.");
             }
-            catch (HttpRequestException ex)
+            finally
             {
-                throw CreateTransportException(request, ex);
+                readTimeout?.Dispose();
+                if (!transferResponse) response?.Dispose();
             }
-            catch (OperationCanceledException ex) when (!cancellationToken.IsCancellationRequested && attempt < attempts)
-            {
-                _logger.Verbose($"Managed module repository request timed out on attempt {attempt}: {ex.Message}");
-                await DelayBeforeRetryAsync(attempt, cancellationToken).ConfigureAwait(false);
-            }
-            catch (OperationCanceledException ex) when (!cancellationToken.IsCancellationRequested)
-            {
-                throw CreateTimeoutException(request, ex);
-            }
+            await DelayBeforeRetryAsync(attempt, cancellationToken).ConfigureAwait(false);
         }
-
         throw new TimeoutException("Managed module repository request timed out.");
     }
 
@@ -258,16 +290,11 @@ public sealed partial class ManagedModuleRepositoryClient
 
     private async Task DelayBeforeRetryAsync(int attempt, CancellationToken cancellationToken)
     {
-        var delay = _options.RetryDelay <= TimeSpan.Zero ? TimeSpan.Zero : _options.RetryDelay;
-        _logger.Verbose($"Managed module repository transient failure; retrying attempt {attempt + 1} after {delay}.");
+        var delay = ModuleRepositoryRetryPolicy.Backoff(_options.RetryDelay, attempt);
+        _logger.Warn($"Managed module repository transient failure on attempt {attempt}/{Math.Max(0, _options.MaxRetries) + 1}; retrying attempt {attempt + 1} after {delay}.");
         if (delay > TimeSpan.Zero)
             await Task.Delay(delay, cancellationToken).ConfigureAwait(false);
     }
-
-    private static bool IsTransientStatus(HttpStatusCode statusCode)
-        => statusCode == HttpStatusCode.RequestTimeout ||
-           statusCode == (HttpStatusCode)429 ||
-           (int)statusCode >= 500;
 
     private static bool IsRedirect(HttpStatusCode statusCode)
         => statusCode == HttpStatusCode.Moved ||
@@ -277,14 +304,6 @@ public sealed partial class ManagedModuleRepositoryClient
 
     private static bool CanRedirect(HttpMethod method)
         => method == HttpMethod.Get || method == HttpMethod.Head;
-
-    private static HttpRequestException CreateTransportException(HttpRequestMessage request, HttpRequestException exception)
-        => new(
-            $"Managed module repository request failed: {FormatRequest(request)}. {exception.Message}",
-            exception);
-
-    private static TimeoutException CreateTimeoutException(HttpRequestMessage request, Exception exception)
-        => new($"Managed module repository request timed out: {FormatRequest(request)}.", exception);
 
     private static string FormatRequest(HttpRequestMessage request)
         => $"{request.Method} {request.RequestUri}";
