@@ -75,8 +75,6 @@ jobs:
       DOTNET_CLI_TELEMETRY_OPTOUT: 'true'
       MSBUILDDISABLENODEREUSE: '1'
       DOTNET_CLI_USE_MSBUILD_SERVER: '0'
-      TERM: ${{ matrix.term || '' }}
-      LANG: ${{ matrix.lang || '' }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -91,6 +89,14 @@ jobs:
           ref: ${{ job.workflow_sha }}
           path: .powerforge-module-test
           persist-credentials: false
+
+      - name: Apply matrix terminal environment
+        if: matrix.term != '' || matrix.lang != ''
+        shell: pwsh
+        env:
+          MODULE_MATRIX_TERM: ${{ matrix.term }}
+          MODULE_MATRIX_LANG: ${{ matrix.lang }}
+        run: ./.powerforge-module-test/.github/scripts/Set-ModuleTestEnvironment.ps1
 
       - name: Setup shared test runner
         uses: ./.powerforge-module-test/.github/actions/setup-test-runner

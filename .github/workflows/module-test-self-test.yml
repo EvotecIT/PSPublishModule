@@ -6,9 +6,12 @@ on:
       - '.github/workflows/powerforge-module-test.yml'
       - '.github/workflows/powerforge-dotnet-test.yml'
       - '.github/actions/setup-test-runner/**'
+      - '.github/actions/setup-dotnet/**'
       - '.github/workflows/module-test-self-test.yml'
       - '.github/scripts/Invoke-ModuleTestCI.ps1'
       - '.github/scripts/Invoke-DotNetTestCI.ps1'
+      - '.github/scripts/Set-ModuleTestEnvironment.ps1'
+      - '.github/scripts/set-module-test-environment.test.cjs'
       - 'PowerForge/**'
       - 'PowerForge.PowerShell/**'
       - 'PowerForge.Cli/**'
@@ -24,9 +27,12 @@ on:
       - '.github/workflows/powerforge-module-test.yml'
       - '.github/workflows/powerforge-dotnet-test.yml'
       - '.github/actions/setup-test-runner/**'
+      - '.github/actions/setup-dotnet/**'
       - '.github/workflows/module-test-self-test.yml'
       - '.github/scripts/Invoke-ModuleTestCI.ps1'
       - '.github/scripts/Invoke-DotNetTestCI.ps1'
+      - '.github/scripts/Set-ModuleTestEnvironment.ps1'
+      - '.github/scripts/set-module-test-environment.test.cjs'
       - 'Tests/ModuleTestSample/**'
       - 'Tests/ModuleTestSampleDependency/**'
       - 'Tests/DotNetTestSample/**'
@@ -44,7 +50,7 @@ jobs:
       project_path: Tests/ModuleTestSample
       test_path: Tests/ModuleTestSample/Tests
       pester_version: '6.1.0'
-      matrix_json: '{"include":[{"os":"ubuntu-latest","shell":"pwsh"},{"os":"macos-15","shell":"pwsh"},{"os":"windows-latest","shell":"pwsh"},{"os":"windows-latest","shell":"powershell"}]}'
+      matrix_json: '{"include":[{"os":"ubuntu-latest","shell":"pwsh","term":"xterm-256color","lang":"C.UTF-8"},{"os":"macos-15","shell":"pwsh"},{"os":"windows-latest","shell":"pwsh"},{"os":"windows-latest","shell":"powershell"}]}'
       build_config_path: Tests/dotnet-test-sample.json
       build_script_path: Tests/ModuleTestSample/Build.ps1
       result_artifact_name: module-test-sample
@@ -62,3 +68,42 @@ jobs:
       config_path: Tests/dotnet-test-sample.json
       matrix_json: '{"include":[{"os":"windows-latest","framework":"net8.0","runtime":"win-x64","profile":"native-windows"},{"os":"ubuntu-latest","framework":"net10.0","runtime":"linux-x64","profile":"native-linux"}]}'
       result_artifact_name: native-test-sample
+
+  additional-sdk:
+    name: Additional SDK without consumer global.json (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    env:
+      DOTNET_GENERATE_ASPNET_CERTIFICATE: 'false'
+      MSBUILDDISABLENODEREUSE: '1'
+      DOTNET_CLI_USE_MSBUILD_SERVER: '0'
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          path: .powerforge-module-test
+          persist-credentials: false
+      - name: Check consumer has no SDK declaration
+        shell: pwsh
+        run: |
+          if (Test-Path global.json) { throw 'This fixture requires no consumer global.json.' }
+      - name: Setup shared test runner with an additional SDK
+        uses: ./.powerforge-module-test/.github/actions/setup-test-runner
+        with:
+          dotnet_version: '8.0.x'
+      - name: Verify the additional SDK and test CLI
+        shell: pwsh
+        run: |
+          $sdks = & dotnet --list-sdks
+          if ($LASTEXITCODE -ne 0 -or -not ($sdks -match '^8\.0\.\d+ ')) {
+              throw 'The requested additional .NET 8 SDK is unavailable.'
+          }
+          & dotnet .powerforge-module-test/PowerForge.Cli/bin/Release/net10.0/PowerForge.Cli.dll --help
+          if ($LASTEXITCODE -ne 0) { throw 'The shared test CLI did not start.' }
+      - name: Remove staged SDK setup
+        if: always()
+        shell: pwsh
+        run: '& ./.powerforge-module-test/.github/actions/setup-dotnet/Stage-SetupDotNet.ps1 -Remove'

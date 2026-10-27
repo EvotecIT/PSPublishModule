@@ -19,16 +19,12 @@ runs:
       uses: ./.powerforge-sdk
       with:
         global-json-file: ${{ inputs.engine_path }}/global.json
+        additional-sdk-versions: ${{ inputs.dotnet_version }}
     - name: Setup consumer SDK
       if: hashFiles('global.json') != ''
       uses: ./.powerforge-sdk
       with:
         global-json-file: global.json
-    - name: Setup additional consumer SDKs
-      if: inputs.dotnet_version != ''
-      uses: ./.powerforge-sdk
-      with:
-        dotnet-version: ${{ inputs.dotnet_version }}
     - name: Build shared test runner
       shell: pwsh
       working-directory: ${{ inputs.engine_path }}

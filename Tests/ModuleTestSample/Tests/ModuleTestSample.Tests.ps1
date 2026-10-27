@@ -19,8 +19,12 @@ Describe 'Module workflow sample' {
         (Get-Module Pester).Version.ToString() | Should -Be $env:MODULE_PESTER_VERSION
     }
 
-    It 'uses the selected shell without a fallback' {
+    It 'uses the selected shell and its test environment' {
         $expectedEdition = if ($env:MODULE_TEST_SHELL -eq 'powershell') { 'Desktop' } else { 'Core' }
         $PSVersionTable.PSEdition | Should -Be $expectedEdition
+        if ($env:RUNNER_OS -eq 'Linux') {
+            $env:TERM | Should -Be 'xterm-256color'
+            $env:LANG | Should -Be 'C.UTF-8'
+        }
     }
 }

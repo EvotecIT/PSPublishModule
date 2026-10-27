@@ -57,11 +57,12 @@ relative to the checkout. Declare prerequisite builds in a shared test profile:
 
 `matrix.build_profile` can select different build profiles for Windows and Unix.
 Optional `matrix.term` and `matrix.lang` preserve terminal/locale policy for the
-whole job, including the selected Pester host.
+whole job, including the selected Pester host. Omitted values keep the runner defaults.
 `build_script_path` runs an optional project-specific setup script in the selected
 PowerShell host. Existing callers can still use `build_script`, but new callers
 should keep executable setup out of their YAML. Neither input is needed for a
-script module. `dotnet_version` adds consumer SDKs when there is no `global.json`.
+script module. `dotnet_version` adds consumer SDKs, including when there is no
+consumer `global.json`, while preserving the engine and consumer SDK policies.
 
 Public repositories use standard hosted runners;
 trusted private repositories can supply their existing self-hosted labels in
@@ -172,7 +173,7 @@ the shared workflow in 40 lines.
 | Render-budget measurements/retries | HtmlTinkerX/PowerForge.Web extraction boundary | ConsoleMonster selectors, interactions, CDP metrics and budget thresholds |
 
 The test workflows support the test-related rows. The browser-budget extraction
-is a separate proposed change: it must preserve CDP layer/CPU/frame/timer
+is a separate follow-up: it must preserve CDP layer/CPU/frame/timer
 measurements, retries and owned server/browser teardown. It must not replace
 those checks with a weaker page-load or screenshot test. The current website
 verification and deployment callers stay unchanged.
