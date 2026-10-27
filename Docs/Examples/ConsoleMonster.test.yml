@@ -1,0 +1,55 @@
+# Proposed follow-up caller. Replace <merged-sha> with the reviewed 40-character
+# merge SHA and install ConsoleMonster.test-ci.json as Build/test-ci.json.
+name: Test
+on:
+  push:
+    paths-ignore: ['*.md', 'Docs/**', '.gitignore']
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+
+jobs:
+  dotnet:
+    uses: EvotecIT/PSPublishModule/.github/workflows/powerforge-dotnet-test.yml@<merged-sha>
+    with:
+      config_path: Build/test-ci.json
+      matrix_json: '{"include":[{"os":"windows-latest","framework":"net472"},{"os":"windows-latest","framework":"net8.0"},{"os":"windows-latest","framework":"net10.0"},{"os":"ubuntu-latest","framework":"net8.0","profile":"dotnet-unix"},{"os":"ubuntu-latest","framework":"net10.0","profile":"dotnet-unix"}]}'
+      profile: dotnet
+
+  dotnet-macos:
+    if: github.event_name == 'pull_request'
+    uses: EvotecIT/PSPublishModule/.github/workflows/powerforge-dotnet-test.yml@<merged-sha>
+    with:
+      config_path: Build/test-ci.json
+      profile: dotnet-macos
+      matrix_json: '{"os":["macos-15"],"framework":["net8.0","net10.0"]}'
+      result_artifact_name: dotnet-macos
+
+  pester:
+    uses: EvotecIT/PSPublishModule/.github/workflows/powerforge-module-test.yml@<merged-sha>
+    with:
+      project_path: Module
+      test_path: Module/Tests
+      pester_version: '6.1.0'
+      build_config_path: Build/test-ci.json
+      matrix_json: '{"include":[{"os":"windows-latest","shell":"powershell","build_profile":"module-desktop"},{"os":"windows-latest","shell":"pwsh","build_profile":"module-windows"},{"os":"ubuntu-latest","shell":"pwsh","build_profile":"module-linux","term":"xterm-256color","lang":"C.UTF-8"}]}'
+
+  pester-macos:
+    if: github.event_name == 'pull_request'
+    uses: EvotecIT/PSPublishModule/.github/workflows/powerforge-module-test.yml@<merged-sha>
+    with:
+      project_path: Module
+      test_path: Module/Tests
+      pester_version: '6.1.0'
+      build_config_path: Build/test-ci.json
+      build_profile: module-macos
+      matrix_json: '{"include":[{"os":"macos-15","shell":"pwsh","term":"xterm-256color","lang":"en_US.UTF-8"}]}'
+      result_artifact_name: pester-macos
+
+  native:
+    uses: EvotecIT/PSPublishModule/.github/workflows/powerforge-dotnet-test.yml@<merged-sha>
+    with:
+      config_path: Build/test-ci.json
+      matrix_json: '{"include":[{"os":"windows-latest","framework":"net8.0","runtime":"win-x64","profile":"native-windows"},{"os":"windows-latest","framework":"net10.0","runtime":"win-x64","profile":"native-windows"},{"os":"ubuntu-latest","framework":"net10.0","runtime":"linux-x64","profile":"native-linux"}]}'
+      result_artifact_name: native-results

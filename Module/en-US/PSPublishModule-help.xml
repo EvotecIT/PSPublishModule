@@ -25255,7 +25255,7 @@ local development and CI pipelines.</maml:para>
       </command:example>
       <command:example>
         <maml:title>Run a pinned Pester version and keep CI reports</maml:title>
-        <dev:code>Invoke-ModuleTestSuite -ProjectPath . -PesterVersion 6.1.0 -ResultsPath TestResults/nunit.xml -JUnitResultsPath TestResults/junit.xml -SummaryPath TestResults/summary.md -WindowsPowerShell -FailIfNoTests</dev:code>
+        <dev:code>Invoke-ModuleTestSuite -PesterVersion 6.1.0 -ResultsPath TestResults/nunit.xml -JUnitResultsPath TestResults/junit.xml -SummaryPath TestResults/summary.md -WindowsPowerShell -FailIfNoTests</dev:code>
         <dev:remarks>
           <maml:para>Saves pinned Pester and runs tests in Windows PowerShell 5.1, retaining reports and a failure summary.</maml:para>
         </dev:remarks>

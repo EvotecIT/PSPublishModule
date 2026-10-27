@@ -148,9 +148,13 @@ public sealed partial class ManagedModuleRepositoryClient
                 }
             }
             catch (Exception ex) when (ex is HttpRequestException or OperationCanceledException ||
-                                       (ex is ObjectDisposedException && readTimeout?.IsCancellationRequested == true))
+                                       (ex is ObjectDisposedException &&
+                                        (readTimeout?.IsCancellationRequested == true || cancellationToken.IsCancellationRequested)))
             {
                 cancellationToken.ThrowIfCancellationRequested();
+                // A failed upload response is ambiguous. Retrying reads is safe;
+                // a publisher must reconcile its outcome before submitting again.
+                if (request.Method != HttpMethod.Get && request.Method != HttpMethod.Head) throw;
                 var timedOut = ex is OperationCanceledException || readTimeout?.IsCancellationRequested == true;
                 if (attempt == attempts)
                 {

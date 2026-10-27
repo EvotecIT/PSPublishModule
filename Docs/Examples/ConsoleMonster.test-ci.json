@@ -1,0 +1,187 @@
+{
+  "projectRoot": "..",
+  "profiles": [
+    {
+      "name": "dotnet",
+      "testProjects": [
+        "ConsoleMonster.Tests/ConsoleMonster.Tests.csproj",
+        "ConsoleMonster.Extensions.Tests/ConsoleMonster.Extensions.Tests.csproj"
+      ],
+      "environmentVariables": {
+        "TERM": "xterm-256color",
+        "LANG": "C.UTF-8"
+      }
+    },
+    {
+      "name": "dotnet-unix",
+      "testProjects": [
+        "ConsoleMonster.Tests/ConsoleMonster.Tests.csproj",
+        "ConsoleMonster.Extensions.Tests/ConsoleMonster.Extensions.Tests.csproj"
+      ],
+      "environmentVariables": {
+        "TERM": "xterm-256color",
+        "LANG": "C.UTF-8"
+      },
+      "beforeTests": [
+        {
+          "kind": "Command",
+          "executable": "python3",
+          "arguments": [
+            "-B",
+            "-m",
+            "unittest",
+            "discover",
+            "-s",
+            "ConsoleMonster.Tests/Input/Fixtures",
+            "-p",
+            "test_unix_input_pty.py",
+            "-v"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "dotnet-macos",
+      "testProjects": [
+        "ConsoleMonster.Tests/ConsoleMonster.Tests.csproj"
+      ],
+      "environmentVariables": {
+        "TERM": "xterm-256color",
+        "LANG": "en_US.UTF-8"
+      },
+      "beforeTests": [
+        {
+          "kind": "Command",
+          "executable": "python3",
+          "arguments": [
+            "-B",
+            "-m",
+            "unittest",
+            "discover",
+            "-s",
+            "ConsoleMonster.Tests/Input/Fixtures",
+            "-p",
+            "test_unix_input_pty.py",
+            "-v"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "module-windows",
+      "configuration": "Debug",
+      "buildProjects": [
+        {
+          "path": "ConsoleMonster.PowerShell/ConsoleMonster.PowerShell.csproj"
+        },
+        {
+          "path": "ConsoleMonster.TestHost/ConsoleMonster.TestHost.csproj"
+        }
+      ]
+    },
+    {
+      "name": "module-desktop",
+      "configuration": "Debug",
+      "buildProjects": [
+        {
+          "path": "ConsoleMonster.PowerShell/ConsoleMonster.PowerShell.csproj"
+        },
+        {
+          "path": "ConsoleMonster.TestHost/ConsoleMonster.TestHost.csproj"
+        }
+      ],
+      "beforeTests": [
+        {
+          "kind": "Command",
+          "executable": "powershell.exe",
+          "arguments": [
+            "-NoProfile",
+            "-File",
+            "Module/Tests/Support/Test-ModuleScriptSyntax.ps1"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "module-linux",
+      "configuration": "Debug",
+      "buildProjects": [
+        {
+          "path": "ConsoleMonster.PowerShell/ConsoleMonster.PowerShell.csproj",
+          "frameworks": [
+            "net8.0",
+            "net10.0"
+          ]
+        },
+        {
+          "path": "ConsoleMonster.TestHost/ConsoleMonster.TestHost.csproj",
+          "frameworks": [
+            "net8.0"
+          ]
+        }
+      ],
+      "environmentVariables": {
+        "TERM": "xterm-256color",
+        "LANG": "C.UTF-8"
+      },
+      "beforeTests": [
+        {
+          "kind": "Command",
+          "executable": "pwsh",
+          "arguments": [
+            "-NoProfile",
+            "-File",
+            "Build/Assert-ModuleTerminal.ps1"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "module-macos",
+      "configuration": "Debug",
+      "buildProjects": [
+        {
+          "path": "ConsoleMonster.PowerShell/ConsoleMonster.PowerShell.csproj",
+          "frameworks": [
+            "net8.0",
+            "net10.0"
+          ]
+        },
+        {
+          "path": "ConsoleMonster.TestHost/ConsoleMonster.TestHost.csproj",
+          "frameworks": [
+            "net8.0"
+          ]
+        }
+      ],
+      "environmentVariables": {
+        "TERM": "xterm-256color",
+        "LANG": "en_US.UTF-8"
+      }
+    },
+    {
+      "name": "native-windows",
+      "nativeProjects": [
+        {
+          "path": "Tests/AotSmoke/AotSmoke.csproj",
+          "executable": "AotSmoke.exe"
+        }
+      ]
+    },
+    {
+      "name": "native-linux",
+      "nativeProjects": [
+        {
+          "path": "Tests/AotSmoke/AotSmoke.csproj",
+          "executable": "AotSmoke",
+          "runEnvironments": [
+            {},
+            {
+              "LANG": "C"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -4,22 +4,34 @@ on:
   pull_request:
     paths:
       - '.github/workflows/powerforge-module-test.yml'
+      - '.github/workflows/powerforge-dotnet-test.yml'
+      - '.github/actions/setup-test-runner/**'
       - '.github/workflows/module-test-self-test.yml'
       - '.github/scripts/Invoke-ModuleTestCI.ps1'
+      - '.github/scripts/Invoke-DotNetTestCI.ps1'
       - 'PowerForge/**'
       - 'PowerForge.PowerShell/**'
       - 'PowerForge.Cli/**'
       - 'PSPublishModule/**'
       - 'Tests/ModuleTestSample/**'
       - 'Tests/ModuleTestSampleDependency/**'
+      - 'Tests/DotNetTestSample/**'
+      - 'Tests/NativeTestSample/**'
+      - 'Tests/dotnet-test-sample.json'
   push:
     branches: [main]
     paths:
       - '.github/workflows/powerforge-module-test.yml'
+      - '.github/workflows/powerforge-dotnet-test.yml'
+      - '.github/actions/setup-test-runner/**'
       - '.github/workflows/module-test-self-test.yml'
       - '.github/scripts/Invoke-ModuleTestCI.ps1'
+      - '.github/scripts/Invoke-DotNetTestCI.ps1'
       - 'Tests/ModuleTestSample/**'
       - 'Tests/ModuleTestSampleDependency/**'
+      - 'Tests/DotNetTestSample/**'
+      - 'Tests/NativeTestSample/**'
+      - 'Tests/dotnet-test-sample.json'
   workflow_dispatch:
 
 permissions:
@@ -33,5 +45,20 @@ jobs:
       test_path: Tests/ModuleTestSample/Tests
       pester_version: '6.1.0'
       matrix_json: '{"include":[{"os":"ubuntu-latest","shell":"pwsh"},{"os":"macos-15","shell":"pwsh"},{"os":"windows-latest","shell":"pwsh"},{"os":"windows-latest","shell":"powershell"}]}'
-      build_script: ./Tests/ModuleTestSample/Build.ps1
+      build_config_path: Tests/dotnet-test-sample.json
+      build_script_path: Tests/ModuleTestSample/Build.ps1
       result_artifact_name: module-test-sample
+
+  dotnet:
+    uses: ./.github/workflows/powerforge-dotnet-test.yml
+    with:
+      config_path: Tests/dotnet-test-sample.json
+      matrix_json: '{"include":[{"os":"windows-latest","framework":"net472"},{"os":"windows-latest","framework":"net8.0"},{"os":"ubuntu-latest","framework":"net8.0"},{"os":"ubuntu-latest","framework":"net10.0"},{"os":"macos-15","framework":"net8.0"}]}'
+      result_artifact_name: dotnet-test-sample
+
+  native:
+    uses: ./.github/workflows/powerforge-dotnet-test.yml
+    with:
+      config_path: Tests/dotnet-test-sample.json
+      matrix_json: '{"include":[{"os":"windows-latest","framework":"net8.0","runtime":"win-x64","profile":"native-windows"},{"os":"ubuntu-latest","framework":"net10.0","runtime":"linux-x64","profile":"native-linux"}]}'
+      result_artifact_name: native-test-sample

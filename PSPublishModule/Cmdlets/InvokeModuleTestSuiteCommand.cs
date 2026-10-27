@@ -62,7 +62,7 @@ public enum ModuleTestSuiteFailureSummaryFormat
 /// </example>
 /// <example>
 /// <summary>Run a pinned Pester version and keep CI reports</summary>
-/// <code>Invoke-ModuleTestSuite -ProjectPath . -PesterVersion 6.1.0 -ResultsPath TestResults/nunit.xml -JUnitResultsPath TestResults/junit.xml -SummaryPath TestResults/summary.md -WindowsPowerShell -FailIfNoTests</code>
+/// <code>Invoke-ModuleTestSuite -PesterVersion 6.1.0 -ResultsPath TestResults/nunit.xml -JUnitResultsPath TestResults/junit.xml -SummaryPath TestResults/summary.md -WindowsPowerShell -FailIfNoTests</code>
 /// <para>Saves pinned Pester and runs tests in Windows PowerShell 5.1, retaining reports and a failure summary.</para>
 /// </example>
 [Cmdlet(VerbsLifecycle.Invoke, "ModuleTestSuite")]

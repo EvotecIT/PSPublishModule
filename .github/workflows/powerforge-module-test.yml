@@ -23,6 +23,22 @@ on:
         description: Optional PowerShell build commands, executed in the selected shell before tests.
         type: string
         default: ''
+      build_script_path:
+        description: Optional repository script for project-specific setup in the selected shell.
+        type: string
+        default: ''
+      build_config_path:
+        description: Optional declarative .NET build/test-host/probe configuration.
+        type: string
+        default: ''
+      build_profile:
+        description: Profile in build_config_path; matrix.build_profile overrides it.
+        type: string
+        default: build
+      dotnet_version:
+        description: Additional consumer SDK versions.
+        type: string
+        default: ''
       result_artifact_name:
         description: Artifact prefix; each matrix job appends its job index.
         type: string
@@ -59,6 +75,8 @@ jobs:
       DOTNET_CLI_TELEMETRY_OPTOUT: 'true'
       MSBUILDDISABLENODEREUSE: '1'
       DOTNET_CLI_USE_MSBUILD_SERVER: '0'
+      TERM: ${{ matrix.term || '' }}
+      LANG: ${{ matrix.lang || '' }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -74,27 +92,27 @@ jobs:
           path: .powerforge-module-test
           persist-credentials: false
 
-      - name: Stage shared SDK setup
-        shell: pwsh
-        run: ./.powerforge-module-test/.github/actions/setup-dotnet/Stage-SetupDotNet.ps1
-
-      - name: Setup engine SDKs
-        uses: ./.powerforge-sdk
+      - name: Setup shared test runner
+        uses: ./.powerforge-module-test/.github/actions/setup-test-runner
         with:
-          global-json-file: .powerforge-module-test/global.json
+          dotnet_version: ${{ inputs.dotnet_version }}
 
-      - name: Setup consumer SDK
-        if: hashFiles('global.json') != ''
-        uses: ./.powerforge-sdk
-        with:
-          global-json-file: global.json
-
-      - name: Build shared test runner
+      - name: Build module and test hosts
+        if: inputs.build_config_path != ''
         shell: pwsh
-        working-directory: .powerforge-module-test
+        env:
+          DOTNET_TEST_CONFIG: ${{ inputs.build_config_path }}
+          DOTNET_TEST_PROFILE: ${{ matrix.build_profile || inputs.build_profile }}
+          DOTNET_TEST_RESULTS_PATH: ${{ runner.temp }}/powerforge-module-test-results/build
+        run: ./.powerforge-module-test/.github/scripts/Invoke-DotNetTestCI.ps1
+
+      - name: Project setup
+        if: inputs.build_script_path != ''
+        env:
+          MODULE_BUILD_SCRIPT_PATH: ${{ inputs.build_script_path }}
         run: |
-          dotnet build PowerForge.Cli/PowerForge.Cli.csproj -c Release -f net10.0 --nologo -nodeReuse:false
-          if ($LASTEXITCODE -ne 0) { throw 'PowerForge test runner build failed.' }
+          & (Join-Path $env:GITHUB_WORKSPACE $env:MODULE_BUILD_SCRIPT_PATH)
+          if ($LASTEXITCODE) { throw "Project setup failed with exit code $LASTEXITCODE." }
 
       - name: Build module
         if: inputs.build_script != ''

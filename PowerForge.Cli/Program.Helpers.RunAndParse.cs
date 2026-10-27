@@ -178,34 +178,34 @@ internal static partial class Program
                 case "--project-root":
                 case "--project":
                 case "--path":
-                    if (++i >= argv.Length) return null;
+                    if (++i >= argv.Length || argv[i].StartsWith("--", StringComparison.Ordinal)) return null;
                     spec.ProjectPath = argv[i];
                     break;
                 case "--test-path":
-                    if (++i >= argv.Length) return null;
+                    if (++i >= argv.Length || argv[i].StartsWith("--", StringComparison.Ordinal)) return null;
                     spec.TestPath = argv[i];
                     break;
                 case "--format":
                 case "--output-format":
-                    if (++i >= argv.Length) return null;
+                    if (++i >= argv.Length || argv[i].StartsWith("--", StringComparison.Ordinal)) return null;
                     if (!Enum.TryParse<ModuleTestSuiteOutputFormat>(argv[i], ignoreCase: true, out var fmt))
                         return null;
                     spec.OutputFormat = fmt;
                     break;
                 case "--pester-version":
-                    if (++i >= argv.Length) return null;
+                    if (++i >= argv.Length || argv[i].StartsWith("--", StringComparison.Ordinal)) return null;
                     spec.PesterVersion = argv[i];
                     break;
                 case "--results-path":
-                    if (++i >= argv.Length) return null;
+                    if (++i >= argv.Length || argv[i].StartsWith("--", StringComparison.Ordinal)) return null;
                     spec.ResultsPath = argv[i];
                     break;
                 case "--junit-results-path":
-                    if (++i >= argv.Length) return null;
+                    if (++i >= argv.Length || argv[i].StartsWith("--", StringComparison.Ordinal)) return null;
                     spec.JUnitResultsPath = argv[i];
                     break;
                 case "--summary-path":
-                    if (++i >= argv.Length) return null;
+                    if (++i >= argv.Length || argv[i].StartsWith("--", StringComparison.Ordinal)) return null;
                     spec.SummaryPath = argv[i];
                     break;
                 case "--windows-powershell":
@@ -216,11 +216,11 @@ internal static partial class Program
                     break;
                 case "--additional-modules":
                 case "--modules":
-                    if (++i >= argv.Length) return null;
+                    if (++i >= argv.Length || argv[i].StartsWith("--", StringComparison.Ordinal)) return null;
                     spec.AdditionalModules = SplitCsv(argv[i]);
                     break;
                 case "--skip-modules":
-                    if (++i >= argv.Length) return null;
+                    if (++i >= argv.Length || argv[i].StartsWith("--", StringComparison.Ordinal)) return null;
                     spec.SkipModules = SplitCsv(argv[i]);
                     break;
                 case "--coverage":
@@ -242,7 +242,7 @@ internal static partial class Program
                     break;
                 case "--timeout":
                 case "--timeout-seconds":
-                    if (++i >= argv.Length) return null;
+                    if (++i >= argv.Length || argv[i].StartsWith("--", StringComparison.Ordinal)) return null;
                     if (!int.TryParse(argv[i], out var t)) return null;
                     spec.TimeoutSeconds = t;
                     break;

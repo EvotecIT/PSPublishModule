@@ -58,8 +58,10 @@ public sealed class ManagedModuleTransferRetryTests
         Assert.Empty(Directory.EnumerateFiles(root.Path, "*", SearchOption.AllDirectories));
     }
 
-    [Fact]
-    public async Task Caller_cancellation_aborts_the_body_without_another_attempt()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Caller_cancellation_aborts_the_body_without_another_attempt(bool noDeadline)
     {
         using var root = new DownloadDirectory();
         using var cancellation = new CancellationTokenSource();
@@ -71,7 +73,7 @@ public sealed class ManagedModuleTransferRetryTests
             return new HttpResponseMessage(HttpStatusCode.OK) { Content = new StreamContent(new FailingBody(stall: true)) };
         }));
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
-            Client(http).DownloadPackageAsync(Repository(), "Sample", "1.0.0", root.Path, cancellationToken: cancellation.Token));
+            Client(http, noDeadline).DownloadPackageAsync(Repository(), "Sample", "1.0.0", root.Path, cancellationToken: cancellation.Token));
         Assert.Equal(1, calls);
         Assert.Empty(Directory.EnumerateFiles(root.Path, "*", SearchOption.AllDirectories));
     }
@@ -103,12 +105,36 @@ public sealed class ManagedModuleTransferRetryTests
     private static ManagedModuleRepository Repository()
         => new("Test", "https://example.test/packages", ManagedModuleRepositoryKind.NuGetV3);
 
-    private static ManagedModuleRepositoryClient Client(HttpClient http)
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Ambiguous_publish_timeout_or_transport_failure_is_not_resubmitted(bool transport)
+    {
+        using var root = new DownloadDirectory();
+        var path = Path.Combine(root.Path, "Sample.1.0.0.nupkg");
+        File.WriteAllBytes(path, Package());
+        var calls = 0;
+        using var http = new HttpClient(new Handler(() =>
+        {
+            calls++;
+            if (transport) throw new HttpRequestException("Response connection lost after upload");
+            throw new OperationCanceledException("Response timed out after upload");
+        }));
+        var client = Client(http);
+        var repository = new ManagedModuleRepository("Publish", "https://example.test/api/v2/package", ManagedModuleRepositoryKind.NuGetV2);
+        var error = await Record.ExceptionAsync(() => client.PublishPackageAsync(repository, path, new RepositoryCredential { Secret = "test-only-key" }));
+        Assert.NotNull(error);
+        Assert.Equal(1, calls);
+        if (transport) Assert.IsAssignableFrom<HttpRequestException>(error);
+        else Assert.IsAssignableFrom<OperationCanceledException>(error);
+    }
+
+    private static ManagedModuleRepositoryClient Client(HttpClient http, bool noDeadline = false)
         => new(new NullLogger(), http, options: new ManagedModuleRepositoryClientOptions
         {
             MaxRetries = 1,
             RetryDelay = TimeSpan.Zero,
-            RequestTimeout = TimeSpan.FromMilliseconds(150),
+            RequestTimeout = noDeadline ? null : TimeSpan.FromSeconds(1),
             DisableManagedModuleCatalog = true
         });
 

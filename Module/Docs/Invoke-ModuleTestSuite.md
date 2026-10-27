@@ -45,7 +45,7 @@ Produces a concise failure summary that can be used in CI logs.
 
 ### EXAMPLE 4
 ```powershell
-Invoke-ModuleTestSuite -ProjectPath . -PesterVersion 6.1.0 -ResultsPath TestResults/nunit.xml -JUnitResultsPath TestResults/junit.xml -SummaryPath TestResults/summary.md -WindowsPowerShell -FailIfNoTests
+Invoke-ModuleTestSuite -PesterVersion 6.1.0 -ResultsPath TestResults/nunit.xml -JUnitResultsPath TestResults/junit.xml -SummaryPath TestResults/summary.md -WindowsPowerShell -FailIfNoTests
 ```
 
 Saves pinned Pester and runs tests in Windows PowerShell 5.1, retaining reports and a failure summary.
