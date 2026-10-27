@@ -6,7 +6,7 @@ using System.Text.Json;
 
 namespace PowerForge;
 
-internal sealed class PowerShellModulePipelineHostedOperations :
+internal sealed partial class PowerShellModulePipelineHostedOperations :
     IModulePipelineHostedOperations,
     IModulePipelinePublishPreflightOperations
 {
@@ -262,6 +262,9 @@ internal sealed class PowerShellModulePipelineHostedOperations :
         SigningOptionsConfiguration signing,
         Action<int, int, string>? progress = null)
     {
+        var signingInput = ModuleSigningCertificateResolver.ResolveInput(signing, _logger.Info);
+        var pfxBase64 = signingInput.PfxBase64;
+        var pfxPassword = signingInput.PfxPassword;
         var normalizedPackageFilePaths = NormalizePackageFilePaths(packageFilePaths);
         _logger.Info(ModuleSigningProgressProtocol.UserGuidance);
         progress?.Invoke(0, 0, "Starting signing host");
@@ -273,19 +276,20 @@ internal sealed class PowerShellModulePipelineHostedOperations :
             packageFileListPath,
             EncodeLines(includePatterns),
             EncodeLines(excludeSubstrings),
-            signing.CertificateThumbprint ?? string.Empty,
-            signing.CertificatePFXPath ?? string.Empty,
-            signing.CertificatePFXBase64 ?? string.Empty,
-            signing.CertificatePFXPassword ?? string.Empty,
-            signing.OverwriteSigned == true ? "1" : "0"
+            signingInput.Thumbprint,
+            string.Empty,
+            string.Empty,
+            string.Empty,
+            signing.OverwriteSigned == true ? "1" : "0",
+            Convert.ToBase64String(JsonSerializer.SerializeToUtf8Bytes(signingInput.ApprovedThumbprints))
         };
 
         var script = EmbeddedScripts.Load("Scripts/Signing/Sign-Module.ps1");
         var useWindowsPowerShellStoreCertificate =
             _isWindows &&
-            !string.IsNullOrWhiteSpace(signing.CertificateThumbprint) &&
+            !string.IsNullOrWhiteSpace(signingInput.Thumbprint) &&
             string.IsNullOrWhiteSpace(signing.CertificatePFXPath) &&
-            string.IsNullOrWhiteSpace(signing.CertificatePFXBase64);
+            string.IsNullOrWhiteSpace(pfxBase64);
         PowerShellRunResult result;
         ModuleSigningResult? summary;
         ModuleSigningResult? attemptSummary;
@@ -299,6 +303,7 @@ internal sealed class PowerShellModulePipelineHostedOperations :
                 hostRequirement: useWindowsPowerShellStoreCertificate
                     ? PowerShellHostRequirement.WindowsPowerShell
                     : PowerShellHostRequirement.Any,
+                environmentVariables: CreateSigningEnvironment(signing, pfxBase64, pfxPassword),
                 outputLineReceived: line =>
                 {
                     if (ModuleSigningProgressProtocol.TryParse(line, out var completed, out var total, out var detail))
@@ -414,7 +419,8 @@ internal sealed class PowerShellModulePipelineHostedOperations :
         TimeSpan timeout,
         bool preferPwsh,
         PowerShellHostRequirement hostRequirement = PowerShellHostRequirement.Any,
-        Action<string>? outputLineReceived = null)
+        Action<string>? outputLineReceived = null,
+        IReadOnlyDictionary<string, string?>? environmentVariables = null)
     {
         var tempDir = Path.Combine(Path.GetTempPath(), "PowerForge", "modulepipeline");
         Directory.CreateDirectory(tempDir);
@@ -423,8 +429,8 @@ internal sealed class PowerShellModulePipelineHostedOperations :
         try
         {
             var request = hostRequirement == PowerShellHostRequirement.Any
-                ? new PowerShellRunRequest(scriptPath, args, timeout, preferPwsh)
-                : new PowerShellRunRequest(scriptPath, args, timeout, preferPwsh, hostRequirement);
+                ? new PowerShellRunRequest(scriptPath, args, timeout, preferPwsh, environmentVariables: environmentVariables)
+                : new PowerShellRunRequest(scriptPath, args, timeout, preferPwsh, hostRequirement, environmentVariables: environmentVariables);
             return _runner.Run(request.WithOutputLineReceived(outputLineReceived));
         }
         finally

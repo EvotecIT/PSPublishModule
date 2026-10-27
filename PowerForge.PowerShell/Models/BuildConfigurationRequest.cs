@@ -57,13 +57,19 @@ internal sealed class BuildConfigurationRequest
     public bool DoNotAttemptToFixRelativePathsSpecified { get; set; }
     public bool DoNotAttemptToFixRelativePaths { get; set; }
     public bool CertificateThumbprintSpecified { get; set; }
+    public bool AllowedCertificateThumbprintsSpecified { get; set; }
     public string? CertificateThumbprint { get; set; }
+    public string[]? AllowedCertificateThumbprints { get; set; }
     public bool CertificatePFXPathSpecified { get; set; }
     public string? CertificatePFXPath { get; set; }
     public bool CertificatePFXBase64Specified { get; set; }
     public string? CertificatePFXBase64 { get; set; }
     public bool CertificatePFXPasswordSpecified { get; set; }
     public string? CertificatePFXPassword { get; set; }
+    public bool CertificatePFXPasswordEnvironmentVariableSpecified { get; set; }
+    public string? CertificatePFXPasswordEnvironmentVariable { get; set; }
+    public bool CertificatePFXBase64EnvironmentVariableSpecified { get; set; }
+    public string? CertificatePFXBase64EnvironmentVariable { get; set; }
     public bool NETProjectPathSpecified { get; set; }
     public string? NETProjectPath { get; set; }
     public bool NETConfigurationSpecified { get; set; }

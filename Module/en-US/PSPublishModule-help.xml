@@ -35728,6 +35728,18 @@ as separate decisions because many teams want one without the other.</maml:para>
     <command:syntax>
       <command:syntaxItem parameterSetName="__AllParameterSets">
         <maml:name>New-ConfigurationBuild</maml:name>
+        <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>AllowedCertificateThumbprints</maml:name>
+          <maml:description>
+            <maml:para>Ordered approved signing thumbprints. Selects the first usable approved certificate when no explicit certificate is supplied; explicit certificates and PFX inputs must also be approved.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+          <dev:type>
+            <maml:name>String[]</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
           <maml:name>AutoSwitchExactOnPublish</maml:name>
           <maml:description>
@@ -35753,9 +35765,33 @@ as separate decisions because many teams want one without the other.</maml:para>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>CertificatePFXBase64EnvironmentVariable</maml:name>
+          <maml:description>
+            <maml:para>Name of the environment variable read only when signing to obtain the PFX Base64 payload.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
           <maml:name>CertificatePFXPassword</maml:name>
           <maml:description>
             <maml:para>Password for the PFX provided via CertificatePFXPath or CertificatePFXBase64.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>CertificatePFXPasswordEnvironmentVariable</maml:name>
+          <maml:description>
+            <maml:para>Name of the environment variable read only when signing to obtain the PFX password.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
@@ -36764,6 +36800,18 @@ reporting hint and does not change the manifest or install anything by itself.</
       </command:syntaxItem>
     </command:syntax>
     <command:parameters>
+      <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>AllowedCertificateThumbprints</maml:name>
+        <maml:description>
+          <maml:para>Ordered approved signing thumbprints. Selects the first usable approved certificate when no explicit certificate is supplied; explicit certificates and PFX inputs must also be approved.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+        <dev:type>
+          <maml:name>String[]</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
       <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
         <maml:name>AutoSwitchExactOnPublish</maml:name>
         <maml:description>
@@ -36789,9 +36837,33 @@ reporting hint and does not change the manifest or install anything by itself.</
         <dev:defaultValue>None</dev:defaultValue>
       </command:parameter>
       <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>CertificatePFXBase64EnvironmentVariable</maml:name>
+        <maml:description>
+          <maml:para>Name of the environment variable read only when signing to obtain the PFX Base64 payload.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
         <maml:name>CertificatePFXPassword</maml:name>
         <maml:description>
           <maml:para>Password for the PFX provided via CertificatePFXPath or CertificatePFXBase64.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>CertificatePFXPasswordEnvironmentVariable</maml:name>
+        <maml:description>
+          <maml:para>Name of the environment variable read only when signing to obtain the PFX password.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
         <dev:type>
@@ -49238,6 +49310,18 @@ and only declare project-specific values.</maml:para>
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
+        <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="None">
+          <maml:name>AllowedCertificateThumbprints</maml:name>
+          <maml:description>
+            <maml:para>Ordered approved signing thumbprints. Selects the first usable approved certificate when no explicit certificate is supplied; explicit certificates must also be approved.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+          <dev:type>
+            <maml:name>String[]</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="None">
           <maml:name>CertificateThumbprint</maml:name>
           <maml:description>
@@ -49792,6 +49876,18 @@ and only declare project-specific values.</maml:para>
         <maml:name>AboutTopicsSourcePath</maml:name>
         <maml:description>
           <maml:para>Source paths for about-topic files.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+        <dev:type>
+          <maml:name>String[]</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="None">
+        <maml:name>AllowedCertificateThumbprints</maml:name>
+        <maml:description>
+          <maml:para>Ordered approved signing thumbprints. Selects the first usable approved certificate when no explicit certificate is supplied; explicit certificates must also be approved.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
         <dev:type>

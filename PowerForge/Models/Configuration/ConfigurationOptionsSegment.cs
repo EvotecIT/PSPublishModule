@@ -56,6 +56,13 @@ public sealed class SigningOptionsConfiguration
     /// <summary>Thumbprint of a code-signing certificate from the local cert store.</summary>
     public string? CertificateThumbprint { get; set; }
 
+    /// <summary>
+    /// Ordered approved code-signing thumbprints. When no explicit certificate is supplied,
+    /// selects the first usable approved certificate from CurrentUser/My then LocalMachine/My.
+    /// Explicit certificates and PFX inputs must also match this list. Empty preserves legacy selection.
+    /// </summary>
+    public string[]? AllowedCertificateThumbprints { get; set; }
+
     /// <summary>Path to a PFX containing a code-signing certificate.</summary>
     public string? CertificatePFXPath { get; set; }
 
@@ -64,6 +71,12 @@ public sealed class SigningOptionsConfiguration
 
     /// <summary>Password for the PFX provided via CertificatePFXPath or CertificatePFXBase64.</summary>
     public string? CertificatePFXPassword { get; set; }
+
+    /// <summary>Name of the environment variable read only when signing to obtain the PFX password.</summary>
+    public string? CertificatePFXPasswordEnvironmentVariable { get; set; }
+
+    /// <summary>Name of the environment variable read only when signing to obtain the PFX Base64 payload.</summary>
+    public string? CertificatePFXBase64EnvironmentVariable { get; set; }
 }
 
 /// <summary>

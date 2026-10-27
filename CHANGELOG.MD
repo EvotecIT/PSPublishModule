@@ -2,6 +2,9 @@
 
 ## Unreleased
 ### What's Changed
+- Use OpenAuthenticode's CMS result and explicit unsigned-file error contracts on non-Windows, pass supported signing parameters, and verify the selected signer after writing each signature.
+- Select module code-signing certificates from an ordered approved-thumbprint list, enforce the list for explicit certificates and PFX inputs, and report unusable candidates without probing private keys.
+- Keep PFX passwords and Base64 payloads out of signing child command lines; support lazy environment-variable references in build JSON and PowerShell configuration, clear child secret variables before provider operations, and import PFX keys ephemerally.
 - Add secret-free repository authentication diagnostics for native registrations, saved NuGet settings and publishing invocations, including safe failure reports and credential source metadata without decrypting stored secrets.
 - Retry Windows recovery replacements only when the native error guarantees unchanged file names; bound the delay, preserve cancellation and restore attempted partial replacements. Include the operation, asset paths and native error in recovery failures while retaining backups when rollback cannot finish.
 - Add per-artefact delivery source/destination mappings for selecting, renaming and rearranging packaged files and directories, with schema, collision checks and a packaging guide; keep DeliveryPath whole-tree copying as the default.
@@ -42,7 +45,7 @@
 ## 2.0.19 - 2025.06.17
 ### What's Changed
 * Improve error handling in release utilities by @PrzemyslawKlys in https://github.com/EvotecIT/PSPublishModule/pull/32
-* feat: ✨ Introduce New-DLLHandleRuntime function and integrate runti… by @PrzemyslawKlys in https://github.com/EvotecIT/PSPublishModule/pull/33
+* feat: Ã¢Å“Â¨ Introduce New-DLLHandleRuntime function and integrate runtiÃ¢â‚¬Â¦ by @PrzemyslawKlys in https://github.com/EvotecIT/PSPublishModule/pull/33
 
 **Full Changelog**: https://github.com/EvotecIT/PSPublishModule/compare/v2.0.18...v2.0.19
 

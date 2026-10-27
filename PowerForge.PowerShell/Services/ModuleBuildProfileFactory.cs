@@ -195,6 +195,8 @@ internal sealed class ModuleBuildProfileFactory
             KillLockersForce = request.KillLockersForce,
             CertificateThumbprintSpecified = !string.IsNullOrWhiteSpace(request.CertificateThumbprint),
             CertificateThumbprint = request.CertificateThumbprint,
+            AllowedCertificateThumbprintsSpecified = request.AllowedCertificateThumbprints is not null,
+            AllowedCertificateThumbprints = request.AllowedCertificateThumbprints,
             SignIncludeBinariesSpecified = request.SignIncludeBinariesSpecified,
             SignIncludeBinaries = request.SignIncludeBinaries,
             SignIncludeInternalsSpecified = request.SignIncludeInternalsSpecified,

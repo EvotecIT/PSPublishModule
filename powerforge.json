@@ -326,7 +326,8 @@
       "Type": "Options",
       "Options": {
         "Signing": {
-          "CertificateThumbprint": "92e95fb58effa6a4a75e77a33cdd6bfe6dd30f1a"
+          "CertificateThumbprint": "92e95fb58effa6a4a75e77a33cdd6bfe6dd30f1a",
+          "AllowedCertificateThumbprints": ["92E95FB58EFFA6A4A75E77A33CDD6BFE6DD30F1A"]
         }
       }
     },

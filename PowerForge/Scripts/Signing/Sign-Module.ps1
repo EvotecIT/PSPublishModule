@@ -1,4 +1,4 @@
-﻿param(
+param(
   [string]$RootPath,
   [string]$PackageFileListPath,
   [string]$IncludeB64,
@@ -7,11 +7,22 @@
   [string]$PfxPath,
   [string]$PfxBase64,
   [string]$PfxPassword,
-  [string]$OverwriteSigned
+  [string]$OverwriteSigned,
+  [string]$AllowedThumbprintsB64
 )
 
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
+# Child-only transport: consume before any provider operation and do not pass secrets
+# to descendant tools. The reserved positional PFX arguments are no longer used.
+$PfxPath = [Environment]::GetEnvironmentVariable('POWERFORGE_SIGNING_PFX_PATH', 'Process')
+$PfxBase64 = [Environment]::GetEnvironmentVariable('POWERFORGE_SIGNING_PFX_BASE64', 'Process')
+$PfxPassword = [Environment]::GetEnvironmentVariable('POWERFORGE_SIGNING_PFX_PASSWORD', 'Process')
+foreach ($name in @('POWERFORGE_SIGNING_PFX_PATH', 'POWERFORGE_SIGNING_PFX_BASE64', 'POWERFORGE_SIGNING_PFX_PASSWORD')) {
+  if (-not [string]::IsNullOrEmpty([Environment]::GetEnvironmentVariable($name, 'Process'))) {
+    [Environment]::SetEnvironmentVariable($name, $null, 'Process')
+  }
+}
 function EmitSigningProgress([int]$completed, [int]$total, [string]$detail) {
   $b64 = [System.Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($detail))
   # Write directly so progress never becomes a signature or retry return value.
@@ -40,13 +51,40 @@ function Test-CodeSigningCertificate([object]$certificate) {
   return -not $hasEnhancedKeyUsageRestriction
 }
 
+# Metadata checks do not acquire a private key or test-sign while selecting a signer.
+function Get-SigningCertificateRejection([object]$certificate) {
+  if ($null -eq $certificate) { return 'not found' }
+  if (-not $certificate.HasPrivateKey) { return 'no private key' }
+  $now = [DateTime]::UtcNow
+  if ($now -lt $certificate.NotBefore.ToUniversalTime()) { return 'not yet valid' }
+  if ($now -ge $certificate.NotAfter.ToUniversalTime()) { return 'expired' }
+  if (-not (Test-CodeSigningCertificate -certificate $certificate)) { return 'code signing is not permitted by EKU' }
+  return $null
+}
 function Get-CodeSigningCertificateByThumbprint([string]$thumbprint) {
   foreach ($storeRoot in @('Cert:\CurrentUser\My', 'Cert:\LocalMachine\My')) {
     $candidate = Get-Item -LiteralPath ("{0}\{1}" -f $storeRoot, $thumbprint) -ErrorAction SilentlyContinue
-    if (Test-CodeSigningCertificate -certificate $candidate) { return $candidate }
+    $reason = Get-SigningCertificateRejection -certificate $candidate
+    if (-not $reason) { return $candidate }
+    EmitSigningProgress 0 0 ("Signing certificate {0} in {1}: {2}" -f $thumbprint, $storeRoot, $reason)
   }
-
   return $null
+}
+# OpenAuthenticode returns validated CMS objects (Certificate), not Windows
+# Signature/Status objects. Only its explicit NoSignature error means unsigned.
+function Get-OpenSigningState([string]$filePath) {
+  try {
+    $signatures = @(Get-OpenAuthenticodeSignature -LiteralPath $filePath -ErrorAction Stop)
+    if ($signatures.Count -eq 0 -or $null -eq $signatures[0].Certificate) {
+      throw 'OpenAuthenticode did not return a signer certificate.'
+    }
+    return [pscustomobject]@{ Status = 'Valid'; SignerCertificate = $signatures[0].Certificate }
+  } catch {
+    if (($_.FullyQualifiedErrorId -split ',')[0] -eq 'NoSignature') {
+      return [pscustomobject]@{ Status = 'NotSigned'; SignerCertificate = $null }
+    }
+    throw
+  }
 }
 function Clear-SigningCloudPlacementAttributes([string]$filePath) {
   if ([System.IO.Path]::DirectorySeparatorChar -ne '\') { return }
@@ -227,8 +265,15 @@ try {
   # Resolve certificate
   EmitSigningProgress 0 0 'Loading signing certificate; the certificate provider may request a PIN or consent'
   $cert = $null
-  $flags = [System.Security.Cryptography.X509Certificates.X509KeyStorageFlags]::Exportable -bor `
-           [System.Security.Cryptography.X509Certificates.X509KeyStorageFlags]::PersistKeySet
+  # Configuration policy and automatic selection were resolved by the shared engine.
+  # Recheck the actual provider certificate identity before signing any file.
+  $approved = @()
+  if (-not [string]::IsNullOrWhiteSpace($AllowedThumbprintsB64)) {
+    $approved = @([Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($AllowedThumbprintsB64)) | ConvertFrom-Json)
+  }
+  $inputCount = @(@($Thumbprint, $PfxPath, $PfxBase64) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }).Count
+  if ($inputCount -gt 1) { throw 'Configure only one explicit signing certificate source: thumbprint, PFX path or PFX Base64.' }
+  $flags = [System.Security.Cryptography.X509Certificates.X509KeyStorageFlags]::EphemeralKeySet
 
   if (-not [string]::IsNullOrWhiteSpace($PfxBase64)) {
     $bytes = [System.Convert]::FromBase64String($PfxBase64)
@@ -236,8 +281,9 @@ try {
   } elseif (-not [string]::IsNullOrWhiteSpace($PfxPath)) {
     $pfxFull = (Resolve-Path -LiteralPath $PfxPath).Path
     $cert = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new($pfxFull, $PfxPassword, $flags)
-  } elseif (-not [string]::IsNullOrWhiteSpace($Thumbprint)) {
-    $tp = ($Thumbprint -replace '\s','').ToUpperInvariant()
+  } else {
+    $tp = ($Thumbprint -replace '\s', '').ToUpperInvariant()
+    if ($approved.Count -gt 0 -and $tp -notin $approved) { throw ("Signing certificate '{0}' is not in AllowedCertificateThumbprints." -f $tp) }
     $cert = Get-CodeSigningCertificateByThumbprint -thumbprint $tp
   }
 
@@ -245,12 +291,13 @@ try {
     throw "Code signing certificate not configured or not found. Provide CertificateThumbprint/CertificatePFXPath/CertificatePFXBase64 (and password for PFX)."
   }
 
-  $now = [DateTime]::UtcNow
-  if ($now -lt $cert.NotBefore.ToUniversalTime() -or $now -gt $cert.NotAfter.ToUniversalTime()) {
-    throw ("Code signing certificate '{0}' is outside its validity period ({1:u} through {2:u})." -f $cert.Thumbprint, $cert.NotBefore.ToUniversalTime(), $cert.NotAfter.ToUniversalTime())
-  }
-
+  $rejection = Get-SigningCertificateRejection -certificate $cert
+  if ($rejection) { throw ("Code signing certificate '{0}' cannot be used: {1}." -f $cert.Thumbprint, $rejection) }
   $thisTp = ($cert.Thumbprint -replace '\s','').ToUpperInvariant()
+  if ($approved.Count -gt 0 -and $thisTp -notin $approved) {
+    throw ("Signing certificate '{0}' is not in AllowedCertificateThumbprints." -f $thisTp)
+  }
+  EmitSigningProgress 0 0 ("Selected signing certificate {0}; valid through {1:u}" -f $thisTp, $cert.NotAfter.ToUniversalTime())
 
   # Select signable files only from the final module package file set.
   EmitSigningProgress 0 0 'Selecting files from the finalized module package'
@@ -464,9 +511,9 @@ try {
       try {
         Clear-SigningCloudPlacementAttributes -filePath $f
         $sig = Invoke-WithFileRetry -FilePath $f -Action 'Get-OpenAuthenticodeSignature' -Completed 0 -Total 0 -ScriptBlock {
-          Get-OpenAuthenticodeSignature -FilePath $f -ErrorAction Stop
+          Get-OpenSigningState -filePath $f
         }
-        $status = [string]$sig.SStatus
+        $status = [string]$sig.Status
         $preStatus[$f] = $status
         $preDisposition[$f] = Get-SigningPrecheckDisposition -status $status -overwrite $overwrite
         if ($status -eq 'Valid') {
@@ -509,16 +556,15 @@ try {
       if ($precheckFailures.ContainsKey($f)) { [void]$precheckFailures.Remove($f) }
       $wasSigned = $preStatus[$f] -ne 'NotSigned'
       try {
-        if ($overwrite) {
-          $r = Invoke-WithFileRetry -FilePath $f -Action 'Set-OpenAuthenticodeSignature' -Completed ($processedTargets - 1) -Total $attempted -ShouldRetryResult $retryUnknownSigningResult -ScriptBlock {
-            Clear-SigningCloudPlacementAttributes -filePath $f
-            Set-OpenAuthenticodeSignature -FilePath $f -Certificate $cert -TimeStampServer $ts -IncludeChain WholeChain -HashAlgorithm SHA256 -Force -ErrorAction Stop
+        $r = Invoke-WithFileRetry -FilePath $f -Action 'Set-OpenAuthenticodeSignature' -Completed ($processedTargets - 1) -Total $attempted -ScriptBlock {
+          Clear-SigningCloudPlacementAttributes -filePath $f
+          # Set replaces existing signatures; target selection implements OverwriteSigned.
+          Set-OpenAuthenticodeSignature -LiteralPath $f -Certificate $cert -TimeStampServer $ts -IncludeOption WholeChain -HashAlgorithm SHA256 -ErrorAction Stop | Out-Null
+          $verified = Get-OpenSigningState -filePath $f
+          if ($verified.Status -ne 'Valid' -or $verified.SignerCertificate.Thumbprint -ne $thisTp) {
+            throw 'OpenAuthenticode did not verify the selected signing identity after signing.'
           }
-        } else {
-          $r = Invoke-WithFileRetry -FilePath $f -Action 'Set-OpenAuthenticodeSignature' -Completed ($processedTargets - 1) -Total $attempted -ShouldRetryResult $retryUnknownSigningResult -ScriptBlock {
-            Clear-SigningCloudPlacementAttributes -filePath $f
-            Set-OpenAuthenticodeSignature -FilePath $f -Certificate $cert -TimeStampServer $ts -IncludeChain WholeChain -HashAlgorithm SHA256 -ErrorAction Stop
-          }
+          $verified
         }
 
         $status = if ($r) { [string]$r.Status } else { 'Unknown' }
@@ -570,4 +616,9 @@ try {
 } catch {
   EmitError $_.Exception.Message
   exit 1
+}
+ finally {
+  $PfxPassword = $null
+  $PfxBase64 = $null
+  if ($cert -is [System.Security.Cryptography.X509Certificates.X509Certificate2]) { $cert.Dispose() }
 }

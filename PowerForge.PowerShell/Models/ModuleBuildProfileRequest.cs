@@ -26,6 +26,7 @@ internal sealed class ModuleBuildProfileRequest
     public bool MergeFunctionsFromApprovedModules { get; set; }
     public bool SignModule { get; set; }
     public string? CertificateThumbprint { get; set; }
+    public string[]? AllowedCertificateThumbprints { get; set; }
     public bool SkipBuiltinReplacements { get; set; }
     public bool DoNotAttemptToFixRelativePaths { get; set; }
     public bool DotSourceLibraries { get; set; }

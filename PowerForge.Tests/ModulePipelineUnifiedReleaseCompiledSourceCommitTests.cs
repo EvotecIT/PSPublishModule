@@ -9,13 +9,15 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
     [Theory]
     [Trait("Category", "PowerShellCompilation")]
     [Trait("Category", "DotNetPublishPrGate")]
-    [InlineData(false)]
-    [InlineData(true)]
-    public void Run_ReusedCompiledStagingPreservesOriginalGitHubSourceAndLegacyUnknown(bool unified)
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public void Run_ReusedCompiledStagingPreservesOriginalGitHubSourceAndLegacyUnknown(bool unified, bool environmentReferences)
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
         var sourceRoot = Path.Combine(root.FullName, "source");
         var staging = Path.Combine(root.FullName, "staging");
+        string pfxVariable = "PF_CHECKPOINT_PFX_" + Guid.NewGuid().ToString("N");
         try
         {
             const string moduleName = "TestModule";
@@ -24,6 +26,15 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
             var originalCommit = ReleaseSourceCommit.Capture(sourceRoot);
             Assert.NotNull(originalCommit);
             var signing = CreateCompiledSourceCheckpointSigning(root.FullName);
+            if (environmentReferences)
+            {
+                Environment.SetEnvironmentVariable(pfxVariable, Convert.ToBase64String(File.ReadAllBytes(signing.CertificatePFXPath!)));
+                Environment.SetEnvironmentVariable(pfxVariable + "_PASSWORD", signing.CertificatePFXPassword);
+                signing.CertificatePFXBase64EnvironmentVariable = pfxVariable;
+                signing.CertificatePFXPasswordEnvironmentVariable = pfxVariable + "_PASSWORD";
+                signing.CertificatePFXPath = null;
+                signing.CertificatePFXPassword = null;
+            }
             var requests = new List<GitHubReleasePublishRequest>();
             var hosted = new FakeHostedOperations(new List<string>())
             {
@@ -110,6 +121,8 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
         }
         finally
         {
+            Environment.SetEnvironmentVariable(pfxVariable, null);
+            Environment.SetEnvironmentVariable(pfxVariable + "_PASSWORD", null);
             DeleteModuleSourceFixture(new DirectoryInfo(sourceRoot));
             if (Directory.Exists(root.FullName)) root.Delete(recursive: true);
         }
@@ -124,6 +137,6 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
         const string password = "compilation-source-fixture";
         var path = Path.Combine(root, "compilation-source-authority.pfx");
         File.WriteAllBytes(path, certificate.Export(X509ContentType.Pfx, password));
-        return new SigningOptionsConfiguration { CertificatePFXPath = path, CertificatePFXPassword = password };
+        return new SigningOptionsConfiguration { CertificatePFXPath = path, CertificatePFXPassword = password, AllowedCertificateThumbprints = [certificate.Thumbprint] };
     }
 }

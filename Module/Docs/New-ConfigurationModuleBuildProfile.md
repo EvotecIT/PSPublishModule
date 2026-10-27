@@ -11,7 +11,7 @@ Emits a reusable module build profile for common PowerForge module builds.
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-New-ConfigurationModuleBuildProfile [-Profile <ModuleBuildProfileKind>] [-Documentation <bool>] [-DocumentationPath <string>] [-DocumentationReadmePath <string>] [-SyncExternalHelpToProjectRoot <bool>] [-AboutTopicsSourcePath <string[]>] [-Validation <bool>] [-EnableScriptAnalyzer <bool>] [-FileConsistency <bool>] [-RequiredEncoding <FileConsistencyEncoding>] [-RequiredLineEnding <FileConsistencyLineEnding>] [-FileConsistencyExcludeDirectories <string[]>] [-EncodingOverrides <hashtable>] [-Compatibility <bool>] [-MinimumCompatibilityPercentage <int>] [-ImportSelf <bool>] [-ImportRequiredModules <bool>] [-MergeModuleOnBuild <bool>] [-MergeFunctionsFromApprovedModules <bool>] [-SignModule <bool>] [-CertificateThumbprint <string>] [-SkipBuiltinReplacements] [-DoNotAttemptToFixRelativePaths] [-DotSourceLibraries] [-DotSourceClasses] [-InstallMissingModules <bool>] [-VersionedInstallStrategy <InstallationStrategy>] [-VersionedInstallKeep <int>] [-KillLockersBeforeInstall] [-KillLockersForce] [-NETProjectPath <string>] [-NETProjectName <string>] [-NETConfiguration <string>] [-NETFramework <string[]>] [-NETHandleAssemblyWithSameName] [-NETAssemblyLoadContext] [-ResolveBinaryConflicts] [-ResolveBinaryConflictsName <string>] [-NETAssemblyTypeAcceleratorMode <AssemblyTypeAcceleratorExportMode>] [-NETAssemblyTypeAccelerators <string[]>] [-NETAssemblyTypeAcceleratorAssemblies <string[]>] [-SignIncludeBinaries] [-SignIncludeInternals] [-SignIncludeExe] [<CommonParameters>]
+New-ConfigurationModuleBuildProfile [-Profile <ModuleBuildProfileKind>] [-Documentation <bool>] [-DocumentationPath <string>] [-DocumentationReadmePath <string>] [-SyncExternalHelpToProjectRoot <bool>] [-AboutTopicsSourcePath <string[]>] [-Validation <bool>] [-EnableScriptAnalyzer <bool>] [-FileConsistency <bool>] [-RequiredEncoding <FileConsistencyEncoding>] [-RequiredLineEnding <FileConsistencyLineEnding>] [-FileConsistencyExcludeDirectories <string[]>] [-EncodingOverrides <hashtable>] [-Compatibility <bool>] [-MinimumCompatibilityPercentage <int>] [-ImportSelf <bool>] [-ImportRequiredModules <bool>] [-MergeModuleOnBuild <bool>] [-MergeFunctionsFromApprovedModules <bool>] [-SignModule <bool>] [-CertificateThumbprint <string>] [-AllowedCertificateThumbprints <string[]>] [-SkipBuiltinReplacements] [-DoNotAttemptToFixRelativePaths] [-DotSourceLibraries] [-DotSourceClasses] [-InstallMissingModules <bool>] [-VersionedInstallStrategy <InstallationStrategy>] [-VersionedInstallKeep <int>] [-KillLockersBeforeInstall] [-KillLockersForce] [-NETProjectPath <string>] [-NETProjectName <string>] [-NETConfiguration <string>] [-NETFramework <string[]>] [-NETHandleAssemblyWithSameName] [-NETAssemblyLoadContext] [-ResolveBinaryConflicts] [-ResolveBinaryConflictsName <string>] [-NETAssemblyTypeAcceleratorMode <AssemblyTypeAcceleratorExportMode>] [-NETAssemblyTypeAccelerators <string[]>] [-NETAssemblyTypeAcceleratorAssemblies <string[]>] [-SignIncludeBinaries] [-SignIncludeInternals] [-SignIncludeExe] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -40,6 +40,22 @@ New-ConfigurationModuleBuildProfile -Profile Binary -NETProjectName MyModule -NE
 
 ### -AboutTopicsSourcePath
 Source paths for about-topic files.
+
+```yaml
+Type: String[]
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -AllowedCertificateThumbprints
+Ordered approved signing thumbprints. Selects the first usable approved certificate when no explicit certificate is supplied; explicit certificates must also be approved.
 
 ```yaml
 Type: String[]

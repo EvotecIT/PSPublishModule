@@ -447,9 +447,16 @@
         "ExcludePaths": { "type": ["array", "null"], "items": { "type": "string" } },
         "OverwriteSigned": { "type": ["boolean", "null"] },
         "CertificateThumbprint": { "type": ["string", "null"] },
+        "AllowedCertificateThumbprints": {
+          "type": ["array", "null"],
+          "description": "Approved code-signing thumbprints in selection priority order. Empty preserves legacy explicit selection; explicit certificates and PFX inputs must also match a nonempty list.",
+          "items": { "type": "string", "pattern": "^(?:\\s*[A-Fa-f0-9]){40}\\s*$" }
+        },
         "CertificatePFXPath": { "type": ["string", "null"] },
         "CertificatePFXBase64": { "type": ["string", "null"] },
-        "CertificatePFXPassword": { "type": ["string", "null"] }
+        "CertificatePFXPassword": { "type": ["string", "null"] },
+        "CertificatePFXBase64EnvironmentVariable": { "type": ["string", "null"], "description": "Environment variable containing PFX Base64, resolved only when signing." },
+        "CertificatePFXPasswordEnvironmentVariable": { "type": ["string", "null"], "description": "Environment variable containing the PFX password, resolved only when signing." }
       }
     },
 

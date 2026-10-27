@@ -342,7 +342,7 @@ jobs:
         run: >
           dotnet test .\PowerForge.Tests\PowerForge.Tests.csproj
           -c Release --no-build --no-restore --nologo
-          --filter 'FullyQualifiedName~ArtefactBuilder|FullyQualifiedName~ApprovedModuleDependencyPruning|FullyQualifiedName~ModulePipelineApprovedModules'
+          --filter 'FullyQualifiedName~ApprovedSigningPolicyTests|FullyQualifiedName~OpenAuthenticodeAdapterTests|FullyQualifiedName~ModuleSigningCertificateResolverTests|FullyQualifiedName~ModuleSigningEvidencePolicyTests|FullyQualifiedName~ArtefactBuilder|FullyQualifiedName~ApprovedModuleDependencyPruning|FullyQualifiedName~ModulePipelineApprovedModules'
 
       - name: Test Apple store art and screenshot provenance
         shell: pwsh
@@ -619,7 +619,7 @@ jobs:
         run: >
           dotnet test .\PowerForge.Tests\PowerForge.Tests.csproj
           -c Release --no-build --no-restore --nologo
-          --filter 'FullyQualifiedName~ArtefactBuilderDeliveryLayout|FullyQualifiedName~ApprovedModuleDependencyPruning|FullyQualifiedName~ModulePipelineApprovedModules'
+          --filter 'FullyQualifiedName~ApprovedSigningPolicyTests|FullyQualifiedName~OpenAuthenticodeAdapterTests|FullyQualifiedName~ModuleSigningCertificateResolverTests|FullyQualifiedName~ModuleSigningEvidencePolicyTests|FullyQualifiedName~ArtefactBuilderDeliveryLayout|FullyQualifiedName~ApprovedModuleDependencyPruning|FullyQualifiedName~ModulePipelineApprovedModules'
 
       - name: Test cross-platform website and agent plugin contracts
         shell: pwsh
