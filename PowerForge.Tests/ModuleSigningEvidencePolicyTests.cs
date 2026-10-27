@@ -20,7 +20,12 @@ public sealed class ModuleSigningEvidencePolicyTests
             AllowedCertificateThumbprints = [approved ? certificate.Thumbprint : new string('1', 40)]
         };
         byte[] content = [1, 2, 3];
-        if (approved)
+        if (OperatingSystem.IsMacOS())
+        {
+            var error = Assert.Throws<PlatformNotSupportedException>(() => PowerShellCompilationEvidenceAuthenticator.Sign(content, signing));
+            Assert.Contains("Ephemeral PFX signing is not supported on macOS", error.Message);
+        }
+        else if (approved)
         {
             var signature = PowerShellCompilationEvidenceAuthenticator.Sign(content, signing);
             Assert.Equal(certificate.Thumbprint, signature.Thumbprint);
@@ -50,9 +55,17 @@ public sealed class ModuleSigningEvidencePolicyTests
                 CertificatePFXBase64EnvironmentVariable = name, CertificatePFXPasswordEnvironmentVariable = name + "_PASSWORD",
                 AllowedCertificateThumbprints = [certificate.Thumbprint]
             };
-            var signature = PowerShellCompilationEvidenceAuthenticator.Sign([1, 2, 3], signing);
-            Assert.Equal(certificate.Thumbprint, PowerShellCompilationEvidenceAuthenticator.GetSignerThumbprint(signing));
-            Assert.Equal(certificate.Thumbprint, PowerShellCompilationEvidenceAuthenticator.Verify([1, 2, 3], signature.Signature, signing).Thumbprint);
+            if (OperatingSystem.IsMacOS())
+            {
+                var error = Assert.Throws<PlatformNotSupportedException>(() => PowerShellCompilationEvidenceAuthenticator.Sign([1, 2, 3], signing));
+                Assert.Contains("Ephemeral PFX signing is not supported on macOS", error.Message);
+            }
+            else
+            {
+                var signature = PowerShellCompilationEvidenceAuthenticator.Sign([1, 2, 3], signing);
+                Assert.Equal(certificate.Thumbprint, PowerShellCompilationEvidenceAuthenticator.GetSignerThumbprint(signing));
+                Assert.Equal(certificate.Thumbprint, PowerShellCompilationEvidenceAuthenticator.Verify([1, 2, 3], signature.Signature, signing).Thumbprint);
+            }
             Assert.Equal(pfx, Environment.GetEnvironmentVariable(name));
         }
         finally

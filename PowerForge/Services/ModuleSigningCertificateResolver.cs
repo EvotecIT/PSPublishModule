@@ -131,6 +131,8 @@ internal static class ModuleSigningCertificateResolver
 
     private static X509Certificate2 LoadPfx(byte[] bytes, string? password)
     {
+        if (System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.OSX))
+            throw new PlatformNotSupportedException("Ephemeral PFX signing is not supported on macOS because private-key import requires a keychain. Use an approved certificate already installed in a certificate store, or sign on Windows or Linux.");
         try
         {
 #if NET10_0_OR_GREATER

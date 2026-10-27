@@ -43,7 +43,18 @@ The equivalent options segment is:
 }
 ```
 
-Include it in the build specification's `Segments` array and enable signing in its Build segment. Execute the specification with `Invoke-ModuleBuild -ConfigPath Build/powerforge.json -RunMode Build`. `Invoke-ModuleBuild -JsonOnly -JsonPath Build/powerforge.json` exports a PowerShell-configured pipeline without executing signing.
+Include it in the build specification's `Segments` array and enable signing in its Build segment. Execute the specification with `Invoke-ModuleBuild -ConfigPath Build/powerforge.json -RunMode Build`.
+
+To export the PowerShell configuration without executing signing, supply the module and settings:
+
+```powershell
+Invoke-ModuleBuild -ModuleName 'MyModule' -JsonOnly -JsonPath Build/powerforge.json -Settings {
+    New-ConfigurationBuild -Enable -SignModule -AllowedCertificateThumbprints @(
+        '1111111111111111111111111111111111111111'
+        '2222222222222222222222222222222222222222'
+    )
+}
+```
 
 ## PFX inputs and secret references
 
@@ -73,7 +84,9 @@ The environment references resolve only when signing executes. Planning and conf
 
 Existing `CertificatePFXBase64` and `CertificatePFXPassword` inputs remain supported, including an explicit empty password for an unprotected fixture or PFX. Those literal values remain part of the configuration supplied by the caller; do not put private key material or passwords in checked-in build JSON or exported files.
 
-The signing host receives PFX data through child-scoped environment overrides, never command-line arguments or temporary secret files. It removes both the source-variable names and transport variables from its environment before provider operations, and imports PFX keys with `EphemeralKeySet`. The parent process environment is unchanged. This reduces command-line and descendant-process exposure; it does not isolate secrets from a debugger, process dump, privileged administrator or other code running in the caller's process.
+The signing host receives PFX data through child-scoped environment overrides, never command-line arguments or temporary secret files. It removes both the source-variable names and transport variables from its environment before provider operations, and imports PFX keys with `EphemeralKeySet` on Windows and Linux. macOS cannot import a PFX private key without writing to a keychain, so PFX signing fails explicitly on macOS. It does not fall back to keychain-backed loading. Use an approved certificate already installed in a certificate store, or perform PFX signing on Windows or Linux. This applies to compilation-evidence signing as well as module files. See [.NET cross-platform cryptography](https://learn.microsoft.com/en-us/dotnet/standard/security/cross-platform-cryptography#read-a-pkcs12pfx).
+
+The parent process environment is unchanged. This reduces command-line and descendant-process exposure; it does not isolate secrets from a debugger, process dump, privileged administrator or other code running in the caller's process.
 
 ## Related configuration
 

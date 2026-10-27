@@ -269,10 +269,16 @@ try {
   # Recheck the actual provider certificate identity before signing any file.
   $approved = @()
   if (-not [string]::IsNullOrWhiteSpace($AllowedThumbprintsB64)) {
-    $approved = @([Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($AllowedThumbprintsB64)) | ConvertFrom-Json)
+    # Windows PowerShell emits the JSON array as one pipeline object. Enumerate
+    # the decoded value separately so one or many identities behave identically.
+    $decoded = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($AllowedThumbprintsB64)) | ConvertFrom-Json
+    $approved = @($decoded | ForEach-Object { [string]$_ })
   }
   $inputCount = @(@($Thumbprint, $PfxPath, $PfxBase64) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }).Count
   if ($inputCount -gt 1) { throw 'Configure only one explicit signing certificate source: thumbprint, PFX path or PFX Base64.' }
+  if ($IsMacOS -and (-not [string]::IsNullOrWhiteSpace($PfxBase64) -or -not [string]::IsNullOrWhiteSpace($PfxPath))) {
+    throw 'Ephemeral PFX signing is not supported on macOS because private-key import requires a keychain. Use an approved certificate already installed in a certificate store, or sign on Windows or Linux.'
+  }
   $flags = [System.Security.Cryptography.X509Certificates.X509KeyStorageFlags]::EphemeralKeySet
 
   if (-not [string]::IsNullOrWhiteSpace($PfxBase64)) {

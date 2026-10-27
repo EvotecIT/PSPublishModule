@@ -34,6 +34,13 @@ public sealed class ApprovedSigningPolicyTests
     [InlineData(true, true, true)]
     public void PfxTransportIsChildScopedAndEnforcesApprovedIdentity(bool approved, bool useEnvironmentReferences, bool usePfxPath)
     {
+        AssertPfxTransport(approved, useEnvironmentReferences, usePfxPath, useDesktop: false);
+        if (OperatingSystem.IsWindows())
+            AssertPfxTransport(approved, useEnvironmentReferences, usePfxPath, useDesktop: true);
+    }
+
+    private static void AssertPfxTransport(bool approved, bool useEnvironmentReferences, bool usePfxPath, bool useDesktop)
+    {
         using var key = RSA.Create(2048);
         var certificateRequest = new CertificateRequest("CN=PowerForge ephemeral signing fixture", key, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
         certificateRequest.CertificateExtensions.Add(new X509EnhancedKeyUsageExtension(new OidCollection { new("1.3.6.1.5.5.7.3.3") }, false));
@@ -77,7 +84,12 @@ public sealed class ApprovedSigningPolicyTests
                 function Set-OpenAuthenticodeSignature { throw 'No signing operation is expected for the valid fixture signature.' }
                 """;
             File.WriteAllText(request.ScriptPath!, script.Replace("$ErrorActionPreference = 'Stop'", probe + "\n$ErrorActionPreference = 'Stop'"));
-            return new PowerShellRunner().Run(request);
+            var child = useDesktop
+                ? new PowerShellRunRequest(request.ScriptPath!, request.Arguments, request.Timeout,
+                    preferPwsh: false, hostRequirement: PowerShellHostRequirement.WindowsPowerShell,
+                    workingDirectory: request.WorkingDirectory, environmentVariables: request.EnvironmentVariables)
+                : request;
+            return new PowerShellRunner().Run(child);
         });
         try
         {
@@ -91,7 +103,14 @@ public sealed class ApprovedSigningPolicyTests
                 CertificatePFXPasswordEnvironmentVariable = useEnvironmentReferences ? passwordVariable : null,
                 AllowedCertificateThumbprints = [approved ? certificate.Thumbprint : First]
             };
-            if (approved)
+            if (OperatingSystem.IsMacOS())
+            {
+                var error = Assert.Throws<ModuleSigningException>(() => operations.SignModuleOutput("Fixture", root, [target], ["*.ps1"], [], signing));
+                Assert.Contains("Ephemeral PFX signing is not supported on macOS", error.Message);
+                Assert.DoesNotContain(password, error.ToString());
+                Assert.DoesNotContain(pfx, error.ToString());
+            }
+            else if (approved)
             {
                 var result = operations.SignModuleOutput("Fixture", root, [target], ["*.ps1"], [], signing);
                 Assert.Equal(certificate.Thumbprint, result.CertificateThumbprint);
