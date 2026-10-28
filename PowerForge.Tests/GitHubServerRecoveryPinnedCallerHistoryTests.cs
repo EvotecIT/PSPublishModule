@@ -25,6 +25,8 @@ public sealed partial class GitHubServerRecoveryValidationSecurityTests
     [InlineData("present")]
     [InlineData("wrong-origin")]
     [InlineData("unavailable")]
+    [InlineData("tag-object")]
+    [InlineData("tag-after-fetch")]
     public void CallerPinRetrieval_PreservesCheckoutAndFailsClosed(string scenario)
     {
         var root = Path.Combine(Path.GetTempPath(), "powerforge-caller-history-" + Guid.NewGuid().ToString("N"));
@@ -48,6 +50,20 @@ public sealed partial class GitHubServerRecoveryValidationSecurityTests
                 RunProcess("git", workspace, "remote", "set-url", "origin", "https://github.com/Other/Repository.git").EnsureSuccess();
             if (scenario == "unavailable")
                 pin = new string('f', 40);
+            if (scenario is "tag-object" or "tag-after-fetch")
+            {
+                var tagRepository = scenario == "tag-object" ? workspace : Path.Combine(root, "original-caller");
+                RunProcess("git", tagRepository, "-c", "user.name=PowerForge Tests", "-c", "user.email=powerforge-tests@example.invalid",
+                    "-c", "tag.gpgsign=false", "tag", "-a", "recovery-pin", "-m", "Recovery tag fixture", scenario == "tag-object" ? head : pin).EnsureSuccess();
+                pin = RunProcess("git", tagRepository, "rev-parse", "refs/tags/recovery-pin").StandardOutput.Trim();
+                if (scenario == "tag-after-fetch")
+                {
+                    var origin = Path.Combine(root, "origin.git");
+                    RunProcess("git", tagRepository, "push", origin, "refs/tags/recovery-pin").EnsureSuccess();
+                    RunProcess("git", tagRepository, "push", origin, ":refs/tags/recovery-pin").EnsureSuccess();
+                    Assert.NotEqual(0, RunProcess("git", workspace, "cat-file", "-e", pin).ExitCode);
+                }
+            }
 
             var wrapper = Path.Combine(root, "retrieve.ps1");
             File.WriteAllText(wrapper, """
@@ -81,8 +97,16 @@ public sealed partial class GitHubServerRecoveryValidationSecurityTests
             else
             {
                 Assert.NotEqual(0, result.ExitCode);
-                Assert.Contains(scenario == "wrong-origin" ? "different repository origin" : "Unable to retrieve the exact pinned", result.AllOutput, StringComparison.Ordinal);
-                Assert.NotEqual(0, RunProcess("git", workspace, "cat-file", "-e", pin + "^{commit}").ExitCode);
+                var expectedError = scenario switch
+                {
+                    "wrong-origin" => "different repository origin",
+                    "tag-object" => "must identify a commit object itself",
+                    "tag-after-fetch" => "not the exact pinned commit",
+                    _ => "Unable to retrieve the exact pinned"
+                };
+                Assert.Contains(expectedError, result.AllOutput, StringComparison.Ordinal);
+                if (scenario is "wrong-origin" or "unavailable")
+                    Assert.NotEqual(0, RunProcess("git", workspace, "cat-file", "-e", pin + "^{commit}").ExitCode);
             }
         }
         finally

@@ -9,8 +9,11 @@ function Assert-PowerForgeCallerGitCommit {
     if ($RepositoryRef -notmatch '^([a-fA-F0-9]{40}|[a-fA-F0-9]{64})$') {
         throw 'Caller recovery repository must be pinned to an exact commit.'
     }
-    & git -C $Workspace cat-file -e "${RepositoryRef}^{commit}" *> $null
+    $objectType = @(& git -C $Workspace cat-file -t $RepositoryRef 2>$null)
     if ($LASTEXITCODE -eq 0) {
+        if ($objectType.Count -ne 1 -or $objectType[0] -ne 'commit') {
+            throw 'The caller recovery pin must identify a commit object itself.'
+        }
         return
     }
 
@@ -34,8 +37,8 @@ function Assert-PowerForgeCallerGitCommit {
         if ($LASTEXITCODE -ne 0) {
             throw 'Unable to retrieve the exact pinned caller recovery commit from its repository origin.'
         }
-        & git -C $Workspace cat-file -e "${RepositoryRef}^{commit}" *> $null
-        if ($LASTEXITCODE -ne 0) {
+        $objectType = @(& git -C $Workspace cat-file -t $RepositoryRef 2>$null)
+        if ($LASTEXITCODE -ne 0 -or $objectType.Count -ne 1 -or $objectType[0] -ne 'commit') {
             throw 'The retrieved caller recovery object is not the exact pinned commit.'
         }
     } finally {
