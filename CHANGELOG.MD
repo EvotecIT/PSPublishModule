@@ -2,6 +2,7 @@
 
 ## Unreleased
 ### What's Changed
+- Preserve the source bootstrapper during frozen-source and deferred release builds while generating the current loader in package staging, so release preparation cannot invalidate its own source-integrity check.
 - Remove each dotnet publish invocation's temporary staging directory after success or failure, retaining deployed output, checksum inputs, service state and other invocations' staging.
 - Decode approved signing lists consistently in Windows PowerShell 5.1 and PowerShell 7, and report macOS PFX imports as unsupported rather than falling back to keychain storage.
 - Use OpenAuthenticode's CMS result and explicit unsigned-file error contracts on non-Windows, pass supported signing parameters, and verify the selected signer after writing each signature.

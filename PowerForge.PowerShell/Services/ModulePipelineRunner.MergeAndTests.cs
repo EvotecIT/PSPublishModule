@@ -439,9 +439,10 @@ public sealed partial class ModulePipelineRunner
         ModuleBuildResult buildResult,
         ModulePipelinePlan plan)
     {
-        // Documentation refreshes must not replace source loader fixes with this tool's template.
-        // Staging has its own bootstrapper; normal builds still refresh or clear the source loader.
-        if (plan.GateMode == ConfigurationGateMode.Documentation)
+        // Frozen release inputs and documentation refreshes preserve the source
+        // loader. Staging still receives its own current package bootstrapper.
+        if (plan.GateMode == ConfigurationGateMode.Documentation ||
+            plan.ReleaseCheckpoint || plan.RequireReleaseSourceUnchanged)
             return;
 
         var sourceIsSingleFileModule = IsSourceSingleFileModule(plan);
