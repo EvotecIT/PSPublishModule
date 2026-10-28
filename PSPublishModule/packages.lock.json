@@ -4,9 +4,9 @@
     ".NETFramework,Version=v4.7.2": {
       "HtmlForgeX": {
         "type": "Direct",
-        "requested": "[2.0.0, )",
-        "resolved": "2.0.0",
-        "contentHash": "8USuIDZXsq6i+fOVTEMQAPs4r5pzYTc4WWSLSGlrnfcw6ssBYsQqYDWl4SRj/nVfDDt6aqCeliq1HG4jy1Q3+A==",
+        "requested": "[2.1.0, )",
+        "resolved": "2.1.0",
+        "contentHash": "pwZYDjXknzjsJf9r5dr/PzQIr8RyEKlWjUZXESwdS16rv/20BaxDrXNq5lCJqq6SXjTkBcETiXWnv95hj7BVmg==",
         "dependencies": {
           "System.ComponentModel.Annotations": "5.0.0",
           "System.Text.Json": "10.0.12",
@@ -334,7 +334,7 @@
         "type": "Project",
         "dependencies": {
           "Microsoft.PowerShell.5.ReferenceAssemblies": "[1.1.0, )",
-          "PowerForge": "[3.0.178, )",
+          "PowerForge": "[3.0.180, )",
           "System.Security.Cryptography.Xml": "[10.0.13, )",
           "System.Text.Json": "[10.0.13, )"
         }
@@ -343,9 +343,9 @@
     "net10.0": {
       "HtmlForgeX": {
         "type": "Direct",
-        "requested": "[2.0.0, )",
-        "resolved": "2.0.0",
-        "contentHash": "8USuIDZXsq6i+fOVTEMQAPs4r5pzYTc4WWSLSGlrnfcw6ssBYsQqYDWl4SRj/nVfDDt6aqCeliq1HG4jy1Q3+A==",
+        "requested": "[2.1.0, )",
+        "resolved": "2.1.0",
+        "contentHash": "pwZYDjXknzjsJf9r5dr/PzQIr8RyEKlWjUZXESwdS16rv/20BaxDrXNq5lCJqq6SXjTkBcETiXWnv95hj7BVmg==",
         "dependencies": {
           "TimeZoneConverter": "7.2.0"
         }
@@ -1151,7 +1151,7 @@
         "type": "Project",
         "dependencies": {
           "Microsoft.PowerShell.SDK": "[7.6.6, )",
-          "PowerForge": "[3.0.178, )",
+          "PowerForge": "[3.0.180, )",
           "System.Security.Cryptography.Xml": "[10.0.13, )"
         }
       }
@@ -1159,9 +1159,9 @@
     "net8.0": {
       "HtmlForgeX": {
         "type": "Direct",
-        "requested": "[2.0.0, )",
-        "resolved": "2.0.0",
-        "contentHash": "8USuIDZXsq6i+fOVTEMQAPs4r5pzYTc4WWSLSGlrnfcw6ssBYsQqYDWl4SRj/nVfDDt6aqCeliq1HG4jy1Q3+A==",
+        "requested": "[2.1.0, )",
+        "resolved": "2.1.0",
+        "contentHash": "pwZYDjXknzjsJf9r5dr/PzQIr8RyEKlWjUZXESwdS16rv/20BaxDrXNq5lCJqq6SXjTkBcETiXWnv95hj7BVmg==",
         "dependencies": {
           "TimeZoneConverter": "7.2.0"
         }
@@ -1928,7 +1928,7 @@
         "type": "Project",
         "dependencies": {
           "Microsoft.PowerShell.SDK": "[7.4.21, )",
-          "PowerForge": "[3.0.178, )",
+          "PowerForge": "[3.0.180, )",
           "System.Security.Cryptography.Xml": "[10.0.13, )"
         }
       }

@@ -9,6 +9,8 @@ concurrency:
 env:
   DOTNET_NOLOGO: true
   DOTNET_CLI_TELEMETRY_OPTOUT: 1
+  # Preserve the failing child host/backend and bounded public Gallery response evidence.
+  POWERFORGE_PUBLIC_GALLERY_DIAGNOSTICS: '1'
   NUGET_PACKAGES: ${{ github.workspace }}/.nuget/packages
 
 # Controls when the workflow will run
@@ -87,6 +89,7 @@ jobs:
           ./.github/scripts/test-npm-release-version.ps1
           ./.github/scripts/test-npm-publish.ps1
           ./.github/scripts/test-website-social-card-dependencies.ps1
+          ./.github/scripts/test-public-gallery-failure-diagnostic.ps1
 
       - name: Test pinned XcodeGen setup
         run: python3 .github/scripts/test-xcodegen-setup.py

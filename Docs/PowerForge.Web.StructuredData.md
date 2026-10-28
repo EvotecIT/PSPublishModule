@@ -127,6 +127,17 @@ syntax and supported profile fields. Check the rendered page with the
 [Schema.org validator](https://validator.schema.org/) and, for a supported Google
 feature, the [Rich Results Test](https://search.google.com/test/rich-results).
 
+The doctor accepts JSON-LD `@graph` containers whose entities declare their own
+types. The container does not need an additional `@type`; the doctor still
+checks the profiles inside the graph and reports a payload with no declared type.
+
+Google's supported search features change independently of Schema.org. FAQ markup
+still describes visible questions and answers, but Google stopped showing FAQ
+rich results in May 2026. Its sitelinks search box was removed in November 2024;
+existing `SearchAction` markup can remain without causing a Search Console error.
+See the [Google documentation updates](https://developers.google.com/search/updates)
+and [sitelinks search box announcement](https://developers.google.com/search/blog/2024/10/sitelinks-search-box).
+
 Schema.org validity and Google search eligibility are separate. Google's
 [software application requirements](https://developers.google.com/search/docs/appearance/structured-data/software-app)
 include real review or rating evidence as well as the application name and offer

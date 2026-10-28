@@ -57,8 +57,8 @@
       },
       "AngleSharp.Js": {
         "type": "Transitive",
-        "resolved": "1.1.0",
-        "contentHash": "5DGuaSi3hxoafNOpqJwqTz4/nIKpniwdF6z/AEf7diQNb5g3JMAR/IzL0JVxsR+3MHrtKNPF4r2BzWOIta0soA==",
+        "resolved": "1.1.1",
+        "contentHash": "yeSCuMGqVfuozAS6CgtW/T9g1H6WagwsdT9aZtrfyumfGshkQ2I2EwhCSvhnZrsnqFCcuRUjFmesjzF9bXW4tg==",
         "dependencies": {
           "AngleSharp": "[1.8.0, 2.0.0)",
           "Jint": "[4.15.3, 5.0.0)"
@@ -66,8 +66,24 @@
       },
       "ChartForgeX": {
         "type": "Transitive",
-        "resolved": "1.8.2",
-        "contentHash": "htXfe/zIkkRXZZon0UW1tYo3ar+oe3Wd6uhij1xdWTTAbzOiZOZ/fKeuBBFvf1FF+EQoLuRZweXOp5QNlNX0EQ=="
+        "resolved": "3.0.0",
+        "contentHash": "jwjmblbiiPWapnDF4Kwkxgbmtp4uYDWfWYK3iUCQpX4xCee79sIrFURA8MV6WBjI24aATkMM/w5TAP5XU4IxlA=="
+      },
+      "ChartForgeX.Stories": {
+        "type": "Transitive",
+        "resolved": "3.0.0",
+        "contentHash": "hz98IJJxv2EdbyqsiWkbBbmGWrTzz4lRR/cAvCh3/fsUfyTr80GFy/nCA/NXPxMVq+ZCrQzdmqrI+X+OaQHUGQ==",
+        "dependencies": {
+          "ChartForgeX": "3.0.0"
+        }
+      },
+      "ChartForgeX.Visuals": {
+        "type": "Transitive",
+        "resolved": "3.0.0",
+        "contentHash": "VLXstBFz0naL1teN9NLQKnpqO7ZCRVATwMgF4+S79rNIunJCBRk8sVV/U0QPitQw6X/rEmgzNo2VtKL6uXEBNw==",
+        "dependencies": {
+          "ChartForgeX": "3.0.0"
+        }
       },
       "DBAClientX.Core": {
         "type": "Transitive",
@@ -107,28 +123,30 @@
       },
       "HtmlTinkerX": {
         "type": "Transitive",
-        "resolved": "3.0.5",
-        "contentHash": "GHqlHBvJyHjv0cgBLnfUF0rjf5BJdz0C/E9i+okGbrMjQ3YE0Jfk3TSi2quJFVqk5bG59EJt0l7PmOcpTf5VtA==",
+        "resolved": "3.0.6",
+        "contentHash": "rTkotWiXMYKJIE2A6z8rsd7PQFTGeObwcdTXTDBjHX81s1Qw3SzW4KMM43ayUHg1h0LxsH0x2kE+sztZWPrrlA==",
         "dependencies": {
           "AngleSharp": "1.8.4",
           "AngleSharp.Css": "1.1.2",
           "AngleSharp.Diffing": "1.1.1",
           "AngleSharp.Io": "1.1.0",
-          "AngleSharp.Js": "1.1.0",
-          "ChartForgeX": "1.8.2",
+          "AngleSharp.Js": "1.1.1",
+          "ChartForgeX": "3.0.0",
+          "ChartForgeX.Stories": "3.0.0",
+          "ChartForgeX.Visuals": "3.0.0",
           "HtmlAgilityPack": "1.13.0",
-          "Jint": "4.16.4",
+          "Jint": "4.17.0",
           "Microsoft.Playwright": "1.63.0",
-          "NUglify": "1.23.3",
-          "OfficeIMO.Html": "3.4.5",
-          "OfficeIMO.Markdown.Html": "3.4.5",
+          "NUglify": "1.23.4",
+          "OfficeIMO.Html": "3.5.1",
+          "OfficeIMO.Markdown.Html": "3.5.1",
           "PreMailer.Net": "2.7.4"
         }
       },
       "Jint": {
         "type": "Transitive",
-        "resolved": "4.16.4",
-        "contentHash": "Gdqc4XA5N7MqUxv2phUZ7U2ZMvcz7tF6ktCe1xVfpP0MEykP41QTKmjyaFTmVPGgawUgQAW4jJi8jv/YEQQY2w==",
+        "resolved": "4.17.0",
+        "contentHash": "9jdpLQQYsWTjOn2THpiR8zRJ34ksV6ofW0gJvZxJW/fIGK+A+TkpWonhuuLDRwqLDjP+9WsxYt2MEge6lWjk2A==",
         "dependencies": {
           "Acornima": "1.7.0"
         }
@@ -240,8 +258,8 @@
       },
       "NUglify": {
         "type": "Transitive",
-        "resolved": "1.23.3",
-        "contentHash": "QdHmq6ApqCIxvbGPF4C9gY3A+n0DGsD74Hye0aivvf8hJqBanlsKysqTADSsWdzhvKx+XjG7zXHn/HAV6eLuuQ=="
+        "resolved": "1.23.4",
+        "contentHash": "nPgi5zK2VdGPdv5DNNyT2OK9wfC5njSb9eYBVv4MT8RSIFbKyU7klj6BW6RcTlZwurqq1jckPttVMd0Gffa6Hw=="
       },
       "OfficeIMO.Core": {
         "type": "Transitive",
@@ -250,29 +268,29 @@
       },
       "OfficeIMO.Html": {
         "type": "Transitive",
-        "resolved": "3.4.5",
-        "contentHash": "S0zclSuFsjq4iYmRUzo0SzxKv8uHj0eklxZzg/w1ebwiGcbOPMU7kZeNLgb6XjCluA3qcnj1opV6Bb7T4yYk+Q==",
+        "resolved": "3.5.1",
+        "contentHash": "jMFiXy9EHNosMGmYE1Jmhri599hDucZrlWkJEuV7ettUVaRueeAeAhF4R7yUGI3E/HpdecfBeu4Ge7qqIBNKEw==",
         "dependencies": {
           "AngleSharp": "1.8.3",
           "AngleSharp.Css": "1.1.2",
-          "OfficeIMO.Core": "3.4.5",
-          "OfficeIMO.Html.AngleSharp": "3.4.5",
-          "OfficeIMO.Html.Core": "3.4.5"
+          "OfficeIMO.Core": "3.5.1",
+          "OfficeIMO.Html.AngleSharp": "3.5.1",
+          "OfficeIMO.Html.Core": "3.5.1"
         }
       },
       "OfficeIMO.Html.AngleSharp": {
         "type": "Transitive",
-        "resolved": "3.4.5",
-        "contentHash": "l1wNKxVOe3inwCl1Tp6xOobaMoeL8X7wiQryVmJpf6XYKfTtp6DmjbE3ivvIEvnw2vwbDH6m+Tdov90EILpUrw==",
+        "resolved": "3.5.1",
+        "contentHash": "Vs2dEfrGlezGdfvsm2vxIE5Ue7iVZylTMaKWDPpPaOGuI51wEtGt6C0FVAM8vgaPJt3A4zn74rPvxNByUS6Hcg==",
         "dependencies": {
           "AngleSharp": "1.8.3",
-          "OfficeIMO.Html.Core": "3.4.5"
+          "OfficeIMO.Html.Core": "3.5.1"
         }
       },
       "OfficeIMO.Html.Core": {
         "type": "Transitive",
-        "resolved": "3.4.5",
-        "contentHash": "VMay7OAMfuPcylWX2irpAPjC3DIpFBDJY6zDY2qMiz7SUUzpw/PeKe0uA22sB8OvXAgbdcSE16qYZHbhQwtp3g=="
+        "resolved": "3.5.1",
+        "contentHash": "UaJ1J+eyKOmlA7HE5lJwMgPtXkKcmGVB9LSM3LOctFyRrJ6k1ly0vs6XYQB33u44S4zZDRsztIvPErFWx/TCrA=="
       },
       "OfficeIMO.Markdown": {
         "type": "Transitive",
@@ -284,11 +302,11 @@
       },
       "OfficeIMO.Markdown.Html": {
         "type": "Transitive",
-        "resolved": "3.4.5",
-        "contentHash": "BhWlF/ZeZl1sbqWhjWBHK7R6nss+F1uF37CFElVqTKliwzfvWKn/5FYUrajygX2nevpHZNScAeK0/SKFIpoGIg==",
+        "resolved": "3.5.1",
+        "contentHash": "NwUXV97Z4CJzt8M9A8KvcVdXN5ADq4AD8H3YQpOyzqNuHKFBdAK7EH+qjg9Ge4MtrrIxCyVU094E0JLnSv/j/Q==",
         "dependencies": {
-          "OfficeIMO.Html": "3.4.5",
-          "OfficeIMO.Markdown": "3.4.5"
+          "OfficeIMO.Html": "3.5.1",
+          "OfficeIMO.Markdown": "3.5.1"
         }
       },
       "PreMailer.Net": {
@@ -403,12 +421,12 @@
         "type": "Project",
         "dependencies": {
           "Google.Apis.Auth": "[1.77.0, )",
-          "HtmlTinkerX": "[3.0.5, )",
+          "HtmlTinkerX": "[3.0.6, )",
           "Magick.NET-Q8-AnyCPU": "[15.0.0, )",
           "Microsoft.CodeAnalysis.CSharp": "[5.9.0, )",
           "OfficeIMO.Markdown": "[3.5.1, )",
-          "PowerForge": "[3.0.178, )",
-          "PowerForge.Web.Protocols": "[3.0.178, )",
+          "PowerForge": "[3.0.180, )",
+          "PowerForge.Web.Protocols": "[3.0.180, )",
           "Scriban": "[7.5.1, )",
           "YamlDotNet": "[18.1.0, )"
         }

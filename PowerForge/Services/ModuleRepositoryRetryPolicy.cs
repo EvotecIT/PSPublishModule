@@ -86,8 +86,16 @@ internal sealed class ModuleRepositoryRetryPolicy
     }
 
     internal static bool IsTransientError(string message)
-        => Regex.IsMatch(message ?? string.Empty,
+    {
+        message ??= string.Empty;
+        // Opt-in HTTP controls describe separate requests and must remain observational.
+        var diagnosticStart = message.IndexOf("\nPFPSRG-DIAGNOSTIC:", StringComparison.Ordinal);
+        if (diagnosticStart >= 0)
+            message = message.Substring(0, diagnosticStart);
+
+        return Regex.IsMatch(message,
             @"(?i)(?:\bHTTP(?:/\d(?:\.\d)?)?\s*[:=]?\s*|\b(?:status(?:\s+code)?|remote server returned an error:)[^\r\n\d]{0,80})(404|408|429|5\d\d)(?!\d)|" +
             @"\bResponse returned status code(?: package)?:\s*(Not Found|Request Timeout|Too Many Requests|Internal Server Error|Bad Gateway|Service Unavailable|Gateway Timeout)\b|" +
             @"\btoo many requests\b|\b(timed?\s*out|timeout)\b|temporarily unavailable|service unavailable|bad gateway|gateway timeout");
+    }
 }

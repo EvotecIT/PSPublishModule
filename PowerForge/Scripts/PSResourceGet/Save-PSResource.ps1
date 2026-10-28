@@ -13,6 +13,7 @@
 )
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
+# POWERFORGE_PUBLIC_GALLERY_FAILURE_DIAGNOSTICS
 
 try {
   Import-Module Microsoft.PowerShell.PSResourceGet -ErrorAction Stop | Out-Null
@@ -42,6 +43,7 @@ if (-not [string]::IsNullOrWhiteSpace($CredentialUser) -and -not [string]::IsNul
 # then throw a generic InstallPackageFailure. Keep the cause for retry decisions.
 $providerMessages = [System.Collections.Generic.List[string]]::new()
 $Error.Clear()
+$galleryTrace = Start-PFPublicGalleryResponseTrace -Repositories @($Repository) -HasCredential ($CredentialUser -or $CredentialSecret)
 try {
   $saved = Save-PSResource @params -PassThru -Verbose 4>&1 | ForEach-Object {
     if ($_ -is [System.Management.Automation.VerboseRecord]) {
@@ -61,8 +63,12 @@ try {
   $failure = $_
   $messages = @($failure.Exception.Message) + @($Error | ForEach-Object { $_.Exception.Message }) + @($providerMessages)
   $msg = ($messages | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -Unique) -join "`n"
+  $diagnostic = Get-PFPublicGalleryFailureDiagnostic -Repositories @($Repository) -Failure $failure -HasCredential ($CredentialUser -or $CredentialSecret) -Trace $galleryTrace
+  if ($diagnostic) { $msg += "`n" + $diagnostic }
   $b64 = [System.Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($msg))
   Write-Output ('PFPSRG::ERROR::' + $b64)
   exit 1
+} finally {
+  if ($galleryTrace) { $galleryTrace.Dispose() }
 }
 
