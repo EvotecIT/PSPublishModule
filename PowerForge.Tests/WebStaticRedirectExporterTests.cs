@@ -34,6 +34,33 @@ public sealed class WebStaticRedirectExporterTests : IDisposable
     }
 
     [Fact]
+    public void ExistingAncestorCaseAliasCannotChangeThePublishedRoute()
+    {
+        WriteRules(new RedirectSpec { From = "/API/legacy/", To = "/api/reader-ocr/type/" });
+        if (OperatingSystem.IsLinux())
+            Assert.Equal(1, WebStaticRedirectExporter.Export(root, false));
+        else
+        {
+            Assert.Throws<InvalidOperationException>(() => WebStaticRedirectExporter.Export(root, false));
+            Assert.False(Directory.Exists(Path.Combine(root, "api", "legacy")));
+        }
+    }
+
+    [Fact]
+    public void PlannedAncestorCaseAliasesFailBeforeAnyPageIsWritten()
+    {
+        WriteRules(new RedirectSpec { From = "/Legacy/a/", To = "/api/reader-ocr/type/" },
+            new RedirectSpec { From = "/legacy/b/", To = "/api/reader-ocr/type/" });
+        if (OperatingSystem.IsLinux())
+            Assert.Equal(2, WebStaticRedirectExporter.Export(root, false));
+        else
+        {
+            Assert.Throws<InvalidOperationException>(() => WebStaticRedirectExporter.Export(root, false));
+            Assert.False(Directory.Exists(Path.Combine(root, "Legacy")));
+        }
+    }
+
+    [Fact]
     public void CaseDistinctSourcesArePreservedOnLinuxAndRejectedOnOtherBuildHosts()
     {
         WriteRules(new RedirectSpec { From = "/Legacy/", To = "/api/reader-ocr/type/" },
