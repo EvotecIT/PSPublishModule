@@ -128,7 +128,6 @@ public sealed class DocumentationEngine
         try
         {
             ValidateDocsPathBeforeBuild(stagingPath, docsPath);
-            SafeDeleteExistingExternalHelpFile(stagingPath, moduleName, buildDocumentation);
 
             DocumentationExtractionPayload extracted;
             SafeStart(extractStep);
@@ -137,7 +136,9 @@ public sealed class DocumentationEngine
                 extracted = ExtractHelpAsJson(
                     stagingPath: stagingPath,
                     moduleManifestPath: moduleManifestPath,
-                    timeout: timeout ?? TimeSpan.FromMinutes(5));
+                    timeout: timeout ?? TimeSpan.FromMinutes(5),
+                    contexts: buildDocumentation.ParameterDiscoveryContexts);
+                SafeDeleteExistingExternalHelpFile(stagingPath, moduleName, buildDocumentation);
                 SafeDone(extractStep);
             }
             catch (Exception ex)
@@ -262,37 +263,46 @@ public sealed class DocumentationEngine
     internal DocumentationExtractionPayload ExtractHelpPayload(
         string stagingPath,
         string moduleManifestPath,
-        TimeSpan? timeout = null)
+        TimeSpan? timeout = null,
+        DocumentationDiscoveryContext[]? contexts = null)
     {
         return ExtractHelpAsJson(
             stagingPath: stagingPath,
             moduleManifestPath: moduleManifestPath,
-            timeout: timeout ?? TimeSpan.FromMinutes(5));
+            timeout: timeout ?? TimeSpan.FromMinutes(5), contexts: contexts);
     }
 
     private DocumentationExtractionPayload ExtractHelpAsJson(
         string stagingPath,
         string moduleManifestPath,
-        TimeSpan timeout)
+        TimeSpan timeout,
+        DocumentationDiscoveryContext[]? contexts = null)
     {
         var tempDir = Path.Combine(Path.GetTempPath(), "PowerForge", "docs");
         Directory.CreateDirectory(tempDir);
         var id = Guid.NewGuid().ToString("N");
         var scriptPath = Path.Combine(tempDir, $"docs_extract_{id}.ps1");
         var jsonPath = Path.Combine(tempDir, $"docs_extract_{id}.json");
+        var contextsPath = Path.Combine(tempDir, $"docs_contexts_{id}.json");
 
         File.WriteAllText(scriptPath, BuildHelpExportScript(), new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
 
         try
         {
-            var args = new[]
+            var args = new System.Collections.Generic.List<string>
             {
                 Path.GetFullPath(stagingPath),
                 Path.GetFullPath(moduleManifestPath),
                 Path.GetFullPath(jsonPath)
             };
+            if (contexts is { Length: > 0 })
+            {
+                using (var contextStream = File.Create(contextsPath))
+                    new DataContractJsonSerializer(typeof(DocumentationDiscoveryContext[])).WriteObject(contextStream, contexts);
+                args.Add(contextsPath);
+            }
 
-            var result = _runner.Run(new PowerShellRunRequest(scriptPath, args, timeout, preferPwsh: true));
+            var result = _runner.Run(new PowerShellRunRequest(scriptPath, args.ToArray(), timeout, preferPwsh: true));
             if (result.ExitCode != 0)
             {
                 if (_logger.IsVerbose && !string.IsNullOrWhiteSpace(result.StdOut)) _logger.Verbose(result.StdOut.Trim());
@@ -315,6 +325,7 @@ public sealed class DocumentationEngine
                 });
             var payload = serializer.ReadObject(stream) as DocumentationExtractionPayload;
             payload ??= new DocumentationExtractionPayload();
+            foreach (string warning in payload.Warnings ?? new System.Collections.Generic.List<string>()) _logger.Warn(warning);
             DocumentationMetadataNormalizer.Normalize(payload);
             return payload;
         }
@@ -322,6 +333,7 @@ public sealed class DocumentationEngine
         {
             try { File.Delete(scriptPath); } catch { /* ignore */ }
             try { File.Delete(jsonPath); } catch { /* ignore */ }
+            try { File.Delete(contextsPath); } catch { /* ignore */ }
         }
     }
 

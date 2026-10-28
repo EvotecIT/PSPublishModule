@@ -1,7 +1,8 @@
 ﻿param(
   [string]$StagingPath,
   [string]$ManifestPath,
-  [string]$OutputJsonPath
+  [string]$OutputJsonPath,
+  [string]$DiscoveryContextsPath
 )
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
@@ -335,6 +336,16 @@ try {
   & $collectorProtocol.RemoveHelperAliases $moduleNameResolved $collectorProtocol.HelperFunctionNames
 
   $commands = @(& $collectorProtocol.GetDocumentedModuleCommands $mod)
+  $discoveryContexts = @()
+  if ($DiscoveryContextsPath) {
+    $parsedContexts = Microsoft.PowerShell.Utility\ConvertFrom-Json -InputObject ([System.IO.File]::ReadAllText($DiscoveryContextsPath))
+    $discoveryContexts = @($parsedContexts)
+    foreach ($context in $discoveryContexts) {
+      if (-not $context.Command -or -not @($commands | Microsoft.PowerShell.Core\Where-Object { $_.Name -eq $context.Command }).Count) {
+        throw ('Discovery context names an unknown exported command: ' + $context.Command)
+      }
+    }
+  }
 
   $result = & $collectorProtocol.NewModuleSnapshot $m ([string]$moduleNameResolved)
 
@@ -350,15 +361,60 @@ try {
     $defaultSet = $null
     try { $defaultSet = $c.DefaultParameterSet } catch { $defaultSet = $null }
 
+    $commandContexts = @($discoveryContexts | Microsoft.PowerShell.Core\Where-Object { $_.Command -eq $c.Name })
+    $parameterMetadata = @{}
+    foreach ($name in @(& $collectorProtocol.GetParameterNames $c)) {
+      $metadata = $c.Parameters[$name]
+      if ($commandContexts.Count -eq 0 -or -not $metadata.IsDynamic) { $parameterMetadata[$name] = $metadata }
+    }
+    $contextParameterSets = @()
+    foreach ($context in $commandContexts) {
+      $pushed = $false
+      try {
+        if ($context.ProviderPath) {
+          Microsoft.PowerShell.Management\Push-Location -LiteralPath ([string]$context.ProviderPath) -ErrorAction Stop
+          $pushed = $true
+        }
+        $qualifiedName = $moduleNameResolved + '\' + $c.Name
+        $discovered = if (@($context.Arguments).Count -gt 0) {
+          Microsoft.PowerShell.Core\Get-Command -Name $qualifiedName -ArgumentList @($context.Arguments) -ErrorAction Stop
+        } else {
+          Microsoft.PowerShell.Core\Get-Command -Name $qualifiedName -ErrorAction Stop
+        }
+        foreach ($name in @(& $collectorProtocol.GetParameterNames $discovered)) {
+          $metadata = $discovered.Parameters[$name]
+          if ($parameterMetadata.ContainsKey($name)) {
+            $previousMetadata = $parameterMetadata[$name]
+            if ($previousMetadata.ParameterType -ne $metadata.ParameterType -or $previousMetadata.IsDynamic -ne $metadata.IsDynamic -or
+                ($metadata.IsDynamic -and -not [string]::Equals(
+                  (& $collectorProtocol.GetParameterSignature $previousMetadata),
+                  (& $collectorProtocol.GetParameterSignature $metadata), [System.StringComparison]::Ordinal))) {
+              throw ('Conflicting parameter metadata for ' + $c.Name + ' -' + $name)
+            }
+          }
+          $parameterMetadata[$name] = $metadata
+        }
+        $contextParameterSets += @($discovered.ParameterSets)
+      } finally {
+        if ($pushed) { Microsoft.PowerShell.Management\Pop-Location }
+      }
+    }
     $commandParameterSets = @()
-    if ($null -ne $c -and $null -ne $c.ParameterSets) { $commandParameterSets = @($c.ParameterSets) }
+    if ($commandContexts.Count -eq 0 -and $null -ne $c -and $null -ne $c.ParameterSets) { $commandParameterSets = @($c.ParameterSets) }
+    $commandParameterSets += $contextParameterSets
 
     $syntax = @()
+    $seenSyntax = @{}
     foreach ($ps in $commandParameterSets) {
+      $syntaxNames = @($ps.Parameters | Microsoft.PowerShell.Core\ForEach-Object { [string]$_.Name } | Microsoft.PowerShell.Utility\Sort-Object)
+      $syntaxKey = [string]$ps.Name + '|' + [string]$ps.ToString() + '|' + ($syntaxNames -join '|')
+      if ($seenSyntax.ContainsKey($syntaxKey)) { continue }
+      $seenSyntax[$syntaxKey] = $true
       $syntax += [ordered]@{
         name = [string]$ps.Name
         isDefault = if ($defaultSet) { [bool]($ps.Name -eq $defaultSet) } else { $false }
         text = ([string]$c.Name + ' ' + [string]$ps.ToString())
+        parameterNames = $syntaxNames
       }
     }
 
@@ -388,13 +444,27 @@ try {
       }
     }
 
-    $paramNames = @(& $collectorProtocol.GetParameterNames $c $helpParameters)
+    $unverified = @()
+    if ((& $collectorProtocol.TestDynamicCommand $c) -and $commandContexts.Count -eq 0) {
+      $commonNames = @('Verbose','Debug','ErrorAction','ErrorVariable','WarningAction','WarningVariable',
+        'InformationAction','InformationVariable','OutVariable','OutBuffer','PipelineVariable','WhatIf','Confirm','ProgressAction')
+      foreach ($name in @($helpParamByName.Keys)) {
+        if ($commonNames -notcontains $name -and -not $parameterMetadata.ContainsKey($name)) { $unverified += [string]$name }
+      }
+      if ($unverified.Count -gt 0) {
+        $unverified = @($unverified | Microsoft.PowerShell.Utility\Sort-Object -Unique)
+        $result.warnings += ('Dynamic parameters for ' + $c.Name + ' could not be verified: ' + ($unverified -join ', ') + '. Configure parameter discovery contexts to verify them.')
+      } else {
+        $result.warnings += ('Dynamic parameter discovery for ' + $c.Name + ' has no explicit contexts; conditional parameters may be missing.')
+      }
+    }
+    $paramNames = @(@($parameterMetadata.Keys) + $unverified | Microsoft.PowerShell.Utility\Sort-Object -Unique)
 
     $parameters = @()
     foreach ($pn in $paramNames) {
       $parameterRuntimeMetadata = & $collectorProtocol.GetParameterRuntimeMetadata `
         $c $pn $collectorProtocol.GetParameterDeclaringMetadata $collectorProtocol.TestParameterDontShow `
-        $collectorProtocol.GetCanonicalTypeNameFromType
+        $collectorProtocol.GetCanonicalTypeNameFromType $parameterMetadata[$pn] $true
       $pmeta = $parameterRuntimeMetadata.Metadata
 
       $aliases = @()
@@ -502,42 +572,13 @@ try {
           $t = (& $collectorProtocol.GetText $d).Trim()
           if ($t) { if ($desc) { $desc += "`n`n" }; $desc += $t }
         }
-        if (-not $typeName) { try { $typeName = [string]$hp.Type.Name } catch {
-          # best effort: some help objects omit structured type metadata
-        } }
-        if ((-not $aliases -or $aliases.Count -eq 0) -and $hp.Aliases) {
-          foreach ($a in @($hp.Aliases)) { $aliases += [string]$a }
-        }
-        try {
-          if (-not $hasValidateSet -and $hp.ValidValues) {
-            foreach ($value in @($hp.ValidValues)) {
-              if ($null -ne $value) { $possibleValues += [string]$value }
-            }
-          }
-        } catch {
-          # best effort: ValidValues is not consistently present across Get-Help payloads
-        }
-        try {
-          $helpDefaultValue = [string]$hp.DefaultValue
-          if (-not $hasMetadataDefault -and -not [string]::IsNullOrWhiteSpace($helpDefaultValue)) {
-            $defaultValue = $helpDefaultValue
-          }
-        } catch {
-          # keep the metadata-derived default when Get-Help omits or reshapes DefaultValue
-        }
-        try {
-          $globbingValue = $hp.Globbing
-          if ($globbingValue -is [bool]) {
-            $acceptWild = $globbingValue
-          } elseif ($null -ne $globbingValue) {
-            $parsedGlobbing = $false
-            if ([bool]::TryParse(([string]$globbingValue).Trim(), [ref]$parsedGlobbing)) {
-              $acceptWild = $parsedGlobbing
-            }
-          }
-        } catch {
-          # keep the metadata-derived default when Get-Help omits or reshapes Globbing
-        }
+      }
+      $unverifiedNotice = 'Dynamic parameter availability and metadata are unverified in the current discovery context.'
+      if ($desc.StartsWith($unverifiedNotice, [System.StringComparison]::Ordinal)) {
+        $desc = $desc.Substring($unverifiedNotice.Length).TrimStart()
+      }
+      if ($null -eq $pmeta) {
+        $desc = $unverifiedNotice + $(if ($desc) { "`n`n" + $desc } else { '' })
       }
       $sets = @()
       if ($paramSets.ContainsKey($pn)) { $sets = @($paramSets[$pn]) }
@@ -646,7 +687,7 @@ try {
       # best effort: older hosts can omit or reshape InputTypes entirely
     }
     $runtimeInputs = @(& $collectorProtocol.GetRuntimeInputs `
-      $c $paramNames $collectorProtocol.GetCanonicalTypeNameFromType)
+      $c $paramNames $collectorProtocol.GetCanonicalTypeNameFromType $parameterMetadata)
     if (-not $inputs -or $inputs.Count -eq 0) {
       $inputs = @($runtimeInputs)
     }

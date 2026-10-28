@@ -3,6 +3,7 @@ namespace PowerForge;
 internal sealed class DocumentationConfigurationRequest
 {
     public bool Enable { get; set; }
+    public DocumentationDiscoveryContext[] ParameterDiscoveryContexts { get; set; } = Array.Empty<DocumentationDiscoveryContext>();
     public bool SyncExternalHelpToProjectRoot { get; set; }
     public bool SkipExternalHelp { get; set; }
     public bool SkipAboutTopics { get; set; }

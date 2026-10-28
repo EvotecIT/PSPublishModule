@@ -170,7 +170,20 @@
         "GenerateExternalHelp": { "type": "boolean" },
         "ExternalHelpCulture": { "type": "string" },
         "ExternalHelpFileName": { "type": "string" },
-        "AboutTopicsSourcePath": { "type": ["array", "null"], "items": { "type": "string" } }
+        "AboutTopicsSourcePath": { "type": ["array", "null"], "items": { "type": "string" } },
+        "ParameterDiscoveryContexts": {
+          "type": ["array", "null"],
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["Command"],
+            "properties": {
+              "Command": { "type": "string", "minLength": 1 },
+              "Arguments": { "type": ["array", "null"], "items": { "type": "string" } },
+              "ProviderPath": { "type": ["string", "null"] }
+            }
+          }
+        }
       }
     },
 

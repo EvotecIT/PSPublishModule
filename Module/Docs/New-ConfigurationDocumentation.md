@@ -11,7 +11,7 @@ Enables or disables creation of documentation from the module using PowerForge.
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-New-ConfigurationDocumentation -Path <string> -PathReadme <string> [-Enable] [-StartClean] [-UpdateWhenNew] [-SyncExternalHelpToProjectRoot] [-SkipExternalHelp] [-SkipAboutTopics] [-SkipFallbackExamples] [-ExternalHelpCulture <string>] [-ExternalHelpFileName <string>] [-AboutTopicsSourcePath <string[]>] [<CommonParameters>]
+New-ConfigurationDocumentation -Path <string> -PathReadme <string> [-Enable] [-ParameterDiscoveryContext <DocumentationDiscoveryContext[]>] [-StartClean] [-UpdateWhenNew] [-SyncExternalHelpToProjectRoot] [-SkipExternalHelp] [-SkipAboutTopics] [-SkipFallbackExamples] [-ExternalHelpCulture <string>] [-ExternalHelpFileName <string>] [-AboutTopicsSourcePath <string[]>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -41,6 +41,13 @@ New-ConfigurationDocumentation -Enable -Path 'Docs' -PathReadme 'Docs\Readme.md'
 ### EXAMPLE 3
 ```powershell
 New-ConfigurationDocumentation -Enable -Path 'Docs' -PathReadme 'Docs\Readme.md' -AboutTopicsSourcePath 'Help\About','Internals\About'
+```
+
+
+### EXAMPLE 4
+```powershell
+$context = [PowerForge.DocumentationDiscoveryContext]@{ Command = 'Get-Example'; Arguments = @('enabled') }
+New-ConfigurationDocumentation -Enable -Path 'Docs' -PathReadme 'Docs\Readme.md' -ParameterDiscoveryContext $context
 ```
 
 
@@ -100,6 +107,22 @@ Optional file name override for external help (default: <ModuleName>-help.xml).
 
 ```yaml
 Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -ParameterDiscoveryContext
+Explicit argument and provider contexts for discovering conditional dynamic parameters. Include every supported context to document.
+
+```yaml
+Type: DocumentationDiscoveryContext[]
 Parameter Sets: __AllParameterSets
 Aliases: None
 Possible values:
