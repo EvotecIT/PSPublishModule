@@ -68,6 +68,24 @@ public sealed class ModuleRepositoryRetryPolicyTests
         Assert.Throws<OperationCanceledException>(() => policy.RunPowerShell("Install", () => throw new OperationCanceledException()));
     }
 
+    [Theory]
+    [InlineData("HTTP 403 Forbidden", 503, false)]
+    [InlineData("HTTP 503 Service Unavailable", 403, true)]
+    public void Public_diagnostic_controls_do_not_change_the_provider_retry_decision(
+        string providerFailure, int controlStatus, bool transient)
+    {
+        var calls = 0;
+        var message = providerFailure + "\nPFPSRG-DIAGNOSTIC: " +
+            "{\"SeparateControlHttpResponse\":{\"StatusCode\":" + controlStatus + "}}";
+        var result = new ModuleRepositoryRetryPolicy(new NullLogger(), _ => { }).RunPowerShell("Save module", () =>
+            ++calls == 1 ? Error(message) : Success());
+
+        Assert.Equal(transient ? 2 : 1, calls);
+        Assert.Equal(transient ? 0 : 1, result.ExitCode);
+        if (!transient)
+            Assert.Contains(Convert.ToBase64String(Encoding.UTF8.GetBytes(message)), result.StdOut);
+    }
+
     [Fact]
     public void Timeouts_are_retried_and_the_final_error_names_the_operation()
     {

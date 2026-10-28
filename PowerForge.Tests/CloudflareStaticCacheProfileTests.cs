@@ -308,7 +308,6 @@ public sealed class CloudflareStaticCacheProfileTests
     public void SmartTieredCache_ShouldEnableAndVerifyTheRequestedState()
     {
         var handler = new SequenceHandler(
-            SmartTieredResponse("on"),
             SmartTieredResponse("off"),
             JsonResponse(HttpStatusCode.OK, SuccessEnvelope()),
             SmartTieredResponse("on"));
@@ -325,14 +324,14 @@ public sealed class CloudflareStaticCacheProfileTests
         Assert.True(result.Changed);
         Assert.False(result.PreviousEnabled);
         Assert.True(result.Enabled);
-        Assert.Equal([HttpMethod.Get, HttpMethod.Get, HttpMethod.Patch, HttpMethod.Get], handler.Requests.Select(request => request.Method).ToArray());
-        Assert.Equal("on", JsonNode.Parse(handler.Requests[2].Body)!["value"]!.GetValue<string>());
+        Assert.Equal([HttpMethod.Get, HttpMethod.Patch, HttpMethod.Get], handler.Requests.Select(request => request.Method).ToArray());
+        Assert.Equal("on", JsonNode.Parse(handler.Requests[1].Body)!["smart_tiered_cache"]!["value"]!.GetValue<string>());
     }
 
     [Fact]
     public void SmartTieredCache_DryRun_ShouldRejectAnExplicitlyNonEditableChange()
     {
-        var handler = new SequenceHandler(SmartTieredResponse("on"), SmartTieredResponse("off", editable: false));
+        var handler = new SequenceHandler(SmartTieredResponse("off", editable: false));
         using var client = NewClient(handler);
 
         var result = CloudflareSmartTieredCacheManager.Apply(
@@ -345,14 +344,13 @@ public sealed class CloudflareStaticCacheProfileTests
         Assert.False(result.Success);
         Assert.False(result.PreviousEnabled);
         Assert.Contains("not editable", result.Message, StringComparison.OrdinalIgnoreCase);
-        Assert.Equal(2, handler.Requests.Count);
+        Assert.Single(handler.Requests);
     }
 
     [Fact]
     public void SmartTieredCache_ShouldReconcileAnAmbiguousWriteResponse()
     {
         var handler = new SequenceHandler(
-            SmartTieredResponse("on"),
             SmartTieredResponse("off"),
             JsonResponse(HttpStatusCode.InternalServerError, """{"success":false,"errors":[{"message":"upstream timeout"}]}"""),
             SmartTieredResponse("on"));
@@ -374,7 +372,6 @@ public sealed class CloudflareStaticCacheProfileTests
     public void SmartTieredCache_ShouldNotOwnAChangeAfterDefinitiveWriteRejection()
     {
         var handler = new SequenceHandler(
-            SmartTieredResponse("on"),
             SmartTieredResponse("off"),
             JsonResponse(HttpStatusCode.Forbidden, """{"success":false,"errors":[{"message":"setting locked"}]}"""),
             SmartTieredResponse("on"));
@@ -391,14 +388,13 @@ public sealed class CloudflareStaticCacheProfileTests
         Assert.False(result.Changed);
         Assert.False(result.PreviousEnabled);
         Assert.Contains("HTTP 403", result.Message, StringComparison.Ordinal);
-        Assert.Equal([HttpMethod.Get, HttpMethod.Get, HttpMethod.Patch], handler.Requests.Select(request => request.Method).ToArray());
+        Assert.Equal([HttpMethod.Get, HttpMethod.Patch], handler.Requests.Select(request => request.Method).ToArray());
     }
 
     [Fact]
     public void SmartTieredCache_ShouldRestorePreviousStateWhenWriteVerificationFails()
     {
         var handler = new SequenceHandler(
-            SmartTieredResponse("on"),
             SmartTieredResponse("off"),
             JsonResponse(HttpStatusCode.OK, SuccessEnvelope()),
             JsonResponse(HttpStatusCode.InternalServerError, """{"success":false,"errors":[{"message":"read timeout"}]}"""),
@@ -415,8 +411,8 @@ public sealed class CloudflareStaticCacheProfileTests
 
         Assert.False(result.Success);
         Assert.Contains("previous Smart Tiered Cache state was restored", result.Message, StringComparison.OrdinalIgnoreCase);
-        Assert.Equal(6, handler.Requests.Count);
-        Assert.Equal("off", JsonNode.Parse(handler.Requests[4].Body)!["value"]!.GetValue<string>());
+        Assert.Equal(5, handler.Requests.Count);
+        Assert.Equal("off", JsonNode.Parse(handler.Requests[3].Body)!["smart_tiered_cache"]!["value"]!.GetValue<string>());
     }
 
     [Fact]
@@ -427,9 +423,7 @@ public sealed class CloudflareStaticCacheProfileTests
         var handler = new SequenceHandler(
             JsonResponse(HttpStatusCode.OK, ExistingRulesEnvelope(oldCacheRules)),
             JsonResponse(HttpStatusCode.OK, ExistingRulesEnvelope(oldHeaderRules)),
-            SmartTieredResponse("on"),
             SmartTieredResponse("off"),
-            SmartTieredResponse("on"),
             SmartTieredResponse("off"),
             JsonResponse(HttpStatusCode.OK, SuccessEnvelope()),
             SmartTieredResponse("on"),
@@ -438,7 +432,6 @@ public sealed class CloudflareStaticCacheProfileTests
             JsonResponse(HttpStatusCode.OK, ExistingRulesEnvelope(oldHeaderRules)),
             JsonResponse(HttpStatusCode.BadRequest, """{"success":false,"errors":[{"message":"invalid transform"}]}"""),
             JsonResponse(HttpStatusCode.OK, SuccessEnvelope()),
-            SmartTieredResponse("on"),
             SmartTieredResponse("on"),
             JsonResponse(HttpStatusCode.OK, SuccessEnvelope()),
             SmartTieredResponse("off"));
@@ -459,9 +452,9 @@ public sealed class CloudflareStaticCacheProfileTests
         Assert.False(result.Success);
         Assert.Contains("previous site-policy state was restored", result.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("Smart Tiered Cache rollback", result.Message, StringComparison.Ordinal);
-        Assert.Equal(17, handler.Requests.Count);
-        Assert.Equal(HttpMethod.Patch, handler.Requests[15].Method);
-        Assert.Equal("off", JsonNode.Parse(handler.Requests[15].Body)!["value"]!.GetValue<string>());
+        Assert.Equal(14, handler.Requests.Count);
+        Assert.Equal(HttpMethod.Patch, handler.Requests[12].Method);
+        Assert.Equal("off", JsonNode.Parse(handler.Requests[12].Body)!["smart_tiered_cache"]!["value"]!.GetValue<string>());
     }
 
     [Fact]
@@ -472,9 +465,7 @@ public sealed class CloudflareStaticCacheProfileTests
         var handler = new SequenceHandler(
             JsonResponse(HttpStatusCode.OK, ExistingRulesEnvelope(oldCacheRules)),
             JsonResponse(HttpStatusCode.OK, ExistingRulesEnvelope(oldHeaderRules)),
-            SmartTieredResponse("on"),
             SmartTieredResponse("off"),
-            SmartTieredResponse("on"),
             SmartTieredResponse("off"),
             JsonResponse(HttpStatusCode.OK, SuccessEnvelope()),
             SmartTieredResponse("on"),
@@ -483,7 +474,6 @@ public sealed class CloudflareStaticCacheProfileTests
             JsonResponse(HttpStatusCode.OK, ExistingRulesEnvelope(oldHeaderRules)),
             JsonResponse(HttpStatusCode.BadRequest, """{"success":false,"errors":[{"message":"invalid transform"}]}"""),
             JsonResponse(HttpStatusCode.OK, SuccessEnvelope()),
-            SmartTieredResponse("on"),
             SmartTieredResponse("on"),
             JsonResponse(HttpStatusCode.Forbidden, """{"success":false,"errors":[{"message":"setting locked"}]}"""),
             SmartTieredResponse("on"));
@@ -505,7 +495,7 @@ public sealed class CloudflareStaticCacheProfileTests
         Assert.Contains("Smart Tiered Cache rollback was incomplete", result.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("Rollback was incomplete", result.Message, StringComparison.Ordinal);
         Assert.DoesNotContain("previous site-policy state was restored", result.Message, StringComparison.OrdinalIgnoreCase);
-        Assert.Equal(16, handler.Requests.Count);
+        Assert.Equal(13, handler.Requests.Count);
     }
 
     private static JsonObject ExistingRule(string id, string description, string action) => new()
@@ -543,7 +533,7 @@ public sealed class CloudflareStaticCacheProfileTests
             new JsonObject
             {
                 ["success"] = true,
-                ["result"] = result
+                ["result"] = new JsonObject { ["smart_tiered_cache"] = result }
             }.ToJsonString());
     }
 

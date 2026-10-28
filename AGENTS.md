@@ -22,7 +22,7 @@ These are the maintainer's default Windows paths (safe to assume in this workspa
 - IntelligenceX website: `C:\Support\GitHub\IntelligenceX\Website`
   - Remote: `https://github.com/EvotecIT/IntelligenceX.git`
 
-- CodeGlyphX website: `C:\Support\GitHub\CodeMatrix\Website`
+- CodeGlyphX website: `C:\Support\GitHub\CodeGlyphX\Website`
   - Remote: `https://github.com/EvotecIT/CodeGlyphX.git`
 
 - OfficeIMO website/docs: `C:\Support\GitHub\OfficeIMO\Website`
@@ -45,7 +45,7 @@ If you're not on Windows or you don't have `C:\Support\GitHub`, use this layout 
   - `<root>/PSPublishModule`
   - `<root>/HtmlForgeX/Website`
   - `<root>/IntelligenceX/Website`
-  - `<root>/CodeMatrix/Website`
+  - `<root>/CodeGlyphX/Website`
   - `<root>/OfficeIMO/Website`
   - `<root>/DomainDetective`
   - `<root>/TestimoX/Website`
