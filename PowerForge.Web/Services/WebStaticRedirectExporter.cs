@@ -14,7 +14,8 @@ internal static class WebStaticRedirectExporter
         using var document = JsonDocument.Parse(File.ReadAllText(metadata));
         var redirects = document.RootElement.GetProperty("redirects").Deserialize<RedirectSpec[]>(WebJson.Options)
             ?? Array.Empty<RedirectSpec>();
-        var plans = new Dictionary<string, (string Html, string Destination)>(StringComparer.OrdinalIgnoreCase);
+        // URL paths are case-sensitive, including when a build runs on a different host OS.
+        var plans = new Dictionary<string, (string Html, string Destination)>(StringComparer.Ordinal);
         foreach (var rule in redirects)
         {
             if (rule.MatchType != RedirectMatchType.Exact || rule.Status is not (301 or 302 or 307 or 308))
@@ -39,6 +40,9 @@ internal static class WebStaticRedirectExporter
                 throw new InvalidOperationException($"Unsupported static redirect destination: {target}");
 
             var html = WebRedirectPage.Render(target, "static-redirect", preserveQueryAndFragment: true, rule.PreserveQuery);
+            if (!OperatingSystem.IsLinux() && plans.Keys.Any(path =>
+                    !path.Equals(output, StringComparison.Ordinal) && path.Equals(output, StringComparison.OrdinalIgnoreCase)))
+                throw new InvalidOperationException("Case-distinct static redirect sources require a case-sensitive Linux output directory.");
             if (plans.TryGetValue(output, out var prior) && prior.Html != html)
                 throw new InvalidOperationException($"Conflicting static redirects: {rule.From}");
             if (File.Exists(output) && File.ReadAllText(output) != html)

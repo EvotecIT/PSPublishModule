@@ -34,6 +34,38 @@ public sealed class WebStaticRedirectExporterTests : IDisposable
     }
 
     [Fact]
+    public void CaseDistinctSourcesArePreservedOnLinuxAndRejectedOnOtherBuildHosts()
+    {
+        WriteRules(new RedirectSpec { From = "/Legacy/", To = "/api/reader-ocr/type/" },
+            new RedirectSpec { From = "/legacy/", To = "/api/reader-ocr/type/" });
+        if (OperatingSystem.IsLinux())
+        {
+            Assert.Equal(2, WebStaticRedirectExporter.Export(root, false));
+            Assert.True(File.Exists(Path.Combine(root, "Legacy", "index.html")));
+            Assert.True(File.Exists(Path.Combine(root, "legacy", "index.html")));
+        }
+        else
+        {
+            Assert.Throws<InvalidOperationException>(() => WebStaticRedirectExporter.Export(root, false));
+            Assert.False(Directory.Exists(Path.Combine(root, "Legacy")));
+        }
+    }
+
+    [Fact]
+    public void CaseOnlyMoveDoesNotBecomeAFalseRedirectLoopOnLinux()
+    {
+        WriteRules(new RedirectSpec { From = "/api/reader-ocr/TYPE/", To = "/api/reader-ocr/type/" });
+        if (OperatingSystem.IsLinux())
+            Assert.Equal(1, WebStaticRedirectExporter.Export(root, false));
+        else
+        {
+            // The existing lowercase canonical page must remain protected on case-insensitive hosts.
+            Assert.Throws<InvalidOperationException>(() => WebStaticRedirectExporter.Export(root, false));
+            Assert.Equal("<h1>OCR type</h1>", File.ReadAllText(Path.Combine(root, "api", "reader-ocr", "type", "index.html")));
+        }
+    }
+
+    [Fact]
     public void DryRunValidatesAllRulesWithoutWriting()
     {
         WriteRules(new RedirectSpec { From = "/old.html", To = "/api/reader-ocr/type/" });

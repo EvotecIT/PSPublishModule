@@ -1835,6 +1835,8 @@ redirect target. Internal destinations must already exist; HTTPS destinations ma
 external. All rules are validated before files are written. Existing content is never
 replaced, except an identical generated redirect on a repeat run. Symlinked metadata,
 source and destination paths are rejected. `dryRun` validates without writing.
+Case-distinct source URLs require a case-sensitive Linux output directory; other
+build hosts reject colliding spellings instead of silently dropping a route.
 
 #### cloudflare
 Purges Cloudflare cache or verifies `cf-cache-status` on selected URLs.
