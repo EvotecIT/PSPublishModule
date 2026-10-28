@@ -22,7 +22,8 @@ public sealed class ModulePipelineSpec
     public bool UnifiedGitHubRelease { get; set; }
 
     /// <summary>
-    /// Indicates that this build produces the exact local artifacts for a deferred release publication.
+    /// Indicates that this invocation builds or publishes a deferred release checkpoint,
+    /// or consumes frozen release inputs. Source loaders must remain unchanged.
     /// </summary>
     [System.Text.Json.Serialization.JsonIgnore]
     internal bool ReleaseCheckpoint { get; set; }

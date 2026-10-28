@@ -449,6 +449,17 @@ clean working tree: normal version updates and uncommitted inputs remain support
 Directories outside Git, and newly initialized repositories without a first commit, have
 no commit to bind. Generic upload commands for prebuilt assets retain their explicit target.
 
+A unified release that explicitly sets `ExpectedSourceRevision` preserves the source
+development loader throughout its module invocations, including deferred publication and
+registry recovery. The build still generates the current loader in staging. Ordinary
+builds continue to refresh the source loader according to their development settings.
+Deferred publication carries the same preservation context into its second module pass.
+
+Publication is ordered across destinations, rather than transactional. A source-integrity
+failure blocks the next operation; an earlier NuGet or Gallery lane may already have
+completed. Check those destinations before retrying, preserve the source of any immutable
+published version, and use the supported exact-payload recovery path for missing assets.
+
 Modules that reuse ordinary staging retain existing files and may apply new build settings,
 so their source commit is unknown. The run does not infer it from the current checkout.
 Authenticated compiled-staging checkpoints and synchronized cached release payloads restore
