@@ -1,4 +1,5 @@
 using System.Text.Json;
+using HtmlTinkerX;
 
 namespace PowerForge.Web;
 
@@ -16,8 +17,7 @@ internal static class WebStaticRedirectExporter
             ?? Array.Empty<RedirectSpec>();
         // URL paths are case-sensitive, including when a build runs on a different host OS.
         var plans = new Dictionary<string, (string Html, string Destination)>(StringComparer.Ordinal);
-        var spellings = FrameworkCompatibility.GetPathStringComparison(root) == StringComparison.Ordinal
-            ? null : new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var spellings = new Dictionary<string, Dictionary<string, string>>(StringComparer.Ordinal);
         foreach (var rule in redirects)
         {
             if (rule.MatchType != RedirectMatchType.Exact || rule.Status is not (301 or 302 or 307 or 308))
@@ -33,7 +33,7 @@ internal static class WebStaticRedirectExporter
                     throw new InvalidOperationException($"Static redirect canonical page was not generated: {path}");
                 FileSystemPathSafety.RequireRegularFile(destination);
                 if (IsGeneratedRedirect(destination))
-                    throw new InvalidOperationException($"Static redirect destination is another generated redirect: {path}. Rebuild clean before exporting changed rules.");
+                    throw new InvalidOperationException($"Static redirect destination is another generated redirect: {path}. Select its canonical destination instead.");
             }
             else if (Uri.TryCreate(target, UriKind.Absolute, out var uri) &&
                      uri.Scheme == Uri.UriSchemeHttps && string.IsNullOrEmpty(uri.UserInfo))
@@ -50,7 +50,7 @@ internal static class WebStaticRedirectExporter
             {
                 FileSystemPathSafety.RequireRegularFile(output);
                 if (File.ReadAllText(output) != html)
-                    throw new InvalidOperationException($"Static redirect would overwrite existing content: {rule.From}. Rebuild clean before exporting changed rules.");
+                    throw new InvalidOperationException($"Static redirect would overwrite existing content: {rule.From}. Remove the route collision, or rebuild clean when changing a generated redirect.");
             }
             plans[output] = (html, destination);
         }
@@ -66,12 +66,13 @@ internal static class WebStaticRedirectExporter
         foreach (var file in Directory.EnumerateFiles(root, "*", enumeration).Where(path => path.EndsWith(".html", StringComparison.OrdinalIgnoreCase)))
         {
             if (!plans.ContainsKey(file) && IsGeneratedRedirect(file, staticOnly: true))
-                throw new InvalidOperationException($"Stale static redirect remains at {Path.GetRelativePath(root, file)}. Rebuild clean before exporting changed rules.");
+                throw new InvalidOperationException($"Stale static redirect remains at {Path.GetRelativePath(root, file)}. Rebuild clean for removed rules, or remove reserved redirect markup from an authored page.");
         }
         if (!dryRun)
         {
             foreach (var plan in plans)
             {
+                if (File.Exists(plan.Key)) continue; // Preflight already proved the existing bytes identical.
                 Directory.CreateDirectory(Path.GetDirectoryName(plan.Key)!);
                 File.WriteAllText(plan.Key, plan.Value.Html);
             }
@@ -85,12 +86,25 @@ internal static class WebStaticRedirectExporter
         using var reader = File.OpenText(file);
         var buffer = new char[4096];
         var prefix = new string(buffer, 0, reader.ReadBlock(buffer, 0, buffer.Length));
-        return prefix.Contains("data-pf=\"static-redirect\"", StringComparison.Ordinal) ||
-            (!staticOnly && prefix.Contains("data-pf=\"api-docs-legacy-alias\"", StringComparison.Ordinal) &&
-             prefix.Contains("http-equiv=\"refresh\"", StringComparison.OrdinalIgnoreCase));
+        var possibleMarker = prefix.Contains("static-redirect", StringComparison.Ordinal) ||
+            (!staticOnly && prefix.Contains("api-docs-legacy-alias", StringComparison.Ordinal));
+        if (!possibleMarker) return false;
+        // Most pages need only the prefix read. Parse the complete reserved-marker candidate
+        // so a long, valid destination URL cannot truncate its refresh or canonical tags.
+        var head = HtmlParser.ParseWithAngleSharp(prefix + reader.ReadToEnd()).Head;
+        if (head is null) return false;
+        var metas = head.QuerySelectorAll("meta");
+        var marker = metas.Any(meta => meta.GetAttribute("data-pf") == "static-redirect" ||
+            (!staticOnly && meta.GetAttribute("data-pf") == "api-docs-legacy-alias"));
+        var refresh = metas.Any(meta => string.Equals(meta.GetAttribute("http-equiv"), "refresh", StringComparison.OrdinalIgnoreCase) &&
+            !string.IsNullOrWhiteSpace(meta.GetAttribute("content")));
+        var canonical = head.QuerySelectorAll("link").Any(link =>
+            (link.GetAttribute("rel") ?? string.Empty).Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries).Contains("canonical", StringComparer.OrdinalIgnoreCase) &&
+            !string.IsNullOrWhiteSpace(link.GetAttribute("href")));
+        return marker && refresh && canonical;
     }
 
-    private static string ResolvePage(string root, string route, Dictionary<string, string>? spellings)
+    private static string ResolvePage(string root, string route, Dictionary<string, Dictionary<string, string>> spellings)
     {
         // Restrict source routes to portable path segments, rather than decoding ambiguous filesystem paths.
         if (string.IsNullOrWhiteSpace(route) || !route.StartsWith('/') || route.StartsWith("//", StringComparison.Ordinal) ||
@@ -107,26 +121,41 @@ internal static class WebStaticRedirectExporter
         }
         var path = Path.GetFullPath(Path.Combine(root, relative.TrimStart('/').Replace('/', Path.DirectorySeparatorChar)));
         FileSystemPathSafety.RejectReparsePoints(path, root, "Static redirect page");
-        if (spellings is not null)
+        // Parent directories may have different case semantics, including Windows directory
+        // flags and Linux mount points. Keep spelling history separate for each exact parent.
         {
-            // Protect every directory component, not just the final filename: /API/a and /api/b
-            // otherwise merge on a case-insensitive build host and publish the wrong URL spelling.
             var current = root;
             foreach (var segment in relative.TrimStart('/').Split('/'))
             {
                 var child = Path.Combine(current, segment);
-                if (spellings.TryGetValue(child, out var prior) && !prior.Equals(child, StringComparison.Ordinal))
-                    throw new InvalidOperationException("Case-distinct static redirect paths require a case-sensitive output directory.");
-                if (Directory.Exists(current))
+                if (!HasCaseSensitiveNames(current))
                 {
-                    var names = Directory.EnumerateFileSystemEntries(current).Select(Path.GetFileName).ToArray();
-                    if (!names.Contains(segment, StringComparer.Ordinal) && names.Contains(segment, StringComparer.OrdinalIgnoreCase))
-                        throw new InvalidOperationException($"Static redirect path spelling differs from generated content: {route}");
+                    if (!spellings.TryGetValue(current, out var namesSeen))
+                        spellings[current] = namesSeen = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                    if (namesSeen.TryGetValue(segment, out var prior) && prior != segment)
+                        throw new InvalidOperationException("Case-distinct static redirect paths cannot be represented safely in this output directory.");
+                    if (Directory.Exists(current))
+                    {
+                        var names = Directory.EnumerateFileSystemEntries(current).Select(Path.GetFileName).ToArray();
+                        if (!names.Contains(segment, StringComparer.Ordinal) && names.Contains(segment, StringComparer.OrdinalIgnoreCase))
+                            throw new InvalidOperationException($"Static redirect path spelling differs from generated content: {route}");
+                    }
+                    namesSeen[segment] = segment;
                 }
-                spellings[child] = child;
                 current = child;
             }
         }
         return path;
+    }
+
+    private static bool HasCaseSensitiveNames(string directory)
+    {
+        var existing = directory;
+        while (!Directory.Exists(existing)) existing = Path.GetDirectoryName(existing)!;
+        if (WindowsDirectoryCaseSensitivity.TryGet(existing, out var sensitive)) return sensitive;
+        // Empty directories supply no read-only evidence. Refuse ambiguous aliases there.
+        if (!Directory.EnumerateFileSystemEntries(existing).Any(path => Path.GetFileName(path).Any(character =>
+                char.ToUpperInvariant(character) != char.ToLowerInvariant(character)))) return false;
+        return FrameworkCompatibility.GetPathStringComparison(existing) == StringComparison.Ordinal;
     }
 }

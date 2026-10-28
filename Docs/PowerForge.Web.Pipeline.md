@@ -1836,11 +1836,13 @@ external. All rules are validated before files are written. Existing content is 
 replaced, except an identical generated redirect on a repeat run. Symlinked metadata,
 source and destination paths are rejected. `dryRun` validates without writing.
 Case-distinct source URLs require a case-sensitive output directory. The existing
-filesystem comparison helper checks actual directory semantics, including Linux
-builds on case-insensitive mounted volumes, rather than assuming them from the OS.
-For incremental builds, an identical export may be repeated. Changed or removed
-rules require a clean site build: the exporter fails before writing if stale generated
-redirects remain or a destination is itself a generated redirect. It never prunes site
+filesystem helpers check each route directory, including Windows per-directory flags
+and Linux builds on case-insensitive mounted volumes. Ambiguous case aliases are
+rejected when directory semantics cannot be established without writing probe files.
+For incremental builds, an identical export may be repeated without rewriting matching
+files. Status-only changes do not alter the HTML. A clean site build is needed when
+changes would overwrite existing redirect HTML or leave stale generated redirects.
+The exporter also rejects destinations that are generated redirects. It never prunes site
 content. Use the build step's `clean: true` before all page and API generators.
 
 #### cloudflare

@@ -93,6 +93,57 @@ public sealed class WebStaticRedirectExporterTests : IDisposable
     }
 
     [Fact]
+    public void IdenticalReadOnlyRedirectIsNotRewrittenIncludingStatusOnlyChanges()
+    {
+        WriteRules(new RedirectSpec { From = "/old/", To = "/api/reader-ocr/type/" });
+        WebStaticRedirectExporter.Export(root, false);
+        var file = Path.Combine(root, "old", "index.html");
+        var timestamp = new DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        File.SetLastWriteTimeUtc(file, timestamp);
+        var attributes = File.GetAttributes(file);
+        File.SetAttributes(file, attributes | FileAttributes.ReadOnly);
+        try
+        {
+            WriteRules(new RedirectSpec { From = "/old/", To = "/api/reader-ocr/type/", Status = 302 });
+            Assert.Equal(1, WebStaticRedirectExporter.Export(root, false));
+            Assert.Equal(timestamp, File.GetLastWriteTimeUtc(file));
+        }
+        finally { File.SetAttributes(file, attributes); }
+    }
+
+    [Theory]
+    [InlineData("<html><head><title>Docs</title></head><body><code>data-pf=\"static-redirect\"</code></body></html>")]
+    [InlineData("<html><head><script>const example = 'data-pf=\"static-redirect\" http-equiv=\"refresh\" rel=\"canonical\"';</script></head><body>Docs</body></html>")]
+    public void AuthoredMarkerExamplesAreNeitherStalePagesNorRedirectDestinations(string html)
+    {
+        var canonical = Path.Combine(root, "api", "reader-ocr", "type", "index.html");
+        File.WriteAllText(canonical, html);
+        File.WriteAllText(Path.Combine(root, "authored.html"), html);
+        WriteRules(new RedirectSpec { From = "/old/", To = "/api/reader-ocr/type/" });
+        Assert.Equal(1, WebStaticRedirectExporter.Export(root, false));
+        Assert.Equal(html, File.ReadAllText(canonical));
+        Assert.Equal(html, File.ReadAllText(Path.Combine(root, "authored.html")));
+    }
+
+    [Fact]
+    public void RedirectStructureIsRecognizedWithMinifiedAttributeQuoting()
+    {
+        File.WriteAllText(Path.Combine(root, "stale.html"),
+            "<html><head><meta name=robots content=noindex,follow data-pf=static-redirect><meta http-equiv=refresh content='0;url=/new/'><link rel=canonical href='/new/'></head></html>");
+        WriteRules();
+        Assert.Throws<InvalidOperationException>(() => WebStaticRedirectExporter.Export(root, false));
+    }
+
+    [Fact]
+    public void RemovedRedirectWithLongDestinationIsStillRecognized()
+    {
+        WriteRules(new RedirectSpec { From = "/old/", To = "https://example.test/new/?context=" + new string('x', 5000) });
+        WebStaticRedirectExporter.Export(root, false);
+        WriteRules();
+        Assert.Throws<InvalidOperationException>(() => WebStaticRedirectExporter.Export(root, false));
+    }
+
+    [Fact]
     public void PreviouslyGeneratedRedirectCannotBeUsedAsCanonicalDestination()
     {
         WriteRules(new RedirectSpec { From = "/old/", To = "/api/reader-ocr/type/", PreserveQuery = false });
