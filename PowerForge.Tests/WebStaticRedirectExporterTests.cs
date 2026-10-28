@@ -31,6 +31,20 @@ public sealed class WebStaticRedirectExporterTests : IDisposable
         Assert.Contains("target.hash = window.location.hash", html);
         Assert.Equal("<h1>OCR type</h1>", File.ReadAllText(Path.Combine(root, "api", "reader-ocr", "type", "index.html")));
         Assert.Equal(1, WebStaticRedirectExporter.Export(root, dryRun: false));
+        Assert.Empty(Directory.EnumerateFiles(root, "*.tmp", SearchOption.AllDirectories));
+    }
+
+    [Theory]
+    [InlineData("/CON/type/")]
+    [InlineData("/aux.html")]
+    [InlineData("/legacy/LpT9/type/")]
+    public void WindowsDeviceRoutesFailPreflightBeforeWritingEarlierValidRules(string route)
+    {
+        WriteRules(new RedirectSpec { From = "/valid-first/", To = "/api/reader-ocr/type/" },
+            new RedirectSpec { From = route, To = "/api/reader-ocr/type/" });
+        var error = Assert.Throws<InvalidOperationException>(() => WebStaticRedirectExporter.Export(root, false));
+        Assert.Contains("Unsupported static page route", error.Message);
+        Assert.False(Directory.Exists(Path.Combine(root, "valid-first")));
     }
 
     [Fact]

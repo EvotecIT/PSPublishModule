@@ -74,7 +74,17 @@ internal static class WebStaticRedirectExporter
             {
                 if (File.Exists(plan.Key)) continue; // Preflight already proved the existing bytes identical.
                 Directory.CreateDirectory(Path.GetDirectoryName(plan.Key)!);
-                File.WriteAllText(plan.Key, plan.Value.Html);
+                var temporaryPath = Path.Combine(Path.GetDirectoryName(plan.Key)!, ".redirect-" + Guid.NewGuid().ToString("N") + ".tmp");
+                try
+                {
+                    File.WriteAllText(temporaryPath, plan.Value.Html);
+                    // Publish only complete pages, and never replace a file created after preflight.
+                    File.Move(temporaryPath, plan.Key);
+                }
+                finally
+                {
+                    if (File.Exists(temporaryPath)) File.Delete(temporaryPath);
+                }
             }
         }
         return plans.Count;
@@ -109,7 +119,8 @@ internal static class WebStaticRedirectExporter
         // Restrict source routes to portable path segments, rather than decoding ambiguous filesystem paths.
         if (string.IsNullOrWhiteSpace(route) || !route.StartsWith('/') || route.StartsWith("//", StringComparison.Ordinal) ||
             route.Any(c => !(char.IsAsciiLetterOrDigit(c) || c is '/' or '-' or '_' or '.')) ||
-            route.Split('/').Any(segment => segment is "." or ".." || segment.EndsWith('.')) ||
+            route.Split('/').Any(segment => segment is "." or ".." || segment.EndsWith('.') ||
+                VisualStoryPortablePathValidator.IsReservedWindowsDeviceName(segment)) ||
             route.Contains("//", StringComparison.Ordinal))
             throw new InvalidOperationException($"Unsupported static page route: {route}");
         var relative = route.Trim('/');
