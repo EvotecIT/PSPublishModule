@@ -2,7 +2,7 @@
 
 ## Unreleased
 ### What's Changed
-- Keep saved SEO-doctor JSON and backlog reports consistent with the final gate outcome, including warning failures and new gate-error counts.
+- Preserve the source bootstrapper during frozen-source and deferred release builds while generating the current loader in package staging, so release preparation cannot invalidate its own source-integrity check.
 - Remove each dotnet publish invocation's temporary staging directory after success or failure, retaining deployed output, checksum inputs, service state and other invocations' staging.
 - Decode approved signing lists consistently in Windows PowerShell 5.1 and PowerShell 7, and report macOS PFX imports as unsupported rather than falling back to keychain storage.
 - Use OpenAuthenticode's CMS result and explicit unsigned-file error contracts on non-Windows, pass supported signing parameters, and verify the selected signer after writing each signature.
@@ -33,6 +33,7 @@
 - Added opt-in module-scoped `UseAssemblyLoadContext` / `NETAssemblyLoadContext` loading for binary modules. The PowerShell Core export bridge uses the private `PSModuleInfo.AddExportedCmdlet` method when available and falls back to a warning if a future PowerShell version removes it.
 - Preserved binary module aliases in the module-scoped AssemblyLoadContext export bridge so forced re-imports keep DSL aliases available.
 - Updated core PSPublishModule/PowerForge package references used by the release build.
+- Keep saved SEO-doctor JSON and backlog reports consistent with the final gate outcome, including warning failures and new gate-error counts.
 - Add reusable dotnet publish command hooks (`Hooks[]`) for restore, build, target publish, and bundle phases.
 - Add bundle composition primitives for primary subdirectories, copy items, module includes, and generated scripts.
 - Add bundle post-process signing and MSI harvest exclude patterns for package/MSI reuse across projects.
@@ -47,7 +48,6 @@
 
 ## 2.0.19 - 2025.06.17
 ### What's Changed
-- Keep saved SEO-doctor JSON and backlog reports consistent with the final gate outcome, including warning failures and new gate-error counts.
 * Improve error handling in release utilities by @PrzemyslawKlys in https://github.com/EvotecIT/PSPublishModule/pull/32
 * feat: ✨ Introduce New-DLLHandleRuntime function and integrate runti… by @PrzemyslawKlys in https://github.com/EvotecIT/PSPublishModule/pull/33
 
@@ -74,7 +74,6 @@ Set-ProjectVersion -Path "C:\Support\GitHub\DnsClientX" -VersionType Build
 
 ## 2.0.15 - 2024.10.11
 ### What's Changed
-- Keep saved SEO-doctor JSON and backlog reports consistent with the final gate outcome, including warning failures and new gate-error counts.
 * Update BuildModule.yml by @SamErde in https://github.com/EvotecIT/PSPublishModule/pull/27
 * Improve error handling
 * Improve DLL handling
@@ -90,7 +89,6 @@ Set-ProjectVersion -Path "C:\Support\GitHub\DnsClientX" -VersionType Build
 ## 2.0.14 - 2024.08.14
 
 ### What's Changed
-- Keep saved SEO-doctor JSON and backlog reports consistent with the final gate outcome, including warning failures and new gate-error counts.
 * Adding cmdlet detection by @PrzemyslawKlys in https://github.com/EvotecIT/PSPublishModule/pull/25
 * Add custom and builtin place holders replacement functionality by @PrzemyslawKlys in https://github.com/EvotecIT/PSPublishModule/pull/26
 
@@ -152,7 +150,6 @@ Set-ProjectVersion -Path "C:\Support\GitHub\DnsClientX" -VersionType Build
 
 ## 2.0.4
 ### What's Changed
-- Keep saved SEO-doctor JSON and backlog reports consistent with the final gate outcome, including warning failures and new gate-error counts.
 * Adding support for Manual version bumping. by @cocazoulou in https://github.com/EvotecIT/PSPublishModule/pull/21
 
 ### New Contributors

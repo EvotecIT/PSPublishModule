@@ -345,7 +345,7 @@ jobs:
         run: >
           dotnet test .\PowerForge.Tests\PowerForge.Tests.csproj
           -c Release --no-build --no-restore --nologo
-          --filter 'FullyQualifiedName~ApprovedSigningPolicyTests|FullyQualifiedName~OpenAuthenticodeAdapterTests|FullyQualifiedName~ModuleSigningCertificateResolverTests|FullyQualifiedName~ModuleSigningEvidencePolicyTests|FullyQualifiedName~ArtefactBuilder|FullyQualifiedName~ApprovedModuleDependencyPruning|FullyQualifiedName~ModulePipelineApprovedModules'
+          --filter 'FullyQualifiedName~Run_SealedReleasePreservesSourceLoaderAndPackagesCurrentBootstrapper|FullyQualifiedName~ApprovedSigningPolicyTests|FullyQualifiedName~OpenAuthenticodeAdapterTests|FullyQualifiedName~ModuleSigningCertificateResolverTests|FullyQualifiedName~ModuleSigningEvidencePolicyTests|FullyQualifiedName~ArtefactBuilder|FullyQualifiedName~ApprovedModuleDependencyPruning|FullyQualifiedName~ModulePipelineApprovedModules'
 
       - name: Test Apple store art and screenshot provenance
         shell: pwsh
@@ -587,7 +587,7 @@ jobs:
         run: >
           dotnet test ./PowerForge.Tests/PowerForge.Tests.csproj
           -c Release --no-build --no-restore --nologo
-          --filter 'FullyQualifiedName~Run_DocumentationGate_PreservesSourceDevelopmentBootstrapper|FullyQualifiedName~ModulePipelineDevelopmentBootstrapperTests|FullyQualifiedName~ModulePipelineRefreshManifestOnlyTests|FullyQualifiedName~ModulePipelineDocumentationSyncTests'
+          --filter 'FullyQualifiedName~Run_SealedReleasePreservesSourceLoaderAndPackagesCurrentBootstrapper|FullyQualifiedName~Run_DocumentationGate_PreservesSourceDevelopmentBootstrapper|FullyQualifiedName~ModulePipelineDevelopmentBootstrapperTests|FullyQualifiedName~ModulePipelineRefreshManifestOnlyTests|FullyQualifiedName~ModulePipelineDocumentationSyncTests'
 
       - name: Install social card renderer
         shell: pwsh

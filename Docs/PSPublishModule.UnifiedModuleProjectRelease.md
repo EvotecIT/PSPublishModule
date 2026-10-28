@@ -490,7 +490,14 @@ New-ConfigurationReleaseProtection -GenerateProvenance
 `RequireSourceUnchanged` implies `RequireCleanSource`. `GenerateProvenance` implies both source checks and also
 requires module signing, at least one artefact, and a GitHub release destination. Manifest, Documentation, and
 Build gate runs leave provenance generation and its implied checks inactive; an explicitly selected clean or
-unchanged-source check still applies in those modes. The equivalent JSON segment is:
+unchanged-source check still applies in those modes.
+
+Builds with unchanged-source protection and the coordinated release's deferred module checkpoint preserve the
+source development bootstrapper. The current loader is generated in package staging instead. This keeps a
+committed development loader from being rewritten, removed, or replaced by the release build itself while the
+source-integrity checks remain enabled. Ordinary unprotected builds retain their source-loader refresh behaviour.
+
+The equivalent JSON segment is:
 
 ```json
 {

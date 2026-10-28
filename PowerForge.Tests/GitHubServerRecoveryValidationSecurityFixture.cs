@@ -42,7 +42,9 @@ public sealed partial class GitHubServerRecoveryValidationSecurityTests
         bool includeCaptureStartup = false,
         string captureStartupOwner = "root",
         string captureStartupMode = "644",
-        string captureStartupContent = "# No executable recovery startup hooks.\n")
+        string captureStartupContent = "# No executable recovery startup hooks.\n",
+        bool unadvertisedCallerCommit = false,
+        bool changeSourceAfterCallerPin = false)
     {
         var root = Path.Combine(Path.GetTempPath(), "powerforge-recovery-source-security-" + Guid.NewGuid().ToString("N"));
         var workspace = Path.Combine(root, "caller");
@@ -104,6 +106,10 @@ public sealed partial class GitHubServerRecoveryValidationSecurityTests
                 RunProcess("git", workspace, "commit", "-m", "Pin symlink mode", "--quiet").EnsureSuccess();
             }
             var callerRef = RunProcess("git", workspace, "rev-parse", "HEAD").StandardOutput.Trim();
+            if (unadvertisedCallerCommit)
+                callerRef = PrepareUnadvertisedCallerCommit(root, workspace);
+            if (changeSourceAfterCallerPin)
+                File.AppendAllText(Path.Combine(workspace, "deploy", "linux", "backup.bashrc"), "# changed after pin\n");
             var manifestPath = Path.Combine(root, "manifest.json");
             var repositories = new List<object>
             {

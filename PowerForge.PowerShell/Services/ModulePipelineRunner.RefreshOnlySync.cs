@@ -89,6 +89,7 @@ public sealed partial class ModulePipelineRunner
         var stagingPsm1Path = Path.Combine(buildResult.StagingPath, plan.ModuleName + ".psm1");
         var copiedGeneratedBootstrapper = false;
         if (syncGeneratedBootstrapper &&
+            !plan.ReleaseCheckpoint && !plan.RequireReleaseSourceUnchanged &&
             File.Exists(stagingPsm1Path) &&
             SourceCanUseGeneratedBuildBootstrapper(plan, sourcePsm1Path))
         {

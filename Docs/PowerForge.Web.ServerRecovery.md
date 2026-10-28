@@ -92,6 +92,8 @@ All plain and encrypted archive entries must be exact paths; wildcard expansion 
 
 Use the credential-free recovery validation action in pull requests. It validates the manifest against the schema from the exact action commit, requires the manifest schema URL and action pin to match, generates bootstrap and secret-restore plans in runner-temporary storage, parses the generated scripts with Bash, and checks them with ShellCheck. It does not execute generated commands, contact the target host, capture state, restore secrets, deploy, or accept credential inputs.
 
+Managed sources in the caller repository can use exact historical commits from deleted branches. If the caller checkout lacks such a commit, validation fetches only that commit through the same repository origin and its existing checkout read access. It leaves the checked-out revision and files unchanged, then verifies each source against its pinned Git blob. An unavailable commit, different repository origin, or changed source remains a validation failure. External repository validation keeps its separate anonymous Git path.
+
 ```yaml
 permissions:
   contents: read
