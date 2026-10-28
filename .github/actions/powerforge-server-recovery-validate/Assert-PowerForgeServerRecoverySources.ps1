@@ -13,6 +13,7 @@ param(
 $ErrorActionPreference = 'Stop'
 $PSNativeCommandUseErrorActionPreference = $false
 . "$PSScriptRoot/Invoke-PowerForgeAnonymousGit.ps1"
+. "$PSScriptRoot/Assert-PowerForgeCallerGitCommit.ps1"
 
 $approvedPrivilegedCaptureCommands = [Collections.Generic.Dictionary[string, string]]::new([StringComparer]::Ordinal)
 $approvedPrivilegedCaptureCommands.Add('apachectl -S', '/usr/sbin/apachectl -S')
@@ -210,6 +211,9 @@ function Resolve-ManagedSourcePath {
             throw 'Deployment-engine managed sources must use the exact commit pinned by this action.'
         }
     } else {
+        if ($matchesCallerRepository) {
+            Assert-PowerForgeCallerGitCommit -Workspace $root -CallerRepository $LocalCallerRepository -RepositoryRef $repositoryRef
+        }
         $treeEntry = @(& git -C $root ls-tree $repositoryRef -- $relativePath 2>$null)
         if ($LASTEXITCODE -ne 0 -or $treeEntry.Count -ne 1 -or
             $treeEntry[0] -notmatch '^(?<mode>[0-9]{6})\s+blob\s+(?<blob>[a-fA-F0-9]{40}|[a-fA-F0-9]{64})\s+') {
