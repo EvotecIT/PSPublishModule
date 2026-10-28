@@ -1805,7 +1805,7 @@ Keeps only selected host redirect artifacts in the built site output (useful whe
 ```
 
 Notes:
-- Supported targets: `netlify`, `azure`, `vercel`, `apache`/`apache2`, `nginx`, `iis` (or `all`).
+- Supported targets: `netlify`, `azure`, `vercel`, `apache`/`apache2`, `nginx`, `iis` (or `all`), plus the explicit `github-pages` target. `all` and the default retain the six server artifact targets.
 - Reads/writes host artifact files under `siteRoot`:
   - `netlify` -> `_redirects`
   - `azure` -> `staticwebapp.config.json`
@@ -1816,6 +1816,25 @@ Notes:
 - `removeUnselected` defaults to `true`.
 - `strict: true` fails if selected target artifacts are missing.
 - `site-root` is supported as an alias for `siteRoot`.
+
+For GitHub Pages, run `hosting` **after API docs and all other page generators**:
+```json
+{ "task": "hosting", "siteRoot": "./_site", "target": "github-pages" }
+```
+This reads the build's `_powerforge/redirects.json` and writes HTML redirect pages for
+exact `Redirects` from `site.json`, including moved API routes. The pages contain a
+canonical link, immediate refresh, JavaScript navigation and a visible fallback link.
+GitHub Pages serves these files with HTTP 200; they are not HTTP 301 responses.
+JavaScript navigation preserves query strings when `PreserveQuery` is true and retains
+the incoming fragment unless the destination supplies one. Refresh and the fallback
+link use the configured destination without the incoming query or fragment.
+
+Only root-relative ASCII HTML page source paths, exact matches and redirect statuses
+301/302/307/308 are supported. Regex, wildcard and query-specific rules need a server
+redirect target. Internal destinations must already exist; HTTPS destinations may be
+external. All rules are validated before files are written. Existing content is never
+replaced, except an identical generated redirect on a repeat run. Symlinked metadata,
+source and destination paths are rejected. `dryRun` validates without writing.
 
 #### cloudflare
 Purges Cloudflare cache or verifies `cf-cache-status` on selected URLs.

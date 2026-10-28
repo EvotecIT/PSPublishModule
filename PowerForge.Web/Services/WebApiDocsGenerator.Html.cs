@@ -271,27 +271,7 @@ public static partial class WebApiDocsGenerator
             canonical = "/" + canonical;
         }
 
-        var encodedCanonical = System.Web.HttpUtility.HtmlEncode(canonical);
-        var scriptCanonical = System.Web.HttpUtility.JavaScriptStringEncode(canonical);
-        return
-$@"<!doctype html>
-<html lang=""en"">
-<head>
-  <meta charset=""utf-8"" />
-  <meta name=""viewport"" content=""width=device-width, initial-scale=1"" />
-  <title>Redirecting...</title>
-  <meta name=""robots"" content=""noindex,follow"" data-pf=""api-docs-legacy-alias"" />
-  <meta http-equiv=""refresh"" content=""0;url={encodedCanonical}"" />
-  <link rel=""canonical"" href=""{encodedCanonical}"" />
-</head>
-<body>
-  <p>This page moved to <a href=""{encodedCanonical}"">{encodedCanonical}</a>.</p>
-  <script>
-    window.location.replace('{scriptCanonical}');
-  </script>
-</body>
-</html>
-";
+        return WebRedirectPage.Render(canonical, "api-docs-legacy-alias");
     }
 
     private static void ApplyNavFallback(WebApiDocsOptions options, List<string> warnings, ref string header, ref string footer)
