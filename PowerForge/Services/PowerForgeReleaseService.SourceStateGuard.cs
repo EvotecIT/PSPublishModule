@@ -78,7 +78,7 @@ internal sealed partial class PowerForgeReleaseService
                 ? "working-tree state is not clean"
                 : string.Join("; ", source.DirtyReasons);
             throw new InvalidOperationException(
-                "Release source changed after the release build. Publication is blocked before package, module, tool, or GitHub mutation. " +
+                "Release source changed after the release build. The next publication operation is blocked; earlier lanes may already have published. " +
                 $"Changed paths: {paths}. Reason: {reasons}.");
         }
     }
