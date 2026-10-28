@@ -37,7 +37,7 @@ public sealed class WebStaticRedirectExporterTests : IDisposable
     public void ExistingAncestorCaseAliasCannotChangeThePublishedRoute()
     {
         WriteRules(new RedirectSpec { From = "/API/legacy/", To = "/api/reader-ocr/type/" });
-        if (OperatingSystem.IsLinux())
+        if (FrameworkCompatibility.GetPathStringComparison(root) == StringComparison.Ordinal)
             Assert.Equal(1, WebStaticRedirectExporter.Export(root, false));
         else
         {
@@ -51,7 +51,7 @@ public sealed class WebStaticRedirectExporterTests : IDisposable
     {
         WriteRules(new RedirectSpec { From = "/Legacy/a/", To = "/api/reader-ocr/type/" },
             new RedirectSpec { From = "/legacy/b/", To = "/api/reader-ocr/type/" });
-        if (OperatingSystem.IsLinux())
+        if (FrameworkCompatibility.GetPathStringComparison(root) == StringComparison.Ordinal)
             Assert.Equal(2, WebStaticRedirectExporter.Export(root, false));
         else
         {
@@ -65,7 +65,7 @@ public sealed class WebStaticRedirectExporterTests : IDisposable
     {
         WriteRules(new RedirectSpec { From = "/Legacy/", To = "/api/reader-ocr/type/" },
             new RedirectSpec { From = "/legacy/", To = "/api/reader-ocr/type/" });
-        if (OperatingSystem.IsLinux())
+        if (FrameworkCompatibility.GetPathStringComparison(root) == StringComparison.Ordinal)
         {
             Assert.Equal(2, WebStaticRedirectExporter.Export(root, false));
             Assert.True(File.Exists(Path.Combine(root, "Legacy", "index.html")));
@@ -82,7 +82,7 @@ public sealed class WebStaticRedirectExporterTests : IDisposable
     public void CaseOnlyMoveDoesNotBecomeAFalseRedirectLoopOnLinux()
     {
         WriteRules(new RedirectSpec { From = "/api/reader-ocr/TYPE/", To = "/api/reader-ocr/type/" });
-        if (OperatingSystem.IsLinux())
+        if (FrameworkCompatibility.GetPathStringComparison(root) == StringComparison.Ordinal)
             Assert.Equal(1, WebStaticRedirectExporter.Export(root, false));
         else
         {
@@ -90,6 +90,33 @@ public sealed class WebStaticRedirectExporterTests : IDisposable
             Assert.Throws<InvalidOperationException>(() => WebStaticRedirectExporter.Export(root, false));
             Assert.Equal("<h1>OCR type</h1>", File.ReadAllText(Path.Combine(root, "api", "reader-ocr", "type", "index.html")));
         }
+    }
+
+    [Fact]
+    public void PreviouslyGeneratedRedirectCannotBeUsedAsCanonicalDestination()
+    {
+        WriteRules(new RedirectSpec { From = "/old/", To = "/api/reader-ocr/type/", PreserveQuery = false });
+        WebStaticRedirectExporter.Export(root, false);
+        WriteRules(new RedirectSpec { From = "/new-alias/", To = "/old/" });
+        Assert.Throws<InvalidOperationException>(() => WebStaticRedirectExporter.Export(root, false));
+        Assert.False(Directory.Exists(Path.Combine(root, "new-alias")));
+    }
+
+    [Theory]
+    [InlineData(false, "/old/")]
+    [InlineData(true, "/old/")]
+    [InlineData(false, "/old.HTML")]
+    public void RemovedRuleRequiresCleanBuildWithoutDeletingPriorOrUnrelatedContent(bool dryRun, string source)
+    {
+        WriteRules(new RedirectSpec { From = source, To = "/api/reader-ocr/type/" });
+        WebStaticRedirectExporter.Export(root, false);
+        var oldPage = source.EndsWith('/') ? Path.Combine(root, "old", "index.html") : Path.Combine(root, source.TrimStart('/'));
+        var original = File.ReadAllText(oldPage);
+        WriteRules();
+        var error = Assert.Throws<InvalidOperationException>(() => WebStaticRedirectExporter.Export(root, dryRun));
+        Assert.Contains("clean", error.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(original, File.ReadAllText(oldPage));
+        Assert.Equal("<h1>OCR type</h1>", File.ReadAllText(Path.Combine(root, "api", "reader-ocr", "type", "index.html")));
     }
 
     [Fact]

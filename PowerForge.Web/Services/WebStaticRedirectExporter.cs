@@ -16,7 +16,8 @@ internal static class WebStaticRedirectExporter
             ?? Array.Empty<RedirectSpec>();
         // URL paths are case-sensitive, including when a build runs on a different host OS.
         var plans = new Dictionary<string, (string Html, string Destination)>(StringComparer.Ordinal);
-        var spellings = OperatingSystem.IsLinux() ? null : new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var spellings = FrameworkCompatibility.GetPathStringComparison(root) == StringComparison.Ordinal
+            ? null : new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         foreach (var rule in redirects)
         {
             if (rule.MatchType != RedirectMatchType.Exact || rule.Status is not (301 or 302 or 307 or 308))
@@ -31,6 +32,8 @@ internal static class WebStaticRedirectExporter
                 if (!File.Exists(destination))
                     throw new InvalidOperationException($"Static redirect canonical page was not generated: {path}");
                 FileSystemPathSafety.RequireRegularFile(destination);
+                if (IsGeneratedRedirect(destination))
+                    throw new InvalidOperationException($"Static redirect destination is another generated redirect: {path}. Rebuild clean before exporting changed rules.");
             }
             else if (Uri.TryCreate(target, UriKind.Absolute, out var uri) &&
                      uri.Scheme == Uri.UriSchemeHttps && string.IsNullOrEmpty(uri.UserInfo))
@@ -43,8 +46,12 @@ internal static class WebStaticRedirectExporter
             var html = WebRedirectPage.Render(target, "static-redirect", preserveQueryAndFragment: true, rule.PreserveQuery);
             if (plans.TryGetValue(output, out var prior) && prior.Html != html)
                 throw new InvalidOperationException($"Conflicting static redirects: {rule.From}");
-            if (File.Exists(output) && File.ReadAllText(output) != html)
-                throw new InvalidOperationException($"Static redirect would overwrite existing content: {rule.From}");
+            if (File.Exists(output))
+            {
+                FileSystemPathSafety.RequireRegularFile(output);
+                if (File.ReadAllText(output) != html)
+                    throw new InvalidOperationException($"Static redirect would overwrite existing content: {rule.From}. Rebuild clean before exporting changed rules.");
+            }
             plans[output] = (html, destination);
         }
 
@@ -52,6 +59,14 @@ internal static class WebStaticRedirectExporter
         {
             if (plans.ContainsKey(plan.Value.Destination))
                 throw new InvalidOperationException("Static redirect chains and loops are not supported.");
+        }
+        // An incremental build may retain pages from removed rules. Refuse to publish stale
+        // navigation rather than deleting content or guessing ownership from a marker alone.
+        var enumeration = new EnumerationOptions { RecurseSubdirectories = true, AttributesToSkip = FileAttributes.ReparsePoint };
+        foreach (var file in Directory.EnumerateFiles(root, "*", enumeration).Where(path => path.EndsWith(".html", StringComparison.OrdinalIgnoreCase)))
+        {
+            if (!plans.ContainsKey(file) && IsGeneratedRedirect(file, staticOnly: true))
+                throw new InvalidOperationException($"Stale static redirect remains at {Path.GetRelativePath(root, file)}. Rebuild clean before exporting changed rules.");
         }
         if (!dryRun)
         {
@@ -62,6 +77,17 @@ internal static class WebStaticRedirectExporter
             }
         }
         return plans.Count;
+    }
+
+    private static bool IsGeneratedRedirect(string file, bool staticOnly = false)
+    {
+        FileSystemPathSafety.RequireRegularFile(file);
+        using var reader = File.OpenText(file);
+        var buffer = new char[4096];
+        var prefix = new string(buffer, 0, reader.ReadBlock(buffer, 0, buffer.Length));
+        return prefix.Contains("data-pf=\"static-redirect\"", StringComparison.Ordinal) ||
+            (!staticOnly && prefix.Contains("data-pf=\"api-docs-legacy-alias\"", StringComparison.Ordinal) &&
+             prefix.Contains("http-equiv=\"refresh\"", StringComparison.OrdinalIgnoreCase));
     }
 
     private static string ResolvePage(string root, string route, Dictionary<string, string>? spellings)
@@ -90,7 +116,7 @@ internal static class WebStaticRedirectExporter
             {
                 var child = Path.Combine(current, segment);
                 if (spellings.TryGetValue(child, out var prior) && !prior.Equals(child, StringComparison.Ordinal))
-                    throw new InvalidOperationException("Case-distinct static redirect paths require a case-sensitive Linux output directory.");
+                    throw new InvalidOperationException("Case-distinct static redirect paths require a case-sensitive output directory.");
                 if (Directory.Exists(current))
                 {
                     var names = Directory.EnumerateFileSystemEntries(current).Select(Path.GetFileName).ToArray();
