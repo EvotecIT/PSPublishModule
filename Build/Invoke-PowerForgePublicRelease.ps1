@@ -21,7 +21,10 @@ param(
     [string] $ReleaseSourceRoot,
 
     [ValidatePattern('^[0-9a-fA-F]{40}$')]
-    [string] $ExpectedToolCommit
+    [string] $ExpectedToolCommit,
+
+    [ValidatePattern('^[A-Za-z_][A-Za-z0-9_]*$')]
+    [string] $GitHubTokenEnvironmentVariable
 )
 
 $ErrorActionPreference = 'Stop'
@@ -313,6 +316,10 @@ try {
     $toolBuildRoot = Join-Path $toolSnapshotRoot 'Build'
 
     $releaseConfig = $sourceReleaseConfig
+    . (Join-Path (Join-Path $toolBuildRoot 'Private') 'Set-PowerForgeReleaseGitHubEnvironment.ps1')
+    $releaseConfig = Set-PowerForgeReleaseGitHubEnvironment `
+        -ReleaseConfig $releaseConfig `
+        -EnvironmentVariable $GitHubTokenEnvironmentVariable
     $moduleConfigPath = Join-Path $repositoryRoot 'powerforge.json'
     $moduleConfig = Get-Content -Raw -LiteralPath $moduleConfigPath | ConvertFrom-Json -Depth 100
     . (Join-Path (Join-Path $toolBuildRoot 'Private') 'Set-PowerForgeAuthorizedReleaseVersion.ps1')
@@ -366,10 +373,18 @@ try {
         Assert-PowerForgeCommittedReleaseVersion -RepositoryRoot $repositoryRoot -Version $Version -ReleaseConfig $releaseConfig
 
         $gitHubTokenPath = [string] $releaseConfig.GitHub.TokenFilePath
-        if ([string]::IsNullOrWhiteSpace($gitHubTokenPath)) {
-            throw 'Build/release.json must configure the unified GitHub release token file.'
+        if (-not [string]::IsNullOrWhiteSpace($gitHubTokenPath)) {
+            $gitHubToken = (Get-Content -Raw -LiteralPath $gitHubTokenPath).Trim()
+        } else {
+            $gitHubEnvironmentProperty = $releaseConfig.GitHub.PSObject.Properties['TokenEnvName']
+            $gitHubToken = if ($null -ne $gitHubEnvironmentProperty) {
+                [Environment]::GetEnvironmentVariable([string] $gitHubEnvironmentProperty.Value)
+            } else { $null }
         }
-        $gitHubToken = (Get-Content -Raw -LiteralPath $gitHubTokenPath).Trim()
+        if ([string]::IsNullOrWhiteSpace($gitHubToken)) {
+            throw 'The unified GitHub release requires a non-empty token from its configured file or environment variable.'
+        }
+        $gitHubToken = $gitHubToken.Trim()
         . (Join-Path (Join-Path $toolBuildRoot 'Private') 'Get-PowerForgeReleasePackageIds.ps1')
         $packageIds = Get-PowerForgeReleasePackageIds `
             -ReleaseConfig $releaseConfig `

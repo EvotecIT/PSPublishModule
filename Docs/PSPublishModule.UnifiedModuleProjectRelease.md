@@ -62,6 +62,40 @@ and the coordinated module GitHub asset set; the tool lane owns runtime-specific
 archives. This is one operator command with one release owner, even when independent product version lines require
 separate GitHub tags.
 
+### Public release credentials
+
+This repository's `Build/Invoke-PowerForgePublicRelease.ps1` keeps its configured
+credential files by default. Add `-GitHubTokenEnvironmentVariable` to use an
+existing process credential for the unified GitHub release, project GitHub lane
+and tool GitHub lane. This changes credential transport; repository destinations,
+release versions, signing settings and source checks stay in their normal configuration.
+The effective configuration records the variable name, never its value. An absent
+or blank variable fails before signing or publication.
+
+For example, when GitHub CLI is already authenticated for the intended account:
+
+```powershell
+$releaseVersion = '3.0.180' # Use the version selected for this release.
+$revision = (git rev-parse HEAD).Trim()
+$env:POWERFORGE_RELEASE_GITHUB_TOKEN = gh auth token
+try {
+    .\Build\Invoke-PowerForgePublicRelease.ps1 -Operation Plan `
+        -Version $releaseVersion -ExpectedCommit $revision `
+        -GitHubTokenEnvironmentVariable POWERFORGE_RELEASE_GITHUB_TOKEN
+} finally {
+    Remove-Item Env:\POWERFORGE_RELEASE_GITHUB_TOKEN -ErrorAction SilentlyContinue
+}
+```
+
+An existing CI environment variable can be used directly; GitHub CLI is optional
+and the release entrypoint does not invoke it. Keep token values out of command
+arguments, transcript output and configuration files. The selected credential must
+already have the permissions needed by the release. In particular, GitHub can
+return `404` when the target commit changes workflow files relative to the default
+branch and the token lacks workflow permission; see the
+[GitHub release API requirements](https://docs.github.com/en/rest/releases/releases#create-a-release).
+Environment transport does not grant permissions or alter a saved credential.
+
 ## Recommended Build-Module Shape
 
 The Build-Module-first workflow supports both JSON-backed and PowerShell-authored package configuration.
