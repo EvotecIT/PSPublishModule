@@ -214,18 +214,15 @@ internal sealed class RequiredModuleResolutionEngine
 
     internal static RequiredModuleReference[] ResolveOutputRequiredModules(
         RequiredModuleReference[]? modules,
-        bool mergeMissing,
-        IReadOnlyCollection<string> fullyInlinedModules)
+        IReadOnlyCollection<string> approvedModules)
     {
-        if (!mergeMissing)
-            return modules ?? Array.Empty<RequiredModuleReference>();
-
         if (modules is null || modules.Length == 0)
             return Array.Empty<RequiredModuleReference>();
-        if (fullyInlinedModules is null || fullyInlinedModules.Count == 0)
+        if (approvedModules is null || approvedModules.Count == 0)
             return modules;
 
-        var approved = new HashSet<string>(fullyInlinedModules, StringComparer.OrdinalIgnoreCase);
+        // ApprovedModule declares build-time helper reuse, never a published runtime dependency.
+        var approved = new HashSet<string>(approvedModules, StringComparer.OrdinalIgnoreCase);
         return modules
             .Where(static module => !string.IsNullOrWhiteSpace(module.ModuleName))
             .Where(module => !approved.Contains(module.ModuleName!))

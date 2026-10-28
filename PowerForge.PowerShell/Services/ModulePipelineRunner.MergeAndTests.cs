@@ -40,7 +40,6 @@ public sealed partial class ModulePipelineRunner
                 usedExistingPsm1: false,
                 requiredModules: plan.RequiredModules ?? Array.Empty<RequiredModuleReference>(),
                 approvedModules: plan.ApprovedModules ?? Array.Empty<string>(),
-                fullyInlinedApprovedModules: Array.Empty<string>(),
                 dependentModules: Array.Empty<string>(),
                 topLevelInlinedFunctions: 0,
                 totalInlinedFunctions: 0,
@@ -81,9 +80,6 @@ public sealed partial class ModulePipelineRunner
             usedExistingPsm1: mergeOutcome.UsedExistingPsm1,
             requiredModules: plan.RequiredModules ?? Array.Empty<RequiredModuleReference>(),
             approvedModules: plan.ApprovedModules ?? Array.Empty<string>(),
-            fullyInlinedApprovedModules: ResolveApprovedModulesSatisfiedByFinalPayload(
-                plan, buildResult, mergeInfo.Psm1Path,
-                missingReport?.FullyInlinedApprovedModules ?? Array.Empty<string>()),
             dependentModules: dependentRequiredModules,
             topLevelInlinedFunctions: mergeOutcome.TopLevelInlinedFunctions,
             totalInlinedFunctions: mergeOutcome.TotalInlinedFunctions,

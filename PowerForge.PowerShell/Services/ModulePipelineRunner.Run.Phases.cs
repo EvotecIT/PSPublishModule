@@ -94,8 +94,7 @@ public sealed partial class ModulePipelineRunner
                 : ApplyMerge(plan, buildResult);
             manifestRequiredModules = ResolveOutputRequiredModules(
                 plan.RequiredModules,
-                plan.MergeMissing,
-                state.MergeExecution.FullyInlinedApprovedModules);
+                plan.ApprovedModules);
             if (!plan.BuildSpec.RefreshManifestOnly && !IsReusingCompiledPowerShellModule(plan))
                 ApplyPlaceholders(plan, buildResult);
 
