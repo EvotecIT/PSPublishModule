@@ -1056,6 +1056,7 @@ internal sealed partial class PowerForgeReleaseService
                 skipInstall: true,
                 includeProjectPackages: false,
                 reuseStaging: deferredModulePublishRequest.ConfigPath is not null,
+                releaseCheckpoint: true,
                 cancellationToken: request.CancellationToken);
             result.ModulePublication = modulePublication;
             if (!modulePublication.Succeeded)
@@ -1710,6 +1711,7 @@ internal sealed partial class PowerForgeReleaseService
             Framework = effectiveModuleFramework,
             RunMode = ResolveModuleRunMode(options, request, packagePublishingRequested),
             PowerForgeReleaseStage = true,
+            ReleaseCheckpoint = HasPostBuildSourceStateGuard(request),
             UnifiedGitHubRelease = publishUnifiedGitHub,
             NoDotnetBuild = noDotnetBuildOverride ?? false,
             NoDotnetBuildWasSpecified = noDotnetBuildOverride.HasValue,

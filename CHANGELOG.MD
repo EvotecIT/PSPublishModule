@@ -3,7 +3,7 @@
 ## Unreleased
 ### What's Changed
 - Export exact route migrations as safe HTML redirect pages for GitHub Pages through the existing hosting pipeline step, preserving canonical content and API anchors.
-- Preserve the source bootstrapper during frozen-source and deferred release builds while generating the current loader in package staging, so release preparation cannot invalidate its own source-integrity check.
+- Preserve the source bootstrapper through both deferred release passes and registry recovery, including frozen-source runs that skip module publication. Generate the current loader in staging, and report source-integrity failures as blocking the next operation without implying that earlier lanes have not published.
 - Remove each dotnet publish invocation's temporary staging directory after success or failure, retaining deployed output, checksum inputs, service state and other invocations' staging.
 - Decode approved signing lists consistently in Windows PowerShell 5.1 and PowerShell 7, and report macOS PFX imports as unsupported rather than falling back to keychain storage.
 - Use OpenAuthenticode's CMS result and explicit unsigned-file error contracts on non-Windows, pass supported signing parameters, and verify the selected signer after writing each signature.
@@ -50,7 +50,7 @@
 ## 2.0.19 - 2025.06.17
 ### What's Changed
 * Improve error handling in release utilities by @PrzemyslawKlys in https://github.com/EvotecIT/PSPublishModule/pull/32
-* feat: ✨ Introduce New-DLLHandleRuntime function and integrate runti… by @PrzemyslawKlys in https://github.com/EvotecIT/PSPublishModule/pull/33
+* feat: âœ¨ Introduce New-DLLHandleRuntime function and integrate runtiâ€¦ by @PrzemyslawKlys in https://github.com/EvotecIT/PSPublishModule/pull/33
 
 **Full Changelog**: https://github.com/EvotecIT/PSPublishModule/compare/v2.0.18...v2.0.19
 

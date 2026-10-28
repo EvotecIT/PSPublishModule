@@ -91,7 +91,8 @@ public sealed class ModuleBuildHostBuildRequest
     internal bool RequireReusableOutput { get; set; }
 
     /// <summary>
-    /// Preserves configured local signing during the build pass that produces a deferred release checkpoint.
+    /// Preserves source loaders throughout a frozen release or deferred publication,
+    /// and preserves configured local signing when building the local checkpoint.
     /// </summary>
     internal bool ReleaseCheckpoint { get; set; }
 

@@ -312,7 +312,7 @@ public sealed partial class PowerForgeReleaseServiceTests
             Assert.Equal("1.2.X", moduleCalls[0].ModuleVersion);
             Assert.Equal("1.2.3", moduleCalls[1].ModuleVersion);
             Assert.True(moduleCalls[0].ReleaseCheckpoint);
-            Assert.False(moduleCalls[1].ReleaseCheckpoint);
+            Assert.True(moduleCalls[1].ReleaseCheckpoint);
         }
         finally
         {
