@@ -1844,6 +1844,10 @@ files. Status-only changes do not alter the HTML. A clean site build is needed w
 changes would overwrite existing redirect HTML or leave stale generated redirects.
 The exporter also rejects destinations that are generated redirects. It never prunes site
 content. Use the build step's `clean: true` before all page and API generators.
+Interrupted writes leave reserved `.redirect-*.tmp` files; the exporter stops before
+writing until a clean build removes them. Use a separate `siteRoot` for each concurrent
+pipeline. If another process creates a destination after validation, export fails
+without replacing that file.
 
 #### cloudflare
 Purges Cloudflare cache or verifies `cf-cache-status` on selected URLs.

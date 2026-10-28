@@ -193,6 +193,24 @@ public sealed class WebStaticRedirectExporterTests : IDisposable
     }
 
     [Theory]
+    [InlineData("", false)]
+    [InlineData("", true)]
+    [InlineData("nested", false)]
+    [InlineData("nested", true)]
+    public void InterruptedWriteRequiresCleanBuildBeforePublishing(string directory, bool dryRun)
+    {
+        WriteRules(new RedirectSpec { From = "/old/", To = "/api/reader-ocr/type/" });
+        var parent = Path.Combine(root, directory);
+        Directory.CreateDirectory(parent);
+        var interrupted = Path.Combine(parent, ".redirect-00000000000000000000000000000000.tmp");
+        File.WriteAllText(interrupted, "Partial redirect page");
+        var error = Assert.Throws<InvalidOperationException>(() => WebStaticRedirectExporter.Export(root, dryRun));
+        Assert.Contains("Rebuild clean", error.Message);
+        Assert.False(Directory.Exists(Path.Combine(root, "old")));
+        Assert.Equal("Partial redirect page", File.ReadAllText(interrupted));
+    }
+
+    [Theory]
     [InlineData("/../escape/")]
     [InlineData("/%2e%2e/escape/")]
     [InlineData("//outside.test/path/")]

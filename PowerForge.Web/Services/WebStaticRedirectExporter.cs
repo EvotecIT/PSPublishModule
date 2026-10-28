@@ -63,9 +63,11 @@ internal static class WebStaticRedirectExporter
         // An incremental build may retain pages from removed rules. Refuse to publish stale
         // navigation rather than deleting content or guessing ownership from a marker alone.
         var enumeration = new EnumerationOptions { RecurseSubdirectories = true, AttributesToSkip = FileAttributes.ReparsePoint };
-        foreach (var file in Directory.EnumerateFiles(root, "*", enumeration).Where(path => path.EndsWith(".html", StringComparison.OrdinalIgnoreCase)))
+        foreach (var file in Directory.EnumerateFiles(root, "*", enumeration))
         {
-            if (!plans.ContainsKey(file) && IsGeneratedRedirect(file, staticOnly: true))
+            if (Path.GetFileName(file).StartsWith(".redirect-", StringComparison.Ordinal) && file.EndsWith(".tmp", StringComparison.Ordinal))
+                throw new InvalidOperationException($"Interrupted static redirect write remains at {Path.GetRelativePath(root, file)}. Rebuild clean before publishing.");
+            if (file.EndsWith(".html", StringComparison.OrdinalIgnoreCase) && !plans.ContainsKey(file) && IsGeneratedRedirect(file, staticOnly: true))
                 throw new InvalidOperationException($"Stale static redirect remains at {Path.GetRelativePath(root, file)}. Rebuild clean for removed rules, or remove reserved redirect markup from an authored page.");
         }
         if (!dryRun)
