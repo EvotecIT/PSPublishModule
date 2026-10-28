@@ -43,6 +43,7 @@ public sealed class DotNetPublishChecksumInputsTests
             Assert.Contains(Path.Combine(output, "app.exe"), artifact.PublishedChecksumFiles!);
             Assert.Contains(artifact.ServicePackage!.MetadataPath, artifact.PublishedChecksumFiles!);
             Assert.True(File.Exists(Path.Combine(output, "old.dll")));
+            Assert.False(Directory.Exists(staging));
             Assert.DoesNotContain("old.dll", File.ReadAllText(WriteChecksums(root, artifact)));
         }
         finally
