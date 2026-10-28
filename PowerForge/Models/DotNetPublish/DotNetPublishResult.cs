@@ -127,7 +127,10 @@ public sealed class DotNetPublishArtefactResult
     /// <summary>Publish style used.</summary>
     public DotNetPublishStyle Style { get; set; }
 
-    /// <summary>Resolved publish directory (staging or final).</summary>
+    /// <summary>
+    /// Resolved publish directory (temporary staging or final output). Invocation-owned
+    /// staging is removed after publishing; use <see cref="OutputDir"/> for the retained payload.
+    /// </summary>
     public string PublishDir { get; set; } = string.Empty;
 
     /// <summary>Final output directory.</summary>
