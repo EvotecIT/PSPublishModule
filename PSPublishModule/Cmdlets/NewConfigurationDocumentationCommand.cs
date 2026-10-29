@@ -31,11 +31,19 @@ namespace PSPublishModule;
 /// <summary>Generate docs and scan custom about topic folders in staging</summary>
 /// <code>New-ConfigurationDocumentation -Enable -Path 'Docs' -PathReadme 'Docs\Readme.md' -AboutTopicsSourcePath 'Help\About','Internals\About'</code>
 /// </example>
+/// <example>
+/// <summary>Discover dynamic parameters available for a specific command mode</summary>
+/// <code>$context = [PowerForge.DocumentationDiscoveryContext]@{ Command = 'Get-Example'; Arguments = @('enabled') }
+/// New-ConfigurationDocumentation -Enable -Path 'Docs' -PathReadme 'Docs\Readme.md' -ParameterDiscoveryContext $context</code>
+/// </example>
 [Cmdlet(VerbsCommon.New, "ConfigurationDocumentation")]
 public sealed class NewConfigurationDocumentationCommand : PSCmdlet
 {
     /// <summary>Enables creation of documentation from the module.</summary>
     [Parameter] public SwitchParameter Enable { get; set; }
+
+    /// <summary>Explicit argument and provider contexts for discovering conditional dynamic parameters. Include every supported context to document.</summary>
+    [Parameter] public DocumentationDiscoveryContext[] ParameterDiscoveryContext { get; set; } = System.Array.Empty<DocumentationDiscoveryContext>();
 
     /// <summary>
     /// Legacy compatibility switch. Documentation builds clean stale generated files by default.
@@ -86,6 +94,7 @@ public sealed class NewConfigurationDocumentationCommand : PSCmdlet
         foreach (var segment in new DocumentationConfigurationFactory().Create(new DocumentationConfigurationRequest
         {
             Enable = Enable.IsPresent,
+            ParameterDiscoveryContexts = ParameterDiscoveryContext ?? System.Array.Empty<DocumentationDiscoveryContext>(),
             SyncExternalHelpToProjectRoot = SyncExternalHelpToProjectRoot.IsPresent,
             SkipExternalHelp = SkipExternalHelp.IsPresent,
             SkipAboutTopics = SkipAboutTopics.IsPresent,

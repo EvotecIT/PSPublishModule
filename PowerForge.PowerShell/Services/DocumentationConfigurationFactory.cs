@@ -21,6 +21,7 @@ internal sealed class DocumentationConfigurationFactory
 
         var emitBuildSegment =
             request.Enable ||
+            request.ParameterDiscoveryContexts.Length > 0 ||
             request.SyncExternalHelpToProjectRoot ||
             request.SkipExternalHelp ||
             request.SkipAboutTopics ||
@@ -36,6 +37,7 @@ internal sealed class DocumentationConfigurationFactory
                 Configuration = new BuildDocumentationConfiguration
                 {
                     Enable = request.Enable,
+                    ParameterDiscoveryContexts = request.ParameterDiscoveryContexts,
                     SyncExternalHelpToProjectRoot = request.SyncExternalHelpToProjectRoot,
                     IncludeAboutTopics = !request.SkipAboutTopics,
                     GenerateFallbackExamples = !request.SkipFallbackExamples,

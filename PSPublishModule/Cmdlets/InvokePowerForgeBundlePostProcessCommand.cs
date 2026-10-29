@@ -52,14 +52,13 @@ public sealed class InvokePowerForgeBundlePostProcessCommand : PSCmdlet
     /// Optional runtime identifier used for metadata and template tokens.
     /// </summary>
     [Parameter]
-    [Alias("Rid", "Runtime")]
+    [Alias("Rid")]
     public string? Runtime { get; set; }
 
     /// <summary>
     /// Optional framework used for metadata and template tokens.
     /// </summary>
     [Parameter]
-    [Alias("Framework")]
     public string? Framework { get; set; }
 
     /// <summary>

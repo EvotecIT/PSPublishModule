@@ -44,6 +44,10 @@ public sealed class BuildDocumentationConfiguration
     /// <summary>Enable documentation generation.</summary>
     public bool Enable { get; set; }
 
+    /// <summary>Explicit contexts used to discover conditional dynamic parameters for a command.</summary>
+    /// <remarks>For each named command these contexts define the supported discovery scope; parameters not present in any of them are excluded.</remarks>
+    public DocumentationDiscoveryContext[] ParameterDiscoveryContexts { get; set; } = Array.Empty<DocumentationDiscoveryContext>();
+
     /// <summary>
     /// When enabled, also syncs the generated external help file back to the project root
     /// (e.g. <c>en-US\&lt;ModuleName&gt;-help.xml</c>) when project docs are synced.
@@ -83,4 +87,17 @@ public sealed class BuildDocumentationConfiguration
     /// Absolute paths are also supported.
     /// </summary>
     public string[] AboutTopicsSourcePath { get; set; } = System.Array.Empty<string>();
+}
+
+/// <summary>Arguments and provider location used to discover a command's dynamic parameters.</summary>
+public sealed class DocumentationDiscoveryContext
+{
+    /// <summary>The exported command name.</summary>
+    public string Command { get; set; } = string.Empty;
+
+    /// <summary>Positional arguments passed to PowerShell command discovery.</summary>
+    public string[] Arguments { get; set; } = Array.Empty<string>();
+
+    /// <summary>Optional PowerShell provider path used during discovery.</summary>
+    public string ProviderPath { get; set; } = string.Empty;
 }

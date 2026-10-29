@@ -36,6 +36,10 @@ internal sealed class DocumentationExtractionPayload
     /// <summary>Extracted command help entries.</summary>
     [DataMember(Name = "commands")]
     public List<DocumentationCommandHelp> Commands { get; set; } = new();       
+
+    /// <summary>Warnings raised while collecting help metadata.</summary>
+    [DataMember(Name = "warnings")]
+    public List<string> Warnings { get; set; } = new();
 }
 
 /// <summary>
@@ -227,6 +231,10 @@ internal sealed class DocumentationSyntaxHelp
     /// <summary>Rendered syntax line.</summary>
     [DataMember(Name = "text")]
     public string Text { get; set; } = string.Empty;
+
+    /// <summary>Runtime parameters observed in this particular syntax context.</summary>
+    [DataMember(Name = "parameterNames")]
+    public List<string>? ParameterNames { get; set; }
 }
 
 /// <summary>

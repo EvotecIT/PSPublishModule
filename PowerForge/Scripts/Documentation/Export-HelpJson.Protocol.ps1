@@ -35,6 +35,7 @@ function GetCollectorHelperFunctionNames {
     'GetDocumentedModuleCommands',
     'GetDocumentationParameterDeclaringMetadata',
     'GetDocumentationParameterNames',
+    'GetDocumentationParameterSignature',
     'GetDocumentationParameterRuntimeMetadata',
     'GetDocumentationRuntimeInputs',
     'GetExactLoadedTypeMatches',
@@ -58,6 +59,7 @@ function GetCollectorHelperFunctionNames {
     'TestExactRuntimeValueType',
     'TestGenuineRuntimeTypeValue',
     'TestDocumentationParameterDontShow',
+    'TestDocumentationDynamicCommand',
     'TestPowerShellSimpleTypeName',
     'TestPowerShellTypeLiteral',
     'TestPowerShellTypeLiteralName',
@@ -100,6 +102,7 @@ function NewDocumentationModuleSnapshot([object]$manifest, [string]$moduleName) 
       } else { $null }
     } catch { $null })
     commands = @()
+    warnings = @()
   }
 }
 
@@ -131,15 +134,60 @@ function TestDocumentationParameterDontShow([object[]]$attributes) {
     @($parameterAttributes | Microsoft.PowerShell.Core\Where-Object { -not $_.DontShow }).Count -eq 0
 }
 
+function TestDocumentationDynamicCommand([System.Management.Automation.CommandInfo]$command) {
+  if ($command -is [System.Management.Automation.FunctionInfo]) {
+    $ast = $command.ScriptBlock.Ast
+    if ($ast -is [System.Management.Automation.Language.FunctionDefinitionAst]) { $ast = $ast.Body }
+    return $null -ne $ast.DynamicParamBlock
+  }
+  if ($null -ne $command.ImplementingType) {
+    return [System.Management.Automation.IDynamicParameters].IsAssignableFrom($command.ImplementingType)
+  }
+  return $false
+}
+
+function GetDocumentationParameterSignature([System.Management.Automation.ParameterMetadata]$metadata, [object]$convertDefault) {
+  $sets = @($metadata.ParameterSets.GetEnumerator() | Microsoft.PowerShell.Utility\Sort-Object -Property Key | Microsoft.PowerShell.Core\ForEach-Object {
+    $s = $_.Value
+    [ordered]@{ name = [string]$_.Key; mandatory = [bool]$s.IsMandatory; position = [int]$s.Position;
+      byValue = [bool]$s.ValueFromPipeline; byProperty = [bool]$s.ValueFromPipelineByPropertyName;
+      remaining = [bool]$s.ValueFromRemainingArguments }
+  })
+  $attributes = @($metadata.Attributes | Microsoft.PowerShell.Core\ForEach-Object {
+    if ($_ -is [System.Management.Automation.ParameterAttribute]) {
+      [ordered]@{ type = 'parameter'; set = $_.ParameterSetName; hidden = [bool]$_.DontShow }
+    } elseif ($_ -is [System.Management.Automation.ValidateSetAttribute]) {
+      [ordered]@{ type = 'validateSet'; values = @($_.ValidValues); ignoreCase = [bool]$_.IgnoreCase }
+    } elseif ($_ -is [System.Management.Automation.PSDefaultValueAttribute]) {
+      $help = [string]$_.Help
+      $value = $null
+      if ([string]::IsNullOrWhiteSpace($help)) {
+        try { $value = & $convertDefault $_.Value } catch { $value = $null }
+      }
+      [ordered]@{ type = 'default'; help = $help; value = $value }
+    } elseif ($_ -is [System.Management.Automation.SupportsWildcardsAttribute]) {
+      [ordered]@{ type = 'wildcards' }
+    }
+  })
+  return Microsoft.PowerShell.Utility\ConvertTo-Json -InputObject ([ordered]@{
+    type = $metadata.ParameterType.AssemblyQualifiedName; dynamic = [bool]$metadata.IsDynamic;
+    aliases = @($metadata.Aliases | Microsoft.PowerShell.Utility\Sort-Object); sets = $sets; attributes = $attributes
+  }) -Depth 20 -Compress
+}
+
 function GetDocumentationParameterRuntimeMetadata(
   [System.Management.Automation.CommandInfo]$command,
   [string]$parameterName,
   [scriptblock]$getDeclaringMetadata,
   [scriptblock]$testDontShow,
-  [scriptblock]$getCanonicalTypeName
+  [scriptblock]$getCanonicalTypeName,
+  [object]$metadataOverride,
+  [bool]$useOverride
 ) {
   $metadata = $null
-  try { $metadata = $command.Parameters[$parameterName] } catch { $metadata = $null }
+  if ($useOverride) { $metadata = $metadataOverride } else {
+    try { $metadata = $command.Parameters[$parameterName] } catch { $metadata = $null }
+  }
   $parameterType = if ($null -ne $metadata) { $metadata.ParameterType } else { $null }
   $nullableArrayRanks = Microsoft.PowerShell.Utility\New-Object System.Collections.Generic.List[int]
   $elementType = $parameterType
@@ -179,24 +227,21 @@ function GetDocumentationParameterRuntimeMetadata(
 }
 
 function GetDocumentationParameterNames(
-  [System.Management.Automation.CommandInfo]$command,
-  [object[]]$helpParameters
+  [System.Management.Automation.CommandInfo]$command
 ) {
   $commonNames = @(
     'Verbose','Debug','ErrorAction','ErrorVariable','WarningAction','WarningVariable',
     'InformationAction','InformationVariable','OutVariable','OutBuffer','PipelineVariable',
     'WhatIf','Confirm','ProgressAction')
-  $names = @()
-  try {
-    $names = @(
-      foreach ($entry in $command.Parameters.GetEnumerator()) {
-        [string]$entry.Key
-      }
-    )
-  } catch { $names = @() }
-  foreach ($helpParameter in @($helpParameters)) {
-    try { $names += [string]$helpParameter.Name } catch { }
+  $runtimeParameters = $command.Parameters
+  if ($null -eq $runtimeParameters) {
+    throw ('Unable to read current parameter metadata for ' + $command.Name)
   }
+  $names = @(
+    foreach ($entry in $runtimeParameters.GetEnumerator()) {
+      [string]$entry.Key
+    }
+  )
   return @($names | Microsoft.PowerShell.Core\Where-Object {
     $_ -and ($commonNames -notcontains $_)
   } | Microsoft.PowerShell.Utility\Sort-Object -Unique)
@@ -205,13 +250,16 @@ function GetDocumentationParameterNames(
 function GetDocumentationRuntimeInputs(
   [System.Management.Automation.CommandInfo]$command,
   [string[]]$parameterNames,
-  [scriptblock]$getCanonicalTypeName
+  [scriptblock]$getCanonicalTypeName,
+  [hashtable]$parameterMetadata
 ) {
   $runtimeInputs = @()
   $seenInputs = @{}
   foreach ($parameterName in @($parameterNames)) {
     $metadata = $null
-    try { $metadata = $command.Parameters[$parameterName] } catch { $metadata = $null }
+    if ($null -ne $parameterMetadata) { $metadata = $parameterMetadata[$parameterName] } else {
+      try { $metadata = $command.Parameters[$parameterName] } catch { $metadata = $null }
+    }
     if (-not $metadata) { continue }
 
     $supportsPipeline = $false
@@ -261,6 +309,8 @@ function NewCollectorProtocol([System.Management.Automation.PSModuleInfo]$helper
     GetParameterDeclaringMetadata = (Microsoft.PowerShell.Core\Get-Command GetDocumentationParameterDeclaringMetadata -CommandType Function).ScriptBlock
     GetParameterRuntimeMetadata = (Microsoft.PowerShell.Core\Get-Command GetDocumentationParameterRuntimeMetadata -CommandType Function).ScriptBlock
     GetParameterNames = (Microsoft.PowerShell.Core\Get-Command GetDocumentationParameterNames -CommandType Function).ScriptBlock
+    GetParameterSignature = (Microsoft.PowerShell.Core\Get-Command GetDocumentationParameterSignature -CommandType Function).ScriptBlock
+    TestDynamicCommand = (Microsoft.PowerShell.Core\Get-Command TestDocumentationDynamicCommand -CommandType Function).ScriptBlock
     GetRuntimeInputs = (Microsoft.PowerShell.Core\Get-Command GetDocumentationRuntimeInputs -CommandType Function).ScriptBlock
     GetDocumentedModuleCommands = (Microsoft.PowerShell.Core\Get-Command GetDocumentedModuleCommands -CommandType Function).ScriptBlock
     GetOutputTypeSnapshot = $helperModule.ExportedFunctions['GetOutputTypeSnapshot']
