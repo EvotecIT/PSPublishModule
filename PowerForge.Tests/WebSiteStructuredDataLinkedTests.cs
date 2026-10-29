@@ -213,6 +213,52 @@ public class WebSiteStructuredDataLinkedTests
         Assert.Equal("Example Publisher", model.GetProperty("publisher").GetProperty("name").GetString());
     }
 
+    [Theory]
+    [InlineData("/support/", "https://product.example/pl/support/")]
+    [InlineData("support/", "https://product.example/pl/support/")]
+    [InlineData("/pl/support/", "https://product.example/pl/support/")]
+    [InlineData("/support/#contact", "https://product.example/pl/support/#contact")]
+    [InlineData("/support/?topic=setup", "https://product.example/pl/support/?topic=setup")]
+    [InlineData("https://help.example/contact/", "https://help.example/contact/")]
+    [InlineData("https://product.example/support/", "https://product.example/support/")]
+    public void Render_ContactPageLocalizesSiteRelativeSupportWithoutRewritingExplicitUrls(string contactUrl, string expected)
+    {
+        var site = Site();
+        site.TrailingSlash = TrailingSlashMode.Always;
+        site.Localization = new LocalizationSpec { Enabled = true, DefaultLanguage = "en", Languages = [
+            new LanguageSpec { Code = "en", Default = true }, new LanguageSpec { Code = "pl" }
+        ] };
+        site.StructuredData!.OrganizationContactUrl = contactUrl;
+        var page = Page();
+        page.Language = "pl";
+        page.OutputPath = "/pl/support/";
+        page.TranslationKey = "support";
+        page.Meta["schema"] = new Dictionary<string, object?> { ["page_type"] = "ContactPage" };
+
+        var models = Models(WebSiteBuilder.RenderStructuredData(site, page, [], null, [
+            new ContentItem { OutputPath = "/support/", Language = "en", TranslationKey = "support" }, page
+        ]));
+
+        Assert.Equal(expected, OfType(models, "Organization").GetProperty("contactPoint")[0].GetProperty("url").GetString());
+        Assert.Equal("pl", OfType(models, "ContactPage").GetProperty("inLanguage").GetString());
+        Assert.Equal("https://publisher.example/#organization", OfType(models, "ContactPage").GetProperty("mainEntity").GetProperty("@id").GetString());
+    }
+
+    [Theory]
+    [InlineData("pl")]
+    [InlineData("pt-BR")]
+    [InlineData("zh-Hant")]
+    public void Render_ApplicationDeclaresTheLanguageOfItsPageMetadata(string language)
+    {
+        var page = Page();
+        page.Language = language;
+        page.Meta["software"] = new Dictionary<string, object?> { ["name"] = "Example App" };
+
+        var app = OfType(Models(WebSiteBuilder.RenderStructuredData(Site(), page, [], null)), "SoftwareApplication");
+
+        Assert.Equal(language, app.GetProperty("inLanguage").GetString());
+    }
+
     private static string RenderTemplate(string template, SiteSpec site, ContentItem page) =>
         new ScribanTemplateEngine().Render(template, new ThemeRenderContext { Site = site, Page = page }, _ => null);
 

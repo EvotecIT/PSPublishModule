@@ -142,7 +142,7 @@ public static partial class WebSiteBuilder
             includeStylesheetHeadLinks: !assetSlotUsage.UseCssSlot);
         var bodyClass = BuildBodyClass(spec, item);
         var openGraph = BuildOpenGraphHtml(spec, item, outputRoot);
-        var structuredData = BuildStructuredDataHtml(spec, item, breadcrumbs);
+        var structuredData = BuildStructuredDataHtml(spec, item, breadcrumbs, allItems);
         var extraCss = GetMetaString(item.Meta, "extra_css");
         var extraScripts = BuildExtraScriptsHtml(item, rootPath);
         var headMs = measure.ElapsedMilliseconds;

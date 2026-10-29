@@ -4,7 +4,7 @@ namespace PowerForge.Web;
 
 public static partial class WebSiteBuilder
 {
-    private static string BuildStructuredDataHtml(SiteSpec spec, ContentItem item, BreadcrumbItem[] breadcrumbs)
+    private static string BuildStructuredDataHtml(SiteSpec spec, ContentItem item, BreadcrumbItem[] breadcrumbs, IReadOnlyList<ContentItem>? allItems = null)
     {
         if (spec.StructuredData is null || !spec.StructuredData.Enabled)
             return string.Empty;
@@ -122,7 +122,7 @@ public static partial class WebSiteBuilder
                 hasContactData = true;
             }
 
-            var contactUrl = ResolveAbsoluteUrl(languageBaseUrl, spec.StructuredData.OrganizationContactUrl);
+            var contactUrl = ResolveStructuredContactUrl(spec, item, localization, allItems ?? Array.Empty<ContentItem>());
             if (!string.IsNullOrWhiteSpace(contactUrl))
             {
                 contactPoint["url"] = contactUrl;

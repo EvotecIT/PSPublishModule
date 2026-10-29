@@ -302,6 +302,9 @@ public static partial class WebSiteBuilder
             ["name"] = name
         };
 
+        if (!string.IsNullOrWhiteSpace(item.Language))
+            appModel["inLanguage"] = item.Language;
+
         var description = ReadMetaString(item.Meta, "software.description", "softwareapplication.description");
         if (string.IsNullOrWhiteSpace(description))
             description = item.Description;

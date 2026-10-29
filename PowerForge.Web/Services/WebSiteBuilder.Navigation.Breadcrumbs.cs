@@ -19,7 +19,8 @@ public static partial class WebSiteBuilder
         var nav = BuildNavigation(spec, item, menuSpecs);
         var localizedHomeRoute = ApplyLanguagePrefixToRoute(spec, "/", item.Language);
 
-        var homeTitle = FindNavTitle(nav, localizedHomeRoute) ?? FindNavTitle(nav, "/") ?? "Home";
+        var homeTitle = FindNavTitle(nav, localizedHomeRoute) ?? FindNavTitle(nav, "/") ??
+            (spec.Navigation?.HomeLinkInBrand == true && !string.IsNullOrWhiteSpace(spec.Name) ? spec.Name : "Home");
         crumbs.Add(new BreadcrumbItem { Title = homeTitle, Url = localizedHomeRoute, IsCurrent = current == "/" });
         if (current == "/")
             return crumbs.ToArray();
@@ -89,7 +90,8 @@ public static partial class WebSiteBuilder
     {
         foreach (var item in items)
         {
-            if (!string.IsNullOrWhiteSpace(item.Url) &&
+            // Section and query links describe a view within a page, not its hierarchy label.
+            if (!string.IsNullOrWhiteSpace(item.Url) && item.Url.IndexOfAny(['#', '?']) < 0 &&
                 string.Equals(NormalizeRouteForMatch(item.Url), NormalizeRouteForMatch(route), StringComparison.OrdinalIgnoreCase))
                 return item.Title;
 

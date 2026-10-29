@@ -4,13 +4,13 @@ namespace PowerForge.Web;
 
 public static partial class WebSiteBuilder
 {
-    internal static string RenderStructuredData(SiteSpec spec, ContentItem item, BreadcrumbItem[] breadcrumbs, object? metadata)
+    internal static string RenderStructuredData(SiteSpec spec, ContentItem item, BreadcrumbItem[] breadcrumbs, object? metadata, IReadOnlyList<ContentItem>? allItems = null)
     {
         // A theme cannot re-enable a page that its author has explicitly excluded.
         if (TryGetMetaBool(item.Meta, "structured_data", out var enabled) && !enabled)
             return string.Empty;
         if (metadata is null)
-            return BuildStructuredDataHtml(spec, item, breadcrumbs);
+            return BuildStructuredDataHtml(spec, item, breadcrumbs, allItems);
         if (!TryAsDictionary(metadata, out var map))
             throw new ArgumentException("Structured data metadata must be an object.", nameof(metadata));
 
@@ -18,7 +18,7 @@ public static partial class WebSiteBuilder
         page.LastModifiedUtc = item.LastModifiedUtc;
         foreach (var pair in map)
             page.Meta[pair.Key] = NormalizeStructuredDataValue(pair.Value);
-        return BuildStructuredDataHtml(spec, page, breadcrumbs);
+        return BuildStructuredDataHtml(spec, page, breadcrumbs, allItems);
     }
 
     private static object? NormalizeStructuredDataValue(object? value)
