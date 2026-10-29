@@ -2,6 +2,7 @@
 
 ## Unreleased
 ### What's Changed
+- Fix social-card generation failing with ImageMagick 7 while retaining ImageMagick 6 support, preserving gradient and opacity handling, and invalidating older Linux and macOS card caches so affected images regenerate.
 - Allow the public release entrypoint to bind its configured GitHub lanes to a process environment variable, preserving file credentials by default and keeping token values out of effective configuration and receipts.
 - Preserve the source bootstrapper through both deferred release passes and registry recovery, including frozen-source runs that skip module publication. Generate the current loader in staging, and report source-integrity failures as blocking the next operation without implying that earlier lanes have not published.
 - Remove each dotnet publish invocation's temporary staging directory after success or failure, retaining deployed output, checksum inputs, service state and other invocations' staging.
