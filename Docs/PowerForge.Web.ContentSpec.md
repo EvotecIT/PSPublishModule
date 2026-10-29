@@ -1152,7 +1152,9 @@ options opt a site into page titles, concise text, and convention-based artwork:
 - `SocialCardsRequired` fails when an eligible card cannot be rendered. Opted-out
   pages do not require cards. Optional rendering failures warn and use the normal
   social-image fallback; declared-font failures remain explicit errors. Linux PNG generation requires the ImageMagick
-  executable (`magick` or `convert`) on the build runner. The build pipeline step
+  executable (`magick` or `convert`) with SVG, MVG and PNG support on the build runner.
+  ImageMagick 6 and 7 use the same normalized MVG path to preserve gradients and transparency.
+  The build pipeline step
   can also set `socialCardsRequired: true` to enforce the same rule in CI.
 
 Generated card data widgets:

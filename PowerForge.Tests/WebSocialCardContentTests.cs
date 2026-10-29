@@ -196,9 +196,18 @@ public sealed class WebSocialCardContentTests : IDisposable
         var spec = Site();
         var page = Page();
         var first = WebSiteBuilder.CreateSocialCardGenerationPlan(spec, page, "Terminal | Example", "Description", "Example", _root)!;
-        Assert.Equal(OperatingSystem.IsLinux()
-            ? "assets/social/generated/docs-terminal-608e28956a.png"
-            : "assets/social/generated/docs-terminal-15010081e3.png", first.RelativePath);
+        if (OperatingSystem.IsMacOS())
+        {
+            // External ImageMagick 7 now follows the normalized MVG route on macOS too.
+            Assert.NotEqual("assets/social/generated/docs-terminal-15010081e3.png", first.RelativePath);
+            Assert.Matches(@"^assets/social/generated/docs-terminal-[0-9a-f]{10}\.png$", first.RelativePath);
+        }
+        else
+        {
+            Assert.Equal(OperatingSystem.IsLinux()
+                ? "assets/social/generated/docs-terminal-bf2d3c9a8a.png"
+                : "assets/social/generated/docs-terminal-15010081e3.png", first.RelativePath);
+        }
         var firstSvg = WebSocialCardGenerator.RenderSvg(first.RenderOptions);
         var roundTrip = JsonSerializer.Deserialize<SiteSpec>(JsonSerializer.Serialize(spec))!;
         var second = WebSiteBuilder.CreateSocialCardGenerationPlan(roundTrip, page, "Terminal | Example", "Description", "Example", _root)!;
