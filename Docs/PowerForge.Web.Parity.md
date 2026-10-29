@@ -72,3 +72,5 @@ These are the gaps that most often cause surprises when compared to DocFX/Hugo/A
 3. **Incremental rebuild**
    - Hugo-tier invalidation (content-hash dependency graph) so big sites rebuild fast and deterministically.
 
+
+<!-- Temporary documentation-only CI verification. -->
