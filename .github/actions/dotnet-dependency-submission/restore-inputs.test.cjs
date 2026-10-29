@@ -91,8 +91,13 @@ test('transport rebases a real restored graph without changing package targets o
   const original = JSON.parse(fs.readFileSync(file, 'utf8'));
   // Simulate a graph restored on macOS and imported on another filesystem.
   original.project.restore.projectPath = '/Users/runner/work/Product/Product/Example.csproj';
+  original.project.restore.projectUniqueName = original.project.restore.projectPath;
   original.project.restore.outputPath = '/Users/runner/work/Product/Product/obj/';
   fs.writeFileSync(file, JSON.stringify(original));
+  const indexFile = path.join(exported, 'dependency-graphs.json');
+  const index = JSON.parse(fs.readFileSync(indexFile, 'utf8'));
+  index.sourceRoot = '/Users/runner/work/Product/Product';
+  fs.writeFileSync(indexFile, JSON.stringify(index));
   result = stage('Import', exported, imported);
   assert.equal(result.status, 0, result.stdout + result.stderr);
   const graph = JSON.parse(fs.readFileSync(path.join(imported, 'obj', 'project.assets.json'), 'utf8'));
@@ -103,6 +108,28 @@ test('transport rebases a real restored graph without changing package targets o
   assert.deepEqual(graph.project.frameworks, original.project.frameworks);
 });
 
+test('transport rejects graph identities that disagree with the indexed source project', t => {
+  const root = fixture(t);
+  const output = root + '-import';
+  t.after(() => fs.rmSync(output, {recursive: true, force: true}));
+  fs.mkdirSync(path.join(root, 'obj'));
+  const sourceRoot = '/Users/runner/work/Product/Product';
+  const project = sourceRoot + '/Example.csproj';
+  const index = {version: 1, sourceRoot, assets: [{file: 'obj/project.assets.json', project: 'Example.csproj'}]};
+  fs.writeFileSync(path.join(root, 'dependency-graphs.json'), JSON.stringify(index));
+  for (const metadata of [
+    {projectPath: sourceRoot + '/Other.csproj', projectUniqueName: project},
+    {projectPath: project, projectUniqueName: sourceRoot + '/Other.csproj'},
+    {projectPath: '/different/root/Example.csproj', projectUniqueName: project}
+  ]) {
+    fs.writeFileSync(path.join(root, 'obj', 'project.assets.json'), JSON.stringify({project: {restore: metadata}}));
+    const result = stage('Import', root, output);
+    assert.notEqual(result.status, 0, 'A mismatched identity must not be rewritten into the indexed project');
+    assert.match(result.stdout + result.stderr, /identity does not match/);
+    assert.equal(fs.existsSync(output), false);
+  }
+});
+
 test('transport rejects traversal, duplicate graphs and stale output', t => {
   const root = fixture(t);
   const output = root + '-import';
@@ -111,7 +138,7 @@ test('transport rejects traversal, duplicate graphs and stale output', t => {
   fs.writeFileSync(path.join(root, 'obj', 'project.assets.json'), '{}');
   const entry = {file: 'obj/project.assets.json', project: 'Example.csproj'};
   for (const assets of [[{...entry, project: '../outside.csproj'}], [{...entry, file: '../project.assets.json'}], [entry, entry]]) {
-    fs.writeFileSync(path.join(root, 'dependency-graphs.json'), JSON.stringify({version: 1, assets}));
+    fs.writeFileSync(path.join(root, 'dependency-graphs.json'), JSON.stringify({version: 1, sourceRoot: root.replace(/\\/g, '/'), assets}));
     assert.notEqual(stage('Import', root, output).status, 0);
     assert.equal(fs.existsSync(output), false);
   }

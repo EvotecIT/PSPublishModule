@@ -51,7 +51,11 @@ before every selected input restores. A failed installation or restore stops the
 job. At least one asset graph must exist before export. No build, signing, native
 application launch or package publication is involved.
 
-Artifacts contain `project.assets.json` files and a repository-relative index.
+Artifacts contain `project.assets.json` files and an index with the source root
+and repository-relative paths. Import verifies that each graph's original project
+path and unique name agree with that index before creating output. This catches
+misassembled trusted artifacts; it does not authenticate artifacts or permit
+untrusted cross-run promotion.
 Import changes only the copied `project.restore` project path, unique name and
 output path, so the scanner attributes dependencies to their original relative
 project names. Package identities, framework targets and dependency edges remain

@@ -43,6 +43,7 @@ if ($output.StartsWith($sourcePrefix, $comparison) -or $output.Equals($root, $co
 }
 
 if ($Mode -eq 'Export') {
+    $sourceRoot = $root.Replace('\', '/')
     $entries = @(foreach ($file in Get-ChildItem -LiteralPath $root -Filter project.assets.json -File -Recurse) {
         if ($file.Attributes -band [IO.FileAttributes]::ReparsePoint) { throw 'Linked asset files are unsupported.' }
         $graph = Get-Content -LiteralPath $file.FullName -Raw | ConvertFrom-Json -AsHashtable
@@ -57,7 +58,11 @@ if ($Mode -eq 'Export') {
     })
 } else {
     $index = Get-Content -LiteralPath (Join-Path $root 'dependency-graphs.json') -Raw | ConvertFrom-Json -AsHashtable
-    if ($index.version -ne 1 -or $index.assets -isnot [array]) { throw 'Unsupported graph artifact index.' }
+    if ($index.version -ne 1 -or $index.assets -isnot [array] -or
+        $index.sourceRoot -isnot [string] -or $index.sourceRoot -notmatch '^(/|[A-Za-z]:/)') {
+        throw 'Unsupported graph artifact index or missing source root.'
+    }
+    $sourceRoot = $index.sourceRoot.TrimEnd('/')
     $entries = @($index.assets)
 }
 if ($entries.Count -eq 0) { throw 'No restored NuGet asset graphs were found.' }
@@ -68,6 +73,18 @@ foreach ($entry in $entries) {
     $null = Get-ContainedPath $output $entry.project
     if ([IO.Path]::GetFileName($asset) -cne 'project.assets.json' -or !$seen.Add($entry.file) -or
         !(Test-Path -LiteralPath $asset -PathType Leaf)) { throw 'Invalid, duplicate or missing asset graph.' }
+    if ($Mode -eq 'Import') {
+        # Compare source identities as portable strings, not paths on this runner.
+        $sourceComparison = if ($sourceRoot -match '^([A-Za-z]:|//)') { [StringComparison]::OrdinalIgnoreCase } else { [StringComparison]::Ordinal }
+        $expectedProject = $sourceRoot.TrimEnd('/') + '/' + $entry.project
+        $graph = Get-Content -LiteralPath $asset -Raw | ConvertFrom-Json -AsHashtable
+        foreach ($name in @('projectPath', 'projectUniqueName')) {
+            $identity = [string] $graph.project.restore[$name]
+            if (!$identity.Replace('\', '/').Equals($expectedProject, $sourceComparison)) {
+                throw "Graph identity does not match its indexed source project: $($entry.file) ($name)."
+            }
+        }
+    }
 }
 New-Item -ItemType Directory -Path $output | Out-Null
 foreach ($entry in $entries) {
@@ -86,7 +103,7 @@ foreach ($entry in $entries) {
     }
 }
 if ($Mode -eq 'Export') {
-    @{ version = 1; assets = $entries } | ConvertTo-Json -Depth 10 |
+    @{ version = 1; sourceRoot = $sourceRoot; assets = $entries } | ConvertTo-Json -Depth 10 |
         Set-Content -LiteralPath (Join-Path $output 'dependency-graphs.json') -Encoding utf8NoBOM
 }
 Write-Host "Staged $($entries.Count) NuGet asset graphs ($Mode)."
