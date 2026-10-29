@@ -78,6 +78,51 @@ public class WingetManifestWriterTests
         Assert.DoesNotContain("PackageLocale:", installer);
     }
 
+    [Theory]
+    [InlineData("x64", "1.2.3", false)]
+    [InlineData("arm64", "1.2.3", false)]
+    [InlineData("x64", "1.2.0", true)]
+    [InlineData("arm64", "1.2.0", true)]
+    public void Build_EmitsDisplayVersionOnlyWhenMsiVersionDiffers(
+        string architecture, string msiVersion, bool expectDisplayVersion)
+    {
+        var yaml = WingetManifestWriter.Build(
+            new PowerForgeReleaseWingetOptions(),
+            CreatePackage(),
+            "1.2.3",
+            new[]
+            {
+                new WingetManifestInstallerEntry
+                {
+                    Architecture = architecture,
+                    InstallerType = "msi",
+                    InstallerUrl = $"https://example.test/app-{architecture}.msi",
+                    InstallerSha256 = "ABC123",
+                    Scope = "machine",
+                    MsiMetadata = new DotNetPublishMsiPackageMetadata
+                    {
+                        ProductName = "Test",
+                        Manufacturer = "Evotec",
+                        ProductVersion = msiVersion,
+                        ProductCode = "{BF9CE84B-12E1-4BD5-B60C-90C57716BDB2}",
+                        UpgradeCode = "{C54BB967-362B-48C3-937E-CCBCDD1EA390}"
+                    }
+                }
+            });
+
+        Assert.Contains("PackageVersion: 1.2.3" + Environment.NewLine, yaml);
+        Assert.Contains("Architecture: " + architecture + Environment.NewLine, yaml);
+        Assert.Contains("AppsAndFeaturesEntries:", yaml);
+        Assert.Contains("DisplayName: Test" + Environment.NewLine, yaml);
+        Assert.Contains("Publisher: Evotec" + Environment.NewLine, yaml);
+        Assert.Contains("ProductCode: \"{BF9CE84B-12E1-4BD5-B60C-90C57716BDB2}\"", yaml);
+        Assert.Contains("UpgradeCode: \"{C54BB967-362B-48C3-937E-CCBCDD1EA390}\"", yaml);
+        if (expectDisplayVersion)
+            Assert.Contains("DisplayVersion: " + msiVersion + Environment.NewLine, yaml);
+        else
+            Assert.DoesNotContain("DisplayVersion:", yaml);
+    }
+
     private static PowerForgeReleaseWingetPackage CreatePackage()
         => new()
         {

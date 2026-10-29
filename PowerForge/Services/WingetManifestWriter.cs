@@ -61,7 +61,8 @@ internal static class WingetManifestWriter
                     using (writer.Indent())
                     {
                         writer.WriteScalar("Publisher", metadata.Manufacturer!);
-                        writer.WriteScalar("DisplayVersion", metadata.ProductVersion!);
+                        if (!string.Equals(metadata.ProductVersion, packageVersion, StringComparison.Ordinal))
+                            writer.WriteScalar("DisplayVersion", metadata.ProductVersion!);
                         writer.WriteScalar("ProductCode", metadata.ProductCode!);
                         writer.WriteScalar("UpgradeCode", metadata.UpgradeCode!);
                     }
