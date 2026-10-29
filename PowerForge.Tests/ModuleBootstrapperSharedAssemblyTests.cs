@@ -79,6 +79,9 @@ public sealed partial class ModuleBootstrapperSharedAssemblyTests
         var root = NewScratchRoot();
         var fixtureScript = Path.Combine(AppContext.BaseDirectory, "Fixtures", "SharedModuleAssemblies", "New-Fixtures.ps1");
         var probeScript = Path.Combine(AppContext.BaseDirectory, "Fixtures", "SharedModuleAssemblies", "Test-ImportOrders.ps1");
+        var selectedDisplayScript = Path.Combine(AppContext.BaseDirectory, "Fixtures", "SharedModuleAssemblies", "Test-SelectedLazyDisplay.ps1");
+        var identityScript = Path.Combine(AppContext.BaseDirectory, "Fixtures", "SharedModuleAssemblies", "Test-SharedIdentity.ps1");
+        var fallbackScript = Path.Combine(AppContext.BaseDirectory, "Fixtures", "SharedModuleAssemblies", "Test-DevelopmentFallback.ps1");
         var fixtures = Path.Combine(root, "fixtures");
         try
         {
@@ -123,6 +126,24 @@ public sealed partial class ModuleBootstrapperSharedAssemblyTests
                 Assert.Contains("SHARED_IMPORT_OK:", output, StringComparison.Ordinal);
                 _output.WriteLine("existing older Display: " + output.Trim());
             }
+            // Alpha registers an older optional adapter without loading it. Beta
+            // must select its own newer payload when presentation first requests it.
+            foreach (var payload in new[] { "Core", "Default" })
+                File.Copy(Path.Combine(fixtures, "Core0", "SharedDisplay.dll"),
+                    Path.Combine(modules, "Alpha", "Lib", payload, "SharedDisplay.dll"), true);
+            foreach (var host in new[] { "powershell.exe", "pwsh.exe" })
+                Assert.Contains("SELECTED_LAZY_DISPLAY_OK:", Run(host, root, "-File", selectedDisplayScript, "-Root", modules), StringComparison.Ordinal);
+            foreach (var payload in new[] { "Core", "Default" })
+                File.Copy(Path.Combine(fixtures, "Core1", "SharedDisplay.dll"),
+                    Path.Combine(modules, "Alpha", "Lib", payload, "SharedDisplay.dll"), true);
+            foreach (var host in new[] { "powershell.exe", "pwsh.exe" })
+                Assert.Contains("SHARED_IDENTITY_OK:", Run(host, root, "-File", identityScript, "-Root", modules), StringComparison.Ordinal);
+            foreach (var framework in new[] { "net8.0", "net472" })
+                File.Delete(Path.Combine(fixtures, "Alpha", "bin", "Release", framework, "SharedCore.dll"));
+            foreach (var host in new[] { "powershell.exe", "pwsh.exe" })
+                Assert.Contains("DEVELOPMENT_FALLBACK_OK:", Run(host, root, "-File", fallbackScript, "-Root", modules), StringComparison.Ordinal);
+            foreach (var framework in new[] { "net8.0", "net472" })
+                CopyRuntime(fixtures, Path.Combine(fixtures, "Alpha", "bin", "Release", framework), 1);
             foreach (var feature in new[] { 0, 1 })
             {
                 var output = Run("pwsh.exe", root, "-File", probeScript, "-Root", modules, "-Order", "Alpha,Beta,Gamma",

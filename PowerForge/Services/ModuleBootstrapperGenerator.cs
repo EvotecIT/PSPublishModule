@@ -920,7 +920,7 @@ internal static partial class ModuleBootstrapperGenerator
                 ["DesktopResolverTypeName"] = sharedAssemblies is { Count: > 0 } ? "DesktopAssemblyResolverV4" : "DesktopAssemblyResolverV2",
                 ["SharedResolverMembers"] = sharedAssemblies is { Count: > 0 } ? SharedDesktopResolverMembers : string.Empty,
                 ["SharedResolverConstructor"] = sharedAssemblies is { Count: > 0 } ? SharedDesktopResolverConstructor : string.Empty,
-                ["SharedResolverResolve"] = sharedAssemblies is { Count: > 0 } ? "                if (sharedNames.Contains(name)) return resolveShared(name, roots);" : string.Empty,
+                ["SharedResolverResolve"] = sharedAssemblies is { Count: > 0 } ? "                if (sharedNames.Contains(name)) return resolveShared(requested, roots);" : string.Empty,
                 ["SharedResolverParameter"] = sharedAssemblies is { Count: > 0 } ? ", string[] sharedAssemblyNames" : string.Empty,
                 ["SharedResolverArgument"] = sharedAssemblies is { Count: > 0 } ? ", [string[]]" + BuildPowerShellArrayLiteral(sharedAssemblies) : string.Empty
             });

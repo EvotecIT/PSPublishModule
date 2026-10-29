@@ -5,7 +5,7 @@ using System.Reflection;
 
 namespace PowerForge.Generated {
     /// <summary>Process-wide resolution policy compiled once by the PowerShell host.</summary>
-    public static class SharedAssemblyPolicyV2 {
+    public static class SharedAssemblyPolicyV3 {
         private static readonly object Sync = new object();
         private static readonly Type ContextType = Type.GetType("System.Runtime.Loader.AssemblyLoadContext, System.Private.CoreLib");
         private static readonly Dictionary<string, List<string>> Payloads = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
@@ -38,32 +38,59 @@ namespace PowerForge.Generated {
 
         /// <summary>Reuses a loaded shared identity or loads a registered payload into the chosen shared context.</summary>
         public static Assembly Resolve(string name, string[] directories) {
+            return Resolve(new AssemblyName(name), directories);
+        }
+
+        /// <summary>Checks requested identity before using any loaded or registered shared DLL.</summary>
+        public static Assembly Resolve(AssemblyName requested, string[] directories) {
             lock (Sync) {
                 List<string> paths;
-                if (!Payloads.TryGetValue(name, out paths))
-                    throw new InvalidOperationException("Assembly is not declared process-shared: " + name);
+                if (requested == null || String.IsNullOrEmpty(requested.Name) || !Payloads.TryGetValue(requested.Name, out paths))
+                    throw new InvalidOperationException("Assembly is not declared process-shared: " + (requested == null ? "<null>" : requested.Name));
                 EnsureContext();
-                Assembly loaded = FindLoaded(name);
+                Assembly loaded = FindLoaded(requested.Name);
                 if (loaded != null) {
                     if (ContextType != null && !Object.ReferenceEquals(GetContext(loaded), sharedContext))
                         throw new FileLoadException("Shared assemblies are already loaded in different contexts. Start a new session.");
+                    if (!MatchesRequestedIdentity(requested, loaded.GetName()))
+                        throw new FileLoadException("Loaded shared assembly does not match the requested identity: " + requested.FullName);
                     SharedInstances.Add(loaded);
                     return loaded;
                 }
-                // Only registration supplies provenance. A caller cannot expand the
-                // payload map by passing another private directory to Resolve.
-                foreach (string path in paths) {
+                // A module can select only paths it registered. A missing selected
+                // payload must not silently load an earlier module's lazy adapter.
+                List<string> candidates = new List<string>();
+                if (directories != null && directories.Length > 0) {
+                    foreach (string directory in directories) {
+                        string selected = Path.GetFullPath(Path.Combine(directory, requested.Name + ".dll"));
+                        foreach (string path in paths)
+                            if (String.Equals(path, selected, StringComparison.OrdinalIgnoreCase) && !candidates.Contains(path))
+                                candidates.Add(path);
+                    }
+                } else candidates.AddRange(paths);
+                foreach (string path in candidates) {
                     if (!File.Exists(path)) continue;
                     AssemblyName identity = AssemblyName.GetAssemblyName(path);
-                    if (!String.Equals(identity.Name, name, StringComparison.OrdinalIgnoreCase) || !String.IsNullOrEmpty(identity.CultureName))
-                        throw new FileLoadException("Shared assembly file does not match its declared simple name: " + path);
+                    if (!MatchesRequestedIdentity(requested, identity) || !String.IsNullOrEmpty(identity.CultureName))
+                        throw new FileLoadException("Shared assembly file does not match its requested identity: " + path);
                     Assembly assembly = ContextType == null ? Assembly.LoadFrom(path) :
                         (Assembly)ContextType.GetMethod("LoadFromAssemblyPath").Invoke(sharedContext, new object[] { path });
                     SharedInstances.Add(assembly);
                     return assembly;
                 }
-                throw new FileNotFoundException("Shared assembly '" + name + "' was not found in a registered module payload.", name + ".dll");
+                throw new FileNotFoundException("Shared assembly '" + requested.Name + "' was not found in the selected registered module payload.", requested.Name + ".dll");
             }
+        }
+
+        private static bool MatchesRequestedIdentity(AssemblyName requested, AssemblyName actual) {
+            if (!String.Equals(requested.Name, actual.Name, StringComparison.OrdinalIgnoreCase) ||
+                !String.Equals(requested.CultureName ?? "", actual.CultureName ?? "", StringComparison.OrdinalIgnoreCase)) return false;
+            byte[] expectedToken = requested.GetPublicKeyToken();
+            if (expectedToken == null) return true;
+            byte[] actualToken = actual.GetPublicKeyToken() ?? new byte[0];
+            if (expectedToken.Length != actualToken.Length) return false;
+            for (int i = 0; i < expectedToken.Length; i++) if (expectedToken[i] != actualToken[i]) return false;
+            return true;
         }
 
         private static Assembly FindLoaded(string name) {
@@ -100,7 +127,7 @@ namespace PowerForge.Generated {
             }
             sharedContext = selected ?? ContextType.GetProperty("Default").GetValue(null, null);
             EventInfo resolvingEvent = ContextType.GetEvent("Resolving");
-            MethodInfo method = typeof(SharedAssemblyPolicyV2).GetMethod("ResolveCore", BindingFlags.NonPublic | BindingFlags.Static).MakeGenericMethod(ContextType);
+            MethodInfo method = typeof(SharedAssemblyPolicyV3).GetMethod("ResolveCore", BindingFlags.NonPublic | BindingFlags.Static).MakeGenericMethod(ContextType);
             contextHandler = Delegate.CreateDelegate(resolvingEvent.EventHandlerType, method);
             resolvingEvent.AddEventHandler(sharedContext, contextHandler);
         }
@@ -137,16 +164,7 @@ namespace PowerForge.Generated {
             if (resolving == null) resolving = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             if (!resolving.Add(requested.Name)) return null;
             try {
-                Assembly assembly = Resolve(requested.Name, new string[0]);
-                AssemblyName actual = assembly.GetName();
-                if (!String.Equals(requested.CultureName ?? "", actual.CultureName ?? "", StringComparison.OrdinalIgnoreCase)) return null;
-                byte[] expectedToken = requested.GetPublicKeyToken();
-                byte[] actualToken = actual.GetPublicKeyToken() ?? new byte[0];
-                if (expectedToken != null) {
-                    if (expectedToken.Length != actualToken.Length) return null;
-                    for (int i = 0; i < expectedToken.Length; i++) if (expectedToken[i] != actualToken[i]) return null;
-                }
-                return assembly;
+                return Resolve(requested, new string[0]);
             } finally { resolving.Remove(requested.Name); }
         }
     }

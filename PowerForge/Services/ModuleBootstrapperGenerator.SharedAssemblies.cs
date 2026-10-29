@@ -4,7 +4,7 @@ internal static partial class ModuleBootstrapperGenerator
 {
     // Empty policies keep the historical identity. Nonempty policies must not
     // bind to an older helper whose Load implementation has no shared routing.
-    private const string SharedAssemblyPolicyCapability = "SharedV2_";
+    private const string SharedAssemblyPolicyCapability = "SharedV3_";
 
     private static string GetSharedAssemblyPolicyIdentitySuffix(IReadOnlyList<string>? names)
     {
@@ -58,13 +58,13 @@ internal static partial class ModuleBootstrapperGenerator
         // Names have already passed the exact-name validator, including quote/path rejection.
         var names = string.Join(", ", sharedAssemblies.Select(name => "\"" + name + "\""));
         return "private static readonly HashSet<string> SharedNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { " + names + " };\n" +
-            "private static readonly Func<string, string[], Assembly> ResolveShared = " +
-            "(Func<string, string[], Assembly>)Delegate.CreateDelegate(typeof(Func<string, string[], Assembly>), " +
-            "AppDomain.CurrentDomain.GetAssemblies().Select(a => a.GetType(\"PowerForge.Generated.SharedAssemblyPolicyV2\", false)).First(t => t != null).GetMethod(\"Resolve\"));\n";
+            "private static readonly Func<AssemblyName, string[], Assembly> ResolveShared = " +
+            "(Func<AssemblyName, string[], Assembly>)Delegate.CreateDelegate(typeof(Func<AssemblyName, string[], Assembly>), " +
+            "AppDomain.CurrentDomain.GetAssemblies().Select(a => a.GetType(\"PowerForge.Generated.SharedAssemblyPolicyV3\", false)).First(t => t != null).GetMethod(\"Resolve\", new[] { typeof(AssemblyName), typeof(string[]) }));\n";
     }
 
     private static string BuildSharedAssemblyResolve(IReadOnlyList<string>? sharedAssemblies, string directoriesExpression)
         => sharedAssemblies is { Count: > 0 }
-            ? "if (SharedNames.Contains(assemblyName.Name)) return ResolveShared(assemblyName.Name, " + directoriesExpression + ");\n"
+            ? "if (SharedNames.Contains(assemblyName.Name)) return ResolveShared(assemblyName, " + directoriesExpression + ");\n"
             : string.Empty;
 }

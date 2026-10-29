@@ -38,8 +38,8 @@ if ($PowerForgeDevelopmentEnabled) {
     }
 
     if ($PowerForgeDevelopmentBinaryPath) {
-{{SharedAssembliesBlock}}
         try {
+{{SharedAssembliesBlock}}
             $ImportModule = Get-Command -Name Import-Module -Module Microsoft.PowerShell.Core
 {{RuntimeHandlerBlock}}
             if ($PSEdition -eq 'Core' -and $PowerForgeDevelopmentUseAssemblyLoadContext) {
