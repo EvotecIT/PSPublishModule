@@ -24,27 +24,18 @@ internal static partial class WebSocialCardGenerator
         try
         {
             Directory.CreateDirectory(tempRoot);
-            var legacy = RequiresLegacyMvgCompatibility(command);
-            if (legacy)
-            {
-                var document = XDocument.Parse(svg);
-                foreach (var family in document.Descendants().Attributes("font-family"))
-                    family.Value = NormalizeFontFamilyForRaster(family.Value, family.Value);
-                svg = document.ToString(SaveOptions.DisableFormatting);
-            }
+            var document = XDocument.Parse(svg);
+            foreach (var family in document.Descendants().Attributes("font-family"))
+                family.Value = NormalizeFontFamilyForRaster(family.Value, family.Value);
+            svg = document.ToString(SaveOptions.DisableFormatting);
             File.WriteAllText(svgPath, svg, Encoding.UTF8);
-            var input = svgPath;
-            if (legacy)
-            {
-                if (!RunExternalRasterizer(command, new[] { svgPath, "MVG:" + mvgPath }))
-                    return null;
-                // ImageMagick 6's SVG coder serializes quoted gradient identifiers which its
-                // own MVG reader cannot resolve. Its SVG compliance mode also discards opacity.
-                // Keep the native SVG parser, then repair only those generated draw directives.
-                var mvg = NormalizeLegacyMvg(File.ReadAllText(mvgPath));
-                File.WriteAllText(mvgPath, mvg, new UTF8Encoding(false));
-                input = "MVG:" + mvgPath;
-            }
+            if (!RunExternalRasterizer(command, new[] { svgPath, "MVG:" + mvgPath }))
+                return null;
+            // Both ImageMagick 6 and 7 serialize quoted gradient identifiers which their
+            // MVG reader cannot resolve. SVG compliance also discards opacity.
+            var mvg = NormalizeSvgMvg(File.ReadAllText(mvgPath));
+            File.WriteAllText(mvgPath, mvg, new UTF8Encoding(false));
+            var input = "MVG:" + mvgPath;
             var arguments = new[] { "-background", "none", "-size", $"{width}x{height}", input, $"PNG32:{pngPath}" };
             return RunExternalRasterizer(command, arguments) && File.Exists(pngPath) ? File.ReadAllBytes(pngPath) : null;
         }
@@ -60,33 +51,12 @@ internal static partial class WebSocialCardGenerator
         }
     }
 
-    private static string NormalizeLegacyMvg(string mvg)
+    private static string NormalizeSvgMvg(string mvg)
     {
         mvg = Regex.Replace(mvg, @"(?m)^compliance ""SVG""\r?$", string.Empty, RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
         mvg = Regex.Replace(mvg, @"(?m)^push gradient ""([A-Za-z0-9_-]+)"" ", "push gradient $1 ", RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
         return Regex.Replace(mvg, @"(?m)^(fill|stroke) ""url\(#([A-Za-z0-9_-]+)\)""\r?$", "$1 url(#$2)", RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
     }
-
-    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, bool> LegacyRasterizerCommands = new(StringComparer.Ordinal);
-
-    private static bool RequiresLegacyMvgCompatibility(ExternalImageMagickCommand command)
-        => LegacyRasterizerCommands.GetOrAdd(command.Executable, executable =>
-        {
-            using var process = Process.Start(new ProcessStartInfo(executable, "-version")
-            {
-                UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardError = true, CreateNoWindow = true
-            });
-            if (process is null) return false;
-            var output = process.StandardOutput.ReadToEndAsync();
-            var error = process.StandardError.ReadToEndAsync();
-            if (!process.WaitForExit(5_000))
-            {
-                process.Kill(entireProcessTree: true);
-                return false;
-            }
-            _ = error.GetAwaiter().GetResult();
-            return process.ExitCode == 0 && output.GetAwaiter().GetResult().Contains("ImageMagick 6.", StringComparison.Ordinal);
-        });
 
     private static bool RunExternalRasterizer(ExternalImageMagickCommand command, IReadOnlyList<string> arguments)
     {

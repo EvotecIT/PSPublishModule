@@ -532,8 +532,7 @@ jobs:
   LinuxBuild:
     # The type of runner that the job will run on
     # Prefer private/self-hosted runners for private repos to reduce hosted spend.
-    # Keep the qualified ImageMagick 6 rendering baseline while ImageMagick 7 compatibility is evaluated.
-    runs-on: ${{ fromJSON(github.event.repository.private && '["self-hosted","linux"]' || '["ubuntu-24.04"]') }}
+    runs-on: ${{ fromJSON(github.event.repository.private && '["self-hosted","linux"]' || '["ubuntu-latest"]') }}
     timeout-minutes: 60
 
     # Steps represent a sequence of tasks that will be executed as part of the job
