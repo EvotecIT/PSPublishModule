@@ -1,0 +1,82 @@
+name: Restore and submit .NET dependencies
+description: Restore explicit projects or submit transported NuGet graphs on a supported runner.
+
+inputs:
+  mode:
+    description: restore exports native graphs; submit prepares graphs and submits on trusted default-branch runs.
+    default: restore
+  projects-json:
+    description: JSON array of repository-relative solutions or projects to restore.
+    required: false
+    default: ''
+  graph-artifact:
+    description: Downloaded graph artifact directory, required in submit mode.
+    default: ''
+  workloads:
+    description: Space-separated workload identifiers to install before restore.
+    required: false
+    default: ''
+  global-json-file:
+    description: Repository SDK policy file.
+    required: false
+    default: global.json
+  submit:
+    description: Submit the dependency snapshot on a trusted default-branch push or manual run.
+    required: false
+    default: 'false'
+  correlator:
+    description: Stable identifier for this platform's dependency snapshot.
+    required: false
+    default: ''
+
+outputs:
+  graphs-path:
+    description: Exported graph artifact directory in restore mode.
+    value: ${{ steps.stage.outputs.path }}
+
+runs:
+  using: composite
+  steps:
+    - name: Validate mode and scanner platform
+      shell: pwsh
+      env:
+        GRAPH_MODE: ${{ inputs.mode }}
+      run: |
+        if ($env:GRAPH_MODE -notin @('restore', 'submit')) { throw 'mode must be restore or submit.' }
+        if ($env:GRAPH_MODE -eq 'submit' -and $IsMacOS) { throw 'The submission action requires a Linux or Windows scanner runner.' }
+        if ($env:GRAPH_MODE -eq 'submit' -and [Runtime.InteropServices.RuntimeInformation]::OSArchitecture -ne 'X64') { throw 'The submission action requires an x64 scanner runner.' }
+    - uses: EvotecIT/PSPublishModule/.github/actions/setup-dotnet@a76d57fbd1f1eb6692ddd18aa67a09dd264a68c7
+      if: inputs.mode == 'restore'
+      with:
+        global-json-file: ${{ inputs.global-json-file }}
+    - name: Restore explicit dependency graphs
+      if: inputs.mode == 'restore'
+      shell: pwsh
+      env:
+        POWERFORGE_DEPENDENCY_PROJECTS: ${{ inputs.projects-json }}
+        POWERFORGE_DEPENDENCY_WORKLOADS: ${{ inputs.workloads }}
+        MSBUILDDISABLENODEREUSE: '1'
+        DOTNET_CLI_USE_MSBUILD_SERVER: '0'
+      run: |
+        & (Join-Path $env:GITHUB_ACTION_PATH 'Restore-DependencyInputs.ps1') `
+          -ProjectsJson $env:POWERFORGE_DEPENDENCY_PROJECTS `
+          -Workloads $env:POWERFORGE_DEPENDENCY_WORKLOADS
+    - name: Stage dependency graphs
+      id: stage
+      shell: pwsh
+      env:
+        GRAPH_MODE: ${{ inputs.mode }}
+        GRAPH_ARTIFACT: ${{ inputs.graph-artifact }}
+      run: |
+        $destination = Join-Path $env:RUNNER_TEMP ('dependency-graphs-' + [guid]::NewGuid().ToString('N'))
+        $mode = if ($env:GRAPH_MODE -eq 'restore') { 'Export' } else { 'Import' }
+        $source = if ($mode -eq 'Export') { $env:GITHUB_WORKSPACE } else { $env:GRAPH_ARTIFACT }
+        & (Join-Path $env:GITHUB_ACTION_PATH 'Stage-DependencyGraphs.ps1') -Mode $mode -Source $source -OutputPath $destination
+        "path=$destination" >> $env:GITHUB_OUTPUT
+    - name: Submit resolved NuGet dependencies
+      if: inputs.mode == 'submit' && inputs.submit == 'true' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+      uses: actions/component-detection-dependency-submission-action@98beaea5a1227f3db476e4c9ca959a0cacd7ac4f
+      with:
+        filePath: ${{ steps.stage.outputs.path }}
+        detectorsCategories: NuGet
+        correlator: ${{ inputs.correlator }}
