@@ -60,6 +60,66 @@ public sealed class WebStaticRedirectExporterTests : IDisposable
         }
     }
 
+    [Theory]
+    [InlineData("v1.0", "v2.0")]
+    [InlineData("legacy.html", "current.html")]
+    public void SlashTerminatedDottedRoutesMapToDirectoryIndexes(string from, string to)
+    {
+        var target = Path.Combine(root, to, "index.html");
+        Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+        File.WriteAllText(target, "<h1>Current version</h1>");
+        WriteRules(new RedirectSpec { From = $"/{from}/", To = $"/{to}/?view=full#member" });
+        Assert.Equal(1, WebStaticRedirectExporter.Export(root, false));
+        Assert.Contains($"href=\"/{to}/?view=full#member\"", File.ReadAllText(Path.Combine(root, from, "index.html")));
+        Assert.Equal("<h1>Current version</h1>", File.ReadAllText(target));
+    }
+
+    [Fact]
+    public void ExplicitHtmlRoutesRemainFiles()
+    {
+        var target = Path.Combine(root, "current.HTML");
+        File.WriteAllText(target, "<h1>Current page</h1>");
+        WriteRules(new RedirectSpec { From = "/legacy.HTML", To = "/current.HTML?view=full#member" });
+        Assert.Equal(1, WebStaticRedirectExporter.Export(root, false));
+        Assert.Contains("href=\"/current.HTML?view=full#member\"", File.ReadAllText(Path.Combine(root, "legacy.HTML")));
+        Assert.Equal("<h1>Current page</h1>", File.ReadAllText(target));
+    }
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public void PlannedFileDirectoryConflictFailsBeforeWriting(bool reverse, bool dryRun)
+    {
+        var rules = new[]
+        {
+            new RedirectSpec { From = "/legacy.html", To = "/api/reader-ocr/type/" },
+            new RedirectSpec { From = "/legacy.html/child/", To = "/api/reader-ocr/type/" }
+        };
+        if (reverse) Array.Reverse(rules);
+        WriteRules(rules);
+        var error = Assert.Throws<InvalidOperationException>(() => WebStaticRedirectExporter.Export(root, dryRun));
+        Assert.Contains("parent directory", error.Message);
+        Assert.False(File.Exists(Path.Combine(root, "legacy.html")));
+        Assert.False(Directory.Exists(Path.Combine(root, "legacy.html")));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ExistingFileDirectoryConflictFailsBeforeWriting(bool dryRun)
+    {
+        var existing = Path.Combine(root, "existing.html");
+        File.WriteAllText(existing, "Existing canonical page");
+        WriteRules(new RedirectSpec { From = "/valid-first/", To = "/api/reader-ocr/type/" },
+            new RedirectSpec { From = "/existing.html/child/", To = "/api/reader-ocr/type/" });
+        var error = Assert.Throws<InvalidOperationException>(() => WebStaticRedirectExporter.Export(root, dryRun));
+        Assert.Contains("parent directory", error.Message);
+        Assert.False(Directory.Exists(Path.Combine(root, "valid-first")));
+        Assert.Equal("Existing canonical page", File.ReadAllText(existing));
+    }
+
     [Fact]
     public void PlannedAncestorCaseAliasesFailBeforeAnyPageIsWritten()
     {

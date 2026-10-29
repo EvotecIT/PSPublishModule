@@ -59,6 +59,13 @@ internal static class WebStaticRedirectExporter
         {
             if (plans.ContainsKey(plan.Value.Destination))
                 throw new InvalidOperationException("Static redirect chains and loops are not supported.");
+            for (var parent = Path.GetDirectoryName(plan.Key);
+                 parent is not null && parent != Path.TrimEndingDirectorySeparator(root);
+                 parent = Path.GetDirectoryName(parent))
+            {
+                if (plans.ContainsKey(parent) || File.Exists(parent))
+                    throw new InvalidOperationException($"Static redirect output requires a parent directory occupied by a file: {Path.GetRelativePath(root, parent)}.");
+            }
         }
         // An incremental build may retain pages from removed rules. Refuse to publish stale
         // navigation rather than deleting content or guessing ownership from a marker alone.
@@ -126,12 +133,10 @@ internal static class WebStaticRedirectExporter
             route.Contains("//", StringComparison.Ordinal))
             throw new InvalidOperationException($"Unsupported static page route: {route}");
         var relative = route.Trim('/');
-        if (!relative.EndsWith(".html", StringComparison.OrdinalIgnoreCase))
-        {
-            if (Path.HasExtension(relative))
-                throw new InvalidOperationException($"Static redirects require HTML page routes: {route}");
+        if (route.EndsWith('/') || !Path.HasExtension(relative))
             relative += "/index.html";
-        }
+        else if (!relative.EndsWith(".html", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException($"Static redirects require HTML page routes: {route}");
         var path = Path.GetFullPath(Path.Combine(root, relative.TrimStart('/').Replace('/', Path.DirectorySeparatorChar)));
         FileSystemPathSafety.RejectReparsePoints(path, root, "Static redirect page");
         // Parent directories may have different case semantics, including Windows directory

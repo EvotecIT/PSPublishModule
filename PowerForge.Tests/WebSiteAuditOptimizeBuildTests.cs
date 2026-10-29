@@ -248,8 +248,8 @@ public partial class WebSiteAuditOptimizeBuildTests
                     GenerateAliasRedirects = true,
                     Versions = new[]
                     {
-                        new VersionSpec { Name = "v3", Url = "/docs/v3/", Latest = true, Aliases = new[] { "stable" } },
-                        new VersionSpec { Name = "v2", Url = "/docs/v2/", Lts = true, Aliases = new[] { "legacy" } }
+                        new VersionSpec { Name = "v3.0", Url = "/docs/v3.0/", Latest = true, Aliases = new[] { "stable" } },
+                        new VersionSpec { Name = "v2.0", Url = "/docs/v2.0/", Lts = true, Aliases = new[] { "legacy" } }
                     }
                 },
                 Collections = new[]
@@ -270,10 +270,10 @@ public partial class WebSiteAuditOptimizeBuildTests
             var result = WebSiteBuilder.Build(spec, plan, outPath);
 
             var netlify = File.ReadAllText(Path.Combine(result.OutputPath, "_redirects"));
-            Assert.Contains("/docs/latest/ /docs/v3/ 301", netlify, StringComparison.OrdinalIgnoreCase);
-            Assert.Contains("/docs/lts/ /docs/v2/ 301", netlify, StringComparison.OrdinalIgnoreCase);
-            Assert.Contains("/docs/stable/ /docs/v3/ 301", netlify, StringComparison.OrdinalIgnoreCase);
-            Assert.Contains("/docs/legacy/ /docs/v2/ 301", netlify, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("/docs/latest/ /docs/v3.0/ 301", netlify, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("/docs/lts/ /docs/v2.0/ 301", netlify, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("/docs/stable/ /docs/v3.0/ 301", netlify, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("/docs/legacy/ /docs/v2.0/ 301", netlify, StringComparison.OrdinalIgnoreCase);
 
             var apache = File.ReadAllText(Path.Combine(result.OutputPath, ".htaccess"));
             Assert.Contains("RewriteEngine On", apache, StringComparison.OrdinalIgnoreCase);
@@ -290,15 +290,27 @@ public partial class WebSiteAuditOptimizeBuildTests
                 .Descendants("action")
                 .Select(action => action.Attribute("url")?.Value ?? string.Empty)
                 .ToArray();
-            Assert.Contains("/docs/v3/", ruleUrls, StringComparer.OrdinalIgnoreCase);
-            Assert.Contains("/docs/v2/", ruleUrls, StringComparer.OrdinalIgnoreCase);
+            Assert.Contains("/docs/v3.0/", ruleUrls, StringComparer.OrdinalIgnoreCase);
+            Assert.Contains("/docs/v2.0/", ruleUrls, StringComparer.OrdinalIgnoreCase);
 
             var metadataPath = Path.Combine(result.OutputPath, "_powerforge", "redirects.json");
             var metadata = JsonDocument.Parse(File.ReadAllText(metadataPath));
             var redirects = metadata.RootElement.GetProperty("redirects");
             Assert.Contains(redirects.EnumerateArray(), entry =>
                 string.Equals(entry.GetProperty("from").GetString(), "/docs/latest/", StringComparison.OrdinalIgnoreCase) &&
-                string.Equals(entry.GetProperty("to").GetString(), "/docs/v3/", StringComparison.OrdinalIgnoreCase));
+                string.Equals(entry.GetProperty("to").GetString(), "/docs/v3.0/", StringComparison.OrdinalIgnoreCase));
+
+            // API or version generators finish canonical pages before the final hosting step.
+            foreach (var version in new[] { "v3.0", "v2.0" })
+            {
+                var directory = Path.Combine(result.OutputPath, "docs", version);
+                Directory.CreateDirectory(directory);
+                File.WriteAllText(Path.Combine(directory, "index.html"), $"<h1>{version}</h1>");
+            }
+            WebStaticRedirectExporter.Export(result.OutputPath, dryRun: false);
+            Assert.Contains("href=\"/docs/v3.0/\"", File.ReadAllText(Path.Combine(result.OutputPath, "docs", "latest", "index.html")));
+            Assert.Contains("href=\"/docs/v2.0/\"", File.ReadAllText(Path.Combine(result.OutputPath, "docs", "lts", "index.html")));
+
         }
         finally
         {

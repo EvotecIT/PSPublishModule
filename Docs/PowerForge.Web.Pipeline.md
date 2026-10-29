@@ -1835,6 +1835,11 @@ redirect target. Internal destinations must already exist; HTTPS destinations ma
 external. All rules are validated before files are written. Existing content is never
 replaced, except an identical generated redirect on a repeat run. Symlinked metadata,
 source and destination paths are rejected. `dryRun` validates without writing.
+Trailing-slash routes identify directories, including dotted versions such as
+`/docs/v1.0/`, and map to their `index.html`. Explicit `.html` routes without a
+trailing slash remain files.
+Paths that require an existing or planned file to also act as a parent directory
+are rejected before writing.
 Case-distinct source URLs require a case-sensitive output directory. The existing
 filesystem helpers check each route directory, including Windows per-directory flags
 and Linux builds on case-insensitive mounted volumes. Ambiguous case aliases are
