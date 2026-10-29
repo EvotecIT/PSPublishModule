@@ -77,13 +77,7 @@ public static class MarkdownCodeSynchronizer
         {
             var line = lines[i].TrimEnd('\r');
             var trimmed = line.TrimStart();
-            var fenceMatch = Fence.Match(trimmed);
-            if (fenceMatch.Success)
-            {
-                var marker = fenceMatch.Groups["fence"].Value;
-                if (fence is null) fence = marker;
-                else if (marker[0] == fence[0] && marker.Length >= fence.Length && string.IsNullOrWhiteSpace(fenceMatch.Groups["info"].Value)) fence = null;
-            }
+            TrackFence(trimmed, ref fence);
             if (fence is null && trimmed.StartsWith(Start, StringComparison.Ordinal))
             {
                 if (line != trimmed || !line.EndsWith(" -->", StringComparison.Ordinal))
@@ -95,10 +89,14 @@ public static class MarkdownCodeSynchronizer
                 var language = attributes.TryGetValue("language", out var specified) ? specified : InferLanguage(source);
                 if (!Regex.IsMatch(language, @"^[A-Za-z0-9_+-]*$")) throw new InvalidDataException("Invalid code language in " + file);
                 var last = i + 1;
-                while (last < lines.Length && lines[last].TrimEnd('\r') != End)
+                string? blockFence = null;
+                while (last < lines.Length)
                 {
-                    if (lines[last].TrimStart().StartsWith(Start, StringComparison.Ordinal))
+                    var contentLine = lines[last].TrimEnd('\r');
+                    if (blockFence is null && contentLine == End) break;
+                    if (blockFence is null && contentLine.TrimStart().StartsWith(Start, StringComparison.Ordinal))
                         throw new InvalidDataException("Nested code marker in " + file);
+                    TrackFence(contentLine.TrimStart(), ref blockFence);
                     last++;
                 }
                 if (last == lines.Length) throw new InvalidDataException("Missing closing code marker in " + file);
@@ -117,6 +115,15 @@ public static class MarkdownCodeSynchronizer
             if (i < lines.Length - 1) output.Append('\n');
         }
         return output.ToString();
+    }
+
+    private static void TrackFence(string line, ref string? fence)
+    {
+        var match = Fence.Match(line);
+        if (!match.Success) return;
+        var marker = match.Groups["fence"].Value;
+        if (fence is null) fence = marker;
+        else if (marker[0] == fence[0] && marker.Length >= fence.Length && string.IsNullOrWhiteSpace(match.Groups["info"].Value)) fence = null;
     }
 
     private static Dictionary<string, string> ParseAttributes(string text, string file)

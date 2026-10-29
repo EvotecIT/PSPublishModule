@@ -8,6 +8,29 @@ public sealed class MarkdownCodeSynchronizerTests : IDisposable
     public MarkdownCodeSynchronizerTests() => Directory.CreateDirectory(_root);
     public void Dispose() => Directory.Delete(_root, true);
 
+    [Theory]
+    [InlineData("opening")]
+    [InlineData("closing")]
+    public void Synchronize_SourceContainsMarkerLiterals_RefreshesAndRemainsIdempotent(string markerKind)
+    {
+        var literal = markerKind == "opening" ? Marker("nested.cs") : "<!-- /powerforge:code -->";
+        var source = "Before\n" + literal + "\n```csharp\nvar x = 1;\n```\nAfter\n";
+        Write("example.txt", source);
+        Write("README.md", "Prose before.\n" + Block("example.txt") + "\nProse after.\n");
+        var spec = Spec("README.md");
+        MarkdownCodeSynchronizer.Synchronize(spec, true);
+        var expected = "Prose before.\n" + Marker("example.txt") + "\n````text\n" + source + "````\n<!-- /powerforge:code -->\nProse after.\n";
+        Assert.Equal(expected, File.ReadAllText(Path.Combine(_root, "README.md")));
+        Assert.Empty(MarkdownCodeSynchronizer.Synchronize(spec).ChangedFiles);
+        Assert.Empty(MarkdownCodeSynchronizer.Synchronize(spec, true).ChangedFiles);
+        Assert.Equal(expected, File.ReadAllText(Path.Combine(_root, "README.md")));
+        Write("example.txt", source.Replace("var x = 1;", "var x = 2;"));
+        Assert.Single(MarkdownCodeSynchronizer.Synchronize(spec).ChangedFiles);
+        MarkdownCodeSynchronizer.Synchronize(spec, true);
+        Assert.Equal(expected.Replace("var x = 1;", "var x = 2;"), File.ReadAllText(Path.Combine(_root, "README.md")));
+        Assert.Empty(MarkdownCodeSynchronizer.Synchronize(spec).ChangedFiles);
+    }
+
     [Fact]
     public void Synchronize_RemovedMarkers_RejectsVacuousSuccess()
     {
