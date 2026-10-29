@@ -387,8 +387,8 @@ try {
             $previousMetadata = $parameterMetadata[$name]
             if ($previousMetadata.ParameterType -ne $metadata.ParameterType -or $previousMetadata.IsDynamic -ne $metadata.IsDynamic -or
                 ($metadata.IsDynamic -and -not [string]::Equals(
-                  (& $collectorProtocol.GetParameterSignature $previousMetadata),
-                  (& $collectorProtocol.GetParameterSignature $metadata), [System.StringComparison]::Ordinal))) {
+                  (& $collectorProtocol.GetParameterSignature $previousMetadata $collectorProtocol.ConvertToRuntimeDefaultValue),
+                  (& $collectorProtocol.GetParameterSignature $metadata $collectorProtocol.ConvertToRuntimeDefaultValue), [System.StringComparison]::Ordinal))) {
               throw ('Conflicting parameter metadata for ' + $c.Name + ' -' + $name)
             }
           }

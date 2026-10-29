@@ -136,7 +136,9 @@ function TestDocumentationParameterDontShow([object[]]$attributes) {
 
 function TestDocumentationDynamicCommand([System.Management.Automation.CommandInfo]$command) {
   if ($command -is [System.Management.Automation.FunctionInfo]) {
-    return $null -ne $command.ScriptBlock.Ast.Body.DynamicParamBlock
+    $ast = $command.ScriptBlock.Ast
+    if ($ast -is [System.Management.Automation.Language.FunctionDefinitionAst]) { $ast = $ast.Body }
+    return $null -ne $ast.DynamicParamBlock
   }
   if ($null -ne $command.ImplementingType) {
     return [System.Management.Automation.IDynamicParameters].IsAssignableFrom($command.ImplementingType)
@@ -144,7 +146,7 @@ function TestDocumentationDynamicCommand([System.Management.Automation.CommandIn
   return $false
 }
 
-function GetDocumentationParameterSignature([System.Management.Automation.ParameterMetadata]$metadata) {
+function GetDocumentationParameterSignature([System.Management.Automation.ParameterMetadata]$metadata, [object]$convertDefault) {
   $sets = @($metadata.ParameterSets.GetEnumerator() | Microsoft.PowerShell.Utility\Sort-Object -Property Key | Microsoft.PowerShell.Core\ForEach-Object {
     $s = $_.Value
     [ordered]@{ name = [string]$_.Key; mandatory = [bool]$s.IsMandatory; position = [int]$s.Position;
@@ -157,11 +159,12 @@ function GetDocumentationParameterSignature([System.Management.Automation.Parame
     } elseif ($_ -is [System.Management.Automation.ValidateSetAttribute]) {
       [ordered]@{ type = 'validateSet'; values = @($_.ValidValues); ignoreCase = [bool]$_.IgnoreCase }
     } elseif ($_ -is [System.Management.Automation.PSDefaultValueAttribute]) {
-      # A non-scalar default cannot be safely compared across independent discovery contexts.
-      if ($null -ne $_.Value -and $_.Value -isnot [string] -and $_.Value -isnot [ValueType]) {
-        throw 'Cannot compare non-scalar dynamic parameter defaults across discovery contexts.'
+      $help = [string]$_.Help
+      $value = $null
+      if ([string]::IsNullOrWhiteSpace($help)) {
+        try { $value = & $convertDefault $_.Value } catch { $value = $null }
       }
-      [ordered]@{ type = 'default'; help = [string]$_.Help; value = [string]$_.Value; valueType = $(if ($null -ne $_.Value) { $_.Value.GetType().FullName } else { '' }) }
+      [ordered]@{ type = 'default'; help = $help; value = $value }
     } elseif ($_ -is [System.Management.Automation.SupportsWildcardsAttribute]) {
       [ordered]@{ type = 'wildcards' }
     }

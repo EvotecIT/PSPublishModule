@@ -5,8 +5,10 @@ namespace PowerForge.Tests;
 
 public sealed partial class DocumentationPowerShellCollectorTests
 {
-    [Fact]
-    public void DocumentationEngine_DynamicHelpWarnsUntilDiscoveryContextVerifiesParameters()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void DocumentationEngine_DynamicHelpWarnsUntilDiscoveryContextVerifiesParameters(bool registeredScriptBlock)
     {
         string root = Path.Combine(Path.GetTempPath(), "pf-dynamic-help-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(Path.Combine(root, "en-US"));
@@ -26,7 +28,7 @@ public sealed partial class DocumentationPowerShellCollectorTests
     VariablesToExport = @()
 }
 """);
-            File.WriteAllText(Path.Combine(root, moduleName + ".psm1"), """
+            string source = """
 function Get-DynamicParameterFixture {
     <#
     .EXTERNALHELP DynamicParameterFixture-help.xml
@@ -35,20 +37,31 @@ function Get-DynamicParameterFixture {
     param([string] $Mode)
     dynamicparam {
         $parameters = [System.Management.Automation.RuntimeDefinedParameterDictionary]::new()
-        if ($Mode -in @('enabled', 'different') -or (Split-Path -Leaf (Get-Location).Path) -eq 'provider-context') {
+        if ($Mode -in @('enabled', 'different', 'differentdefault', 'textdefault', 'unsupporteddefault') -or (Split-Path -Leaf (Get-Location).Path) -eq 'provider-context') {
             $attributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
             $attributes.Add([System.Management.Automation.ParameterAttribute]::new())
             $value = if ($Mode -eq 'different') { 'a' } else { 'A' }
             $validate = [System.Management.Automation.ValidateSetAttribute]::new([string[]]@($value))
             $validate.IgnoreCase = $false
             $attributes.Add($validate)
+            $default = [System.Management.Automation.PSDefaultValueAttribute]::new()
+            if ($Mode -in @('textdefault', 'unsupporteddefault')) {
+                if ($Mode -eq 'textdefault') { $default.Help = 'Documented default' }
+                $default.Value = [IntPtr]::new(4294967296)
+            } else {
+                $default.Value = if ($Mode -eq 'differentdefault') { [string[]]@('one', 'changed') } else { [string[]]@('one', 'two') }
+            }
+            $attributes.Add($default)
             $parameters.Add('Live', [System.Management.Automation.RuntimeDefinedParameter]::new('Live', [string], $attributes))
         }
         $parameters
     }
 }
 Export-ModuleMember -Function Get-DynamicParameterFixture
-""");
+""";
+            if (registeredScriptBlock)
+                source = source.Replace("function Get-DynamicParameterFixture {", "Set-Item -Path function:Get-DynamicParameterFixture -Value {", StringComparison.Ordinal);
+            File.WriteAllText(Path.Combine(root, moduleName + ".psm1"), source);
             var oldHelp = new DocumentationExtractionPayload
             {
                 ModuleName = moduleName,
@@ -132,6 +145,22 @@ Export-ModuleMember -Function Get-DynamicParameterFixture
                     new DocumentationDiscoveryContext { Command = "Get-DynamicParameterFixture", Arguments = new[] { "different" } }
                 };
                 InvalidOperationException error = Assert.Throws<InvalidOperationException>(() => engine.ExtractHelpPayload(root, manifest, TimeSpan.FromMinutes(1), conflictingContexts));
+                Assert.Contains("Conflicting parameter metadata", error.Message, StringComparison.Ordinal);
+
+                var textDefaultContexts = new[]
+                {
+                    new DocumentationDiscoveryContext { Command = "Get-DynamicParameterFixture", Arguments = new[] { "textdefault" } },
+                    new DocumentationDiscoveryContext { Command = "Get-DynamicParameterFixture", Arguments = new[] { "textdefault" } }
+                };
+                DocumentationCommandHelp textDefault = Assert.Single(engine.ExtractHelpPayload(root, manifest, TimeSpan.FromMinutes(1), textDefaultContexts).Commands);
+                Assert.Equal("Documented default", Assert.Single(textDefault.Parameters, parameter => parameter.Name == "Live").DefaultValue);
+                foreach (DocumentationDiscoveryContext context in textDefaultContexts)
+                    context.Arguments = new[] { "unsupporteddefault" };
+                DocumentationCommandHelp unsupportedDefault = Assert.Single(engine.ExtractHelpPayload(root, manifest, TimeSpan.FromMinutes(1), textDefaultContexts).Commands);
+                Assert.Contains(unsupportedDefault.Parameters, parameter => parameter.Name == "Live");
+
+                conflictingContexts[1].Arguments = new[] { "differentdefault" };
+                error = Assert.Throws<InvalidOperationException>(() => engine.ExtractHelpPayload(root, manifest, TimeSpan.FromMinutes(1), conflictingContexts));
                 Assert.Contains("Conflicting parameter metadata", error.Message, StringComparison.Ordinal);
             }
         }

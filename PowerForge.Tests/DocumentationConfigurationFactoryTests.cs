@@ -33,6 +33,19 @@ public sealed class DocumentationConfigurationFactoryTests
     }
 
     [Fact]
+    public void Create_ParameterDiscoveryContexts_EmitsBuildSegmentWithoutEnable()
+    {
+        var context = new DocumentationDiscoveryContext { Command = "Get-Example" };
+        var segments = new DocumentationConfigurationFactory().Create(new DocumentationConfigurationRequest
+        {
+            ParameterDiscoveryContexts = new[] { context }
+        });
+        var build = Assert.IsType<ConfigurationBuildDocumentationSegment>(segments[1]);
+        Assert.False(build.Configuration.Enable);
+        Assert.Same(context, Assert.Single(build.Configuration.ParameterDiscoveryContexts));
+    }
+
+    [Fact]
     public void Create_emits_only_documentation_segment_when_no_build_settings_requested()
     {
         var factory = new DocumentationConfigurationFactory();
