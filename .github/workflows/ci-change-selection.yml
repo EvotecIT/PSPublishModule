@@ -1,0 +1,59 @@
+name: Select repository CI coverage
+
+# Internal selection for this repository; existing shared workflow contracts are unchanged.
+on:
+  workflow_call:
+    outputs:
+      build:
+        description: Whether the PR contains a build or test input.
+        value: ${{ jobs.select.outputs.build }}
+
+permissions:
+  contents: read
+
+jobs:
+  select:
+    name: Select changes
+    runs-on: ${{ fromJSON(github.event.repository.private && '["self-hosted","linux"]' || '["ubuntu-latest"]') }}
+    timeout-minutes: 5
+    outputs:
+      build: ${{ steps.select.outputs.build }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Inspect the complete PR diff
+        id: select
+        shell: python
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          import os, pathlib, subprocess
+
+          def documentation(path):
+              parts = pathlib.PurePosixPath(path).parts
+              # Package READMEs, generated help, fixtures, schemas and templates are inputs.
+              if path.lower() in ('readme.md', 'docs/readme.md', 'docs/pspublishmodule.unifiedmoduleprojectrelease.md'):
+                  return False
+              if any(part.lower() in ('schema', 'schemas', 'fixtures', 'templates', 'examples') for part in parts[:-1]):
+                  return False
+              if parts[0] == 'Website':
+                  return True
+              if len(parts) == 1:
+                  return path.lower().endswith('.md')
+              return parts[0] in ('Docs', 'docs') and path.lower().endswith('.md')
+
+          build = True
+          if os.environ['EVENT'] == 'pull_request':
+              base, head = os.environ['BASE_SHA'], os.environ['HEAD_SHA']
+              if not base or not head:
+                  raise SystemExit('Missing PR endpoints; refusing to skip coverage.')
+              # No API file limit; disable rename detection so moves out of source retain deletions.
+              diff = subprocess.check_output(['git', 'diff', '--name-only', '--no-renames', '-z', f'{base}...{head}'])
+              paths = [p.decode('utf-8', errors='surrogateescape') for p in diff.split(b'\0') if p]
+              build = not paths or not all(documentation(p) for p in paths)
+              print(f'Inspected {len(paths)} changed paths; build required: {build}.')
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write(f'build={str(build).lower()}\n')

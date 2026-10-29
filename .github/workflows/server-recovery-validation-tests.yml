@@ -36,14 +36,17 @@ on:
       - "PowerForge.Web.Cli/Templates/ServerScaffold/**"
       - "PowerForge.Web.Cli/WebCliCommandHandlers.Server*.cs"
       - "Schemas/powerforge.web.serverrecovery.schema.json"
+      - "!**/*.md"
+      - "!**/*.MD"
   workflow_dispatch:
 
 permissions:
   contents: read
 
+# Only a newer revision of the same PR may cancel an earlier run.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   ServerRecoveryValidationTests:
