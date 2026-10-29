@@ -1,0 +1,349 @@
+using System.Text.Json;
+using PowerForge.Web;
+using PowerForge.Web.Cli;
+
+namespace PowerForge.Tests;
+
+public sealed class WebStaticRedirectExporterTests : IDisposable
+{
+    private readonly string root = Path.Combine(Path.GetTempPath(), "pf-static-redirects-" + Guid.NewGuid().ToString("N"));
+
+    public WebStaticRedirectExporterTests()
+    {
+        Directory.CreateDirectory(Path.Combine(root, "_powerforge"));
+        Directory.CreateDirectory(Path.Combine(root, "api", "reader-ocr", "type"));
+        File.WriteAllText(Path.Combine(root, "api", "reader-ocr", "type", "index.html"), "<h1>OCR type</h1>");
+    }
+
+    [Fact]
+    public void Hosting_GithubPagesWritesMovedApiAliasAndPreservesCanonicalContent()
+    {
+        WriteRules(new RedirectSpec { From = "/api/reader/type/", To = "/api/reader-ocr/type/?view=full" });
+        var pipeline = Path.Combine(root, "pipeline.json");
+        File.WriteAllText(pipeline, """{"steps":[{"task":"hosting","siteRoot":".","target":"github-pages"}]}""");
+        var result = WebPipelineRunner.RunPipeline(pipeline, logger: null);
+        Assert.True(result.Success, string.Join(";", result.Steps.Select(s => s.Message)));
+        var html = File.ReadAllText(Path.Combine(root, "api", "reader", "type", "index.html"));
+        Assert.Contains("http-equiv=\"refresh\"", html);
+        Assert.Contains("href=\"/api/reader-ocr/type/?view=full\"", html);
+        Assert.Contains("noindex,follow", html);
+        Assert.Contains("window.location.search", html);
+        Assert.Contains("target.hash = window.location.hash", html);
+        Assert.Equal("<h1>OCR type</h1>", File.ReadAllText(Path.Combine(root, "api", "reader-ocr", "type", "index.html")));
+        Assert.Equal(1, WebStaticRedirectExporter.Export(root, dryRun: false));
+        Assert.Empty(Directory.EnumerateFiles(root, "*.tmp", SearchOption.AllDirectories));
+    }
+
+    [Theory]
+    [InlineData("/CON/type/")]
+    [InlineData("/aux.html")]
+    [InlineData("/legacy/LpT9/type/")]
+    public void WindowsDeviceRoutesFailPreflightBeforeWritingEarlierValidRules(string route)
+    {
+        WriteRules(new RedirectSpec { From = "/valid-first/", To = "/api/reader-ocr/type/" },
+            new RedirectSpec { From = route, To = "/api/reader-ocr/type/" });
+        var error = Assert.Throws<InvalidOperationException>(() => WebStaticRedirectExporter.Export(root, false));
+        Assert.Contains("Unsupported static page route", error.Message);
+        Assert.False(Directory.Exists(Path.Combine(root, "valid-first")));
+    }
+
+    [Fact]
+    public void ExistingAncestorCaseAliasCannotChangeThePublishedRoute()
+    {
+        WriteRules(new RedirectSpec { From = "/API/legacy/", To = "/api/reader-ocr/type/" });
+        if (FrameworkCompatibility.GetPathStringComparison(root) == StringComparison.Ordinal)
+            Assert.Equal(1, WebStaticRedirectExporter.Export(root, false));
+        else
+        {
+            Assert.Throws<InvalidOperationException>(() => WebStaticRedirectExporter.Export(root, false));
+            Assert.False(Directory.Exists(Path.Combine(root, "api", "legacy")));
+        }
+    }
+
+    [Theory]
+    [InlineData("v1.0", "v2.0")]
+    [InlineData("legacy.html", "current.html")]
+    public void SlashTerminatedDottedRoutesMapToDirectoryIndexes(string from, string to)
+    {
+        var target = Path.Combine(root, to, "index.html");
+        Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+        File.WriteAllText(target, "<h1>Current version</h1>");
+        WriteRules(new RedirectSpec { From = $"/{from}/", To = $"/{to}/?view=full#member" });
+        Assert.Equal(1, WebStaticRedirectExporter.Export(root, false));
+        Assert.Contains($"href=\"/{to}/?view=full#member\"", File.ReadAllText(Path.Combine(root, from, "index.html")));
+        Assert.Equal("<h1>Current version</h1>", File.ReadAllText(target));
+    }
+
+    [Fact]
+    public void ExplicitHtmlRoutesRemainFiles()
+    {
+        var target = Path.Combine(root, "current.HTML");
+        File.WriteAllText(target, "<h1>Current page</h1>");
+        WriteRules(new RedirectSpec { From = "/legacy.HTML", To = "/current.HTML?view=full#member" });
+        Assert.Equal(1, WebStaticRedirectExporter.Export(root, false));
+        Assert.Contains("href=\"/current.HTML?view=full#member\"", File.ReadAllText(Path.Combine(root, "legacy.HTML")));
+        Assert.Equal("<h1>Current page</h1>", File.ReadAllText(target));
+    }
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public void PlannedFileDirectoryConflictFailsBeforeWriting(bool reverse, bool dryRun)
+    {
+        var rules = new[]
+        {
+            new RedirectSpec { From = "/legacy.html", To = "/api/reader-ocr/type/" },
+            new RedirectSpec { From = "/legacy.html/child/", To = "/api/reader-ocr/type/" }
+        };
+        if (reverse) Array.Reverse(rules);
+        WriteRules(rules);
+        var error = Assert.Throws<InvalidOperationException>(() => WebStaticRedirectExporter.Export(root, dryRun));
+        Assert.Contains("parent directory", error.Message);
+        Assert.False(File.Exists(Path.Combine(root, "legacy.html")));
+        Assert.False(Directory.Exists(Path.Combine(root, "legacy.html")));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ExistingFileDirectoryConflictFailsBeforeWriting(bool dryRun)
+    {
+        var existing = Path.Combine(root, "existing.html");
+        File.WriteAllText(existing, "Existing canonical page");
+        WriteRules(new RedirectSpec { From = "/valid-first/", To = "/api/reader-ocr/type/" },
+            new RedirectSpec { From = "/existing.html/child/", To = "/api/reader-ocr/type/" });
+        var error = Assert.Throws<InvalidOperationException>(() => WebStaticRedirectExporter.Export(root, dryRun));
+        Assert.Contains("parent directory", error.Message);
+        Assert.False(Directory.Exists(Path.Combine(root, "valid-first")));
+        Assert.Equal("Existing canonical page", File.ReadAllText(existing));
+    }
+
+    [Fact]
+    public void PlannedAncestorCaseAliasesFailBeforeAnyPageIsWritten()
+    {
+        WriteRules(new RedirectSpec { From = "/Legacy/a/", To = "/api/reader-ocr/type/" },
+            new RedirectSpec { From = "/legacy/b/", To = "/api/reader-ocr/type/" });
+        if (FrameworkCompatibility.GetPathStringComparison(root) == StringComparison.Ordinal)
+            Assert.Equal(2, WebStaticRedirectExporter.Export(root, false));
+        else
+        {
+            Assert.Throws<InvalidOperationException>(() => WebStaticRedirectExporter.Export(root, false));
+            Assert.False(Directory.Exists(Path.Combine(root, "Legacy")));
+        }
+    }
+
+    [Fact]
+    public void CaseDistinctSourcesArePreservedOnLinuxAndRejectedOnOtherBuildHosts()
+    {
+        WriteRules(new RedirectSpec { From = "/Legacy/", To = "/api/reader-ocr/type/" },
+            new RedirectSpec { From = "/legacy/", To = "/api/reader-ocr/type/" });
+        if (FrameworkCompatibility.GetPathStringComparison(root) == StringComparison.Ordinal)
+        {
+            Assert.Equal(2, WebStaticRedirectExporter.Export(root, false));
+            Assert.True(File.Exists(Path.Combine(root, "Legacy", "index.html")));
+            Assert.True(File.Exists(Path.Combine(root, "legacy", "index.html")));
+        }
+        else
+        {
+            Assert.Throws<InvalidOperationException>(() => WebStaticRedirectExporter.Export(root, false));
+            Assert.False(Directory.Exists(Path.Combine(root, "Legacy")));
+        }
+    }
+
+    [Fact]
+    public void CaseOnlyMoveDoesNotBecomeAFalseRedirectLoopOnLinux()
+    {
+        WriteRules(new RedirectSpec { From = "/api/reader-ocr/TYPE/", To = "/api/reader-ocr/type/" });
+        if (FrameworkCompatibility.GetPathStringComparison(root) == StringComparison.Ordinal)
+            Assert.Equal(1, WebStaticRedirectExporter.Export(root, false));
+        else
+        {
+            // The existing lowercase canonical page must remain protected on case-insensitive hosts.
+            Assert.Throws<InvalidOperationException>(() => WebStaticRedirectExporter.Export(root, false));
+            Assert.Equal("<h1>OCR type</h1>", File.ReadAllText(Path.Combine(root, "api", "reader-ocr", "type", "index.html")));
+        }
+    }
+
+    [Fact]
+    public void IdenticalReadOnlyRedirectIsNotRewrittenIncludingStatusOnlyChanges()
+    {
+        WriteRules(new RedirectSpec { From = "/old/", To = "/api/reader-ocr/type/" });
+        WebStaticRedirectExporter.Export(root, false);
+        var file = Path.Combine(root, "old", "index.html");
+        var timestamp = new DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        File.SetLastWriteTimeUtc(file, timestamp);
+        var attributes = File.GetAttributes(file);
+        File.SetAttributes(file, attributes | FileAttributes.ReadOnly);
+        try
+        {
+            WriteRules(new RedirectSpec { From = "/old/", To = "/api/reader-ocr/type/", Status = 302 });
+            Assert.Equal(1, WebStaticRedirectExporter.Export(root, false));
+            Assert.Equal(timestamp, File.GetLastWriteTimeUtc(file));
+        }
+        finally { File.SetAttributes(file, attributes); }
+    }
+
+    [Theory]
+    [InlineData("<html><head><title>Docs</title></head><body><code>data-pf=\"static-redirect\"</code></body></html>")]
+    [InlineData("<html><head><script>const example = 'data-pf=\"static-redirect\" http-equiv=\"refresh\" rel=\"canonical\"';</script></head><body>Docs</body></html>")]
+    public void AuthoredMarkerExamplesAreNeitherStalePagesNorRedirectDestinations(string html)
+    {
+        var canonical = Path.Combine(root, "api", "reader-ocr", "type", "index.html");
+        File.WriteAllText(canonical, html);
+        File.WriteAllText(Path.Combine(root, "authored.html"), html);
+        WriteRules(new RedirectSpec { From = "/old/", To = "/api/reader-ocr/type/" });
+        Assert.Equal(1, WebStaticRedirectExporter.Export(root, false));
+        Assert.Equal(html, File.ReadAllText(canonical));
+        Assert.Equal(html, File.ReadAllText(Path.Combine(root, "authored.html")));
+    }
+
+    [Fact]
+    public void RedirectStructureIsRecognizedWithMinifiedAttributeQuoting()
+    {
+        File.WriteAllText(Path.Combine(root, "stale.html"),
+            "<html><head><meta name=robots content=noindex,follow data-pf=static-redirect><meta http-equiv=refresh content='0;url=/new/'><link rel=canonical href='/new/'></head></html>");
+        WriteRules();
+        Assert.Throws<InvalidOperationException>(() => WebStaticRedirectExporter.Export(root, false));
+    }
+
+    [Fact]
+    public void RemovedRedirectWithLongDestinationIsStillRecognized()
+    {
+        WriteRules(new RedirectSpec { From = "/old/", To = "https://example.test/new/?context=" + new string('x', 5000) });
+        WebStaticRedirectExporter.Export(root, false);
+        WriteRules();
+        Assert.Throws<InvalidOperationException>(() => WebStaticRedirectExporter.Export(root, false));
+    }
+
+    [Fact]
+    public void PreviouslyGeneratedRedirectCannotBeUsedAsCanonicalDestination()
+    {
+        WriteRules(new RedirectSpec { From = "/old/", To = "/api/reader-ocr/type/", PreserveQuery = false });
+        WebStaticRedirectExporter.Export(root, false);
+        WriteRules(new RedirectSpec { From = "/new-alias/", To = "/old/" });
+        Assert.Throws<InvalidOperationException>(() => WebStaticRedirectExporter.Export(root, false));
+        Assert.False(Directory.Exists(Path.Combine(root, "new-alias")));
+    }
+
+    [Theory]
+    [InlineData(false, "/old/")]
+    [InlineData(true, "/old/")]
+    [InlineData(false, "/old.HTML")]
+    public void RemovedRuleRequiresCleanBuildWithoutDeletingPriorOrUnrelatedContent(bool dryRun, string source)
+    {
+        WriteRules(new RedirectSpec { From = source, To = "/api/reader-ocr/type/" });
+        WebStaticRedirectExporter.Export(root, false);
+        var oldPage = source.EndsWith('/') ? Path.Combine(root, "old", "index.html") : Path.Combine(root, source.TrimStart('/'));
+        var original = File.ReadAllText(oldPage);
+        WriteRules();
+        var error = Assert.Throws<InvalidOperationException>(() => WebStaticRedirectExporter.Export(root, dryRun));
+        Assert.Contains("clean", error.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(original, File.ReadAllText(oldPage));
+        Assert.Equal("<h1>OCR type</h1>", File.ReadAllText(Path.Combine(root, "api", "reader-ocr", "type", "index.html")));
+    }
+
+    [Fact]
+    public void DryRunValidatesAllRulesWithoutWriting()
+    {
+        WriteRules(new RedirectSpec { From = "/old.html", To = "/api/reader-ocr/type/" });
+        Assert.Equal(1, WebStaticRedirectExporter.Export(root, dryRun: true));
+        Assert.False(File.Exists(Path.Combine(root, "old.html")));
+    }
+
+    [Theory]
+    [InlineData("", false)]
+    [InlineData("", true)]
+    [InlineData("nested", false)]
+    [InlineData("nested", true)]
+    public void InterruptedWriteRequiresCleanBuildBeforePublishing(string directory, bool dryRun)
+    {
+        WriteRules(new RedirectSpec { From = "/old/", To = "/api/reader-ocr/type/" });
+        var parent = Path.Combine(root, directory);
+        Directory.CreateDirectory(parent);
+        var interrupted = Path.Combine(parent, ".redirect-00000000000000000000000000000000.tmp");
+        File.WriteAllText(interrupted, "Partial redirect page");
+        var error = Assert.Throws<InvalidOperationException>(() => WebStaticRedirectExporter.Export(root, dryRun));
+        Assert.Contains("Rebuild clean", error.Message);
+        Assert.False(Directory.Exists(Path.Combine(root, "old")));
+        Assert.Equal("Partial redirect page", File.ReadAllText(interrupted));
+    }
+
+    [Theory]
+    [InlineData("/../escape/")]
+    [InlineData("/%2e%2e/escape/")]
+    [InlineData("//outside.test/path/")]
+    [InlineData("/old?query=1")]
+    [InlineData("/old.xml")]
+    [InlineData("/old\\escape/")]
+    public void UnsafeOrNonPageSourcesCannotWrite(string source)
+    {
+        WriteRules(new RedirectSpec { From = source, To = "/api/reader-ocr/type/" });
+        Assert.Throws<InvalidOperationException>(() => WebStaticRedirectExporter.Export(root, false));
+    }
+
+    [Fact]
+    public void InvalidLaterRuleDoesNotLeaveEarlierRedirect()
+    {
+        WriteRules(new RedirectSpec { From = "/old/", To = "/api/reader-ocr/type/" },
+            new RedirectSpec { From = "/unsupported/*", To = "/api/{path}", MatchType = RedirectMatchType.Wildcard });
+        Assert.Throws<InvalidOperationException>(() => WebStaticRedirectExporter.Export(root, false));
+        Assert.False(Directory.Exists(Path.Combine(root, "old")));
+    }
+
+    [Fact]
+    public void ExistingPageIsNeverReplaced()
+    {
+        File.WriteAllText(Path.Combine(root, "index.html"), "Existing home");
+        WriteRules(new RedirectSpec { From = "/", To = "/api/reader-ocr/type/" });
+        Assert.Throws<InvalidOperationException>(() => WebStaticRedirectExporter.Export(root, false));
+        Assert.Equal("Existing home", File.ReadAllText(Path.Combine(root, "index.html")));
+    }
+
+    [Fact]
+    public void MissingCanonicalDestinationFailsBeforeWriting()
+    {
+        WriteRules(new RedirectSpec { From = "/old/", To = "/missing/" });
+        Assert.Throws<InvalidOperationException>(() => WebStaticRedirectExporter.Export(root, false));
+        Assert.False(Directory.Exists(Path.Combine(root, "old")));
+    }
+
+    [Fact]
+    public void ExternalDestinationIsEscapedAndQueryPreservationCanBeDisabled()
+    {
+        WriteRules(new RedirectSpec { From = "/old.html", To = "https://example.test/new/?x='&y=<value>#section", PreserveQuery = false });
+        WebStaticRedirectExporter.Export(root, false);
+        var html = File.ReadAllText(Path.Combine(root, "old.html"));
+        Assert.Contains("&amp;y=&lt;value&gt;", html);
+        Assert.DoesNotContain("window.location.search", html);
+        Assert.DoesNotContain("y=<value>", html);
+        Assert.Contains("if (!target.hash)", html);
+    }
+
+    [Fact]
+    public void LinkedOutputDirectoryCannotEscapeSiteRoot()
+    {
+        var outside = Path.Combine(Path.GetTempPath(), "pf-redirect-outside-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(outside);
+        var link = Path.Combine(root, "linked");
+        try
+        {
+            try { Directory.CreateSymbolicLink(link, outside); }
+            catch (UnauthorizedAccessException) when (OperatingSystem.IsWindows()) { return; }
+            WriteRules(new RedirectSpec { From = "/linked/alias/", To = "/api/reader-ocr/type/" });
+            Assert.Throws<InvalidOperationException>(() => WebStaticRedirectExporter.Export(root, false));
+            Assert.Empty(Directory.EnumerateFileSystemEntries(outside));
+        }
+        finally
+        {
+            if (Directory.Exists(link)) Directory.Delete(link);
+            Directory.Delete(outside);
+        }
+    }
+
+    private void WriteRules(params RedirectSpec[] rules) => File.WriteAllText(Path.Combine(root, "_powerforge", "redirects.json"),
+        JsonSerializer.Serialize(new { redirects = rules }, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase }));
+
+    public void Dispose() => Directory.Delete(root, recursive: true);
+}

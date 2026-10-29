@@ -25,7 +25,7 @@ internal static class VisualStoryPortablePathValidator
     private static bool IsWindowsInvalidFileNameCharacter(char value)
         => value < 32 || value is '<' or '>' or ':' or '"' or '/' or '\\' or '|' or '?' or '*';
 
-    private static bool IsReservedWindowsDeviceName(string segment)
+    internal static bool IsReservedWindowsDeviceName(string segment)
     {
         var extensionIndex = segment.IndexOf('.');
         var stem = (extensionIndex < 0 ? segment : segment.Substring(0, extensionIndex)).TrimEnd(' ', '.');

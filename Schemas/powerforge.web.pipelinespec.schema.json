@@ -4589,7 +4589,7 @@
         "skip-modes": { "type": "array", "items": { "type": "string" } },
         "siteRoot": { "type": "string" },
         "site-root": { "type": "string" },
-        "target": { "type": "string", "description": "Single hosting target (netlify, azure, vercel, apache/apache2, nginx, iis)." },
+        "target": { "type": "string", "description": "Single hosting target (netlify, azure, vercel, apache/apache2, nginx, iis, github-pages)." },
         "targets": {
           "oneOf": [
             { "type": "string", "description": "Comma-separated hosting targets." },

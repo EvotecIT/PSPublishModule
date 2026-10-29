@@ -7,6 +7,15 @@ namespace PowerForge.Tests;
 
 public sealed partial class PowerShellCompilationBoundPipelineTests
 {
+    private static ProcessRunRequest CreateClosureFixtureBuildRequest(string root, IReadOnlyList<string> arguments, TimeSpan timeout)
+        => PowerShellCompilationSdkProcessEnvironment.CreateInheritedRequest(root, arguments, timeout,
+            new Dictionary<string, string?>
+            {
+                ["MSBUILDDISABLENODEREUSE"] = "1",
+                ["DOTNET_CLI_USE_MSBUILD_SERVER"] = "0",
+                ["UseSharedCompilation"] = "false"
+            });
+
     [Fact]
     public void NativeProcessLaunchIsClassifiedAndRejectedBeforeTypedEmission()
     {
@@ -59,9 +68,7 @@ public sealed partial class PowerShellCompilationBoundPipelineTests
                 $"<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup><ItemGroup><ProjectReference Include=\"../Dependency/{assemblyName}.csproj\" /></ItemGroup></Project>");
             File.WriteAllText(Path.Combine(consumer, "Consumer.cs"),
                 $"public static class Consumer {{ public static int Get() => {assemblyName}.Value.Get(); }}");
-            var build = await new ProcessRunner().RunAsync(new ProcessRunRequest(
-                    "dotnet",
-                    root,
+            var build = await new ProcessRunner().RunAsync(CreateClosureFixtureBuildRequest(root,
                     new[] { "build", Path.Combine(consumer, "Consumer.csproj"), "-c", "Release", "-o", output, "--nologo", "--verbosity", "quiet" },
                     TimeSpan.FromSeconds(60)));
             Assert.True(build.Succeeded, build.StdErr + Environment.NewLine + build.StdOut);
@@ -104,13 +111,11 @@ public sealed partial class PowerShellCompilationBoundPipelineTests
             File.WriteAllText(Path.Combine(consumer, "Consumer.cs"),
                 "public static class Consumer { public static int Get() => Versioned.Dependency.Value.Get(); }");
 
-            var consumerBuild = await new ProcessRunner().RunAsync(new ProcessRunRequest(
-                "dotnet", root,
+            var consumerBuild = await new ProcessRunner().RunAsync(CreateClosureFixtureBuildRequest(root,
                 new[] { "build", Path.Combine(consumer, "Consumer.csproj"), "-c", "Release", "-o", consumerOutput, "--nologo", "--verbosity", "quiet" },
                 TimeSpan.FromSeconds(60)));
             Assert.True(consumerBuild.Succeeded, consumerBuild.StdErr + Environment.NewLine + consumerBuild.StdOut);
-            var wrongBuild = await new ProcessRunner().RunAsync(new ProcessRunRequest(
-                "dotnet", root,
+            var wrongBuild = await new ProcessRunner().RunAsync(CreateClosureFixtureBuildRequest(root,
                 new[] { "build", Path.Combine(dependencyV2, "Versioned.Dependency.csproj"), "-c", "Release", "-o", wrongOutput, "--nologo", "--verbosity", "quiet" },
                 TimeSpan.FromSeconds(60)));
             Assert.True(wrongBuild.Succeeded, wrongBuild.StdErr + Environment.NewLine + wrongBuild.StdOut);
@@ -246,8 +251,7 @@ public sealed partial class PowerShellCompilationBoundPipelineTests
             var project = Path.Combine(root, "TargetProof.csproj");
             File.WriteAllText(project, "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup></Project>");
             File.WriteAllText(Path.Combine(root, "Proof.cs"), "public static class Proof { public static int Value => 1; }");
-            var build = await new ProcessRunner().RunAsync(new ProcessRunRequest(
-                "dotnet", root, new[] { "build", project, "-c", "Release", "-o", Path.Combine(root, "out"), "--nologo", "--verbosity", "quiet" }, TimeSpan.FromSeconds(60)));
+            var build = await new ProcessRunner().RunAsync(CreateClosureFixtureBuildRequest(root, new[] { "build", project, "-c", "Release", "-o", Path.Combine(root, "out"), "--nologo", "--verbosity", "quiet" }, TimeSpan.FromSeconds(60)));
             Assert.True(build.Succeeded, build.StdErr + Environment.NewLine + build.StdOut);
             var assembly = new[] { new PowerShellCompilationArtifactFile { Path = Path.Combine(root, "out", "TargetProof.dll"), Role = "Primary" } };
 
@@ -448,8 +452,7 @@ public sealed partial class PowerShellCompilationBoundPipelineTests
             File.WriteAllText(project, "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup></Project>");
             File.WriteAllText(Path.Combine(root, "Injected.cs"), "public static class Injected { public static int Value => 1; }");
             var output = Path.Combine(root, "out");
-            var build = await new ProcessRunner().RunAsync(new ProcessRunRequest(
-                "dotnet", root, new[] { "build", project, "-c", "Release", "-o", output, "--nologo", "--verbosity", "quiet" }, TimeSpan.FromSeconds(60)));
+            var build = await new ProcessRunner().RunAsync(CreateClosureFixtureBuildRequest(root, new[] { "build", project, "-c", "Release", "-o", output, "--nologo", "--verbosity", "quiet" }, TimeSpan.FromSeconds(60)));
             Assert.True(build.Succeeded, build.StdErr + Environment.NewLine + build.StdOut);
 
             var files = new[]
@@ -501,8 +504,7 @@ public sealed partial class PowerShellCompilationBoundPipelineTests
             File.WriteAllText(project, "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup></Project>");
             File.WriteAllText(Path.Combine(root, "Proof.cs"), "using System.Runtime.InteropServices; public static class Proof { [DllImport(\"nativeproof\")] public static extern int Invoke(); }");
             var output = Path.Combine(root, "out");
-            var build = await new ProcessRunner().RunAsync(new ProcessRunRequest(
-                "dotnet", root, new[] { "build", project, "-c", "Release", "-o", output, "--nologo", "--verbosity", "quiet" }, TimeSpan.FromSeconds(60)));
+            var build = await new ProcessRunner().RunAsync(CreateClosureFixtureBuildRequest(root, new[] { "build", project, "-c", "Release", "-o", output, "--nologo", "--verbosity", "quiet" }, TimeSpan.FromSeconds(60)));
             Assert.True(build.Succeeded, build.StdErr + Environment.NewLine + build.StdOut);
             var files = new[] { new PowerShellCompilationArtifactFile { Path = Path.Combine(output, "NativeProof.dll"), Role = "Primary" } };
 

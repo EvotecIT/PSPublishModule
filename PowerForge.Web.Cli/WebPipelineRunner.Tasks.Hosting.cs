@@ -28,6 +28,10 @@ internal static partial class WebPipelineRunner
         var dryRun = GetBool(step, "dryRun") ?? GetBool(step, "dry-run") ?? false;
         var selectedTargets = ResolveHostingTargets(step);
 
+        var staticRedirects = selectedTargets.Contains("github-pages", StringComparer.OrdinalIgnoreCase)
+            ? WebStaticRedirectExporter.Export(fullSiteRoot, dryRun)
+            : 0;
+
         var removed = 0;
         var kept = 0;
         var missingSelected = new List<string>();
@@ -62,7 +66,7 @@ internal static partial class WebPipelineRunner
 
         var selectedLabel = string.Join(",", selectedTargets.OrderBy(static value => value, StringComparer.OrdinalIgnoreCase));
         stepResult.Success = true;
-        stepResult.Message = $"hosting ok: targets={selectedLabel}; kept={kept}; removed={removed}; missing={missingSelected.Count}";
+        stepResult.Message = $"hosting ok: targets={selectedLabel}; kept={kept}; removed={removed}; missing={missingSelected.Count}; staticRedirects={staticRedirects}";
     }
 
     private static string[] ResolveHostingTargets(JsonElement step)
@@ -95,7 +99,7 @@ internal static partial class WebPipelineRunner
 
             var mapped = NormalizeHostingTarget(value);
             if (string.IsNullOrWhiteSpace(mapped))
-                throw new InvalidOperationException($"hosting has unsupported target '{value}'. Supported targets: {string.Join(", ", HostingTargetsAll)}.");
+                throw new InvalidOperationException($"hosting has unsupported target '{value}'. Supported targets: {string.Join(", ", HostingTargetsAll)}, github-pages.");
 
             normalized.Add(mapped);
         }
@@ -130,6 +134,7 @@ internal static partial class WebPipelineRunner
         var token = value.Trim().ToLowerInvariant();
         return token switch
         {
+            "github-pages" => "github-pages",
             "netlify" => "netlify",
             "azure" => "azure",
             "azure-swa" => "azure",

@@ -1805,7 +1805,7 @@ Keeps only selected host redirect artifacts in the built site output (useful whe
 ```
 
 Notes:
-- Supported targets: `netlify`, `azure`, `vercel`, `apache`/`apache2`, `nginx`, `iis` (or `all`).
+- Supported targets: `netlify`, `azure`, `vercel`, `apache`/`apache2`, `nginx`, `iis` (or `all`), plus the explicit `github-pages` target. `all` and the default retain the six server artifact targets.
 - Reads/writes host artifact files under `siteRoot`:
   - `netlify` -> `_redirects`
   - `azure` -> `staticwebapp.config.json`
@@ -1816,6 +1816,46 @@ Notes:
 - `removeUnselected` defaults to `true`.
 - `strict: true` fails if selected target artifacts are missing.
 - `site-root` is supported as an alias for `siteRoot`.
+
+For GitHub Pages, run `hosting` **after API docs and all other page generators**:
+```json
+{ "task": "hosting", "siteRoot": "./_site", "target": "github-pages" }
+```
+This reads the build's `_powerforge/redirects.json` and writes HTML redirect pages for
+exact `Redirects` from `site.json`, including moved API routes. The pages contain a
+canonical link, immediate refresh, JavaScript navigation and a visible fallback link.
+GitHub Pages serves these files with HTTP 200; they are not HTTP 301 responses.
+JavaScript navigation preserves query strings when `PreserveQuery` is true and retains
+the incoming fragment unless the destination supplies one. Refresh and the fallback
+link use the configured destination without the incoming query or fragment.
+
+Only root-relative ASCII HTML page source paths, exact matches and redirect statuses
+301/302/307/308 are supported. Regex, wildcard and query-specific rules need a server
+redirect target. Internal destinations must already exist; HTTPS destinations may be
+external. All rules are validated before files are written. Existing content is never
+replaced, except an identical generated redirect on a repeat run. Symlinked metadata,
+source and destination paths are rejected. `dryRun` validates without writing.
+Trailing-slash routes identify directories, including dotted versions such as
+`/docs/v1.0/`, and map to their `index.html`. Explicit `.html` routes without a
+trailing slash remain files.
+Paths that require an existing or planned file to also act as a parent directory
+are rejected before writing.
+The static auditor recognizes generated static/API redirect pages and excludes only
+their navigation checks. Canonical pages still require navigation; redirect link,
+asset and other audit checks remain enabled according to the audit configuration.
+Case-distinct source URLs require a case-sensitive output directory. The existing
+filesystem helpers check each route directory, including Windows per-directory flags
+and Linux builds on case-insensitive mounted volumes. Ambiguous case aliases are
+rejected when directory semantics cannot be established without writing probe files.
+For incremental builds, an identical export may be repeated without rewriting matching
+files. Status-only changes do not alter the HTML. A clean site build is needed when
+changes would overwrite existing redirect HTML or leave stale generated redirects.
+The exporter also rejects destinations that are generated redirects. It never prunes site
+content. Use the build step's `clean: true` before all page and API generators.
+Interrupted writes leave reserved `.redirect-*.tmp` files; the exporter stops before
+writing until a clean build removes them. Use a separate `siteRoot` for each concurrent
+pipeline. If another process creates a destination after validation, export fails
+without replacing that file.
 
 #### cloudflare
 Purges Cloudflare cache or verifies `cf-cache-status` on selected URLs.
