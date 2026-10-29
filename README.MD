@@ -728,6 +728,7 @@ Build only the CLI tools:
 
 Start here:
 
+- [Source-backed Markdown examples](Docs/PowerForge.DocsSync.md)
 - [Docs/PSPublishModule.DotNetPublish.Quickstart.md](Docs/PSPublishModule.DotNetPublish.Quickstart.md)
 - [Docs/PSPublishModule.ProjectBuild.md](Docs/PSPublishModule.ProjectBuild.md)
 - [Docs/PSPublishModule.VirusTotalMonitor.md](Docs/PSPublishModule.VirusTotalMonitor.md)

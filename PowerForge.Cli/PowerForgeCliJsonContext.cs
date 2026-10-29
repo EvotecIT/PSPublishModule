@@ -11,6 +11,8 @@ namespace PowerForge.Cli;
     UseStringEnumConverter = true)]
 [JsonSerializable(typeof(JsonElement))]
 [JsonSerializable(typeof(string))]
+[JsonSerializable(typeof(MarkdownCodeSyncSpec))]
+[JsonSerializable(typeof(MarkdownCodeSyncResult))]
 [JsonSerializable(typeof(AppleSimulatorSessionReceipt))]
 [JsonSerializable(typeof(AppleSimulatorSessionResult))]
 [JsonSerializable(typeof(AppleSimulatorSessionStatus))]

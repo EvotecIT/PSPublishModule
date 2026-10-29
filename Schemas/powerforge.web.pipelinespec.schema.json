@@ -45,6 +45,7 @@
         { "$ref": "#/$defs/VerifyStep" },
         { "$ref": "#/$defs/DoctorStep" },
         { "$ref": "#/$defs/MarkdownFixStep" },
+        { "$ref": "#/$defs/DocsSyncStep" },
         { "$ref": "#/$defs/ApiDocsStep" },
         { "$ref": "#/$defs/XrefMergeStep" },
         { "$ref": "#/$defs/ChangelogStep" },
@@ -350,6 +351,19 @@
         "verifyFailOnNew": { "type": "boolean", "description": "Alias for verifyFailOnNewWarnings." },
         "verifyWarningPreviewCount": { "type": "integer", "minimum": 0, "description": "How many verify warnings to include in the thrown failure summary (default 2 in dev/fast, 5 otherwise)." },
         "verifyErrorPreviewCount": { "type": "integer", "minimum": 0, "description": "How many verify errors to include in the thrown failure summary (default 2 in dev/fast, 5 otherwise)." }
+      },
+      "required": ["task", "config"]
+    },
+    "DocsSyncStep": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "task": { "const": "docs-sync" },
+        "id": { "type": "string" },
+        "dependsOn": { "oneOf": [{ "type": "string" }, { "type": "array", "items": { "type": "string" } }] },
+        "modes": { "type": "array", "items": { "type": "string" } },
+        "config": { "type": "string", "description": "Path to a PowerForge documentation synchronization configuration." },
+        "apply": { "type": "boolean", "default": false, "description": "Write updates instead of failing on stale blocks." }
       },
       "required": ["task", "config"]
     },

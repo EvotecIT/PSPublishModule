@@ -38,6 +38,7 @@ namespace PowerForge.Web.Cli;
 [JsonSerializable(typeof(WebReleaseHubResult))]
 [JsonSerializable(typeof(WebPipelineResult))]
 [JsonSerializable(typeof(WebMarkdownFixResult))]
+[JsonSerializable(typeof(PowerForge.MarkdownCodeSyncSpec))]
 [JsonSerializable(typeof(WebContributionResult))]
 [JsonSerializable(typeof(WebContributionPostResult))]
 [JsonSerializable(typeof(WebContributionAuthorProfile))]

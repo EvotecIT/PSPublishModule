@@ -6,4 +6,9 @@ Start with the [PowerForge repository documentation](https://github.com/EvotecIT
 
 The package is licensed under the [MIT License](https://github.com/EvotecIT/PSPublishModule/blob/main/LICENSE).
 
+Use `MarkdownCodeSynchronizer` to check or refresh marked README and guide examples
+from local source files, and `SourceCodeReader` to extract a whole file or named
+region. See [source-backed Markdown examples](https://github.com/EvotecIT/PSPublishModule/blob/main/Docs/PowerForge.DocsSync.md)
+for configuration, CLI check/apply commands, and pipeline integration.
+
 Use `AgentPluginPackageService` to validate and package portable skills/MCP bundles with generated Codex and Claude compatibility metadata. See [agent plugin packaging](https://github.com/EvotecIT/PSPublishModule/blob/main/Docs/PowerForge.AgentPlugins.md) for the source layout, CLI commands, and consumer validation requirements.
