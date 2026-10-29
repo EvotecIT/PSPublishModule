@@ -35,7 +35,7 @@ public sealed class ModulePipelineApprovedModulesTests
     }
 
     [Fact]
-    public void Run_KeepsApprovedModuleWhenItsRuntimeSurfaceCannotBeInspected()
+    public void Run_OmitsApprovedModuleWhenItsRuntimeSurfaceCannotBeInspected()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
         try
@@ -52,7 +52,8 @@ public sealed class ModulePipelineApprovedModulesTests
             var requiredNames = ReadRequiredModuleNames(result.BuildResult.ManifestPath);
 
             Assert.Contains("PSWriteHTML", requiredNames, StringComparer.OrdinalIgnoreCase);
-            Assert.Contains("Graphimo", requiredNames, StringComparer.OrdinalIgnoreCase);
+            Assert.DoesNotContain("Graphimo", requiredNames, StringComparer.OrdinalIgnoreCase);
+            Assert.Contains("Graphimo", ReadRequiredModuleNames(Path.Combine(root.FullName, $"{moduleName}.psd1")), StringComparer.OrdinalIgnoreCase);
         }
         finally
         {
@@ -61,7 +62,7 @@ public sealed class ModulePipelineApprovedModulesTests
     }
 
     [Fact]
-    public void Run_KeepsApprovedModulesInManifest_WhenMergeMissingDisabled()
+    public void Run_OmitsApprovedModulesInManifest_WhenMergeMissingDisabled()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
         try
@@ -77,7 +78,7 @@ public sealed class ModulePipelineApprovedModulesTests
             var requiredNames = ReadRequiredModuleNames(result.BuildResult.ManifestPath);
 
             Assert.Contains("PSWriteHTML", requiredNames, StringComparer.OrdinalIgnoreCase);
-            Assert.Contains("Graphimo", requiredNames, StringComparer.OrdinalIgnoreCase);
+            Assert.DoesNotContain("Graphimo", requiredNames, StringComparer.OrdinalIgnoreCase);
         }
         finally
         {
@@ -86,7 +87,7 @@ public sealed class ModulePipelineApprovedModulesTests
     }
 
     [Fact]
-    public void Run_ClearsStaleSourceDependenciesButKeepsUninspectedApprovedDependency()
+    public void Run_ClearsStaleSourceDependenciesAndOmitsApprovedDependency()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
         try
@@ -152,7 +153,7 @@ public sealed class ModulePipelineApprovedModulesTests
             Assert.DoesNotContain("LegacyOnly", requiredNames, StringComparer.OrdinalIgnoreCase);
             // Source manifest dependencies are not authoritative; build configuration owns the generated manifest.
             Assert.DoesNotContain("Microsoft.PowerShell.Utility", requiredNames, StringComparer.OrdinalIgnoreCase);
-            Assert.Contains("Graphimo", requiredNames, StringComparer.OrdinalIgnoreCase);
+            Assert.DoesNotContain("Graphimo", requiredNames, StringComparer.OrdinalIgnoreCase);
         }
         finally
         {

@@ -3,6 +3,7 @@
 ## Unreleased
 ### What's Changed
 - Export exact route migrations as safe HTML redirect pages for GitHub Pages through the existing hosting pipeline step, preserving canonical content and API anchors.
+- Allow the public release entrypoint to bind its configured GitHub lanes to a process environment variable, preserving file credentials by default and keeping token values out of effective configuration and receipts.
 - Preserve the source bootstrapper through both deferred release passes and registry recovery, including frozen-source runs that skip module publication. Generate the current loader in staging, and report source-integrity failures as blocking the next operation without implying that earlier lanes have not published.
 - Remove each dotnet publish invocation's temporary staging directory after success or failure, retaining deployed output, checksum inputs, service state and other invocations' staging.
 - Decode approved signing lists consistently in Windows PowerShell 5.1 and PowerShell 7, and report macOS PFX imports as unsupported rather than falling back to keychain storage.

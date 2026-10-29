@@ -28,6 +28,8 @@ RequiredModule entries are written to the manifest RequiredModules. ExternalModu
 are written to PrivateData.PSData.ExternalModuleDependencies. EmbeddedModule entries are copied
 into the built module internals and are not emitted as manifest dependencies. ApprovedModule entries are
 used by merge/missing-function workflows and are not emitted as manifest dependencies.
+When the same module is both required and approved, the source retains its required declaration,
+while finalized manifests and dependency artefacts omit the approved module.
 
 Built-in Microsoft.PowerShell.* modules are ignored during manifest refresh because they are inbox runtime
 modules, not gallery-resolvable dependencies.

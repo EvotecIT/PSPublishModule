@@ -610,7 +610,6 @@ public sealed partial class ModulePipelineRunner
             usedExistingPsm1: false,
             requiredModules: Array.Empty<RequiredModuleReference>(),
             approvedModules: Array.Empty<string>(),
-            fullyInlinedApprovedModules: Array.Empty<string>(),
             dependentModules: Array.Empty<string>(),
             topLevelInlinedFunctions: 0,
             totalInlinedFunctions: 0,
@@ -623,7 +622,6 @@ public sealed partial class ModulePipelineRunner
         internal bool UsedExistingPsm1 { get; }
         internal RequiredModuleReference[] RequiredModules { get; }
         internal string[] ApprovedModules { get; }
-        internal string[] FullyInlinedApprovedModules { get; }
         internal string[] DependentModules { get; }
         internal int TopLevelInlinedFunctions { get; }
         internal int TotalInlinedFunctions { get; }
@@ -637,7 +635,6 @@ public sealed partial class ModulePipelineRunner
             bool usedExistingPsm1,
             RequiredModuleReference[] requiredModules,
             string[] approvedModules,
-            string[] fullyInlinedApprovedModules,
             string[] dependentModules,
             int topLevelInlinedFunctions,
             int totalInlinedFunctions,
@@ -650,7 +647,6 @@ public sealed partial class ModulePipelineRunner
             UsedExistingPsm1 = usedExistingPsm1;
             RequiredModules = requiredModules ?? Array.Empty<RequiredModuleReference>();
             ApprovedModules = approvedModules ?? Array.Empty<string>();
-            FullyInlinedApprovedModules = fullyInlinedApprovedModules ?? Array.Empty<string>();
             DependentModules = dependentModules ?? Array.Empty<string>();
             TopLevelInlinedFunctions = topLevelInlinedFunctions;
             TotalInlinedFunctions = totalInlinedFunctions;

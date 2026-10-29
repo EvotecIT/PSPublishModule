@@ -544,9 +544,8 @@ public sealed partial class ModulePipelineRunner
 
     private static RequiredModuleReference[] ResolveOutputRequiredModules(
         RequiredModuleReference[]? modules,
-        bool mergeMissing,
-        IReadOnlyCollection<string> fullyInlinedModules)
-        => RequiredModuleResolutionEngine.ResolveOutputRequiredModules(modules, mergeMissing, fullyInlinedModules);
+        IReadOnlyCollection<string> approvedModules)
+        => RequiredModuleResolutionEngine.ResolveOutputRequiredModules(modules, approvedModules);
 
     private static RequiredModuleDraftDescriptor[] ToRequiredModuleDraftDescriptors(IEnumerable<RequiredModuleDraft> drafts)
     {
