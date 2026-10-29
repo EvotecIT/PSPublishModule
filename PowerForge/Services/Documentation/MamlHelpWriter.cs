@@ -122,7 +122,7 @@ internal sealed class MamlHelpWriter
         {
             var setName = set.Name;
             var parameters = (cmd.Parameters ?? Enumerable.Empty<DocumentationParameterHelp>())
-                .Where(p => ParameterInSet(p, setName))
+                .Where(p => set.ParameterNames is null ? ParameterInSet(p, setName) : set.ParameterNames.Contains(p.Name, StringComparer.OrdinalIgnoreCase))
                 .ToArray();
             WriteSyntaxItem(writer, commandName, setName, parameters, set.Text);
         }
