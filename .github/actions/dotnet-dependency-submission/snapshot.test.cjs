@@ -99,7 +99,7 @@ test('uploader sends the complete edge-preserving payload and propagates API fai
     assert.equal(options.headers.Authorization, 'Bearer synthetic-token');
     const body = JSON.parse(options.body);
     assert.deepEqual(body.manifests['Main.csproj'].resolved[urls[1]].dependencies, [urls[2]]);
-    return {status: 201};
+    return {status: 201, json: async () => ({result: 'SUCCESS'})};
   };
   await submit(candidate(), environment(), {repository: {default_branch: 'main'}}, 'profile-linux', request);
   assert.equal(calls, 1);
@@ -107,10 +107,24 @@ test('uploader sends the complete edge-preserving payload and propagates API fai
 });
 
 test('uploader rejects malformed artifact paths and dependency edges before HTTP', () => {
+  for (const file of ['C:/absolute/Main.csproj', 'c:relative/Main.csproj']) {
+    const changed = candidate();
+    const manifest = changed.manifests['Main.csproj'];
+    delete changed.manifests['Main.csproj'];
+    changed.manifests[file] = {...manifest, name: file, file: {source_location: file}};
+    assert.throws(() => validateCandidate(changed), /manifest path/);
+  }
   const payload = candidate();
   payload.manifests['../outside.csproj'] = payload.manifests['Main.csproj'];
   assert.throws(() => validateCandidate(payload), /outside the scan root|manifest path/);
   delete payload.manifests['../outside.csproj'];
   payload.manifests['Main.csproj'].resolved[urls[1]].dependencies = ['toString'];
   assert.throws(() => validateCandidate(payload), /dependency or edge/);
+});
+
+test('HTTP 201 without an applied snapshot result is a failure', async () => {
+  for (const result of ['ACCEPTED', 'INVALID', 'UNRECOGNIZED', undefined]) {
+    await assert.rejects(submit(candidate(), environment(), {repository: {default_branch: 'main'}}, 'profile-linux',
+      async () => ({status: 201, json: async () => ({result, message: 'Snapshot not applied'})})), /not applied/);
+  }
 });

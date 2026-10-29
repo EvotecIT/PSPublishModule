@@ -27,6 +27,8 @@ async function submit(candidate, environment, event, correlator, request = fetch
       'Content-Type': 'application/json', 'X-GitHub-Api-Version': '2026-03-10'}, body: JSON.stringify(body)
   });
   if (response.status !== 201) throw new Error(`Snapshot upload failed: HTTP ${response.status}`);
+  const result = await response.json();
+  if (result?.result !== 'SUCCESS') throw new Error(`Snapshot not applied: ${result?.result || 'missing result'}: ${result?.message || 'No result message'}`);
 }
 
 if (require.main === module) {

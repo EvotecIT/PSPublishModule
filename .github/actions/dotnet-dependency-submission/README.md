@@ -68,7 +68,9 @@ pushes and manual runs, and make it depend on every profile's successful scan:
 ```
 
 The upload mode validates the JSON and binds its SHA, ref, detector and job to the
-current run. It independently rejects pull requests, `pull_request_target`, tags
+current run. It requires HTTP 201 and an API `SUCCESS` result before reporting
+an applied snapshot; `ACCEPTED`, `INVALID` or missing results fail the job.
+It independently rejects pull requests, `pull_request_target`, tags
 and non-default branches. It invokes no scanner. Use distinct stable correlators
 for native host profiles. Download only named artifacts from the same workflow
 run; never promote pull-request artifacts into a privileged workflow.

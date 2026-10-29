@@ -64,7 +64,7 @@ function validateCandidate(candidate) {
     throw new Error('Invalid dependency snapshot candidate.');
   }
   for (const [file, manifest] of Object.entries(candidate.manifests)) {
-    if (relativeProject('/repository', `/repository/${file}`) !== file || manifest.name !== file || manifest.file?.source_location !== file) {
+    if (/^[A-Za-z]:/.test(file) || relativeProject('/repository', `/repository/${file}`) !== file || manifest.name !== file || manifest.file?.source_location !== file) {
       throw new Error('Invalid snapshot manifest path.');
     }
     const resolved = manifest.resolved;
