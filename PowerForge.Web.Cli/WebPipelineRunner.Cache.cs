@@ -35,6 +35,9 @@ internal static partial class WebPipelineRunner
             return false;
         if (task.Equals("exec", StringComparison.OrdinalIgnoreCase))
             return false;
+        // Explicit source paths live in a separate configuration; always observe their current bytes.
+        if (task.Equals("docs-sync", StringComparison.OrdinalIgnoreCase))
+            return false;
         // MSBuild owns transitive source/resource freshness and output validation.
         // A pipeline fingerprint of project paths cannot replace that graph.
         if (task.Equals("dotnet-build", StringComparison.OrdinalIgnoreCase) ||

@@ -31,6 +31,9 @@ internal static partial class WebPipelineRunner
             case "markdown-fix":
                 ExecuteMarkdownFix(step, baseDir, stepResult);
                 break;
+            case "docs-sync":
+                ExecuteDocsSync(step, baseDir, stepResult);
+                break;
             case "apidocs":
                 ExecuteApiDocs(step, label, baseDir, fast, effectiveMode, logger, stepResult);
                 break;

@@ -9,6 +9,8 @@ internal static partial class Program
     private static int CommandDocs(string[] filteredArgs, CliOptions cli, ILogger logger)
     {
         var argv = filteredArgs.Skip(1).ToArray();
+        if (argv.Length > 0 && argv[0].Equals("sync", StringComparison.OrdinalIgnoreCase))
+            return CommandDocsSync(argv.Skip(1).ToArray(), logger);
         var configPath = TryGetOptionValue(argv, "--config");
         var outputJson = IsJsonOutput(argv);
 

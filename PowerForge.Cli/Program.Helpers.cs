@@ -14,6 +14,7 @@ internal static partial class Program
       powerforge build --name <ModuleName> --project-root <path> --version <X.Y.Z> [--csproj <path>] [--staging <path>] [--configuration Release] [--framework <tfm>]* [--author <name>] [--company <name>] [--description <text>] [--tag <tag>]* [--output json]
       powerforge build [--config <BuildSpec|Pipeline>.json] [--project-root <path>] [--output json]
       powerforge docs [--config <Pipeline.json>] [--project-root <path>] [--output json]
+      powerforge docs sync --config <docs-sync.json> [--apply] [--output json]
       powerforge validate-release --config <validation.json> [--project-root <path>] [--version <version>] [--variable <Name=Value>] [--output json]
       powerforge pack [--config <Pipeline.json>] [--project-root <path>] [--out <path>] [--output json]
       powerforge template --script <Build-Module.ps1> [--out <path>] [--project-root <path>] [--powershell <path>] [--output json]

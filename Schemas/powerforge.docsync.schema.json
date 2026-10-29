@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "powerforge.docsync.schema.json",
+  "title": "PowerForge source-backed Markdown code blocks",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "rootPath": { "type": "string", "minLength": 1, "description": "Repository root relative to this configuration file." },
+    "files": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string", "minLength": 1 }, "description": "Explicit Markdown file paths relative to rootPath." }
+  },
+  "required": ["files"]
+}

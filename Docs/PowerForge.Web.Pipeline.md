@@ -207,6 +207,23 @@ Notes:
   - `warningPreviewCount`: number of warnings included in the thrown failure summary
   - `errorPreviewCount`: number of errors included in the thrown failure summary
 
+#### docs-sync
+
+Check source-backed Markdown code blocks without building a website:
+
+```json
+{
+  "task": "docs-sync",
+  "config": "../Build/docs-sync.json"
+}
+```
+
+The task fails when selected blocks are stale. Set `apply: true` only for an
+explicit refresh operation. Source files are checked on every run, including
+cached pipelines. See [source-backed Markdown examples](PowerForge.DocsSync.md)
+for marker syntax, configuration paths, and the standalone `powerforge docs sync`
+command.
+
 #### markdown-fix
 Normalizes markdown hygiene issues in content folders (dry-run by default).
 ```json
