@@ -3,6 +3,22 @@ namespace PowerForge.Web;
 /// <summary>Shared HTML redirect rendering for static hosts and API compatibility pages.</summary>
 internal static class WebRedirectPage
 {
+    /// <summary>Recognizes reserved generated pages without treating authored examples or noindex content as redirects.</summary>
+    internal static bool IsGenerated(AngleSharp.Dom.IDocument document, bool staticOnly = false)
+    {
+        var head = document.Head;
+        if (head is null) return false;
+        var metas = head.QuerySelectorAll("meta");
+        var marker = metas.Any(meta => meta.GetAttribute("data-pf") == "static-redirect" ||
+            (!staticOnly && meta.GetAttribute("data-pf") == "api-docs-legacy-alias"));
+        var refresh = metas.Any(meta => string.Equals(meta.GetAttribute("http-equiv"), "refresh", StringComparison.OrdinalIgnoreCase) &&
+            !string.IsNullOrWhiteSpace(meta.GetAttribute("content")));
+        var canonical = head.QuerySelectorAll("link").Any(link =>
+            (link.GetAttribute("rel") ?? string.Empty).Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries).Contains("canonical", StringComparer.OrdinalIgnoreCase) &&
+            !string.IsNullOrWhiteSpace(link.GetAttribute("href")));
+        return marker && refresh && canonical;
+    }
+
     internal static string Render(string canonical, string marker, bool preserveQueryAndFragment = false, bool preserveQuery = true)
     {
         var encoded = System.Web.HttpUtility.HtmlEncode(canonical);

@@ -110,17 +110,7 @@ internal static class WebStaticRedirectExporter
         if (!possibleMarker) return false;
         // Most pages need only the prefix read. Parse the complete reserved-marker candidate
         // so a long, valid destination URL cannot truncate its refresh or canonical tags.
-        var head = HtmlParser.ParseWithAngleSharp(prefix + reader.ReadToEnd()).Head;
-        if (head is null) return false;
-        var metas = head.QuerySelectorAll("meta");
-        var marker = metas.Any(meta => meta.GetAttribute("data-pf") == "static-redirect" ||
-            (!staticOnly && meta.GetAttribute("data-pf") == "api-docs-legacy-alias"));
-        var refresh = metas.Any(meta => string.Equals(meta.GetAttribute("http-equiv"), "refresh", StringComparison.OrdinalIgnoreCase) &&
-            !string.IsNullOrWhiteSpace(meta.GetAttribute("content")));
-        var canonical = head.QuerySelectorAll("link").Any(link =>
-            (link.GetAttribute("rel") ?? string.Empty).Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries).Contains("canonical", StringComparer.OrdinalIgnoreCase) &&
-            !string.IsNullOrWhiteSpace(link.GetAttribute("href")));
-        return marker && refresh && canonical;
+        return WebRedirectPage.IsGenerated(HtmlParser.ParseWithAngleSharp(prefix + reader.ReadToEnd()), staticOnly);
     }
 
     private static string ResolvePage(string root, string route, Dictionary<string, Dictionary<string, string>> spellings)

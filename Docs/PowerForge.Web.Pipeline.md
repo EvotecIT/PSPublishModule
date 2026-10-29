@@ -1840,6 +1840,9 @@ Trailing-slash routes identify directories, including dotted versions such as
 trailing slash remain files.
 Paths that require an existing or planned file to also act as a parent directory
 are rejected before writing.
+The static auditor recognizes generated static/API redirect pages and excludes only
+their navigation checks. Canonical pages still require navigation; redirect link,
+asset and other audit checks remain enabled according to the audit configuration.
 Case-distinct source URLs require a case-sensitive output directory. The existing
 filesystem helpers check each route directory, including Windows per-directory flags
 and Linux builds on case-insensitive mounted volumes. Ambiguous case aliases are

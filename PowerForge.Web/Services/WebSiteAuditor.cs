@@ -440,7 +440,7 @@ public static partial class WebSiteAuditor
                              MatchesAny(options.IgnoreNavFor, relativePath);
             var prefixIgnored = navIgnorePrefixes.Length > 0 &&
                                 navIgnorePrefixes.Any(prefix => relativePath.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
-            var profileIgnored = navProfile?.Ignore ?? false;
+            var profileIgnored = (navProfile?.Ignore ?? false) || WebRedirectPage.IsGenerated(doc);
             if (options.CheckNavConsistency && (navIgnored || prefixIgnored || profileIgnored))
                 navIgnoredCount++;
             if (options.CheckNavConsistency && !navIgnored && !prefixIgnored && !profileIgnored)
