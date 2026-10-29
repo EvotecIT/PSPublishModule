@@ -14,7 +14,8 @@ $cases = @(
     @{ Name = 'write-only-svg'; Formats = "SVG SVG -w+`nMVG MVG rw-`nPNG PNG rw-"; Reject = $true },
     @{ Name = 'legacy'; Formats = $classic; Version = 'ImageMagick 6.9.12'; Reject = $false },
     @{ Name = 'legacy-read-only-mvg'; Formats = "SVG SVG rw+`nMVG MVG r--`nPNG PNG rw-"; Version = 'ImageMagick 6.9.12'; Reject = $true },
-    @{ Name = 'modern-without-mvg'; Formats = "SVG SVG rw+`nPNG PNG rw-"; Reject = $false },
+    @{ Name = 'modern-without-mvg'; Formats = "SVG SVG rw+`nPNG PNG rw-"; Reject = $true },
+    @{ Name = 'modern-mvg-denied'; Formats = $classic; MvgProbe = 'exit 1'; Reject = $true },
     @{ Name = 'policy-denied'; Formats = $classic; Probe = 'exit 1'; Reject = $true },
     @{ Name = 'legacy-policy-denied'; Formats = $classic; Version = 'ImageMagick 6.9.12'; Probe = 'exit 1'; Reject = $true },
     @{ Name = 'legacy-mvg-denied'; Formats = $classic; Version = 'ImageMagick 6.9.12'; MvgProbe = 'exit 1'; Reject = $true },
@@ -60,8 +61,7 @@ fi
         try { & $installer -Enabled $true } catch { $failure = $_ }
         if (-not $case.Reject -and $null -eq $failure) {
             $calls = Get-Content -Raw (Join-Path $bin 'calls.log')
-            $legacy = $case.Version -match 'ImageMagick 6\.'
-            if ($legacy -ne ($calls -match 'MVG:') -or $calls -notmatch 'PNG32:') {
+            if ($calls -notmatch 'MVG:' -or $calls -notmatch 'PNG32:') {
                 $failure = 'Probe did not exercise the runtime rendering route.'
             }
         }

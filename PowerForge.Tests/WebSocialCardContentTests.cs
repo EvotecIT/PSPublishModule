@@ -197,7 +197,7 @@ public sealed class WebSocialCardContentTests : IDisposable
         var page = Page();
         var first = WebSiteBuilder.CreateSocialCardGenerationPlan(spec, page, "Terminal | Example", "Description", "Example", _root)!;
         Assert.Equal(OperatingSystem.IsLinux()
-            ? "assets/social/generated/docs-terminal-608e28956a.png"
+            ? "assets/social/generated/docs-terminal-bf2d3c9a8a.png"
             : "assets/social/generated/docs-terminal-15010081e3.png", first.RelativePath);
         var firstSvg = WebSocialCardGenerator.RenderSvg(first.RenderOptions);
         var roundTrip = JsonSerializer.Deserialize<SiteSpec>(JsonSerializer.Serialize(spec))!;
