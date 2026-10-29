@@ -7,7 +7,8 @@ internal static partial class Program
     private static int CommandDocsSync(string[] argv, ILogger logger)
     {
         const string usage = "Usage: powerforge docs sync --config <docs-sync.json> [--apply] [--output json]";
-        if (argv.Contains("--help") || argv.Contains("-h")) { Console.WriteLine(usage); return 0; }
+        argv = argv.TakeWhile(value => value != "--").ToArray();
+        if (argv.Contains("--help", StringComparer.OrdinalIgnoreCase) || argv.Contains("-h", StringComparer.OrdinalIgnoreCase)) { Console.WriteLine(usage); return 0; }
         var outputJson = IsJsonOutput(argv);
         try
         {
@@ -17,7 +18,7 @@ internal static partial class Program
             var spec = JsonSerializer.Deserialize(File.ReadAllText(fullPath), CliJson.Context.MarkdownCodeSyncSpec)
                 ?? throw new InvalidDataException("Documentation synchronization configuration is empty.");
             spec.RootPath = ResolvePathFromBase(Path.GetDirectoryName(fullPath)!, spec.RootPath);
-            var apply = argv.Contains("--apply");
+            var apply = argv.Contains("--apply", StringComparer.OrdinalIgnoreCase);
             var result = MarkdownCodeSynchronizer.Synchronize(spec, apply);
             var exitCode = apply || result.ChangedFiles.Length == 0 ? 0 : 1;
             if (outputJson)

@@ -36,6 +36,10 @@ In the source file, use `#region QuickStart` and `#endregion`. Region names matc
 exactly and must be unique in the selected file. Nested region directives are
 removed from the displayed excerpt; their code is retained. Omit `region` to
 include the entire file. Common indentation and outer blank lines are removed.
+Region extraction recognizes directive lines; it does not parse C# raw strings or
+PowerShell here-strings. When their content contains directive-like lines, select
+a whole source file instead. Sources must not depend on their generated blocks;
+a whole-file source pointing to its own document is rejected.
 
 The language is inferred for C#, PowerShell, JSON and XML, with `text` as the
 fallback. Add `language="typescript"`, for example, to select a different fence
@@ -62,6 +66,10 @@ block. Markdown and source files use UTF-8; an existing UTF-8 BOM, line endings,
 final newline and surrounding prose are preserved. Validation failures leave all
 documents unchanged. Updates replace individual files; an I/O failure is not a
 transaction across the complete document set.
+Run against a trusted, stable checkout. Selected documents and source paths must
+not change during the operation. Path validation and the pre-write byte check do
+not lock files or sandbox concurrent local writers; a concurrent save or path
+replacement can race the final file operation.
 
 Synchronization proves that the displayed code matches its source. Compile and
 run the example separately to verify its behavior. Package README examples should

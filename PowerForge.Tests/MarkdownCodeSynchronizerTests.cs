@@ -32,6 +32,61 @@ public sealed class MarkdownCodeSynchronizerTests : IDisposable
     }
 
     [Fact]
+    public void Synchronize_MixedNewlines_UsesEachOpeningMarkersLineEnding()
+    {
+        Write("source.cs", "var value = 42;");
+        var lf = Marker("source.cs") + "\nstale\n<!-- /powerforge:code -->\n";
+        var crlf = lf.Replace("\n", "\r\n");
+        Write("README.md", "# Header\r\n" + lf + crlf);
+        MarkdownCodeSynchronizer.Synchronize(Spec("README.md"), true);
+        var expectedLf = lf.Replace("stale\n", "```csharp\nvar value = 42;\n```\n");
+        Assert.Equal("# Header\r\n" + expectedLf + expectedLf.Replace("\n", "\r\n"), File.ReadAllText(Path.Combine(_root, "README.md")));
+        Assert.Empty(MarkdownCodeSynchronizer.Synchronize(Spec("README.md")).ChangedFiles);
+    }
+
+    [Theory]
+    [InlineData("four-spaces")]
+    [InlineData("tab")]
+    [InlineData("invalid-backtick-info")]
+    public void Synchronize_IndentedCodeFence_DoesNotHideLaterManagedBlocks(string indentationKind)
+    {
+        Write("source.cs", "var value = 42;");
+        var indentation = indentationKind == "tab" ? "\t" : "    ";
+        var fenceLine = indentationKind == "invalid-backtick-info" ? "```bad`info" : indentation + "```";
+        Write("README.md", Block("source.cs") + "\n" + fenceLine + "\n" + indentation + "indented example\n\n" + Block("source.cs"));
+        var check = MarkdownCodeSynchronizer.Synchronize(Spec("README.md"));
+        Assert.Equal(2, check.BlockCount);
+        MarkdownCodeSynchronizer.Synchronize(Spec("README.md"), true);
+        Assert.Empty(MarkdownCodeSynchronizer.Synchronize(Spec("README.md")).ChangedFiles);
+    }
+
+    [Fact]
+    public void Synchronize_WholeDocumentAsItsOwnSource_IsRejectedWithoutWriting()
+    {
+        var document = Block("./README.md");
+        Write("README.md", document);
+        Assert.Throws<InvalidDataException>(() => MarkdownCodeSynchronizer.Synchronize(Spec("README.md"), true));
+        Assert.Equal(document, File.ReadAllText(Path.Combine(_root, "README.md")));
+    }
+
+    [Fact]
+    public void Read_CarriageReturnSources_NormalizesRegionAndWholeFile()
+    {
+        Write("source.cs", "#region Pick\r    var value = 42;\r#endregion\r");
+        Assert.Equal("var value = 42;", SourceCodeReader.Read(_root, "source.cs", "Pick"));
+        Assert.Equal("#region Pick\n    var value = 42;\n#endregion", SourceCodeReader.Read(_root, "source.cs"));
+    }
+
+    [Fact]
+    public void Read_FilesystemRoot_ResolvesFromThatRoot()
+    {
+        Write("source.cs", "var value = 42;");
+        var filesystemRoot = Path.GetPathRoot(_root)!;
+        var relative = Path.GetRelativePath(filesystemRoot, Path.Combine(_root, "source.cs"));
+        Assert.Equal("var value = 42;", SourceCodeReader.Read(filesystemRoot, relative));
+    }
+
+    [Fact]
     public void Synchronize_RemovedMarkers_RejectsVacuousSuccess()
     {
         Write("README.md", "# Guide\n\n```csharp\nvar number = 1;\n```\n");

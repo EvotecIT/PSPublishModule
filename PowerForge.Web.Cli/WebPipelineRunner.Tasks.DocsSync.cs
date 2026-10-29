@@ -16,6 +16,6 @@ internal static partial class WebPipelineRunner
         stepResult.Success = apply || result.ChangedFiles.Length == 0;
         stepResult.Message = $"Checked {result.BlockCount} code blocks in {result.FileCount} Markdown files; {result.ChangedFiles.Length} {(apply ? "updated" : "stale")} files.";
         if (!stepResult.Success)
-            throw new InvalidOperationException(stepResult.Message + " Run powerforge docs sync --config " + config + " --apply. Stale: " + string.Join(", ", result.ChangedFiles));
+            throw new InvalidOperationException(stepResult.Message + " Run powerforge docs sync --config \"" + config + "\" --apply. Stale: " + string.Join(", ", result.ChangedFiles));
     }
 }

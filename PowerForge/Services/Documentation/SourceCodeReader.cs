@@ -23,7 +23,7 @@ public static class SourceCodeReader
         var path = ResolveFile(rootPath, sourcePath);
         var bytes = File.ReadAllBytes(path);
         var offset = bytes.Length >= 3 && bytes[0] == 0xef && bytes[1] == 0xbb && bytes[2] == 0xbf ? 3 : 0;
-        var text = Utf8.GetString(bytes, offset, bytes.Length - offset).Replace("\r\n", "\n");
+        var text = Utf8.GetString(bytes, offset, bytes.Length - offset).Replace("\r\n", "\n").Replace('\r', '\n');
         if (region is null) return Normalize(text.Split('\n'));
         if (string.IsNullOrWhiteSpace(region)) throw new ArgumentException("Region name is empty.", nameof(region));
 
@@ -64,16 +64,17 @@ public static class SourceCodeReader
     {
         if (string.IsNullOrWhiteSpace(relativePath) || Path.IsPathRooted(relativePath))
             throw new ArgumentException("An explicit root-relative file path is required: " + relativePath);
-        var root = Path.GetFullPath(rootPath).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var root = Path.GetFullPath(rootPath);
+        var prefix = root.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
         var path = Path.GetFullPath(Path.Combine(root, relativePath));
         var comparison = Path.DirectorySeparatorChar == '\\' ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
-        if (!path.StartsWith(root + Path.DirectorySeparatorChar, comparison))
+        if (!path.StartsWith(prefix, comparison))
             throw new InvalidDataException("File is outside the documentation root: " + relativePath);
         for (var current = path; current is not null; current = Path.GetDirectoryName(current))
         {
             if ((File.GetAttributes(current) & FileAttributes.ReparsePoint) != 0)
                 throw new InvalidDataException("Linked documentation paths are not supported: " + current);
-            if (string.Equals(current, root, comparison)) break;
+            if (string.Equals(current.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar), root.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar), comparison)) break;
         }
         if (!File.Exists(path)) throw new FileNotFoundException("Documentation source file does not exist.", path);
         return path;

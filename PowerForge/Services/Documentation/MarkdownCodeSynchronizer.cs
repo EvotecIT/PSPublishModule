@@ -70,21 +70,24 @@ public static class MarkdownCodeSynchronizer
     {
         var lines = text.Split('\n');
         var output = new StringBuilder();
-        var newline = text.Contains("\r\n") ? "\r\n" : "\n";
         string? fence = null;
         blocks = 0;
         for (var i = 0; i < lines.Length; i++)
         {
             var line = lines[i].TrimEnd('\r');
             var trimmed = line.TrimStart();
-            TrackFence(trimmed, ref fence);
+            TrackFence(line, ref fence);
             if (fence is null && trimmed.StartsWith(Start, StringComparison.Ordinal))
             {
+                var newline = lines[i].EndsWith("\r", StringComparison.Ordinal) ? "\r\n" : "\n";
                 if (line != trimmed || !line.EndsWith(" -->", StringComparison.Ordinal))
                     throw new InvalidDataException($"Invalid code marker in {file}:{i + 1}; markers must occupy an unindented line.");
                 var attributes = ParseAttributes(line.Substring(Start.Length, line.Length - Start.Length - 4), file);
                 var source = attributes["source"];
                 attributes.TryGetValue("region", out var region);
+                var pathComparison = Path.DirectorySeparatorChar == '\\' ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+                if (region is null && string.Equals(SourceCodeReader.ResolveFile(root, source), SourceCodeReader.ResolveFile(root, file), pathComparison))
+                    throw new InvalidDataException("A whole-file source cannot be its own generated document: " + file);
                 var code = SourceCodeReader.Read(root, source, region);
                 var language = attributes.TryGetValue("language", out var specified) ? specified : InferLanguage(source);
                 if (!Regex.IsMatch(language, @"^[A-Za-z0-9_+-]*$")) throw new InvalidDataException("Invalid code language in " + file);
@@ -96,7 +99,7 @@ public static class MarkdownCodeSynchronizer
                     if (blockFence is null && contentLine == End) break;
                     if (blockFence is null && contentLine.TrimStart().StartsWith(Start, StringComparison.Ordinal))
                         throw new InvalidDataException("Nested code marker in " + file);
-                    TrackFence(contentLine.TrimStart(), ref blockFence);
+                    TrackFence(contentLine, ref blockFence);
                     last++;
                 }
                 if (last == lines.Length) throw new InvalidDataException("Missing closing code marker in " + file);
@@ -119,9 +122,13 @@ public static class MarkdownCodeSynchronizer
 
     private static void TrackFence(string line, ref string? fence)
     {
+        var indentation = line.Length - line.TrimStart(' ').Length;
+        if (indentation > 3) return;
+        line = line.Substring(indentation);
         var match = Fence.Match(line);
         if (!match.Success) return;
         var marker = match.Groups["fence"].Value;
+        if (fence is null && marker[0] == '`' && match.Groups["info"].Value.Contains("`")) return;
         if (fence is null) fence = marker;
         else if (marker[0] == fence[0] && marker.Length >= fence.Length && string.IsNullOrWhiteSpace(match.Groups["info"].Value)) fence = null;
     }
