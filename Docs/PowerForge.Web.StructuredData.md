@@ -30,7 +30,9 @@ Its URL falls back to the site base URL. Existing logo, contact and `sameAs`
 settings still apply. Set `meta.schema.page_type: ContactPage` on a contact page.
 Site-relative organization contact URLs follow published translations, including
 translated slugs. If a translation is absent, the existing contact destination
-remains available. Explicit absolute contact URLs retain their configured destination. Application markup
+remains available. Explicit absolute contact URLs retain their configured destination.
+A translated URL that supplies a query or fragment keeps that suffix; otherwise
+it inherits the contact URL’s configured query or fragment. Application markup
 declares the language of its page metadata. Breadcrumb labels use page links,
 not section anchors or query links; when the brand supplies the home link,
 the site name is the fallback home label.

@@ -75,21 +75,26 @@ public sealed class WebSiteStructuredContactRoutingTests
     }
 
     [Theory]
-    [InlineData("https://help.example/support/")]
-    [InlineData("https://help.example/pomoc/")]
-    public void Render_ExplicitTranslationOriginWinsOverMatchingLocalPaths(string translatedUrl)
+    [InlineData("https://help.example/support/", "https://help.example/support/#contact")]
+    [InlineData("https://help.example/pomoc/", "https://help.example/pomoc/#contact")]
+    [InlineData("https://help.example/pomoc/#form", "https://help.example/pomoc/#form")]
+    [InlineData("https://help.example/pomoc/?topic=setup", "https://help.example/pomoc/?topic=setup")]
+    [InlineData("https://help.example/pomoc/?topic=setup#form", "https://help.example/pomoc/?topic=setup#form")]
+    [InlineData("/pl/pomoc/#form", "https://product.example/pl/pomoc/#form")]
+    [InlineData("/pl/pomoc?topic=setup#form", "https://product.example/pl/pomoc/?topic=setup#form")]
+    public void Render_ExplicitTranslationOwnsItsOriginAndSuffix(string translatedUrl, string expected)
     {
         var source = new ContentItem { OutputPath = "/support/", Language = "en", TranslationKey = "support",
             Meta = new Dictionary<string, object?> { ["i18n"] = new Dictionary<string, object?> {
                 ["routes"] = new Dictionary<string, object?> { ["pl"] = translatedUrl }
             } } };
         var page = new ContentItem { OutputPath = "/pl/", Language = "pl" };
-        var site = new SiteSpec { BaseUrl = "https://product.example", StructuredData = new StructuredDataSpec {
+        var site = new SiteSpec { BaseUrl = "https://product.example", TrailingSlash = TrailingSlashMode.Always, StructuredData = new StructuredDataSpec {
             Enabled = true, WebPage = true, Organization = true, OrganizationContactUrl = "/support/#contact"
         }, Localization = new LocalizationSpec { Enabled = true, DefaultLanguage = "en", Languages = [
             new LanguageSpec { Code = "en", Default = true }, new LanguageSpec { Code = "pl" }
         ] } };
-        AssertContactUrl(WebSiteBuilder.RenderStructuredData(site, page, [], null, [source, page]), translatedUrl + "#contact");
+        AssertContactUrl(WebSiteBuilder.RenderStructuredData(site, page, [], null, [source, page]), expected);
     }
 
     private static void AssertContactUrl(string html, string expected)

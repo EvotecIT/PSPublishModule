@@ -22,14 +22,19 @@ public static partial class WebSiteBuilder
 
         var route = ResolveLocalizedPageUrl(spec, localization, source, allItems,
             item.Language, source.Language);
-        if (IsAbsoluteHttpUrl(route))
-            return route + suffix;
+        if (IsAbsoluteHttpUrl(route) || TryResolveExplicitLocalizedRoute(spec, localization, source, item.Language, out _))
+        {
+            // An explicit translated URL owns its query/fragment. Only inherit the
+            // configured contact suffix when that destination does not supply one.
+            var routeSuffixIndex = route.IndexOfAny(['?', '#']);
+            var routePath = routeSuffixIndex < 0 ? route : route[..routeSuffixIndex];
+            var routeSuffix = routeSuffixIndex < 0 ? suffix : route[routeSuffixIndex..];
+            return ResolveAbsolutePublicUrl(spec, localization, item.Language, routePath) + routeSuffix;
+        }
         var destination = allItems.FirstOrDefault(page => !page.Draft &&
             string.Equals(NormalizeRouteForMatch(page.OutputPath), NormalizeRouteForMatch(route), StringComparison.OrdinalIgnoreCase));
         if (destination is not null)
             return ResolveAbsolutePublicUrl(spec, localization, destination.Language, destination.OutputPath) + suffix;
-        if (TryResolveExplicitLocalizedRoute(spec, localization, source, item.Language, out _))
-            return ResolveAbsolutePublicUrl(spec, localization, item.Language, route) + suffix;
 
         // Missing translations must not create a contact link to an unbuilt locale route.
         return ResolveAbsolutePublicUrl(spec, localization, source.Language, source.OutputPath) + suffix;

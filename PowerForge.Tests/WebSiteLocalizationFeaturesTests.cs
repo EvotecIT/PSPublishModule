@@ -791,8 +791,11 @@ public class WebSiteLocalizationFeaturesTests
         }
     }
 
-    [Fact]
-    public void Build_LocalizedPages_RespectExplicitI18nRoutes_WhenTranslationKeysDiffer()
+    [Theory]
+    [InlineData("/pl/docs/faq-polski/", "/pl/docs/faq-polski/")]
+    [InlineData("/pl/docs/faq-polski#answer", "/pl/docs/faq-polski/#answer")]
+    [InlineData("/pl/docs/faq-polski?topic=setup#answer", "/pl/docs/faq-polski/?topic=setup#answer")]
+    public void Build_LocalizedPages_RespectExplicitI18nRoutes_WhenTranslationKeysDiffer(string polishRoute, string expectedRoute)
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-localization-features-explicit-routes-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
@@ -805,12 +808,12 @@ public class WebSiteLocalizationFeaturesTests
             Directory.CreateDirectory(docsPlPath);
 
             File.WriteAllText(Path.Combine(docsEnPath, "faq.md"),
-                """
+                $$"""
                 ---
                 title: FAQ EN
                 slug: faq-english
                 translation_key: docs:faq-en
-                i18n.routes.pl: /pl/docs/faq-polski/
+                i18n.routes.pl: {{polishRoute}}
                 ---
 
                 # FAQ EN
@@ -839,7 +842,7 @@ public class WebSiteLocalizationFeaturesTests
 
             var enHtml = File.ReadAllText(enHtmlPath);
             var plHtml = File.ReadAllText(plHtmlPath);
-            Assert.Contains("hreflang=\"pl\" href=\"https://example.test/pl/docs/faq-polski/\"", enHtml, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains($"hreflang=\"pl\" href=\"https://example.test{expectedRoute}\"", enHtml, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("hreflang=\"en\" href=\"https://example.test/docs/faq-english/\"", plHtml, StringComparison.OrdinalIgnoreCase);
         }
         finally
