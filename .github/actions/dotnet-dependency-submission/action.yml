@@ -16,6 +16,9 @@ inputs:
     description: Space-separated workload identifiers to install before restore.
     required: false
     default: ''
+  workload-version:
+    description: Optional exact workload-set version for the selected SDK feature band.
+    default: ''
   global-json-file:
     description: Repository SDK policy file.
     required: false
@@ -55,12 +58,14 @@ runs:
       env:
         POWERFORGE_DEPENDENCY_PROJECTS: ${{ inputs.projects-json }}
         POWERFORGE_DEPENDENCY_WORKLOADS: ${{ inputs.workloads }}
+        POWERFORGE_DEPENDENCY_WORKLOAD_VERSION: ${{ inputs.workload-version }}
         MSBUILDDISABLENODEREUSE: '1'
         DOTNET_CLI_USE_MSBUILD_SERVER: '0'
       run: |
         & (Join-Path $env:GITHUB_ACTION_PATH 'Restore-DependencyInputs.ps1') `
           -ProjectsJson $env:POWERFORGE_DEPENDENCY_PROJECTS `
-          -Workloads $env:POWERFORGE_DEPENDENCY_WORKLOADS
+          -Workloads $env:POWERFORGE_DEPENDENCY_WORKLOADS `
+          -WorkloadVersion $env:POWERFORGE_DEPENDENCY_WORKLOAD_VERSION
     - name: Stage dependency graphs
       id: stage
       shell: pwsh

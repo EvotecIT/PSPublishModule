@@ -47,7 +47,12 @@ import. This prepares graphs without invoking the submission action or scanner.
 Never promote artifacts from pull-request runs into a privileged workflow.
 
 The SDK follows `global.json` through the shared setup action. Workloads install
-before every selected input restores. A failed installation or restore stops the
+before every selected input restores. By default, installation uses the SDK's
+existing manifests. Set `workload-version` to an exact workload-set version when
+a project requires targeting packs newer than those bundled with that SDK. The
+action passes it to `dotnet workload install --version`, without
+`--skip-manifest-update`; the set must support the selected SDK feature band.
+A failed installation or restore stops the
 job. At least one asset graph must exist before export. No build, signing, native
 application launch or package publication is involved.
 

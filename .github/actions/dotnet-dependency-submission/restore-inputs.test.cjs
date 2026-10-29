@@ -15,8 +15,8 @@ function fixture(t) {
   return root;
 }
 
-function run(root, projects, workloads = '') {
-  return spawnSync('pwsh', ['-NoLogo', '-NoProfile', '-File', script, '-ProjectsJson', JSON.stringify(projects), '-Workloads', workloads], {
+function run(root, projects, workloads = '', version = '') {
+  return spawnSync('pwsh', ['-NoLogo', '-NoProfile', '-File', script, '-ProjectsJson', JSON.stringify(projects), '-Workloads', workloads, '-WorkloadVersion', version], {
     cwd: root, encoding: 'utf8', timeout: 180000,
     env: {...process.env, MSBUILDDISABLENODEREUSE: '1', DOTNET_CLI_USE_MSBUILD_SERVER: '0'}
   });
@@ -63,6 +63,46 @@ test('invalid workload identifiers fail before installation or restore', t => {
   assert.notEqual(result.status, 0);
   assert.match(result.stdout + result.stderr, /Workload identifiers/);
   assert.equal(fs.existsSync(path.join(root, 'obj')), false);
+});
+
+test('invalid or unselected workload-set versions fail before installation', t => {
+  const root = fixture(t);
+  for (const [workloads, version] of [['ios', '10.0.112;echo'], ['', '10.0.112']]) {
+    const result = run(root, ['Example.csproj'], workloads, version);
+    assert.notEqual(result.status, 0);
+    assert.match(result.stdout + result.stderr, /workload-version requires/);
+    assert.equal(fs.existsSync(path.join(root, 'obj')), false);
+  }
+});
+
+test('workload installation selects the exact set or retains bundled manifests and stops on failure', t => {
+  const root = fixture(t);
+  const harness = path.join(root, 'capture.ps1');
+  fs.writeFileSync(harness, `
+function dotnet {
+  ConvertTo-Json -InputObject @($args) -Compress | Add-Content -LiteralPath (Join-Path $env:TEST_ROOT 'calls.jsonl')
+  $global:LASTEXITCODE = 0
+  if ($args[0] -eq 'workload' -and $env:TEST_FAIL -eq '1') { $global:LASTEXITCODE = 9 }
+  if ($args[0] -eq 'restore') {
+    New-Item -ItemType Directory -Force -Path (Join-Path $env:TEST_ROOT 'obj') | Out-Null
+    '{}' | Set-Content -LiteralPath (Join-Path $env:TEST_ROOT 'obj/project.assets.json')
+  }
+}
+& $env:TEST_SCRIPT -ProjectsJson ' ["Example.csproj"]' -Workloads 'ios wasm-tools' -WorkloadVersion $env:TEST_VERSION
+`);
+  for (const [version, fail] of [['10.0.112', false], ['', false], ['10.0.112', true]]) {
+    const callsFile = path.join(root, 'calls.jsonl');
+    fs.rmSync(callsFile, {force: true});
+    const result = spawnSync('pwsh', ['-NoLogo', '-NoProfile', '-File', harness], {
+      cwd: root, encoding: 'utf8', timeout: 30000,
+      env: {...process.env, TEST_ROOT: root, TEST_SCRIPT: script, TEST_VERSION: version, TEST_FAIL: fail ? '1' : '0'}
+    });
+    assert.equal(result.status === 0, !fail, result.stdout + result.stderr);
+    const calls = fs.readFileSync(callsFile, 'utf8').trim().split(/\r?\n/).map(line => JSON.parse(line));
+    assert.deepEqual(calls[0], ['workload', 'install', 'ios', 'wasm-tools', ...(version ? ['--version', version] : ['--skip-manifest-update'])]);
+    assert.equal(calls.length, fail ? 1 : 2);
+    if (!fail) assert.equal(calls[1][0], 'restore');
+  }
 });
 
 test('a failed restore stops before later project graphs are produced', t => {

@@ -9,6 +9,8 @@ installation or restore stops the operation; partial graphs are not submitted.
 JSON array of solution or project paths relative to the working directory.
 .PARAMETER Workloads
 Optional workload identifiers separated by whitespace.
+.PARAMETER WorkloadVersion
+Optional workload-set version to install instead of the bundled manifests.
 .EXAMPLE
 ./Restore-DependencyInputs.ps1 -ProjectsJson '["Product.sln"]' -Workloads 'wasm-tools'
 .OUTPUTS
@@ -17,7 +19,8 @@ Writes restore progress and the resulting asset-file count to the console.
 [CmdletBinding()]
 param(
     [Parameter(Mandatory)][string] $ProjectsJson,
-    [AllowEmptyString()][string] $Workloads = ''
+    [AllowEmptyString()][string] $Workloads = '',
+    [AllowEmptyString()][string] $WorkloadVersion = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -46,8 +49,15 @@ $workloadIds = @($Workloads -split '\s+' | Where-Object { $_ })
 if (@($workloadIds | Where-Object { $_ -cnotmatch '^[a-z][a-z0-9-]*$' }).Count) {
     throw 'Workload identifiers must contain only lowercase letters, digits and hyphens.'
 }
+if ($WorkloadVersion -and ($WorkloadVersion -cnotmatch '^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$' -or !$workloadIds.Count)) {
+    throw 'workload-version requires workload identifiers and a valid workload-set version.'
+}
 if ($workloadIds.Count) {
-    dotnet workload install @workloadIds --skip-manifest-update
+    if ($WorkloadVersion) {
+        dotnet workload install @workloadIds --version $WorkloadVersion
+    } else {
+        dotnet workload install @workloadIds --skip-manifest-update
+    }
     if ($LASTEXITCODE -ne 0) { throw "Workload installation failed with exit code $LASTEXITCODE." }
 }
 foreach ($project in @($projects | Select-Object -Unique)) {
