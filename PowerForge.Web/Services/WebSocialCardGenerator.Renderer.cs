@@ -17,7 +17,9 @@ internal static partial class WebSocialCardGenerator
     // Bump whenever raster-visible rendering or media sanitization changes.
     internal static string RendererVersion => OperatingSystem.IsLinux()
         ? "social-card-renderer-v10-linux-raster-v2"
-        : "social-card-renderer-v10";
+        : OperatingSystem.IsMacOS()
+            ? "social-card-renderer-v10-macos-raster-v2"
+            : "social-card-renderer-v10";
     internal const int MaxRemoteImageBytes = 10 * 1024 * 1024;
     internal const int MaxRemoteImageCacheEntries = 128;
     internal const long MaxRemoteImageCacheBytes = 100L * 1024 * 1024;

@@ -30,8 +30,8 @@ try {
         foreach ($name in @('magick', 'convert', 'sudo')) {
             $path = Join-Path $bin $name
             $version = if ($name -eq 'magick' -and $case.Version) { $case.Version } else { 'ImageMagick 7.1.0' }
-            $probe = if ($name -eq 'magick' -and $case.Probe) { $case.Probe } else { 'printf "\211PNG\015\012\032\012" > "$output"' }
-            $mvgProbe = if ($name -eq 'magick' -and $case.MvgProbe) { $case.MvgProbe } else { 'printf ''compliance "SVG"\npush graphic-context\npop graphic-context\n'' > "$output"' }
+            $probe = if ($name -eq 'magick' -and $case.Probe) { $case.Probe } else { 'for arg do case "$arg" in MVG:*) input="${arg#MVG:}" ;; esac; done; grep -q ''^push gradient g1 '' "$input" && grep -q ''^fill url(#g1)$'' "$input" && grep -q ''^stroke url(#g1)$'' "$input" && ! grep -q ''^compliance'' "$input" || exit 1; printf "\211PNG\015\012\032\012" > "$output"' }
+            $mvgProbe = if ($name -eq 'magick' -and $case.MvgProbe) { $case.MvgProbe } else { 'printf ''compliance "SVG"\npush graphic-context\npush gradient "g1" linear 0,0 0,1\nfill "url(#g1)"\nstroke "url(#g1)"\npop graphic-context\n'' > "$output"' }
             $formats = if ($name -eq 'convert' -and $case.Reject) { $classic } else { $case.Formats }
             $formats = ($formats -split "`n" | ForEach-Object { '  ' + $_ }) -join "`n"
             $script = if ($name -eq 'sudo') { "#!/bin/sh`nexit 1`n" } else {
