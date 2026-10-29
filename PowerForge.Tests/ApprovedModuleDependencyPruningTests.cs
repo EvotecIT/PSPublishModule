@@ -104,14 +104,14 @@ public sealed class ApprovedModuleDependencyPruningTests
     [InlineData("@(\"$env:PF_DEPENDENCY\")")]
     [InlineData("@(@{ModuleName=\"$env:PF_DEPENDENCY\";ModuleVersion='1.0.0'})")]
     [InlineData("@($env:PF_DEPENDENCY)")]
-    public void Run_PreservesApprovedDependenciesWhenNestedRequirementsAreComputed(string requirements)
+    public void Run_RejectsApprovedDependenciesWhenNestedRequirementsAreComputed(string requirements)
         => AssertRetainedDependency("NestedModules", "Nested.psd1", "'nested'", nestedRequirements: requirements);
 
     [Theory]
     [InlineData("NestedModules", "@($env:PF_NESTED_MODULE)")]
     [InlineData("ScriptsToProcess", "@($env:PF_HOOK)")]
     [InlineData("RootModule", "$env:PF_ROOT_MODULE")]
-    public void Run_PreservesApprovedDependenciesWhenManifestLoadedContentIsComputed(string property, string expression)
+    public void Run_RejectsApprovedDependenciesWhenManifestLoadedContentIsComputed(string property, string expression)
         => AssertRetainedDependency("NestedModules", "Nested.psd1", "'nested'", nestedRequirements: "@()",
             computedProperty: property, computedExpression: expression);
 
@@ -121,16 +121,29 @@ public sealed class ApprovedModuleDependencyPruningTests
     [InlineData("NestedModules", "Nested.psm1", "SharedHelpers\\Get-SharedHelper")]
     [InlineData("NestedModules", "Nested.psm1", "Get-SharedHelper")]
     [InlineData("NestedModules", "Nested.psd1", "'nested'")]
-    public void Run_PreservesApprovedDependencyUsedByRetainedManifestContent(string key, string relativePath, string script)
+    public void Run_RejectsApprovedDependencyUsedByRetainedManifestContent(string key, string relativePath, string script)
         => AssertRetainedDependency(key, relativePath, script);
 
     [Theory]
     [InlineData("ScriptsToProcess", "Hooks/initialize.ps1", "Hooks/Initialize.ps1")]
     [InlineData("NestedModules", "Nested.psm1", "nested.psm1")]
     [InlineData("NestedModules", "SOURCE.psm1", null)]
-    public void Run_PreservesApprovedDependencyUsedByCaseDistinctRetainedContent(
+    public void Run_RejectsApprovedDependencyUsedByCaseDistinctRetainedContent(
         string key, string relativePath, string? predecessor)
         => AssertRetainedDependency(key, relativePath, "SharedHelpers\\Get-SharedHelper", predecessor, requireCaseSensitiveStorage: true);
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Run_RejectsRetainedApprovedRuntimeRequirementsWithoutHelperMerging(bool merge)
+        => AssertRetainedDependency("NestedModules", "Nested.psd1", "'nested'", merge: merge, mergeMissing: false);
+
+    [Theory]
+    [InlineData("FormatsToProcess", "Consumer.format.ps1xml", "<Configuration><ViewDefinitions><View><Name>Consumer</Name><ViewSelectedBy><TypeName>System.String</TypeName></ViewSelectedBy><TableControl><TableRowEntries><TableRowEntry><TableColumnItems><TableColumnItem><ScriptBlock>SharedHelpers\\Get-SharedHelper</ScriptBlock></TableColumnItem></TableColumnItems></TableRowEntry></TableRowEntries></TableControl></View></ViewDefinitions></Configuration>")]
+    [InlineData("TypesToProcess", "Consumer.types.ps1xml", "<Types><Type><Name>System.String</Name><Members><ScriptProperty><Name>Shared</Name><GetScriptBlock>SharedHelpers\\Get-SharedHelper</GetScriptBlock></ScriptProperty></Members></Type></Types>")]
+    [InlineData("TypesToProcess", "Consumer.types.ps1xml", "<Types><Type><Name>System.String</Name><Members><ScriptMethod><Name>Shared</Name><Script>SharedHelpers\\Get-SharedHelper</Script></ScriptMethod></Members></Type></Types>")]
+    public void Run_RejectsApprovedRuntimeReferencesInExecutableXml(string key, string path, string xml)
+        => AssertRetainedDependency(key, path, xml);
 
     [Fact]
     public void ReadRelativePaths_PreservesCaseDistinctReferencesForFilesystemResolution()
@@ -147,7 +160,8 @@ public sealed class ApprovedModuleDependencyPruningTests
 
     private static void AssertRetainedDependency(string key, string relativePath, string script,
         string? predecessor = null, bool requireCaseSensitiveStorage = false,
-        string nestedRequirements = "@('SharedHelpers')", string? computedProperty = null, string? computedExpression = null)
+        string nestedRequirements = "@('SharedHelpers')", string? computedProperty = null, string? computedExpression = null,
+        bool merge = true, bool mergeMissing = true)
     {
         string root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
@@ -187,7 +201,7 @@ public sealed class ApprovedModuleDependencyPruningTests
                 Install = new ModulePipelineInstallOptions { Enabled = false },
                 Segments = new IConfigurationSegment[]
                 {
-                    new ConfigurationBuildSegment { BuildModule = new BuildModuleConfiguration { Merge = true, MergeMissing = true } },
+                    new ConfigurationBuildSegment { BuildModule = new BuildModuleConfiguration { Merge = merge, MergeMissing = mergeMissing } },
                     new ConfigurationModuleSegment
                     {
                         Kind = ModuleDependencyKind.RequiredModule,
@@ -203,9 +217,9 @@ public sealed class ApprovedModuleDependencyPruningTests
             var runner = new ModulePipelineRunner(new NullLogger(), powerShellRunner: null,
                 moduleDependencyMetadataProvider: new FixtureMetadataProvider(modules),
                 missingFunctionAnalysisService: new PowerShellMissingFunctionAnalysisService());
-            var result = runner.Run(spec, runner.Plan(spec));
-            Assert.Contains("SharedHelpers", File.ReadAllText(result.BuildResult.ManifestPath));
-            Assert.True(File.Exists(Path.Combine(result.BuildResult.StagingPath, relativePath)));
+            var error = Assert.Throws<InvalidOperationException>(() => runner.Run(spec, runner.Plan(spec)));
+            Assert.Contains("Approved modules cannot remain runtime dependencies", error.Message);
+            Assert.Contains("SharedHelpers", error.Message);
         }
         finally
         {
@@ -222,12 +236,15 @@ public sealed class ApprovedModuleDependencyPruningTests
         try
         {
             string modules = Path.Combine(root, "installed");
-            WriteModule(modules, "SharedHelpers", "function Get-SharedHelper { 'shared' }; Export-ModuleMember Get-SharedHelper");
+            WriteModule(modules, "SharedHelpers", "function Get-SharedHelper { 'shared' }; Set-Alias SharedAlias Get-SharedHelper; Export-ModuleMember -Function Get-SharedHelper -Alias SharedAlias");
             WriteModule(modules, "ParentDonor", "function Get-SharedHelper { 'parent-copy' }; function Get-ParentThing { Get-SharedHelper }; Export-ModuleMember Get-ParentThing");
             WriteModule(modules, "RuntimeDependency", "function Get-RuntimeThing { 'runtime' }; Export-ModuleMember Get-RuntimeThing");
             Environment.SetEnvironmentVariable("PSModulePath", modules + Path.PathSeparator + previousModulePath);
             string source = Path.Combine(root, "source");
-            WriteModule(root, "source", "function Get-ConsumerThing { Get-ParentThing }; Export-ModuleMember Get-ConsumerThing");
+            WriteModule(root, "source", "function Get-ConsumerThing { param([string]$ProviderName='PnP.PowerShell'); Get-ParentThing; Get-Module -Name $ProviderName | Out-Null }; Export-ModuleMember Get-ConsumerThing");
+            File.WriteAllText(Path.Combine(source, "Consumer.format.ps1xml"),
+                "<Configuration><ViewDefinitions><View><Name>Consumer</Name><ViewSelectedBy><TypeName>System.String</TypeName></ViewSelectedBy><TableControl><TableRowEntries><TableRowEntry><TableColumnItems><TableColumnItem><PropertyName>Length</PropertyName></TableColumnItem></TableColumnItems></TableRowEntry></TableRowEntries></TableControl></View></ViewDefinitions></Configuration>");
+            Assert.True(ManifestEditor.TrySetTopLevelStringArray(Path.Combine(source, "source.psd1"), "FormatsToProcess", new[] { "Consumer.format.ps1xml" }));
             // WriteModule uses the directory name as identity; the consumer has a normal manifest.
             var segments = new List<IConfigurationSegment>
             {

@@ -39,7 +39,7 @@ public sealed class RequiredModuleResolutionEngineTests
     }
 
     [Fact]
-    public void ResolveOutputRequiredModules_FiltersApprovedModules_WhenMergeMissingEnabled()
+    public void ResolveOutputRequiredModules_FiltersApprovedModules()
     {
         var modules = new[]
         {
@@ -49,8 +49,7 @@ public sealed class RequiredModuleResolutionEngineTests
 
         var filtered = RequiredModuleResolutionEngine.ResolveOutputRequiredModules(
             modules,
-            mergeMissing: true,
-            fullyInlinedModules: new[] { "Graphimo" });
+            approvedModules: new[] { "GRAPHIMO" });
 
         Assert.Single(filtered);
         Assert.Equal("PSWriteHTML", filtered[0].ModuleName);

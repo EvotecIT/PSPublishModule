@@ -59,14 +59,20 @@ public sealed partial class ModulePipelineRunner
             if (plan.RequireReleaseSourceUnchanged)
                 ValidateReleaseSourceUnchanged(plan, generatedOutputPaths: null, trackedGeneratedOutputPaths: null);
             ExecutePreparationAndBuildPhases(plan, session, manifestRequiredModules, manifestExternalModuleDependencies, pipeline, state);
+            var approvedForOutput = plan.ApprovedModules ?? Array.Empty<string>();
+            var retainedApprovedModules = approvedForOutput.Except(
+                ResolveApprovedModulesSatisfiedByFinalPayload(plan, state.BuildResult!,
+                    Path.Combine(state.BuildResult!.StagingPath, $"{plan.ModuleName}.psm1"), approvedForOutput),
+                StringComparer.OrdinalIgnoreCase).ToArray();
+            if (retainedApprovedModules.Length > 0)
+                throw new InvalidOperationException($"Approved modules cannot remain runtime dependencies of retained manifest-loaded files: {string.Join(", ", retainedApprovedModules)}. Merge those files into the root module or declare their runtime modules only as RequiredModule.");
+
             manifestRequiredModules = ResolveOutputRequiredModules(
                 plan.RequiredModules,
-                plan.MergeMissing,
-                state.MergeExecution.FullyInlinedApprovedModules);
+                approvedForOutput);
             packagingRequiredModules = ResolveOutputRequiredModules(
                 plan.RequiredModulesForPackaging,
-                plan.MergeMissing,
-                state.MergeExecution.FullyInlinedApprovedModules);
+                approvedForOutput);
             if (plan.GateMode == ConfigurationGateMode.Documentation)
             {
                 ExecuteCompilationPhase(

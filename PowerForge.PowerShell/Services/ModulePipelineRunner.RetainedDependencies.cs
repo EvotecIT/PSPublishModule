@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Management.Automation.Language;
+using System.Xml;
+using System.Xml.Linq;
 
 namespace PowerForge;
 
@@ -18,7 +20,7 @@ public sealed partial class ModulePipelineRunner
         string mergedRootPath,
         string[] satisfiedByRoot)
     {
-        if (!plan.MergeMissing || satisfiedByRoot.Length == 0)
+        if (satisfiedByRoot.Length == 0)
             return satisfiedByRoot;
 
         var candidates = new HashSet<string>(satisfiedByRoot, StringComparer.OrdinalIgnoreCase);
@@ -68,12 +70,29 @@ public sealed partial class ModulePipelineRunner
                     manifests.Push(path);
                     continue;
                 }
-                // Binary loaders and XML type/format scripts have no complete PowerShell AST here.
-                if (!extension.Equals(".ps1", StringComparison.OrdinalIgnoreCase) &&
-                    !extension.Equals(".psm1", StringComparison.OrdinalIgnoreCase))
-                    return Array.Empty<string>();
+                string? code = null;
+                if (extension.Equals(".ps1xml", StringComparison.OrdinalIgnoreCase))
+                {
+                    // Type and format assets can carry executable PowerShell, unlike property-only views.
+                    try
+                    {
+                        using var reader = XmlReader.Create(path, new XmlReaderSettings { DtdProcessing = DtdProcessing.Prohibit, XmlResolver = null });
+                        code = string.Join(Environment.NewLine, XDocument.Load(reader).Descendants()
+                            .Where(element => element.Name.LocalName is "ScriptBlock" or "GetScriptBlock" or "SetScriptBlock" or "Script")
+                            .Select(element => element.Value));
+                    }
+                    catch (XmlException)
+                    {
+                        return Array.Empty<string>();
+                    }
+                    if (string.IsNullOrWhiteSpace(code))
+                        continue;
+                }
+                else if (!extension.Equals(".ps1", StringComparison.OrdinalIgnoreCase) &&
+                         !extension.Equals(".psm1", StringComparison.OrdinalIgnoreCase))
+                    continue;
                 visited.Add(path);
-                var analysis = AnalyzeMissingFunctions(path, null, plan, Array.Empty<string>());
+                var analysis = AnalyzeMissingFunctions(code is null ? path : null, code, plan, Array.Empty<string>());
                 if (analysis is null || analysis.Summary.Any(command => string.IsNullOrWhiteSpace(command.Source)))
                     return Array.Empty<string>();
                 candidates.IntersectWith(analysis.FullyInlinedApprovedModules);

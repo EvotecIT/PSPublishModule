@@ -25,6 +25,8 @@ namespace PSPublishModule;
 /// are written to <c>PrivateData.PSData.ExternalModuleDependencies</c>. <c>EmbeddedModule</c> entries are copied
 /// into the built module internals and are not emitted as manifest dependencies. <c>ApprovedModule</c> entries are
 /// used by merge/missing-function workflows and are not emitted as manifest dependencies.
+/// When the same module is both required and approved, the source retains its required declaration,
+/// while finalized manifests and dependency artefacts omit the approved module.
 /// </para>
 /// <para>
 /// Built-in <c>Microsoft.PowerShell.*</c> modules are ignored during manifest refresh because they are inbox runtime
