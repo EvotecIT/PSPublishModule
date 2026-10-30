@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
 
 namespace PowerForge;
@@ -8,15 +7,8 @@ namespace PowerForge;
 /// <summary>Orders selected modules without letting a consumer autoload another dependency version first.</summary>
 internal static class ModuleDependencyImportOrder
 {
-    internal static string[] Resolve(string[] preferred, IReadOnlyDictionary<string, string> moduleBasePaths)
+    internal static string[] Resolve(string[] preferred, IReadOnlyDictionary<string, string[]> dependencies)
     {
-        var dependencies = moduleBasePaths.ToDictionary(
-            static item => item.Key,
-            static item => ModuleManifestValueReader.ReadRequiredModules(
-                    Path.Combine(item.Value, item.Key + ".psd1"))
-                .Select(static dependency => dependency.ModuleName)
-                .ToArray(),
-            StringComparer.OrdinalIgnoreCase);
         var remaining = new HashSet<string>(preferred, StringComparer.OrdinalIgnoreCase);
         var result = new List<string>(preferred.Length);
         while (remaining.Count > 0)

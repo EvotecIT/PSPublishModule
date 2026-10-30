@@ -62,7 +62,11 @@ internal sealed class BinaryConflictDetectionService
                 summary: "no managed assemblies");
         }
 
-        var roots = ResolveSearchRoots(searchRoots, edition);
+        // Explicit module paths describe a selected runtime, not an addition to
+        // every module in the machine's default stores.
+        var roots = searchRoots is null && searchModulePaths is { Count: > 0 }
+            ? Array.Empty<string>()
+            : ResolveSearchRoots(searchRoots, edition);
         var modulePaths = ResolveModulePaths(searchModulePaths, root);
         if (roots.Length == 0 && modulePaths.Length == 0)
         {

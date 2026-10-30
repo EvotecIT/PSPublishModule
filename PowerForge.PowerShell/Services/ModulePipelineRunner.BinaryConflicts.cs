@@ -342,10 +342,10 @@ public sealed partial class ModulePipelineRunner
             .OrderByDescending(name => scores.TryGetValue(name, out var score) ? score : 0)
             .ThenBy(name => originalIndex.TryGetValue(name, out var index) ? index : int.MaxValue)
             .ToArray();
-        return ModuleDependencyImportOrder.Resolve(preferred, installedModules.ToDictionary(
-            static module => module.Name,
-            static module => module.ModuleBasePath!,
-            StringComparer.OrdinalIgnoreCase));
+        var sources = installedModules.Select(static module => new ApprovedModuleSource(
+            module.Name, module.Version, module.ModuleBasePath!, module.Guid)).ToArray();
+        var graph = new ModuleDependencyImportGraphReader(_moduleDependencyMetadataProvider, _logger).Read(sources);
+        return ModuleDependencyImportOrder.Resolve(preferred, graph);
     }
 
     private Dictionary<string, int> ScoreRequiredModuleConflictOrder(

@@ -643,6 +643,8 @@ public sealed partial class MissingFunctionsAnalyzer
                 }
                 catch (Exception moduleScopeException)
                 {
+                    if (failedSelectedSource is not null)
+                        continue;
                     resolution = new MissingFunctionCommand(
                         name: name,
                         source: modName,

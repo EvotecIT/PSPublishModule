@@ -8,8 +8,13 @@ namespace PowerForge.Tests;
 
 public sealed class ModulePipelineBinaryConflictOrderingTests
 {
-    [Fact]
-    public void Plan_PlacesSelectedDependencyBeforeModuleThatRequiresIt()
+    [Theory]
+    [InlineData("Direct")]
+    [InlineData("Nested")]
+    [InlineData("Intermediate")]
+    [InlineData("InstalledAfterPlanning")]
+    [InlineData("Script")]
+    public void Plan_PlacesSelectedDependencyBeforeModuleThatRequiresIt(string route)
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
         try
@@ -19,19 +24,46 @@ public sealed class ModulePipelineBinaryConflictOrderingTests
             var runtime = Path.Combine(root.FullName, "Runtime.Tools");
             WriteMinimalModule(consumer, "Consumer.Tools", "1.0.0");
             WriteMinimalModule(runtime, "Runtime.Tools", "1.0.0");
-            File.WriteAllText(Path.Combine(consumer, "Consumer.Tools.psd1"),
-                "@{ RootModule = 'Consumer.Tools.psm1'; ModuleVersion = '1.0.0'; RequiredModules = @(@{ ModuleName = 'Runtime.Tools'; ModuleVersion = '1.0.0' }) }");
-            var runner = new ModulePipelineRunner(new NullLogger(), new StubPowerShellRunner(new Dictionary<string, string>
+            const string requiresRuntime = "RequiredModules = @(@{ ModuleName = 'Runtime.Tools'; ModuleVersion = '1.0.0' })";
+            var modules = new Dictionary<string, string>
             {
                 ["Consumer.Tools"] = consumer,
                 ["Runtime.Tools"] = runtime
-            }));
+            };
+            var consumerRequirements = requiresRuntime;
+            string? deferredIntermediate = null;
+            if (route != "Direct" && route != "Script")
+            {
+                var intermediate = route == "Nested"
+                    ? Path.Combine(consumer, "Intermediate.Tools")
+                    : Path.Combine(root.FullName, "Intermediate.Tools");
+                WriteMinimalModule(intermediate, "Intermediate.Tools", "1.0.0");
+                File.WriteAllText(Path.Combine(intermediate, "Intermediate.Tools.psd1"),
+                    "@{ RootModule = 'Intermediate.Tools.psm1'; ModuleVersion = '1.0.0'; " + requiresRuntime + " }");
+                if (route == "InstalledAfterPlanning")
+                    deferredIntermediate = intermediate;
+                else
+                    modules["Intermediate.Tools"] = intermediate;
+                consumerRequirements = route == "Nested"
+                    ? "NestedModules = @('Intermediate.Tools/Intermediate.Tools.psd1')"
+                    : "RequiredModules = @('Intermediate.Tools')";
+            }
+            File.WriteAllText(Path.Combine(consumer, "Consumer.Tools.psd1"),
+                "@{ RootModule = 'Consumer.Tools.psm1'; ModuleVersion = '1.0.0'; " + consumerRequirements + " }");
+            if (route == "Script")
+            {
+                File.Delete(Path.Combine(consumer, "Consumer.Tools.psd1"));
+                File.WriteAllText(Path.Combine(consumer, "Consumer.Tools.psm1"),
+                    "#requires -Modules @{ ModuleName = 'Runtime.Tools'; ModuleVersion = '1.0.0' }\n");
+            }
+            var runner = new ModulePipelineRunner(new NullLogger(), new StubPowerShellRunner(modules));
             var spec = new ModulePipelineSpec
             {
                 Build = new ModuleBuildSpec { Name = "TestModule", SourcePath = root.FullName, Version = "1.0.0" },
                 Install = new ModulePipelineInstallOptions { Enabled = false },
                 Segments = new IConfigurationSegment[]
                 {
+                    new ConfigurationBuildSegment { BuildModule = new BuildModuleConfiguration { InstallMissingModules = false } },
                     new ConfigurationModuleSegment { Kind = ModuleDependencyKind.RequiredModule,
                         Configuration = new ModuleDependencyConfiguration { ModuleName = "Consumer.Tools", RequiredVersion = "1.0.0" } },
                     new ConfigurationModuleSegment { Kind = ModuleDependencyKind.RequiredModule,
@@ -42,6 +74,15 @@ public sealed class ModulePipelineBinaryConflictOrderingTests
             };
 
             var plan = runner.Plan(spec);
+
+            if (deferredIntermediate is not null)
+            {
+                Assert.Equal(new[] { "Consumer.Tools", "Runtime.Tools" }, plan.RequiredModules.Select(module => module.ModuleName));
+                // Model metadata becoming available during dependency preparation, after pure planning.
+                modules["Intermediate.Tools"] = deferredIntermediate;
+                typeof(ModulePipelineRunner).GetMethod("EnsureBuildDependenciesInstalledIfNeeded",
+                    System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.Invoke(runner, new object[] { plan });
+            }
 
             Assert.Equal(new[] { "Runtime.Tools", "Consumer.Tools" }, plan.RequiredModules.Select(module => module.ModuleName));
         }

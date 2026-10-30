@@ -27,9 +27,11 @@ public sealed partial class MissingFunctionsAnalyzer
         foreach (var source in sources)
             _selectedRuntimeSources[source.Name] = source;
         var sourcesByName = sources.ToDictionary(static source => source.Name, StringComparer.OrdinalIgnoreCase);
+        var metadata = new PowerShellModuleDependencyMetadataProvider(new PowerShellRunner(), new NullLogger());
+        var graph = new ModuleDependencyImportGraphReader(metadata, new NullLogger()).Read(sources);
         var order = ModuleDependencyImportOrder.Resolve(
             sources.Select(static source => source.Name).ToArray(),
-            sources.ToDictionary(static source => source.Name, static source => source.ModuleBasePath, StringComparer.OrdinalIgnoreCase));
+            graph);
         foreach (var name in order)
         {
             try { GetOrCreateModuleScopeSession(sourcesByName[name]); }
@@ -112,9 +114,16 @@ try {
                 throw new InvalidOperationException($"Selected module '{source.Name}' could not be imported from '{moduleReference}'. {reason}");
             }
             ValidateImportedModuleIdentity(imported, source);
-            foreach (var dependency in EnumerateLoadedModuleGraph(imported).Skip(1))
-                if (_selectedRuntimeSources.TryGetValue(dependency.Name, out var selected))
-                    ValidateImportedModuleIdentity(dependency, selected);
+            if (_selectedRuntimeSources.Count > 0)
+            {
+                // RequiredModules can contain declaration placeholders rather than loaded
+                // identities. Ask PowerShell for the actual imported module catalog.
+                ps.Commands.Clear();
+                var loaded = ps.AddCommand("Microsoft.PowerShell.Core\\Get-Module").Invoke();
+                foreach (var module in loaded.Select(static result => result.BaseObject).OfType<PSModuleInfo>())
+                    if (_selectedRuntimeSources.TryGetValue(module.Name, out var selected))
+                        ValidateImportedModuleIdentity(module, selected);
+            }
 
             var created = new ModuleScopeSession(
                 runspace,

@@ -59,8 +59,13 @@ New-ConfigurationImportModule -ImportSelf -ImportRequiredModules -PreferBinaryCo
 Binary conflict analysis inspects the selected version, even if a newer version
 is installed. `-PreferBinaryConflictOrder` imports dependencies before modules
 that require them, then applies the binary preference among eligible modules.
-The same ordering is used for import advice and the generated manifest. Cyclic
-required-module declarations fail with an explicit dependency-cycle error.
+The same ordering is used for import advice and the generated manifest, including
+dependencies reached through intermediate modules and local nested modules.
+Module selection uses PowerShell's version and GUID rules. Planning reports
+indirect dependencies that are not installed yet; the build refreshes the order
+after dependency preparation makes their metadata available. Cyclic declarations
+fail with an explicit dependency-cycle error. Binary scoring for selected module
+paths stays within those paths instead of scanning unrelated default stores.
 
 Approved helper analysis uses the selected runtime context too. A donor whose
 minimum requirement accepts `Runtime.Tools` 1.0.0 uses that selected module

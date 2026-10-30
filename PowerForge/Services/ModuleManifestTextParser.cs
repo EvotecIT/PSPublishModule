@@ -38,9 +38,12 @@ internal static class ModuleManifestTextParser
     }
 
     internal static bool TryGetRequiredModules(string manifestText, out RequiredModuleReference[]? modules)
+        => TryGetModuleReferences(manifestText, "RequiredModules", out modules);
+
+    internal static bool TryGetModuleReferences(string manifestText, string key, out RequiredModuleReference[]? modules)
     {
         modules = null;
-        if (!TryReadTopLevelAssignedExpressionByKey(manifestText, "RequiredModules", out var expression) ||
+        if (!TryReadTopLevelAssignedExpressionByKey(manifestText, key, out var expression) ||
             string.IsNullOrWhiteSpace(expression))
             return false;
 
