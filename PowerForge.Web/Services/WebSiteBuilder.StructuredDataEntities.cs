@@ -2,6 +2,44 @@ namespace PowerForge.Web;
 
 public static partial class WebSiteBuilder
 {
+    /// <summary>Uses a published translation of an internal contact page, retaining its existing destination when absent.</summary>
+    private static string ResolveStructuredContactUrl(SiteSpec spec, ContentItem item,
+        ResolvedLocalizationConfig localization, IReadOnlyList<ContentItem> allItems)
+    {
+        var configured = spec.StructuredData?.OrganizationContactUrl;
+        var baseUrl = ResolveLanguageBaseUrl(spec, localization, item.Language);
+        if (string.IsNullOrWhiteSpace(configured) || IsAbsoluteHttpUrl(configured) ||
+            configured.StartsWith("//", StringComparison.Ordinal) || IsNonRouteReference(configured))
+            return ResolveAbsoluteUrl(baseUrl, configured);
+
+        var suffixIndex = configured.IndexOfAny(['?', '#']);
+        var path = suffixIndex < 0 ? configured : configured[..suffixIndex];
+        var suffix = suffixIndex < 0 ? string.Empty : configured[suffixIndex..];
+        var source = allItems.FirstOrDefault(page => !page.Draft &&
+            string.Equals(NormalizeRouteForMatch(page.OutputPath), NormalizeRouteForMatch(path), StringComparison.OrdinalIgnoreCase));
+        if (source is null)
+            return ResolveAbsoluteUrl(baseUrl, configured);
+
+        var route = ResolveLocalizedPageUrl(spec, localization, source, allItems,
+            item.Language, source.Language);
+        if (IsAbsoluteHttpUrl(route) || TryResolveExplicitLocalizedRoute(spec, localization, source, item.Language, out _))
+        {
+            // An explicit translated URL owns its query/fragment. Only inherit the
+            // configured contact suffix when that destination does not supply one.
+            var routeSuffixIndex = route.IndexOfAny(['?', '#']);
+            var routePath = routeSuffixIndex < 0 ? route : route[..routeSuffixIndex];
+            var routeSuffix = routeSuffixIndex < 0 ? suffix : route[routeSuffixIndex..];
+            return ResolveAbsolutePublicUrl(spec, localization, item.Language, routePath) + routeSuffix;
+        }
+        var destination = allItems.FirstOrDefault(page => !page.Draft &&
+            string.Equals(NormalizeRouteForMatch(page.OutputPath), NormalizeRouteForMatch(route), StringComparison.OrdinalIgnoreCase));
+        if (destination is not null)
+            return ResolveAbsolutePublicUrl(spec, localization, destination.Language, destination.OutputPath) + suffix;
+
+        // Missing translations must not create a contact link to an unbuilt locale route.
+        return ResolveAbsolutePublicUrl(spec, localization, source.Language, source.OutputPath) + suffix;
+    }
+
     private static string StructuredPublisherName(SiteSpec spec) =>
         FirstStructuredValue(spec.StructuredData?.OrganizationName, spec.StructuredData?.OrganizationLegalName, spec.Name);
 

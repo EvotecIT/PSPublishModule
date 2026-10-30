@@ -1168,13 +1168,16 @@ public static partial class WebSiteBuilder
         if (string.IsNullOrWhiteSpace(path))
             return "/";
 
-        if (mode == TrailingSlashMode.Never)
-            return path.EndsWith("/") && path.Length > 1 ? path.TrimEnd('/') : path;
+        var suffixIndex = path.IndexOfAny(['?', '#']);
+        var suffix = suffixIndex < 0 ? string.Empty : path[suffixIndex..];
+        path = suffixIndex < 0 ? path : path[..suffixIndex];
 
-        if (mode == TrailingSlashMode.Always && !path.EndsWith("/"))
-            return path + "/";
+        if (mode == TrailingSlashMode.Never && path.Length > 1)
+            path = path.TrimEnd('/');
+        else if (mode == TrailingSlashMode.Always && !path.EndsWith("/"))
+            path += "/";
 
-        return path;
+        return path + suffix;
     }
 
     private static string NormalizeRootNotFoundPublicRoute(string route)
