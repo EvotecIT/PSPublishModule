@@ -2,6 +2,7 @@
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net10.0-windows</TargetFramework>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
     <Description>PowerForgeStudio WPF shell for release orchestration and portfolio management.</Description>
     <AssemblyName>PowerForgeStudio.Wpf</AssemblyName>
     <RootNamespace>PowerForgeStudio.Wpf</RootNamespace>

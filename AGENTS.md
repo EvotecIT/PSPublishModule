@@ -88,6 +88,8 @@ need per-user global skill installs.
 
 ## Working Agreements (Best Practices)
 
+Resolve the following shared procedures against `CODEX_HOME` (default `~/.codex`). Before adding or changing tests, apply the [test authoring gate](skills/test-audit/SKILL.md#authoring-gate), then use [contract-focused proof design](skills/contract-focused-tests/SKILL.md). Deliberate pruning follows [campaign mode](skills/test-audit/CAMPAIGN.md); its coverage evidence is local and never a CI or merge gate.
+
 - Prefer engine fixes over theme hacks when the same issue can recur across sites.
 - Keep `PSPublishModule` cmdlets thin:
   - parameter binding
