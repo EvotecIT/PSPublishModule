@@ -32,65 +32,35 @@ public sealed class SigningScriptRetryTests
         }
     }
 
-    [Fact]
-    public void PowerShellCoreStoreProviderFailuresAreBoundedAndEmitEveryRetryPath()
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    public void SigningFailureStopsBatchAndReportsEveryUnfulfilledFile(
+        bool includePrecheckFailure,
+        bool returnFailedStatus)
     {
         if (Path.DirectorySeparatorChar != '\\')
             return;
 
         var evidence = RunSigningProviderFailureHarness(
-            includePrecheckFailure: false,
-            includeNonCompatibilitySigningFailure: false);
+            includePrecheckFailure: includePrecheckFailure,
+            includeNonCompatibilitySigningFailure: returnFailedStatus);
 
-        Assert.Equal(12, evidence.Summary.Attempted);
+        Assert.Equal(1, evidence.Summary.Attempted);
         Assert.Equal(12, evidence.Summary.Failed);
-        Assert.Equal(12, evidence.Summary.SigningException);
+        Assert.False(evidence.Summary.Success);
+        Assert.Equal(includePrecheckFailure ? 1 : 0, evidence.Summary.PrecheckFailure);
+        Assert.Equal(returnFailedStatus ? 0 : 1, evidence.Summary.SigningException);
+        Assert.Equal(0, evidence.Summary.SignedTotal);
+        Assert.Empty(evidence.Summary.VerifiedFilePaths);
         Assert.Equal(evidence.PackageFilePaths.OrderBy(path => path), evidence.Summary.FailedFilePaths.OrderBy(path => path));
-        Assert.Equal(3, evidence.SigningCallCount);
+        Assert.Equal(1, evidence.SigningCallCount);
+        Assert.Equal(includePrecheckFailure ? 10 : 11, evidence.Summary.FailedFiles.Count(failure => failure.Contains(
+            "not attempted because signing stopped after a failure",
+            StringComparison.Ordinal)));
         Assert.Contains(evidence.Summary.FailedFiles, failure => failure.Contains(
-            "deferred to Windows PowerShell compatibility retry",
-            StringComparison.Ordinal));
-    }
-
-    [Fact]
-    public void PrecheckFailuresPreventDeferringTargets()
-    {
-        if (Path.DirectorySeparatorChar != '\\')
-            return;
-
-        var evidence = RunSigningProviderFailureHarness(
-            includePrecheckFailure: true,
-            includeNonCompatibilitySigningFailure: false);
-
-        Assert.Equal(11, evidence.Summary.Attempted);
-        Assert.Equal(12, evidence.Summary.Failed);
-        Assert.Equal(1, evidence.Summary.PrecheckFailure);
-        Assert.Equal(11, evidence.Summary.SigningException);
-        Assert.Equal(evidence.PackageFilePaths.OrderBy(path => path), evidence.Summary.FailedFilePaths.OrderBy(path => path));
-        Assert.Equal(11 * 15, evidence.SigningCallCount);
-        Assert.DoesNotContain(evidence.Summary.FailedFiles, failure => failure.Contains(
-            "deferred to Windows PowerShell compatibility retry",
-            StringComparison.Ordinal));
-    }
-
-    [Fact]
-    public void NonCompatibilitySigningFailuresPreventDeferringLaterTargets()
-    {
-        if (Path.DirectorySeparatorChar != '\\')
-            return;
-
-        var evidence = RunSigningProviderFailureHarness(
-            includePrecheckFailure: false,
-            includeNonCompatibilitySigningFailure: true);
-
-        Assert.Equal(12, evidence.Summary.Attempted);
-        Assert.Equal(12, evidence.Summary.Failed);
-        Assert.Equal(0, evidence.Summary.PrecheckFailure);
-        Assert.Equal(11, evidence.Summary.SigningException);
-        Assert.Equal(1 + (11 * 15), evidence.SigningCallCount);
-        Assert.DoesNotContain(evidence.Summary.FailedFiles, failure => failure.Contains(
-            "deferred to Windows PowerShell compatibility retry",
-            StringComparison.Ordinal));
+            returnFailedStatus ? "HashMismatch" : "hardware provider unavailable", StringComparison.Ordinal));
     }
 
     [Theory]
@@ -150,6 +120,8 @@ public sealed class SigningScriptRetryTests
 
         Assert.Equal(12, evidence.Summary.SignedNew);
         Assert.Equal(0, evidence.Summary.Failed);
+        Assert.Equal(12, evidence.SigningCallCount);
+        Assert.Equal(12, evidence.Summary.VerifiedFilePaths.Length);
         Assert.All(evidence.SigningTargetAttributes, attributes =>
         {
             Assert.Equal(0, attributes & cloudAttribute);
@@ -158,7 +130,7 @@ public sealed class SigningScriptRetryTests
     }
 
     [Fact]
-    public void ReturnedUnknownErrorReclearsCloudAttributesAndRetriesBeforeCompatibilityFallback()
+    public void ReturnedUnknownErrorStopsWithoutRetryEvenWhenNextCallWouldSucceed()
     {
         if (Path.DirectorySeparatorChar != '\\')
             return;
@@ -169,20 +141,23 @@ public sealed class SigningScriptRetryTests
             includeNonCompatibilitySigningFailure: false,
             signingSucceeds: true,
             signingTargetAttributes: FileAttributes.Archive | (FileAttributes)pinnedAttribute,
-            resultFailuresBeforeSuccess: 2);
+            resultFailuresBeforeSuccess: 1);
 
-        Assert.Equal(12, evidence.Summary.SignedNew);
-        Assert.Equal(0, evidence.Summary.Failed);
-        Assert.Equal(0, evidence.Summary.UnknownError);
-        Assert.Equal(14, evidence.SigningCallCount);
+        Assert.Equal(0, evidence.Summary.SignedNew);
+        Assert.Equal(12, evidence.Summary.Failed);
+        Assert.Equal(1, evidence.Summary.Attempted);
+        Assert.Equal(1, evidence.Summary.UnknownError);
+        Assert.Equal(0, evidence.Summary.SigningException);
+        Assert.Equal(1, evidence.SigningCallCount);
+        Assert.Empty(evidence.Summary.VerifiedFilePaths);
+        Assert.Equal(evidence.PackageFilePaths.OrderBy(path => path), evidence.Summary.FailedFilePaths.OrderBy(path => path));
         Assert.All(evidence.SigningTargetAttributes, attributes =>
         {
             Assert.Equal(0, attributes & pinnedAttribute);
             Assert.NotEqual(0, attributes & (int)FileAttributes.Archive);
         });
-        Assert.DoesNotContain(evidence.Summary.FailedFiles, failure => failure.Contains(
-            "Windows PowerShell compatibility retry",
-            StringComparison.Ordinal));
+        Assert.Equal(11, evidence.Summary.FailedFiles.Count(failure => failure.Contains(
+            "not attempted because signing stopped after a failure", StringComparison.Ordinal)));
     }
 
     private static (
@@ -225,9 +200,6 @@ public sealed class SigningScriptRetryTests
             var script = EmbeddedScripts.Load("Scripts/Signing/Sign-Module.ps1");
             var includeB64 = Convert.ToBase64String(Encoding.UTF8.GetBytes("*.ps1"));
             var precheckFailurePath = includePrecheckFailure ? packageFilePaths[0] : string.Empty;
-            var signingTargetAttributeValue = signingTargetAttributes.HasValue
-                ? (int)signingTargetAttributes.Value
-                : 0;
             var harness = $$"""
                 $scriptText = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('{{Convert.ToBase64String(Encoding.UTF8.GetBytes(script))}}'))
                 $rootPath = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('{{Convert.ToBase64String(Encoding.UTF8.GetBytes(rootPath))}}'))
@@ -242,7 +214,6 @@ public sealed class SigningScriptRetryTests
                 $currentUserHasEkuRestriction = [Convert]::ToBoolean('{{currentUserHasEkuRestriction}}')
                 $signingSucceeds = [Convert]::ToBoolean('{{signingSucceeds}}')
                 $resultFailuresBeforeSuccess = [Convert]::ToInt32('{{resultFailuresBeforeSuccess}}')
-                $signingTargetAttributeValue = [Convert]::ToInt32('{{signingTargetAttributeValue}}')
                 $script:firstSigningCall = $true
                 $script:signingCallNumber = 0
                 function Get-Item {
@@ -290,11 +261,6 @@ public sealed class SigningScriptRetryTests
                     ([int][IO.File]::GetAttributes($FilePath)).ToString() + [Environment]::NewLine)
                   $script:signingCallNumber++
                   if ($script:signingCallNumber -le $resultFailuresBeforeSuccess) {
-                    if ($signingTargetAttributeValue -ne 0) {
-                      [IO.File]::SetAttributes(
-                        $FilePath,
-                        [IO.FileAttributes]$signingTargetAttributeValue)
-                    }
                     return [pscustomobject]@{
                       Status = 'UnknownError'
                       StatusMessage = 'Access was denied because of a security violation.'

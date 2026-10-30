@@ -367,7 +367,7 @@ public sealed partial class DotNetNuGetClientTests
     }
 
     [Fact]
-    public async Task SignPackagesIndividuallyAsync_RetriesOnlyThePackageThatFailed()
+    public async Task SignPackagesIndividuallyAsync_ReportsEachSuccessfulPackageOnce()
     {
         var events = new List<string>();
         var completedDurations = new Dictionary<string, TimeSpan>();
@@ -377,11 +377,7 @@ public sealed partial class DotNetNuGetClientTests
             string package = request.Arguments[2];
             attempts[package] = attempts.TryGetValue(package, out int count) ? count + 1 : 1;
             Assert.Equal($"{Path.GetFileName(package)}:start:{attempts[package]}", events[^1]);
-            bool transientFailure = package.EndsWith("One.1.0.0.nupkg", StringComparison.OrdinalIgnoreCase) &&
-                                    attempts[package] == 1;
-            return transientFailure
-                ? new ProcessRunResult(1, string.Empty, "Access was denied because of a security violation.", request.FileName, TimeSpan.FromSeconds(30), timedOut: false)
-                : new ProcessRunResult(0, "Package(s) signed successfully.", string.Empty, request.FileName, TimeSpan.FromSeconds(2), timedOut: false);
+            return new ProcessRunResult(0, "Package(s) signed successfully.", string.Empty, request.FileName, TimeSpan.FromSeconds(2), timedOut: false);
         });
         var client = new DotNetNuGetClient(processRunner);
         string first = @"C:\repo\Artifacts\One.1.0.0.nupkg";
@@ -400,75 +396,53 @@ public sealed partial class DotNetNuGetClientTests
 
         Assert.True(outcome.Result.Succeeded, outcome.Result.ErrorMessage);
         Assert.Empty(outcome.FailedPackages);
-        Assert.Equal(2, attempts[first]);
+        Assert.Equal(1, attempts[first]);
         Assert.Equal(1, attempts[second]);
-        Assert.Equal(TimeSpan.FromSeconds(32), completedDurations[first]);
+        Assert.Equal(TimeSpan.FromSeconds(2), completedDurations[first]);
         Assert.Equal(TimeSpan.FromSeconds(2), completedDurations[second]);
-        Assert.Contains("One.1.0.0.nupkg: signed on retry", outcome.Result.StdOut, StringComparison.Ordinal);
+        Assert.Contains($"{Path.GetFileName(first)}: signed", outcome.Result.StdOut, StringComparison.Ordinal);
         Assert.Equal([
             $"{Path.GetFileName(first)}:start:1",
-            $"{Path.GetFileName(first)}:start:2",
             $"{Path.GetFileName(first)}:end:True",
             $"{Path.GetFileName(second)}:start:1",
             $"{Path.GetFileName(second)}:end:True"], events);
     }
 
-    [Fact]
-    public async Task SignPackagesIndividuallyAsync_ReportsOnlyThePackageThatStillFails()
+    [Theory]
+    [InlineData(false, 0)]
+    [InlineData(false, 1)]
+    [InlineData(true, 1)]
+    public async Task SignPackagesIndividuallyAsync_StopsAtFailureAndReportsUnattemptedPackages(bool timedOut, int failedIndex)
     {
-        var processRunner = new StubProcessRunner(request =>
-        {
-            string package = request.Arguments[2];
-            bool fails = package.EndsWith("Two.1.0.0.nupkg", StringComparison.OrdinalIgnoreCase);
-            return fails
-                ? new ProcessRunResult(1, string.Empty, "Access was denied because of a security violation.", request.FileName, TimeSpan.Zero, timedOut: false)
-                : new ProcessRunResult(0, "Package(s) signed successfully.", string.Empty, request.FileName, TimeSpan.Zero, timedOut: false);
-        });
-        var client = new DotNetNuGetClient(processRunner);
-        string first = @"C:\repo\Artifacts\One.1.0.0.nupkg";
-        string second = @"C:\repo\Artifacts\Two.1.0.0.nupkg";
-
-        var outcome = await client.SignPackagesIndividuallyAsync(new DotNetNuGetSignRequest(
-            new[] { first, second },
-            certificateFingerprint: "ABC123",
-            certificateStoreLocation: "CurrentUser",
-            timeStampServer: "http://timestamp.digicert.com"));
-
-        Assert.False(outcome.Result.Succeeded);
-        Assert.Equal(new[] { second }, outcome.FailedPackages);
-        Assert.Contains("1 of 2 package(s)", outcome.Result.ErrorMessage, StringComparison.Ordinal);
-        Assert.Contains("Two.1.0.0.nupkg", outcome.Result.ErrorMessage, StringComparison.Ordinal);
-        Assert.DoesNotContain("One.1.0.0.nupkg:", outcome.Result.ErrorMessage, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public async Task SignPackagesIndividuallyAsync_StopsAfterFirstTimeout()
-    {
+        string[] packages = [Path.GetFullPath("One.1.0.0.nupkg"), Path.GetFullPath("Two.1.0.0.nupkg"), Path.GetFullPath("Three.1.0.0.nupkg")];
         var attempted = new List<string>();
         var processRunner = new StubProcessRunner(request =>
         {
             string package = request.Arguments[2];
             attempted.Add(package);
-            return package.EndsWith("Two.1.0.0.nupkg", StringComparison.OrdinalIgnoreCase)
-                ? new ProcessRunResult(-1, string.Empty, "Timeout", request.FileName, TimeSpan.FromMinutes(10), timedOut: true)
+            return package == packages[failedIndex]
+                ? new ProcessRunResult(timedOut ? -1 : 1, string.Empty, timedOut ? "Timeout" : "Access denied", request.FileName, TimeSpan.Zero, timedOut)
                 : new ProcessRunResult(0, "Package(s) signed successfully.", string.Empty, request.FileName, TimeSpan.Zero, timedOut: false);
         });
         var client = new DotNetNuGetClient(processRunner);
-        string first = @"C:\repo\Artifacts\One.1.0.0.nupkg";
-        string second = @"C:\repo\Artifacts\Two.1.0.0.nupkg";
-        string third = @"C:\repo\Artifacts\Three.1.0.0.nupkg";
 
         var outcome = await client.SignPackagesIndividuallyAsync(new DotNetNuGetSignRequest(
-            new[] { first, second, third },
+            packages,
             certificateFingerprint: "ABC123",
             certificateStoreLocation: "CurrentUser",
             timeStampServer: "http://timestamp.digicert.com"));
 
-        Assert.Equal(new[] { first, second }, attempted);
-        Assert.Equal(new[] { second, third }, outcome.FailedPackages);
-        Assert.True(outcome.Result.TimedOut);
-        Assert.Contains("1 remaining package(s) were not attempted", outcome.Result.ErrorMessage, StringComparison.Ordinal);
-        Assert.Contains("hardware-token authorization/PIN", outcome.Result.ErrorMessage, StringComparison.Ordinal);
+        Assert.False(outcome.Result.Succeeded);
+        Assert.Equal(packages.Take(failedIndex + 1), attempted);
+        Assert.Equal(packages.Skip(failedIndex), outcome.FailedPackages);
+        Assert.Equal(timedOut, outcome.Result.TimedOut);
+        Assert.Contains($"{2 - failedIndex} remaining package(s) were not attempted", outcome.Result.ErrorMessage, StringComparison.Ordinal);
+        Assert.Contains(Path.GetFileName(packages[failedIndex]), outcome.Result.ErrorMessage, StringComparison.Ordinal);
+        if (failedIndex > 0)
+        {
+            Assert.Contains($"{Path.GetFileName(packages[0])}: signed", outcome.Result.StdOut, StringComparison.Ordinal);
+            Assert.DoesNotContain($"{Path.GetFileName(packages[0])}:", outcome.Result.ErrorMessage, StringComparison.Ordinal);
+        }
     }
 
     [Fact]

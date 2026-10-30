@@ -93,7 +93,7 @@ public sealed partial class DotNetRepositoryReleaseService
         {
             attemptedPackages.Add(package);
             var detail = outcome is null
-                ? $"Signing and timestamping (attempt {attempt}/2)"
+                ? "Signing and timestamping"
                 : outcome.Succeeded ? "signed" : outcome.ErrorMessage ?? "signing failed";
             UpdateArtifactProgress(
                 detailedProgress,
@@ -110,8 +110,6 @@ public sealed partial class DotNetRepositoryReleaseService
             }
             progress?.PhaseUpdated(ProjectBuildProgressPhase.PackageSigning, signedCount, packages.Length,
                 $"{Path.GetFileName(package)} — {detail}");
-            if (attempt > 1)
-                _logger.Info($"Retrying package signing: {Path.GetFileName(package)} (attempt {attempt}/2).");
         }
 
         _logger.Info($"Signing {packages.Length} NuGet package(s)...");

@@ -3,10 +3,8 @@ namespace PowerForge;
 public sealed partial class DotNetNuGetClient
 {
     /// <summary>
-    /// Signs packages one at a time so one transient certificate-provider or file-access
-    /// failure cannot hide packages that were already signed by a multi-package command.
-    /// Each failed package receives one immediate retry, except a timeout: a stalled
-    /// certificate or timestamp operation stops the batch so the operator can act.
+    /// Signs packages one at a time and stops at the first failure so a denied or
+    /// failed certificate operation cannot trigger another private-key prompt.
     /// </summary>
     internal async Task<(DotNetNuGetSignResult Result, string[] FailedPackages)> SignPackagesIndividuallyAsync(
         DotNetNuGetSignRequest request,
@@ -26,41 +24,25 @@ public sealed partial class DotNetNuGetClient
         {
             cancellationToken.ThrowIfCancellationRequested();
             attemptedPackageCount++;
-            DotNetNuGetSignResult? last = null;
-            TimeSpan packageDuration = TimeSpan.Zero;
-            for (int attempt = 1; attempt <= 2; attempt++)
-            {
-                progress?.Invoke(packagePath, attempt, null);
-                last = await SignPackageAsync(
+            progress?.Invoke(packagePath, 1, null);
+            var last = await SignPackageAsync(
                     new DotNetNuGetSignRequest(
                         packagePath,
                         request.CertificateFingerprint,
                         request.CertificateStoreLocation,
                         request.TimeStampServer,
                         request.CertificateStoreName,
-                        request.Overwrite || attempt > 1,
+                        request.Overwrite,
                         request.WorkingDirectory,
                         request.Timeout),
                     cancellationToken).ConfigureAwait(false);
-                packageDuration += last.Duration;
-                if (last.Succeeded)
-                {
-                    messages.Add($"{Path.GetFileName(packagePath)}: " +
-                                 (attempt == 1 ? "signed" : "signed on retry"));
-                    break;
-                }
-                if (last.TimedOut)
-                    break;
-            }
-
-            if (last is not null)
-                last = new DotNetNuGetSignResult(last.ExitCode, last.StdOut, last.StdErr,
-                    last.Executable, packageDuration, last.TimedOut, last.ErrorMessage);
             progress?.Invoke(packagePath, 0, last);
-            if (last is not null && !last.Succeeded)
+            if (!last.Succeeded)
+            {
                 failures.Add((packagePath, last));
-            if (last?.TimedOut == true)
                 break;
+            }
+            messages.Add($"{Path.GetFileName(packagePath)}: signed");
         }
 
         TimeSpan duration = DateTime.UtcNow - started;
@@ -90,7 +72,7 @@ public sealed partial class DotNetNuGetClient
         int unattemptedPackages = request.PackagePaths.Length - attemptedPackageCount;
         string error = failures.Any(failure => failure.Result.TimedOut)
             ? $"Signing timed out for {details}; {unattemptedPackages} remaining package(s) were not attempted. Check hardware-token authorization/PIN and the timestamp service before retrying."
-            : $"Signing failed for {failures.Count} of {request.PackagePaths.Length} package(s): {details}";
+            : $"Signing failed for {failures.Count} of {request.PackagePaths.Length} package(s): {details}; {unattemptedPackages} remaining package(s) were not attempted.";
         DotNetNuGetSignResult firstFailure = failures[0].Result;
         return (
             new DotNetNuGetSignResult(

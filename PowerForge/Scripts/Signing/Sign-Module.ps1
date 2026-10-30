@@ -196,21 +196,14 @@ function Invoke-WithFileRetry {
     [Parameter(Mandatory = $true)] [string]$Action,
     [Parameter(Mandatory = $true)] [int]$Completed,
     [Parameter(Mandatory = $true)] [int]$Total,
-    [int]$MaxAttempts = 15,
-    [scriptblock]$ShouldRetryResult
+    [int]$MaxAttempts = 15
   )
 
   if ($MaxAttempts -lt 1) { throw 'MaxAttempts must be at least 1.' }
   $delay = 200
   for ($attempt = 1; $attempt -le $MaxAttempts; $attempt++) {
     try {
-      $result = & $ScriptBlock
-      if ($null -eq $ShouldRetryResult -or -not (& $ShouldRetryResult $result)) {
-        return $result
-      }
-      if ($attempt -ge $MaxAttempts) {
-        return $result
-      }
+      return (& $ScriptBlock)
     } catch {
       if ($attempt -ge $MaxAttempts) {
         $message = $_.Exception.Message
@@ -371,21 +364,7 @@ try {
   $failedFiles = New-Object 'System.Collections.Generic.List[string]'
   $failedFilePaths = New-Object 'System.Collections.Generic.List[string]'
   $precheckFailures = @{}
-  $useWindowsPowerShellCompatibility = `
-    [System.IO.Path]::DirectorySeparatorChar -eq '\' -and `
-    $PSVersionTable.PSEdition -eq 'Core' -and `
-    -not [string]::IsNullOrWhiteSpace($Thumbprint) -and `
-    [string]::IsNullOrWhiteSpace($PfxPath) -and `
-    [string]::IsNullOrWhiteSpace($PfxBase64)
-  $signingMaxAttempts = 15
-  $retryUnknownSigningResult = {
-    param([object]$result)
-    return $null -ne $result -and [string]$result.Status -eq 'UnknownError'
-  }
-  $canDeferToWindowsPowerShell = $false
-  $hasNonCompatibilitySigningFailure = $false
-  $deferRemainingSigningTargets = $false
-  $compatibilityFailureMessage = $null
+  $signingFailureMessage = $null
 
   if ($IsWindows -or $PSVersionTable.PSVersion.Major -le 5) {
     if (-not (Get-Command Get-AuthenticodeSignature -ErrorAction SilentlyContinue)) {
@@ -439,35 +418,28 @@ try {
       }
     }
 
-    $canDeferToWindowsPowerShell = $useWindowsPowerShellCompatibility -and $precheckFailures.Count -eq 0
-    $signingMaxAttempts = if ($canDeferToWindowsPowerShell) { 3 } else { 15 }
-    $targets = $all | Where-Object { $preDisposition[$_] -eq 'Target' }
-    $attempted = $targets.Count
+    $targets = @($all | Where-Object { $preDisposition[$_] -eq 'Target' })
 
     $processedTargets = 0
     foreach ($f in $targets) {
-      EmitSigningProgress $processedTargets $attempted ("Signing and timestamping {0}/{1}: {2}" -f ($processedTargets + 1), $attempted, $f.Substring($rootPrefix.Length))
-      $processedTargets++
-      if ($precheckFailures.ContainsKey($f)) { [void]$precheckFailures.Remove($f) }
-      $wasSigned = $preStatus[$f] -ne 'NotSigned'
-      if ($deferRemainingSigningTargets) {
+      if ($signingFailureMessage) {
         $failed++
-        $signingException++
-        Add-FailedFile -List $failedFiles -FilePath $f -Message ("deferred to Windows PowerShell compatibility retry after provider failure: " + $compatibilityFailureMessage)
+        Add-FailedFile -List $failedFiles -FilePath $f -Message ("not attempted because signing stopped after a failure: " + $signingFailureMessage)
         $failedFilePaths.Add($f) | Out-Null
         continue
       }
+      EmitSigningProgress $processedTargets $targets.Count ("Signing and timestamping {0}/{1}: {2}" -f ($processedTargets + 1), $targets.Count, $f.Substring($rootPrefix.Length))
+      $processedTargets++
+      $attempted++
+      $wasSigned = $preStatus[$f] -ne 'NotSigned'
       try {
+        # A private-key operation may prompt for consent. Never retry it, including
+        # in another host, after a failed result, denial or cancellation.
+        Clear-SigningCloudPlacementAttributes -filePath $f
         if ($overwrite) {
-          $r = Invoke-WithFileRetry -FilePath $f -Action 'Set-AuthenticodeSignature' -Completed ($processedTargets - 1) -Total $attempted -MaxAttempts $signingMaxAttempts -ShouldRetryResult $retryUnknownSigningResult -ScriptBlock {
-            Clear-SigningCloudPlacementAttributes -filePath $f
-            Set-AuthenticodeSignature -FilePath $f -Certificate $cert -TimestampServer $ts -IncludeChain All -HashAlgorithm SHA256 -Force -ErrorAction Stop
-          }
+          $r = Set-AuthenticodeSignature -FilePath $f -Certificate $cert -TimestampServer $ts -IncludeChain All -HashAlgorithm SHA256 -Force -ErrorAction Stop
         } else {
-          $r = Invoke-WithFileRetry -FilePath $f -Action 'Set-AuthenticodeSignature' -Completed ($processedTargets - 1) -Total $attempted -MaxAttempts $signingMaxAttempts -ShouldRetryResult $retryUnknownSigningResult -ScriptBlock {
-            Clear-SigningCloudPlacementAttributes -filePath $f
-            Set-AuthenticodeSignature -FilePath $f -Certificate $cert -TimestampServer $ts -IncludeChain All -HashAlgorithm SHA256 -ErrorAction Stop
-          }
+          $r = Set-AuthenticodeSignature -FilePath $f -Certificate $cert -TimestampServer $ts -IncludeChain All -HashAlgorithm SHA256 -ErrorAction Stop
         }
 
         $status = if ($r) { [string]$r.Status } else { 'Unknown' }
@@ -477,23 +449,17 @@ try {
           if ($wasSigned) { $resigned++ } else { $signedNew++ }
         } else {
           $failed++
-          if ($status -ne 'UnknownError') {
-            $hasNonCompatibilitySigningFailure = $true
-            $signingMaxAttempts = 15
-          }
           $statusMessage = if ($r) { [string]$r.StatusMessage } else { '' }
-          Add-FailedFile -List $failedFiles -FilePath $f -Message ("signing returned status " + $status + " " + $statusMessage)
+          $signingFailureMessage = "signing returned status " + $status + " " + $statusMessage
+          Add-FailedFile -List $failedFiles -FilePath $f -Message $signingFailureMessage
           $failedFilePaths.Add($f) | Out-Null
         }
       } catch {
         $failed++
         $signingException++
-        Add-FailedFile -List $failedFiles -FilePath $f -Message $_.Exception.Message
+        $signingFailureMessage = 'signing failed: ' + $_.Exception.Message
+        Add-FailedFile -List $failedFiles -FilePath $f -Message $signingFailureMessage
         $failedFilePaths.Add($f) | Out-Null
-        if ($canDeferToWindowsPowerShell -and -not $hasNonCompatibilitySigningFailure) {
-          $deferRemainingSigningTargets = $true
-          $compatibilityFailureMessage = $_.Exception.Message
-        }
       }
     }
 
@@ -552,20 +518,26 @@ try {
       }
     }
 
-    $targets = $all | Where-Object { $preDisposition[$_] -eq 'Target' }
-    $attempted = $targets.Count
+    $targets = @($all | Where-Object { $preDisposition[$_] -eq 'Target' })
 
     $processedTargets = 0
     foreach ($f in $targets) {
-      EmitSigningProgress $processedTargets $attempted ("Signing and timestamping {0}/{1}: {2}" -f ($processedTargets + 1), $attempted, $f.Substring($rootPrefix.Length))
+      if ($signingFailureMessage) {
+        $failed++
+        Add-FailedFile -List $failedFiles -FilePath $f -Message ("not attempted because signing stopped after a failure: " + $signingFailureMessage)
+        $failedFilePaths.Add($f) | Out-Null
+        continue
+      }
+      EmitSigningProgress $processedTargets $targets.Count ("Signing and timestamping {0}/{1}: {2}" -f ($processedTargets + 1), $targets.Count, $f.Substring($rootPrefix.Length))
       $processedTargets++
-      if ($precheckFailures.ContainsKey($f)) { [void]$precheckFailures.Remove($f) }
+      $attempted++
       $wasSigned = $preStatus[$f] -ne 'NotSigned'
       try {
-        $r = Invoke-WithFileRetry -FilePath $f -Action 'Set-OpenAuthenticodeSignature' -Completed ($processedTargets - 1) -Total $attempted -ScriptBlock {
-          Clear-SigningCloudPlacementAttributes -filePath $f
-          # Set replaces existing signatures; target selection implements OverwriteSigned.
-          Set-OpenAuthenticodeSignature -LiteralPath $f -Certificate $cert -TimeStampServer $ts -IncludeOption WholeChain -HashAlgorithm SHA256 -ErrorAction Stop | Out-Null
+        Clear-SigningCloudPlacementAttributes -filePath $f
+        # Set replaces existing signatures; target selection implements OverwriteSigned.
+        # Only the read-only verification may retry, never the private-key operation.
+        Set-OpenAuthenticodeSignature -LiteralPath $f -Certificate $cert -TimeStampServer $ts -IncludeOption WholeChain -HashAlgorithm SHA256 -ErrorAction Stop | Out-Null
+        $r = Invoke-WithFileRetry -FilePath $f -Action 'Get-OpenAuthenticodeSignature' -Completed ($processedTargets - 1) -Total $targets.Count -ScriptBlock {
           $verified = Get-OpenSigningState -filePath $f
           if ($verified.Status -ne 'Valid' -or $verified.SignerCertificate.Thumbprint -ne $thisTp) {
             throw 'OpenAuthenticode did not verify the selected signing identity after signing.'
@@ -581,13 +553,15 @@ try {
         } else {
           $failed++
           $statusMessage = if ($r) { [string]$r.StatusMessage } else { '' }
-          Add-FailedFile -List $failedFiles -FilePath $f -Message ("signing returned status " + $status + " " + $statusMessage)
+          $signingFailureMessage = "signing returned status " + $status + " " + $statusMessage
+          Add-FailedFile -List $failedFiles -FilePath $f -Message $signingFailureMessage
           $failedFilePaths.Add($f) | Out-Null
         }
       } catch {
         $failed++
         $signingException++
-        Add-FailedFile -List $failedFiles -FilePath $f -Message $_.Exception.Message
+        $signingFailureMessage = 'signing failed: ' + $_.Exception.Message
+        Add-FailedFile -List $failedFiles -FilePath $f -Message $signingFailureMessage
         $failedFilePaths.Add($f) | Out-Null
       }
     }
@@ -599,7 +573,8 @@ try {
     }
   }
 
-  EmitSigningProgress $attempted $attempted 'Signing attempts finished; checking results'
+  $completionDetail = if ($signingFailureMessage) { 'Signing stopped after a failure; remaining files were not attempted' } else { 'Signing attempts finished; checking results' }
+  EmitSigningProgress $attempted $targets.Count $completionDetail
   EmitSummary `
     -totalMatched @($files).Count `
     -totalAfterExclude @($all).Count `

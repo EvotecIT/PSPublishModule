@@ -169,16 +169,9 @@ public sealed class AuthenticodeSigningService
             return Array.Empty<PSObject>();
 
         EnsureSigningCommandsAvailable();
-        var signatures = IsWindows()
+        return IsWindows()
             ? SignWithWindowsAuthenticode(files, request)
             : SignWithOpenAuthenticode(files, request);
-        foreach (var signature in signatures)
-        {
-            var status = signature.Properties["Status"]?.Value?.ToString();
-            if (!string.Equals(status, "Valid", StringComparison.OrdinalIgnoreCase))
-                throw new InvalidOperationException($"Authenticode signing failed for '{signature.Properties["Path"]?.Value}': {status}. {signature.Properties["StatusMessage"]?.Value}");
-        }
-        return signatures;
     }
 
     /// <summary>
@@ -205,12 +198,9 @@ public sealed class AuthenticodeSigningService
         if (filesToSign.Length == 0)
             return Array.Empty<PSObject>();
 
-        foreach (var file in filesToSign)
-            _logger.Verbose($"Signing file: {file}");
-
-        return InvokeMany("Set-AuthenticodeSignature", ps =>
+        return SignIndividually("Set-AuthenticodeSignature", filesToSign, (ps, file) =>
         {
-            ps.AddParameter("FilePath", filesToSign);
+            ps.AddParameter("FilePath", file);
             ps.AddParameter("Certificate", request.Certificate);
             ps.AddParameter("TimestampServer", request.TimeStampServer);
             ps.AddParameter("IncludeChain", request.WindowsIncludeChain);
@@ -227,18 +217,33 @@ public sealed class AuthenticodeSigningService
         if (filesToSign.Length == 0)
             return Array.Empty<PSObject>();
 
-        foreach (var file in filesToSign)
-            _logger.Verbose($"Signing file: {file}");
-
-        return InvokeMany("Set-OpenAuthenticodeSignature", ps =>
+        return SignIndividually("Set-OpenAuthenticodeSignature", filesToSign, (ps, file) =>
         {
-            ps.AddParameter("FilePath", filesToSign);
+            ps.AddParameter("FilePath", file);
             ps.AddParameter("Certificate", request.Certificate);
             ps.AddParameter("TimeStampServer", request.TimeStampServer);
             ps.AddParameter("IncludeChain", request.NonWindowsIncludeChain);
             ps.AddParameter("HashAlgorithm", request.HashAlgorithm);
             if (request.OverwriteSigned) ps.AddParameter("Force");
         });
+    }
+
+    private IReadOnlyList<PSObject> SignIndividually(string command, string[] files, Action<PowerShell, string> configure)
+    {
+        var signatures = new List<PSObject>(files.Length);
+        foreach (var file in files)
+        {
+            _logger.Verbose($"Signing file: {file}");
+            var result = InvokeMany(command, ps => configure(ps, file));
+            if (result.Count != 1)
+                throw new InvalidOperationException($"Authenticode signing did not return exactly one signature for '{file}'.");
+            var signature = result[0];
+            var status = signature.Properties["Status"]?.Value?.ToString();
+            if (!string.Equals(status, "Valid", StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException($"Authenticode signing failed for '{file}': {status}. {signature.Properties["StatusMessage"]?.Value}");
+            signatures.Add(signature);
+        }
+        return signatures;
     }
 
     private string[] GetUnsignedFiles(string commandName, string[] files)
