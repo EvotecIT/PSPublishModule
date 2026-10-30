@@ -47,6 +47,32 @@ under `Modules`, use the native [delivery bundle layout](PSPublishModule.ModuleD
 carry selected dependency payloads without adding those modules to PSD1
 `RequiredModules`.
 
+## Selected Versions And Import Order
+
+Use `-RequiredVersion` when a dependency must use one exact version:
+
+```powershell
+New-ConfigurationModule -Type RequiredModule -Name 'Runtime.Tools' -RequiredVersion '1.0.0'
+New-ConfigurationImportModule -ImportSelf -ImportRequiredModules -PreferBinaryConflictOrder
+```
+
+Binary conflict analysis inspects the selected version, even if a newer version
+is installed. `-PreferBinaryConflictOrder` imports dependencies before modules
+that require them, then applies the binary preference among eligible modules.
+The same ordering is used for import advice and the generated manifest. Cyclic
+required-module declarations fail with an explicit dependency-cycle error.
+
+Approved helper analysis uses the selected runtime context too. A donor whose
+minimum requirement accepts `Runtime.Tools` 1.0.0 uses that selected module
+instead of autoloading an installed 2.0.0. If the donor requires 2.0.0, analysis
+reports the incompatible selected and imported versions and keeps the donor
+from being treated as safely inlined. Align those requirements before building.
+
+Import ordering cannot make incompatible assemblies coexist. Use `-Verbose`
+when investigating missing-command failures: resolution messages include the
+selected module and its import error, rather than only reporting that a command
+has no module source.
+
 ## Installed Modules In Cloud-Synced Folders
 
 Artefact builds can copy locally available installed dependencies from Windows

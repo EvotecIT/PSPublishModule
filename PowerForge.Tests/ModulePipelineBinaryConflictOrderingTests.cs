@@ -9,6 +9,49 @@ namespace PowerForge.Tests;
 public sealed class ModulePipelineBinaryConflictOrderingTests
 {
     [Fact]
+    public void Plan_PlacesSelectedDependencyBeforeModuleThatRequiresIt()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            WriteMinimalModule(root.FullName, "TestModule", "1.0.0");
+            var consumer = Path.Combine(root.FullName, "Consumer.Tools");
+            var runtime = Path.Combine(root.FullName, "Runtime.Tools");
+            WriteMinimalModule(consumer, "Consumer.Tools", "1.0.0");
+            WriteMinimalModule(runtime, "Runtime.Tools", "1.0.0");
+            File.WriteAllText(Path.Combine(consumer, "Consumer.Tools.psd1"),
+                "@{ RootModule = 'Consumer.Tools.psm1'; ModuleVersion = '1.0.0'; RequiredModules = @(@{ ModuleName = 'Runtime.Tools'; ModuleVersion = '1.0.0' }) }");
+            var runner = new ModulePipelineRunner(new NullLogger(), new StubPowerShellRunner(new Dictionary<string, string>
+            {
+                ["Consumer.Tools"] = consumer,
+                ["Runtime.Tools"] = runtime
+            }));
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec { Name = "TestModule", SourcePath = root.FullName, Version = "1.0.0" },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationModuleSegment { Kind = ModuleDependencyKind.RequiredModule,
+                        Configuration = new ModuleDependencyConfiguration { ModuleName = "Consumer.Tools", RequiredVersion = "1.0.0" } },
+                    new ConfigurationModuleSegment { Kind = ModuleDependencyKind.RequiredModule,
+                        Configuration = new ModuleDependencyConfiguration { ModuleName = "Runtime.Tools", RequiredVersion = "1.0.0" } },
+                    new ConfigurationImportModulesSegment { ImportModules = new ImportModulesConfiguration
+                        { RequiredModules = true, PreferBinaryConflictOrder = true } }
+                }
+            };
+
+            var plan = runner.Plan(spec);
+
+            Assert.Equal(new[] { "Runtime.Tools", "Consumer.Tools" }, plan.RequiredModules.Select(module => module.ModuleName));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void Plan_PreservesInstalledConflictAnalysisOptIn()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
@@ -38,8 +81,10 @@ public sealed class ModulePipelineBinaryConflictOrderingTests
         }
     }
 
-    [Fact]
-    public void Plan_ReordersRequiredModules_WhenPreferBinaryConflictOrderEnabled()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Plan_ReordersSelectedRequiredModules_WhenPreferBinaryConflictOrderEnabled(bool newerUnselectedVersionInstalled)
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
         try
@@ -56,12 +101,26 @@ public sealed class ModulePipelineBinaryConflictOrderingTests
             var betaModuleBase = Directory.CreateDirectory(Path.Combine(root.FullName, "Beta.Tools", "2.0.0", "bin"));
             File.Copy(betaAssembly, Path.Combine(betaModuleBase.FullName, "SharedAuth.dll"), overwrite: true);
 
+            var latestAlphaModuleBase = alphaModuleBase.Parent!.FullName;
+            if (newerUnselectedVersionInstalled)
+            {
+                var latestAssembly = BuildLibrary(root.FullName, "SharedAuth", "3.0.0", projectFolderName: "SharedAuth_Unselected");
+                var latestBin = Directory.CreateDirectory(Path.Combine(root.FullName, "Alpha.Tools", "3.0.0", "bin"));
+                File.Copy(latestAssembly, Path.Combine(latestBin.FullName, "SharedAuth.dll"));
+                latestAlphaModuleBase = latestBin.Parent!.FullName;
+            }
+
             var logger = new CollectingLogger();
-            var runner = new ModulePipelineRunner(logger, new StubPowerShellRunner(new Dictionary<string, string>
+            var selectedModules = new Dictionary<string, string>
             {
                 ["Alpha.Tools"] = alphaModuleBase.Parent!.FullName,
                 ["Beta.Tools"] = betaModuleBase.Parent!.FullName
-            }));
+            };
+            var latestModules = new Dictionary<string, string>(selectedModules)
+            {
+                ["Alpha.Tools"] = latestAlphaModuleBase
+            };
+            var runner = new ModulePipelineRunner(logger, new StubPowerShellRunner(latestModules, selectedModules));
 
             var spec = new ModulePipelineSpec
             {
@@ -188,15 +247,21 @@ public sealed class Marker
     private sealed class StubPowerShellRunner : IPowerShellRunner
     {
         private readonly IReadOnlyDictionary<string, string> _moduleBasePaths;
+        private readonly IReadOnlyDictionary<string, string>? _selectedModuleBasePaths;
 
-        public StubPowerShellRunner(IReadOnlyDictionary<string, string> moduleBasePaths)
+        public StubPowerShellRunner(IReadOnlyDictionary<string, string> moduleBasePaths,
+            IReadOnlyDictionary<string, string>? selectedModuleBasePaths = null)
         {
             _moduleBasePaths = moduleBasePaths;
+            _selectedModuleBasePaths = selectedModuleBasePaths;
         }
 
         public PowerShellRunResult Run(PowerShellRunRequest request)
         {
-            var lines = _moduleBasePaths
+            var modules = request.Arguments.Count > 1 && _selectedModuleBasePaths is not null
+                ? _selectedModuleBasePaths
+                : _moduleBasePaths;
+            var lines = modules
                 .OrderBy(static item => item.Key, StringComparer.OrdinalIgnoreCase)
                 .Select(static item =>
                     "PFMODINFO::ITEM::" +

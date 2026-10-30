@@ -355,7 +355,7 @@ jobs:
         run: >
           dotnet test .\PowerForge.Tests\PowerForge.Tests.csproj
           -c Release --no-build --no-restore --nologo
-          --filter 'FullyQualifiedName~Run_SealedReleasePreservesSourceLoaderAndPackagesCurrentBootstrapper|FullyQualifiedName~Execute_preserves_source_loader_through_deferred_publication_and_registry_recovery|FullyQualifiedName~ApprovedSigningPolicyTests|FullyQualifiedName~OpenAuthenticodeAdapterTests|FullyQualifiedName~ModuleSigningCertificateResolverTests|FullyQualifiedName~ModuleSigningEvidencePolicyTests|FullyQualifiedName~ArtefactBuilder|FullyQualifiedName~ApprovedModuleDependencyPruning|FullyQualifiedName~ModulePipelineApprovedModules'
+          --filter 'FullyQualifiedName~Run_SealedReleasePreservesSourceLoaderAndPackagesCurrentBootstrapper|FullyQualifiedName~Execute_preserves_source_loader_through_deferred_publication_and_registry_recovery|FullyQualifiedName~ApprovedSigningPolicyTests|FullyQualifiedName~OpenAuthenticodeAdapterTests|FullyQualifiedName~ModuleSigningCertificateResolverTests|FullyQualifiedName~ModuleSigningEvidencePolicyTests|FullyQualifiedName~ArtefactBuilder|FullyQualifiedName~ApprovedModuleDependencyPruning|FullyQualifiedName~ModulePipelineApprovedModules|FullyQualifiedName~ModulePipelineBinaryConflictOrderingTests|FullyQualifiedName~MissingFunctionsAnalyzerRuntimeModuleTests'
 
       - name: Test Apple store art and screenshot provenance
         shell: pwsh
@@ -636,7 +636,7 @@ jobs:
         run: >
           dotnet test .\PowerForge.Tests\PowerForge.Tests.csproj
           -c Release --no-build --no-restore --nologo
-          --filter 'FullyQualifiedName~ApprovedSigningPolicyTests|FullyQualifiedName~OpenAuthenticodeAdapterTests|FullyQualifiedName~ModuleSigningCertificateResolverTests|FullyQualifiedName~ModuleSigningEvidencePolicyTests|FullyQualifiedName~ArtefactBuilderDeliveryLayout|FullyQualifiedName~ApprovedModuleDependencyPruning|FullyQualifiedName~ModulePipelineApprovedModules'
+          --filter 'FullyQualifiedName~ApprovedSigningPolicyTests|FullyQualifiedName~OpenAuthenticodeAdapterTests|FullyQualifiedName~ModuleSigningCertificateResolverTests|FullyQualifiedName~ModuleSigningEvidencePolicyTests|FullyQualifiedName~ArtefactBuilderDeliveryLayout|FullyQualifiedName~ApprovedModuleDependencyPruning|FullyQualifiedName~ModulePipelineApprovedModules|FullyQualifiedName~ModulePipelineBinaryConflictOrderingTests|FullyQualifiedName~MissingFunctionsAnalyzerRuntimeModuleTests'
 
       - name: Test cross-platform website and agent plugin contracts
         shell: pwsh
