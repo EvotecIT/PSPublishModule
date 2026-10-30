@@ -7,9 +7,11 @@ namespace PowerForge.Tests;
 public sealed class MissingFunctionsAnalyzerRuntimeModuleTests
 {
     [Theory]
-    [InlineData("1.0.0", true)]
-    [InlineData("2.0.0", false)]
-    public void Analyze_ApprovedDonorHonorsSelectedRuntimeDependency(string donorMinimum, bool compatible)
+    [InlineData("1.0.0", true, false)]
+    [InlineData("2.0.0", false, false)]
+    [InlineData("1.0.0", true, true)]
+    [InlineData("2.0.0", false, true)]
+    public void Analyze_ApprovedDonorHonorsSelectedRuntimeDependency(string donorMinimum, bool compatible, bool nested)
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
         var previousModulePath = Environment.GetEnvironmentVariable("PSModulePath");
@@ -32,7 +34,11 @@ public sealed class MissingFunctionsAnalyzerRuntimeModuleTests
                 "if ((Get-SelectedRuntime) -eq 'selected') { function Get-SelectedDonor { 'selected-runtime' } }\n" +
                 "else { function Get-SelectedDonor { 'unselected-runtime' } }\nExport-ModuleMember -Function Get-SelectedDonor\n");
             File.WriteAllText(Path.Combine(donor.FullName, donorName + ".psd1"),
-                $"@{{ RootModule = '{donorName}.psm1'; ModuleVersion = '1.0.0'; RequiredModules = @(@{{ ModuleName = '{runtimeName}'; ModuleVersion = '{donorMinimum}' }}); FunctionsToExport = @('Get-SelectedDonor') }}");
+                $"@{{ RootModule = '{donorName}.psm1'; ModuleVersion = '1.0.0'; " +
+                (nested
+                    ? $"NestedModules = @('{Path.Combine(root.FullName, runtimeName, donorMinimum, runtimeName + ".psd1")}'); "
+                    : $"RequiredModules = @(@{{ ModuleName = '{runtimeName}'; ModuleVersion = '{donorMinimum}' }}); ") +
+                "FunctionsToExport = @('Get-SelectedDonor') }");
             Environment.SetEnvironmentVariable("PSModulePath", root.FullName + Path.PathSeparator + previousModulePath);
             var options = new MissingFunctionsOptions(
                 approvedModules: new[] { donorName },

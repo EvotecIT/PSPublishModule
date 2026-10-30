@@ -125,10 +125,12 @@ internal sealed class ModuleDependencyImportGraphReader
             throw new InvalidOperationException($"Cannot inspect module dependency declarations in '{path}': {errors[0].Message}");
         var references = (ast.ScriptRequirements?.RequiredModules.AsEnumerable() ?? Enumerable.Empty<ModuleSpecification>())
             .Select(ToReference).ToList();
-        foreach (var statement in ast.UsingStatements.Where(static statement => statement.UsingStatementKind == UsingStatementKind.Module))
+        foreach (var statement in ast.UsingStatements.OfType<UsingStatementAst>()
+                     .Where(static statement => statement.UsingStatementKind == UsingStatementKind.Module))
         {
-            var spec = statement.ModuleSpecification is not null
-                ? new ModuleSpecification((Hashtable)statement.ModuleSpecification.SafeGetValue())
+            var moduleSpecification = statement.GetType().GetProperty("ModuleSpecification")?.GetValue(statement) as HashtableAst;
+            var spec = moduleSpecification is not null
+                ? new ModuleSpecification((Hashtable)moduleSpecification.SafeGetValue())
                 : new ModuleSpecification(statement.Name.Value);
             references.Add(ToReference(spec));
         }
@@ -137,7 +139,7 @@ internal sealed class ModuleDependencyImportGraphReader
 
     private static RequiredModuleReference ToReference(ModuleSpecification spec)
         => new(spec.Name, moduleVersion: spec.Version?.ToString(), requiredVersion: spec.RequiredVersion?.ToString(),
-            maximumVersion: spec.MaximumVersion, guid: spec.Guid?.ToString());
+            maximumVersion: spec.GetType().GetProperty("MaximumVersion")?.GetValue(spec)?.ToString(), guid: spec.Guid?.ToString());
 
     private static string? ResolveLocalFile(string path)
     {

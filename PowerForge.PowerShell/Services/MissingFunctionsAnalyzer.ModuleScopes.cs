@@ -119,7 +119,7 @@ try {
                 // RequiredModules can contain declaration placeholders rather than loaded
                 // identities. Ask PowerShell for the actual imported module catalog.
                 ps.Commands.Clear();
-                var loaded = ps.AddCommand("Microsoft.PowerShell.Core\\Get-Module").Invoke();
+                var loaded = ps.AddCommand("Microsoft.PowerShell.Core\\Get-Module").AddParameter("All").Invoke();
                 foreach (var module in loaded.Select(static result => result.BaseObject).OfType<PSModuleInfo>())
                     if (_selectedRuntimeSources.TryGetValue(module.Name, out var selected))
                         ValidateImportedModuleIdentity(module, selected);
