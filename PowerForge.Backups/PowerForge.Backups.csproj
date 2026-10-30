@@ -6,7 +6,7 @@
     <IsPackable>false</IsPackable>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="DBAClientX.SQLite" Version="1.0.15" />
-    <PackageReference Include="DBAClientX.SqlServer" Version="1.0.15" />
+    <PackageReference Include="DBAClientX.SQLite" Version="1.0.16" />
+    <PackageReference Include="DBAClientX.SqlServer" Version="1.0.16" />
   </ItemGroup>
 </Project>
