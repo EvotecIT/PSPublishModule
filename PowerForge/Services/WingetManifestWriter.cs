@@ -117,7 +117,7 @@ internal static class WingetManifestWriter
     private static string ResolveManifestVersion(PowerForgeReleaseWingetOptions winget, PowerForgeReleaseWingetPackage package)
         => !string.IsNullOrWhiteSpace(package.ManifestVersion) ? package.ManifestVersion!.Trim()
             : !string.IsNullOrWhiteSpace(winget.ManifestVersion) ? winget.ManifestVersion!.Trim()
-            : "1.12.0";
+            : "1.28.0";
 
     private static string AddSchemaHeader(string yaml, string manifestType, string manifestVersion)
         => $"# yaml-language-server: $schema=https://aka.ms/winget-manifest.{manifestType}.{manifestVersion}.schema.json{Environment.NewLine}{yaml}";
