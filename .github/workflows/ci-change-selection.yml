@@ -37,13 +37,16 @@ jobs:
               # Package READMEs, generated help, fixtures, schemas and templates are inputs.
               if path.lower() in ('readme.md', 'docs/readme.md', 'docs/pspublishmodule.unifiedmoduleprojectrelease.md'):
                   return False
-              if any(part.lower() in ('schema', 'schemas', 'fixtures', 'templates', 'examples') for part in parts[:-1]):
+              if any(part.lower() in ('schema', 'schemas', 'fixtures', 'templates') for part in parts[:-1]):
                   return False
               if parts[0] == 'Website':
                   return True
+              if any(part.lower() == 'examples' for part in parts[:-1]):
+                  return False
               if len(parts) == 1:
                   return path.lower().endswith('.md')
-              return parts[0] in ('Docs', 'docs') and path.lower().endswith('.md')
+              return parts[0] in ('Docs', 'docs') and pathlib.PurePosixPath(path).suffix.lower() in (
+                  '.md', '.png', '.jpg', '.jpeg', '.gif', '.svg', '.webp', '.ico')
 
           build = True
           if os.environ['EVENT'] == 'pull_request':
