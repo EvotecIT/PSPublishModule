@@ -1,0 +1,27 @@
+name: PowerForge PR cache cleanup
+
+on:
+  pull_request_target:
+    types: [closed]
+  workflow_call:
+
+permissions: {}
+
+jobs:
+  cleanup:
+    if: github.event_name == 'pull_request_target' && github.event.action == 'closed'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write
+    steps:
+      # Never check out or execute pull-request code in this privileged job.
+      - name: Delete only the closed PR merge-ref caches
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          [[ "$PR_NUMBER" =~ ^[1-9][0-9]*$ ]]
+          gh cache delete --all --ref "refs/pull/$PR_NUMBER/merge" --succeed-on-no-caches
