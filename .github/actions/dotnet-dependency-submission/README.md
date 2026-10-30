@@ -89,8 +89,9 @@ directories must be new and outside their source. These are integrity checks for
 trusted artifacts, not artifact authentication. Coverage is limited to selected
 projects and restored runtime variants.
 
-Before retiring an automatic submission route, verify all native restores,
-read-only scans and actual default-branch snapshots. Keep dependency graph and
-Dependabot enabled. Scanner updates change the fixed version and platform digests
+Keep automatic dependency submission, dependency graph and Dependabot enabled.
+Verify native restores, read-only scans and actual default-branch snapshots;
+controlled scanner success does not settle a failed generated submission job.
+Scanner updates change the fixed version and platform digests
 in `scan.cjs` together and require renewed scan/snapshot proof. Native restore
 jobs can use Windows, macOS or Linux; scanner execution is supported on Linux x64.
