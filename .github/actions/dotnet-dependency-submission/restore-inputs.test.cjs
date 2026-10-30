@@ -7,6 +7,7 @@ const {spawnSync} = require('node:child_process');
 
 const script = path.join(__dirname, 'Restore-DependencyInputs.ps1');
 const stageScript = path.join(__dirname, 'Stage-DependencyGraphs.ps1');
+const sdkScript = path.join(__dirname, 'Assert-DependencySdk.ps1');
 
 function fixture(t) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'powerforge dependency inputs '));
@@ -22,13 +23,49 @@ function run(root, projects, workloads = '', version = '') {
   });
 }
 
-test('explicit portable project restores a real NuGet asset graph', t => {
+function sdk(root, setup, hideDotnet = false) {
+  const command = (hideDotnet ? "$env:PATH = ''; " : '') +
+    (setup === undefined ? '& $env:TEST_SDK_SCRIPT -Restore' : '& $env:TEST_SDK_SCRIPT -SetupDotNet $env:TEST_SETUP_DOTNET -Restore');
+  return spawnSync('pwsh', ['-NoLogo', '-NoProfile', '-Command', command], {
+    cwd: root, encoding: 'utf8', timeout: 30000,
+    env: {...process.env, TEST_SDK_SCRIPT: sdkScript, TEST_SETUP_DOTNET: setup ?? ''}
+  });
+}
+
+test('an existing SDK restores a real portable graph without a policy file', t => {
   const root = fixture(t);
+  const selected = sdk(root, 'false');
+  assert.equal(selected.status, 0, selected.stdout + selected.stderr);
+  assert.match(selected.stdout, /Using existing \.NET SDK \d+\.\d+\.\d+/);
   const result = run(root, ['Example.csproj']);
   assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.equal(fs.existsSync(path.join(root, 'global.json')), false);
   const assets = JSON.parse(fs.readFileSync(path.join(root, 'obj', 'project.assets.json'), 'utf8'));
   assert.ok(assets.targets['net8.0']);
   assert.equal(path.resolve(assets.project.restore.projectPath), path.join(root, 'Example.csproj'));
+});
+
+test('SDK preflight defers SDK selection to configured setup by default', t => {
+  const root = fixture(t);
+  for (const setup of [undefined, 'true']) {
+    const result = sdk(root, setup, true);
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+  }
+});
+
+test('SDK preflight rejects nonboolean setup selections', t => {
+  const root = fixture(t);
+  for (const setup of ['', 'TRUE', '1']) {
+    const result = sdk(root, setup, true);
+    assert.notEqual(result.status, 0);
+    assert.match(result.stdout + result.stderr, /setup-dotnet must be 'true' or 'false'/);
+  }
+});
+
+test('existing SDK selection fails when dotnet is absent from PATH', t => {
+  const result = sdk(fixture(t), 'false', true);
+  assert.notEqual(result.status, 0);
+  assert.match(result.stdout + result.stderr, /dotnet is not available on PATH/);
 });
 
 test('empty project selection fails before restore', t => {

@@ -75,7 +75,15 @@ and non-default branches. It invokes no scanner. Use distinct stable correlators
 for native host profiles. Download only named artifacts from the same workflow
 run; never promote pull-request artifacts into a privileged workflow.
 
-The SDK follows `global.json`. Workloads install before restore using existing
+By default, SDK setup follows `global.json` (or `global-json-file`) and a missing
+policy file fails setup. A workflow that has already configured its SDK can set
+`setup-dotnet: 'false'` on the restore step. That mode validates and logs the SDK
+selected by `dotnet --version`, retaining its normal SDK resolution. It skips
+PowerForge's policy-file setup and creates no SDK policy file. SDK selection
+remains with the caller. The input accepts only `true` or `false`; scans and
+uploads do not configure or require an SDK.
+
+Workloads install before restore using existing
 SDK manifests by default. Set `workload-version` to an exact workload-set version
 when a project requires newer targeting packs within the same SDK feature band;
 it is passed to `dotnet workload install --version`. Installation or restore
