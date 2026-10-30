@@ -9,6 +9,8 @@ on:
       - 'Deployment/Windows/DatabaseBackupInstallation.ps1'
       - 'Deployment/Windows/Test-DatabaseBackupInstallation.ps1'
       - '.github/workflows/database-backups-tests.yml'
+      - '!**/*.md'
+      - '!**/*.MD'
   push:
     branches: [main]
     paths:
@@ -19,8 +21,14 @@ on:
       - 'Deployment/Windows/DatabaseBackupInstallation.ps1'
       - 'Deployment/Windows/Test-DatabaseBackupInstallation.ps1'
       - '.github/workflows/database-backups-tests.yml'
+  workflow_dispatch:
 permissions:
   contents: read
+# First attempts supersede the same PR; reruns and non-PR runs have separate groups.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.run_attempt == 1 && format('pr-{0}', github.event.pull_request.number) || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' && github.run_attempt == 1 }}
+
 jobs:
   contracts:
     strategy:

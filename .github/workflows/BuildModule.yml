@@ -2,9 +2,10 @@
 
 name: Test & Build Module
 
+# First attempts supersede the same PR; reruns and non-PR runs have separate groups.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.run_attempt == 1 && format('pr-{0}', github.event.pull_request.number) || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' && github.run_attempt == 1 }}
 
 env:
   DOTNET_NOLOGO: true
@@ -19,7 +20,6 @@ on:
   push:
     branches: [ "main" ]
   pull_request:
-    branches: [ "main" ]
 
   # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
@@ -74,6 +74,9 @@ on:
 
 # A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
+  changes:
+    uses: ./.github/workflows/ci-change-selection.yml
+
   WorkflowLint:
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -151,6 +154,8 @@ jobs:
           "$lint_root/actionlint" -oneline "${lint_workflows[@]}"
 
   DependencyAudit:
+    needs: changes
+    if: needs.changes.outputs.build == 'true'
     # Prefer private/self-hosted runners for private repos to reduce hosted spend.
     runs-on: ${{ fromJSON(github.event.repository.private && '["self-hosted","linux"]' || '["ubuntu-latest"]') }}
     timeout-minutes: 5
@@ -269,6 +274,8 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
   WindowsBuild:
+    needs: changes
+    if: needs.changes.outputs.build == 'true'
     # The type of runner that the job will run on
     # Prefer private/self-hosted runners for private repos to reduce hosted spend.
     runs-on: ${{ fromJSON(github.event.repository.private && '["self-hosted","windows"]' || '["windows-latest"]') }}
@@ -385,6 +392,8 @@ jobs:
         timeout-minutes: 10
         run: .\PSPublishModule.Tests.ps1
   ProductBuildSmoke:
+    needs: changes
+    if: needs.changes.outputs.build == 'true'
     runs-on: ${{ fromJSON(github.event.repository.private && '["self-hosted","windows"]' || '["windows-latest"]') }}
     timeout-minutes: ${{ github.event_name == 'workflow_dispatch' && inputs.compilerFullGate == true && 240 || 180 }}
     env:
@@ -530,6 +539,8 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
   LinuxBuild:
+    needs: changes
+    if: needs.changes.outputs.build == 'true'
     # The type of runner that the job will run on
     # Prefer private/self-hosted runners for private repos to reduce hosted spend.
     runs-on: ${{ fromJSON(github.event.repository.private && '["self-hosted","linux"]' || '["ubuntu-latest"]') }}
@@ -683,6 +694,8 @@ jobs:
         timeout-minutes: 10
         run: .\PSPublishModule.Tests.ps1
   MacOsBuild:
+    needs: changes
+    if: needs.changes.outputs.build == 'true' && github.event_name != 'pull_request'
     # The type of runner that the job will run on
     # Prefer private/self-hosted runners for private repos to reduce hosted spend.
     runs-on: ${{ fromJSON(github.event.repository.private && '["self-hosted","macOS"]' || '["macos-latest"]') }}
@@ -754,3 +767,31 @@ jobs:
         shell: pwsh
         timeout-minutes: 10
         run: .\PSPublishModule.Tests.ps1
+
+  CoverageGate:
+    # There are no required branch contexts. Keep job names and use one fail-closed gate.
+    name: CI coverage
+    needs: [changes, DependencyAudit, WindowsBuild, ProductBuildSmoke, LinuxBuild, MacOsBuild]
+    if: always()
+    runs-on: ${{ fromJSON(github.event.repository.private && '["self-hosted","linux"]' || '["ubuntu-latest"]') }}
+    timeout-minutes: 5
+    steps:
+      - name: Require selected coverage
+        env:
+          EVENT: ${{ github.event_name }}
+          RESULTS: ${{ toJSON(needs) }}
+        shell: python
+        run: |
+          import json, os
+          results = json.loads(os.environ['RESULTS'])
+          selection = results.pop('changes')
+          if selection['result'] != 'success' or selection['outputs'].get('build') not in ('true', 'false'):
+              raise SystemExit('Coverage selection failed or returned no decision.')
+          for name, job in results.items():
+              required = selection['outputs']['build'] == 'true'
+              if name == 'MacOsBuild' and os.environ['EVENT'] == 'pull_request':
+                  required = False
+              expected = 'success' if required else 'skipped'
+              if job['result'] != expected:
+                  raise SystemExit(f"{name}: expected {expected}, received {job['result']}.")
+              print(f'{name}: {expected}.')

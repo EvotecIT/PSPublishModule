@@ -33,17 +33,21 @@ on:
       - "PowerForge.Web.Cli/ServerScaffoldTemplateStore.cs"
       - "PowerForge.Web.Cli/ServerRecoveryModels.cs"
       - "PowerForge.Web.Cli/ServerRecoveryDurableBackupModels.cs"
-      - "PowerForge.Web.Cli/Templates/ServerScaffold/**"
       - "PowerForge.Web.Cli/WebCliCommandHandlers.Server*.cs"
       - "Schemas/powerforge.web.serverrecovery.schema.json"
+      - "!**/*.md"
+      - "!**/*.MD"
+      # Templates are build inputs, including ONBOARDING.md.
+      - "PowerForge.Web.Cli/Templates/ServerScaffold/**"
   workflow_dispatch:
 
 permissions:
   contents: read
 
+# First attempts supersede the same PR; reruns and non-PR runs have separate groups.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.run_attempt == 1 && format('pr-{0}', github.event.pull_request.number) || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' && github.run_attempt == 1 }}
 
 jobs:
   ServerRecoveryValidationTests:

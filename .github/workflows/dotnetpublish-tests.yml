@@ -1,8 +1,9 @@
 name: DotNetPublish Focused Tests
 
+# First attempts supersede the same PR; reruns and non-PR runs have separate groups.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.run_attempt == 1 && format('pr-{0}', github.event.pull_request.number) || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' && github.run_attempt == 1 }}
 
 env:
   DOTNET_NOLOGO: true

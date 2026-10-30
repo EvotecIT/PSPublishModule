@@ -188,7 +188,7 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
 concurrency:
-  group: powerforge-website-deploy-${{ github.repository }}-${{ inputs.website_root }}
+  group: powerforge-website-deploy-${{ github.repository }}-${{ inputs.website_root }}-${{ github.run_id }}
   cancel-in-progress: false
 
 jobs:
