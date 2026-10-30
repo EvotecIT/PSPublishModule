@@ -446,7 +446,7 @@ try {
     $dotNetLifetimeConfigured = $true
 
     $snapshotModuleProject = Join-Path $toolSnapshotRoot 'PSPublishModule\PSPublishModule.csproj'
-    $restoreOutput = @(& dotnet restore $snapshotModuleProject --locked-mode --disable-parallel --nologo --verbosity quiet 2>&1)
+    $restoreOutput = @(& dotnet restore $snapshotModuleProject --disable-parallel --nologo --verbosity quiet 2>&1)
     if ($LASTEXITCODE -ne 0) {
         $restoreDetails = ($restoreOutput | Out-String).Trim()
         throw "Failed to restore the immutable PowerForge tool snapshot (exit code $LASTEXITCODE).`n$restoreDetails"

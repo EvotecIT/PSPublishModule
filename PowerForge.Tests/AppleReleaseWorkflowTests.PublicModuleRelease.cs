@@ -93,7 +93,7 @@ public sealed partial class AppleReleaseWorkflowTests
         Assert.Contains("New-PowerForgeReleaseToolSnapshot", script, StringComparison.Ordinal);
         Assert.Contains("Remove-PowerForgeReleaseToolSnapshot", script, StringComparison.Ordinal);
         Assert.Contains("Invoke-PowerForgeReleaseBuildProcess", script, StringComparison.Ordinal);
-        Assert.Contains("dotnet restore $snapshotModuleProject --locked-mode --disable-parallel", script, StringComparison.Ordinal);
+        Assert.Contains("dotnet restore $snapshotModuleProject --disable-parallel", script, StringComparison.Ordinal);
         Assert.Contains("DOTNET_CLI_USE_MSBUILD_SERVER", script, StringComparison.Ordinal);
         Assert.Contains("Set-PowerForgePublicReleaseAuthorizationReceipt", script, StringComparison.Ordinal);
         Assert.Contains("$preserveSuccessfulReceipt", script, StringComparison.Ordinal);

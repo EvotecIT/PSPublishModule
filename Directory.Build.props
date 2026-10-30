@@ -7,10 +7,6 @@
     <RepositoryType>git</RepositoryType>
     <PublishRepositoryUrl>true</PublishRepositoryUrl>
 
-    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
   </PropertyGroup>
 
-  <PropertyGroup Condition=" '$(CI)' == 'true' ">
-    <RestoreLockedMode>true</RestoreLockedMode>
-  </PropertyGroup>
 </Project>

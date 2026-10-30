@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-# Restore the exact SDK required by a site's pinned PowerForge engine.
+# Satisfy the stable SDK policy declared by a site's pinned PowerForge engine.
 umask 077
 PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 export PATH
@@ -44,7 +44,8 @@ unsafe=$(find "$ENGINE_REPOSITORY_PATH/.git" -xdev \( ! -user root -o -perm /022
 global_json=$(git -c "safe.directory=$ENGINE_REPOSITORY_PATH" -C "$ENGINE_REPOSITORY_PATH" show "${ENGINE_SHA}:global.json")
 sdk_version=$(jq -er '.sdk.version | select(type == "string")' <<<"$global_json")
 [[ $sdk_version =~ ^10\.0\.[0-9]+$ ]] || fail 'engine requires an unsupported SDK version'
-jq -e '.sdk.rollForward == "disable" and .sdk.allowPrerelease == false' <<<"$global_json" >/dev/null || fail 'engine SDK lock is not exact'
+jq -e '.sdk.allowPrerelease == false and (.sdk.rollForward == "latestFeature" or .sdk.rollForward == "disable")' <<<"$global_json" >/dev/null || fail 'engine SDK policy must select stable latestFeature or legacy disable'
+sdk_roll_forward=$(jq -er '.sdk.rollForward' <<<"$global_json")
 runtime_channels=${DOTNET_RUNTIME_CHANNELS:-}
 runtime_versions=${DOTNET_RUNTIME_VERSIONS:-}
 for channel in $runtime_channels; do
@@ -81,8 +82,23 @@ has_runtime() {
   return 1
 }
 
+has_sdk() {
+  local version path
+  [[ -x $DOTNET_ROOT/dotnet ]] || return 1
+  while read -r version path; do
+    [[ $path == "[$DOTNET_ROOT/sdk]" ]] || continue
+    if [[ $sdk_roll_forward == disable ]]; then
+      [[ $version == "$sdk_version" ]] && return 0
+    elif [[ $version =~ ^10[.]0[.](0|[1-9][0-9]*)$ ]] &&
+      (( 10#${version##*.} >= 10#${sdk_version##*.} )); then
+      return 0
+    fi
+  done < <("$DOTNET_ROOT/dotnet" --list-sdks)
+  return 1
+}
+
 sdk_installed=0
-if [[ -x $DOTNET_ROOT/dotnet ]] && "$DOTNET_ROOT/dotnet" --list-sdks | grep -Fqx "$sdk_version [$DOTNET_ROOT/sdk]"; then
+if has_sdk; then
   sdk_installed=1
 fi
 runtime_missing=0
@@ -98,7 +114,7 @@ for version in $runtime_versions; do
 done
 if [[ $sdk_installed -eq 1 && $runtime_missing -eq 0 ]]; then
   chmod -R a+rX "$DOTNET_ROOT"
-  printf 'SDK %s and declared runtimes already installed\n' "$sdk_version"
+  printf 'Stable SDK policy %s (%s) and declared runtimes satisfied\n' "$sdk_version" "$sdk_roll_forward"
   exit 0
 fi
 
@@ -107,10 +123,14 @@ trap 'rm -rf -- "$scratch"' EXIT
 curl --fail --silent --show-error --location --retry 3 --max-time 60 \
   https://dot.net/v1/dotnet-install.sh -o "$scratch/dotnet-install.sh"
 if [[ $sdk_installed -eq 0 ]]; then
-  (umask 022; bash "$scratch/dotnet-install.sh" --version "$sdk_version" --install-dir "$DOTNET_ROOT" --no-path)
+  if [[ $sdk_roll_forward == latestFeature ]]; then
+    (umask 022; bash "$scratch/dotnet-install.sh" --channel "${sdk_version%.*}" --install-dir "$DOTNET_ROOT" --no-path)
+  else
+    (umask 022; bash "$scratch/dotnet-install.sh" --version "$sdk_version" --install-dir "$DOTNET_ROOT" --no-path)
+  fi
   assert_sdk_tree
 fi
-"$DOTNET_ROOT/dotnet" --list-sdks | grep -Fqx "$sdk_version [$DOTNET_ROOT/sdk]" || fail 'exact SDK installation did not complete'
+has_sdk || fail 'required stable SDK policy was not satisfied after installation'
 for channel in $runtime_channels; do
   if ! has_runtime "$channel"; then
     (umask 022; bash "$scratch/dotnet-install.sh" --channel "$channel" --runtime dotnet --install-dir "$DOTNET_ROOT" --no-path --skip-non-versioned-files)
@@ -126,4 +146,4 @@ for version in $runtime_versions; do
   has_runtime "$version" exact || fail "required .NET $version runtime installation did not complete"
 done
 chmod -R a+rX "$DOTNET_ROOT"
-printf 'SDK %s and declared runtimes installed\n' "$sdk_version"
+printf 'Stable SDK policy %s (%s) and declared runtimes installed\n' "$sdk_version" "$sdk_roll_forward"

@@ -32,7 +32,7 @@ function Invoke-PinnedStoreArt {
     $packages = $env:NUGET_PACKAGES
     if ([string]::IsNullOrWhiteSpace($packages)) { $packages = Join-Path ([Environment]::GetFolderPath('UserProfile')) '.nuget/packages' }
     $restore = Invoke-RedactedProcess -FilePath $dotnet -WorkingDirectory $snapshot `
-        -Arguments @('restore', $project, '--locked-mode', '--packages', $packages, '--artifacts-path', $artifacts, '--verbosity', 'minimal') `
+        -Arguments @('restore', $project, '--packages', $packages, '--artifacts-path', $artifacts, '--verbosity', 'minimal') `
         -NuGetPackagesPath $packages
     if ($restore -ne 0) { $global:LASTEXITCODE = $restore; return }
     $build = Invoke-RedactedProcess -FilePath $dotnet -WorkingDirectory $snapshot `

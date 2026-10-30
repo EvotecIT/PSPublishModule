@@ -752,7 +752,7 @@ try {
     $restoreExitCode = Invoke-RedactedProcess `
         -FilePath $dotnet `
         -WorkingDirectory $buildToolRoot `
-        -Arguments @('restore', $cliProject, '--locked-mode', '--packages', $nugetPackages, '--artifacts-path', $artifactsRoot, '--verbosity', 'minimal') `
+        -Arguments @('restore', $cliProject, '--packages', $nugetPackages, '--artifacts-path', $artifactsRoot, '--verbosity', 'minimal') `
         -NuGetPackagesPath $nugetPackages
     if ($restoreExitCode -ne 0) { exit $restoreExitCode }
     $buildExitCode = Invoke-RedactedProcess `
