@@ -100,6 +100,9 @@ jobs:
       - name: Test .NET SDK setup
         run: node --test .github/actions/setup-dotnet/setup-dotnet.test.cjs
 
+      - name: Test controlled dependency restore inputs
+        run: node --test .github/actions/dotnet-dependency-submission/restore-inputs.test.cjs .github/actions/dotnet-dependency-submission/snapshot.test.cjs
+
       - name: Validate website workflows
         shell: bash
         run: |

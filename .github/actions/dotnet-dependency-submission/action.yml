@@ -1,0 +1,111 @@
+name: Restore and submit .NET dependencies
+description: Restore explicit projects or submit transported NuGet graphs on a supported runner.
+
+inputs:
+  mode:
+    description: restore exports native graphs; scan prepares a snapshot read-only; submit uploads a snapshot on trusted default-branch runs.
+    default: restore
+  projects-json:
+    description: JSON array of repository-relative solutions or projects to restore.
+    required: false
+    default: ''
+  graph-artifact:
+    description: Downloaded graph artifact directory, required in scan mode.
+    default: ''
+  snapshot-file:
+    description: Downloaded snapshot.json file, required in submit mode.
+    default: ''
+  workloads:
+    description: Space-separated workload identifiers to install before restore.
+    required: false
+    default: ''
+  workload-version:
+    description: Optional exact workload-set version for the selected SDK feature band.
+    default: ''
+  global-json-file:
+    description: Repository SDK policy file.
+    required: false
+    default: global.json
+  submit:
+    description: Submit the dependency snapshot on a trusted default-branch push or manual run.
+    required: false
+    default: 'false'
+  correlator:
+    description: Stable identifier for this platform's dependency snapshot.
+    required: false
+    default: ''
+
+outputs:
+  graphs-path:
+    description: Exported graph artifact directory in restore mode.
+    value: ${{ steps.stage.outputs.path }}
+  snapshot-path:
+    description: Prepared snapshot.json file in scan mode.
+    value: ${{ steps.snapshot.outputs.path }}
+
+runs:
+  using: composite
+  steps:
+    - name: Validate mode and scanner platform
+      shell: pwsh
+      env:
+        GRAPH_MODE: ${{ inputs.mode }}
+      run: |
+        if ($env:GRAPH_MODE -notin @('restore', 'scan', 'submit')) { throw 'mode must be restore, scan or submit.' }
+        if ($env:GRAPH_MODE -eq 'scan' -and (!$IsLinux -or [Runtime.InteropServices.RuntimeInformation]::OSArchitecture -ne 'X64')) { throw 'Scanning requires a Linux x64 runner.' }
+    - uses: EvotecIT/PSPublishModule/.github/actions/setup-dotnet@a76d57fbd1f1eb6692ddd18aa67a09dd264a68c7
+      if: inputs.mode == 'restore'
+      with:
+        global-json-file: ${{ inputs.global-json-file }}
+    - name: Restore explicit dependency graphs
+      if: inputs.mode == 'restore'
+      shell: pwsh
+      env:
+        POWERFORGE_DEPENDENCY_PROJECTS: ${{ inputs.projects-json }}
+        POWERFORGE_DEPENDENCY_WORKLOADS: ${{ inputs.workloads }}
+        POWERFORGE_DEPENDENCY_WORKLOAD_VERSION: ${{ inputs.workload-version }}
+        MSBUILDDISABLENODEREUSE: '1'
+        DOTNET_CLI_USE_MSBUILD_SERVER: '0'
+      run: |
+        & (Join-Path $env:GITHUB_ACTION_PATH 'Restore-DependencyInputs.ps1') `
+          -ProjectsJson $env:POWERFORGE_DEPENDENCY_PROJECTS `
+          -Workloads $env:POWERFORGE_DEPENDENCY_WORKLOADS `
+          -WorkloadVersion $env:POWERFORGE_DEPENDENCY_WORKLOAD_VERSION
+    - name: Stage dependency graphs
+      if: inputs.mode != 'submit'
+      id: stage
+      shell: pwsh
+      env:
+        GRAPH_MODE: ${{ inputs.mode }}
+        GRAPH_ARTIFACT: ${{ inputs.graph-artifact }}
+      run: |
+        $destination = Join-Path $env:RUNNER_TEMP ('dependency-graphs-' + [guid]::NewGuid().ToString('N'))
+        $mode = if ($env:GRAPH_MODE -eq 'restore') { 'Export' } else { 'Import' }
+        $source = if ($mode -eq 'Export') { $env:GITHUB_WORKSPACE } else { $env:GRAPH_ARTIFACT }
+        & (Join-Path $env:GITHUB_ACTION_PATH 'Stage-DependencyGraphs.ps1') -Mode $mode -Source $source -OutputPath $destination
+        "path=$destination" >> $env:GITHUB_OUTPUT
+    - name: Scan dependencies and preserve manifest edges
+      if: inputs.mode == 'scan'
+      id: snapshot
+      shell: pwsh
+      env:
+        GRAPH_ROOT: ${{ steps.stage.outputs.path }}
+        GRAPH_ARTIFACT: ${{ inputs.graph-artifact }}
+      run: |
+        $directory = Join-Path $env:RUNNER_TEMP ('nuget-snapshot-' + [guid]::NewGuid().ToString('N'))
+        New-Item -ItemType Directory -Path $directory | Out-Null
+        $output = Join-Path $directory 'snapshot.json'
+        node (Join-Path $env:GITHUB_ACTION_PATH 'scan.cjs') $env:GRAPH_ROOT (Join-Path $env:GRAPH_ARTIFACT 'dependency-graphs.json') $output
+        if ($LASTEXITCODE -ne 0) { throw 'NuGet dependency scanning failed.' }
+        "path=$output" >> $env:GITHUB_OUTPUT
+    - name: Submit resolved NuGet dependencies
+      if: inputs.mode == 'submit' && inputs.submit == 'true' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+      shell: pwsh
+      env:
+        SNAPSHOT_FILE: ${{ inputs.snapshot-file }}
+        POWERFORGE_SUBMIT: ${{ inputs.submit }}
+        POWERFORGE_CORRELATOR: ${{ inputs.correlator }}
+        POWERFORGE_SNAPSHOT_TOKEN: ${{ github.token }}
+      run: |
+        node (Join-Path $env:GITHUB_ACTION_PATH 'submit.cjs') $env:SNAPSHOT_FILE
+        if ($LASTEXITCODE -ne 0) { throw 'NuGet dependency snapshot upload failed.' }
