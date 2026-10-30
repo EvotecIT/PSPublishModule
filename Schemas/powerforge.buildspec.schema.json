@@ -31,6 +31,8 @@
     "ExportAssemblies": { "type": "array", "items": { "type": "string" } },
     "DisableBinaryCmdletScan": { "type": "boolean" },
     "IgnoreLibraryOnLoad": { "type": "array", "items": { "type": "string" } },
+    "SharedAssemblies": { "type": "array", "default": [], "uniqueItems": true, "items": { "type": "string", "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.-]*$" } },
+    "PreloadSharedAssemblies": { "type": "array", "default": [], "uniqueItems": true, "items": { "type": "string", "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.-]*$" } },
     "UseAssemblyLoadContext": { "type": "boolean" },
     "DesktopDependencyAssetFrameworks": {
       "type": "object",

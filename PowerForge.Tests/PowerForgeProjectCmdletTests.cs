@@ -7,6 +7,23 @@ namespace PowerForge.Tests;
 
 public sealed class PowerForgeProjectCmdletTests
 {
+    [Theory]
+    [InlineData("NETSharedAssemblies", "NETPreloadSharedAssemblies")]
+    [InlineData("SharedAssemblies", "PreloadSharedAssemblies")]
+    public void NewConfigurationBuild_SharedAssemblyParameters_EmitDeclarativePolicy(string sharedParameter, string preloadParameter)
+    {
+        using var ps = CreatePowerShellWithModuleImported();
+        ps.AddCommand("New-ConfigurationBuild")
+            .AddParameter(sharedParameter, new[] { "Common.Runtime", "Common.Display" })
+            .AddParameter(preloadParameter, new[] { "Common.Runtime" });
+
+        var results = ps.Invoke();
+        Assert.False(ps.HadErrors);
+        var libraries = results.Select(result => result.BaseObject).OfType<ConfigurationBuildLibrariesSegment>().Single().BuildLibraries;
+        Assert.Equal(new[] { "Common.Runtime", "Common.Display" }, libraries.SharedAssemblies);
+        Assert.Equal(new[] { "Common.Runtime" }, libraries.PreloadSharedAssemblies);
+    }
+
     [Fact]
     public void NewConfigurationModule_DefaultsToInstalledSource_AndSupportsExplicitPSGallery()
     {

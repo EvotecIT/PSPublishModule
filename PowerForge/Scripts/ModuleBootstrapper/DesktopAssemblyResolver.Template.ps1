@@ -35,10 +35,10 @@ if ($PSEdition -ne 'Core' -and $PowerForgeDesktopAssemblyRoots.Count -gt 0) {
     # A CLR callback must not execute a PowerShell scriptblock: AssemblyResolve
     # also runs on worker threads that have no runspace. Compile this BCL-only
     # implementation with the host's built-in Add-Type, once per process.
-    $PowerForgeDesktopResolverTypeLock = [string]::Intern('PowerForge.Generated.DesktopAssemblyResolverV2')
+    $PowerForgeDesktopResolverTypeLock = [string]::Intern('PowerForge.Generated.{{DesktopResolverTypeName}}')
     [Threading.Monitor]::Enter($PowerForgeDesktopResolverTypeLock)
     try {
-      if (-not ('PowerForge.Generated.DesktopAssemblyResolverV2' -as [type])) {
+      if (-not ('PowerForge.Generated.{{DesktopResolverTypeName}}' -as [type])) {
         Add-Type -TypeDefinition @'
 using System;
 using System.Collections.Generic;
@@ -48,15 +48,17 @@ using System.Security.Cryptography;
 using System.Threading;
 
 namespace PowerForge.Generated {
-    public sealed class DesktopAssemblyResolverV2 {
+    public sealed class {{DesktopResolverTypeName}} {
         private readonly string[] roots;
+{{SharedResolverMembers}}
         private readonly object lifetime = new object();
         private readonly Dictionary<string, string[]> facadeBindings = new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase);
         private volatile bool bootstrapActive = true;
         private int registered;
-        [ThreadStatic] private static HashSet<DesktopAssemblyResolverV2> resolving;
+        [ThreadStatic] private static HashSet<{{DesktopResolverTypeName}}> resolving;
 
-        public DesktopAssemblyResolverV2(string[] assemblyRoots) {
+        public {{DesktopResolverTypeName}}(string[] assemblyRoots{{SharedResolverParameter}}) {
+{{SharedResolverConstructor}}
             roots = new string[assemblyRoots.Length];
             for (int i = 0; i < roots.Length; i++) {
                 roots[i] = Path.GetFullPath(assemblyRoots[i]).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
@@ -148,7 +150,7 @@ namespace PowerForge.Generated {
         }
         private Assembly Resolve(object sender, ResolveEventArgs args) {
             if (!Registered || args == null) return null;
-            if (resolving == null) resolving = new HashSet<DesktopAssemblyResolverV2>();
+            if (resolving == null) resolving = new HashSet<{{DesktopResolverTypeName}}>();
             if (!resolving.Add(this)) return null;
             try {
                 // Null callers cannot be attributed within an AppDomain. Accept
@@ -163,6 +165,7 @@ namespace PowerForge.Generated {
                 string name = requested.Name;
                 if (String.IsNullOrWhiteSpace(name) || name != Path.GetFileName(name) ||
                     name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0) return null;
+{{SharedResolverResolve}}
                 foreach (string root in roots) {
                     string candidate = Path.GetFullPath(Path.Combine(root, name + ".dll"));
                     if (!candidate.StartsWith(root, StringComparison.OrdinalIgnoreCase) || !File.Exists(candidate)) continue;
@@ -184,7 +187,7 @@ namespace PowerForge.Generated {
     } finally {
         [Threading.Monitor]::Exit($PowerForgeDesktopResolverTypeLock)
     }
-    $PowerForgeDesktopAssemblyResolverState = [PowerForge.Generated.DesktopAssemblyResolverV2]::new([string[]]$PowerForgeDesktopAssemblyRoots)
+    $PowerForgeDesktopAssemblyResolverState = [PowerForge.Generated.{{DesktopResolverTypeName}}]::new([string[]]$PowerForgeDesktopAssemblyRoots{{SharedResolverArgument}})
     $PowerForgeDesktopAssemblyResolver = $PowerForgeDesktopAssemblyResolverState.Handler
     $PowerForgeDesktopAssemblyResolverState.Register()
     $UnregisterPowerForgeDesktopAssemblyResolver = {

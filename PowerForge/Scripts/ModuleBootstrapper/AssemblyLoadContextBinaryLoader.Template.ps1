@@ -1,6 +1,6 @@
 {{BinaryAssemblyResolverBlock}}
 
-{{DesktopAssemblyResolverBlock}}{{RuntimeHandlerBlock}}if ($PSEdition -ne 'Core') {
+{{SharedAssembliesBlock}}{{DesktopAssemblyResolverBlock}}{{RuntimeHandlerBlock}}if ($PSEdition -ne 'Core') {
     $LibrariesScript = [IO.Path]::Combine($PowerForgeModuleRoot, '{{ModuleName}}.Libraries.ps1')
     if (Test-Path -LiteralPath $LibrariesScript) {
         try {

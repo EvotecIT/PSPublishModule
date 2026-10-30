@@ -128,6 +128,8 @@ public static class LegacySegmentAdapter
                         DesktopDependencyAssetFrameworks = GetStringDictionary(buildLibraries, "DesktopDependencyAssetFrameworks"),
                         ExcludeLibraryFilter = GetStringArray(buildLibraries, "ExcludeLibraryFilter") ?? GetStringArray(buildLibraries, "NETExcludeLibraryFilter"),
                         IgnoreLibraryOnLoad = GetStringArray(buildLibraries, "IgnoreLibraryOnLoad") ?? GetStringArray(buildLibraries, "NETIgnoreLibraryOnLoad"),
+                        SharedAssemblies = GetStringArray(buildLibraries, "SharedAssemblies") ?? GetStringArray(buildLibraries, "NETSharedAssemblies"),
+                        PreloadSharedAssemblies = GetStringArray(buildLibraries, "PreloadSharedAssemblies") ?? GetStringArray(buildLibraries, "NETPreloadSharedAssemblies"),
                         UseAssemblyLoadContext = HasKey(buildLibraries, "UseAssemblyLoadContext")
                             ? GetBool(buildLibraries, "UseAssemblyLoadContext")
                             : HasKey(buildLibraries, "NETAssemblyLoadContext")
@@ -219,6 +221,8 @@ public static class LegacySegmentAdapter
                     DesktopDependencyAssetFrameworks = GetStringDictionary(conf, "DesktopDependencyAssetFrameworks"),
                     ExcludeLibraryFilter = GetStringArray(conf, "ExcludeLibraryFilter") ?? GetStringArray(conf, "NETExcludeLibraryFilter"),
                     IgnoreLibraryOnLoad = GetStringArray(conf, "IgnoreLibraryOnLoad") ?? GetStringArray(conf, "NETIgnoreLibraryOnLoad"),
+                    SharedAssemblies = GetStringArray(conf, "SharedAssemblies") ?? GetStringArray(conf, "NETSharedAssemblies"),
+                    PreloadSharedAssemblies = GetStringArray(conf, "PreloadSharedAssemblies") ?? GetStringArray(conf, "NETPreloadSharedAssemblies"),
                     UseAssemblyLoadContext = HasKey(conf, "UseAssemblyLoadContext")
                         ? GetBool(conf, "UseAssemblyLoadContext")
                         : HasKey(conf, "NETAssemblyLoadContext")

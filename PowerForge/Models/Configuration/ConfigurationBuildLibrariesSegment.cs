@@ -76,6 +76,12 @@ public sealed class BuildLibrariesConfiguration
     /// <summary>Load the binary module and its dependencies through a custom AssemblyLoadContext on PowerShell Core.</summary>
     public bool? UseAssemblyLoadContext { get; set; }
 
+    /// <summary>Exact assembly simple names shared process-wide; empty preserves private dependency loading.</summary>
+    public string[]? SharedAssemblies { get; set; }
+
+    /// <summary>Subset of shared names to preload before the binary data host. Other shared assemblies remain lazy.</summary>
+    public string[]? PreloadSharedAssemblies { get; set; }
+
     /// <summary>Legacy alias for <see cref="UseAssemblyLoadContext"/>.</summary>
     public bool? NETAssemblyLoadContext { get; set; }
 

@@ -64,6 +64,9 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Remove="Scripts/ModuleBootstrapper/*.cs" />
+    <EmbeddedResource Include="Scripts/ModuleBootstrapper/SharedDesktopResolver.*.cs" LogicalName="PowerForge.Scripts.ModuleBootstrapper.%(Filename)%(Extension)" />
+    <EmbeddedResource Include="Scripts/ModuleBootstrapper/SharedAssemblyPolicy.cs" LogicalName="PowerForge.Scripts.ModuleBootstrapper.SharedAssemblyPolicy.cs" />
     <EmbeddedResource Include="Scripts\\**\\*.ps1"
                       LogicalName="PowerForge.$([System.String]::Copy('%(Identity)').Replace('\', '.').Replace('/', '.'))" />
     <EmbeddedResource Include="Resources\\PowerShellCompilation\\SemanticOracle\\Cases\\*.ps1"

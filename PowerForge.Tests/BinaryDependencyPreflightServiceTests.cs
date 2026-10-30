@@ -462,8 +462,12 @@ public sealed partial class BinaryDependencyPreflightServiceTests
         }
     }
 
-    [Fact]
-    public void Analyze_DesktopIgnoresGeneratedCoreLoadContextHelper()
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public void Analyze_DesktopIgnoresGeneratedCoreLoadContextHelper(bool sharedPolicy, bool development)
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
         try
@@ -476,7 +480,9 @@ public sealed partial class BinaryDependencyPreflightServiceTests
             var manifestPath = Path.Combine(moduleRoot.FullName, "TestModule.psd1");
             File.WriteAllText(manifestPath, "@{ ModuleVersion = '1.0.0'; RootModule = 'TestModule.psm1' }");
             File.WriteAllText(Path.Combine(moduleRoot.FullName, "TestModule.psm1"), "# generated binary bootstrapper");
-            File.Copy(paths.ConsumerAssemblyPath, Path.Combine(defaultRoot.FullName, "TestModule.ModuleLoadContext.dll"), overwrite: true);
+            var helperFileName = ModuleBootstrapperGenerator.GetAssemblyLoadContextLoaderFileNames(
+                "TestModule", sharedPolicy ? new[] { "SharedCore" } : null)[development ? 1 : 0];
+            File.Copy(paths.ConsumerAssemblyPath, Path.Combine(defaultRoot.FullName, helperFileName), overwrite: true);
 
             var desktop = new BinaryDependencyPreflightService(new NullLogger()).Analyze(
                 moduleRoot.FullName,

@@ -433,8 +433,7 @@ public sealed partial class BinaryDependencyPreflightService
             return false;
 
         var fileName = Path.GetFileName(assemblyPath);
-        return ModuleBootstrapperGenerator.GetAssemblyLoadContextLoaderFileNames(moduleName)
-            .Contains(fileName, StringComparer.OrdinalIgnoreCase);
+        return ModuleBootstrapperGenerator.IsAssemblyLoadContextLoaderFileName(moduleName, fileName);
     }
 
     private static ScopedRootAnalysis? TryCreateScopedRootAnalysis(string moduleRoot, string assemblyRoot, string? manifestPath)

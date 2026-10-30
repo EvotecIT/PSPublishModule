@@ -29,17 +29,21 @@ internal static partial class ModuleBootstrapperGenerator
         ModuleDevelopmentBinaryBootstrapperOptions? developmentBinaries = null,
         IReadOnlyList<string>? targetFrameworks = null,
         bool forceBootstrapperWrite = false,
-        Action<string>? log = null)
+        Action<string>? log = null,
+        IReadOnlyList<string>? sharedAssemblies = null,
+        IReadOnlyList<string>? preloadSharedAssemblies = null)
     {
         if (string.IsNullOrWhiteSpace(moduleRoot)) throw new ArgumentException("Module root is required.", nameof(moduleRoot));
         if (string.IsNullOrWhiteSpace(moduleName)) throw new ArgumentException("Module name is required.", nameof(moduleName));
 
+        SharedAssemblyOptions.Validate(sharedAssemblies, preloadSharedAssemblies, exportAssemblies);
         var root = Path.GetFullPath(moduleRoot);
         if (!Directory.Exists(root)) throw new DirectoryNotFoundException($"Module root not found: {root}");
 
         var hasScriptFolders = HasAnyDirectory(root, "Public", "Private", "Classes", "Enums");
         var libRoot = Path.Combine(root, "Lib");
         var exportAssemblyFileNames = ModuleBinaryFileLocator.ResolveAssemblyReferences(moduleName, exportAssemblies);
+        SharedAssemblyOptions.Validate(sharedAssemblies, preloadSharedAssemblies, exportAssemblyFileNames);
         var primaryAssemblyName = exportAssemblyFileNames.FirstOrDefault() ?? (moduleName + ".dll");
         var hasLib = ContainsConfiguredOrSelectablePayload(libRoot, exportAssemblies, exportAssemblyFileNames);
         var hasDevelopmentBinaryLoader = developmentBinaries?.Enabled == true;
@@ -52,11 +56,11 @@ internal static partial class ModuleBootstrapperGenerator
         if (string.IsNullOrWhiteSpace(primaryLibraryName)) primaryLibraryName = moduleName;
 
         var assemblyLoadContextLoaderIdentity = useAssemblyLoadContext
-            ? CreateAssemblyLoadContextLoaderIdentity(moduleName)
+            ? CreateAssemblyLoadContextLoaderIdentity(moduleName, sharedAssemblies)
             : null;
 
         if (hasLib && useAssemblyLoadContext && assemblyLoadContextLoaderIdentity is not null)
-            BuildAssemblyLoadContextLoader(root, exportAssemblyFileNames, assemblyLoadContextLoaderIdentity, ResolveAssemblyLoadContextTargetFramework(targetFrameworks), log);
+            BuildAssemblyLoadContextLoader(root, exportAssemblyFileNames, assemblyLoadContextLoaderIdentity, ResolveAssemblyLoadContextTargetFramework(targetFrameworks), log, sharedAssemblies);
 
         if (hasLib)
         {
@@ -66,7 +70,7 @@ internal static partial class ModuleBootstrapperGenerator
                 moduleName,
                 exportAssemblyFileNames,
                 assemblyLoadContextLoaderIdentity?.AssemblyName,
-                ignoreLibrariesOnLoad,
+                (ignoreLibrariesOnLoad ?? Array.Empty<string>()).Concat((sharedAssemblies ?? Array.Empty<string>()).Select(name => name + ".dll")).ToArray(),
                 targetFrameworks);
             WritePowerShellFile(librariesPath, librariesContent);
         }
@@ -88,7 +92,9 @@ internal static partial class ModuleBootstrapperGenerator
             conditionalFunctionDependencies: conditionalFunctionDependencies,
             developmentBinaries: developmentBinaries,
             moduleRoot: root,
-            targetFrameworks: targetFrameworks);
+            targetFrameworks: targetFrameworks,
+            sharedAssemblies: sharedAssemblies,
+            preloadSharedAssemblies: preloadSharedAssemblies);
         WritePowerShellFile(psm1Path, psm1Content);
     }
 
@@ -164,12 +170,13 @@ internal static partial class ModuleBootstrapperGenerator
         {
             byFolder[folder] = EnumerateDllRelativePaths(
                 libRoot,
+                moduleName,
                 folder,
                 exportAssemblyFileNames,
                 assemblyLoadContextLoaderAssemblyName,
                 ignored);
         }
-        byFolder[""] = EnumerateDllRelativePaths(libRoot, null, exportAssemblyFileNames, assemblyLoadContextLoaderAssemblyName, ignored);
+        byFolder[""] = EnumerateDllRelativePaths(libRoot, moduleName, null, exportAssemblyFileNames, assemblyLoadContextLoaderAssemblyName, ignored);
 
         var map = BuildLibrariesByFolderMap(byFolder);
         var template = EmbeddedScripts.Load("Scripts/ModuleBootstrapper/Libraries.Template.ps1");
@@ -233,6 +240,7 @@ internal static partial class ModuleBootstrapperGenerator
 
     private static List<string> EnumerateDllRelativePaths(
         string libRoot,
+        string moduleName,
         string? folderName,
         IReadOnlyList<string> exportAssemblyFileNames,
         string? assemblyLoadContextLoaderAssemblyName,
@@ -249,6 +257,7 @@ internal static partial class ModuleBootstrapperGenerator
             dllFiles = ModuleBinaryFileLocator.Enumerate(dir, SearchOption.TopDirectoryOnly)
                 .Select(Path.GetFileName)
                 .Where(n => !string.IsNullOrWhiteSpace(n))
+                .Where(n => !IsAssemblyLoadContextLoaderFileName(moduleName, n!))
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToArray()!;
         }
@@ -316,10 +325,12 @@ internal static partial class ModuleBootstrapperGenerator
         IReadOnlyDictionary<string, string[]>? conditionalFunctionDependencies,
         ModuleDevelopmentBinaryBootstrapperOptions? developmentBinaries = null,
         string? moduleRoot = null,
-        IReadOnlyList<string>? targetFrameworks = null)
+        IReadOnlyList<string>? targetFrameworks = null,
+        IReadOnlyList<string>? sharedAssemblies = null,
+        IReadOnlyList<string>? preloadSharedAssemblies = null)
     {
         var loaderIdentity = useAssemblyLoadContext
-            ? CreateAssemblyLoadContextLoaderIdentity(moduleName)
+            ? CreateAssemblyLoadContextLoaderIdentity(moduleName, sharedAssemblies)
             : null;
 
         var binaryLoaderBlock = includeBinaryLoader
@@ -343,7 +354,9 @@ internal static partial class ModuleBootstrapperGenerator
                     ["LoaderAssemblyName"] = EscapePsSingleQuoted(loaderIdentity?.AssemblyName ?? string.Empty),
                     ["LoaderTypeName"] = loaderIdentity?.TypeName ?? string.Empty,
                     ["RuntimePayloadSelectorBlock"] = ModuleBinaryPayloadLayout.BuildPowerShellRuntimeSelector(),
-                    ["DesktopAssemblyResolverBlock"] = BuildDesktopAssemblyResolverBlock(),
+                    ["SharedAssembliesBlock"] = BuildSharedAssembliesBlock(sharedAssemblies, preloadSharedAssemblies,
+                        "@($LibraryFileNames | ForEach-Object { (& $ResolvePowerForgeModuleAssembly -LibraryFileName $_).Directory } | Select-Object -Unique)"),
+                    ["DesktopAssemblyResolverBlock"] = BuildDesktopAssemblyResolverBlock(sharedAssemblies),
                     ["RuntimeHandlerBlock"] = handleRuntimes ? BuildRuntimeHandlerBlock() : string.Empty,
                     ["TypeAcceleratorBlock"] = BuildTypeAcceleratorBlock(
                         assemblyTypeAcceleratorMode,
@@ -369,7 +382,7 @@ internal static partial class ModuleBootstrapperGenerator
         if (developmentBinaries?.Enabled == true)
         {
             var developmentLoaderIdentity = useAssemblyLoadContext
-                ? CreateDevelopmentAssemblyLoadContextLoaderIdentity(moduleName)
+                ? CreateDevelopmentAssemblyLoadContextLoaderIdentity(moduleName, sharedAssemblies)
                 : null;
             var developmentBlock = BuildDevelopmentBinaryLoaderBlock(
                 moduleRoot ?? string.Empty,
@@ -382,7 +395,7 @@ internal static partial class ModuleBootstrapperGenerator
                 assemblyTypeAccelerators,
                 assemblyTypeAcceleratorAssemblies,
                 ignoreLibrariesOnLoad,
-                developmentBinaries);
+                developmentBinaries, sharedAssemblies, preloadSharedAssemblies);
 
             var hasPackagedBinaryLoader = !string.IsNullOrWhiteSpace(binaryLoaderBlock);
             binaryLoaderBlock = RenderModuleBootstrapperTemplate(
@@ -436,7 +449,8 @@ internal static partial class ModuleBootstrapperGenerator
         IReadOnlyList<string> exportAssemblyFileNames,
         AssemblyLoadContextLoaderIdentity identity,
         string targetFramework,
-        Action<string>? log)
+        Action<string>? log,
+        IReadOnlyList<string>? sharedAssemblies = null)
     {
         var libRoot = Path.Combine(moduleRoot, "Lib");
         if (!Directory.Exists(libRoot))
@@ -479,7 +493,7 @@ internal static partial class ModuleBootstrapperGenerator
 
                 var projectPath = Path.Combine(groupRoot, identity.AssemblyName + ".csproj");
                 File.WriteAllText(projectPath, BuildAssemblyLoadContextProject(identity, targetGroup.Key), Encoding.UTF8);
-                File.WriteAllText(Path.Combine(groupRoot, "ModuleAssemblyLoadContext.cs"), BuildAssemblyLoadContextSource(identity), Encoding.UTF8);
+                File.WriteAllText(Path.Combine(groupRoot, "ModuleAssemblyLoadContext.cs"), BuildAssemblyLoadContextSource(identity, sharedAssemblies), Encoding.UTF8);
 
                 log?.Invoke($"Building module-scoped AssemblyLoadContext loader '{identity.AssemblyName}' for {targetGroup.Key}.");
                 var result = RunProcess(
@@ -714,27 +728,29 @@ internal static partial class ModuleBootstrapperGenerator
             : NormalizeAssemblyLoadContextTargetFramework(normalized);
     }
 
-    private static AssemblyLoadContextLoaderIdentity CreateAssemblyLoadContextLoaderIdentity(string moduleName)
+    private static AssemblyLoadContextLoaderIdentity CreateAssemblyLoadContextLoaderIdentity(string moduleName, IReadOnlyList<string>? sharedAssemblies = null)
     {
         var safeNamespaceRoot = ToCSharpIdentifierPath(moduleName);
-        var assemblyName = SanitizeAssemblyName(moduleName) + ".ModuleLoadContext";
-        var ns = safeNamespaceRoot + ".ModuleLoadContext";
+        var policySuffix = GetSharedAssemblyPolicyIdentitySuffix(sharedAssemblies);
+        var assemblyName = SanitizeAssemblyName(moduleName) + ".ModuleLoadContext" + policySuffix;
+        var ns = safeNamespaceRoot + ".ModuleLoadContext" + policySuffix;
         return new AssemblyLoadContextLoaderIdentity(assemblyName, ns, ns + ".ModuleAssemblyLoadContext");
     }
 
-    private static AssemblyLoadContextLoaderIdentity CreateDevelopmentAssemblyLoadContextLoaderIdentity(string moduleName)
+    private static AssemblyLoadContextLoaderIdentity CreateDevelopmentAssemblyLoadContextLoaderIdentity(string moduleName, IReadOnlyList<string>? sharedAssemblies = null)
     {
         var safeNamespaceRoot = ToCSharpIdentifierPath(moduleName);
-        var assemblyName = SanitizeAssemblyName(moduleName) + ".DevelopmentModuleLoadContext";
-        var ns = safeNamespaceRoot + ".DevelopmentModuleLoadContext";
+        var policySuffix = GetSharedAssemblyPolicyIdentitySuffix(sharedAssemblies);
+        var assemblyName = SanitizeAssemblyName(moduleName) + ".DevelopmentModuleLoadContext" + policySuffix;
+        var ns = safeNamespaceRoot + ".DevelopmentModuleLoadContext" + policySuffix;
         return new AssemblyLoadContextLoaderIdentity(assemblyName, ns, ns + ".ModuleAssemblyLoadContext");
     }
 
-    internal static string[] GetAssemblyLoadContextLoaderFileNames(string moduleName)
+    internal static string[] GetAssemblyLoadContextLoaderFileNames(string moduleName, IReadOnlyList<string>? sharedAssemblies = null)
         => new[]
         {
-            CreateAssemblyLoadContextLoaderIdentity(moduleName).AssemblyName + ".dll",
-            CreateDevelopmentAssemblyLoadContextLoaderIdentity(moduleName).AssemblyName + ".dll"
+            CreateAssemblyLoadContextLoaderIdentity(moduleName, sharedAssemblies).AssemblyName + ".dll",
+            CreateDevelopmentAssemblyLoadContextLoaderIdentity(moduleName, sharedAssemblies).AssemblyName + ".dll"
         };
 
     private static string SanitizeAssemblyName(string value)
@@ -894,12 +910,20 @@ internal static partial class ModuleBootstrapperGenerator
             });
     }
 
-    private static string BuildDesktopAssemblyResolverBlock()
+    private static string BuildDesktopAssemblyResolverBlock(IReadOnlyList<string>? sharedAssemblies = null)
     {
         return RenderModuleBootstrapperTemplate(
             "DesktopAssemblyResolver",
             "Scripts/ModuleBootstrapper/DesktopAssemblyResolver.Template.ps1",
-            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase));
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["DesktopResolverTypeName"] = sharedAssemblies is { Count: > 0 } ? "DesktopAssemblyResolverV4" : "DesktopAssemblyResolverV2",
+                ["SharedResolverMembers"] = sharedAssemblies is { Count: > 0 } ? SharedDesktopResolverMembers : string.Empty,
+                ["SharedResolverConstructor"] = sharedAssemblies is { Count: > 0 } ? SharedDesktopResolverConstructor : string.Empty,
+                ["SharedResolverResolve"] = sharedAssemblies is { Count: > 0 } ? "                if (sharedNames.Contains(name)) return resolveShared(requested, roots);" : string.Empty,
+                ["SharedResolverParameter"] = sharedAssemblies is { Count: > 0 } ? ", string[] sharedAssemblyNames" : string.Empty,
+                ["SharedResolverArgument"] = sharedAssemblies is { Count: > 0 } ? ", [string[]]" + BuildPowerShellArrayLiteral(sharedAssemblies) : string.Empty
+            });
     }
 
     internal static string BuildTypeAcceleratorBlock(

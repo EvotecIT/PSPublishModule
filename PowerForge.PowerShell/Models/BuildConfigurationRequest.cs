@@ -112,6 +112,10 @@ internal sealed class BuildConfigurationRequest
     public Dictionary<string, string>? NETDesktopDependencyAssetFrameworks { get; set; }
     public bool NETAssemblyLoadContextSpecified { get; set; }
     public bool NETAssemblyLoadContext { get; set; }
+    public bool NETSharedAssembliesSpecified { get; set; }
+    public string[]? NETSharedAssemblies { get; set; }
+    public bool NETPreloadSharedAssembliesSpecified { get; set; }
+    public string[]? NETPreloadSharedAssemblies { get; set; }
     public bool NETDevelopmentBinariesSpecified { get; set; }
     public bool NETDevelopmentBinaries { get; set; }
     public bool NETDevelopmentBinariesModeSpecified { get; set; }

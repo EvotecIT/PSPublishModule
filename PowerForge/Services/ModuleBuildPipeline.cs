@@ -64,6 +64,7 @@ public sealed class ModuleBuildPipeline
         if (string.IsNullOrWhiteSpace(spec.Name)) throw new ArgumentException("Name is required.", nameof(spec));
         if (string.IsNullOrWhiteSpace(spec.SourcePath)) throw new ArgumentException("SourcePath is required.", nameof(spec));
 
+        SharedAssemblyOptions.Validate(spec.SharedAssemblies, spec.PreloadSharedAssemblies, spec.ExportAssemblies);
         var source = Path.GetFullPath(spec.SourcePath);
         if (!Directory.Exists(source)) throw new DirectoryNotFoundException($"Source directory not found: {source}");
 
@@ -271,6 +272,8 @@ public sealed class ModuleBuildPipeline
                 spec.AssemblyTypeAccelerators,
                 spec.AssemblyTypeAcceleratorAssemblies,
                 spec.IgnoreLibraryOnLoad,
+                sharedAssemblies: spec.SharedAssemblies,
+                preloadSharedAssemblies: spec.PreloadSharedAssemblies,
                 targetFrameworks: spec.Frameworks,
                 forceBootstrapperWrite: forceBootstrapperWrite,
                 log: message => _logger.Info(message));

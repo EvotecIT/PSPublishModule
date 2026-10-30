@@ -107,6 +107,8 @@
           "propertyNames": { "minLength": 1 },
           "additionalProperties": { "type": "string", "enum": ["netstandard2.0"] }
         },
+        "SharedAssemblies": { "type": "array", "default": [], "uniqueItems": true, "items": { "type": "string", "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.-]*$" } },
+        "PreloadSharedAssemblies": { "type": "array", "default": [], "uniqueItems": true, "items": { "type": "string", "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.-]*$" } },
         "UseAssemblyLoadContext": { "type": ["boolean", "null"] },
         "NETAssemblyLoadContext": { "type": ["boolean", "null"] },
         "DevelopmentBinaries": { "type": ["boolean", "null"] },
