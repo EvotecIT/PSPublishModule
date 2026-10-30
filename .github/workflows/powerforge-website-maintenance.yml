@@ -85,7 +85,7 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
 concurrency:
-  group: powerforge-website-maintenance-${{ github.repository }}-${{ github.ref }}-${{ inputs.website_root }}
+  group: powerforge-website-maintenance-${{ github.repository }}-${{ github.ref }}-${{ inputs.website_root }}-${{ github.run_id }}
   # Let scheduled/manual maintenance finish once started.
   cancel-in-progress: false
 

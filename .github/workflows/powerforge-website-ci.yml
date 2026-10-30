@@ -99,8 +99,8 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
 concurrency:
-  group: powerforge-website-ci-${{ github.repository }}-${{ github.ref }}-${{ inputs.website_root }}
-  cancel-in-progress: true
+  group: powerforge-website-ci-${{ github.repository }}-${{ github.workflow }}-${{ inputs.website_root }}-${{ github.event_name == 'pull_request' && github.run_attempt == 1 && format('pr-{0}', github.event.pull_request.number) || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' && github.run_attempt == 1 }}
 
 jobs:
   website-ci-untrusted:
