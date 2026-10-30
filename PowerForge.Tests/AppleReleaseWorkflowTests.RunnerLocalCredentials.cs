@@ -28,7 +28,7 @@ public sealed partial class AppleReleaseWorkflowTests
         Assert.Contains("for-each-ref', '--format=%(refname)', 'refs/replace", script, StringComparison.Ordinal);
         Assert.Contains("core.fsmonitor=false", script, StringComparison.Ordinal);
         Assert.Contains("ls-files', '--error-unmatch'", script, StringComparison.Ordinal);
-        Assert.Contains("'restore', $cliProject, '--locked-mode', '--packages', $nugetPackages, '--artifacts-path', $artifactsRoot", script, StringComparison.Ordinal);
+        Assert.Contains("'restore', $cliProject, '--packages', $nugetPackages, '--artifacts-path', $artifactsRoot", script, StringComparison.Ordinal);
         Assert.Contains("-WorkingDirectory $buildToolRoot", script, StringComparison.Ordinal);
         Assert.Contains("-WorkingDirectory $consumer", script, StringComparison.Ordinal);
         Assert.Contains("$start.Environment['NUGET_PACKAGES'] = $NuGetPackagesPath", script, StringComparison.Ordinal);
