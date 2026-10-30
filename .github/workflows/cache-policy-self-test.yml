@@ -28,6 +28,7 @@ jobs:
       pipeline_config: Samples/PowerForge.Web.Sample/pipeline.cache-proof.json
       engine_mode: source
       # Exercise a workflow upgrade while the engine remains independently pinned.
+      powerforge_repository: EvotecIT/PSPublishModule
       powerforge_ref: 75e74486ba6b74b6d6b320143f57b9d89c439782
       credential_mode: none
       social-cards: ${{ 'false' }}
