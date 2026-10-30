@@ -13,7 +13,7 @@ if [[ ${1:-} != --namespace ]]; then
   mkdir -p "$fixture"/{etc/powerforge/site-pull,opt/powerforge-dotnet,srv/engine,bin}
   cp /etc/passwd /etc/group "$fixture/etc/"
   git -C "$fixture/srv/engine" init -q
-  printf '%s\n' '{"sdk":{"version":"10.0.303","rollForward":"disable","allowPrerelease":false}}' >"$fixture/srv/engine/global.json"
+  cp "$repo_root/global.json" "$fixture/srv/engine/global.json"
   git -C "$fixture/srv/engine" add global.json
   git -C "$fixture/srv/engine" -c user.name=Fixture -c user.email=fixture@example.invalid commit -qm 'Fixture SDK lock'
   git -C "$fixture/srv/engine" rev-parse HEAD >"$fixture/engine-sha"
@@ -31,6 +31,7 @@ mount --bind "$fixture/bin" /usr/local/bin
 export PATH=/usr/local/bin:/usr/bin:/bin
 engine_sha=$(cat "$fixture/engine-sha")
 root=/opt/powerforge-dotnet
+repository_policy=$(cat /srv/engine/global.json)
 config=/etc/powerforge/site-pull/fixture.env
 
 cat >"/usr/local/bin/curl" <<'EOF'
@@ -65,6 +66,7 @@ if [[ $runtime == dotnet ]]; then
   version=${version:-$channel.99}
   printf 'Microsoft.NETCore.App %s [/opt/powerforge-dotnet/shared/Microsoft.NETCore.App]\n' "$version" >>/opt/powerforge-dotnet/runtimes
 else
+  version=${version:-$channel.999}
   printf '%s [/opt/powerforge-dotnet/sdk]\n' "$version" >>/opt/powerforge-dotnet/sdks
 fi
 EOF
@@ -87,6 +89,12 @@ reset_inventory() {
   printf '10.0.303 [/opt/powerforge-dotnet/sdk]\n' >"$root/sdks"
   printf 'Microsoft.NETCore.App 8.0.20 [/opt/powerforge-dotnet/shared/Microsoft.NETCore.App]\nMicrosoft.NETCore.App 10.0.11 [/opt/powerforge-dotnet/shared/Microsoft.NETCore.App]\n' >"$root/runtimes"
   : >/srv/install.log
+}
+set_sdk_policy() {
+  printf '%s\n' "$1" >/srv/engine/global.json
+  git -C /srv/engine add global.json
+  git -C /srv/engine -c user.name=Fixture -c user.email=fixture@example.invalid commit --allow-empty -qm 'Fixture SDK policy'
+  engine_sha=$(git -C /srv/engine rev-parse HEAD)
 }
 run_helper() { bash "$helper" fixture >"$fixture/result.log" 2>&1; }
 assert_exact() { grep -Fqx 'Microsoft.NETCore.App 10.0.12 [/opt/powerforge-dotnet/shared/Microsoft.NETCore.App]' "$root/runtimes"; }
@@ -135,6 +143,7 @@ grep -Fq -- '--channel 10.0 --runtime dotnet' /srv/install.log
 assert_host
 echo 'PASS: channel-only configurations retain no-op and missing-channel behavior'
 
+set_sdk_policy '{"sdk":{"version":"10.0.303","rollForward":"disable","allowPrerelease":false}}'
 reset_inventory
 : >"$root/sdks"
 declare_config '8.0' '10.0.12'
@@ -142,6 +151,56 @@ run_helper
 grep -Fqx '10.0.303 [/opt/powerforge-dotnet/sdk]' "$root/sdks"
 assert_exact
 echo 'PASS: missing exact SDK and runtime are both installed'
+
+# Exercise the checked-in policy, not a second independently maintained SDK pin.
+set_sdk_policy "$repository_policy"
+reset_inventory
+declare_config '' ''
+run_helper
+[[ ! -s /srv/install.log ]]
+echo 'PASS: repository SDK floor reuses the compatible installed stable SDK'
+
+printf '10.0.403 [/opt/powerforge-dotnet/sdk]\n' >"$root/sdks"
+run_helper
+[[ ! -s /srv/install.log ]]
+echo 'PASS: a newer stable feature band does not trigger an exact SDK download'
+
+for inventory in '9.0.999 [/opt/powerforge-dotnet/sdk]' '11.0.100 [/opt/powerforge-dotnet/sdk]' '10.0.999-preview [/opt/powerforge-dotnet/sdk]' '10.0.403 [/elsewhere/sdk]'; do
+  reset_inventory
+  printf '%s\n' "$inventory" >"$root/sdks"
+  declare_config '' ''
+  run_helper
+  grep -Fq -- '--channel 10.0 --install-dir /opt/powerforge-dotnet' /srv/install.log
+  grep -Fqx '10.0.999 [/opt/powerforge-dotnet/sdk]' "$root/sdks"
+done
+echo 'PASS: a missing compatible SDK installs the stable declared major/minor channel'
+
+set_sdk_policy '{"sdk":{"version":"10.0.300","rollForward":"latestFeature","allowPrerelease":false}}'
+reset_inventory
+printf '10.0.203 [/opt/powerforge-dotnet/sdk]\n' >"$root/sdks"
+declare_config '' ''
+run_helper
+grep -Fq -- '--channel 10.0 --install-dir /opt/powerforge-dotnet' /srv/install.log
+echo 'PASS: an installed SDK below the declared floor is not accepted'
+
+set_sdk_policy '{"sdk":{"version":"10.0.303","rollForward":"disable","allowPrerelease":false}}'
+reset_inventory
+printf '10.0.403 [/opt/powerforge-dotnet/sdk]\n' >"$root/sdks"
+declare_config '' ''
+run_helper
+grep -Fq -- '--version 10.0.303 --install-dir /opt/powerforge-dotnet' /srv/install.log
+echo 'PASS: older pinned engines retain their explicit exact-policy behavior'
+
+for policy in '{"sdk":{"version":"10.0.100","rollForward":"latestMajor","allowPrerelease":false}}' '{"sdk":{"version":"10.0.100","rollForward":"latestFeature","allowPrerelease":true}}'; do
+  set_sdk_policy "$policy"
+  reset_inventory
+  declare_config '' ''
+  if run_helper; then echo 'Accepted unsupported SDK policy.' >&2; exit 1; fi
+  [[ ! -s /srv/install.log ]]
+done
+echo 'PASS: unsupported roll-forward and preview policies fail before download'
+
+set_sdk_policy "$repository_policy"
 
 for invalid in 9.0.1 10.0 10.0.12-preview 10.0.012 '../10.0.12'; do
   reset_inventory

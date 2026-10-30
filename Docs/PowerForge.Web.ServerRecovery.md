@@ -220,7 +220,7 @@ Do not treat these as the primary recovery source:
 - generated `_site-*` outputs
 - timestamped release directories
 - pipeline temp folders
-- downloaded project-source working trees when they are reproducible from lock files
+- downloaded project-source working trees when they are reproducible from their pinned source and explicit package versions
 - package caches
 
 Those are rebuildable. Capture them only when diagnosing an incident, not as the normal recovery path.

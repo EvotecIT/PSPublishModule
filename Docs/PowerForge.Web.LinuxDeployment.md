@@ -244,6 +244,18 @@ Unit=example-website-change-rebuild.service
 WantedBy=timers.target
 ```
 
+## SDK recovery
+
+`powerforge-site-sdk-install` follows the pinned engine's stable `global.json`
+policy. With `latestFeature`, it reuses an installed SDK from the declared
+major/minor at or above the SDK floor. If none is available, it installs the
+stable SDK channel and verifies the resulting inventory. Older engine revisions
+that explicitly use `disable` retain their exact-version behavior.
+
+The deployment account continues to build an archive of the pinned engine.
+The SDK helper keeps its root-controlled configuration, installation-tree and
+runtime checks; a successful download alone does not establish readiness.
+
 ## External Content
 
 Do not make the Linux host poll every contribution or project repository directly unless the site really needs that. Prefer this pattern:
@@ -317,4 +329,4 @@ PowerForge should use that manifest to support these stages:
 5. run the normal deploy script
 6. verify services, certificates, origin behavior, and public URLs
 
-Generated site output and timestamped release folders are not primary backup state. They are rebuildable from Git, lock files, and the deployment pipeline. Private keys, API tokens, SMTP credentials, and environment files must only enter GitHub backup storage as encrypted bundles.
+Generated site output and timestamped release folders are not primary backup state. They are rebuildable from Git, explicit package versions, and the deployment pipeline. Private keys, API tokens, SMTP credentials, and environment files must only enter GitHub backup storage as encrypted bundles.
