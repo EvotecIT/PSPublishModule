@@ -1,0 +1,59 @@
+name: Cache NuGet dependencies
+description: Restore package-only caches on hosted runners; save only successful default-branch pushes.
+inputs:
+  mode:
+    description: restore before the first restore/build, or save after validation.
+    default: restore
+  key:
+    description: Primary key returned by the restore invocation, required for save.
+    default: ''
+  cache-hit:
+    description: Exact-hit output returned by the restore invocation.
+    default: ''
+outputs:
+  primary-key:
+    description: Dependency-manifest key used for restoration.
+    value: ${{ steps.restore.outputs.cache-primary-key }}
+  cache-hit:
+    description: Whether an exact cache entry was restored.
+    value: ${{ steps.restore.outputs.cache-hit }}
+runs:
+  using: composite
+  steps:
+    - name: Select hosted package directory
+      if: inputs.mode == 'restore' && runner.environment == 'github-hosted'
+      shell: pwsh
+      run: |
+        "NUGET_PACKAGES=$(Join-Path $HOME '.nuget/packages')" >> $env:GITHUB_ENV
+    - name: Restore NuGet packages
+      id: restore
+      if: inputs.mode == 'restore' && runner.environment == 'github-hosted'
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ~/.nuget/packages
+        key: powerforge-nuget-v2-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('**/*.csproj', '**/*.fsproj', '**/*.vbproj', '**/Directory.Packages.props', '**/Directory.Build.props', '**/Directory.Build.targets', '**/global.json', '**/packages.lock.json', '**/NuGet.config', '**/NuGet.Config', '**/nuget.config', '!**/obj/**', '!**/bin/**', '!**/.nuget/**') }}
+        restore-keys: |
+          ${{ !(github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)) && format('powerforge-nuget-v2-{0}-{1}-', runner.os, runner.arch) || '' }}
+    - name: Start a clean cache for changed default-branch dependencies
+      if: inputs.mode == 'restore' && runner.environment == 'github-hosted' && github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) && steps.restore.outputs.cache-hit != 'true'
+      shell: pwsh
+      run: node "${{ github.action_path }}/cache.cjs" prepare
+    - name: Report cache restoration
+      if: inputs.mode == 'restore' && runner.environment == 'github-hosted'
+      shell: pwsh
+      env:
+        CACHE_KEY: ${{ steps.restore.outputs.cache-primary-key }}
+        CACHE_HIT: ${{ steps.restore.outputs.cache-hit }}
+        CACHE_MATCH: ${{ steps.restore.outputs.cache-matched-key }}
+      run: |
+        "NuGet cache: exact-hit=$env:CACHE_HIT; matched=$env:CACHE_MATCH; requested=$env:CACHE_KEY" >> $env:GITHUB_STEP_SUMMARY
+    - name: Report package cache size and largest dependencies
+      if: inputs.mode == 'save' && runner.environment == 'github-hosted' && github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) && inputs.key != '' && inputs.cache-hit != 'true'
+      shell: pwsh
+      run: node "${{ github.action_path }}/cache.cjs" report
+    - name: Save NuGet packages
+      if: inputs.mode == 'save' && runner.environment == 'github-hosted' && github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) && inputs.key != '' && inputs.cache-hit != 'true'
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ~/.nuget/packages
+        key: ${{ inputs.key }}

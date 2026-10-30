@@ -1,0 +1,10 @@
+{
+  "steps": [
+    {
+      "task": "build",
+      "config": "./site.json",
+      "out": "../../Artifacts/cache-policy-sample",
+      "clean": true
+    }
+  ]
+}

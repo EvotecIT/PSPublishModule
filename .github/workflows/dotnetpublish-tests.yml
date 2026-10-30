@@ -38,11 +38,9 @@ jobs:
       - uses: actions/checkout@v7
 
       - uses: ./.github/actions/setup-dotnet
-      - name: Cache NuGet packages
-        uses: actions/cache@v6
-        with:
-          path: ${{ env.NUGET_PACKAGES }}
-          key: ${{ runner.os }}-nuget-publish-sdk-locked-v1-${{ hashFiles('global.json', 'NuGet.config', '**/packages.lock.json') }}
+      - name: Restore NuGet packages
+        id: nuget-cache
+        uses: ./.github/actions/cache-nuget
 
       - name: Restore focused test graph
         shell: pwsh
@@ -68,11 +66,9 @@ jobs:
       - uses: actions/checkout@v7
 
       - uses: ./.github/actions/setup-dotnet
-      - name: Cache NuGet packages
-        uses: actions/cache@v6
-        with:
-          path: ${{ env.NUGET_PACKAGES }}
-          key: ${{ runner.os }}-nuget-publish-sdk-locked-v1-${{ hashFiles('global.json', 'NuGet.config', '**/packages.lock.json') }}
+      - name: Restore NuGet packages
+        id: nuget-cache
+        uses: ./.github/actions/cache-nuget
 
       - name: Restore deep test graph
         shell: pwsh

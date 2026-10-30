@@ -1,0 +1,35 @@
+name: Shared cache policy self-test
+
+on:
+  pull_request:
+    paths:
+      - '.github/actions/cache-nuget/**'
+      - '.github/workflows/cache-policy-self-test.yml'
+      - '.github/workflows/powerforge-website-run.yml'
+      - 'Samples/PowerForge.Web.Sample/pipeline.cache-proof.json'
+  push:
+    branches: [main]
+    paths:
+      - '.github/actions/cache-nuget/**'
+      - '.github/workflows/cache-policy-self-test.yml'
+      - '.github/workflows/powerforge-website-run.yml'
+      - 'Samples/PowerForge.Web.Sample/pipeline.cache-proof.json'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  website-cache:
+    uses: ./.github/workflows/powerforge-website-run.yml
+    with:
+      website_root: Samples/PowerForge.Web.Sample
+      pipeline_config: Samples/PowerForge.Web.Sample/pipeline.cache-proof.json
+      engine_mode: source
+      # Exercise a workflow upgrade while the engine remains independently pinned.
+      powerforge_ref: 75e74486ba6b74b6d6b320143f57b9d89c439782
+      credential_mode: none
+      social-cards: ${{ 'false' }}
+      use_playwright_cache: false
+      report_artifact_name: cache-policy-sample-reports

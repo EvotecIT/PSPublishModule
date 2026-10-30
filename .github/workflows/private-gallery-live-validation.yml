@@ -64,13 +64,9 @@ jobs:
           fetch-depth: 0
 
       - uses: ./.github/actions/setup-dotnet
-      - name: Cache NuGet packages
-        uses: actions/cache@v6
-        with:
-          path: ${{ env.NUGET_PACKAGES }}
-          key: ${{ runner.os }}-nuget-${{ hashFiles('global.json', 'NuGet.config', '**/packages.lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-nuget-
+      - name: Restore NuGet packages
+        id: nuget-cache
+        uses: ./.github/actions/cache-nuget
 
       - name: Build PSPublishModule
         shell: pwsh
@@ -148,4 +144,4 @@ jobs:
           name: private-gallery-live-validation
           path: live-validation-output
           if-no-files-found: warn
-          retention-days: 14
+          retention-days: 7

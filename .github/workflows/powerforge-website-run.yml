@@ -273,10 +273,40 @@ jobs:
           persist-credentials: ${{ inputs.credential_mode == 'standard' }}
           fetch-depth: 1
 
+      - name: Checkout shared cache policy
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: ./.powerforge-cache-policy
+          sparse-checkout: .github/actions/cache-nuget
+          persist-credentials: false
+          fetch-depth: 1
+
       - name: Setup .NET
         uses: ./.powerforge-runner/.github/actions/setup-dotnet
         with:
           global-json-file: ${{ hashFiles('global.json') != '' && 'global.json' || '.powerforge-runner/global.json' }}
+      - name: Select hosted npm cache directory
+        if: runner.environment == 'github-hosted'
+        shell: pwsh
+        run: |
+          "NPM_CONFIG_CACHE=$(Join-Path $env:RUNNER_TEMP 'powerforge-npm-cache')" >> $env:GITHUB_ENV
+
+      - name: Restore NuGet packages
+        id: nuget-cache
+        uses: ./.powerforge-cache-policy/.github/actions/cache-nuget
+
+      - name: Restore npm cache
+        id: npm-cache
+        if: runner.environment == 'github-hosted' && hashFiles('**/package-lock.json', '!**/node_modules/**', '!**/obj/**', '!**/bin/**') != ''
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ env.NPM_CONFIG_CACHE }}
+          key: powerforge-npm-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('**/package-lock.json', '!**/node_modules/**', '!**/obj/**', '!**/bin/**') }}
+          restore-keys: |
+            powerforge-npm-v1-${{ runner.os }}-${{ runner.arch }}-
+
       - name: Prepare social card renderer
         shell: pwsh
         env:
@@ -336,18 +366,8 @@ jobs:
           name: ${{ inputs.deployment_manifest_artifact_name }}
           path: ${{ runner.temp }}/powerforge-deployment-manifest
 
-      - name: Cache NuGet packages
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ${{ runner.temp }}/powerforge-website-nuget-packages
-          key: powerforge-website-nuget-v1-${{ runner.os }}-${{ hashFiles('**/*.csproj', '**/*.props', '**/*.targets', '**/packages.lock.json') }}
-          restore-keys: |
-            powerforge-website-nuget-v1-${{ runner.os }}-
-
       - name: Initialize transient tool cache directories
         shell: pwsh
-        env:
-          NUGET_PACKAGES: ${{ runner.temp }}/powerforge-website-nuget-packages
         run: |
           foreach ($path in @(
             $env:POWERFORGE_RUNNER_CACHE_ROOT,
@@ -365,7 +385,6 @@ jobs:
       - name: Run website pipeline
         shell: pwsh
         env:
-          NUGET_PACKAGES: ${{ runner.temp }}/powerforge-website-nuget-packages
           GITHUB_TOKEN: ${{ (inputs.credential_mode == 'standard' || (inputs.credential_mode == 'public-github' && github.event.repository.private == false && github.event.repository.visibility == 'public')) && github.token || '' }}
           # Prevent an ambient runner CLI credential from overriding this policy.
           GH_TOKEN: ''
@@ -461,6 +480,7 @@ jobs:
         continue-on-error: true
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
+          retention-days: 7
           name: ${{ inputs.report_artifact_name }}
           path: |
             ${{ inputs.website_root == '.' && '_reports/**' || format('{0}/_reports/**', inputs.website_root) }}
@@ -631,6 +651,21 @@ jobs:
           path: ${{ runner.temp }}/artifact.tar
           retention-days: ${{ inputs.site_artifact_retention_days }}
           if-no-files-found: error
+
+
+      - name: Save validated NuGet cache
+        uses: ./.powerforge-cache-policy/.github/actions/cache-nuget
+        with:
+          mode: save
+          key: ${{ steps.nuget-cache.outputs.primary-key }}
+          cache-hit: ${{ steps.nuget-cache.outputs.cache-hit }}
+
+      - name: Save npm cache
+        if: runner.environment == 'github-hosted' && github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) && steps.npm-cache.outputs.cache-primary-key != '' && steps.npm-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ env.NPM_CONFIG_CACHE }}
+          key: ${{ steps.npm-cache.outputs.cache-primary-key }}
 
       - name: Cleanup transient tool caches
         if: ${{ always() }}

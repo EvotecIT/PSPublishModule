@@ -97,6 +97,9 @@ jobs:
       - name: Test pinned XcodeGen setup
         run: python3 .github/scripts/test-xcodegen-setup.py
 
+      - name: Test hosted package cache preparation
+        run: node --test .github/actions/cache-nuget/cache.test.cjs
+
       - name: Test .NET SDK setup
         run: node --test .github/actions/setup-dotnet/setup-dotnet.test.cjs
 
@@ -121,6 +124,7 @@ jobs:
           tar --extract --gzip --file "$lint_root/$actionlint_archive" --directory "$lint_root" actionlint
 
           readonly -a website_workflows=(
+            '.github/workflows/powerforge-pr-cache-cleanup.yml'
             '.github/workflows/powerforge-website-ci.yml'
             '.github/workflows/powerforge-website-deploy.yml'
             '.github/workflows/powerforge-website-maintenance.yml'
@@ -134,7 +138,7 @@ jobs:
           # Lint copies with only those five documented fields normalized to another string field.
           readonly workflow_identity_expression='\$\{\{[[:space:]]*job\.workflow_(repository|sha|ref|file_path)[[:space:]]*\}\}'
           readonly replacement_expression='$'"{{ job.status }}"
-          readonly expected_workflow_identity_count=7
+          readonly expected_workflow_identity_count=9
           workflow_identity_count="$({ grep --no-filename --only-matching --extended-regexp "$workflow_identity_expression" "${website_workflows[@]}" || true; } | wc --lines | tr --delete '[:space:]')"
           if [[ "$workflow_identity_count" != "$expected_workflow_identity_count" ]]; then
             printf 'Expected %s documented job.workflow_* expressions, found %s.\n' "$expected_workflow_identity_count" "$workflow_identity_count" >&2
@@ -168,18 +172,15 @@ jobs:
         with:
           fetch-depth: 2
       - uses: ./.github/actions/setup-dotnet
-      - name: Cache NuGet packages
-        uses: actions/cache@v6
-        with:
-          path: ${{ env.NUGET_PACKAGES }}
-          key: ${{ runner.os }}-nuget-${{ hashFiles('global.json', 'NuGet.config', '**/packages.lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-nuget-
+      - name: Restore NuGet packages
+        id: nuget-cache
+        uses: ./.github/actions/cache-nuget
 
       - name: NuGet vulnerability audit (informational)
         shell: pwsh
         continue-on-error: true
         run: dotnet list ./PSPublishModule.sln package --vulnerable --include-transitive
+
   PrivateGalleryLiveValidation:
     if: ${{ github.event_name == 'workflow_dispatch' && inputs.privateGalleryLiveValidation == true }}
     runs-on: ${{ fromJSON(inputs.privateGalleryRunnerLabels || vars.PSPUBLISHMODULE_AZDO_RUNNER_LABELS || '["self-hosted","windows"]') }}
@@ -191,13 +192,9 @@ jobs:
           fetch-depth: 0
 
       - uses: ./.github/actions/setup-dotnet
-      - name: Cache NuGet packages
-        uses: actions/cache@v6
-        with:
-          path: ${{ env.NUGET_PACKAGES }}
-          key: ${{ runner.os }}-nuget-${{ hashFiles('global.json', 'NuGet.config', '**/packages.lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-nuget-
+      - name: Restore NuGet packages
+        id: nuget-cache
+        uses: ./.github/actions/cache-nuget
 
       - name: Build PSPublishModule
         shell: pwsh
@@ -275,7 +272,8 @@ jobs:
           name: private-gallery-live-validation
           path: live-validation-output
           if-no-files-found: warn
-          retention-days: 14
+          retention-days: 7
+
   WindowsBuild:
     needs: changes
     if: needs.changes.outputs.build == 'true'
@@ -292,13 +290,9 @@ jobs:
         with:
           fetch-depth: 0
       - uses: ./.github/actions/setup-dotnet
-      - name: Cache NuGet packages
-        uses: actions/cache@v6
-        with:
-          path: ${{ env.NUGET_PACKAGES }}
-          key: ${{ runner.os }}-nuget-${{ hashFiles('global.json', 'NuGet.config', '**/packages.lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-nuget-
+      - name: Restore NuGet packages
+        id: nuget-cache
+        uses: ./.github/actions/cache-nuget
 
       - name: Verify net472 compatibility
         shell: pwsh
@@ -394,6 +388,14 @@ jobs:
         shell: pwsh
         timeout-minutes: 10
         run: .\PSPublishModule.Tests.ps1
+
+      - name: Save validated NuGet cache
+        uses: ./.github/actions/cache-nuget
+        with:
+          mode: save
+          key: ${{ steps.nuget-cache.outputs.primary-key }}
+          cache-hit: ${{ steps.nuget-cache.outputs.cache-hit }}
+
   ProductBuildSmoke:
     needs: changes
     if: needs.changes.outputs.build == 'true'
@@ -414,14 +416,9 @@ jobs:
           path: _dependencies/DbaClientX
 
       - uses: ./.github/actions/setup-dotnet
-      - name: Cache NuGet packages
-        uses: actions/cache@v6
-        with:
-          path: ${{ env.NUGET_PACKAGES }}
-          key: ${{ runner.os }}-product-nuget-${{ hashFiles('global.json', 'NuGet.config', '**/packages.lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-product-nuget-
-            ${{ runner.os }}-nuget-
+      - name: Restore NuGet packages
+        id: nuget-cache
+        uses: ./.github/actions/cache-nuget
 
       - name: Restore core product graph
         shell: pwsh
@@ -541,6 +538,7 @@ jobs:
           path: ${{ runner.temp }}/powerforge-compiler-gate-cleanup.json
           if-no-files-found: ignore
           retention-days: 7
+
   LinuxBuild:
     needs: changes
     if: needs.changes.outputs.build == 'true'
@@ -556,13 +554,9 @@ jobs:
         with:
           fetch-depth: 0
       - uses: ./.github/actions/setup-dotnet
-      - name: Cache NuGet packages
-        uses: actions/cache@v6
-        with:
-          path: ${{ env.NUGET_PACKAGES }}
-          key: ${{ runner.os }}-nuget-${{ hashFiles('global.json', 'NuGet.config', '**/packages.lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-nuget-
+      - name: Restore NuGet packages
+        id: nuget-cache
+        uses: ./.github/actions/cache-nuget
       - name: Build Module
         shell: pwsh
         # Approved-module downloads can exceed ten minutes while the Gallery retries requests.
@@ -696,6 +690,14 @@ jobs:
         shell: pwsh
         timeout-minutes: 10
         run: .\PSPublishModule.Tests.ps1
+
+      - name: Save validated NuGet cache
+        uses: ./.github/actions/cache-nuget
+        with:
+          mode: save
+          key: ${{ steps.nuget-cache.outputs.primary-key }}
+          cache-hit: ${{ steps.nuget-cache.outputs.cache-hit }}
+
   MacOsBuild:
     needs: changes
     if: needs.changes.outputs.build == 'true' && github.event_name != 'pull_request'
@@ -711,13 +713,9 @@ jobs:
         with:
           fetch-depth: 0
       - uses: ./.github/actions/setup-dotnet
-      - name: Cache NuGet packages
-        uses: actions/cache@v6
-        with:
-          path: ${{ env.NUGET_PACKAGES }}
-          key: ${{ runner.os }}-nuget-${{ hashFiles('global.json', 'NuGet.config', '**/packages.lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-nuget-
+      - name: Restore NuGet packages
+        id: nuget-cache
+        uses: ./.github/actions/cache-nuget
       - name: Build Module
         shell: pwsh
         # Approved-module downloads can exceed ten minutes while the Gallery retries requests.
@@ -770,6 +768,13 @@ jobs:
         shell: pwsh
         timeout-minutes: 10
         run: .\PSPublishModule.Tests.ps1
+
+      - name: Save validated NuGet cache
+        uses: ./.github/actions/cache-nuget
+        with:
+          mode: save
+          key: ${{ steps.nuget-cache.outputs.primary-key }}
+          cache-hit: ${{ steps.nuget-cache.outputs.cache-hit }}
 
   CoverageGate:
     # There are no required branch contexts. Keep job names and use one fail-closed gate.
