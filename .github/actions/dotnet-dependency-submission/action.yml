@@ -22,8 +22,11 @@ inputs:
   workload-version:
     description: Optional exact workload-set version for the selected SDK feature band.
     default: ''
+  setup-dotnet:
+    description: Select an SDK from global.json; false validates and uses the SDK already configured by the caller.
+    default: 'true'
   global-json-file:
-    description: Repository SDK policy file.
+    description: Repository SDK policy file, used when setup-dotnet is true.
     required: false
     default: global.json
   submit:
@@ -50,11 +53,14 @@ runs:
       shell: pwsh
       env:
         GRAPH_MODE: ${{ inputs.mode }}
+        GRAPH_SETUP_DOTNET: ${{ inputs.setup-dotnet }}
       run: |
         if ($env:GRAPH_MODE -notin @('restore', 'scan', 'submit')) { throw 'mode must be restore, scan or submit.' }
         if ($env:GRAPH_MODE -eq 'scan' -and (!$IsLinux -or [Runtime.InteropServices.RuntimeInformation]::OSArchitecture -ne 'X64')) { throw 'Scanning requires a Linux x64 runner.' }
+        & (Join-Path $env:GITHUB_ACTION_PATH 'Assert-DependencySdk.ps1') `
+          -SetupDotNet $env:GRAPH_SETUP_DOTNET -Restore:($env:GRAPH_MODE -eq 'restore')
     - uses: EvotecIT/PSPublishModule/.github/actions/setup-dotnet@a76d57fbd1f1eb6692ddd18aa67a09dd264a68c7
-      if: inputs.mode == 'restore'
+      if: inputs.mode == 'restore' && inputs.setup-dotnet == 'true'
       with:
         global-json-file: ${{ inputs.global-json-file }}
     - name: Restore explicit dependency graphs
