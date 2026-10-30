@@ -2,6 +2,10 @@
 
 ## Unreleased
 ### What's Changed
+- Analyze the selected required-module versions when checking binary conflicts and import order, so unrelated newer installations do not change the build's dependency ordering or warnings.
+- Keep selected runtime dependencies ahead of their dependants when applying binary import preferences, and analyze approved helpers in that selected dependency context instead of autoloading newer installed versions.
+- Preserve module import errors in command-analysis reports and verbose build logs, including when another helper defines the same command, so a loader failure is distinguishable from a missing command.
+- Support native Windows PowerShell 5.1 AST metadata and larger selected-runtime analysis scopes without changing the caller's session capacity.
 - Recover Linux website builders with the repository's stable SDK policy, reuse compatible installed SDKs, and retain exact selection for older engine pins. Use servicing SDK floors and ordinary package restore without repository lock files.
 - Export exact route migrations as safe HTML redirect pages for GitHub Pages through the existing hosting pipeline step, preserving canonical content and API anchors.
 - Fix social-card generation failing with ImageMagick 7 while retaining ImageMagick 6 support, preserving gradient and opacity handling, and invalidating older Linux and macOS card caches so affected images regenerate.

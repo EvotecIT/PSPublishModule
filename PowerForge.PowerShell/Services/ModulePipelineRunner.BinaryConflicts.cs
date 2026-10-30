@@ -96,19 +96,12 @@ public sealed partial class ModulePipelineRunner
         if (installedModules.Length < 2)
             return modules;
 
-        var scores = ScoreRequiredModuleConflictOrder(installedModules, GetBinaryConflictEditions(compatiblePSEditions));
-        if (scores.Count == 0 || scores.Values.All(static value => value == 0))
-            return modules;
-
-        var originalIndex = modules
-            .Select((module, index) => new { module.ModuleName, index })
-            .Where(static item => !string.IsNullOrWhiteSpace(item.ModuleName))
-            .ToDictionary(static item => item.ModuleName!, static item => item.index, StringComparer.OrdinalIgnoreCase);
-
-        var reordered = modules
-            .OrderByDescending(module => scores.TryGetValue(module.ModuleName ?? string.Empty, out var score) ? score : 0)
-            .ThenBy(module => originalIndex.TryGetValue(module.ModuleName ?? string.Empty, out var index) ? index : int.MaxValue)
-            .ToArray();
+        var preferredNames = BuildPreferredRequiredModuleOrder(
+            modules.Select(static module => module.ModuleName).ToArray(),
+            installedModules,
+            GetBinaryConflictEditions(compatiblePSEditions));
+        var byName = modules.ToDictionary(static module => module.ModuleName, StringComparer.OrdinalIgnoreCase);
+        var reordered = preferredNames.Select(name => byName[name]).ToArray();
 
         if (!modules.Select(static m => m.ModuleName).SequenceEqual(reordered.Select(static m => m.ModuleName), StringComparer.OrdinalIgnoreCase))
         {
@@ -340,18 +333,19 @@ public sealed partial class ModulePipelineRunner
             return Array.Empty<string>();
 
         var scores = ScoreRequiredModuleConflictOrder(installedModules, editions);
-        if (scores.Count == 0)
-            return declaredOrder.ToArray();
-
         var originalIndex = declaredOrder
             .Select((name, index) => new { name, index })
             .Where(static item => !string.IsNullOrWhiteSpace(item.name))
             .ToDictionary(static item => item.name, static item => item.index, StringComparer.OrdinalIgnoreCase);
 
-        return declaredOrder
+        var preferred = declaredOrder
             .OrderByDescending(name => scores.TryGetValue(name, out var score) ? score : 0)
             .ThenBy(name => originalIndex.TryGetValue(name, out var index) ? index : int.MaxValue)
             .ToArray();
+        var sources = installedModules.Select(static module => new ApprovedModuleSource(
+            module.Name, module.Version, module.ModuleBasePath!, module.Guid)).ToArray();
+        var graph = new ModuleDependencyImportGraphReader(_moduleDependencyMetadataProvider, _logger).Read(sources);
+        return ModuleDependencyImportOrder.Resolve(preferred, graph);
     }
 
     private Dictionary<string, int> ScoreRequiredModuleConflictOrder(
@@ -400,7 +394,11 @@ public sealed partial class ModulePipelineRunner
         if (names.Length == 0)
             return Array.Empty<InstalledModuleMetadata>();
 
-        var installed = _moduleDependencyMetadataProvider.GetLatestInstalledModules(names);
+        // Inspect the same selected identities that will be imported. A newer unrelated
+        // installation can carry different assemblies and reverse the preferred order.
+        var installed = _moduleDependencyMetadataProvider is IModuleDependencyVersionedMetadataProvider versionedProvider
+            ? versionedProvider.GetInstalledModules(requiredModules ?? Array.Empty<RequiredModuleReference>())
+            : _moduleDependencyMetadataProvider.GetLatestInstalledModules(names);
         var resolved = new List<InstalledModuleMetadata>(names.Length);
         var missing = new List<string>();
         foreach (var name in names)

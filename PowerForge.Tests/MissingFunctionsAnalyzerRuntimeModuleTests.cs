@@ -6,6 +6,118 @@ namespace PowerForge.Tests;
 
 public sealed class MissingFunctionsAnalyzerRuntimeModuleTests
 {
+    [Theory]
+    [InlineData("1.0.0", true, false)]
+    [InlineData("2.0.0", false, false)]
+    [InlineData("1.0.0", true, true)]
+    [InlineData("2.0.0", false, true)]
+    public void Analyze_ApprovedDonorHonorsSelectedRuntimeDependency(string donorMinimum, bool compatible, bool nested)
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        var previousModulePath = Environment.GetEnvironmentVariable("PSModulePath");
+        try
+        {
+            const string runtimeName = "Selected.Runtime";
+            const string donorName = "Selected.Donor";
+            const string runtimeGuid = "83bbf0ad-4a28-43b7-bd5c-5d6dd0007f03";
+            foreach (var version in new[] { "1.0.0", "2.0.0" })
+            {
+                var runtime = Directory.CreateDirectory(Path.Combine(root.FullName, runtimeName, version));
+                var value = version == "1.0.0" ? "selected" : "unselected";
+                File.WriteAllText(Path.Combine(runtime.FullName, runtimeName + ".psm1"),
+                    $"function Get-SelectedRuntime {{ '{value}' }}\n" +
+                    (compatible ? "function Import-Module { throw 'Selected exports must not replace the native module loader.' }\n" : string.Empty) +
+                    "Export-ModuleMember -Function Get-SelectedRuntime, Import-Module\n");
+                File.WriteAllText(Path.Combine(runtime.FullName, runtimeName + ".psd1"),
+                    $"@{{ RootModule = '{runtimeName}.psm1'; ModuleVersion = '{version}'; GUID = '{runtimeGuid}'; FunctionsToExport = @('Get-SelectedRuntime', 'Import-Module') }}");
+            }
+            var donor = Directory.CreateDirectory(Path.Combine(root.FullName, donorName));
+            File.WriteAllText(Path.Combine(donor.FullName, donorName + ".psm1"),
+                "if ((Get-SelectedRuntime) -eq 'selected') { function Get-SelectedDonor { 'selected-runtime' } }\n" +
+                "else { function Get-SelectedDonor { 'unselected-runtime' } }\nExport-ModuleMember -Function Get-SelectedDonor\n");
+            File.WriteAllText(Path.Combine(donor.FullName, donorName + ".psd1"),
+                $"@{{ RootModule = '{donorName}.psm1'; ModuleVersion = '1.0.0'; " +
+                (nested
+                    ? $"NestedModules = @('{Path.Combine(root.FullName, runtimeName, donorMinimum, runtimeName + ".psd1")}'); "
+                    : $"RequiredModules = @(@{{ ModuleName = '{runtimeName}'; ModuleVersion = '{donorMinimum}' }}); ") +
+                "FunctionsToExport = @('Get-SelectedDonor') }");
+            Environment.SetEnvironmentVariable("PSModulePath", root.FullName + Path.PathSeparator + previousModulePath);
+            var options = new MissingFunctionsOptions(
+                approvedModules: new[] { donorName },
+                approvedModuleSources: new[] { new ApprovedModuleSource(donorName, "1.0.0", donor.FullName) },
+                requireApprovedModuleSources: true,
+                runtimeModuleSources: new[]
+                {
+                    new ApprovedModuleSource(runtimeName, "1.0.0", Path.Combine(root.FullName, runtimeName, "1.0.0"), runtimeGuid)
+                });
+
+            var report = new MissingFunctionsAnalyzer().Analyze(null, "Get-SelectedDonor", options);
+
+            if (compatible)
+                Assert.Contains(report.Functions, function => function.Contains("'selected-runtime'", StringComparison.Ordinal));
+            else
+            {
+                Assert.Empty(report.Functions);
+                var command = Assert.Single(report.Summary);
+                Assert.Contains(runtimeName, command.Error, StringComparison.Ordinal);
+                Assert.Contains("2.0.0", command.Error, StringComparison.Ordinal);
+                Assert.Contains("1.0.0", command.Error, StringComparison.Ordinal);
+            }
+            Assert.DoesNotContain(report.Functions, function => function.Contains("'unselected-runtime'", StringComparison.Ordinal));
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("PSModulePath", previousModulePath);
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Theory]
+    [InlineData(false, false, false)]
+    [InlineData(true, false, false)]
+    [InlineData(true, true, false)]
+    [InlineData(false, false, true)]
+    [InlineData(false, true, true)]
+    public void Analyze_ReportsRuntimeModuleImportErrorInsteadOfOnlyMissingCommand(bool unrelatedUnboundDonor, bool strict, bool healthyBoundDonor)
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "Runtime.Dependency";
+            File.WriteAllText(Path.Combine(root.FullName, moduleName + ".psm1"),
+                "Write-Error 'Required assembly fixture could not be loaded.' -ErrorAction Continue\n" +
+                "function Get-RuntimeThing { 'runtime' }\nExport-ModuleMember -Function Get-RuntimeThing\n");
+            File.WriteAllText(Path.Combine(root.FullName, moduleName + ".psd1"),
+                "@{ RootModule = 'Runtime.Dependency.psm1'; ModuleVersion = '1.0.0'; FunctionsToExport = @('Get-RuntimeThing') }");
+            var donor = Path.Combine(root.FullName, "Healthy.Donor");
+            if (healthyBoundDonor)
+            {
+                Directory.CreateDirectory(donor);
+                File.WriteAllText(Path.Combine(donor, "Healthy.Donor.psm1"), "function Get-RuntimeThing { 'wrong-donor' }; Export-ModuleMember -Function Get-RuntimeThing");
+                File.WriteAllText(Path.Combine(donor, "Healthy.Donor.psd1"), "@{ RootModule = 'Healthy.Donor.psm1'; ModuleVersion = '1.0.0'; FunctionsToExport = @('Get-RuntimeThing') }");
+            }
+            var options = new MissingFunctionsOptions(
+                approvedModules: healthyBoundDonor ? new[] { "Healthy.Donor" } : unrelatedUnboundDonor ? new[] { "Optional.Unbound" } : Array.Empty<string>(),
+                approvedModuleSources: healthyBoundDonor ? new[] { new ApprovedModuleSource("Healthy.Donor", "1.0.0", donor) } : null,
+                requireApprovedModuleSources: strict,
+                runtimeModuleSources: new[]
+                {
+                    new ApprovedModuleSource(moduleName, "1.0.0", root.FullName)
+                });
+
+            var report = new MissingFunctionsAnalyzer().Analyze(null, "Get-RuntimeThing", options);
+
+            var command = Assert.Single(report.Summary);
+            Assert.Empty(command.CommandType);
+            Assert.Contains(moduleName, command.Error, StringComparison.Ordinal);
+            Assert.Contains("Required assembly fixture could not be loaded.", command.Error, StringComparison.Ordinal);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
     [Fact]
     public void Analyze_RecursiveDonorAnalysisPrefersPrivateDonorHelperOverRuntimeExport()
     {

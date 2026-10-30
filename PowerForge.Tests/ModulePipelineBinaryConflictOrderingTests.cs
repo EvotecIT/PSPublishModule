@@ -3,11 +3,105 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Text.Json;
 
 namespace PowerForge.Tests;
 
 public sealed class ModulePipelineBinaryConflictOrderingTests
 {
+    [Theory]
+    [InlineData("Direct")]
+    [InlineData("Nested")]
+    [InlineData("Intermediate")]
+    [InlineData("AvailableAfterPlanning")]
+    [InlineData("NestedCycle")]
+    [InlineData("Script")]
+    public void Plan_PlacesSelectedDependencyBeforeModuleThatRequiresIt(string route)
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            WriteMinimalModule(root.FullName, "TestModule", "1.0.0");
+            var consumer = Path.Combine(root.FullName, "Consumer.Tools");
+            var runtime = Path.Combine(root.FullName, "Runtime.Tools");
+            WriteMinimalModule(consumer, "Consumer.Tools", "1.0.0");
+            WriteMinimalModule(runtime, "Runtime.Tools", "1.0.0");
+            const string requiresRuntime = "RequiredModules = @(@{ ModuleName = 'Runtime.Tools'; ModuleVersion = '1.0.0' })";
+            var modules = new Dictionary<string, string>
+            {
+                ["Consumer.Tools"] = consumer,
+                ["Runtime.Tools"] = runtime
+            };
+            var consumerRequirements = requiresRuntime;
+            string? deferredIntermediate = null;
+            if (route != "Direct" && route != "Script")
+            {
+                var nestedRoute = route.StartsWith("Nested", StringComparison.Ordinal);
+                var intermediate = nestedRoute
+                    ? Path.Combine(consumer, "Intermediate.Tools")
+                    : Path.Combine(root.FullName, "Intermediate.Tools");
+                WriteMinimalModule(intermediate, "Intermediate.Tools", "1.0.0");
+                File.WriteAllText(Path.Combine(intermediate, "Intermediate.Tools.psd1"),
+                    "@{ RootModule = 'Intermediate.Tools.psm1'; ModuleVersion = '1.0.0'; " + requiresRuntime +
+                    (route == "NestedCycle" ? "; NestedModules = @('../Consumer.Tools.psd1')" : string.Empty) + " }");
+                if (route == "AvailableAfterPlanning")
+                    deferredIntermediate = intermediate;
+                else
+                    modules["Intermediate.Tools"] = intermediate;
+                consumerRequirements = nestedRoute
+                    ? "NestedModules = @('Intermediate.Tools/Intermediate.Tools.psd1')"
+                    : "RequiredModules = @('Intermediate.Tools')";
+            }
+            File.WriteAllText(Path.Combine(consumer, "Consumer.Tools.psd1"),
+                "@{ RootModule = 'Consumer.Tools.psm1'; ModuleVersion = '1.0.0'; " + consumerRequirements + " }");
+            if (route == "Script")
+            {
+                File.Delete(Path.Combine(consumer, "Consumer.Tools.psd1"));
+                File.WriteAllText(Path.Combine(consumer, "Consumer.Tools.psm1"),
+                    "#requires -Modules @{ ModuleName = 'Runtime.Tools'; ModuleVersion = '1.0.0' }\n");
+            }
+            var runner = new ModulePipelineRunner(new NullLogger(), new StubPowerShellRunner(modules));
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec { Name = "TestModule", SourcePath = root.FullName, Version = "1.0.0" },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationBuildSegment { BuildModule = new BuildModuleConfiguration { InstallMissingModules = false } },
+                    new ConfigurationModuleSegment { Kind = ModuleDependencyKind.RequiredModule,
+                        Configuration = new ModuleDependencyConfiguration { ModuleName = "Consumer.Tools", RequiredVersion = "1.0.0" } },
+                    new ConfigurationModuleSegment { Kind = ModuleDependencyKind.RequiredModule,
+                        Configuration = new ModuleDependencyConfiguration { ModuleName = "Runtime.Tools", RequiredVersion = "1.0.0" } },
+                    new ConfigurationImportModulesSegment { ImportModules = new ImportModulesConfiguration
+                        { RequiredModules = true, PreferBinaryConflictOrder = true } }
+                }
+            };
+
+            if (route == "NestedCycle")
+            {
+                var error = Assert.Throws<InvalidOperationException>(() => runner.Plan(spec));
+                Assert.Contains("dependency cycle", error.Message, StringComparison.OrdinalIgnoreCase);
+                return;
+            }
+            var plan = runner.Plan(spec);
+
+            if (deferredIntermediate is not null)
+            {
+                Assert.Equal(new[] { "Consumer.Tools", "Runtime.Tools" }, plan.RequiredModules.Select(module => module.ModuleName));
+                // Model metadata becoming available during dependency preparation, after pure planning.
+                modules["Intermediate.Tools"] = deferredIntermediate;
+                typeof(ModulePipelineRunner).GetMethod("EnsureBuildDependenciesInstalledIfNeeded",
+                    System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.Invoke(runner, new object[] { plan });
+            }
+
+            Assert.Equal(new[] { "Runtime.Tools", "Consumer.Tools" }, plan.RequiredModules.Select(module => module.ModuleName));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
     [Fact]
     public void Plan_PreservesInstalledConflictAnalysisOptIn()
     {
@@ -38,8 +132,10 @@ public sealed class ModulePipelineBinaryConflictOrderingTests
         }
     }
 
-    [Fact]
-    public void Plan_ReordersRequiredModules_WhenPreferBinaryConflictOrderEnabled()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Plan_ReordersSelectedRequiredModules_WhenPreferBinaryConflictOrderEnabled(bool newerUnselectedVersionInstalled)
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
         try
@@ -56,12 +152,27 @@ public sealed class ModulePipelineBinaryConflictOrderingTests
             var betaModuleBase = Directory.CreateDirectory(Path.Combine(root.FullName, "Beta.Tools", "2.0.0", "bin"));
             File.Copy(betaAssembly, Path.Combine(betaModuleBase.FullName, "SharedAuth.dll"), overwrite: true);
 
+            var latestAlphaModuleBase = alphaModuleBase.Parent!.FullName;
+            if (newerUnselectedVersionInstalled)
+            {
+                var latestAssembly = BuildLibrary(root.FullName, "SharedAuth", "3.0.0", projectFolderName: "SharedAuth_Unselected");
+                var latestBin = Directory.CreateDirectory(Path.Combine(root.FullName, "Alpha.Tools", "3.0.0", "bin"));
+                File.Copy(latestAssembly, Path.Combine(latestBin.FullName, "SharedAuth.dll"));
+                latestAlphaModuleBase = latestBin.Parent!.FullName;
+            }
+
             var logger = new CollectingLogger();
-            var runner = new ModulePipelineRunner(logger, new StubPowerShellRunner(new Dictionary<string, string>
+            var selectedModules = new Dictionary<string, string>
             {
                 ["Alpha.Tools"] = alphaModuleBase.Parent!.FullName,
                 ["Beta.Tools"] = betaModuleBase.Parent!.FullName
-            }));
+            };
+            var latestModules = new Dictionary<string, string>(selectedModules)
+            {
+                ["Alpha.Tools"] = latestAlphaModuleBase
+            };
+            var powerShell = new StubPowerShellRunner(latestModules, selectedModules);
+            var runner = new ModulePipelineRunner(logger, powerShell);
 
             var spec = new ModulePipelineSpec
             {
@@ -108,6 +219,11 @@ public sealed class ModulePipelineBinaryConflictOrderingTests
 
             Assert.Equal(new[] { "Beta.Tools", "Alpha.Tools" }, plan.RequiredModules.Select(static module => module.ModuleName).ToArray());
             Assert.Contains(logger.Infos, static message => message.Contains("PreferBinaryConflictOrder reordered RequiredModules", StringComparison.OrdinalIgnoreCase));
+            var query = Assert.Single(powerShell.Requests, static request => request.Arguments.Count == 2);
+            using var references = JsonDocument.Parse(Convert.FromBase64String(query.Arguments[1]));
+            Assert.Collection(references.RootElement.EnumerateArray(),
+                reference => { Assert.Equal("Alpha.Tools", reference.GetProperty("Name").GetString()); Assert.Equal("1.0.0", reference.GetProperty("RequiredVersion").GetString()); },
+                reference => { Assert.Equal("Beta.Tools", reference.GetProperty("Name").GetString()); Assert.Equal("2.0.0", reference.GetProperty("RequiredVersion").GetString()); });
         }
         finally
         {
@@ -188,15 +304,30 @@ public sealed class Marker
     private sealed class StubPowerShellRunner : IPowerShellRunner
     {
         private readonly IReadOnlyDictionary<string, string> _moduleBasePaths;
+        private readonly IReadOnlyDictionary<string, string>? _selectedModuleBasePaths;
+        internal List<PowerShellRunRequest> Requests { get; } = new();
 
-        public StubPowerShellRunner(IReadOnlyDictionary<string, string> moduleBasePaths)
+        public StubPowerShellRunner(IReadOnlyDictionary<string, string> moduleBasePaths,
+            IReadOnlyDictionary<string, string>? selectedModuleBasePaths = null)
         {
             _moduleBasePaths = moduleBasePaths;
+            _selectedModuleBasePaths = selectedModuleBasePaths;
         }
 
         public PowerShellRunResult Run(PowerShellRunRequest request)
         {
-            var lines = _moduleBasePaths
+            if (request.Arguments.Count == 2)
+            {
+                using var payload = JsonDocument.Parse(Convert.FromBase64String(request.Arguments[1]));
+                // Get-RequiredModules requests carry one reference, not the metadata batch.
+                if (payload.RootElement.ValueKind != JsonValueKind.Array)
+                    return new PowerShellRunResult(0, string.Empty, string.Empty, "pwsh.exe");
+            }
+            Requests.Add(request);
+            var modules = request.Arguments.Count > 1 && _selectedModuleBasePaths is not null
+                ? _selectedModuleBasePaths
+                : _moduleBasePaths;
+            var lines = modules
                 .OrderBy(static item => item.Key, StringComparer.OrdinalIgnoreCase)
                 .Select(static item =>
                     "PFMODINFO::ITEM::" +

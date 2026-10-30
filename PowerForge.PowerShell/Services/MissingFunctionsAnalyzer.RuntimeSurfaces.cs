@@ -40,6 +40,13 @@ public sealed partial class MissingFunctionsAnalyzer
     }
 
     private static bool HasNonFunctionRuntimeSurface(PSModuleInfo module)
+        => EnumerateLoadedModuleGraph(module).Any(static current =>
+            current.ModuleType != ModuleType.Script ||
+            current.ExportedVariables.Count > 0 || current.ExportedAliases.Count > 0 ||
+            current.ExportedCmdlets.Count > 0 || current.ExportedTypeFiles.Count > 0 ||
+            current.ExportedFormatFiles.Count > 0);
+
+    private static IEnumerable<PSModuleInfo> EnumerateLoadedModuleGraph(PSModuleInfo module)
     {
         // Ask the PowerShell owner for the loaded graph rather than interpreting declarations.
         // Required and nested modules can register runtime state that the parent does not export.
@@ -51,14 +58,9 @@ public sealed partial class MissingFunctionsAnalyzer
             var current = pending.Pop();
             if (!visited.Add(current))
                 continue;
-            if (current.ModuleType != ModuleType.Script ||
-                current.ExportedVariables.Count > 0 || current.ExportedAliases.Count > 0 ||
-                current.ExportedCmdlets.Count > 0 || current.ExportedTypeFiles.Count > 0 ||
-                current.ExportedFormatFiles.Count > 0)
-                return true;
+            yield return current;
             foreach (var dependency in current.NestedModules.Concat(current.RequiredModules))
                 pending.Push(dependency);
         }
-        return false;
     }
 }

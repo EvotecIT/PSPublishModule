@@ -9,12 +9,17 @@ internal sealed class PowerShellModuleDependencyMetadataProvider : IModuleDepend
 {
     private readonly IPowerShellRunner _powerShellRunner;
     private readonly ILogger _logger;
+    private readonly string? _moduleSearchRoot;
 
-    internal PowerShellModuleDependencyMetadataProvider(IPowerShellRunner powerShellRunner, ILogger logger)
+    internal PowerShellModuleDependencyMetadataProvider(IPowerShellRunner powerShellRunner, ILogger logger, string? moduleSearchRoot = null)
     {
         _powerShellRunner = powerShellRunner;
         _logger = logger;
+        _moduleSearchRoot = moduleSearchRoot;
     }
+
+    internal PowerShellModuleDependencyMetadataProvider WithModuleSearchRoot(string root)
+        => new(_powerShellRunner, _logger, root);
 
     public IReadOnlyDictionary<string, InstalledModuleMetadata> GetLatestInstalledModules(IReadOnlyList<string> names)
     {
@@ -199,7 +204,13 @@ internal sealed class PowerShellModuleDependencyMetadataProvider : IModuleDepend
         var scriptPath = WriteTempScript(scriptText);
         try
         {
-            return _powerShellRunner.Run(new PowerShellRunRequest(scriptPath, args, timeout, preferPwsh: true));
+            IReadOnlyDictionary<string, string?>? environment = string.IsNullOrWhiteSpace(_moduleSearchRoot)
+                ? null
+                : new Dictionary<string, string?>
+                {
+                    ["PSModulePath"] = _moduleSearchRoot + Path.PathSeparator + Environment.GetEnvironmentVariable("PSModulePath")
+                };
+            return _powerShellRunner.Run(new PowerShellRunRequest(scriptPath, args, timeout, preferPwsh: true, environmentVariables: environment));
         }
         finally
         {

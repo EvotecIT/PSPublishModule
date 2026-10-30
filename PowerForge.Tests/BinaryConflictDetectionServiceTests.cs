@@ -7,8 +7,10 @@ namespace PowerForge.Tests;
 
 public sealed class BinaryConflictDetectionServiceTests
 {
-    [Fact]
-    public void Analyze_FindsVersionMismatchAcrossInstalledModules()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Analyze_FindsVersionMismatchWithinRequestedSources(bool useModulePaths)
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
         try
@@ -28,7 +30,8 @@ public sealed class BinaryConflictDetectionServiceTests
                 moduleRoot.FullName,
                 "Core",
                 currentModuleName: "TestModule",
-                searchRoots: new[] { moduleSearchRoot.FullName });
+                searchRoots: useModulePaths ? null : new[] { moduleSearchRoot.FullName },
+                searchModulePaths: useModulePaths ? new[] { installedModuleDir.Parent!.FullName } : null);
 
             Assert.True(result.HasConflicts);
             var issue = Assert.Single(result.Issues);
@@ -38,6 +41,7 @@ public sealed class BinaryConflictDetectionServiceTests
             Assert.Equal("1.0.0", issue.InstalledModuleVersion);
             Assert.Equal("1.0.0.0", issue.InstalledAssemblyVersion);
             Assert.True(issue.VersionComparison > 0);
+            Assert.EndsWith("across 1 module source", result.Summary);
         }
         finally
         {

@@ -211,6 +211,8 @@ public sealed partial class ModulePipelineRunner
                 continue;
             if (IsBuiltInCommand(name))
                 continue;
+            if (!string.IsNullOrWhiteSpace(cmd.Error))
+                _logger.Verbose($"Command resolution failed for '{name}': {cmd.Error}");
             if (ignoreFunctions.Contains(name))
             {
                 _logger.Warn($"Unresolved command '{name}' ignored by configuration.");

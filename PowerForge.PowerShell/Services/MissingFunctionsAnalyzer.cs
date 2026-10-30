@@ -1,5 +1,4 @@
 using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -15,6 +14,7 @@ namespace PowerForge;
 /// </summary>
 public sealed partial class MissingFunctionsAnalyzer
 {
+    private const string SelectedModuleFailureKey = "PowerForge.SelectedModule";
     private static readonly object ModulePathImportLock = new();
 
     private readonly Dictionary<string, CommandInfo?> _currentSessionCommandCache =
@@ -85,6 +85,7 @@ public sealed partial class MissingFunctionsAnalyzer
 
         try
         {
+            InitializeSelectedRuntimeScope(runtimeSourceOrder);
             var report = AnalyzeInternal(
                 filePath: filePath,
                 code: code,
@@ -434,6 +435,7 @@ public sealed partial class MissingFunctionsAnalyzer
         var isAlias = false;
         var qualifier = GetModuleQualifier(name);
         var lookupName = GetUnqualifiedCommandName(name);
+        string? unboundCommandSource = null;
 
         try
         {
@@ -522,6 +524,7 @@ public sealed partial class MissingFunctionsAnalyzer
                 approvedModules.Contains(cmd.Source) &&
                 !approvedModuleSources.ContainsKey(cmd.Source))
             {
+                unboundCommandSource = cmd.Source;
                 throw new InvalidOperationException(
                     $"Approved module '{cmd.Source}' has no concrete source binding for deterministic helper analysis.");
             }
@@ -543,16 +546,17 @@ public sealed partial class MissingFunctionsAnalyzer
         }
         catch (Exception ex)
         {
+            var failedSelectedSource = ex.Data[SelectedModuleFailureKey] as string;
             var resolution = new MissingFunctionCommand(
                 name: name,
-                source: string.Empty,
+                source: failedSelectedSource ?? unboundCommandSource ?? string.Empty,
                 commandType: string.Empty,
                 isAlias: isAlias,
                 isPrivate: false,
                 error: ex.Message,
                 scriptBlock: null);
 
-            if (approvedModules.Count == 0)
+            if (approvedModules.Count == 0 || failedSelectedSource is not null)
                 return resolution;
 
             if (qualifier is null)
@@ -831,185 +835,6 @@ try {
         {
             return false;
         }
-    }
-
-    private ModuleScopeSession GetOrCreateModuleScopeSession(ApprovedModuleSource source)
-    {
-        var key = source.Name.Trim() + "|" + (source.Version ?? string.Empty) + "|" + source.ModuleBasePath + "|" + (source.ModuleSearchRoot ?? string.Empty);
-        if (_moduleScopeSessions.TryGetValue(key, out var existing))
-            return existing;
-
-        var initialSessionState = InitialSessionState.CreateDefault();
-        initialSessionState.AuthorizationManager = new AuthorizationManager("PowerForge");
-        var runspace = RunspaceFactory.CreateRunspace(initialSessionState);
-        runspace.Open();
-        try
-        {
-            using var ps = PowerShell.Create();
-            ps.Runspace = runspace;
-            var moduleReference = ResolveModuleReference(source);
-            System.Collections.ObjectModel.Collection<PSObject> importResults;
-            if (string.IsNullOrWhiteSpace(source.ModuleSearchRoot))
-            {
-                importResults = ps.AddCommand("Import-Module")
-                    .AddParameter("Name", moduleReference)
-                    .AddParameter("PassThru", true)
-                    .AddParameter("Force", true)
-                    .AddParameter("ErrorAction", "Stop")
-                    .AddParameter("Verbose", false)
-                    .Invoke();
-            }
-            else
-            {
-                ps.AddScript(@"
-param($ModuleReference, $ModuleSearchRoot)
-$previousModulePath = [Environment]::GetEnvironmentVariable('PSModulePath', 'Process')
-try {
-    [Environment]::SetEnvironmentVariable(
-        'PSModulePath',
-        $ModuleSearchRoot + [IO.Path]::PathSeparator + $previousModulePath,
-        'Process')
-    Import-Module -Name $ModuleReference -PassThru -Force -ErrorAction Stop -Verbose:$false
-} finally {
-    [Environment]::SetEnvironmentVariable('PSModulePath', $previousModulePath, 'Process')
-}
-")
-                    .AddArgument(moduleReference)
-                    .AddArgument(source.ModuleSearchRoot);
-                lock (ModulePathImportLock)
-                    importResults = ps.Invoke();
-            }
-
-            var imported = importResults
-                .Select(static result => result.BaseObject)
-                .OfType<PSModuleInfo>()
-                .LastOrDefault();
-            // PowerShell.HadErrors is sticky across nested pipelines, including failures that
-            // a module deliberately catches for optional dependencies. Treat the import as
-            // failed only when the outer Import-Module pipeline emitted an error or did not
-            // return a module; otherwise healthy donors such as ADEssentials are discarded.
-            if (ps.Streams.Error.Count > 0 || imported is null)
-                throw new InvalidOperationException($"Approved module '{source.Name}' could not be imported from '{moduleReference}'.");
-            if (!string.Equals(imported.Name, source.Name, StringComparison.OrdinalIgnoreCase))
-                throw new InvalidOperationException($"Imported module '{imported.Name}' does not match expected module '{source.Name}'.");
-            if (!string.IsNullOrWhiteSpace(source.Guid) &&
-                (!System.Guid.TryParse(source.Guid, out var expectedGuid) || imported.Guid != expectedGuid))
-            {
-                throw new InvalidOperationException(
-                    $"Imported module '{source.Name}' GUID '{imported.Guid}' does not match expected GUID '{source.Guid}'.");
-            }
-            if (!string.IsNullOrWhiteSpace(source.Version) && !ModuleVersionMatches(imported, source.Version!))
-            {
-                throw new InvalidOperationException(
-                    $"Imported module '{source.Name}' version '{FormatImportedModuleVersion(imported)}' does not match expected version '{source.Version}'.");
-            }
-
-            var created = new ModuleScopeSession(
-                runspace,
-                imported.ModuleBase,
-                imported.ExportedCommands.Keys,
-                HasNonFunctionRuntimeSurface(imported));
-            _moduleScopeSessions[key] = created;
-            return created;
-        }
-        catch
-        {
-            runspace.Dispose();
-            throw;
-        }
-    }
-
-    private static bool ModuleVersionMatches(PSModuleInfo module, string expectedVersion)
-    {
-        var expected = (expectedVersion ?? string.Empty).Trim();
-        var metadataSeparator = expected.IndexOf('+');
-        if (metadataSeparator >= 0)
-            expected = expected.Substring(0, metadataSeparator);
-
-        var prereleaseSeparator = expected.IndexOf('-');
-        var expectedBase = prereleaseSeparator >= 0 ? expected.Substring(0, prereleaseSeparator) : expected;
-        var expectedPrerelease = prereleaseSeparator >= 0 ? expected.Substring(prereleaseSeparator + 1) : string.Empty;
-        if (!Version.TryParse(expectedBase, out var parsedExpected) || module.Version is null || module.Version != parsedExpected)
-            return false;
-
-        return string.Equals(GetModulePrerelease(module), expectedPrerelease, StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static string FormatImportedModuleVersion(PSModuleInfo module)
-    {
-        var baseVersion = module.Version?.ToString() ?? string.Empty;
-        var prerelease = GetModulePrerelease(module);
-        return string.IsNullOrWhiteSpace(prerelease) ? baseVersion : $"{baseVersion}-{prerelease}";
-    }
-
-    private static string GetModulePrerelease(PSModuleInfo module)
-    {
-        if (module.PrivateData is not IDictionary privateData)
-            return string.Empty;
-        var psData = GetDictionaryValue(privateData, "PSData") as IDictionary;
-        var prerelease = psData is null ? null : GetDictionaryValue(psData, "Prerelease")?.ToString();
-        return (prerelease ?? string.Empty).Trim().TrimStart('-');
-    }
-
-    private static object? GetDictionaryValue(IDictionary dictionary, string key)
-    {
-        foreach (DictionaryEntry entry in dictionary)
-        {
-            if (string.Equals(entry.Key?.ToString(), key, StringComparison.OrdinalIgnoreCase))
-                return entry.Value;
-        }
-
-        return null;
-    }
-
-    private static string ResolveModuleReference(ApprovedModuleSource source)
-    {
-        if (string.IsNullOrWhiteSpace(source.ModuleBasePath))
-            return source.Name;
-
-        foreach (var extension in new[] { ".psd1", ".psm1", ".dll" })
-        {
-            var modulePath = Path.Combine(source.ModuleBasePath, source.Name + extension);
-            if (File.Exists(modulePath))
-                return modulePath;
-        }
-
-        throw new FileNotFoundException(
-            $"The selected approved module '{source.Name}' entry point was not found under '{source.ModuleBasePath}'. Expected {source.Name}.psd1, {source.Name}.psm1, or {source.Name}.dll.",
-            source.ModuleBasePath);
-    }
-
-    private void DisposeModuleScopeSessions()
-    {
-        foreach (var session in _moduleScopeSessions.Values)
-            session.Dispose();
-        _moduleScopeSessions.Clear();
-        _moduleScopeCommandCache.Clear();
-        _currentSessionCommandCache.Clear();
-    }
-
-    private sealed class ModuleScopeSession : IDisposable
-    {
-        internal Runspace Runspace { get; }
-        internal string ModuleBase { get; }
-        internal HashSet<string> ExportedCommandNames { get; }
-        internal bool HasNonFunctionRuntimeSurface { get; }
-
-        internal ModuleScopeSession(
-            Runspace runspace,
-            string moduleBase,
-            IEnumerable<string> exportedCommandNames,
-            bool hasNonFunctionRuntimeSurface)
-        {
-            Runspace = runspace;
-            ModuleBase = moduleBase;
-            HasNonFunctionRuntimeSurface = hasNonFunctionRuntimeSurface;
-            ExportedCommandNames = new HashSet<string>(
-                exportedCommandNames ?? Array.Empty<string>(),
-                StringComparer.OrdinalIgnoreCase);
-        }
-
-        public void Dispose() => Runspace.Dispose();
     }
 
     private sealed class ParsedInput

@@ -17,6 +17,13 @@ public sealed partial class ModulePipelineRunner
             // output filtering happens only after the merge proves a donor module was fully inlined.
             var packagingRequiredModules = plan.RequiredModulesForPackaging ?? Array.Empty<RequiredModuleReference>();
             results.AddRange(EnsureFeatureToolDependenciesInstalled(plan, packagingRequiredModules));
+            if (plan.ImportModules?.PreferBinaryConflictOrder == true)
+            {
+                var reordered = ReorderRequiredModulesForBinaryConflicts(plan.RequiredModules, plan.CompatiblePSEditions);
+                // Build phases already share this array. Refresh its order after dependency
+                // preparation makes previously unavailable manifests inspectable.
+                Array.Copy(reordered, plan.RequiredModules, reordered.Length);
+            }
             return results.ToArray();
         }
         catch (Exception ex)
