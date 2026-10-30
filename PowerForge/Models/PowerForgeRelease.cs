@@ -953,7 +953,7 @@ internal sealed class PowerForgeReleaseWingetOptions
 
     public string? InstallerUrlTemplate { get; set; }
 
-    public string ManifestVersion { get; set; } = "1.12.0";
+    public string ManifestVersion { get; set; } = "1.28.0";
 
     public string PackageLocale { get; set; } = "en-US";
 

@@ -42,7 +42,7 @@ public class WingetManifestWriterTests
             });
 
         Assert.Contains("InstallerType: zip" + Environment.NewLine, yaml);
-        Assert.StartsWith("# yaml-language-server: $schema=https://aka.ms/winget-manifest.installer.1.12.0.schema.json" + Environment.NewLine, yaml);
+        Assert.StartsWith("# yaml-language-server: $schema=https://aka.ms/winget-manifest.installer.1.28.0.schema.json" + Environment.NewLine, yaml);
         Assert.Contains("ManifestType: installer" + Environment.NewLine, yaml);
         Assert.DoesNotContain("Publisher:", yaml);
     }
@@ -67,11 +67,11 @@ public class WingetManifestWriterTests
         });
 
         Assert.Contains("DefaultLocale: en-GB", version);
-        Assert.StartsWith("# yaml-language-server: $schema=https://aka.ms/winget-manifest.version.1.12.0.schema.json" + Environment.NewLine, version);
+        Assert.StartsWith("# yaml-language-server: $schema=https://aka.ms/winget-manifest.version.1.28.0.schema.json" + Environment.NewLine, version);
         Assert.Contains("ManifestType: version", version);
         Assert.Contains("PackageLocale: en-GB", locale);
         Assert.Contains("Publisher: Evotec", locale);
-        Assert.StartsWith("# yaml-language-server: $schema=https://aka.ms/winget-manifest.defaultLocale.1.12.0.schema.json" + Environment.NewLine, locale);
+        Assert.StartsWith("# yaml-language-server: $schema=https://aka.ms/winget-manifest.defaultLocale.1.28.0.schema.json" + Environment.NewLine, locale);
         Assert.Contains("ManifestType: defaultLocale", locale);
         Assert.Contains("Platform:\n- Windows.Desktop".Replace("\n", Environment.NewLine), installer);
         Assert.Contains("ManifestType: installer", installer);
@@ -121,6 +121,38 @@ public class WingetManifestWriterTests
             Assert.Contains("DisplayVersion: " + msiVersion + Environment.NewLine, yaml);
         else
             Assert.DoesNotContain("DisplayVersion:", yaml);
+    }
+
+    [Theory]
+    [InlineData("", null, "1.28.0")]
+    [InlineData("1.12.0", null, "1.12.0")]
+    [InlineData("1.12.0", " 1.28.0 ", "1.28.0")]
+    public void Build_UsesConsistentSchemaVersionAndPreservesExplicitOverrides(
+        string sharedVersion, string? packageVersion, string expectedVersion)
+    {
+        var winget = new PowerForgeReleaseWingetOptions { ManifestVersion = sharedVersion };
+        var package = CreatePackage();
+        package.ManifestVersion = packageVersion;
+        var manifests = new[]
+        {
+            (Kind: "installer", Yaml: WingetManifestWriter.Build(winget, package, "1.2.3", new[]
+            {
+                new WingetManifestInstallerEntry
+                {
+                    Architecture = "x64",
+                    InstallerUrl = "https://example.test/app.zip",
+                    InstallerSha256 = "ABC123"
+                }
+            })),
+            (Kind: "version", Yaml: WingetManifestWriter.BuildVersion(winget, package, "1.2.3")),
+            (Kind: "defaultLocale", Yaml: WingetManifestWriter.BuildDefaultLocale(winget, package, "1.2.3"))
+        };
+
+        foreach (var manifest in manifests)
+        {
+            Assert.StartsWith($"# yaml-language-server: $schema=https://aka.ms/winget-manifest.{manifest.Kind}.{expectedVersion}.schema.json" + Environment.NewLine, manifest.Yaml);
+            Assert.Contains("ManifestVersion: " + expectedVersion + Environment.NewLine, manifest.Yaml);
+        }
     }
 
     private static PowerForgeReleaseWingetPackage CreatePackage()
