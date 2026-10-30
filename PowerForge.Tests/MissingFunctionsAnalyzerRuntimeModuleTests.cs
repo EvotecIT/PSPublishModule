@@ -25,9 +25,11 @@ public sealed class MissingFunctionsAnalyzerRuntimeModuleTests
                 var runtime = Directory.CreateDirectory(Path.Combine(root.FullName, runtimeName, version));
                 var value = version == "1.0.0" ? "selected" : "unselected";
                 File.WriteAllText(Path.Combine(runtime.FullName, runtimeName + ".psm1"),
-                    $"function Get-SelectedRuntime {{ '{value}' }}\nExport-ModuleMember -Function Get-SelectedRuntime\n");
+                    $"function Get-SelectedRuntime {{ '{value}' }}\n" +
+                    (compatible ? "function Import-Module { throw 'Selected exports must not replace the native module loader.' }\n" : string.Empty) +
+                    "Export-ModuleMember -Function Get-SelectedRuntime, Import-Module\n");
                 File.WriteAllText(Path.Combine(runtime.FullName, runtimeName + ".psd1"),
-                    $"@{{ RootModule = '{runtimeName}.psm1'; ModuleVersion = '{version}'; GUID = '{runtimeGuid}'; FunctionsToExport = @('Get-SelectedRuntime') }}");
+                    $"@{{ RootModule = '{runtimeName}.psm1'; ModuleVersion = '{version}'; GUID = '{runtimeGuid}'; FunctionsToExport = @('Get-SelectedRuntime', 'Import-Module') }}");
             }
             var donor = Directory.CreateDirectory(Path.Combine(root.FullName, donorName));
             File.WriteAllText(Path.Combine(donor.FullName, donorName + ".psm1"),
@@ -71,10 +73,12 @@ public sealed class MissingFunctionsAnalyzerRuntimeModuleTests
     }
 
     [Theory]
-    [InlineData(false, false)]
-    [InlineData(true, false)]
-    [InlineData(true, true)]
-    public void Analyze_ReportsRuntimeModuleImportErrorInsteadOfOnlyMissingCommand(bool unrelatedUnboundDonor, bool strict)
+    [InlineData(false, false, false)]
+    [InlineData(true, false, false)]
+    [InlineData(true, true, false)]
+    [InlineData(false, false, true)]
+    [InlineData(false, true, true)]
+    public void Analyze_ReportsRuntimeModuleImportErrorInsteadOfOnlyMissingCommand(bool unrelatedUnboundDonor, bool strict, bool healthyBoundDonor)
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
         try
@@ -85,8 +89,16 @@ public sealed class MissingFunctionsAnalyzerRuntimeModuleTests
                 "function Get-RuntimeThing { 'runtime' }\nExport-ModuleMember -Function Get-RuntimeThing\n");
             File.WriteAllText(Path.Combine(root.FullName, moduleName + ".psd1"),
                 "@{ RootModule = 'Runtime.Dependency.psm1'; ModuleVersion = '1.0.0'; FunctionsToExport = @('Get-RuntimeThing') }");
+            var donor = Path.Combine(root.FullName, "Healthy.Donor");
+            if (healthyBoundDonor)
+            {
+                Directory.CreateDirectory(donor);
+                File.WriteAllText(Path.Combine(donor, "Healthy.Donor.psm1"), "function Get-RuntimeThing { 'wrong-donor' }; Export-ModuleMember -Function Get-RuntimeThing");
+                File.WriteAllText(Path.Combine(donor, "Healthy.Donor.psd1"), "@{ RootModule = 'Healthy.Donor.psm1'; ModuleVersion = '1.0.0'; FunctionsToExport = @('Get-RuntimeThing') }");
+            }
             var options = new MissingFunctionsOptions(
-                approvedModules: unrelatedUnboundDonor ? new[] { "Optional.Unbound" } : Array.Empty<string>(),
+                approvedModules: healthyBoundDonor ? new[] { "Healthy.Donor" } : unrelatedUnboundDonor ? new[] { "Optional.Unbound" } : Array.Empty<string>(),
+                approvedModuleSources: healthyBoundDonor ? new[] { new ApprovedModuleSource("Healthy.Donor", "1.0.0", donor) } : null,
                 requireApprovedModuleSources: strict,
                 runtimeModuleSources: new[]
                 {

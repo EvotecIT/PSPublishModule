@@ -30,22 +30,30 @@ internal sealed class ModuleDependencyImportGraphReader
         {
             var dependencies = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var visited = new HashSet<string>(StringComparer.Ordinal);
+            var active = new HashSet<string>(StringComparer.Ordinal);
             VisitFile(ResolveEntryPoint(source.ModuleBasePath, source.Name), 0);
             result[source.Name] = dependencies.ToArray();
 
             void VisitFile(string path, int depth)
             {
                 path = Path.GetFullPath(path);
+                if (active.Contains(path))
+                    throw new InvalidOperationException($"Module dependency cycle at '{path}' under '{source.Name}'.");
                 if (!visited.Add(path) || string.Equals(Path.GetExtension(path), ".dll", StringComparison.OrdinalIgnoreCase))
                     return;
-                if (depth > 128)
-                    throw new InvalidOperationException($"Module dependency declarations are too deeply nested under '{source.Name}'.");
-                if (!_files.TryGetValue(path, out var file))
-                    _files[path] = file = ReadSource(path);
-                foreach (var required in file.Required)
-                    VisitReference(required, nested: false);
-                foreach (var nested in file.Nested)
-                    VisitReference(nested, nested: true);
+                active.Add(path);
+                try
+                {
+                    if (depth > 128)
+                        throw new InvalidOperationException($"Module dependency declarations are too deeply nested under '{source.Name}'.");
+                    if (!_files.TryGetValue(path, out var file))
+                        _files[path] = file = ReadSource(path);
+                    foreach (var required in file.Required)
+                        VisitReference(required, nested: false);
+                    foreach (var nested in file.Nested)
+                        VisitReference(nested, nested: true);
+                }
+                finally { active.Remove(path); }
 
                 void VisitReference(RequiredModuleReference reference, bool nested)
                 {
@@ -125,7 +133,8 @@ internal sealed class ModuleDependencyImportGraphReader
             throw new InvalidOperationException($"Cannot inspect module dependency declarations in '{path}': {errors[0].Message}");
         var references = (ast.ScriptRequirements?.RequiredModules.AsEnumerable() ?? Enumerable.Empty<ModuleSpecification>())
             .Select(ToReference).ToList();
-        foreach (var statement in ast.UsingStatements.OfType<UsingStatementAst>()
+        foreach (var statement in ast.FindAll(static node => node is UsingStatementAst, searchNestedScriptBlocks: false)
+                     .Cast<UsingStatementAst>()
                      .Where(static statement => statement.UsingStatementKind == UsingStatementKind.Module))
         {
             var moduleSpecification = statement.GetType().GetProperty("ModuleSpecification")?.GetValue(statement) as HashtableAst;

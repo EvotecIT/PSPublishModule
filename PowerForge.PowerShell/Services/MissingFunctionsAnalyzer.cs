@@ -556,7 +556,7 @@ public sealed partial class MissingFunctionsAnalyzer
                 error: ex.Message,
                 scriptBlock: null);
 
-            if (approvedModules.Count == 0)
+            if (approvedModules.Count == 0 || failedSelectedSource is not null)
                 return resolution;
 
             if (qualifier is null)
@@ -584,8 +584,6 @@ public sealed partial class MissingFunctionsAnalyzer
                     }
                     catch (Exception moduleScopeException)
                     {
-                        if (failedSelectedSource is not null)
-                            continue;
                         resolution = new MissingFunctionCommand(
                             name: name,
                             source: source.Name,
@@ -605,18 +603,14 @@ public sealed partial class MissingFunctionsAnalyzer
 
                 if (requireApprovedModuleSources && !approvedModuleSources.ContainsKey(modName))
                 {
-                    // An unrelated unavailable donor must not replace a concrete import failure.
-                    if (failedSelectedSource is null)
-                    {
-                        resolution = new MissingFunctionCommand(
-                            name: name,
-                            source: modName,
-                            commandType: string.Empty,
-                            isAlias: isAlias,
-                            isPrivate: true,
-                            error: $"Approved module '{modName}' has no concrete source binding for deterministic helper analysis.",
-                            scriptBlock: null);
-                    }
+                    resolution = new MissingFunctionCommand(
+                        name: name,
+                        source: modName,
+                        commandType: string.Empty,
+                        isAlias: isAlias,
+                        isPrivate: true,
+                        error: $"Approved module '{modName}' has no concrete source binding for deterministic helper analysis.",
+                        scriptBlock: null);
                     continue;
                 }
 
@@ -643,8 +637,6 @@ public sealed partial class MissingFunctionsAnalyzer
                 }
                 catch (Exception moduleScopeException)
                 {
-                    if (failedSelectedSource is not null)
-                        continue;
                     resolution = new MissingFunctionCommand(
                         name: name,
                         source: modName,

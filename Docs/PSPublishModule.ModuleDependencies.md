@@ -78,6 +78,18 @@ when investigating missing-command failures: resolution messages include the
 selected module and its import error, rather than only reporting that a command
 has no module source.
 
+Windows PowerShell 5.1 can exceed its default 4,096-function capacity when an
+application imports several large SDK modules. Build import validation and
+helper analysis use an 18,000-function capacity in their own sessions; they do
+not change the operator's runtime host. Use PowerShell 7 for such applications,
+or prepare the Windows PowerShell 5.1 session before importing the module:
+
+```powershell
+$global:MaximumFunctionCount = 18000
+$global:MaximumVariableCount = 18000
+Import-Module Company.Tools
+```
+
 ## Installed Modules In Cloud-Synced Folders
 
 Artefact builds can copy locally available installed dependencies from Windows

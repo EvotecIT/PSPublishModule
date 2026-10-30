@@ -47,8 +47,18 @@ public sealed partial class MissingFunctionsAnalyzer
     {
         var state = InitialSessionState.CreateDefault();
         state.AuthorizationManager = new AuthorizationManager("PowerForge");
+#if NETFRAMEWORK
+        // Match the native Desktop import policy for large selected dependency sets.
+        state.Variables.Add(new SessionStateVariableEntry("MaximumFunctionCount", 18000, "Module import capacity"));
+        state.Variables.Add(new SessionStateVariableEntry("MaximumVariableCount", 18000, "Module import capacity"));
+#endif
         var runspace = RunspaceFactory.CreateRunspace(state);
-        try { runspace.Open(); return runspace; }
+        try
+        {
+            lock (ModulePathImportLock)
+                runspace.Open();
+            return runspace;
+        }
         catch { runspace.Dispose(); throw; }
     }
 
@@ -69,13 +79,14 @@ public sealed partial class MissingFunctionsAnalyzer
             System.Collections.ObjectModel.Collection<PSObject> importResults;
             if (string.IsNullOrWhiteSpace(source.ModuleSearchRoot))
             {
-                importResults = ps.AddCommand("Import-Module")
+                ps.AddCommand("Microsoft.PowerShell.Core\\Import-Module")
                     .AddParameter("Name", moduleReference)
                     .AddParameter("PassThru", true)
                     .AddParameter("Force", true)
                     .AddParameter("ErrorAction", "Stop")
-                    .AddParameter("Verbose", false)
-                    .Invoke();
+                    .AddParameter("Verbose", false);
+                lock (ModulePathImportLock)
+                    importResults = ps.Invoke();
             }
             else
             {
@@ -87,7 +98,7 @@ try {
         'PSModulePath',
         $ModuleSearchRoot + [IO.Path]::PathSeparator + $previousModulePath,
         'Process')
-    Import-Module -Name $ModuleReference -PassThru -Force -ErrorAction Stop -Verbose:$false
+    Microsoft.PowerShell.Core\Import-Module -Name $ModuleReference -PassThru -Force -ErrorAction Stop -Verbose:$false
 } finally {
     [Environment]::SetEnvironmentVariable('PSModulePath', $previousModulePath, 'Process')
 }
