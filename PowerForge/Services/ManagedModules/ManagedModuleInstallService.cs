@@ -213,28 +213,25 @@ public sealed partial class ManagedModuleInstallService
         {
             if (knownCoalescingKey is not null)
             {
-                if (!context.TryBeginInstall(knownCoalescingKey, out var existingInstall, out var pendingInstall, out var runIndependently))
+                if (!context.TryBeginInstall(knownCoalescingKey, out var existingInstall, out var pendingInstall))
                 {
-                    if (!runIndependently)
+                    var coalescedWaitStopwatch = System.Diagnostics.Stopwatch.StartNew();
+                    ManagedModuleInstallResult completed;
+                    using (context.EnterInstallWait(knownCoalescingKey))
                     {
-                        var coalescedWaitStopwatch = System.Diagnostics.Stopwatch.StartNew();
-                        ManagedModuleInstallResult completed;
-                        using (context.EnterInstallWait(knownCoalescingKey))
-                        {
-                            completed = await existingInstall.ConfigureAwait(false);
-                        }
-
-                        coalescedWaitStopwatch.Stop();
-                        return CreateCoalescedCompletedResult(
-                            request,
-                            completed,
-                            moduleRoot,
-                            stopwatch.Elapsed,
-                            TimeSpan.Zero,
-                            repositoryRequestCount: 0,
-                            installLockWaitElapsed,
-                            coalescedWaitStopwatch.Elapsed);
+                        completed = await existingInstall.ConfigureAwait(false);
                     }
+
+                    coalescedWaitStopwatch.Stop();
+                    return CreateCoalescedCompletedResult(
+                        request,
+                        completed,
+                        moduleRoot,
+                        stopwatch.Elapsed,
+                        TimeSpan.Zero,
+                        repositoryRequestCount: 0,
+                        installLockWaitElapsed,
+                        coalescedWaitStopwatch.Elapsed);
                 }
                 else
                 {
@@ -341,28 +338,25 @@ public sealed partial class ManagedModuleInstallService
 
             if (coalescingKey is not null)
             {
-                if (!context.TryBeginInstall(coalescingKey, out var existingInstall, out var pendingInstall, out var runIndependently))
+                if (!context.TryBeginInstall(coalescingKey, out var existingInstall, out var pendingInstall))
                 {
-                    if (!runIndependently)
+                    var coalescedWaitStopwatch = System.Diagnostics.Stopwatch.StartNew();
+                    ManagedModuleInstallResult completed;
+                    using (context.EnterInstallWait(coalescingKey))
                     {
-                        var coalescedWaitStopwatch = System.Diagnostics.Stopwatch.StartNew();
-                        ManagedModuleInstallResult completed;
-                        using (context.EnterInstallWait(coalescingKey))
-                        {
-                            completed = await existingInstall.ConfigureAwait(false);
-                        }
-
-                        coalescedWaitStopwatch.Stop();
-                        return CreateCoalescedCompletedResult(
-                            request,
-                            completed,
-                            moduleRoot,
-                            stopwatch.Elapsed,
-                            versionResolutionStopwatch.Elapsed,
-                            requestScope.Count,
-                            installLockWaitElapsed,
-                            coalescedWaitStopwatch.Elapsed);
+                        completed = await existingInstall.ConfigureAwait(false);
                     }
+
+                    coalescedWaitStopwatch.Stop();
+                    return CreateCoalescedCompletedResult(
+                        request,
+                        completed,
+                        moduleRoot,
+                        stopwatch.Elapsed,
+                        versionResolutionStopwatch.Elapsed,
+                        requestScope.Count,
+                        installLockWaitElapsed,
+                        coalescedWaitStopwatch.Elapsed);
                 }
                 else
                 {

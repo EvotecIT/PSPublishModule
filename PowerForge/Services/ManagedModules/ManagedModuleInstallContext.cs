@@ -6,8 +6,9 @@ internal sealed class ManagedModuleInstallContext : IDisposable
 {
     private const string MissingDependencyVersionSelection = "\0";
 
-    private readonly HashSet<string> _active;
+    private readonly List<string> _active;
     private readonly HashSet<string> _ownedInstallKeys;
+    private readonly ManagedModuleInstallWaitGraph _waitGraph;
     private readonly ConcurrentDictionary<string, ManagedModuleInstallPending> _inFlightInstalls;
     private readonly ConcurrentDictionary<string, ManagedModuleInstallResult> _completedInstalls;
     private readonly ConcurrentDictionary<string, string[]> _installedVersions;
@@ -21,7 +22,8 @@ internal sealed class ManagedModuleInstallContext : IDisposable
 
     public ManagedModuleInstallContext()
         : this(
-            new HashSet<string>(StringComparer.OrdinalIgnoreCase),
+            new List<string>(),
+            new ManagedModuleInstallWaitGraph(),
             new HashSet<string>(StringComparer.OrdinalIgnoreCase),
             new ConcurrentDictionary<string, ManagedModuleInstallPending>(StringComparer.OrdinalIgnoreCase),
             new ConcurrentDictionary<string, ManagedModuleInstallResult>(StringComparer.OrdinalIgnoreCase),
@@ -38,7 +40,8 @@ internal sealed class ManagedModuleInstallContext : IDisposable
     }
 
     private ManagedModuleInstallContext(
-        HashSet<string> active,
+        List<string> active,
+        ManagedModuleInstallWaitGraph waitGraph,
         HashSet<string> ownedInstallKeys,
         ConcurrentDictionary<string, ManagedModuleInstallPending> inFlightInstalls,
         ConcurrentDictionary<string, ManagedModuleInstallResult> completedInstalls,
@@ -53,6 +56,7 @@ internal sealed class ManagedModuleInstallContext : IDisposable
         )
     {
         _active = active;
+        _waitGraph = waitGraph;
         _ownedInstallKeys = ownedInstallKeys;
         _inFlightInstalls = inFlightInstalls;
         _completedInstalls = completedInstalls;
@@ -67,7 +71,8 @@ internal sealed class ManagedModuleInstallContext : IDisposable
 
     public ManagedModuleInstallContext CreateBranch()
         => new(
-            new HashSet<string>(_active, StringComparer.OrdinalIgnoreCase),
+            new List<string>(_active),
+            _waitGraph,
             new HashSet<string>(_ownedInstallKeys, StringComparer.OrdinalIgnoreCase),
             _inFlightInstalls,
             _completedInstalls,
@@ -84,14 +89,16 @@ internal sealed class ManagedModuleInstallContext : IDisposable
     public IDisposable Enter(string moduleName)
     {
         var normalized = moduleName.Trim();
-        if (!_active.Add(normalized))
-            throw new InvalidOperationException($"Managed module dependency cycle detected for '{moduleName}'.");
+        var cycleStart = _active.FindIndex(name => name.Equals(normalized, StringComparison.OrdinalIgnoreCase));
+        if (cycleStart >= 0)
+            throw ManagedModuleInstallWaitGraph.CreateCycleException(_active.Skip(cycleStart).Concat(new[] { _active[cycleStart] }));
 
+        _active.Add(normalized);
         return new PopOnDispose(_active, normalized);
     }
 
     public bool IsActive(string moduleName)
-        => _active.Contains(moduleName.Trim());
+        => _active.Contains(moduleName.Trim(), StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     /// Gets whether the current branch is installing below the root request and may run alongside sibling branches.
@@ -99,21 +106,30 @@ internal sealed class ManagedModuleInstallContext : IDisposable
     public bool IsDependencyInstall
         => _active.Count > 1;
 
+    /// <summary>Owns a target or returns its shared task, recording an owned child before it can be awaited.</summary>
     public bool TryBeginInstall(
         string key,
         out Task<ManagedModuleInstallResult> existingInstall,
-        out ManagedModuleInstallPending pendingInstall,
-        out bool runIndependently)
+        out ManagedModuleInstallPending pendingInstall)
     {
         if (string.IsNullOrWhiteSpace(key))
             throw new ArgumentException("Install coalescing key is required.", nameof(key));
 
-        runIndependently = false;
         while (true)
         {
-            var pending = new ManagedModuleInstallPending(_inFlightInstalls, _ownedInstallKeys, key);
+            var pending = new ManagedModuleInstallPending(_inFlightInstalls, _ownedInstallKeys, key, _active.LastOrDefault() ?? key);
             if (_inFlightInstalls.TryAdd(key, pending))
             {
+                try
+                {
+                    pending.ParentWait = _waitGraph.EnterWait(GetImmediateOwnedInstall(), pending);
+                }
+                catch (Exception exception)
+                {
+                    pending.Fail(exception);
+                    pending.Dispose();
+                    throw;
+                }
                 _ownedInstallKeys.Add(key);
                 existingInstall = pending.Task;
                 pendingInstall = pending;
@@ -122,14 +138,6 @@ internal sealed class ManagedModuleInstallContext : IDisposable
 
             if (_inFlightInstalls.TryGetValue(key, out var existing))
             {
-                if (WouldCreateWaitCycle(existing))
-                {
-                    existingInstall = existing.Task;
-                    pendingInstall = null!;
-                    runIndependently = true;
-                    return false;
-                }
-
                 existingInstall = existing.Task;
                 pendingInstall = null!;
                 return false;
@@ -137,13 +145,11 @@ internal sealed class ManagedModuleInstallContext : IDisposable
         }
     }
 
+    /// <summary>Atomically checks and records a coalesced wait; the caller must keep the lease until its await completes.</summary>
     public IDisposable EnterInstallWait(string key)
     {
-        var ownedPending = GetOwnedPendingInstalls().ToArray();
-        foreach (var pending in ownedPending)
-            pending.SetWaitingFor(key);
-
-        return new ClearWaitOnDispose(ownedPending);
+        _inFlightInstalls.TryGetValue(key, out var target);
+        return _waitGraph.EnterWait(GetImmediateOwnedInstall(), target);
     }
 
     public bool TryGetCompletedInstall(string key, out ManagedModuleInstallResult result)
@@ -476,41 +482,31 @@ internal sealed class ManagedModuleInstallContext : IDisposable
                parts.All(static part => part.Length > 0 && part.All(static character => character >= '0' && character <= '9'));
     }
 
-    private bool WouldCreateWaitCycle(ManagedModuleInstallPending pending)
+    private IEnumerable<ManagedModuleInstallPending> GetImmediateOwnedInstall()
     {
-        var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var waitingFor = pending.WaitingForKey;
-        while (!string.IsNullOrWhiteSpace(waitingFor))
+        // The nearest owned request is the real parent; ancestor shortcuts would omit
+        // intermediate modules from cycle diagnostics.
+        for (var index = _active.Count - 1; index >= 0; index--)
         {
-            var currentKey = waitingFor!;
-            if (_ownedInstallKeys.Contains(currentKey))
-                return true;
-            if (!visited.Add(currentKey))
-                return true;
-            if (!_inFlightInstalls.TryGetValue(currentKey, out var nextPending))
-                return false;
-
-            waitingFor = nextPending.WaitingForKey;
+            foreach (var key in _ownedInstallKeys)
+            {
+                if (_inFlightInstalls.TryGetValue(key, out var pending) &&
+                    pending.Name.Equals(_active[index], StringComparison.OrdinalIgnoreCase))
+                {
+                    yield return pending;
+                    yield break;
+                }
+            }
         }
 
-        return false;
-    }
-
-    private IEnumerable<ManagedModuleInstallPending> GetOwnedPendingInstalls()
-    {
-        foreach (var ownedKey in _ownedInstallKeys)
-        {
-            if (_inFlightInstalls.TryGetValue(ownedKey, out var pending))
-                yield return pending;
-        }
     }
 
     private sealed class PopOnDispose : IDisposable
     {
-        private readonly HashSet<string> _active;
+        private readonly List<string> _active;
         private readonly string _moduleName;
 
-        public PopOnDispose(HashSet<string> active, string moduleName)
+        public PopOnDispose(List<string> active, string moduleName)
         {
             _active = active;
             _moduleName = moduleName;
@@ -519,22 +515,6 @@ internal sealed class ManagedModuleInstallContext : IDisposable
         public void Dispose()
         {
             _active.Remove(_moduleName);
-        }
-    }
-
-    private sealed class ClearWaitOnDispose : IDisposable
-    {
-        private readonly IReadOnlyList<ManagedModuleInstallPending> _pendingInstalls;
-
-        public ClearWaitOnDispose(IReadOnlyList<ManagedModuleInstallPending> pendingInstalls)
-        {
-            _pendingInstalls = pendingInstalls;
-        }
-
-        public void Dispose()
-        {
-            foreach (var pending in _pendingInstalls)
-                pending.SetWaitingFor(null);
         }
     }
 }
@@ -561,15 +541,15 @@ internal sealed class ManagedModuleInstallPending : IDisposable
     private readonly HashSet<string> _ownedInstallKeys;
     private readonly string _key;
     private readonly TaskCompletionSource<ManagedModuleInstallResult> _completion;
-    private readonly object _syncRoot = new();
-    private string? _waitingForKey;
     private bool _disposed;
 
     public ManagedModuleInstallPending(
         ConcurrentDictionary<string, ManagedModuleInstallPending> owner,
         HashSet<string> ownedInstallKeys,
-        string key)
+        string key,
+        string name)
     {
+        Name = name;
         _owner = owner;
         _ownedInstallKeys = ownedInstallKeys;
         _key = key;
@@ -579,24 +559,9 @@ internal sealed class ManagedModuleInstallPending : IDisposable
 
     public Task<ManagedModuleInstallResult> Task => _completion.Task;
 
-    public string? WaitingForKey
-    {
-        get
-        {
-            lock (_syncRoot)
-            {
-                return _waitingForKey;
-            }
-        }
-    }
+    public string Name { get; }
 
-    public void SetWaitingFor(string? key)
-    {
-        lock (_syncRoot)
-        {
-            _waitingForKey = key;
-        }
-    }
+    public IDisposable? ParentWait { get; set; }
 
     public void Complete(ManagedModuleInstallResult result)
         => _completion.TrySetResult(result);
@@ -618,6 +583,7 @@ internal sealed class ManagedModuleInstallPending : IDisposable
             return;
 
         _disposed = true;
+        ParentWait?.Dispose();
         ((ICollection<KeyValuePair<string, ManagedModuleInstallPending>>)_owner)
             .Remove(new KeyValuePair<string, ManagedModuleInstallPending>(_key, this));
         _ownedInstallKeys.Remove(_key);

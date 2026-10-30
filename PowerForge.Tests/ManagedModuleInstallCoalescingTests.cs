@@ -10,10 +10,8 @@ public sealed class ManagedModuleInstallCoalescingTests
         var context = new ManagedModuleInstallContext();
         var branch = context.CreateBranch();
 
-        Assert.True(context.TryBeginInstall("module|1.0.0", out _, out var pending, out var runIndependently));
-        Assert.False(runIndependently);
-        Assert.False(branch.TryBeginInstall("module|1.0.0", out var existingInstall, out var branchPending, out runIndependently));
-        Assert.False(runIndependently);
+        Assert.True(context.TryBeginInstall("module|1.0.0", out _, out var pending));
+        Assert.False(branch.TryBeginInstall("module|1.0.0", out var existingInstall, out var branchPending));
         Assert.Null(branchPending);
 
         var result = new ManagedModuleInstallResult
@@ -26,32 +24,83 @@ public sealed class ManagedModuleInstallCoalescingTests
 
         Assert.Same(result, await existingInstall);
         pending.Dispose();
-        Assert.True(branch.TryBeginInstall("module|1.0.0", out _, out var nextPending, out runIndependently));
-        Assert.False(runIndependently);
+        Assert.True(branch.TryBeginInstall("module|1.0.0", out _, out var nextPending));
         nextPending.Dispose();
     }
 
     [Fact]
-    public void Context_skips_waiting_when_coalescing_would_create_a_cycle()
+    public void Context_rejects_cycle_when_both_coalescing_decisions_precede_wait_registration()
     {
-        var root = new ManagedModuleInstallContext();
-        var branchA = root.CreateBranch();
-        var branchB = root.CreateBranch();
-
-        Assert.True(branchA.TryBeginInstall("A", out _, out var pendingA, out var runIndependently));
-        Assert.False(runIndependently);
-        Assert.True(branchB.TryBeginInstall("B", out _, out var pendingB, out runIndependently));
-        Assert.False(runIndependently);
-
-        using (branchA.EnterInstallWait("B"))
+        using var root = new ManagedModuleInstallContext();
+        var a = root.CreateBranch();
+        var b = root.CreateBranch();
+        using var scopeA = a.Enter("A");
+        using var scopeB = b.Enter("B");
+        Assert.True(a.TryBeginInstall("A", out _, out var pendingA));
+        Assert.True(b.TryBeginInstall("B", out _, out var pendingB));
+        using (pendingA)
+        using (pendingB)
         {
-            Assert.False(branchB.TryBeginInstall("A", out _, out var pending, out runIndependently));
-            Assert.True(runIndependently);
-            Assert.Null(pending);
+            Assert.False(a.TryBeginInstall("B", out _, out _));
+            Assert.False(b.TryBeginInstall("A", out _, out _));
+            using var wait = a.EnterInstallWait("B");
+            var exception = Assert.Throws<InvalidOperationException>(() => b.EnterInstallWait("A"));
+            Assert.Equal("Managed module dependency cycle detected: A -> B -> A.", exception.Message);
         }
+    }
 
-        pendingA.Dispose();
-        pendingB.Dispose();
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Context_wait_disposal_preserves_other_sibling_and_duplicate_waits(bool duplicate)
+    {
+        using var root = new ManagedModuleInstallContext();
+        var a = root.CreateBranch();
+        var b = root.CreateBranch();
+        var c = root.CreateBranch();
+        using var scopeA = a.Enter("A");
+        using var scopeB = b.Enter("B");
+        using var scopeC = c.Enter("C");
+        Assert.True(a.TryBeginInstall("A", out _, out var pendingA));
+        Assert.True(b.TryBeginInstall("B", out _, out var pendingB));
+        Assert.True(c.TryBeginInstall("C", out _, out var pendingC));
+        using (pendingA)
+        using (pendingB)
+        using (pendingC)
+        {
+            using var first = a.EnterInstallWait("B");
+            var other = a.EnterInstallWait(duplicate ? "B" : "C");
+            other.Dispose();
+            other.Dispose();
+            Assert.Throws<InvalidOperationException>(() => b.EnterInstallWait("A"));
+            first.Dispose();
+            using var validWait = b.EnterInstallWait("A");
+        }
+    }
+
+    [Fact]
+    public void Context_cycle_path_preserves_owned_intermediate_dependencies()
+    {
+        using var root = new ManagedModuleInstallContext();
+        var a = root.CreateBranch();
+        var b = root.CreateBranch();
+        using var scopeA = a.Enter("A");
+        using var scopeB = b.Enter("B");
+        Assert.True(a.TryBeginInstall("a-target", out _, out var pendingA));
+        Assert.True(b.TryBeginInstall("b-target", out _, out var pendingB));
+        using (pendingA)
+        using (pendingB)
+        {
+            var c = a.CreateBranch();
+            using var scopeC = c.Enter("C");
+            Assert.True(c.TryBeginInstall("c-target", out _, out var pendingC));
+            using (pendingC)
+            using (c.EnterInstallWait("b-target"))
+            {
+                var exception = Assert.Throws<InvalidOperationException>(() => b.EnterInstallWait("a-target"));
+                Assert.Equal("Managed module dependency cycle detected: A -> C -> B -> A.", exception.Message);
+            }
+        }
     }
 
     [Fact]
