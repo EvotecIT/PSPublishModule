@@ -293,6 +293,7 @@ public sealed partial class DotNetRepositoryReleaseService
             }
             catch (Exception ex)
             {
+                result.SigningFailed = true;
                 result.ErrorMessage = $"Assembly signing failed for {project.ProjectName}. {ex.Message}";
                 return result;
             }

@@ -18,6 +18,7 @@ public sealed partial class DotNetRepositoryReleaseService
     private sealed class DotNetPackResult
     {
         public bool Success { get; set; }
+        public bool SigningFailed { get; set; }
         public string? ErrorMessage { get; set; }
         public TimeSpan Duration { get; set; }
         public List<string> Packages { get; } = new();

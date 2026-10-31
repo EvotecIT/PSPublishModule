@@ -111,22 +111,39 @@ public sealed class ProcessRunnerEnvironmentTests
     public async Task RunAsync_invokes_completion_boundary_before_inherited_output_pipe_drain()
     {
         if (OperatingSystem.IsWindows()) return;
+        var root = Directory.CreateTempSubdirectory("PowerForge.ProcessBoundary.");
+        var hold = root.CreateSubdirectory("hold");
         var boundary = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var request = new ProcessRunRequest(
             "/bin/sh",
-            Path.GetTempPath(),
-            new[] { "-c", "sleep 2 &" },
-            TimeSpan.FromSeconds(10),
+            root.FullName,
+            new[] { "-c", "while [ -d \"$1\" ]; do sleep 0.05; done &", "sh", hold.FullName },
+            TimeSpan.FromSeconds(30),
             captureOutput: true,
             captureError: true);
         request.SetCompletionBoundary(_ => boundary.TrySetResult());
 
-        var run = new ProcessRunner().RunAsync(request);
-        await boundary.Task.WaitAsync(TimeSpan.FromSeconds(1));
+        try
+        {
+            var run = new ProcessRunner().RunAsync(request);
+            try
+            {
+                await boundary.Task.WaitAsync(TimeSpan.FromSeconds(30));
+                Assert.False(run.IsCompleted);
+            }
+            finally
+            {
+                hold.Delete();
+                await run;
+            }
 
-        Assert.False(run.IsCompleted);
-        var result = await run;
-        Assert.True(result.Succeeded, result.StdErr);
+            var result = await run;
+            Assert.True(result.Succeeded, result.StdErr);
+        }
+        finally
+        {
+            root.Delete(recursive: true);
+        }
     }
 
     [Fact]

@@ -678,7 +678,7 @@ public sealed class ProjectBuildProgressLedgerTests
             Assert.Contains(progress.Updates, update =>
                 update.Item.Key == signingItem.Key &&
                 update.State == ProjectBuildProgressItemState.Started &&
-                update.Detail == "Signing and timestamping (attempt 1/2)");
+                update.Detail == "Signing and timestamping");
             var completed = Assert.Single(progress.Updates, update =>
                 update.Item.Key == signingItem.Key &&
                 update.State == ProjectBuildProgressItemState.Completed);

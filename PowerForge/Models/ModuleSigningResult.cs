@@ -59,7 +59,7 @@ public sealed class ModuleSigningResult
     [JsonPropertyName("failedFiles")]
     public string[] FailedFiles { get; set; } = Array.Empty<string>();
 
-    /// <summary>Exact package file paths that failed signing, used for a scoped compatibility retry.</summary>
+    /// <summary>Exact package file paths whose signing was not fulfilled, including unattempted files after a failure.</summary>
     [JsonPropertyName("failedFilePaths")]
     public string[] FailedFilePaths { get; set; } = Array.Empty<string>();
 

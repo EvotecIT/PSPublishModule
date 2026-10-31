@@ -6,36 +6,43 @@ namespace PowerForge.Tests;
 public sealed class ModuleSigningProgressTests
 {
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public void SigningScript_StreamsCertificatePrecheckRetryAndFileMilestones(bool overwrite)
+    [InlineData(false, false, 2)]
+    [InlineData(true, false, 2)]
+    [InlineData(false, true, 2)]
+    [InlineData(true, true, 2)]
+    [InlineData(false, true, 3)]
+    public void SigningScript_StreamsReadRetriesAndStopsProgressAtSigningFailure(bool overwrite, bool failSigning, int failAt)
     {
         if (Path.DirectorySeparatorChar != '\\') return;
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
         try
         {
-            var files = new[] { Path.Combine(root.FullName, "One.psm1"), Path.Combine(root.FullName, "Two.ps1") };
+            var files = new[] { Path.Combine(root.FullName, "One.psm1"), Path.Combine(root.FullName, "Two.ps1"), Path.Combine(root.FullName, "Three.ps1") };
             foreach (var file in files) File.WriteAllText(file, "# signing progress fixture");
             var updates = new List<(int Completed, int Total, string Detail)>();
             var runner = new CallbackRunner(request =>
             {
                 // Replace only external certificate/provider operations in the actual signing script.
                 // No certificate store lookup, private key, network timestamp or real signing can run.
-                const string fixtures = """
+                var fixtures = $$"""
                 function Get-Item {
                   [CmdletBinding()] param([string]$LiteralPath)
                   if ($LiteralPath -notlike 'Cert:*') { throw 'Unexpected metadata lookup' }
                   [pscustomobject]@{ HasPrivateKey=$true; Extensions=@(); Thumbprint='ABC'; NotBefore=[DateTime]::Now.AddDays(-1); NotAfter=[DateTime]::Now.AddDays(1) }
                 }
+                $script:readCalls=0
                 function Get-AuthenticodeSignature {
                   [CmdletBinding()] param([string]$FilePath)
+                  $script:readCalls++
+                  if ($script:readCalls -eq 2) { throw 'Transient signature read failure' }
                   [pscustomobject]@{ Status='NotSigned'; SignerCertificate=$null }
                 }
                 $script:calls=0
                 function Set-AuthenticodeSignature {
                   [CmdletBinding()] param([string]$FilePath,[object]$Certificate,[string]$TimestampServer,[object]$IncludeChain,[string]$HashAlgorithm,[switch]$Force)
                   $script:calls++
-                  [pscustomobject]@{Status=$(if($script:calls -eq 2){'UnknownError'}else{'Valid'});StatusMessage='fixture'}
+                  if ($script:calls -gt {{failAt}} -and ${{(failSigning ? "true" : "false")}}) { throw 'Signing continued after failure' }
+                  [pscustomobject]@{Status=$(if($script:calls -eq {{failAt}} -and ${{(failSigning ? "true" : "false")}}){'UnknownError'}else{'Valid'});StatusMessage='fixture'}
                 }
                 function Start-Sleep { param([int]$Milliseconds) }
                 """;
@@ -45,16 +52,43 @@ public sealed class ModuleSigningProgressTests
                 return new PowerShellRunner().Run(request);
             });
             var operations = new PowerShellModulePipelineHostedOperations(runner, new NullLogger(), isWindows: true);
-            var result = operations.SignModuleOutput("Demo", root.FullName, files, ["*.psm1", "*.ps1"], [],
+            ModuleSigningResult Sign() => operations.SignModuleOutput("Demo", root.FullName, files, ["*.psm1", "*.ps1"], [],
                 new SigningOptionsConfiguration { CertificateThumbprint = "ABC", OverwriteSigned = overwrite },
                 (completed, total, detail) => updates.Add((completed, total, detail)));
-            Assert.Equal(2, result.SignedNew);
+            ModuleSigningResult result;
+            if (failSigning)
+            {
+                var failure = Assert.Throws<ModuleSigningException>(() => Sign());
+                result = Assert.IsType<ModuleSigningResult>(failure.Result);
+                Assert.Equal(failAt, result.Attempted);
+                Assert.Equal(failAt - 1, result.SignedNew);
+                Assert.Equal(4 - failAt, result.Failed);
+                Assert.Equal(1, result.UnknownError);
+                Assert.Equal(0, result.SigningException);
+                Assert.Equal(files.Take(failAt - 1).OrderBy(path => path), result.VerifiedFilePaths.OrderBy(path => path));
+                Assert.Equal(files.Skip(failAt - 1).OrderBy(path => path), result.FailedFilePaths.OrderBy(path => path));
+                if (failAt == 2)
+                    Assert.DoesNotContain(updates, update => update.Detail == "Signing and timestamping 3/3: Three.ps1");
+                var completion = Assert.Single(updates, update => update.Detail.StartsWith("Signing stopped after a failure"));
+                Assert.Equal(failAt, completion.Completed);
+                Assert.Equal(3, completion.Total);
+                Assert.Equal(failAt < 3 ? "Signing stopped after a failure; remaining files were not attempted" : "Signing stopped after a failure", completion.Detail);
+            }
+            else
+            {
+                result = Sign();
+                Assert.Equal(3, result.SignedNew);
+                Assert.Equal(3, result.Attempted);
+                Assert.Equal(0, result.Failed);
+                Assert.Contains(updates, update => update.Detail == "Signing and timestamping 3/3: Three.ps1");
+            }
             Assert.Contains(updates, update => update.Detail.StartsWith("Loading signing certificate"));
-            Assert.Contains(updates, update => update.Detail.StartsWith("Checking existing signatures 2/2"));
+            Assert.Contains(updates, update => update.Detail.StartsWith("Checking existing signatures 3/3"));
             var retry = Assert.Single(updates, update => update.Detail.Contains("retry 2/15"));
-            Assert.Equal(1, retry.Completed);
-            Assert.Equal(2, retry.Total);
-            Assert.Contains(updates, update => update.Detail == "Signing and timestamping 2/2: Two.ps1");
+            Assert.StartsWith("Get-AuthenticodeSignature:", retry.Detail);
+            Assert.Equal(0, retry.Completed);
+            Assert.Equal(0, retry.Total);
+            Assert.Contains(updates, update => update.Completed == 1 && update.Total == 3 && update.Detail == "Signing and timestamping 2/3: Two.ps1");
         }
         finally { root.Delete(true); }
     }
