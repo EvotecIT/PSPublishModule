@@ -144,7 +144,7 @@ jobs:
           # Lint copies with only those five documented fields normalized to another string field.
           readonly workflow_identity_expression='\$\{\{[[:space:]]*job\.workflow_(repository|sha|ref|file_path)[[:space:]]*\}\}'
           readonly replacement_expression='$'"{{ job.status }}"
-          readonly expected_workflow_identity_count=11
+          readonly expected_workflow_identity_count=13
           workflow_identity_count="$({ grep --no-filename --only-matching --extended-regexp "$workflow_identity_expression" "${website_workflows[@]}" || true; } | wc --lines | tr --delete '[:space:]')"
           if [[ "$workflow_identity_count" != "$expected_workflow_identity_count" ]]; then
             printf 'Expected %s documented job.workflow_* expressions, found %s.\n' "$expected_workflow_identity_count" "$workflow_identity_count" >&2

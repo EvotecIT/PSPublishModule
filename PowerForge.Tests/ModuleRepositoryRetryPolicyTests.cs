@@ -1,3 +1,4 @@
+using System.Net;
 using System.Text;
 
 namespace PowerForge.Tests;
@@ -53,8 +54,6 @@ public sealed class ModuleRepositoryRetryPolicyTests
     [InlineData("Destination file not found: C:\\modules\\404\\PSUnifi.psd1", false)]
     [InlineData("Package(s) 'PSUnifi' could not be installed from repository 'PSGallery'.", false)]
     [InlineData("Destination file not found: /tmp/modules/Pester.psd1", false)]
-    [InlineData("Destination file not found: C:\\modules\\404\\PSUnifi.psd1", false)]
-    [InlineData("Package(s) 'PSUnifi' could not be installed from repository 'PSGallery'.", false)]
     public void Child_install_retries_only_transient_repository_failures(string message, bool transient)
     {
         Assert.Equal(transient, ModuleRepositoryRetryPolicy.IsTransientError(message));
@@ -165,9 +164,75 @@ public sealed class ModuleRepositoryRetryPolicyTests
     public void Backoff_is_exponential_and_capped(int attempt, int seconds)
         => Assert.Equal(TimeSpan.FromSeconds(seconds), ModuleRepositoryRetryPolicy.Backoff(TimeSpan.FromSeconds(1), attempt));
 
+    [Theory]
+    [InlineData(404, true)]
+    [InlineData(503, true)]
+    [InlineData(403, false)]
+    public async Task Managed_reads_retry_transient_status_and_preserve_permanent_http_evidence(int status, bool transient)
+    {
+        var calls = 0;
+        using var http = new HttpClient(new CallbackHandler(() =>
+        {
+            calls++;
+            return new HttpResponseMessage(calls == 1 ? (HttpStatusCode)status : HttpStatusCode.OK)
+            {
+                Content = new StringContent("{\"versions\":[\"6.1.0\"]}")
+            };
+        }));
+        var client = new ManagedModuleRepositoryClient(new NullLogger(), http,
+            options: new ManagedModuleRepositoryClientOptions { RetryDelay = TimeSpan.Zero, MaxRetries = 2, DisableManagedModuleCatalog = true });
+        var repository = new ManagedModuleRepository("Gallery", "https://example.test/packages", ManagedModuleRepositoryKind.NuGetV3);
+        if (transient)
+        {
+            var versions = await client.GetVersionsAsync(repository, "Pester");
+            Assert.Equal("6.1.0", Assert.Single(versions).Version);
+            Assert.Equal(2, calls);
+        }
+        else
+        {
+            var exception = await Assert.ThrowsAsync<ManagedModuleRepositoryException>(() => client.GetVersionsAsync(repository, "Pester"));
+            Assert.Equal(status, exception.StatusCode);
+            Assert.Equal(1, calls);
+        }
+    }
+
+    [Fact]
+    public async Task Managed_permanent_404_has_bounded_attempts_and_repository_remediation()
+    {
+        var calls = 0;
+        var logger = new RecordingLogger();
+        using var http = new HttpClient(new CallbackHandler(() =>
+        {
+            calls++;
+            return new HttpResponseMessage(HttpStatusCode.NotFound) { Content = new StringContent("Package not found") };
+        }));
+        var client = new ManagedModuleRepositoryClient(logger, http,
+            options: new ManagedModuleRepositoryClientOptions { RetryDelay = TimeSpan.Zero, MaxRetries = 2, DisableManagedModuleCatalog = true });
+        var repository = new ManagedModuleRepository("Gallery", "https://example.test/packages", ManagedModuleRepositoryKind.NuGetV3);
+        var destination = Path.Combine(Path.GetTempPath(), "pf-retry-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(destination);
+        ManagedModuleRepositoryException exception;
+        try
+        {
+            exception = await Assert.ThrowsAsync<ManagedModuleRepositoryException>(() =>
+                client.DownloadPackageAsync(repository, "Pester", "6.1.0", destination));
+        }
+        finally { Directory.Delete(destination, recursive: true); }
+        Assert.Equal(3, calls);
+        Assert.Equal(404, exception.StatusCode);
+        Assert.Contains("package version", exception.Message);
+        Assert.Contains(logger.Messages, message => message.Contains("after 3/3 attempts"));
+    }
+
     private static PowerShellRunResult Success() => new(0, string.Empty, string.Empty, "pwsh");
     private static PowerShellRunResult Error(string message, int exitCode = 1)
         => new(exitCode, "PFPSRG::ERROR::" + Convert.ToBase64String(Encoding.UTF8.GetBytes(message)), string.Empty, "pwsh");
+
+    private sealed class CallbackHandler(Func<HttpResponseMessage> response) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+            => Task.FromResult(response());
+    }
 
     private sealed class CallbackRunner(Func<PowerShellRunRequest, PowerShellRunResult> run) : IPowerShellRunner
     {
