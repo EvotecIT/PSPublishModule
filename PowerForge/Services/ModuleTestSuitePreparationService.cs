@@ -31,6 +31,12 @@ internal sealed class ModuleTestSuitePreparationService
             {
                 ProjectPath = projectRoot,
                 TestPath = request.TestPath,
+                PesterVersion = request.PesterVersion,
+                ResultsPath = request.ResultsPath,
+                JUnitResultsPath = request.JUnitResultsPath,
+                SummaryPath = request.SummaryPath,
+                WindowsPowerShell = request.WindowsPowerShell,
+                FailIfNoTests = request.FailIfNoTests,
                 AdditionalModules = NormalizeStrings(request.AdditionalModules, "Pester", "PSWriteColor"),
                 SkipModules = NormalizeStrings(request.SkipModules),
                 OutputFormat = outputFormat,

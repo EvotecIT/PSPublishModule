@@ -11,7 +11,7 @@ namespace PowerForge;
 /// <summary>
 /// Runs a full module test suite (dependency installation + optional import + Pester execution) in a child PowerShell process.
 /// </summary>
-public sealed class ModuleTestSuiteService
+public sealed partial class ModuleTestSuiteService
 {
     private const string RepositoryToolModuleName = "Microsoft.PowerShell.PSResourceGet";
 
@@ -35,6 +35,25 @@ public sealed class ModuleTestSuiteService
     public ModuleTestSuiteResult Run(ModuleTestSuiteSpec spec)
     {
         if (spec is null) throw new ArgumentNullException(nameof(spec));
+        var summaryPath = ResolveOutputPath(spec.ProjectPath, spec.SummaryPath);
+        ValidateReportPaths(spec);
+        try
+        {
+            var result = RunCore(spec);
+            result.SummaryPath = summaryPath;
+            WriteSummary(summaryPath, result, null);
+            return result;
+        }
+        catch (Exception ex)
+        {
+            WriteSummary(summaryPath, null, ex.Message);
+            throw;
+        }
+    }
+
+    private ModuleTestSuiteResult RunCore(ModuleTestSuiteSpec spec)
+    {
+        if (spec is null) throw new ArgumentNullException(nameof(spec));
         if (string.IsNullOrWhiteSpace(spec.ProjectPath))
             throw new ArgumentException("ProjectPath is required.", nameof(spec));
 
@@ -51,17 +70,17 @@ public sealed class ModuleTestSuiteService
         var testPath = ResolveTestPath(projectRoot, spec.TestPath);
 
         var dependencyResults = Array.Empty<ModuleDependencyInstallResult>();
-        if (!spec.SkipDependencies)
-        {
-            dependencyResults = EnsureDependenciesInstalled(spec, requiredModules);
-        }
 
         var tempDir = Path.Combine(Path.GetTempPath(), "PowerForge", "testsuite");
         Directory.CreateDirectory(tempDir);
 
         var runId = Guid.NewGuid().ToString("N");
         var scriptPath = Path.Combine(tempDir, $"testsuite_{runId}.ps1");
-        var xmlPath = Path.Combine(tempDir, $"pester_{runId}.xml");
+        var xmlPath = ResolveOutputPath(projectRoot, spec.ResultsPath) ?? Path.Combine(tempDir, $"pester_{runId}.xml");
+        var junitPath = ResolveOutputPath(projectRoot, spec.JUnitResultsPath);
+        PrepareResultFile(xmlPath);
+        if (junitPath is not null) PrepareResultFile(junitPath);
+        var toolRoot = Path.Combine(tempDir, $"modules_{runId}");
 
         var script = BuildTestSuiteScript();
         File.WriteAllText(scriptPath, script, new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
@@ -84,17 +103,35 @@ public sealed class ModuleTestSuiteService
             spec.SkipImport ? "1" : "0",
             spec.Force ? "1" : "0",
             importModulesB64,
-            spec.ImportModulesVerbose ? "-ImportVerbose:$true" : "-ImportVerbose:$false"
+            "-ImportVerbose", spec.ImportModulesVerbose ? "1" : "0",
+            "-PesterVersion", spec.PesterVersion ?? string.Empty,
+            "-ToolRoot", toolRoot,
+            "-JUnitResultsPath", junitPath ?? string.Empty,
+            "-FailIfNoTests", spec.FailIfNoTests ? "1" : "0"
         };
 
         PowerShellRunResult runResult;
         try
         {
-            runResult = _runner.Run(new PowerShellRunRequest(scriptPath, args, timeout, preferPwsh: spec.PreferPwsh));
+            if (!spec.SkipDependencies)
+                dependencyResults = EnsureDependenciesInstalled(spec, requiredModules);
+            if (!spec.SkipDependencies && !string.IsNullOrWhiteSpace(spec.PesterVersion))
+                SavePinnedPester(spec.PesterVersion!, toolRoot, spec.Force);
+            if (spec.WindowsPowerShell && !spec.SkipDependencies && dependencyResults.Length > 0)
+            {
+                args.Add("-DependencyModulePathsB64");
+                args.Add(ReadDependencyModulePaths());
+            }
+            runResult = _runner.Run(new PowerShellRunRequest(scriptPath, args, timeout,
+                preferPwsh: spec.PreferPwsh,
+                hostRequirement: spec.WindowsPowerShell ? PowerShellHostRequirement.WindowsPowerShell : PowerShellHostRequirement.Any,
+                workingDirectory: projectRoot));
         }
         finally
         {
             try { File.Delete(scriptPath); } catch { /* ignore */ }
+            try { if (Directory.Exists(toolRoot)) Directory.Delete(toolRoot, recursive: true); }
+            catch (Exception ex) { _logger.Warn($"Could not remove test-tool directory '{toolRoot}': {ex.Message}"); }
         }
 
         var markers = ParseMarkers(runResult.StdOut);
@@ -113,7 +150,8 @@ public sealed class ModuleTestSuiteService
             }
         }
 
-        if (failureAnalysis is not null && !spec.KeepResultsXml)
+        var keepXml = spec.KeepResultsXml || !string.IsNullOrWhiteSpace(spec.ResultsPath);
+        if (failureAnalysis is not null && !keepXml)
         {
             failureAnalysis.Source = "NUnitXml (temp)";
         }
@@ -132,7 +170,7 @@ public sealed class ModuleTestSuiteService
         }
 
         string? keptXmlPath = null;
-        if (spec.KeepResultsXml)
+        if (keepXml)
         {
             keptXmlPath = File.Exists(xmlPath) ? xmlPath : null;
         }
@@ -164,7 +202,10 @@ public sealed class ModuleTestSuiteService
             exitCode: runResult.ExitCode,
             stdOut: sanitizedStdOut,
             stdErr: runResult.StdErr,
-            resultsXmlPath: keptXmlPath);
+            resultsXmlPath: keptXmlPath)
+        {
+            JUnitResultsPath = junitPath is not null && File.Exists(junitPath) ? junitPath : null
+        };
     }
 
     private ModuleDependencyInstallResult[] EnsureDependenciesInstalled(
@@ -175,7 +216,8 @@ public sealed class ModuleTestSuiteService
 
         foreach (var name in spec.AdditionalModules ?? Array.Empty<string>())
         {
-            if (!string.IsNullOrWhiteSpace(name))
+            if (!string.IsNullOrWhiteSpace(name) &&
+                !(name.Trim().Equals("Pester", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrWhiteSpace(spec.PesterVersion)))
                 deps.Add(new ModuleDependency(name.Trim()));
         }
 
@@ -214,7 +256,7 @@ public sealed class ModuleTestSuiteService
         var allResults = bootstrapResults.Concat(results).ToArray();
         var failures = allResults.Where(r => r.Status == ModuleDependencyInstallStatus.Failed).ToArray();
         if (failures.Length > 0)
-            throw new InvalidOperationException($"Dependency installation failed for {failures.Length} module{(failures.Length == 1 ? string.Empty : "s")}.");
+            throw new InvalidOperationException("Dependency installation failed: " + string.Join("; ", failures.Select(f => $"{f.Name}: {f.Message}")));
 
         return allResults;
     }

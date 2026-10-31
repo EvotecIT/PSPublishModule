@@ -21,6 +21,8 @@ namespace PowerForge.Cli;
 [JsonSerializable(typeof(ModuleBuildSpec))]
 [JsonSerializable(typeof(ModuleInstallSpec))]
 [JsonSerializable(typeof(ModuleTestSuiteSpec))]
+[JsonSerializable(typeof(DotNetTestSuiteSpec))]
+[JsonSerializable(typeof(Dictionary<string, string?>[]), TypeInfoPropertyName = "DotNetTestEnvironments")]
 [JsonSerializable(typeof(ModulePipelinePlan))]
 [JsonSerializable(typeof(ModuleBuildResult))]
 [JsonSerializable(typeof(ModuleInstallerResult))]

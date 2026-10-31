@@ -132,7 +132,7 @@ public sealed class WorkspaceValidationService
                     step.Executable,
                     step.WorkingDirectory,
                     step.Arguments,
-                    TimeSpan.FromHours(8),
+                    TimeSpan.FromSeconds(step.TimeoutSeconds),
                     step.EnvironmentVariables,
                     request.CaptureOutput,
                     request.CaptureError),
@@ -385,6 +385,7 @@ public sealed class WorkspaceValidationService
 
                 prepared.Add(new WorkspaceValidationPreparedStep
                 {
+                    TimeoutSeconds = step.TimeoutSeconds > 0 ? step.TimeoutSeconds : throw new ArgumentException("Step TimeoutSeconds must be positive."),
                     Id = BuildExpandedId(step.Id, item, framework),
                     Name = string.IsNullOrWhiteSpace(displayName) ? step.Id : displayName!,
                     Kind = step.Kind,

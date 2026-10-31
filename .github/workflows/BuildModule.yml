@@ -106,7 +106,10 @@ jobs:
       - name: Test controlled dependency restore inputs
         run: node --test .github/actions/dotnet-dependency-submission/restore-inputs.test.cjs .github/actions/dotnet-dependency-submission/snapshot.test.cjs
 
-      - name: Validate website workflows
+      - name: Test module terminal environment
+        run: node --test .github/scripts/set-module-test-environment.test.cjs
+
+      - name: Validate reusable workflows
         shell: bash
         run: |
           set -euo pipefail
@@ -132,13 +135,16 @@ jobs:
             '.github/workflows/powerforge-catalog-update.yml'
             '.github/workflows/powerforge-npm-publish.yml'
             '.github/workflows/powerforge-apple-screenshot-capture.yml'
+            '.github/workflows/powerforge-module-test.yml'
+            '.github/workflows/module-test-self-test.yml'
+            '.github/workflows/powerforge-dotnet-test.yml'
           )
 
           # GitHub added job.workflow_* identity fields after actionlint's current schema.
           # Lint copies with only those five documented fields normalized to another string field.
           readonly workflow_identity_expression='\$\{\{[[:space:]]*job\.workflow_(repository|sha|ref|file_path)[[:space:]]*\}\}'
           readonly replacement_expression='$'"{{ job.status }}"
-          readonly expected_workflow_identity_count=9
+          readonly expected_workflow_identity_count=13
           workflow_identity_count="$({ grep --no-filename --only-matching --extended-regexp "$workflow_identity_expression" "${website_workflows[@]}" || true; } | wc --lines | tr --delete '[:space:]')"
           if [[ "$workflow_identity_count" != "$expected_workflow_identity_count" ]]; then
             printf 'Expected %s documented job.workflow_* expressions, found %s.\n' "$expected_workflow_identity_count" "$workflow_identity_count" >&2
@@ -341,7 +347,7 @@ jobs:
         run: >
           dotnet test .\PowerForge.Tests\PowerForge.Tests.csproj
           -c Release --no-build --no-restore --nologo
-          --filter 'FullyQualifiedName~RepositoryDiagnostic|FullyQualifiedName~RepositoryCredentialResolverTests|FullyQualifiedName~PublishConfigurationFactoryTests|FullyQualifiedName~ModulePublishConfigurationReaderTests|FullyQualifiedName~ManagedModuleInstallCycleTests|FullyQualifiedName~ManagedModuleInstallCoalescingTests|FullyQualifiedName~ManagedModuleInstallContextTests'
+          --filter 'FullyQualifiedName~RepositoryDiagnostic|FullyQualifiedName~RepositoryCredentialResolverTests|FullyQualifiedName~PublishConfigurationFactoryTests|FullyQualifiedName~ModulePublishConfigurationReaderTests|FullyQualifiedName~ManagedModuleInstallCycleTests|FullyQualifiedName~ManagedModuleInstallCoalescingTests|FullyQualifiedName~ManagedModuleInstallContextTests|FullyQualifiedName~ModuleRepositoryRetryPolicyTests|FullyQualifiedName~PSResourceGetInstallDiagnosticsTests'
 
       - name: Test artefact safety and approved dependency pruning
         shell: pwsh
@@ -622,7 +628,7 @@ jobs:
         run: >
           dotnet test .\PowerForge.Tests\PowerForge.Tests.csproj
           -c Release --no-build --no-restore --nologo
-          --filter 'FullyQualifiedName~RepositoryDiagnostic|FullyQualifiedName~RepositoryCredentialResolverTests|FullyQualifiedName~PublishConfigurationFactoryTests|FullyQualifiedName~ModulePublishConfigurationReaderTests|FullyQualifiedName~ManagedModuleInstallCycleTests|FullyQualifiedName~ManagedModuleInstallCoalescingTests|FullyQualifiedName~ManagedModuleInstallContextTests'
+          --filter 'FullyQualifiedName~RepositoryDiagnostic|FullyQualifiedName~RepositoryCredentialResolverTests|FullyQualifiedName~PublishConfigurationFactoryTests|FullyQualifiedName~ModulePublishConfigurationReaderTests|FullyQualifiedName~ManagedModuleInstallCycleTests|FullyQualifiedName~ManagedModuleInstallCoalescingTests|FullyQualifiedName~ManagedModuleInstallContextTests|FullyQualifiedName~ModuleRepositoryRetryPolicyTests|FullyQualifiedName~PSResourceGetInstallDiagnosticsTests'
 
       - name: Test delivery bundles and approved dependency pruning
         shell: pwsh

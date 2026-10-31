@@ -56,6 +56,32 @@ test('global.json rollForward selects available feature bands and required servi
   assert.throws(() => globalSdkRequest({version: '10.0.300', rollForward: 'unknown'}), /rollForward/);
 });
 
+test('additional SDK requests append to global.json policy without replacing it', () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'dotnet-additional-test-'));
+  const file = path.join(directory, 'engine-global.json');
+  const keys = ['INPUT_GLOBAL-JSON-FILE', 'INPUT_ADDITIONAL-SDK-VERSIONS'];
+  const previous = Object.fromEntries(keys.map(key => [key, process.env[key]]));
+  const document = JSON.stringify({sdk: {version: '10.0.300', rollForward: 'latestPatch'}});
+  fs.writeFileSync(file, document);
+  try {
+    process.env['INPUT_GLOBAL-JSON-FILE'] = file;
+    process.env['INPUT_ADDITIONAL-SDK-VERSIONS'] = '8.0.426\n10.0.x';
+    const requests = requestedVersions();
+    assert.deepEqual(requests.map(r => r.value), ['10.0.300', '8.0.426', '10.0.x']);
+    assert.equal(requests[0].band, '3');
+    assert.equal(requests[1].exact, true);
+    assert.equal(requests[2].exact, false);
+    assert.equal(fs.readFileSync(file, 'utf8'), document);
+    process.env['INPUT_ADDITIONAL-SDK-VERSIONS'] = 'invalid-sdk';
+    assert.throws(() => requestedVersions(), /Unsupported .NET SDK request/);
+  } finally {
+    for (const [key, value] of Object.entries(previous)) {
+      if (value === undefined) delete process.env[key]; else process.env[key] = value;
+    }
+    fs.rmSync(directory, {recursive: true, force: true});
+  }
+});
+
 test('installation discovery checks architecture and retains runtime-only roots', () => {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'dotnet-architecture-test-'));
   fs.writeFileSync(path.join(directory, process.platform === 'win32' ? 'dotnet.exe' : 'dotnet'), 'fixture');

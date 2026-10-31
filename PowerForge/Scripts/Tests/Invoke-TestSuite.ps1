@@ -9,7 +9,12 @@
   [string]$SkipImport,
   [string]$ForceImport,
   [string]$ImportModulesB64,
-  [bool]$ImportVerbose
+  [string]$ImportVerbose,
+  [string]$PesterVersion,
+  [string]$ToolRoot,
+  [string]$JUnitResultsPath,
+  [string]$FailIfNoTests,
+  [string]$DependencyModulePathsB64
 )
 
 function Encode([string]$s) {
@@ -50,7 +55,27 @@ function Import-TestSuiteModule {
 }
 
 try {
-  Import-Module -Name Pester -Force -ErrorAction Stop
+  # Retain Desktop's native paths and append paths from the actual install host.
+  if (-not [string]::IsNullOrWhiteSpace($DependencyModulePathsB64)) {
+    $dependencyPaths = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($DependencyModulePathsB64))
+    $nativePaths = @($env:PSModulePath -split [regex]::Escape([string][IO.Path]::PathSeparator))
+    foreach ($path in ($dependencyPaths -split [regex]::Escape([string][IO.Path]::PathSeparator))) {
+      if (-not [string]::IsNullOrWhiteSpace($path) -and $nativePaths -notcontains $path) {
+        $nativePaths += $path
+      }
+    }
+    $env:PSModulePath = $nativePaths -join [IO.Path]::PathSeparator
+  }
+  $showImportVerbose = $ImportVerbose -eq '1'
+  # Add the shared save root to this host's native paths, including Desktop's modules.
+  if (-not [string]::IsNullOrWhiteSpace($ToolRoot) -and (Test-Path -LiteralPath $ToolRoot)) {
+    $env:PSModulePath = $ToolRoot + [IO.Path]::PathSeparator + $env:PSModulePath
+  }
+  $pesterImport = @{ Name = 'Pester'; Force = $true; ErrorAction = 'Stop' }
+  if (-not [string]::IsNullOrWhiteSpace($PesterVersion)) {
+    $pesterImport.RequiredVersion = $PesterVersion
+  }
+  Import-Module @pesterImport
   $p = Get-Module -Name Pester
   if ($p -and $p.Version) {
     Write-Output ('PFTEST::PESTER::' + $p.Version.ToString())
@@ -60,13 +85,13 @@ try {
   if ($importModules) {
     foreach ($m in $importModules) {
       if (-not $m -or [string]::IsNullOrWhiteSpace($m.Name)) { continue }
-      Import-TestSuiteModule -Name $m.Name -RequiredVersion $m.RequiredVersion -MinimumVersion $m.MinimumVersion -ShowVerbose:$ImportVerbose
+      Import-TestSuiteModule -Name $m.Name -RequiredVersion $m.RequiredVersion -MinimumVersion $m.MinimumVersion -ShowVerbose:$showImportVerbose
     }
   }
 
   $doImport = ($SkipImport -ne '1') -and (-not [string]::IsNullOrWhiteSpace($ModuleImportPath))
   if ($doImport) {
-    Import-TestSuiteModule -Name $ModuleImportPath -Force:($ForceImport -eq '1') -ShowVerbose:$ImportVerbose
+    Import-TestSuiteModule -Name $ModuleImportPath -Force:($ForceImport -eq '1') -ShowVerbose:$showImportVerbose
     Write-Output 'PFTEST::IMPORT::OK'
     try {
       $m = Get-Module -Name $ModuleName | Select-Object -First 1
@@ -87,11 +112,12 @@ try {
 
   $r = $null
   if ($p -and $p.Version -and $p.Version.Major -ge 5) {
-    $Configuration = [PesterConfiguration]::Default
+    $Configuration = New-PesterConfiguration
     $Configuration.Run.Path = $TestPath
     $Configuration.Run.Exit = $false
     $Configuration.Run.PassThru = $true
     $Configuration.Should.ErrorAction = 'Continue'
+    $Configuration.CodeCoverage.Enabled = $false
 
     $Configuration.TestResult.Enabled = $true
     $Configuration.TestResult.OutputPath = $ResultsPath
@@ -111,6 +137,9 @@ try {
 
     $r = Invoke-Pester -Configuration $Configuration
   } else {
+    if (-not [string]::IsNullOrWhiteSpace($JUnitResultsPath)) {
+      throw 'JUnit output requires Pester 5 or newer.'
+    }
     $PesterParams = @{
       Script      = $TestPath
       PassThru    = $true
@@ -128,6 +157,9 @@ try {
   }
 
   if (-not $r) { throw 'Invoke-Pester returned no results' }
+  if (-not [string]::IsNullOrWhiteSpace($JUnitResultsPath)) {
+    Export-JUnitReport -Result $r -Path $JUnitResultsPath -ErrorAction Stop
+  }
 
   $total = $r.TotalCount
   $passed = $r.PassedCount
@@ -162,6 +194,11 @@ try {
     }
   } catch { }
 
+  if ($failed -gt 0 -or $r.Result -eq 'Failed' -or
+      $r.FailedContainersCount -gt 0 -or $r.FailedBlocksCount -gt 0 -or
+      ($FailIfNoTests -eq '1' -and $total -eq 0)) {
+    exit 1
+  }
   exit 0
 } catch {
   $m = $_.Exception.Message
