@@ -1054,7 +1054,7 @@ public sealed class DotNetRepositoryReleaseServiceTests
             Assert.Empty(Directory.EnumerateFiles(localFeed.FullName, "*.nupkg", SearchOption.AllDirectories));
             var project = Assert.Single(result.Projects, item => item.IsPackable);
             Assert.Contains("Package signing failed", project.ErrorMessage, StringComparison.OrdinalIgnoreCase);
-            Assert.Contains("Publish preflight failed", result.ErrorMessage, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("simulated signing failure", result.ErrorMessage, StringComparison.Ordinal);
         }
         finally
         {

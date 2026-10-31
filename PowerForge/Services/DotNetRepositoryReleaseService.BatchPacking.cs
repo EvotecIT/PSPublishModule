@@ -153,6 +153,7 @@ public sealed partial class DotNetRepositoryReleaseService
                 result.Duration += signing.Duration;
                 if (!signing.Success)
                 {
+                    result.SigningFailed = signing.SigningFailed;
                     result.ErrorMessage = signing.ErrorMessage;
                     return result;
                 }
@@ -382,6 +383,7 @@ public sealed partial class DotNetRepositoryReleaseService
         {
             watch.Stop();
             result.Duration = watch.Elapsed;
+            result.SigningFailed = true;
             result.ErrorMessage = $"MSBuild batch assembly signing failed. {ex.Message}";
             return result;
         }

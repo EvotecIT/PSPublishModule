@@ -137,7 +137,7 @@ public sealed partial class DotNetRepositoryReleaseService
             }
 
             progress?.PhaseFailed(ProjectBuildProgressPhase.PackageSigning, error);
-            return spec.PublishFailFast;
+            return true;
         }
 
         watch.Stop();

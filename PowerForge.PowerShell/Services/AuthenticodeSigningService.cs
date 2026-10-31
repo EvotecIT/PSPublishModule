@@ -211,21 +211,54 @@ public sealed class AuthenticodeSigningService
 
     private IReadOnlyList<PSObject> SignWithOpenAuthenticode(string[] files, AuthenticodeSignRequest request)
     {
-        var filesToSign = request.OverwriteSigned
-            ? files
-            : GetUnsignedFiles("Get-OpenAuthenticodeSignature", files);
-        if (filesToSign.Length == 0)
-            return Array.Empty<PSObject>();
-
-        return SignIndividually("Set-OpenAuthenticodeSignature", filesToSign, (ps, file) =>
+        var signatures = new List<PSObject>(files.Length);
+        foreach (var file in files)
         {
-            ps.AddParameter("FilePath", file);
-            ps.AddParameter("Certificate", request.Certificate);
-            ps.AddParameter("TimeStampServer", request.TimeStampServer);
-            ps.AddParameter("IncludeChain", request.NonWindowsIncludeChain);
-            ps.AddParameter("HashAlgorithm", request.HashAlgorithm);
-            if (request.OverwriteSigned) ps.AddParameter("Force");
-        });
+            if (!request.OverwriteSigned && GetOpenSignatures(file, allowUnsigned: true).Count > 0)
+                continue;
+
+            _logger.Verbose($"Signing file: {file}");
+            // The writer normally has no output; only a separate read validates the file.
+            InvokeMany("Set-OpenAuthenticodeSignature", ps =>
+            {
+                ps.AddParameter("LiteralPath", file);
+                ps.AddParameter("Certificate", request.Certificate);
+                ps.AddParameter("TimeStampServer", request.TimeStampServer);
+                ps.AddParameter("IncludeOption", request.NonWindowsIncludeChain);
+                ps.AddParameter("HashAlgorithm", request.HashAlgorithm);
+            });
+            var result = GetOpenSignatures(file, allowUnsigned: false);
+            if (result.Count != 1)
+                throw new InvalidOperationException($"Authenticode signing did not return exactly one signature for '{file}'.");
+            var certificate = (X509Certificate2)result[0].Properties["Certificate"].Value;
+            if (NormalizeThumbprint(certificate.Thumbprint) != NormalizeThumbprint(request.Certificate.Thumbprint))
+                throw new InvalidOperationException($"Authenticode signing returned an unexpected signer for '{file}'.");
+            signatures.Add(result[0]);
+        }
+        return signatures;
+    }
+
+    private IReadOnlyList<PSObject> GetOpenSignatures(string file, bool allowUnsigned)
+    {
+        using var ps = CreatePowerShell();
+        ps.AddCommand("Get-OpenAuthenticodeSignature")
+            .AddParameter("LiteralPath", file)
+            .AddParameter("ErrorAction", ActionPreference.Continue);
+        var result = ps.Invoke();
+        if (ps.HadErrors)
+        {
+            // NoSignature is the provider's unsigned-file contract. Validation/read
+            // failures must never turn into permission to replace an existing signature.
+            if (allowUnsigned && result.Count == 0 && ps.Streams.Error.Count > 0 &&
+                ps.Streams.Error.All(error => string.Equals(error.FullyQualifiedErrorId.Split(',')[0], "NoSignature", StringComparison.Ordinal)))
+                return Array.Empty<PSObject>();
+            throw new InvalidOperationException($"Authenticode signature validation failed for '{file}'.", ps.Streams.Error.FirstOrDefault()?.Exception);
+        }
+        if (result.Count == 0 || result.Any(signature =>
+                signature.Properties["Certificate"]?.Value is not X509Certificate2 certificate ||
+                string.IsNullOrWhiteSpace(certificate.Thumbprint)))
+            throw new InvalidOperationException($"Authenticode signature validation did not return a signer certificate for '{file}'.");
+        return result.ToArray();
     }
 
     private IReadOnlyList<PSObject> SignIndividually(string command, string[] files, Action<PowerShell, string> configure)
