@@ -129,11 +129,11 @@ public sealed class ServiceAdoptionStateProcessTests
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public void StateRecoveryRequiresAnExistingRegistrationEvenWhenAnOlderMsiWasDetected(bool hasUpgradeCommand)
+    public void OnlyOriginalStateRecoveryRequiresAnExistingRegistration(bool hasUpgradeCommand)
     {
         var service = new PowerForgeInstallerServiceComponent { Id = "Fixture", ServiceName = "Fixture",
             ScriptInstall = new PowerForgeInstallerServiceScriptInstall { Command = "install", UpgradeCommand = hasUpgradeCommand ? "upgrade" : null,
-                BackupExistingImagePath = true, StopServiceForUpgrade = true } };
+                Condition = "NOT Installed", BackupExistingImagePath = true, StopServiceForUpgrade = true } };
         var definition = new PowerForgeInstallerDefinition(); definition.Components.Add(service);
         definition.Product.MajorUpgradeSchedule = PowerForgeInstallerMajorUpgradeSchedule.AfterInstallExecute;
         var emitter = typeof(DotNetPublishPipelineRunner).Assembly.GetType("PowerForge.PowerForgeWixInstallerServiceScriptEmitter")!;
@@ -143,8 +143,43 @@ public sealed class ServiceAdoptionStateProcessTests
         var search = elements.Single(x => x.Name == wix + "Property" && x.Element(wix + "RegistrySearch") != null);
         string registration = (string)search.Attribute("Id")!;
         var recovery = elements.Where(x => x.Name == wix + "InstallExecuteSequence").Elements(wix + "Custom")
-            .Where(x => ((string)x.Attribute("Action")!).EndsWith("State", StringComparison.Ordinal) || ((string)x.Attribute("Action")!).EndsWith("Stop", StringComparison.Ordinal)).ToArray();
-        Assert.Equal(6, recovery.Length);
+            .Where(x => ((string)x.Attribute("Action")!).EndsWith("State", StringComparison.Ordinal)).ToArray();
+        Assert.Equal(4, recovery.Length);
         Assert.All(recovery, row => Assert.EndsWith("AND (" + registration + ")", (string)row.Attribute("Condition")!));
+        var rollbackStops = elements.Where(x => x.Name == wix + "InstallExecuteSequence").Elements(wix + "Custom")
+            .Where(x => ((string)x.Attribute("Action")!).EndsWith("Stop", StringComparison.Ordinal)).ToArray();
+        Assert.Equal(2, rollbackStops.Length);
+        Assert.All(rollbackStops, row => Assert.Equal("(NOT Installed) AND (NOT REMOVE=\"ALL\")", (string)row.Attribute("Condition")!));
+    }
+
+    [Fact]
+    public async Task MissingImagePathFailsBeforeRecordingOriginalAvailability()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var backup = Path.Combine(root, "b");
+            var harness = Path.Combine(root, "Harness.ps1");
+            File.WriteAllText(backup, "stale command from a prior attempt");
+            File.WriteAllText(harness, "function Get-WmiObject { [pscustomobject]@{Name='Fixture';PathName=$null} }");
+            var emitter = typeof(DotNetPublishPipelineRunner).Assembly.GetType("PowerForge.PowerForgeWixInstallerServiceScriptEmitter")!;
+            var method = emitter.GetMethod("BuildBackupCommand", BindingFlags.Static | BindingFlags.NonPublic)!;
+            var command = (string)method.Invoke(null, new object[] { new PowerForgeInstallerServiceComponent { ServiceName = "Fixture" }, backup })!;
+            const string prefix = "\"powershell.exe\" ";
+            var start = new ProcessStartInfo("powershell.exe") { UseShellExecute = false, CreateNoWindow = true,
+                RedirectStandardOutput = true, RedirectStandardError = true,
+                Arguments = command.Substring(prefix.Length).Replace("-c \"", "-c \". '" + harness.Replace("'", "''") + "';") };
+            using var process = Process.Start(start)!;
+            var stdout = process.StandardOutput.ReadToEndAsync(); var stderr = process.StandardError.ReadToEndAsync();
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+            try { await process.WaitForExitAsync(timeout.Token); }
+            catch (OperationCanceledException) { process.Kill(entireProcessTree: true); throw; }
+            Assert.True(process.ExitCode != 0, await stdout + Environment.NewLine + await stderr);
+            Assert.False(File.Exists(backup));
+            Assert.False(File.Exists(backup + ".s"));
+        }
+        finally { Directory.Delete(root, recursive: true); }
     }
 }

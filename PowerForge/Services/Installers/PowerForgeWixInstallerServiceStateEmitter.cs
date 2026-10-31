@@ -26,7 +26,8 @@ internal static partial class PowerForgeWixInstallerServiceScriptEmitter
         ICollection<XElement> actions,
         XElement sequence,
         ICollection<UpgradePreparationAction> preparation,
-        string condition)
+        string condition,
+        string stopCondition)
     {
         var backupId = ids.BackupImagePathId + "State";
         var setBackupId = ids.SetBackupCommandId + "State";
@@ -55,9 +56,9 @@ internal static partial class PowerForgeWixInstallerServiceScriptEmitter
         // This rollback entry is registered after replacement files are installed, so a new
         // service process is stopped before Windows Installer restores the previous files.
         sequence.Add(new XElement(WixNamespace + "Custom", new XAttribute("Action", setStopId),
-            new XAttribute("After", "InstallFiles"), new XAttribute("Condition", condition)));
+            new XAttribute("After", "InstallFiles"), new XAttribute("Condition", stopCondition)));
         sequence.Add(new XElement(WixNamespace + "Custom", new XAttribute("Action", stopId),
-            new XAttribute("After", setStopId), new XAttribute("Condition", condition)));
+            new XAttribute("After", setStopId), new XAttribute("Condition", stopCondition)));
     }
 
     private static string BuildStateBackupCommand(PowerForgeInstallerServiceComponent service, string backupPath)
@@ -72,5 +73,5 @@ internal static partial class PowerForgeWixInstallerServiceScriptEmitter
 
     private static string BuildRollbackStopCommand(PowerForgeInstallerServiceComponent service)
         => BuildPowerShellCommand(service, "rollback stop", "$s=gsv '" + EscapePowerShellSingleQuoted(service.ServiceName) +
-            "' -ea Stop;if($s.Status-ne'Stopped'){spsv $s -ea Stop;$s.WaitForStatus('Stopped','00:00:30')}");
+            "' -ea 0;if($s-and$s.Status-ne'Stopped'){spsv $s -ea Stop;$s.WaitForStatus('Stopped','00:00:30')}");
 }

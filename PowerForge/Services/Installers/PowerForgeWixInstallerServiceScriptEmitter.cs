@@ -153,7 +153,8 @@ internal static partial class PowerForgeWixInstallerServiceScriptEmitter
             // An older MSI can exist after its service was removed. Restore availability
             // only when AppSearch found a registration to preserve, not for a repair/create.
             EmitServiceStateActions(service, ids, resolvedBackupPath, actions, sequence, upgradePreparationActions,
-                CombineConditions(upgradeCondition, serviceExistsProperty!));
+                CombineConditions(upgradeCondition, serviceExistsProperty!),
+                CombineConditions(script.Condition, "NOT REMOVE=\"ALL\""));
     }
 
     private static void AddSequenceRows(
@@ -167,10 +168,11 @@ internal static partial class PowerForgeWixInstallerServiceScriptEmitter
     {
         if (script.BackupExistingImagePath)
         {
-            upgradePreparationActions.Add(new UpgradePreparationAction(ids.SetBackupCommandId, upgradeCondition));
-            upgradePreparationActions.Add(new UpgradePreparationAction(ids.BackupImagePathId, upgradeCondition));
-            upgradePreparationActions.Add(new UpgradePreparationAction(ids.SetRollbackCommandId, upgradeCondition));
-            upgradePreparationActions.Add(new UpgradePreparationAction(ids.RollbackImagePathId, upgradeCondition));
+            var backupCondition = CombineConditions(upgradeCondition, ids.ServiceExistsPropertyId);
+            upgradePreparationActions.Add(new UpgradePreparationAction(ids.SetBackupCommandId, backupCondition));
+            upgradePreparationActions.Add(new UpgradePreparationAction(ids.BackupImagePathId, backupCondition));
+            upgradePreparationActions.Add(new UpgradePreparationAction(ids.SetRollbackCommandId, backupCondition));
+            upgradePreparationActions.Add(new UpgradePreparationAction(ids.RollbackImagePathId, backupCondition));
         }
 
         if (script.StopServiceForUpgrade)
@@ -314,7 +316,7 @@ internal static partial class PowerForgeWixInstallerServiceScriptEmitter
         string backup = EscapePowerShellSingleQuoted(backupPath);
         string command = "$b='" + backup +
                          "';rm $b -ea 0;$p=(gwmi win32_service|? Name -eq '" + serviceName +
-                         "').PathName;if($p){$p|Out-File $b -NoN -NoC -ea Stop}";
+                         "').PathName;if(!$p){throw 'ImagePath'};$p|Out-File $b -NoN -NoC -ea Stop";
         return BuildPowerShellCommand(service, "backup", command);
     }
 
