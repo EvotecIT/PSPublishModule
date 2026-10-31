@@ -3,7 +3,7 @@ using Xunit;
 
 namespace PowerForge.Tests;
 
-public sealed class ModulePipelineDevelopmentBootstrapperTests
+public sealed partial class ModulePipelineDevelopmentBootstrapperTests
 {
     [Fact]
     public void Plan_MapsDevelopmentBinaryOptions_FromBuildLibraries()

@@ -871,13 +871,8 @@ public sealed partial class ModulePipelineRunner
     }
 
     private static string[] ResolveDevelopmentFrameworkCandidates(ModuleBuildSpec spec)
-    {
-        var declared = NormalizeStringArray(spec.Frameworks);
-        if (declared.Length > 0)
-            return declared;
-
-        return ModulePipelinePlanningHelpers.TryReadTargetFrameworks(spec.CsprojPath);
-    }
+        => NormalizeStringArray((spec.Frameworks ?? Array.Empty<string>())
+            .Concat(ModulePipelinePlanningHelpers.TryReadDeclaredTargetFrameworks(spec.CsprojPath)));
 
     private void SyncMergedPsm1WithGeneratedScripts(
         string manifestPath,
