@@ -986,8 +986,10 @@ public sealed class DotNetRepositoryReleaseServiceTests
         }
     }
 
-    [Fact]
-    public void Execute_WithPackageSigningFailure_DoesNotPublishUnsignedPackagesWhenFailFastIsDisabled()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Execute_WithPackageSigningFailure_DoesNotPublishUnsignedPackagesWhenFailFastIsDisabled(bool cancel)
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
         try
@@ -1008,6 +1010,7 @@ public sealed class DotNetRepositoryReleaseServiceTests
 
             var localFeed = Directory.CreateDirectory(Path.Combine(root.FullName, "feed"));
             var packagesSeenBySigner = Array.Empty<string>();
+            using var cancellation = new CancellationTokenSource();
             DotNetRepositoryReleaseService.PackageSigningHandler signPackages = (
                 IReadOnlyList<string> packages,
                 DotNetRepositoryReleaseSpec spec,
@@ -1017,6 +1020,7 @@ public sealed class DotNetRepositoryReleaseServiceTests
                 out string error) =>
             {
                 packagesSeenBySigner = packages.ToArray();
+                if (cancel) cancellation.Cancel();
                 failedPackages = packages.ToArray();
                 error = "simulated signing failure";
                 return false;
@@ -1041,10 +1045,20 @@ public sealed class DotNetRepositoryReleaseServiceTests
                 SignPackages = true
             };
 
-            var result = new DotNetRepositoryReleaseService(
+            var service = new DotNetRepositoryReleaseService(
                 new NullLogger(),
                 signPackages,
-                (_, _) => "ABCDEF").Execute(spec);
+                (_, _) => "ABCDEF");
+            DotNetRepositoryReleaseResult Run() => service.Execute(spec, null, null, null, cancellation.Token);
+            if (cancel)
+            {
+                var error = Assert.ThrowsAny<OperationCanceledException>(() => Run());
+                Assert.Equal(cancellation.Token, error.CancellationToken);
+                Assert.Equal(2, packagesSeenBySigner.Length);
+                Assert.Empty(Directory.EnumerateFiles(localFeed.FullName, "*.nupkg", SearchOption.AllDirectories));
+                return;
+            }
+            var result = Run();
 
             Assert.False(result.Success);
             Assert.Equal(2, packagesSeenBySigner.Length);

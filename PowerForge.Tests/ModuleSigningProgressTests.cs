@@ -6,11 +6,12 @@ namespace PowerForge.Tests;
 public sealed class ModuleSigningProgressTests
 {
     [Theory]
-    [InlineData(false, false)]
-    [InlineData(true, false)]
-    [InlineData(false, true)]
-    [InlineData(true, true)]
-    public void SigningScript_StreamsReadRetriesAndStopsProgressAtSigningFailure(bool overwrite, bool failSigning)
+    [InlineData(false, false, 2)]
+    [InlineData(true, false, 2)]
+    [InlineData(false, true, 2)]
+    [InlineData(true, true, 2)]
+    [InlineData(false, true, 3)]
+    public void SigningScript_StreamsReadRetriesAndStopsProgressAtSigningFailure(bool overwrite, bool failSigning, int failAt)
     {
         if (Path.DirectorySeparatorChar != '\\') return;
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
@@ -40,8 +41,8 @@ public sealed class ModuleSigningProgressTests
                 function Set-AuthenticodeSignature {
                   [CmdletBinding()] param([string]$FilePath,[object]$Certificate,[string]$TimestampServer,[object]$IncludeChain,[string]$HashAlgorithm,[switch]$Force)
                   $script:calls++
-                  if ($script:calls -gt 2 -and ${{(failSigning ? "true" : "false")}}) { throw 'Signing continued after failure' }
-                  [pscustomobject]@{Status=$(if($script:calls -eq 2 -and ${{(failSigning ? "true" : "false")}}){'UnknownError'}else{'Valid'});StatusMessage='fixture'}
+                  if ($script:calls -gt {{failAt}} -and ${{(failSigning ? "true" : "false")}}) { throw 'Signing continued after failure' }
+                  [pscustomobject]@{Status=$(if($script:calls -eq {{failAt}} -and ${{(failSigning ? "true" : "false")}}){'UnknownError'}else{'Valid'});StatusMessage='fixture'}
                 }
                 function Start-Sleep { param([int]$Milliseconds) }
                 """;
@@ -59,15 +60,19 @@ public sealed class ModuleSigningProgressTests
             {
                 var failure = Assert.Throws<ModuleSigningException>(() => Sign());
                 result = Assert.IsType<ModuleSigningResult>(failure.Result);
-                Assert.Equal(2, result.Attempted);
-                Assert.Equal(1, result.SignedNew);
-                Assert.Equal(2, result.Failed);
+                Assert.Equal(failAt, result.Attempted);
+                Assert.Equal(failAt - 1, result.SignedNew);
+                Assert.Equal(4 - failAt, result.Failed);
                 Assert.Equal(1, result.UnknownError);
                 Assert.Equal(0, result.SigningException);
-                Assert.Equal(files[0], Assert.Single(result.VerifiedFilePaths));
-                Assert.Equal(files.Skip(1).OrderBy(path => path), result.FailedFilePaths.OrderBy(path => path));
-                Assert.DoesNotContain(updates, update => update.Detail == "Signing and timestamping 3/3: Three.ps1");
-                Assert.Contains(updates, update => update.Completed == 2 && update.Total == 3 && update.Detail.StartsWith("Signing stopped after a failure"));
+                Assert.Equal(files.Take(failAt - 1).OrderBy(path => path), result.VerifiedFilePaths.OrderBy(path => path));
+                Assert.Equal(files.Skip(failAt - 1).OrderBy(path => path), result.FailedFilePaths.OrderBy(path => path));
+                if (failAt == 2)
+                    Assert.DoesNotContain(updates, update => update.Detail == "Signing and timestamping 3/3: Three.ps1");
+                var completion = Assert.Single(updates, update => update.Detail.StartsWith("Signing stopped after a failure"));
+                Assert.Equal(failAt, completion.Completed);
+                Assert.Equal(3, completion.Total);
+                Assert.Equal(failAt < 3 ? "Signing stopped after a failure; remaining files were not attempted" : "Signing stopped after a failure", completion.Detail);
             }
             else
             {

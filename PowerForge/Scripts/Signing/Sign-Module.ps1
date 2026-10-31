@@ -573,7 +573,11 @@ try {
     }
   }
 
-  $completionDetail = if ($signingFailureMessage) { 'Signing stopped after a failure; remaining files were not attempted' } else { 'Signing attempts finished; checking results' }
+  $completionDetail = if ($signingFailureMessage -and $attempted -lt $targets.Count) {
+    'Signing stopped after a failure; remaining files were not attempted'
+  } elseif ($signingFailureMessage) {
+    'Signing stopped after a failure'
+  } else { 'Signing attempts finished; checking results' }
   EmitSigningProgress $attempted $targets.Count $completionDetail
   EmitSummary `
     -totalMatched @($files).Count `

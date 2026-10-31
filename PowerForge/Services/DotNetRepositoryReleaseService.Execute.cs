@@ -450,6 +450,8 @@ public sealed partial class DotNetRepositoryReleaseService
 
                             result.Success = false;
                             _logger.Warn(batchError);
+                            if (batchPackResult.SigningFailed)
+                                cancellationToken.ThrowIfCancellationRequested();
                             if (spec.PublishFailFast || batchPackResult.SigningFailed)
                             {
                                 result.ErrorMessage = batchError;
@@ -525,7 +527,11 @@ public sealed partial class DotNetRepositoryReleaseService
                         result.Success = false;
                         if (packResult.SigningFailed)
                         {
+                            cancellationToken.ThrowIfCancellationRequested();
                             result.ErrorMessage = packResult.ErrorMessage;
+                            foreach (var unattempted in packable.Skip(packageProgress))
+                                detailedProgress?.ItemUpdated(packageProgressItems[unattempted],
+                                    ProjectBuildProgressItemState.Skipped, "not attempted; skipped after assembly signing failure");
                             progress?.PhaseFailed(ProjectBuildProgressPhase.PackageBuild, packResult.ErrorMessage ?? "Assembly signing failed");
                             return result;
                         }
@@ -640,6 +646,7 @@ public sealed partial class DotNetRepositoryReleaseService
                     signingSha256 is not null &&
                     ExecutePackageSigning(spec, result, packable, signingSha256, progress, detailedProgress))
                 {
+                    cancellationToken.ThrowIfCancellationRequested();
                     return result;
                 }
             }
