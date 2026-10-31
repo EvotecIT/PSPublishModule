@@ -67,20 +67,25 @@ internal static class ModulePipelinePlanningHelpers
         return Path.Combine(basePath, projectName + ".csproj");
     }
 
-    internal static string[] TryReadTargetFrameworks(string? projectPath)
+    /// <summary>
+    /// Reads every project framework declaration without evaluating its conditions so a source loader
+    /// generated on one OS can also locate development binaries built on another OS.
+    /// This is candidate metadata, not the set of frameworks to build on the current host.
+    /// </summary>
+    internal static string[] TryReadDeclaredTargetFrameworks(string? projectPath)
     {
         if (string.IsNullOrWhiteSpace(projectPath) || !File.Exists(projectPath))
             return Array.Empty<string>();
 
         try
         {
-            var doc = XDocument.Load(projectPath, LoadOptions.None);
-            var single = ReadFirstProperty(doc, "TargetFramework");
-            if (!string.IsNullOrWhiteSpace(single))
-                return NormalizeFrameworks(single);
-
-            var multi = ReadFirstProperty(doc, "TargetFrameworks");
-            return NormalizeFrameworks(multi);
+            return XDocument.Load(projectPath, LoadOptions.None)
+                .Descendants()
+                .Where(e => string.Equals(e.Name.LocalName, "TargetFramework", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(e.Name.LocalName, "TargetFrameworks", StringComparison.OrdinalIgnoreCase))
+                .SelectMany(e => NormalizeFrameworks(e.Value))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
         }
         catch
         {
@@ -95,12 +100,6 @@ internal static class ModulePipelinePlanningHelpers
             .Where(static framework => !string.IsNullOrWhiteSpace(framework))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
-
-    private static string? ReadFirstProperty(XDocument doc, string name)
-        => doc.Descendants()
-            .Where(e => string.Equals(e.Name.LocalName, name, StringComparison.OrdinalIgnoreCase))
-            .Select(e => e.Value)
-            .FirstOrDefault(v => !string.IsNullOrWhiteSpace(v));
 
     private static string? TryResolveConventionalCsprojPath(string projectRoot, string projectName)
     {
