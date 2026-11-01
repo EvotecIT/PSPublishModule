@@ -128,6 +128,7 @@ try {
     $modules = DecodeModules $ModulesB64
     foreach ($m in $modules) {
       if (-not $m -or [string]::IsNullOrWhiteSpace($m.Name)) { continue }
+      Reset-PSModulePathForEdition
       if ($m.RequiredVersion) {
         Import-Module -Name $m.Name -RequiredVersion $m.RequiredVersion -Force -ErrorAction Stop -Verbose:$importVerbose
       } elseif ($m.MinimumVersion) {
@@ -140,6 +141,7 @@ try {
 
   if ($ImportSelf -eq '1') {
     if (-not [string]::IsNullOrWhiteSpace($ModulePath)) {
+      Reset-PSModulePathForEdition
       Import-Module -Name $ModulePath -Force -ErrorAction Stop -Verbose:$importVerbose
     } else {
       throw 'ModulePath is required for ImportSelf.'
