@@ -5,6 +5,15 @@ BeforeAll {
 }
 
 Describe 'Selected metadata installation roots' {
+    It 'keeps the build-entry search path for later import validation' {
+        $root = Join-Path $TestDrive ([guid]::NewGuid().ToString('N'))
+        $null = New-Item -ItemType Directory -Path $root
+        $fixture = Join-Path $PSScriptRoot 'Fixtures/SelectedRuntimeHostedPath.ps1'
+        $output = & $script:hostPath -NoProfile -NonInteractive -File $fixture -ModuleDll $script:moduleDll -Root $root
+        $LASTEXITCODE | Should -Be 0
+        $output | Should -Contain 'Hosted import passed'
+    }
+
     It 'restores the build search path between required module imports' {
         $root = Join-Path $TestDrive ([guid]::NewGuid().ToString('N'))
         $null = New-Item -ItemType Directory -Path $root

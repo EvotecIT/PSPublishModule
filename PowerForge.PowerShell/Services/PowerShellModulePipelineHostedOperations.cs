@@ -14,6 +14,7 @@ internal sealed partial class PowerShellModulePipelineHostedOperations :
     private readonly ILogger _logger;
     private readonly bool _isWindows;
     private readonly BinaryDependencyPreflightService _dependencyPreflight;
+    private readonly string _moduleSearchPath;
 
     internal PowerShellModulePipelineHostedOperations(IPowerShellRunner runner, ILogger logger)
         : this(runner, logger, Path.DirectorySeparatorChar == '\\')
@@ -25,6 +26,7 @@ internal sealed partial class PowerShellModulePipelineHostedOperations :
         _runner = runner ?? throw new ArgumentNullException(nameof(runner));
         _logger = logger ?? new NullLogger();
         _isWindows = isWindows;
+        _moduleSearchPath = Environment.GetEnvironmentVariable("PSModulePath") ?? string.Empty;
         _dependencyPreflight = new BinaryDependencyPreflightService(_logger, _runner);
     }
 
@@ -230,7 +232,7 @@ internal sealed partial class PowerShellModulePipelineHostedOperations :
             importSelf ? "1" : "0",
             manifestPath,
             verbose ? "1" : "0",
-            Convert.ToBase64String(Encoding.UTF8.GetBytes(Environment.GetEnvironmentVariable("PSModulePath") ?? string.Empty))
+            Convert.ToBase64String(Encoding.UTF8.GetBytes(_moduleSearchPath))
         };
 
         var script = EmbeddedScripts.Load("Scripts/ModulePipeline/Import-Modules.ps1");
