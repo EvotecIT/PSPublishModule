@@ -131,9 +131,14 @@ try {
                 // identities. Ask PowerShell for the actual imported module catalog.
                 ps.Commands.Clear();
                 var loaded = ps.AddCommand("Microsoft.PowerShell.Core\\Get-Module").AddParameter("All").Invoke();
-                foreach (var module in loaded.Select(static result => result.BaseObject).OfType<PSModuleInfo>())
+                var modules = loaded.Select(static result => result.BaseObject).OfType<PSModuleInfo>().ToArray();
+                foreach (var module in modules)
                     if (_selectedRuntimeSources.TryGetValue(module.Name, out var selected))
+                    {
+                        if (IsNestedBinaryModule(module, modules))
+                            continue;
                         ValidateImportedModuleIdentity(module, selected);
+                    }
             }
 
             var created = new ModuleScopeSession(
@@ -152,6 +157,22 @@ try {
                 runspace.Dispose();
             throw;
         }
+    }
+
+    private static bool IsNestedBinaryModule(PSModuleInfo module, IReadOnlyList<PSModuleInfo> loaded)
+    {
+        if (module.ModuleType != ModuleType.Binary || module.Guid != Guid.Empty || string.IsNullOrWhiteSpace(module.Path))
+            return false;
+
+        // Get-Module -All includes a manifest's same-name nested binary as a separate
+        // entry. Its assembly metadata is not the enclosing manifest's GUID/version.
+        // Exclude only an actual nested entry; the enclosing identity is still validated.
+        return loaded.Any(parent =>
+            !ReferenceEquals(parent, module) &&
+            string.Equals(parent.Name, module.Name, StringComparison.OrdinalIgnoreCase) &&
+            parent.NestedModules.Any(nested =>
+                nested.ModuleType == ModuleType.Binary &&
+                string.Equals(nested.Path, module.Path, StringComparison.Ordinal)));
     }
 
     private static void ValidateImportedModuleIdentity(PSModuleInfo imported, ApprovedModuleSource source)
