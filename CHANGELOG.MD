@@ -3,6 +3,7 @@
 ## Unreleased
 ### What's Changed
 - Resolve commands from manifest modules with a same-name nested binary without treating the binary's assembly metadata as a second manifest identity; keep wrong manifest GUID and version checks.
+- Keep selected runtime installation roots available while analyzing and importing transitive dependencies, ahead of unrelated globally installed module versions.
 - Analyze the selected required-module versions when checking binary conflicts and import order, so unrelated newer installations do not change the build's dependency ordering or warnings.
 - Keep selected runtime dependencies ahead of their dependants when applying binary import preferences, and analyze approved helpers in that selected dependency context instead of autoloading newer installed versions.
 - Preserve module import errors in command-analysis reports and verbose build logs, including when another helper defines the same command, so a loader failure is distinguishable from a missing command.

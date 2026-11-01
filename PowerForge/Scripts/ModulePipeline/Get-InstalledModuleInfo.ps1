@@ -1,6 +1,7 @@
 param(
   [string]$NamesB64,
-  [string]$ReferencesB64
+  [string]$ReferencesB64,
+  [string]$SearchRootsB64
 )
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
@@ -122,6 +123,7 @@ function Test-ModuleVersionConstraint([string]$candidateText, $reference) {
 
 $names = DecodeLines $NamesB64
 $references = Get-ReferenceSpecs $ReferencesB64 $names
+$searchRoots = @((DecodeText $SearchRootsB64) -split [IO.Path]::PathSeparator | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
 foreach ($ref in $references) {
   $n = [string]$ref.Name
   try {
@@ -134,14 +136,23 @@ foreach ($ref in $references) {
     $m = $null
     $ver = ''
     $selectedComparableVersion = $null
+    $selectedRootIndex = [int]::MaxValue
     foreach ($candidate in $modules) {
       $candidateVersion = Get-ModuleVersionText $candidate
       if (-not (Test-ModuleVersionConstraint $candidateVersion $ref)) { continue }
+      $rootIndex = [int]::MaxValue
+      for ($index = 0; $index -lt $searchRoots.Count; $index++) {
+        $prefix = [IO.Path]::GetFullPath($searchRoots[$index]).TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar
+        $comparison = if ([IO.Path]::DirectorySeparatorChar -eq '\') { [StringComparison]::OrdinalIgnoreCase } else { [StringComparison]::Ordinal }
+        if ($candidate.ModuleBase.StartsWith($prefix, $comparison)) { $rootIndex = $index; break }
+      }
       $candidateComparableVersion = Convert-ComparableModuleVersion $candidateVersion
-      if (-not $m -or (Compare-ComparableModuleVersion $candidateComparableVersion $selectedComparableVersion) -gt 0) {
+      if (-not $m -or $rootIndex -lt $selectedRootIndex -or
+          ($rootIndex -eq $selectedRootIndex -and (Compare-ComparableModuleVersion $candidateComparableVersion $selectedComparableVersion) -gt 0)) {
         $m = $candidate
         $ver = $candidateVersion
         $selectedComparableVersion = $candidateComparableVersion
+        $selectedRootIndex = $rootIndex
       }
     }
     $guid = if ($m) { [string]$m.Guid } else { '' }
