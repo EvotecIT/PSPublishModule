@@ -5,6 +5,21 @@ namespace PowerForge.Tests;
 public sealed class ProjectBuildHostServiceTests
 {
     [Fact]
+    public void Deferred_staging_is_rejected_before_credentials_or_build_execution()
+    {
+        var service = new ProjectBuildHostService(new NullLogger(),
+            _ => throw new InvalidOperationException("Build must not run"), null, null);
+        var error = Assert.Throws<InvalidOperationException>(() => service.Execute(
+            new ProjectBuildHostRequest { ExecuteBuild = true, DeferPublishing = true, StageNuget = true },
+            new ProjectBuildConfiguration { PublishApiKeyFilePath = "missing-key.txt", SignAssemblies = true,
+                SignPackages = true, OutputPath = "packages", GitHubAccessToken = "draft-token" },
+            Path.Combine(Directory.GetCurrentDirectory(), "project.build.json")));
+
+        Assert.Contains("deferred", error.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Build must not run", error.Message);
+    }
+
+    [Fact]
     public void Execute_WritesPlanUsesRequestedActionOverridesAndReportsWarnings()
     {
         using var scope = new TemporaryDirectoryScope();

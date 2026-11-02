@@ -147,6 +147,8 @@ public sealed partial class ProjectBuildHostService
         string configDirectory,
         DateTimeOffset startedAt)
     {
+        if (request.DeferPublishing && (request.StageNuget ?? config.StageNuget ?? false))
+            throw new InvalidOperationException("StageNuget does not support deferred publication. Run Invoke-ProjectBuild or powerforge nuget stage directly.");
         if (request.PublicationCheckpoint is not null)
             return PublishCheckpoint(request);
         var preparation = new ProjectBuildPreparationService(_logger).Prepare(
@@ -160,6 +162,7 @@ public sealed partial class ProjectBuildHostService
                 UpdateVersions = request.UpdateVersions,
                 Build = request.Build,
                 PublishNuget = request.PublishNuget,
+                StageNuget = request.StageNuget,
                 PublishGitHub = request.PublishGitHub
             });
         request.BuildSpecPrepared?.Invoke(preparation.Spec);

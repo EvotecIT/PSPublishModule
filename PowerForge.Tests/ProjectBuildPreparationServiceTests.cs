@@ -4,6 +4,40 @@ namespace PowerForge.Tests;
 
 public sealed class ProjectBuildPreparationServiceTests
 {
+    [Fact]
+    public void Configured_staging_cannot_override_an_explicit_build_only_publication_restriction()
+    {
+        var error = Assert.Throws<InvalidOperationException>(() => new ProjectBuildPreparationService().Prepare(
+            new ProjectBuildConfiguration { StageNuget = true, PublishApiKeyFilePath = "missing-key.txt",
+                SignAssemblies = true, SignPackages = true, OutputPath = "packages", GitHubAccessToken = "draft-token" },
+            Directory.GetCurrentDirectory(), null, new ProjectBuildRequestedActions { Build = true, PublishNuget = false, PublishGitHub = false }));
+
+        Assert.Contains("explicitly disabled", error.Message);
+    }
+
+    [Fact]
+    public void Stage_keeps_signing_and_draft_upload_but_does_not_resolve_a_NuGet_key()
+    {
+        var context = new ProjectBuildPreparationService().Prepare(new ProjectBuildConfiguration
+        {
+            StageNuget = true, PublishNuget = true, SignPackages = true, SignAssemblies = true,
+            PublishApiKeyFilePath = "missing-nuget-secret.txt", GitHubAccessToken = "draft-upload-token",
+            OutputPath = "signed-packages", GitHubTagConflictPolicy = "Fail"
+        }, Directory.GetCurrentDirectory(), null, new ProjectBuildRequestedActions());
+
+        Assert.True(context.StageNuget);
+        Assert.True(context.PublishGitHub);
+        Assert.Equal("draft-upload-token", context.GitHubToken);
+        Assert.True(context.Spec.SignAssemblies);
+        Assert.True(context.Spec.SignPackages);
+        Assert.True(context.Spec.Pack);
+        Assert.False(context.Spec.Publish);
+        Assert.False(context.CreateReleaseZip);
+        Assert.False(context.PublishNuget);
+        Assert.Null(context.PublishApiKey);
+        Assert.Null(context.Spec.PublishApiKey);
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]

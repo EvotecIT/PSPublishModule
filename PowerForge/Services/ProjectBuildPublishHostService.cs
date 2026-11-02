@@ -95,6 +95,7 @@ public sealed class ProjectBuildPublishHostService
         string resolvedConfigPath,
         string configDirectory)
     {
+        ProjectBuildConfigurationAdapter.RejectNuGetStaging(config);
         var feed = ProjectBuildPackageFeedResolver.Resolve(config, configDirectory);
         var publishSource = string.IsNullOrWhiteSpace(feed.PublishSource)
             ? ProjectBuildPackageFeedResolver.GetDefaultPublishSource()
