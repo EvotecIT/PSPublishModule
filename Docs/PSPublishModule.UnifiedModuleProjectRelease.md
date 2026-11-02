@@ -148,6 +148,13 @@ are not reused by default. Use `-ReuseExistingRelease` only for a deliberate rec
 bind the exact existing release, authorize the complete asset-name set, and verify the server-assigned identity of
 every uploaded asset before reporting success.
 
+When `SynchronizeModuleVersion` is disabled for fixed versions, the module phase can complete the exact GitHub
+release created by the package phase in the same invocation. Automatic reuse requires a successful result with
+explicit creation evidence, matching owner, repository, tag and numeric release ID, and retains source-commit
+verification. Reused or legacy results do not grant that permission, and the in-memory identity does not carry
+into a new run. Persistent checkpoint recovery keeps its existing exact-ID binding. Missing, invalid or conflicting
+matching IDs cannot enable automatic reuse, and unrelated pre-existing tags keep the default collision behavior.
+
 ### PowerShell-authored package configuration
 
 For modules where you want the whole release in PowerShell, declare the package config inline. It maps to
