@@ -537,6 +537,19 @@ public abstract partial class AsyncPSCmdlet
             finally
             {
                 CompleteAddingIfNeeded(outPipe);
+                if (stopRequested || pipelineException is PipelineStoppedException)
+                {
+                    try
+                    {
+                        // Let cooperative engine cleanup finish before Stop returns. A hook that
+                        // ignores cancellation must not keep the PowerShell pipeline alive forever.
+                        _ = blockTask.Wait(TimeSpan.FromSeconds(1));
+                    }
+                    catch (AggregateException)
+                    {
+                        // The pipeline stop remains the caller-visible failure.
+                    }
+                }
                 if (blockTask.IsCompleted)
                 {
                     ClearPipes();
