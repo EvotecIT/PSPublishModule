@@ -2,6 +2,7 @@
 
 ## Unreleased
 ### What's Changed
+- Allow up to one second for cooperative async cmdlet cleanup when a pipeline is stopped, preserving prompt cancellation for hooks that do not finish within that grace period.
 - Resolve commands from manifest modules with a same-name nested binary without treating the binary's assembly metadata as a second manifest identity; keep wrong manifest GUID and version checks.
 - Keep selected runtime installation roots available while analyzing and importing transitive dependencies, ahead of unrelated globally installed module versions, and retain the build-entry search path for import validation.
 - Analyze the selected required-module versions when checking binary conflicts and import order, so unrelated newer installations do not change the build's dependency ordering or warnings.

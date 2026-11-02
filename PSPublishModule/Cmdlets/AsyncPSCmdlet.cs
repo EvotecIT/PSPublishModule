@@ -17,6 +17,8 @@ namespace PSPublishModule;
 /// context or a custom task scheduler that may be running the PowerShell pipeline thread.
 /// Keep hook implementations asynchronous all the way through and pass <see cref="CancelToken"/> to
 /// cancellable engine operations. Do not block with Task.Wait, Task.Result, or Task.WaitAll.
+/// A pipeline stop allows up to one second for asynchronous cleanup. Hooks that outlive that
+/// grace period remain cancelled and retain their lifecycle resources until they complete.
 /// </remarks>
 public abstract partial class AsyncPSCmdlet : PSCmdlet, IDisposable
 {
