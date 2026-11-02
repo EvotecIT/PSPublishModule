@@ -5,6 +5,41 @@ namespace PowerForge.Tests;
 public sealed class ProjectBuildHostServiceTests
 {
     [Fact]
+    public void Explicitly_disabled_staging_allows_a_deferred_build_from_staging_configuration()
+    {
+        using var scope = new TemporaryDirectoryScope();
+        var service = new ProjectBuildHostService(new NullLogger(),
+            _ => new DotNetRepositoryReleaseResult { Success = true }, null, null);
+
+        var result = service.Execute(new ProjectBuildHostRequest
+        {
+            ExecuteBuild = true, DeferPublishing = true, StageNuget = false,
+            Build = true, PublishNuget = false, PublishGitHub = false
+        }, new ProjectBuildConfiguration { RootPath = scope.RootPath, StageNuget = true },
+            Path.Combine(scope.RootPath, "project.build.json"));
+
+        Assert.True(result.Success, result.ErrorMessage);
+        Assert.NotNull(result.DeferredPublicationConfiguration);
+        Assert.False(result.DeferredPublicationConfiguration.PublishNuget);
+        Assert.False(result.DeferredPublicationConfiguration.PublishGitHub);
+    }
+
+    [Fact]
+    public void Deferred_staging_is_rejected_before_credentials_or_build_execution()
+    {
+        var service = new ProjectBuildHostService(new NullLogger(),
+            _ => throw new InvalidOperationException("Build must not run"), null, null);
+        var error = Assert.Throws<InvalidOperationException>(() => service.Execute(
+            new ProjectBuildHostRequest { ExecuteBuild = true, DeferPublishing = true, StageNuget = true },
+            new ProjectBuildConfiguration { PublishApiKeyFilePath = "missing-key.txt", SignAssemblies = true,
+                SignPackages = true, OutputPath = "packages", GitHubAccessToken = "draft-token" },
+            Path.Combine(Directory.GetCurrentDirectory(), "project.build.json")));
+
+        Assert.Contains("deferred", error.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Build must not run", error.Message);
+    }
+
+    [Fact]
     public void Execute_WritesPlanUsesRequestedActionOverridesAndReportsWarnings()
     {
         using var scope = new TemporaryDirectoryScope();

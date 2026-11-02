@@ -11,5 +11,6 @@ internal sealed class ProjectBuildRequestedActions
     public bool? UpdateVersions { get; set; }
     public bool? Build { get; set; }
     public bool? PublishNuget { get; set; }
+    public bool? StageNuget { get; set; }
     public bool? PublishGitHub { get; set; }
 }

@@ -28,6 +28,12 @@ public sealed class ProjectBuildGitHubPublishRequest
     /// <summary>Whether the published GitHub release is a prerelease.</summary>
     public bool IsPreRelease { get; set; }
 
+    /// <summary>Create a draft release for local signed-package staging.</summary>
+    public bool IsDraft { get; set; }
+
+    /// <summary>Explicit signed packages and manifest used by draft staging; ordinary releases use their existing zip assets.</summary>
+    public string[]? StagedNuGetAssets { get; set; }
+
     /// <summary>Whether GitHub should auto-generate release notes.</summary>
     public bool GenerateReleaseNotes { get; set; }
 

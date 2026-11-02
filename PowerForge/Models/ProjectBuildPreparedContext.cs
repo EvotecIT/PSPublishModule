@@ -9,6 +9,7 @@ internal sealed class ProjectBuildPreparedContext
     public bool UpdateVersions { get; set; }
     public bool Build { get; set; }
     public bool PublishNuget { get; set; }
+    public bool StageNuget { get; set; }
     public bool PublishGitHub { get; set; }
     public bool CreateReleaseZip { get; set; }
     public string RootPath { get; set; } = string.Empty;

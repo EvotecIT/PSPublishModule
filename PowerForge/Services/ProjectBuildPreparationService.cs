@@ -34,14 +34,29 @@ internal sealed class ProjectBuildPreparationService
             throw new ArgumentNullException(nameof(requestedActions));
 
         var actions = ResolveActions(config, requestedActions);
+        var stageNuget = requestedActions.StageNuget ?? config.StageNuget ?? false;
+        if (stageNuget && config.PlanOnly == true && requestedActions.PlanOnly is null)
+            throw new InvalidOperationException("StageNuget requires execution. Request Plan explicitly to inspect a staging plan without creating a draft.");
+        if (stageNuget && requestedActions.PublishGitHub == false)
+            throw new InvalidOperationException("StageNuget cannot create a draft because GitHub publication was explicitly disabled by the caller.");
+        if (stageNuget && (!ResolveSigningEnabled(config.SignPackages, config.CertificateThumbprint) ||
+                           !ResolveSigningEnabled(config.SignAssemblies, config.CertificateThumbprint)))
+            throw new InvalidOperationException("StageNuget requires assembly and package signing.");
+        var releaseMode = string.IsNullOrWhiteSpace(config.GitHubReleaseMode) ? "Single" : config.GitHubReleaseMode!.Trim();
+        var tagConflictPolicy = string.IsNullOrWhiteSpace(config.GitHubTagConflictPolicy) ? "Fail" : config.GitHubTagConflictPolicy!.Trim();
+        if (stageNuget && !string.Equals(releaseMode, "Single", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("StageNuget requires GitHubReleaseMode Single.");
+        if (stageNuget && !string.Equals(tagConflictPolicy, "Fail", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("StageNuget requires GitHubTagConflictPolicy Fail; published or existing drafts must not be silently reused.");
         var context = new ProjectBuildPreparedContext
         {
             PlanOnly = requestedActions.PlanOnly ?? (config.PlanOnly ?? false),
             UpdateVersions = actions.UpdateVersions,
-            Build = actions.Build,
-            PublishNuget = actions.PublishNuGet,
-            PublishGitHub = actions.PublishGitHub,
-            CreateReleaseZip = config.CreateReleaseZip ?? true
+            Build = stageNuget || actions.Build,
+            StageNuget = stageNuget,
+            PublishNuget = !stageNuget && actions.PublishNuGet,
+            PublishGitHub = stageNuget || actions.PublishGitHub,
+            CreateReleaseZip = !stageNuget && (config.CreateReleaseZip ?? true)
         };
 
         context.RootPath = ProjectBuildSupportService.ResolveOptionalPath(config.RootPath, configDir) ?? configDir;
@@ -49,6 +64,9 @@ internal sealed class ProjectBuildPreparationService
         context.OutputPath = ProjectBuildSupportService.ResolveOptionalPath(config.OutputPath, context.RootPath);
         context.ReleaseZipOutputPath = ProjectBuildSupportService.ResolveOptionalPath(config.ReleaseZipOutputPath, context.RootPath);
         context.PlanOutputPath = ProjectBuildSupportService.ResolveOptionalPath(planPath ?? config.PlanOutputPath, configDir);
+
+        if (stageNuget && string.IsNullOrWhiteSpace(context.OutputPath) && string.IsNullOrWhiteSpace(context.StagingPath))
+            throw new InvalidOperationException("StageNuget requires OutputPath or StagingPath for the signed package asset set.");
 
         if (string.IsNullOrWhiteSpace(context.OutputPath) && !string.IsNullOrWhiteSpace(context.StagingPath))
             context.OutputPath = Path.Combine(context.StagingPath, "packages");
