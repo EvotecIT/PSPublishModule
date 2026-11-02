@@ -25,6 +25,11 @@ namespace PSPublishModule;
 /// the local date (<c>yyyy.MM.dd</c>) unless a primary project version is available.
 /// </para>
 /// </remarks>
+/// <example>
+/// <summary>Stage signed NuGet packages for GitHub trusted publishing</summary>
+/// <code>Invoke-ProjectBuild -ConfigPath './Build/project.build.json' -StageNuget</code>
+/// <para>Uses the configured local signing certificate and uploads verified packages and their manifest to a new draft GitHub release without a NuGet key.</para>
+/// </example>
 [Cmdlet(VerbsLifecycle.Invoke, "ProjectBuild", SupportsShouldProcess = true)]
 [OutputType(typeof(ProjectBuildResult))]
 public sealed partial class InvokeProjectBuildCommand : PSCmdlet
@@ -44,6 +49,10 @@ public sealed partial class InvokeProjectBuildCommand : PSCmdlet
     /// <summary>Publish packages to NuGet.</summary>
     [Parameter]
     public SwitchParameter PublishNuget { get; set; }
+
+    /// <summary>Build and sign packages, verify them, and upload them with a manifest to a draft GitHub release without publishing to NuGet.</summary>
+    [Parameter]
+    public SwitchParameter StageNuget { get; set; }
 
     /// <summary>Publish artifacts to GitHub.</summary>
     [Parameter]
@@ -124,6 +133,7 @@ public sealed partial class InvokeProjectBuildCommand : PSCmdlet
                 UpdateVersions = ResolveRequestedAction(bound, nameof(UpdateVersions)),
                 Build = ResolveRequestedAction(bound, nameof(Build)),
                 PublishNuget = ResolveRequestedAction(bound, nameof(PublishNuget)),
+                StageNuget = ResolveRequestedAction(bound, nameof(StageNuget)),
                 PublishGitHub = ResolveRequestedAction(bound, nameof(PublishGitHub))
             });
 

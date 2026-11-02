@@ -131,7 +131,12 @@ public sealed class ProjectBuildGitHubPublisher
         var timestampToken = nowLocal.ToString("yyyyMMddHHmmss");
         var utcTimestampToken = nowUtc.ToString("yyyyMMddHHmmss");
         var repoName = request.Repository.Trim();
-        var assetPaths = GetPlannedAssetPaths(request.Release);
+        if (request.StagedNuGetAssets is not null && (!request.IsDraft || perProject || reuseExistingReleaseOnConflict))
+            throw new InvalidOperationException("Signed NuGet staging requires a new single draft release.");
+        if (request.StagedNuGetAssets is not null && !request.StagedNuGetAssets.Any(asset =>
+                string.Equals(Path.GetFileName(asset), NuGetTrustedPublishingService.ManifestFileName, StringComparison.Ordinal)))
+            throw new InvalidOperationException("Signed NuGet staging requires the NuGet release manifest.");
+        var assetPaths = request.StagedNuGetAssets ?? GetPlannedAssetPaths(request.Release);
         var assetProgress = request.Progress is null
             ? null
             : new ProjectBuildGitHubProgressAdapter(request.Progress, assetPaths);
@@ -274,7 +279,7 @@ public sealed class ProjectBuildGitHubPublisher
         string utcTimestampToken,
         IGitHubReleaseProgressReporter? progress)
     {
-        var assets = request.Release.Projects
+        var assets = request.StagedNuGetAssets ?? request.Release.Projects
             .Where(project => project.IsPackable && !string.IsNullOrWhiteSpace(project.ReleaseZipPath) && File.Exists(project.ReleaseZipPath))
             .Select(project => project.ReleaseZipPath!)
             .Distinct(StringComparer.OrdinalIgnoreCase)
@@ -372,6 +377,7 @@ public sealed class ProjectBuildGitHubPublisher
                 ExpectedTagCommitSha = request.Release.SourceCommitSha,
                 GenerateReleaseNotes = request.GenerateReleaseNotes,
                 IsPreRelease = request.IsPreRelease,
+                IsDraft = request.IsDraft,
                 ReuseExistingReleaseOnConflict = reuseExistingReleaseOnConflict,
                 AssetFilePaths = assets,
                 Progress = progress

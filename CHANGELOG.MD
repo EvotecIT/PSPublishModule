@@ -3,6 +3,8 @@
 ## Unreleased
 ### What's Changed
 - Complete the package phase's exact GitHub release during a combined module release with fixed versions, without enabling generic reuse of pre-existing releases.
+- Stage locally signed NuGet packages in a draft GitHub release and publish their exact files through a protected GitHub OIDC workflow, with manifest integrity checks and author-signer verification on retries.
+- Keep shared dependency prefetches coalesced after one install branch takes ownership of the download.
 - Allow up to one second for cooperative async cmdlet cleanup when a pipeline is stopped, preserving prompt cancellation for hooks that do not finish within that grace period.
 - Resolve commands from manifest modules with a same-name nested binary without treating the binary's assembly metadata as a second manifest identity; keep wrong manifest GUID and version checks.
 - Keep selected runtime installation roots available while analyzing and importing transitive dependencies, ahead of unrelated globally installed module versions, and retain the build-entry search path for import validation.

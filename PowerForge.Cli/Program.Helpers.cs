@@ -73,6 +73,8 @@ internal static partial class Program
                      [--results-path <nunit.xml>] [--junit-results-path <junit.xml>] [--summary-path <summary.md>]
       powerforge test --config <TestSpec.json>
       powerforge test-dotnet --config <tests.json> [--profile test] [--framework net8.0] [--runtime linux-x64] [--results-path TestResults]
+      powerforge nuget stage --config <project.build.json>
+      powerforge nuget <verify|publish> --manifest <path> --source-commit <sha> --author-fingerprints <sha256[,sha256]> [--api-key-env NUGET_API_KEY]
       powerforge install --name <ModuleName> --version <X.Y.Z> --staging <path> [--strategy exact|autorevision] [--keep N] [--root path]*
       powerforge install --config <InstallSpec.json>
       powerforge pipeline [--config <Pipeline.json>] [--project-root <path>] [--diagnostics-baseline <file>] [--diagnostics-baseline-generate] [--diagnostics-baseline-update] [--fail-on-new-diagnostics] [--fail-on-diagnostics-severity <Warning|Error>] [--output json]

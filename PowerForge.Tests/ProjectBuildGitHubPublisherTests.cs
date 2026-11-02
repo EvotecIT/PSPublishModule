@@ -5,6 +5,55 @@ namespace PowerForge.Tests;
 public sealed class ProjectBuildGitHubPublisherTests
 {
     [Fact]
+    public void Signed_package_staging_requires_a_manifest_before_creating_a_release()
+    {
+        var publisher = new ProjectBuildGitHubPublisher(new NullLogger(), _ =>
+            throw new InvalidOperationException("Remote creation must not run"));
+
+        var error = Assert.Throws<InvalidOperationException>(() => publisher.Publish(new ProjectBuildGitHubPublishRequest
+        {
+            Owner = "EvotecIT", Repository = "Example", Token = "draft-token", IsDraft = true,
+            ReleaseMode = "Single", TagName = "v1.2.3", TagConflictPolicy = "Fail",
+            StagedNuGetAssets = ["Example.1.2.3.nupkg"],
+            Release = new DotNetRepositoryReleaseResult { Success = true,
+                Projects = [new() { IsPackable = true, ProjectName = "Example", NewVersion = "1.2.3" }] }
+        }));
+
+        Assert.Contains("requires the NuGet release manifest", error.Message);
+    }
+
+    [Fact]
+    public void Signed_package_staging_creates_one_draft_with_exact_assets_and_source_commit()
+    {
+        GitHubReleasePublishRequest? captured = null;
+        var publisher = new ProjectBuildGitHubPublisher(new NullLogger(), request =>
+        {
+            captured = request;
+            return new GitHubReleasePublishResult { Succeeded = true, ReleaseId = 42 };
+        });
+        var assets = new[] { "Example.1.2.3.nupkg", "Example.1.2.3.snupkg", "nuget-release-manifest.json" };
+        var summary = publisher.Publish(new ProjectBuildGitHubPublishRequest
+        {
+            Owner = "EvotecIT", Repository = "Example", Token = "draft-token", IsDraft = true,
+            ReleaseMode = "Single", TagName = "v1.2.3", TagConflictPolicy = "Fail", StagedNuGetAssets = assets,
+            Release = new DotNetRepositoryReleaseResult
+            {
+                Success = true, SourceCommitSha = "0123456789012345678901234567890123456789",
+                Projects = [new() { IsPackable = true, ProjectName = "Example", NewVersion = "1.2.3" }]
+            }
+        });
+
+        Assert.True(summary.Success);
+        Assert.NotNull(captured);
+        Assert.True(captured.IsDraft);
+        Assert.False(captured.ReuseExistingReleaseOnConflict);
+        Assert.Equal("v1.2.3", captured.TagName);
+        Assert.Equal("0123456789012345678901234567890123456789", captured.Commitish);
+        Assert.Equal(captured.Commitish, captured.ExpectedTagCommitSha);
+        Assert.Equal(assets, captured.AssetFilePaths);
+    }
+
+    [Fact]
     public void Publish_per_project_builds_project_tags_and_collects_results()
     {
         var requests = new List<GitHubReleasePublishRequest>();

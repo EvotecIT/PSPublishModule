@@ -60,6 +60,9 @@ public sealed class ProjectBuildHostRequest
     /// </summary>
     public bool? PublishNuget { get; set; }
 
+    /// <summary>Stage signed NuGet assets in a draft GitHub release instead of pushing to NuGet.</summary>
+    public bool? StageNuget { get; set; }
+
     /// <summary>
     /// Optional override for GitHub release publishing.
     /// </summary>

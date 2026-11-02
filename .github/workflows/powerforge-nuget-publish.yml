@@ -1,0 +1,137 @@
+name: Publish locally signed NuGet release assets
+
+on:
+  workflow_call:
+    inputs:
+      environment-name:
+        description: Protected environment allowing only the release tag namespace.
+        required: true
+        type: string
+      release-tag-prefix:
+        description: Literal release tag prefix, for example v or Library-v.
+        required: true
+        type: string
+      author-fingerprints:
+        description: Comma-separated SHA256 author certificate fingerprints, maintained independently of release assets.
+        required: true
+        type: string
+      nuget-user:
+        description: NuGet account username used by NuGet/login; the policy owner can be the Evotec organization.
+        required: true
+        type: string
+      powerforge-version:
+        description: Reviewed three-part PowerForge.Build version containing the trusted publisher command.
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+  id-token: write
+
+concurrency:
+  group: nuget-publish-${{ github.repository }}
+  cancel-in-progress: false
+  queue: max
+
+jobs:
+  publish:
+    runs-on: ${{ github.event.repository.private && fromJSON('["self-hosted","linux"]') || 'ubuntu-latest' }}
+    timeout-minutes: 30
+    environment: ${{ inputs.environment-name }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RELEASE_ENVIRONMENT: ${{ inputs.environment-name }}
+      RELEASE_TAG_PREFIX: ${{ inputs.release-tag-prefix }}
+      AUTHOR_FINGERPRINTS: ${{ inputs.author-fingerprints }}
+      POWERFORGE_VERSION: ${{ inputs.powerforge-version }}
+      MSBUILDDISABLENODEREUSE: '1'
+      DOTNET_CLI_USE_MSBUILD_SERVER: '0'
+    steps:
+      - name: Qualify published release, tag source and environment policy
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $env:RELEASE_DIRECTORY = Join-Path $env:RUNNER_TEMP "nuget-release-$env:GITHUB_RUN_ID-$env:GITHUB_RUN_ATTEMPT"
+          $env:TOOL_DIRECTORY = Join-Path $env:RUNNER_TEMP "nuget-publisher-$env:GITHUB_RUN_ID-$env:GITHUB_RUN_ATTEMPT"
+          "RELEASE_DIRECTORY=$env:RELEASE_DIRECTORY" >> $env:GITHUB_ENV
+          "TOOL_DIRECTORY=$env:TOOL_DIRECTORY" >> $env:GITHUB_ENV
+          function Read-GitHub([string] $Path) {
+              $json = & gh api $Path
+              if ($LASTEXITCODE -ne 0) { throw "Cannot read GitHub release policy: $Path" }
+              return $json | ConvertFrom-Json
+          }
+          if ($env:GITHUB_EVENT_NAME -cnotin @('release', 'workflow_dispatch') -or
+              -not $env:GITHUB_REF.StartsWith('refs/tags/', [StringComparison]::Ordinal)) {
+              throw 'Publish requires a release:published event or a manual dispatch on that release tag.'
+          }
+          if ($env:RELEASE_TAG_PREFIX -cnotmatch '^[A-Za-z0-9][A-Za-z0-9._-]*$') { throw 'Invalid literal tag prefix.' }
+          $tag = $env:GITHUB_REF.Substring('refs/tags/'.Length)
+          if (-not $tag.StartsWith($env:RELEASE_TAG_PREFIX, [StringComparison]::Ordinal)) { throw 'Tag is outside the release namespace.' }
+          $release = Read-GitHub "repos/$env:GITHUB_REPOSITORY/releases/tags/$([Uri]::EscapeDataString($tag))"
+          if ($release.tag_name -cne $tag -or $release.draft -or -not $release.published_at) {
+              throw 'The matching release must already be published.'
+          }
+          if ($env:GITHUB_EVENT_NAME -ceq 'release') {
+              $event = Get-Content -LiteralPath $env:GITHUB_EVENT_PATH -Raw | ConvertFrom-Json
+              if ($event.action -cne 'published' -or $event.release.id -ne $release.id) { throw 'The event identifies a different release.' }
+          }
+          $target = (Read-GitHub "repos/$env:GITHUB_REPOSITORY/git/ref/tags/$([Uri]::EscapeDataString($tag))").object
+          for ($depth = 0; $target.type -ceq 'tag' -and $depth -lt 8; $depth++) {
+              if ($target.sha -cnotmatch '^[a-fA-F0-9]{40}$') { throw 'Invalid annotated tag.' }
+              $target = (Read-GitHub "repos/$env:GITHUB_REPOSITORY/git/tags/$($target.sha)").object
+          }
+          if ($target.type -cne 'commit' -or $target.sha -cnotmatch '^[a-fA-F0-9]{40}$' -or $target.sha -cne $env:GITHUB_SHA) {
+              throw 'The release tag must resolve to the workflow source commit.'
+          }
+          $repo = Read-GitHub "repos/$env:GITHUB_REPOSITORY"
+          $comparison = Read-GitHub "repos/$env:GITHUB_REPOSITORY/compare/$($target.sha)...$([Uri]::EscapeDataString($repo.default_branch))"
+          if ($comparison.status -cnotin @('ahead', 'identical')) { throw 'The release source is not on the default branch.' }
+          $environmentPath = [Uri]::EscapeDataString($env:RELEASE_ENVIRONMENT)
+          $environment = Read-GitHub "repos/$env:GITHUB_REPOSITORY/environments/$environmentPath"
+          $policies = Read-GitHub "repos/$env:GITHUB_REPOSITORY/environments/$environmentPath/deployment-branch-policies"
+          if (-not $environment.deployment_branch_policy.custom_branch_policies -or $policies.total_count -ne 1 -or
+              $policies.branch_policies[0].type -cne 'tag' -or $policies.branch_policies[0].name -cne ($env:RELEASE_TAG_PREFIX + '*')) {
+              throw 'The protected environment must allow exactly the configured tag prefix followed by *, with no branch policies.'
+          }
+          New-Item -ItemType Directory -Path $env:RELEASE_DIRECTORY | Out-Null
+          & gh release download $tag --repo $env:GITHUB_REPOSITORY --dir $env:RELEASE_DIRECTORY --pattern 'nuget-release-manifest.json' --pattern '*.nupkg' --pattern '*.snupkg'
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot download the signed release assets.' }
+          "QUALIFIED_SOURCE_SHA=$($target.sha)" >> $env:GITHUB_ENV
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Install reviewed publisher and verify every asset before login
+        shell: pwsh
+        run: |
+          if ($env:POWERFORGE_VERSION -cnotmatch '^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$') { throw 'PowerForge.Build requires a pinned three-part version.' }
+          & dotnet tool install PowerForge.Build --version $env:POWERFORGE_VERSION --tool-path $env:TOOL_DIRECTORY --source https://api.nuget.org/v3/index.json
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot install the reviewed PowerForge publisher.' }
+          & "$env:TOOL_DIRECTORY/powerforge" nuget verify --manifest "$env:RELEASE_DIRECTORY/nuget-release-manifest.json" --source-commit $env:QUALIFIED_SOURCE_SHA --author-fingerprints $env:AUTHOR_FINGERPRINTS
+          if ($LASTEXITCODE -ne 0) { throw 'Signed NuGet release verification failed.' }
+
+      - name: Obtain short-lived NuGet key
+        id: login
+        uses: NuGet/login@8d196754b4036150537f80ac539e15c2f1028841 # v1
+        with:
+          user: ${{ inputs.nuget-user }}
+
+      - name: Publish exact files and verify registry author identities
+        shell: pwsh
+        env:
+          NUGET_API_KEY: ${{ steps.login.outputs.NUGET_API_KEY }}
+        run: |
+          & "$env:TOOL_DIRECTORY/powerforge" nuget publish --manifest "$env:RELEASE_DIRECTORY/nuget-release-manifest.json" --source-commit $env:QUALIFIED_SOURCE_SHA --author-fingerprints $env:AUTHOR_FINGERPRINTS --api-key-env NUGET_API_KEY
+          if ($LASTEXITCODE -ne 0) { throw 'NuGet publication or registry readback failed. Inspect the registry before retrying the tag.' }
+          "Verified NuGet release from $env:QUALIFIED_SOURCE_SHA using signed GitHub assets and registry author identities." >> $env:GITHUB_STEP_SUMMARY
+
+      - name: Remove invocation-owned downloads and tool files
+        if: always()
+        shell: pwsh
+        run: |
+          foreach ($path in @($env:RELEASE_DIRECTORY, $env:TOOL_DIRECTORY)) {
+              if (Test-Path -LiteralPath $path) { Remove-Item -LiteralPath $path -Recurse -ErrorAction Stop }
+          }
