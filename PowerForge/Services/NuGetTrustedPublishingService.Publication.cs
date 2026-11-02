@@ -82,7 +82,7 @@ public sealed partial class NuGetTrustedPublishingService
                 {
                     RootPath = directory, OutputPath = directory, PublishSource = NuGetSource,
                     PublishApiKey = feed.PublishApiKey, IncludeSymbols = symbols.Length > 0,
-                    SkipDuplicate = false, PublishFailFast = true,
+                    SkipDuplicate = true, PublishFailFast = true,
                     RemotePublishAttempted = snapshot.ValidateUnchanged
                 };
                 var publication = _release.PublishExistingPackages(policy, checkpoint, cancellationToken: cancellationToken);

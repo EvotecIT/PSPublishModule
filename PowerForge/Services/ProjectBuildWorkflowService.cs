@@ -177,11 +177,15 @@ internal sealed class ProjectBuildWorkflowService
         }
 
         string[]? stagedAssets = null;
+        using var stagingSnapshot = preparation.StageNuget
+            ? ModulePackagePublicationSnapshot.Create(ModulePackageReleaseCheckpointService.CreatePublicationRelease(
+                release, releaseAssets: null, requireStagedAssets: false))
+            : null;
         if (preparation.StageNuget)
         {
-            var manifest = new NuGetTrustedPublishingService(_logger).StageAsync(release, cancellationToken).GetAwaiter().GetResult();
-            stagedAssets = release.Projects.Where(p => p.IsPackable).SelectMany(p => p.Packages.Concat(p.SymbolPackages))
-                .Concat(new[] { manifest }).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+            var manifest = new NuGetTrustedPublishingService(_logger).StageAsync(stagingSnapshot!.Release, cancellationToken).GetAwaiter().GetResult();
+            stagedAssets = stagingSnapshot.Release.Projects.Where(p => p.IsPackable).SelectMany(p => p.Packages.Concat(p.SymbolPackages))
+                .Concat(new[] { manifest }).Distinct(StringComparer.Ordinal).ToArray();
         }
 
         gitHubToken ??= preparation.GitHubToken;
@@ -201,6 +205,7 @@ internal sealed class ProjectBuildWorkflowService
 
         var gitHubWatch = Stopwatch.StartNew();
         progress?.PhaseStarted(ProjectBuildProgressPhase.GitHubPublish, 1, "Publishing GitHub release");
+        stagingSnapshot?.ValidateUnchanged();
         remotePublishAttempted?.Invoke();
         var publishSummary = _publishGitHub(new ProjectBuildGitHubPublishRequest
         {

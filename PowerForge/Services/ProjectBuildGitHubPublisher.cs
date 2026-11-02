@@ -133,6 +133,9 @@ public sealed class ProjectBuildGitHubPublisher
         var repoName = request.Repository.Trim();
         if (request.StagedNuGetAssets is not null && (!request.IsDraft || perProject || reuseExistingReleaseOnConflict))
             throw new InvalidOperationException("Signed NuGet staging requires a new single draft release.");
+        if (request.StagedNuGetAssets is not null && !request.StagedNuGetAssets.Any(asset =>
+                string.Equals(Path.GetFileName(asset), NuGetTrustedPublishingService.ManifestFileName, StringComparison.Ordinal)))
+            throw new InvalidOperationException("Signed NuGet staging requires the NuGet release manifest.");
         var assetPaths = request.StagedNuGetAssets ?? GetPlannedAssetPaths(request.Release);
         var assetProgress = request.Progress is null
             ? null

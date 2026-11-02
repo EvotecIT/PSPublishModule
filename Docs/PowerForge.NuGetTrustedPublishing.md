@@ -65,6 +65,12 @@ existing configurations separate; PowerShell Gallery publication stays with its
 current publisher. An explicit `PublishGitHub: false` request also prevents
 staging from creating a draft.
 
+Staging copies the signed package set into private temporary storage before
+verification, manifest creation and draft upload. A later local build cannot
+replace the files being uploaded. The snapshot is removed after upload. A
+configured `PlanOnly: true` must be accompanied by an explicit `-Plan` request;
+the CLI stage command requires execution and rejects that configuration.
+
 The manifest records a source commit and, for each asset, its filename, nuspec
 package id, normalized version, signed-file SHA256 and author certificate SHA256
 fingerprint. The source SHA identifies the available local Git commit; it does
@@ -184,6 +190,8 @@ inputs during registry preflight. The snapshot is removed when publication ends.
 
 New packages are published in dependency order through the existing exact-file
 publisher. There is no build or pack operation on those files. Registry readback
+also runs after a duplicate response while an accepted version is still indexing.
+Its author identity must match before the retry can succeed. Readback
 waits up to five minutes per new primary package without uploading again. If
 indexing takes longer, inspect nuget.org and dispatch the same published tag
 again. Matching existing primary versions need no repeat primary upload.

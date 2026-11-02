@@ -169,7 +169,7 @@ public sealed partial class ProjectBuildHostService
         ProjectBuildPublishHostConfiguration? deferredPublication = null;
         if (request.DeferPublishing && !preparation.PlanOnly && request.ExecuteBuild)
         {
-            deferredPublication = ProjectBuildPublishHostService.CreateHostConfiguration(config, configPath, configDirectory);
+            deferredPublication = ProjectBuildPublishHostService.CreateHostConfiguration(config, configPath, configDirectory, preparation.StageNuget);
             deferredPublication.PublishNuget = preparation.PublishNuget;
             deferredPublication.PublishGitHub = preparation.PublishGitHub;
             if (preparation.PublishNuget)

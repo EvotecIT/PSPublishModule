@@ -17,6 +17,7 @@ public sealed class NuGetTrustedPublishingServiceTests : IDisposable
     private readonly string _root = Path.Combine(Path.GetTempPath(), "PowerForge.NuGetTrusted.Tests", Guid.NewGuid().ToString("N"));
     private readonly List<byte[]> _uploads = new();
     private readonly List<string> _registry = new();
+    private bool _duplicateDuringIndexing;
     private readonly VerificationRunner _runner = new();
     private readonly RSA _key = RSA.Create(2048);
     private readonly X509Certificate2 _certificate;
@@ -33,6 +34,36 @@ public sealed class NuGetTrustedPublishingServiceTests : IDisposable
     }
 
     private string Fingerprint => Convert.ToHexString(SHA256.HashData(_certificate.RawData));
+
+    [Fact]
+    public async Task Stage_rejects_a_tampered_archive_before_writing_a_manifest()
+    {
+        var package = await Package("Example");
+        using (var zip = ZipFile.Open(package, ZipArchiveMode.Update))
+        {
+            zip.GetEntry("lib/net10.0/Example.dll")!.Delete();
+            using var writer = new StreamWriter(zip.CreateEntry("lib/net10.0/Example.dll").Open());
+            writer.Write("replaced after signing");
+        }
+
+        await Assert.ThrowsAsync<SignatureException>(() => Service().StageAsync(Release(package)));
+
+        Assert.False(File.Exists(Path.Combine(_root, NuGetTrustedPublishingService.ManifestFileName)));
+        Assert.Empty(_uploads);
+    }
+
+    [Fact]
+    public async Task Stage_rejects_case_colliding_package_paths_instead_of_omitting_an_asset()
+    {
+        var package = await Package("Example");
+        var alternate = Path.Combine(_root, Path.GetFileName(package).ToLowerInvariant());
+        if (!File.Exists(alternate)) File.Copy(package, alternate);
+
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() => Service().StageAsync(Release(package, alternate)));
+
+        Assert.Contains("duplicate", error.Message);
+        Assert.False(File.Exists(Path.Combine(_root, NuGetTrustedPublishingService.ManifestFileName)));
+    }
 
     [Fact]
     public async Task Stage_records_signed_identity_hash_source_and_symbols_without_changing_bytes()
@@ -131,10 +162,13 @@ public sealed class NuGetTrustedPublishingServiceTests : IDisposable
     }
 
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task New_version_uploads_the_verified_file_and_reads_back_the_author(bool replaceOriginalDuringRegistryPreflight)
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    public async Task New_or_indexing_version_pushes_the_verified_file_and_reads_back_the_author(
+        bool replaceOriginalDuringRegistryPreflight, bool duplicateDuringIndexing)
     {
+        _duplicateDuringIndexing = duplicateDuringIndexing;
         var package = await Package("Example");
         var manifest = await Service().StageAsync(Release(package));
         var bytes = File.ReadAllBytes(package);
@@ -180,9 +214,9 @@ public sealed class NuGetTrustedPublishingServiceTests : IDisposable
         {
             Assert.Equal("ephemeral-test-key", key);
             Assert.Equal("https://api.nuget.org/v3/index.json", source);
-            Assert.False(skipDuplicate);
+            Assert.True(skipDuplicate);
             _uploads.Add(File.ReadAllBytes(path));
-            return new PackagePushResult { Outcome = PackagePushOutcome.Published };
+            return new PackagePushResult { Outcome = _duplicateDuringIndexing ? PackagePushOutcome.SkippedDuplicate : PackagePushOutcome.Published };
         }), _http);
 
     private static DotNetRepositoryReleaseResult Release(params string[] paths) => new()

@@ -37,7 +37,7 @@ public sealed partial class NuGetTrustedPublishingService
         if (!release.Success) throw new InvalidOperationException("Staging requires a successful signed build.");
         ValidateCommit(release.SourceCommitSha);
         var paths = release.Projects.Where(p => p.IsPackable).SelectMany(p => p.Packages.Concat(p.SymbolPackages))
-            .Select(Path.GetFullPath).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+            .Select(Path.GetFullPath).Distinct(StringComparer.Ordinal).ToArray();
         if (paths.Length == 0) throw new InvalidOperationException("No NuGet packages were built.");
         var directory = Path.GetDirectoryName(paths[0])!;
         if (paths.Any(p => !string.Equals(Path.GetDirectoryName(p), directory, StringComparison.OrdinalIgnoreCase)))

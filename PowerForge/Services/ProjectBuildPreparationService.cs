@@ -35,14 +35,18 @@ internal sealed class ProjectBuildPreparationService
 
         var actions = ResolveActions(config, requestedActions);
         var stageNuget = requestedActions.StageNuget ?? config.StageNuget ?? false;
+        if (stageNuget && config.PlanOnly == true && requestedActions.PlanOnly is null)
+            throw new InvalidOperationException("StageNuget requires execution. Request Plan explicitly to inspect a staging plan without creating a draft.");
         if (stageNuget && requestedActions.PublishGitHub == false)
             throw new InvalidOperationException("StageNuget cannot create a draft because GitHub publication was explicitly disabled by the caller.");
         if (stageNuget && (!ResolveSigningEnabled(config.SignPackages, config.CertificateThumbprint) ||
                            !ResolveSigningEnabled(config.SignAssemblies, config.CertificateThumbprint)))
             throw new InvalidOperationException("StageNuget requires assembly and package signing.");
-        if (stageNuget && !string.Equals(config.GitHubReleaseMode ?? "Single", "Single", StringComparison.OrdinalIgnoreCase))
+        var releaseMode = string.IsNullOrWhiteSpace(config.GitHubReleaseMode) ? "Single" : config.GitHubReleaseMode!.Trim();
+        var tagConflictPolicy = string.IsNullOrWhiteSpace(config.GitHubTagConflictPolicy) ? "Fail" : config.GitHubTagConflictPolicy!.Trim();
+        if (stageNuget && !string.Equals(releaseMode, "Single", StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("StageNuget requires GitHubReleaseMode Single.");
-        if (stageNuget && !string.Equals(config.GitHubTagConflictPolicy ?? "Fail", "Fail", StringComparison.OrdinalIgnoreCase))
+        if (stageNuget && !string.Equals(tagConflictPolicy, "Fail", StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("StageNuget requires GitHubTagConflictPolicy Fail; published or existing drafts must not be silently reused.");
         var context = new ProjectBuildPreparedContext
         {

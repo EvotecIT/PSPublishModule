@@ -5,6 +5,24 @@ namespace PowerForge.Tests;
 public sealed class ProjectBuildGitHubPublisherTests
 {
     [Fact]
+    public void Signed_package_staging_requires_a_manifest_before_creating_a_release()
+    {
+        var publisher = new ProjectBuildGitHubPublisher(new NullLogger(), _ =>
+            throw new InvalidOperationException("Remote creation must not run"));
+
+        var error = Assert.Throws<InvalidOperationException>(() => publisher.Publish(new ProjectBuildGitHubPublishRequest
+        {
+            Owner = "EvotecIT", Repository = "Example", Token = "draft-token", IsDraft = true,
+            ReleaseMode = "Single", TagName = "v1.2.3", TagConflictPolicy = "Fail",
+            StagedNuGetAssets = ["Example.1.2.3.nupkg"],
+            Release = new DotNetRepositoryReleaseResult { Success = true,
+                Projects = [new() { IsPackable = true, ProjectName = "Example", NewVersion = "1.2.3" }] }
+        }));
+
+        Assert.Contains("requires the NuGet release manifest", error.Message);
+    }
+
+    [Fact]
     public void Signed_package_staging_creates_one_draft_with_exact_assets_and_source_commit()
     {
         GitHubReleasePublishRequest? captured = null;

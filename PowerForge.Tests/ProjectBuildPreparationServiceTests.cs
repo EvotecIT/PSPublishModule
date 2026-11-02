@@ -22,7 +22,7 @@ public sealed class ProjectBuildPreparationServiceTests
         {
             StageNuget = true, PublishNuget = true, SignPackages = true, SignAssemblies = true,
             PublishApiKeyFilePath = "missing-nuget-secret.txt", GitHubAccessToken = "draft-upload-token",
-            OutputPath = "signed-packages", GitHubTagConflictPolicy = "Fail"
+            OutputPath = "signed-packages", GitHubReleaseMode = " Single ", GitHubTagConflictPolicy = " Fail "
         }, Directory.GetCurrentDirectory(), null, new ProjectBuildRequestedActions());
 
         Assert.True(context.StageNuget);
@@ -36,6 +36,23 @@ public sealed class ProjectBuildPreparationServiceTests
         Assert.False(context.PublishNuget);
         Assert.Null(context.PublishApiKey);
         Assert.Null(context.Spec.PublishApiKey);
+    }
+
+    [Fact]
+    public void Stage_requires_an_explicit_plan_request_to_skip_execution()
+    {
+        var config = new ProjectBuildConfiguration
+        {
+            StageNuget = true, PlanOnly = true, SignAssemblies = true, SignPackages = true,
+            OutputPath = "signed-packages"
+        };
+        var service = new ProjectBuildPreparationService();
+        var error = Assert.Throws<InvalidOperationException>(() => service.Prepare(config,
+            Directory.GetCurrentDirectory(), null, new ProjectBuildRequestedActions()));
+
+        Assert.Contains("Request Plan explicitly", error.Message);
+        Assert.True(service.Prepare(config, Directory.GetCurrentDirectory(), null,
+            new ProjectBuildRequestedActions { PlanOnly = true }).PlanOnly);
     }
 
     [Theory]
