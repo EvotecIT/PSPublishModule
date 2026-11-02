@@ -11,7 +11,7 @@ Executes a repository-wide .NET build/release pipeline from a JSON configuration
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-Invoke-ProjectBuild -ConfigPath <string> [-UpdateVersions] [-Build] [-PublishNuget] [-PublishGitHub] [-Plan] [-PlanPath <string>] [-NoInteractive] [-Quiet] [-ExitCode] [-WhatIf] [-Confirm] [<CommonParameters>]
+Invoke-ProjectBuild -ConfigPath <string> [-UpdateVersions] [-Build] [-PublishNuget] [-StageNuget] [-PublishGitHub] [-Plan] [-PlanPath <string>] [-NoInteractive] [-Quiet] [-ExitCode] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -29,9 +29,10 @@ the local date (yyyy.MM.dd) unless a primary project version is available.
 
 ### EXAMPLE 1
 ```powershell
-Invoke-ProjectBuild -ConfigPath 'C:\Path'
+Invoke-ProjectBuild -ConfigPath './Build/project.build.json' -StageNuget
 ```
 
+Uses the configured local signing certificate and uploads verified packages and their manifest to a new draft GitHub release without a NuGet key.
 
 ## PARAMETERS
 
@@ -165,6 +166,22 @@ Accept wildcard characters: False
 
 ### -Quiet
 Suppresses progress and informational output while preserving results, warnings and errors.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -StageNuget
+Build and sign packages, verify them, and upload them with a manifest to a draft GitHub release without publishing to NuGet.
 
 ```yaml
 Type: SwitchParameter

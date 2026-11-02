@@ -465,7 +465,7 @@ public static partial class WebApiDocsGenerator
             assembly = TryLoadAssembly(assemblyPaths, warnings, out assemblyContext);
             if (assembly is null)
                 throw new InvalidOperationException(
-                    $"Configured API documentation assembly could not be inspected: {requestedAssemblyPath}");
+                    $"Configured API documentation assembly could not be inspected: {requestedAssemblyPath}. {warnings.LastOrDefault()}");
             assemblies.Add(assembly);
             assembliesByName.Add(assembly.GetName().Name!, assembly);
             assemblyPathsByName.Add(assembly.GetName().Name!, requestedAssemblyPath);

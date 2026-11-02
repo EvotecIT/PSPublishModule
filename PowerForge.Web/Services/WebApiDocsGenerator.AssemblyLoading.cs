@@ -7,9 +7,34 @@ namespace PowerForge.Web;
 
 public static partial class WebApiDocsGenerator
 {
+    private static readonly Lazy<HashSet<string>> ApiDocsFrameworkAssemblyNames = new(GetApiDocsFrameworkAssemblyNames);
+
     private static bool IsApiDocsFrameworkAssembly(Assembly assembly) =>
-        !assembly.IsDynamic && string.Equals(Path.GetDirectoryName(assembly.Location),
-            Path.GetDirectoryName(typeof(object).Assembly.Location), StringComparison.OrdinalIgnoreCase);
+        !assembly.IsDynamic && ApiDocsFrameworkAssemblyNames.Value.Contains(assembly.GetName().Name!);
+
+    /// <summary>Uses the host's runtime-pack manifests; self-contained outputs also contain application DLLs.</summary>
+    private static HashSet<string> GetApiDocsFrameworkAssemblyNames()
+    {
+        var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { typeof(object).Assembly.GetName().Name! };
+        var depsFiles = (AppContext.GetData("APP_CONTEXT_DEPS_FILES") as string ?? string.Empty)
+            .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries);
+        foreach (var depsFile in depsFiles.Where(File.Exists))
+        {
+            using var document = JsonDocument.Parse(File.ReadAllText(depsFile));
+            if (!document.RootElement.TryGetProperty("targets", out var targets)) continue;
+            foreach (var target in targets.EnumerateObject())
+            foreach (var library in target.Value.EnumerateObject())
+            {
+                if (!library.Name.StartsWith("Microsoft.NETCore.App.Runtime.", StringComparison.OrdinalIgnoreCase) &&
+                    !library.Name.StartsWith("runtimepack.Microsoft.NETCore.App.Runtime.", StringComparison.OrdinalIgnoreCase)) continue;
+                if (!library.Value.TryGetProperty("runtime", out var assets)) continue;
+                foreach (var asset in assets.EnumerateObject())
+                    if (asset.Name.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
+                        names.Add(Path.GetFileNameWithoutExtension(asset.Name));
+            }
+        }
+        return names;
+    }
 
     private static Assembly? TryLoadAssembly(string[] assemblyPaths, List<string> warnings, out ApiDocsAssemblyLoadContext? context)
     {
@@ -44,25 +69,15 @@ public static partial class WebApiDocsGenerator
     {
         private readonly AssemblyDependencyResolver[] _resolvers;
         private readonly string[] _assemblyDirectories;
-        private readonly IReadOnlyDictionary<string, string> _dependencyPaths;
-        private readonly HashSet<string> _frameworkAssemblies;
+        private readonly IReadOnlyDictionary<string, string>[] _dependencyPaths;
 
         internal ApiDocsAssemblyLoadContext(string[] assemblyPaths)
             : base($"PowerForge.Web.ApiDocs:{Path.GetFileNameWithoutExtension(assemblyPaths[0])}", isCollectible: true)
         {
             var paths = assemblyPaths.Select(Path.GetFullPath).ToArray();
-            _resolvers = paths.Select(path => new AssemblyDependencyResolver(path)).ToArray();
             _assemblyDirectories = paths.Select(path => Path.GetDirectoryName(path)!).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
-            var dependencyPaths = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var path in paths)
-            foreach (var dependency in BuildDependencyPathMap(path))
-                dependencyPaths.TryAdd(dependency.Key, dependency.Value);
-            _dependencyPaths = dependencyPaths;
-
-            // Only the shared runtime may come from the host. Application dependencies
-            // must resolve from the documented outputs or their dependency manifests.
-            _frameworkAssemblies = Directory.EnumerateFiles(Path.GetDirectoryName(typeof(object).Assembly.Location)!, "*.dll")
-                .Select(path => Path.GetFileNameWithoutExtension(path)).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            _dependencyPaths = paths.Select(BuildDependencyPathMap).ToArray();
+            _resolvers = paths.Select(path => new AssemblyDependencyResolver(path)).ToArray();
         }
 
         public void Dispose() => Unload();
@@ -70,30 +85,31 @@ public static partial class WebApiDocsGenerator
         protected override Assembly? Load(AssemblyName assemblyName)
         {
             var assemblySimpleName = assemblyName.Name;
-            if (assemblySimpleName is not null && _frameworkAssemblies.Contains(assemblySimpleName))
+            if (assemblySimpleName is not null && ApiDocsFrameworkAssemblyNames.Value.Contains(assemblySimpleName))
                 return Default.LoadFromAssemblyName(assemblyName);
 
             foreach (var resolver in _resolvers)
             {
-                var dependencyAssembly = TryLoadFromPath(resolver.ResolveAssemblyToPath(assemblyName));
+                var dependencyAssembly = TryLoadFromPath(resolver.ResolveAssemblyToPath(assemblyName), assemblyName);
                 if (dependencyAssembly is not null)
                     return dependencyAssembly;
             }
 
             foreach (var directory in _assemblyDirectories)
             {
-                var dependencyAssembly = TryLoadFromPath(Path.Combine(directory, assemblySimpleName + ".dll"));
+                var dependencyAssembly = TryLoadFromPath(Path.Combine(directory, assemblySimpleName + ".dll"), assemblyName);
                 if (dependencyAssembly is not null)
                     return dependencyAssembly;
             }
 
-            if (!string.IsNullOrWhiteSpace(assemblySimpleName) &&
-                _dependencyPaths.TryGetValue(assemblySimpleName, out var mappedPath) &&
-                File.Exists(mappedPath))
+            foreach (var dependencyPaths in _dependencyPaths)
             {
-                var mappedAssembly = TryLoadFromPath(mappedPath);
-                if (mappedAssembly is not null)
-                    return mappedAssembly;
+                if (!string.IsNullOrWhiteSpace(assemblySimpleName) && dependencyPaths.TryGetValue(assemblySimpleName, out var mappedPath))
+                {
+                    var mappedAssembly = TryLoadFromPath(mappedPath, assemblyName);
+                    if (mappedAssembly is not null)
+                        return mappedAssembly;
+                }
             }
 
             // Returning null would silently fall back to the CLI's default context.
@@ -112,13 +128,17 @@ public static partial class WebApiDocsGenerator
             return IntPtr.Zero;
         }
 
-        private Assembly? TryLoadFromPath(string? candidatePath)
+        private Assembly? TryLoadFromPath(string? candidatePath, AssemblyName requestedName)
         {
             if (string.IsNullOrWhiteSpace(candidatePath) || !File.Exists(candidatePath))
                 return null;
 
             try
             {
+                var candidateName = AssemblyName.GetAssemblyName(candidatePath);
+                if (!AssemblyName.ReferenceMatchesDefinition(requestedName, candidateName) ||
+                    (requestedName.Version is not null && candidateName.Version < requestedName.Version))
+                    return null;
                 using var stream = new MemoryStream(File.ReadAllBytes(candidatePath), writable: false);
                 return LoadFromStream(stream);
             }
@@ -142,14 +162,12 @@ public static partial class WebApiDocsGenerator
             if (!File.Exists(depsPath))
                 return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
+            using var document = ReadDependencyManifest(depsPath);
             var packageRoots = GetNuGetPackageRootCandidates(assemblyPath)
                 .Where(Directory.Exists)
                 .ToArray();
             if (packageRoots.Length == 0)
                 return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-
-            using var stream = File.OpenRead(depsPath);
-            using var document = JsonDocument.Parse(stream);
 
             if (!document.RootElement.TryGetProperty("libraries", out var librariesElement) ||
                 librariesElement.ValueKind != JsonValueKind.Object ||
@@ -197,6 +215,19 @@ public static partial class WebApiDocsGenerator
             }
 
             return dependencyPaths;
+        }
+
+        private static JsonDocument ReadDependencyManifest(string depsPath)
+        {
+            try
+            {
+                using var stream = File.OpenRead(depsPath);
+                return JsonDocument.Parse(stream);
+            }
+            catch (JsonException ex)
+            {
+                throw new InvalidDataException($"API documentation dependency manifest could not be parsed: {depsPath}. {ex.Message}", ex);
+            }
         }
 
         private static void AddDependencyPaths(

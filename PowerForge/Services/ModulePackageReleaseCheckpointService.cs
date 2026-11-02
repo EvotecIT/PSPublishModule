@@ -320,6 +320,7 @@ internal sealed class ModulePackageReleaseCheckpointService
                         context,
                         project.Configuration);
                     var publish = new ProjectBuildSupportService(new NullLogger()).LoadConfig(configPath);
+                    ProjectBuildConfigurationAdapter.ApplyReference(publish, project.Configuration);
                     lanes.Add(new ModulePackageReleaseLane(
                         $"ProjectBuild:{index}",
                         project.Configuration.Name ?? Path.GetFileNameWithoutExtension(configPath),
@@ -332,6 +333,7 @@ internal sealed class ModulePackageReleaseCheckpointService
                     break;
                 }
                 case ConfigurationPackageBuildSegment package when package.Configuration.Enabled:
+                    ProjectBuildConfigurationAdapter.FromPackageBuild(package.Configuration);
                     lanes.Add(new ModulePackageReleaseLane(
                         $"PackageBuild:{index}",
                         package.Configuration.Name ?? "Inline package build",

@@ -24,6 +24,7 @@ public sealed class WebApiDocsGeneratorDependencyIsolationTests
             var version = new Version(hostName.Version!.Major + 1, 0, 0, 0);
             var primaryDirectory = Directory.CreateDirectory(Path.Combine(root, "primary")).FullName;
             var additionalDirectory = Directory.CreateDirectory(Path.Combine(root, "additional")).FullName;
+            File.Copy(hostDependency.Location, Path.Combine(primaryDirectory, hostName.Name + ".dll"));
             var dependencyDirectory = useDependencyManifest
                 ? Directory.CreateDirectory(Path.Combine(root, ".nuget", "packages", "scriban", version.ToString(), "lib", "net8.0")).FullName
                 : additionalDirectory;
@@ -90,6 +91,34 @@ public sealed class WebApiDocsGeneratorDependencyIsolationTests
             Assert.Contains("NewerPayload", method.GetProperty("signature").GetString());
             Assert.DoesNotContain(AssemblyLoadContext.Default.Assemblies, assembly => assembly.GetName().Name == hostName.Name && assembly.GetName().Version == version);
             Assert.Same(hostDependency, AssemblyLoadContext.Default.LoadFromAssemblyName(hostName));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Generate_ReportsMalformedManifestForAdditionalAssembly()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "pf-apidocs-manifest-" + Guid.NewGuid().ToString("N"))).FullName;
+        try
+        {
+            var primary = Compile(root, "PrimaryApi", "public class Primary { }");
+            var additional = Compile(root, "AdditionalApi", "public class Additional { }");
+            var manifest = Path.ChangeExtension(additional, ".deps.json");
+            File.WriteAllText(manifest, "{ malformed");
+            var xml = Path.Combine(root, "docs.xml");
+            File.WriteAllText(xml, "<doc><members/></doc>");
+
+            var error = Assert.Throws<InvalidOperationException>(() => WebApiDocsGenerator.Generate(new WebApiDocsOptions
+            {
+                AssemblyPaths = new[] { primary, additional }, XmlPath = xml,
+                OutputPath = Path.Combine(root, "api"), Format = "json"
+            }));
+
+            Assert.Contains(manifest, error.Message, StringComparison.Ordinal);
+            Assert.Contains("could not be parsed", error.Message, StringComparison.Ordinal);
         }
         finally
         {
