@@ -453,6 +453,7 @@
               "KeepSymbols": { "type": "boolean" },
               "KeepDocs": { "type": "boolean" },
               "CreateCommandAliasOnUnix": { "type": "boolean" },
+              "Sign": { "anyOf": [{ "$ref": "powerforge.dotnetpublish.schema.json#/$defs/DotNetPublishSignOptions" }, { "type": "null" }] },
               "MsBuildProperties": {
                 "type": [ "object", "null" ],
                 "additionalProperties": { "type": "string" }
