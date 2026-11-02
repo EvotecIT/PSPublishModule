@@ -21,29 +21,32 @@ public sealed partial class AsyncPSCmdletTests
         shell.AddCommand("Test-AsyncCancellationCleanup");
         TestAsyncCancellationCleanupCommand.Reset();
         var invocation = shell.BeginInvoke();
-        Task? stop = null;
+        Task<bool>? stop = null;
+        Task? cleanupRelease = null;
         try
         {
             Assert.True(TestAsyncCancellationCleanupCommand.Started.Wait(TimeSpan.FromSeconds(5)));
-            stop = Task.Run(shell.Stop);
-            Assert.True(TestAsyncCancellationCleanupCommand.CleanupStarted.Wait(TimeSpan.FromSeconds(5)));
             if (finishesDuringGrace)
             {
-                Assert.NotSame(stop, await Task.WhenAny(stop, Task.Delay(100)));
-                TestAsyncCancellationCleanupCommand.AllowCleanup();
-                await stop.WaitAsync(TimeSpan.FromSeconds(5));
-                Assert.True(TestAsyncCancellationCleanupCommand.CleanupCompleted);
+                // Cleanup admission is independent of when the test thread resumes after Stop.
+                cleanupRelease = Task.Factory.StartNew(() =>
+                {
+                    Assert.True(TestAsyncCancellationCleanupCommand.CleanupStarted.Wait(TimeSpan.FromSeconds(5)));
+                    TestAsyncCancellationCleanupCommand.AllowCleanup();
+                }, CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
             }
-            else
+            stop = Task.Run(() =>
             {
-                await stop.WaitAsync(TimeSpan.FromSeconds(5));
-                Assert.False(TestAsyncCancellationCleanupCommand.CleanupCompleted);
-            }
+                shell.Stop();
+                return TestAsyncCancellationCleanupCommand.CleanupCompleted;
+            });
+            Assert.Equal(finishesDuringGrace, await stop.WaitAsync(TimeSpan.FromSeconds(5)));
         }
         finally
         {
             TestAsyncCancellationCleanupCommand.AllowCleanup();
             if (stop is not null) await stop.WaitAsync(TimeSpan.FromSeconds(5));
+            if (cleanupRelease is not null) await cleanupRelease.WaitAsync(TimeSpan.FromSeconds(5));
         }
         await TestAsyncCancellationCleanupCommand.CleanupFinished.Task.WaitAsync(TimeSpan.FromSeconds(5));
         Assert.Throws<PipelineStoppedException>(() => shell.EndInvoke(invocation));
