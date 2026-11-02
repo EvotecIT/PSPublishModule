@@ -500,7 +500,7 @@ public sealed partial class ModulePipelineRunner
             .Where(release =>
                 string.Equals(release.Owner, owner, StringComparison.OrdinalIgnoreCase) &&
                 string.Equals(release.Repository, repository, StringComparison.OrdinalIgnoreCase) &&
-                string.Equals(release.TagName, tag, StringComparison.OrdinalIgnoreCase))
+                string.Equals(release.TagName, tag, StringComparison.Ordinal))
             .Select(static release => release.ReleaseId)
             .Distinct()
             .ToArray();

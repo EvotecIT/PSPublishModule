@@ -9,12 +9,14 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
     [Trait("Category", "DotNetPublishPrGate")]
     [InlineData("matching")]
     [InlineData("other-tag")]
+    [InlineData("other-tag-case")]
+    [InlineData("checkpoint-tag-case")]
     [InlineData("other-repository")]
     [InlineData("no-receipt")]
     [InlineData("reused")]
     [InlineData("missing-id")]
     [InlineData("conflicting-ids")]
-    public void Run_BindsOnlyExactCurrentPackageReleaseWithoutVersionSynchronization(string identity)
+    public void Run_BindsOnlyExactPackageReleaseIdentity(string identity)
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
         var staging = Path.Combine(Path.GetTempPath(), "PowerForge.Tests.Staging", Guid.NewGuid().ToString("N"));
@@ -30,12 +32,12 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
             var sourceCommit = ReleaseSourceCommit.Capture(root.FullName);
             var spec = CreateCoordinatedGitHubSpec(root.FullName, staging, moduleName, tag);
             var release = spec.Segments.OfType<ConfigurationReleaseSegment>().Single().Configuration!;
-            release.VersionSource = ReleaseVersionSource.Module;
-            release.SynchronizeModuleVersion = false;
+            release.VersionSource = identity == "checkpoint-tag-case" ? ReleaseVersionSource.ProjectBuild : ReleaseVersionSource.Module;
+            release.SynchronizeModuleVersion = identity == "checkpoint-tag-case";
             release.ResumeIncompleteRelease = false;
             var project = spec.Segments.OfType<ConfigurationProjectBuildSegment>().Single().Configuration!;
             project.UpdateVersions = false;
-            project.UseAsReleaseVersionSource = false;
+            project.UseAsReleaseVersionSource = identity == "checkpoint-tag-case";
             var calls = 0;
             var completedInvocation = false;
             var runner = CreateRunner(new FakeHostedOperations(new List<string>()),
@@ -50,7 +52,8 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
                             {
                                 ProjectName = moduleName, Owner = "EvotecIT", Success = true,
                                 Repository = identity == "other-repository" ? "OtherModule" : moduleName,
-                                TagName = identity == "other-tag" ? "different-tag" : tag,
+                                TagName = identity == "other-tag" ? "different-tag"
+                                    : identity is "other-tag-case" or "checkpoint-tag-case" ? tag.ToLowerInvariant() : tag,
                                 ReleaseId = id,
                                 CreatedRelease = identity != "reused" && !completedInvocation
                             });
