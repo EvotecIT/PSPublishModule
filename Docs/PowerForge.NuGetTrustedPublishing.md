@@ -90,8 +90,16 @@ Create a nuget.org trusted-publishing policy with these fields:
 | Environment | `nuget-release`, matching the protected GitHub environment |
 | Scopes | Only the intended package ids or package glob; permit new versions, and new packages only when needed |
 
-Do not enter `powerforge-nuget-publish.yml` as the policy's workflow file. The
-`nuget-user` input is the NuGet account username used by the login action, not
+The publishing job runs in the calling repository's workflow and uses the shared
+`.github/actions/nuget-publish` composite action. Do not call it through a
+cross-repository reusable workflow: nuget.org rejects the resulting
+`job_workflow_ref` because it names a workflow outside the policy's repository
+([NuGet's tracked limitation](https://github.com/NuGet/NuGetGallery/issues/11000)).
+The composite action preserves the calling workflow's OIDC identity while keeping
+verification and publication in PowerForge. See GitHub's
+[OIDC workflow identity documentation](https://docs.github.com/en/actions/how-tos/secure-your-work/security-harden-deployments/oidc-with-reusable-workflows).
+
+The `nuget-user` input is the NuGet account username used by the login action, not
 necessarily the organization name selected as policy owner. The account must
 have the required rights in Evotec. Follow the current
 [NuGet trusted-publishing setup](https://learn.microsoft.com/nuget/nuget-org/trusted-publishing)
@@ -114,11 +122,11 @@ when several accounts own a package. Trusted publishing replaces upload
 authentication; it does not bypass the
 [registered-certificate requirements](https://learn.microsoft.com/nuget/create-packages/sign-a-package).
 
-## Call the reusable workflow
+## Call the publishing action
 
 After the shared changes have been merged and PowerForge.Build containing these
 commands has been published, set `POWERFORGE_NUGET_PUBLISHER_VERSION` to that
-reviewed three-part version. Pin the reusable workflow to the reviewed **full
+reviewed three-part version. Pin the composite action to the reviewed **full
 commit SHA** in the caller. Replace the capitalized placeholders below before use.
 This source PR alone does not make the new CLI available on nuget.org.
 
@@ -134,23 +142,32 @@ permissions:
   actions: read
   id-token: write
 
+concurrency:
+  group: nuget-publish-${{ github.repository }}
+  cancel-in-progress: false
+  queue: max
+
 jobs:
   nuget:
-    uses: EvotecIT/PSPublishModule/.github/workflows/powerforge-nuget-publish.yml@REVIEWED_FULL_COMMIT_SHA
-    with:
-      environment-name: nuget-release
-      release-tag-prefix: v
-      nuget-user: YOUR_NUGET_USERNAME
-      author-fingerprints: YOUR_AUTHOR_CERTIFICATE_SHA256
-      powerforge-version: ${{ vars.POWERFORGE_NUGET_PUBLISHER_VERSION }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: nuget-release
+    steps:
+      - uses: EvotecIT/PSPublishModule/.github/actions/nuget-publish@REVIEWED_FULL_COMMIT_SHA
+        with:
+          environment-name: nuget-release
+          release-tag-prefix: v
+          nuget-user: YOUR_NUGET_USERNAME
+          author-fingerprints: YOUR_AUTHOR_CERTIFICATE_SHA256
+          powerforge-version: ${{ vars.POWERFORGE_NUGET_PUBLISHER_VERSION }}
 ```
 
-The workflow accepts `release: published` and manual dispatch **on the same
+The action accepts `release: published` and manual dispatch **on the same
 published tag**. A dispatch on `main` is rejected. It resolves annotated tags,
 requires the tag to match the workflow source and to belong to the current
 default branch history, and checks the environment's exact tag policy. Public
-repositories use a standard GitHub-hosted Ubuntu runner; private repositories
-use the existing self-hosted Linux capability, with PowerShell and GitHub CLI
+repositories use a standard GitHub-hosted Ubuntu runner. For private repositories,
+set the job's `runs-on` to the existing self-hosted Linux capability, with PowerShell and GitHub CLI
 available. It installs the pinned PowerForge.Build tool, downloads release
 packages and the manifest, then checks hashes, package identities, timestamps,
 author signatures and the independent signer allow-list before OIDC login.
