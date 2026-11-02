@@ -427,7 +427,7 @@ public sealed partial class ModulePipelineRunner
         var tag = ModulePublisher.GetGitHubTag(publish, plan.ModuleName, plan.ResolvedVersion, plan.PreRelease);
         var versionText = ModulePathTokenFormatter.FormatVersionWithPreRelease(plan.ResolvedVersion, plan.PreRelease);
         var isPreRelease = !string.IsNullOrWhiteSpace(plan.PreRelease) && !publish.DoNotMarkAsPreRelease;
-        var coordinatedReleaseId = ResolveSynchronizedGitHubReleaseId(state, owner, repo, tag);
+        var coordinatedReleaseId = ResolveCoordinatedGitHubReleaseId(state, owner, repo, tag);
 
         if (coordinatedReleaseId.HasValue)
         {
@@ -478,20 +478,36 @@ public sealed partial class ModulePipelineRunner
             errorMessage: null);
     }
 
-    private static long? ResolveSynchronizedGitHubReleaseId(
+    private static long? ResolveCoordinatedGitHubReleaseId(
         ModulePipelineRunState state,
         string owner,
         string repository,
         string tag)
     {
-        var releaseIds = state.SynchronizedReleaseCheckpoint?.GitHubReleases
+        // Package results belong to this invocation even when fixed versions disable the persistent checkpoint.
+        var currentReleases = state.PackageBuildResultsBySegment.Values
+            .SelectMany(static result => result.Result.GitHub)
+            .Where(static release => release.Success && release.CreatedRelease)
+            .Select(static release => new SynchronizedGitHubReleaseCheckpoint
+            {
+                Owner = release.Owner,
+                Repository = release.Repository,
+                TagName = release.TagName ?? string.Empty,
+                ReleaseId = release.ReleaseId
+            });
+        var releaseIds = (state.SynchronizedReleaseCheckpoint?.GitHubReleases ?? Array.Empty<SynchronizedGitHubReleaseCheckpoint>())
+            .Concat(currentReleases)
             .Where(release =>
                 string.Equals(release.Owner, owner, StringComparison.OrdinalIgnoreCase) &&
                 string.Equals(release.Repository, repository, StringComparison.OrdinalIgnoreCase) &&
-                string.Equals(release.TagName, tag, StringComparison.OrdinalIgnoreCase))
+                string.Equals(release.TagName, tag, StringComparison.Ordinal))
             .Select(static release => release.ReleaseId)
             .Distinct()
-            .ToArray() ?? Array.Empty<long>();
+            .ToArray();
+
+        if (releaseIds.Any(static id => id <= 0))
+            throw new InvalidOperationException(
+                $"Coordinated release {owner}/{repository} tag '{tag}' returned an invalid GitHub release identifier. Inspect the incomplete release before retrying.");
 
         return releaseIds.Length switch
         {
