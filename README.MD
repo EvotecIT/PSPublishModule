@@ -88,6 +88,9 @@ For example, a repository that builds with .NET 10 and runs .NET 8 tests can use
 
 ### NuGet Packages and Tools
 
+For local USB signing followed by GitHub OIDC publication, see
+[NuGet trusted publishing](Docs/PowerForge.NuGetTrustedPublishing.md).
+
 [![PowerForge](https://img.shields.io/nuget/v/PowerForge?label=PowerForge)](https://www.nuget.org/packages/PowerForge)
 [![PowerForge downloads](https://img.shields.io/nuget/dt/PowerForge?label=PowerForge%20downloads)](https://www.nuget.org/packages/PowerForge)
 [![PowerForge.PowerShell](https://img.shields.io/nuget/v/PowerForge.PowerShell?label=PowerForge.PowerShell)](https://www.nuget.org/packages/PowerForge.PowerShell)
