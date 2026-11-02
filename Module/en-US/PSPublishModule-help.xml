@@ -30413,6 +30413,18 @@ the local date (yyyy.MM.dd) unless a primary project version is available.</maml
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="none">
+          <maml:name>StageNuget</maml:name>
+          <maml:description>
+            <maml:para>Build and sign packages, verify them, and upload them with a manifest to a draft GitHub release without publishing to NuGet.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="none">
           <maml:name>UpdateVersions</maml:name>
           <maml:description>
             <maml:para>Run version update step.</maml:para>
@@ -30536,6 +30548,18 @@ the local date (yyyy.MM.dd) unless a primary project version is available.</maml
         <dev:defaultValue>None</dev:defaultValue>
       </command:parameter>
       <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="none">
+        <maml:name>StageNuget</maml:name>
+        <maml:description>
+          <maml:para>Build and sign packages, verify them, and upload them with a manifest to a draft GitHub release without publishing to NuGet.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="none">
         <maml:name>UpdateVersions</maml:name>
         <maml:description>
           <maml:para>Run version update step.</maml:para>
@@ -30569,10 +30593,10 @@ the local date (yyyy.MM.dd) unless a primary project version is available.</maml
     </maml:alertSet>
     <command:examples>
       <command:example>
-        <maml:title>EXAMPLE 1</maml:title>
-        <dev:code>Invoke-ProjectBuild -ConfigPath 'C:\Path'</dev:code>
+        <maml:title>Stage signed NuGet packages for GitHub trusted publishing</maml:title>
+        <dev:code>Invoke-ProjectBuild -ConfigPath './Build/project.build.json' -StageNuget</dev:code>
         <dev:remarks>
-          <maml:para></maml:para>
+          <maml:para>Uses the configured local signing certificate and uploads verified packages and their manifest to a new draft GitHub release without a NuGet key.</maml:para>
         </dev:remarks>
       </command:example>
     </command:examples>

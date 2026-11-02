@@ -138,6 +138,10 @@
       "type": "boolean",
       "description": "When true, creates portable .snupkg symbol packages and includes them in publish and staged release outputs."
     },
+    "StageNuget": {
+      "type": "boolean",
+      "description": "Sign and verify packages, then upload exact packages and a manifest to a new draft GitHub release. No NuGet key or NuGet push. Requires signing, Single release mode and Fail tag conflict policy."
+    },
     "PublishNuget": {
       "type": "boolean"
     },

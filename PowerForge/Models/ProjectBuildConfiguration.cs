@@ -32,6 +32,9 @@ internal sealed class ProjectBuildConfiguration
     public string? PackStrategy { get; set; }
     public bool? IncludeSymbols { get; set; }
     public bool? PublishNuget { get; set; }
+
+    /// <summary>Build and sign NuGet packages, verify them, and upload packages and a manifest to a draft GitHub release without a NuGet key.</summary>
+    public bool? StageNuget { get; set; }
     public bool? PublishGitHub { get; set; }
     public bool? CreateReleaseZip { get; set; }
     public bool UseGitHubPackages { get; set; }

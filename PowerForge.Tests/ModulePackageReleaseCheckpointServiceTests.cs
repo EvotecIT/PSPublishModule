@@ -2,6 +2,34 @@ namespace PowerForge.Tests;
 
 public sealed class ModulePackageReleaseCheckpointServiceTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Module_lane_discovery_rejects_staging_before_restoring_ordinary_publication_flags(bool inline)
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "project.build.json"),
+                """{"StageNuget":true,"PublishNuget":true,"PublishApiKeyFilePath":"missing-key.txt"}""");
+            var segment = inline
+                ? """{"Type":"PackageBuild","Configuration":{"PublishNuget":true,"Options":{"StageNuget":true}}}"""
+                : """{"Type":"ProjectBuild","Configuration":{"ConfigPath":"project.build.json"}}""";
+            var path = Path.Combine(root, "powerforge.json");
+            File.WriteAllText(path, """{"Build":{"Name":"Example","SourcePath":"."},"Segments":[""" + segment + "]}");
+            var error = Assert.Throws<InvalidOperationException>(() =>
+            {
+                var context = new ModulePipelineConfigurationService().Load(path);
+                ModulePackageReleaseCheckpointService.ResolveLanes(context);
+            });
+
+            Assert.Contains("StageNuget", error.Message);
+            Assert.Contains("directly", error.Message);
+        }
+        finally { Directory.Delete(root, recursive: true); }
+    }
+
     [Fact]
     public void ResolveLanes_treats_script_backed_package_ownership_as_legacy_module_work()
     {

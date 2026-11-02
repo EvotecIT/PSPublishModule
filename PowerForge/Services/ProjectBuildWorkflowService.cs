@@ -105,7 +105,7 @@ internal sealed class ProjectBuildWorkflowService
         var preflightError = _support.ValidatePreflight(
             preparation.PublishNuget,
             preparation.PublishGitHub,
-            preparation.CreateReleaseZip,
+            preparation.CreateReleaseZip || preparation.StageNuget,
             preparation.PublishApiKey,
             preparation.GitHubToken,
             config.GitHubUsername,
@@ -176,6 +176,18 @@ internal sealed class ProjectBuildWorkflowService
             return new ProjectBuildWorkflowResult { Result = result };
         }
 
+        string[]? stagedAssets = null;
+        using var stagingSnapshot = preparation.StageNuget
+            ? ModulePackagePublicationSnapshot.Create(ModulePackageReleaseCheckpointService.CreatePublicationRelease(
+                release, releaseAssets: null, requireStagedAssets: false))
+            : null;
+        if (preparation.StageNuget)
+        {
+            var manifest = new NuGetTrustedPublishingService(_logger).StageAsync(stagingSnapshot!.Release, cancellationToken).GetAwaiter().GetResult();
+            stagedAssets = stagingSnapshot.Release.Projects.Where(p => p.IsPackable).SelectMany(p => p.Packages.Concat(p.SymbolPackages))
+                .Concat(new[] { manifest }).Distinct(StringComparer.Ordinal).ToArray();
+        }
+
         gitHubToken ??= preparation.GitHubToken;
         if (string.IsNullOrWhiteSpace(gitHubToken))
         {
@@ -193,6 +205,7 @@ internal sealed class ProjectBuildWorkflowService
 
         var gitHubWatch = Stopwatch.StartNew();
         progress?.PhaseStarted(ProjectBuildProgressPhase.GitHubPublish, 1, "Publishing GitHub release");
+        stagingSnapshot?.ValidateUnchanged();
         remotePublishAttempted?.Invoke();
         var publishSummary = _publishGitHub(new ProjectBuildGitHubPublishRequest
         {
@@ -203,13 +216,15 @@ internal sealed class ProjectBuildWorkflowService
             ReleaseMode = config.GitHubReleaseMode ?? "Single",
             IncludeProjectNameInTag = config.GitHubIncludeProjectNameInTag,
             IsPreRelease = config.GitHubIsPreRelease,
+            IsDraft = preparation.StageNuget,
+            StagedNuGetAssets = stagedAssets,
             GenerateReleaseNotes = config.GitHubGenerateReleaseNotes,
             PublishFailFast = spec.PublishFailFast,
             ReleaseName = config.GitHubReleaseName,
             TagName = config.GitHubTagName,
             TagTemplate = config.GitHubTagTemplate,
             PrimaryProject = config.GitHubPrimaryProject,
-            TagConflictPolicy = config.GitHubTagConflictPolicy,
+            TagConflictPolicy = preparation.StageNuget ? "Fail" : config.GitHubTagConflictPolicy,
             Progress = progress as IProjectBuildProgressReporterV2
         });
         gitHubWatch.Stop();

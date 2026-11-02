@@ -5,6 +5,30 @@ namespace PowerForge.Tests;
 public sealed class ManagedModuleInstallContextTests
 {
     [Fact]
+    public async Task BufferedPackagePrefetch_IsNotRestartedAfterAnotherBranchTakesIt()
+    {
+        using var context = new ManagedModuleInstallContext();
+        var branch = context.CreateBranch();
+        using var package = new ManagedModuleBufferedPackage(new ManagedModuleDownloadResult(), new MemoryStream());
+        var download = new TaskCompletionSource<ManagedModuleBufferedPackage>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var downloads = 0;
+        Task<ManagedModuleBufferedPackage> Download(CancellationToken cancellationToken)
+        {
+            downloads++;
+            return download.Task;
+        }
+
+        context.StartBufferedPackagePrefetch("shared", Download, CancellationToken.None);
+        var taken = branch.TryTakeBufferedPackagePrefetchAsync("shared", CancellationToken.None);
+        context.StartBufferedPackagePrefetch("shared", Download, CancellationToken.None);
+        download.SetResult(package);
+
+        Assert.Same(package, await taken);
+        Assert.Equal(1, downloads);
+        Assert.Null(await context.TryTakeBufferedPackagePrefetchAsync("shared", CancellationToken.None));
+    }
+
+    [Fact]
     public void InstalledVersionCache_IsSharedAcrossBranchesAndKeepsVersionOrder()
     {
         using var moduleRoot = new TemporaryDirectory();

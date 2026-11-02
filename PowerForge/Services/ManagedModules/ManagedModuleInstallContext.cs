@@ -14,7 +14,7 @@ internal sealed class ManagedModuleInstallContext : IDisposable
     private readonly ConcurrentDictionary<string, string[]> _installedVersions;
     private readonly ConcurrentDictionary<string, Lazy<Task<ManagedModuleDependencyVersionSelection>>> _dependencyVersionSelections;
 #if !NET472
-    private readonly ConcurrentDictionary<string, Lazy<Task<ManagedModuleBufferedPackage>>> _bufferedPackagePrefetches;
+    private readonly ConcurrentDictionary<string, Lazy<Task<ManagedModuleBufferedPackage>>?> _bufferedPackagePrefetches;
     private readonly SemaphoreSlim _bufferedPackagePrefetchGate;
     private readonly CancellationTokenSource _bufferedPackagePrefetchCancellation;
     private bool _disposed;
@@ -31,7 +31,7 @@ internal sealed class ManagedModuleInstallContext : IDisposable
             new ConcurrentDictionary<string, Lazy<Task<ManagedModuleDependencyVersionSelection>>>(StringComparer.OrdinalIgnoreCase)
 #if !NET472
             ,
-            new ConcurrentDictionary<string, Lazy<Task<ManagedModuleBufferedPackage>>>(StringComparer.OrdinalIgnoreCase),
+            new ConcurrentDictionary<string, Lazy<Task<ManagedModuleBufferedPackage>>?>(StringComparer.OrdinalIgnoreCase),
             new SemaphoreSlim(8, 8),
             new CancellationTokenSource()
 #endif
@@ -49,7 +49,7 @@ internal sealed class ManagedModuleInstallContext : IDisposable
         ConcurrentDictionary<string, Lazy<Task<ManagedModuleDependencyVersionSelection>>> dependencyVersionSelections
 #if !NET472
         ,
-        ConcurrentDictionary<string, Lazy<Task<ManagedModuleBufferedPackage>>> bufferedPackagePrefetches,
+        ConcurrentDictionary<string, Lazy<Task<ManagedModuleBufferedPackage>>?> bufferedPackagePrefetches,
         SemaphoreSlim bufferedPackagePrefetchGate,
         CancellationTokenSource bufferedPackagePrefetchCancellation
 #endif
@@ -271,7 +271,7 @@ internal sealed class ManagedModuleInstallContext : IDisposable
         if (!ReferenceEquals(lazy, newLazy))
             return;
 
-        _ = CompleteBufferedPackagePrefetchAsync(key, lazy);
+        _ = CompleteBufferedPackagePrefetchAsync(key, newLazy);
     }
 
     public async Task<ManagedModuleBufferedPackage?> TryTakeBufferedPackagePrefetchAsync(
@@ -281,7 +281,9 @@ internal sealed class ManagedModuleInstallContext : IDisposable
         if (string.IsNullOrWhiteSpace(key))
             return null;
 
-        if (!_bufferedPackagePrefetches.TryRemove(key, out var lazy))
+        // Keep a consumed marker so a later sibling cannot restart this download.
+        if (!_bufferedPackagePrefetches.TryGetValue(key, out var lazy) || lazy is null ||
+            !_bufferedPackagePrefetches.TryUpdate(key, null, lazy))
             return null;
 
         try
@@ -313,7 +315,7 @@ internal sealed class ManagedModuleInstallContext : IDisposable
         _bufferedPackagePrefetchCancellation.Cancel();
         foreach (var item in _bufferedPackagePrefetches.ToArray())
         {
-            if (!_bufferedPackagePrefetches.TryRemove(item.Key, out var lazy) || !lazy.IsValueCreated)
+            if (!_bufferedPackagePrefetches.TryRemove(item.Key, out var lazy) || lazy is null || !lazy.IsValueCreated)
                 continue;
 
             DisposeBufferedPackageWhenComplete(lazy.Value);
@@ -336,8 +338,8 @@ internal sealed class ManagedModuleInstallContext : IDisposable
         }
         catch
         {
-            ((ICollection<KeyValuePair<string, Lazy<Task<ManagedModuleBufferedPackage>>>>)_bufferedPackagePrefetches)
-                .Remove(new KeyValuePair<string, Lazy<Task<ManagedModuleBufferedPackage>>>(key, lazy));
+            ((ICollection<KeyValuePair<string, Lazy<Task<ManagedModuleBufferedPackage>>?>>)_bufferedPackagePrefetches)
+                .Remove(new KeyValuePair<string, Lazy<Task<ManagedModuleBufferedPackage>>?>(key, lazy));
         }
     }
 
