@@ -10,35 +10,41 @@ namespace PowerForge.Tests;
 public sealed class WebApiDocsGeneratorDependencyIsolationTests
 {
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public void Generate_UsesNewerDependencyFromAdditionalDocumentedAssembly(bool useDependencyManifest)
+    [InlineData("Scriban", false)]
+    [InlineData("Scriban", true)]
+    [InlineData("System.Text.Json", false)]
+    [InlineData("System.Text.Json", true)]
+    public void Generate_UsesNewerDependencyFromAdditionalDocumentedAssembly(string dependencyName, bool useDependencyManifest)
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-apidocs-dependency-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
         try
         {
-            var hostDependency = typeof(Scriban.Template).Assembly;
+            var hostDependency = dependencyName == "Scriban" ? typeof(Scriban.Template).Assembly : typeof(JsonDocument).Assembly;
             var hostName = hostDependency.GetName();
             Assert.Same(AssemblyLoadContext.Default, AssemblyLoadContext.GetLoadContext(hostDependency));
             var version = new Version(hostName.Version!.Major + 1, 0, 0, 0);
             var primaryDirectory = Directory.CreateDirectory(Path.Combine(root, "primary")).FullName;
             var additionalDirectory = Directory.CreateDirectory(Path.Combine(root, "additional")).FullName;
-            File.Copy(hostDependency.Location, Path.Combine(primaryDirectory, hostName.Name + ".dll"));
+            var olderDependency = Compile(primaryDirectory, dependencyName, $$"""
+                [assembly: System.Reflection.AssemblyVersion("{{hostName.Version}}")]
+                namespace DependencyFixture { public class BasePayload { } }
+                """);
+            var packageName = dependencyName.ToLowerInvariant();
             var dependencyDirectory = useDependencyManifest
-                ? Directory.CreateDirectory(Path.Combine(root, ".nuget", "packages", "scriban", version.ToString(), "lib", "net8.0")).FullName
+                ? Directory.CreateDirectory(Path.Combine(root, ".nuget", "packages", packageName, version.ToString(), "lib", "net8.0")).FullName
                 : additionalDirectory;
             var dependency = Compile(dependencyDirectory, hostName.Name!, $$"""
                 [assembly: System.Reflection.AssemblyVersion("{{version}}")]
-                namespace Scriban { public class NewerPayload { } }
+                namespace DependencyFixture { public class BasePayload { } public class NewerPayload : BasePayload { } }
                 """);
-            var primary = Compile(primaryDirectory, "PrimaryApi", "namespace Fixture { public class Primary { } }");
+            var primary = Compile(primaryDirectory, "PrimaryApi", "namespace Fixture { public class Primary : DependencyFixture.BasePayload { } }", olderDependency);
             var additional = Compile(additionalDirectory, "AdditionalApi", """
                 namespace Fixture
                 {
-                    public class Adapter : Scriban.NewerPayload
+                    public class Adapter : DependencyFixture.NewerPayload
                     {
-                        public Scriban.NewerPayload Read(Scriban.NewerPayload payload) => payload;
+                        public DependencyFixture.NewerPayload Read(DependencyFixture.NewerPayload payload) => payload;
                     }
                 }
                 """, dependency);
@@ -50,15 +56,15 @@ public sealed class WebApiDocsGeneratorDependencyIsolationTests
                       "compilationOptions": {},
                       "targets": { ".NETCoreApp,Version=v8.0": {
                         "AdditionalApi/1.0.0": {
-                          "dependencies": { "Scriban": "{{version}}" },
+                          "dependencies": { "{{dependencyName}}": "{{version}}" },
                           "runtime": { "AdditionalApi.dll": {} }
                         },
-                        "Scriban/{{version}}": { "runtime": { "lib/net8.0/Scriban.dll": {} } }
+                        "{{dependencyName}}/{{version}}": { "runtime": { "lib/net8.0/{{dependencyName}}.dll": {} } }
                       } },
                       "libraries": {
                         "AdditionalApi/1.0.0": { "type": "project", "serviceable": false, "sha512": "" },
-                        "Scriban/{{version}}": {
-                        "type": "package", "serviceable": true, "sha512": "", "path": "scriban/{{version}}", "hashPath": "scriban.{{version}}.nupkg.sha512"
+                        "{{dependencyName}}/{{version}}": {
+                        "type": "package", "serviceable": true, "sha512": "", "path": "{{packageName}}/{{version}}", "hashPath": "{{packageName}}.{{version}}.nupkg.sha512"
                       } }
                     }
                     """);
@@ -67,7 +73,7 @@ public sealed class WebApiDocsGeneratorDependencyIsolationTests
             File.WriteAllText(xml, """
                 <doc><assembly><name>AdditionalApi</name></assembly><members>
                   <member name="T:Fixture.Adapter"><summary>Reads newer payloads.</summary></member>
-                  <member name="M:Fixture.Adapter.Read(Scriban.NewerPayload)"><summary>Reads a payload.</summary></member>
+                  <member name="M:Fixture.Adapter.Read(DependencyFixture.NewerPayload)"><summary>Reads a payload.</summary></member>
                 </members></doc>
                 """);
             var output = Path.Combine(root, "api");

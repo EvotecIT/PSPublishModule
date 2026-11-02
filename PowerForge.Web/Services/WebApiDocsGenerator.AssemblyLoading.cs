@@ -7,15 +7,17 @@ namespace PowerForge.Web;
 
 public static partial class WebApiDocsGenerator
 {
-    private static readonly Lazy<HashSet<string>> ApiDocsFrameworkAssemblyNames = new(GetApiDocsFrameworkAssemblyNames);
+    private static readonly Lazy<Dictionary<string, string>> ApiDocsFrameworkAssemblyPaths = new(GetApiDocsFrameworkAssemblyPaths);
 
     private static bool IsApiDocsFrameworkAssembly(Assembly assembly) =>
-        !assembly.IsDynamic && ApiDocsFrameworkAssemblyNames.Value.Contains(assembly.GetName().Name!);
+        assembly == typeof(object).Assembly ||
+        (!assembly.IsDynamic && ApiDocsFrameworkAssemblyPaths.Value.TryGetValue(assembly.GetName().Name!, out var path) &&
+         string.Equals(assembly.Location, path, StringComparison.OrdinalIgnoreCase));
 
     /// <summary>Uses the host's runtime-pack manifests; self-contained outputs also contain application DLLs.</summary>
-    private static HashSet<string> GetApiDocsFrameworkAssemblyNames()
+    private static Dictionary<string, string> GetApiDocsFrameworkAssemblyPaths()
     {
-        var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { typeof(object).Assembly.GetName().Name! };
+        var paths = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         var depsFiles = (AppContext.GetData("APP_CONTEXT_DEPS_FILES") as string ?? string.Empty)
             .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries);
         foreach (var depsFile in depsFiles.Where(File.Exists))
@@ -30,10 +32,13 @@ public static partial class WebApiDocsGenerator
                 if (!library.Value.TryGetProperty("runtime", out var assets)) continue;
                 foreach (var asset in assets.EnumerateObject())
                     if (asset.Name.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
-                        names.Add(Path.GetFileNameWithoutExtension(asset.Name));
+                    {
+                        var path = Path.Combine(Path.GetDirectoryName(depsFile)!, Path.GetFileName(asset.Name));
+                        if (File.Exists(path)) paths.TryAdd(Path.GetFileNameWithoutExtension(asset.Name), path);
+                    }
             }
         }
-        return names;
+        return paths;
     }
 
     private static Assembly? TryLoadAssembly(string[] assemblyPaths, List<string> warnings, out ApiDocsAssemblyLoadContext? context)
@@ -85,31 +90,43 @@ public static partial class WebApiDocsGenerator
         protected override Assembly? Load(AssemblyName assemblyName)
         {
             var assemblySimpleName = assemblyName.Name;
-            if (assemblySimpleName is not null && ApiDocsFrameworkAssemblyNames.Value.Contains(assemblySimpleName))
-                return Default.LoadFromAssemblyName(assemblyName);
+            if (assemblySimpleName == typeof(object).Assembly.GetName().Name)
+                return typeof(object).Assembly;
 
-            foreach (var resolver in _resolvers)
+            var paths = _resolvers.Select(resolver => resolver.ResolveAssemblyToPath(assemblyName))
+                .Concat(_assemblyDirectories.Select(directory => Path.Combine(directory, assemblySimpleName + ".dll")))
+                .Concat(_dependencyPaths.Select(map => assemblySimpleName is not null && map.TryGetValue(assemblySimpleName, out var path) ? path : null))
+                .OfType<string>().Distinct(StringComparer.OrdinalIgnoreCase);
+            var candidates = new List<(string Path, Version? Version)>();
+            foreach (var path in paths)
             {
-                var dependencyAssembly = TryLoadFromPath(resolver.ResolveAssemblyToPath(assemblyName), assemblyName);
-                if (dependencyAssembly is not null)
-                    return dependencyAssembly;
+                var candidateName = ReadCandidateName(path, assemblyName);
+                if (candidateName is not null) candidates.Add((path, candidateName.Version));
             }
 
-            foreach (var directory in _assemblyDirectories)
+            // One context can hold only one version per name. Select the newest compatible
+            // project candidate even when the first inspected assembly requests an older one.
+            foreach (var candidate in candidates.OrderByDescending(candidate => candidate.Version))
             {
-                var dependencyAssembly = TryLoadFromPath(Path.Combine(directory, assemblySimpleName + ".dll"), assemblyName);
-                if (dependencyAssembly is not null)
-                    return dependencyAssembly;
+                var dependency = TryLoadFromPath(candidate.Path);
+                if (dependency is not null) return dependency;
             }
 
-            foreach (var dependencyPaths in _dependencyPaths)
+            if (assemblySimpleName is not null && ApiDocsFrameworkAssemblyPaths.Value.TryGetValue(assemblySimpleName, out var runtimePath) &&
+                ReadCandidateName(runtimePath, assemblyName) is { } runtimeName)
             {
-                if (!string.IsNullOrWhiteSpace(assemblySimpleName) && dependencyPaths.TryGetValue(assemblySimpleName, out var mappedPath))
+                try
                 {
-                    var mappedAssembly = TryLoadFromPath(mappedPath, assemblyName);
-                    if (mappedAssembly is not null)
-                        return mappedAssembly;
+                    var shared = Default.LoadFromAssemblyName(runtimeName);
+                    if (IsApiDocsFrameworkAssembly(shared)) return shared;
                 }
+                catch (Exception ex) when (ex is FileNotFoundException or FileLoadException)
+                {
+                    // An older host package can also prevent a default-context bind.
+                }
+                // A host package can override a runtime-shipped library. Never borrow it.
+                var runtimeAssembly = TryLoadFromPath(runtimePath);
+                if (runtimeAssembly is not null) return runtimeAssembly;
             }
 
             // Returning null would silently fall back to the CLI's default context.
@@ -128,17 +145,28 @@ public static partial class WebApiDocsGenerator
             return IntPtr.Zero;
         }
 
-        private Assembly? TryLoadFromPath(string? candidatePath, AssemblyName requestedName)
+        private static AssemblyName? ReadCandidateName(string path, AssemblyName requestedName)
+        {
+            if (!File.Exists(path)) return null;
+            try
+            {
+                var candidateName = AssemblyName.GetAssemblyName(path);
+                return AssemblyName.ReferenceMatchesDefinition(requestedName, candidateName) &&
+                    (requestedName.Version is null || candidateName.Version >= requestedName.Version) ? candidateName : null;
+            }
+            catch (Exception ex) when (ex is FileNotFoundException or FileLoadException or BadImageFormatException)
+            {
+                return null;
+            }
+        }
+
+        private Assembly? TryLoadFromPath(string? candidatePath)
         {
             if (string.IsNullOrWhiteSpace(candidatePath) || !File.Exists(candidatePath))
                 return null;
 
             try
             {
-                var candidateName = AssemblyName.GetAssemblyName(candidatePath);
-                if (!AssemblyName.ReferenceMatchesDefinition(requestedName, candidateName) ||
-                    (requestedName.Version is not null && candidateName.Version < requestedName.Version))
-                    return null;
                 using var stream = new MemoryStream(File.ReadAllBytes(candidatePath), writable: false);
                 return LoadFromStream(stream);
             }

@@ -45,6 +45,9 @@ including package assets in the configured NuGet cache. Build the documented
 projects first and keep those outputs and packages available during generation.
 Application dependencies are isolated from the CLI's own versions; only the
 shared .NET runtime is reused from the host.
+The loader selects the newest compatible dependency across the supplied outputs
+before its first load. Project package copies take precedence even for libraries
+that also ship with .NET; runtime fallback uses the runtime-pack manifests.
 XML-only generation remains available, but reports a warning because XML member
 records do not encode accessibility. Treat that warning as a generation limit
 when publishing a reference from XML alone.
