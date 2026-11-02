@@ -39,6 +39,12 @@ equivalent library options are `XmlPaths` and `AssemblyPaths`; the existing
 `xml`/`assembly` or `XmlPath`/`AssemblyPath` inputs remain supported. Each XML
 file's `<assembly><name>` must match a supplied DLL. The generator combines the
 public types into one reference and rejects an XML/DLL mismatch.
+Each generation inspects the assemblies in a collectible load context. Dependencies
+resolve from all supplied assembly directories and their `.deps.json` files,
+including package assets in the configured NuGet cache. Build the documented
+projects first and keep those outputs and packages available during generation.
+Application dependencies are isolated from the CLI's own versions; only the
+shared .NET runtime is reused from the host.
 XML-only generation remains available, but reports a warning because XML member
 records do not encode accessibility. Treat that warning as a generation limit
 when publishing a reference from XML alone.

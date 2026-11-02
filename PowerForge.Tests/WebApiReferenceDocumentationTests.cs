@@ -1,6 +1,8 @@
 using System.Text.Json;
 using System.Reflection;
 using System.Reflection.Emit;
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
 using PowerForge.Web;
 using PowerForge.Web.Cli;
 
@@ -9,13 +11,13 @@ namespace PowerForge.Tests;
 public sealed class WebApiReferenceDocumentationTests
 {
     [Fact]
-    public void Generate_RecursivelyResolvesExplicitImportedTargetFromLoadedDependency()
+    public void Generate_RecursivelyResolvesExplicitImportedTargetFromDocumentedDependency()
     {
         WithRoot(root =>
         {
             var suffix = Guid.NewGuid().ToString("N");
             var namespaceName = "Imported.InheritDoc." + suffix;
-            var dependency = AssemblyBuilder.DefineDynamicAssembly(new AssemblyName("ImportedInheritDoc" + suffix), AssemblyBuilderAccess.Run);
+            var dependency = new PersistedAssemblyBuilder(new AssemblyName("ImportedInheritDoc" + suffix), typeof(object).Assembly);
             var module = dependency.DefineDynamicModule("ImportedInheritDoc" + suffix);
             var contract = module.DefineType(namespaceName + ".IContract", TypeAttributes.Public | TypeAttributes.Interface | TypeAttributes.Abstract);
             var contractMethod = contract.DefineMethod("Other", MethodAttributes.Public | MethodAttributes.Abstract | MethodAttributes.Virtual | MethodAttributes.NewSlot,
@@ -31,10 +33,10 @@ public sealed class WebApiReferenceDocumentationTests
             var targetId = "M:" + baseType.FullName + ".Other";
             var contractId = "M:" + contractType.FullName + ".Other";
 
-            var assembly = Path.Combine(root, "PowerForge.Tests.dll");
-            File.Copy(typeof(WebReferenceNamedDerived).Assembly.Location, assembly);
+            var assembly = WriteReferenceFixture(root);
             var dependencyName = "ImportedInheritDoc" + suffix;
-            File.WriteAllText(Path.Combine(root, dependencyName + ".dll"), "loaded from the test AppDomain");
+            var dependencyPath = Path.Combine(root, dependencyName + ".dll");
+            dependency.Save(dependencyPath);
             File.WriteAllText(Path.Combine(root, dependencyName + ".xml"), $"""
                 <doc><members>
                   <member name="{targetId}"><inheritdoc/></member>
@@ -43,7 +45,7 @@ public sealed class WebApiReferenceDocumentationTests
                 """);
             var xml = Path.Combine(root, "docs.xml");
             File.WriteAllText(xml, $"""
-                <doc><members>
+                <doc><assembly><name>PowerForge.Tests</name></assembly><members>
                   <member name="T:PowerForge.Tests.WebReferenceNamedDerived"><summary>Derived.</summary></member>
                   <member name="M:PowerForge.Tests.WebReferenceNamedDerived.Run"><inheritdoc cref="{targetId}"/></member>
                 </members></doc>
@@ -52,7 +54,7 @@ public sealed class WebApiReferenceDocumentationTests
 
             var result = WebApiDocsGenerator.Generate(new WebApiDocsOptions
             {
-                XmlPath = xml, AssemblyPath = assembly, OutputPath = output, Format = "json", IncludeUndocumentedTypes = false
+                XmlPath = xml, AssemblyPaths = new[] { assembly, dependencyPath }, OutputPath = output, Format = "json", IncludeUndocumentedTypes = false
             });
 
             Assert.Empty(result.Warnings);
@@ -67,8 +69,7 @@ public sealed class WebApiReferenceDocumentationTests
     {
         WithRoot(root =>
         {
-            var assembly = Path.Combine(root, "PowerForge.Tests.dll");
-            File.Copy(typeof(WebReferenceNamedDerived).Assembly.Location, assembly);
+            var assembly = WriteReferenceFixture(root);
             File.WriteAllText(Path.ChangeExtension(assembly, ".xml"), "<doc><members><member name=\"M:PowerForge.Tests.WebReferenceNamedBase.Other\"><summary>The explicitly selected contract.</summary></member></members></doc>");
             var xml = Path.Combine(root, "docs.xml");
             File.WriteAllText(xml, """
@@ -180,8 +181,7 @@ public sealed class WebApiReferenceDocumentationTests
     {
         WithRoot(root =>
         {
-            var assembly = Path.Combine(root, "PowerForge.Tests.dll");
-            File.Copy(typeof(WebInheritanceImplementation).Assembly.Location, assembly);
+            var assembly = WriteReferenceFixture(root);
             var inherited = explicitInput ? Path.Combine(root, "contracts.xml") : Path.ChangeExtension(assembly, ".xml");
             string Contracts(string summary) => "<doc><assembly><name>PowerForge.Tests</name></assembly><members><member name=\"T:PowerForge.Tests.WebInheritanceBase\"><summary>Base.</summary></member>" +
                 "<member name=\"M:PowerForge.Tests.WebInheritanceBase.Execute(System.String)\"><summary>" + summary + "</summary></member></members></doc>";
@@ -260,6 +260,34 @@ public sealed class WebApiReferenceDocumentationTests
             Assert.Contains("AfterRebuild", File.ReadAllText(output));
             Assert.DoesNotContain("BeforeRebuild", File.ReadAllText(output));
         });
+    }
+
+    private static string WriteReferenceFixture(string root)
+    {
+        var compilation = CSharpCompilation.Create("PowerForge.Tests", new[] { CSharpSyntaxTree.ParseText("""
+            namespace PowerForge.Tests
+            {
+                public class WebReferenceNamedBase
+                {
+                    public virtual void Run() { }
+                    public void Other() { }
+                }
+                public sealed class WebReferenceNamedDerived : WebReferenceNamedBase
+                {
+                    public override void Run() { }
+                }
+                public class WebInheritanceBase { public virtual void Execute(string input) { } }
+                public sealed class WebInheritanceImplementation : WebInheritanceBase
+                {
+                    public sealed override void Execute(string input) { }
+                }
+            }
+            """) }, new[] { MetadataReference.CreateFromFile(typeof(object).Assembly.Location) },
+            new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
+        var path = Path.Combine(root, "PowerForge.Tests.dll");
+        var emitted = compilation.Emit(path);
+        Assert.True(emitted.Success, string.Join(Environment.NewLine, emitted.Diagnostics));
+        return path;
     }
 
     private static void WithRoot(Action<string> action)

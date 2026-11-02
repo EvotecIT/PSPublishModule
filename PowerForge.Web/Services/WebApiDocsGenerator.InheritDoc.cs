@@ -103,7 +103,7 @@ public static partial class WebApiDocsGenerator
     {
         var loadContext = AssemblyLoadContext.GetLoadContext(sourceAssembly);
         var assemblies = (loadContext?.Assemblies ?? Array.Empty<Assembly>())
-            .Concat(AppDomain.CurrentDomain.GetAssemblies().Where(candidate => AssemblyLoadContext.GetLoadContext(candidate) == AssemblyLoadContext.Default))
+            .Concat(AssemblyLoadContext.Default.Assemblies.Where(IsApiDocsFrameworkAssembly))
             .Distinct()
             .OrderBy(candidate => candidate == sourceAssembly ? 0 : 1);
         const BindingFlags flags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static | BindingFlags.DeclaredOnly;

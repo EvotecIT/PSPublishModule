@@ -462,7 +462,7 @@ public static partial class WebApiDocsGenerator
                     $"Configured API documentation assembly was not found: {requestedAssemblyPath}",
                     requestedAssemblyPath);
 
-            assembly = TryLoadAssembly(requestedAssemblyPath, warnings, out assemblyContext);
+            assembly = TryLoadAssembly(assemblyPaths, warnings, out assemblyContext);
             if (assembly is null)
                 throw new InvalidOperationException(
                     $"Configured API documentation assembly could not be inspected: {requestedAssemblyPath}");
