@@ -1041,8 +1041,10 @@ public class WebPipelineRunnerApiDocsPreflightTests
         }
     }
 
-    [Fact]
-    public void RunPipeline_ProjectApiDocs_PreservesAbsoluteSuiteLandingUrl()
+    [Theory]
+    [InlineData("https://docs.example.com/projects/", true)]
+    [InlineData("file:///tmp/site/projects/", false)]
+    public void RunPipeline_ProjectApiDocs_ValidatesAbsoluteSuiteLandingUrl(string landingUrl, bool valid)
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-pipeline-project-apidocs-suite-absolute-landing-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
@@ -1080,7 +1082,7 @@ public class WebPipelineRunnerApiDocsPreflightTests
 
             var pipelinePath = Path.Combine(root, "pipeline.json");
             File.WriteAllText(pipelinePath,
-                """
+                $$"""
                 {
                   "steps": [
                     {
@@ -1091,13 +1093,20 @@ public class WebPipelineRunnerApiDocsPreflightTests
                       "template": "docs",
                       "format": "json",
                       "suiteTitle": "Project APIs",
-                      "suiteLandingUrl": "https://docs.example.com/projects/"
+                      "suiteLandingUrl": "{{landingUrl}}"
                     }
                   ]
                 }
                 """);
 
             var result = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
+
+            if (!valid)
+            {
+                Assert.False(result.Success);
+                Assert.Contains("not a file URI", result.Steps[0].Message, StringComparison.Ordinal);
+                return;
+            }
 
             Assert.True(result.Success);
             Assert.Single(result.Steps);

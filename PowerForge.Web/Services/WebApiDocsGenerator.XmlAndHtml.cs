@@ -60,7 +60,7 @@ public static partial class WebApiDocsGenerator
         return results;
     }
 
-    /// <summary>Resolves against the inspected assembly's context before shared host types.
+    /// <summary>Resolves against the inspected assembly's context and the shared runtime.
     /// Other inspection contexts may be retiring and must never supply dependency identities.</summary>
     private static Type? ResolveType(Assembly assembly, string fullName)
     {
@@ -78,14 +78,14 @@ public static partial class WebApiDocsGenerator
 
         if (context != AssemblyLoadContext.Default)
         {
-            foreach (var loaded in AssemblyLoadContext.Default.Assemblies)
+            foreach (var loaded in AssemblyLoadContext.Default.Assemblies.Where(IsApiDocsFrameworkAssembly))
             {
                 type = FindInAssembly(loaded);
                 if (type is not null) return type;
             }
         }
 
-        return Type.GetType(fullName);
+        return null;
 
         Type? FindInAssembly(Assembly source)
         {

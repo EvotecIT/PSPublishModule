@@ -2642,7 +2642,10 @@ internal static partial class WebPipelineRunner
     {
         if (!string.IsNullOrWhiteSpace(explicitLandingUrl))
         {
-            if (Uri.TryCreate(explicitLandingUrl, UriKind.Absolute, out var absoluteLandingUrl))
+            if (explicitLandingUrl.StartsWith("file:", StringComparison.OrdinalIgnoreCase))
+                throw new ArgumentException("suiteLandingUrl must be a web URL or a site-relative route, not a file URI.");
+
+            if (Uri.TryCreate(explicitLandingUrl, UriKind.Absolute, out var absoluteLandingUrl) && !absoluteLandingUrl.IsFile)
             {
                 var builder = new UriBuilder(absoluteLandingUrl)
                 {
@@ -2656,7 +2659,7 @@ internal static partial class WebPipelineRunner
 
         if (!string.IsNullOrWhiteSpace(suiteHomeUrl))
         {
-            if (Uri.TryCreate(suiteHomeUrl, UriKind.Absolute, out var absolute))
+            if (Uri.TryCreate(suiteHomeUrl, UriKind.Absolute, out var absolute) && !absolute.IsFile)
             {
                 var builder = new UriBuilder(absolute);
                 builder.Path = EnsureProjectSuiteLandingRoute(builder.Path);

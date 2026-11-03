@@ -15,8 +15,8 @@ public static partial class WebApiDocsGenerator
 
         return paths
             .Select(Path.GetFullPath)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .OrderBy(static path => path, StringComparer.OrdinalIgnoreCase)
+            .Distinct(ApiDocsPathComparer)
+            .OrderBy(static path => path, ApiDocsPathComparer)
             .ToArray();
     }
 
@@ -29,7 +29,7 @@ public static partial class WebApiDocsGenerator
             paths.AddRange(options.AssemblyPaths.Where(static path => !string.IsNullOrWhiteSpace(path)));
 
         return paths.Select(Path.GetFullPath)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Distinct(ApiDocsPathComparer)
             .ToArray();
     }
 
