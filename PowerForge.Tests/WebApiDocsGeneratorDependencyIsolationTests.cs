@@ -104,8 +104,10 @@ public sealed class WebApiDocsGeneratorDependencyIsolationTests
         }
     }
 
-    [Fact]
-    public void Generate_ReportsMalformedManifestForAdditionalAssembly()
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void Generate_ReportsAdditionalAssemblyErrorsBeforeInspecting(bool assemblyExists)
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "pf-apidocs-manifest-" + Guid.NewGuid().ToString("N"))).FullName;
         try
@@ -114,17 +116,26 @@ public sealed class WebApiDocsGeneratorDependencyIsolationTests
             var additional = Compile(root, "AdditionalApi", "public class Additional { }");
             var manifest = Path.ChangeExtension(additional, ".deps.json");
             File.WriteAllText(manifest, "{ malformed");
+            if (!assemblyExists) File.Delete(additional);
             var xml = Path.Combine(root, "docs.xml");
             File.WriteAllText(xml, "<doc><members/></doc>");
 
-            var error = Assert.Throws<InvalidOperationException>(() => WebApiDocsGenerator.Generate(new WebApiDocsOptions
+            var error = Record.Exception(() => WebApiDocsGenerator.Generate(new WebApiDocsOptions
             {
                 AssemblyPaths = new[] { primary, additional }, XmlPath = xml,
                 OutputPath = Path.Combine(root, "api"), Format = "json"
             }));
 
-            Assert.Contains(manifest, error.Message, StringComparison.Ordinal);
-            Assert.Contains("could not be parsed", error.Message, StringComparison.Ordinal);
+            if (assemblyExists)
+            {
+                Assert.IsType<InvalidOperationException>(error);
+                Assert.Contains(manifest, error.Message, StringComparison.Ordinal);
+                Assert.Contains("could not be parsed", error.Message, StringComparison.Ordinal);
+            }
+            else
+            {
+                Assert.Equal(additional, Assert.IsType<FileNotFoundException>(error).FileName);
+            }
         }
         finally
         {

@@ -18,8 +18,9 @@ public static partial class WebApiDocsGenerator
     private static Dictionary<string, string> GetApiDocsFrameworkAssemblyPaths()
     {
         var paths = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        // The runtime uses semicolons on every platform, including Unix.
         var depsFiles = (AppContext.GetData("APP_CONTEXT_DEPS_FILES") as string ?? string.Empty)
-            .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries);
+            .Split(';', StringSplitOptions.RemoveEmptyEntries);
         foreach (var depsFile in depsFiles.Where(File.Exists))
         {
             using var document = JsonDocument.Parse(File.ReadAllText(depsFile));
@@ -333,7 +334,15 @@ public static partial class WebApiDocsGenerator
 
             var home = Environment.GetEnvironmentVariable("HOME");
             if (!string.IsNullOrWhiteSpace(home))
+            {
+                AddCandidate(GetConfiguredPackageRoot(Path.Combine(home, ".config", "NuGet", "NuGet.Config")));
+                AddCandidate(GetConfiguredPackageRoot(Path.Combine(home, ".nuget", "NuGet", "NuGet.Config")));
                 AddCandidate(Path.Combine(home, ".nuget", "packages"));
+            }
+
+            var appData = Environment.GetEnvironmentVariable("APPDATA");
+            if (!string.IsNullOrWhiteSpace(appData))
+                AddCandidate(GetConfiguredPackageRoot(Path.Combine(appData, "NuGet", "NuGet.Config")));
 
             var userProfile = Environment.GetEnvironmentVariable("USERPROFILE");
             if (!string.IsNullOrWhiteSpace(userProfile))
@@ -368,13 +377,11 @@ public static partial class WebApiDocsGenerator
 
         private static IEnumerable<string> EnumerateNuGetConfigPaths(string directory)
         {
-            var canonical = Path.Combine(directory, "NuGet.config");
-            if (File.Exists(canonical))
-                yield return canonical;
-
-            var lowerCase = Path.Combine(directory, "nuget.config");
-            if (!string.Equals(lowerCase, canonical, StringComparison.OrdinalIgnoreCase) && File.Exists(lowerCase))
-                yield return lowerCase;
+            foreach (var name in new[] { "NuGet.Config", "NuGet.config", "nuget.config" })
+            {
+                var path = Path.Combine(directory, name);
+                if (File.Exists(path)) yield return path;
+            }
         }
 
         private static string? GetConfiguredPackageRoot(string configPath)

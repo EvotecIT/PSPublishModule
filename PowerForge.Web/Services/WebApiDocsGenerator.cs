@@ -457,10 +457,10 @@ public static partial class WebApiDocsGenerator
         if (assemblyPaths.Length > 0)
         {
             var requestedAssemblyPath = assemblyPaths[0];
-            if (!File.Exists(requestedAssemblyPath))
-                throw new FileNotFoundException(
-                    $"Configured API documentation assembly was not found: {requestedAssemblyPath}",
-                    requestedAssemblyPath);
+            foreach (var path in assemblyPaths)
+                if (!File.Exists(path))
+                    throw new FileNotFoundException(
+                        $"Configured API documentation assembly was not found: {path}", path);
 
             assembly = TryLoadAssembly(assemblyPaths, warnings, out assemblyContext);
             if (assembly is null)
@@ -476,10 +476,6 @@ public static partial class WebApiDocsGenerator
         {
             foreach (var additionalPath in assemblyPaths.Skip(1))
             {
-                if (!File.Exists(additionalPath))
-                    throw new FileNotFoundException(
-                        $"Configured API documentation assembly was not found: {additionalPath}",
-                        additionalPath);
                 using var additionalStream = new MemoryStream(File.ReadAllBytes(additionalPath), writable: false);
                 var additional = assemblyContext.LoadFromStream(additionalStream);
                 if (!assembliesByName.TryAdd(additional.GetName().Name!, additional))

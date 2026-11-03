@@ -101,33 +101,50 @@ public sealed class WebApiDocsGeneratorAssemblyLoadTests
         }
     }
 
-    [Fact]
-    public void GetNuGetPackageRootCandidates_UsesNuGetConfigRelativeGlobalPackagesFolder()
+    [Theory]
+    [InlineData("NuGet.config", false)]
+    [InlineData("nuget.config", false)]
+    [InlineData("NuGet.Config", true)]
+    public void GetNuGetPackageRootCandidates_UsesNuGetConfigRelativeGlobalPackagesFolder(string configName, bool userConfiguration)
     {
         var tempRoot = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "pf-web-apidocs-nuget-config-" + Guid.NewGuid().ToString("N"))).FullName;
         var assemblyDirectory = Directory.CreateDirectory(Path.Combine(tempRoot, "Website", "..", "TestimoX", "bin", "Release", "net8.0-windows")).FullName;
-        var configuredPackages = Directory.CreateDirectory(Path.Combine(tempRoot, ".nuget", "packages")).FullName;
+        var configuredPackages = Directory.CreateDirectory(Path.Combine(tempRoot, "configured-packages")).FullName;
         var assemblyPath = Path.Combine(assemblyDirectory, "TestimoX.dll");
-        var configPath = Path.Combine(tempRoot, "NuGet.config");
+        var configDirectory = userConfiguration
+            ? Directory.CreateDirectory(OperatingSystem.IsWindows()
+                ? Path.Combine(tempRoot, "user-config", "NuGet")
+                : Path.Combine(tempRoot, "home", ".config", "NuGet")).FullName
+            : tempRoot;
+        var configPath = Path.Combine(configDirectory, configName);
+        var originalAppData = Environment.GetEnvironmentVariable("APPDATA");
+        var originalHome = Environment.GetEnvironmentVariable("HOME");
         File.WriteAllText(assemblyPath, string.Empty);
         File.WriteAllText(configPath,
-            """
+            $"""
             <?xml version="1.0" encoding="utf-8"?>
             <configuration>
               <config>
-                <add key="globalPackagesFolder" value=".nuget/packages" />
+                <add key="globalPackagesFolder" value="{Path.GetRelativePath(configDirectory, configuredPackages)}" />
               </config>
             </configuration>
             """);
 
         try
         {
+            if (userConfiguration)
+            {
+                Environment.SetEnvironmentVariable("APPDATA", Path.Combine(tempRoot, "user-config"));
+                Environment.SetEnvironmentVariable("HOME", Path.Combine(tempRoot, "home"));
+            }
             var candidates = WebApiDocsGenerator.GetApiDocsNuGetPackageRootCandidates(assemblyPath);
 
             Assert.Contains(Path.GetFullPath(configuredPackages), candidates, StringComparer.OrdinalIgnoreCase);
         }
         finally
         {
+            Environment.SetEnvironmentVariable("APPDATA", originalAppData);
+            Environment.SetEnvironmentVariable("HOME", originalHome);
             TryDeleteDirectory(tempRoot);
         }
     }
