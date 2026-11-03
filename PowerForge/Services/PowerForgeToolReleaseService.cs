@@ -12,6 +12,7 @@ internal sealed partial class PowerForgeToolReleaseService
 {
     private readonly ILogger _logger;
     private readonly Func<ProcessStartInfo, CancellationToken, ProcessExecutionResult> _runProcess;
+    private readonly DotNetPublishPipelineRunner _signingRunner;
 
     /// <summary>
     /// Creates a new tool release service.
@@ -30,10 +31,12 @@ internal sealed partial class PowerForgeToolReleaseService
 
     internal PowerForgeToolReleaseService(
         ILogger logger,
-        Func<ProcessStartInfo, CancellationToken, ProcessExecutionResult> runProcess)
+        Func<ProcessStartInfo, CancellationToken, ProcessExecutionResult> runProcess,
+        DotNetPublishPipelineRunner? signingRunner = null)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _runProcess = runProcess ?? throw new ArgumentNullException(nameof(runProcess));
+        _signingRunner = signingRunner ?? new DotNetPublishPipelineRunner(logger);
     }
 
     /// <summary>
@@ -160,6 +163,12 @@ internal sealed partial class PowerForgeToolReleaseService
                 }
             }
 
+            if (!string.IsNullOrWhiteSpace(request?.SignProfile))
+                throw new InvalidOperationException("Named signing profiles require Tools.DotNetPublish or Tools.DotNetPublishConfigPath; simple tool targets use Sign directly.");
+            var sign = request is null
+                ? DotNetPublishSigningProfileResolver.CloneSignOptions(target.Sign)
+                : PowerForgeReleaseService.ApplySigningOverrides(target.Sign, request);
+
             plans.Add(new PowerForgeToolReleaseTargetPlan
             {
                 Name = name,
@@ -173,6 +182,7 @@ internal sealed partial class PowerForgeToolReleaseService
                 Zip = target.Zip,
                 KeepSymbols = target.KeepSymbols,
                 KeepDocs = target.KeepDocs,
+                Sign = sign,
                 CreateCommandAliasOnUnix = target.CreateCommandAliasOnUnix,
                 MsBuildProperties = msbuildProperties,
                 Combinations = combinations
@@ -351,6 +361,9 @@ internal sealed partial class PowerForgeToolReleaseService
             ExecutePublish(plan, target, combination, publishDir, cancellationToken);
             ApplyCleanup(publishDir, target);
             var executablePath = RenameMainExecutable(target, publishDir, combination.Runtime);
+
+            if (target.Sign?.Enabled == true && combination.Runtime.StartsWith("win-", StringComparison.OrdinalIgnoreCase))
+                _signingRunner.SignToolOutput(publishDir, executablePath, target.Sign, cancellationToken);
 
             if (target.ClearOutput && target.UseStaging)
                 ClearDirectory(combination.OutputPath);
