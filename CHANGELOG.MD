@@ -2,6 +2,9 @@
 
 ## Unreleased
 ### What's Changed
+- Keep identical shared type accelerators registered until their last module is removed, while preserving external and conflicting accelerator mappings.
+- Reject empty Markdown readiness evidence, inspect headings in main content, and verify WebMCP synchronization against the tool's visible search surface.
+- Avoid Windows short-name expansion in generated benchmark paths while preserving deterministic names and collision resistance.
 - Complete the package phase's exact GitHub release during a combined module release with fixed versions, without enabling generic reuse of pre-existing releases.
 - Stage locally signed NuGet packages in a draft GitHub release and publish their exact files through a protected GitHub OIDC workflow, with manifest integrity checks and author-signer verification on retries.
 - Keep shared dependency prefetches coalesced after one install branch takes ownership of the download.

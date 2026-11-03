@@ -82,6 +82,10 @@ public static class WebMcpBehavioralTester
                   const tool = tools[request.toolName];
                   const input = request.limit > 0 ? { query: request.query, limit: request.limit } : { query: request.query };
                   const visibleResultSelector = '[data-search-page-results], [data-search-results], #pf-search-results, .search-results, .ev-search-page-results';
+                  const searchSurface = Array.from(document.querySelectorAll('[data-webmcp-site-search]'))
+                    .find(surface => surface.getAttribute('data-webmcp-tool-name') === request.toolName) || document;
+                  const isVisible = element => element.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true });
+                  const findVisible = selector => Array.from(searchSurface.querySelectorAll(selector)).find(isVisible);
                   const normalizeUrl = (value) => {
                     try {
                       const resolved = new URL(value, document.baseURI);
@@ -92,9 +96,10 @@ public static class WebMcpBehavioralTester
                     }
                   };
                   const readVisibleUrls = (region) => Array.from(region?.querySelectorAll('a[href]') || [])
+                    .filter(isVisible)
                     .map(anchor => normalizeUrl(anchor.getAttribute('href')))
                     .filter(Boolean);
-                  const initialVisibleResults = document.querySelector(visibleResultSelector);
+                  const initialVisibleResults = findVisible(visibleResultSelector);
                   const initialVisibleResultText = String(initialVisibleResults?.innerText || '').slice(0, 1000);
                   const initialVisibleResultUrls = readVisibleUrls(initialVisibleResults);
                   const controller = new AbortController();
@@ -111,8 +116,8 @@ public static class WebMcpBehavioralTester
                     clearTimeout(timeoutId);
                   }
                   await new Promise(resolve => setTimeout(resolve, 300));
-                  const visibleInput = document.querySelector('[data-search-page-input], #pf-search-query');
-                  const visibleResults = document.querySelector(visibleResultSelector);
+                  const visibleInput = findVisible('[data-search-page-input], #pf-search-query');
+                  const visibleResults = findVisible(visibleResultSelector);
                   const visibleResultText = String(visibleResults?.innerText || '').slice(0, 1000);
                   const visibleResultUrls = readVisibleUrls(visibleResults);
                   return JSON.stringify({

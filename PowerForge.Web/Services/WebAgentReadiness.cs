@@ -393,14 +393,17 @@ public static partial class WebAgentReadiness
 
         var markdown = await TryGetTextAsync(http, baseUrl, "text/markdown", cancellationToken).ConfigureAwait(false);
         var markdownContentType = markdown.Response?.Content.Headers.ContentType?.MediaType ?? string.Empty;
-        var markdownNegotiated = markdown.Success && IsMarkdownContentType(markdownContentType);
+        var markdownNegotiated = markdown.Success && IsMarkdownContentType(markdownContentType) &&
+                                 !string.IsNullOrWhiteSpace(markdown.Text);
         var markdownArtifact = await ScanRemoteMarkdownArtifactAsync(
             http, baseUrl, linkHeader, spec, markdownNegotiated, cancellationToken).ConfigureAwait(false);
 
         AddCheck(checks, "markdown-negotiation", "content", "Markdown for Agents",
             spec.MarkdownNegotiation ? GetMarkdownNegotiationStatus(markdownNegotiated, markdownArtifact.AvailableAsMarkdown) : "info",
             spec.MarkdownNegotiation
-                ? BuildMarkdownNegotiationMessage(
+                ? markdown.Success && IsMarkdownContentType(markdownContentType) && string.IsNullOrWhiteSpace(markdown.Text)
+                    ? "Accept: text/markdown returned no non-whitespace content."
+                    : BuildMarkdownNegotiationMessage(
                     markdownNegotiated,
                     markdown.Success,
                     markdownContentType,
@@ -2192,10 +2195,11 @@ public static partial class WebAgentReadiness
         var markdownFiles = Directory.Exists(siteRoot)
             ? Directory.EnumerateFiles(siteRoot, "*" + extension, SearchOption.AllDirectories)
                 .Where(path => !ShouldSkipMarkdownArtifactCandidate(siteRoot, path))
+                .Where(HasNonWhitespaceTextFile)
                 .Take(2)
                 .ToArray()
             : Array.Empty<string>();
-        var rootMarkdownExists = File.Exists(rootMarkdown);
+        var rootMarkdownExists = File.Exists(rootMarkdown) && HasNonWhitespaceTextFile(rootMarkdown);
 
         AddCheck(checks, "markdown-artifacts", "content", "Markdown artifacts",
             markdownFiles.Length > 0 ? "pass" : (expected ? "fail" : "info"),
@@ -2226,11 +2230,20 @@ public static partial class WebAgentReadiness
         if (string.IsNullOrWhiteSpace(html))
             return false;
 
-        var levels = Regex.Matches(html, @"<h(?<level>[1-6])\b", RegexOptions.IgnoreCase)
-            .Select(match => int.TryParse(match.Groups["level"].Value, out var level) ? level : 0)
-            .Where(static level => level > 0)
-            .ToArray();
-        return levels.Length > 0 && levels[0] == 1 && levels.Contains(1);
+        using var document = new AngleSharp.Html.Parser.HtmlParser().ParseDocument(html);
+        var scope = document.QuerySelector("main") ?? document.Body ?? document.DocumentElement;
+        return scope.QuerySelector("h1,h2,h3,h4,h5,h6")?.LocalName == "h1";
+    }
+
+    private static bool HasNonWhitespaceTextFile(string path)
+    {
+        using var reader = File.OpenText(path);
+        var buffer = new char[1024];
+        int read;
+        while ((read = reader.Read(buffer, 0, buffer.Length)) > 0)
+            for (var index = 0; index < read; index++)
+                if (!char.IsWhiteSpace(buffer[index])) return true;
+        return false;
     }
 
     private static bool JsonLdObjectHasNonEmptyValue(JsonElement obj, string propertyName)

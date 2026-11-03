@@ -24,13 +24,14 @@ public static partial class WebAgentReadiness
             : null;
         var contentType = result?.Response?.Content.Headers.ContentType?.MediaType ?? string.Empty;
         var fetched = result?.Success == true;
+        var readable = !string.IsNullOrWhiteSpace(result?.Text);
         return new RemoteMarkdownArtifactScan(
             expected,
             url,
             result,
             contentType,
             fetched,
-            fetched && IsMarkdownContentType(contentType));
+            fetched && readable && IsMarkdownContentType(contentType));
     }
 
     private static void AddRemoteMarkdownArtifactCheck(
@@ -45,6 +46,8 @@ public static partial class WebAgentReadiness
             artifact.AvailableAsMarkdown ? "pass" : artifact.Expected ? "fail" : artifact.Fetched ? "warn" : "info",
             artifact.AvailableAsMarkdown
                 ? $"Direct Markdown artifact is available at {artifact.Url}."
+                : artifact.Fetched && string.IsNullOrWhiteSpace(artifact.Result?.Text)
+                    ? $"Direct Markdown artifact was fetched at {artifact.Url}, but contained no non-whitespace content."
                 : artifact.Fetched
                     ? $"Direct Markdown artifact was fetched at {artifact.Url}, but returned {FormatContentTypeForMessage(artifact.ContentType)}. Configure the host MIME type as text/markdown."
                     : artifact.Expected
