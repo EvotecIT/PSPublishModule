@@ -3,6 +3,7 @@
 ## Unreleased
 ### What's Changed
 - Sign standalone PowerForge and PowerForgeWeb Windows executables before packaging their release archives, and stop publication when signing or publisher verification fails.
+- Complete the package phase's exact GitHub release during a combined module release with fixed versions, without enabling generic reuse of pre-existing releases.
 - Stage locally signed NuGet packages in a draft GitHub release and publish their exact files through a protected GitHub OIDC workflow, with manifest integrity checks and author-signer verification on retries.
 - Keep shared dependency prefetches coalesced after one install branch takes ownership of the download.
 - Allow up to one second for cooperative async cmdlet cleanup when a pipeline is stopped, preserving prompt cancellation for hooks that do not finish within that grace period.

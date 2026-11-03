@@ -340,6 +340,7 @@ public sealed class ProjectBuildGitHubPublisher
                 Success = publishResult.Success,
                 TagName = publishResult.TagName,
                 ReleaseId = publishResult.ReleaseId,
+                CreatedRelease = publishResult.CreatedRelease,
                 ReleaseUrl = publishResult.ReleaseUrl,
                 ErrorMessage = publishResult.ErrorMessage
             });
@@ -385,6 +386,7 @@ public sealed class ProjectBuildGitHubPublisher
             result.Success = publishResult.Succeeded;
             result.TagName = tag;
             result.ReleaseId = publishResult.ReleaseId;
+            result.CreatedRelease = publishResult.Succeeded && publishResult.ReleaseCreationSucceeded && !publishResult.ReusedExistingRelease;
             result.ReleaseUrl = publishResult.HtmlUrl;
             result.ErrorMessage = null;
             WriteGitHubPublishNotes(tag, publishResult);

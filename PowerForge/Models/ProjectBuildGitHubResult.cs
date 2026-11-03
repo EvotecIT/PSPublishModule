@@ -23,6 +23,9 @@ public sealed class ProjectBuildGitHubResult
     /// <summary>Numeric GitHub release identifier returned by the API.</summary>
     public long ReleaseId { get; set; }
 
+    /// <summary>True only when this publication created a new release; reused and legacy results remain false.</summary>
+    public bool CreatedRelease { get; set; }
+
     /// <summary>Release URL when publishing succeeded.</summary>
     public string? ReleaseUrl { get; set; }
 
