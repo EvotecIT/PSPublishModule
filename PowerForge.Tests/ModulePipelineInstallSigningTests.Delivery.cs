@@ -32,6 +32,8 @@ public sealed partial class ModulePipelineInstallSigningTests
             Directory.CreateDirectory(Path.Combine(source, "Files"));
             WriteMinimalModule(source, "DemoModule", "1.0.0");
             File.WriteAllText(Path.Combine(source, "Files", "Run.ps1"), "'launcher'");
+            Directory.CreateDirectory(Path.Combine(source, "Support"));
+            File.WriteAllText(Path.Combine(source, "Support", "Bootstrap.ps1"), "'support'");
             var spec = CreateSpec(source, "DemoModule", Path.Combine(root, "install"));
             spec.Install.Enabled = false;
             var options = spec.Segments.OfType<ConfigurationOptionsSegment>().Single().Options;
@@ -47,7 +49,9 @@ public sealed partial class ModulePipelineInstallSigningTests
                     Configuration = new ArtefactConfiguration
                     {
                         Enabled = true, Layout = ArtefactLayout.Delivery, DeliveryPath = deliveryPath, Path = Path.Combine(root, "packed"),
-                        DeliveryMappings = mapped ? new[] { new ArtefactCopyMapping { Source = "Run.ps1", Destination = launcherName } } : null
+                        DeliveryMappings = mapped ? new[] { new ArtefactCopyMapping { Source = "Run.ps1", Destination = launcherName } } : null,
+                        DestinationFilesRelative = true,
+                        FilesOutput = new[] { new ArtefactCopyMapping { Source = Path.Combine(source, "Support", "Bootstrap.ps1"), Destination = "Diagnostics/Bootstrap.ps1" } }
                     }
                 }
             }).ToArray();
@@ -56,14 +60,21 @@ public sealed partial class ModulePipelineInstallSigningTests
             var result = runner.Run(spec, runner.Plan(spec));
             string output = Assert.Single(result.ArtefactResults).OutputPath;
             string launcher;
+            string support;
             if (type == ArtefactType.Packed)
             {
                 using var zip = ZipFile.OpenRead(output);
                 using var reader = new StreamReader(Assert.IsType<ZipArchiveEntry>(zip.GetEntry((deliveryPath is null ? "" : deliveryPath + "/") + launcherName)).Open());
                 launcher = reader.ReadToEnd();
+                using var supportReader = new StreamReader(zip.GetEntry("Diagnostics/Bootstrap.ps1")!.Open());
+                support = supportReader.ReadToEnd();
             }
             else
+            {
                 launcher = File.ReadAllText(Path.Combine(output, deliveryPath ?? ".", launcherName));
+                support = File.ReadAllText(Path.Combine(output, "Diagnostics", "Bootstrap.ps1"));
+            }
+            Assert.Contains("# synthetic delivery signature", support, StringComparison.Ordinal);
             Assert.Equal(deliverySign || includeInternals, launcher.Contains("# synthetic delivery signature", StringComparison.Ordinal));
             if (!deliverySign && !includeInternals)
                 Assert.Equal("'launcher'", launcher);

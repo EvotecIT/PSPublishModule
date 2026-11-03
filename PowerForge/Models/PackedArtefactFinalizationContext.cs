@@ -8,6 +8,10 @@ public sealed class PackedArtefactFinalizationContext
     // Exact promoted destinations from the builder's copy plan; separate from module payload files.
     internal string[] PromotedDeliveryFilePaths { get; set; } = System.Array.Empty<string>();
 
+    // Unpacked roots can retain unrelated files. Null keeps the isolated packed/script contract.
+    internal string[]? FinalizationFilePaths { get; set; }
+    internal string[] FinalizationRoots { get; set; } = System.Array.Empty<string>();
+
     /// <summary>Kind of artefact whose completed layout is being finalized.</summary>
     public ArtefactType ArtefactType { get; }
 
@@ -23,7 +27,7 @@ public sealed class PackedArtefactFinalizationContext
     /// <summary>Primary executable module or script file within <see cref="MainModulePath"/>.</summary>
     public string EntryPointPath { get; }
 
-    /// <summary>Final archive output path.</summary>
+    /// <summary>Final archive, script, or unpacked directory output path.</summary>
     public string OutputPath { get; }
 
     /// <summary>Primary module name.</summary>
