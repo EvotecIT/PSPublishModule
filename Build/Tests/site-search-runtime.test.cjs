@@ -5,15 +5,86 @@ const path = require('node:path');
 const vm = require('node:vm');
 const source = fs.readFileSync(path.join(__dirname, '../../PowerForge.Web/Assets/WebMcp/site-search.v1.js'), 'utf8');
 
-function runtime(fetch, Worker, json = JSON) {
+function runtime(fetch, Worker, json = JSON, configure = () => {}) {
   const surface = { getAttribute: key => key === 'data-webmcp-tool-name' ? 'search_site' : null, setAttribute() {} };
   const document = { baseURI: 'https://example.test/search/', currentScript: { src: 'https://example.test/assets/site-search.hash.js' }, readyState: 'complete', querySelector: () => surface };
   const window = { location: { origin: 'https://example.test' }, fetch, atob, AbortController, Worker };
-  vm.runInNewContext(source, { window, document, URL, TextEncoder, TextDecoder, DOMException, AbortController, JSON: json });
+  configure({ surface, document, window });
+  vm.runInNewContext(source, { window, document, URL, TextEncoder, TextDecoder, DOMException, AbortController, Event, JSON: json });
   return window.PowerForgeWebMcpSearch;
 }
 const response = value => new Response(JSON.stringify(value), { headers: { 'content-type': 'application/json' } });
 const descriptors = count => Array.from({ length: count }, (_, i) => ({ path: 'query/' + i + '.json', bytes: 1024, project: 'Example' }));
+
+test('the registered tool dispatches input to its declared external visible elements', async () => {
+  let tool;
+  let input;
+  const events = [];
+  const api = runtime(async url => url.endsWith('manifest.json')
+    ? new Response('', { status: 404 })
+    : response([{ title: 'Guide', url: '/docs/guide/' }]), undefined, JSON,
+    ({ surface, document, window }) => {
+      surface.querySelector = () => { throw new Error('The scoped input must not replace the declared input.'); };
+      input = { ownerDocument: document, isConnected: true, value: '', dispatchEvent: event => events.push(event.type) };
+      window.PowerForgeWebMcpSearch = {
+        visibleElements: { input, results: { ownerDocument: document, isConnected: true, querySelectorAll() { return []; } } }
+      };
+      document.modelContext = { registerTool: registered => { tool = registered; } };
+    });
+  await api.ready;
+
+  const result = await tool.execute({ query: 'guide' }, {});
+
+  assert.equal(result.query, 'guide');
+  assert.equal(result.returned, 1);
+  assert.equal(input.value, 'guide');
+  assert.deepEqual(events, ['input']);
+});
+
+for (const useRenderer of [true, false]) {
+  test(`bounded tool output preserves ${useRenderer ? 'theme renderer' : 'adapter'} ownership`, async () => {
+    let tool;
+    let rendered;
+    let renderCalls = 0;
+    const controller = new AbortController();
+    const api = runtime(async () => { throw new Error('A bound adapter must own the search.'); }, undefined, JSON,
+      ({ surface, document, window }) => {
+        surface.querySelector = () => { throw new Error('Adapter and renderer paths must not dispatch synthetic input.'); };
+        const configured = {
+          adapter: { search: async () => ({ totalMatches: 10, results: Array.from({ length: 10 }, (_, i) => ({
+            title: 'Guide ' + i, url: '/docs/guide/' + i, description: 'x'.repeat(4000)
+          })) }) }
+        };
+        if (useRenderer) configured.renderVisibleResults = (response, context) => {
+          renderCalls++;
+          assert.equal(context.signal, controller.signal);
+          rendered = structuredClone(response);
+          response.results[0].title = 'Changed by renderer';
+          response.results.push({ title: 'Injected', url: '/injected/' });
+        };
+        window.PowerForgeWebMcpSearch = configured;
+        document.modelContext = { registerTool: registered => { tool = registered; } };
+      });
+    await api.ready;
+
+    const result = await tool.execute({ query: 'guide', limit: 3 }, { signal: controller.signal });
+
+    assert.equal(result.returned, 3);
+    assert.equal(result.results.length, 3);
+    assert.equal(result.results[0].title, 'Guide 0');
+    assert.equal(result.results[0].description.length, 200);
+    assert.equal(result.totalMatches, 10);
+    assert.equal(result.moreResultsAvailable, true);
+    assert.equal(result.outputTruncated, true);
+    assert.ok(JSON.stringify(result).length <= 1500);
+    if (useRenderer) assert.deepEqual(JSON.parse(JSON.stringify(rendered)), JSON.parse(JSON.stringify(result)));
+    else assert.equal(rendered, undefined);
+
+    controller.abort();
+    await assert.rejects(tool.execute({ query: 'guide' }, { signal: controller.signal }), error => error.name === 'AbortError');
+    assert.equal(renderCalls, useRenderer ? 1 : 0);
+  });
+}
 
 test('a broad query fails explicitly before downloading any query shards', async () => {
   const urls = [];

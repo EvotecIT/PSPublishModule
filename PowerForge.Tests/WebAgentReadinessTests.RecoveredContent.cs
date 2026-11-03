@@ -62,6 +62,7 @@ public partial class WebAgentReadinessTests
     [Theory]
     [InlineData("<dialog><h2>Search</h2></dialog><main><h1>Example</h1></main>", "pass")]
     [InlineData("<header><h2>Search</h2></header><div role='main'><h1>Example</h1></div>", "pass")]
+    [InlineData("<main hidden><h1>Old</h1></main><main><h1>Example</h1></main>", "pass")]
     [InlineData("<main><dialog><h2>Search</h2></dialog><div hidden><h2>Hidden</h2></div><h1>Example</h1></main>", "pass")]
     [InlineData("<main><h2>Section</h2><h1>Example</h1></main>", "warn")]
     [InlineData("<main><dialog open><h2>Search</h2></dialog><h1>Example</h1></main>", "warn")]

@@ -278,6 +278,7 @@ results rather than loading or ranking the search index again:
 ```html
 <script>
   window.PowerForgeWebMcpSearch = {
+    visibleElements: { input: searchInput, results: searchResults },
     renderVisibleResults: function (response) {
       searchInput.value = response.query;
       renderSearchResults(response.results, response.query);
@@ -292,6 +293,16 @@ The predeclared renderer replaces synthetic input dispatch. A bound search adapt
 continues to own its visible interaction unless the page also predeclares this
 renderer explicitly. Both adapters and renderers should honor the supplied abort
 signal and avoid visible changes after cancellation.
+
+`visibleElements` identifies the input and results owned by this search tool. Use
+connected DOM elements from the same document and refresh the references when the
+theme replaces them. This also lets the default synthetic-input path use an input
+outside the marked surface. Behavioral exercises use the binding to distinguish
+the tool's results from other widgets, including when the result rows do not
+change. Older external renderers without a binding remain observable when the
+marked surface has no results region and a query or result transition identifies
+the external UI. Bind the elements for layouts with both scoped and external
+result regions; a changed unrelated widget cannot replace stale scoped results.
 
 The `page-tool` kind is a verification contract for a product-owned adapter;
 PowerForge does not generate its behavior. Use it only when an existing visible

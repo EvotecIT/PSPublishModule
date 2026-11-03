@@ -318,7 +318,9 @@ public sealed partial class DotNetRepositoryReleaseService
                 }
 
                 var content = File.ReadAllText(project.CsprojPath);
-                var updated = CsprojVersionEditor.UpdateVersionText(content, resolvedVersion, out _);
+                // Keep the package version project-local; an MSBuild global property would
+                // also replace independently versioned ProjectReference package identities.
+                var updated = CsprojVersionEditor.UpdateVersionText(content, resolvedVersion, out _, ensurePackageVersion: true);
 
                 if (!string.Equals(content, updated, StringComparison.Ordinal))
                 {

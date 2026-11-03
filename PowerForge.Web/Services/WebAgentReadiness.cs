@@ -2231,7 +2231,9 @@ public static partial class WebAgentReadiness
             return false;
 
         using var document = new AngleSharp.Html.Parser.HtmlParser().ParseDocument(html);
-        var scope = document.QuerySelector("main,[role='main']") ?? document.Body ?? document.DocumentElement;
+        var scope = document.QuerySelectorAll("main,[role='main']")
+            .FirstOrDefault(region => region.Closest("[hidden],dialog:not([open])") is null)
+            ?? document.Body ?? document.DocumentElement;
         var firstHeading = scope.QuerySelectorAll("h1,h2,h3,h4,h5,h6")
             .FirstOrDefault(heading => heading.Closest("[hidden],dialog:not([open])") is null);
         return firstHeading?.LocalName == "h1";

@@ -388,7 +388,7 @@ Discovery and selection
 - `ExpectedVersionMapUseWildcards`: allows `*` and `?` in map keys.
 
 Versioning
-- `ExpectedVersion`: global version or X-pattern (e.g. `1.2.X`).
+- `ExpectedVersion`: global version or X-pattern (e.g. `1.2.X`). Version updates persist the resolved `PackageVersion` in each selected project, preserving imported defaults and independently versioned project references.
 - `ExpectedVersionMap`: per-project overrides (`ProjectName` -> version/X-pattern).
 - `VersionTracks`: anchor-driven version trains. Each track resolves one version from an anchor package/project and applies it to every project in the track.
 - `VersionTracks.<Name>.AnchorProject`: project whose package identity is used as the default version source for the track.

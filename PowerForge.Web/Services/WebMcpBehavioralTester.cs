@@ -85,6 +85,12 @@ public static class WebMcpBehavioralTester
                   const searchSurface = Array.from(document.querySelectorAll('[data-webmcp-site-search]'))
                     .find(surface => surface.getAttribute('data-webmcp-tool-name') === request.toolName);
                   if (!searchSurface) throw new Error('No search surface declares the requested WebMCP tool.');
+                  const runtime = window.PowerForgeWebMcpSearch;
+                  const ownsRuntime = runtime?.registeredToolName === request.toolName;
+                  const readBinding = () => ownsRuntime ? runtime.visibleElements : null;
+                  let binding = readBinding();
+                  const initialBoundResults = binding?.results;
+                  const hasExternalRenderer = ownsRuntime && typeof runtime.renderVisibleResults === 'function';
                   const isBoxVisible = element => element.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true });
                   const isTextVisible = node => {
                     let parent = node.parentElement;
@@ -108,7 +114,9 @@ public static class WebMcpBehavioralTester
                     }
                     return Array.from(element.querySelectorAll('*')).some(isBoxVisible);
                   };
-                  const candidates = selector => Array.from(document.querySelectorAll(selector))
+                  const candidates = (selector, boundElement) => Array.from(new Set([
+                    ...document.querySelectorAll(selector), ...(boundElement ? [boundElement] : [])
+                  ])).filter(element => element?.nodeType === 1 && element.ownerDocument === document)
                     .filter(element => {
                       const owner = element.closest('[data-webmcp-site-search]');
                       return (owner === searchSurface || owner === null) && isVisible(element);
@@ -142,9 +150,9 @@ public static class WebMcpBehavioralTester
                     }
                     return parts.join(' ').slice(0, 1000);
                   };
-                  const initialInputs = new Map(candidates('[data-search-page-input], #pf-search-query')
+                  const initialInputs = new Map(candidates('[data-search-page-input], #pf-search-query', binding?.input)
                     .map(element => [element, element.value]));
-                  const initialResults = new Map(candidates(visibleResultSelector).map(region => [region, {
+                  const initialResults = new Map(candidates(visibleResultSelector, binding?.results).map(region => [region, {
                     text: readVisibleText(region), urls: JSON.stringify(readVisibleUrls(region))
                   }]));
                   const controller = new AbortController();
@@ -161,13 +169,23 @@ public static class WebMcpBehavioralTester
                     clearTimeout(timeoutId);
                   }
                   await new Promise(resolve => setTimeout(resolve, 300));
-                  const inputs = candidates('[data-search-page-input], #pf-search-query');
+                  binding = readBinding();
+                  if (binding && [binding.input, binding.results].some(element =>
+                      element?.ownerDocument !== document || element?.nodeType !== 1 || !element.isConnected ||
+                      (element.closest('[data-webmcp-site-search]') &&
+                       element.closest('[data-webmcp-site-search]') !== searchSurface))) {
+                    throw new Error('The search tool visibleElements binding must identify connected elements owned by this tool.');
+                  }
+                  const inputs = candidates('[data-search-page-input], #pf-search-query', binding?.input);
                   const externalInputs = inputs.filter(element => !searchSurface.contains(element) &&
                     element.value === request.query && element.value !== initialInputs.get(element));
-                  const regions = new Set(candidates(visibleResultSelector));
+                  const regions = new Set(candidates(visibleResultSelector, binding?.results));
                   // An emptied boxless region has no visible descendants, but its disappearance
                   // still provides the same zero-results transition as an emptied boxed region.
-                  if (output?.totalMatches === 0) initialResults.forEach((_, region) => regions.add(region));
+                  if (output?.totalMatches === 0) {
+                    initialResults.forEach((_, region) => regions.add(region));
+                    if (binding) regions.add(binding.results);
+                  }
                   const observations = Array.from(regions).map(region => {
                     const text = readVisibleText(region);
                     const urls = readVisibleUrls(region);
@@ -176,23 +194,28 @@ public static class WebMcpBehavioralTester
                       JSON.stringify(urls) !== (initial?.urls || '[]') };
                   });
                   const scopedResults = observations.filter(item => searchSurface.contains(item.region));
-                  // A custom renderer may own controls outside the marked surface. Require a
-                  // results or query transition; other declared tools were excluded above.
-                  const externalResults = observations.filter(item => !searchSurface.contains(item.region) &&
-                    (item.changed || externalInputs.length > 0));
+                  // Explicit bindings own external results. Legacy renderers can identify an
+                  // external UI only when there is no competing scoped result region.
+                  const externalResults = hasExternalRenderer && scopedResults.length === 0
+                    ? observations.filter(item => !searchSurface.contains(item.region) &&
+                      (item.changed || externalInputs.length > 0)) : [];
                   const outputResultUrls = Array.from(output?.results || [])
                     .map(result => normalizeUrl(result?.url)).filter(Boolean);
                   const matchesOutput = item => outputResultUrls.every(url => item.urls.includes(url));
-                  const observation = [...scopedResults, ...externalResults]
-                    .find(item => item.changed && matchesOutput(item)) ||
-                    scopedResults.find(matchesOutput) || externalResults.find(matchesOutput) ||
-                    scopedResults[0] || externalResults[0];
+                  const observation = binding
+                    ? observations.find(item => item.region === binding.results)
+                    : [...scopedResults, ...externalResults].find(item => item.changed && matchesOutput(item)) ||
+                      scopedResults.find(matchesOutput) || externalResults.find(matchesOutput) ||
+                      scopedResults[0] || externalResults[0];
+                  if (binding && observation && output?.totalMatches === 0 && initialBoundResults !== binding.results) {
+                    const previous = observations.find(item => item.region === initialBoundResults);
+                    observation.changed ||= previous?.changed === true;
+                  }
                   const scopedInputs = inputs.filter(element => searchSurface.contains(element));
-                  const visibleInput = scopedInputs.find(element => element.value === request.query) ||
-                    externalInputs[0] ||
-                    (observation?.changed ? inputs.find(element => element.value === request.query &&
-                      (element.value !== initialInputs.get(element) || externalResults.includes(observation))) : null) ||
-                    scopedInputs[0];
+                  const visibleInput = binding ? inputs.find(element => element === binding.input)
+                    : scopedInputs.find(element => element.value === request.query) ||
+                      (externalResults.includes(observation) ? externalInputs[0] ||
+                        inputs.find(element => element.value === request.query) : null) || scopedInputs[0];
                   const visibleResultText = observation?.text || '';
                   const visibleResultUrls = observation?.urls || [];
                   return JSON.stringify({

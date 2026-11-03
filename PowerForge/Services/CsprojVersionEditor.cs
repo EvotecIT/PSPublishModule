@@ -77,7 +77,7 @@ internal static class CsprojVersionEditor
         return false;
     }
 
-    internal static string UpdateVersionText(string content, string version, out bool hadVersionTag)
+    internal static string UpdateVersionText(string content, string version, out bool hadVersionTag, bool ensurePackageVersion = false)
     {
         if (content is null) throw new ArgumentNullException(nameof(content));
         hadVersionTag = false;
@@ -118,6 +118,13 @@ internal static class CsprojVersionEditor
 
         if (!hasPackageVersionTag && !hasVersionPrefix)
             updated = InsertVersion(updated, string.IsNullOrEmpty(prereleaseVersion) ? "VersionPrefix" : "Version", string.IsNullOrEmpty(prereleaseVersion) ? escapedNumericVersion : escapedVersion);
+
+        if (ensurePackageVersion)
+        {
+            updated = ReplaceValues(updated, "PackageVersion", escapedVersion, includeEmpty: true);
+            if (!FindValues(updated, "PackageVersion", includeEmpty: true).Any(IsUnconditional))
+                updated = InsertVersion(updated, "PackageVersion", escapedVersion);
+        }
 
         return updated;
     }
