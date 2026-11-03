@@ -2533,7 +2533,8 @@ public partial class WebAgentReadinessTests
         string? homepageCorsOrigin = null,
         IReadOnlyCollection<string>? corsPaths = null,
         string homepagePath = "/",
-        bool negotiateMarkdown = false) : HttpMessageHandler
+        bool negotiateMarkdown = false,
+        string negotiatedMarkdownContent = "# Example") : HttpMessageHandler
     {
         internal List<string> Requests { get; } = [];
         internal HashSet<string> HomepageHeaders { get; } = new(StringComparer.OrdinalIgnoreCase);
@@ -2548,7 +2549,7 @@ public partial class WebAgentReadinessTests
                     request.Headers.Accept.Any(value =>
                         string.Equals(value.MediaType, "text/markdown", StringComparison.OrdinalIgnoreCase)))
                 {
-                    return Task.FromResult(Response(HttpStatusCode.OK, "# Example", "text/markdown"));
+                    return Task.FromResult(Response(HttpStatusCode.OK, negotiatedMarkdownContent, "text/markdown"));
                 }
 
                 var response = Response(

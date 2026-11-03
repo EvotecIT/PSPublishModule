@@ -39,7 +39,7 @@ internal static class PowerShellBenchmarkPathSegments
             return "_";
 
         var text = value!;
-        var escaped = Uri.EscapeDataString(text).Replace("_", "%5F");
+        var escaped = Uri.EscapeDataString(text).Replace("_", "%5F").Replace("~", "%7E");
         escaped = EscapeTrailingWindowsIgnoredCharacters(escaped);
         escaped = EscapeWindowsDeviceName(text, escaped);
         return escaped switch
@@ -70,7 +70,7 @@ internal static class PowerShellBenchmarkPathSegments
             var bytes = sha256.ComputeHash(Encoding.UTF8.GetBytes(text));
             hash = BitConverter.ToString(bytes, 0, 6).Replace("-", string.Empty);
         }
-        return string.Concat(text.Substring(0, MaxMatrixSegmentLength - hash.Length - 1), "~", hash);
+        return string.Concat(text.Substring(0, MaxMatrixSegmentLength - hash.Length - 1), "-", hash);
     }
 
     private static string EscapeTrailingWindowsIgnoredCharacters(string escaped)

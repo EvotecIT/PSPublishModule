@@ -179,7 +179,14 @@
     }
 
     if (usesAdapter) return;
-    var input = surface.querySelector('[data-search-page-input], #pf-search-query');
+    var elements = api.visibleElements;
+    if (elements && (!elements.input || !elements.results ||
+        elements.input.ownerDocument !== document || elements.results.ownerDocument !== document ||
+        !elements.input.isConnected || !elements.results.isConnected ||
+        typeof elements.input.value !== 'string' || typeof elements.results.querySelectorAll !== 'function')) {
+      throw new TypeError('visibleElements must contain an input and results element from this document.');
+    }
+    var input = elements ? elements.input : surface.querySelector('[data-search-page-input], #pf-search-query');
     if (input) {
       input.value = response.query;
       input.dispatchEvent(new Event('input', { bubbles: true }));

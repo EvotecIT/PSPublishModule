@@ -126,6 +126,8 @@ $RegisterPowerForgeAssemblyTypeAccelerators = {
 
         return $null
     }
+{{OwnershipBlock}}
+
 
     $AddPowerForgeTypeAccelerator = {
         param([Parameter(Mandatory = $true)][type] $Type)
@@ -139,6 +141,7 @@ $RegisterPowerForgeAssemblyTypeAccelerators = {
         if ($Existing.ContainsKey($Name)) {
             $ExistingType = $Existing[$Name]
             if ([object]::ReferenceEquals($ExistingType, $Type)) {
+                & $RegisterPowerForgeTypeAcceleratorOwner $Name $Type
                 return
             } else {
                 $ExistingAssemblyName = $ExistingType.Assembly.GetName()
@@ -155,13 +158,12 @@ $RegisterPowerForgeAssemblyTypeAccelerators = {
         }
 
         try {
-            $AddTypeAccelerator.Invoke($null, @($Name, $Type)) | Out-Null
+            & $RegisterPowerForgeTypeAcceleratorOwner $Name $Type
         } catch {
             Write-Warning -Message "Type accelerator '$Name' could not be registered from $($Type.Assembly.GetName().Name): $($_.Exception.Message)"
             return
         }
 
-        $script:PowerForgeRegisteredAssemblyTypeAccelerators[$Name] = $Type
     }
 
     if ($Mode -eq 'Assembly' -or $Mode -eq 'Enums') {
@@ -205,23 +207,7 @@ $RegisterPowerForgeAssemblyTypeAccelerators = {
         $PreviousPowerForgeOnRemove = $ExecutionContext.SessionState.Module.OnRemove
         $ExecutionContext.SessionState.Module.OnRemove = {
             try {
-                $TypeAccelerators = [psobject].Assembly.GetType('System.Management.Automation.TypeAccelerators')
-                if ($null -eq $TypeAccelerators -or $null -eq $RegisteredPowerForgeTypeAccelerators) {
-                    return
-                }
-
-                $GetTypeAccelerators = $TypeAccelerators.GetProperty('Get', [System.Reflection.BindingFlags] 'Static,Public,NonPublic')
-                $RemoveTypeAccelerator = $TypeAccelerators.GetMethod('Remove', [type[]]@([string]))
-                if ($null -eq $GetTypeAccelerators -or $null -eq $RemoveTypeAccelerator) {
-                    return
-                }
-
-                $Existing = $GetTypeAccelerators.GetValue($null)
-                foreach ($Entry in @($RegisteredPowerForgeTypeAccelerators.GetEnumerator())) {
-                    if ($Existing.ContainsKey($Entry.Key) -and [object]::ReferenceEquals($Existing[$Entry.Key], $Entry.Value)) {
-                        $RemoveTypeAccelerator.Invoke($null, @($Entry.Key)) | Out-Null
-                    }
-                }
+                & $UnregisterPowerForgeTypeAcceleratorOwners
             } finally {
                 if ($null -ne $PreviousPowerForgeOnRemove) {
                     & $PreviousPowerForgeOnRemove @args
