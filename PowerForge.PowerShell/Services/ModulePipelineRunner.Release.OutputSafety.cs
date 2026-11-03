@@ -52,7 +52,17 @@ public sealed partial class ModulePipelineRunner
         ModulePipelineRunState state)
     {
         if (artefact.ArtefactType is ArtefactType.Unpacked or ArtefactType.Script)
-            return CollectArtefactDestructivePaths(plan, artefact, configuration, state);
+        {
+            List<ArtefactDestructivePath> unpackedPaths = CollectArtefactDestructivePaths(plan, artefact, configuration, state);
+            if (artefact.ArtefactType == ArtefactType.Unpacked && plan.SignModule && plan.GenerateReleaseProvenance)
+            {
+                string unpackedRoot = ArtefactLayoutPathResolver.ResolveOutputRoot(configuration.Path,
+                    plan.ProjectRoot, plan.ModuleName, plan.ResolvedVersion, plan.PreRelease, artefact.ArtefactType);
+                unpackedPaths.Add(new ArtefactDestructivePath(unpackedRoot + ".signing.json",
+                    "unpacked signing evidence file", ArtefactDestructivePathKind.ExactFile));
+            }
+            return unpackedPaths;
+        }
 
         string outputRoot = ArtefactLayoutPathResolver.ResolveOutputRoot(
             configuration.Path,

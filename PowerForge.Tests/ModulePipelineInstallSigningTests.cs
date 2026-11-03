@@ -509,6 +509,7 @@ public sealed partial class ModulePipelineInstallSigningTests
         public bool MarkSignedFiles { get; set; }
         public bool FailInstallManifestSigning { get; set; }
         public bool HonorSigningPatterns { get; set; }
+        public bool RequireExistingSigningFiles { get; set; }
         public Action<string, string>? AfterInstallManifestVersionObserved { get; set; }
         public string? InstallManifestSha256 { get; private set; }
 
@@ -521,6 +522,8 @@ public sealed partial class ModulePipelineInstallSigningTests
             SigningOptionsConfiguration signing, Action<int, int, string>? progress = null)
         {
             var paths = packageFilePaths.Select(Path.GetFullPath).ToArray();
+            if (RequireExistingSigningFiles)
+                Assert.All(paths, path => Assert.True(File.Exists(path), "Missing signing candidate: " + path));
             var verifiedPaths = HonorSigningPatterns
                 ? paths.Where(path => includePatterns.Any(pattern =>
                     pattern == "*" ||

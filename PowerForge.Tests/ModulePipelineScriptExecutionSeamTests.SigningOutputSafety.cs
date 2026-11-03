@@ -7,8 +7,10 @@ namespace PowerForge.Tests;
 
 public sealed partial class ModulePipelineScriptExecutionSeamTests
 {
-    [Fact]
-    public void Run_RejectsSharedPackedOutputThatWouldDeleteEarlierSigningEvidence()
+    [Theory]
+    [InlineData(ArtefactType.Packed)]
+    [InlineData(ArtefactType.Unpacked)]
+    public void Run_RejectsSharedOutputThatWouldOverwriteEarlierSigningEvidence(ArtefactType artefactType)
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
         try
@@ -28,17 +30,22 @@ public sealed partial class ModulePipelineScriptExecutionSeamTests
             ConfigurationArtefactSegment first = Assert.IsType<ConfigurationArtefactSegment>(spec.Segments.Last());
             first.Configuration!.ID = "first";
             first.Configuration.ArtefactName = "module.zip";
+            first.ArtefactType = artefactType;
+            first.Configuration.DoNotClear = artefactType == ArtefactType.Unpacked;
+            first.Configuration.RequiredModules.ModulesPath = "First";
             spec.Segments = spec.Segments.Concat(new IConfigurationSegment[]
             {
                 new ConfigurationArtefactSegment
                 {
-                    ArtefactType = ArtefactType.Packed,
+                    ArtefactType = artefactType,
                     Configuration = new ArtefactConfiguration
                     {
                         ID = "second",
                         Enabled = true,
                         Path = outputRoot,
-                        ArtefactName = "module-secondary.zip"
+                        ArtefactName = "module-secondary.zip",
+                        DoNotClear = artefactType == ArtefactType.Unpacked,
+                        RequiredModules = new ArtefactRequiredModulesConfiguration { ModulesPath = "Second" }
                     }
                 }
             }).ToArray();
@@ -47,10 +54,13 @@ public sealed partial class ModulePipelineScriptExecutionSeamTests
             InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
                 runner.Run(spec, runner.Plan(spec)));
 
-            Assert.Contains("packed signing evidence file", exception.Message, StringComparison.OrdinalIgnoreCase);
-            Assert.Contains("direct output files", exception.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains(artefactType == ArtefactType.Unpacked ? "unpacked signing evidence file" : "packed signing evidence file", exception.Message, StringComparison.OrdinalIgnoreCase);
+            if (artefactType == ArtefactType.Packed)
+                Assert.Contains("direct output files", exception.Message, StringComparison.OrdinalIgnoreCase);
             Assert.False(File.Exists(Path.Combine(outputRoot, "module.zip")));
             Assert.False(File.Exists(Path.Combine(outputRoot, "module-secondary.zip")));
+            Assert.False(Directory.Exists(Path.Combine(outputRoot, "First")));
+            Assert.False(Directory.Exists(Path.Combine(outputRoot, "Second")));
         }
         finally
         {

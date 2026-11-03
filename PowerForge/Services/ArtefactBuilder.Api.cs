@@ -60,7 +60,7 @@ public sealed partial class ArtefactBuilder
     /// <param name="information">Optional include/exclude configuration for packaging.</param>
     /// <param name="delivery">Optional delivery configuration used to auto-include bundled internals.</param>
     /// <param name="includeScriptFolders">When false, skips packaging script-only folders (Public/Private/Classes/Enums).</param>
-    /// <param name="finalizePackedArtefact">Optional finalizer invoked after the complete packed or script layout is assembled and before delivery. Returned files are recorded as release evidence and remain owned by the callback.</param>
+    /// <param name="finalizePackedArtefact">Optional finalizer invoked after the complete module or script layout is assembled and before delivery. Returned files are recorded as release evidence and remain owned by the callback.</param>
     public ArtefactBuildResult BuildWithFinalizer(
         ConfigurationArtefactSegment segment,
         string projectRoot,
@@ -131,7 +131,7 @@ public sealed partial class ArtefactBuilder
 
         return segment.ArtefactType switch
         {
-            ArtefactType.Unpacked => BuildUnpacked(cfg, root, projectRoot, stagingPath, moduleName, moduleVersion, preRelease, requiredModules, information, delivery, includeScriptFolders, finalizedPayloadFiles),
+            ArtefactType.Unpacked => BuildUnpacked(cfg, root, projectRoot, stagingPath, moduleName, moduleVersion, preRelease, requiredModules, information, delivery, includeScriptFolders, finalizePackedArtefact, finalizedPayloadFiles),
             ArtefactType.Packed => BuildPacked(cfg, root, projectRoot, stagingPath, moduleName, moduleVersion, preRelease, requiredModules, information, delivery, includeScriptFolders, finalizePackedArtefact, finalizedPayloadFiles),
             ArtefactType.Script => BuildScript(cfg, root, projectRoot, stagingPath, moduleName, moduleVersion, preRelease, requiredModules, information, delivery, includeScriptFolders, finalizePackedArtefact, finalizedPayloadFiles),
             ArtefactType.ScriptPacked => BuildScriptPacked(cfg, root, projectRoot, stagingPath, moduleName, moduleVersion, preRelease, requiredModules, information, delivery, includeScriptFolders, finalizePackedArtefact, finalizedPayloadFiles),
@@ -163,6 +163,7 @@ public sealed partial class ArtefactBuilder
         InformationConfiguration? information,
         DeliveryOptionsConfiguration? delivery,
         bool includeScriptFolders,
+        Func<PackedArtefactFinalizationContext, IReadOnlyList<string>?>? finalizeArtefact,
         IReadOnlyList<string>? finalizedPayloadFiles)
     {
         if (cfg.DoNotClear != true)
@@ -209,7 +210,27 @@ public sealed partial class ArtefactBuilder
             preRelease,
             copied);
 
-        return new ArtefactBuildResult(ArtefactType.Unpacked, cfg.ID, outputRoot, modules.ToArray(), copied.ToArray());
+        var evidencePaths = Array.Empty<string>();
+        if (finalizeArtefact is not null)
+        {
+            string manifestPath = Path.Combine(mainModuleDest, moduleName + ".psd1");
+            string[] ownedFiles = ResolveUnpackedFinalizationFiles(modules, copied);
+            var context = new PackedArtefactFinalizationContext(ArtefactType.Unpacked,
+                outputRoot, mainModuleDest, manifestPath,
+                ResolvePackedEntryPointPath(mainModuleDest, manifestPath), outputRoot,
+                moduleName, ModulePathTokenFormatter.FormatVersionWithPreRelease(moduleVersion, preRelease))
+            {
+                FinalizationFilePaths = ownedFiles,
+                FinalizationRoots = modules.Select(module => Path.GetFullPath(module.Path))
+                    .Concat(copied.Select(entry => Path.GetFullPath(entry.IsDirectory ? entry.Destination : Path.GetDirectoryName(entry.Destination)!)))
+                    .Distinct(FrameworkCompatibility.PathComparer).ToArray(),
+                PromotedDeliveryFilePaths = ResolveDeliveryOutputPaths(cfg, stagingPath, outputRoot,
+                    information, delivery, includeScriptFolders, finalizedPayloadFiles)
+            };
+            evidencePaths = FinalizeArtefactLayout(finalizeArtefact, context);
+        }
+
+        return new ArtefactBuildResult(ArtefactType.Unpacked, cfg.ID, outputRoot, modules.ToArray(), copied.ToArray(), evidencePaths);
     }
 
     private ArtefactBuildResult BuildPacked(
