@@ -83,9 +83,36 @@ public static class WebMcpBehavioralTester
                   const input = request.limit > 0 ? { query: request.query, limit: request.limit } : { query: request.query };
                   const visibleResultSelector = '[data-search-page-results], [data-search-results], #pf-search-results, .search-results, .ev-search-page-results';
                   const searchSurface = Array.from(document.querySelectorAll('[data-webmcp-site-search]'))
-                    .find(surface => surface.getAttribute('data-webmcp-tool-name') === request.toolName) || document;
-                  const isVisible = element => element.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true });
-                  const findVisible = selector => Array.from(searchSurface.querySelectorAll(selector)).find(isVisible);
+                    .find(surface => surface.getAttribute('data-webmcp-tool-name') === request.toolName);
+                  if (!searchSurface) throw new Error('No search surface declares the requested WebMCP tool.');
+                  const isBoxVisible = element => element.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true });
+                  const isTextVisible = node => {
+                    let parent = node.parentElement;
+                    while (parent && getComputedStyle(parent).display === 'contents') {
+                      const style = getComputedStyle(parent);
+                      if (style.visibility !== 'visible' || Number(style.opacity) === 0) return false;
+                      parent = parent.parentElement;
+                    }
+                    if (!parent || !isBoxVisible(parent)) return false;
+                    const range = document.createRange();
+                    range.selectNodeContents(node);
+                    return Array.from(range.getClientRects()).some(rect => rect.width > 0 && rect.height > 0);
+                  };
+                  const isVisible = element => {
+                    if (isBoxVisible(element)) return true;
+                    if (getComputedStyle(element).display !== 'contents') return false;
+                    const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+                    let node;
+                    while ((node = walker.nextNode())) {
+                      if (String(node.nodeValue || '').trim() && isTextVisible(node)) return true;
+                    }
+                    return Array.from(element.querySelectorAll('*')).some(isBoxVisible);
+                  };
+                  const candidates = selector => Array.from(document.querySelectorAll(selector))
+                    .filter(element => {
+                      const owner = element.closest('[data-webmcp-site-search]');
+                      return (owner === searchSurface || owner === null) && isVisible(element);
+                    });
                   const normalizeUrl = (value) => {
                     try {
                       const resolved = new URL(value, document.baseURI);
@@ -106,13 +133,7 @@ public static class WebMcpBehavioralTester
                     let length = 0;
                     let node;
                     while (length < 1000 && (node = walker.nextNode())) {
-                      let parent = node.parentElement;
-                      while (parent && getComputedStyle(parent).display === 'contents') {
-                        const style = getComputedStyle(parent);
-                        if (style.visibility !== 'visible' || Number(style.opacity) === 0) break;
-                        parent = parent.parentElement;
-                      }
-                      if (!parent || !isVisible(parent)) continue;
+                      if (!isTextVisible(node)) continue;
                       const text = String(node.nodeValue || '').trim().slice(0, 1000 - length);
                       if (text) {
                         parts.push(text);
@@ -121,9 +142,11 @@ public static class WebMcpBehavioralTester
                     }
                     return parts.join(' ').slice(0, 1000);
                   };
-                  const initialVisibleResults = findVisible(visibleResultSelector);
-                  const initialVisibleResultText = readVisibleText(initialVisibleResults);
-                  const initialVisibleResultUrls = readVisibleUrls(initialVisibleResults);
+                  const initialInputs = new Map(candidates('[data-search-page-input], #pf-search-query')
+                    .map(element => [element, element.value]));
+                  const initialResults = new Map(candidates(visibleResultSelector).map(region => [region, {
+                    text: readVisibleText(region), urls: JSON.stringify(readVisibleUrls(region))
+                  }]));
                   const controller = new AbortController();
                   const timeoutId = setTimeout(() => controller.abort(), request.timeoutMs);
                   let output;
@@ -138,10 +161,40 @@ public static class WebMcpBehavioralTester
                     clearTimeout(timeoutId);
                   }
                   await new Promise(resolve => setTimeout(resolve, 300));
-                  const visibleInput = findVisible('[data-search-page-input], #pf-search-query');
-                  const visibleResults = findVisible(visibleResultSelector);
-                  const visibleResultText = readVisibleText(visibleResults);
-                  const visibleResultUrls = readVisibleUrls(visibleResults);
+                  const inputs = candidates('[data-search-page-input], #pf-search-query');
+                  const externalInputs = inputs.filter(element => !searchSurface.contains(element) &&
+                    element.value === request.query && element.value !== initialInputs.get(element));
+                  const regions = new Set(candidates(visibleResultSelector));
+                  // An emptied boxless region has no visible descendants, but its disappearance
+                  // still provides the same zero-results transition as an emptied boxed region.
+                  if (output?.totalMatches === 0) initialResults.forEach((_, region) => regions.add(region));
+                  const observations = Array.from(regions).map(region => {
+                    const text = readVisibleText(region);
+                    const urls = readVisibleUrls(region);
+                    const initial = initialResults.get(region);
+                    return { region, text, urls, changed: text !== (initial?.text || '') ||
+                      JSON.stringify(urls) !== (initial?.urls || '[]') };
+                  });
+                  const scopedResults = observations.filter(item => searchSurface.contains(item.region));
+                  // A custom renderer may own controls outside the marked surface. Require a
+                  // results or query transition; other declared tools were excluded above.
+                  const externalResults = observations.filter(item => !searchSurface.contains(item.region) &&
+                    (item.changed || externalInputs.length > 0));
+                  const outputResultUrls = Array.from(output?.results || [])
+                    .map(result => normalizeUrl(result?.url)).filter(Boolean);
+                  const matchesOutput = item => outputResultUrls.every(url => item.urls.includes(url));
+                  const observation = [...scopedResults, ...externalResults]
+                    .find(item => item.changed && matchesOutput(item)) ||
+                    scopedResults.find(matchesOutput) || externalResults.find(matchesOutput) ||
+                    scopedResults[0] || externalResults[0];
+                  const scopedInputs = inputs.filter(element => searchSurface.contains(element));
+                  const visibleInput = scopedInputs.find(element => element.value === request.query) ||
+                    externalInputs[0] ||
+                    (observation?.changed ? inputs.find(element => element.value === request.query &&
+                      (element.value !== initialInputs.get(element) || externalResults.includes(observation))) : null) ||
+                    scopedInputs[0];
+                  const visibleResultText = observation?.text || '';
+                  const visibleResultUrls = observation?.urls || [];
                   return JSON.stringify({
                     registeredTools: Object.keys(tools).sort(),
                     schemaType: tool.inputSchema?.type,
@@ -159,11 +212,8 @@ public static class WebMcpBehavioralTester
                     visibleQuery: visibleInput?.value || '',
                     visibleResultText,
                     visibleResultUrls,
-                    visibleResultChanged: visibleResultText !== initialVisibleResultText ||
-                      JSON.stringify(visibleResultUrls) !== JSON.stringify(initialVisibleResultUrls),
-                    outputResultUrls: Array.from(output?.results || [])
-                      .map(result => normalizeUrl(result?.url))
-                      .filter(Boolean),
+                    visibleResultChanged: observation?.changed === true,
+                    outputResultUrls,
                     output,
                     outputJson: JSON.stringify(output)
                   });

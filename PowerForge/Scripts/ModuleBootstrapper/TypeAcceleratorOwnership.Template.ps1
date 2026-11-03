@@ -1,4 +1,5 @@
 # PowerShell's accelerator catalog is process-wide, including across module ALCs and runspaces.
+# This lock coordinates this helper's callers; external catalog writes can still race registration or removal.
 $PowerForgeAcceleratorOwnersKey = 'PowerForge.TypeAcceleratorOwners.v1'
 $PowerForgeAcceleratorDomain = [AppDomain]::CurrentDomain
 [Threading.Monitor]::Enter($PowerForgeAcceleratorDomain)
@@ -26,7 +27,10 @@ $RegisterPowerForgeTypeAcceleratorOwner = {
             if (-not [object]::ReferenceEquals($Catalog[$Name], $Type)) { return }
         } else {
             $AddTypeAccelerator.Invoke($null, @($Name, $Type)) | Out-Null
-            $PowerForgeAcceleratorOwners[$Name] = @{ Type = $Type; Owners = @{} }
+            $PreviousEntry = $PowerForgeAcceleratorOwners[$Name]
+            if ($null -eq $PreviousEntry -or -not [object]::ReferenceEquals($PreviousEntry.Type, $Type)) {
+                $PowerForgeAcceleratorOwners[$Name] = @{ Type = $Type; Owners = @{} }
+            }
         }
         $Entry = $PowerForgeAcceleratorOwners[$Name]
         if ($null -ne $Entry -and [object]::ReferenceEquals($Entry.Type, $Type)) {

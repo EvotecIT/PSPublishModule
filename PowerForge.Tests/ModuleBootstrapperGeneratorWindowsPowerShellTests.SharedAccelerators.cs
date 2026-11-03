@@ -12,7 +12,7 @@ public sealed partial class ModuleBootstrapperGeneratorWindowsPowerShellTests
         var host = desktop
             ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "WindowsPowerShell", "v1.0", "powershell.exe")
             : FindExecutableOnPath("pwsh.exe");
-        Assert.NotNull(host);
+        if (host is null) return;
         Assert.True(File.Exists(host));
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "pf-shared-accelerator-" + Guid.NewGuid().ToString("N"))).FullName;
         try
@@ -41,6 +41,15 @@ public sealed partial class ModuleBootstrapperGeneratorWindowsPowerShellTests
                 }
                 Remove-Module Second
                 if ($get.GetValue($null).ContainsKey($name)) { throw 'The final owner left its accelerator registered.' }
+                Import-Module (Join-Path $PSScriptRoot 'First.psm1') -WarningAction SilentlyContinue
+                $catalogType.GetMethod('Remove').Invoke($null, @($name)) | Out-Null
+                Import-Module (Join-Path $PSScriptRoot 'Second.psm1') -WarningAction SilentlyContinue
+                Remove-Module Second
+                if (-not [object]::ReferenceEquals($get.GetValue($null)[$name], $type)) {
+                    throw 'Re-registration lost the first module ownership claim.'
+                }
+                Remove-Module First
+                if ($get.GetValue($null).ContainsKey($name)) { throw 'The re-registered accelerator outlived its final owner.' }
                 $catalogType.GetMethod('Add').Invoke($null, @($name, [Uri])) | Out-Null
                 Import-Module (Join-Path $PSScriptRoot 'First.psm1') -WarningAction SilentlyContinue
                 Import-Module (Join-Path $PSScriptRoot 'Second.psm1') -WarningAction SilentlyContinue

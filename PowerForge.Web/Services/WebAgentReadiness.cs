@@ -2231,19 +2231,26 @@ public static partial class WebAgentReadiness
             return false;
 
         using var document = new AngleSharp.Html.Parser.HtmlParser().ParseDocument(html);
-        var scope = document.QuerySelector("main") ?? document.Body ?? document.DocumentElement;
-        return scope.QuerySelector("h1,h2,h3,h4,h5,h6")?.LocalName == "h1";
+        var scope = document.QuerySelector("main,[role='main']") ?? document.Body ?? document.DocumentElement;
+        var firstHeading = scope.QuerySelectorAll("h1,h2,h3,h4,h5,h6")
+            .FirstOrDefault(heading => heading.Closest("[hidden],dialog:not([open])") is null);
+        return firstHeading?.LocalName == "h1";
     }
 
     private static bool HasNonWhitespaceTextFile(string path)
     {
-        using var reader = File.OpenText(path);
-        var buffer = new char[1024];
-        int read;
-        while ((read = reader.Read(buffer, 0, buffer.Length)) > 0)
-            for (var index = 0; index < read; index++)
-                if (!char.IsWhiteSpace(buffer[index])) return true;
-        return false;
+        try
+        {
+            using var reader = File.OpenText(path);
+            var buffer = new char[1024];
+            int read;
+            while ((read = reader.Read(buffer, 0, buffer.Length)) > 0)
+                for (var index = 0; index < read; index++)
+                    if (!char.IsWhiteSpace(buffer[index])) return true;
+            return false;
+        }
+        catch (IOException) { return false; }
+        catch (UnauthorizedAccessException) { return false; }
     }
 
     private static bool JsonLdObjectHasNonEmptyValue(JsonElement obj, string propertyName)

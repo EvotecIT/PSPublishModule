@@ -5,14 +5,17 @@ namespace PowerForge.Tests;
 public partial class WebAgentReadinessTests
 {
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public void Verify_RejectsEmptyMarkdownArtifacts(bool whitespace)
+    [InlineData("", false)]
+    [InlineData(" \r\n\t", false)]
+    [InlineData("# Content", true)]
+    public void Verify_RejectsUnreadableOrEmptyMarkdownArtifacts(string content, bool locked)
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "pf-empty-markdown-" + Guid.NewGuid().ToString("N"))).FullName;
         try
         {
-            File.WriteAllText(Path.Combine(root, "index.md"), whitespace ? " \r\n\t" : "");
+            var path = Path.Combine(root, "index.md");
+            File.WriteAllText(path, content);
+            using var lockedFile = locked ? new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.None) : null;
             var result = WebAgentReadiness.Verify(new WebAgentReadinessVerifyOptions
             {
                 SiteRoot = root,
@@ -56,15 +59,20 @@ public partial class WebAgentReadinessTests
         Assert.Equal("fail", Assert.Single(result.Checks, check => check.Id == "markdown-negotiation").Status);
     }
 
-    [Fact]
-    public void Verify_UsesMainContentHeadingBeforeSearchDialogHeadings()
+    [Theory]
+    [InlineData("<dialog><h2>Search</h2></dialog><main><h1>Example</h1></main>", "pass")]
+    [InlineData("<header><h2>Search</h2></header><div role='main'><h1>Example</h1></div>", "pass")]
+    [InlineData("<main><dialog><h2>Search</h2></dialog><div hidden><h2>Hidden</h2></div><h1>Example</h1></main>", "pass")]
+    [InlineData("<main><h2>Section</h2><h1>Example</h1></main>", "warn")]
+    [InlineData("<main><dialog open><h2>Search</h2></dialog><h1>Example</h1></main>", "warn")]
+    public void Verify_UsesFirstMainContentHeading(string html, string expectedStatus)
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "pf-main-heading-" + Guid.NewGuid().ToString("N"))).FullName;
         try
         {
-            File.WriteAllText(Path.Combine(root, "index.html"), "<dialog><h2>Search</h2></dialog><main><h1>Example</h1></main>");
+            File.WriteAllText(Path.Combine(root, "index.html"), html);
             var result = WebAgentReadiness.Verify(new WebAgentReadinessVerifyOptions { SiteRoot = root });
-            Assert.Equal("pass", Assert.Single(result.Checks, check => check.Id == "heading-hierarchy").Status);
+            Assert.Equal(expectedStatus, Assert.Single(result.Checks, check => check.Id == "heading-hierarchy").Status);
         }
         finally { Directory.Delete(root, recursive: true); }
     }
