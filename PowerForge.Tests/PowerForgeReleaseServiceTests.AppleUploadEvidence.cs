@@ -63,6 +63,10 @@ public sealed partial class PowerForgeReleaseServiceTests
                 };
                 return Task.FromResult(new ProcessRunResult(0, value, string.Empty, request.FileName, TimeSpan.Zero, false));
             }
+            if (request.FileName.EndsWith("codesign", StringComparison.Ordinal))
+                return Task.FromResult(new ProcessRunResult(0,
+                    "Format=app bundle with Mach-O thin (arm64)\nTeamIdentifier=TEAM1234567", string.Empty,
+                    request.FileName, TimeSpan.Zero, false));
             Assert.Contains("-exportArchive", request.Arguments);
             request.InvokePreStartBoundary();
             request.InvokeStartBoundary();

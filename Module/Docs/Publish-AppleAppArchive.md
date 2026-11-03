@@ -11,7 +11,7 @@ Uploads an Apple app .xcarchive to App Store Connect using xcodebuild exportArch
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-Publish-AppleAppArchive [-ArchivePath] <string> [-TeamId <string>] [-ExportPath <string>] [-ExportOptionsPlistPath <string>] [-XcodeBuild <string>] [-SigningStyle <string>] [-ManageAppVersionAndBuildNumber] [-UploadSymbols] [-GenerateAppStoreInformation] [-AdditionalArgument <string[]>] [-TimeoutMinutes <int>] [-WhatIf] [-Confirm] [<CommonParameters>]
+Publish-AppleAppArchive [-ArchivePath] <string> [-TeamId <string>] [-BundleId <string>] [-MarketingVersion <string>] [-BuildNumber <string>] [-RequiredEmbeddedBundleId <string[]>] [-RequiredPrivacyUsageDescriptionKey <string[]>] [-RequiredEntitlementKey <string[]>] [-RequireArchiveAttestation] [-ExportPath <string>] [-ExportOptionsPlistPath <string>] [-XcodeBuild <string>] [-SigningStyle <string>] [-ManageAppVersionAndBuildNumber] [-UploadSymbols] [-GenerateAppStoreInformation] [-AdditionalArgument <string[]>] [-TimeoutMinutes <int>] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -56,6 +56,38 @@ Required: True
 Position: 0
 Default value: None
 Accept pipeline input: True (ByPropertyName)
+Accept wildcard characters: False
+```
+
+### -BuildNumber
+Expected build number in the final primary app.
+
+```yaml
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -BundleId
+Expected primary app bundle identifier.
+
+```yaml
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
 Accept wildcard characters: False
 ```
 
@@ -112,6 +144,86 @@ Controls whether App Store Connect manages app version and build numbers during 
 
 ```yaml
 Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -MarketingVersion
+Expected marketing version in the final primary app.
+
+```yaml
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -RequireArchiveAttestation
+Verifies the primary and embedded app signatures before export or upload.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -RequiredEmbeddedBundleId
+Bundle identifiers required in embedded apps or extensions.
+
+```yaml
+Type: String[]
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -RequiredEntitlementKey
+Entitlement keys required in the primary app signature.
+
+```yaml
+Type: String[]
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -RequiredPrivacyUsageDescriptionKey
+Privacy purpose-string keys required in the final primary app.
+
+```yaml
+Type: String[]
 Parameter Sets: __AllParameterSets
 Aliases: None
 Possible values:

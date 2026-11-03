@@ -30,6 +30,7 @@ public sealed partial class PowerForgeReleaseServiceTests
             var spec = CreateAppleAutomationSpec(root, keyPath);
             spec.AppleApps!.Automation.MinimumFreeSpaceGB = 0;
             spec.AppleApps.Automation.CleanupBeforeArchive = false;
+            spec.AppleApps.Apps[0].RequiredEntitlementKeys = ["com.apple.security.application-groups"];
             var exportRequests = new List<AppleAppArchiveUploadRequest>();
             var progress = new AppleRehearsalProgress();
             var service = CreateAppleAutomationService(
@@ -42,6 +43,8 @@ public sealed partial class PowerForgeReleaseServiceTests
                     Assert.Equal("app-store-connect", request.Method);
                     Assert.Equal("1.7", request.MarketingVersion);
                     Assert.Equal("16", request.BuildNumber);
+                    Assert.True(request.RequireArchiveAttestation);
+                    Assert.Equal(new[] { "com.apple.security.application-groups" }, request.RequiredEntitlementKeys);
                     Assert.Null(request.RemoteMutationStarted);
                     Directory.CreateDirectory(request.ExportPath!);
                     var artifactPath = Path.Combine(request.ExportPath!, artifactName);

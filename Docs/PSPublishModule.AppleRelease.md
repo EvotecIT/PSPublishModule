@@ -246,6 +246,20 @@ version and build before export when `ManageAppVersionAndBuildNumber` is `false`
 bundle identity and configured privacy purpose strings remain validated. Use
 `false` for a release bound to an approved version and build number.
 
+### Final signed archive checks
+
+Unified Apple release uploads and rehearsals verify the primary app and embedded
+apps/extensions with `codesign --verify --deep --strict` before export. When a team
+is configured, every app/extension signature must name that team.
+`RequiredEmbeddedBundleIds` is checked against the final archived bundle graph;
+`RequiredEntitlementKeys` requires keys in the primary app's signed entitlements.
+The existing bundle/version/privacy checks and protected archive hashes still apply.
+
+For standalone uploads, use `Publish-AppleAppArchive -RequireArchiveAttestation`.
+`-RequiredEmbeddedBundleId` and `-RequiredEntitlementKey` also enable these checks.
+`-BundleId`, `-MarketingVersion` and `-BuildNumber` select and validate the primary
+app. Signature inspection does not sign or repair an invalid archive.
+
 ## Preflight Checks
 
 Use the existing read-only App Store Connect cmdlets before or after upload:

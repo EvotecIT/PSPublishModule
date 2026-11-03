@@ -11,12 +11,12 @@ Creates configuration for preparing an Apple app target in a release pipeline.
 ## SYNTAX
 ### ExplicitVersion (Default)
 ```powershell
-New-ConfigurationAppleApp [-ProjectPath] <string> -MarketingVersion <string> [-Name <string>] [-BundleId <string>] [-Platform <ApplePlatform>] [-ArchiveVariant <AppleArchiveVariant>] [-Scheme <string>] [-AppStoreConnectAppId <string>] [-RequiredPrivacyUsageDescriptionKeys <string[]>] [-BuildNumber <string>] [-BuildNumberPolicy <AppleBuildNumberPolicy>] [-Disabled] [<CommonParameters>]
+New-ConfigurationAppleApp [-ProjectPath] <string> -MarketingVersion <string> [-Name <string>] [-BundleId <string>] [-Platform <ApplePlatform>] [-ArchiveVariant <AppleArchiveVariant>] [-Scheme <string>] [-AppStoreConnectAppId <string>] [-RequiredEmbeddedBundleIds <string[]>] [-RequiredEntitlementKeys <string[]>] [-RequiredPrivacyUsageDescriptionKeys <string[]>] [-BuildNumber <string>] [-BuildNumberPolicy <AppleBuildNumberPolicy>] [-Disabled] [<CommonParameters>]
 ```
 
 ### ResolvedVersion
 ```powershell
-New-ConfigurationAppleApp [-ProjectPath] <string> -UseResolvedVersion [-Name <string>] [-BundleId <string>] [-Platform <ApplePlatform>] [-ArchiveVariant <AppleArchiveVariant>] [-Scheme <string>] [-AppStoreConnectAppId <string>] [-RequiredPrivacyUsageDescriptionKeys <string[]>] [-BuildNumber <string>] [-BuildNumberPolicy <AppleBuildNumberPolicy>] [-Disabled] [<CommonParameters>]
+New-ConfigurationAppleApp [-ProjectPath] <string> -UseResolvedVersion [-Name <string>] [-BundleId <string>] [-Platform <ApplePlatform>] [-ArchiveVariant <AppleArchiveVariant>] [-Scheme <string>] [-AppStoreConnectAppId <string>] [-RequiredEmbeddedBundleIds <string[]>] [-RequiredEntitlementKeys <string[]>] [-RequiredPrivacyUsageDescriptionKeys <string[]>] [-BuildNumber <string>] [-BuildNumberPolicy <AppleBuildNumberPolicy>] [-Disabled] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -191,6 +191,38 @@ Possible values:
 
 Required: True
 Position: 0
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -RequiredEmbeddedBundleIds
+Bundle identifiers required in the final embedded apps or extensions.
+
+```yaml
+Type: String[]
+Parameter Sets: ExplicitVersion, ResolvedVersion
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -RequiredEntitlementKeys
+Entitlement keys required in the final primary app's code signature.
+
+```yaml
+Type: String[]
+Parameter Sets: ExplicitVersion, ResolvedVersion
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False

@@ -112,6 +112,15 @@ public sealed class AppleAppArchiveUploadRequest
     /// <summary>Privacy purpose-string keys that must contain non-empty values in the final archived app.</summary>
     public string[] RequiredPrivacyUsageDescriptionKeys { get; set; } = Array.Empty<string>();
 
+    /// <summary>Embedded application or extension bundle identifiers required in the final archive.</summary>
+    public string[] RequiredEmbeddedBundleIds { get; set; } = Array.Empty<string>();
+
+    /// <summary>Entitlement keys required in the primary app's verified code signature.</summary>
+    public string[] RequiredEntitlementKeys { get; set; } = Array.Empty<string>();
+
+    /// <summary>Verifies primary and embedded app signatures, and their team when TeamId is supplied.</summary>
+    public bool RequireArchiveAttestation { get; set; }
+
     /// <summary>Temporary export path used by xcodebuild.</summary>
     public string? ExportPath { get; set; }
 
