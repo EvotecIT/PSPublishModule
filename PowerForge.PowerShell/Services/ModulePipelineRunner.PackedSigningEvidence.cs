@@ -82,6 +82,7 @@ public sealed partial class ModulePipelineRunner
         }
         string[] packageFiles = (context.FinalizationFilePaths ?? Directory.EnumerateFiles(context.RootPath, "*", SearchOption.AllDirectories).ToArray())
             .Select(Path.GetFullPath)
+            .Where(File.Exists)
             .Except(loadedContentFiles, StringComparer.OrdinalIgnoreCase)
             .Except(signing.IncludeInternals == true || plan.Delivery?.Sign == true
                     ? Array.Empty<string>() : context.PromotedDeliveryFilePaths,

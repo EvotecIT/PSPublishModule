@@ -14,6 +14,8 @@ public sealed partial class ModulePipelineInstallSigningTests
             string source = Path.Combine(root, "source");
             Directory.CreateDirectory(source);
             WriteMinimalModule(source, "DemoModule", "1.0.0");
+            File.WriteAllText(Path.Combine(source, "PowerForge.ReleaseProvenance.psd1"), "stale provenance");
+            File.WriteAllText(Path.Combine(source, "PowerForge.ReleaseProvenance.json"), "stale provenance");
             string output = Path.Combine(root, "output");
             Directory.CreateDirectory(output);
             string retained = Path.Combine(output, "Caller.ps1");
@@ -23,6 +25,10 @@ public sealed partial class ModulePipelineInstallSigningTests
             spec.Install.Enabled = false;
             spec.Segments = spec.Segments.Concat(new IConfigurationSegment[]
             {
+                new ConfigurationInformationSegment
+                {
+                    Configuration = new InformationConfiguration { IncludeRoot = ["*.psd1", "*.psm1", "*.json"] }
+                },
                 new ConfigurationArtefactSegment
                 {
                     ArtefactType = ArtefactType.Unpacked,
@@ -33,7 +39,7 @@ public sealed partial class ModulePipelineInstallSigningTests
                     }
                 }
             }).ToArray();
-            var hosted = new RecordingHostedOperations { HonorSigningPatterns = true, MarkSignedFiles = true };
+            var hosted = new RecordingHostedOperations { HonorSigningPatterns = true, MarkSignedFiles = true, RequireExistingSigningFiles = true };
             var runner = new ModulePipelineRunner(new NullLogger(), powerShellRunner: null,
                 moduleDependencyMetadataProvider: null, hostedOperations: hosted);
             var result = runner.Run(spec, runner.Plan(spec));
@@ -44,6 +50,12 @@ public sealed partial class ModulePipelineInstallSigningTests
             Assert.Contains("# synthetic delivery signature", File.ReadAllText(module), StringComparison.Ordinal);
             Assert.DoesNotContain(retained, hosted.SignedFilePaths);
             Assert.Equal("caller owned", File.ReadAllText(retained));
+            foreach (string extension in new[] { "psd1", "json" })
+            {
+                string removedProvenance = Path.Combine(modules, "DemoModule", "PowerForge.ReleaseProvenance." + extension);
+                Assert.False(File.Exists(removedProvenance));
+                Assert.DoesNotContain(removedProvenance, hosted.SigningCalls.SelectMany(call => call.FilePaths));
+            }
         }
         finally { Directory.Delete(root, recursive: true); }
     }

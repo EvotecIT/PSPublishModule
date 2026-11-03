@@ -62,7 +62,7 @@ public sealed partial class ArtefactBuilderDeliveryLayoutTests
         Directory.CreateDirectory(source);
         Directory.CreateDirectory(destination);
         File.WriteAllText(Path.Combine(source, "Bootstrap.ps1"), "runtime");
-        File.WriteAllText(Path.Combine(destination, "Bootstrap.ps1"), "runtime");
+        File.WriteAllText(Path.Combine(destination, "Bootstrap.ps1"), "stale");
         string retained = Path.Combine(fixture.Output, "Caller.ps1");
         File.WriteAllText(retained, "caller owned");
         var segment = fixture.Segment(ArtefactType.Unpacked);
