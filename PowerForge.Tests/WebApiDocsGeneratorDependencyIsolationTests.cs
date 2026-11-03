@@ -25,7 +25,9 @@ public sealed class WebApiDocsGeneratorDependencyIsolationTests
             Assert.Same(AssemblyLoadContext.Default, AssemblyLoadContext.GetLoadContext(hostDependency));
             var version = new Version(hostName.Version!.Major + 1, 0, 0, 0);
             var primaryDirectory = Directory.CreateDirectory(Path.Combine(root, "primary")).FullName;
-            var additionalDirectory = Directory.CreateDirectory(Path.Combine(root, "additional")).FullName;
+            if (!OperatingSystem.IsWindows())
+                Assert.False(Directory.Exists(Path.Combine(root, "PRIMARY")), "This fixture requires case-sensitive storage.");
+            var additionalDirectory = Directory.CreateDirectory(Path.Combine(root, OperatingSystem.IsWindows() ? "additional" : "PRIMARY")).FullName;
             var olderDependency = Compile(primaryDirectory, dependencyName, $$"""
                 [assembly: System.Reflection.AssemblyVersion("{{hostName.Version}}")]
                 namespace DependencyFixture { public class BasePayload { } }
@@ -50,6 +52,8 @@ public sealed class WebApiDocsGeneratorDependencyIsolationTests
                 """, dependency);
             if (useDependencyManifest)
             {
+                var stalePackageDirectory = Directory.CreateDirectory(Path.Combine(additionalDirectory, ".nuget", "packages", packageName, version.ToString(), "lib", "net8.0")).FullName;
+                File.WriteAllText(Path.Combine(stalePackageDirectory, dependencyName + ".dll"), "incomplete package download");
                 File.WriteAllText(Path.ChangeExtension(additional, ".deps.json"), $$"""
                     {
                       "runtimeTarget": { "name": ".NETCoreApp,Version=v8.0", "signature": "" },
@@ -105,9 +109,10 @@ public sealed class WebApiDocsGeneratorDependencyIsolationTests
     }
 
     [Theory]
-    [InlineData(true)]
-    [InlineData(false)]
-    public void Generate_ReportsAdditionalAssemblyErrorsBeforeInspecting(bool assemblyExists)
+    [InlineData(true, "{ malformed")]
+    [InlineData(true, "[]")]
+    [InlineData(false, "{ malformed")]
+    public void Generate_ReportsAdditionalAssemblyErrorsBeforeInspecting(bool assemblyExists, string manifestContents)
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "pf-apidocs-manifest-" + Guid.NewGuid().ToString("N"))).FullName;
         try
@@ -115,7 +120,7 @@ public sealed class WebApiDocsGeneratorDependencyIsolationTests
             var primary = Compile(root, "PrimaryApi", "public class Primary { }");
             var additional = Compile(root, "AdditionalApi", "public class Additional { }");
             var manifest = Path.ChangeExtension(additional, ".deps.json");
-            File.WriteAllText(manifest, "{ malformed");
+            File.WriteAllText(manifest, manifestContents);
             if (!assemblyExists) File.Delete(additional);
             var xml = Path.Combine(root, "docs.xml");
             File.WriteAllText(xml, "<doc><members/></doc>");
@@ -136,6 +141,39 @@ public sealed class WebApiDocsGeneratorDependencyIsolationTests
             {
                 Assert.Equal(additional, Assert.IsType<FileNotFoundException>(error).FileName);
             }
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Generate_DoesNotBorrowMissingProjectDependencyFromHost()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "pf-apidocs-missing-" + Guid.NewGuid().ToString("N"))).FullName;
+        try
+        {
+            var host = typeof(Scriban.Runtime.ScriptObject).Assembly;
+            Assert.Same(AssemblyLoadContext.Default, AssemblyLoadContext.GetLoadContext(host));
+            var dependency = Compile(root, "Scriban", $$"""
+                [assembly: System.Reflection.AssemblyVersion("{{host.GetName().Version}}")]
+                namespace Scriban.Runtime { public class ScriptObject { } }
+                """);
+            var primary = Compile(root, "MissingDependencyApi", "public class Primary : Scriban.Runtime.ScriptObject { }", dependency);
+            File.Delete(dependency);
+            var xml = Path.Combine(root, "docs.xml");
+            File.WriteAllText(xml, "<doc><members/></doc>");
+
+            var result = WebApiDocsGenerator.Generate(new WebApiDocsOptions
+            {
+                AssemblyPath = primary, XmlPath = xml,
+                OutputPath = Path.Combine(root, "api"), Format = "json"
+            });
+
+            Assert.Equal(0, result.TypeCount);
+            Assert.Contains(result.Warnings, warning => warning.Contains("0 public types", StringComparison.Ordinal));
+            Assert.Same(host, AssemblyLoadContext.Default.LoadFromAssemblyName(host.GetName()));
         }
         finally
         {

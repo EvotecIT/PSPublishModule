@@ -7,12 +7,13 @@ namespace PowerForge.Web;
 
 public static partial class WebApiDocsGenerator
 {
+    private static readonly StringComparer ApiDocsPathComparer = OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
     private static readonly Lazy<Dictionary<string, string>> ApiDocsFrameworkAssemblyPaths = new(GetApiDocsFrameworkAssemblyPaths);
 
     private static bool IsApiDocsFrameworkAssembly(Assembly assembly) =>
         assembly == typeof(object).Assembly ||
         (!assembly.IsDynamic && ApiDocsFrameworkAssemblyPaths.Value.TryGetValue(assembly.GetName().Name!, out var path) &&
-         string.Equals(assembly.Location, path, StringComparison.OrdinalIgnoreCase));
+         ApiDocsPathComparer.Equals(assembly.Location, path));
 
     /// <summary>Uses the host's runtime-pack manifests; self-contained outputs also contain application DLLs.</summary>
     private static Dictionary<string, string> GetApiDocsFrameworkAssemblyPaths()
@@ -75,13 +76,13 @@ public static partial class WebApiDocsGenerator
     {
         private readonly AssemblyDependencyResolver[] _resolvers;
         private readonly string[] _assemblyDirectories;
-        private readonly IReadOnlyDictionary<string, string>[] _dependencyPaths;
+        private readonly IReadOnlyDictionary<string, List<string>>[] _dependencyPaths;
 
         internal ApiDocsAssemblyLoadContext(string[] assemblyPaths)
             : base($"PowerForge.Web.ApiDocs:{Path.GetFileNameWithoutExtension(assemblyPaths[0])}", isCollectible: true)
         {
             var paths = assemblyPaths.Select(Path.GetFullPath).ToArray();
-            _assemblyDirectories = paths.Select(path => Path.GetDirectoryName(path)!).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+            _assemblyDirectories = paths.Select(path => Path.GetDirectoryName(path)!).Distinct(ApiDocsPathComparer).ToArray();
             _dependencyPaths = paths.Select(BuildDependencyPathMap).ToArray();
             _resolvers = paths.Select(path => new AssemblyDependencyResolver(path)).ToArray();
         }
@@ -96,8 +97,8 @@ public static partial class WebApiDocsGenerator
 
             var paths = _resolvers.Select(resolver => resolver.ResolveAssemblyToPath(assemblyName))
                 .Concat(_assemblyDirectories.Select(directory => Path.Combine(directory, assemblySimpleName + ".dll")))
-                .Concat(_dependencyPaths.Select(map => assemblySimpleName is not null && map.TryGetValue(assemblySimpleName, out var path) ? path : null))
-                .OfType<string>().Distinct(StringComparer.OrdinalIgnoreCase);
+                .Concat(_dependencyPaths.SelectMany(map => assemblySimpleName is not null && map.TryGetValue(assemblySimpleName, out var candidates) ? candidates : Enumerable.Empty<string>()))
+                .OfType<string>().Distinct(ApiDocsPathComparer);
             var candidates = new List<(string Path, Version? Version)>();
             foreach (var path in paths)
             {
@@ -130,8 +131,8 @@ public static partial class WebApiDocsGenerator
                 if (runtimeAssembly is not null) return runtimeAssembly;
             }
 
-            // Returning null would silently fall back to the CLI's default context.
-            throw new FileNotFoundException($"API documentation dependency '{assemblyName}' was not found in the documented project outputs or dependency manifests.", assemblySimpleName + ".dll");
+            // Both null and FileNotFoundException permit default-context fallback.
+            throw new FileLoadException($"API documentation dependency '{assemblyName}' was not found in the documented project outputs or dependency manifests.", assemblySimpleName + ".dll");
         }
 
         protected override IntPtr LoadUnmanagedDll(string unmanagedDllName)
@@ -185,25 +186,25 @@ public static partial class WebApiDocsGenerator
             }
         }
 
-        private static IReadOnlyDictionary<string, string> BuildDependencyPathMap(string assemblyPath)
+        private static IReadOnlyDictionary<string, List<string>> BuildDependencyPathMap(string assemblyPath)
         {
             var depsPath = Path.ChangeExtension(assemblyPath, ".deps.json");
             if (!File.Exists(depsPath))
-                return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                return new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
 
             using var document = ReadDependencyManifest(depsPath);
             var packageRoots = GetNuGetPackageRootCandidates(assemblyPath)
                 .Where(Directory.Exists)
                 .ToArray();
             if (packageRoots.Length == 0)
-                return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                return new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
 
             if (!document.RootElement.TryGetProperty("libraries", out var librariesElement) ||
                 librariesElement.ValueKind != JsonValueKind.Object ||
                 !document.RootElement.TryGetProperty("targets", out var targetsElement) ||
                 targetsElement.ValueKind != JsonValueKind.Object)
             {
-                return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                return new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
             }
 
             var packagePaths = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -224,7 +225,7 @@ public static partial class WebApiDocsGenerator
                     packagePaths[library.Name] = relativePackagePath.Replace('/', Path.DirectorySeparatorChar);
             }
 
-            var dependencyPaths = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            var dependencyPaths = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
             foreach (var target in targetsElement.EnumerateObject())
             {
                 if (target.Value.ValueKind != JsonValueKind.Object)
@@ -251,7 +252,12 @@ public static partial class WebApiDocsGenerator
             try
             {
                 using var stream = File.OpenRead(depsPath);
-                return JsonDocument.Parse(stream);
+                var document = JsonDocument.Parse(stream);
+                if (document.RootElement.ValueKind == JsonValueKind.Object)
+                    return document;
+
+                document.Dispose();
+                throw new InvalidDataException($"API documentation dependency manifest could not be parsed: {depsPath}. The root must be a JSON object.");
             }
             catch (JsonException ex)
             {
@@ -263,7 +269,7 @@ public static partial class WebApiDocsGenerator
             JsonElement libraryElement,
             string relativePackagePath,
             string packageRoot,
-            Dictionary<string, string> dependencyPaths)
+            Dictionary<string, List<string>> dependencyPaths)
         {
             AddDependencyPathsFromSection("runtime");
             AddDependencyPathsFromSection("runtimeTargets");
@@ -286,8 +292,9 @@ public static partial class WebApiDocsGenerator
                         continue;
 
                     var assemblyName = Path.GetFileNameWithoutExtension(runtimeAsset.Name);
-                    if (!dependencyPaths.ContainsKey(assemblyName))
-                        dependencyPaths[assemblyName] = fullPath;
+                    if (!dependencyPaths.TryGetValue(assemblyName, out var candidates))
+                        dependencyPaths[assemblyName] = candidates = new List<string>();
+                    candidates.Add(fullPath);
                 }
             }
         }
@@ -300,7 +307,7 @@ public static partial class WebApiDocsGenerator
         internal static IReadOnlyList<string> GetNuGetPackageRootCandidates(string? assemblyPath)
         {
             var candidates = new List<string>();
-            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var seen = new HashSet<string>(ApiDocsPathComparer);
 
             void AddCandidate(string? path)
             {
