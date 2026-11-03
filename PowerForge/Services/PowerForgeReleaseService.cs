@@ -6336,7 +6336,8 @@ internal sealed partial class PowerForgeReleaseService
             || !string.IsNullOrWhiteSpace(request.SignKeyContainer);
     }
 
-    private static DotNetPublishSignOptions ApplySigningOverrides(
+    /// <summary>Applies shared signing precedence for both simple and DotNet publish tool targets.</summary>
+    internal static DotNetPublishSignOptions ApplySigningOverrides(
         DotNetPublishSignOptions? existing,
         PowerForgeReleaseRequest request)
     {

@@ -73,6 +73,9 @@ internal sealed class PowerForgeToolReleaseTarget
 
     public bool KeepDocs { get; set; }
 
+    /// <summary>Optional Authenticode signing for Windows outputs before archiving.</summary>
+    public DotNetPublishSignOptions? Sign { get; set; }
+
     public bool CreateCommandAliasOnUnix { get; set; } = true;
 
     public Dictionary<string, string>? MsBuildProperties { get; set; }
@@ -155,6 +158,8 @@ internal sealed class PowerForgeToolReleaseTargetPlan
     public bool KeepSymbols { get; set; }
 
     public bool KeepDocs { get; set; }
+
+    public DotNetPublishSignOptions? Sign { get; set; }
 
     public bool CreateCommandAliasOnUnix { get; set; }
 

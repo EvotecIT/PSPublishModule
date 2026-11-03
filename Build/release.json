@@ -77,6 +77,12 @@
     "Targets": [
       {
         "Name": "PowerForge",
+        "Sign": {
+          "Enabled": true,
+          "Thumbprint": "92E95FB58EFFA6A4A75E77A33CDD6BFE6DD30F1A",
+          "OnMissingTool": "Fail",
+          "OnSignFailure": "Fail"
+        },
         "ProjectPath": "PowerForge.Cli/PowerForge.Cli.csproj",
         "OutputName": "PowerForge",
         "CommandAlias": "powerforge",
@@ -90,6 +96,12 @@
       },
       {
         "Name": "PowerForgeWeb",
+        "Sign": {
+          "Enabled": true,
+          "Thumbprint": "92E95FB58EFFA6A4A75E77A33CDD6BFE6DD30F1A",
+          "OnMissingTool": "Fail",
+          "OnSignFailure": "Fail"
+        },
         "ProjectPath": "PowerForge.Web.Cli/PowerForge.Web.Cli.csproj",
         "OutputName": "PowerForgeWeb",
         "CommandAlias": "powerforge-web",

@@ -55,6 +55,16 @@ publication switches so a partial public release cannot become visible before th
 with packages, tools, signing, and the unified GitHub release. External module repositories can continue using
 the `Build-Module {}` DSL; both entry-point styles run the same shared module and release engines.
 
+The standalone PowerForge and PowerForgeWeb Windows executables use `Tools.Targets[].Sign` in
+`Build/release.json`. The tool lane signs the renamed executable before copying it to the final output
+and creating its ZIP, and checks that the executable has a valid signature from the configured publisher.
+Missing SignTool, signing failures and invalid publisher signatures stop the release. Linux and macOS
+outputs retain their normal unsigned payloads and command aliases. Use `-EnableSigning $false`
+for unsigned package/tool validation and `-ModuleNoSign` for an unsigned module build; those artifacts
+do not qualify for a signed public release.
+Explicit signing identity, tool and policy overrides use the same precedence as the DotNet publish
+lane. Named signing profiles require `Tools.DotNetPublish` or `Tools.DotNetPublishConfigPath`.
+
 Repositories that also ship native CLI archives can keep those targets in the broader
 `Invoke-PowerForgeRelease` configuration. Their publish wrapper should select the module `Publish` gate and the
 tool GitHub publisher in the same engine invocation. The module pipeline still owns NuGet, PowerShell Gallery,
