@@ -5,7 +5,7 @@ using Xunit;
 
 namespace PowerForge.Tests;
 
-public sealed class DotNetRepositoryReleaseServiceVersioningTests
+public sealed partial class DotNetRepositoryReleaseServiceVersioningTests
 {
     [Fact]
     public void Execute_DoesNotResolveAlignedFeedsWhenPlanCoversSelection()
@@ -343,8 +343,10 @@ public sealed class DotNetRepositoryReleaseServiceVersioningTests
         }
     }
 
-    [Fact]
-    public void Execute_AlignsVersionTrackFromExplicitAnchorPackageId()
+    [Theory]
+    [InlineData(true, "2.0.6")]
+    [InlineData(false, "2.0.0")]
+    public void Execute_AlignsVersionTrackFromExplicitAnchorPackageId(bool hasPublishedAnchor, string expectedVersion)
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
         try
@@ -353,7 +355,10 @@ public sealed class DotNetRepositoryReleaseServiceVersioningTests
             WritePackableProject(root.FullName, "Suite.NewPackage", "Suite.NewPackage");
 
             var source = Directory.CreateDirectory(Path.Combine(root.FullName, "source"));
-            File.WriteAllText(Path.Combine(source.FullName, "Suite.Anchor.2.0.5.nupkg"), string.Empty);
+            File.WriteAllText(Path.Combine(root.FullName, "Directory.Build.props"),
+                "<Project><PropertyGroup><PackageVersion>2.0.5</PackageVersion></PropertyGroup></Project>");
+            if (hasPublishedAnchor)
+                File.WriteAllText(Path.Combine(source.FullName, "Suite.Anchor.2.0.5.nupkg"), string.Empty);
 
             var context = new ProjectBuildPreparationService().Prepare(
                 new ProjectBuildConfiguration
@@ -385,8 +390,8 @@ public sealed class DotNetRepositoryReleaseServiceVersioningTests
             var result = new DotNetRepositoryReleaseService(new NullLogger()).Execute(context.Spec);
 
             Assert.True(result.Success, result.ErrorMessage);
-            Assert.Equal("2.0.6", result.ResolvedVersion);
-            Assert.All(result.ResolvedVersionsByProject.Values, version => Assert.Equal("2.0.6", version));
+            Assert.Equal(expectedVersion, result.ResolvedVersion);
+            Assert.All(result.ResolvedVersionsByProject.Values, version => Assert.Equal(expectedVersion, version));
         }
         finally
         {

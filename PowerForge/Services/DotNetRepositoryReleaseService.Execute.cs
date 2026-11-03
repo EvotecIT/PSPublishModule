@@ -209,7 +209,7 @@ public sealed partial class DotNetRepositoryReleaseService
                 packable.All(project => spec.PlannedVersionsByProject.ContainsKey(project.ProjectName));
             var alignedVersions = plannedVersionsCoverSelection
                 ? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
-                : ResolveAlignedPackageVersions(packable, expectedGlobal, expectedMap, spec);
+                : ResolveAlignedPackageVersions(packable, expectedGlobal, expectedMap, spec, candidateMetadata);
             var detailedProgress = progress as IProjectBuildProgressReporterV2;
             var versionItems = CreateVersionProgressItems(packable, detailedProgress);
             progress?.PhaseStarted(ProjectBuildProgressPhase.Versioning, packable.Length, "Resolving project versions");

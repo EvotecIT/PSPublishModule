@@ -43,9 +43,26 @@ public sealed partial class DotNetRepositoryReleaseService
             includePrerelease: spec.IncludePrerelease);
 
         if (current is null)
-            warning = $"No current package version found; using 0 baseline for '{expectedVersion}'.";
+        {
+            current = ResolveProjectVersionBaseline(project, spec, evaluatedPackageVersion);
+            warning = current is null
+                ? $"No current package version found; using 0 baseline for '{expectedVersion}'."
+                : $"No current package version found; using project version {current} as baseline for '{expectedVersion}'.";
+        }
 
         return VersionPatternStepper.Step(expectedVersion!, current);
+    }
+
+    private Version? ResolveProjectVersionBaseline(
+        DotNetRepositoryProjectResult project,
+        DotNetRepositoryReleaseSpec spec,
+        string? evaluatedPackageVersion)
+    {
+        var projectVersion = ResolveCurrentProjectVersion(project, spec, out _, evaluatedPackageVersion);
+        return PackageVersionUtility.TryNormalizeExact(projectVersion, out var normalized) &&
+               Version.TryParse(PackageVersionUtility.GetNumericVersion(normalized), out var version)
+            ? version
+            : null;
     }
 
     private string ResolveCurrentProjectVersion(

@@ -2,9 +2,6 @@
 
 ## Unreleased
 ### What's Changed
-- Keep identical shared type accelerators registered until their last module is removed, while preserving external and conflicting accelerator mappings.
-- Reject empty Markdown readiness evidence, inspect headings in main content, and verify WebMCP synchronization against the tool's visible search surface.
-- Avoid Windows short-name expansion in generated benchmark paths while preserving deterministic names and collision resistance.
 - Sign standalone PowerForge and PowerForgeWeb Windows executables before packaging their release archives, and stop publication when signing or publisher verification fails.
 - Complete the package phase's exact GitHub release during a combined module release with fixed versions, without enabling generic reuse of pre-existing releases.
 - Stage locally signed NuGet packages in a draft GitHub release and publish their exact files through a protected GitHub OIDC workflow, with manifest integrity checks and author-signer verification on retries.
@@ -35,6 +32,10 @@
 - Allow locally available Windows Cloud Files inputs, including OneDrive-backed installed modules, when building artefacts while retaining strict link and finalized-output checks.
 - Read Windows directory case flags when validating artefact destinations, so empty output directories cannot hide case-only payload collisions.
 - Defer repository credential file and environment lookups until repository operations, so local builds and configuration exports do not require publishing secrets. Preserve the source through JSON configuration and resolve relative secret files against the project root.
+- Use the evaluated project version as the wildcard release baseline when no published package exists, including aligned package groups, while preserving published-version priority.
+- Keep identical shared type accelerators registered until their last module is removed, while preserving external and conflicting accelerator mappings.
+- Reject empty Markdown readiness evidence, inspect headings in main content, and verify WebMCP synchronization against the tool's visible search surface.
+- Avoid Windows short-name expansion in generated benchmark paths while preserving deterministic names and collision resistance.
 - Fixed framework inheritdoc resolution for multi-assembly API references, added built-in summaries for common object/equality members when targeting-pack XML is unavailable, and added per-step API/command index copy. Pre-rendered headers and footers no longer warn about absent navigation placeholders.
 - PowerForge.Web PowerShell command references now read like Get-Help: syntax first, each parameter listed once with set-aware chips, Get-Help positional syntax, `Module` instead of `Namespace`, no stray `PS>` example lines, dedented example code, and new `sectionLabel` / `moduleName` apidocs options (with a `{{SECTION_LABEL}}` template token). Example code blocks no longer render a blank first line or an indented closing line.
 - Made generated module-scoped AssemblyLoadContext loaders deterministic and removed machine-specific temporary build paths from their embedded debug metadata.

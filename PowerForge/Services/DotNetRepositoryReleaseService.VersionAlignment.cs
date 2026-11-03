@@ -10,7 +10,8 @@ public sealed partial class DotNetRepositoryReleaseService
         IReadOnlyList<DotNetRepositoryProjectResult> projects,
         string? expectedGlobal,
         IReadOnlyDictionary<string, string> expectedMap,
-        DotNetRepositoryReleaseSpec spec)
+        DotNetRepositoryReleaseSpec spec,
+        IReadOnlyDictionary<string, ProjectMetadataResolution> candidateMetadata)
     {
         var aligned = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         if (!spec.AlignPackageVersions || !spec.UpdateVersions)
@@ -54,8 +55,21 @@ public sealed partial class DotNetRepositoryReleaseService
                 }
             }
 
-            var alignedVersion = VersionPatternStepper.Step(settings.ExpectedVersion, highestCurrent);
             var members = group.ToArray();
+            if (highestCurrent is null && settings.GroupKey.StartsWith("pattern:", StringComparison.Ordinal))
+            {
+                foreach (var item in members)
+                {
+                    var local = ResolveProjectVersionBaseline(item.Project, spec,
+                        candidateMetadata[item.Project.CsprojPath].PackageVersion);
+                    if (local is not null && (highestCurrent is null || local.CompareTo(highestCurrent) > 0))
+                    {
+                        highestCurrent = local;
+                        highestPackageId = $"{item.PackageId}, project version";
+                    }
+                }
+            }
+            var alignedVersion = VersionPatternStepper.Step(settings.ExpectedVersion, highestCurrent);
             var floorMember = members.FirstOrDefault(item => IsReleaseVersionFloorProject(item.Project, spec));
             if (floorMember is not null)
             {
@@ -78,7 +92,7 @@ public sealed partial class DotNetRepositoryReleaseService
             {
                 _logger.Info(
                     $"Aligned {members.Length} project(s) using pattern '{settings.ExpectedVersion}' to {alignedVersion}; " +
-                    $"highest current package version is {highestCurrent} ({highestPackageId}).");
+                    $"highest current version baseline is {highestCurrent} ({highestPackageId}).");
             }
         }
 
