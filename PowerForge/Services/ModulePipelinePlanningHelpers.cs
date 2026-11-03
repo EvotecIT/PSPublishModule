@@ -81,8 +81,9 @@ internal static class ModulePipelinePlanningHelpers
         {
             return XDocument.Load(projectPath, LoadOptions.None)
                 .Descendants()
-                .Where(e => string.Equals(e.Name.LocalName, "TargetFramework", StringComparison.OrdinalIgnoreCase)
-                    || string.Equals(e.Name.LocalName, "TargetFrameworks", StringComparison.OrdinalIgnoreCase))
+                .Where(e => string.Equals(e.Parent?.Name.LocalName, "PropertyGroup", StringComparison.OrdinalIgnoreCase)
+                    && (string.Equals(e.Name.LocalName, "TargetFramework", StringComparison.OrdinalIgnoreCase)
+                        || string.Equals(e.Name.LocalName, "TargetFrameworks", StringComparison.OrdinalIgnoreCase)))
                 .SelectMany(e => NormalizeFrameworks(e.Value))
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToArray();

@@ -20,6 +20,11 @@ public sealed partial class ModulePipelineDevelopmentBootstrapperTests
                     <TargetFrameworks>net8.0</TargetFrameworks>
                     <TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('Windows'))">net472;net8.0</TargetFrameworks>
                   </PropertyGroup>
+                  <ItemGroup>
+                    <ProjectReference Include="Unused.csproj" Condition="false">
+                      <TargetFramework>net48</TargetFramework>
+                    </ProjectReference>
+                  </ItemGroup>
                 </Project>
                 """);
             File.WriteAllText(Path.Combine(csprojDir.FullName, "Demo.cs"), "public sealed class Demo { }");
