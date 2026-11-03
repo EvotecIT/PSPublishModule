@@ -2,7 +2,8 @@
 
 ## Unreleased
 ### What's Changed
-- Resolve relative TOC links against each collection's output path during coverage verification, including nested and index Markdown links, while retaining warnings for missing pages.
+- Resolve relative TOC links against evaluated collection output paths, including project and language prefixes, nested and index Markdown links, while retaining warnings for missing pages.
+- Preserve literal reserved characters in content output directories when adding trailing slashes and language prefixes.
 - Resolve C# API documentation dependencies from every documented assembly's output and dependency manifest in a collectible context, keeping the CLI's application dependencies out of reflection.
 - Preserve site-relative API suite routes on Linux instead of converting them to file URLs.
 - Sign standalone PowerForge and PowerForgeWeb Windows executables before packaging their release archives, and stop publication when signing or publisher verification fails.

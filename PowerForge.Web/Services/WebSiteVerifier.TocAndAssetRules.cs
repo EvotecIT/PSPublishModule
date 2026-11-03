@@ -115,6 +115,7 @@ public static partial class WebSiteVerifier
     private static void ValidateTocCoverage(
         SiteSpec spec,
         WebSitePlan plan,
+        ResolvedLocalizationConfig localization,
         Dictionary<string, List<CollectionRoute>> collectionRoutes,
         List<string> warnings)
     {
@@ -140,43 +141,55 @@ public static partial class WebSiteVerifier
             if (tocItems.Length == 0)
                 continue;
 
-            var outputRoot = string.IsNullOrWhiteSpace(collection.Output) ? "/" : collection.Output;
-            var tocUrls = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            CollectTocUrls(tocItems, tocUrls, outputRoot, spec.TrailingSlash);
-
-            if (tocUrls.Count == 0)
-                continue;
-
-            var normalizedRoot = NormalizeRouteForCompare(outputRoot, spec.TrailingSlash);
-
-            var routeSet = routes
-                .Where(r => !r.Draft)
-                .Select(r => r.Route)
+            var outputTemplate = string.IsNullOrWhiteSpace(collection.Output) ? "/" : collection.Output;
+            var hasProjectPlaceholder = outputTemplate.Contains("{project}", StringComparison.OrdinalIgnoreCase);
+            var collectionRouteSet = routes
+                .Where(route => !route.Draft)
+                .Select(route => NormalizeRouteForCompare(route.Route, spec.TrailingSlash))
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
-
-            var missing = routeSet
-                .Where(r => !tocUrls.Contains(r))
-                .ToList();
-
-            if (missing.Count > 0)
+            foreach (var group in routes.GroupBy(route => (
+                         Project: hasProjectPlaceholder ? route.ProjectSlug : null,
+                         route.Language)))
             {
-                var preview = string.Join(", ", missing.Take(5));
-                var suffix = missing.Count > 5 ? " ..." : string.Empty;
-                warnings.Add($"TOC for collection '{collection.Name}' is missing {missing.Count} page(s): {preview}{suffix}");
-            }
+                var outputRoot = ReplaceProjectPlaceholder(outputTemplate, group.Key.Project);
+                outputRoot = ApplyLanguagePrefixToRoute(spec, localization, outputRoot, group.Key.Language);
+                var tocUrls = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                CollectTocUrls(tocItems, tocUrls, outputRoot, spec.TrailingSlash);
 
-            var extra = tocUrls
-                .Where(u => normalizedRoot == "/" ||
-                            u.Equals(normalizedRoot, StringComparison.OrdinalIgnoreCase) ||
-                            u.StartsWith(normalizedRoot.TrimEnd('/') + "/", StringComparison.OrdinalIgnoreCase))
-                .Where(u => !routeSet.Contains(u))
-                .ToList();
+                if (tocUrls.Count == 0)
+                    continue;
 
-            if (extra.Count > 0)
-            {
-                var preview = string.Join(", ", extra.Take(5));
-                var suffix = extra.Count > 5 ? " ..." : string.Empty;
-                warnings.Add($"TOC for collection '{collection.Name}' contains {extra.Count} missing page(s): {preview}{suffix}");
+                var normalizedRoot = NormalizeRouteForCompare(outputRoot, spec.TrailingSlash);
+
+                var routeSet = group
+                    .Where(r => !r.Draft)
+                    .Select(r => NormalizeRouteForCompare(r.Route, spec.TrailingSlash))
+                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+                var missing = routeSet
+                    .Where(r => !tocUrls.Contains(r))
+                    .ToList();
+
+                if (missing.Count > 0)
+                {
+                    var preview = string.Join(", ", missing.Take(5));
+                    var suffix = missing.Count > 5 ? " ..." : string.Empty;
+                    warnings.Add($"TOC for collection '{collection.Name}' is missing {missing.Count} page(s): {preview}{suffix}");
+                }
+
+                var extra = tocUrls
+                    .Where(u => normalizedRoot == "/" ||
+                                u.Equals(normalizedRoot, StringComparison.OrdinalIgnoreCase) ||
+                                u.StartsWith(normalizedRoot.TrimEnd('/') + "/", StringComparison.OrdinalIgnoreCase))
+                    .Where(u => !collectionRouteSet.Contains(u))
+                    .ToList();
+
+                if (extra.Count > 0)
+                {
+                    var preview = string.Join(", ", extra.Take(5));
+                    var suffix = extra.Count > 5 ? " ..." : string.Empty;
+                    warnings.Add($"TOC for collection '{collection.Name}' contains {extra.Count} missing page(s): {preview}{suffix}");
+                }
             }
         }
     }
@@ -275,10 +288,12 @@ public static partial class WebSiteVerifier
             return null;
 
         // Treat the collection root as a directory even when routes omit trailing slashes.
-        var root = new Uri("https://powerforge.invalid" + NormalizeRouteForCompare(outputRoot, TrailingSlashMode.Always));
+        var rootPath = NormalizeRouteForCompare(outputRoot, TrailingSlashMode.Always);
+        var encodedRoot = string.Join("/", rootPath.Split('/').Select(Uri.EscapeDataString));
+        var root = new Uri("https://powerforge.invalid" + encodedRoot);
         if (!Uri.TryCreate(root, baseUrl, out var resolved))
             return null;
-        baseUrl = resolved.GetComponents(UriComponents.Path | UriComponents.KeepDelimiter, UriFormat.SafeUnescaped);
+        baseUrl = resolved.GetComponents(UriComponents.Path | UriComponents.KeepDelimiter, UriFormat.Unescaped);
 
         if (baseUrl.EndsWith(".md", StringComparison.OrdinalIgnoreCase))
         {
@@ -298,7 +313,7 @@ public static partial class WebSiteVerifier
         if (!normalized.StartsWith("/", StringComparison.Ordinal))
             normalized = "/" + normalized.TrimStart('/');
 
-        if (mode == TrailingSlashMode.Never && normalized.EndsWith("/") && normalized.Length > 1)
+        if (mode != TrailingSlashMode.Always && normalized.EndsWith("/") && normalized.Length > 1)
             return normalized.TrimEnd('/');
         if (mode == TrailingSlashMode.Always && !normalized.EndsWith("/"))
             return normalized + "/";

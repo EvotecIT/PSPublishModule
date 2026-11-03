@@ -315,7 +315,7 @@ public static partial class WebSiteBuilder
             if (languageCode.Equals(selectedLanguage, StringComparison.OrdinalIgnoreCase))
             {
                 var strippedRoute = StripLanguagePrefix(localization, route);
-                return EnsureTrailingSlash(strippedRoute, spec.TrailingSlash);
+                return BuildRoute(strippedRoute, string.Empty, spec.TrailingSlash);
             }
         }
 
@@ -332,7 +332,7 @@ public static partial class WebSiteBuilder
             ? "/" + prefix
             : "/" + prefix + "/" + withoutLeadingSlash;
 
-        return EnsureTrailingSlash(prefixed, spec.TrailingSlash);
+        return BuildRoute(prefixed, string.Empty, spec.TrailingSlash);
     }
 
     private static string StripLanguagePrefix(ResolvedLocalizationConfig localization, string? route)
