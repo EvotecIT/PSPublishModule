@@ -99,8 +99,30 @@ public static class WebMcpBehavioralTester
                     .filter(isVisible)
                     .map(anchor => normalizeUrl(anchor.getAttribute('href')))
                     .filter(Boolean);
+                  const readVisibleText = region => {
+                    if (!region) return '';
+                    const walker = document.createTreeWalker(region, NodeFilter.SHOW_TEXT);
+                    const parts = [];
+                    let length = 0;
+                    let node;
+                    while (length < 1000 && (node = walker.nextNode())) {
+                      let parent = node.parentElement;
+                      while (parent && getComputedStyle(parent).display === 'contents') {
+                        const style = getComputedStyle(parent);
+                        if (style.visibility !== 'visible' || Number(style.opacity) === 0) break;
+                        parent = parent.parentElement;
+                      }
+                      if (!parent || !isVisible(parent)) continue;
+                      const text = String(node.nodeValue || '').trim().slice(0, 1000 - length);
+                      if (text) {
+                        parts.push(text);
+                        length += text.length + 1;
+                      }
+                    }
+                    return parts.join(' ').slice(0, 1000);
+                  };
                   const initialVisibleResults = findVisible(visibleResultSelector);
-                  const initialVisibleResultText = String(initialVisibleResults?.innerText || '').slice(0, 1000);
+                  const initialVisibleResultText = readVisibleText(initialVisibleResults);
                   const initialVisibleResultUrls = readVisibleUrls(initialVisibleResults);
                   const controller = new AbortController();
                   const timeoutId = setTimeout(() => controller.abort(), request.timeoutMs);
@@ -118,7 +140,7 @@ public static class WebMcpBehavioralTester
                   await new Promise(resolve => setTimeout(resolve, 300));
                   const visibleInput = findVisible('[data-search-page-input], #pf-search-query');
                   const visibleResults = findVisible(visibleResultSelector);
-                  const visibleResultText = String(visibleResults?.innerText || '').slice(0, 1000);
+                  const visibleResultText = readVisibleText(visibleResults);
                   const visibleResultUrls = readVisibleUrls(visibleResults);
                   return JSON.stringify({
                     registeredTools: Object.keys(tools).sort(),
