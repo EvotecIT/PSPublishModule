@@ -40,23 +40,6 @@ public sealed partial class ModulePipelineRunner
                         finalizePackedArtefact: context => plan.SignModule
                             ? FinalizeSignedPackedArtefact(plan, state, context)
                             : FinalizeUnsignedPackedArtefact(plan, state, context));
-                    if (result.Type == ArtefactType.Unpacked)
-                    {
-                        foreach (var module in result.Modules.Where(static module => module.IsMainModule))
-                        {
-                            var deliveredSigningResult = CreateDeliveredSigningResult(
-                                state.SigningResult,
-                                buildResult.StagingPath,
-                                module.Path);
-                            ValidateDeliveredBinaryDependencies(plan, module.Path);
-                            _ = PowerShellModuleCompilationIntegrator.FinalizeDeliveredCanonicalManifest(
-                                module.Path,
-                                module.Name,
-                                deliveredSigningResult,
-                                plan.Signing);
-                            ValidateDeliveredBinaryDependencies(plan, module.Path);
-                        }
-                    }
                     state.ArtefactResults.Add(result);
                     session.Done(step);
                 }

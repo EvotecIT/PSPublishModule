@@ -16,6 +16,17 @@ public sealed partial class ModulePipelineRunner
         if (context.ArtefactType == ArtefactType.Script || context.ArtefactType == ArtefactType.ScriptPacked)
             return FinalizeSignedScriptArtefact(plan, state, context);
 
+        if (context.ArtefactType == ArtefactType.Unpacked)
+            return FinalizeSignedUnpackedArtefact(plan, state, context);
+
+        return FinalizeSignedModuleLayout(plan, state, context);
+    }
+
+    private IReadOnlyList<string> FinalizeSignedModuleLayout(
+        ModulePipelinePlan plan,
+        ModulePipelineRunState state,
+        PackedArtefactFinalizationContext context)
+    {
         PreparePackedReleaseProtection(plan, state, context);
         ValidateDeliveredBinaryDependencies(plan, context.MainModulePath, context.ManifestPath);
         SigningOptionsConfiguration signing = plan.Signing ?? throw new InvalidOperationException(
@@ -69,8 +80,9 @@ public sealed partial class ModulePipelineRunner
                 plan.SourceRevision!,
                 sourceDirty: false);
         }
-        string[] packageFiles = Directory.EnumerateFiles(context.RootPath, "*", SearchOption.AllDirectories)
+        string[] packageFiles = (context.FinalizationFilePaths ?? Directory.EnumerateFiles(context.RootPath, "*", SearchOption.AllDirectories).ToArray())
             .Select(Path.GetFullPath)
+            .Where(File.Exists)
             .Except(loadedContentFiles, StringComparer.OrdinalIgnoreCase)
             .Except(signing.IncludeInternals == true || plan.Delivery?.Sign == true
                     ? Array.Empty<string>() : context.PromotedDeliveryFilePaths,

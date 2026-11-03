@@ -2,6 +2,7 @@
 
 ## Unreleased
 ### What's Changed
+- Finalize unpacked module and delivery layouts after runtime support files are copied, so signing covers the delivered scripts as it does in ZIP packages. Keep retained caller files and removed disabled provenance out of signing scope, and reject overlapping signing-evidence outputs.
 - Resolve C# API documentation dependencies from every documented assembly's output and dependency manifest in a collectible context, keeping the CLI's application dependencies out of reflection.
 - Preserve site-relative API suite routes on Linux instead of converting them to file URLs.
 - Sign standalone PowerForge and PowerForgeWeb Windows executables before packaging their release archives, and stop publication when signing or publisher verification fails.

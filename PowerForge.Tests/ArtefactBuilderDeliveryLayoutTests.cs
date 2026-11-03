@@ -159,8 +159,14 @@ public sealed partial class ArtefactBuilderDeliveryLayoutTests
             segment.Configuration.RequiredModules.Path = customPaths ? "Shared/Modules" : null;
             segment.Configuration.RequiredModules.Enabled = true;
             segment.Configuration.RequiredModules.Source = RequiredModulesSource.Installed;
-            var result = new ArtefactBuilder(new NullLogger()).Build(segment, fixture.Root, fixture.Staging,
+            var result = new ArtefactBuilder(new NullLogger()).BuildWithFinalizer(segment, fixture.Root, fixture.Staging,
                 "DemoModule", "1.2.3", null, new[] { new RequiredModuleReference("RuntimeDependency", requiredVersion: "1.0.0") },
+                finalizePackedArtefact: context =>
+                {
+                    if (type == ArtefactType.Unpacked)
+                        Assert.Contains(Path.GetFullPath(Path.Combine(context.RootPath, customPaths ? "Shared/Modules" : "Modules", "RuntimeDependency", "RuntimeDependency.psm1")), context.FinalizationFilePaths!);
+                    return null;
+                },
                 delivery: fixture.Delivery);
             string relative = (customPaths ? "Shared/Modules" : "Modules") + "/RuntimeDependency/RuntimeDependency.psm1";
             string main = (customPaths ? "Application/Modules" : "Modules") + "/DemoModule/DemoModule.psd1";
