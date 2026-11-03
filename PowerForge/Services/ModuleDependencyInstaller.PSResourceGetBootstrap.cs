@@ -32,7 +32,11 @@ public sealed partial class ModuleDependencyInstaller
         try
         {
             Directory.CreateDirectory(tempRoot);
-            _directPackageDownloader(BuildPowerShellGalleryPackageUri(version), packagePath, timeout);
+            new ModuleRepositoryRetryPolicy(_logger).Execute($"Download {PSResourceGetModuleName} {version}", () =>
+            {
+                _directPackageDownloader(BuildPowerShellGalleryPackageUri(version), packagePath, timeout);
+                return true;
+            });
             ZipFile.ExtractToDirectory(packagePath, extractPath);
 
             var sourceDirectory = FindPowerShellModulePayloadDirectory(extractPath, PSResourceGetModuleName);
@@ -213,13 +217,27 @@ public sealed partial class ModuleDependencyInstaller
     {
         using var http = new HttpClient { Timeout = timeout };
         http.DefaultRequestHeaders.UserAgent.ParseAdd("PowerForge/1.0");
-        using var response = http.GetAsync(packageUri).GetAwaiter().GetResult();
-        if (!response.IsSuccessStatusCode)
-            throw new InvalidOperationException($"PowerShell Gallery package download failed ({(int)response.StatusCode} {response.ReasonPhrase}) for '{packageUri}'.");
+        try
+        {
+            // ResponseContentRead keeps the configured HttpClient timeout over the full transfer.
+            using var response = http.GetAsync(packageUri).GetAwaiter().GetResult();
+            if (!response.IsSuccessStatusCode)
+            {
+                var message = $"PowerShell Gallery package download failed ({(int)response.StatusCode} {response.ReasonPhrase}) for '{packageUri}'.";
+                if (ModuleRepositoryRetryPolicy.IsTransientStatus(response.StatusCode))
+                    throw new ModuleRepositoryRetryPolicy.TransientRepositoryFailure(message);
+                throw new InvalidOperationException(message);
+            }
 
-        Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(destinationPath))!);
-        using var source = response.Content.ReadAsStreamAsync().GetAwaiter().GetResult();
-        using var destination = File.Create(destinationPath);
-        source.CopyTo(destination);
+            Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(destinationPath))!);
+            using var source = response.Content.ReadAsStreamAsync().GetAwaiter().GetResult();
+            using var destination = File.Create(destinationPath);
+            source.CopyTo(destination);
+        }
+        catch (OperationCanceledException ex)
+        {
+            // This bootstrap API has no caller cancellation token; cancellation here is HttpClient's timeout.
+            throw new TimeoutException($"PowerShell Gallery package download timed out after {timeout}.", ex);
+        }
     }
 }

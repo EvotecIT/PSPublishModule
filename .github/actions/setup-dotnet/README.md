@@ -23,6 +23,11 @@ Additional SDKs required by test runtimes use the same declaration shape in
 `powerforge.sdks`, an array within global.json. The action contains no SDK
 version defaults, and workflow inputs cannot override repository SDK policy.
 
+`additional-sdk-versions` adds SDK versions or channels alongside that policy,
+separated by spaces or newlines, for example `8.0.426` or `8.0.x`. It does not
+replace the primary SDK declaration or edit `global.json`. Callers without their
+own SDK declaration can pass an engine-owned file through `global-json-file`.
+
 `architecture` defaults to the runner architecture and supports x64, x86,
 arm64 and arm. The action exports DOTNET_ROOT,
 the architecture-specific root, and PATH. Its outputs are

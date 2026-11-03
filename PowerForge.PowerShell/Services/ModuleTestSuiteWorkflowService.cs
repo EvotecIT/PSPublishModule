@@ -26,10 +26,12 @@ internal sealed class ModuleTestSuiteWorkflowService
             throw new ArgumentException("Prepared test suite spec is required.", nameof(context));
 
         var result = _runSuite(context.Spec);
-        var success = result.FailedCount == 0;
+        var success = result.FailedCount == 0 && result.ExitCode == 0;
         var failureMessage = success
             ? null
-            : $"{result.FailedCount} test{(result.FailedCount != 1 ? "s" : string.Empty)} failed";
+            : result.FailedCount > 0
+                ? $"{result.FailedCount} test{(result.FailedCount != 1 ? "s" : string.Empty)} failed"
+                : $"Pester failed with exit code {result.ExitCode}; check discovery and setup errors.";
 
         return new ModuleTestSuiteWorkflowResult
         {

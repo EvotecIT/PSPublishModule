@@ -214,7 +214,7 @@ public sealed class PowerForgeInstallerAuthoringTests
         Assert.NotNull(doc.Descendants(Wix + "CustomAction").SingleOrDefault(e =>
             (string?)e.Attribute("Id") == "ServiceComponent.SetCleanupCommand" &&
             (string?)e.Attribute("Property") == "ServiceComponent.CleanupImagePath" &&
-            ((string?)e.Attribute("Value"))?.Contains("rm '[WindowsFolder]Installer\\tmx-svc-[ProductCode].txt'", StringComparison.Ordinal) == true));
+            ((string?)e.Attribute("Value"))?.Contains("rm ($b+'.s')", StringComparison.Ordinal) == true));
         Assert.NotNull(doc.Descendants(Wix + "CustomAction").SingleOrDefault(e =>
             (string?)e.Attribute("Id") == "ServiceComponent.CleanupImagePath" &&
             (string?)e.Attribute("Execute") == "commit" &&
@@ -256,7 +256,7 @@ public sealed class PowerForgeInstallerAuthoringTests
             (string?)e.Attribute("Before") == "ServiceComponent.BackupImagePath"));
         Assert.NotNull(sequenceRows.SingleOrDefault(e =>
             (string?)e.Attribute("Action") == "ServiceComponent.BackupImagePath" &&
-            (string?)e.Attribute("Before") == "ServiceComponent.SetRollbackCommand"));
+            (string?)e.Attribute("Before") == "ServiceComponent.SetBackupCommandState"));
         Assert.NotNull(sequenceRows.SingleOrDefault(e =>
             (string?)e.Attribute("Action") == "ServiceComponent.SetRollbackCommand" &&
             (string?)e.Attribute("Before") == "ServiceComponent.RollbackImagePath"));
@@ -737,7 +737,7 @@ public sealed class PowerForgeInstallerAuthoringTests
 
         string[] quietExecSetterIds = doc.Descendants(Wix + "CustomAction")
             .Where(e => ((string?)e.Attribute("Property"))?.EndsWith("BackupImagePath", StringComparison.Ordinal) == true ||
-                        (string?)e.Attribute("Property") == "WixQuietExecCmdLine")
+                        ((string?)e.Attribute("Property"))?.EndsWith(".StopService", StringComparison.Ordinal) == true)
             .Select(e => (string?)e.Attribute("Id"))
             .Where(id => !string.IsNullOrWhiteSpace(id))
             .Select(id => id!)
@@ -1017,7 +1017,7 @@ public sealed class PowerForgeInstallerAuthoringTests
             .ToDictionary(row => (string)row.Attribute("Action")!, StringComparer.Ordinal);
 
         Assert.Equal("ServiceComponent.BackupImagePath", (string?)rows["ServiceComponent.SetBackupCommand"].Attribute("Before"));
-        Assert.Equal("ServiceComponent.SetRollbackCommand", (string?)rows["ServiceComponent.BackupImagePath"].Attribute("Before"));
+        Assert.Equal("ServiceComponent.SetBackupCommandState", (string?)rows["ServiceComponent.BackupImagePath"].Attribute("Before"));
         Assert.Equal("ServiceComponent.RollbackImagePath", (string?)rows["ServiceComponent.SetRollbackCommand"].Attribute("Before"));
         Assert.Equal("ServiceComponent.SetStopService", (string?)rows["ServiceComponent.RollbackImagePath"].Attribute("Before"));
         Assert.Equal("ServiceComponent.StopService", (string?)rows["ServiceComponent.SetStopService"].Attribute("Before"));

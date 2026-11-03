@@ -6,6 +6,9 @@ inputs:
     description: Repository global.json containing sdk.version, rollForward and optional powerforge.sdks declarations.
     required: false
     default: global.json
+  additional-sdk-versions:
+    description: Additional exact SDK versions or channels, separated by whitespace; preserves global.json policy.
+    required: false
   architecture:
     description: SDK architecture; defaults to the runner architecture.
     required: false

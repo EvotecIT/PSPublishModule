@@ -602,7 +602,9 @@ public sealed partial class ModuleDependencyInstaller
             prerelease ? "1" : "0",
             allowClobber ? "1" : "0"
         };
-        var result = RunScript(script, args, timeout);
+        var result = new ModuleRepositoryRetryPolicy(_logger).RunPowerShell(
+            $"Install-Module {dep.Name} {dep.RequiredVersion ?? dep.MinimumVersion}",
+            () => RunScript(script, args, timeout));
         if (result.ExitCode != 0)
         {
             var msg = TryExtractError(result.StdOut) ?? result.StdErr;

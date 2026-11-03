@@ -14,7 +14,7 @@ public sealed class ModuleTestSuiteServiceTests
     private const string PowerShellGetInstallMarker = "PFMOD::INSTALL::OK";
 
     [Fact]
-    public void Run_PassesNamedBooleanTokenForImportVerbose()
+    public void Run_PassesFileCompatibleStringFlagForImportVerbose()
     {
         var projectRoot = Directory.CreateDirectory(
             Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
@@ -45,7 +45,8 @@ public sealed class ModuleTestSuiteServiceTests
             });
 
             Assert.NotNull(capturedRequest);
-            Assert.Contains("-ImportVerbose:$true", capturedRequest!.Arguments);
+            var arguments = capturedRequest!.Arguments.ToList();
+            Assert.Equal("1", arguments[arguments.IndexOf("-ImportVerbose") + 1]);
         }
         finally
         {
@@ -53,8 +54,10 @@ public sealed class ModuleTestSuiteServiceTests
         }
     }
 
-    [Fact]
-    public void Run_BootstrapsRepositoryToolBeforeInstallingAdditionalModules()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Run_BootstrapsRepositoryToolAndCarriesInstallHostPathsToDesktop(bool windowsPowerShell)
     {
         var projectRoot = Directory.CreateDirectory(
             Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
@@ -75,12 +78,22 @@ public sealed class ModuleTestSuiteServiceTests
             {
                 ProjectPath = projectRoot.FullName,
                 AdditionalModules = new[] { "Az.Accounts", "Pester" },
+                WindowsPowerShell = windowsPowerShell,
                 SkipImport = true
             });
 
             Assert.Equal(
                 new[] { "Microsoft.PowerShell.PSResourceGet", "Az.Accounts", "Pester" },
                 runner.InstallNames);
+            Assert.NotNull(runner.TestRequest);
+            Assert.Equal(windowsPowerShell ? PowerShellHostRequirement.WindowsPowerShell : PowerShellHostRequirement.Any,
+                runner.TestRequest!.HostRequirement);
+            if (windowsPowerShell)
+            {
+                var arguments = runner.TestRequest.Arguments.ToList();
+                var paths = arguments[arguments.IndexOf("-DependencyModulePathsB64") + 1];
+                Assert.Equal(@"C:\CustomCoreModules", Encoding.UTF8.GetString(Convert.FromBase64String(paths)));
+            }
         }
         finally
         {
@@ -104,9 +117,12 @@ public sealed class ModuleTestSuiteServiceTests
     private sealed class TestSuiteDependencyRunner : IPowerShellRunner
     {
         public List<string> InstallNames { get; } = new();
+        public PowerShellRunRequest? TestRequest { get; private set; }
 
         public PowerShellRunResult Run(PowerShellRunRequest request)
         {
+            if (request.InvocationMode == PowerShellInvocationMode.Command)
+                return new PowerShellRunResult(0, "PFTESTPATH::" + Encode(@"C:\CustomCoreModules"), string.Empty, "pwsh.exe");
             Assert.NotNull(request.ScriptPath);
             var script = File.ReadAllText(request.ScriptPath!);
 
@@ -125,6 +141,7 @@ public sealed class ModuleTestSuiteServiceTests
                 return new PowerShellRunResult(0, PsResourceInstallMarker, string.Empty, "pwsh.exe");
             }
 
+            TestRequest = request;
             return new PowerShellRunResult(
                 0,
                 string.Join(Environment.NewLine, new[]

@@ -20,22 +20,27 @@ public sealed class BufferedLogger : ILogger
     /// <summary>
     /// Records an informational message.
     /// </summary>
-    public void Info(string message) => Entries.Add(new BufferedLogEntry("info", message));
+    public void Info(string message) => Add(new BufferedLogEntry("info", message));
 
     /// <summary>
     /// Records a success message.
     /// </summary>
-    public void Success(string message) => Entries.Add(new BufferedLogEntry("success", message));
+    public void Success(string message) => Add(new BufferedLogEntry("success", message));
 
     /// <summary>
     /// Records a warning message.
     /// </summary>
-    public void Warn(string message) => Entries.Add(new BufferedLogEntry("warn", message));
+    public void Warn(string message) => Add(new BufferedLogEntry("warn", message));
 
     /// <summary>
     /// Records an error message.
     /// </summary>
-    public void Error(string message) => Entries.Add(new BufferedLogEntry("error", message));
+    public void Error(string message) => Add(new BufferedLogEntry("error", message));
+
+    private void Add(BufferedLogEntry entry)
+    {
+        lock (Entries) Entries.Add(entry);
+    }
 
     /// <summary>
     /// Records a verbose message when <see cref="IsVerbose"/> is enabled.
@@ -43,6 +48,6 @@ public sealed class BufferedLogger : ILogger
     public void Verbose(string message)
     {
         if (!IsVerbose) return;
-        Entries.Add(new BufferedLogEntry("verbose", message));
+        Add(new BufferedLogEntry("verbose", message));
     }
 }

@@ -11,7 +11,7 @@ public sealed class ManagedModuleRepositoryClientOptions
     public int MaxRetries { get; set; } = 2;
 
     /// <summary>
-    /// Delay before retrying a transient failure.
+    /// Initial delay before retrying a transient failure; doubles per attempt, capped at 30 seconds.
     /// </summary>
     public TimeSpan RetryDelay { get; set; } = TimeSpan.FromMilliseconds(200);
 

@@ -93,8 +93,11 @@ public sealed class ProjectBuildPublishHostService
     internal static ProjectBuildPublishHostConfiguration CreateHostConfiguration(
         ProjectBuildConfiguration config,
         string resolvedConfigPath,
-        string configDirectory)
+        string configDirectory,
+        bool? stageNuget = null)
     {
+        if (stageNuget ?? config.StageNuget ?? false)
+            throw new InvalidOperationException("StageNuget is not supported in deferred publication lanes. Run Invoke-ProjectBuild or powerforge nuget stage directly.");
         var feed = ProjectBuildPackageFeedResolver.Resolve(config, configDirectory);
         var publishSource = string.IsNullOrWhiteSpace(feed.PublishSource)
             ? ProjectBuildPackageFeedResolver.GetDefaultPublishSource()

@@ -14,6 +14,7 @@ internal static class ProjectBuildConfigurationAdapter
         var target = JsonSerializer.Deserialize<ProjectBuildConfiguration>(json)
             ?? throw new InvalidOperationException("Inline package-build configuration could not be converted.");
         ApplyOptions(target, source.Options);
+        RejectNuGetStaging(target);
         return target;
     }
 
@@ -38,7 +39,15 @@ internal static class ProjectBuildConfigurationAdapter
         Apply(target, reference.SignPackages, static (config, value) => config.SignPackages = value);
         Apply(target, reference.OverwriteSignedAssemblies, static (config, value) => config.OverwriteSignedAssemblies = value);
         Apply(target, reference.OverwriteSignedPackages, static (config, value) => config.OverwriteSignedPackages = value);
+        RejectNuGetStaging(target);
         return target;
+    }
+
+    /// <summary>Module/deferred publishers cannot reinterpret direct NuGet staging as an ordinary publication.</summary>
+    internal static void RejectNuGetStaging(ProjectBuildConfiguration config)
+    {
+        if (config.StageNuget == true)
+            throw new InvalidOperationException("StageNuget is not supported in module or deferred publication lanes. Run Invoke-ProjectBuild or powerforge nuget stage directly.");
     }
 
     private static void Apply(

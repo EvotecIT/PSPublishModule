@@ -90,6 +90,8 @@ function requestedVersions(architecture) {
   const additional = global.powerforge?.sdks || [];
   if (!Array.isArray(additional)) throw new Error('global.json powerforge.sdks must be an array of SDK declarations.');
   const requests = [global.sdk, ...additional].map(globalSdkRequest);
+  const extraVersions = input('additional-sdk-versions').split(/\s+/).filter(Boolean);
+  requests.push(...extraVersions.map(versionRequest));
   // A later action may need a writable root instead of a reused system root.
   // Carry earlier requested SDKs into that installation without changing it.
   if (architecture) requests.push(...(process.env[`EVOTEC_DOTNET_SDKS_${architecture.toUpperCase()}`] || '').split(',').filter(Boolean).map(versionRequest));

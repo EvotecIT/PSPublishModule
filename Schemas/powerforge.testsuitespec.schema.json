@@ -9,6 +9,12 @@
 
     "ProjectPath": { "type": "string", "minLength": 1 },
     "TestPath": { "type": ["string", "null"] },
+    "PesterVersion": { "type": ["string", "null"], "description": "Exact stable Pester version, Pester 5 or newer." },
+    "ResultsPath": { "type": ["string", "null"], "description": "Retained NUnit XML output path." },
+    "JUnitResultsPath": { "type": ["string", "null"] },
+    "SummaryPath": { "type": ["string", "null"] },
+    "WindowsPowerShell": { "type": "boolean", "default": false },
+    "FailIfNoTests": { "type": "boolean", "default": false },
     "AdditionalModules": { "type": "array", "items": { "type": "string" } },
     "SkipModules": { "type": "array", "items": { "type": "string" } },
     "OutputFormat": { "$ref": "powerforge.common.schema.json#/$defs/ModuleTestSuiteOutputFormat" },

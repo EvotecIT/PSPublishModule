@@ -1,0 +1,26 @@
+{
+  "projectRoot": "..",
+  "profiles": [
+    {
+      "name": "test",
+      "buildProjects": [{ "path": "Tests/NativeTestSample/NativeTestSample.csproj", "frameworks": ["net8.0"] }],
+      "testProjects": ["Tests/DotNetTestSample/DotNetTestSample.csproj"],
+      "environmentVariables": { "POWERFORGE_TEST_SAMPLE": "enabled" },
+      "beforeTests": [{ "kind": "Command", "executable": "dotnet", "arguments": ["--info"] }]
+    },
+    {
+      "name": "native-windows",
+      "nativeProjects": [{ "path": "Tests/NativeTestSample/NativeTestSample.csproj", "executable": "NativeTestSample.exe" }]
+    },
+    {
+      "name": "native-linux",
+      "nativeProjects": [{ "path": "Tests/NativeTestSample/NativeTestSample.csproj", "executable": "NativeTestSample",
+        "runEnvironments": [{}, {"LANG": "C"}] }]
+    },
+    {
+      "name": "build",
+      "configuration": "Debug",
+      "buildProjects": [{ "path": "Tests/NativeTestSample/NativeTestSample.csproj", "frameworks": ["net8.0"] }]
+    }
+  ]
+}

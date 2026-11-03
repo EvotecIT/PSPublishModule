@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <PublishAot>true</PublishAot>
+    <RuntimeIdentifiers>win-x64;linux-x64;osx-arm64</RuntimeIdentifiers>
+    <!-- Keep this test-only AOT package graph stable across the supported SDK servicing versions. -->
+    <NativeSmokeToolVersion Condition="'$(TargetFramework)' == 'net8.0'">8.0.32</NativeSmokeToolVersion>
+    <NativeSmokeToolVersion Condition="'$(TargetFramework)' == 'net10.0'">10.0.13</NativeSmokeToolVersion>
+    <RuntimeFrameworkVersion>$(NativeSmokeToolVersion)</RuntimeFrameworkVersion>
+    <IlcTreatWarningsAsErrors>true</IlcTreatWarningsAsErrors>
+    <ILLinkTreatWarningsAsErrors>true</ILLinkTreatWarningsAsErrors>
+  </PropertyGroup>
+  <Target Name="PinNativeSmokeToolPacks" BeforeTargets="ProcessFrameworkReferences">
+    <ItemGroup>
+      <KnownILCompilerPack Update="Microsoft.DotNet.ILCompiler" Condition="'%(KnownILCompilerPack.TargetFramework)' == '$(TargetFramework)'">
+        <ILCompilerPackVersion>$(NativeSmokeToolVersion)</ILCompilerPackVersion>
+      </KnownILCompilerPack>
+      <KnownILLinkPack Update="Microsoft.NET.ILLink.Tasks" Condition="'%(KnownILLinkPack.TargetFramework)' == '$(TargetFramework)'">
+        <ILLinkPackVersion>$(NativeSmokeToolVersion)</ILLinkPackVersion>
+      </KnownILLinkPack>
+    </ItemGroup>
+  </Target>
+</Project>

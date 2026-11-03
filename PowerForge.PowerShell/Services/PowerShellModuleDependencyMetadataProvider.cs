@@ -71,7 +71,9 @@ internal sealed class PowerShellModuleDependencyMetadataProvider : IModuleDepend
         }));
 
         var script = EmbeddedScripts.Load("Scripts/ModulePipeline/Get-InstalledModuleInfo.ps1");
-        var args = new List<string>(2) { EncodeLines(names), EncodeText(referenceJson) };
+        var args = new List<string>(3) { EncodeLines(names), EncodeText(referenceJson) };
+        if (!string.IsNullOrWhiteSpace(_moduleSearchRoot))
+            args.Add(EncodeText(_moduleSearchRoot!));
         var result = RunScript(script, args, TimeSpan.FromMinutes(2));
 
         if (result.ExitCode != 0)

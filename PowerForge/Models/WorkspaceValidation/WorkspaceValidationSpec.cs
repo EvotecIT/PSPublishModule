@@ -27,6 +27,8 @@ public sealed class WorkspaceValidationProfile
 
 public sealed class WorkspaceValidationStep
 {
+    /// <summary>Maximum process runtime in seconds; existing workspace profiles retain the eight-hour default.</summary>
+    public int TimeoutSeconds { get; set; } = 28800;
     public string Id { get; set; } = string.Empty;
     public string? Name { get; set; }
     public WorkspaceValidationStepKind Kind { get; set; } = WorkspaceValidationStepKind.DotNet;
@@ -65,6 +67,7 @@ public sealed class WorkspaceValidationProfileSummary
 
 public sealed class WorkspaceValidationPreparedStep
 {
+    public int TimeoutSeconds { get; set; } = 28800;
     public string Id { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
     public WorkspaceValidationStepKind Kind { get; set; }

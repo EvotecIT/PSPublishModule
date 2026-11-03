@@ -1,0 +1,33 @@
+name: Setup PowerForge test runner
+description: Reuse the shared SDK setup and build the test CLI from the checked-out workflow revision.
+inputs:
+  engine_path:
+    description: Checkout directory for the exact shared workflow revision.
+    default: .powerforge-module-test
+  dotnet_version:
+    description: Additional consumer SDK versions; a consumer global.json is also honored.
+    default: ''
+runs:
+  using: composite
+  steps:
+    - name: Stage shared SDK setup
+      shell: pwsh
+      env:
+        ENGINE_PATH: ${{ inputs.engine_path }}
+      run: '& (Join-Path $env:ENGINE_PATH ".github/actions/setup-dotnet/Stage-SetupDotNet.ps1")'
+    - name: Setup engine SDKs
+      uses: ./.powerforge-sdk
+      with:
+        global-json-file: ${{ inputs.engine_path }}/global.json
+        additional-sdk-versions: ${{ inputs.dotnet_version }}
+    - name: Setup consumer SDK
+      if: hashFiles('global.json') != ''
+      uses: ./.powerforge-sdk
+      with:
+        global-json-file: global.json
+    - name: Build shared test runner
+      shell: pwsh
+      working-directory: ${{ inputs.engine_path }}
+      run: |
+        dotnet build PowerForge.Cli/PowerForge.Cli.csproj -c Release -f net10.0 --nologo -nodeReuse:false
+        if ($LASTEXITCODE -ne 0) { throw 'PowerForge test runner build failed.' }

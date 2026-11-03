@@ -12,6 +12,7 @@ namespace PowerForge;
 public sealed partial class MissingFunctionsAnalyzer
 {
     private Runspace? _selectedRuntimeRunspace;
+    private string? _selectedRuntimeSearchPath;
     private readonly Dictionary<string, ExceptionDispatchInfo> _moduleScopeFailures = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, ApprovedModuleSource> _selectedRuntimeSources = new(StringComparer.OrdinalIgnoreCase);
 
@@ -24,11 +25,17 @@ public sealed partial class MissingFunctionsAnalyzer
         // Keep that native PowerShell context for module-scoped lookups: a separate
         // donor runspace could otherwise satisfy a minimum version with a newer copy.
         _selectedRuntimeRunspace = CreateModuleScopeRunspace();
+        _selectedRuntimeSearchPath = string.Join(Path.PathSeparator.ToString(), sources
+            .Select(GetRuntimeModuleSearchRoot)
+            .Distinct(StringComparer.OrdinalIgnoreCase));
         foreach (var source in sources)
             _selectedRuntimeSources[source.Name] = source;
         var sourcesByName = sources.ToDictionary(static source => source.Name, StringComparer.OrdinalIgnoreCase);
-        var metadata = new PowerShellModuleDependencyMetadataProvider(new PowerShellRunner(), new NullLogger());
-        var graph = new ModuleDependencyImportGraphReader(metadata, new NullLogger()).Read(sources);
+        var metadata = new PowerShellModuleDependencyMetadataProvider(new PowerShellRunner(), new NullLogger(), _selectedRuntimeSearchPath);
+        var graphSources = sources.Select(source => new ApprovedModuleSource(
+            source.Name, source.Version, source.ModuleBasePath, source.Guid,
+            GetModuleSearchPath(source))).ToArray();
+        var graph = new ModuleDependencyImportGraphReader(metadata, new NullLogger()).Read(graphSources);
         var order = ModuleDependencyImportOrder.Resolve(
             sources.Select(static source => source.Name).ToArray(),
             graph);
@@ -43,6 +50,25 @@ public sealed partial class MissingFunctionsAnalyzer
         }
     }
 
+    private static string GetRuntimeModuleSearchRoot(ApprovedModuleSource source)
+    {
+        var directory = new DirectoryInfo(Path.GetFullPath(source.ModuleBasePath));
+        // Saved modules can be Modules/Name/Version or Modules/Name. Keep sibling
+        // dependencies in that selected installation ahead of global installations.
+        if (string.Equals(directory.Parent?.Name, source.Name, StringComparison.OrdinalIgnoreCase))
+            directory = directory.Parent!;
+        return string.Equals(directory.Name, source.Name, StringComparison.OrdinalIgnoreCase)
+            ? directory.Parent?.FullName ?? directory.FullName
+            : directory.FullName;
+    }
+
+    private string GetModuleSearchPath(ApprovedModuleSource source)
+        => string.Join(Path.PathSeparator.ToString(), new[] {
+            source.ModuleSearchRoot,
+            _selectedRuntimeSources.ContainsKey(source.Name) ? GetRuntimeModuleSearchRoot(source) : null,
+            _selectedRuntimeSearchPath
+        }.Where(static path => !string.IsNullOrWhiteSpace(path)));
+
     private static Runspace CreateModuleScopeRunspace()
     {
         var state = InitialSessionState.CreateDefault();
@@ -56,7 +82,11 @@ public sealed partial class MissingFunctionsAnalyzer
         try
         {
             lock (ModulePathImportLock)
-                runspace.Open();
+            {
+                var previousModulePath = Environment.GetEnvironmentVariable("PSModulePath");
+                try { runspace.Open(); }
+                finally { Environment.SetEnvironmentVariable("PSModulePath", previousModulePath); }
+            }
             return runspace;
         }
         catch { runspace.Dispose(); throw; }
@@ -76,8 +106,9 @@ public sealed partial class MissingFunctionsAnalyzer
             using var ps = PowerShell.Create();
             ps.Runspace = runspace;
             var moduleReference = ResolveModuleReference(source);
+            var searchPath = GetModuleSearchPath(source);
             System.Collections.ObjectModel.Collection<PSObject> importResults;
-            if (string.IsNullOrWhiteSpace(source.ModuleSearchRoot))
+            if (string.IsNullOrWhiteSpace(searchPath))
             {
                 ps.AddCommand("Microsoft.PowerShell.Core\\Import-Module")
                     .AddParameter("Name", moduleReference)
@@ -104,7 +135,7 @@ try {
 }
 ")
                     .AddArgument(moduleReference)
-                    .AddArgument(source.ModuleSearchRoot);
+                    .AddArgument(searchPath);
                 lock (ModulePathImportLock)
                     importResults = ps.Invoke();
             }
@@ -131,9 +162,14 @@ try {
                 // identities. Ask PowerShell for the actual imported module catalog.
                 ps.Commands.Clear();
                 var loaded = ps.AddCommand("Microsoft.PowerShell.Core\\Get-Module").AddParameter("All").Invoke();
-                foreach (var module in loaded.Select(static result => result.BaseObject).OfType<PSModuleInfo>())
+                var modules = loaded.Select(static result => result.BaseObject).OfType<PSModuleInfo>().ToArray();
+                foreach (var module in modules)
                     if (_selectedRuntimeSources.TryGetValue(module.Name, out var selected))
+                    {
+                        if (IsNestedBinaryModule(module, modules))
+                            continue;
                         ValidateImportedModuleIdentity(module, selected);
+                    }
             }
 
             var created = new ModuleScopeSession(
@@ -152,6 +188,22 @@ try {
                 runspace.Dispose();
             throw;
         }
+    }
+
+    private static bool IsNestedBinaryModule(PSModuleInfo module, IReadOnlyList<PSModuleInfo> loaded)
+    {
+        if (module.ModuleType != ModuleType.Binary || module.Guid != Guid.Empty || string.IsNullOrWhiteSpace(module.Path))
+            return false;
+
+        // Get-Module -All includes a manifest's same-name nested binary as a separate
+        // entry. Its assembly metadata is not the enclosing manifest's GUID/version.
+        // Exclude only an actual nested entry; the enclosing identity is still validated.
+        return loaded.Any(parent =>
+            !ReferenceEquals(parent, module) &&
+            string.Equals(parent.Name, module.Name, StringComparison.OrdinalIgnoreCase) &&
+            parent.NestedModules.Any(nested =>
+                nested.ModuleType == ModuleType.Binary &&
+                string.Equals(nested.Path, module.Path, StringComparison.Ordinal)));
     }
 
     private static void ValidateImportedModuleIdentity(PSModuleInfo imported, ApprovedModuleSource source)
@@ -233,6 +285,7 @@ try {
         foreach (var runspace in runspaces)
             runspace.Dispose();
         _selectedRuntimeRunspace = null;
+        _selectedRuntimeSearchPath = null;
         _moduleScopeSessions.Clear();
         _moduleScopeFailures.Clear();
         _selectedRuntimeSources.Clear();

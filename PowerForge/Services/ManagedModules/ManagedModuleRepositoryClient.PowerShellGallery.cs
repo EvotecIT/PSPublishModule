@@ -59,30 +59,8 @@ public sealed partial class ManagedModuleRepositoryClient
         RepositoryCredential? credential,
         CancellationToken cancellationToken)
     {
-        var destinationPath = BuildDestinationPath(destinationDirectory, repository, packageId, version);
-        using var response = await SendWithPolicyAsync(
-            () => CreateRequest(HttpMethod.Get, packageUri, credential, "application/octet-stream"),
-            cancellationToken).ConfigureAwait(false);
-        if (!response.IsSuccessStatusCode)
-            return null;
-
-        PackageCopyResult packageCopy;
-        using (var source = await ReadContentStreamAsync(response.Content, cancellationToken).ConfigureAwait(false))
-        {
-            packageCopy = await CopyPackageStreamWithHashAsync(source, destinationPath, _options.MaxPackageBytes, cancellationToken).ConfigureAwait(false);
-        }
-
-        return new ManagedModuleDownloadResult
-        {
-            Name = packageId,
-            Version = version,
-            RepositoryName = repository.Name,
-            Source = packageUri.ToString(),
-            PackagePath = destinationPath,
-            BytesWritten = packageCopy.BytesWritten,
-            PackageSha256 = packageCopy.Sha256,
-            Metadata = ReadDownloadedPackageMetadata(packageId, version, destinationPath)
-        };
+        return await DownloadHttpPackageToFileAsync(repository, packageUri, packageId, version,
+            destinationDirectory, credential, allowMissing: true, cancellationToken).ConfigureAwait(false);
     }
 
     private static Uri BuildPowerShellGalleryCdnPackageUri(string packageId, string version)
