@@ -635,6 +635,10 @@ public sealed partial class BenchmarkServicesTests
         Assert.NotEqual(colon, question);
         Assert.Contains("%3A", colon, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("%3F", question, StringComparison.OrdinalIgnoreCase);
+
+        var tilde = PowerShellBenchmarkPathSegments.Value("Case~A");
+        Assert.Equal("Case%7EA", tilde);
+        Assert.NotEqual(tilde, PowerShellBenchmarkPathSegments.Value("Case%7EA"));
     }
 
     [Fact]
@@ -676,7 +680,12 @@ public sealed partial class BenchmarkServicesTests
         Assert.Equal(first, repeated);
         Assert.NotEqual(first, second);
         Assert.True(first.Length <= 80);
-        Assert.Contains("~", first, StringComparison.Ordinal);
+        Assert.DoesNotContain("~", first, StringComparison.Ordinal);
+
+        var shortMatrix = PowerShellBenchmarkPathSegments.Matrix(
+            new Dictionary<string, object?> { ["Label~"] = "short~value" },
+            _ => false);
+        Assert.Equal("Label%7E=short%7Evalue", shortMatrix);
     }
 
     [Fact]

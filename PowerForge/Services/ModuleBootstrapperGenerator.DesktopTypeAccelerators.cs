@@ -29,7 +29,8 @@ internal static partial class ModuleBootstrapperGenerator
                 ["RequestedTypes"] = BuildPowerShellArrayLiteral(normalizedTypes),
                 ["RequestedAssemblies"] = BuildPowerShellArrayLiteral(normalizedAssemblies),
                 ["IgnoredLibraryFileNames"] = BuildPowerShellArrayLiteral(ignoredLibraryFileNames),
-                ["LibraryDirectoryExpression"] = libraryDirectoryExpression
+                ["LibraryDirectoryExpression"] = libraryDirectoryExpression,
+                ["OwnershipBlock"] = BuildTypeAcceleratorOwnershipBlock(8)
             });
     }
 }

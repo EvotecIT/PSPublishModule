@@ -943,7 +943,8 @@ internal static partial class ModuleBootstrapperGenerator
             {
                 ["Mode"] = mode.ToString(),
                 ["RequestedTypes"] = BuildPowerShellArrayLiteral(normalizedTypes),
-                ["RequestedAssemblies"] = BuildPowerShellArrayLiteral(normalizedAssemblies)
+                ["RequestedAssemblies"] = BuildPowerShellArrayLiteral(normalizedAssemblies),
+                ["OwnershipBlock"] = BuildTypeAcceleratorOwnershipBlock(4)
             });
     }
 
@@ -955,6 +956,11 @@ internal static partial class ModuleBootstrapperGenerator
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToArray()
             : Array.Empty<string>();
+
+    private static string BuildTypeAcceleratorOwnershipBlock(int indent)
+        => IndentPowerShell(RenderModuleBootstrapperTemplate(
+            "TypeAcceleratorOwnership", "Scripts/ModuleBootstrapper/TypeAcceleratorOwnership.Template.ps1",
+            new Dictionary<string, string>()), indent).TrimEnd();
 
     private static string BuildPowerShellArrayLiteral(IReadOnlyList<string> values)
     {
