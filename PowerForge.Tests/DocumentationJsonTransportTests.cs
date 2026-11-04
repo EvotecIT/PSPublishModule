@@ -6,6 +6,64 @@ namespace PowerForge.Tests;
 public sealed partial class DocumentationPowerShellCollectorTests
 {
     [Fact]
+    public void Collector_PreservesKeysParametersWithoutSerializingMetadataObjects()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-doc-keys-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var manifestPath = Path.Combine(root, "KeysFixture.psd1");
+            File.WriteAllText(manifestPath, """
+@{
+    RootModule = 'KeysFixture.psm1'
+    ModuleVersion = '1.0.0'
+    GUID = '56565656-5656-5656-5656-565656565656'
+    FunctionsToExport = @('Get-KeysOnly', 'Get-KeysAndOther', 'Get-KeysDynamic')
+    CmdletsToExport = @()
+    AliasesToExport = @()
+}
+""", new UTF8Encoding(false));
+            File.WriteAllText(Path.Combine(root, "KeysFixture.psm1"), """
+function Get-KeysOnly {
+    [CmdletBinding()] param([string] $Keys)
+}
+function Get-KeysAndOther {
+    [CmdletBinding()] param([string] $Keys, [int] $Other)
+}
+function Get-KeysDynamic {
+<#
+.SYNOPSIS
+Shows keys.
+.PARAMETER Keys
+Keys to show.
+#>
+    [CmdletBinding()] param([string] $Keys)
+    dynamicparam { }
+    process { }
+}
+Export-ModuleMember -Function Get-KeysOnly, Get-KeysAndOther, Get-KeysDynamic
+""", new UTF8Encoding(false));
+            var hosts = OperatingSystem.IsWindows() ? new[] { "pwsh.exe", "powershell.exe" } : new[] { "pwsh" };
+            foreach (var host in hosts)
+            {
+                var engine = new DocumentationEngine(new ExecutablePowerShellRunner(host, root), new NullLogger());
+                var payload = engine.ExtractHelpPayload(root, manifestPath, TimeSpan.FromMinutes(1));
+                Assert.Equal(3, payload.Commands.Count);
+                var only = Assert.Single(payload.Commands, command => command.Name == "Get-KeysOnly");
+                var other = Assert.Single(payload.Commands, command => command.Name == "Get-KeysAndOther");
+                var dynamic = Assert.Single(payload.Commands, command => command.Name == "Get-KeysDynamic");
+                Assert.Equal("Keys", Assert.Single(only.Parameters).Name);
+                Assert.Equal(["Keys", "Other"], other.Parameters.Select(parameter => parameter.Name).ToArray());
+                Assert.Equal("Keys", Assert.Single(dynamic.Parameters).Name);
+            }
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void DocumentationTransport_PreservesUnpairedSurrogatesAcrossBothPowerShellHosts()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-doc-json-transport-" + Guid.NewGuid().ToString("N"));

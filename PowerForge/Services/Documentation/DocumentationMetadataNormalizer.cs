@@ -219,6 +219,7 @@ internal static class DocumentationMetadataNormalizer
             if (parameter is null) continue;
             rawNames.AddRange(parameter.ParameterSets ?? new List<string>());
             rawNames.AddRange((parameter.ParameterSetRequired ?? new Dictionary<string, bool>()).Keys);
+            rawNames.AddRange((parameter.ParameterSetPositions ?? new Dictionary<string, string>()).Keys);
         }
 
         var reserved = new HashSet<string>(
@@ -259,6 +260,8 @@ internal static class DocumentationMetadataNormalizer
                     (requiredBySet.TryGetValue(name, out var required) && required);
             }
             parameter.ParameterSetRequired = requiredBySet;
+            parameter.ParameterSetPositions = (parameter.ParameterSetPositions ?? new Dictionary<string, string>())
+                .ToDictionary(entry => Map(entry.Key), entry => entry.Value, StringComparer.OrdinalIgnoreCase);
         }
     }
 

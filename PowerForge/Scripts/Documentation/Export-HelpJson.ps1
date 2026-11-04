@@ -448,7 +448,7 @@ try {
     if ((& $collectorProtocol.TestDynamicCommand $c) -and $commandContexts.Count -eq 0) {
       $commonNames = @('Verbose','Debug','ErrorAction','ErrorVariable','WarningAction','WarningVariable',
         'InformationAction','InformationVariable','OutVariable','OutBuffer','PipelineVariable','WhatIf','Confirm','ProgressAction')
-      foreach ($name in @($helpParamByName.Keys)) {
+      foreach ($name in @($helpParamByName.get_Keys())) {
         if ($commonNames -notcontains $name -and -not $parameterMetadata.ContainsKey($name)) { $unverified += [string]$name }
       }
       if ($unverified.Count -gt 0) {
@@ -458,7 +458,7 @@ try {
         $result.warnings += ('Dynamic parameter discovery for ' + $c.Name + ' has no explicit contexts; conditional parameters may be missing.')
       }
     }
-    $paramNames = @(@($parameterMetadata.Keys) + $unverified | Microsoft.PowerShell.Utility\Sort-Object -Unique)
+    $paramNames = @(@($parameterMetadata.get_Keys()) + $unverified | Microsoft.PowerShell.Utility\Sort-Object -Unique)
 
     $parameters = @()
     foreach ($pn in $paramNames) {
@@ -483,6 +483,7 @@ try {
 
       $required = $false
       $parameterSetRequired = @{}
+      $parameterSetPositions = @{}
       $named = $true
       $pos = $null
       $pipeByValue = $false
@@ -503,6 +504,9 @@ try {
               if ($setName) { $parameterSetRequired[$setName] = [bool]$psm.IsMandatory }
               if ($psm.IsMandatory) { $required = $true }
               $pPos = [int]$psm.Position
+              if ($setName) {
+                $parameterSetPositions[$setName] = if ($pPos -eq -2147483648) { 'Named' } else { $pPos.ToString([System.Globalization.CultureInfo]::InvariantCulture) }
+              }
               if ($pPos -ne -2147483648) {
                 $named = $false
                 if ($null -eq $pos -or $pPos -lt $pos) { $pos = $pPos }
@@ -609,6 +613,7 @@ try {
         validateSetCaseSensitive = [bool]$validateSetCaseSensitive
         required = [bool]$required
         parameterSetRequired = $parameterSetRequired
+        parameterSetPositions = $parameterSetPositions
         position = $positionText
         defaultValue = $defaultValue
         hasMetadataDefault = [bool]$hasMetadataDefault
