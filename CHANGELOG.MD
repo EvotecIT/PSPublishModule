@@ -3,7 +3,7 @@
 ## Unreleased
 ### What's Changed
 - Resolve relative TOC links against evaluated collection output paths, including project and language prefixes, nested and index Markdown links, while retaining warnings for missing pages.
-- Preserve literal reserved characters in content output directories when adding trailing slashes and language prefixes.
+- Preserve literal reserved characters in content output directories and encode them in canonical, social, and sitemap URLs.
 - Finalize unpacked module and delivery layouts after runtime support files are copied, so signing covers the delivered scripts as it does in ZIP packages. Keep retained caller files and removed disabled provenance out of signing scope, and reject overlapping signing-evidence outputs.
 - Resolve C# API documentation dependencies from every documented assembly's output and dependency manifest in a collectible context, keeping the CLI's application dependencies out of reflection.
 - Preserve site-relative API suite routes on Linux instead of converting them to file URLs.

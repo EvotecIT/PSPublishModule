@@ -289,7 +289,7 @@ public static partial class WebSiteVerifier
 
         // Treat the collection root as a directory even when routes omit trailing slashes.
         var rootPath = NormalizeRouteForCompare(outputRoot, TrailingSlashMode.Always);
-        var encodedRoot = string.Join("/", rootPath.Split('/').Select(Uri.EscapeDataString));
+        var encodedRoot = WebSiteBuilder.EncodePhysicalRoute(rootPath);
         var root = new Uri("https://powerforge.invalid" + encodedRoot);
         if (!Uri.TryCreate(root, baseUrl, out var resolved))
             return null;

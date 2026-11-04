@@ -858,6 +858,7 @@ public partial class WebSiteVerifierTests
             {
                 Name = "Reserved route characters",
                 BaseUrl = "https://example.test",
+                Social = new SocialSpec { Enabled = true },
                 TrailingSlash = slashMode,
                 Localization = new LocalizationSpec
                 {
@@ -905,6 +906,15 @@ public partial class WebSiteVerifierTests
             Assert.True(File.Exists(Path.Combine(physicalRoot, "index.html")));
             Assert.True(File.Exists(Path.Combine(physicalRoot, "index.json")));
             Assert.True(File.Exists(Path.Combine(physicalRoot, "manual#one.pdf")));
+            var canonicalUrl = "https://example.test" + (slashMode == TrailingSlashMode.Never ? pageRoute.TrimEnd('/') : pageRoute);
+            var html = File.ReadAllText(Path.Combine(physicalRoot, "index.html"));
+            Assert.Contains($"<link rel=\"canonical\" href=\"{canonicalUrl}\"", html, StringComparison.Ordinal);
+            Assert.Contains($"property=\"og:url\" content=\"{canonicalUrl}\"", html, StringComparison.Ordinal);
+            var sitemap = WebSitemapGenerator.Generate(new WebSitemapOptions
+            {
+                SiteRoot = outputRoot, BaseUrl = spec.BaseUrl, IncludeHtmlFiles = false, IncludeTextFiles = false
+            });
+            Assert.Contains($"<loc>https://example.test{pageRoute}</loc>", File.ReadAllText(sitemap.OutputPath), StringComparison.Ordinal);
             Assert.False(HasMissingRouteWarning(result, pageRoute), string.Join(Environment.NewLine, result.Warnings));
             Assert.False(HasMissingRouteWarning(result, jsonRoute), string.Join(Environment.NewLine, result.Warnings));
             Assert.False(HasMissingRouteWarning(result, resourceRoute), string.Join(Environment.NewLine, result.Warnings));
