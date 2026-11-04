@@ -7,6 +7,48 @@ namespace PowerForge.Tests;
 public class WebSiteArticleMetadataTests
 {
     [Theory]
+    [InlineData("WebPage", false)]
+    [InlineData("ContactPage", false)]
+    [InlineData("", true)]
+    public void Build_DatedLandingPageRespectsExplicitPageType(string pageType, bool expectArticle)
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-landing-schema-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(root, "content", "docs"));
+            File.WriteAllText(Path.Combine(root, "content", "docs", "downloads.md"), $$"""
+                ---
+                title: Downloads
+                date: 2020-01-02
+                meta.schema.page_type: {{pageType}}
+                ---
+                Find the current packages on the project pages.
+                """);
+            var site = Site();
+            site.Social = new SocialSpec { Enabled = true };
+            var config = Path.Combine(root, "site.json");
+            File.WriteAllText(config, "{}");
+            WebSiteBuilder.Build(site, WebSitePlanner.Plan(site, config), Path.Combine(root, "_site"));
+            var html = File.ReadAllText(Path.Combine(root, "_site", "docs", "downloads", "index.html"));
+            var models = Models(html);
+            Assert.Equal(expectArticle, models.Any(model => model.GetProperty("@type").GetString() == "Article"));
+            var page = Assert.Single(models, model => model.GetProperty("@type").GetString() ==
+                (pageType == "ContactPage" ? "ContactPage" : "WebPage"));
+            Assert.Equal("https://product.example/docs/downloads/", page.GetProperty("url").GetString());
+            Assert.Equal("https://product.example/docs/downloads/#webpage", page.GetProperty("@id").GetString());
+            Assert.Single(models, model => model.GetProperty("@type").GetString() == "Organization");
+            Assert.Single(models, model => model.GetProperty("@type").GetString() == "BreadcrumbList");
+            Assert.Contains($"property=\"og:type\" content=\"{(expectArticle ? "article" : "website")}\"", html);
+            if (pageType == "WebPage")
+                Assert.False(page.TryGetProperty("mainEntity", out _));
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, true);
+        }
+    }
+
+    [Theory]
     [InlineData("Article", "Organization")]
     [InlineData("BlogPosting", "Person")]
     [InlineData("NewsArticle", "Organization")]

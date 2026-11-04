@@ -43,6 +43,11 @@ retain their canonical page link through `mainEntityOfPage` when FAQs are presen
 
 ## Articles and authors
 
+For a dated landing page, set `meta.schema.page_type: WebPage` (or `ContactPage`
+for a contact page) to keep its publication date without inferring Article
+JSON-LD or Open Graph article metadata. An explicit editorial `meta.schema.type`
+still takes precedence; pages without either declaration retain automatic inference.
+
 Blog and news collections are recognized automatically. An undated guide in a
 documentation collection can declare its article type without adding a fictitious
 publication date:

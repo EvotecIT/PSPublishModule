@@ -820,6 +820,8 @@ public static partial class WebSiteBuilder
             return false;
         if (!string.IsNullOrWhiteSpace(ReadStructuredArticleType(item)))
             return true;
+        if (ReadMetaString(item.Meta, "schema.page_type") is "WebPage" or "ContactPage")
+            return false;
         if (!string.IsNullOrWhiteSpace(item.Collection) &&
             IsEditorialCollection(item.Collection))
             return true;
