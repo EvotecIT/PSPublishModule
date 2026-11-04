@@ -7,13 +7,19 @@ namespace PowerForge.Tests;
 public sealed class AppleArchiveBundleValidationTests
 {
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task UploadArchiveAsync_verifies_final_app_and_embedded_extension_before_export(bool macLayout)
+    [InlineData(false, 90)]
+    [InlineData(true, 0)]
+    public async Task UploadArchiveAsync_verifies_final_app_and_embedded_extension_before_export(bool macLayout, int timeoutSeconds)
     {
         using var fixture = new Fixture(macLayout);
         var runner = new InspectionRunner { Universal = macLayout };
-        var result = await new AppleAppArchiveService(runner).UploadArchiveAsync(fixture.Request());
+        var request = fixture.Request();
+        request.Timeout = TimeSpan.FromSeconds(timeoutSeconds);
+        var result = await new AppleAppArchiveService(runner).UploadArchiveAsync(request);
+
+        Assert.NotEmpty(runner.CodesignTimeouts);
+        Assert.All(runner.CodesignTimeouts, timeout => Assert.Equal(
+            timeoutSeconds <= 0 ? TimeSpan.FromHours(1) : request.Timeout, timeout));
 
         Assert.True(result.Succeeded);
         Assert.Equal(1, runner.Exports);
@@ -24,6 +30,7 @@ public sealed class AppleArchiveBundleValidationTests
     [Theory]
     [InlineData("signature", "signature verification failed")]
     [InlineData("team", "signed team")]
+    [InlineData("team-primary", "signed team")]
     [InlineData("team-other-architecture", "signed team")]
     [InlineData("bundle", "missing required embedded bundle")]
     [InlineData("entitlement", "missing required signed entitlement")]
@@ -109,6 +116,7 @@ public sealed class AppleArchiveBundleValidationTests
         internal bool Universal { get; init; } = true;
         internal int Exports { get; private set; }
         internal List<string> VerifiedBundles { get; } = new();
+        internal List<TimeSpan> CodesignTimeouts { get; } = new();
 
         public Task<ProcessRunResult> RunAsync(ProcessRunRequest request, CancellationToken cancellationToken = default)
         {
@@ -125,6 +133,7 @@ public sealed class AppleArchiveBundleValidationTests
             }
             else if (tool == "codesign")
             {
+                CodesignTimeouts.Add(request.Timeout);
                 var bundle = Path.GetFileName(request.Arguments[^1]);
                 var otherArchitecture = request.Arguments.Contains("--architecture") && request.Arguments.Contains("x86_64");
                 if (request.Arguments.Contains("--verify"))
@@ -140,7 +149,8 @@ public sealed class AppleArchiveBundleValidationTests
                 }
                 else
                 {
-                    var wrongTeam = bundle == "Widget.appex" && (Defect == "team" || Defect == "team-other-architecture" && otherArchitecture);
+                    var wrongTeam = Defect == "team-primary" ? bundle == "Example.app"
+                        : bundle == "Widget.appex" && (Defect == "team" || Defect == "team-other-architecture" && otherArchitecture);
                     output = (Universal ? "Format=app bundle with Mach-O universal (arm64 x86_64)" : "Format=app bundle with Mach-O thin (arm64)") + "\nTeamIdentifier=" + (wrongTeam ? "OTHERTEAM1" : "TEAM123456");
                 }
             }

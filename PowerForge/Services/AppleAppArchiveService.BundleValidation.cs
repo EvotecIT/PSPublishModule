@@ -167,7 +167,7 @@ public sealed partial class AppleAppArchiveService
         var executable = System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(
             System.Runtime.InteropServices.OSPlatform.OSX) ? "/usr/bin/codesign" : "codesign";
         return _processRunner.RunAsync(new ProcessRunRequest(executable, bundlePath, arguments,
-            TimeSpan.FromSeconds(30), environment, captureOutput: true, captureError: true,
+            request.Timeout <= TimeSpan.Zero ? TimeSpan.FromHours(1) : request.Timeout, environment, captureOutput: true, captureError: true,
             inheritEnvironment: environment is null), cancellationToken);
     }
 
