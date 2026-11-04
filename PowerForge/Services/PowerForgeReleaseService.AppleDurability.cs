@@ -322,6 +322,9 @@ internal sealed partial class PowerForgeReleaseService
             app.XcodeGenExecutable,
             app.ProjectGenerationTimeoutSeconds,
             RequiredEmbeddedBundleIds = app.RequiredEmbeddedBundleIds.OrderBy(static value => value, StringComparer.Ordinal).ToArray(),
+            // Omit the new empty policy so persisted pre-entitlement receipts retain their identity.
+            RequiredEntitlementKeys = app.RequiredEntitlementKeys.Length == 0 ? null
+                : app.RequiredEntitlementKeys.OrderBy(static value => value, StringComparer.Ordinal).ToArray(),
             RequiredPrivacyUsageDescriptionKeys = app.RequiredPrivacyUsageDescriptionKeys.OrderBy(static value => value, StringComparer.Ordinal).ToArray(),
             DirectDistribution = new
             {
@@ -377,6 +380,9 @@ internal sealed partial class PowerForgeReleaseService
             app.XcodeGenExecutable,
             app.ProjectGenerationTimeoutSeconds,
             RequiredEmbeddedBundleIds = app.RequiredEmbeddedBundleIds.OrderBy(static value => value, StringComparer.Ordinal).ToArray(),
+            // Omit the new empty policy so persisted pre-entitlement receipts retain their identity.
+            RequiredEntitlementKeys = app.RequiredEntitlementKeys.Length == 0 ? null
+                : app.RequiredEntitlementKeys.OrderBy(static value => value, StringComparer.Ordinal).ToArray(),
             RequiredPrivacyUsageDescriptionKeys = app.RequiredPrivacyUsageDescriptionKeys.OrderBy(static value => value, StringComparer.Ordinal).ToArray()
         });
     }

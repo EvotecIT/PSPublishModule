@@ -237,6 +237,9 @@ public sealed class AppleAppConfiguration
     /// <summary>Privacy purpose-string keys that must contain non-empty values in the final archived app before upload.</summary>
     public string[] RequiredPrivacyUsageDescriptionKeys { get; set; } = Array.Empty<string>();
 
+    /// <summary>Entitlement keys required in the final primary app's verified code signature.</summary>
+    public string[] RequiredEntitlementKeys { get; set; } = Array.Empty<string>();
+
     /// <summary>Path to a .xcodeproj directory or project.pbxproj file. Relative paths resolve from the pipeline project root.</summary>
     public string ProjectPath { get; set; } = string.Empty;
 

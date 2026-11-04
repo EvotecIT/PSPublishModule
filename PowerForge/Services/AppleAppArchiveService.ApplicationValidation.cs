@@ -21,7 +21,10 @@ public sealed partial class AppleAppArchiveService
         var verifyVersion = !string.IsNullOrWhiteSpace(request.MarketingVersion) || !string.IsNullOrWhiteSpace(request.BuildNumber);
         if (verifyVersion && request.ManageAppVersionAndBuildNumber)
             throw new InvalidOperationException("Planned archive identity requires ManageAppVersionAndBuildNumber=false so Xcode cannot rewrite the verified version during export/upload.");
-        if (requiredKeys.Length == 0 && !verifyVersion && string.IsNullOrWhiteSpace(request.BundleId))
+        var verifyBundles = request.RequireArchiveAttestation
+            || (request.RequiredEmbeddedBundleIds ?? Array.Empty<string>()).Any(static value => !string.IsNullOrWhiteSpace(value))
+            || (request.RequiredEntitlementKeys ?? Array.Empty<string>()).Any(static value => !string.IsNullOrWhiteSpace(value));
+        if (requiredKeys.Length == 0 && !verifyVersion && string.IsNullOrWhiteSpace(request.BundleId) && !verifyBundles)
             return;
         var invalidKey = requiredKeys.FirstOrDefault(key => !PrivacyUsageDescriptionKey.IsMatch(key));
         if (invalidKey is not null)
@@ -101,6 +104,7 @@ public sealed partial class AppleAppArchiveService
                     $"Archived app '{Path.GetFileName(Path.GetDirectoryName(selectedInfoPlist))}' is missing non-empty privacy purpose string '{key}'. Upload was blocked before App Store Connect delivery.");
             }
         }
+        await ValidateArchivedBundlesAsync(request, selectedInfoPlist, cancellationToken).ConfigureAwait(false);
     }
 
     private async Task<string?> ReadPlistStringAsync(

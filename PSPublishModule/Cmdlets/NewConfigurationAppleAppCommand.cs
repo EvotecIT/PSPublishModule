@@ -55,6 +55,16 @@ public sealed class NewConfigurationAppleAppCommand : PSCmdlet
     [Parameter]
     public string? AppStoreConnectAppId { get; set; }
 
+    /// <summary>Bundle identifiers required in the final embedded apps or extensions.</summary>
+    [Parameter]
+    [ValidateNotNull]
+    public string[] RequiredEmbeddedBundleIds { get; set; } = System.Array.Empty<string>();
+
+    /// <summary>Entitlement keys required in the final primary app's code signature.</summary>
+    [Parameter]
+    [ValidateNotNull]
+    public string[] RequiredEntitlementKeys { get; set; } = System.Array.Empty<string>();
+
     /// <summary>Privacy purpose-string keys that must contain non-empty values in the final archived app before upload.</summary>
     [Parameter]
     [ValidateNotNull]
@@ -102,6 +112,8 @@ public sealed class NewConfigurationAppleAppCommand : PSCmdlet
                 Scheme = Scheme,
                 AppStoreConnectAppId = AppStoreConnectAppId,
                 RequiredPrivacyUsageDescriptionKeys = RequiredPrivacyUsageDescriptionKeys,
+                RequiredEmbeddedBundleIds = RequiredEmbeddedBundleIds,
+                RequiredEntitlementKeys = RequiredEntitlementKeys,
                 MarketingVersion = MarketingVersion,
                 UseResolvedVersion = UseResolvedVersion.IsPresent,
                 BuildNumber = BuildNumber,

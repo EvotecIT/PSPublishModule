@@ -21,6 +21,10 @@ public sealed partial class PowerForgeReleaseServiceTests
                     _ => throw new InvalidOperationException("Unexpected plist key.")
                 };
             }
+            else if (request.FileName.EndsWith("codesign", StringComparison.Ordinal))
+            {
+                output = "Format=app bundle with Mach-O thin (arm64)\nTeamIdentifier=TEAMID";
+            }
             else
             {
                 request.InvokePreStartBoundary();
