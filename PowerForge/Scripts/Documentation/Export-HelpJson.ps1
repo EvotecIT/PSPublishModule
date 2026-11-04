@@ -448,7 +448,7 @@ try {
     if ((& $collectorProtocol.TestDynamicCommand $c) -and $commandContexts.Count -eq 0) {
       $commonNames = @('Verbose','Debug','ErrorAction','ErrorVariable','WarningAction','WarningVariable',
         'InformationAction','InformationVariable','OutVariable','OutBuffer','PipelineVariable','WhatIf','Confirm','ProgressAction')
-      foreach ($name in @($helpParamByName.Keys)) {
+      foreach ($name in @($helpParamByName.get_Keys())) {
         if ($commonNames -notcontains $name -and -not $parameterMetadata.ContainsKey($name)) { $unverified += [string]$name }
       }
       if ($unverified.Count -gt 0) {
@@ -458,7 +458,7 @@ try {
         $result.warnings += ('Dynamic parameter discovery for ' + $c.Name + ' has no explicit contexts; conditional parameters may be missing.')
       }
     }
-    $paramNames = @(@($parameterMetadata.Keys) + $unverified | Microsoft.PowerShell.Utility\Sort-Object -Unique)
+    $paramNames = @(@($parameterMetadata.get_Keys()) + $unverified | Microsoft.PowerShell.Utility\Sort-Object -Unique)
 
     $parameters = @()
     foreach ($pn in $paramNames) {
