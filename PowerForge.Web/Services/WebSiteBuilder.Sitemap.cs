@@ -75,14 +75,14 @@ public static partial class WebSiteBuilder
                           string.IsNullOrWhiteSpace(format.Suffix) ||
                           format.Suffix.Equals("html", StringComparison.OrdinalIgnoreCase))
                       ?? htmlFormats[0];
-        var normalizedBaseRoute = NormalizeRouteForMatch(item.OutputPath);
+        var publicPath = EncodePhysicalRoute(item.OutputPath);
         if ((string.IsNullOrWhiteSpace(primary.Suffix) || primary.Suffix.Equals("html", StringComparison.OrdinalIgnoreCase)) &&
-            normalizedBaseRoute.Trim('/').Equals("404", StringComparison.OrdinalIgnoreCase))
+            publicPath.Trim('/').Equals("404", StringComparison.OrdinalIgnoreCase))
         {
             return "/404.html";
         }
 
-        return ResolveOutputRoute(item.OutputPath, primary);
+        return ResolveOutputRoute(publicPath, primary);
     }
 
     private static string ResolveCanonicalRoute(SiteSpec spec, ContentItem item)
@@ -90,8 +90,8 @@ public static partial class WebSiteBuilder
             ? item.Canonical
             : ResolveOutputFormats(spec, item).Any(format => RendersHtmlPage(format) &&
                 (string.IsNullOrWhiteSpace(format.Suffix) || format.Suffix.Equals("html", StringComparison.OrdinalIgnoreCase)))
-                ? item.OutputPath
-                : ItemRendersHtml(spec, item) ? ResolveSitemapEntryPath(spec, item) : item.OutputPath;
+                ? EncodePhysicalRoute(item.OutputPath)
+                : ItemRendersHtml(spec, item) ? ResolveSitemapEntryPath(spec, item) : EncodePhysicalRoute(item.OutputPath);
 
     private static bool ItemDeclaresNoIndex(SiteSpec spec, ContentItem item, string outputRoot)
     {
@@ -121,7 +121,7 @@ public static partial class WebSiteBuilder
             if (!RendersHtmlPage(format))
                 continue;
 
-            var route = ResolveOutputRoute(item.OutputPath, format);
+            var route = ResolveOutputRoute(EncodePhysicalRoute(item.OutputPath), format);
             var path = ResolveRenderedHtmlPath(outputRoot, route, format);
             if (!string.IsNullOrWhiteSpace(path) &&
                 File.Exists(path) &&
@@ -136,7 +136,7 @@ public static partial class WebSiteBuilder
 
     private static string ResolveRenderedHtmlPath(string outputRoot, string route, OutputFormatSpec format)
     {
-        var normalizedRoute = NormalizeRouteForMatch(route).Trim('/');
+        var normalizedRoute = Uri.UnescapeDataString(NormalizeRouteForMatch(route).Trim('/'));
         var fileName = ResolveOutputFileName(format);
         string relative;
         if (normalizedRoute.Equals("404", StringComparison.OrdinalIgnoreCase) &&

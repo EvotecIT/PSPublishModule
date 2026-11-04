@@ -268,7 +268,7 @@ public static partial class WebSiteVerifier
             ? "/" + prefix
             : "/" + prefix + "/" + withoutLeadingSlash;
 
-        return EnsureTrailingSlash(prefixed, spec.TrailingSlash);
+        return WebSiteBuilder.ResolveContentRoute(prefixed, string.Empty, spec.TrailingSlash, null);
     }
 
     private static string StripLanguagePrefix(ResolvedLocalizationConfig localization, string? route)

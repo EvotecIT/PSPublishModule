@@ -1160,7 +1160,8 @@ public static partial class WebSiteBuilder
         }
 
         combined = "/" + combined.Trim('/');
-        return EnsureTrailingSlash(combined, slashMode);
+        // Collection and slug segments are physical path names, so '#' is not a fragment here.
+        return slashMode == TrailingSlashMode.Always && combined != "/" ? combined + "/" : combined;
     }
 
     private static string EnsureTrailingSlash(string path, TrailingSlashMode mode)
