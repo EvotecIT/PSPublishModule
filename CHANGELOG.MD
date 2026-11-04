@@ -2,6 +2,7 @@
 
 ## Unreleased
 ### What's Changed
+- Retain private System.Management binaries in modern isolated module payloads, including Windows runtime assets, while preserving shared PowerShell host assemblies and legacy copy rules.
 - Finalize unpacked module and delivery layouts after runtime support files are copied, so signing covers the delivered scripts as it does in ZIP packages. Keep retained caller files and removed disabled provenance out of signing scope, and reject overlapping signing-evidence outputs.
 - Resolve C# API documentation dependencies from every documented assembly's output and dependency manifest in a collectible context, keeping the CLI's application dependencies out of reflection.
 - Preserve site-relative API suite routes on Linux instead of converting them to file URLs.
