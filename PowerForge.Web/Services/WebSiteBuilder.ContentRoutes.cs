@@ -2,6 +2,10 @@ namespace PowerForge.Web;
 
 public static partial class WebSiteBuilder
 {
+    /// <summary>Converts literal output path segments to a URL path.</summary>
+    internal static string EncodePhysicalRoute(string route)
+        => string.Join("/", route.Split('/').Select(Uri.EscapeDataString));
+
     /// <summary>Resolves the output route shared by content discovery and verification.</summary>
     internal static string ResolveContentRoute(string baseOutput, string slugPath, TrailingSlashMode slashMode, FrontMatter? matter)
     {

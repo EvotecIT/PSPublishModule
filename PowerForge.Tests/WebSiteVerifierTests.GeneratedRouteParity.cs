@@ -92,6 +92,7 @@ public partial class WebSiteVerifierTests
             File.WriteAllText(
                 Path.Combine(root, "content", "guide.md"),
                 "---\ntitle: Guide\n---\n<meta name=\"robots\" content=\"noindex\">\nGuide");
+            File.WriteAllText(Path.Combine(root, "content", "public.md"), "---\ntitle: Public\n---\nPublic");
             var spec = new SiteSpec
             {
                 Name = "Custom HTML noindex",
@@ -113,7 +114,8 @@ public partial class WebSiteVerifierTests
             Assert.True(File.Exists(renderedPath));
             using var metadata = System.Text.Json.JsonDocument.Parse(
                 File.ReadAllText(Path.Combine(outputRoot, "_powerforge", "sitemap-entries.json")));
-            var entry = Assert.Single(metadata.RootElement.GetProperty("entries").EnumerateArray());
+            var entry = Assert.Single(metadata.RootElement.GetProperty("entries").EnumerateArray(),
+                entry => entry.GetProperty("path").GetString() == "/guide/index.xhtml");
             Assert.Equal("/guide/index.xhtml", entry.GetProperty("path").GetString());
             Assert.True(entry.GetProperty("noIndex").GetBoolean());
 
@@ -124,7 +126,10 @@ public partial class WebSiteVerifierTests
                 IncludeHtmlFiles = false,
                 IncludeTextFiles = false
             });
-            Assert.DoesNotContain("guide/index.xhtml", File.ReadAllText(sitemap.OutputPath), StringComparison.OrdinalIgnoreCase);
+            Assert.Equal(1, sitemap.UrlCount);
+            var sitemapXml = File.ReadAllText(sitemap.OutputPath);
+            Assert.Contains("https://example.test/public/index.xhtml", sitemapXml, StringComparison.Ordinal);
+            Assert.DoesNotContain("guide/index.xhtml", sitemapXml, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {
@@ -829,8 +834,12 @@ public partial class WebSiteVerifierTests
         }
     }
 
-    [Fact]
-    public void Verify_ProjectsReservedRouteCharactersFromPhysicalOutputs()
+    [Theory]
+    [InlineData(TrailingSlashMode.Always, false)]
+    [InlineData(TrailingSlashMode.Never, false)]
+    [InlineData(TrailingSlashMode.Always, true)]
+    [InlineData(TrailingSlashMode.Never, true)]
+    public void Verify_ProjectsReservedRouteCharactersFromPhysicalOutputs(TrailingSlashMode slashMode, bool localized)
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-verify-reserved-route-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(Path.Combine(root, "content", "about"));
@@ -839,23 +848,31 @@ public partial class WebSiteVerifierTests
         {
             File.WriteAllText(
                 Path.Combine(root, "content", "about", "index.md"),
-                "---\ntitle: About\nslug: about#us\n---\nAbout us.");
+                "---\ntitle: About\nslug: about#us\nlanguage: pl\n---\nAbout us.");
             File.WriteAllText(Path.Combine(root, "content", "about", "manual#one.pdf"), "manual");
-            var pageRoute = "/about%23us/";
-            var jsonRoute = "/about%23us/index.json";
-            var resourceRoute = "/about%23us/manual%23one.pdf";
+            var prefix = localized ? "/pl/docs" : "";
+            var pageRoute = prefix + "/about%23us/";
+            var jsonRoute = prefix + "/about%23us/index.json";
+            var resourceRoute = prefix + "/about%23us/manual%23one.pdf";
             var spec = new SiteSpec
             {
                 Name = "Reserved route characters",
                 BaseUrl = "https://example.test",
-                TrailingSlash = TrailingSlashMode.Always,
+                Social = new SocialSpec { Enabled = true },
+                TrailingSlash = slashMode,
+                Localization = new LocalizationSpec
+                {
+                    Enabled = localized,
+                    DefaultLanguage = "en",
+                    Languages = [new LanguageSpec { Code = "en", Default = true }, new LanguageSpec { Code = "pl" }]
+                },
                 Collections =
                 [
                     new CollectionSpec
                     {
                         Name = "pages",
                         Input = "content",
-                        Output = "/",
+                        Output = localized ? "/docs" : "/",
                         Outputs = ["html", "json"]
                     }
                 ],
@@ -885,9 +902,19 @@ public partial class WebSiteVerifierTests
             WebSiteBuilder.Build(spec, plan, outputRoot);
             var result = WebSiteVerifier.Verify(spec, plan);
 
-            Assert.True(File.Exists(Path.Combine(outputRoot, "about#us", "index.html")));
-            Assert.True(File.Exists(Path.Combine(outputRoot, "about#us", "index.json")));
-            Assert.True(File.Exists(Path.Combine(outputRoot, "about#us", "manual#one.pdf")));
+            var physicalRoot = Path.Combine(outputRoot, prefix.Trim('/').Replace('/', Path.DirectorySeparatorChar), "about#us");
+            Assert.True(File.Exists(Path.Combine(physicalRoot, "index.html")));
+            Assert.True(File.Exists(Path.Combine(physicalRoot, "index.json")));
+            Assert.True(File.Exists(Path.Combine(physicalRoot, "manual#one.pdf")));
+            var canonicalUrl = "https://example.test" + (slashMode == TrailingSlashMode.Never ? pageRoute.TrimEnd('/') : pageRoute);
+            var html = File.ReadAllText(Path.Combine(physicalRoot, "index.html"));
+            Assert.Contains($"<link rel=\"canonical\" href=\"{canonicalUrl}\"", html, StringComparison.Ordinal);
+            Assert.Contains($"property=\"og:url\" content=\"{canonicalUrl}\"", html, StringComparison.Ordinal);
+            var sitemap = WebSitemapGenerator.Generate(new WebSitemapOptions
+            {
+                SiteRoot = outputRoot, BaseUrl = spec.BaseUrl, IncludeHtmlFiles = false, IncludeTextFiles = false
+            });
+            Assert.Contains($"<loc>https://example.test{pageRoute}</loc>", File.ReadAllText(sitemap.OutputPath), StringComparison.Ordinal);
             Assert.False(HasMissingRouteWarning(result, pageRoute), string.Join(Environment.NewLine, result.Warnings));
             Assert.False(HasMissingRouteWarning(result, jsonRoute), string.Join(Environment.NewLine, result.Warnings));
             Assert.False(HasMissingRouteWarning(result, resourceRoute), string.Join(Environment.NewLine, result.Warnings));

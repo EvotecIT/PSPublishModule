@@ -339,7 +339,7 @@ public static partial class WebSiteVerifier
         ValidateLayoutHooks(spec, plan, warnings);
         ValidateThemeTokens(spec, plan, warnings);
         ValidatePrismAssets(spec, plan, warnings);
-        ValidateTocCoverage(spec, plan, collectionRoutes, warnings);
+        ValidateTocCoverage(spec, plan, localization, collectionRoutes, warnings);
         ValidateNavigationDefaults(spec, warnings);
         ValidateBlogAndTaxonomySupport(spec, localization, collectionRoutes, usedTaxonomyNames, warnings);
         ValidateLocalizationTranslationMappings(spec, localization, collectionRoutes, warnings);
