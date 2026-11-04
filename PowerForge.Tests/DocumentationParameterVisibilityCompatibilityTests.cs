@@ -5,6 +5,61 @@ namespace PowerForge.Tests;
 public sealed class DocumentationParameterVisibilityCompatibilityTests
 {
     [Fact]
+    public void CompiledHelp_PreservesPositionsAndMembershipForEachSyntaxSet()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-compiled-positions-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var source = """
+function New-PositionFixture {
+<#
+.SYNOPSIS
+Creates a position fixture.
+#>
+    [CmdletBinding(DefaultParameterSetName = 'Section', PositionalBinding = $false)]
+    param(
+        [Parameter(Mandatory = $true, Position = 0, ParameterSetName = 'Section')]
+        [string] $Key,
+        [Parameter(ParameterSetName = 'Section')]
+        [Parameter(Mandatory = $true, Position = 0, ParameterSetName = 'Accordion')]
+        [string] $Content,
+        [Parameter(Mandatory = $true, ParameterSetName = 'Accordion')]
+        [switch] $Accordion,
+        [Parameter()]
+        [string] $Shared
+    )
+    return $Content
+}
+""";
+            var sourcePath = Path.Combine(root, "fixture.ps1");
+            File.WriteAllText(sourcePath, source);
+            var result = new PowerShellTypedCompilationTranspiler().TranspileForBinaryModule(
+                new[] { sourcePath }, "PositionFixture", "Commands", "net10.0");
+            Assert.Empty(result.Diagnostics);
+            var path = PowerShellCompiledHelpWriter.WriteExternalHelp("PositionFixture", root, result.Methods);
+            var syntax = System.Xml.Linq.XDocument.Load(path!).Descendants()
+                .Where(element => element.Name.LocalName == "syntaxItem").ToArray();
+            Assert.Equal(2, syntax.Length);
+            var section = Assert.Single(syntax, element => (string?)element.Attribute("parameterSetName") == "Section");
+            var accordion = Assert.Single(syntax, element => (string?)element.Attribute("parameterSetName") == "Accordion");
+            string[] Names(System.Xml.Linq.XElement set) => set.Elements()
+                .Where(element => element.Name.LocalName == "parameter")
+                .Select(element => element.Elements().Single(child => child.Name.LocalName == "name").Value).ToArray();
+            Assert.Equal(["Key", "Content", "Shared"], Names(section));
+            Assert.Equal(["Content", "Accordion", "Shared"], Names(accordion));
+            System.Xml.Linq.XElement Content(System.Xml.Linq.XElement set) => set.Elements()
+                .Single(element => element.Elements().Any(child => child.Name.LocalName == "name" && child.Value == "Content"));
+            Assert.Equal("named", (string?)Content(section).Attribute("position"));
+            Assert.Equal("0", (string?)Content(accordion).Attribute("position"));
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void Collector_PreservesParameterPositionsForEachSyntaxSetAcrossHosts()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-parameter-positions-" + Guid.NewGuid().ToString("N"));

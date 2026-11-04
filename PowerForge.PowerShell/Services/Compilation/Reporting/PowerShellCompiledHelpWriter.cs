@@ -58,6 +58,22 @@ internal static class PowerShellCompiledHelpWriter
             }
             command.Parameters.Add(entry);
         }
+        var setNames = command.Parameters.SelectMany(static parameter => parameter.ParameterSets)
+            .Where(static name => !name.Equals("__AllParameterSets", StringComparison.OrdinalIgnoreCase))
+            .Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+        if (setNames.Length == 0) setNames = new[] { "__AllParameterSets" };
+        foreach (var setName in setNames)
+        {
+            command.Syntax.Add(new DocumentationSyntaxHelp
+            {
+                Name = setName,
+                IsDefault = setName.Equals(command.DefaultParameterSet, StringComparison.OrdinalIgnoreCase),
+                ParameterNames = command.Parameters.Where(parameter => parameter.ParameterSets.Count == 0 ||
+                        parameter.ParameterSets.Contains(setName, StringComparer.OrdinalIgnoreCase) ||
+                        parameter.ParameterSets.Contains("__AllParameterSets", StringComparer.OrdinalIgnoreCase))
+                    .Select(static parameter => parameter.Name).ToList()
+            });
+        }
         for (var index = 0; index < help.Examples.Length; index++)
         {
             command.Examples.Add(new DocumentationExampleHelp
