@@ -623,6 +623,7 @@ public sealed class ModuleBuilder
         public HashSet<string> RuntimeTargetRelativePaths { get; } = new(StringComparer.OrdinalIgnoreCase);
         public HashSet<string> DeclaredRuntimeRelativePaths { get; } = new(StringComparer.OrdinalIgnoreCase);
         public HashSet<string> DeclaredTopLevelBinaryFileNames { get; } = new(StringComparer.OrdinalIgnoreCase);
+        public HashSet<string> ExcludedTopLevelBinaryFileNames { get; } = new(StringComparer.OrdinalIgnoreCase);
     }
 
     private sealed class PublishCopyOptions
@@ -719,12 +720,13 @@ public sealed class ModuleBuilder
             }
         }
 
-        copied += CopyReferencedTopLevelAssemblies(publishDir, targetDir, options);
+        copied += CopyReferencedTopLevelAssemblies(publishDir, targetDir, options, plan.ExcludedTopLevelBinaryFileNames);
 
         _logger.Verbose($"Copied {copied} binaries for {tfm} from '{publishDir}' to '{targetDir}'.");
     }
 
-    private static int CopyReferencedTopLevelAssemblies(string publishDir, string targetDir, PublishCopyOptions options)
+    private static int CopyReferencedTopLevelAssemblies(
+        string publishDir, string targetDir, PublishCopyOptions options, ISet<string> excludedFileNames)
     {
         var copied = 0;
         var initialAssemblies = ModuleBinaryFileLocator.Enumerate(targetDir, SearchOption.TopDirectoryOnly).ToArray();
@@ -747,7 +749,7 @@ public sealed class ModuleBuilder
                 if (IsPowerShellRuntimeLibraryId(referenceName)) continue;
 
                 var fileName = referenceName + ".dll";
-                if (IsHostProvidedBinary(fileName, options)) continue;
+                if (IsHostProvidedBinary(fileName, options) || excludedFileNames.Contains(fileName)) continue;
                 if (MatchesAnyFilter(fileName, referenceName, options.ExcludeLibraryFilters)) continue;
 
                 var destination = Path.Combine(targetDir, fileName);
@@ -1340,7 +1342,13 @@ public sealed class ModuleBuilder
                     AddDeclaredRuntimePaths(plan.DeclaredRuntimeRelativePaths, lib.Value, "native");
                     AddDeclaredRuntimePaths(plan.DeclaredRuntimeRelativePaths, lib.Value, "runtimeTargets");
 
-                    if (excluded.Contains(lib.Name)) continue;
+                    if (excluded.Contains(lib.Name))
+                    {
+                        AddDeclaredBinaryFileNames(plan.ExcludedTopLevelBinaryFileNames, lib.Value, "runtime");
+                        AddDeclaredBinaryFileNames(plan.ExcludedTopLevelBinaryFileNames, lib.Value, "native");
+                        AddDeclaredBinaryFileNames(plan.ExcludedTopLevelBinaryFileNames, lib.Value, "runtimeTargets");
+                        continue;
+                    }
 
                     AddRuntimeAssetFileNames(plan.RootFileNames, lib.Name, lib.Value, "runtime", options.ExcludeLibraryFilters);
                     AddRuntimeAssetFileNames(plan.RootFileNames, lib.Name, lib.Value, "native", options.ExcludeLibraryFilters);

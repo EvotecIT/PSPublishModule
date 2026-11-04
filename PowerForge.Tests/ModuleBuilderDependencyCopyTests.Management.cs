@@ -6,22 +6,23 @@ public sealed partial class ModuleBuilderDependencyCopyTests
 {
     [Theory]
     [Trait("Category", "Integration")]
-    [InlineData("net8.0", true, true, false, true)]
-    [InlineData("net8.0", true, false, false, true)]
-    [InlineData("net8.0", false, true, false, false)]
-    [InlineData("netstandard2.0", true, true, false, false)]
-    [InlineData("net8.0", true, true, true, false)]
+    [InlineData("net8.0", true, true, null, true)]
+    [InlineData("net8.0", true, false, null, true)]
+    [InlineData("net8.0", false, true, null, false)]
+    [InlineData("netstandard2.0", true, true, null, false)]
+    [InlineData("net8.0", true, true, "System.Management*", false)]
+    [InlineData("net8.0", true, true, "System.Management/9.0.6", false)]
     public void BuildInPlace_PreservesPrivateManagementOnlyForIsolatedCorePayloads(
-        string framework, bool isolated, bool deps, bool excludeManagement, bool expectedManagement)
-        => AssertManagementCopy(framework, isolated, deps, excludeManagement, expectedManagement);
+        string framework, bool isolated, bool deps, string? managementFilter, bool expectedManagement)
+        => AssertManagementCopy(framework, isolated, deps, managementFilter, expectedManagement);
 
     [WindowsFact]
     [Trait("Category", "Integration")]
     public void BuildInPlace_ExcludesPublishedModernManagementAssetsFromDesktopPayload()
-        => AssertManagementCopy("net472", isolated: true, deps: true, excludeManagement: false, expectedManagement: false);
+        => AssertManagementCopy("net472", isolated: true, deps: true, managementFilter: null, expectedManagement: false);
 
     private static void AssertManagementCopy(
-        string framework, bool isolated, bool deps, bool excludeManagement, bool expectedManagement)
+        string framework, bool isolated, bool deps, string? managementFilter, bool expectedManagement)
     {
         var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
         var moduleRoot = Directory.CreateDirectory(Path.Combine(root, "Module")).FullName;
@@ -63,7 +64,7 @@ public sealed partial class ModuleBuilderDependencyCopyTests
                 HandleRuntimes = true,
                 DisableBinaryCmdletScan = true,
                 EmitBinaryConflictOwnerNotes = false,
-                ExcludeLibraryFilter = excludeManagement ? ["System.Management*"] : []
+                ExcludeLibraryFilter = managementFilter is null ? [] : [managementFilter]
             });
 
             var payload = Path.Combine(moduleRoot, "Lib", framework == "net472" ? "Default" : framework == "netstandard2.0" ? "Standard" : "Core");

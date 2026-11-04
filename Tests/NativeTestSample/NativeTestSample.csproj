@@ -7,8 +7,8 @@
     <PublishAot>true</PublishAot>
     <RuntimeIdentifiers>win-x64;linux-x64;osx-arm64</RuntimeIdentifiers>
     <!-- Keep this test-only AOT package graph stable across the supported SDK servicing versions. -->
-    <NativeSmokeToolVersion Condition="'$(TargetFramework)' == 'net8.0'">8.0.32</NativeSmokeToolVersion>
-    <NativeSmokeToolVersion Condition="'$(TargetFramework)' == 'net10.0'">10.0.13</NativeSmokeToolVersion>
+    <NativeSmokeToolVersion Condition="'$(TargetFramework)' == 'net8.0'">8.0.33</NativeSmokeToolVersion>
+    <NativeSmokeToolVersion Condition="'$(TargetFramework)' == 'net10.0'">10.0.14</NativeSmokeToolVersion>
     <RuntimeFrameworkVersion>$(NativeSmokeToolVersion)</RuntimeFrameworkVersion>
     <IlcTreatWarningsAsErrors>true</IlcTreatWarningsAsErrors>
     <ILLinkTreatWarningsAsErrors>true</ILLinkTreatWarningsAsErrors>
