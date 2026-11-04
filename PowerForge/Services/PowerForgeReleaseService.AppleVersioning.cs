@@ -541,6 +541,7 @@ internal sealed partial class PowerForgeReleaseService
                     ArchivePath = FrameworkCompatibility.GetRelativePath(plan.ProjectRoot, app.ArchivePath).Replace('\\', '/'),
                     ExportPath = FrameworkCompatibility.GetRelativePath(plan.ProjectRoot, app.ExportPath).Replace('\\', '/'),
                     RequiredEmbeddedBundleIds = app.RequiredEmbeddedBundleIds.OrderBy(static value => value, StringComparer.Ordinal).ToArray(),
+                    RequiredEntitlementKeys = app.RequiredEntitlementKeys.OrderBy(static value => value, StringComparer.Ordinal).ToArray(),
                     RequiredPrivacyUsageDescriptionKeys = app.RequiredPrivacyUsageDescriptionKeys.OrderBy(static value => value, StringComparer.Ordinal).ToArray()
                 })
                 .ToArray(),

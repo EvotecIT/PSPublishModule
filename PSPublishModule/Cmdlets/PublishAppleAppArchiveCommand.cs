@@ -22,6 +22,37 @@ public sealed class PublishAppleAppArchiveCommand : PSCmdlet
     [Parameter]
     public string? TeamId { get; set; }
 
+    /// <summary>Expected primary app bundle identifier.</summary>
+    [Parameter]
+    public string? BundleId { get; set; }
+
+    /// <summary>Expected marketing version in the final primary app.</summary>
+    [Parameter]
+    public string? MarketingVersion { get; set; }
+
+    /// <summary>Expected build number in the final primary app.</summary>
+    [Parameter]
+    public string? BuildNumber { get; set; }
+
+    /// <summary>Bundle identifiers required in embedded apps or extensions.</summary>
+    [Parameter]
+    [ValidateNotNull]
+    public string[] RequiredEmbeddedBundleId { get; set; } = Array.Empty<string>();
+
+    /// <summary>Privacy purpose-string keys required in the final primary app.</summary>
+    [Parameter]
+    [ValidateNotNull]
+    public string[] RequiredPrivacyUsageDescriptionKey { get; set; } = Array.Empty<string>();
+
+    /// <summary>Entitlement keys required in the primary app signature.</summary>
+    [Parameter]
+    [ValidateNotNull]
+    public string[] RequiredEntitlementKey { get; set; } = Array.Empty<string>();
+
+    /// <summary>Verifies the primary and embedded app signatures before export or upload.</summary>
+    [Parameter]
+    public SwitchParameter RequireArchiveAttestation { get; set; }
+
     /// <summary>Temporary export path used by xcodebuild.</summary>
     [Parameter]
     public string? ExportPath { get; set; }
@@ -69,6 +100,13 @@ public sealed class PublishAppleAppArchiveCommand : PSCmdlet
         {
             ArchivePath = resolvedArchivePath,
             TeamId = TeamId,
+            BundleId = BundleId,
+            MarketingVersion = MarketingVersion,
+            BuildNumber = BuildNumber,
+            RequiredEmbeddedBundleIds = RequiredEmbeddedBundleId,
+            RequiredPrivacyUsageDescriptionKeys = RequiredPrivacyUsageDescriptionKey,
+            RequiredEntitlementKeys = RequiredEntitlementKey,
+            RequireArchiveAttestation = RequireArchiveAttestation.IsPresent,
             ExportPath = ExportPath is null ? null : SessionState.Path.GetUnresolvedProviderPathFromPSPath(ExportPath),
             ExportOptionsPlistPath = ExportOptionsPlistPath is null ? null : SessionState.Path.GetUnresolvedProviderPathFromPSPath(ExportOptionsPlistPath),
             XcodeBuildExecutable = XcodeBuild,
