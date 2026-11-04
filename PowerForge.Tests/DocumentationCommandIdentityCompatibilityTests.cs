@@ -199,6 +199,14 @@ public sealed class DocumentationCommandIdentityCompatibilityTests
                                 [" A "] = true,
                                 ["A"] = false,
                                 ["' A '"] = false
+                            },
+                            ParameterSetPositions = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                            {
+                                [invalid] = "0",
+                                [literal] = "Named",
+                                [" A "] = "1",
+                                ["A"] = "2",
+                                ["' A '"] = "3"
                             }
                         }
                     ]
@@ -237,6 +245,11 @@ public sealed class DocumentationCommandIdentityCompatibilityTests
             Assert.Equal(
                 ["S%uD800 [encoded 1]", "S%uD800", " A ", "A", "' A '"],
                 setNames);
+            var positions = XDocument.Load(mamlPath).Descendants()
+                .Where(element => element.Name.LocalName == "syntaxItem")
+                .Select(set => set.Elements().Single(element => element.Name.LocalName == "parameter").Attribute("position")?.Value ?? string.Empty)
+                .ToArray();
+            Assert.Equal(["0", "named", "1", "2", "3"], positions);
         }
         finally
         {

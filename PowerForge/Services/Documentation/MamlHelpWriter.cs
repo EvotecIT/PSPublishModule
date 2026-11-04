@@ -301,7 +301,7 @@ internal sealed class MamlHelpWriter
             .ToArray();
 
         var aliasValue = aliases.Length == 0 ? "none" : string.Join(",", aliases);
-        var position = NormalizePosition(p.Position);
+        var position = ParameterPositionInSet(p, setName);
 
         var typeName = string.IsNullOrWhiteSpace(p.Type) ? "Object" : p.Type.Trim();
         var isArray = typeName.EndsWith("[]", StringComparison.Ordinal);
@@ -470,6 +470,21 @@ internal sealed class MamlHelpWriter
             if (sn.Equals(setName, StringComparison.OrdinalIgnoreCase)) return true;
         }
         return false;
+    }
+
+    private static string ParameterPositionInSet(DocumentationParameterHelp parameter, string? setName)
+    {
+        if (!string.IsNullOrEmpty(setName) && parameter.ParameterSetPositions is { Count: > 0 } positions)
+        {
+            foreach (var entry in positions)
+                if (string.Equals(entry.Key, setName, StringComparison.OrdinalIgnoreCase))
+                    return NormalizePosition(entry.Value);
+            foreach (var entry in positions)
+                if (string.Equals(entry.Key, "__AllParameterSets", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(entry.Key, "(All)", StringComparison.OrdinalIgnoreCase))
+                    return NormalizePosition(entry.Value);
+        }
+        return NormalizePosition(parameter.Position);
     }
 
     private static bool ParameterRequiredInSet(DocumentationParameterHelp p, string? setName, string? syntaxText)

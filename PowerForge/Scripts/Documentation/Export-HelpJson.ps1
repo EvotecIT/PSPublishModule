@@ -483,6 +483,7 @@ try {
 
       $required = $false
       $parameterSetRequired = @{}
+      $parameterSetPositions = @{}
       $named = $true
       $pos = $null
       $pipeByValue = $false
@@ -503,6 +504,9 @@ try {
               if ($setName) { $parameterSetRequired[$setName] = [bool]$psm.IsMandatory }
               if ($psm.IsMandatory) { $required = $true }
               $pPos = [int]$psm.Position
+              if ($setName) {
+                $parameterSetPositions[$setName] = if ($pPos -eq -2147483648) { 'Named' } else { $pPos.ToString([System.Globalization.CultureInfo]::InvariantCulture) }
+              }
               if ($pPos -ne -2147483648) {
                 $named = $false
                 if ($null -eq $pos -or $pPos -lt $pos) { $pos = $pPos }
@@ -609,6 +613,7 @@ try {
         validateSetCaseSensitive = [bool]$validateSetCaseSensitive
         required = [bool]$required
         parameterSetRequired = $parameterSetRequired
+        parameterSetPositions = $parameterSetPositions
         position = $positionText
         defaultValue = $defaultValue
         hasMetadataDefault = [bool]$hasMetadataDefault

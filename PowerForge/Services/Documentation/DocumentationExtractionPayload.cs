@@ -318,6 +318,10 @@ internal sealed class DocumentationParameterHelp
     [DataMember(Name = "parameterSetRequired")]
     public Dictionary<string, bool> ParameterSetRequired { get; set; } = new();
 
+    /// <summary>Named or numeric position by parameter set name for syntax rendering.</summary>
+    [DataMember(Name = "parameterSetPositions")]
+    public Dictionary<string, string> ParameterSetPositions { get; set; } = new();
+
     /// <summary>Position information (Named/0/1/...).</summary>
     [DataMember(Name = "position")]
     public string Position { get; set; } = string.Empty;

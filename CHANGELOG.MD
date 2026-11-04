@@ -2,6 +2,7 @@
 
 ## Unreleased
 ### What's Changed
+- Preserve each parameter set's named or positional binding in generated PowerShell syntax help.
 - Retain private System.Management binaries in modern isolated module payloads, including Windows runtime assets. Preserve versioned library exclusions during dependency repair.
 - Resolve relative TOC links against evaluated collection output paths, including project and language prefixes, nested and index Markdown links, while retaining warnings for missing pages.
 - Preserve literal reserved characters in content output directories and encode them in canonical, social, and sitemap URLs.

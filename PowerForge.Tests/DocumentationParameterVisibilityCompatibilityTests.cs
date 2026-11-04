@@ -5,6 +5,65 @@ namespace PowerForge.Tests;
 public sealed class DocumentationParameterVisibilityCompatibilityTests
 {
     [Fact]
+    public void Collector_PreservesParameterPositionsForEachSyntaxSetAcrossHosts()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-parameter-positions-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var manifestPath = Path.Combine(root, "PositionFixture.psd1");
+            File.WriteAllText(manifestPath, """
+@{
+    RootModule = 'PositionFixture.psm1'
+    ModuleVersion = '1.0.0'
+    GUID = '54545454-5454-5454-5454-545454545454'
+    FunctionsToExport = @('New-PositionFixture')
+    CmdletsToExport = @()
+    AliasesToExport = @()
+}
+""", new UTF8Encoding(false));
+            File.WriteAllText(Path.Combine(root, "PositionFixture.psm1"), """
+function New-PositionFixture {
+    [CmdletBinding(DefaultParameterSetName = 'Section', PositionalBinding = $false)]
+    param(
+        [Parameter(Mandatory = $true, Position = 0, ParameterSetName = 'Section')]
+        [string] $Key,
+        [Parameter(ParameterSetName = 'Section')]
+        [Parameter(Mandatory = $true, Position = 0, ParameterSetName = 'Accordion')]
+        [object] $Content,
+        [Parameter(Mandatory = $true, ParameterSetName = 'Accordion')]
+        [switch] $Accordion
+    )
+}
+Export-ModuleMember -Function New-PositionFixture
+""", new UTF8Encoding(false));
+            var hosts = OperatingSystem.IsWindows() ? new[] { "pwsh.exe", "powershell.exe" } : new[] { "pwsh" };
+            foreach (var host in hosts)
+            {
+                var engine = new DocumentationEngine(new ExecutablePowerShellRunner(host, root), new NullLogger());
+                var payload = engine.ExtractHelpPayload(root, manifestPath, TimeSpan.FromMinutes(1));
+                var path = new MamlHelpWriter().WriteExternalHelpFile(payload, "PositionFixture", Path.Combine(root, host.Replace('.', '-')));
+                var document = System.Xml.Linq.XDocument.Load(path);
+                var syntax = document.Descendants().Where(element => element.Name.LocalName == "syntaxItem").ToArray();
+                var section = Assert.Single(syntax, element => (string?)element.Attribute("parameterSetName") == "Section");
+                var accordion = Assert.Single(syntax, element => (string?)element.Attribute("parameterSetName") == "Accordion");
+                System.Xml.Linq.XElement Parameter(System.Xml.Linq.XElement set, string name) =>
+                    Assert.Single(set.Elements().Where(element => element.Name.LocalName == "parameter"),
+                        element => element.Elements().Any(child => child.Name.LocalName == "name" && child.Value == name));
+                Assert.Equal("0", (string?)Parameter(section, "Key").Attribute("position"));
+                Assert.Equal("named", (string?)Parameter(section, "Content").Attribute("position"));
+                Assert.Equal("0", (string?)Parameter(accordion, "Content").Attribute("position"));
+                Assert.Equal("false", (string?)Parameter(section, "Content").Attribute("required"));
+                Assert.Equal("true", (string?)Parameter(accordion, "Content").Attribute("required"));
+            }
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
     public void Collector_UnwrapsNullableTypesAndOmitsDontShowParametersAcrossHosts()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-parameter-visibility-" + Guid.NewGuid().ToString("N"));

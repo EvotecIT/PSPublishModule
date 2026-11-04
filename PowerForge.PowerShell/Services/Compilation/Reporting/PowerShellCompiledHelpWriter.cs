@@ -54,6 +54,7 @@ internal static class PowerShellCompiledHelpWriter
                 var setName = string.IsNullOrWhiteSpace(binding.ParameterSetName) ? "__AllParameterSets" : binding.ParameterSetName;
                 if (!entry.ParameterSets.Contains(setName, StringComparer.OrdinalIgnoreCase)) entry.ParameterSets.Add(setName);
                 entry.ParameterSetRequired[setName] = binding.Mandatory;
+                entry.ParameterSetPositions[setName] = binding.Position?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "Named";
             }
             command.Parameters.Add(entry);
         }
