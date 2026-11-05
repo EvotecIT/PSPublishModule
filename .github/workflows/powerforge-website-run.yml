@@ -164,6 +164,11 @@ on:
         required: false
         type: string
         default: ""
+      apidocs_shards:
+        description: Jobs (1-8) that share the pipeline's consecutive apidocs steps. 1 keeps the single-job build; larger values add Linux jobs that each run the earlier steps and part of the API docs, and this job merges them before the remaining steps.
+        required: false
+        type: number
+        default: 1
     secrets:
       indexnow_key:
         required: false
@@ -211,6 +216,16 @@ jobs:
           }
           if ($env:POWERFORGE_CREDENTIAL_MODE -eq 'public-github' -and $env:POWERFORGE_PUBLIC_REPOSITORY -ne 'true') {
             throw 'public-github credentials require a verified public repository.'
+          }
+
+      - name: Validate API docs shard count
+        if: ${{ inputs.apidocs_shards != 1 }}
+        shell: pwsh
+        env:
+          POWERFORGE_APIDOCS_SHARDS: ${{ inputs.apidocs_shards }}
+        run: |
+          if ($env:POWERFORGE_APIDOCS_SHARDS -notmatch '^[2-8]$') {
+            throw "apidocs_shards must be a whole number from 1 to 8, got '$env:POWERFORGE_APIDOCS_SHARDS'."
           }
 
       - name: Checkout website
@@ -382,6 +397,66 @@ jobs:
             }
           }
 
+      - name: Prepare website pipeline and API docs shard 1
+        if: ${{ inputs.apidocs_shards > 1 }}
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ (inputs.credential_mode == 'standard' || (inputs.credential_mode == 'public-github' && github.event.repository.private == false && github.event.repository.visibility == 'public')) && github.token || '' }}
+          # Prevent an ambient runner CLI credential from overriding this policy.
+          GH_TOKEN: ''
+          GITHUB_PACKAGES_TOKEN: ${{ inputs.credential_mode == 'standard' && (secrets.repository_read_token || github.token) || '' }}
+          LICENSING_PACKAGES_TOKEN: ${{ inputs.credential_mode == 'standard' && (secrets.repository_read_token || github.token) || '' }}
+          LICENSING_PACKAGES_USERNAME: ${{ inputs.credential_mode == 'standard' && github.repository_owner || '' }}
+          INDEXNOW_KEY: ${{ inputs.credential_mode == 'standard' && secrets.indexnow_key || '' }}
+          POWERFORGE_REPOSITORY_TOKEN: ${{ inputs.credential_mode == 'standard' && secrets.repository_read_token || '' }}
+          CLOUDFLARE_API_TOKEN: ${{ inputs.credential_mode == 'standard' && secrets.cloudflare_api_token || '' }}
+          CLOUDFLARE_ZONE_ID: ${{ inputs.credential_mode == 'standard' && secrets.cloudflare_zone_id || '' }}
+          POWERFORGE_RUNNER_RESULT_PATH: ${{ runner.temp }}/powerforge-website-runner-result.json
+          POWERFORGE_APIDOCS_SHARDS: ${{ inputs.apidocs_shards }}
+        run: |
+          $runnerRestoreConfig = Join-Path $env:GITHUB_WORKSPACE '.powerforge-runner/.github/nuget.public.config'
+          if (-not (Test-Path -LiteralPath $runnerRestoreConfig -PathType Leaf)) {
+            throw "PowerForge runner NuGet configuration not found: $runnerRestoreConfig"
+          }
+
+          $runnerArgs = @(
+            'website-runner',
+            '--website-root', '${{ inputs.website_root }}',
+            '--pipeline-config', '${{ inputs.pipeline_config }}',
+            '--engine-mode', '${{ inputs.engine_mode }}',
+            '--pipeline-mode', '${{ inputs.pipeline_mode }}',
+            '--powerforge-lock-path', '${{ inputs.powerforge_lock_path }}',
+            '--powerforge-repository', '${{ inputs.powerforge_repository }}',
+            '--powerforge-ref', '${{ startsWith(inputs.powerforge_ref, 'actions-') && steps.shared_runner.outputs.commit || inputs.powerforge_ref }}',
+            '--powerforge-repository-override', '${{ inputs.powerforge_repository_override }}',
+            '--powerforge-ref-override', '${{ inputs.powerforge_ref_override }}',
+            '--powerforge-tool-lock-path', '${{ inputs.powerforge_tool_lock_path }}',
+            '--powerforge-web-tag', '${{ inputs.powerforge_web_tag }}',
+            '--result-path', $env:POWERFORGE_RUNNER_RESULT_PATH
+          )
+
+          # Steps up to the apidocs block plus shard 1; the website pipeline step below runs the rest.
+          $runnerArgs += @('--split-phase', 'prepare', '--apidocs-shard', "1/$($env:POWERFORGE_APIDOCS_SHARDS)",
+            '--split-archive', (Join-Path $env:RUNNER_TEMP 'powerforge-apidocs-shards/1/shard.tar'))
+
+          dotnet run --framework net10.0 -p:RestoreLockedMode=false "-p:RestoreConfigFile=$runnerRestoreConfig" --project ./.powerforge-runner/PowerForge.Web.Cli/PowerForge.Web.Cli.csproj -- $runnerArgs
+
+      - name: Collect API docs shards
+        if: ${{ inputs.apidocs_shards > 1 }}
+        shell: pwsh
+        env:
+          # Read-only artifact access stays out of the steps that run website code.
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          ./.powerforge-runner/.github/scripts/Receive-WebsiteApiDocsShards.ps1 `
+            -Repository '${{ github.repository }}' `
+            -RunId '${{ github.run_id }}' `
+            -RunAttempt '${{ github.run_attempt }}' `
+            -ArtifactPrefix '${{ inputs.report_artifact_name }}-apidocs-shard' `
+            -ShardCount '${{ inputs.apidocs_shards }}' `
+            -Destination (Join-Path $env:RUNNER_TEMP 'powerforge-apidocs-shards') `
+            -TimeoutMinutes '${{ inputs.timeout_minutes }}'
+
       - name: Run website pipeline
         shell: pwsh
         env:
@@ -397,6 +472,7 @@ jobs:
           CLOUDFLARE_ZONE_ID: ${{ inputs.credential_mode == 'standard' && secrets.cloudflare_zone_id || '' }}
           POWERFORGE_DEPLOYMENT_MANIFEST: ${{ runner.temp }}/powerforge-deployment-manifest/manifest.json
           POWERFORGE_RUNNER_RESULT_PATH: ${{ runner.temp }}/powerforge-website-runner-result.json
+          POWERFORGE_APIDOCS_SHARDS: ${{ inputs.apidocs_shards }}
         run: |
           $runnerRestoreConfig = Join-Path $env:GITHUB_WORKSPACE '.powerforge-runner/.github/nuget.public.config'
           if (-not (Test-Path -LiteralPath $runnerRestoreConfig -PathType Leaf)) {
@@ -421,6 +497,11 @@ jobs:
 
           if ('${{ inputs.maintenance_mode_note }}' -eq 'true') {
             $runnerArgs += '--maintenance-note'
+          }
+
+          if ([int]$env:POWERFORGE_APIDOCS_SHARDS -gt 1) {
+            # Merges every shard archive, then runs the steps after the apidocs block.
+            $runnerArgs += @('--split-phase', 'finish', '--split-archives', (Join-Path $env:RUNNER_TEMP 'powerforge-apidocs-shards'))
           }
 
           dotnet run --framework net10.0 -p:RestoreLockedMode=false "-p:RestoreConfigFile=$runnerRestoreConfig" --project ./.powerforge-runner/PowerForge.Web.Cli/PowerForge.Web.Cli.csproj -- $runnerArgs
@@ -666,6 +747,289 @@ jobs:
         with:
           path: ${{ env.NPM_CONFIG_CACHE }}
           key: ${{ steps.npm-cache.outputs.cache-primary-key }}
+
+      - name: Cleanup transient tool caches
+        if: ${{ always() }}
+        shell: pwsh
+        run: |
+          $cacheRoot = [System.IO.Path]::GetFullPath($env:POWERFORGE_RUNNER_CACHE_ROOT)
+          $workspace = [System.IO.Path]::GetFullPath($env:GITHUB_WORKSPACE).TrimEnd([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar)
+          $workspacePrefix = $workspace + [System.IO.Path]::DirectorySeparatorChar
+          if ($cacheRoot.StartsWith($workspacePrefix, [System.StringComparison]::OrdinalIgnoreCase) -and (Test-Path -LiteralPath $cacheRoot)) {
+            Remove-Item -LiteralPath $cacheRoot -Recurse -Force
+          }
+
+  # Extra machines for the apidocs block. Each runs the steps before the block and its share of the
+  # API docs, then uploads the files that share produced; website-run waits for them and merges.
+  website-apidocs-shard:
+    if: ${{ inputs.apidocs_shards > 1 }}
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ${{ fromJson('[[0],[0],[2],[2,3],[2,3,4],[2,3,4,5],[2,3,4,5,6],[2,3,4,5,6,7],[2,3,4,5,6,7,8]]')[inputs.apidocs_shards] }}
+    runs-on: ${{ fromJson(inputs.runner_labels_json) }}
+    timeout-minutes: ${{ inputs.timeout_minutes }}
+    env:
+      POWERFORGE_RUNNER_CACHE_ROOT: ${{ github.workspace }}/.cache/powerforge-runner
+      PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.cache/powerforge-runner/ms-playwright
+      DOTNET_BUNDLE_EXTRACT_BASE_DIR: ${{ github.workspace }}/.cache/powerforge-runner/dotnet-bundle
+      BUN_INSTALL_CACHE_DIR: ${{ github.workspace }}/.cache/powerforge-runner/bun-install-cache
+      NPM_CONFIG_CACHE: ${{ github.workspace }}/.cache/powerforge-runner/npm-cache
+    steps:
+      - name: Validate credential mode
+        shell: pwsh
+        env:
+          POWERFORGE_CREDENTIAL_MODE: ${{ inputs.credential_mode }}
+          POWERFORGE_PUBLIC_REPOSITORY: ${{ github.event.repository.private == false && github.event.repository.visibility == 'public' }}
+        run: |
+          if ($env:POWERFORGE_CREDENTIAL_MODE -notin @('none', 'standard', 'public-github')) {
+            throw "Unsupported credential_mode '$env:POWERFORGE_CREDENTIAL_MODE'. Expected none, standard or public-github."
+          }
+          if ($env:POWERFORGE_CREDENTIAL_MODE -eq 'public-github' -and $env:POWERFORGE_PUBLIC_REPOSITORY -ne 'true') {
+            throw 'public-github credentials require a verified public repository.'
+          }
+
+      - name: Checkout website
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          token: ${{ github.token }}
+          persist-credentials: false
+          # workflow_call can otherwise default to refs/pull/<n>/merge, which is not available in some repos.
+          ref: ${{ inputs.source_ref || github.event.pull_request.head.sha || github.sha }}
+
+      - name: Resolve website source provenance
+        id: source_provenance
+        shell: pwsh
+        run: |
+          $sourceSha = (git rev-parse HEAD).Trim().ToLowerInvariant()
+          if ($sourceSha -notmatch '^[a-f0-9]{40,64}$') {
+            throw "Unable to resolve the exact website source commit."
+          }
+
+          "sha=$sourceSha" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+      - name: Resolve shared workflow source
+        id: workflow_source
+        shell: pwsh
+        run: |
+          $resolvedRepository = [string]'${{ inputs.powerforge_repository }}'
+          $resolvedRef = [string]'${{ inputs.powerforge_ref }}'
+          $workflowRepository = [string]'${{ job.workflow_repository }}'
+          $workflowRef = [string]'${{ job.workflow_ref }}'
+          $workflowSha = [string]'${{ job.workflow_sha }}'
+
+          if ([string]::IsNullOrWhiteSpace($resolvedRepository)) {
+            $resolvedRepository = $workflowRepository
+          }
+
+          if ([string]::IsNullOrWhiteSpace($resolvedRepository)) {
+            $resolvedRepository = 'EvotecIT/PSPublishModule'
+          }
+
+          if ([string]::IsNullOrWhiteSpace($resolvedRef)) {
+            $resolvedRef = $workflowSha
+          }
+
+          if ([string]::IsNullOrWhiteSpace($resolvedRef)) {
+            throw "Unable to resolve the shared workflow commit SHA from job.workflow_sha. Pass powerforge_ref explicitly."
+          }
+
+          Write-Host "Resolved shared workflow source from $workflowRef to $resolvedRepository@$resolvedRef"
+          "repository=$resolvedRepository" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "ref=$resolvedRef" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+      - name: Checkout shared PowerForge runner
+        id: shared_runner
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ steps.workflow_source.outputs.repository }}
+          ref: ${{ steps.workflow_source.outputs.ref }}
+          path: ./.powerforge-runner
+          token: ${{ github.token }}
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Checkout shared cache policy
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: ./.powerforge-cache-policy
+          sparse-checkout: .github/actions/cache-nuget
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Setup .NET
+        uses: ./.powerforge-runner/.github/actions/setup-dotnet
+        with:
+          global-json-file: ${{ hashFiles('global.json') != '' && 'global.json' || '.powerforge-runner/global.json' }}
+      - name: Select hosted npm cache directory
+        if: runner.environment == 'github-hosted'
+        shell: pwsh
+        run: |
+          "NPM_CONFIG_CACHE=$(Join-Path $env:RUNNER_TEMP 'powerforge-npm-cache')" >> $env:GITHUB_ENV
+
+      - name: Restore NuGet packages
+        id: nuget-cache
+        uses: ./.powerforge-cache-policy/.github/actions/cache-nuget
+
+      - name: Restore npm cache
+        id: npm-cache
+        if: runner.environment == 'github-hosted' && hashFiles('**/package-lock.json', '!**/node_modules/**', '!**/obj/**', '!**/bin/**') != ''
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ env.NPM_CONFIG_CACHE }}
+          key: powerforge-npm-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('**/package-lock.json', '!**/node_modules/**', '!**/obj/**', '!**/bin/**') }}
+          restore-keys: |
+            powerforge-npm-v1-${{ runner.os }}-${{ runner.arch }}-
+
+      - name: Prepare social card renderer
+        shell: pwsh
+        env:
+          POWERFORGE_SOCIAL_CARDS: ${{ inputs.social-cards }}
+          POWERFORGE_PIPELINE_CONFIG: ${{ inputs.pipeline_config }}
+          POWERFORGE_PIPELINE_MODE: ${{ inputs.pipeline_mode }}
+          POWERFORGE_WEBSITE_ROOT: ${{ inputs.website_root }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $selection = $env:POWERFORGE_SOCIAL_CARDS.ToLowerInvariant()
+          if ($selection -notin @('auto', 'true', 'false')) {
+            throw 'social-cards must be auto, true or false.'
+          }
+          $enabled = $selection -eq 'true'
+          if ($selection -eq 'auto') {
+            $restoreConfig = Join-Path $env:GITHUB_WORKSPACE '.powerforge-runner/.github/nuget.public.config'
+            $output = @(dotnet run --framework net10.0 -p:RestoreLockedMode=false "-p:RestoreConfigFile=$restoreConfig" --project ./.powerforge-runner/PowerForge.Web.Cli/PowerForge.Web.Cli.csproj -- website-runner --website-root $env:POWERFORGE_WEBSITE_ROOT --pipeline-config $env:POWERFORGE_PIPELINE_CONFIG --pipeline-mode $env:POWERFORGE_PIPELINE_MODE --check-social-cards)
+            if ($LASTEXITCODE -ne 0 -or $output.Count -eq 0 -or $output[-1] -notin @('true', 'false')) {
+              throw 'Unable to determine social card requirements from the website pipeline.'
+            }
+            $enabled = $output[-1] -eq 'true'
+          }
+          & ./.powerforge-runner/.github/scripts/Install-WebsiteSocialCardDependencies.ps1 -Enabled $enabled
+
+      - name: Install requested .NET workloads
+        if: ${{ inputs.dotnet_workloads != '' }}
+        shell: pwsh
+        env:
+          DOTNET_WORKLOADS: ${{ inputs.dotnet_workloads }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $workloads = @(
+            $env:DOTNET_WORKLOADS -split '[,;\s]+' |
+              Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
+              Select-Object -Unique
+          )
+
+          if ($workloads.Count -eq 0) {
+            throw 'dotnet_workloads did not contain a workload identifier.'
+          }
+
+          foreach ($workload in $workloads) {
+            if ($workload -notmatch '^[A-Za-z0-9][A-Za-z0-9._-]*$') {
+              throw "Invalid .NET workload identifier '$workload'."
+            }
+          }
+
+          dotnet workload install @workloads --skip-manifest-update
+          if ($LASTEXITCODE -ne 0) {
+            throw "dotnet workload install failed with exit code $LASTEXITCODE."
+          }
+
+      - name: Initialize transient tool cache directories
+        shell: pwsh
+        run: |
+          foreach ($path in @(
+            $env:POWERFORGE_RUNNER_CACHE_ROOT,
+            $env:NUGET_PACKAGES,
+            $env:PLAYWRIGHT_BROWSERS_PATH,
+            $env:DOTNET_BUNDLE_EXTRACT_BASE_DIR,
+            $env:BUN_INSTALL_CACHE_DIR,
+            $env:NPM_CONFIG_CACHE
+          )) {
+            if (-not [string]::IsNullOrWhiteSpace($path)) {
+              New-Item -ItemType Directory -Force -Path $path | Out-Null
+            }
+          }
+
+      - name: Run website pipeline shard
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ (inputs.credential_mode == 'standard' || (inputs.credential_mode == 'public-github' && github.event.repository.private == false && github.event.repository.visibility == 'public')) && github.token || '' }}
+          # Prevent an ambient runner CLI credential from overriding this policy.
+          GH_TOKEN: ''
+          GITHUB_PACKAGES_TOKEN: ${{ inputs.credential_mode == 'standard' && (secrets.repository_read_token || github.token) || '' }}
+          LICENSING_PACKAGES_TOKEN: ${{ inputs.credential_mode == 'standard' && (secrets.repository_read_token || github.token) || '' }}
+          LICENSING_PACKAGES_USERNAME: ${{ inputs.credential_mode == 'standard' && github.repository_owner || '' }}
+          INDEXNOW_KEY: ${{ inputs.credential_mode == 'standard' && secrets.indexnow_key || '' }}
+          POWERFORGE_REPOSITORY_TOKEN: ${{ inputs.credential_mode == 'standard' && secrets.repository_read_token || '' }}
+          CLOUDFLARE_API_TOKEN: ${{ inputs.credential_mode == 'standard' && secrets.cloudflare_api_token || '' }}
+          CLOUDFLARE_ZONE_ID: ${{ inputs.credential_mode == 'standard' && secrets.cloudflare_zone_id || '' }}
+          POWERFORGE_RUNNER_RESULT_PATH: ${{ runner.temp }}/powerforge-website-runner-result.json
+          POWERFORGE_APIDOCS_SHARD: ${{ matrix.shard }}/${{ inputs.apidocs_shards }}
+        run: |
+          $runnerRestoreConfig = Join-Path $env:GITHUB_WORKSPACE '.powerforge-runner/.github/nuget.public.config'
+          if (-not (Test-Path -LiteralPath $runnerRestoreConfig -PathType Leaf)) {
+            throw "PowerForge runner NuGet configuration not found: $runnerRestoreConfig"
+          }
+
+          $runnerArgs = @(
+            'website-runner',
+            '--website-root', '${{ inputs.website_root }}',
+            '--pipeline-config', '${{ inputs.pipeline_config }}',
+            '--engine-mode', '${{ inputs.engine_mode }}',
+            '--pipeline-mode', '${{ inputs.pipeline_mode }}',
+            '--powerforge-lock-path', '${{ inputs.powerforge_lock_path }}',
+            '--powerforge-repository', '${{ inputs.powerforge_repository }}',
+            '--powerforge-ref', '${{ startsWith(inputs.powerforge_ref, 'actions-') && steps.shared_runner.outputs.commit || inputs.powerforge_ref }}',
+            '--powerforge-repository-override', '${{ inputs.powerforge_repository_override }}',
+            '--powerforge-ref-override', '${{ inputs.powerforge_ref_override }}',
+            '--powerforge-tool-lock-path', '${{ inputs.powerforge_tool_lock_path }}',
+            '--powerforge-web-tag', '${{ inputs.powerforge_web_tag }}',
+            '--result-path', $env:POWERFORGE_RUNNER_RESULT_PATH
+          )
+
+          $runnerArgs += @('--split-phase', 'prepare', '--apidocs-shard', $env:POWERFORGE_APIDOCS_SHARD,
+            '--split-archive', (Join-Path $env:RUNNER_TEMP 'powerforge-apidocs-shard/shard.tar'))
+
+          dotnet run --framework net10.0 -p:RestoreLockedMode=false "-p:RestoreConfigFile=$runnerRestoreConfig" --project ./.powerforge-runner/PowerForge.Web.Cli/PowerForge.Web.Cli.csproj -- $runnerArgs
+
+      - name: Upload API docs shard
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ${{ inputs.report_artifact_name }}-apidocs-shard-${{ matrix.shard }}
+          path: ${{ runner.temp }}/powerforge-apidocs-shard/shard.tar
+          retention-days: 1
+          overwrite: true
+          if-no-files-found: error
+
+      - name: Record failed API docs shard
+        if: ${{ failure() }}
+        shell: pwsh
+        run: |
+          $marker = Join-Path $env:RUNNER_TEMP 'powerforge-apidocs-shard-failed.txt'
+          "API docs shard ${{ matrix.shard }} failed in attempt ${{ github.run_attempt }}." | Set-Content -LiteralPath $marker
+
+      - name: Upload failed API docs shard marker
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ${{ inputs.report_artifact_name }}-apidocs-shard-${{ matrix.shard }}-failed-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/powerforge-apidocs-shard-failed.txt
+          retention-days: 1
+          overwrite: true
+          if-no-files-found: error
+
+      - name: Upload API docs shard reports
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          retention-days: 7
+          name: ${{ inputs.report_artifact_name }}-apidocs-shard-${{ matrix.shard }}-reports
+          overwrite: true
+          path: |
+            ${{ inputs.website_root == '.' && '_temp/pipeline-profile.json' || format('{0}/_temp/pipeline-profile.json', inputs.website_root) }}
+          if-no-files-found: ignore
 
       - name: Cleanup transient tool caches
         if: ${{ always() }}

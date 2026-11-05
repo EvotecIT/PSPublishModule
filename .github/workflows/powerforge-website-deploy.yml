@@ -156,6 +156,11 @@ on:
         required: false
         type: number
         default: 7
+      apidocs_shards:
+        description: Jobs (1-8) that share the pipeline's consecutive apidocs steps; 1 keeps the single-job build.
+        required: false
+        type: number
+        default: 1
     secrets:
       indexnow_key:
         required: false
@@ -269,6 +274,7 @@ jobs:
       site_artifact_retention_days: ${{ inputs.deployment_artifact_retention_days }}
       generate_cloudflare_cache_manifest: ${{ inputs.deployment_target == 'github-pages' && inputs.manage_cloudflare_site_policy }}
       generate_deployment_manifest: ${{ inputs.post_deploy_pipeline_config != '' }}
+      apidocs_shards: ${{ inputs.apidocs_shards }}
     secrets:
       indexnow_key: ${{ secrets.indexnow_key }}
       repository_read_token: ${{ secrets.repository_read_token }}
