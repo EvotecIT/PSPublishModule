@@ -39,12 +39,13 @@ Set-Alias -Name TestPublicEmptyArraySingleton -Value ConvertToUtf16CodeUnits
 function Get-HelperIsolationFixture {
     [CmdletBinding()]
     [OutputType([System.Collections.Generic.List[string]])]
-    param()
+    param([string] $Mode)
 
     dynamicparam {
         $parameters = [System.Management.Automation.RuntimeDefinedParameterDictionary]::new()
 
         $valueAttributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
+        $valueAttributes.Add([System.Management.Automation.ParameterAttribute]::new())
         $valueDefault = [System.Management.Automation.PSDefaultValueAttribute]::new()
         $valueDefault.Value = 'runtime value'
         $valueAttributes.Add($valueDefault)
@@ -86,7 +87,8 @@ Export-ModuleMember -Function Get-HelperIsolationFixture, ConvertToUtf16CodeUnit
                 var payload = new DocumentationEngine(
                         new ExecutablePowerShellRunner(host, root),
                         new NullLogger())
-                    .ExtractHelpPayload(root, manifestPath, TimeSpan.FromMinutes(1));
+                    .ExtractHelpPayload(root, manifestPath, TimeSpan.FromMinutes(1),
+                        [new DocumentationDiscoveryContext { Command = "Get-HelperIsolationFixture", Arguments = ["fixture"] }]);
                 var command = Assert.Single(payload.Commands, candidate =>
                     candidate.Name == "Get-HelperIsolationFixture");
                 var valueParameter = Assert.Single(command.Parameters, parameter => parameter.Name == "Value");
