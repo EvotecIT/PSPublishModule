@@ -168,14 +168,18 @@ public class WebPipelineRunnerSplitTests
             var linked = Path.Combine(main, "_site", "api", helperApi!);
             if (Directory.Exists(linked))
                 Directory.Delete(linked, true);
-            Directory.CreateSymbolicLink(linked, outside);
+            // A link to a folder inside the site whose own parent is a link to the outside folder.
+            var alias = Path.Combine(main, "alias");
+            Directory.CreateSymbolicLink(alias, outside);
+            Directory.CreateSymbolicLink(linked, Path.Combine(alias, "sub"));
+            Directory.CreateDirectory(Path.Combine(outside, "sub"));
 
             var error = Assert.Throws<InvalidOperationException>(() =>
                 WebPipelineRunner.RunPipeline(Path.Combine(main, "pipeline.json"), new WebConsoleLogger(),
                     split: WebPipelineSplitOptions.Parse("finish", null, null, archives)));
             // Planning sees the linked output folder; the archive targets are checked the same way.
             Assert.Contains("outside the pipeline root", error.Message, StringComparison.Ordinal);
-            Assert.Empty(Directory.EnumerateFileSystemEntries(outside));
+            Assert.Empty(Directory.EnumerateFileSystemEntries(Path.Combine(outside, "sub")));
         }
         finally
         {

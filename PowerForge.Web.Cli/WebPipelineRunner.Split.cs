@@ -161,8 +161,9 @@ internal static partial class WebPipelineRunner
             if (stepFootprints is null)
                 throw new InvalidOperationException($"Split pipeline runs cannot distribute apidocs step '{definition.Id}': its output is not declared or it executes PowerShell examples.");
             // Shard archives carry only files under the pipeline root.
-            var root = ResolvePhysicalPath(state.BaseDir);
-            var outside = stepFootprints.SelectMany(static footprint => footprint.Outputs).FirstOrDefault(output => !IsUnder(output, root));
+            var root = ResolveSplitPhysicalPath(state.BaseDir);
+            var outside = stepFootprints.SelectMany(static footprint => footprint.Outputs)
+                .FirstOrDefault(output => !IsUnderSplitRoot(ResolveSplitPhysicalPath(output), root));
             if (outside is not null)
                 throw new InvalidOperationException($"Split pipeline runs cannot distribute apidocs step '{definition.Id}': output '{outside}' is outside the pipeline root.");
 
@@ -543,12 +544,35 @@ internal static partial class WebPipelineRunner
         if (!target.StartsWith(root.TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar, StringComparison.Ordinal))
             throw new InvalidOperationException($"Split archive path '{relative}' resolves outside the pipeline root.");
         // Linked folders inside the root must not redirect writes or deletions elsewhere.
-        var physicalRoot = ResolvePhysicalPath(root).TrimEnd(Path.DirectorySeparatorChar);
-        var physicalTarget = ResolvePhysicalPath(target);
-        // Case-sensitive except on Windows, so a link to a case-variant sibling cannot pass.
-        if (!physicalTarget.StartsWith(physicalRoot + Path.DirectorySeparatorChar, FileSystemPathComparison))
+        if (!IsUnderSplitRoot(ResolveSplitPhysicalPath(target), ResolveSplitPhysicalPath(root)))
             throw new InvalidOperationException($"Split archive path '{relative}' resolves through a link outside the pipeline root.");
         return target;
+    }
+
+    // Case-sensitive except on Windows, so a case-variant sibling of the root is outside it.
+    private static bool IsUnderSplitRoot(string path, string root)
+    {
+        var normalizedRoot = root.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        return string.Equals(path, normalizedRoot, FileSystemPathComparison) ||
+               path.StartsWith(normalizedRoot + Path.DirectorySeparatorChar, FileSystemPathComparison);
+    }
+
+    /// <summary>Resolves every link on the path, including links inside link targets.</summary>
+    private static string ResolveSplitPhysicalPath(string path, int depth = 0)
+    {
+        if (depth > 40)
+            throw new InvalidOperationException($"Too many levels of links while resolving '{path}'.");
+        var full = Path.GetFullPath(path);
+        var current = Path.GetPathRoot(full) ?? string.Empty;
+        foreach (var segment in full.Substring(current.Length).Split(new[] { Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar }, StringSplitOptions.RemoveEmptyEntries))
+        {
+            var next = Path.Combine(current, segment);
+            FileSystemInfo? info = Directory.Exists(next) ? new DirectoryInfo(next) : File.Exists(next) ? new FileInfo(next) : null;
+            if (info?.LinkTarget is { } target)
+                next = ResolveSplitPhysicalPath(Path.IsPathRooted(target) ? target : Path.Combine(current, target), depth + 1);
+            current = next;
+        }
+        return current;
     }
 
     /// <summary>The commit checked out at the pipeline root, or empty outside a Git work tree.</summary>

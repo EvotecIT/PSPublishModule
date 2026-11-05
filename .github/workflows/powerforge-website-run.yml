@@ -489,6 +489,12 @@ jobs:
               try {
                   $artifacts = @(Get-RunArtifacts | Where-Object { -not $_.expired })
               } catch {
+                  # Missing access does not heal by waiting; rate limits and server errors may.
+                  $status = [int]($_.Exception.Response.StatusCode)
+                  $rateLimited = $status -eq 429 -or ($status -eq 403 -and "$($_.ErrorDetails.Message)" -match 'rate limit')
+                  if ($status -in 401, 403, 404 -and -not $rateLimited) {
+                      throw "Listing run artifacts failed with HTTP ${status}; the job token needs actions: read. $($_.Exception.Message)"
+                  }
                   Write-Warning "Listing run artifacts failed; retrying: $($_.Exception.Message)"
                   $artifacts = $null
               }
