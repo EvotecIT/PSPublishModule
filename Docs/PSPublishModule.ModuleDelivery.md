@@ -266,12 +266,22 @@ Each directory entry creates only its mapped destination folder; file entries se
 to copy. This preserves empty folders without including files omitted from the mapping.
 Directory and file entries can appear in either order.
 
-Copy sources, configured mappings, and staged main-module destination kinds are checked before
+Copy sources, configured mappings, and resolved module/dependency destination kinds are checked before
 artefact output is cleared.
 Missing inputs, a file supplied to `CopyDirectories`, and destinations that require the same
 path to be both a file and a directory fail with a configuration error. Recursive folder mappings
 cannot replace bundled module folders or erase promoted delivery files. Keep copy sources
 outside output that the build clears, or use `DoNotClear` when retaining that output is intended.
+
+When module artefacts combine dependencies with copy mappings, the selected dependency payloads
+are prepared in temporary staging before output cleanup. Validation uses their actual file and
+folder paths, and the build copies those same prepared files into the artefact.
+Unpacked output that is cleared must stay separate from this temporary staging location.
+
+With `DoNotClear`, Script signing includes the generated script, selected package support files,
+bundled dependencies, and copied files. Retained caller files are excluded, including files under
+a directory-only `CopyFiles` destination. Signed Script output must stay under its configured
+output root.
 
 ## Publishing to private repositories
 

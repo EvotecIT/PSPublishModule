@@ -19,6 +19,8 @@ public sealed class ModuleSigningProgressTests
         {
             var files = new[] { Path.Combine(root.FullName, "One.psm1"), Path.Combine(root.FullName, "Two.ps1"), Path.Combine(root.FullName, "Three.ps1") };
             foreach (var file in files) File.WriteAllText(file, "# signing progress fixture");
+            string caller = Path.Combine(root.FullName, "Caller.ps1");
+            File.WriteAllText(caller, "# retained caller outside the signing file list");
             var updates = new List<(int Completed, int Total, string Detail)>();
             var runner = new CallbackRunner(request =>
             {
@@ -83,6 +85,9 @@ public sealed class ModuleSigningProgressTests
                 Assert.Contains(updates, update => update.Detail == "Signing and timestamping 3/3: Three.ps1");
             }
             Assert.Contains(updates, update => update.Detail.StartsWith("Loading signing certificate"));
+            Assert.DoesNotContain(caller, result.VerifiedFilePaths);
+            Assert.DoesNotContain(caller, result.FailedFilePaths);
+            Assert.DoesNotContain(updates, update => update.Detail.Contains("Caller.ps1", StringComparison.Ordinal));
             Assert.Contains(updates, update => update.Detail.StartsWith("Checking existing signatures 3/3"));
             var retry = Assert.Single(updates, update => update.Detail.Contains("retry 2/15"));
             Assert.StartsWith("Get-AuthenticodeSignature:", retry.Detail);

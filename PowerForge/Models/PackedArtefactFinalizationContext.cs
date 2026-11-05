@@ -8,7 +8,7 @@ public sealed class PackedArtefactFinalizationContext
     // Exact promoted destinations from the builder's copy plan; separate from module payload files.
     internal string[] PromotedDeliveryFilePaths { get; set; } = System.Array.Empty<string>();
 
-    // Unpacked roots can retain unrelated files. Null keeps the isolated packed/script contract.
+    // Unpacked module/script roots can retain unrelated files. Null keeps the isolated packed contract.
     internal string[]? FinalizationFilePaths { get; set; }
     internal string[] FinalizationRoots { get; set; } = System.Array.Empty<string>();
 

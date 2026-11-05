@@ -4,6 +4,7 @@
 ### What's Changed
 - Preserve commands exported as `Values`, dictionary defaults with member names such as `Count`, and dictionary enumeration in help extraction and build helpers.
 - Keep accelerator registration and removal on the same monitor when an exported type is named `SyncRoot`.
+- Sign only build-owned files in retained Script artefacts. Validate mapped destination kinds against prepared dependency payloads before clearing module output, then reuse those prepared files for delivery.
 - Preserve directory entries, including empty folders, in legacy artefact `CopyFiles` mappings without copying unselected files. Validate copy sources and destination conflicts before changing existing artefact output.
 - Collect parameters named `Keys` without confusing their metadata with a dictionary's key collection or expanding that metadata during JSON serialization.
 - Preserve each parameter set's named or positional binding in generated PowerShell syntax help.
