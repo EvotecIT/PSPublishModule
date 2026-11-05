@@ -106,8 +106,12 @@ internal static partial class WebPipelineRunner
         bool fast = false,
         string? mode = null,
         string[]? onlyTasks = null,
-        string[]? skipTasks = null)
+        string[]? skipTasks = null,
+        WebPipelineSplitOptions? split = null)
     {
+        if (split is not null && fast)
+            throw new InvalidOperationException("Split pipeline runs do not support fast or dev mode.");
+
         using var doc = LoadPipelineDocumentWithExtends(pipelinePath, out var pipelineSourcePaths);
 
         var root = doc.RootElement;
@@ -168,8 +172,12 @@ internal static partial class WebPipelineRunner
                 return result;
             }
         }
+        var splitBlock = split is null ? (First: 0, Last: 0) : ResolveSplitBlock(steps);
         var state = new PipelineRunState
         {
+            Split = split,
+            SplitFirstIndex = splitBlock.First,
+            SplitLastIndex = splitBlock.Last,
             Steps = steps,
             TotalSteps = totalSteps,
             BaseDir = baseDir,
@@ -188,6 +196,9 @@ internal static partial class WebPipelineRunner
             EnabledIndexNowSteps = enabledIndexNowSteps,
             Result = result
         };
+
+        if (split?.Phase == WebPipelineSplitPhase.Finish)
+            ApplySplitArchives(state);
 
         var maxParallelism = GetPipelineMaxParallelism(root);
         PipelineStepOutcome? failure;
@@ -228,6 +239,9 @@ internal static partial class WebPipelineRunner
             return result;
         }
 
+        if (split?.Phase == WebPipelineSplitPhase.Prepare)
+            WriteSplitArchive(state);
+
         var cacheOutputs = state.CacheOutputs;
         var cacheUpdated = state.CacheUpdated;
 
@@ -248,6 +262,7 @@ internal static partial class WebPipelineRunner
         }
         if (!string.IsNullOrWhiteSpace(profilePath) && profileEnabled)
         {
+            MergeSplitPrepareProfile(state);
             WritePipelineProfile(profilePath, result, logger);
             result.ProfilePath = profilePath;
         }

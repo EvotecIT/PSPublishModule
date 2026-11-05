@@ -2,6 +2,7 @@
 
 ## Unreleased
 ### What's Changed
+- Split a website pipeline's consecutive apidocs steps across several machines with `pipeline --split-phase prepare|finish` and the shared website workflows' `apidocs_shards` input. Shards rebuild the earlier steps, run a size-balanced share of the API docs, and archive what they produced; the finishing job verifies the archives cover every generator run exactly once and agree on shared files before running the remaining steps.
 - Preserve commands exported as `Values`, dictionary defaults with member names such as `Count`, and dictionary enumeration in help extraction and build helpers.
 - Keep accelerator registration and removal on the same monitor when an exported type is named `SyncRoot`.
 - Sign only build-owned files in retained Script artefacts. Validate mapped destination kinds against prepared dependency payloads before clearing module output, then reuse those prepared files for delivery.

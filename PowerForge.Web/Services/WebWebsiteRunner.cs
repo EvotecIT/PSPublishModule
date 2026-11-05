@@ -106,7 +106,7 @@ public static class WebWebsiteRunner
         RunProcess(
             "dotnet",
             null,
-            BuildSourcePipelineArguments(projectPath, pipelineConfig, NormalizeValue(options.PipelineMode, "ci")),
+            BuildSourcePipelineArguments(projectPath, pipelineConfig, NormalizeValue(options.PipelineMode, "ci"), options.PipelineSplitArguments),
             null,
             standardOutput,
             standardError);
@@ -123,13 +123,23 @@ public static class WebWebsiteRunner
         };
     }
 
-    internal static string[] BuildSourcePipelineArguments(string projectPath, string pipelineConfig, string pipelineMode)
+    internal static string[] BuildSourcePipelineArguments(
+        string projectPath,
+        string pipelineConfig,
+        string pipelineMode,
+        IReadOnlyList<string>? splitArguments = null)
     {
         return new[]
         {
-            "run", "--framework", "net10.0", "-p:RestoreLockedMode=false", "--project", projectPath, "--",
-            "pipeline", "--config", pipelineConfig, "--mode", NormalizeValue(pipelineMode, "ci")
-        };
+            "run", "--framework", "net10.0", "-p:RestoreLockedMode=false", "--project", projectPath, "--"
+        }.Concat(BuildPipelineArguments(pipelineConfig, pipelineMode, splitArguments)).ToArray();
+    }
+
+    internal static string[] BuildPipelineArguments(string pipelineConfig, string pipelineMode, IReadOnlyList<string>? splitArguments = null)
+    {
+        return new[] { "pipeline", "--config", pipelineConfig, "--mode", NormalizeValue(pipelineMode, "ci") }
+            .Concat(splitArguments ?? Array.Empty<string>())
+            .ToArray();
     }
 
     private static void CloneAndFetchSourceEngine(
@@ -187,7 +197,7 @@ public static class WebWebsiteRunner
         RunProcess(
             executablePath,
             null,
-            new[] { "pipeline", "--config", pipelineConfig, "--mode", NormalizeValue(options.PipelineMode, "ci") },
+            BuildPipelineArguments(pipelineConfig, NormalizeValue(options.PipelineMode, "ci"), options.PipelineSplitArguments),
             null,
             standardOutput,
             standardError);

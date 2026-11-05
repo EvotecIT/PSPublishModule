@@ -646,6 +646,22 @@ internal static partial class WebCliCommandHandlers
             skipTasks.Add("audit");
         }
 
+        WebPipelineSplitOptions? split;
+        try
+        {
+            split = WebPipelineSplitOptions.Parse(
+                TryGetOptionValue(subArgs, "--split-phase"),
+                TryGetOptionValue(subArgs, "--apidocs-shard"),
+                TryGetOptionValue(subArgs, "--split-archive"),
+                TryGetOptionValue(subArgs, "--split-archives"));
+        }
+        catch (ArgumentException ex)
+        {
+            return Fail(ex.Message, outputJson, logger, "web.pipeline");
+        }
+        if (split is not null && (watch || fastMode))
+            return Fail("--split-phase is not supported with --watch, --fast or --dev.", outputJson, logger, "web.pipeline");
+
         if (watch)
         {
             if (outputJson)
@@ -668,7 +684,8 @@ internal static partial class WebCliCommandHandlers
             fast: fastMode,
             mode: mode,
             onlyTasks: onlyTasks.Count > 0 ? onlyTasks.ToArray() : null,
-            skipTasks: skipTasks.Count > 0 ? skipTasks.ToArray() : null);
+            skipTasks: skipTasks.Count > 0 ? skipTasks.ToArray() : null,
+            split: split);
 
         if (outputJson)
         {
