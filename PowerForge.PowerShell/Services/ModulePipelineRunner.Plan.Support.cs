@@ -399,7 +399,10 @@ public sealed partial class ModulePipelineRunner
             {
                 if (mapping is null)
                     continue;
-                inputs.Add(ResolveArtefactInputPath(mapping.Source, projectRoot, moduleName, moduleVersion, preRelease));
+                string source = ResolveArtefactInputPath(mapping.Source, projectRoot, moduleName, moduleVersion, preRelease);
+                // Legacy directory entries create folders without consuming their contents.
+                if (!Directory.Exists(source))
+                    inputs.Add(source);
             }
 
             foreach (ArtefactCopyMapping mapping in configuration.DirectoryOutput ?? Array.Empty<ArtefactCopyMapping>())
