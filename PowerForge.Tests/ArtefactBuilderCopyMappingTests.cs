@@ -8,7 +8,7 @@ namespace PowerForge.Tests;
 
 [Collection(ProcessEnvironmentCollection.Name)]
 [Trait("Category", "DotNetPublishPrGate")]
-public sealed class ArtefactBuilderCopyMappingTests
+public sealed partial class ArtefactBuilderCopyMappingTests
 {
     [Theory]
     [InlineData(ArtefactType.Unpacked, false)]
