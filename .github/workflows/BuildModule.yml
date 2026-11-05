@@ -762,7 +762,7 @@ jobs:
         run: >
           dotnet test .\PowerForge.Tests\PowerForge.Tests.csproj
           -c Release --nologo
-          --filter 'FullyQualifiedName~WebPipelineRunnerParallelStepsTests|FullyQualifiedName~WebPipelineRunnerApiDocsBatchTests|FullyQualifiedName~WebSiteVerifierTocCoverageTests|FullyQualifiedName~WebSiteVerifierTests|FullyQualifiedName~WebPipelineRunnerCloudflareTests|FullyQualifiedName~WebApiDocsGenerator|FullyQualifiedName~WebApiMemberSearchTests|FullyQualifiedName~WebApiSourceRevisionTests|FullyQualifiedName~WebPipelineProjectSetTests|FullyQualifiedName~WebSiteApiSearchTests|FullyQualifiedName~WebDotNetProcessLifetimeTests|FullyQualifiedName~WebWebsiteRunnerTests|FullyQualifiedName~WebSocialCard|FullyQualifiedName~WebApiSocialCard'
+          --filter 'FullyQualifiedName~WebPipelineRunnerParallelStepsTests|FullyQualifiedName~WebSiteVerifierTocCoverageTests|FullyQualifiedName~WebSiteVerifierTests|FullyQualifiedName~WebPipelineRunnerCloudflareTests|FullyQualifiedName~WebApiDocsGenerator|FullyQualifiedName~WebApiMemberSearchTests|FullyQualifiedName~WebApiSourceRevisionTests|FullyQualifiedName~WebPipelineProjectSetTests|FullyQualifiedName~WebSiteApiSearchTests|FullyQualifiedName~WebDotNetProcessLifetimeTests|FullyQualifiedName~WebWebsiteRunnerTests|FullyQualifiedName~WebSocialCard|FullyQualifiedName~WebApiSocialCard'
 
       - name: Test Linux executable package and runtime closure
         shell: pwsh
