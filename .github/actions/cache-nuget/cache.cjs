@@ -29,7 +29,8 @@ function report(cache) {
 
 if (require.main === module) {
   if (process.env.RUNNER_ENVIRONMENT !== 'github-hosted') throw new Error('Actions package caches require an ephemeral GitHub-hosted runner.');
-  const cache = path.join(os.homedir(), '.nuget', 'packages');
+  // The restore step selected the hosted package directory for this job.
+  const cache = process.env.NUGET_PACKAGES || path.join(os.homedir(), '.nuget', 'packages');
   if (process.argv[2] === 'prepare') prepare(cache);
   else if (process.argv[2] === 'report') {
     const text = `NuGet package cache before save: ${JSON.stringify(report(cache))}\n`;

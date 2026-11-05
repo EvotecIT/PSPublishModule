@@ -7,6 +7,12 @@ on:
       build:
         description: Whether the PR contains a build or test input.
         value: ${{ jobs.select.outputs.build }}
+      web:
+        description: Whether website engine coverage is needed (a web or shared input changed).
+        value: ${{ jobs.select.outputs.web }}
+      powershell:
+        description: Whether PowerShell compiler and module qualification is needed (a non-web input changed).
+        value: ${{ jobs.select.outputs.powershell }}
 
 permissions:
   contents: read
@@ -18,6 +24,8 @@ jobs:
     timeout-minutes: 5
     outputs:
       build: ${{ steps.select.outputs.build }}
+      web: ${{ steps.select.outputs.web }}
+      powershell: ${{ steps.select.outputs.powershell }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -48,7 +56,25 @@ jobs:
               return parts[0] in ('Docs', 'docs') and pathlib.PurePosixPath(path).suffix.lower() in (
                   '.md', '.png', '.jpg', '.jpeg', '.gif', '.svg', '.webp', '.ico')
 
-          build = True
+          def web_only(path):
+              # Inputs consumed only by the website engine and its tests. Shared
+              # projects, build files and .github always select every lane.
+              parts = pathlib.PurePosixPath(path).parts
+              if parts[0].startswith('PowerForge.Web'):
+                  return True
+              if parts[0] == 'PowerForge.Tests' and len(parts) == 2 and parts[1].startswith('Web'):
+                  return True
+              if parts[0] == 'Schemas' and parts[-1].lower().startswith('powerforge.web.'):
+                  return True
+              return parts[0] == 'Samples' and len(parts) > 1 and parts[1].startswith('PowerForge.Web.')
+
+          def outside_web(path):
+              # Projects the website engine neither references nor tests.
+              top = pathlib.PurePosixPath(path).parts[0]
+              return top in ('PSPublishModule', 'Module', 'Modules', 'PowerForge.Cli') or \
+                  top.startswith(('PowerForge.PowerShell', 'PowerForge.Backups', 'PowerForgeStudio'))
+
+          build = web = powershell = True
           if os.environ['EVENT'] == 'pull_request':
               base, head = os.environ['BASE_SHA'], os.environ['HEAD_SHA']
               if not base or not head:
@@ -57,6 +83,11 @@ jobs:
               diff = subprocess.check_output(['git', 'diff', '--name-only', '--no-renames', '-z', f'{base}...{head}'])
               paths = [p.decode('utf-8', errors='surrogateescape') for p in diff.split(b'\0') if p]
               build = not paths or not all(documentation(p) for p in paths)
-              print(f'Inspected {len(paths)} changed paths; build required: {build}.')
+              code = [p for p in paths if not documentation(p)]
+              web = any(not outside_web(p) for p in code)
+              powershell = any(not web_only(p) for p in code)
+              print(f'Inspected {len(paths)} changed paths; build required: {build}; web: {web}; powershell: {powershell}.')
           with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
               output.write(f'build={str(build).lower()}\n')
+              output.write(f'web={str(web).lower()}\n')
+              output.write(f'powershell={str(powershell).lower()}\n')

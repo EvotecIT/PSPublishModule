@@ -24,13 +24,19 @@ runs:
       if: inputs.mode == 'restore' && runner.environment == 'github-hosted'
       shell: pwsh
       run: |
-        "NUGET_PACKAGES=$(Join-Path $HOME '.nuget/packages')" >> $env:GITHUB_ENV
+        # Hosted Windows runners keep the profile on the slower C: disk; RUNNER_TEMP is on D:.
+        if ($env:RUNNER_OS -eq 'Windows') {
+            "NUGET_PACKAGES=$env:RUNNER_TEMP/nuget/packages" >> $env:GITHUB_ENV
+            "NUGET_HTTP_CACHE_PATH=$env:RUNNER_TEMP/nuget/http-cache" >> $env:GITHUB_ENV
+        } else {
+            "NUGET_PACKAGES=$(Join-Path $HOME '.nuget/packages')" >> $env:GITHUB_ENV
+        }
     - name: Restore NuGet packages
       id: restore
       if: inputs.mode == 'restore' && runner.environment == 'github-hosted'
       uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
-        path: ~/.nuget/packages
+        path: ${{ runner.os == 'Windows' && format('{0}/nuget/packages', runner.temp) || '~/.nuget/packages' }}
         key: powerforge-nuget-v2-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('**/*.csproj', '**/*.fsproj', '**/*.vbproj', '**/Directory.Packages.props', '**/Directory.Build.props', '**/Directory.Build.targets', '**/global.json', '**/packages.lock.json', '**/NuGet.config', '**/NuGet.Config', '**/nuget.config', '!**/obj/**', '!**/bin/**', '!**/.nuget/**') }}
         restore-keys: |
           ${{ !(github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)) && format('powerforge-nuget-v2-{0}-{1}-', runner.os, runner.arch) || '' }}
@@ -55,5 +61,5 @@ runs:
       if: inputs.mode == 'save' && runner.environment == 'github-hosted' && github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) && inputs.key != '' && inputs.cache-hit != 'true'
       uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
-        path: ~/.nuget/packages
+        path: ${{ runner.os == 'Windows' && format('{0}/nuget/packages', runner.temp) || '~/.nuget/packages' }}
         key: ${{ inputs.key }}

@@ -132,7 +132,6 @@ internal static partial class WebPipelineRunner
         var cacheEnabled = GetBool(root, "cache") ?? false;
         var cachePath = ResolvePathWithinRoot(baseDir, GetString(root, "cachePath") ?? GetString(root, "cache-path"), Path.Combine(".powerforge", "pipeline-cache.json"));
         var cacheState = cacheEnabled ? LoadPipelineCache(cachePath, logger) : null;
-        var cacheUpdated = false;
         var runStopwatch = Stopwatch.StartNew();
 
         var result = new WebPipelineResult
@@ -169,172 +168,68 @@ internal static partial class WebPipelineRunner
                 return result;
             }
         }
-        var stepResultsByIndex = new Dictionary<int, WebPipelineStepResult>();
-        var cacheOutputs = new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase);
-
-        // Allows fast mode to scope optimize/audit to just the pages touched by the last build step.
-        var lastBuildOutPath = string.Empty;
-        var lastBuildUpdatedFiles = Array.Empty<string>();
-
-        foreach (var definition in steps)
+        var state = new PipelineRunState
         {
-            var step = definition.Element;
-            var task = definition.Task;
-            var stepIndex = definition.Index;
-            var label = $"[{stepIndex}/{totalSteps}] {task}";
-            var stepResult = new WebPipelineStepResult { Task = task };
+            Steps = steps,
+            TotalSteps = totalSteps,
+            BaseDir = baseDir,
+            Fast = fast,
+            EffectiveMode = effectiveMode,
+            OnlyTaskSet = onlyTaskSet,
+            SkipTaskSet = skipTaskSet,
+            Logger = logger,
+            ProfileEnabled = profileEnabled,
+            ProfileWriteOnFail = profileWriteOnFail,
+            ProfilePath = profilePath,
+            CacheEnabled = cacheEnabled,
+            CachePath = cachePath,
+            CacheState = cacheState,
+            PipelineSourcePaths = pipelineSourcePaths,
+            EnabledIndexNowSteps = enabledIndexNowSteps,
+            Result = result
+        };
 
-            var skipReason = GetSkipReason(task, step, effectiveMode, onlyTaskSet, skipTaskSet);
-            if (skipReason is not null)
-            {
-                stepResult.Success = true;
-                stepResult.Cached = false;
-                stepResult.DurationMs = 0;
-                stepResult.Message = $"skipped ({skipReason})";
-                result.Steps.Add(stepResult);
-                stepResultsByIndex[stepIndex] = stepResult;
-                if (profileEnabled)
-                    logger?.Info($"Finished {label} (skipped) in 0 ms");
-                continue;
-            }
-
-            logger?.Info($"Starting {label}...");
-            var stopwatch = Stopwatch.StartNew();
-            var cacheKey = $"{stepIndex}:{task}";
-            var stepFingerprint = string.Empty;
-            var expectedOutputs = GetExpectedStepOutputs(task, step, baseDir, lastBuildOutPath);
-            if (definition.DependencyIndexes.Length > 0)
-            {
-                foreach (var dependencyIndex in definition.DependencyIndexes)
-                {
-                    if (!stepResultsByIndex.TryGetValue(dependencyIndex, out var dependencyResult) || !dependencyResult.Success)
-                    {
-                        throw new InvalidOperationException($"Step '{definition.Id}' dependency #{dependencyIndex} failed or was not executed.");
-                    }
-                }
-            }
-
-            var dependencyMiss = definition.DependencyIndexes.Any(index =>
-                !stepResultsByIndex.TryGetValue(index, out var dependencyResult) || !dependencyResult.Cached);
-            if (steps.Any(prior => prior.Index < stepIndex &&
-                                   (prior.Task.Equals("release-hub", StringComparison.OrdinalIgnoreCase) ||
-                                    prior.Task.Equals("build", StringComparison.OrdinalIgnoreCase)) &&
-                                   stepResultsByIndex.TryGetValue(prior.Index, out var priorResult) &&
-                                   priorResult.Success && !priorResult.Cached &&
-                                   priorResult.Message?.StartsWith("skipped (", StringComparison.OrdinalIgnoreCase) != true))
-            {
-                // A release refresh or site build can change data consumed by later
-                // verify, audit, and publish preparation without explicit dependencies.
-                dependencyMiss = true;
-            }
-            var cacheStateLocal = cacheState;
-            var cacheable = cacheEnabled && cacheStateLocal is not null && IsCacheableStep(task, step);
-            if (cacheable)
-            {
-                var fingerprintSalt = fast ? $"fast|{PipelineToolFingerprint}" : PipelineToolFingerprint;
-                try
-                {
-                    stepFingerprint = ComputeStepFingerprint(baseDir, step, fingerprintSalt);
-                }
-                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or InvalidOperationException or ArgumentException or BadImageFormatException)
-                {
-                    // Discovery failure must never reuse an old output. Execute the task
-                    // so its normal validation reports the actionable configuration error.
-                    cacheable = false;
-                }
-                if (cacheable && cacheStateLocal!.Entries.TryGetValue(cacheKey, out var cacheEntry) &&
-                    string.Equals(cacheEntry.Fingerprint, stepFingerprint, StringComparison.Ordinal) &&
-                    !dependencyMiss &&
-                    AreExpectedOutputsPresent(expectedOutputs) &&
-                    (expectedOutputs.Length == 0 ||
-                     (ComputeOutputStamp(expectedOutputs) is { } currentOutputStamp &&
-                      string.Equals(cacheEntry.OutputStamp, currentOutputStamp, StringComparison.Ordinal))))
-                {
-                    stepResult.Success = true;
-                    stepResult.Cached = true;
-                    stepResult.Message = AppendDuration(cacheEntry.Message ?? "cache hit", stopwatch);
-                    stepResult.DurationMs = (long)Math.Round(stopwatch.Elapsed.TotalMilliseconds);
-                    if (task.Equals("build", StringComparison.OrdinalIgnoreCase))
-                    {
-                        var cachedBuildOut = ResolvePath(baseDir, GetString(step, "out") ?? GetString(step, "output"));
-                        if (!string.IsNullOrWhiteSpace(cachedBuildOut))
-                            lastBuildOutPath = cachedBuildOut;
-                    }
-                    result.Steps.Add(stepResult);
-                    stepResultsByIndex[stepIndex] = stepResult;
-                    cacheOutputs[cacheKey] = expectedOutputs;
-                    if (profileEnabled)
-                        logger?.Info($"Finished {label} (cache hit) in {FormatDuration(stopwatch.Elapsed)}");
-                    continue;
-                }
-            }
-
-            var failureProfileOutputIsSafe = true;
-            try
-            {
-                if ((task.Equals("build", StringComparison.OrdinalIgnoreCase) ||
-                     task.Equals("dotnet-publish", StringComparison.OrdinalIgnoreCase)) &&
-                    GetBool(step, "clean") == true)
-                {
-                    var cleanOutput = ResolvePath(baseDir, GetString(step, "out") ?? GetString(step, "output"));
-                    if (!string.IsNullOrWhiteSpace(cleanOutput))
-                        foreach (var input in pipelineSourcePaths)
-                            WebOutputPathGuard.ValidateSourceInput(cleanOutput, input);
-                }
-                // A preceding sitemap step can create index leaves absent during initial validation.
-                if (task.Equals("indexnow", StringComparison.OrdinalIgnoreCase))
-                {
-                    failureProfileOutputIsSafe = false;
-                    ValidateIndexNowOutputPaths(enabledIndexNowSteps, baseDir, pipelineSourcePaths,
-                        profileEnabled || profileWriteOnFail ? profilePath : null, cacheEnabled ? cachePath : null);
-                    failureProfileOutputIsSafe = true;
-                }
-                ExecuteTask(task, step, label, baseDir, fast, effectiveMode, logger, ref lastBuildOutPath, ref lastBuildUpdatedFiles, stepResult);
-            }
-            catch (Exception ex)
-            {
-                stepResult.Success = false;
-                var failureMessage = FormatFailureMessage(ex);
-                logger?.Error($"{label}: {failureMessage}");
-                stepResult.Message = AppendDuration(failureMessage, stopwatch);
-                stepResult.DurationMs = (long)Math.Round(stopwatch.Elapsed.TotalMilliseconds);
-                result.Steps.Add(stepResult);
-                stepResultsByIndex[stepIndex] = stepResult;
-                result.StepCount = result.Steps.Count;
-                result.Success = false;
-                result.DurationMs = (long)Math.Round(runStopwatch.Elapsed.TotalMilliseconds);
-                // Keep the previous successful cache. A later failing step may
-                // have modified an earlier step's output before throwing.
-                // Intentionally asymmetric:
-                // - Success: write profile only when profile is enabled (to avoid noise/overhead).
-                // - Failure: write profile when profile is enabled OR profileOnFail is true (default),
-                //   so CI failures still produce actionable artifacts.
-                if (failureProfileOutputIsSafe && !string.IsNullOrWhiteSpace(profilePath) && (profileEnabled || profileWriteOnFail))
-                {
-                    WritePipelineProfile(profilePath, result, logger);
-                    result.ProfilePath = profilePath;
-                }
-                return result;
-            }
-
-            stepResult.Message = AppendDuration(stepResult.Message, stopwatch);
-            stepResult.DurationMs = (long)Math.Round(stopwatch.Elapsed.TotalMilliseconds);
-            if (cacheable && stepResult.Success && !string.IsNullOrWhiteSpace(stepFingerprint))
-            {
-                cacheStateLocal!.Entries[cacheKey] = new WebPipelineCacheEntry
-                {
-                    Fingerprint = stepFingerprint,
-                    Message = stepResult.Message
-                };
-                cacheUpdated = true;
-                cacheOutputs[cacheKey] = task.Equals("sitemap", StringComparison.OrdinalIgnoreCase)
-                    ? GetExpectedStepOutputs(task, step, baseDir, lastBuildOutPath) : expectedOutputs;
-            }
-            result.Steps.Add(stepResult);
-            stepResultsByIndex[stepIndex] = stepResult;
-            if (profileEnabled)
-                logger?.Info($"Finished {label} in {FormatDuration(stopwatch.Elapsed)}");
+        var maxParallelism = GetPipelineMaxParallelism(root);
+        PipelineStepOutcome? failure;
+        if (maxParallelism > 1)
+        {
+            failure = RunStepsInParallelGroups(state, maxParallelism);
         }
+        else
+        {
+            failure = null;
+            foreach (var definition in steps)
+            {
+                var outcome = RunPipelineStep(state, definition);
+                if (outcome.Failed)
+                {
+                    failure = outcome;
+                    break;
+                }
+            }
+        }
+
+        if (failure is not null)
+        {
+            result.StepCount = result.Steps.Count;
+            result.Success = false;
+            result.DurationMs = (long)Math.Round(runStopwatch.Elapsed.TotalMilliseconds);
+            // Keep the previous successful cache. A later failing step may
+            // have modified an earlier step's output before throwing.
+            // Intentionally asymmetric:
+            // - Success: write profile only when profile is enabled (to avoid noise/overhead).
+            // - Failure: write profile when profile is enabled OR profileOnFail is true (default),
+            //   so CI failures still produce actionable artifacts.
+            if (failure.FailureProfileOutputIsSafe && !string.IsNullOrWhiteSpace(profilePath) && (profileEnabled || profileWriteOnFail))
+            {
+                WritePipelineProfile(profilePath, result, logger);
+                result.ProfilePath = profilePath;
+            }
+            return result;
+        }
+
+        var cacheOutputs = state.CacheOutputs;
+        var cacheUpdated = state.CacheUpdated;
 
         runStopwatch.Stop();
         result.StepCount = result.Steps.Count;
