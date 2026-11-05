@@ -35,18 +35,19 @@ $null = & $env:ComSpec /d /c 'exit 3'
     NullValue = $null
     EmptyCollection = [object[]] @()
     Pair = [object[]] @(1, 'two')
+    Dictionary = @{ Count = 'three'; Values = 42 }
 }
 """);
         var observation = new PowerShellCompilationSemanticOracleRunner().Observe(
             new PowerShellCompilationSemanticOracleRequest(profileId, fixture.ScriptPath)
             {
-                ObservedPropertyNames = new[] { "Pair", "NullValue", "EmptyCollection" }
+                ObservedPropertyNames = new[] { "Pair", "NullValue", "EmptyCollection", "Dictionary" }
             });
 
         Assert.Equal(3, observation.SchemaVersion);
         Assert.Equal("Output", observation.SuccessState);
         var value = Assert.Single(observation.Success);
-        Assert.Equal(new[] { "NullValue", "EmptyCollection", "Pair" },
+        Assert.Equal(new[] { "NullValue", "EmptyCollection", "Pair", "Dictionary" },
             value.Properties.Select(static property => property.Name));
         var nullValue = Assert.Single(value.Properties, static property => property.Name == "NullValue");
         Assert.True(nullValue.IsNull);
@@ -57,6 +58,10 @@ $null = & $env:ComSpec /d /c 'exit 3'
         var pair = Assert.Single(value.Properties, static property => property.Name == "Pair");
         Assert.Equal(2, pair.CollectionCardinality);
         Assert.Equal(new[] { "System.Int32", "System.String" }, pair.ElementTypeNames);
+        var dictionary = Assert.Single(value.Properties, static property => property.Name == "Dictionary");
+        Assert.Equal("Dictionary", dictionary.EnumerationState);
+        Assert.Equal(2, dictionary.CollectionCardinality);
+        Assert.Equal(new[] { "System.Int32", "System.String" }, dictionary.ElementTypeNames.OrderBy(static name => name, StringComparer.Ordinal));
         Assert.False(string.IsNullOrWhiteSpace(observation.Encoding.ConsoleOutput));
         Assert.False(string.IsNullOrWhiteSpace(observation.Encoding.PowerShellOutput));
         Assert.Equal(3, observation.ProcessState.LastExitCode);

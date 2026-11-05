@@ -83,7 +83,7 @@ function ImportDocumentedModule([string]$manifestPath) {
 }
 
 function GetDocumentedModuleCommands([System.Management.Automation.PSModuleInfo]$module) {
-  return @(@($module.ExportedCmdlets.Values) + @($module.ExportedFunctions.Values)) |
+  return @(@($module.ExportedCmdlets.get_Values()) + @($module.ExportedFunctions.get_Values())) |
     Microsoft.PowerShell.Core\Where-Object {
       $_.CommandType -eq 'Cmdlet' -or $_.CommandType -eq 'Function'
     } | Microsoft.PowerShell.Utility\Sort-Object -Property Name

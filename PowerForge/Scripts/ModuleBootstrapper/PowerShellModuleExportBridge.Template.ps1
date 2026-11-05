@@ -58,7 +58,7 @@ if (-not $PowerForgeIsModuleWrapper) {
     # A Script/ScriptPacked entry point, including one dot-sourced by another module, must not mutate
     # that caller's export table. The imported inner module's commands remain available to this script.
 } elseif ($null -ne $AddExportedCmdlet) {
-    foreach ($Cmd in {{InnerModuleExpression}}.ExportedCmdlets.Values) {
+    foreach ($Cmd in {{InnerModuleExpression}}.ExportedCmdlets.get_Values()) {
         $AddExportedCmdlet.Invoke($PowerForgeOuterModule, @(, $Cmd)) | Out-Null
     }
     $AddExportedAlias = [System.Management.Automation.PSModuleInfo].GetMethod(
@@ -66,7 +66,7 @@ if (-not $PowerForgeIsModuleWrapper) {
         [System.Reflection.BindingFlags]'Instance, NonPublic'
     )
     if ($null -ne $AddExportedAlias) {
-        foreach ($Alias in {{InnerModuleExpression}}.ExportedAliases.Values) {
+        foreach ($Alias in {{InnerModuleExpression}}.ExportedAliases.get_Values()) {
             $AliasTarget = if ([string]::IsNullOrWhiteSpace($Alias.Definition)) { $Alias.ResolvedCommandName } else { $Alias.Definition }
             try {
                 # The alias must exist in this module scope before the private export table can reference it.

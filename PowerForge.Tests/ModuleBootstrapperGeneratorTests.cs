@@ -603,7 +603,7 @@ public partial class ModuleBootstrapperGeneratorTests
             Assert.Contains("-PassThru -ErrorAction Stop", bootstrapper);
             Assert.Contains("AddExportedCmdlet", bootstrapper);
             Assert.Contains("AddExportedAlias", bootstrapper);
-            Assert.Contains("ExportedAliases.Values", bootstrapper);
+            Assert.Contains("ExportedAliases.get_Values()", bootstrapper);
             Assert.Contains("Aliases from $LibraryName will not be re-exported to the module scope.", bootstrapper);
             Assert.Contains("before the private export table can reference it", bootstrapper);
             Assert.Contains("if ([string]::IsNullOrWhiteSpace($Alias.Definition)) { $Alias.ResolvedCommandName } else { $Alias.Definition }", bootstrapper);
