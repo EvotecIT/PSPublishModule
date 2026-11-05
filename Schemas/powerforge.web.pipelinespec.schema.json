@@ -29,13 +29,7 @@
       "type": "integer",
       "minimum": 1,
       "maximum": 64,
-      "description": "Maximum number of parallel-safe steps (currently apidocs) that run at once. Omit or use 1 for sequential execution."
-    },
-    "max-parallelism": {
-      "type": "integer",
-      "minimum": 1,
-      "maximum": 64,
-      "description": "Alias for maxParallelism."
+      "description": "Maximum number of parallel-safe steps (currently apidocs) and of batch inputs per step that run at once. Omit it or use 1 for sequential execution."
     },
     "steps": {
       "type": "array",

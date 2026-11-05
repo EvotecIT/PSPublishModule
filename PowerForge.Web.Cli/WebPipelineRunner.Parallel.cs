@@ -18,14 +18,53 @@ internal static partial class WebPipelineRunner
         "apidocs"
     };
 
+    // Paths an apidocs run reads; a unit reading another unit's output must run after it.
+    private static readonly string[][] ApiDocsReadKeys =
+    {
+        new[] { "xml" }, new[] { "help", "helpPath", "help-path" }, new[] { "assembly" },
+        new[] { "headHtml", "head-html" }, new[] { "headerHtml", "header-html" }, new[] { "footerHtml", "footer-html" },
+        new[] { "templateRoot", "template-root" }, new[] { "templateIndex", "template-index" }, new[] { "templateType", "template-type" },
+        new[] { "templateDocsIndex", "template-docs-index" }, new[] { "templateDocsType", "template-docs-type" },
+        new[] { "docsScript", "docs-script" }, new[] { "searchScript", "search-script" },
+        new[] { "criticalCssPath", "critical-css-path", "criticalCss", "critical-css" },
+        new[] { "nav", "navJson", "nav-json" }, new[] { "config" },
+        new[] { "psExamplesPath", "ps-examples-path", "powerShellExamplesPath", "powershell-examples-path" },
+        new[] { "psManifestPath", "ps-manifest-path", "powerShellManifestPath", "powershell-manifest-path" },
+        new[] { "psCommandMetadataPath", "ps-command-metadata-path", "powerShellCommandMetadataPath", "powershell-command-metadata-path" },
+        new[] { "relatedContentManifest", "related-content-manifest", "exampleManifest", "example-manifest" }
+    };
+
+    private static readonly string[] ApiDocsReadArrayKeys =
+    {
+        "xmls", "xmlPaths", "assemblies", "assemblyPaths",
+        "relatedContentManifests", "related-content-manifests", "exampleManifests", "example-manifests"
+    };
+
+    private static readonly string[][] ApiDocsExtraOutputKeys =
+    {
+        new[] { "coverageReport", "coverage-report", "coverageReportPath", "coverage-report-path" },
+        new[] { "xrefMap", "xref-map", "xrefMapPath", "xref-map-path" },
+        new[] { "powerShellExampleValidationReport", "powershell-example-validation-report",
+            "powerShellExampleValidationReportPath", "powershell-example-validation-report-path" }
+    };
+
     private static readonly AsyncLocal<int> CurrentPipelineMaxParallelism = new();
 
+    /// <summary>One generator run: what it writes, what it reads, and the API route it owns.</summary>
+    private sealed class ApiDocsFootprint
+    {
+        public int Owner { get; init; }
+        public List<string> Outputs { get; } = new();
+        public List<string> Reads { get; } = new();
+        public string BaseUrl { get; init; } = string.Empty;
+    }
+
     /// <summary>
-    /// Reads the opt-in pipeline-level <c>maxParallelism</c> setting. Values of 1 or less keep sequential execution.
+    /// Reads the opt-in pipeline-level <c>maxParallelism</c> setting. Omitting it, or 1, keeps sequential execution.
     /// </summary>
     private static int GetPipelineMaxParallelism(JsonElement root)
     {
-        var value = GetInt(root, "maxParallelism") ?? GetInt(root, "max-parallelism") ?? 1;
+        var value = GetInt(root, "maxParallelism") ?? 1;
         return Math.Clamp(value, 1, 64);
     }
 
@@ -67,99 +106,170 @@ internal static partial class WebPipelineRunner
 
     private static List<PipelineStepDefinition> CollectParallelGroup(PipelineRunState state, int start)
     {
-        var group = new List<PipelineStepDefinition> { state.Steps[start] };
         var first = state.Steps[start];
-        var outputs = new List<string>();
-        if (!TryGetParallelStepOutputs(state.BaseDir, first, outputs))
+        var group = new List<PipelineStepDefinition> { first };
+        var footprints = TryGetParallelStepFootprints(state.BaseDir, first);
+        if (footprints is null)
             return group;
 
         for (var index = start + 1; index < state.Steps.Count; index++)
         {
             var candidate = state.Steps[index];
-            var candidateOutputs = new List<string>();
-            if (!TryGetParallelStepOutputs(state.BaseDir, candidate, candidateOutputs) ||
-                candidateOutputs.Any(output => outputs.Any(existing => PathsOverlap(existing, output))))
+            var candidateFootprints = TryGetParallelStepFootprints(state.BaseDir, candidate);
+            // A declared dependency orders the read; anything else keeps sequential order.
+            if (candidateFootprints is null ||
+                candidateFootprints.Any(unit => footprints.Any(existing =>
+                    Conflicts(existing, unit, unitDependsOnExisting: candidate.DependencyIndexes.Contains(existing.Owner)))))
                 break;
 
-            outputs.AddRange(candidateOutputs);
+            footprints.AddRange(candidateFootprints);
             group.Add(candidate);
         }
         return group;
     }
 
-    private static bool TryGetParallelStepOutputs(string baseDir, PipelineStepDefinition definition, List<string> outputs)
+    private static List<ApiDocsFootprint>? TryGetParallelStepFootprints(string baseDir, PipelineStepDefinition definition)
     {
         if (!ParallelSafeTasks.Contains(definition.Task))
-            return false;
-        return TryCollectApiDocsOutputs(baseDir, definition.Element, outputs);
+            return null;
+        return TryGetApiDocsFootprints(baseDir, definition.Element, definition.Index);
     }
 
-    private static bool TryCollectApiDocsOutputs(string baseDir, JsonElement step, List<string> outputs)
+    /// <summary>
+    /// Describes each generator run of an apidocs step (one per batch input) from the same merged
+    /// step that execution uses. Returns null when the step must not overlap with other work.
+    /// </summary>
+    private static List<ApiDocsFootprint>? TryGetApiDocsFootprints(string baseDir, JsonElement step, int owner)
     {
+        var footprints = new List<ApiDocsFootprint>();
         var inputs = GetArrayOfObjects(step, "inputs") ?? GetArrayOfObjects(step, "entries");
-        if (inputs is { Length: > 0 })
+        try
         {
+            if (inputs is not { Length: > 0 })
+                return TryAddApiDocsFootprint(baseDir, step, owner, footprints) ? footprints : null;
+
             foreach (var input in inputs)
             {
-                if (!TryAddApiDocsOutputs(baseDir, input, step, outputs))
-                    return false;
+                using var merged = CreateMergedApiDocsStepDocument(step, input);
+                if (!TryAddApiDocsFootprint(baseDir, merged.RootElement, owner, footprints))
+                    return null;
             }
-            return true;
+            return footprints;
         }
-        return TryAddApiDocsOutputs(baseDir, step, null, outputs);
-    }
-
-    private static bool TryAddApiDocsOutputs(string baseDir, JsonElement step, JsonElement? parent, List<string> outputs)
-    {
-        string? Read(params string[] names)
+        catch (Exception ex) when (ex is ArgumentException or NotSupportedException or IOException or
+                                   UnauthorizedAccessException or InvalidOperationException or JsonException)
         {
-            foreach (var name in names)
-            {
-                var value = GetString(step, name);
-                if (!string.IsNullOrWhiteSpace(value))
-                    return value;
-            }
-            if (parent is { } parentStep)
-            {
-                foreach (var name in names)
-                {
-                    var value = GetString(parentStep, name);
-                    if (!string.IsNullOrWhiteSpace(value))
-                        return value;
-                }
-            }
+            // Unresolvable configuration runs as a normal step, so its usual skip and error handling apply.
             return null;
         }
+    }
 
-        var outPath = Read("out", "output");
+    private static bool TryAddApiDocsFootprint(string baseDir, JsonElement step, int owner, List<ApiDocsFootprint> footprints)
+    {
+        // Example scripts run with their own folder as the working directory and may share files there.
+        if (GetBool(step, "executePowerShellExamples") == true || GetBool(step, "execute-powershell-examples") == true ||
+            GetBool(step, "failOnPowerShellExampleExecution") == true || GetBool(step, "fail-on-powershell-example-execution") == true)
+            return false;
+
+        var outPath = ResolvePath(baseDir, GetString(step, "out") ?? GetString(step, "output"));
         if (string.IsNullOrWhiteSpace(outPath))
             return false;
-        var candidates = new List<string?>
+
+        var footprint = new ApiDocsFootprint
         {
-            outPath,
-            Read("coverageReport", "coverage-report", "coverageReportPath", "coverage-report-path"),
-            Read("xrefMap", "xref-map", "xrefMapPath", "xref-map-path"),
-            Read("powerShellExampleValidationReport", "powershell-example-validation-report",
-                "powerShellExampleValidationReportPath", "powershell-example-validation-report-path")
+            Owner = owner,
+            BaseUrl = (GetString(step, "baseUrl") ?? GetString(step, "base-url") ?? "/api").Trim().TrimEnd('/')
         };
-        foreach (var candidate in candidates)
+        footprint.Outputs.Add(ResolvePhysicalPath(outPath));
+        foreach (var names in ApiDocsExtraOutputKeys)
         {
-            var resolved = ResolvePath(baseDir, candidate);
-            if (string.IsNullOrWhiteSpace(resolved))
-                continue;
-            var full = Path.GetFullPath(resolved);
-            if (outputs.Any(existing => PathsOverlap(existing, full) && !IsUnder(full, Path.GetFullPath(ResolvePath(baseDir, outPath)!))))
-                return false;
-            outputs.Add(full);
+            var path = ResolvePath(baseDir, FirstString(step, names));
+            if (!string.IsNullOrWhiteSpace(path))
+                footprint.Outputs.Add(ResolvePhysicalPath(path));
         }
+        foreach (var names in ApiDocsReadKeys)
+        {
+            var path = ResolvePath(baseDir, FirstString(step, names));
+            if (!string.IsNullOrWhiteSpace(path))
+                footprint.Reads.Add(ResolvePhysicalPath(path));
+        }
+        foreach (var name in ApiDocsReadArrayKeys)
+        {
+            foreach (var value in GetArrayOfStrings(step, name) ?? Array.Empty<string>())
+            {
+                var path = ResolvePath(baseDir, value);
+                if (!string.IsNullOrWhiteSpace(path))
+                    footprint.Reads.Add(ResolvePhysicalPath(path));
+            }
+        }
+        footprints.Add(footprint);
         return true;
     }
 
+    private static string? FirstString(JsonElement step, string[] names)
+    {
+        foreach (var name in names)
+        {
+            var value = GetString(step, name);
+            if (!string.IsNullOrWhiteSpace(value))
+                return value;
+        }
+        return null;
+    }
+
+    /// <summary>True when two generator runs could observe or overwrite each other's files.</summary>
+    private static bool Conflicts(ApiDocsFootprint existing, ApiDocsFootprint candidate, bool unitDependsOnExisting)
+    {
+        if (string.Equals(existing.BaseUrl, candidate.BaseUrl, StringComparison.OrdinalIgnoreCase))
+            return true; // Same routes share social card and alias file names.
+        if (existing.Outputs.Any(left => candidate.Outputs.Any(right => PathsOverlap(left, right))))
+            return true;
+        if (existing.Reads.Any(read => candidate.Outputs.Any(output => IsUnder(read, output))))
+            return true;
+        return !unitDependsOnExisting &&
+               candidate.Reads.Any(read => existing.Outputs.Any(output => IsUnder(read, output)));
+    }
+
+    /// <summary>True when batch inputs can run concurrently without seeing each other's files.</summary>
+    private static bool AreIndependentApiDocsInputs(string baseDir, JsonElement step)
+    {
+        var footprints = TryGetApiDocsFootprints(baseDir, step, owner: 0);
+        if (footprints is null)
+            return false;
+        for (var left = 0; left < footprints.Count; left++)
+            for (var right = left + 1; right < footprints.Count; right++)
+                if (Conflicts(footprints[left], footprints[right], unitDependsOnExisting: false))
+                    return false;
+        return true;
+    }
+
+    /// <summary>Resolves links in every existing segment so two spellings of one folder compare equal.</summary>
+    private static string ResolvePhysicalPath(string path)
+    {
+        var full = Path.GetFullPath(path);
+        var root = Path.GetPathRoot(full) ?? string.Empty;
+        var current = root;
+        foreach (var segment in full.Substring(root.Length).Split(new[] { Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar }, StringSplitOptions.RemoveEmptyEntries))
+        {
+            var next = Path.Combine(current, segment);
+            for (var hops = 0; hops < 32; hops++)
+            {
+                FileSystemInfo? info = Directory.Exists(next) ? new DirectoryInfo(next) : File.Exists(next) ? new FileInfo(next) : null;
+                if (info?.LinkTarget is not { } target)
+                    break;
+                next = Path.GetFullPath(Path.IsPathRooted(target) ? target : Path.Combine(Path.GetDirectoryName(next) ?? current, target));
+            }
+            current = next;
+        }
+        return current;
+    }
+
+    // Case-insensitive on every host: case variants on case-insensitive volumes name one folder.
     private static bool IsUnder(string path, string root)
     {
         var normalizedRoot = root.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-        return string.Equals(path, normalizedRoot, FileSystemPathComparison) ||
-               path.StartsWith(normalizedRoot + Path.DirectorySeparatorChar, FileSystemPathComparison);
+        return string.Equals(path, normalizedRoot, StringComparison.OrdinalIgnoreCase) ||
+               path.StartsWith(normalizedRoot + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool PathsOverlap(string left, string right) => IsUnder(left, right) || IsUnder(right, left);
@@ -243,6 +353,10 @@ internal static partial class WebPipelineRunner
         }
         finally
         {
+            // Never leave started steps running past this group, even if replaying output failed.
+            var started = tasks.Where(static task => task is not null).Select(static task => (Task)task!).ToArray();
+            try { Task.WaitAll(started); }
+            catch (AggregateException) { /* already recorded from the completed task */ }
             state.PublishDeferredResults(int.MaxValue);
             state.DeferResultOrdering = false;
         }
@@ -267,8 +381,12 @@ internal static partial class WebPipelineRunner
         for (var index = 0; index < items.Count; index++)
             captures[index] = new PipelineOutputCapture();
 
+        var failed = 0;
         Parallel.For(0, items.Count, new ParallelOptions { MaxDegreeOfParallelism = maxParallelism }, index =>
         {
+            // Like the sequential loop, start nothing new once an item failed.
+            if (Volatile.Read(ref failed) != 0)
+                return;
             try
             {
                 captures[index].Run(() => body(items[index], index));
@@ -276,15 +394,15 @@ internal static partial class WebPipelineRunner
             catch (Exception ex)
             {
                 errors[index] = ex;
+                Interlocked.Exchange(ref failed, 1);
             }
         });
 
-        for (var index = 0; index < items.Count; index++)
-        {
-            captures[index].ReplayTo(Console.Out, Console.Error);
-            if (errors[index] is { } error)
-                ExceptionDispatchInfo.Capture(error).Throw();
-        }
+        // Replay everything that ran before reporting the first failure in item order.
+        foreach (var capture in captures)
+            capture.ReplayTo(Console.Out, Console.Error);
+        if (errors.FirstOrDefault(static error => error is not null) is { } firstError)
+            ExceptionDispatchInfo.Capture(firstError).Throw();
         return true;
     }
 

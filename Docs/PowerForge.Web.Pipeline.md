@@ -139,9 +139,8 @@ Example: skip heavy steps in `dev`, keep them in `ci`/`default`.
 
 ### Parallel steps (`maxParallelism`)
 
-Set `maxParallelism` (or `max-parallelism`) at the pipeline root to let
-independent steps overlap. Values of 1 or less, and pipelines without the
-setting, run strictly in order as before.
+Set `maxParallelism` at the pipeline root to let independent steps overlap.
+Pipelines that omit it, or set it to 1, run strictly in order as before.
 
 ```json
 {
@@ -151,19 +150,24 @@ setting, run strictly in order as before.
 ```
 
 Behaviour:
-- Only parallel-safe task types overlap. Today that is `apidocs`, whose steps
-  read earlier outputs and write only their own `out` (plus explicit
-  `coverageReport`, `xrefMap` and validation report) paths. Consecutive
-  `apidocs` steps form a group; every other step is a barrier that starts after
+- Only parallel-safe task types overlap. Today that is `apidocs`. Consecutive
+  `apidocs` steps form a group. Every other step is a barrier that starts after
   all earlier steps finish and before any later step starts.
 - Inside a group, a step starts only after its `dependsOn` steps finish.
-  Steps with overlapping output paths, or without an `out`, are not grouped.
-- `apidocs` batch `inputs` with distinct outputs also run concurrently, using
-  the same limit.
+- A step stays out of a group, and batch inputs run one by one, when outputs
+  (`out` plus explicit `coverageReport`, `xrefMap` and validation report
+  paths) overlap after resolving links and ignoring case, when two runs share
+  a `baseUrl`, when one run reads files under another's output without
+  `dependsOn`, when `out` is missing, or when the step executes PowerShell
+  examples.
+- `apidocs` batch `inputs` run concurrently within their step, with up to
+  `maxParallelism` inputs at once. A group can therefore run more than
+  `maxParallelism` generators at the same time.
 - Each overlapping step's console output is buffered and printed as one block
-  in pipeline order, so logs and results keep the sequential order.
-- After a failure no new steps start; steps already running finish and are
-  reported.
+  in pipeline order, so logs and results keep the sequential order. Native
+  libraries that write straight to the process output are not buffered.
+- After a failure no new steps or batch inputs start. Work already running
+  finishes and is reported.
 
 ### Supported steps
 

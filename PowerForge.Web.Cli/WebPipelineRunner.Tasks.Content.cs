@@ -664,8 +664,8 @@ internal static partial class WebPipelineRunner
             nestedMessages[index] = nestedResult.Message;
         }
 
-        // Inputs with distinct outputs are independent; parallel runs replay their logs in input order.
-        var ranInParallel = TryCollectApiDocsOutputs(baseDir, parentStep, new List<string>()) &&
+        // Inputs that neither share outputs nor read each other's are independent; parallel runs replay their logs in input order.
+        var ranInParallel = AreIndependentApiDocsInputs(baseDir, parentStep) &&
                             TryRunInParallelWithOrderedOutput(inputs, RunInput);
         if (!ranInParallel)
         {
