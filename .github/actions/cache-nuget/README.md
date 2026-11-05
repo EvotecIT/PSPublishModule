@@ -20,7 +20,9 @@ generated files cannot change it later in the job.
 Consumers can reference `EvotecIT/PSPublishModule/.github/actions/cache-nuget`
 at the same reviewed SHA as their shared workflows instead of copying the action.
 Self-hosted runners keep their existing package stores and do not upload them.
-On hosted runners, only `~/.nuget/packages` is cached. Keys include the OS,
+On hosted runners, only the package folder is cached: `~/.nuget/packages` on
+Linux and macOS, and `$RUNNER_TEMP/nuget/packages` on Windows, where the profile
+disk is slower (the Windows HTTP cache also moves under `RUNNER_TEMP`). Keys include the OS,
 architecture and dependency manifests, excluding generated `obj` and `bin`
 files. PRs and manual, tag and feature-branch runs restore without saving, with
 a prefix fallback. Default-branch pushes restore exact keys only. On a miss,
