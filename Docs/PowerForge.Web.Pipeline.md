@@ -137,6 +137,34 @@ Example: skip heavy steps in `dev`, keep them in `ci`/`default`.
 }
 ```
 
+### Parallel steps (`maxParallelism`)
+
+Set `maxParallelism` (or `max-parallelism`) at the pipeline root to let
+independent steps overlap. Values of 1 or less, and pipelines without the
+setting, run strictly in order as before.
+
+```json
+{
+  "maxParallelism": 4,
+  "steps": [ ... ]
+}
+```
+
+Behaviour:
+- Only parallel-safe task types overlap. Today that is `apidocs`, whose steps
+  read earlier outputs and write only their own `out` (plus explicit
+  `coverageReport`, `xrefMap` and validation report) paths. Consecutive
+  `apidocs` steps form a group; every other step is a barrier that starts after
+  all earlier steps finish and before any later step starts.
+- Inside a group, a step starts only after its `dependsOn` steps finish.
+  Steps with overlapping output paths, or without an `out`, are not grouped.
+- `apidocs` batch `inputs` with distinct outputs also run concurrently, using
+  the same limit.
+- Each overlapping step's console output is buffered and printed as one block
+  in pipeline order, so logs and results keep the sequential order.
+- After a failure no new steps start; steps already running finish and are
+  reported.
+
 ### Supported steps
 
 #### build

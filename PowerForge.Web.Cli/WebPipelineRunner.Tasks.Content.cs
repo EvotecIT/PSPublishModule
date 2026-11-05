@@ -627,16 +627,19 @@ internal static partial class WebPipelineRunner
             throw new InvalidOperationException("apidocs batch requires at least one input object.");
 
         var suite = BuildApiSuiteSpec(parentStep, inputs);
-        var completed = 0;
-        var notes = new List<string>();
+        var inputLabels = new string[inputs.Length];
+        var nestedMessages = new string?[inputs.Length];
         for (var index = 0; index < inputs.Length; index++)
         {
-            var input = inputs[index];
-            var inputLabel = GetString(input, "id") ??
-                             GetString(input, "name") ??
-                             GetString(input, "title") ??
-                             $"input-{index + 1}";
+            inputLabels[index] = GetString(inputs[index], "id") ??
+                                 GetString(inputs[index], "name") ??
+                                 GetString(inputs[index], "title") ??
+                                 $"input-{index + 1}";
+        }
 
+        void RunInput(JsonElement input, int index)
+        {
+            var inputLabel = inputLabels[index];
             using var merged = CreateMergedApiDocsStepDocument(
                 parentStep,
                 input,
@@ -658,13 +661,28 @@ internal static partial class WebPipelineRunner
                 throw new InvalidOperationException($"apidocs batch input '{inputLabel}' failed: {ex.Message}", ex);
             }
 
-            completed++;
-            if (!string.IsNullOrWhiteSpace(nestedResult.Message))
+            nestedMessages[index] = nestedResult.Message;
+        }
+
+        // Inputs with distinct outputs are independent; parallel runs replay their logs in input order.
+        var ranInParallel = TryCollectApiDocsOutputs(baseDir, parentStep, new List<string>()) &&
+                            TryRunInParallelWithOrderedOutput(inputs, RunInput);
+        if (!ranInParallel)
+        {
+            for (var index = 0; index < inputs.Length; index++)
+                RunInput(inputs[index], index);
+        }
+
+        var completed = inputs.Length;
+        var notes = new List<string>();
+        for (var index = 0; index < inputs.Length; index++)
+        {
+            if (!string.IsNullOrWhiteSpace(nestedMessages[index]))
             {
-                var note = nestedResult.Message!;
+                var note = nestedMessages[index]!;
                 if (note.Length > 100)
                     note = $"{note.Substring(0, 97)}...";
-                notes.Add($"{inputLabel}: {note}");
+                notes.Add($"{inputLabels[index]}: {note}");
             }
         }
 

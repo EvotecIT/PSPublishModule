@@ -25,6 +25,18 @@
     "cachePath": { "type": "string" },
     "profile": { "type": "boolean" },
     "profilePath": { "type": "string" },
+    "maxParallelism": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 64,
+      "description": "Maximum number of parallel-safe steps (currently apidocs) that run at once. Omit or use 1 for sequential execution."
+    },
+    "max-parallelism": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 64,
+      "description": "Alias for maxParallelism."
+    },
     "steps": {
       "type": "array",
       "minItems": 1,
