@@ -133,10 +133,16 @@ public sealed partial class ArtefactBuilder
             stagingPath, moduleName, moduleVersion, preRelease, requiredModules,
             information, delivery, includeScriptFolders, finalizedPayloadFiles);
 
+        using var preparedDependencies = PrepareMappingDependencies(cfg, segment.ArtefactType, root, requiredModules);
+        if (preparedDependencies is not null)
+            ValidateExtraCopyMappings(cfg, segment.ArtefactType, projectRoot, root,
+                stagingPath, moduleName, moduleVersion, preRelease, requiredModules,
+                information, delivery, includeScriptFolders, finalizedPayloadFiles, preparedDependencies.Modules);
+
         return segment.ArtefactType switch
         {
-            ArtefactType.Unpacked => BuildUnpacked(cfg, root, projectRoot, stagingPath, moduleName, moduleVersion, preRelease, requiredModules, information, delivery, includeScriptFolders, finalizePackedArtefact, finalizedPayloadFiles),
-            ArtefactType.Packed => BuildPacked(cfg, root, projectRoot, stagingPath, moduleName, moduleVersion, preRelease, requiredModules, information, delivery, includeScriptFolders, finalizePackedArtefact, finalizedPayloadFiles),
+            ArtefactType.Unpacked => BuildUnpacked(cfg, root, projectRoot, stagingPath, moduleName, moduleVersion, preRelease, requiredModules, information, delivery, includeScriptFolders, finalizePackedArtefact, finalizedPayloadFiles, preparedDependencies?.Modules),
+            ArtefactType.Packed => BuildPacked(cfg, root, projectRoot, stagingPath, moduleName, moduleVersion, preRelease, requiredModules, information, delivery, includeScriptFolders, finalizePackedArtefact, finalizedPayloadFiles, preparedDependencies?.Modules),
             ArtefactType.Script => BuildScript(cfg, root, projectRoot, stagingPath, moduleName, moduleVersion, preRelease, requiredModules, information, delivery, includeScriptFolders, finalizePackedArtefact, finalizedPayloadFiles),
             ArtefactType.ScriptPacked => BuildScriptPacked(cfg, root, projectRoot, stagingPath, moduleName, moduleVersion, preRelease, requiredModules, information, delivery, includeScriptFolders, finalizePackedArtefact, finalizedPayloadFiles),
             _ => throw new NotSupportedException($"Artefact type '{segment.ArtefactType}' is not supported.")
@@ -168,7 +174,8 @@ public sealed partial class ArtefactBuilder
         DeliveryOptionsConfiguration? delivery,
         bool includeScriptFolders,
         Func<PackedArtefactFinalizationContext, IReadOnlyList<string>?>? finalizeArtefact,
-        IReadOnlyList<string>? finalizedPayloadFiles)
+        IReadOnlyList<string>? finalizedPayloadFiles,
+        IReadOnlyList<ArtefactModuleEntry>? preparedDependencies)
     {
         if (cfg.DoNotClear != true)
             ClearDirectorySafe(outputRoot);
@@ -187,22 +194,7 @@ public sealed partial class ArtefactBuilder
         CopyModulePackage(stagingPath, mainModuleDest, include, finalizedPayloadFiles);
         modules.Add(new ArtefactModuleEntry(moduleName, isMainModule: true, version: moduleVersion, path: mainModuleDest));
 
-        if (cfg.RequiredModules.Enabled == true)
-        {
-            var tool = cfg.RequiredModules.Tool ?? ModuleSaveTool.Auto;
-            var source = cfg.RequiredModules.Source ?? RequiredModulesSource.Installed;
-            foreach (var rm in FilterRequiredModulesForArtefact(requiredModules, cfg.RequiredModules.ExcludeModuleName))
-            {
-                var depEntry = SaveRequiredModuleToFolder(
-                    rm,
-                    requiredRoot,
-                    cfg.RequiredModules.Repository,
-                    cfg.RequiredModules.Credential,
-                    tool,
-                    source);
-                modules.Add(depEntry);
-            }
-        }
+        AddRequiredModules(cfg, requiredRoot, requiredModules, modules, preparedDependencies);
 
         CopyDeliveryFiles(cfg, stagingPath, outputRoot, information, delivery, includeScriptFolders, finalizedPayloadFiles, copied);
         CopyExtraMappings(
@@ -250,7 +242,8 @@ public sealed partial class ArtefactBuilder
         DeliveryOptionsConfiguration? delivery,
         bool includeScriptFolders,
         Func<PackedArtefactFinalizationContext, IReadOnlyList<string>?>? finalizePackedArtefact,
-        IReadOnlyList<string>? finalizedPayloadFiles)
+        IReadOnlyList<string>? finalizedPayloadFiles,
+        IReadOnlyList<ArtefactModuleEntry>? preparedDependencies)
     {
         var artefactName = ResolveArtefactFileName(cfg, moduleName, moduleVersion, preRelease);
         var zipPath = Path.Combine(outputRoot, artefactName);
@@ -277,22 +270,7 @@ public sealed partial class ArtefactBuilder
             CopyModulePackage(stagingPath, mainModuleDest, include, finalizedPayloadFiles);
             modules.Add(new ArtefactModuleEntry(moduleName, isMainModule: true, version: moduleVersion, path: mainModuleDest));
 
-            if (cfg.RequiredModules.Enabled == true)
-            {
-                var tool = cfg.RequiredModules.Tool ?? ModuleSaveTool.Auto;
-                var source = cfg.RequiredModules.Source ?? RequiredModulesSource.Installed;
-                foreach (var rm in FilterRequiredModulesForArtefact(requiredModules, cfg.RequiredModules.ExcludeModuleName))
-                {
-                    var depEntry = SaveRequiredModuleToFolder(
-                        rm,
-                        requiredRoot,
-                        cfg.RequiredModules.Repository,
-                        cfg.RequiredModules.Credential,
-                        tool,
-                        source);
-                    modules.Add(depEntry);
-                }
-            }
+            AddRequiredModules(cfg, requiredRoot, requiredModules, modules, preparedDependencies);
 
             CopyDeliveryFiles(cfg, stagingPath, tempRoot, information, delivery, includeScriptFolders, finalizedPayloadFiles, copied);
             CopyExtraMappings(

@@ -14,7 +14,8 @@ public sealed partial class ArtefactBuilder
         string stagingPath, string moduleName, string moduleVersion, string? preRelease,
         IReadOnlyList<RequiredModuleReference> requiredModules,
         InformationConfiguration? information, DeliveryOptionsConfiguration? delivery,
-        bool includeScriptFolders, IReadOnlyList<string>? finalizedPayloadFiles)
+        bool includeScriptFolders, IReadOnlyList<string>? finalizedPayloadFiles,
+        IReadOnlyList<ArtefactModuleEntry>? preparedDependencies = null)
     {
         if (cfg.DirectoryOutput is not { Length: > 0 } && cfg.FilesOutput is not { Length: > 0 })
             return;
@@ -81,6 +82,10 @@ public sealed partial class ArtefactBuilder
             if (mapping is not null)
                 Validate(mapping, copyTree: false);
 
+        foreach (var module in preparedDependencies ?? Array.Empty<ArtefactModuleEntry>())
+            sources.Add((ValidateCopyMappingSource(module.Path, true, cfg.DoNotClear != true,
+                outputRoot, type, copyContents: true), true));
+
         if (type is ArtefactType.Packed or ArtefactType.Unpacked)
         {
             string requiredRoot = ResolveRequiredModulesRootForUnpacked(cfg, outputRoot, projectRoot, moduleName, moduleVersion, preRelease);
@@ -97,13 +102,23 @@ public sealed partial class ArtefactBuilder
             overwrittenFiles.AddRange(deliveryFiles);
             var package = ResolveScriptPackageDestinationNamespace(stagingPath, moduleRoot,
                 information, delivery, includeScriptFolders, finalizedPayloadFiles);
+            var payloadFiles = package.Files.ToList();
+            var payloadDirectories = package.Directories.ToList();
+            foreach (var module in preparedDependencies ?? Array.Empty<ArtefactModuleEntry>())
+            {
+                string destination = Path.Combine(requiredRoot, module.Name);
+                foreach (string file in Directory.EnumerateFiles(module.Path, "*", SearchOption.AllDirectories))
+                    payloadFiles.Add(Path.Combine(destination, ComputeRelativePath(module.Path, file)));
+                foreach (string directory in Directory.EnumerateDirectories(module.Path, "*", SearchOption.AllDirectories))
+                    payloadDirectories.Add(Path.Combine(destination, ComputeRelativePath(module.Path, directory)));
+            }
             allDirectories.AddRange(moduleRoots);
-            allDirectories.AddRange(package.Directories.Where(path => !treeDestinations.Any(destination => IsSameOrBelowPath(path, destination))));
-            allFiles.AddRange(package.Files.Where(path => !treeDestinations.Any(destination => IsSameOrBelowPath(path, destination))));
+            allDirectories.AddRange(payloadDirectories.Where(path => !treeDestinations.Any(destination => IsSameOrBelowPath(path, destination))));
+            allFiles.AddRange(payloadFiles.Where(path => !treeDestinations.Any(destination => IsSameOrBelowPath(path, destination))));
             allFiles.AddRange(deliveryFiles);
             foreach (string destination in treeDestinations)
             {
-                string? moduleFile = package.Files.FirstOrDefault(path => IsSameOrBelowPath(destination, path));
+                string? moduleFile = payloadFiles.FirstOrDefault(path => IsSameOrBelowPath(destination, path));
                 if (moduleFile is not null)
                     throw new InvalidOperationException(
                         $"{type} artefact file copy destination '{moduleFile}' conflicts with directory copy destination '{destination}'. Choose a separate destination.");

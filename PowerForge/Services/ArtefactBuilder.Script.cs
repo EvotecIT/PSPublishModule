@@ -138,7 +138,11 @@ public sealed partial class ArtefactBuilder
                 scriptPath,
                 outputRoot,
                 moduleName,
-                version);
+                version)
+            {
+                FinalizationFilePaths = ResolveUnpackedFinalizationFiles(
+                    modules, copied, packageNamespace.Files.Append(scriptPath))
+            };
             evidencePaths = FinalizeArtefactLayout(finalizeArtefact, context);
         }
 
@@ -366,10 +370,22 @@ public sealed partial class ArtefactBuilder
         ArtefactConfiguration cfg,
         string requiredRoot,
         IReadOnlyList<RequiredModuleReference> requiredModules,
-        List<ArtefactModuleEntry> modules)
+        List<ArtefactModuleEntry> modules,
+        IReadOnlyList<ArtefactModuleEntry>? preparedDependencies = null)
     {
         if (cfg.RequiredModules.Enabled != true)
             return;
+
+        if (preparedDependencies is not null)
+        {
+            foreach (var module in preparedDependencies)
+            {
+                string destination = Path.Combine(requiredRoot, module.Name);
+                CopyDirectory(module.Path, destination, excludeBuildHostMetadata: true);
+                modules.Add(new ArtefactModuleEntry(module.Name, false, module.Version, destination));
+            }
+            return;
+        }
 
         var tool = cfg.RequiredModules.Tool ?? ModuleSaveTool.Auto;
         var source = cfg.RequiredModules.Source ?? RequiredModulesSource.Installed;

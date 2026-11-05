@@ -184,8 +184,9 @@ public sealed partial class ModulePipelineRunner
         }
 
         ArtefactBuilder.ValidateDirectoryTreeContainsNoReparsePoints(rootPath);
-        string[] packageFiles = Directory.EnumerateFiles(rootPath, "*", SearchOption.AllDirectories)
+        string[] packageFiles = (context.FinalizationFilePaths ?? Directory.EnumerateFiles(rootPath, "*", SearchOption.AllDirectories).ToArray())
             .Select(Path.GetFullPath)
+            .Where(File.Exists)
             .ToArray();
         ModuleSigningResult signingResult = _hostedOperations.SignModuleOutput(
             context.ModuleName,
