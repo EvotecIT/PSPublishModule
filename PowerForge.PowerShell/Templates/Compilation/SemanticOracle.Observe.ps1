@@ -189,8 +189,8 @@ function Get-ValueShape {
     $elementTypes = @()
     if ($Value -is [System.Collections.IDictionary]) {
         $enumerationState = 'Dictionary'
-        $cardinality = [int] $Value.Count
-        $elementTypes = @(Get-ElementTypeNames -Values $Value.Values)
+        $cardinality = [int] $Value.get_Count()
+        $elementTypes = @(Get-ElementTypeNames -Values $Value.get_Values())
     } elseif ($Value -is [System.Collections.ICollection] -and -not ($Value -is [string])) {
         $enumerationState = 'Collection'
         $cardinality = [int] $Value.Count
@@ -425,7 +425,7 @@ if ($powerForgeObservedPropertyNamesSnapshot.Count -eq 0) {
 
 $after = Get-FileSnapshot ([string] $config.FileSystemRoot)
 $effects = [System.Collections.Generic.List[string]]::new()
-foreach ($path in @($before.Keys + $after.Keys | Sort-Object -Unique)) {
+foreach ($path in @($before.get_Keys() + $after.get_Keys() | Sort-Object -Unique)) {
     if (-not $before.ContainsKey($path)) { $effects.Add("Added:${path}:$($after[$path])"); continue }
     if (-not $after.ContainsKey($path)) { $effects.Add("Removed:${path}:$($before[$path])"); continue }
     if ($before[$path] -ne $after[$path]) { $effects.Add("Modified:${path}:$($after[$path])") }

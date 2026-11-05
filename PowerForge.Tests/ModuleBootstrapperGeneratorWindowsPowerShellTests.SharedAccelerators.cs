@@ -3,10 +3,12 @@ using PowerForge;
 public sealed partial class ModuleBootstrapperGeneratorWindowsPowerShellTests
 {
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
     [Trait("Category", "Integration")]
-    public void GeneratedAccelerators_RemainUntilLastIdenticalTypeOwnerIsRemoved(bool desktop)
+    public void GeneratedAccelerators_RemainUntilLastIdenticalTypeOwnerIsRemoved(bool desktop, bool collidingName)
     {
         if (!OperatingSystem.IsWindows()) return;
         var host = desktop
@@ -17,22 +19,26 @@ public sealed partial class ModuleBootstrapperGeneratorWindowsPowerShellTests
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "pf-shared-accelerator-" + Guid.NewGuid().ToString("N"))).FullName;
         try
         {
+            var typeName = collidingName ? "SyncRoot" : "PowerForge.SharedAcceleratorFixture";
+            var typeDeclaration = collidingName
+                ? "public class SyncRoot {}"
+                : "namespace PowerForge { public class SharedAcceleratorFixture {} }";
             var block = desktop
                 ? ModuleBootstrapperGenerator.BuildDesktopTypeAcceleratorBlock(AssemblyTypeAcceleratorExportMode.AllowList,
-                    ["PowerForge.SharedAcceleratorFixture"], [], "$PSScriptRoot")
-                : "$ModuleAssembly = [PowerForge.SharedAcceleratorFixture].Assembly\n$LibFolder = $PSScriptRoot\n" +
+                    [typeName], [], "$PSScriptRoot")
+                : "$ModuleAssembly = [" + typeName + "].Assembly\n$LibFolder = $PSScriptRoot\n" +
                   ModuleBootstrapperGenerator.BuildTypeAcceleratorBlock(AssemblyTypeAcceleratorExportMode.AllowList,
-                      ["PowerForge.SharedAcceleratorFixture"], []);
+                      [typeName], []);
             foreach (var name in new[] { "First", "Second" })
                 File.WriteAllText(Path.Combine(root, name + ".psm1"), block);
             var script = Path.Combine(root, "Verify.ps1");
-            File.WriteAllText(script, """
+            File.WriteAllText(script, $$"""
                 $ErrorActionPreference = 'Stop'
-                Add-Type 'namespace PowerForge { public class SharedAcceleratorFixture {} }'
+                Add-Type '{{typeDeclaration}}'
                 $catalogType = [psobject].Assembly.GetType('System.Management.Automation.TypeAccelerators')
                 $get = $catalogType.GetProperty('Get', [Reflection.BindingFlags]'Static,Public,NonPublic')
-                $name = 'PowerForge.SharedAcceleratorFixture'
-                $type = [PowerForge.SharedAcceleratorFixture]
+                $name = '{{typeName}}'
+                $type = [{{typeName}}]
                 Import-Module (Join-Path $PSScriptRoot 'First.psm1')
                 Import-Module (Join-Path $PSScriptRoot 'Second.psm1')
                 Remove-Module First

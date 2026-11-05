@@ -36,6 +36,7 @@ $null = & $env:ComSpec /d /c 'exit 3'
     EmptyCollection = [object[]] @()
     Pair = [object[]] @(1, 'two')
 }
+@{ Count = 'three'; Values = 42 }
 """);
         var observation = new PowerShellCompilationSemanticOracleRunner().Observe(
             new PowerShellCompilationSemanticOracleRequest(profileId, fixture.ScriptPath)
@@ -45,7 +46,8 @@ $null = & $env:ComSpec /d /c 'exit 3'
 
         Assert.Equal(3, observation.SchemaVersion);
         Assert.Equal("Output", observation.SuccessState);
-        var value = Assert.Single(observation.Success);
+        Assert.Equal(2, observation.Success.Length);
+        var value = observation.Success[0];
         Assert.Equal(new[] { "NullValue", "EmptyCollection", "Pair" },
             value.Properties.Select(static property => property.Name));
         var nullValue = Assert.Single(value.Properties, static property => property.Name == "NullValue");
@@ -57,6 +59,10 @@ $null = & $env:ComSpec /d /c 'exit 3'
         var pair = Assert.Single(value.Properties, static property => property.Name == "Pair");
         Assert.Equal(2, pair.CollectionCardinality);
         Assert.Equal(new[] { "System.Int32", "System.String" }, pair.ElementTypeNames);
+        var dictionary = observation.Success[1];
+        Assert.Equal("Dictionary", dictionary.EnumerationState);
+        Assert.Equal(2, dictionary.CollectionCardinality);
+        Assert.Equal(new[] { "System.Int32", "System.String" }, dictionary.ElementTypeNames.OrderBy(static name => name, StringComparer.Ordinal));
         Assert.False(string.IsNullOrWhiteSpace(observation.Encoding.ConsoleOutput));
         Assert.False(string.IsNullOrWhiteSpace(observation.Encoding.PowerShellOutput));
         Assert.Equal(3, observation.ProcessState.LastExitCode);
