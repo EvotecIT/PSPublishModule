@@ -1,13 +1,14 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
+    <PackageVersion>3.0.187</PackageVersion>
     <TargetFrameworks>net472;net8.0;net10.0</TargetFrameworks>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <LangVersion>latest</LangVersion>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <WarningsAsErrors>CS1591</WarningsAsErrors>
-    <VersionPrefix>3.0.186</VersionPrefix>
+    <VersionPrefix>3.0.187</VersionPrefix>
     <PackageId>PowerForge.PowerShell</PackageId>
     <Description>PowerForge PowerShell-hosted module pipeline services.</Description>
     <AssemblyName>PowerForge.PowerShell</AssemblyName>
