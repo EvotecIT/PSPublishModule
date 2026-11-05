@@ -320,6 +320,7 @@ jobs:
         run: dotnet test .\PowerForge.Net472SmokeTests\PowerForge.Net472SmokeTests.csproj -c Release -f net472 --nologo
 
       - name: Test web protocol contracts on Framework and modern .NET
+        if: needs.changes.outputs.web == 'true'
         shell: pwsh
         timeout-minutes: 5
         run: dotnet test .\PowerForge.Web.Protocols.Tests\PowerForge.Web.Protocols.Tests.csproj -c Release --nologo
@@ -407,7 +408,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.build == 'true'
     runs-on: ${{ fromJSON(github.event.repository.private && '["self-hosted","windows"]' || '["windows-latest"]') }}
-    timeout-minutes: ${{ github.event_name == 'workflow_dispatch' && inputs.compilerFullGate == true && 240 || 180 }}
+    timeout-minutes: 90
     env:
       DbaClientXRoot: ${{ github.workspace }}\_dependencies\DbaClientX
 
@@ -451,6 +452,40 @@ jobs:
       - name: Test catalog workflow receipt recovery
         shell: pwsh
         run: ./.github/scripts/test-catalog-update-workflow.ps1 -ScratchRoot $env:RUNNER_TEMP
+
+
+  # Runs beside ProductBuildSmoke; each job builds the same core graph on a clean runner.
+  ProductCompilerGate:
+    needs: changes
+    if: needs.changes.outputs.build == 'true' && needs.changes.outputs.powershell == 'true'
+    runs-on: ${{ fromJSON(github.event.repository.private && '["self-hosted","windows"]' || '["windows-latest"]') }}
+    timeout-minutes: ${{ github.event_name == 'workflow_dispatch' && inputs.compilerFullGate == true && 240 || 180 }}
+    env:
+      DbaClientXRoot: ${{ github.workspace }}\_dependencies\DbaClientX
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Check out the shared DbaClientX source
+        uses: actions/checkout@v7
+        with:
+          repository: EvotecIT/DbaClientX
+          path: _dependencies/DbaClientX
+
+      - uses: ./.github/actions/setup-dotnet
+      - name: Restore NuGet packages
+        id: nuget-cache
+        uses: ./.github/actions/cache-nuget
+
+      - name: Restore core product graph
+        shell: pwsh
+        run: dotnet restore .\PSPublishModule.Core.slnf --force-evaluate
+
+      - name: Build core product graph
+        shell: pwsh
+        run: dotnet build .\PSPublishModule.Core.slnf -c Release --no-restore --nologo
 
       - name: Prepare pinned PowerShell compiler host
         shell: pwsh
@@ -500,6 +535,79 @@ jobs:
           & (Join-Path $hostRoot 'pwsh.exe') -NoProfile -File ./Build/Invoke-PowerShellCompilerGate.ps1 -EvidencePath (Join-Path $gateRoot 'evidence') -Lane Full -NoBuild
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
+      - name: Upload compiler gate evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: powershell-compiler-gate-windows
+          path: |
+            ${{ runner.temp }}/powerforge-compiler-gate/evidence/*.trx
+            ${{ runner.temp }}/powerforge-compiler-gate/evidence/*.json
+            ${{ runner.temp }}/powerforge-compiler-gate/evidence/**/*.xml
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Clean compiler gate workspace
+        if: always()
+        shell: pwsh
+        run: ./Build/Remove-PowerShellCompilerGateWorkspace.ps1 -RunnerTemp $env:RUNNER_TEMP
+
+      - name: Upload compiler workspace cleanup decision
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: powershell-compiler-workspace-cleanup-windows
+          path: ${{ runner.temp }}/powerforge-compiler-gate-cleanup.json
+          if-no-files-found: ignore
+          retention-days: 7
+
+
+  ProductWholeWorkflowGate:
+    needs: changes
+    if: needs.changes.outputs.build == 'true' && needs.changes.outputs.powershell == 'true'
+    runs-on: ${{ fromJSON(github.event.repository.private && '["self-hosted","windows"]' || '["windows-latest"]') }}
+    timeout-minutes: 120
+    env:
+      DbaClientXRoot: ${{ github.workspace }}\_dependencies\DbaClientX
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Check out the shared DbaClientX source
+        uses: actions/checkout@v7
+        with:
+          repository: EvotecIT/DbaClientX
+          path: _dependencies/DbaClientX
+
+      - uses: ./.github/actions/setup-dotnet
+      - name: Restore NuGet packages
+        id: nuget-cache
+        uses: ./.github/actions/cache-nuget
+
+      - name: Restore core product graph
+        shell: pwsh
+        run: dotnet restore .\PSPublishModule.Core.slnf --force-evaluate
+
+      - name: Build core product graph
+        shell: pwsh
+        run: dotnet build .\PSPublishModule.Core.slnf -c Release --no-restore --nologo
+
+      - name: Prepare pinned PowerShell compiler host
+        shell: pwsh
+        timeout-minutes: 5
+        run: |
+          $ErrorActionPreference = 'Stop'
+          . ./Benchmarks/PowerShellCompilation/Corpus/Corpus.Runner.Common.ps1
+          $gateRoot = Join-Path $env:RUNNER_TEMP 'powerforge-compiler-gate'
+          $pins = Get-Content ./PowerForge/Resources/PowerShellCompilation/SemanticOracle/host-artifact-pins.json -Raw | ConvertFrom-Json
+          $pin = @($pins.pins | Where-Object profileId -eq 'PowerForge.Oracle.PowerShell/7.6')
+          if ($pin.Count -ne 1) { throw 'The compiler gate requires one pinned PowerShell 7.6 host.' }
+          $payload = Get-VerifiedCorpusPayload -Uri $pin[0].releaseAssetUri -Sha256 $pin[0].releaseAssetSha256 -CacheRoot (Join-Path $gateRoot 'payloads') -CacheExtension '.zip' -Label 'compiler semantic host'
+          $hostRoot = Join-Path $gateRoot 'host'
+          Expand-VerifiedCorpusArchive -PayloadPath $payload -Target $hostRoot -ContainmentRoot $gateRoot -Label 'compiler semantic host'
+
       - name: Qualify complete public modules and script workflow
         shell: pwsh
         timeout-minutes: 45
@@ -523,10 +631,8 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: powershell-compiler-gate-windows
+          name: powershell-compiler-gate-windows-whole-workflows
           path: |
-            ${{ runner.temp }}/powerforge-compiler-gate/evidence/*.trx
-            ${{ runner.temp }}/powerforge-compiler-gate/evidence/*.json
             ${{ runner.temp }}/powerforge-compiler-gate/evidence/whole-workflows/**
             ${{ runner.temp }}/powerforge-compiler-gate/evidence/**/*.xml
           if-no-files-found: ignore
@@ -541,7 +647,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: powershell-compiler-workspace-cleanup-windows
+          name: powershell-compiler-workspace-cleanup-windows-whole-workflows
           path: ${{ runner.temp }}/powerforge-compiler-gate-cleanup.json
           if-no-files-found: ignore
           retention-days: 7
@@ -605,10 +711,12 @@ jobs:
           --filter 'FullyQualifiedName~Run_SealedReleasePreservesSourceLoaderAndPackagesCurrentBootstrapper|FullyQualifiedName~Execute_preserves_source_loader_through_deferred_publication_and_registry_recovery|FullyQualifiedName~Run_DocumentationGate_PreservesSourceDevelopmentBootstrapper|FullyQualifiedName~ModulePipelineDevelopmentBootstrapperTests|FullyQualifiedName~ModulePipelineRefreshManifestOnlyTests|FullyQualifiedName~ModulePipelineDocumentationSyncTests'
 
       - name: Install social card renderer
+        if: needs.changes.outputs.web == 'true'
         shell: pwsh
         run: ./.github/scripts/Install-WebsiteSocialCardDependencies.ps1 -Enabled $true
 
       - name: Smoke test required Linux social cards
+        if: needs.changes.outputs.web == 'true'
         shell: pwsh
         run: >
           dotnet test ./PowerForge.Tests/PowerForge.Tests.csproj
@@ -639,13 +747,22 @@ jobs:
           -c Release --no-build --no-restore --nologo
           --filter 'FullyQualifiedName~ApprovedSigningPolicyTests|FullyQualifiedName~OpenAuthenticodeAdapterTests|FullyQualifiedName~ModuleSigningCertificateResolverTests|FullyQualifiedName~ModuleSigningEvidencePolicyTests|FullyQualifiedName~ArtefactBuilderDeliveryLayout|FullyQualifiedName~ModuleBuilderDependencyCopyTests|FullyQualifiedName~ModulePipelineInstallSigningTests|FullyQualifiedName~ModulePipelineDeliverySigningTests|FullyQualifiedName~Run_RejectsSharedOutputThatWouldOverwriteEarlierSigningEvidence|FullyQualifiedName~ApprovedModuleDependencyPruning|FullyQualifiedName~ModulePipelineApprovedModules|FullyQualifiedName~BinaryConflictDetectionServiceTests|FullyQualifiedName~ModulePipelineBinaryConflictOrderingTests|FullyQualifiedName~MissingFunctionsAnalyzerRuntimeModuleTests'
 
-      - name: Test cross-platform website and agent plugin contracts
+      - name: Test cross-platform agent plugin and release contracts
         shell: pwsh
         timeout-minutes: 10
         run: >
           dotnet test .\PowerForge.Tests\PowerForge.Tests.csproj
           -c Release --nologo
-          --filter 'FullyQualifiedName~WebSiteVerifierTocCoverageTests|FullyQualifiedName~WebSiteVerifierTests|FullyQualifiedName~WebPipelineRunnerCloudflareTests|FullyQualifiedName~WebApiDocsGenerator|FullyQualifiedName~WebApiMemberSearchTests|FullyQualifiedName~WebApiSourceRevisionTests|FullyQualifiedName~WebPipelineProjectSetTests|FullyQualifiedName~WebSiteApiSearchTests|FullyQualifiedName~AgentPluginPackageServiceTests|FullyQualifiedName~AgentPluginReleaseVersionBindingTests|FullyQualifiedName~RedirectedProcessOutputTests|FullyQualifiedName~ProcessOutputShutdownTests|FullyQualifiedName~ModulePipelinePackageBuild|FullyQualifiedName~AppleSimulatorSessionServiceTests|FullyQualifiedName~WebDotNetProcessLifetimeTests|FullyQualifiedName~DotNetBuildEnvironmentLifetimeTests|FullyQualifiedName~ProcessRunnerEnvironmentTests|FullyQualifiedName~DotNetReleaseBuildContractTests|FullyQualifiedName~DotnetPublisherTests|FullyQualifiedName~PowerForgePluginCatalogServiceTests|FullyQualifiedName~PowerForgeToolReleaseServiceTests|FullyQualifiedName~WebWebsiteRunnerTests|FullyQualifiedName~WebSocialCard|FullyQualifiedName~WebApiSocialCard|FullyQualifiedName~RecoveryFileReplacement|FullyQualifiedName~PublishedNuGetAssetRecoveryServiceTests|FullyQualifiedName~PublishedModuleAssetRecoveryServiceTests'
+          --filter 'FullyQualifiedName~AgentPluginPackageServiceTests|FullyQualifiedName~AgentPluginReleaseVersionBindingTests|FullyQualifiedName~RedirectedProcessOutputTests|FullyQualifiedName~ProcessOutputShutdownTests|FullyQualifiedName~ModulePipelinePackageBuild|FullyQualifiedName~AppleSimulatorSessionServiceTests|FullyQualifiedName~DotNetBuildEnvironmentLifetimeTests|FullyQualifiedName~ProcessRunnerEnvironmentTests|FullyQualifiedName~DotNetReleaseBuildContractTests|FullyQualifiedName~DotnetPublisherTests|FullyQualifiedName~PowerForgePluginCatalogServiceTests|FullyQualifiedName~PowerForgeToolReleaseServiceTests|FullyQualifiedName~RecoveryFileReplacement|FullyQualifiedName~PublishedNuGetAssetRecoveryServiceTests|FullyQualifiedName~PublishedModuleAssetRecoveryServiceTests'
+
+      - name: Test cross-platform website contracts
+        if: needs.changes.outputs.web == 'true'
+        shell: pwsh
+        timeout-minutes: 10
+        run: >
+          dotnet test .\PowerForge.Tests\PowerForge.Tests.csproj
+          -c Release --nologo
+          --filter 'FullyQualifiedName~WebPipelineRunnerParallelStepsTests|FullyQualifiedName~WebPipelineRunnerApiDocsBatchTests|FullyQualifiedName~WebSiteVerifierTocCoverageTests|FullyQualifiedName~WebSiteVerifierTests|FullyQualifiedName~WebPipelineRunnerCloudflareTests|FullyQualifiedName~WebApiDocsGenerator|FullyQualifiedName~WebApiMemberSearchTests|FullyQualifiedName~WebApiSourceRevisionTests|FullyQualifiedName~WebPipelineProjectSetTests|FullyQualifiedName~WebSiteApiSearchTests|FullyQualifiedName~WebDotNetProcessLifetimeTests|FullyQualifiedName~WebWebsiteRunnerTests|FullyQualifiedName~WebSocialCard|FullyQualifiedName~WebApiSocialCard'
 
       - name: Test Linux executable package and runtime closure
         shell: pwsh
@@ -786,7 +903,7 @@ jobs:
   CoverageGate:
     # There are no required branch contexts. Keep job names and use one fail-closed gate.
     name: CI coverage
-    needs: [changes, DependencyAudit, WindowsBuild, ProductBuildSmoke, LinuxBuild, MacOsBuild]
+    needs: [changes, DependencyAudit, WindowsBuild, ProductBuildSmoke, ProductCompilerGate, ProductWholeWorkflowGate, LinuxBuild, MacOsBuild]
     if: always()
     runs-on: ${{ fromJSON(github.event.repository.private && '["self-hosted","linux"]' || '["ubuntu-latest"]') }}
     timeout-minutes: 5
@@ -800,11 +917,15 @@ jobs:
           import json, os
           results = json.loads(os.environ['RESULTS'])
           selection = results.pop('changes')
-          if selection['result'] != 'success' or selection['outputs'].get('build') not in ('true', 'false'):
+          outputs = selection['outputs']
+          if selection['result'] != 'success' or any(outputs.get(key) not in ('true', 'false') for key in ('build', 'web', 'powershell')):
               raise SystemExit('Coverage selection failed or returned no decision.')
           for name, job in results.items():
-              required = selection['outputs']['build'] == 'true'
+              required = outputs['build'] == 'true'
               if name == 'MacOsBuild' and os.environ['EVENT'] == 'pull_request':
+                  required = False
+              # Website-only PRs skip PowerShell compiler and module qualification.
+              if name in ('ProductCompilerGate', 'ProductWholeWorkflowGate') and outputs['powershell'] != 'true':
                   required = False
               expected = 'success' if required else 'skipped'
               if job['result'] != expected:
