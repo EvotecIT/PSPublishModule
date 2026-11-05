@@ -92,6 +92,51 @@ public sealed partial class ArtefactBuilderCopyMappingTests
         }
     }
 
+    [Fact]
+    public void Build_RetainedScriptFinalizationIncludesSupportAndDependencies()
+    {
+        using var fixture = new Fixture();
+        string installed = WriteDependencyFixture(fixture.Root);
+        string resources = Directory.CreateDirectory(Path.Combine(fixture.Staging, "Resources")).FullName;
+        File.WriteAllText(Path.Combine(resources, "Support.ps1"), "'support'");
+        var segment = fixture.Segment(ArtefactType.Script);
+        segment.Configuration.DoNotClear = true;
+        segment.Configuration.RequiredModules.Enabled = true;
+        segment.Configuration.RequiredModules.Source = RequiredModulesSource.Installed;
+        string support = Path.Combine(fixture.Output, "Resources", "Support.ps1");
+        string dependency = Path.Combine(fixture.Output, "PreflightDependency", "PreflightDependency.psm1");
+        string? previous = Environment.GetEnvironmentVariable("PSModulePath");
+        bool finalized = false;
+        try
+        {
+            Environment.SetEnvironmentVariable("PSModulePath", installed + Path.PathSeparator + previous);
+
+            _ = new ArtefactBuilder(new NullLogger()).BuildWithFinalizer(segment, fixture.Root, fixture.Staging,
+                "Demo", "1.0.0", null, [new("PreflightDependency", requiredVersion: "1.0.0")], context =>
+                {
+                    finalized = true;
+                    Assert.Contains(context.EntryPointPath, context.FinalizationFilePaths!);
+                    Assert.Contains(support, context.FinalizationFilePaths!);
+                    Assert.Contains(dependency, context.FinalizationFilePaths!);
+                    foreach (string file in context.FinalizationFilePaths!)
+                        if (file.EndsWith(".ps1", StringComparison.OrdinalIgnoreCase) ||
+                            file.EndsWith(".psm1", StringComparison.OrdinalIgnoreCase))
+                            File.AppendAllText(file, "\n# finalized");
+                    return null;
+                });
+
+            Assert.True(finalized);
+            Assert.Equal("'support'\n# finalized", File.ReadAllText(support));
+            Assert.Equal("'dependency'\n# finalized", File.ReadAllText(dependency));
+            Assert.Equal("'support'", File.ReadAllText(Path.Combine(resources, "Support.ps1")));
+            Assert.Equal("'dependency'", File.ReadAllText(Path.Combine(installed, "PreflightDependency", "1.0.0", "PreflightDependency.psm1")));
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("PSModulePath", previous);
+        }
+    }
+
     private static string WriteDependencyFixture(string root)
     {
         string installed = Path.Combine(root, "installed");
