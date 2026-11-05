@@ -129,6 +129,10 @@ public sealed partial class ArtefactBuilder
         ValidateDeliveryLayout(segment.ArtefactType, cfg, root, stagingPath, moduleName,
             moduleVersion, preRelease, information, delivery, includeScriptFolders, finalizedPayloadFiles);
 
+        ValidateExtraCopyMappings(cfg, segment.ArtefactType, projectRoot, root,
+            stagingPath, moduleName, moduleVersion, preRelease, requiredModules,
+            information, delivery, includeScriptFolders, finalizedPayloadFiles);
+
         return segment.ArtefactType switch
         {
             ArtefactType.Unpacked => BuildUnpacked(cfg, root, projectRoot, stagingPath, moduleName, moduleVersion, preRelease, requiredModules, information, delivery, includeScriptFolders, finalizePackedArtefact, finalizedPayloadFiles),
@@ -404,7 +408,8 @@ public sealed partial class ArtefactBuilder
 
     private IReadOnlyList<RequiredModuleReference> FilterRequiredModulesForArtefact(
         IReadOnlyList<RequiredModuleReference>? requiredModules,
-        IReadOnlyList<string>? excludedModuleNames)
+        IReadOnlyList<string>? excludedModuleNames,
+        bool logExclusions = true)
     {
         var modules = (requiredModules ?? Array.Empty<RequiredModuleReference>())
             .Where(static module => module is not null && !string.IsNullOrWhiteSpace(module.ModuleName))
@@ -425,7 +430,8 @@ public sealed partial class ArtefactBuilder
         {
             if (excluded.Contains(module.ModuleName!))
             {
-                _logger.Info($"Skipping required module '{module.ModuleName}' for artefact because it is excluded.");
+                if (logExclusions)
+                    _logger.Info($"Skipping required module '{module.ModuleName}' for artefact because it is excluded.");
                 continue;
             }
 

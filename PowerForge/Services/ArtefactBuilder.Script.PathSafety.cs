@@ -61,7 +61,7 @@ public sealed partial class ArtefactBuilder
     {
         string scriptPath = Path.GetFullPath(Path.Combine(scriptRoot, scriptName));
         string? fileConflict = packageNamespace.Files.FirstOrDefault(destination =>
-            ScriptPathsOverlap(destination, scriptPath));
+            CopyPathsOverlap(destination, scriptPath));
         string? directoryConflict = packageNamespace.Directories.FirstOrDefault(destination =>
             IsSameOrBelowPath(destination, scriptPath));
         string? conflict = fileConflict ?? directoryConflict;
@@ -184,7 +184,7 @@ public sealed partial class ArtefactBuilder
                 "Keep the generated script root equal to or inside the artefact output root.");
         }
 
-        if (ScriptPathsOverlap(fullScriptRoot, fullProjectRoot) &&
+        if (CopyPathsOverlap(fullScriptRoot, fullProjectRoot) &&
             !IsSameOrBelowPath(fullScriptRoot, fullOutputRoot))
         {
             throw new InvalidOperationException(

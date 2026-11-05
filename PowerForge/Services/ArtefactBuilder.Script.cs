@@ -98,7 +98,6 @@ public sealed partial class ArtefactBuilder
             moduleName,
             moduleVersion,
             preRelease,
-            ArtefactType.Script,
             enforceRelativeDestination: false);
 
         if (cfg.DoNotClear != true)
@@ -244,7 +243,6 @@ public sealed partial class ArtefactBuilder
             moduleName,
             moduleVersion,
             preRelease,
-            ArtefactType.ScriptPacked,
             enforceRelativeDestination: true);
 
         Directory.CreateDirectory(outputRoot);

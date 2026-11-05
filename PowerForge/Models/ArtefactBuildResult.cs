@@ -139,11 +139,21 @@ public sealed class ArtefactCopyEntry
     /// <summary>Whether the copy was a directory copy.</summary>
     public bool IsDirectory { get; }
 
+    /// <summary>Whether this entry owns the directory contents for finalization, rather than only creating the directory.</summary>
+    internal bool IncludesDirectoryContents { get; }
+
     /// <summary>
     /// Creates a new entry.
     /// </summary>
     public ArtefactCopyEntry(string source, string destination, bool isDirectory)
+        : this(source, destination, isDirectory, includesDirectoryContents: isDirectory)
     {
+    }
+
+    /// <summary>Records whether a directory mapping copied its contents or only created its destination.</summary>
+    internal ArtefactCopyEntry(string source, string destination, bool isDirectory, bool includesDirectoryContents)
+    {
+        IncludesDirectoryContents = includesDirectoryContents;
         Source = source;
         Destination = destination;
         IsDirectory = isDirectory;

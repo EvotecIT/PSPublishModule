@@ -33,6 +33,9 @@ public sealed partial class ArtefactBuilder
                 continue;
             }
 
+            if (!entry.IncludesDirectoryContents)
+                continue;
+
             foreach (string file in Directory.EnumerateFiles(entry.Destination, "*", SearchOption.AllDirectories))
                 Add(file);
         }

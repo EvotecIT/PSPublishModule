@@ -1,0 +1,436 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+
+namespace PowerForge;
+
+public sealed partial class ArtefactBuilder
+{
+    // Resolve against the final output namespace before any builder clears existing output.
+    // Packed builders remap these relative destinations into their isolated staging directory.
+    private void ValidateExtraCopyMappings(
+        ArtefactConfiguration cfg, ArtefactType type, string projectRoot, string outputRoot,
+        string stagingPath, string moduleName, string moduleVersion, string? preRelease,
+        IReadOnlyList<RequiredModuleReference> requiredModules,
+        InformationConfiguration? information, DeliveryOptionsConfiguration? delivery,
+        bool includeScriptFolders, IReadOnlyList<string>? finalizedPayloadFiles)
+    {
+        if (cfg.DirectoryOutput is not { Length: > 0 } && cfg.FilesOutput is not { Length: > 0 })
+            return;
+
+        bool packed = type is ArtefactType.Packed or ArtefactType.ScriptPacked;
+        var sources = new List<(string Path, bool IsDirectory)>();
+        var treeDestinations = new List<string>();
+        var fileDestinations = new List<string>();
+        var allFiles = new List<string>();
+        var allDirectories = new List<string>();
+        var replacedDirectories = new List<string>();
+        var overwrittenFiles = new List<string>();
+
+        void Validate(ArtefactCopyMapping mapping, bool copyTree)
+        {
+            string source = ResolveInputPath(mapping.Source, projectRoot, moduleName, moduleVersion, preRelease);
+            string destination = ResolveOutputPath(mapping.Destination, outputRoot,
+                copyTree ? cfg.DestinationDirectoriesRelative == true : cfg.DestinationFilesRelative == true,
+                packed, moduleName, moduleVersion, preRelease);
+            bool directory = copyTree || Directory.Exists(source);
+            try
+            {
+                source = ValidateCopyMappingSource(source, directory, cfg.DoNotClear != true, outputRoot, type, copyTree);
+            }
+            catch (InvalidOperationException error)
+            {
+                string parameter = copyTree ? "CopyDirectories" : "CopyFiles";
+                throw new InvalidOperationException(
+                    $"{type} artefact {parameter} mapping '{mapping.Source}' -> '{mapping.Destination}': {error.Message}", error);
+            }
+            sources.Add((source, copyTree));
+            if (directory)
+                allDirectories.Add(destination);
+            else
+            {
+                fileDestinations.Add(destination);
+                allFiles.Add(destination);
+                allDirectories.Add(Path.GetDirectoryName(destination)!);
+            }
+
+            if (copyTree)
+            {
+                treeDestinations.Add(destination);
+                foreach (string path in Directory.EnumerateDirectories(source, "*", SearchOption.AllDirectories))
+                    allDirectories.Add(Path.Combine(destination, ComputeRelativePath(source, path)));
+                foreach (string path in Directory.EnumerateFiles(source, "*", SearchOption.AllDirectories))
+                    allFiles.Add(Path.Combine(destination, ComputeRelativePath(source, path)));
+            }
+
+            if (!packed)
+            {
+                // These existing guards also protect module artefacts from writing into sources or links.
+                if (copyTree)
+                    ValidateDirectoryCopyDestinationSafety(destination, outputRoot, outputRoot, projectRoot, stagingPath);
+                else
+                    ValidateFileCopyDestinationSafety(destination, outputRoot, outputRoot, projectRoot, stagingPath);
+            }
+        }
+
+        foreach (var mapping in cfg.DirectoryOutput ?? Array.Empty<ArtefactCopyMapping>())
+            if (mapping is not null)
+                Validate(mapping, copyTree: true);
+        foreach (var mapping in cfg.FilesOutput ?? Array.Empty<ArtefactCopyMapping>())
+            if (mapping is not null)
+                Validate(mapping, copyTree: false);
+
+        if (type is ArtefactType.Packed or ArtefactType.Unpacked)
+        {
+            string requiredRoot = ResolveRequiredModulesRootForUnpacked(cfg, outputRoot, projectRoot, moduleName, moduleVersion, preRelease);
+            string modulesRoot = ResolveModulesRootForUnpacked(cfg, outputRoot, requiredRoot, projectRoot, moduleName, moduleVersion, preRelease);
+            string moduleRoot = Path.Combine(modulesRoot, moduleName);
+            var moduleRoots = new List<string> { moduleRoot };
+            if (cfg.RequiredModules.Enabled == true)
+                moduleRoots.AddRange(FilterRequiredModulesForArtefact(requiredModules, cfg.RequiredModules.ExcludeModuleName, logExclusions: false)
+                    .Select(module => Path.Combine(requiredRoot, module.ModuleName.Trim())));
+            if (!packed)
+                replacedDirectories.AddRange(moduleRoots);
+            string[] deliveryFiles = ResolveDeliveryOutputPaths(cfg, stagingPath, outputRoot,
+                information, delivery, includeScriptFolders, finalizedPayloadFiles);
+            overwrittenFiles.AddRange(deliveryFiles);
+            var package = ResolveScriptPackageDestinationNamespace(stagingPath, moduleRoot,
+                information, delivery, includeScriptFolders, finalizedPayloadFiles);
+            allDirectories.AddRange(moduleRoots);
+            allDirectories.AddRange(package.Directories.Where(path => !treeDestinations.Any(destination => IsSameOrBelowPath(path, destination))));
+            allFiles.AddRange(package.Files.Where(path => !treeDestinations.Any(destination => IsSameOrBelowPath(path, destination))));
+            allFiles.AddRange(deliveryFiles);
+            foreach (string destination in treeDestinations)
+            {
+                string? moduleFile = package.Files.FirstOrDefault(path => IsSameOrBelowPath(destination, path));
+                if (moduleFile is not null)
+                    throw new InvalidOperationException(
+                        $"{type} artefact file copy destination '{moduleFile}' conflicts with directory copy destination '{destination}'. Choose a separate destination.");
+                if (moduleRoots.Any(root => IsSameOrBelowPath(root, destination)))
+                    throw new InvalidOperationException(
+                        $"{type} artefact directory copy destination '{destination}' would replace a bundled module directory. Choose a separate destination.");
+                string? deliveryConflict = deliveryFiles.FirstOrDefault(path => CopyPathsOverlap(path, destination));
+                if (deliveryConflict is not null)
+                    throw new InvalidOperationException(
+                        $"{type} artefact directory copy destination '{destination}' conflicts with promoted delivery file '{deliveryConflict}'. Choose a separate destination so the tree copy cannot erase delivery files.");
+            }
+        }
+
+        if (type == ArtefactType.Script)
+        {
+            string requiredRoot = ResolveRequiredModulesRootForUnpacked(cfg, outputRoot, projectRoot, moduleName, moduleVersion, preRelease);
+            string scriptRoot = ResolveModulesRootForUnpacked(cfg, outputRoot, requiredRoot, projectRoot, moduleName, moduleVersion, preRelease);
+            if (cfg.DoNotClear != true)
+                replacedDirectories.Add(scriptRoot);
+            if (cfg.RequiredModules.Enabled == true)
+                replacedDirectories.AddRange(FilterRequiredModulesForArtefact(requiredModules, cfg.RequiredModules.ExcludeModuleName, logExclusions: false)
+                    .Select(module => Path.Combine(requiredRoot, module.ModuleName.Trim())));
+            var package = ResolveScriptPackageDestinationNamespace(stagingPath, scriptRoot,
+                information, delivery, includeScriptFolders, finalizedPayloadFiles);
+            overwrittenFiles.AddRange(package.Files);
+            overwrittenFiles.Add(Path.Combine(scriptRoot, ResolveScriptName(cfg.ScriptName, moduleName, moduleVersion, preRelease)));
+            overwrittenFiles.AddRange(EnumerateUnsupportedScriptEvidencePaths(scriptRoot, moduleName));
+        }
+
+        allDirectories.AddRange(allFiles.Select(path => Path.GetDirectoryName(path)!));
+        ValidateDirectoryCopyDestinationsDoNotOverlap(treeDestinations);
+        ValidateFileCopyDestinationsDoNotConflict(allDirectories, fileDestinations);
+        ValidateCopyDestinationKinds(type, allFiles, allDirectories);
+        if (!packed)
+        {
+            replacedDirectories.AddRange(treeDestinations);
+            overwrittenFiles.AddRange(fileDestinations);
+            ValidateCopyMappingSourcesSurviveDestinations(sources, replacedDirectories, overwrittenFiles);
+            ValidateExistingCopyDestinationKinds(cfg, type, outputRoot, replacedDirectories, allFiles, allDirectories);
+        }
+    }
+
+    private static void ValidateExistingCopyDestinationKinds(
+        ArtefactConfiguration cfg, ArtefactType type, string outputRoot,
+        IReadOnlyList<string> replacedDirectories, IEnumerable<string> files, IEnumerable<string> directories)
+    {
+        bool RemovedBeforeCopy(string path) =>
+            (cfg.DoNotClear != true && IsSameOrBelowPath(path, outputRoot)) ||
+            replacedDirectories.Any(root => Directory.Exists(root) && IsSameOrBelowPath(path, root));
+
+        foreach (string file in files)
+            if (Directory.Exists(file) && !RemovedBeforeCopy(file))
+                throw new InvalidOperationException(
+                    $"{type} artefact file copy destination '{file}' already exists as a directory. Choose a destination of the correct kind.");
+        foreach (string directory in directories)
+        {
+            for (string? parent = Path.GetFullPath(directory); parent is not null; parent = Path.GetDirectoryName(parent))
+                if (File.Exists(parent) && !RemovedBeforeCopy(parent))
+                    throw new InvalidOperationException(
+                        $"{type} artefact required directory '{parent}' is an existing file. Choose a separate copy destination.");
+        }
+    }
+
+    private static void ValidateCopyDestinationKinds(
+        ArtefactType type, IEnumerable<string> files, IEnumerable<string> directories)
+    {
+        // A broad lookup narrows candidates; the filesystem-aware comparison remains authoritative.
+        var filesByPath = files.ToLookup(Path.GetFullPath, StringComparer.OrdinalIgnoreCase);
+        foreach (string directory in directories)
+        {
+            for (string? ancestor = Path.GetFullPath(directory); ancestor is not null; ancestor = Path.GetDirectoryName(ancestor))
+            {
+                foreach (string file in filesByPath[ancestor])
+                    if (IsSameOrBelowPath(directory, file))
+                        throw new InvalidOperationException(
+                            $"{type} artefact file copy destination '{file}' conflicts with directory copy destination '{directory}'. Change one of the destinations.");
+            }
+        }
+    }
+
+    private static void ValidateDirectoryCopyDestinationsDoNotOverlap(
+        IReadOnlyList<string> directoryDestinations)
+    {
+        for (int firstIndex = 0; firstIndex < directoryDestinations.Count; firstIndex++)
+        {
+            string first = directoryDestinations[firstIndex];
+            for (int secondIndex = firstIndex + 1; secondIndex < directoryDestinations.Count; secondIndex++)
+            {
+                string second = directoryDestinations[secondIndex];
+                if (!IsSameOrBelowPath(first, second) && !IsSameOrBelowPath(second, first))
+                    continue;
+
+                throw new InvalidOperationException(
+                    $"Artefact directory copy destinations '{Path.GetFullPath(first)}' and '{Path.GetFullPath(second)}' overlap. " +
+                    "Use separate destination trees so one mapping cannot erase another mapping's payload.");
+            }
+        }
+    }
+
+    private static void ValidateFileCopyDestinationsDoNotConflict(
+        IReadOnlyList<string> directoryDestinations,
+        IReadOnlyList<string> fileDestinations)
+    {
+        // Narrow candidates by path; confirm using the filesystem-aware comparison.
+        string Key(string path) => Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var filesByPath = fileDestinations.ToLookup(Key, StringComparer.OrdinalIgnoreCase);
+        foreach (string file in fileDestinations)
+        {
+            for (string? ancestor = Path.GetFullPath(file); ancestor is not null; ancestor = Path.GetDirectoryName(ancestor))
+            {
+                bool matchedSelf = false;
+                foreach (string candidate in filesByPath[Key(ancestor)])
+                {
+                    if (!IsSameOrBelowPath(file, candidate))
+                        continue;
+                    if (!matchedSelf && string.Equals(file, candidate, StringComparison.Ordinal))
+                    {
+                        matchedSelf = true;
+                        continue;
+                    }
+                    throw new InvalidOperationException(
+                        $"Artefact file copy destinations '{Path.GetFullPath(file)}' and '{Path.GetFullPath(candidate)}' overlap. " +
+                        "Use separate file paths so one mapping cannot block or overwrite another mapping.");
+                }
+            }
+        }
+
+        foreach (string directory in directoryDestinations)
+        {
+            for (string? ancestor = Path.GetFullPath(directory); ancestor is not null; ancestor = Path.GetDirectoryName(ancestor))
+            {
+                foreach (string file in filesByPath[Key(ancestor)])
+                    if (IsSameOrBelowPath(directory, file))
+                        throw new InvalidOperationException(
+                            $"Artefact file copy destination '{Path.GetFullPath(file)}' is equal to or contains directory copy destination '{Path.GetFullPath(directory)}'. " +
+                            "Use separate destination paths so a file mapping cannot collide with a directory mapping.");
+            }
+        }
+    }
+
+    private static bool CopyPathsOverlap(string first, string second) =>
+        IsSameOrBelowPath(first, second) || IsSameOrBelowPath(second, first);
+
+    private static string ValidateCopyMappingSource(
+        string source,
+        bool sourceIsDirectory,
+        bool clearsOutput,
+        string outputRoot,
+        ArtefactType artefactType,
+        bool copyContents)
+    {
+        bool exists = sourceIsDirectory ? Directory.Exists(source) : File.Exists(source);
+        if (!exists)
+        {
+            string kind = sourceIsDirectory ? "directory" : "file";
+            if (sourceIsDirectory && File.Exists(source))
+                throw new InvalidOperationException(
+                    $"{artefactType} artefact directory copy source '{source}' is a file. Use CopyFiles for individual files.");
+            throw new InvalidOperationException(
+                $"Artefact {kind} copy source '{source}' does not exist.");
+        }
+
+        if (sourceIsDirectory && copyContents)
+        {
+            ValidateDirectoryTreeContainsNoReparsePoints(
+                source,
+                $"Artefact directory copy source '{Path.GetFullPath(source)}'",
+                allowCloudPlaceholders: true);
+        }
+        else if ((File.GetAttributes(source) & FileAttributes.ReparsePoint) != 0 &&
+                 !WindowsCloudFiles.IsPlaceholder(source))
+        {
+            throw new InvalidOperationException(
+                $"Artefact file copy source '{Path.GetFullPath(source)}' must not be a symbolic link or reparse point.");
+        }
+
+        try
+        {
+            source = FileSystemPathSafety.ResolveParentDirectoryAliases(source, allowCloudPlaceholders: true);
+            outputRoot = FileSystemPathSafety.ResolveParentDirectoryAliases(outputRoot, allowCloudPlaceholders: true);
+        }
+        catch (InvalidDataException error)
+        {
+            throw new InvalidOperationException($"Artefact copy source '{source}' cannot be validated: {error.Message}", error);
+        }
+        if (!clearsOutput || !WouldOutputClearRemoveSource(source, sourceIsDirectory, outputRoot, artefactType, copyContents))
+            return source;
+
+        throw new InvalidOperationException(
+            $"Artefact copy source '{source}' would be removed while clearing output root '{Path.GetFullPath(outputRoot)}'. " +
+            "Keep copy sources outside the artefact output root or enable DoNotClear.");
+    }
+
+    private static bool WouldOutputClearRemoveSource(
+        string source,
+        bool sourceIsDirectory,
+        string outputRoot,
+        ArtefactType artefactType,
+        bool copyContents)
+    {
+        if (!IsSameOrBelowPath(source, outputRoot))
+            return false;
+
+        if (artefactType is ArtefactType.Script or ArtefactType.Unpacked)
+            return true;
+
+        if (artefactType is not (ArtefactType.ScriptPacked or ArtefactType.Packed))
+            return false;
+
+        string fullSource = Path.GetFullPath(source);
+        string fullOutputRoot = Path.GetFullPath(outputRoot);
+        if (IsSameOrBelowPath(fullOutputRoot, fullSource))
+            return !sourceIsDirectory || copyContents;
+        if (sourceIsDirectory)
+            return false;
+
+        string? parent = Path.GetDirectoryName(fullSource);
+        return parent is not null &&
+               string.Equals(parent, fullOutputRoot, GetPathComparison(parent, fullOutputRoot)) &&
+               !WildcardMatch(Path.GetFileName(fullSource), "*.zip");
+    }
+
+    private static void ValidateCopyMappingSourcesSurviveDestinations(
+        IReadOnlyList<(string Path, bool IsDirectory)> sources,
+        IReadOnlyList<string> directoryDestinations,
+        IReadOnlyList<string> fileDestinations)
+    {
+        foreach (string mappedDestination in directoryDestinations)
+        {
+            string destination = FileSystemPathSafety.ResolveParentDirectoryAliases(mappedDestination, allowCloudPlaceholders: true);
+            foreach ((string source, bool sourceIsDirectory) in sources)
+            {
+                bool overlaps = IsSameOrBelowPath(source, destination) ||
+                                (sourceIsDirectory && IsSameOrBelowPath(destination, source));
+                if (!overlaps)
+                    continue;
+
+                throw new InvalidOperationException(
+                    $"Artefact directory copy destination '{Path.GetFullPath(destination)}' overlaps configured copy source '{Path.GetFullPath(source)}'. " +
+                    "Use separate source and destination trees.");
+            }
+        }
+
+        foreach (string mappedDestination in fileDestinations)
+        {
+            string destination = FileSystemPathSafety.ResolveParentDirectoryAliases(mappedDestination, allowCloudPlaceholders: true);
+            foreach ((string source, bool sourceIsDirectory) in sources)
+            {
+                bool overlaps = sourceIsDirectory
+                    ? CopyPathsOverlap(source, destination)
+                    : string.Equals(Path.GetFullPath(source), Path.GetFullPath(destination), GetPathComparison(source, destination));
+                if (!overlaps)
+                {
+                    continue;
+                }
+
+                throw new InvalidOperationException(
+                    $"Artefact file copy destination '{Path.GetFullPath(destination)}' overlaps configured copy source '{Path.GetFullPath(source)}'. " +
+                    "Use separate source and destination paths.");
+            }
+        }
+    }
+
+    private static void ValidateDirectoryCopyDestinationSafety(
+        string destination,
+        string trustedDestinationRoot,
+        string outputRoot,
+        string projectRoot,
+        string stagingPath)
+    {
+        string fullDestination = Path.GetFullPath(destination);
+        string fullProjectRoot = Path.GetFullPath(projectRoot);
+        ValidateScriptDestinationDoesNotTraverseReparsePoint(
+            fullDestination,
+            IsSameOrBelowPath(fullDestination, trustedDestinationRoot)
+                ? trustedDestinationRoot
+                : ResolveTrustedSystemTemporaryBoundary(fullDestination),
+            "directory copy destination");
+        if (IsSameOrBelowPath(fullProjectRoot, fullDestination))
+        {
+            throw new InvalidOperationException(
+                $"Artefact directory copy destination '{fullDestination}' contains project root '{fullProjectRoot}' and would erase project sources.");
+        }
+        if (IsSameOrBelowPath(fullDestination, fullProjectRoot) &&
+            !IsSameOrBelowPath(fullDestination, outputRoot))
+        {
+            throw new InvalidOperationException(
+                $"Artefact directory copy destination '{fullDestination}' is inside project root '{fullProjectRoot}' and would erase or modify project sources.");
+        }
+
+        string fullStagingPath = Path.GetFullPath(stagingPath);
+        if (!CopyPathsOverlap(fullDestination, fullStagingPath))
+            return;
+
+        throw new InvalidOperationException(
+            $"Artefact directory copy destination '{fullDestination}' overlaps staging source '{fullStagingPath}' and would erase or modify build inputs.");
+    }
+
+    private static void ValidateFileCopyDestinationSafety(
+        string destination,
+        string trustedDestinationRoot,
+        string outputRoot,
+        string projectRoot,
+        string stagingPath)
+    {
+        string fullDestination = Path.GetFullPath(destination);
+        string fullProjectRoot = Path.GetFullPath(projectRoot);
+        ValidateScriptDestinationDoesNotTraverseReparsePoint(
+            fullDestination,
+            IsSameOrBelowPath(fullDestination, trustedDestinationRoot)
+                ? trustedDestinationRoot
+                : ResolveTrustedSystemTemporaryBoundary(fullDestination),
+            "file copy destination");
+        if (IsSameOrBelowPath(fullDestination, fullProjectRoot) &&
+            !IsSameOrBelowPath(fullDestination, outputRoot))
+        {
+            throw new InvalidOperationException(
+                $"Artefact file copy destination '{fullDestination}' is inside project root '{fullProjectRoot}' and would overwrite project content.");
+        }
+
+        string fullStagingPath = Path.GetFullPath(stagingPath);
+        if (!CopyPathsOverlap(fullDestination, fullStagingPath))
+            return;
+
+        throw new InvalidOperationException(
+            $"Artefact file copy destination '{fullDestination}' overlaps staging source '{fullStagingPath}'. " +
+            "Keep staging and artefact destination paths separate.");
+    }
+
+}
