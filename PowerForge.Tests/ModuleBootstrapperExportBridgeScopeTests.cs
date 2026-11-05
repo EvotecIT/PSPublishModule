@@ -13,9 +13,14 @@ public sealed class ModuleBootstrapperExportBridgeScopeTests
         try
         {
             string bridge = BuildExportBridge();
-            string bridgePayload =
-                "$PowerForgeTestInnerModule = Import-Module -Name Microsoft.PowerShell.Management " +
-                "-PassThru -Force -ErrorAction Stop" + Environment.NewLine + bridge;
+            string bridgePayload = """
+$PowerForgeTestInnerModule = New-Module -Name BridgeCollisionFixture -ScriptBlock {
+    Import-Module Microsoft.PowerShell.Management
+    Set-Alias Values Get-Item
+    Set-Alias BridgeItem Get-ChildItem
+    Export-ModuleMember -Cmdlet Get-Item -Alias Values,BridgeItem
+}
+""" + Environment.NewLine + bridge;
             const string exportedCommand = "Get-Item";
 
             string wrapperPath = Path.Combine(root.FullName, "WrapperModule.psm1");
@@ -24,7 +29,7 @@ public sealed class ModuleBootstrapperExportBridgeScopeTests
             File.WriteAllText(
                 wrapperManifestPath,
                 "@{ RootModule = 'WrapperModule.psm1'; ModuleVersion = '1.0.0'; " +
-                "CmdletsToExport = @('*'); FunctionsToExport = @(); AliasesToExport = @() }");
+                "CmdletsToExport = @('*'); FunctionsToExport = @(); AliasesToExport = @('Values', 'BridgeItem') }");
 
             string standalonePath = Path.Combine(root.FullName, "Standalone.ps1");
             File.WriteAllText(standalonePath, bridgePayload);
@@ -37,8 +42,8 @@ public sealed class ModuleBootstrapperExportBridgeScopeTests
 
             foreach (string executable in ResolvePowerShellExecutables())
             {
-                Assert.True(IsCmdletExported(executable, wrapperPath, "WrapperModule", exportedCommand));
-                Assert.True(IsCmdletExported(executable, wrapperManifestPath, "WrapperModule", exportedCommand));
+                Assert.True(IsCmdletExported(executable, wrapperPath, "WrapperModule", exportedCommand, requireAliases: true));
+                Assert.True(IsCmdletExported(executable, wrapperManifestPath, "WrapperModule", exportedCommand, requireAliases: true));
                 Assert.False(IsCmdletExported(executable, callerPath, "CallerModule", exportedCommand));
             }
         }
@@ -73,7 +78,8 @@ public sealed class ModuleBootstrapperExportBridgeScopeTests
         string executable,
         string modulePath,
         string moduleName,
-        string commandName)
+        string commandName,
+        bool requireAliases = false)
     {
         var processStartInfo = new System.Diagnostics.ProcessStartInfo
         {
@@ -91,8 +97,13 @@ public sealed class ModuleBootstrapperExportBridgeScopeTests
         processStartInfo.ArgumentList.Add("-Command");
         processStartInfo.ArgumentList.Add(
             "Import-Module -Name '" + EscapePowerShellLiteral(modulePath) +
-            "' -Force -ErrorAction Stop; (Get-Module -Name '" + EscapePowerShellLiteral(moduleName) +
-            "').ExportedCmdlets.ContainsKey('" + EscapePowerShellLiteral(commandName) + "')");
+            "' -Force -ErrorAction Stop; $module = Get-Module -Name '" + EscapePowerShellLiteral(moduleName) +
+            "'; $module.ExportedCmdlets.ContainsKey('" + EscapePowerShellLiteral(commandName) + "')" +
+            (requireAliases
+                ? " -and $module.ExportedAliases.ContainsKey('Values') -and $module.ExportedAliases.ContainsKey('BridgeItem') -and " +
+                  "$module.ExportedAliases['Values'].Definition -eq 'Get-Item' -and " +
+                  "$module.ExportedAliases['BridgeItem'].Definition -eq 'Get-ChildItem'"
+                : string.Empty));
 
         using var process = System.Diagnostics.Process.Start(processStartInfo)!;
         string standardOutput = process.StandardOutput.ReadToEnd();
