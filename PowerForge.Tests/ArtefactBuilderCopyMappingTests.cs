@@ -363,6 +363,39 @@ public sealed class ArtefactBuilderCopyMappingTests
         fixture.AssertPreserved();
     }
 
+    [Theory]
+    [InlineData(ArtefactType.Unpacked, false)]
+    [InlineData(ArtefactType.Unpacked, true)]
+    [InlineData(ArtefactType.Packed, false)]
+    public void Build_RecursiveMappingCannotErasePromotedDeliveryFiles(ArtefactType type, bool existingBlocker)
+    {
+        using var fixture = new Fixture();
+        string source = Directory.CreateDirectory(Path.Combine(fixture.Root, "GPO", "child")).Parent!.FullName;
+        string deliveryFiles = Directory.CreateDirectory(Path.Combine(fixture.Staging, "Files")).FullName;
+        File.WriteAllText(Path.Combine(deliveryFiles, "Run.ps1"), "'launcher'");
+        string backup = Directory.CreateDirectory(Path.Combine(fixture.Output, "backup")).FullName;
+        if (existingBlocker)
+            File.WriteAllText(Path.Combine(backup, "child"), "preserve-blocker");
+        string previousModule = Directory.CreateDirectory(Path.Combine(fixture.Output, "Modules", "Demo")).FullName;
+        string marker = Path.Combine(previousModule, "previous.txt");
+        File.WriteAllText(marker, "preserve-module");
+        var segment = fixture.Segment(type);
+        segment.Configuration.Layout = ArtefactLayout.Delivery;
+        segment.Configuration.DoNotClear = true;
+        segment.Configuration.DeliveryPath = "backup/child";
+        segment.Configuration.DirectoryOutput = [new() { Source = source, Destination = "backup" }];
+
+        var error = Assert.Throws<InvalidOperationException>(() => new ArtefactBuilder(new NullLogger()).Build(
+            segment, fixture.Root, fixture.Staging, "Demo", "1.0.0", null, [],
+            delivery: new DeliveryOptionsConfiguration { Enable = true, InternalsPath = "Files" }));
+
+        Assert.Contains("promoted delivery file", error.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal("preserve-module", File.ReadAllText(marker));
+        if (existingBlocker)
+            Assert.Equal("preserve-blocker", File.ReadAllText(Path.Combine(backup, "child")));
+        fixture.AssertPreserved();
+    }
+
     private sealed class Fixture : IDisposable
     {
         internal string Root { get; } = Directory.CreateDirectory(

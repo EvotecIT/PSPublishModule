@@ -268,7 +268,8 @@ Directory and file entries can appear in either order.
 
 Copy sources and conflicting destination kinds are checked before artefact output is cleared.
 Missing inputs, a file supplied to `CopyDirectories`, and destinations that require the same
-path to be both a file and a directory fail with a configuration error. Keep copy sources
+path to be both a file and a directory fail with a configuration error. Recursive folder mappings
+cannot replace bundled module folders or erase promoted delivery files. Keep copy sources
 outside output that the build clears, or use `DoNotClear` when retaining that output is intended.
 
 ## Publishing to private repositories

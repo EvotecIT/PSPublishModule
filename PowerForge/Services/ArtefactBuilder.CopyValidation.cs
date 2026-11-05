@@ -92,20 +92,25 @@ public sealed partial class ArtefactBuilder
                     .Select(module => Path.Combine(requiredRoot, module.ModuleName.Trim())));
             if (!packed)
                 replacedDirectories.AddRange(moduleRoots);
-            overwrittenFiles.AddRange(ResolveDeliveryOutputPaths(cfg, stagingPath, outputRoot,
-                information, delivery, includeScriptFolders, finalizedPayloadFiles));
+            string[] deliveryFiles = ResolveDeliveryOutputPaths(cfg, stagingPath, outputRoot,
+                information, delivery, includeScriptFolders, finalizedPayloadFiles);
+            overwrittenFiles.AddRange(deliveryFiles);
             var package = ResolveScriptPackageDestinationNamespace(stagingPath, moduleRoot,
                 information, delivery, includeScriptFolders, finalizedPayloadFiles);
             allDirectories.AddRange(moduleRoots);
             allDirectories.AddRange(package.Directories.Where(path => !treeDestinations.Any(destination => IsSameOrBelowPath(path, destination))));
             allFiles.AddRange(package.Files.Where(path => !treeDestinations.Any(destination => IsSameOrBelowPath(path, destination))));
-            allFiles.AddRange(ResolveDeliveryOutputPaths(cfg, stagingPath, outputRoot,
-                information, delivery, includeScriptFolders, finalizedPayloadFiles)
-                .Where(path => !treeDestinations.Any(destination => IsSameOrBelowPath(path, destination))));
+            allFiles.AddRange(deliveryFiles);
             foreach (string destination in treeDestinations)
+            {
                 if (moduleRoots.Any(root => IsSameOrBelowPath(root, destination)))
                     throw new InvalidOperationException(
                         $"{type} artefact directory copy destination '{destination}' would replace a bundled module directory. Choose a separate destination.");
+                string? deliveryConflict = deliveryFiles.FirstOrDefault(path => CopyPathsOverlap(path, destination));
+                if (deliveryConflict is not null)
+                    throw new InvalidOperationException(
+                        $"{type} artefact directory copy destination '{destination}' conflicts with promoted delivery file '{deliveryConflict}'. Choose a separate destination so the tree copy cannot erase delivery files.");
+            }
         }
 
         if (type == ArtefactType.Script)
