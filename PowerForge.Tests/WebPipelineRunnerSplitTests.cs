@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Formats.Tar;
 using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
@@ -102,6 +103,51 @@ public class WebPipelineRunnerSplitTests
     }
 
     [Fact]
+    public void SplitFinish_RejectsAlteredPayloadAndForeignEngineBeforeChangingTheSite()
+    {
+        var root = CreateRoot();
+        var previousEngine = Environment.GetEnvironmentVariable("POWERFORGE_ENGINE_IDENTITY");
+        try
+        {
+            var main = CreateSite(root, "main");
+            var helper = CreateSite(root, "helper");
+            var archives = Path.Combine(root, "archives");
+            AssertSucceeded(WebPipelineRunner.RunPipeline(Path.Combine(main, "pipeline.json"), new WebConsoleLogger(),
+                split: Prepare(1, 2, Path.Combine(archives, "main", "shard.tar"))));
+            var helperArchive = Path.Combine(archives, "helper", "shard.tar");
+            AssertSucceeded(WebPipelineRunner.RunPipeline(Path.Combine(helper, "pipeline.json"), new WebConsoleLogger(),
+                split: Prepare(2, 2, helperArchive)));
+            var before = ReadTree(main);
+
+            // One payload byte differs from the hash its manifest records.
+            var original = File.ReadAllBytes(helperArchive);
+            RewriteFirstPayload(helperArchive);
+            var tampered = Assert.Throws<InvalidOperationException>(() =>
+                WebPipelineRunner.RunPipeline(Path.Combine(main, "pipeline.json"), new WebConsoleLogger(),
+                    split: WebPipelineSplitOptions.Parse("finish", null, null, archives)));
+            Assert.Contains("different content", tampered.Message, StringComparison.Ordinal);
+            Assert.Equal(before, ReadTree(main));
+
+            // A shard built by another engine cannot be mixed in.
+            File.WriteAllBytes(helperArchive, original);
+            Environment.SetEnvironmentVariable("POWERFORGE_ENGINE_IDENTITY", "source:other/engine@0000000000000000000000000000000000000000");
+            AssertSucceeded(WebPipelineRunner.RunPipeline(Path.Combine(helper, "pipeline.json"), new WebConsoleLogger(),
+                split: Prepare(2, 2, helperArchive)));
+            Environment.SetEnvironmentVariable("POWERFORGE_ENGINE_IDENTITY", previousEngine);
+            var foreign = Assert.Throws<InvalidOperationException>(() =>
+                WebPipelineRunner.RunPipeline(Path.Combine(main, "pipeline.json"), new WebConsoleLogger(),
+                    split: WebPipelineSplitOptions.Parse("finish", null, null, archives)));
+            Assert.Contains("other/engine", foreign.Message, StringComparison.Ordinal);
+            Assert.Equal(before, ReadTree(main));
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("POWERFORGE_ENGINE_IDENTITY", previousEngine);
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void SplitRun_RejectsStepsBetweenApiDocsSteps()
     {
         var root = CreateRoot();
@@ -162,6 +208,25 @@ public class WebPipelineRunnerSplitTests
 
     private static void AssertSucceeded(PowerForge.Web.WebPipelineResult result)
         => Assert.True(result.Success, string.Join(Environment.NewLine, result.Steps.ConvertAll(step => $"{step.Task}: {step.Message}")));
+
+    private static void RewriteFirstPayload(string archive)
+    {
+        var entries = new List<(string Name, byte[] Data)>();
+        using (var reader = new TarReader(File.OpenRead(archive)))
+        {
+            while (reader.GetNextEntry() is { } entry)
+            {
+                using var buffer = new MemoryStream();
+                entry.DataStream?.CopyTo(buffer);
+                entries.Add((entry.Name, buffer.ToArray()));
+            }
+        }
+        var payload = entries.FindIndex(static entry => entry.Name.StartsWith("files/", StringComparison.Ordinal) && entry.Data.Length > 0);
+        entries[payload].Data[0] ^= 0x20;
+        using var writer = new TarWriter(File.Create(archive), TarEntryFormat.Pax, leaveOpen: false);
+        foreach (var (name, data) in entries)
+            writer.WriteEntry(new PaxTarEntry(TarEntryType.RegularFile, name) { DataStream = new MemoryStream(data) });
+    }
 
     private static string CreateRoot()
     {

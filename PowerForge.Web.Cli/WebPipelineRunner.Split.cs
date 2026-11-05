@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Formats.Tar;
 using System.IO;
 using System.Linq;
@@ -119,6 +120,8 @@ internal static partial class WebPipelineRunner
         public string[] Units { get; init; } = Array.Empty<string>();
         public Dictionary<string, string> Files { get; init; } = new(StringComparer.Ordinal);
         public string[] Deleted { get; init; } = Array.Empty<string>();
+        public string Source { get; init; } = string.Empty;
+        public string Engine { get; init; } = string.Empty;
     }
 
     /// <summary>The contiguous apidocs block that a split run distributes.</summary>
@@ -157,6 +160,11 @@ internal static partial class WebPipelineRunner
             var stepFootprints = TryGetApiDocsFootprints(state.BaseDir, definition.Element, definition.Index);
             if (stepFootprints is null)
                 throw new InvalidOperationException($"Split pipeline runs cannot distribute apidocs step '{definition.Id}': its output is not declared or it executes PowerShell examples.");
+            // Shard archives carry only files under the pipeline root.
+            var root = ResolvePhysicalPath(state.BaseDir);
+            var outside = stepFootprints.SelectMany(static footprint => footprint.Outputs).FirstOrDefault(output => !IsUnder(output, root));
+            if (outside is not null)
+                throw new InvalidOperationException($"Split pipeline runs cannot distribute apidocs step '{definition.Id}': output '{outside}' is outside the pipeline root.");
 
             var inputs = GetArrayOfObjects(definition.Element, "inputs") ?? GetArrayOfObjects(definition.Element, "entries");
             if (inputs is { Length: > 1 } && AreIndependentApiDocsInputs(state.BaseDir, definition.Element))
@@ -251,8 +259,12 @@ internal static partial class WebPipelineRunner
         foreach (var path in paths)
         {
             var resolved = ResolvePath(baseDir, path);
-            if (!string.IsNullOrWhiteSpace(resolved) && File.Exists(resolved))
+            if (string.IsNullOrWhiteSpace(resolved))
+                continue;
+            if (File.Exists(resolved))
                 weight += new FileInfo(resolved).Length;
+            else if (Directory.Exists(resolved))
+                weight += new DirectoryInfo(resolved).EnumerateFiles("*", SearchOption.AllDirectories).Sum(static file => file.Length);
         }
         return Math.Max(1, weight);
     }
@@ -323,13 +335,16 @@ internal static partial class WebPipelineRunner
             return snapshot;
 
         var options = new EnumerationOptions { RecurseSubdirectories = true, IgnoreInaccessible = false, AttributesToSkip = 0 };
-        foreach (var file in new DirectoryInfo(fullRoot).EnumerateFiles("*", options))
+        var rootDirectory = new DirectoryInfo(fullRoot);
+        var files = rootDirectory.EnumerateFiles("*", new EnumerationOptions { IgnoreInaccessible = false, AttributesToSkip = 0 })
+            .Concat(rootDirectory.EnumerateDirectories("*", new EnumerationOptions { IgnoreInaccessible = false, AttributesToSkip = 0 })
+                .Where(static directory => !directory.Name.Equals(".git", StringComparison.Ordinal))
+                .SelectMany(directory => directory.EnumerateFiles("*", options)));
+        foreach (var file in files)
         {
             if (excluded.Contains(file.FullName))
                 continue;
             var relative = Path.GetRelativePath(fullRoot, file.FullName).Replace('\\', '/');
-            if (relative.Equals(".git", StringComparison.Ordinal) || relative.StartsWith(".git/", StringComparison.Ordinal))
-                continue;
             snapshot[relative] = (file.Length, file.LastWriteTimeUtc.Ticks);
         }
         return snapshot;
@@ -367,7 +382,9 @@ internal static partial class WebPipelineRunner
                 ShardCount = split.ShardCount,
                 Units = units,
                 Files = hashes,
-                Deleted = deleted
+                Deleted = deleted,
+                Source = ResolveSplitSourceIdentity(state.BaseDir),
+                Engine = ResolveSplitEngineIdentity()
             });
             var manifestEntry = new PaxTarEntry(TarEntryType.RegularFile, SplitManifestEntryName)
             {
@@ -405,6 +422,15 @@ internal static partial class WebPipelineRunner
         if (!shardIndexes.SequenceEqual(Enumerable.Range(1, shardCount)))
             throw new InvalidOperationException($"Expected one split archive for each shard 1..{shardCount}; found shard(s) {string.Join(", ", shardIndexes)}.");
 
+        // Archives from another commit or engine could carry stale documentation with the same unit keys.
+        var source = ResolveSplitSourceIdentity(state.BaseDir);
+        var engine = ResolveSplitEngineIdentity();
+        var foreign = archives.FirstOrDefault(archive => !archive.Manifest.Source.Equals(source, StringComparison.Ordinal) ||
+                                                         !archive.Manifest.Engine.Equals(engine, StringComparison.Ordinal));
+        if (foreign.Path is not null)
+            throw new InvalidOperationException(
+                $"Split archive {foreign.Path} was built from source '{foreign.Manifest.Source}' with engine '{foreign.Manifest.Engine}', but this run uses source '{source}' with engine '{engine}'.");
+
         var plan = EnsureSplitPlan(state);
         var expected = plan.Units.Select(static unit => unit.Key).ToHashSet(StringComparer.Ordinal);
         var seen = new HashSet<string>(StringComparer.Ordinal);
@@ -434,7 +460,13 @@ internal static partial class WebPipelineRunner
         if (both is not null)
             throw new InvalidOperationException($"One shard deleted '{both}' while another produced it.");
 
+        // Check every entry, payload hash and target first, so a bad archive leaves the site untouched.
         var root = Path.GetFullPath(state.BaseDir);
+        foreach (var (archivePath, manifest) in archives)
+            VerifySplitArchive(archivePath, manifest, root);
+        foreach (var path in deleted)
+            ResolveSplitTarget(root, path);
+
         var written = 0;
         foreach (var (archivePath, manifest) in archives)
             written += ExtractSplitArchive(archivePath, manifest, root);
@@ -448,9 +480,9 @@ internal static partial class WebPipelineRunner
         state.Logger?.Info($"Split pipeline: merged {archives.Length} shard archive(s): {files.Count} file(s), {written} written, {deleted.Count} deletion(s).");
     }
 
-    private static int ExtractSplitArchive(string archivePath, SplitManifest manifest, string root)
+    private static void VerifySplitArchive(string archivePath, SplitManifest manifest, string root)
     {
-        var written = 0;
+        var seen = new HashSet<string>(StringComparer.Ordinal);
         using var stream = File.OpenRead(archivePath);
         using var reader = new TarReader(stream);
         while (reader.GetNextEntry() is { } entry)
@@ -462,8 +494,32 @@ internal static partial class WebPipelineRunner
                 throw new InvalidOperationException($"Split archive {archivePath} contains unexpected entry '{entry.Name}'.");
 
             var relative = entry.Name.Substring(SplitFileEntryPrefix.Length);
-            if (!manifest.Files.TryGetValue(relative, out var hash))
-                throw new InvalidOperationException($"Split archive {archivePath} contains '{relative}' outside its manifest.");
+            if (!manifest.Files.TryGetValue(relative, out var hash) || !seen.Add(relative))
+                throw new InvalidOperationException($"Split archive {archivePath} contains '{relative}' outside its manifest or more than once.");
+            ResolveSplitTarget(root, relative);
+            var actual = entry.DataStream is null
+                ? Convert.ToHexString(SHA256.HashData(Array.Empty<byte>())).ToLowerInvariant()
+                : Convert.ToHexString(SHA256.HashData(entry.DataStream)).ToLowerInvariant();
+            if (!actual.Equals(hash, StringComparison.Ordinal))
+                throw new InvalidOperationException($"Split archive {archivePath} has different content for '{relative}' than its manifest records.");
+        }
+
+        var missing = manifest.Files.Keys.FirstOrDefault(path => !seen.Contains(path));
+        if (missing is not null)
+            throw new InvalidOperationException($"Split archive {archivePath} does not contain '{missing}' listed in its manifest.");
+    }
+
+    private static int ExtractSplitArchive(string archivePath, SplitManifest manifest, string root)
+    {
+        var written = 0;
+        using var stream = File.OpenRead(archivePath);
+        using var reader = new TarReader(stream);
+        while (reader.GetNextEntry() is { } entry)
+        {
+            if (entry.Name.Equals(SplitManifestEntryName, StringComparison.Ordinal))
+                continue;
+            var relative = entry.Name.Substring(SplitFileEntryPrefix.Length);
+            var hash = manifest.Files[relative];
             var target = ResolveSplitTarget(root, relative);
             // A file already in place (this machine's own shard, or a shared file) is left untouched.
             if (File.Exists(target) && ComputeFileSha256(target).Equals(hash, StringComparison.Ordinal))
@@ -486,7 +542,46 @@ internal static partial class WebPipelineRunner
         var target = Path.GetFullPath(Path.Combine(root, relative));
         if (!target.StartsWith(root.TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar, StringComparison.Ordinal))
             throw new InvalidOperationException($"Split archive path '{relative}' resolves outside the pipeline root.");
+        // Linked folders inside the root must not redirect writes or deletions elsewhere.
+        if (!IsUnder(ResolvePhysicalPath(target), ResolvePhysicalPath(root)))
+            throw new InvalidOperationException($"Split archive path '{relative}' resolves through a link outside the pipeline root.");
         return target;
+    }
+
+    /// <summary>The commit checked out at the pipeline root, or empty outside a Git work tree.</summary>
+    private static string ResolveSplitSourceIdentity(string baseDir)
+    {
+        try
+        {
+            var startInfo = new ProcessStartInfo("git")
+            {
+                WorkingDirectory = baseDir,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+            foreach (var argument in new[] { "rev-parse", "--verify", "HEAD" })
+                startInfo.ArgumentList.Add(argument);
+            using var process = Process.Start(startInfo);
+            if (process is null)
+                return string.Empty;
+            var output = process.StandardOutput.ReadToEnd().Trim();
+            process.StandardError.ReadToEnd();
+            process.WaitForExit();
+            return process.ExitCode == 0 ? output.ToLowerInvariant() : string.Empty;
+        }
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException or IOException)
+        {
+            return string.Empty;
+        }
+    }
+
+    /// <summary>The engine website-runner selected, or this engine's own build identity when run directly.</summary>
+    private static string ResolveSplitEngineIdentity()
+    {
+        var identity = Environment.GetEnvironmentVariable("POWERFORGE_ENGINE_IDENTITY");
+        return string.IsNullOrWhiteSpace(identity) ? PipelineToolFingerprint : identity.Trim();
     }
 
     private static string ComputeFileSha256(string path)
@@ -504,6 +599,8 @@ internal static partial class WebPipelineRunner
             writer.WriteNumber("version", 1);
             writer.WriteNumber("shardIndex", manifest.ShardIndex);
             writer.WriteNumber("shardCount", manifest.ShardCount);
+            writer.WriteString("source", manifest.Source);
+            writer.WriteString("engine", manifest.Engine);
             writer.WriteStartArray("units");
             foreach (var unit in manifest.Units)
                 writer.WriteStringValue(unit);
@@ -543,7 +640,9 @@ internal static partial class WebPipelineRunner
             ShardCount = GetInt(root, "shardCount") ?? 0,
             Units = GetArrayOfStrings(root, "units") ?? Array.Empty<string>(),
             Files = files,
-            Deleted = GetArrayOfStrings(root, "deleted") ?? Array.Empty<string>()
+            Deleted = GetArrayOfStrings(root, "deleted") ?? Array.Empty<string>(),
+            Source = GetString(root, "source") ?? string.Empty,
+            Engine = GetString(root, "engine") ?? string.Empty
         };
     }
 

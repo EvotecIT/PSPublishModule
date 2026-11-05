@@ -165,7 +165,7 @@ on:
         type: string
         default: ""
       apidocs_shards:
-        description: Jobs (1-8) that share the pipeline's consecutive apidocs steps. 1 keeps the single-job build; larger values add Linux jobs that each run the earlier steps and part of the API docs, and this job merges them before the remaining steps.
+        description: Jobs (1-8) that share the pipeline's consecutive apidocs steps. 1 keeps the single-job build; larger values add jobs on the same runner labels that each run the earlier steps and part of the API docs, and this job merges them before the remaining steps. Needs that many concurrent runners.
         required: false
         type: number
         default: 1
@@ -223,9 +223,13 @@ jobs:
         shell: pwsh
         env:
           POWERFORGE_APIDOCS_SHARDS: ${{ inputs.apidocs_shards }}
+          POWERFORGE_DEPLOYMENT_MANIFEST_ARTIFACT: ${{ inputs.deployment_manifest_artifact_name }}
         run: |
           if ($env:POWERFORGE_APIDOCS_SHARDS -notmatch '^[2-8]$') {
             throw "apidocs_shards must be a whole number from 1 to 8, got '$env:POWERFORGE_APIDOCS_SHARDS'."
+          }
+          if (-not [string]::IsNullOrWhiteSpace($env:POWERFORGE_DEPLOYMENT_MANIFEST_ARTIFACT)) {
+            throw 'apidocs_shards applies to website builds, not post-deployment verification runs.'
           }
 
       - name: Checkout website
@@ -443,19 +447,89 @@ jobs:
 
       - name: Collect API docs shards
         if: ${{ inputs.apidocs_shards > 1 }}
-        shell: pwsh
+        # Inline and profile-free: the website workspace ran repository code and must not supply code that sees the token.
+        shell: pwsh -NoLogo -NoProfile -NonInteractive -Command ". '{0}'"
         env:
           # Read-only artifact access stays out of the steps that run website code.
           GITHUB_TOKEN: ${{ github.token }}
+          POWERFORGE_REPORT_ARTIFACT_NAME: ${{ inputs.report_artifact_name }}
+          POWERFORGE_APIDOCS_SHARDS: ${{ inputs.apidocs_shards }}
+          POWERFORGE_TIMEOUT_MINUTES: ${{ inputs.timeout_minutes }}
         run: |
-          ./.powerforge-runner/.github/scripts/Receive-WebsiteApiDocsShards.ps1 `
-            -Repository '${{ github.repository }}' `
-            -RunId '${{ github.run_id }}' `
-            -RunAttempt '${{ github.run_attempt }}' `
-            -ArtifactPrefix '${{ inputs.report_artifact_name }}-apidocs-shard' `
-            -ShardCount '${{ inputs.apidocs_shards }}' `
-            -Destination (Join-Path $env:RUNNER_TEMP 'powerforge-apidocs-shards') `
-            -TimeoutMinutes '${{ inputs.timeout_minutes }}'
+          $prefix = "$($env:POWERFORGE_REPORT_ARTIFACT_NAME)-apidocs-shard"
+          $shardCount = [int]$env:POWERFORGE_APIDOCS_SHARDS
+          $timeoutMinutes = [int]$env:POWERFORGE_TIMEOUT_MINUTES
+          $destination = Join-Path $env:RUNNER_TEMP 'powerforge-apidocs-shards'
+          $ErrorActionPreference = 'Stop'
+          $ProgressPreference = 'SilentlyContinue'
+          if ([string]::IsNullOrWhiteSpace($env:GITHUB_TOKEN)) {
+              throw 'GITHUB_TOKEN with actions: read is required to collect API docs shards.'
+          }
+          $headers = @{
+              Authorization          = "Bearer $($env:GITHUB_TOKEN)"
+              Accept                 = 'application/vnd.github+json'
+              'X-GitHub-Api-Version' = '2022-11-28'
+          }
+
+          function Get-RunArtifacts {
+              $artifacts = @()
+              for ($page = 1; ; $page++) {
+                  $uri = "https://api.github.com/repos/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID/artifacts?per_page=100&page=$page"
+                  $response = Invoke-RestMethod -Uri $uri -Headers $headers -TimeoutSec 60
+                  $artifacts += @($response.artifacts)
+                  if (@($response.artifacts).Count -lt 100) { return $artifacts }
+              }
+          }
+
+          $pending = [System.Collections.Generic.List[int]]::new()
+          2..$shardCount | ForEach-Object { $pending.Add($_) }
+          $deadline = [DateTime]::UtcNow.AddMinutes($timeoutMinutes)
+          $started = [DateTime]::UtcNow
+          while ($pending.Count -gt 0) {
+              try {
+                  $artifacts = @(Get-RunArtifacts | Where-Object { -not $_.expired })
+              } catch {
+                  Write-Warning "Listing run artifacts failed; retrying: $($_.Exception.Message)"
+                  $artifacts = $null
+              }
+
+              foreach ($shard in @($pending)) {
+                  if ($null -eq $artifacts) { break }
+                  if ($artifacts | Where-Object { $_.name -ceq "$prefix-$shard-failed-$env:GITHUB_RUN_ATTEMPT" }) {
+                      throw "API docs shard $shard failed; see the website-apidocs-shard ($shard) job."
+                  }
+
+                  $artifact = $artifacts | Where-Object { $_.name -ceq "$prefix-$shard" } |
+                      Sort-Object -Property created_at -Descending | Select-Object -First 1
+                  if (-not $artifact) { continue }
+
+                  $target = Join-Path $destination $shard
+                  $zip = Join-Path $destination "shard-$shard.zip"
+                  try {
+                      New-Item -ItemType Directory -Force -Path $target | Out-Null
+                      # The redirect goes to signed storage; PowerShell does not forward the Authorization header.
+                      Invoke-WebRequest -Uri "https://api.github.com/repos/$env:GITHUB_REPOSITORY/actions/artifacts/$($artifact.id)/zip" `
+                          -Headers $headers -OutFile $zip -TimeoutSec 600
+                      Expand-Archive -LiteralPath $zip -DestinationPath $target -Force
+                      Remove-Item -LiteralPath $zip -Force
+                  } catch {
+                      # A rerun can replace an artifact while it downloads; list again and retry.
+                      Write-Warning "Downloading API docs shard $shard failed; retrying: $($_.Exception.Message)"
+                      Remove-Item -LiteralPath $zip -Force -ErrorAction SilentlyContinue
+                      continue
+                  }
+
+                  $elapsed = [int]([DateTime]::UtcNow - $started).TotalSeconds
+                  Write-Host ("Collected API docs shard {0} ({1:n1} MB) after waiting {2} s." -f $shard, ($artifact.size_in_bytes / 1MB), $elapsed)
+                  [void]$pending.Remove($shard)
+              }
+
+              if ($pending.Count -eq 0) { break }
+              if ([DateTime]::UtcNow -gt $deadline) {
+                  throw "Timed out after $timeoutMinutes minute(s) waiting for API docs shard(s): $($pending -join ', ')."
+              }
+              Start-Sleep -Seconds 20
+          }
 
       - name: Run website pipeline
         shell: pwsh

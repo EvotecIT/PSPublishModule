@@ -107,7 +107,7 @@ public static class WebWebsiteRunner
             "dotnet",
             null,
             BuildSourcePipelineArguments(projectPath, pipelineConfig, NormalizeValue(options.PipelineMode, "ci"), options.PipelineSplitArguments),
-            null,
+            BuildEngineIdentityEnvironment($"source:{finalRepository}@{finalRef}"),
             standardOutput,
             standardError);
 
@@ -134,6 +134,12 @@ public static class WebWebsiteRunner
             "run", "--framework", "net10.0", "-p:RestoreLockedMode=false", "--project", projectPath, "--"
         }.Concat(BuildPipelineArguments(pipelineConfig, pipelineMode, splitArguments)).ToArray();
     }
+
+    /// <summary>Names the exact engine for split pipeline runs, which require every shard to use the same one.</summary>
+    internal const string EngineIdentityEnvironmentVariable = "POWERFORGE_ENGINE_IDENTITY";
+
+    private static IReadOnlyDictionary<string, string?> BuildEngineIdentityEnvironment(string identity)
+        => new Dictionary<string, string?>(StringComparer.Ordinal) { [EngineIdentityEnvironmentVariable] = identity };
 
     internal static string[] BuildPipelineArguments(string pipelineConfig, string pipelineMode, IReadOnlyList<string>? splitArguments = null)
     {
@@ -198,7 +204,7 @@ public static class WebWebsiteRunner
             executablePath,
             null,
             BuildPipelineArguments(pipelineConfig, NormalizeValue(options.PipelineMode, "ci"), options.PipelineSplitArguments),
-            null,
+            BuildEngineIdentityEnvironment($"binary:{repository}@{toolLock.Tag}:{assetSha256}"),
             standardOutput,
             standardError);
 
