@@ -543,7 +543,10 @@ internal static partial class WebPipelineRunner
         if (!target.StartsWith(root.TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar, StringComparison.Ordinal))
             throw new InvalidOperationException($"Split archive path '{relative}' resolves outside the pipeline root.");
         // Linked folders inside the root must not redirect writes or deletions elsewhere.
-        if (!IsUnder(ResolvePhysicalPath(target), ResolvePhysicalPath(root)))
+        var physicalRoot = ResolvePhysicalPath(root).TrimEnd(Path.DirectorySeparatorChar);
+        var physicalTarget = ResolvePhysicalPath(target);
+        // Case-sensitive except on Windows, so a link to a case-variant sibling cannot pass.
+        if (!physicalTarget.StartsWith(physicalRoot + Path.DirectorySeparatorChar, FileSystemPathComparison))
             throw new InvalidOperationException($"Split archive path '{relative}' resolves through a link outside the pipeline root.");
         return target;
     }

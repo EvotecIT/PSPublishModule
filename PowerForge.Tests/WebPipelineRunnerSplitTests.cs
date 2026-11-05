@@ -148,6 +148,42 @@ public class WebPipelineRunnerSplitTests
     }
 
     [Fact]
+    public void SplitFinish_RejectsOutputsLinkedOutsideTheRoot()
+    {
+        var root = CreateRoot();
+        try
+        {
+            var main = CreateSite(root, "main");
+            var helper = CreateSite(root, "helper");
+            var archives = Path.Combine(root, "archives");
+            AssertSucceeded(WebPipelineRunner.RunPipeline(Path.Combine(main, "pipeline.json"), new WebConsoleLogger(),
+                split: Prepare(1, 2, Path.Combine(archives, "main", "shard.tar"))));
+            AssertSucceeded(WebPipelineRunner.RunPipeline(Path.Combine(helper, "pipeline.json"), new WebConsoleLogger(),
+                split: Prepare(2, 2, Path.Combine(archives, "helper", "shard.tar"))));
+
+            // The helper's API folder in the main site now points outside the site.
+            var helperApi = Directory.GetDirectories(Path.Combine(helper, "_site", "api")).Select(Path.GetFileName).First();
+            var outside = Path.Combine(root, "outside");
+            Directory.CreateDirectory(outside);
+            var linked = Path.Combine(main, "_site", "api", helperApi!);
+            if (Directory.Exists(linked))
+                Directory.Delete(linked, true);
+            Directory.CreateSymbolicLink(linked, outside);
+
+            var error = Assert.Throws<InvalidOperationException>(() =>
+                WebPipelineRunner.RunPipeline(Path.Combine(main, "pipeline.json"), new WebConsoleLogger(),
+                    split: WebPipelineSplitOptions.Parse("finish", null, null, archives)));
+            // Planning sees the linked output folder; the archive targets are checked the same way.
+            Assert.Contains("outside the pipeline root", error.Message, StringComparison.Ordinal);
+            Assert.Empty(Directory.EnumerateFileSystemEntries(outside));
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void SplitRun_RejectsStepsBetweenApiDocsSteps()
     {
         var root = CreateRoot();
