@@ -256,6 +256,113 @@ public sealed class ArtefactBuilderCopyMappingTests
         Assert.Equal("caller owned", File.ReadAllText(retained));
     }
 
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public void Build_RetainedMappingSourceCannotBeReplacedByBundledModule(bool dependency, bool directory)
+    {
+        using var fixture = new Fixture();
+        string module = dependency ? "Dependency" : "Demo";
+        string source = directory
+            ? Directory.CreateDirectory(Path.Combine(fixture.Output, module, "custom")).FullName
+            : Path.Combine(Directory.CreateDirectory(Path.Combine(fixture.Output, module)).FullName, "custom.txt");
+        string content = directory ? Path.Combine(source, "content.txt") : source;
+        File.WriteAllText(content, "preserve-source");
+        var segment = fixture.Segment(ArtefactType.Unpacked);
+        segment.Configuration.DoNotClear = true;
+        segment.Configuration.RequiredModules.Enabled = dependency;
+        segment.Configuration.FilesOutput = [new() { Source = source, Destination = "backup" }];
+        RequiredModuleReference[] dependencies = dependency ? [new("Dependency", "1.0.0")] : [];
+
+        var error = Assert.Throws<InvalidOperationException>(() => new ArtefactBuilder(new NullLogger()).Build(
+            segment, fixture.Root, fixture.Staging, "Demo", "1.0.0", null, dependencies));
+
+        Assert.Contains("copy source", error.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("overlaps", error.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal("preserve-source", File.ReadAllText(content));
+        fixture.AssertPreserved();
+    }
+
+    [Theory]
+    [InlineData("Demo.psm1")]
+    [InlineData("Demo.psd1")]
+    [InlineData("Demo.ps1")]
+    [InlineData("Demo.powerforge-compilation.json")]
+    public void Build_RetainedMappingSourceCannotBeOverwrittenByScriptPreparation(string name)
+    {
+        using var fixture = new Fixture();
+        string source = Path.Combine(fixture.Output, name);
+        File.WriteAllText(source, "preserve-source");
+        var segment = fixture.Segment(ArtefactType.Script);
+        segment.Configuration.DoNotClear = true;
+        segment.Configuration.FilesOutput = [new() { Source = source, Destination = "backup/source.txt" }];
+
+        var error = Assert.Throws<InvalidOperationException>(() => fixture.Build(segment));
+
+        Assert.Contains("copy source", error.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("overlaps", error.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal("preserve-source", File.ReadAllText(source));
+        fixture.AssertPreserved();
+    }
+
+    [Theory]
+    [InlineData(ArtefactType.Unpacked, false)]
+    [InlineData(ArtefactType.Unpacked, true)]
+    [InlineData(ArtefactType.Script, false)]
+    [InlineData(ArtefactType.Script, true)]
+    public void Build_ExistingFileInDestinationParentIsRejectedBeforeMutation(ArtefactType type, bool external)
+    {
+        using var fixture = new Fixture();
+        string project = Directory.CreateDirectory(Path.Combine(fixture.Root, "project")).FullName;
+        string destinationRoot = external
+            ? Directory.CreateDirectory(Path.Combine(fixture.Root, "external")).FullName
+            : fixture.Output;
+        string blocker = Path.Combine(destinationRoot, "blocked");
+        File.WriteAllText(blocker, "preserve-blocker");
+        string source = Path.Combine(fixture.Root, "source.txt");
+        File.WriteAllText(source, "source");
+        string previousModuleFile = type == ArtefactType.Script
+            ? Path.Combine(fixture.Output, "Demo.ps1")
+            : Path.Combine(Directory.CreateDirectory(Path.Combine(fixture.Output, "Demo")).FullName, "previous.txt");
+        File.WriteAllText(previousModuleFile, "preserve-module");
+        var segment = fixture.Segment(type);
+        segment.Configuration.DoNotClear = !external;
+        segment.Configuration.FilesOutput = [new() { Source = source, Destination = Path.Combine(blocker, "child.txt") }];
+        segment.Configuration.DestinationFilesRelative = false;
+
+        var error = Assert.Throws<InvalidOperationException>(() => new ArtefactBuilder(new NullLogger()).Build(
+            segment, project, fixture.Staging, "Demo", "1.0.0", null, []));
+
+        Assert.Contains("required directory", error.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(blocker, error.Message, StringComparison.Ordinal);
+        Assert.Equal("preserve-blocker", File.ReadAllText(blocker));
+        Assert.Equal("preserve-module", File.ReadAllText(previousModuleFile));
+        fixture.AssertPreserved();
+    }
+
+    [Fact]
+    public void Build_ParentFileRemovedByEarlierDirectoryReplacementDoesNotBlockMapping()
+    {
+        using var fixture = new Fixture();
+        string source = Directory.CreateDirectory(Path.Combine(fixture.Root, "GPO")).FullName;
+        Directory.CreateDirectory(Path.Combine(source, "child"));
+        string policy = Path.Combine(source, "policy.xml");
+        File.WriteAllText(policy, "policy");
+        string backup = Directory.CreateDirectory(Path.Combine(fixture.Output, "backup")).FullName;
+        File.WriteAllText(Path.Combine(backup, "child"), "old file removed by the tree copy");
+        var segment = fixture.Segment(ArtefactType.Unpacked);
+        segment.Configuration.DoNotClear = true;
+        segment.Configuration.DirectoryOutput = [new() { Source = source, Destination = "backup" }];
+        segment.Configuration.FilesOutput = [new() { Source = policy, Destination = "backup/child/policy.xml" }];
+
+        string output = fixture.BuildAndInspect(segment);
+
+        Assert.Equal("policy", File.ReadAllText(Path.Combine(output, "backup", "child", "policy.xml")));
+        fixture.AssertPreserved();
+    }
+
     private sealed class Fixture : IDisposable
     {
         internal string Root { get; } = Directory.CreateDirectory(

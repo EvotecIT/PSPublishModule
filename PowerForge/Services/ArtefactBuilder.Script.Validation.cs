@@ -257,7 +257,6 @@ public sealed partial class ArtefactBuilder
         string moduleName,
         string moduleVersion,
         string? preRelease,
-        ArtefactType artefactType,
         bool enforceRelativeDestination)
     {
         string[] requiredModuleDestinations = cfg.RequiredModules.Enabled == true
@@ -427,25 +426,19 @@ public sealed partial class ArtefactBuilder
         }
     }
 
+    private static IEnumerable<string> EnumerateUnsupportedScriptEvidencePaths(string scriptRoot, string moduleName)
+    {
+        yield return Path.Combine(scriptRoot, moduleName + ".powerforge-compilation.json");
+        yield return Path.Combine(scriptRoot, moduleName + ".powerforge-compilation.p7s");
+        yield return Path.Combine(scriptRoot, PowerForgeModuleSourceAttestationWriter.FileName);
+        yield return Path.Combine(scriptRoot, PublishedRegistryProvenanceValidator.ModuleProvenanceFileName);
+    }
+
     private static void RemoveUnsupportedEvidenceFromTransformedScript(string scriptRoot, string moduleName)
     {
-        foreach (var suffix in new[] { ".powerforge-compilation.json", ".powerforge-compilation.p7s" })
-        {
-            var path = Path.Combine(scriptRoot, moduleName + suffix);
+        foreach (string path in EnumerateUnsupportedScriptEvidencePaths(scriptRoot, moduleName))
             if (File.Exists(path))
                 File.Delete(path);
-        }
-
-        foreach (string fileName in new[]
-                 {
-                     PowerForgeModuleSourceAttestationWriter.FileName,
-                     PublishedRegistryProvenanceValidator.ModuleProvenanceFileName
-                 })
-        {
-            string path = Path.Combine(scriptRoot, fileName);
-            if (File.Exists(path))
-                File.Delete(path);
-        }
     }
 
     private static string RemoveTrailingAuthenticodeSignatureBlock(string content)

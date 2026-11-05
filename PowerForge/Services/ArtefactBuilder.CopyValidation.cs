@@ -25,6 +25,8 @@ public sealed partial class ArtefactBuilder
         var fileDestinations = new List<string>();
         var allFiles = new List<string>();
         var allDirectories = new List<string>();
+        var replacedDirectories = new List<string>();
+        var overwrittenFiles = new List<string>();
 
         void Validate(ArtefactCopyMapping mapping, bool copyTree)
         {
@@ -69,12 +71,6 @@ public sealed partial class ArtefactBuilder
                     ValidateDirectoryCopyDestinationSafety(destination, outputRoot, outputRoot, projectRoot, stagingPath);
                 else
                     ValidateFileCopyDestinationSafety(destination, outputRoot, outputRoot, projectRoot, stagingPath);
-                if (cfg.DoNotClear == true || !IsSameOrBelowPath(destination, outputRoot))
-                {
-                    if (directory ? File.Exists(destination) : Directory.Exists(destination))
-                        throw new InvalidOperationException(
-                            $"{type} artefact {(directory ? "directory" : "file")} copy destination '{destination}' already exists as a {(directory ? "file" : "directory")}. Choose a destination of the correct kind.");
-                }
             }
         }
 
@@ -94,6 +90,10 @@ public sealed partial class ArtefactBuilder
             if (cfg.RequiredModules.Enabled == true)
                 moduleRoots.AddRange(FilterRequiredModulesForArtefact(requiredModules, cfg.RequiredModules.ExcludeModuleName, logExclusions: false)
                     .Select(module => Path.Combine(requiredRoot, module.ModuleName.Trim())));
+            if (!packed)
+                replacedDirectories.AddRange(moduleRoots);
+            overwrittenFiles.AddRange(ResolveDeliveryOutputPaths(cfg, stagingPath, outputRoot,
+                information, delivery, includeScriptFolders, finalizedPayloadFiles));
             var package = ResolveScriptPackageDestinationNamespace(stagingPath, moduleRoot,
                 information, delivery, includeScriptFolders, finalizedPayloadFiles);
             allDirectories.AddRange(moduleRoots);
@@ -108,12 +108,54 @@ public sealed partial class ArtefactBuilder
                         $"{type} artefact directory copy destination '{destination}' would replace a bundled module directory. Choose a separate destination.");
         }
 
+        if (type == ArtefactType.Script)
+        {
+            string requiredRoot = ResolveRequiredModulesRootForUnpacked(cfg, outputRoot, projectRoot, moduleName, moduleVersion, preRelease);
+            string scriptRoot = ResolveModulesRootForUnpacked(cfg, outputRoot, requiredRoot, projectRoot, moduleName, moduleVersion, preRelease);
+            if (cfg.DoNotClear != true)
+                replacedDirectories.Add(scriptRoot);
+            if (cfg.RequiredModules.Enabled == true)
+                replacedDirectories.AddRange(FilterRequiredModulesForArtefact(requiredModules, cfg.RequiredModules.ExcludeModuleName, logExclusions: false)
+                    .Select(module => Path.Combine(requiredRoot, module.ModuleName.Trim())));
+            var package = ResolveScriptPackageDestinationNamespace(stagingPath, scriptRoot,
+                information, delivery, includeScriptFolders, finalizedPayloadFiles);
+            overwrittenFiles.AddRange(package.Files);
+            overwrittenFiles.Add(Path.Combine(scriptRoot, ResolveScriptName(cfg.ScriptName, moduleName, moduleVersion, preRelease)));
+            overwrittenFiles.AddRange(EnumerateUnsupportedScriptEvidencePaths(scriptRoot, moduleName));
+        }
+
         allDirectories.AddRange(allFiles.Select(path => Path.GetDirectoryName(path)!));
         ValidateDirectoryCopyDestinationsDoNotOverlap(treeDestinations);
         ValidateFileCopyDestinationsDoNotConflict(allDirectories, fileDestinations);
         ValidateCopyDestinationKinds(type, allFiles, allDirectories);
         if (!packed)
-            ValidateCopyMappingSourcesSurviveDestinations(sources, treeDestinations, fileDestinations);
+        {
+            replacedDirectories.AddRange(treeDestinations);
+            overwrittenFiles.AddRange(fileDestinations);
+            ValidateCopyMappingSourcesSurviveDestinations(sources, replacedDirectories, overwrittenFiles);
+            ValidateExistingCopyDestinationKinds(cfg, type, outputRoot, replacedDirectories, allFiles, allDirectories);
+        }
+    }
+
+    private static void ValidateExistingCopyDestinationKinds(
+        ArtefactConfiguration cfg, ArtefactType type, string outputRoot,
+        IReadOnlyList<string> replacedDirectories, IEnumerable<string> files, IEnumerable<string> directories)
+    {
+        bool RemovedBeforeCopy(string path) =>
+            (cfg.DoNotClear != true && IsSameOrBelowPath(path, outputRoot)) ||
+            replacedDirectories.Any(root => Directory.Exists(root) && IsSameOrBelowPath(path, root));
+
+        foreach (string file in files)
+            if (Directory.Exists(file) && !RemovedBeforeCopy(file))
+                throw new InvalidOperationException(
+                    $"{type} artefact file copy destination '{file}' already exists as a directory. Choose a destination of the correct kind.");
+        foreach (string directory in directories)
+        {
+            for (string? parent = Path.GetFullPath(directory); parent is not null; parent = Path.GetDirectoryName(parent))
+                if (File.Exists(parent) && !RemovedBeforeCopy(parent))
+                    throw new InvalidOperationException(
+                        $"{type} artefact required directory '{parent}' is an existing file. Choose a separate copy destination.");
+        }
     }
 
     private static void ValidateCopyDestinationKinds(
@@ -193,7 +235,7 @@ public sealed partial class ArtefactBuilder
         bool clearsOutput,
         string outputRoot,
         ArtefactType artefactType,
-        bool copyContents = true)
+        bool copyContents)
     {
         bool exists = sourceIsDirectory ? Directory.Exists(source) : File.Exists(source);
         if (!exists)
