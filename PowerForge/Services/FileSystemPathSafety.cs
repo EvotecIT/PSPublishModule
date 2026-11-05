@@ -75,7 +75,9 @@ internal static class FileSystemPathSafety
 
     /// <summary>Resolves existing parent aliases, including macOS /var and /tmp aliases.
     /// The selected leaf itself must not be a link. This is a preflight, not a replacement-race guard.</summary>
-    internal static string ResolveParentDirectoryAliases(string path)
+    /// <param name="path">Path whose existing parent aliases are resolved.</param>
+    /// <param name="allowCloudPlaceholders">Allow Windows cloud placeholders as ordinary entries rather than directory aliases.</param>
+    internal static string ResolveParentDirectoryAliases(string path, bool allowCloudPlaceholders = false)
     {
         var fullPath = Path.GetFullPath(path);
         var root = Path.GetPathRoot(fullPath)!;
@@ -89,6 +91,7 @@ internal static class FileSystemPathSafety
             catch (FileNotFoundException) { continue; }
             catch (DirectoryNotFoundException) { continue; }
             if ((attributes & FileAttributes.ReparsePoint) == 0) continue;
+            if (allowCloudPlaceholders && WindowsCloudFiles.IsPlaceholder(current)) continue;
             if (index == segments.Length - 1)
                 throw new InvalidDataException("Selected package/output root must not be a link: " + fullPath);
 #if NET8_0_OR_GREATER

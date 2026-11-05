@@ -37,7 +37,7 @@ public sealed partial class ArtefactBuilder
             bool directory = copyTree || Directory.Exists(source);
             try
             {
-                ValidateCopyMappingSource(source, directory, cfg.DoNotClear != true, outputRoot, type, copyTree);
+                source = ValidateCopyMappingSource(source, directory, cfg.DoNotClear != true, outputRoot, type, copyTree);
             }
             catch (InvalidOperationException error)
             {
@@ -103,6 +103,10 @@ public sealed partial class ArtefactBuilder
             allFiles.AddRange(deliveryFiles);
             foreach (string destination in treeDestinations)
             {
+                string? moduleFile = package.Files.FirstOrDefault(path => IsSameOrBelowPath(destination, path));
+                if (moduleFile is not null)
+                    throw new InvalidOperationException(
+                        $"{type} artefact file copy destination '{moduleFile}' conflicts with directory copy destination '{destination}'. Choose a separate destination.");
                 if (moduleRoots.Any(root => IsSameOrBelowPath(root, destination)))
                     throw new InvalidOperationException(
                         $"{type} artefact directory copy destination '{destination}' would replace a bundled module directory. Choose a separate destination.");
@@ -203,30 +207,39 @@ public sealed partial class ArtefactBuilder
         IReadOnlyList<string> directoryDestinations,
         IReadOnlyList<string> fileDestinations)
     {
-        for (int firstIndex = 0; firstIndex < fileDestinations.Count; firstIndex++)
+        // Narrow candidates by path; confirm using the filesystem-aware comparison.
+        string Key(string path) => Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var filesByPath = fileDestinations.ToLookup(Key, StringComparer.OrdinalIgnoreCase);
+        foreach (string file in fileDestinations)
         {
-            string first = fileDestinations[firstIndex];
-            for (int secondIndex = firstIndex + 1; secondIndex < fileDestinations.Count; secondIndex++)
+            for (string? ancestor = Path.GetFullPath(file); ancestor is not null; ancestor = Path.GetDirectoryName(ancestor))
             {
-                string second = fileDestinations[secondIndex];
-                if (!CopyPathsOverlap(first, second))
-                    continue;
-
-                throw new InvalidOperationException(
-                    $"Artefact file copy destinations '{Path.GetFullPath(first)}' and '{Path.GetFullPath(second)}' overlap. " +
-                    "Use separate file paths so one mapping cannot block or overwrite another mapping.");
+                bool matchedSelf = false;
+                foreach (string candidate in filesByPath[Key(ancestor)])
+                {
+                    if (!IsSameOrBelowPath(file, candidate))
+                        continue;
+                    if (!matchedSelf && string.Equals(file, candidate, StringComparison.Ordinal))
+                    {
+                        matchedSelf = true;
+                        continue;
+                    }
+                    throw new InvalidOperationException(
+                        $"Artefact file copy destinations '{Path.GetFullPath(file)}' and '{Path.GetFullPath(candidate)}' overlap. " +
+                        "Use separate file paths so one mapping cannot block or overwrite another mapping.");
+                }
             }
         }
 
-        foreach (string fileDestination in fileDestinations)
+        foreach (string directory in directoryDestinations)
         {
-            string? conflictingDirectory = directoryDestinations.FirstOrDefault(directoryDestination =>
-                IsSameOrBelowPath(directoryDestination, fileDestination));
-            if (conflictingDirectory is not null)
+            for (string? ancestor = Path.GetFullPath(directory); ancestor is not null; ancestor = Path.GetDirectoryName(ancestor))
             {
-                throw new InvalidOperationException(
-                    $"Artefact file copy destination '{Path.GetFullPath(fileDestination)}' is equal to or contains directory copy destination '{Path.GetFullPath(conflictingDirectory)}'. " +
-                    "Use separate destination paths so a file mapping cannot collide with a directory mapping.");
+                foreach (string file in filesByPath[Key(ancestor)])
+                    if (IsSameOrBelowPath(directory, file))
+                        throw new InvalidOperationException(
+                            $"Artefact file copy destination '{Path.GetFullPath(file)}' is equal to or contains directory copy destination '{Path.GetFullPath(directory)}'. " +
+                            "Use separate destination paths so a file mapping cannot collide with a directory mapping.");
             }
         }
     }
@@ -234,7 +247,7 @@ public sealed partial class ArtefactBuilder
     private static bool CopyPathsOverlap(string first, string second) =>
         IsSameOrBelowPath(first, second) || IsSameOrBelowPath(second, first);
 
-    private static void ValidateCopyMappingSource(
+    private static string ValidateCopyMappingSource(
         string source,
         bool sourceIsDirectory,
         bool clearsOutput,
@@ -267,8 +280,17 @@ public sealed partial class ArtefactBuilder
                 $"Artefact file copy source '{Path.GetFullPath(source)}' must not be a symbolic link or reparse point.");
         }
 
-        if (!clearsOutput || !WouldOutputClearRemoveSource(source, sourceIsDirectory, outputRoot, artefactType))
-            return;
+        try
+        {
+            source = FileSystemPathSafety.ResolveParentDirectoryAliases(source, allowCloudPlaceholders: true);
+            outputRoot = FileSystemPathSafety.ResolveParentDirectoryAliases(outputRoot, allowCloudPlaceholders: true);
+        }
+        catch (InvalidDataException error)
+        {
+            throw new InvalidOperationException($"Artefact copy source '{source}' cannot be validated: {error.Message}", error);
+        }
+        if (!clearsOutput || !WouldOutputClearRemoveSource(source, sourceIsDirectory, outputRoot, artefactType, copyContents))
+            return source;
 
         throw new InvalidOperationException(
             $"Artefact copy source '{source}' would be removed while clearing output root '{Path.GetFullPath(outputRoot)}'. " +
@@ -279,7 +301,8 @@ public sealed partial class ArtefactBuilder
         string source,
         bool sourceIsDirectory,
         string outputRoot,
-        ArtefactType artefactType)
+        ArtefactType artefactType,
+        bool copyContents)
     {
         if (!IsSameOrBelowPath(source, outputRoot))
             return false;
@@ -292,8 +315,8 @@ public sealed partial class ArtefactBuilder
 
         string fullSource = Path.GetFullPath(source);
         string fullOutputRoot = Path.GetFullPath(outputRoot);
-        if (string.Equals(fullSource, fullOutputRoot, GetPathComparison(fullSource, fullOutputRoot)))
-            return true;
+        if (IsSameOrBelowPath(fullOutputRoot, fullSource))
+            return !sourceIsDirectory || copyContents;
         if (sourceIsDirectory)
             return false;
 
@@ -308,8 +331,9 @@ public sealed partial class ArtefactBuilder
         IReadOnlyList<string> directoryDestinations,
         IReadOnlyList<string> fileDestinations)
     {
-        foreach (string destination in directoryDestinations)
+        foreach (string mappedDestination in directoryDestinations)
         {
+            string destination = FileSystemPathSafety.ResolveParentDirectoryAliases(mappedDestination, allowCloudPlaceholders: true);
             foreach ((string source, bool sourceIsDirectory) in sources)
             {
                 bool overlaps = IsSameOrBelowPath(source, destination) ||
@@ -323,8 +347,9 @@ public sealed partial class ArtefactBuilder
             }
         }
 
-        foreach (string destination in fileDestinations)
+        foreach (string mappedDestination in fileDestinations)
         {
+            string destination = FileSystemPathSafety.ResolveParentDirectoryAliases(mappedDestination, allowCloudPlaceholders: true);
             foreach ((string source, bool sourceIsDirectory) in sources)
             {
                 bool overlaps = sourceIsDirectory

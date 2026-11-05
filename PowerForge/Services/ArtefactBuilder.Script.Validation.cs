@@ -327,6 +327,13 @@ public sealed partial class ArtefactBuilder
                 outputRootToClear,
                 projectRoot,
                 stagingPath);
+            string? requiredModuleDestination = requiredModuleDestinations.FirstOrDefault(requiredDestination =>
+                CopyPathsOverlap(destination, requiredDestination));
+            if (requiredModuleDestination is not null)
+            {
+                throw new InvalidOperationException(
+                    $"Script artefact file copy destination '{destination}' overlaps required module destination '{requiredModuleDestination}' and would overwrite or conflict with bundled dependency content.");
+            }
             if (Directory.Exists(source))
             {
                 string? conflictingFile = packageNamespace.Files.Append(scriptPath)
@@ -340,13 +347,6 @@ public sealed partial class ArtefactBuilder
             {
                 throw new InvalidOperationException(
                     $"Script artefact file copy destination '{destination}' overlaps the generated entry point '{Path.GetFullPath(scriptPath)}'.");
-            }
-            string? requiredModuleDestination = requiredModuleDestinations.FirstOrDefault(requiredDestination =>
-                CopyPathsOverlap(destination, requiredDestination));
-            if (requiredModuleDestination is not null)
-            {
-                throw new InvalidOperationException(
-                    $"Script artefact file copy destination '{destination}' overlaps required module destination '{requiredModuleDestination}' and would overwrite or conflict with bundled dependency content.");
             }
             ValidateScriptCopyDestinationDoesNotReplacePackage(
                 destination,

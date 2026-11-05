@@ -7,6 +7,7 @@ using Xunit;
 namespace PowerForge.Tests;
 
 [Collection(ProcessEnvironmentCollection.Name)]
+[Trait("Category", "DotNetPublishPrGate")]
 public sealed class ArtefactBuilderCopyMappingTests
 {
     [Theory]
@@ -168,19 +169,25 @@ public sealed class ArtefactBuilderCopyMappingTests
     }
 
     [Theory]
-    [InlineData(ArtefactType.Unpacked, false)]
-    [InlineData(ArtefactType.Unpacked, true)]
-    [InlineData(ArtefactType.Packed, false)]
-    [InlineData(ArtefactType.Packed, true)]
-    public void Build_MappingKindCannotConflictWithBundledModuleBeforeCleanup(ArtefactType type, bool directory)
+    [InlineData(ArtefactType.Unpacked, false, false)]
+    [InlineData(ArtefactType.Unpacked, true, false)]
+    [InlineData(ArtefactType.Packed, false, false)]
+    [InlineData(ArtefactType.Packed, true, false)]
+    [InlineData(ArtefactType.Unpacked, true, true)]
+    [InlineData(ArtefactType.Packed, true, true)]
+    public void Build_MappingKindCannotConflictWithBundledModuleBeforeCleanup(ArtefactType type, bool directory, bool recursive)
     {
         using var fixture = new Fixture();
         string source = Directory.CreateDirectory(Path.Combine(fixture.Root, "GPO")).FullName;
         string policy = Path.Combine(source, "policy.xml");
         File.WriteAllText(policy, "policy");
         var segment = fixture.Segment(type);
-        segment.Configuration.FilesOutput =
+        ArtefactCopyMapping[] mappings =
         [new() { Source = directory ? source : policy, Destination = directory ? "Demo/Demo.psm1" : "Demo" }];
+        if (recursive)
+            segment.Configuration.DirectoryOutput = mappings;
+        else
+            segment.Configuration.FilesOutput = mappings;
 
         var error = Assert.Throws<InvalidOperationException>(() => fixture.Build(segment));
 
@@ -394,6 +401,69 @@ public sealed class ArtefactBuilderCopyMappingTests
         if (existingBlocker)
             Assert.Equal("preserve-blocker", File.ReadAllText(Path.Combine(backup, "child")));
         fixture.AssertPreserved();
+    }
+
+    [Theory]
+    [InlineData(ArtefactType.Packed)]
+    [InlineData(ArtefactType.ScriptPacked)]
+    public void Build_DirectoryOnlySourceCanEqualRetainedPackedOutputRoot(ArtefactType type)
+    {
+        using var fixture = new Fixture();
+        var segment = fixture.Segment(type);
+        segment.Configuration.FilesOutput = [new() { Source = fixture.Output, Destination = "empty" }];
+
+        string output = fixture.BuildAndInspect(segment);
+
+        Assert.True(Directory.Exists(Path.Combine(output, "empty")));
+        Assert.Empty(Directory.EnumerateFileSystemEntries(Path.Combine(output, "empty")));
+    }
+
+    [Theory]
+    [InlineData(ArtefactType.Script)]
+    [InlineData(ArtefactType.ScriptPacked)]
+    public void Build_DirectoryEntryCannotReplaceRequiredModuleFile(ArtefactType type)
+    {
+        using var fixture = new Fixture();
+        string source = Directory.CreateDirectory(Path.Combine(fixture.Root, "GPO")).FullName;
+        var segment = fixture.Segment(type);
+        segment.Configuration.RequiredModules.Enabled = true;
+        segment.Configuration.FilesOutput = [new() { Source = source, Destination = "Dependency/Dependency.psm1" }];
+
+        var error = Assert.Throws<InvalidOperationException>(() => new ArtefactBuilder(new NullLogger()).Build(
+            segment, fixture.Root, fixture.Staging, "Demo", "1.0.0", null, [new("Dependency", "1.0.0")]));
+
+        Assert.Contains("required module destination", error.Message, StringComparison.OrdinalIgnoreCase);
+        fixture.AssertPreserved();
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Build_CopySourceThroughLinkedAncestorCannotBeCleared(bool directory)
+    {
+        using var fixture = new Fixture();
+        string source = directory
+            ? Directory.CreateDirectory(Path.Combine(fixture.Output, "custom")).FullName
+            : fixture.Marker;
+        string link = Path.Combine(fixture.Root, "alias");
+        Directory.CreateSymbolicLink(link, fixture.Output);
+        try
+        {
+            var segment = fixture.Segment(ArtefactType.Unpacked);
+            segment.Configuration.FilesOutput = [new() { Source = Path.Combine(link, Path.GetFileName(source)), Destination = "backup" }];
+
+            var error = Assert.Throws<InvalidOperationException>(() => fixture.Build(segment));
+
+            Assert.Contains("would be removed", error.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.True(Directory.Exists(fixture.Output));
+            if (directory)
+                Assert.True(Directory.Exists(source));
+            fixture.AssertPreserved();
+        }
+        finally
+        {
+            Directory.Delete(link);
+        }
     }
 
     private sealed class Fixture : IDisposable

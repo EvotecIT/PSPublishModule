@@ -5,6 +5,7 @@ namespace PowerForge.Tests;
 public sealed partial class ModulePipelineScriptExecutionSeamTests
 {
     [Fact]
+    [Trait("Category", "DotNetPublishPrGate")]
     public void Plan_DirectoryOnlyMappingsPreserveReleaseInputSelection()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
