@@ -44,4 +44,7 @@ public sealed class WebWebsiteRunnerOptions
 
     /// <summary>Optional note to mirror maintenance workflow messaging.</summary>
     public bool MaintenanceModeNote { get; set; }
+
+    /// <summary>Optional split-run arguments forwarded to the pipeline command (for example --split-phase).</summary>
+    public IReadOnlyList<string>? PipelineSplitArguments { get; set; }
 }

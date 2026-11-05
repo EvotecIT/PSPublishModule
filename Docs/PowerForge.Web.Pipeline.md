@@ -169,6 +169,38 @@ Behaviour:
 - After a failure no new steps or batch inputs start. Work already running
   finishes and is reported.
 
+### Splitting API docs across machines
+
+A pipeline whose `apidocs` steps are consecutive can spread them over several
+machines. The shared website workflows expose this as `apidocs_shards` (1-8,
+default 1). With a value above 1, `website-run` and `apidocs_shards - 1`
+extra `website-apidocs-shard` jobs start together on the same runner labels.
+
+```text
+powerforge-web pipeline --config pipeline.json --mode ci --split-phase prepare --apidocs-shard 2/4 --split-archive shard.tar
+powerforge-web pipeline --config pipeline.json --mode ci --split-phase finish --split-archives ./shards
+```
+
+- `prepare` runs every step before the apidocs block, then this shard's share
+  of the block, and writes an archive with the files that share added, changed
+  or deleted (including files outside `out`, such as social cards).
+- Shares are whole steps, or single batch `inputs` when they are independent.
+  They are balanced by the size of their XML, help and assembly inputs.
+- `finish` runs in the workspace that ran a `prepare`. It checks that the
+  archives come from one shard each, from the same commit and engine, cover
+  every apidocs run once, match their recorded hashes and agree on shared
+  files. It applies them and runs the steps after the block. Its profile keeps
+  the prepare results, so it covers the whole pipeline.
+- A split run fails when another step sits between `apidocs` steps, when an
+  `apidocs` step depends on another one, when generator runs share outputs or
+  routes or read each other's files, or when a step executes PowerShell
+  examples. Fast and watch modes are not supported.
+- Every shard repeats the steps before the block, so the split pays off when
+  the apidocs block is long compared with those steps. All jobs must be able to
+  run at the same time, because `website-run` waits for the shard jobs. Shard
+  jobs check out the repository without persisted credentials, and the option
+  is not available for post-deployment verification runs.
+
 ### Supported steps
 
 #### build

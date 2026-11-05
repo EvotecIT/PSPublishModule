@@ -99,7 +99,7 @@ internal static partial class WebCliHelpers
         Console.WriteLine("  powerforge-web website-runner --website-root <dir> --pipeline-config <file> [--engine-mode source|binary]");
         Console.WriteLine("                     [--pipeline-mode <name>] [--powerforge-lock-path <file>] [--powerforge-web-tag <tag>] [--powerforge-tool-lock-path <file>]");
         Console.WriteLine("                     [--powerforge-repository <owner/repo>] [--powerforge-ref <sha>] [--powerforge-repository-override <owner/repo>] [--powerforge-ref-override <sha>]");
-        Console.WriteLine("                     [--maintenance-note]");
+        Console.WriteLine("                     [--maintenance-note] [--split-phase prepare|finish] [--apidocs-shard <i>/<n>] [--split-archive <file>] [--split-archives <dir>]");
         Console.WriteLine("  powerforge-web new --config <site.json> --title <Title> [--collection <name>] [--slug <slug>] [--out <path>]");
         Console.WriteLine("  powerforge-web serve --path <dir> [--port 8080] [--host localhost]");
         Console.WriteLine("  powerforge-web serve --config <site.json> [--out <path>] [--port 8080] [--host localhost]");
@@ -146,6 +146,7 @@ internal static partial class WebCliHelpers
         Console.WriteLine("                     [--self-contained] [--no-build] [--no-restore] [--base-href <path>] [--no-blazor-fixes]");
         Console.WriteLine("  powerforge-web overlay --source <dir> --destination <dir> [--include <glob[,glob...]>] [--exclude <glob[,glob...]>]");
         Console.WriteLine("  powerforge-web pipeline --config <pipeline.json> [--profile] [--watch] [--fast] [--dev] [--mode <name>] [--only <task[,task...]>] [--skip <task[,task...]>]");
+        Console.WriteLine("                     [--split-phase prepare --apidocs-shard <i>/<n> --split-archive <file> | --split-phase finish --split-archives <dir>]");
         Console.WriteLine("  powerforge-web links validate --config <site.json> [--shortlink-source <file>] [--report-path <file>] [--duplicate-report-path <file>] [--baseline <file>] [--fail-on-new-warnings] [--output json]");
         Console.WriteLine("  powerforge-web links export-apache --config <site.json> [--shortlink-source <file>] [--out <file>] [--shortlink-map-out <file> --shortlink-map-runtime-path <absolute-path>] [--include-404] [--output json]");
         Console.WriteLine("  powerforge-web links import-wordpress --source <pretty-links.csv> --config <site.json> [--out <shortlinks.json>] [--owner <name>] [--tag <tag>] [--output json]");

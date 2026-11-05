@@ -106,8 +106,8 @@ public static class WebWebsiteRunner
         RunProcess(
             "dotnet",
             null,
-            BuildSourcePipelineArguments(projectPath, pipelineConfig, NormalizeValue(options.PipelineMode, "ci")),
-            null,
+            BuildSourcePipelineArguments(projectPath, pipelineConfig, NormalizeValue(options.PipelineMode, "ci"), options.PipelineSplitArguments),
+            BuildEngineIdentityEnvironment($"source:{finalRepository}@{finalRef}"),
             standardOutput,
             standardError);
 
@@ -123,13 +123,29 @@ public static class WebWebsiteRunner
         };
     }
 
-    internal static string[] BuildSourcePipelineArguments(string projectPath, string pipelineConfig, string pipelineMode)
+    internal static string[] BuildSourcePipelineArguments(
+        string projectPath,
+        string pipelineConfig,
+        string pipelineMode,
+        IReadOnlyList<string>? splitArguments = null)
     {
         return new[]
         {
-            "run", "--framework", "net10.0", "-p:RestoreLockedMode=false", "--project", projectPath, "--",
-            "pipeline", "--config", pipelineConfig, "--mode", NormalizeValue(pipelineMode, "ci")
-        };
+            "run", "--framework", "net10.0", "-p:RestoreLockedMode=false", "--project", projectPath, "--"
+        }.Concat(BuildPipelineArguments(pipelineConfig, pipelineMode, splitArguments)).ToArray();
+    }
+
+    /// <summary>Names the exact engine for split pipeline runs, which require every shard to use the same one.</summary>
+    internal const string EngineIdentityEnvironmentVariable = "POWERFORGE_ENGINE_IDENTITY";
+
+    private static IReadOnlyDictionary<string, string?> BuildEngineIdentityEnvironment(string identity)
+        => new Dictionary<string, string?>(StringComparer.Ordinal) { [EngineIdentityEnvironmentVariable] = identity };
+
+    internal static string[] BuildPipelineArguments(string pipelineConfig, string pipelineMode, IReadOnlyList<string>? splitArguments = null)
+    {
+        return new[] { "pipeline", "--config", pipelineConfig, "--mode", NormalizeValue(pipelineMode, "ci") }
+            .Concat(splitArguments ?? Array.Empty<string>())
+            .ToArray();
     }
 
     private static void CloneAndFetchSourceEngine(
@@ -187,8 +203,8 @@ public static class WebWebsiteRunner
         RunProcess(
             executablePath,
             null,
-            new[] { "pipeline", "--config", pipelineConfig, "--mode", NormalizeValue(options.PipelineMode, "ci") },
-            null,
+            BuildPipelineArguments(pipelineConfig, NormalizeValue(options.PipelineMode, "ci"), options.PipelineSplitArguments),
+            BuildEngineIdentityEnvironment($"binary:{repository}@{toolLock.Tag}:{assetSha256}"),
             standardOutput,
             standardError);
 
