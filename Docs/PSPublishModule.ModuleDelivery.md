@@ -247,6 +247,30 @@ the same operator setting when both are intended to be signed.
 signing disabled (and `IncludeInternals` not enabled), promoted launcher files
 remain unsigned while module signing still applies to module payloads.
 
+### Additional files and folders
+
+Use `CopyDirectories` to include a complete repository folder, including its files and empty
+subfolders. For example, both artefacts below include a GPO backup under `Artefacts/AUDIT_GPO`:
+
+```powershell
+$directories = @{
+    'Examples\AUDIT_GPO' = 'Artefacts\AUDIT_GPO'
+}
+
+New-ConfigurationArtefact -Type Unpacked -Enable -Path 'Artefacts\Unpacked' -CopyDirectories $directories -CopyDirectoriesRelative
+New-ConfigurationArtefact -Type Packed -Enable -Path 'Artefacts\Packed' -ArtefactName 'Audit.zip' -CopyDirectories $directories -CopyDirectoriesRelative
+```
+
+`CopyFiles` also accepts directory entries from an existing `Get-ChildItem -Recurse` mapping.
+Each directory entry creates only its mapped destination folder; file entries select the files
+to copy. This preserves empty folders without including files omitted from the mapping.
+Directory and file entries can appear in either order.
+
+Copy sources and conflicting destination kinds are checked before artefact output is cleared.
+Missing inputs, a file supplied to `CopyDirectories`, and destinations that require the same
+path to be both a file and a directory fail with a configuration error. Keep copy sources
+outside output that the build clears, or use `DoNotClear` when retaining that output is intended.
+
 ## Publishing to private repositories
 
 Artefact layout is independent of repository publication. `Build` can produce

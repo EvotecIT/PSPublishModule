@@ -2,6 +2,7 @@
 
 ## Unreleased
 ### What's Changed
+- Preserve directory entries, including empty folders, in legacy artefact `CopyFiles` mappings without copying unselected files. Validate copy sources and destination conflicts before changing existing artefact output.
 - Collect parameters named `Keys` without confusing their metadata with a dictionary's key collection or expanding that metadata during JSON serialization.
 - Preserve each parameter set's named or positional binding in generated PowerShell syntax help.
 - Retain private System.Management binaries in modern isolated module payloads, including Windows runtime assets. Preserve versioned library exclusions during dependency repair.

@@ -490,9 +490,18 @@ public sealed partial class ArtefactBuilder
             if (mapping is null) continue;
             var src = ResolveInputPath(mapping.Source, projectRoot, moduleName, moduleVersion, preRelease);
             var dest = ResolveOutputPath(mapping.Destination, destinationRoot, cfg.DestinationFilesRelative == true, enforceRelativeDestination, moduleName, moduleVersion, preRelease);
-            Directory.CreateDirectory(Path.GetDirectoryName(dest)!);
-            File.Copy(src, dest, overwrite: true);
-            copied.Add(new ArtefactCopyEntry(src, dest, isDirectory: false));
+            if (Directory.Exists(src))
+            {
+                // Legacy CopyFiles enumerations include directories, but select their files separately.
+                Directory.CreateDirectory(dest);
+                copied.Add(new ArtefactCopyEntry(src, dest, isDirectory: true, includesDirectoryContents: false));
+            }
+            else
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(dest)!);
+                File.Copy(src, dest, overwrite: true);
+                copied.Add(new ArtefactCopyEntry(src, dest, isDirectory: false));
+            }
         }
     }
 
