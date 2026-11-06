@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory)]
-    [ValidateSet('Plan', 'Prepare', 'Publish')]
+    [ValidateSet('Plan', 'PrepareMetadata', 'Prepare', 'Publish')]
     [string] $Operation,
 
     [Parameter(Mandatory)]
@@ -220,9 +220,10 @@ $savedMsBuildDisableNodeReuse = $null
 $savedDotNetCliUseMsBuildServer = $null
 $dotNetLifetimeConfigured = $false
 $preserveSuccessfulReceipt = $false
+$preserveFailedReleaseReceipt = $false
 
 try {
-    if (-not $IsWindows) {
+    if ($Operation -ne 'PrepareMetadata' -and -not $IsWindows) {
         throw 'The public PSPublishModule release must run on Windows because its signing certificate is stored in the Windows certificate store.'
     }
 
@@ -337,34 +338,38 @@ try {
         -ReleaseConfig $releaseConfig `
         -Operation $Operation `
         -ExpectedCommit $ExpectedCommit
-    $certificateThumbprint = [string] $releaseConfig.Packages.CertificateThumbprint
-    $certificateStore = [string] $releaseConfig.Packages.CertificateStore
-    if ([string]::IsNullOrWhiteSpace($certificateThumbprint) -or [string]::IsNullOrWhiteSpace($certificateStore)) {
-        throw 'Build/release.json must configure the package signing certificate thumbprint and store.'
-    }
-    $certificatePath = "Cert:\$certificateStore\My\$certificateThumbprint"
-    $certificate = Get-Item -LiteralPath $certificatePath -ErrorAction SilentlyContinue
-    if ($null -eq $certificate -or -not $certificate.HasPrivateKey) {
-        throw "Signing certificate '$certificateThumbprint' with a private key was not found in $certificateStore\My."
-    }
-    if ($certificate.NotAfter -le [DateTime]::UtcNow.AddDays(7)) {
-        throw "Signing certificate '$certificateThumbprint' expires on $($certificate.NotAfter.ToUniversalTime().ToString('O'))."
-    }
+    $certificateThumbprint = $null
+    $certificate = $null
+    if ($Operation -ne 'PrepareMetadata') {
+        $certificateThumbprint = [string] $releaseConfig.Packages.CertificateThumbprint
+        $certificateStore = [string] $releaseConfig.Packages.CertificateStore
+        if ([string]::IsNullOrWhiteSpace($certificateThumbprint) -or [string]::IsNullOrWhiteSpace($certificateStore)) {
+            throw 'Build/release.json must configure the package signing certificate thumbprint and store.'
+        }
+        $certificatePath = "Cert:\$certificateStore\My\$certificateThumbprint"
+        $certificate = Get-Item -LiteralPath $certificatePath -ErrorAction SilentlyContinue
+        if ($null -eq $certificate -or -not $certificate.HasPrivateKey) {
+            throw "Signing certificate '$certificateThumbprint' with a private key was not found in $certificateStore\My."
+        }
+        if ($certificate.NotAfter -le [DateTime]::UtcNow.AddDays(7)) {
+            throw "Signing certificate '$certificateThumbprint' expires on $($certificate.NotAfter.ToUniversalTime().ToString('O'))."
+        }
 
-    $moduleGalleryPublish = @($moduleConfig.Segments) |
-        Where-Object { $_.Type -eq 'GalleryNuget' -and $_.Configuration.Enabled -eq $true } |
-        Select-Object -First 1
-    $credentialPaths = @(
-        [string] $releaseConfig.Packages.PublishApiKeyFilePath
-        [string] $releaseConfig.Packages.GitHubAccessTokenFilePath
-        [string] $releaseConfig.GitHub.TokenFilePath
-        [string] $moduleGalleryPublish.Configuration.ApiKeyFilePath
-    ) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -Unique
+        $moduleGalleryPublish = @($moduleConfig.Segments) |
+            Where-Object { $_.Type -eq 'GalleryNuget' -and $_.Configuration.Enabled -eq $true } |
+            Select-Object -First 1
+        $credentialPaths = @(
+            [string] $releaseConfig.Packages.PublishApiKeyFilePath
+            [string] $releaseConfig.Packages.GitHubAccessTokenFilePath
+            [string] $releaseConfig.GitHub.TokenFilePath
+            [string] $moduleGalleryPublish.Configuration.ApiKeyFilePath
+        ) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -Unique
 
-    foreach ($credentialPath in $credentialPaths) {
-        $credentialFile = Get-Item -LiteralPath $credentialPath -ErrorAction SilentlyContinue
-        if ($null -eq $credentialFile -or $credentialFile.Length -le 0) {
-            throw "Required release credential file is missing or empty: $credentialPath"
+        foreach ($credentialPath in $credentialPaths) {
+            $credentialFile = Get-Item -LiteralPath $credentialPath -ErrorAction SilentlyContinue
+            if ($null -eq $credentialFile -or $credentialFile.Length -le 0) {
+                throw "Required release credential file is missing or empty: $credentialPath"
+            }
         }
     }
 
@@ -466,6 +471,9 @@ try {
         'Plan' {
             $buildParameters.Plan = $true
         }
+        'PrepareMetadata' {
+            $buildParameters.PrepareMetadata = $true
+        }
         'Prepare' {
             $buildParameters.RunMode = 'Build'
             $buildParameters.ModuleSignModule = $true
@@ -490,6 +498,13 @@ try {
     $json = [string] $buildProcess.StdOut
     $releaseOutput = $json
     $json | Set-Content -LiteralPath $ReceiptPath -Encoding utf8
+    try {
+        $nativeReceipt = $json | ConvertFrom-Json -Depth 100
+        $preserveFailedReleaseReceipt = $nativeReceipt.Success -eq $false -and
+            $null -ne $nativeReceipt.PSObject.Properties['ReleaseAssetEntries']
+    } catch {
+        # The wrapper failure receipt records malformed or incomplete child output.
+    }
     if ($exitCode -ne 0) {
         $standardError = ([string] $buildProcess.StdErr).Trim()
         if (-not [string]::IsNullOrWhiteSpace($standardError)) {
@@ -524,7 +539,7 @@ try {
         ToolCommit            = $actualToolCommit
         ReleaseSourceRoot     = $repositoryRoot
         CertificateThumbprint = $certificateThumbprint
-        CertificateExpiresUtc = $certificate.NotAfter.ToUniversalTime()
+        CertificateExpiresUtc = if ($null -ne $certificate) { $certificate.NotAfter.ToUniversalTime() } else { $null }
         GitHubRecovery         = $releaseRecovery
         EffectiveConfigPath    = $effectiveConfigPath
         EffectiveConfigSha256  = $effectiveConfigSha256
@@ -536,7 +551,7 @@ try {
         $outputTail = $outputTail.Substring($outputTail.Length - 20000)
     }
     if ($receiptInitialized) {
-        $failureReceiptPath = if ($preserveSuccessfulReceipt) {
+        $failureReceiptPath = if ($preserveSuccessfulReceipt -or $preserveFailedReleaseReceipt) {
             $wrapperFailureReceiptPath
         } else {
             $ReceiptPath
@@ -558,6 +573,7 @@ try {
             ErrorMessage   = $_.Exception.Message
             OutputTail     = $outputTail
             SuccessfulReleaseReceiptPath = if ($preserveSuccessfulReceipt) { $ReceiptPath } else { $null }
+            FailedReleaseReceiptPath = if ($preserveFailedReleaseReceipt) { $ReceiptPath } else { $null }
             FailedAtUtc    = [DateTime]::UtcNow
         } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $failureReceiptPath -Encoding utf8
         if ($preserveSuccessfulReceipt) {
