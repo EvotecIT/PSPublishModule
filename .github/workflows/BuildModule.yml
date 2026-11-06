@@ -123,7 +123,7 @@ jobs:
 
           rm --recursive --force "$lint_root"
           mkdir --parents "$lint_root/.github/workflows"
-          curl --fail --location --silent --show-error "$actionlint_url" --output "$lint_root/$actionlint_archive"
+          curl --fail --location --silent --show-error --retry 4 --retry-all-errors --retry-delay 5 "$actionlint_url" --output "$lint_root/$actionlint_archive"
           printf '%s  %s\n' "$actionlint_sha256" "$lint_root/$actionlint_archive" | sha256sum --check --strict
           tar --extract --gzip --file "$lint_root/$actionlint_archive" --directory "$lint_root" actionlint
 
@@ -341,7 +341,19 @@ jobs:
 
       - name: Install native repository diagnostic test backend
         shell: pwsh
-        run: Install-Module Microsoft.PowerShell.PSResourceGet -RequiredVersion 1.2.0 -Scope CurrentUser -Force -AllowClobber -ErrorAction Stop
+        timeout-minutes: 10
+        run: |
+          # PowerShell Gallery downloads occasionally fail on hosted runners; retry before failing the job.
+          for ($attempt = 1; ; $attempt++) {
+            try {
+              Install-Module Microsoft.PowerShell.PSResourceGet -RequiredVersion 1.2.0 -Scope CurrentUser -Force -AllowClobber -ErrorAction Stop
+              break
+            } catch {
+              if ($attempt -ge 4) { throw }
+              Write-Warning "PSResourceGet download attempt $attempt/4 failed: $($_.Exception.Message)"
+              Start-Sleep -Seconds (15 * $attempt)
+            }
+          }
 
       - name: Test repository authentication diagnostics
         shell: pwsh
