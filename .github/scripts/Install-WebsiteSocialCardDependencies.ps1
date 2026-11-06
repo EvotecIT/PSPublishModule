@@ -80,9 +80,9 @@ function Get-PlannedPackages {
     $lines = @(& apt-get install --print-uris --yes -qq --install-recommends imagemagick 2>&1)
     if ($LASTEXITCODE -ne 0) { throw "Resolving ImageMagick packages failed: $($lines -join ' ')" }
     $packages = @(foreach ($line in $lines) {
-        if ("$line" -match "^'[^']+'\s+(?<file>(?<name>[^\s/_]+)_(?<version>[^\s/_]+)_(?<arch>[^\s/_]+)\.deb)\s+(?<size>\d+)\s") {
+        if ("$line" -match "^'(?<uri>[^']+)'\s+(?<file>(?<name>[^\s/_]+)_(?<version>[^\s/_]+)_(?<arch>[^\s/_]+)\.deb)\s+(?<size>\d+)\s") {
             [pscustomobject]@{
-                File = $Matches.file; Size = [long]$Matches.size; Hash = $null
+                File = $Matches.file; Size = [long]$Matches.size; Hash = $null; Uri = $Matches.uri
                 Id = "$($Matches.name)|$([Uri]::UnescapeDataString($Matches.version))|$($Matches.arch)"
                 Query = "$($Matches.name)$(if ($Matches.arch -ne 'all') { ':' + $Matches.arch })=$([Uri]::UnescapeDataString($Matches.version))"
             }
@@ -109,6 +109,42 @@ function Get-PlannedPackages {
 function Test-PackageFile([string] $Path, $Package) {
     if (-not [IO.File]::Exists($Path) -or ([IO.FileInfo]::new($Path)).Length -ne $Package.Size) { return $false }
     return (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash -eq $Package.Hash.ToUpperInvariant()
+}
+
+# Downloads packages missing from the cache directly from the configured mirrors. Apt stays on a
+# mirror that trickles at a few kB/s for many minutes; curl gives each file ten slow seconds (thirty
+# in all) before trying the next mirror. Unverified files are discarded; apt fetches what is left.
+function Save-PackagesFromMirrors($Packages, [string] $Directory) {
+    $curl = Get-Command curl -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+    if (-not $curl) { return }
+    $bases = [Collections.Generic.List[string]]::new()
+    $paths = @{}
+    foreach ($package in $Packages) {
+        $index = $package.Uri.IndexOf('/pool/')
+        if ($index -lt 0) { continue }
+        $paths[$package.File] = $package.Uri.Substring($index + 1)
+        $origin = $package.Uri.Substring(0, $index)
+        $candidates = if ($origin -match '^mirror\+file:(?<list>/.+)$' -and [IO.File]::Exists($Matches.list)) {
+            [IO.File]::ReadAllLines($Matches.list) | ForEach-Object { if ($_ -match '^\s*(?<url>https?://\S+)') { $Matches.url.TrimEnd('/') } }
+        } elseif ($origin -match '^https?://') { $origin }
+        foreach ($candidate in $candidates) { if (-not $bases.Contains($candidate)) { $bases.Add($candidate) } }
+    }
+    foreach ($base in $bases) {
+        $remaining = @($Packages | Where-Object { $paths.ContainsKey($_.File) -and -not (Test-PackageFile (Join-Path $Directory $_.File) $_) })
+        if ($remaining.Count -eq 0) { break }
+        $arguments = @('--fail', '--silent', '--show-error', '--location', '--parallel', '--parallel-max', '32',
+            '--connect-timeout', '10', '--speed-limit', '102400', '--speed-time', '10', '--max-time', '30')
+        foreach ($package in $remaining) { $arguments += @('--output', (Join-Path $Directory $package.File), "$base/$($paths[$package.File])") }
+        $watch = [Diagnostics.Stopwatch]::StartNew()
+        $errors = @(& $curl.Source @arguments 2>&1)
+        $fetched = 0
+        foreach ($package in $remaining) {
+            $target = Join-Path $Directory $package.File
+            if (Test-PackageFile $target $package) { $fetched++ } elseif ([IO.File]::Exists($target)) { [IO.File]::Delete($target) }
+        }
+        $detail = if ($errors.Count -gt 0) { " First error: $($errors[0])" } else { '' }
+        Write-Host "Downloaded $fetched of $($remaining.Count) package(s) from $base in $([int]$watch.Elapsed.TotalSeconds)s.$detail"
+    }
 }
 
 $renderer = Get-SocialCardRenderer
@@ -139,8 +175,12 @@ Write-Host 'Installing ImageMagick with its recommended SVG rendering support.'
 $packages = @()
 if ($PackageCacheDirectory) {
     $packages = @(Get-PlannedPackages)
+    [IO.Directory]::CreateDirectory($PackageCacheDirectory) | Out-Null
+    $missing = @($packages | Where-Object { -not (Test-PackageFile (Join-Path $PackageCacheDirectory $_.File) $_) })
+    Write-Host "$($packages.Count - $missing.Count) of $($packages.Count) package(s) restored from cache."
+    if ($missing.Count -gt 0) { Save-PackagesFromMirrors $missing $PackageCacheDirectory }
     $cached = @($packages | Where-Object { Test-PackageFile (Join-Path $PackageCacheDirectory $_.File) $_ } | ForEach-Object { Join-Path $PackageCacheDirectory $_.File })
-    Write-Host "Reusing $($cached.Count) of $($packages.Count) cached package(s)."
+    Write-Host "Handing $($cached.Count) of $($packages.Count) verified package(s) to apt."
     if ($cached.Count -gt 0) {
         & sudo cp -- @cached $aptArchives | Out-Host
         if ($LASTEXITCODE -ne 0) { throw 'Copying cached ImageMagick packages failed.' }
