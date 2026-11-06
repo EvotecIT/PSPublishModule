@@ -772,6 +772,8 @@ public sealed partial class ModulePipelineRunner
             ReleaseVersionSource.ProjectBuild,
             segment,
             laneLabel);
+        if (ShouldReusePreparedPackageLane(plan, mode))
+            return RestorePreparedPackageLane(plan, state, configuration, configPath, checkpointKey);
         ApplySynchronizedReleaseCheckpointVersion(
             plan,
             state,
@@ -779,8 +781,6 @@ public sealed partial class ModulePipelineRunner
             laneLabel,
             checkpointKey,
             configuration);
-        if (ShouldReusePreparedPackageLane(plan, mode))
-            return RestorePreparedPackageLane(plan, state, configuration, configPath, checkpointKey);
         var releaseVersionFloor = ResolveCoordinatedVersionFloor(
             plan,
             state,
@@ -837,6 +837,9 @@ public sealed partial class ModulePipelineRunner
             ReleaseVersionSource.PackageBuild,
             segment,
             laneLabel);
+        if (ShouldReusePreparedPackageLane(plan, mode))
+            return RestorePreparedPackageLane(plan, state, projectBuildConfig,
+                Path.Combine(plan.ProjectRoot, "module.packagebuild.inline.json"), checkpointKey);
         ApplySynchronizedReleaseCheckpointVersion(
             plan,
             state,
@@ -844,9 +847,6 @@ public sealed partial class ModulePipelineRunner
             laneLabel,
             checkpointKey,
             projectBuildConfig);
-        if (ShouldReusePreparedPackageLane(plan, mode))
-            return RestorePreparedPackageLane(plan, state, projectBuildConfig,
-                Path.Combine(plan.ProjectRoot, "module.packagebuild.inline.json"), checkpointKey);
         var releaseVersionFloor = ResolveCoordinatedVersionFloor(
             plan,
             state,

@@ -295,22 +295,25 @@ public sealed class PowerForgeProjectCmdletTests
         Assert.Equal(new[] { "NuGet", "PowerShellGallery", "GitHub" }, segment.Configuration.PublishOrder);
     }
 
-    [Fact]
-    public void NewConfigurationRelease_EnablesExplicitPreparedPackageResume()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void NewConfigurationRelease_OptsIntoPreparedPackagesOnlyWhenRequested(bool reusePackages)
     {
         using var ps = CreatePowerShellWithModuleImported();
         ps.AddCommand("New-ConfigurationRelease")
             .AddParameter("VersionSource", ReleaseVersionSource.PackageBuild)
             .AddParameter("PrimaryProject", "HtmlTinkerX")
-            .AddParameter("ResumeIncompleteRelease")
-            .AddParameter("ReusePreparedPackages");
+            .AddParameter("ResumeIncompleteRelease");
+        if (reusePackages)
+            ps.AddParameter("ReusePreparedPackages");
 
         var results = ps.Invoke();
 
         Assert.False(ps.HadErrors);
         var segment = Assert.IsType<ConfigurationReleaseSegment>(Assert.Single(results).BaseObject);
         Assert.True(segment.Configuration.ResumeIncompleteRelease);
-        Assert.True(segment.Configuration.ReusePreparedPackages);
+        Assert.Equal(reusePackages, segment.Configuration.ReusePreparedPackages);
     }
 
     [Fact]
