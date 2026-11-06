@@ -11,7 +11,7 @@ Creates/updates a module structure and triggers the build pipeline (legacy DSL c
 ## SYNTAX
 ### Modern (Default)
 ```powershell
-Invoke-ModuleBuild [[-Settings] <scriptblock>] -ModuleName <string> [-Path <string>] [-RunMode <ConfigurationGateMode>] [-IncludeModulePublishing <bool>] [-FunctionsToExportFolder <string>] [-AliasesToExportFolder <string>] [-ExcludeFromPackage <string[]>] [-ExcludeDirectories <string[]>] [-ExcludeFiles <string[]>] [-IncludeRoot <string[]>] [-IncludePS1 <string[]>] [-IncludeAll <string[]>] [-IncludeCustomCode <scriptblock>] [-IncludeToArray <IDictionary>] [-LibrariesCore <string>] [-LibrariesDefault <string>] [-LibrariesStandard <string>] [-Legacy] [-NoInteractive] [-Quiet] [-PassThru] [-StagingPath <string>] [-CsprojPath <string>] [-DotNetConfiguration <string>] [-DotNetFramework <string[]>] [-SkipInstall] [-InstallStrategy <InstallationStrategy>] [-KeepVersions <int>] [-InstallRoots <string[]>] [-LegacyFlatHandling <LegacyFlatModuleHandling>] [-PreserveInstallVersions <string[]>] [-KeepStaging] [-JsonOnly] [-JsonPath <string>] [-DiagnosticsBaselinePath <string>] [-GenerateDiagnosticsBaseline] [-UpdateDiagnosticsBaseline] [-FailOnNewDiagnostics] [-FailOnDiagnosticsSeverity <BuildDiagnosticSeverity>] [-DiagnosticsBinaryConflictSearchRoot <string[]>] [-ExitCode] [<CommonParameters>]
+Invoke-ModuleBuild [[-Settings] <scriptblock>] -ModuleName <string> [-Path <string>] [-RunMode <ConfigurationGateMode>] [-NoDotnetBuild] [-IncludeModulePublishing <bool>] [-FunctionsToExportFolder <string>] [-AliasesToExportFolder <string>] [-ExcludeFromPackage <string[]>] [-ExcludeDirectories <string[]>] [-ExcludeFiles <string[]>] [-IncludeRoot <string[]>] [-IncludePS1 <string[]>] [-IncludeAll <string[]>] [-IncludeCustomCode <scriptblock>] [-IncludeToArray <IDictionary>] [-LibrariesCore <string>] [-LibrariesDefault <string>] [-LibrariesStandard <string>] [-Legacy] [-NoInteractive] [-Quiet] [-PassThru] [-StagingPath <string>] [-CsprojPath <string>] [-DotNetConfiguration <string>] [-DotNetFramework <string[]>] [-SkipInstall] [-InstallStrategy <InstallationStrategy>] [-KeepVersions <int>] [-InstallRoots <string[]>] [-LegacyFlatHandling <LegacyFlatModuleHandling>] [-PreserveInstallVersions <string[]>] [-KeepStaging] [-JsonOnly] [-JsonPath <string>] [-DiagnosticsBaselinePath <string>] [-GenerateDiagnosticsBaseline] [-UpdateDiagnosticsBaseline] [-FailOnNewDiagnostics] [-FailOnDiagnosticsSeverity <BuildDiagnosticSeverity>] [-DiagnosticsBinaryConflictSearchRoot <string[]>] [-ExitCode] [<CommonParameters>]
 ```
 
 ### Config
@@ -727,7 +727,7 @@ Skips the configured .NET project build and reuses the existing module binary pa
 
 ```yaml
 Type: SwitchParameter
-Parameter Sets: Config
+Parameter Sets: Modern, Config
 Aliases: None
 Possible values:
 
