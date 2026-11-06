@@ -165,6 +165,44 @@ public sealed partial class ModulePipelineRunner
         return _hostedOperations.SignModuleOutput(moduleName, rootPath, packageFilePaths, include, exclude, signing, progress);
     }
 
+    private static string[] ResolveManifestLoadedSigningFiles(string rootPath, string manifestPath)
+    {
+        string manifestDirectory = Path.GetDirectoryName(manifestPath)
+            ?? throw new InvalidOperationException("Module manifest directory could not be resolved.");
+        string[] files = ModuleManifestLoadedContent.ReadRelativePaths(manifestPath)
+            .Select(path => Path.GetFullPath(Path.Combine(manifestDirectory, path)))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        string rootPrefix = Path.GetFullPath(rootPath)
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        if (files.Any(path =>
+                !path.StartsWith(rootPrefix, StringComparison.OrdinalIgnoreCase) || !File.Exists(path)))
+        {
+            throw new InvalidOperationException(
+                "Every manifest-loaded module file must exist inside the final module layout before signing.");
+        }
+        return files;
+    }
+
+    // Loaded code is signed in its final layout independently of optional package include/exclude patterns.
+    private ModuleSigningResult SignManifestLoadedContent(
+        string moduleName,
+        string rootPath,
+        string[] loadedContentFiles,
+        SigningOptionsConfiguration signing)
+    {
+        SigningOptionsConfiguration loadedContentSigning = CloneSigningOptions(signing)
+            ?? throw new InvalidOperationException("Signing options could not be cloned.");
+        loadedContentSigning.OverwriteSigned = true;
+        return _hostedOperations.SignModuleOutput(
+            moduleName,
+            rootPath,
+            loadedContentFiles,
+            new[] { "*" },
+            Array.Empty<string>(),
+            loadedContentSigning);
+    }
+
     internal static string[] BuildSigningIncludePatterns(SigningOptionsConfiguration signing)
     {
         if (signing.Include is { Length: > 0 })

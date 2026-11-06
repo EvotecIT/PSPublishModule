@@ -87,7 +87,7 @@ public sealed partial class ModulePipelineRunner
                 plan.Delivery,
                 includeScriptFolders: !state.PackageWithoutScriptFolders,
                 finalizedPayloadFiles: buildResult.FinalizedPayloadFiles);
-            FinalizeAndValidateRepositoryModulePayload(plan, state, packagePath, plan.ModuleName);
+            FinalizeAndValidateRepositoryModulePayload(plan, state, packagePath, plan.ModuleName, finalizeSignatures: false);
         }
         finally
         {
@@ -99,14 +99,28 @@ public sealed partial class ModulePipelineRunner
         ModulePipelinePlan plan,
         ModulePipelineRunState state,
         string moduleRoot,
-        string moduleName)
+        string moduleName,
+        bool finalizeSignatures)
     {
         ValidateDeliveredBinaryDependencies(plan, moduleRoot);
+        // Preflight validates the derived layout without invoking either signing path.
+        SigningOptionsConfiguration? signing = finalizeSignatures && plan.SignModule ? plan.Signing : null;
+        if (signing is not null)
+        {
+            string manifestPath = Path.Combine(moduleRoot, moduleName + ".psd1");
+            string[] loadedContentFiles = ResolveManifestLoadedSigningFiles(moduleRoot, manifestPath);
+            if (loadedContentFiles.Length > 0)
+            {
+                ModuleSigningResult signingResult = SignManifestLoadedContent(
+                    moduleName, moduleRoot, loadedContentFiles, signing);
+                state.SigningResult = AggregateSigningResults(state.SigningResult, signingResult);
+            }
+        }
         PowerShellModuleCompilationIntegrator.FinalizeDeliveredCanonicalManifest(
             moduleRoot,
             moduleName,
             state.SigningResult,
-            plan.Signing);
+            signing);
         ValidateDeliveredBinaryDependencies(plan, moduleRoot);
     }
 
@@ -383,7 +397,7 @@ public sealed partial class ModulePipelineRunner
                     remotePublishAttempted: guardedRemotePublishAttempted,
                     remoteSideEffectObserved: guardedRemoteSideEffectObserved,
                     finalizeRepositoryModule: (root, moduleName) =>
-                        FinalizeAndValidateRepositoryModulePayload(plan, state, root, moduleName),
+                        FinalizeAndValidateRepositoryModulePayload(plan, state, root, moduleName, finalizeSignatures: true),
                     gitHubProgress: gitHubProgress));
             session.Done(step);
         }
