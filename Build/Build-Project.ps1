@@ -150,10 +150,15 @@ try {
 
     if ($PrepareMetadata) {
         . (Join-Path $PSScriptRoot 'Private/Invoke-PowerForgeReleaseMetadataPreparation.ps1')
-        $result = Invoke-PowerForgeReleaseMetadataPreparation `
-            -ConfigPath $ConfigPath `
-            -EffectiveConfigurationPath $EffectiveConfigurationPath `
-            -Version $ModuleVersion
+        $metadataParameters = @{
+            ConfigPath = $ConfigPath
+            EffectiveConfigurationPath = $EffectiveConfigurationPath
+            Version = $ModuleVersion
+        }
+        if ($Json) {
+            $metadataParameters.WarningAction = 'SilentlyContinue'
+        }
+        $result = Invoke-PowerForgeReleaseMetadataPreparation @metadataParameters
         if ($Json) { $result | ConvertTo-Json -Depth 20 } else { $result }
         return
     }

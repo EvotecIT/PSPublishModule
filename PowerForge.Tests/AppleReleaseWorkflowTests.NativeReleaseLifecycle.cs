@@ -111,8 +111,10 @@ public sealed partial class AppleReleaseWorkflowTests
         }
     }
 
-    [Fact]
-    public void PrepareMetadataUpdatesOnlyTwelveProjectsManifestAndHelpVersion()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void PrepareMetadataUpdatesOnlyTwelveProjectsManifestAndHelpVersion(bool json)
     {
         var root = Directory.CreateTempSubdirectory();
         try
@@ -188,9 +190,21 @@ public sealed partial class AppleReleaseWorkflowTests
                 function dotnet { $global:LASTEXITCODE = 0 }
                 function Import-Module { Microsoft.PowerShell.Core\Import-Module '{{binaryPath.Replace("'", "''", StringComparison.Ordinal)}}' -Force }
                 & '{{scriptPath.Replace("'", "''", StringComparison.Ordinal)}}' -PrepareMetadata `
-                    -ConfigPath '{{configPath.Replace("'", "''", StringComparison.Ordinal)}}' -ModuleVersion 3.0.189 -Json
+                    -ConfigPath '{{configPath.Replace("'", "''", StringComparison.Ordinal)}}' -ModuleVersion 3.0.189
                 """;
-            Run("pwsh", root.FullName, "-NoProfile", "-Command", command).EnsureSuccess();
+            var result = Run("pwsh", root.FullName, "-NoProfile", "-Command", command + (json ? " -Json" : string.Empty))
+                .EnsureSuccess();
+            if (json)
+            {
+                using var receipt = JsonDocument.Parse(result.StandardOutput);
+                Assert.True(receipt.RootElement.GetProperty("Success").GetBoolean());
+                Assert.Equal("PrepareMetadata", receipt.RootElement.GetProperty("Operation").GetString());
+                Assert.Equal("3.0.189", receipt.RootElement.GetProperty("Version").GetString());
+            }
+            else
+            {
+                Assert.Contains("No export assemblies found for 'Fixture' under staging", result.StandardOutput);
+            }
 
             var changed = before.Keys.Where(path => before[path] != File.ReadAllText(path)).ToArray();
             Assert.Equal(14, changed.Length);
