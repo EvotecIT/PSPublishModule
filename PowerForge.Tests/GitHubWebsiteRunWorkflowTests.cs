@@ -144,7 +144,7 @@ public sealed class GitHubWebsiteRunWorkflowTests
             });
         Assert.DoesNotContain("inputs.credential_mode != 'none'", workflowYaml, StringComparison.Ordinal);
         // Each step that hands the policy token to website code also blanks an ambient CLI credential.
-        var lines = workflowYaml.Split('\n');
+        var lines = workflowYaml.Split('\n').Select(static line => line.TrimEnd('\r')).ToArray();
         Assert.Equal(
             lines.Count(static line => line.Contains("GITHUB_TOKEN: ${{ (inputs.credential_mode == 'standard' ||", StringComparison.Ordinal)),
             lines.Count(static line => line == "          GH_TOKEN: ''"));

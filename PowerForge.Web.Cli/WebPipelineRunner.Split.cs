@@ -366,10 +366,16 @@ internal static partial class WebPipelineRunner
     private static string GetSplitPrepareReceiptPath(PipelineRunState state)
         => Path.Combine(Path.GetFullPath(state.BaseDir), ".powerforge", "split-prepare-receipt.json");
 
-    private static string[] DescribeSplitPrepareSteps(PipelineRunState state)
-        => state.Steps.Where(step => state.SplitPrepareSteps.Contains(step.Index))
-            .Select(static step => $"{step.Index}:{step.Id}:{Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(step.Element.GetRawText()))).ToLowerInvariant()}")
-            .ToArray();
+    private static string DescribeSplitPrepareStep(PipelineStepDefinition step)
+        => $"{step.Index}:{step.Id}:{Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(step.Element.GetRawText()))).ToLowerInvariant()}";
+
+    /// <summary>Removes a receipt left by an earlier prepare run, before this one can change the workspace.</summary>
+    private static void DeleteSplitPrepareReceipt(PipelineRunState state)
+    {
+        var path = GetSplitPrepareReceiptPath(state);
+        if (File.Exists(path))
+            File.Delete(path);
+    }
 
     /// <summary>
     /// Records in this workspace that shard 1 ran the splitPhase prepare steps, so a finish run here can skip them.
@@ -386,8 +392,11 @@ internal static partial class WebPipelineRunner
         writer.WriteString("source", ResolveSplitSourceIdentity(state.BaseDir));
         writer.WriteString("engine", ResolveSplitEngineIdentity());
         writer.WriteStartArray("steps");
-        foreach (var step in DescribeSplitPrepareSteps(state))
-            writer.WriteStringValue(step);
+        // Only steps this run executed; a step skipped by mode or task filters is left to finish.
+        foreach (var step in state.Steps.Where(step => state.SplitPrepareSteps.Contains(step.Index) &&
+                                                      state.StepResultsByIndex.TryGetValue(step.Index, out var result) &&
+                                                      result.Success && result.Message?.StartsWith("skipped (", StringComparison.Ordinal) != true))
+            writer.WriteStringValue(DescribeSplitPrepareStep(step));
         writer.WriteEndArray();
         writer.WriteEndObject();
     }
@@ -399,10 +408,13 @@ internal static partial class WebPipelineRunner
         if (!File.Exists(path))
         {
             if (state.SplitPrepareSteps.Count > 0)
-                state.Logger?.Info($"Split pipeline: no prepare receipt in this workspace; {state.SplitPrepareSteps.Count} splitPhase prepare step(s) run here.");
+                state.Logger?.Info($"Split pipeline: no prepare receipt in this workspace; splitPhase prepare steps run here.");
             return new HashSet<int>();
         }
 
+        var current = state.Steps.Where(step => state.SplitPrepareSteps.Contains(step.Index))
+            .ToDictionary(DescribeSplitPrepareStep, static step => step.Index, StringComparer.Ordinal);
+        var ran = new HashSet<int>();
         string? mismatch;
         try
         {
@@ -413,8 +425,10 @@ internal static partial class WebPipelineRunner
                 mismatch = GetInt(root, "version") != 1 ? "version"
                     : !string.Equals(GetString(root, "source"), ResolveSplitSourceIdentity(state.BaseDir), StringComparison.Ordinal) ? "source commit"
                     : !string.Equals(GetString(root, "engine"), ResolveSplitEngineIdentity(), StringComparison.Ordinal) ? "engine"
-                    : !steps.SequenceEqual(DescribeSplitPrepareSteps(state), StringComparer.Ordinal) ? "steps"
+                    : steps.Any(step => !current.ContainsKey(step)) ? "steps"
                     : null;
+                if (mismatch is null)
+                    ran.UnionWith(steps.Select(step => current[step]));
             }
         }
         catch (JsonException ex)
@@ -428,7 +442,7 @@ internal static partial class WebPipelineRunner
             state.Logger?.Info($"Split pipeline: prepare receipt does not match this run ({mismatch}); splitPhase prepare steps run here.");
             return new HashSet<int>();
         }
-        return new HashSet<int>(state.SplitPrepareSteps);
+        return ran;
     }
 
     private static HashSet<string> GetSplitExcludedPaths(PipelineRunState state)

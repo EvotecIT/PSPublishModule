@@ -198,6 +198,8 @@ internal static partial class WebPipelineRunner
             Result = result
         };
 
+        if (split?.Phase == WebPipelineSplitPhase.Prepare)
+            DeleteSplitPrepareReceipt(state);
         if (split?.Phase == WebPipelineSplitPhase.Finish)
         {
             state.SplitPreparedHere = ConsumeSplitPrepareReceipt(state);

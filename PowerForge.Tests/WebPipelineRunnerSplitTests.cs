@@ -233,6 +233,31 @@ public class WebPipelineRunnerSplitTests
     }
 
     [Fact]
+    public void SplitFinish_RunsPrepareStepsThatShardOneSkipped()
+    {
+        var root = CreateRoot();
+        try
+        {
+            var main = CreateSite(root, "main");
+            var helper = CreateSite(root, "helper");
+            var archives = Path.Combine(root, "archives");
+            AssertSucceeded(WebPipelineRunner.RunPipeline(Path.Combine(main, "pipeline.json"), new WebConsoleLogger(),
+                skipTasks: new[] { "overlay" }, split: Prepare(1, 2, Path.Combine(archives, "main", "shard.tar"))));
+            AssertSucceeded(WebPipelineRunner.RunPipeline(Path.Combine(helper, "pipeline.json"), new WebConsoleLogger(),
+                split: Prepare(2, 2, Path.Combine(archives, "helper", "shard.tar"))));
+            Assert.False(Directory.Exists(Path.Combine(main, "_site", "early")));
+
+            AssertSucceeded(WebPipelineRunner.RunPipeline(Path.Combine(main, "pipeline.json"), new WebConsoleLogger(),
+                split: WebPipelineSplitOptions.Parse("finish", null, null, archives)));
+            Assert.True(File.Exists(Path.Combine(main, "_site", "early", "index.html")));
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void SplitRun_RejectsPrepareStepsThatNeedTheFinishRun()
     {
         var root = CreateRoot();
