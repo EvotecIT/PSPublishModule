@@ -111,6 +111,7 @@ internal static partial class WebPipelineRunner
         public required int LastIndex { get; init; }
         public required List<SplitUnit> Units { get; init; }
         public Dictionary<string, (long Length, long Ticks)>? Before { get; set; }
+        public Dictionary<string, (long Length, long Ticks)>? After { get; set; }
     }
 
     private sealed class SplitManifest
@@ -301,10 +302,18 @@ internal static partial class WebPipelineRunner
 
         var (first, last) = (state.SplitFirstIndex, state.SplitLastIndex);
         if (split.Phase == WebPipelineSplitPhase.Finish)
-            return definition.Index <= last ? "split: ran in prepare" : null;
+            return definition.Index <= last || state.SplitPreparedHere.Contains(definition.Index) ? "split: ran in prepare" : null;
 
         if (definition.Index > last)
-            return "split: runs in finish";
+        {
+            if (!state.SplitPrepareSteps.Contains(definition.Index))
+                return "split: runs in finish";
+            if (split.ShardIndex != 1)
+                return "split: runs in shard 1";
+            // The archive holds only apidocs output, so it is written before these steps change anything.
+            EnsureSplitArchiveWritten(state);
+            return null;
+        }
         if (definition.Index < first)
             return null;
 
@@ -317,6 +326,137 @@ internal static partial class WebPipelineRunner
             return null;
         inputSelection = mine.Select(static unit => unit.InputIndex!.Value).OrderBy(static index => index).ToArray();
         return null;
+    }
+
+    /// <summary>
+    /// Steps after the apidocs block marked <c>"splitPhase": "prepare"</c>. In a split run they run at the end of
+    /// shard 1's prepare run, while the other shards are still generating API docs, instead of in the finish run.
+    /// They may depend only on steps before the block or on other such steps.
+    /// </summary>
+    private static HashSet<int> ResolveSplitPrepareSteps(List<PipelineStepDefinition> steps, int first, int last)
+    {
+        var selected = new HashSet<int>();
+        foreach (var step in steps)
+        {
+            var phase = GetString(step.Element, "splitPhase");
+            if (string.IsNullOrWhiteSpace(phase))
+                continue;
+            if (!phase.Equals("prepare", StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException($"Step '{step.Id}' has unsupported splitPhase '{phase}'; the only supported value is 'prepare'.");
+            if (step.Index <= last)
+                throw new InvalidOperationException($"Step '{step.Id}' sets splitPhase 'prepare', but only steps after the apidocs block can move to the prepare run.");
+            var blocking = step.DependencyIndexes.FirstOrDefault(index => index >= first && !selected.Contains(index));
+            if (blocking != 0)
+                throw new InvalidOperationException($"Step '{step.Id}' sets splitPhase 'prepare', but depends on step '{steps[blocking - 1].Id}'; it may depend only on steps before the apidocs block or on other splitPhase prepare steps.");
+            selected.Add(step.Index);
+        }
+        return selected;
+    }
+
+    private static void EnsureSplitArchiveWritten(PipelineRunState state)
+    {
+        lock (state.SplitGate)
+        {
+            if (state.SplitArchiveWritten)
+                return;
+            WriteSplitArchive(state);
+            state.SplitArchiveWritten = true;
+        }
+    }
+
+    private static string GetSplitPrepareReceiptPath(PipelineRunState state)
+        => Path.Combine(Path.GetFullPath(state.BaseDir), ".powerforge", "split-prepare-receipt.json");
+
+    private static string DescribeSplitPrepareStep(PipelineStepDefinition step)
+        => $"{step.Index}:{step.Id}:{Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(step.Element.GetRawText()))).ToLowerInvariant()}";
+
+    /// <summary>Removes a receipt left by an earlier prepare run, before this one can change the workspace.</summary>
+    private static void DeleteSplitPrepareReceipt(PipelineRunState state)
+    {
+        var path = GetSplitPrepareReceiptPath(state);
+        if (File.Exists(path))
+            File.Delete(path);
+    }
+
+    /// <summary>
+    /// Records in this workspace that shard 1 ran the splitPhase prepare steps, so a finish run here can skip them.
+    /// A finish run elsewhere finds no receipt and runs them itself.
+    /// </summary>
+    private static void WriteSplitPrepareReceipt(PipelineRunState state)
+    {
+        var path = GetSplitPrepareReceiptPath(state);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        using var stream = File.Create(path);
+        using var writer = new Utf8JsonWriter(stream, new JsonWriterOptions { Indented = true });
+        writer.WriteStartObject();
+        writer.WriteNumber("version", 1);
+        writer.WriteString("source", ResolveSplitSourceIdentity(state.BaseDir));
+        writer.WriteString("engine", ResolveSplitEngineIdentity());
+        writer.WriteStartArray("steps");
+        // Only steps this run executed; a step skipped by mode or task filters is left to finish.
+        foreach (var step in state.Steps.Where(step => state.SplitPrepareSteps.Contains(step.Index) &&
+                                                      state.StepResultsByIndex.TryGetValue(step.Index, out var result) &&
+                                                      result.Success && result.Message?.StartsWith("skipped (", StringComparison.Ordinal) != true))
+            writer.WriteStringValue(DescribeSplitPrepareStep(step));
+        writer.WriteEndArray();
+        // What these steps changed after the archive was written; finish rejects archives that write the same files.
+        var before = EnsureSplitPlan(state).After!;
+        var now = CaptureSplitSnapshot(state.BaseDir, GetSplitExcludedPaths(state));
+        writer.WriteStartArray("touched");
+        foreach (var touched in now.Where(entry => !before.TryGetValue(entry.Key, out var previous) || previous != entry.Value)
+                     .Select(static entry => entry.Key)
+                     .Concat(before.Keys.Where(key => !now.ContainsKey(key)))
+                     .OrderBy(static key => key, StringComparer.Ordinal))
+            writer.WriteStringValue(touched);
+        writer.WriteEndArray();
+        writer.WriteEndObject();
+    }
+
+    /// <summary>Reads and removes this workspace's prepare receipt; returns the steps it proves already ran here.</summary>
+    private static HashSet<int> ConsumeSplitPrepareReceipt(PipelineRunState state)
+    {
+        var path = GetSplitPrepareReceiptPath(state);
+        if (!File.Exists(path))
+        {
+            if (state.SplitPrepareSteps.Count > 0)
+                state.Logger?.Info($"Split pipeline: no prepare receipt in this workspace; splitPhase prepare steps run here.");
+            return new HashSet<int>();
+        }
+
+        var current = state.Steps.Where(step => state.SplitPrepareSteps.Contains(step.Index))
+            .ToDictionary(DescribeSplitPrepareStep, static step => step.Index, StringComparer.Ordinal);
+        var ran = new HashSet<int>();
+        string? mismatch;
+        try
+        {
+            using (var document = JsonDocument.Parse(File.ReadAllBytes(path)))
+            {
+                var root = document.RootElement;
+                var steps = GetArrayOfStrings(root, "steps") ?? Array.Empty<string>();
+                mismatch = GetInt(root, "version") != 1 ? "version"
+                    : !string.Equals(GetString(root, "source"), ResolveSplitSourceIdentity(state.BaseDir), StringComparison.Ordinal) ? "source commit"
+                    : !string.Equals(GetString(root, "engine"), ResolveSplitEngineIdentity(), StringComparison.Ordinal) ? "engine"
+                    : steps.Any(step => !current.ContainsKey(step)) ? "steps"
+                    : null;
+                if (mismatch is null)
+                {
+                    ran.UnionWith(steps.Select(step => current[step]));
+                    state.SplitPreparedTouched.UnionWith(GetArrayOfStrings(root, "touched") ?? Array.Empty<string>());
+                }
+            }
+        }
+        catch (JsonException ex)
+        {
+            mismatch = ex.Message;
+        }
+        File.Delete(path);
+
+        if (mismatch is not null)
+        {
+            state.Logger?.Info($"Split pipeline: prepare receipt does not match this run ({mismatch}); splitPhase prepare steps run here.");
+            return new HashSet<int>();
+        }
+        return ran;
     }
 
     private static HashSet<string> GetSplitExcludedPaths(PipelineRunState state)
@@ -358,6 +498,7 @@ internal static partial class WebPipelineRunner
         var plan = EnsureSplitPlan(state);
         var before = plan.Before!;
         var after = CaptureSplitSnapshot(state.BaseDir, GetSplitExcludedPaths(state));
+        plan.After = after;
         var changed = after
             .Where(entry => !before.TryGetValue(entry.Key, out var previous) || previous != entry.Value)
             .Select(static entry => entry.Key)
@@ -431,6 +572,16 @@ internal static partial class WebPipelineRunner
         if (foreign.Path is not null)
             throw new InvalidOperationException(
                 $"Split archive {foreign.Path} was built from source '{foreign.Manifest.Source}' with engine '{foreign.Manifest.Engine}', but this run uses source '{source}' with engine '{engine}'.");
+
+        // A splitPhase step ran after shard 1's archive; applying an archive over its files would undo it.
+        var overlap = archives.SelectMany(static archive => archive.Manifest.Files.Keys.Concat(archive.Manifest.Deleted))
+            .Where(state.SplitPreparedTouched.Contains)
+            .Distinct(StringComparer.Ordinal)
+            .OrderBy(static path => path, StringComparer.Ordinal)
+            .ToArray();
+        if (overlap.Length > 0)
+            throw new InvalidOperationException(
+                $"splitPhase prepare steps changed files that the apidocs block also writes: {string.Join(", ", overlap.Take(5))}{(overlap.Length > 5 ? $" (+{overlap.Length - 5} more)" : string.Empty)}. Remove splitPhase from those steps.");
 
         var plan = EnsureSplitPlan(state);
         var expected = plan.Units.Select(static unit => unit.Key).ToHashSet(StringComparer.Ordinal);
@@ -686,6 +837,8 @@ internal static partial class WebPipelineRunner
                 return;
             for (var index = 0; index < state.SplitLastIndex; index++)
                 result.Steps[index] = priorSteps[index];
+            foreach (var stepIndex in state.SplitPreparedHere)
+                result.Steps[stepIndex - 1] = priorSteps[stepIndex - 1];
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
         {

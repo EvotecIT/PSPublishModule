@@ -178,6 +178,7 @@ internal static partial class WebPipelineRunner
             Split = split,
             SplitFirstIndex = splitBlock.First,
             SplitLastIndex = splitBlock.Last,
+            SplitPrepareSteps = split is null ? new HashSet<int>() : ResolveSplitPrepareSteps(steps, splitBlock.First, splitBlock.Last),
             Steps = steps,
             TotalSteps = totalSteps,
             BaseDir = baseDir,
@@ -197,8 +198,13 @@ internal static partial class WebPipelineRunner
             Result = result
         };
 
+        if (split?.Phase == WebPipelineSplitPhase.Prepare)
+            DeleteSplitPrepareReceipt(state);
         if (split?.Phase == WebPipelineSplitPhase.Finish)
+        {
+            state.SplitPreparedHere = ConsumeSplitPrepareReceipt(state);
             ApplySplitArchives(state);
+        }
 
         var maxParallelism = GetPipelineMaxParallelism(root);
         PipelineStepOutcome? failure;
@@ -240,7 +246,11 @@ internal static partial class WebPipelineRunner
         }
 
         if (split?.Phase == WebPipelineSplitPhase.Prepare)
-            WriteSplitArchive(state);
+        {
+            EnsureSplitArchiveWritten(state);
+            if (split.ShardIndex == 1 && state.SplitPrepareSteps.Count > 0)
+                WriteSplitPrepareReceipt(state);
+        }
 
         var cacheOutputs = state.CacheOutputs;
         var cacheUpdated = state.CacheUpdated;

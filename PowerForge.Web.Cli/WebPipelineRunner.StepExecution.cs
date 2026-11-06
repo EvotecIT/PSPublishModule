@@ -32,6 +32,10 @@ internal static partial class WebPipelineRunner
         public WebPipelineSplitOptions? Split { get; init; }
         public int SplitFirstIndex { get; init; }
         public int SplitLastIndex { get; init; }
+        public HashSet<int> SplitPrepareSteps { get; init; } = new();
+        public HashSet<int> SplitPreparedHere { get; set; } = new();
+        public HashSet<string> SplitPreparedTouched { get; } = new(StringComparer.Ordinal);
+        public bool SplitArchiveWritten { get; set; }
 
         public object Gate { get; } = new();
         public object SplitGate { get; } = new();
