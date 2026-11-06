@@ -147,6 +147,7 @@ public sealed partial class InvokeModuleBuildCommand : PSCmdlet
     public string? BuildFramework { get; set; }
 
     /// <summary>Skips the configured .NET project build and reuses the existing module binary payload.</summary>
+    [Parameter(ParameterSetName = ParameterSetModern)]
     [Parameter(ParameterSetName = ParameterSetConfig)]
     public SwitchParameter NoDotnetBuild { get; set; }
 

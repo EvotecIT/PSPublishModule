@@ -7,14 +7,61 @@ namespace PowerForge.Tests;
 
 public sealed class InvokeModuleBuildPublishingTests
 {
+    [Fact]
+    public void Run_PowerShellAuthoredBuild_ReusesPreparedStagingWithoutBuildingDotNet()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "pf-native-staging-" + Guid.NewGuid().ToString("N")));
+        try
+        {
+            var source = Directory.CreateDirectory(Path.Combine(root.FullName, "Sample"));
+            var staged = Directory.CreateDirectory(Path.Combine(root.FullName, "prepared"));
+            const string manifest = "@{RootModule='Sample.psm1';ModuleVersion='1.0.0';GUID='a28d1771-0f39-4569-9404-437bb10edc34';FunctionsToExport=@();CmdletsToExport=@();AliasesToExport=@()}";
+            foreach (var directory in new[] { source, staged })
+            {
+                File.WriteAllText(Path.Combine(directory.FullName, "Sample.psd1"), manifest);
+                File.WriteAllText(Path.Combine(directory.FullName, "Sample.psm1"), "# fixture module");
+            }
+            File.WriteAllText(Path.Combine(source.FullName, "payload.txt"), "source payload");
+            File.WriteAllText(Path.Combine(staged.FullName, "payload.txt"), "prepared payload");
+            var state = InitialSessionState.CreateDefault();
+            state.Commands.Add(new SessionStateCmdletEntry("Invoke-ModuleBuild", typeof(InvokeModuleBuildCommand), null));
+            using var shell = PowerShell.Create(state);
+            shell.AddCommand("Invoke-ModuleBuild")
+                .AddParameter("ModuleName", "Sample")
+                .AddParameter("Path", root.FullName)
+                .AddParameter("StagingPath", staged.FullName)
+                .AddParameter("NoDotnetBuild")
+                .AddParameter("ReuseStaging")
+                .AddParameter("PowerForgeReleaseCheckpoint")
+                .AddParameter("SkipInstall")
+                .AddParameter("KeepStaging")
+                .AddParameter("NoInteractive")
+                .AddParameter("PassThru")
+                .AddParameter("ErrorAction", ActionPreference.Stop);
+
+            var output = shell.Invoke();
+            Assert.False(shell.HadErrors, string.Join(Environment.NewLine, shell.Streams.Error));
+            var result = Assert.IsType<ModulePipelineResult>(Assert.Single(output).BaseObject);
+            Assert.True(result.Plan.BuildSpec.ReuseStaging);
+            Assert.True(result.Plan.BuildSpec.SkipDotNetBuild);
+            Assert.Equal("prepared payload", File.ReadAllText(Path.Combine(staged.FullName, "payload.txt")));
+            Assert.Equal("source payload", File.ReadAllText(Path.Combine(source.FullName, "payload.txt")));
+        }
+        finally { root.Delete(recursive: true); }
+    }
+
     [Theory]
-    [InlineData("Modern", false)]
-    [InlineData("Modern", true)]
-    [InlineData("Config", false)]
-    [InlineData("Config", true)]
-    [InlineData("Configuration", false)]
-    [InlineData("Configuration", true)]
-    public void JsonOnly_ModulePublishingSelection_PreservesPackageLane(string inputKind, bool excludeModulePublishing)
+    [InlineData("Modern", false, true)]
+    [InlineData("Modern", true, true)]
+    [InlineData("Config", false, true)]
+    [InlineData("Config", true, true)]
+    [InlineData("Configuration", false, null)]
+    [InlineData("Configuration", true, null)]
+    [InlineData("Modern", false, null)]
+    [InlineData("Modern", false, false)]
+    [InlineData("Config", false, null)]
+    [InlineData("Config", false, false)]
+    public void JsonOnly_ModulePublishingSelection_PreservesPackageLane(string inputKind, bool excludeModulePublishing, bool? noDotnetBuild)
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "pf-publish-selection-" + Guid.NewGuid().ToString("N")));
         try
@@ -45,10 +92,8 @@ public sealed class InvokeModuleBuildPublishingTests
                 .AddParameter("JsonPath", outputPath)
                 .AddParameter("NoInteractive")
                 .AddParameter("ErrorAction", ActionPreference.Stop);
-            if (inputKind != "Configuration")
-                shell.AddParameter("NoDotnetBuild")
-                    .AddParameter("ReuseStaging")
-                    .AddParameter("PowerForgeReleaseCheckpoint");
+            if (noDotnetBuild.HasValue)
+                shell.AddParameter("NoDotnetBuild", noDotnetBuild.Value);
             if (excludeModulePublishing)
                 shell.AddParameter("IncludeModulePublishing", false);
 
@@ -94,7 +139,7 @@ public sealed class InvokeModuleBuildPublishingTests
 
             if (inputKind != "Configuration")
             {
-                Assert.True(prepared.Build.SkipDotNetBuild);
+                Assert.Equal(noDotnetBuild == true, prepared.Build.SkipDotNetBuild);
                 var project = Assert.Single(prepared.Segments.OfType<ConfigurationProjectBuildSegment>());
                 Assert.Equal("Library", project.Configuration.Name);
                 Assert.True(project.Configuration.PublishNuget);
