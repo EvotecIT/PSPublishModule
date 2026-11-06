@@ -279,11 +279,27 @@ public sealed class PowerForgeToolReleaseServiceTests
         startInfo.RedirectStandardError = true;
         startInfo.UseShellExecute = false;
         startInfo.CreateNoWindow = true;
-        using var cancellation = new CancellationTokenSource(TimeSpan.FromMilliseconds(250));
-        var stopwatch = Stopwatch.StartNew();
+        using var cancellation = new CancellationTokenSource();
+        var stopwatch = new Stopwatch();
+        // Measure termination after cancellation, independently of a busy test
+        // host's thread-pool timer scheduling or process startup.
+        var cancelThread = new Thread(() =>
+        {
+            Thread.Sleep(250);
+            stopwatch.Start();
+            cancellation.Cancel();
+        });
+        cancelThread.Start();
 
-        Assert.ThrowsAny<OperationCanceledException>(
-            () => PowerForgeToolReleaseService.RunProcess(startInfo, cancellation.Token));
+        try
+        {
+            Assert.ThrowsAny<OperationCanceledException>(
+                () => PowerForgeToolReleaseService.RunProcess(startInfo, cancellation.Token));
+        }
+        finally
+        {
+            cancelThread.Join();
+        }
 
         Assert.True(
             stopwatch.Elapsed < TimeSpan.FromSeconds(5),
