@@ -664,6 +664,15 @@ without building, signing, or publishing.
   `ResumeIncompleteRelease` only when the operator intentionally wants to continue that exact release and skip
   destinations that already completed.
 
+For a partial publication with a complete payload cache, add `ReusePreparedPackages` alongside
+`ResumeIncompleteRelease` to retain the prepared NuGet packages, symbols and project release ZIPs
+without another build, pack or signing pass. This also accepts existing schema-5 checkpoints.
+The cache contents, package identities, versions and source snapshot are checked before publication.
+Every packable cached project needs a primary package, and its lane needs `OutputPath` or `StagingPath`.
+Payload-free, non-packable projects retain their identities through a read-only project plan.
+Module preparation and destination checks run normally. Missing or corrupt payloads fail recovery
+and preserve the checkpoint. Controlled provenance rebuilding uses the normal release path.
+
 ## Validation Contract
 
 Use run modes through the same JSON-first wrapper in CI and at release time:
