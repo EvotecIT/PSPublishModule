@@ -658,6 +658,8 @@ public sealed partial class ModulePipelineScriptExecutionSeamTests
         public bool AutoSuccessfulSigningResult { get; set; }
         public bool RejectIncompleteBinaryPayload { get; set; }
         public bool AutoSuccessfulPublishResult { get; set; }
+        public ModulePublisher? RepositoryPublisher { get; set; }
+        public bool SatisfyDependencies { get; set; }
         public Action<int>? SigningCallStarted { get; set; }
         public Action<int, string[]>? SigningFilesCompleted { get; set; }
         public Action? BeforeRemotePublishAttempted { get; set; }
@@ -665,6 +667,7 @@ public sealed partial class ModulePipelineScriptExecutionSeamTests
         public bool InvokeRemoteSideEffectObserved { get; set; }
         public Action<ModulePipelineActionConfiguration, ModulePipelineActionContext>? ActionStarted { get; set; }
         public List<string> SigningRootPaths { get; } = new();
+        public List<string> BinaryDependencyRootPaths { get; } = new();
         public List<string> OperationOrder { get; } = new();
         public string[] LastDocumentationCommands { get; private set; } = Array.Empty<string>();
         public ArtefactBuildResult[] LastPublishedArtefacts { get; private set; } = Array.Empty<ArtefactBuildResult>();
@@ -678,7 +681,15 @@ public sealed partial class ModulePipelineScriptExecutionSeamTests
             string? repository,
             RepositoryCredential? credential,
             bool prerelease)
-            => throw new InvalidOperationException("Not used in this test.");
+        {
+            if (!SatisfyDependencies)
+                throw new InvalidOperationException("Not used in this test.");
+            return dependencies.Select(dependency => new ModuleDependencyInstallResult(
+                dependency.Name, dependency.RequiredVersion ?? dependency.MinimumVersion,
+                dependency.RequiredVersion ?? dependency.MinimumVersion,
+                dependency.RequiredVersion ?? dependency.MinimumVersion,
+                ModuleDependencyInstallStatus.Satisfied, "test-host", "Already available in the test host.")).ToArray();
+        }
 
         public DocumentationBuildResult BuildDocumentation(
             string moduleName,
@@ -736,6 +747,7 @@ public sealed partial class ModulePipelineScriptExecutionSeamTests
 
         public void EnsureBinaryDependenciesValid(string moduleRoot, string powerShellEdition, string? modulePath, string? validationTarget, IReadOnlyDictionary<string, string[]>? optionalDependencies = null)
         {
+            BinaryDependencyRootPaths.Add(Path.GetFullPath(moduleRoot));
             if (!RejectIncompleteBinaryPayload)
                 throw new InvalidOperationException("Not used in this test.");
 
@@ -762,6 +774,14 @@ public sealed partial class ModulePipelineScriptExecutionSeamTests
             IGitHubReleaseProgressReporter? gitHubProgress)
         {
             PublishCalls++;
+            if (RepositoryPublisher is not null)
+            {
+                return RepositoryPublisher.Publish(
+                    publish, plan, buildResult, artefactResults, includeScriptFolders,
+                    remotePublishAttempted, remoteSideEffectObserved,
+                    finalizeRepositoryModule: finalizeRepositoryModule,
+                    gitHubProgress: gitHubProgress);
+            }
             if (!AutoSuccessfulPublishResult)
                 throw new InvalidOperationException("Not used in this test.");
 
