@@ -12,6 +12,7 @@ using Xunit;
 public class WebPipelineRunnerSplitTests
 {
     // overlay runs before the apidocs block in every shard; xref-merge runs after it and reads every shard's output.
+    // "early" comes after the block but needs only "static", so it moves to shard 1's prepare run.
     private const string Pipeline =
         """
         {
@@ -27,6 +28,7 @@ public class WebPipelineRunnerSplitTests
               { "id": "beta-three", "xml": "./beta-three.xml", "out": "./_site/api/beta-three", "baseUrl": "/api/beta-three", "title": "Beta Three API" }
             ] },
             { "task": "apidocs", "failOnWarnings": false, "id": "gamma", "type": "CSharp", "format": "both", "xml": "./gamma.xml", "out": "./_site/api/gamma", "baseUrl": "/api/gamma", "title": "Gamma API" },
+            { "task": "overlay", "id": "early", "splitPhase": "prepare", "dependsOn": "static", "source": "./static", "destination": "./_site/early" },
             { "task": "xref-merge", "id": "merge-xref", "dependsOn": ["alpha", "beta", "gamma"], "out": "./_site/xrefmap.json", "mapFiles": [
               "./_site/api/alpha/xrefmap.json", "./_site/api/beta-one/xrefmap.json", "./_site/api/beta-two/xrefmap.json",
               "./_site/api/beta-three/xrefmap.json", "./_site/api/gamma/xrefmap.json"
@@ -65,11 +67,30 @@ public class WebPipelineRunnerSplitTests
             Assert.False(File.Exists(Path.Combine(main, "_site", "xrefmap.json")));
             Assert.Equal("skipped (split: runs in finish)", mainPrepare.Steps[^1].Message);
 
+            // Only shard 1 runs the splitPhase step, after its archive holds the apidocs output.
+            Assert.True(File.Exists(Path.Combine(main, "_site", "early", "index.html")));
+            Assert.False(Directory.Exists(Path.Combine(helper, "_site", "early")));
+            Assert.Equal("skipped (split: runs in shard 1)", helperPrepare.Steps[^2].Message);
+            Assert.DoesNotContain(ReadArchiveEntries(Path.Combine(archives, "main", "shard.tar")),
+                static name => name.StartsWith("files/_site/early/", StringComparison.Ordinal));
+
+            // finish in shard 1's workspace must not run it again.
+            var early = Path.Combine(main, "_site", "early", "index.html");
+            var earlyContent = File.ReadAllText(early);
+            File.WriteAllText(early, "marker");
             var finish = WebPipelineRunner.RunPipeline(Path.Combine(main, "pipeline.json"), new WebConsoleLogger(),
                 split: WebPipelineSplitOptions.Parse("finish", null, null, archives));
             AssertSucceeded(finish);
+            Assert.Equal("marker", File.ReadAllText(early));
+            File.WriteAllText(early, earlyContent);
 
             Assert.Equal(ReadTree(single), ReadTree(main));
+
+            // A workspace without shard 1's receipt runs the step itself.
+            var helperFinish = WebPipelineRunner.RunPipeline(Path.Combine(helper, "pipeline.json"), new WebConsoleLogger(),
+                split: WebPipelineSplitOptions.Parse("finish", null, null, archives));
+            AssertSucceeded(helperFinish);
+            Assert.Equal(ReadTree(single), ReadTree(helper));
             // The finish profile keeps the prepare run's results for the steps it skipped.
             Assert.DoesNotContain("split: ran in prepare", File.ReadAllText(Path.Combine(main, "_temp", "profile.json")), StringComparison.Ordinal);
         }
@@ -212,6 +233,26 @@ public class WebPipelineRunnerSplitTests
     }
 
     [Fact]
+    public void SplitRun_RejectsPrepareStepsThatNeedTheFinishRun()
+    {
+        var root = CreateRoot();
+        try
+        {
+            var site = CreateSite(root, "site");
+            var pipeline = Path.Combine(site, "pipeline.json");
+            File.WriteAllText(pipeline, Pipeline.Replace("\"dependsOn\": \"static\"", "\"dependsOn\": \"gamma\"", StringComparison.Ordinal));
+
+            var error = Assert.Throws<InvalidOperationException>(() =>
+                WebPipelineRunner.RunPipeline(pipeline, new WebConsoleLogger(), split: Prepare(1, 2, Path.Combine(root, "shard.tar"))));
+            Assert.Contains("depends on step 'gamma'; it may depend only on steps before the apidocs block", error.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void AssignSplitShards_PutsHeaviestUnitsOnLightestShards()
     {
         var shards = WebPipelineRunner.AssignSplitShards(new long[] { 10, 1, 1, 1, 9, 8 }, 3);
@@ -248,6 +289,15 @@ public class WebPipelineRunnerSplitTests
 
     private static void AssertSucceeded(PowerForge.Web.WebPipelineResult result)
         => Assert.True(result.Success, string.Join(Environment.NewLine, result.Steps.ConvertAll(step => $"{step.Task}: {step.Message}")));
+
+    private static List<string> ReadArchiveEntries(string archive)
+    {
+        var names = new List<string>();
+        using var reader = new TarReader(File.OpenRead(archive));
+        while (reader.GetNextEntry() is { } entry)
+            names.Add(entry.Name);
+        return names;
+    }
 
     private static void RewriteFirstPayload(string archive)
     {

@@ -191,6 +191,14 @@ powerforge-web pipeline --config pipeline.json --mode ci --split-phase finish --
   every apidocs run once, match their recorded hashes and agree on shared
   files. It applies them and runs the steps after the block. Its profile keeps
   the prepare results, so it covers the whole pipeline.
+- A step after the block can set `"splitPhase": "prepare"` to run at the end
+  of shard 1's `prepare` (after its archive is written), while the other
+  shards are still generating API docs. It may depend only on steps before the
+  block or on other `splitPhase` steps, and it must not need anything a later
+  step without `dependsOn` would produce. Shard 1 then leaves a receipt in the
+  workspace, and `finish` there skips those steps. Without a matching receipt
+  (another workspace, commit, engine or step definition) `finish` runs them.
+  Runs that are not split ignore the setting.
 - A split run fails when another step sits between `apidocs` steps, when an
   `apidocs` step depends on another one, when generator runs share outputs or
   routes or read each other's files, or when a step executes PowerShell
