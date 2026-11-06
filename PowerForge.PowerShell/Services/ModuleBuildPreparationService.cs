@@ -69,6 +69,8 @@ internal sealed class ModuleBuildPreparationService
                 Name = moduleName!,
                 SourcePath = projectRoot,
                 StagingPath = ResolveWorkspacePath(workspaceRoot, request.StagingPath),
+                ReuseStaging = request.ReuseStaging,
+                SkipDotNetBuild = request.NoDotnetBuild,
                 CsprojPath = UsesModuleFolderLayout(workspaceRoot, projectRoot)
                     ? ResolveProjectPreferredPath(workspaceRoot, projectRoot, request.CsprojPath)
                     : ResolveWorkspacePath(workspaceRoot, request.CsprojPath),

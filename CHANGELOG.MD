@@ -3,6 +3,7 @@
 ## Unreleased
 ### What's Changed
 - Resolve each project's evaluated build output before signing or checking package payloads, so stale conventional `bin` folders cannot shadow a custom output directory.
+- Allow PowerShell-authored module builds to reuse prepared staging through the same no-rebuild controls as JSON-configured builds.
 - Resume a partially published coordinated release with `ReusePreparedPackages` to reuse its verified NuGet packages, symbols and project ZIPs without rebuilding or signing them again. Preserve the original checkpoint when recovery prerequisites or cached contents do not match.
 - Split a website pipeline's consecutive apidocs steps across several machines with `pipeline --split-phase prepare|finish` and the shared website workflows' `apidocs_shards` input. Shards rebuild the earlier steps, run a size-balanced share of the API docs, and archive what they produced; the finishing job verifies the archives cover every generator run exactly once and agree on shared files before running the remaining steps.
 - Preserve commands exported as `Values`, dictionary defaults with member names such as `Count`, and dictionary enumeration in help extraction and build helpers.
