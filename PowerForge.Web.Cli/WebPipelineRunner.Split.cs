@@ -111,6 +111,7 @@ internal static partial class WebPipelineRunner
         public required int LastIndex { get; init; }
         public required List<SplitUnit> Units { get; init; }
         public Dictionary<string, (long Length, long Ticks)>? Before { get; set; }
+        public Dictionary<string, (long Length, long Ticks)>? After { get; set; }
     }
 
     private sealed class SplitManifest
@@ -398,6 +399,16 @@ internal static partial class WebPipelineRunner
                                                       result.Success && result.Message?.StartsWith("skipped (", StringComparison.Ordinal) != true))
             writer.WriteStringValue(DescribeSplitPrepareStep(step));
         writer.WriteEndArray();
+        // What these steps changed after the archive was written; finish rejects archives that write the same files.
+        var before = EnsureSplitPlan(state).After!;
+        var now = CaptureSplitSnapshot(state.BaseDir, GetSplitExcludedPaths(state));
+        writer.WriteStartArray("touched");
+        foreach (var touched in now.Where(entry => !before.TryGetValue(entry.Key, out var previous) || previous != entry.Value)
+                     .Select(static entry => entry.Key)
+                     .Concat(before.Keys.Where(key => !now.ContainsKey(key)))
+                     .OrderBy(static key => key, StringComparer.Ordinal))
+            writer.WriteStringValue(touched);
+        writer.WriteEndArray();
         writer.WriteEndObject();
     }
 
@@ -428,7 +439,10 @@ internal static partial class WebPipelineRunner
                     : steps.Any(step => !current.ContainsKey(step)) ? "steps"
                     : null;
                 if (mismatch is null)
+                {
                     ran.UnionWith(steps.Select(step => current[step]));
+                    state.SplitPreparedTouched.UnionWith(GetArrayOfStrings(root, "touched") ?? Array.Empty<string>());
+                }
             }
         }
         catch (JsonException ex)
@@ -484,6 +498,7 @@ internal static partial class WebPipelineRunner
         var plan = EnsureSplitPlan(state);
         var before = plan.Before!;
         var after = CaptureSplitSnapshot(state.BaseDir, GetSplitExcludedPaths(state));
+        plan.After = after;
         var changed = after
             .Where(entry => !before.TryGetValue(entry.Key, out var previous) || previous != entry.Value)
             .Select(static entry => entry.Key)
@@ -557,6 +572,16 @@ internal static partial class WebPipelineRunner
         if (foreign.Path is not null)
             throw new InvalidOperationException(
                 $"Split archive {foreign.Path} was built from source '{foreign.Manifest.Source}' with engine '{foreign.Manifest.Engine}', but this run uses source '{source}' with engine '{engine}'.");
+
+        // A splitPhase step ran after shard 1's archive; applying an archive over its files would undo it.
+        var overlap = archives.SelectMany(static archive => archive.Manifest.Files.Keys.Concat(archive.Manifest.Deleted))
+            .Where(state.SplitPreparedTouched.Contains)
+            .Distinct(StringComparer.Ordinal)
+            .OrderBy(static path => path, StringComparer.Ordinal)
+            .ToArray();
+        if (overlap.Length > 0)
+            throw new InvalidOperationException(
+                $"splitPhase prepare steps changed files that the apidocs block also writes: {string.Join(", ", overlap.Take(5))}{(overlap.Length > 5 ? $" (+{overlap.Length - 5} more)" : string.Empty)}. Remove splitPhase from those steps.");
 
         var plan = EnsureSplitPlan(state);
         var expected = plan.Units.Select(static unit => unit.Key).ToHashSet(StringComparer.Ordinal);

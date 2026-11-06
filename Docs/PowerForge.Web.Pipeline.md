@@ -198,7 +198,8 @@ powerforge-web pipeline --config pipeline.json --mode ci --split-phase finish --
   step without `dependsOn` would produce. Shard 1 then leaves a receipt listing the
   steps it ran, and `finish` in that workspace skips those. Without a matching
   receipt (another workspace, commit, engine or step definition, or a step
-  shard 1 skipped) `finish` runs them.
+  shard 1 skipped) `finish` runs them. If those steps changed a file that an
+  archive also writes, `finish` fails instead of overwriting their result.
   Runs that are not split ignore the setting.
 - A split run fails when another step sits between `apidocs` steps, when an
   `apidocs` step depends on another one, when generator runs share outputs or

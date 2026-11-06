@@ -258,6 +258,34 @@ public class WebPipelineRunnerSplitTests
     }
 
     [Fact]
+    public void SplitFinish_RejectsPrepareStepsThatChangedApiDocsOutput()
+    {
+        var root = CreateRoot();
+        try
+        {
+            var archives = Path.Combine(root, "archives");
+            var sites = new[] { CreateSite(root, "main"), CreateSite(root, "helper") };
+            for (var shard = 0; shard < sites.Length; shard++)
+            {
+                File.WriteAllText(Path.Combine(sites[shard], "pipeline.json"),
+                    Pipeline.Replace("\"./_site/early\"", "\"./_site/api/alpha\"", StringComparison.Ordinal));
+                AssertSucceeded(WebPipelineRunner.RunPipeline(Path.Combine(sites[shard], "pipeline.json"), new WebConsoleLogger(),
+                    split: Prepare(shard + 1, 2, Path.Combine(archives, shard.ToString(), "shard.tar"))));
+            }
+
+            // Applying alpha's archived page would silently undo the overlay that a single run applies last.
+            var error = Assert.Throws<InvalidOperationException>(() =>
+                WebPipelineRunner.RunPipeline(Path.Combine(sites[0], "pipeline.json"), new WebConsoleLogger(),
+                    split: WebPipelineSplitOptions.Parse("finish", null, null, archives)));
+            Assert.Contains("api/alpha/index.html", error.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void SplitRun_RejectsPrepareStepsThatNeedTheFinishRun()
     {
         var root = CreateRoot();
