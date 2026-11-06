@@ -17,22 +17,10 @@ public sealed partial class DotNetRepositoryReleaseService
     {
         var directories = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var targetFrameworks = ResolveConfiguredTargetFrameworks(csproj, workingDirectory, configuration, projectName, logger);
-        foreach (var directory in ResolveConventionalBuildOutputDirectories(csproj, workingDirectory, configuration, targetFrameworks))
-        {
-            if (!Directory.Exists(directory))
-                continue;
-
-            if (includePatterns is { Count: > 0 } && !ContainsSignableFiles(directory, includePatterns))
-                continue;
-
-            directories.Add(Path.GetFullPath(directory));
-        }
-
+        // Existing bin folders may contain stale assemblies or only a dependency.
+        // Evaluate the actual output before considering conventional fallbacks.
         foreach (var targetFramework in targetFrameworks)
         {
-            if (directories.Count > 0 && HasOutputDirectoryForTargetFramework(directories, targetFramework))
-                continue;
-
             var exitCode = RunDotnetMsBuildGetProperty(
                 csproj,
                 workingDirectory,
@@ -60,6 +48,20 @@ public sealed partial class DotNetRepositoryReleaseService
 
         if (directories.Count == 0)
         {
+            foreach (var directory in ResolveConventionalBuildOutputDirectories(csproj, workingDirectory, configuration, targetFrameworks))
+            {
+                if (!Directory.Exists(directory))
+                    continue;
+
+                if (includePatterns is { Count: > 0 } && !ContainsSignableFiles(directory, includePatterns))
+                    continue;
+
+                directories.Add(Path.GetFullPath(directory));
+            }
+        }
+
+        if (directories.Count == 0)
+        {
             var fallback = Path.Combine(workingDirectory, "bin", configuration);
             if (Directory.Exists(fallback))
                 directories.Add(fallback);
@@ -69,19 +71,6 @@ public sealed partial class DotNetRepositoryReleaseService
             throw new DirectoryNotFoundException($"No build output directory found for {projectName}.");
 
         return directories.ToArray();
-    }
-
-    private static bool HasOutputDirectoryForTargetFramework(IEnumerable<string> directories, string? targetFramework)
-    {
-        if (string.IsNullOrWhiteSpace(targetFramework))
-            return directories.Any();
-
-        var normalizedTargetFramework = targetFramework!.Trim();
-        return directories.Any(directory =>
-        {
-            var parts = directory.Split(new[] { Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar }, StringSplitOptions.RemoveEmptyEntries);
-            return parts.Any(part => string.Equals(part, normalizedTargetFramework, StringComparison.OrdinalIgnoreCase));
-        });
     }
 
     private static string[] ResolvePackToolIntermediateAssemblyPaths(

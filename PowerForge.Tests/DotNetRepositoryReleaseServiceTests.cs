@@ -1434,8 +1434,10 @@ public sealed class DotNetRepositoryReleaseServiceTests
         }
     }
 
-    [Fact]
-    public void ResolveBuildOutputDirectories_ProbesEvaluatedTargetDirForMissingTargetFrameworkOutputs()
+    [Theory]
+    [InlineData("Dependency.dll")]
+    [InlineData("Sample.Package.dll")]
+    public void ResolveBuildOutputDirectories_PrefersEvaluatedTargetDirOverStaleConventionalOutputs(string staleAssembly)
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
         try
@@ -1463,6 +1465,8 @@ public sealed class DotNetRepositoryReleaseServiceTests
             Directory.CreateDirectory(customNet10TargetDir);
             File.WriteAllText(Path.Combine(conventionalNet8Output.FullName, "Sample.Package.dll"), "net8");
             File.WriteAllText(Path.Combine(customNet10TargetDir, "Sample.Package.dll"), "net10");
+            var staleNet10Output = Directory.CreateDirectory(Path.Combine(projectDir.FullName, "bin", "Release", "net10.0"));
+            File.WriteAllText(Path.Combine(staleNet10Output.FullName, staleAssembly), "stale output");
 
             var method = typeof(DotNetRepositoryReleaseService).GetMethod(
                 "ResolveBuildOutputDirectories",
@@ -1476,14 +1480,19 @@ public sealed class DotNetRepositoryReleaseServiceTests
                 "Release",
                 "Sample.Package",
                 new NullLogger(),
-                new[] { "Sample.Package.dll" }
+                new[] { "*.dll" }
             }));
 
-            Assert.Contains(directories, path => path.EndsWith(Path.Combine("bin", "Release", "net8.0"), StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(directories, path => path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+                .EndsWith(Path.Combine("bin", "Release", "net8.0"), StringComparison.OrdinalIgnoreCase));
             var expectedCustomOutput = Path.GetFullPath(customNet10TargetDir).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
             Assert.Contains(directories, path => string.Equals(
                 path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
                 expectedCustomOutput,
+                StringComparison.OrdinalIgnoreCase));
+            Assert.DoesNotContain(directories, path => string.Equals(
+                path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+                staleNet10Output.FullName,
                 StringComparison.OrdinalIgnoreCase));
         }
         finally
