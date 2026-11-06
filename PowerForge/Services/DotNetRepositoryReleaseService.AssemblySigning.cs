@@ -36,8 +36,12 @@ public sealed partial class DotNetRepositoryReleaseService
 
             if (exitCode == 0 && !string.IsNullOrWhiteSpace(value))
             {
-                var resolved = Path.GetFullPath(value!.Trim().Trim('"'));
-                if (Directory.Exists(resolved))
+                var outputPath = value!.Trim().Trim('"');
+                var resolved = Path.IsPathRooted(outputPath)
+                    ? Path.GetFullPath(outputPath)
+                    : Path.GetFullPath(Path.Combine(workingDirectory, outputPath));
+                if (Directory.Exists(resolved) &&
+                    (includePatterns is not { Count: > 0 } || ContainsSignableFiles(resolved, includePatterns)))
                     directories.Add(resolved);
             }
             else

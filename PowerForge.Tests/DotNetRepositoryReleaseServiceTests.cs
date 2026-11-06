@@ -1375,17 +1375,20 @@ public sealed class DotNetRepositoryReleaseServiceTests
         }
     }
 
-    [Fact]
-    public void Execute_WithAssemblySigning_UsesCustomBuildOutputDirectory()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Execute_WithAssemblySigning_UsesCustomBuildOutputDirectory(bool relativeTargetDir)
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
         try
         {
             var projectDir = Directory.CreateDirectory(Path.Combine(root.FullName, "Src", "Sample.Package"));
-            var customOutput = Path.Combine(root.FullName, "custom-output");
+            var customOutput = Path.Combine(projectDir.FullName, "custom-output");
             File.WriteAllText(Path.Combine(projectDir.FullName, "Sample.Package.csproj"), string.Join(Environment.NewLine, new[]
             {
-                "<Project Sdk=\"Microsoft.NET.Sdk\">",
+                "<Project>",
+                "  <Import Project=\"Sdk.props\" Sdk=\"Microsoft.NET.Sdk\" />",
                 "  <PropertyGroup>",
                 "    <TargetFramework>net8.0</TargetFramework>",
                 "    <PackageId>Sample.Package</PackageId>",
@@ -1393,9 +1396,14 @@ public sealed class DotNetRepositoryReleaseServiceTests
                 "    <IsPackable>true</IsPackable>",
                 $"    <OutputPath>{customOutput}</OutputPath>",
                 "  </PropertyGroup>",
+                "  <Import Project=\"Sdk.targets\" Sdk=\"Microsoft.NET.Sdk\" />",
+                relativeTargetDir ? "  <PropertyGroup><TargetDir>custom-output/net8.0/</TargetDir></PropertyGroup>" : string.Empty,
                 "</Project>"
             }));
             File.WriteAllText(Path.Combine(projectDir.FullName, "Class1.cs"), "namespace Sample.Package; public static class Class1 { public static string Value => \"custom\"; }");
+            var staleOutput = Directory.CreateDirectory(Path.Combine(projectDir.FullName, "bin", "Release", "net8.0"));
+            var staleDependency = Path.Combine(staleOutput.FullName, "Dependency.dll");
+            File.WriteAllText(staleDependency, "stale dependency");
 
             var signedPath = string.Empty;
             var spec = new DotNetRepositoryReleaseSpec
@@ -1408,7 +1416,8 @@ public sealed class DotNetRepositoryReleaseServiceTests
                 UpdateVersions = false,
                 CertificateThumbprint = "ABC123",
                 SignAssemblies = true,
-                SignPackages = false
+                SignPackages = false,
+                SignDependencyAssemblies = true
             };
 
             var result = new DotNetRepositoryReleaseService(new NullLogger()).Execute(
@@ -1416,6 +1425,7 @@ public sealed class DotNetRepositoryReleaseServiceTests
                 request =>
                 {
                     var filePaths = Assert.IsType<string[]>(request.FilePaths);
+                    Assert.DoesNotContain(staleDependency, filePaths);
                     var assembly = filePaths.SingleOrDefault(path => path.EndsWith("Sample.Package.dll", StringComparison.OrdinalIgnoreCase));
                     Assert.False(string.IsNullOrWhiteSpace(assembly));
                     Assert.Contains("custom-output", assembly, StringComparison.OrdinalIgnoreCase);
@@ -1501,8 +1511,10 @@ public sealed class DotNetRepositoryReleaseServiceTests
         }
     }
 
-    [Fact]
-    public void ResolveBuildOutputDirectories_ProbesRidSpecificTargetDirInsteadOfFrameworkParent()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ResolveBuildOutputDirectories_PrefersEvaluatedRidOutputAndFallsBackWhenEmpty(bool emptyEvaluatedOutput)
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
         try
@@ -1522,7 +1534,23 @@ public sealed class DotNetRepositoryReleaseServiceTests
             var frameworkDirectory = Directory.CreateDirectory(
                 Path.Combine(projectDir.FullName, "bin", "Release", "net472"));
             var ridTargetDirectory = Directory.CreateDirectory(Path.Combine(frameworkDirectory.FullName, "win-x64"));
-            File.WriteAllText(Path.Combine(ridTargetDirectory.FullName, "Sample.Package.dll"), "rid-output");
+            var expectedOutput = emptyEvaluatedOutput ? frameworkDirectory : ridTargetDirectory;
+            File.WriteAllText(Path.Combine(expectedOutput.FullName, "Sample.Package.dll"), "current-output");
+            if (emptyEvaluatedOutput)
+            {
+                var emptyOutput = Directory.CreateDirectory(Path.Combine(projectDir.FullName, "empty-output"));
+                var project = System.Xml.Linq.XDocument.Load(csprojPath);
+                project.Root!.Attribute("Sdk")!.Remove();
+                project.Root.AddFirst(new System.Xml.Linq.XElement("Import",
+                    new System.Xml.Linq.XAttribute("Project", "Sdk.props"),
+                    new System.Xml.Linq.XAttribute("Sdk", "Microsoft.NET.Sdk")));
+                project.Root.Add(new System.Xml.Linq.XElement("Import",
+                    new System.Xml.Linq.XAttribute("Project", "Sdk.targets"),
+                    new System.Xml.Linq.XAttribute("Sdk", "Microsoft.NET.Sdk")));
+                project.Root.Add(new System.Xml.Linq.XElement("PropertyGroup",
+                    new System.Xml.Linq.XElement("TargetDir", emptyOutput.FullName)));
+                project.Save(csprojPath);
+            }
 
             var method = typeof(DotNetRepositoryReleaseService).GetMethod(
                 "ResolveBuildOutputDirectories",
@@ -1539,7 +1567,7 @@ public sealed class DotNetRepositoryReleaseServiceTests
                 new[] { "Sample.Package.dll" }
             }));
 
-            string expected = Path.GetFullPath(ridTargetDirectory.FullName)
+            string expected = Path.GetFullPath(expectedOutput.FullName)
                 .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
             Assert.Contains(directories, path => string.Equals(
                 path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
@@ -1547,7 +1575,8 @@ public sealed class DotNetRepositoryReleaseServiceTests
                 StringComparison.OrdinalIgnoreCase));
             Assert.DoesNotContain(directories, path => string.Equals(
                 path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
-                Path.GetFullPath(frameworkDirectory.FullName).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+                Path.GetFullPath((emptyEvaluatedOutput ? ridTargetDirectory : frameworkDirectory).FullName)
+                    .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
                 StringComparison.OrdinalIgnoreCase));
         }
         finally
