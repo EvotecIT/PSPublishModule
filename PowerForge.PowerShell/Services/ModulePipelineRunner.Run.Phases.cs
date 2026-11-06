@@ -13,8 +13,11 @@ public sealed partial class ModulePipelineRunner
         ModuleBuildPipeline pipeline,
         ModulePipelineRunState state)
     {
+        if (plan.Release?.Configuration is { ReusePreparedPackages: true, ResumeIncompleteRelease: false })
+            throw new InvalidOperationException("ReusePreparedPackages requires ResumeIncompleteRelease. The existing checkpoint must be preserved.");
         EnterSynchronizedReleaseCheckpointScope(plan, state);
         RestoreSynchronizedReleaseCheckpoint(plan, state);
+        ValidatePreparedPackageRecovery(plan, state);
         PreflightSynchronizedPackageGitHubConfigurationRetrySafety(plan, state);
         var synchronizeVersionBeforeLifecycleActions = ShouldSynchronizeModuleVersionForRun(
             plan.Release,

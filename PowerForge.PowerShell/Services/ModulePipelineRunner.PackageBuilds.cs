@@ -102,6 +102,8 @@ public sealed partial class ModulePipelineRunner
                 continue;
             }
 
+            if (plan.Release?.Configuration?.ReusePreparedPackages == true)
+                throw new InvalidOperationException("The prepared project payload cannot be published with this configuration. Preserve its checkpoint and artifacts.");
             ExecuteProjectBuildSegment(
                 plan,
                 session,
@@ -152,6 +154,8 @@ public sealed partial class ModulePipelineRunner
                 continue;
             }
 
+            if (plan.Release?.Configuration?.ReusePreparedPackages == true)
+                throw new InvalidOperationException("The prepared package payload cannot be published with this configuration. Preserve its checkpoint and artifacts.");
             ExecutePackageBuildSegment(
                 plan,
                 session,
@@ -775,6 +779,8 @@ public sealed partial class ModulePipelineRunner
             laneLabel,
             checkpointKey,
             configuration);
+        if (ShouldReusePreparedPackageLane(plan, mode))
+            return RestorePreparedPackageLane(plan, state, configuration, configPath, checkpointKey);
         var releaseVersionFloor = ResolveCoordinatedVersionFloor(
             plan,
             state,
@@ -838,6 +844,9 @@ public sealed partial class ModulePipelineRunner
             laneLabel,
             checkpointKey,
             projectBuildConfig);
+        if (ShouldReusePreparedPackageLane(plan, mode))
+            return RestorePreparedPackageLane(plan, state, projectBuildConfig,
+                Path.Combine(plan.ProjectRoot, "module.packagebuild.inline.json"), checkpointKey);
         var releaseVersionFloor = ResolveCoordinatedVersionFloor(
             plan,
             state,

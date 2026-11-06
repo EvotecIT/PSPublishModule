@@ -11,7 +11,7 @@ Creates repo-level release coordination settings for a module and package build.
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-New-ConfigurationRelease [-StageRoot <string>] [-VersionSource <ReleaseVersionSource>] [-Version <string>] [-PrimaryProject <string>] [-SynchronizeModuleVersion] [-ResumeIncompleteRelease] [-BuildOrder <string[]>] [-PublishOrder <string[]>] [<CommonParameters>]
+New-ConfigurationRelease [-StageRoot <string>] [-VersionSource <ReleaseVersionSource>] [-Version <string>] [-PrimaryProject <string>] [-SynchronizeModuleVersion] [-ResumeIncompleteRelease] [-ReusePreparedPackages] [-BuildOrder <string[]>] [-PublishOrder <string[]>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -79,6 +79,23 @@ Accept wildcard characters: False
 ### -ResumeIncompleteRelease
 Explicitly resumes a compatible incomplete synchronized release checkpoint.
 Without this switch, an older checkpoint is archived and the invocation starts a fresh release.
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -ReusePreparedPackages
+Reuses the verified package and release archive payloads from an incomplete release without rebuilding or signing them again.
+Requires ResumeIncompleteRelease and its complete payload cache. Module preparation and destination checks still run.
 
 ```yaml
 Type: SwitchParameter

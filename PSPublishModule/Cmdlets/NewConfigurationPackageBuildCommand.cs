@@ -475,6 +475,12 @@ public sealed class NewConfigurationReleaseCommand : PSCmdlet
     /// </summary>
     [Parameter] public SwitchParameter ResumeIncompleteRelease { get; set; }
 
+    /// <summary>
+    /// Reuses the verified package and release archive payloads from an incomplete release without rebuilding or signing them again.
+    /// Requires ResumeIncompleteRelease and its complete payload cache. Module preparation and destination checks still run.
+    /// </summary>
+    [Parameter] public SwitchParameter ReusePreparedPackages { get; set; }
+
     /// <summary>Preferred build order for high-level release lanes.</summary>
     [Parameter] public string[]? BuildOrder { get; set; }
 
@@ -496,6 +502,7 @@ public sealed class NewConfigurationReleaseCommand : PSCmdlet
                     (!string.IsNullOrWhiteSpace(PrimaryProject) &&
                      VersionSource is ReleaseVersionSource.ProjectBuild or ReleaseVersionSource.PackageBuild),
                 ResumeIncompleteRelease = ResumeIncompleteRelease.IsPresent,
+                ReusePreparedPackages = ReusePreparedPackages.IsPresent,
                 BuildOrder = BuildOrder,
                 PublishOrder = PublishOrder
             }

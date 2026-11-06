@@ -57969,6 +57969,19 @@ Without this switch, an older checkpoint is archived and the invocation starts a
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="none">
+          <maml:name>ReusePreparedPackages</maml:name>
+          <maml:description>
+            <maml:para>Reuses the verified package and release archive payloads from an incomplete release without rebuilding or signing them again.
+Requires ResumeIncompleteRelease and its complete payload cache. Module preparation and destination checks still run.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="none">
           <maml:name>StageRoot</maml:name>
           <maml:description>
             <maml:para>Staged release root where upload-ready assets should be copied.</maml:para>
@@ -58077,6 +58090,19 @@ Required by SynchronizeModuleVersion to identify the package coordinated with mo
         <maml:description>
           <maml:para>Explicitly resumes a compatible incomplete synchronized release checkpoint.
 Without this switch, an older checkpoint is archived and the invocation starts a fresh release.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="none">
+        <maml:name>ReusePreparedPackages</maml:name>
+        <maml:description>
+          <maml:para>Reuses the verified package and release archive payloads from an incomplete release without rebuilding or signing them again.
+Requires ResumeIncompleteRelease and its complete payload cache. Module preparation and destination checks still run.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
         <dev:type>
