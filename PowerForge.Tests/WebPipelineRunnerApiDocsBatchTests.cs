@@ -19,12 +19,14 @@ public class WebPipelineRunnerApiDocsBatchTests
             File.WriteAllText(xmlTwo, BuildMinimalXml("ExtensionsAssembly", "T:Extensions.Toolkit", "Extensions toolkit type."));
 
             var pipelinePath = Path.Combine(root, "pipeline.json");
+            // XML-only inputs warn, and CI hosts make warnings fatal by default.
             File.WriteAllText(pipelinePath,
                 """
                 {
                   "steps": [
                     {
                       "task": "apidocs",
+                      "failOnWarnings": false,
                       "format": "json",
                       "inputs": [
                         {
