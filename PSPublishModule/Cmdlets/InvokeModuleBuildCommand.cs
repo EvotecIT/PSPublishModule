@@ -337,6 +337,7 @@ public sealed partial class InvokeModuleBuildCommand : PSCmdlet
     public string? StagingPath { get; set; }
 
     /// <summary>Reuses an existing staged module output for an internal deferred publication pass.</summary>
+    [Parameter(ParameterSetName = ParameterSetModern, DontShow = true)]
     [Parameter(ParameterSetName = ParameterSetConfig, DontShow = true)]
     public SwitchParameter ReuseStaging { get; set; }
 

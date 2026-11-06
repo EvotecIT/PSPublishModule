@@ -45,6 +45,10 @@ public sealed class InvokeModuleBuildPublishingTests
                 .AddParameter("JsonPath", outputPath)
                 .AddParameter("NoInteractive")
                 .AddParameter("ErrorAction", ActionPreference.Stop);
+            if (inputKind != "Configuration")
+                shell.AddParameter("NoDotnetBuild")
+                    .AddParameter("ReuseStaging")
+                    .AddParameter("PowerForgeReleaseCheckpoint");
             if (excludeModulePublishing)
                 shell.AddParameter("IncludeModulePublishing", false);
 
@@ -90,6 +94,7 @@ public sealed class InvokeModuleBuildPublishingTests
 
             if (inputKind != "Configuration")
             {
+                Assert.True(prepared.Build.SkipDotNetBuild);
                 var project = Assert.Single(prepared.Segments.OfType<ConfigurationProjectBuildSegment>());
                 Assert.Equal("Library", project.Configuration.Name);
                 Assert.True(project.Configuration.PublishNuget);
