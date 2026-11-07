@@ -16,6 +16,8 @@ public sealed partial class ModulePipelineRunner
         public ModuleDependencyInstallResult[] DependencyInstallResults { get; set; } = Array.Empty<ModuleDependencyInstallResult>();
         public ModuleBuildPipeline.StagingResult? Staged { get; set; }
         public ModuleBuildResult? BuildResult { get; set; }
+        public ReleaseValidationIntegrityCheckpoint? PublicationIntegrity { get; set; }
+        public Dictionary<string, int> PublicationUnixModes { get; set; } = new(PowerShellCompilationPathSafety.PathComparer);
         public PowerShellModuleCompilationResult? PowerShellCompilationResult { get; set; }
         public PowerShellModuleCompilationReleaseContract? PowerShellCompilationReleaseContract { get; set; }
         public MergeExecutionResult MergeExecution { get; set; } = MergeExecutionResult.None;

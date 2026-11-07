@@ -7,7 +7,8 @@ namespace PowerForge;
 /// <summary>Non-secret normalized module and release inputs that must remain stable when compiled staging is reused.</summary>
 internal sealed class PowerShellModuleCompilationReleaseContract
 {
-    private PowerShellModuleCompilationReleaseContract(
+    /// <summary>Restores the exact contract identity that an authenticated compilation checkpoint must match.</summary>
+    internal PowerShellModuleCompilationReleaseContract(
         string sha256,
         string moduleName,
         string version,

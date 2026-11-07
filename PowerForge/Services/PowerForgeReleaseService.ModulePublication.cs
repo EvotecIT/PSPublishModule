@@ -58,7 +58,16 @@ internal sealed partial class PowerForgeReleaseService
             if (releaseCheckpoint.HasValue)
                 request.ReleaseCheckpoint = releaseCheckpoint.Value;
 
-            return ExecuteModuleBuildWithDiagnostics(request, cancellationToken);
+            var result = ExecuteModuleBuildWithDiagnostics(request, cancellationToken);
+            if (result.Succeeded && request.ReleaseCheckpoint && !request.ReuseStaging &&
+                request.ConfigPath is not null && !string.IsNullOrWhiteSpace(request.StagingPath)) {
+                string checkpointPath = ModuleBuildSpec.GetPublicationCheckpointPath(request.StagingPath!);
+                if (File.Exists(checkpointPath)) {
+                    request.PublicationCheckpointSha256 = DotNetPublishReleaseArtifactVerifier
+                        .ComputeSha256Async(checkpointPath, cancellationToken).GetAwaiter().GetResult();
+                }
+            }
+            return result;
         }
         finally
         {

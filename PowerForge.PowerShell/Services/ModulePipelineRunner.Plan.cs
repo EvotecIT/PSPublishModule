@@ -298,6 +298,7 @@ public sealed partial class ModulePipelineRunner
             SourcePath = projectRoot,
             StagingPath = spec.Build.StagingPath,
             ReuseStaging = spec.Build.ReuseStaging,
+            PublicationCheckpointSha256 = spec.Build.PublicationCheckpointSha256,
             CsprojPath = refreshPsd1Only || spec.Build.SkipDotNetBuild ? string.Empty : csproj,
             SkipDotNetBuild = spec.Build.SkipDotNetBuild,
             Version = resolved,

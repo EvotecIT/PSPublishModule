@@ -96,6 +96,9 @@ public sealed class ModuleBuildHostBuildRequest
     /// </summary>
     internal bool ReleaseCheckpoint { get; set; }
 
+    /// <summary>Fingerprint captured before validation and bound to the deferred publication host.</summary>
+    internal string? PublicationCheckpointSha256 { get; set; }
+
     /// <summary>
     /// Disables module signing when true.
     /// </summary>

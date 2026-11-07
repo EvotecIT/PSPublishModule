@@ -399,6 +399,13 @@ public sealed class ModuleBuildHostService
             $"$moduleBuildArguments = @{{ ConfigPath = {QuoteLiteral(configPath)}; ExitCode = $true }}"
         };
 
+        if (request.ReleaseCheckpoint) {
+            string checkpointHash = request.ReuseStaging && !string.IsNullOrWhiteSpace(request.PublicationCheckpointSha256)
+                ? QuoteLiteral(request.PublicationCheckpointSha256!)
+                : "$null";
+            arguments.Add($"$env:{ModuleBuildSpec.PublicationCheckpointHashEnvironmentVariable} = {checkpointHash}");
+        }
+
         AddDirectStringArgument(arguments, "BuildConfiguration", request.Configuration);
         AddDirectStringArgument(arguments, "BuildFramework", request.Framework);
         if (request.RunMode.HasValue)
