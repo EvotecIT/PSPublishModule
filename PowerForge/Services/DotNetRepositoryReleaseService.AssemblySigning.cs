@@ -17,62 +17,63 @@ public sealed partial class DotNetRepositoryReleaseService
     {
         var directories = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var targetFrameworks = ResolveConfiguredTargetFrameworks(csproj, workingDirectory, configuration, projectName, logger);
-        // Existing bin folders may contain stale assemblies or only a dependency.
-        // Evaluate the actual output before considering conventional fallbacks.
+        // Resolve every framework through MSBuild before returning a signing set.
+        // Conventional folders may contain stale assemblies or only a dependency.
         foreach (var targetFramework in targetFrameworks)
         {
-            var exitCode = RunDotnetMsBuildGetProperty(
-                csproj,
-                workingDirectory,
-                configuration,
-                targetFramework,
-                "TargetDir",
-                projectName,
-                logger,
-                out var value,
-                out var stdErr,
-                out var stdOut,
-                out var duration);
-
-            if (exitCode == 0 && !string.IsNullOrWhiteSpace(value))
+            string? directory = null;
+            foreach (var propertyName in new[] { "TargetDir", "TargetPath" })
             {
+                var exitCode = RunDotnetMsBuildGetProperty(
+                    csproj,
+                    workingDirectory,
+                    configuration,
+                    targetFramework,
+                    propertyName,
+                    projectName,
+                    logger,
+                    out var value,
+                    out var stdErr,
+                    out var stdOut,
+                    out var duration);
+
+                if (exitCode != 0 || string.IsNullOrWhiteSpace(value))
+                {
+                    logger.Verbose($"{projectName}: unable to resolve MSBuild {propertyName} for {targetFramework ?? "the default framework"} in {FormatDuration(duration)}. {SummarizeProcessFailureOutput(stdErr, stdOut)}");
+                    continue;
+                }
+
                 var outputPath = value!.Trim().Trim('"');
                 var resolved = Path.IsPathRooted(outputPath)
                     ? Path.GetFullPath(outputPath)
                     : Path.GetFullPath(Path.Combine(workingDirectory, outputPath));
+                if (propertyName == "TargetPath")
+                {
+                    if (!File.Exists(resolved))
+                        continue;
+                    resolved = Path.GetDirectoryName(resolved)!;
+                }
+
                 if (Directory.Exists(resolved) &&
                     (includePatterns is not { Count: > 0 } || ContainsSignableFiles(resolved, includePatterns)))
-                    directories.Add(resolved);
+                {
+                    directory = resolved;
+                    break;
+                }
             }
-            else
+
+            if (directory is null)
             {
-                logger.Verbose($"{projectName}: unable to resolve MSBuild TargetDir for signing in {FormatDuration(duration)}. {SummarizeProcessFailureOutput(stdErr, stdOut)}");
+                var fallback = Path.Combine(workingDirectory, "bin", configuration, targetFramework ?? string.Empty);
+                if (Directory.Exists(fallback) &&
+                    (includePatterns is not { Count: > 0 } || ContainsSignableFiles(fallback, includePatterns)))
+                    directory = Path.GetFullPath(fallback);
             }
+
+            if (directory is null)
+                throw new DirectoryNotFoundException($"No matching build output directory found for {projectName} ({targetFramework ?? "default framework"}). Refusing to return partial framework outputs.");
+            directories.Add(directory);
         }
-
-        if (directories.Count == 0)
-        {
-            foreach (var directory in ResolveConventionalBuildOutputDirectories(csproj, workingDirectory, configuration, targetFrameworks))
-            {
-                if (!Directory.Exists(directory))
-                    continue;
-
-                if (includePatterns is { Count: > 0 } && !ContainsSignableFiles(directory, includePatterns))
-                    continue;
-
-                directories.Add(Path.GetFullPath(directory));
-            }
-        }
-
-        if (directories.Count == 0)
-        {
-            var fallback = Path.Combine(workingDirectory, "bin", configuration);
-            if (Directory.Exists(fallback))
-                directories.Add(fallback);
-        }
-
-        if (directories.Count == 0)
-            throw new DirectoryNotFoundException($"No build output directory found for {projectName}.");
 
         return directories.ToArray();
     }
@@ -186,43 +187,6 @@ public sealed partial class DotNetRepositoryReleaseService
             foreach (var path in Directory.EnumerateFiles(directory, includePattern, searchOption))
                 files.Add(Path.GetFullPath(path));
         }
-    }
-
-    private static string[] ResolveConventionalBuildOutputDirectories(
-        string csproj,
-        string workingDirectory,
-        string configuration,
-        IReadOnlyList<string?> targetFrameworkValues)
-    {
-        var directories = new List<string>();
-        var targetFrameworks = targetFrameworkValues
-            .Where(static framework => !string.IsNullOrWhiteSpace(framework))
-            .Select(static framework => framework!.Trim())
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-
-        foreach (var targetFramework in targetFrameworks)
-            directories.Add(Path.Combine(workingDirectory, "bin", configuration, targetFramework));
-
-        foreach (var outputPath in ReadOutputPaths(csproj))
-        {
-            var resolved = Path.IsPathRooted(outputPath)
-                ? outputPath
-                : Path.GetFullPath(Path.Combine(workingDirectory, outputPath));
-            directories.Add(resolved);
-
-            foreach (var targetFramework in targetFrameworks)
-                directories.Add(Path.Combine(resolved, targetFramework));
-        }
-
-        if (targetFrameworks.Length == 0)
-            directories.Add(Path.Combine(workingDirectory, "bin", configuration));
-
-        return directories
-            .Where(static directory => !string.IsNullOrWhiteSpace(directory))
-            .Select(Path.GetFullPath)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
     }
 
     private static bool ContainsSignableFiles(string directory, IReadOnlyList<string> includePatterns)

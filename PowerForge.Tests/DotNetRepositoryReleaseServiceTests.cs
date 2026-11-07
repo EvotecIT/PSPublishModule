@@ -1445,9 +1445,12 @@ public sealed class DotNetRepositoryReleaseServiceTests
     }
 
     [Theory]
-    [InlineData("Dependency.dll")]
-    [InlineData("Sample.Package.dll")]
-    public void ResolveBuildOutputDirectories_PrefersEvaluatedTargetDirOverStaleConventionalOutputs(string staleAssembly)
+    [InlineData("Dependency.dll", false, false)]
+    [InlineData("Sample.Package.dll", false, false)]
+    [InlineData("Dependency.dll", true, false)]
+    [InlineData("Dependency.dll", true, true)]
+    public void ResolveBuildOutputDirectories_ResolvesEveryFrameworkBeforeReturningOutputs(
+        string staleAssembly, bool unavailableTargetDir, bool missingOutput)
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
         try
@@ -1459,7 +1462,8 @@ public sealed class DotNetRepositoryReleaseServiceTests
             var csprojPath = Path.Combine(projectDir.FullName, "Sample.Package.csproj");
             File.WriteAllText(csprojPath, string.Join(Environment.NewLine, new[]
             {
-                "<Project Sdk=\"Microsoft.NET.Sdk\">",
+                "<Project>",
+                "  <Import Project=\"Sdk.props\" Sdk=\"Microsoft.NET.Sdk\" />",
                 "  <PropertyGroup>",
                 "    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>",
                 "    <PackageId>Sample.Package</PackageId>",
@@ -1469,21 +1473,28 @@ public sealed class DotNetRepositoryReleaseServiceTests
                 "  <PropertyGroup Condition=\"'$(TargetFramework)' == 'net10.0'\">",
                 $"    <OutputPath>{customNet10OutputPath}</OutputPath>",
                 "  </PropertyGroup>",
+                "  <Import Project=\"Sdk.targets\" Sdk=\"Microsoft.NET.Sdk\" />",
+                unavailableTargetDir
+                    ? $"  <PropertyGroup Condition=\"'$(TargetFramework)' == 'net10.0'\"><TargetDir>{Path.Combine(root.FullName, "unavailable-output")}</TargetDir></PropertyGroup>"
+                    : string.Empty,
                 "</Project>"
             }));
             var conventionalNet8Output = Directory.CreateDirectory(Path.Combine(projectDir.FullName, "bin", "Release", "net8.0"));
             Directory.CreateDirectory(customNet10TargetDir);
             File.WriteAllText(Path.Combine(conventionalNet8Output.FullName, "Sample.Package.dll"), "net8");
-            File.WriteAllText(Path.Combine(customNet10TargetDir, "Sample.Package.dll"), "net10");
             var staleNet10Output = Directory.CreateDirectory(Path.Combine(projectDir.FullName, "bin", "Release", "net10.0"));
-            File.WriteAllText(Path.Combine(staleNet10Output.FullName, staleAssembly), "stale output");
+            if (!missingOutput)
+            {
+                File.WriteAllText(Path.Combine(customNet10TargetDir, "Sample.Package.dll"), "net10");
+                File.WriteAllText(Path.Combine(staleNet10Output.FullName, staleAssembly), "stale output");
+            }
 
             var method = typeof(DotNetRepositoryReleaseService).GetMethod(
                 "ResolveBuildOutputDirectories",
                 BindingFlags.NonPublic | BindingFlags.Static);
 
             Assert.NotNull(method);
-            var directories = Assert.IsType<string[]>(method!.Invoke(null, new object?[]
+            object? Resolve() => method!.Invoke(null, new object?[]
             {
                 csprojPath,
                 projectDir.FullName,
@@ -1491,7 +1502,15 @@ public sealed class DotNetRepositoryReleaseServiceTests
                 "Sample.Package",
                 new NullLogger(),
                 new[] { "*.dll" }
-            }));
+            });
+            if (missingOutput)
+            {
+                var error = Assert.Throws<TargetInvocationException>(() => Resolve());
+                var cause = Assert.IsType<DirectoryNotFoundException>(error.InnerException);
+                Assert.Contains("net10.0", cause.Message);
+                return;
+            }
+            var directories = Assert.IsType<string[]>(Resolve());
 
             Assert.Contains(directories, path => path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
                 .EndsWith(Path.Combine("bin", "Release", "net8.0"), StringComparison.OrdinalIgnoreCase));
