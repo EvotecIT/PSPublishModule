@@ -6,19 +6,20 @@ namespace PowerForge.Tests;
 public sealed partial class DocumentationPowerShellCollectorTests
 {
     [Fact]
-    public void Collector_PreservesDictionaryMemberNamesWithoutSerializingMetadataObjects()
+    public void Collector_PreservesDictionaryMemberNamesAcross134CommandsWithoutSerializingMetadataObjects()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-doc-keys-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
         try
         {
             var manifestPath = Path.Combine(root, "KeysFixture.psd1");
-            File.WriteAllText(manifestPath, """
+            var scaleExports = string.Join(", ", Enumerable.Range(1, 130).Select(index => $"'Get-Scale{index}'"));
+            File.WriteAllText(manifestPath, $$"""
 @{
     RootModule = 'KeysFixture.psm1'
     ModuleVersion = '1.0.0'
     GUID = '56565656-5656-5656-5656-565656565656'
-    FunctionsToExport = @('Get-KeysOnly', 'Get-KeysAndOther', 'Get-KeysDynamic', 'Values')
+    FunctionsToExport = @('Get-KeysOnly', 'Get-KeysAndOther', 'Get-KeysDynamic', 'Values', {{scaleExports}})
     CmdletsToExport = @()
     AliasesToExport = @()
 }
@@ -75,12 +76,24 @@ The number to document.
 }
 Export-ModuleMember -Function Get-KeysOnly, Get-KeysAndOther, Get-KeysDynamic, Values
 """, new UTF8Encoding(false));
+            var scaleCommands = new StringBuilder();
+            for (var index = 1; index <= 130; index++)
+            {
+                scaleCommands.AppendLine($"function Get-Scale{index} {{ [CmdletBinding()] param([string[]] $Keys, [string[]] $Values, [int] $Count) }}");
+                scaleCommands.AppendLine($"Export-ModuleMember -Function Get-Scale{index}");
+            }
+            File.AppendAllText(Path.Combine(root, "KeysFixture.psm1"), Environment.NewLine + scaleCommands, new UTF8Encoding(false));
             var hosts = OperatingSystem.IsWindows() ? new[] { "pwsh.exe", "powershell.exe" } : new[] { "pwsh" };
             foreach (var host in hosts)
             {
                 var engine = new DocumentationEngine(new ExecutablePowerShellRunner(host, root), new NullLogger());
                 var payload = engine.ExtractHelpPayload(root, manifestPath, TimeSpan.FromMinutes(1));
-                Assert.Equal(4, payload.Commands.Count);
+                Assert.Equal(134, payload.Commands.Count);
+                for (var index = 1; index <= 130; index++)
+                {
+                    var scaled = Assert.Single(payload.Commands, command => command.Name == $"Get-Scale{index}");
+                    Assert.Equal(["Count", "Keys", "Values"], scaled.Parameters.Select(parameter => parameter.Name).ToArray());
+                }
                 var only = Assert.Single(payload.Commands, command => command.Name == "Get-KeysOnly");
                 var other = Assert.Single(payload.Commands, command => command.Name == "Get-KeysAndOther");
                 var dynamic = Assert.Single(payload.Commands, command => command.Name == "Get-KeysDynamic");
@@ -112,8 +125,13 @@ if ($map.get_Count() -ne 3 -or $map['Count'] -ne 99 -or
                 }
                 var mamlPath = new MamlHelpWriter().WriteExternalHelpFile(payload, "KeysFixture", Path.Combine(root, host));
                 var maml = System.Xml.Linq.XDocument.Load(mamlPath);
+                Assert.Equal(134, maml.Descendants().Count(element => element.Name.LocalName == "command"));
+                var docsPath = Path.Combine(root, host, "Docs");
+                new MarkdownHelpWriter().WriteCommandHelpFiles(payload, "KeysFixture", docsPath);
+                Assert.Equal(134, Directory.GetFiles(docsPath, "*.md").Length);
                 var commandHelp = Assert.Single(maml.Descendants().Where(element => element.Name.LocalName == "command"),
-                    element => element.Descendants().Any(child => child.Name.LocalName == "name" && child.Value == "Values"));
+                    element => element.Elements().Single(child => child.Name.LocalName == "details")
+                        .Elements().Single(child => child.Name.LocalName == "name").Value == "Values");
                 var parameterHelp = commandHelp.Elements().Single(element => element.Name.LocalName == "parameters");
                 Assert.Equal(["Count", "Keys", "Values"], parameterHelp.Elements()
                     .Select(element => element.Elements().Single(child => child.Name.LocalName == "name").Value).ToArray());
