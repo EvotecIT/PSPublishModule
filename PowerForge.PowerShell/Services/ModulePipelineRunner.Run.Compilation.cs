@@ -32,7 +32,7 @@ public sealed partial class ModulePipelineRunner
         var configuration = plan.BuildSpec.PowerShellCompilation;
         if (configuration?.Enabled != true) return;
 
-        var releaseContract = PowerShellModuleCompilationReleaseContract.Create(
+        var releaseContract = state.PowerShellCompilationReleaseContract ?? PowerShellModuleCompilationReleaseContract.Create(
             plan,
             manifestRequiredModules,
             manifestExternalModuleDependencies);

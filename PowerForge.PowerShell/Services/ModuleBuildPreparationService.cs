@@ -70,6 +70,9 @@ internal sealed class ModuleBuildPreparationService
                 SourcePath = projectRoot,
                 StagingPath = ResolveWorkspacePath(workspaceRoot, request.StagingPath),
                 ReuseStaging = request.ReuseStaging,
+                PublicationCheckpointSha256 = request.ReleaseCheckpoint
+                    ? Environment.GetEnvironmentVariable(ModuleBuildSpec.PublicationCheckpointHashEnvironmentVariable)
+                    : null,
                 SkipDotNetBuild = request.NoDotnetBuild,
                 CsprojPath = UsesModuleFolderLayout(workspaceRoot, projectRoot)
                     ? ResolveProjectPreferredPath(workspaceRoot, projectRoot, request.CsprojPath)
@@ -177,6 +180,9 @@ internal sealed class ModuleBuildPreparationService
             spec.Build.StagingPath = request.ResolvePath!(request.StagingPath!);
         if (request.ReuseStaging)
             spec.Build.ReuseStaging = true;
+        spec.Build.PublicationCheckpointSha256 = request.ReleaseCheckpoint
+            ? Environment.GetEnvironmentVariable(ModuleBuildSpec.PublicationCheckpointHashEnvironmentVariable)
+            : null;
 
         if (request.SkipInstall)
             spec.Install.Enabled = false;

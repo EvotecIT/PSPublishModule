@@ -727,7 +727,17 @@ public sealed partial class DotNetPublishPipelineRunner
             .ToArray();
         if (versions.Length > 1)
             throw new InvalidOperationException($"Publish target '{targetName}' resolved conflicting release versions.");
-        return versions.SingleOrDefault();
+        if (versions.Length == 1)
+            return versions[0];
+
+        var target = (plan.Targets ?? Array.Empty<DotNetPublishTargetPlan>()).FirstOrDefault(candidate =>
+            string.Equals(candidate.Name, targetName, StringComparison.OrdinalIgnoreCase));
+        if (target is null)
+            return null;
+        var properties = BuildPublishMsBuildProperties(plan, target, framework, runtime, style);
+        return properties.TryGetValue("Version", out var version) && !string.IsNullOrWhiteSpace(version)
+            ? version.Trim()
+            : null;
     }
 
     private static string[] ResolvePublishVersionProperties(DotNetPublishMsiVersionOptions versioning)

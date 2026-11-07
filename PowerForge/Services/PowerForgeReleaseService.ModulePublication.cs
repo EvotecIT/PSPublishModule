@@ -58,7 +58,17 @@ internal sealed partial class PowerForgeReleaseService
             if (releaseCheckpoint.HasValue)
                 request.ReleaseCheckpoint = releaseCheckpoint.Value;
 
-            return ExecuteModuleBuildWithDiagnostics(request, cancellationToken);
+            // Only the build pass may establish the fingerprint, before release validation.
+            bool captureCheckpoint = request.ReleaseCheckpoint && runMode == ConfigurationGateMode.Build;
+            if (captureCheckpoint)
+                request.PublicationCheckpointSha256 = null;
+            var result = ExecuteModuleBuildWithDiagnostics(request, cancellationToken);
+            if (result.Succeeded && captureCheckpoint && !string.IsNullOrWhiteSpace(request.StagingPath)) {
+                string checkpointPath = ModuleBuildSpec.GetPublicationCheckpointPath(request.StagingPath!);
+                // Preserve absence too: a wrapper must not introduce a restored checkpoint later.
+                request.PublicationCheckpointSha256 = CaptureValidationIntegrity([checkpointPath], cancellationToken)[checkpointPath];
+            }
+            return result;
         }
         finally
         {
