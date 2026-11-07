@@ -5,7 +5,7 @@ function Set-PowerForgeAuthorizedReleaseCommitish {
         [psobject] $ReleaseConfig,
 
         [Parameter(Mandatory)]
-        [ValidateSet('Plan', 'Prepare', 'Publish')]
+        [ValidateSet('Plan', 'PrepareMetadata', 'Prepare', 'Publish')]
         [string] $Operation,
 
         [Parameter(Mandatory)]
@@ -18,7 +18,7 @@ function Set-PowerForgeAuthorizedReleaseCommitish {
     }
 
     $commitishProperty = $ReleaseConfig.GitHub.PSObject.Properties['Commitish']
-    if ($Operation -eq 'Prepare') {
+    if ($Operation -in @('PrepareMetadata', 'Prepare')) {
         if ($null -ne $commitishProperty) {
             $ReleaseConfig.GitHub.PSObject.Properties.Remove('Commitish')
         }

@@ -531,6 +531,56 @@ public sealed class PublishedNuGetAssetRecoveryServiceTests
     }
 
     [Fact]
+    public void Restore_ReportsThirtyMinuteIndexingBudgetAndHonorsCancellation()
+    {
+        var root = Directory.CreateTempSubdirectory();
+        try
+        {
+            const string version = "3.0.188";
+            string packagePath = Path.Combine(root.FullName, "PowerForge.Web.Build.3.0.188.nupkg");
+            byte[] original = CreatePackage("PowerForge.Web.Build", version, "original-signed-payload");
+            File.WriteAllBytes(packagePath, original);
+            using var cancellation = new CancellationTokenSource();
+            var logger = new BufferedLogger();
+            var handler = new NuGetRecoveryHandler(original, packageNotFoundResponses: 1);
+            var service = new PublishedNuGetAssetRecoveryService(
+                logger,
+                new NuGetV3PackageDownloader(handler),
+                delay: (_, token) =>
+                {
+                    cancellation.Cancel();
+                    token.ThrowIfCancellationRequested();
+                });
+
+            Assert.ThrowsAny<OperationCanceledException>(() => service.Restore(
+                "https://packages.example/v3/index.json", version, [packagePath], cancellation.Token));
+
+            string progress = Assert.Single(logger.Entries).Message;
+            Assert.Contains("elapsed ", progress);
+            Assert.Contains("budget 00:30:00", progress);
+            Assert.Contains("HTTP status 404", progress);
+            Assert.Equal(original, File.ReadAllBytes(packagePath));
+            Assert.Equal([packagePath], Directory.GetFiles(root.FullName));
+
+            var expired = new PublishedNuGetAssetRecoveryService(
+                new NullLogger(),
+                new NuGetV3PackageDownloader(new NuGetRecoveryHandler(original, packageNotFoundResponses: 1)),
+                indexingTimeout: TimeSpan.Zero);
+            var failure = Assert.Throws<InvalidOperationException>(() => expired.Restore(
+                "https://packages.example/v3/index.json", version, [packagePath], CancellationToken.None));
+            Assert.Contains("still unreadable after ", failure.Message);
+            Assert.Contains("indexing budget 00:00:00", failure.Message);
+            Assert.Contains("HTTP status 404", failure.Message);
+            Assert.NotNull(failure.InnerException);
+            Assert.Equal(original, File.ReadAllBytes(packagePath));
+        }
+        finally
+        {
+            root.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
     public void Restore_RetriesUntilNewlyPublishedPackageIsReadable()
     {
         var root = Directory.CreateTempSubdirectory();

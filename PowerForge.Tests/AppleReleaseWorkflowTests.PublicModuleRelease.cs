@@ -146,7 +146,6 @@ public sealed partial class AppleReleaseWorkflowTests
         Assert.Contains("\"PowerForge.ReleaseProvenance.json\"", moduleConfig, StringComparison.Ordinal);
         Assert.Contains("\"PowerForge.ReleaseProvenance.psd1\"", moduleConfig, StringComparison.Ordinal);
         Assert.Contains("Set-PowerForgeAuthorizedReleaseCommitish", script, StringComparison.Ordinal);
-        Assert.Contains("$Operation -eq 'Prepare'", commitishAuthorization, StringComparison.Ordinal);
         Assert.Contains("Add-Member -NotePropertyName Commitish", commitishAuthorization, StringComparison.Ordinal);
         Assert.Contains("Status         = 'Failed'", script, StringComparison.Ordinal);
         Assert.Contains("\"PlanOutputPath\": \"../Artefacts/ProjectBuild/project.build.plan.json\"", releaseConfig, StringComparison.Ordinal);
@@ -157,9 +156,11 @@ public sealed partial class AppleReleaseWorkflowTests
     [Theory]
     [InlineData("powershell", "Plan", "0123456789abcdef0123456789abcdef01234567")]
     [InlineData("powershell", "Prepare", "<absent>")]
+    [InlineData("powershell", "PrepareMetadata", "<absent>")]
     [InlineData("powershell", "Publish", "0123456789abcdef0123456789abcdef01234567")]
     [InlineData("pwsh", "Plan", "0123456789abcdef0123456789abcdef01234567")]
     [InlineData("pwsh", "Prepare", "<absent>")]
+    [InlineData("pwsh", "PrepareMetadata", "<absent>")]
     [InlineData("pwsh", "Publish", "0123456789abcdef0123456789abcdef01234567")]
     public void PublicModuleReleaseOmitsCommitishOnlyWhilePreparingVersionChanges(
         string shell,
@@ -477,7 +478,7 @@ public sealed partial class AppleReleaseWorkflowTests
         var command = $". '{escapedHelper}'; " +
                       $"$config = Get-Content -Raw -LiteralPath '{escapedConfig}' | ConvertFrom-Json; " +
                       $"$ids = @(Get-PowerForgeReleasePackageIds -ReleaseConfig $config -RepositoryRoot '{escapedRoot}'); " +
-                      "$expected = @('PowerForge','PowerForge.PowerShell','PowerForge.PowerShell.ProviderSdk','PowerForge.PowerShell.Provider.Directory','PowerForge.PowerShell.Provider.Directory.Runtime','PowerForge.PowerShell.Provider.Management','PowerForge.PowerShell.Provider.Management.Runtime','PowerForge.Build','PowerForge.Blazor','PowerForge.Web','PowerForge.Web.Build'); " +
+                      "$expected = @('PowerForge','PowerForge.PowerShell','PowerForge.PowerShell.ProviderSdk','PowerForge.PowerShell.Provider.Directory','PowerForge.PowerShell.Provider.Directory.Runtime','PowerForge.PowerShell.Provider.Management','PowerForge.PowerShell.Provider.Management.Runtime','PowerForge.Build','PowerForge.Blazor','PowerForge.Web','PowerForge.Web.Build','PowerForge.Web.Protocols'); " +
                       "if (Compare-Object $expected $ids) { throw \"Resolved package IDs differ: $($ids -join ', ')\" }";
 
         Run("pwsh", root, "-NoProfile", "-Command", command).EnsureSuccess();

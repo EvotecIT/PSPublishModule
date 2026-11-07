@@ -72,6 +72,21 @@ and the coordinated module GitHub asset set; the tool lane owns runtime-specific
 archives. This is one operator command with one release owner, even when independent product version lines require
 separate GitHub tags.
 
+### Public release preparation
+
+Run `Build/Invoke-PowerForgePublicRelease.ps1 -Operation PrepareMetadata` with the
+selected `-Version` and current `-ExpectedCommit` to update project versions, the
+module manifest, and the generated README Help Version. It uses separate metadata
+output paths and disables signing, installation, and publication. Existing signed
+staging remains available for recovery.
+
+Commit the resulting version metadata before running `Publish` against that new
+commit. `Prepare` continues to build and sign the complete release payload.
+
+Published NuGet payload read-back allows thirty minutes per package for registry
+indexing. Progress includes elapsed time and the last HTTP status. Cancellation
+and an exhausted indexing budget retain the release failure state.
+
 ### Public release credentials
 
 This repository's `Build/Invoke-PowerForgePublicRelease.ps1` keeps its configured

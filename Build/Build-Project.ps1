@@ -14,6 +14,7 @@ param(
     [switch] $Publish,
     [switch] $Plan,
     [switch] $Validate,
+    [switch] $PrepareMetadata,
     [switch] $Json,
     [switch] $PackagesOnly,
     [switch] $ModuleOnly,
@@ -74,7 +75,9 @@ if ([string]::IsNullOrWhiteSpace($ConfigPath)) {
 
 $publishRequested = $Publish -or $RunMode -eq 'Publish'
 $fullPublishRequested = $Publish -or ($RunMode -eq 'Publish' -and -not $ModuleOnly)
-$operation = if ($Plan) {
+$operation = if ($PrepareMetadata) {
+    'Prepare PowerForge release version metadata'
+} elseif ($Plan) {
     'Plan unified PowerForge release'
 } elseif ($Validate) {
     'Validate unified PowerForge release'
@@ -110,7 +113,13 @@ $importFramework = @($bootstrapFrameworks)[0]
 $moduleProject = Join-Path $repoRoot 'PSPublishModule\PSPublishModule.csproj'
 $moduleBinary = Join-Path $repoRoot "PSPublishModule\bin\$Configuration\$importFramework\PSPublishModule.dll"
 
+$result = $null
 try {
+    if ($PrepareMetadata -and ($Plan -or $Validate -or $publishRequested -or
+            $PublishNuget -or $PublishProjectGitHub -or $PublishToolGitHub -or
+            $PackagesOnly -or $ModuleOnly -or $ToolsOnly)) {
+        throw 'PrepareMetadata cannot be combined with planning, validation, publication, or lane selection.'
+    }
     if ($Publish -and $ModuleOnly) {
         throw 'The full -Publish switch cannot be combined with -ModuleOnly. Use -ModuleOnly -RunMode Publish for an intentional module-only publication.'
     }
@@ -139,9 +148,24 @@ try {
         Remove-Module -Force -ErrorAction SilentlyContinue
     Import-Module $moduleBinary -Force -ErrorAction Stop -Verbose:$false
 
+    if ($PrepareMetadata) {
+        . (Join-Path $PSScriptRoot 'Private/Invoke-PowerForgeReleaseMetadataPreparation.ps1')
+        $metadataParameters = @{
+            ConfigPath = $ConfigPath
+            EffectiveConfigurationPath = $EffectiveConfigurationPath
+            Version = $ModuleVersion
+        }
+        if ($Json) {
+            $metadataParameters.WarningAction = 'SilentlyContinue'
+        }
+        $result = Invoke-PowerForgeReleaseMetadataPreparation @metadataParameters
+        if ($Json) { $result | ConvertTo-Json -Depth 20 } else { $result }
+        return
+    }
+
     $invokeParams = @{}
     foreach ($entry in $PSBoundParameters.GetEnumerator()) {
-        if ($entry.Key -notin @('Json', 'Publish', 'RunMode', 'WhatIf', 'Confirm')) {
+        if ($entry.Key -notin @('Json', 'Publish', 'RunMode', 'WhatIf', 'Confirm', 'PrepareMetadata')) {
             $invokeParams[$entry.Key] = $entry.Value
         }
     }
@@ -178,17 +202,25 @@ try {
         $invokeParams.WarningAction = 'SilentlyContinue'
     }
 
-    $result = Invoke-PowerForgeRelease @invokeParams
+    Invoke-PowerForgeRelease @invokeParams | ForEach-Object { $result = $_ }
     if ($null -eq $result) {
         throw 'Unified release execution returned no result.'
     }
     if ($Json) { $result | ConvertTo-Json -Depth 20 } else { $result }
 } catch {
     if ($Json) {
-        [ordered]@{
-            Success = $false
-            ErrorMessage = $_.Exception.Message
-        } | ConvertTo-Json -Depth 5
+        if ($null -eq $result) {
+            $result = [pscustomobject]@{
+                Success = $false
+                ErrorMessage = $_.Exception.Message
+            }
+        } else {
+            $result | Add-Member -NotePropertyName Success -NotePropertyValue $false -Force
+            if ([string]::IsNullOrWhiteSpace([string] $result.ErrorMessage)) {
+                $result | Add-Member -NotePropertyName ErrorMessage -NotePropertyValue $_.Exception.Message -Force
+            }
+        }
+        $result | ConvertTo-Json -Depth 20
     } else {
         Write-Error $_
     }
