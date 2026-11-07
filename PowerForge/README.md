@@ -12,3 +12,5 @@ region. See [source-backed Markdown examples](https://github.com/EvotecIT/PSPubl
 for configuration, CLI check/apply commands, and pipeline integration.
 
 Use `AgentPluginPackageService` to validate and package portable skills/MCP bundles with generated Codex and Claude compatibility metadata. See [agent plugin packaging](https://github.com/EvotecIT/PSPublishModule/blob/main/Docs/PowerForge.AgentPlugins.md) for the source layout, CLI commands, and consumer validation requirements.
+
+Use `SigningPreparationService` or `powerforge signing prepare` to request one local provider signature before an authorized release needs it. The generated proof verifies the configured identity without storing a PIN or promising a cache lifetime. See [signing preparation](https://github.com/EvotecIT/PSPublishModule/blob/main/Docs/PowerForge.SigningPreparation.md).
