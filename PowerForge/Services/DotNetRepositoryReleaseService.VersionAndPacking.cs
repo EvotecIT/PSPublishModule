@@ -629,24 +629,4 @@ private static string? ResolvePackagePath(DotNetRepositoryReleaseSpec spec, DotN
         return new string?[] { null };
     }
 
-    private static string[] ReadOutputPaths(string csproj)
-    {
-        try
-        {
-            var document = XDocument.Load(csproj);
-            return document.Descendants()
-                .Where(element =>
-                    string.Equals(element.Name.LocalName, "OutputPath", StringComparison.OrdinalIgnoreCase) ||
-                    string.Equals(element.Name.LocalName, "OutDir", StringComparison.OrdinalIgnoreCase))
-                .Select(static element => element.Value?.Trim())
-                .Where(static value => !string.IsNullOrWhiteSpace(value))
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .ToArray()!;
-        }
-        catch
-        {
-            return Array.Empty<string>();
-        }
-    }
-
 }
