@@ -1,11 +1,11 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <PackageVersion>3.0.188</PackageVersion>
+    <PackageVersion>3.0.189</PackageVersion>
     <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <VersionPrefix>3.0.188</VersionPrefix>
+    <VersionPrefix>3.0.189</VersionPrefix>
     <PackageId>PowerForge.Web</PackageId>
     <RootNamespace>PowerForge.Web</RootNamespace>
     <Description>PowerForge.Web static-site engine and reusable website build components.</Description>

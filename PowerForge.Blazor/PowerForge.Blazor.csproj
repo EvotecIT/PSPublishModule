@@ -1,12 +1,12 @@
 <Project Sdk="Microsoft.NET.Sdk.Razor">
 
   <PropertyGroup>
-    <PackageVersion>3.0.188</PackageVersion>
+    <PackageVersion>3.0.189</PackageVersion>
     <TargetFramework>net8.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <LangVersion>latest</LangVersion>
-    <VersionPrefix>3.0.188</VersionPrefix>
+    <VersionPrefix>3.0.189</VersionPrefix>
 
     <!-- Package metadata -->
     <PackageId>PowerForge.Blazor</PackageId>
