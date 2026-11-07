@@ -297,7 +297,10 @@ public sealed partial class ModulePipelineRunner
             Name = moduleName,
             SourcePath = projectRoot,
             StagingPath = spec.Build.StagingPath,
-            ReuseStaging = spec.Build.ReuseStaging,
+            // A validated outer checkpoint selects frozen publication even when a legacy wrapper forwards its default false.
+            ReuseStaging = spec.Build.ReuseStaging ||
+                (spec.ReleaseCheckpoint && gateMode == ConfigurationGateMode.Publish &&
+                 !string.IsNullOrWhiteSpace(spec.Build.PublicationCheckpointSha256)),
             PublicationCheckpointSha256 = spec.Build.PublicationCheckpointSha256,
             CsprojPath = refreshPsd1Only || spec.Build.SkipDotNetBuild ? string.Empty : csproj,
             SkipDotNetBuild = spec.Build.SkipDotNetBuild,
