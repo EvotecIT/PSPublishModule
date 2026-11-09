@@ -20,6 +20,8 @@ the API reference. It is separate from test code coverage. Enum declarations and
 fields use Roslyn syntax from checksum-verified portable PDB documents; methods
 continue to use execution sequence points. Missing or changed source files do
 not receive inferred declaration links.
+Source links support portable PDB sidecars and portable PDBs embedded in the
+assembly. Embedded symbols take precedence when a sidecar is also present.
 
 The `apidocs` pipeline option `sourceMemberCoverageScope: "assembly"` measures
 member source links against members declared by the documented assemblies.
