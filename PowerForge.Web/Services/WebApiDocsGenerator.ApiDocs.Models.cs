@@ -163,10 +163,9 @@ public static partial class WebApiDocsGenerator
         public bool WorkingTreeChanged { get; set; }
     }
 
-    private sealed class SourceLinkContext : IDisposable
+    private sealed partial class SourceLinkContext : IDisposable
     {
         private readonly MetadataReaderProvider _provider;
-        private readonly Stream _stream;
         private readonly MetadataReader _reader;
         private readonly Module _sourceModule;
         private readonly string? _sourceRoot;
@@ -180,7 +179,6 @@ public static partial class WebApiDocsGenerator
 
         private SourceLinkContext(
             MetadataReaderProvider provider,
-            Stream stream,
             Module sourceModule,
             string? sourceRoot,
             string? sourcePathPrefix,
@@ -190,7 +188,6 @@ public static partial class WebApiDocsGenerator
             bool workingTreeChanged)
         {
             _provider = provider;
-            _stream = stream;
             _reader = provider.GetMetadataReader();
             _sourceModule = sourceModule;
             _sourceRoot = sourceRoot;
@@ -216,17 +213,10 @@ public static partial class WebApiDocsGenerator
                 return null;
             }
 
-            var pdbPath = Path.ChangeExtension(assemblyPath, ".pdb");
-            if (!File.Exists(pdbPath))
-            {
-                warnings.Add($"Source links disabled: PDB not found at {pdbPath}.");
-                return null;
-            }
-
+            MetadataReaderProvider? provider = null;
             try
             {
-                var stream = File.OpenRead(pdbPath);
-                var provider = MetadataReaderProvider.FromPortablePdbStream(stream);
+                provider = OpenSymbolReader(assemblyPath);
 
                 string? root = null;
                 if (!string.IsNullOrWhiteSpace(options.SourceRootPath))
@@ -253,11 +243,12 @@ public static partial class WebApiDocsGenerator
 
                 var mappings = BuildSourceUrlMappings(options.SourceUrlMappings, warnings);
                 var snapshot = ResolveSourceSnapshot(root, pattern, options.SourceUrlMappings, warnings);
-                return new SourceLinkContext(provider, stream, assembly.ManifestModule, root, options.SourcePathPrefix, pattern, mappings,
+                return new SourceLinkContext(provider, assembly.ManifestModule, root, options.SourcePathPrefix, pattern, mappings,
                     snapshot.Revision, snapshot.WorkingTreeChanged);
             }
             catch (Exception ex)
             {
+                provider?.Dispose();
                 warnings.Add($"Source links disabled: {ex.Message}");
                 return null;
             }
@@ -670,7 +661,6 @@ public static partial class WebApiDocsGenerator
         public void Dispose()
         {
             _provider.Dispose();
-            _stream.Dispose();
         }
 
         private static string? TryFindGitRoot(string path)
