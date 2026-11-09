@@ -9,3 +9,4 @@ PFF001 | PowerForge.Fluent | Error | Delegate property needs a fluent verb
 PFF002 | PowerForge.Fluent | Error | Fluent method collides with an existing method
 PFF003 | PowerForge.Fluent | Error | Two members map to one fluent method
 PFF004 | PowerForge.Fluent | Error | Forward target has no matching method
+PFF005 | PowerForge.Fluent | Error | Fluent name is not a valid identifier

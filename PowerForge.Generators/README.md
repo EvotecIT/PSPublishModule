@@ -25,13 +25,17 @@ property access all edit one object.
   `[NoFluent]` leaves a property or type out.
 - `[FluentForward("Content", typeof(ContentBuilder), "Replace")]` on a base type or interface generates `Content(...)`
   for each static `Replace(owner, value)` overload, for values that must go through a helper.
-- A delegate property without a verb (PFF001), a method that collides with an existing one (PFF002) and two members that
-  map to one method (PFF003) are build errors.
-- Methods for a type that can be derived from are generic over `TSelf`, so a chain keeps the derived type.
+- A delegate property without a verb (PFF001), a method that collides with an existing one or that a delegate-valued
+  member would capture (PFF002), two members that map to one method (PFF003), a forward target without a usable
+  overload (PFF004) and a name that is not an identifier (PFF005) are build errors.
+- Methods for a type that can be derived from are generic over `TSelf`, so a chain keeps the derived type. They live in
+  a `<Type>Fluent` partial class, where handwritten helpers can sit beside them.
+- Nested types and generic types that can be derived from get no methods; sealed generic types do, with their
+  constraints.
 
 MSBuild settings:
 
 | Property | Meaning |
 | --- | --- |
-| `PowerForgeFluentNaming=Prefixed` | ConsoleMonster's earlier names (`AddX`, `AddXs`, one `Configure`, `X()` for a bool); an existing method silently wins. For ConsoleMonster until it adopts the convention. |
+| `PowerForgeFluentNaming=Prefixed` | ConsoleMonster's earlier names (`AddX`, `AddXs`, one `Configure`, `X()` for a bool) in one `<Namespace>Fluent` class; an existing method silently wins. For ConsoleMonster until it adopts the convention. |
 | `PowerForgeFluentFactory=Namespace.Type` | A static factory class whose parameterless methods are used in the generated documentation examples. |
