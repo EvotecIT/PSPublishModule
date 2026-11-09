@@ -208,21 +208,52 @@ namespace PowerForge.Generators.Fluent {
                 if (receiver is not INamedTypeSymbol named) {
                     return false;
                 }
-                // Type arguments must agree position by position; only the receiver's own type parameters match anything,
-                // so Base<string, T> accepts Base<string, bool> but not Base<int, bool>.
-                for (INamedTypeSymbol? current = type; current != null; current = current.BaseType) {
-                    if (Unifies(named, current)) { return true; }
+                // Type arguments must agree position by position. A receiver type parameter binds to one type, consistently
+                // across its uses, and only when that type satisfies its constraints: Base<string, T> where T : struct
+                // accepts Base<string, int> but neither Base<int, int> nor Base<string, string>.
+                foreach (INamedTypeSymbol candidate in BaseTypes(type).Concat(type.AllInterfaces)) {
+                    Dictionary<ITypeParameterSymbol, ITypeSymbol> bindings = new Dictionary<ITypeParameterSymbol, ITypeSymbol>(SymbolEqualityComparer.Default);
+                    if (Unifies(named, candidate, bindings) && bindings.All(binding => Satisfies(binding.Key, binding.Value))) { return true; }
                 }
-                return type.AllInterfaces.Any(contract => Unifies(named, contract));
+                return false;
             }
 
-            private static bool Unifies(ITypeSymbol pattern, ITypeSymbol actual) => pattern switch {
+            private static bool Unifies(ITypeSymbol pattern, ITypeSymbol actual, Dictionary<ITypeParameterSymbol, ITypeSymbol> bindings) {
+                switch (pattern) {
+                    case ITypeParameterSymbol parameter:
+                        if (bindings.TryGetValue(parameter, out ITypeSymbol? bound)) { return SymbolEqualityComparer.Default.Equals(bound, actual); }
+                        bindings[parameter] = actual;
+                        return true;
+                    case IArrayTypeSymbol array:
+                        return actual is IArrayTypeSymbol other && array.Rank == other.Rank && Unifies(array.ElementType, other.ElementType, bindings);
+                    case INamedTypeSymbol named when named.IsGenericType:
+                        if (actual is not INamedTypeSymbol actualNamed || !SymbolEqualityComparer.Default.Equals(named.OriginalDefinition, actualNamed.OriginalDefinition)) { return false; }
+                        for (int index = 0; index < named.TypeArguments.Length; index++) {
+                            if (!Unifies(named.TypeArguments[index], actualNamed.TypeArguments[index], bindings)) { return false; }
+                        }
+                        return true;
+                    default:
+                        return SymbolEqualityComparer.Default.Equals(pattern, actual);
+                }
+            }
+
+            // Whether a type meets a type parameter's constraints. A constraint that itself mentions type parameters is
+            // accepted, so a match is never missed; the compiler still checks the call.
+            private static bool Satisfies(ITypeParameterSymbol parameter, ITypeSymbol type) {
+                if (parameter.HasReferenceTypeConstraint && !type.IsReferenceType) { return false; }
+                if (parameter.HasValueTypeConstraint && (!type.IsValueType || type.OriginalDefinition.SpecialType == SpecialType.System_Nullable_T)) { return false; }
+                if (parameter.HasUnmanagedTypeConstraint && !type.IsUnmanagedType) { return false; }
+                if (parameter.HasConstructorConstraint && !(type.IsValueType || type is INamedTypeSymbol { IsAbstract: false } named
+                    && named.InstanceConstructors.Any(c => c.Parameters.Length == 0 && c.DeclaredAccessibility == Accessibility.Public))) { return false; }
+                return parameter.ConstraintTypes.All(constraint => ContainsTypeParameter(constraint) || type is INamedTypeSymbol named
+                    && BaseTypes(named).Concat(named.AllInterfaces).Any(candidate => SymbolEqualityComparer.Default.Equals(candidate, constraint)));
+            }
+
+            private static bool ContainsTypeParameter(ITypeSymbol type) => type switch {
                 ITypeParameterSymbol => true,
-                IArrayTypeSymbol array => actual is IArrayTypeSymbol other && array.Rank == other.Rank && Unifies(array.ElementType, other.ElementType),
-                INamedTypeSymbol named when named.IsGenericType => actual is INamedTypeSymbol other
-                    && SymbolEqualityComparer.Default.Equals(named.OriginalDefinition, other.OriginalDefinition)
-                    && named.TypeArguments.Zip(other.TypeArguments, Unifies).All(match => match),
-                _ => SymbolEqualityComparer.Default.Equals(pattern, actual)
+                IArrayTypeSymbol array => ContainsTypeParameter(array.ElementType),
+                INamedTypeSymbol named => named.TypeArguments.Any(ContainsTypeParameter),
+                _ => false
             };
 
             private static AttributeData? Attribute(ISymbol symbol, string name) => symbol.GetAttributes().FirstOrDefault(a => a.AttributeClass?.ToDisplayString() == name);

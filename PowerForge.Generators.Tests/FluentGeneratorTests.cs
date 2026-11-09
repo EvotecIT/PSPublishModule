@@ -130,14 +130,23 @@ public sealed class FluentGeneratorTests {
                 public class Pair<TFirst, TSecond> {
                 }
 
-                // Applies to Pair<string, T> only, so it does not compete with Pairing.Title.
+                // None of these apply to the models below: a fixed argument differs, a constraint fails, or one type
+                // parameter would need two different types.
                 public static class PairExtensions {
                     public static Pair<string, T> Title<T>(this Pair<string, T> pair, string? title) => pair;
+                    public static Pair<string, T> Note<T>(this Pair<string, T> pair, string? note) where T : struct => pair;
+                    public static Pair<T, T> Same<T>(this Pair<T, T> pair, string? same) => pair;
                 }
 
                 [Fluent]
                 public sealed class Pairing : Pair<int, bool> {
                     public string? Title { get; set; }
+                    public string? Same { get; set; }
+                }
+
+                [Fluent]
+                public sealed class Labelled : Pair<string, string> {
+                    public string? Note { get; set; }
                 }
 
                 [Fluent]
@@ -176,9 +185,10 @@ public sealed class FluentGeneratorTests {
                         Box<Value> box = new Box<Value>().Content(value);
                         GlobalModel global = new GlobalModel().Name("global");
                         Derived derived = new Derived().Title("inherited");
-                        Pairing pairing = new Pairing().Title("pair");
+                        Pairing pairing = new Pairing().Title("pair").Same("same");
+                        Labelled labelled = new Labelled().Note("note");
                         Value attached = new Value().Attach("attached");
-                        return new object[] { box.Content!.Amount, value.@event!, value.Tags.Count, global.Name!, derived.Title!, pairing.Title!, attached.@event! };
+                        return new object[] { box.Content!.Amount, value.@event!, value.Tags.Count, global.Name!, derived.Title!, pairing.Title!, attached.@event!, pairing.Same!, labelled.Note! };
                     }
                 }
             }
@@ -187,7 +197,7 @@ public sealed class FluentGeneratorTests {
         (Compilation compilation, ImmutableArray<Diagnostic> generatorDiagnostics) = Run(library);
         Assert.Empty(generatorDiagnostics);
 
-        Assert.Equal(new object[] { 3, "start", 2, "global", "inherited", "pair", "attached" }, Execute(compilation));
+        Assert.Equal(new object[] { 3, "start", 2, "global", "inherited", "pair", "attached", "same", "note" }, Execute(compilation));
     }
 
     private static (Compilation Compilation, ImmutableArray<Diagnostic> Diagnostics) Run(string source) {
