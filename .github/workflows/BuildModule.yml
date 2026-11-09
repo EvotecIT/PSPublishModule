@@ -319,6 +319,11 @@ jobs:
         timeout-minutes: 15
         run: dotnet test .\PowerForge.Net472SmokeTests\PowerForge.Net472SmokeTests.csproj -c Release -f net472 --nologo
 
+      - name: Test source generators
+        shell: pwsh
+        timeout-minutes: 5
+        run: dotnet test .\PowerForge.Generators.Tests\PowerForge.Generators.Tests.csproj -c Release --nologo
+
       - name: Test web protocol contracts on Framework and modern .NET
         if: needs.changes.outputs.web == 'true'
         shell: pwsh

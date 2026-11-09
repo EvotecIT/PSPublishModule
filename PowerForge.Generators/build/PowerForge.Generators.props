@@ -1,0 +1,7 @@
+<Project>
+    <!-- Settings the fluent generator reads. See the package README. -->
+    <ItemGroup>
+        <CompilerVisibleProperty Include="PowerForgeFluentNaming" />
+        <CompilerVisibleProperty Include="PowerForgeFluentFactory" />
+    </ItemGroup>
+</Project>
