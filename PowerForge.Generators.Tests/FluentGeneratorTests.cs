@@ -119,8 +119,29 @@ public sealed class FluentGeneratorTests {
                     public T? Content { get; set; }
                 }
 
+                [FluentForward("Attach", typeof(Attachments), "Set")]
+                public interface IAttachable {
+                }
+
+                public static class Attachments {
+                    public static void Set(IAttachable owner, string valueInstance) => ((Value)owner).@event = valueInstance;
+                }
+
+                public class Pair<TFirst, TSecond> {
+                }
+
+                // Applies to Pair<string, T> only, so it does not compete with Pairing.Title.
+                public static class PairExtensions {
+                    public static Pair<string, T> Title<T>(this Pair<string, T> pair, string? title) => pair;
+                }
+
                 [Fluent]
-                public sealed class Value {
+                public sealed class Pairing : Pair<int, bool> {
+                    public string? Title { get; set; }
+                }
+
+                [Fluent]
+                public sealed class Value : IAttachable {
                     public int Amount { get; set; }
                     public string? @event { get; set; }
                     public Tags Tags { get; } = new();
@@ -155,7 +176,9 @@ public sealed class FluentGeneratorTests {
                         Box<Value> box = new Box<Value>().Content(value);
                         GlobalModel global = new GlobalModel().Name("global");
                         Derived derived = new Derived().Title("inherited");
-                        return new object[] { box.Content!.Amount, value.@event!, value.Tags.Count, global.Name!, derived.Title! };
+                        Pairing pairing = new Pairing().Title("pair");
+                        Value attached = new Value().Attach("attached");
+                        return new object[] { box.Content!.Amount, value.@event!, value.Tags.Count, global.Name!, derived.Title!, pairing.Title!, attached.@event! };
                     }
                 }
             }
@@ -164,7 +187,7 @@ public sealed class FluentGeneratorTests {
         (Compilation compilation, ImmutableArray<Diagnostic> generatorDiagnostics) = Run(library);
         Assert.Empty(generatorDiagnostics);
 
-        Assert.Equal(new object[] { 3, "start", 2, "global", "inherited" }, Execute(compilation));
+        Assert.Equal(new object[] { 3, "start", 2, "global", "inherited", "pair", "attached" }, Execute(compilation));
     }
 
     private static (Compilation Compilation, ImmutableArray<Diagnostic> Diagnostics) Run(string source) {

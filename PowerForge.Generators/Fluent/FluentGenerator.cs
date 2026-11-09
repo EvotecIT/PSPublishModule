@@ -208,22 +208,21 @@ namespace PowerForge.Generators.Fluent {
                 if (receiver is not INamedTypeSymbol named) {
                     return false;
                 }
-                // A closed receiver (Base<string>) must match exactly; an open one (Base<T>) matches any construction.
-                bool open = IsOpen(named);
-                bool Matches(INamedTypeSymbol candidate) => open
-                    ? SymbolEqualityComparer.Default.Equals(candidate.OriginalDefinition, named.OriginalDefinition)
-                    : SymbolEqualityComparer.Default.Equals(candidate, named);
+                // Type arguments must agree position by position; only the receiver's own type parameters match anything,
+                // so Base<string, T> accepts Base<string, bool> but not Base<int, bool>.
                 for (INamedTypeSymbol? current = type; current != null; current = current.BaseType) {
-                    if (Matches(current)) { return true; }
+                    if (Unifies(named, current)) { return true; }
                 }
-                return type.AllInterfaces.Any(Matches);
+                return type.AllInterfaces.Any(contract => Unifies(named, contract));
             }
 
-            private static bool IsOpen(ITypeSymbol type) => type switch {
+            private static bool Unifies(ITypeSymbol pattern, ITypeSymbol actual) => pattern switch {
                 ITypeParameterSymbol => true,
-                IArrayTypeSymbol array => IsOpen(array.ElementType),
-                INamedTypeSymbol named => named.TypeArguments.Any(IsOpen),
-                _ => false
+                IArrayTypeSymbol array => actual is IArrayTypeSymbol other && array.Rank == other.Rank && Unifies(array.ElementType, other.ElementType),
+                INamedTypeSymbol named when named.IsGenericType => actual is INamedTypeSymbol other
+                    && SymbolEqualityComparer.Default.Equals(named.OriginalDefinition, other.OriginalDefinition)
+                    && named.TypeArguments.Zip(other.TypeArguments, Unifies).All(match => match),
+                _ => SymbolEqualityComparer.Default.Equals(pattern, actual)
             };
 
             private static AttributeData? Attribute(ISymbol symbol, string name) => symbol.GetAttributes().FirstOrDefault(a => a.AttributeClass?.ToDisplayString() == name);
@@ -301,8 +300,10 @@ namespace PowerForge.Generators.Fluent {
                     _generic = open ? "<TSelf>" : type.TypeParameters.Length == 0 ? string.Empty : "<" + string.Join(", ", type.TypeParameters.Select(parameter => parameter.Name)) + ">";
                     _constraint = open ? " where TSelf : " + typeName : Constraints(type);
                     string receiver = Camel(type.Name);
-                    if (Reserved.Contains(receiver.TrimStart('@')) || _forwards.Any(forward => forward.Target.Parameters[1].Name == receiver.TrimStart('@'))) {
-                        receiver = receiver.TrimStart('@') + "Instance";
+                    string stem = receiver.TrimStart('@');
+                    bool Clashes(string name) => Reserved.Contains(name) || _forwards.Any(forward => forward.Target.Parameters[1].Name == name);
+                    for (int attempt = 0; Clashes(receiver.TrimStart('@')); attempt++) {
+                        receiver = stem + "Instance" + (attempt == 0 ? string.Empty : attempt.ToString(System.Globalization.CultureInfo.InvariantCulture));
                     }
                     _receiver = receiver;
                     // Prefixed naming keeps ConsoleMonster's one partial class per namespace. The convention uses one class
