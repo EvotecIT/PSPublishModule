@@ -29,9 +29,12 @@ property access all edit one object.
   member would capture (PFF002), two members that map to one method (PFF003), a forward target without a usable
   overload (PFF004) and a name that is not an identifier (PFF005) are build errors.
 - Methods for a type that can be derived from are generic over `TSelf`, so a chain keeps the derived type. They live in
-  a `<Type>Fluent` partial class, where handwritten helpers can sit beside them.
+  a `<Type>Fluent` partial class, where handwritten helpers can sit beside them; a class of that name you declare
+  yourself must be `static partial`.
 - Nested types and generic types that can be derived from get no methods; sealed generic types do, with their
   constraints.
+- Generated code also compiles as C# 7.3 (the default for netstandard2.0 and .NET Framework projects); nullable
+  annotations and `??=` are only emitted for C# 8 and later.
 
 MSBuild settings:
 

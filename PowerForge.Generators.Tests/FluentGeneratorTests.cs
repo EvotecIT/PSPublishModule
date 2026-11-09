@@ -136,12 +136,38 @@ public sealed class FluentGeneratorTests {
                     public static Pair<string, T> Title<T>(this Pair<string, T> pair, string? title) => pair;
                     public static Pair<string, T> Note<T>(this Pair<string, T> pair, string? note) where T : struct => pair;
                     public static Pair<T, T> Same<T>(this Pair<T, T> pair, string? same) => pair;
+                    public static Pair<T, U> Stroke<T, U>(this Pair<T, U> pair, string? stroke) where U : T => pair;
+                    public static T Fill<T>(this T shape, string? fill) where T : struct => shape;
+                }
+
+                // A derivable model under an abstract marked base, and a sealed override, reuse the base's methods.
+                [Fluent]
+                public abstract class Shape {
+                    public string? Fill { get; set; }
+                }
+
+                public class Rect : Shape {
+                    public virtual int Width { get; set; }
+                }
+
+                public sealed class Square : Rect {
+                    public override int Width { get; set; }
+                }
+
+                public sealed class Entry {
+                    public string? Text { get; set; }
+                }
+
+                [Fluent]
+                public sealed class Journal {
+                    public List<Entry?> Entries { get; } = new();
                 }
 
                 [Fluent]
                 public sealed class Pairing : Pair<int, bool> {
                     public string? Title { get; set; }
                     public string? Same { get; set; }
+                    public string? Stroke { get; set; }
                 }
 
                 [Fluent]
@@ -187,8 +213,12 @@ public sealed class FluentGeneratorTests {
                         Derived derived = new Derived().Title("inherited");
                         Pairing pairing = new Pairing().Title("pair").Same("same");
                         Labelled labelled = new Labelled().Note("note");
+                        pairing.Stroke("stroke");
+                        Rect rect = new Rect().Fill("red").Width(2);
+                        Square square = new Square().Fill("blue").Width(3);
+                        Journal journal = new Journal().Entry(entry => entry.Text("entry"));
                         Value attached = new Value().Attach("attached");
-                        return new object[] { box.Content!.Amount, value.@event!, value.Tags.Count, global.Name!, derived.Title!, pairing.Title!, attached.@event!, pairing.Same!, labelled.Note! };
+                        return new object[] { box.Content!.Amount, value.@event!, value.Tags.Count, global.Name!, derived.Title!, pairing.Title!, attached.@event!, pairing.Same!, labelled.Note!, pairing.Stroke!, rect.Width, square.Fill!, square.Width, journal.Entries[0]!.Text! };
                     }
                 }
             }
@@ -197,15 +227,50 @@ public sealed class FluentGeneratorTests {
         (Compilation compilation, ImmutableArray<Diagnostic> generatorDiagnostics) = Run(library);
         Assert.Empty(generatorDiagnostics);
 
-        Assert.Equal(new object[] { 3, "start", 2, "global", "inherited", "pair", "attached", "same", "note" }, Execute(compilation));
+        Assert.Equal(new object[] { 3, "start", 2, "global", "inherited", "pair", "attached", "same", "note", "stroke", 2, "blue", 3, "entry" }, Execute(compilation));
     }
 
-    private static (Compilation Compilation, ImmutableArray<Diagnostic> Diagnostics) Run(string source) {
+    [Fact]
+    public void GeneratedCodeCompilesAsCSharp73() {
+        const string library = @"
+            using System.Collections.Generic;
+            using PowerForge.Fluent;
+
+            namespace Sample {
+                [Fluent]
+                public class Legacy {
+                    public string Title { get; set; }
+                    public bool IsVisible { get; set; }
+                    public List<string> Tags { get; set; } = new List<string>();
+                    public Settings Settings { get; set; }
+                }
+
+                public sealed class Settings {
+                    public int Size { get; set; }
+                }
+
+                public static class Usage {
+                    public static object[] Run() {
+                        Legacy legacy = new Legacy().Title(""old"").Visible().Tag(""a"").Settings(s => s.Size(4));
+                        return new object[] { legacy.Title, legacy.IsVisible, legacy.Tags.Count, legacy.Settings.Size };
+                    }
+                }
+            }";
+
+        (Compilation compilation, ImmutableArray<Diagnostic> generatorDiagnostics) = Run(library, LanguageVersion.CSharp7_3);
+        Assert.Empty(generatorDiagnostics);
+
+        Assert.Equal(new object[] { "old", true, 1, 4 }, Execute(compilation));
+    }
+
+    private static (Compilation Compilation, ImmutableArray<Diagnostic> Diagnostics) Run(string source, LanguageVersion version = LanguageVersion.Latest) {
         IEnumerable<MetadataReference> references = ((string)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES")!)
             .Split(Path.PathSeparator).Select(path => MetadataReference.CreateFromFile(path));
-        CSharpCompilation compilation = CSharpCompilation.Create("Sample", new[] { CSharpSyntaxTree.ParseText(source, new CSharpParseOptions(LanguageVersion.Latest)) },
-            references, new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary, nullableContextOptions: NullableContextOptions.Enable));
-        GeneratorDriver driver = CSharpGeneratorDriver.Create(new FluentGenerator()).WithUpdatedParseOptions(new CSharpParseOptions(LanguageVersion.Latest));
+        CSharpParseOptions parse = new CSharpParseOptions(version);
+        NullableContextOptions nullable = version >= LanguageVersion.CSharp8 ? NullableContextOptions.Enable : NullableContextOptions.Disable;
+        CSharpCompilation compilation = CSharpCompilation.Create("Sample", new[] { CSharpSyntaxTree.ParseText(source, parse) },
+            references, new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary, nullableContextOptions: nullable));
+        GeneratorDriver driver = CSharpGeneratorDriver.Create(new FluentGenerator()).WithUpdatedParseOptions(parse);
         driver.RunGeneratorsAndUpdateCompilation(compilation, out Compilation output, out ImmutableArray<Diagnostic> diagnostics);
         return (output, diagnostics);
     }

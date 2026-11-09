@@ -21,7 +21,7 @@ namespace PowerForge.Generators.Fluent {
 
         internal static readonly DiagnosticDescriptor ForwardMethodMissing = new DiagnosticDescriptor(
             "PFF004", "Forward target has no matching method",
-            "[FluentForward] on '{0}' names '{1}.{2}', which has no accessible, non-generic static overload taking the owner and a value by value",
+            "[FluentForward] on '{0}' names '{1}.{2}', which has no accessible, non-generic static overload taking a {3} and a value by value",
             Category, DiagnosticSeverity.Error, isEnabledByDefault: true);
 
         internal static readonly DiagnosticDescriptor InvalidName = new DiagnosticDescriptor(
