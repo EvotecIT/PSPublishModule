@@ -18,6 +18,8 @@ internal static partial class Program
         string commandName = "release")
     {
         var argv = filteredArgs.Skip(1).ToArray();
+        if (argv.FirstOrDefault() == "prepare-scoop")
+            return CommandScoop(argv.Skip(1).ToArray(), logger);
         if (argv.FirstOrDefault() == "prepare-catalog")
             return CommandReleaseCatalog(argv.Skip(1).ToArray(), logger);
         if (argv.FirstOrDefault() == "catalog")

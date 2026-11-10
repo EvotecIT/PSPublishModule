@@ -293,6 +293,23 @@
         }
       ]
     },
+    "Scoop": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Portable Windows manifest metadata for release prepare-scoop. Existing GitHub identity and TagTemplate select stable application updates.",
+      "required": [ "Name", "Description", "Homepage", "License", "Executable", "ShortcutName", "Target", "Runtimes", "UrlTemplate" ],
+      "properties": {
+        "Name": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
+        "Description": { "type": "string", "minLength": 1 },
+        "Homepage": { "type": "string", "format": "uri", "pattern": "^https://" },
+        "License": { "type": "string", "minLength": 1 },
+        "Executable": { "type": "string", "minLength": 1 },
+        "ShortcutName": { "type": "string", "minLength": 1 },
+        "Target": { "type": "string", "minLength": 1 },
+        "Runtimes": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "enum": [ "win-x64", "win-arm64", "win-x86" ] } },
+        "UrlTemplate": { "type": "string", "pattern": "^https://", "description": "Archive URL containing $version and {Runtime}; its resolved filename must match the selected release asset." }
+      }
+    },
     "Winget": {
       "type": "object",
       "additionalProperties": false,
