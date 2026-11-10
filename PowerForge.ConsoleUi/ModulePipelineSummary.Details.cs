@@ -35,7 +35,8 @@ internal static partial class ModulePipelineSummary
             var hasLocation = recommendations.Any(row => !string.IsNullOrWhiteSpace(row.Where));
             var table = new Table().AddColumn("When");
             if (hasLocation) table.AddColumn("Where");
-            table.AddColumn("Do this");
+            // The action ends with the command to run ("Suggested command: ..."); show all of it.
+            table.AddColumn(new TableColumn("Do this") { MaxLines = TableColumn.Unlimited });
             foreach (var row in recommendations)
             {
                 if (hasLocation) table.AddRow(Markup.Escape(row.When), Markup.Escape(row.Where), Markup.Escape(row.Action));

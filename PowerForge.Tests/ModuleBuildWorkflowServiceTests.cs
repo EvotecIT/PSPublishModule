@@ -278,7 +278,7 @@ public sealed class ModuleBuildWorkflowServiceTests
     }
 
     // The module summary lists what needs attention from the run itself (warning diagnostics, with their location),
-    // and keeps the recommended action in the details.
+    // and keeps the whole recommended action, suggested command included, in the details.
     [Fact]
     public void ModuleSummary_ListsWarningDiagnosticsUnderNeedsAttention()
     {
@@ -295,6 +295,7 @@ public sealed class ModuleBuildWorkflowServiceTests
             details: "Public\\Get-Thing.ps1:12:5 - Write-Host is used.",
             recommendedAction: "Use Write-Information or Write-Output.",
             sourcePath: "Public\\Get-Thing.ps1:12:5",
+            suggestedCommand: "Invoke-ScriptAnalyzer -Path .\\Public\\Get-Thing.ps1 -IncludeRule PSAvoidUsingWriteHost -Settings .\\Build\\PSScriptAnalyzerSettings.psd1 -Recurse -ReportSummary -Severity Warning,Error -ExcludeRule PSUseShouldProcessForStateChangingFunctions,PSUseSingularNouns -CustomRulePath .\\Build\\Rules -RecurseCustomRulePath -EnableExit",
             generatedBy: "PSScriptAnalyzer");
 
         var output = ConsoleCapture.Final(_ => ModulePipelineSummary.Write(CreateResult(plan, [diagnostic])));
