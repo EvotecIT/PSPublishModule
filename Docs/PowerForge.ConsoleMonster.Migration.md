@@ -118,6 +118,60 @@ unchanged.
 - **Smaller items:** a JSON tree widget; correct the Spectre migration guide, which
   says `:shortcode:` emoji are unsupported although `Markup.Shortcodes` exists.
 
+## Progress that looks stuck
+
+Verified on `main` (`e67e1bfea`). A module build can show finished rows and no
+running row for minutes while work continues.
+
+- **Child rows land at the end.** Rows planned late, such as the 149 NuGet
+  package-signing rows that arrive through `ItemsPlanned` and `ledger.Plan`, are
+  added by `SpectreProgressLedger.EnsureVisibleTask` (`_context.AddTask`) at the
+  end of the list instead of under their parent step, so they appear after the
+  module steps.
+- **The viewport follows the furthest row only.**
+  `SpectreProgressViewportState.AdvanceFocus` never moves focus back. After the last
+  package row, the viewport stays on finished rows while "Extract help", which has
+  a lower index, runs off-screen. `RenderActiveStatus` reads the full list, so
+  "Current:" names a row the user cannot see.
+- **Work runs outside any step.** The type-accelerator report, dependency
+  installation and version synchronisation with its checkpoint ran between steps,
+  as does the manifest refresh after formatting. Nothing on screen is running.
+- **Child processes are silent.** Help extraction, module import validation and
+  dotnet restore/build/publish stream output that the runner already captures, but
+  none of it reached the step, so a long run looks frozen.
+
+### Engine changes made now
+
+These survive the move to ConsoleMonster and change no JSON or quiet output.
+
+- Dependency preparation (`deps:install`, new `Dependencies` step kind), module
+  version synchronisation with its checkpoint (`version:synchronize`) and the
+  type-accelerator report (`build:type-accelerators`) are planned steps.
+- Help extraction, module import validation and dotnet publish processes send their
+  latest output line to the step detail, at most every 250 ms.
+- The compatibility check reports per-file progress, Markdown help and external
+  help report per-command progress, and the file-consistency checks name the
+  operation they are on.
+- The MSBuild batch heartbeat in project releases reaches the phase detail as well
+  as the log.
+
+Not done yet: the manifest refresh after formatting still runs between steps, and
+artefact zipping has no per-file progress (the zip writer is several layers below
+the artefact step).
+
+### Requirements for the live-progress port
+
+- Running rows are always visible.
+- Child rows are inserted under their parent and collapse into it ("149/149
+  signed") once the group finishes; the final printed ledger keeps the full list.
+- Between steps, show an indicator instead of nothing.
+- Under "Current:", show "last activity Ns ago" and the latest child-process line.
+
+### Follow-up
+
+Whether NuGet package signing should run in parallel is a separate question and is
+not part of this change.
+
 ## 6. Migration plan
 
 1. **ConsoleMonster.** Ship the two blockers plus the buffer and VT-mode fixes.
