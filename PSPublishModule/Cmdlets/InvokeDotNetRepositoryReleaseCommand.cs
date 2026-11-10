@@ -190,9 +190,9 @@ public sealed class InvokeDotNetRepositoryReleaseCommand : PSCmdlet
             // best effort only
         }
 
-        var interactive = SpectrePipelineConsoleUi.ShouldUseInteractiveView(isVerbose);
+        var interactive = ModulePipelineConsoleUi.ShouldUseInteractiveView(isVerbose);
         ILogger logger = interactive
-            ? new SpectreConsoleLogger { IsVerbose = isVerbose }
+            ? new ConsoleOutputLogger { IsVerbose = isVerbose }
             : new CmdletLogger(this, isVerbose);
         var currentPath = SessionState.Path.CurrentFileSystemLocation.Path;
         var preparation = new DotNetRepositoryReleasePreparationService().Prepare(new DotNetRepositoryReleasePreparationRequest
@@ -242,7 +242,7 @@ public sealed class InvokeDotNetRepositoryReleaseCommand : PSCmdlet
             signAssemblies: DotNetAssemblySigningCallbackFactory.Create(logger),
             validateAssemblySigning: DotNetAssemblySigningCallbackFactory.CreatePreflight(logger));
         var result = interactive
-            ? PowerForge.ConsoleUi.SpectreStatusConsoleUi.Run(
+            ? StatusConsoleUi.Run(
                 "Release repository packages", () => workflow.Execute(preparation, executeBuild), value => value.Success)
             : workflow.Execute(preparation, executeBuild);
         if (interactive)

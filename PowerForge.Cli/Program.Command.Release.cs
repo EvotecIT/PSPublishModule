@@ -97,7 +97,7 @@ internal static partial class Program
                 DotNetAssemblySigningCallbackFactory.CreatePreflight(cmdLogger));
             var watch = Stopwatch.StartNew();
             var result = interactive
-                ? SpectrePowerForgeReleaseConsoleUi.RunInteractive(
+                ? PowerForgeReleaseConsoleUi.RunInteractive(
                     spec,
                     request,
                     progress =>
@@ -136,7 +136,7 @@ internal static partial class Program
 
             if (interactive)
             {
-                SpectrePowerForgeReleaseConsoleUi.WriteSummary(result, watch.Elapsed);
+                PowerForgeReleaseConsoleUi.WriteSummary(result, watch.Elapsed);
                 return exitCode;
             }
 

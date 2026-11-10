@@ -18,8 +18,7 @@ internal sealed class CmdletWarningLogger(PSCmdlet cmdlet, ILogger output) : ILo
     {
         try
         {
-            PowerForge.ConsoleUi.ConsoleOutput.WriteOutside(
-                () => PowerForge.ConsoleUi.SpectreProgressDisplay.WriteExternal(() => cmdlet.WriteWarning(message)));
+            PowerForge.ConsoleUi.ConsoleOutput.WriteOutside(() => cmdlet.WriteWarning(message));
         }
         catch (Exception ex) when (ex is ActionPreferenceStopException or PipelineStoppedException)
         {

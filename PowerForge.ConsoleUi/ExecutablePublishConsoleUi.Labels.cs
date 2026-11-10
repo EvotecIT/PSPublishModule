@@ -2,11 +2,10 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using PowerForge;
-using Spectre.Console;
 
 namespace PowerForge.ConsoleUi;
 
-internal static partial class SpectreDotNetPublishConsoleUi
+internal static partial class ExecutablePublishConsoleUi
 {
     private static string GetStepTitle(DotNetPublishStep step, DotNetPublishPlan plan)
     {

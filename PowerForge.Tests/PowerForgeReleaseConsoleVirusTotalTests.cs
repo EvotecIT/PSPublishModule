@@ -3,6 +3,7 @@ using Spectre.Console;
 
 namespace PowerForge.Tests;
 
+[Collection(ConsoleCapture.Collection)]
 public sealed class PowerForgeReleaseConsoleVirusTotalTests
 {
     [Fact]
@@ -31,8 +32,7 @@ public sealed class PowerForgeReleaseConsoleVirusTotalTests
             ModuleRunMode = ConfigurationGateMode.Publish
         };
 
-        var result = SpectrePowerForgeReleaseConsoleUi.RunInteractive(
-            console,
+        var result = Run(writer,
             spec,
             request,
             progress =>
@@ -49,7 +49,7 @@ public sealed class PowerForgeReleaseConsoleVirusTotalTests
                     }
                 };
             });
-        SpectrePowerForgeReleaseConsoleUi.WriteSummary(console, result, TimeSpan.FromSeconds(1));
+        PowerForgeReleaseConsoleUi.WriteSummary(console, result, TimeSpan.FromSeconds(1));
 
         Assert.True(result.Success);
         var output = writer.ToString();
@@ -63,7 +63,7 @@ public sealed class PowerForgeReleaseConsoleVirusTotalTests
         using var writer = new StringWriter();
         var console = CreateConsole(writer);
 
-        SpectrePowerForgeReleaseConsoleUi.WriteSummary(
+        PowerForgeReleaseConsoleUi.WriteSummary(
             console,
             new PowerForgeReleaseResult
             {
@@ -111,8 +111,7 @@ public sealed class PowerForgeReleaseConsoleVirusTotalTests
             Targets = ["MacApp"]
         };
 
-        _ = SpectrePowerForgeReleaseConsoleUi.RunInteractive(
-            console,
+        _ = Run(writer,
             spec,
             request,
             _ => new PowerForgeReleaseResult { Success = true });
@@ -150,13 +149,23 @@ public sealed class PowerForgeReleaseConsoleVirusTotalTests
             AppleOnly = true
         };
 
-        _ = SpectrePowerForgeReleaseConsoleUi.RunInteractive(
-            console,
+        _ = Run(writer,
             spec,
             request,
             _ => new PowerForgeReleaseResult { Success = true });
 
         Assert.DoesNotContain("VirusTotal Monitor registration", writer.ToString(), StringComparison.Ordinal);
+    }
+
+    private static PowerForgeReleaseResult Run(
+        StringWriter writer,
+        PowerForgeReleaseSpec spec,
+        PowerForgeReleaseRequest request,
+        Func<IPowerForgeReleaseProgressReporter, PowerForgeReleaseResult> run)
+    {
+        PowerForgeReleaseResult? result = null;
+        writer.Write(ConsoleCapture.Final(view => result = PowerForgeReleaseConsoleUi.RunInteractive(view, spec, request, run)));
+        return result!;
     }
 
     private static IAnsiConsole CreateConsole(TextWriter writer)

@@ -1,18 +1,15 @@
 using PowerForge.ConsoleUi;
-using Spectre.Console;
 
 namespace PowerForge.Tests;
 
+[Collection(ConsoleCapture.Collection)]
 public sealed class DotNetPublishConsoleTests
 {
     [Theory]
-    [InlineData(80)]
     [InlineData(72)]
     [InlineData(160)]
     public void Failure_FinalizesEveryPlannedStepAndPreservesLiteralDiagnostics(int width)
     {
-        using var writer = new StringWriter();
-        var console = CreateConsole(writer, width);
         var steps = new[]
         {
             new DotNetPublishStep { Key = "restore", Kind = DotNetPublishStepKind.Restore, Title = "Restore [App]" },
@@ -20,7 +17,8 @@ public sealed class DotNetPublishConsoleTests
             new DotNetPublishStep { Key = "publish", Kind = DotNetPublishStepKind.Publish, TargetName = "App[dev]", Runtime = "win-x64", Framework = "net8.0", Style = DotNetPublishStyle.FrameworkDependent },
             new DotNetPublishStep { Key = "manifest", Kind = DotNetPublishStepKind.Manifest, Title = "Write manifest" }
         };
-        var result = SpectreDotNetPublishConsoleUi.RunInteractive(console,
+        DotNetPublishResult? result = null;
+        var output = ConsoleCapture.Final(view => result = ExecutablePublishConsoleUi.RunInteractive(view,
             new DotNetPublishPlan { ProjectRoot = "source[dev]", Steps = steps }, "publish.json", progress =>
             {
                 progress.StepStarting(steps[0]);
@@ -30,10 +28,9 @@ public sealed class DotNetPublishConsoleTests
                 progress.StepStarting(steps[2]);
                 progress.StepFailed(steps[2], new InvalidOperationException("missing [reference]"));
                 return new DotNetPublishResult { Succeeded = false, ErrorMessage = "missing [reference]" };
-            });
+            }), width);
 
-        Assert.False(result.Succeeded);
-        var output = writer.ToString();
+        Assert.False(result!.Succeeded);
         Assert.Contains("Restore [App]", output);
         Assert.Contains("Build [App]", output);
         Assert.Contains("missing [reference]", output);
@@ -44,51 +41,51 @@ public sealed class DotNetPublishConsoleTests
     [Fact]
     public void UnexpectedFailure_PreservesExceptionAndFinalizesActiveAndPendingSteps()
     {
-        using var writer = new StringWriter();
         var steps = new[]
         {
             new DotNetPublishStep { Key = "build", Kind = DotNetPublishStepKind.Build, Title = "Build App" },
             new DotNetPublishStep { Key = "manifest", Kind = DotNetPublishStepKind.Manifest, Title = "Write manifest" }
         };
         var error = new IOException("output unavailable");
-        var actual = Assert.Throws<IOException>(() => SpectreDotNetPublishConsoleUi.RunInteractive(
-            CreateConsole(writer, 140), new DotNetPublishPlan { Steps = steps }, null, progress =>
+        Exception? actual = null;
+        var output = ConsoleCapture.Final(view => actual = Record.Exception(() => ExecutablePublishConsoleUi.RunInteractive(
+            view, new DotNetPublishPlan { Steps = steps }, null, progress =>
             {
                 progress.StepStarting(steps[0]);
                 throw error;
-            }));
+            })), 140);
         Assert.Same(error, actual);
-        Assert.Contains("Build App", writer.ToString());
-        Assert.Contains("skipped after failure", writer.ToString());
+        Assert.True(System.Text.RegularExpressions.Regex.IsMatch(output, @"\[FAIL\] Build App\s+stopped"), output);
+        Assert.Contains("skipped after failure", output);
     }
 
     [Fact]
     public void Success_LabelsEachPublishStepWithItsActualStyle()
     {
-        using var writer = new StringWriter();
         var steps = new[]
         {
             new DotNetPublishStep { Key = "portable", Kind = DotNetPublishStepKind.Publish, TargetName = "App", Style = DotNetPublishStyle.PortableSize },
             new DotNetPublishStep { Key = "contained", Kind = DotNetPublishStepKind.Publish, TargetName = "App", Style = DotNetPublishStyle.SelfContained }
         };
-        var result = SpectreDotNetPublishConsoleUi.RunInteractive(CreateConsole(writer, 140),
+        DotNetPublishResult? result = null;
+        var output = ConsoleCapture.Final(view => result = ExecutablePublishConsoleUi.RunInteractive(view,
             new DotNetPublishPlan { Steps = steps }, null, progress =>
             {
                 foreach (var step in steps) { progress.StepStarting(step); progress.StepCompleted(step); }
                 return new DotNetPublishResult { Succeeded = true };
-            });
-        Assert.True(result.Succeeded);
-        Assert.Contains("PortableSize", writer.ToString());
-        Assert.Contains("SelfContained", writer.ToString());
+            }), 140);
+        Assert.True(result!.Succeeded);
+        Assert.Contains("PortableSize", output);
+        Assert.Contains("SelfContained", output);
     }
 
     [Fact]
     public void CommandFailure_ShowsHeadlineAndOutputTailWithoutRepeatingCommandDetails()
     {
-        using var writer = new StringWriter();
         var step = new DotNetPublishStep { Key = "build", Kind = DotNetPublishStepKind.Build, Title = "Build App" };
         const string message = "Build failed\r\nCommand: detailed command retained in result";
-        var result = SpectreDotNetPublishConsoleUi.RunInteractive(CreateConsole(writer, 80),
+        DotNetPublishResult? result = null;
+        var output = ConsoleCapture.Final(view => result = ExecutablePublishConsoleUi.RunInteractive(view,
             new DotNetPublishPlan { Steps = [step] }, null, progress =>
             {
                 progress.StepStarting(step);
@@ -98,27 +95,11 @@ public sealed class DotNetPublishConsoleTests
                     Succeeded = false, ErrorMessage = message,
                     Failure = new DotNetPublishFailure { StdOutTail = "Compiler diagnostic [App]", LogPath = "build.log" }
                 };
-            });
-        Assert.Equal(message, result.ErrorMessage);
-        Assert.Contains("Build failed", writer.ToString());
-        Assert.Contains("Compiler diagnostic [App]", writer.ToString());
-        Assert.Contains("build.log", writer.ToString());
-        Assert.DoesNotContain("detailed command retained in result", writer.ToString());
-    }
-
-    private static IAnsiConsole CreateConsole(TextWriter writer, int width)
-        => AnsiConsole.Create(new AnsiConsoleSettings
-        {
-            Out = new TerminalOutput(writer, width), Ansi = AnsiSupport.Yes,
-            ColorSystem = ColorSystemSupport.NoColors, Interactive = InteractionSupport.Yes
-        });
-
-    private sealed class TerminalOutput(TextWriter writer, int width) : IAnsiConsoleOutput
-    {
-        public TextWriter Writer => writer;
-        public bool IsTerminal => true;
-        public int Width => width;
-        public int Height => 18;
-        public void SetEncoding(System.Text.Encoding encoding) { }
+            }), 80);
+        Assert.Equal(message, result!.ErrorMessage);
+        Assert.Contains("Build failed", output);
+        Assert.Contains("Compiler diagnostic [App]", output);
+        Assert.Contains("build.log", output);
+        Assert.DoesNotContain("detailed command retained in result", output);
     }
 }

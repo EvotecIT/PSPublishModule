@@ -11,6 +11,7 @@ namespace PowerForge.Tests;
 
 // Golden output of the static views that moved to ConsoleMonster, rendered through ConsoleOutput into a
 // fixed 80-column recording target. Refresh with CONSOLEMONSTER_UPDATE_GOLDEN=1 after an intended change.
+[Collection(ConsoleCapture.Collection)]
 public sealed class ConsoleMonsterOutputTests
 {
     [Theory]

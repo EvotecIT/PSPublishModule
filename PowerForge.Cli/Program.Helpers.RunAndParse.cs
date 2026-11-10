@@ -42,7 +42,7 @@ internal static partial class Program
         if (ConsoleEnvironment.IsCI || !Spectre.Console.AnsiConsole.Profile.Capabilities.Interactive)
             return action();
 
-        return PowerForge.ConsoleUi.SpectreStatusConsoleUi.Run(statusText, action, succeeded);
+        return PowerForge.ConsoleUi.StatusConsoleUi.Run(statusText, action, succeeded);
     }
 
     static ConsoleView ResolveConsoleView(ConsoleView requested)

@@ -114,12 +114,12 @@ public sealed partial class InvokeProjectBuildCommand : PSCmdlet
         }
 
         var interactive = !Quiet.IsPresent && !NoInteractive.IsPresent &&
-                          SpectrePipelineConsoleUi.ShouldUseInteractiveView(isVerbose);
+                          ModulePipelineConsoleUi.ShouldUseInteractiveView(isVerbose);
         BufferedLogger? interactiveBuffer = null;
         ILogger outputLogger = Quiet.IsPresent
             ? interactiveBuffer = new BufferedLogger { IsVerbose = isVerbose }
             : interactive
-                ? new SpectreConsoleLogger { IsVerbose = isVerbose }
+                ? new ConsoleOutputLogger { IsVerbose = isVerbose }
                 : ExitCode.IsPresent
                     ? interactiveBuffer = new BufferedLogger { IsVerbose = isVerbose }
                     : new CmdletLogger(this, isVerbose);
@@ -161,7 +161,7 @@ public sealed partial class InvokeProjectBuildCommand : PSCmdlet
         ProjectBuildWorkflowResult workflow;
         if (interactive)
         {
-            workflow = SpectreProjectBuildConsoleUi.RunInteractive(
+            workflow = ProjectBuildConsoleUi.RunInteractive(
                 new ProjectBuildConsolePlan
                 {
                     ConfigPath = configFullPath,
@@ -198,7 +198,7 @@ public sealed partial class InvokeProjectBuildCommand : PSCmdlet
             if (!Quiet.IsPresent && interactiveBuffer is not null)
                 new BufferedLogSupportService().WriteTail(
                     interactiveBuffer.Entries,
-                    new SpectreConsoleLogger { IsVerbose = isVerbose });
+                    new ConsoleOutputLogger { IsVerbose = isVerbose });
         }
 
         CompleteResult(workflow.Result);

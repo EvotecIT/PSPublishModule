@@ -1,4 +1,4 @@
-﻿using PowerForge;
+using PowerForge;
 using PowerForge.Cli;
 using Spectre.Console;
 using System.Diagnostics;
@@ -265,8 +265,8 @@ internal static partial class Program
     static ILogger CreateTextLogger(CliOptions cli)
     {
         ILogger baseLogger = cli.NoColor
-            ? new ConsoleLogger { IsVerbose = cli.Verbose }
-            : new SpectreConsoleLogger { IsVerbose = cli.Verbose };
+            ? new PowerForge.ConsoleUi.ConsoleOutputLogger { IsVerbose = cli.Verbose }
+            : new PowerForge.ConsoleUi.ConsoleOutputLogger { IsVerbose = cli.Verbose };
 
         return cli.Quiet ? new QuietLogger(baseLogger) : baseLogger;
     }

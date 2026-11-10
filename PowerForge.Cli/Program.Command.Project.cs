@@ -97,7 +97,7 @@ internal static partial class Program
 
             var service = new PowerForgeReleaseService(cmdLogger);
             var result = PipelineConsoleUi.ShouldUseInteractiveView(outputJson, cli)
-                ? PowerForge.ConsoleUi.SpectrePowerForgeReleaseConsoleUi.RunInteractive(spec, request, progress =>
+                ? PowerForge.ConsoleUi.PowerForgeReleaseConsoleUi.RunInteractive(spec, request, progress =>
                 {
                     request.Progress = progress;
                     return service.Execute(spec, request);

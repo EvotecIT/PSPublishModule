@@ -5,6 +5,7 @@ using System.Diagnostics;
 using System.Linq;
 using System.Management.Automation;
 using PowerForge;
+using PowerForge.ConsoleUi;
 
 namespace PSPublishModule;
 
@@ -493,7 +494,7 @@ public sealed partial class InvokeModuleBuildCommand : PSCmdlet
         }
         ILogger outputLogger = Quiet.IsPresent
             ? new NullLogger { IsVerbose = isVerbose }
-            : new SpectreConsoleLogger { IsVerbose = isVerbose };
+            : new ConsoleOutputLogger { IsVerbose = isVerbose };
         var logger = new CmdletWarningLogger(this, outputLogger);
         var preparation = new ModuleBuildPreparationService().Prepare(new ModuleBuildPreparationRequest
         {
@@ -588,14 +589,14 @@ public sealed partial class InvokeModuleBuildCommand : PSCmdlet
         else
         {
             var interactive = !Quiet.IsPresent && !NoInteractive.IsPresent &&
-                SpectrePipelineConsoleUi.ShouldUseInteractiveView(isVerbose);
+                ModulePipelineConsoleUi.ShouldUseInteractiveView(isVerbose);
 
             workflow = new ModuleBuildWorkflowService(
                 logger,
                 runInteractive: (spec, plan, configLabel) =>
                 {
                     interactiveLogger = new CmdletWarningLogger(this, outputLogger);
-                    return SpectrePipelineConsoleUi.RunInteractive(
+                    return ModulePipelineConsoleUi.RunInteractive(
                         runner: new ModulePipelineRunner(interactiveLogger), spec: spec, plan: plan, configLabel: configLabel);
                 },
                 writeSummary: Quiet.IsPresent ? null : SpectrePipelineConsoleUi.WriteSummary)

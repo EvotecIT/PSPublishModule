@@ -6,7 +6,7 @@ namespace PowerForge.Cli;
 internal static class PipelineConsoleUi
 {
     public static bool ShouldUseInteractiveView(bool outputJson, CliOptions cli)
-        => SpectreModulePipelineConsoleUi.ShouldUseInteractiveView(
+        => ModulePipelineConsoleUi.ShouldUseInteractiveView(
             isVerbose: cli.Verbose,
             outputJson: outputJson,
             quiet: cli.Quiet,
@@ -24,7 +24,7 @@ internal static class PipelineConsoleUi
         if (!ShouldUseInteractiveView(outputJson, cli))
             return runner.Run(spec, plan, progress: null);
 
-        return SpectreModulePipelineConsoleUi.RunInteractive(
+        return ModulePipelineConsoleUi.RunInteractive(
             runner,
             spec,
             plan,

@@ -1,329 +1,144 @@
+using ConsoleMonster.Testing;
 using PowerForge.ConsoleUi;
-using Spectre.Console;
 
 namespace PowerForge.Tests;
 
+[Collection(ConsoleCapture.Collection)]
 public sealed class ProjectBuildProgressLedgerTests
 {
+    // A finished run prints the complete ledger: every planned row with the time it took, not only what fitted the live area.
     [Fact]
-    public void ProgressLedger_RegistersCompletePlanAndRetainsCompleteTimedHistory()
+    public void StandaloneConsole_PrintsEveryItemWithItsDurationAfterSuccess()
     {
-        using var writer = new StringWriter();
-        var console = CreateConsole(writer, height: 12);
-        SpectreProgressLedger? ledger = null;
-
-        SpectreProgressDisplay.Run(
-            console,
-            [
-                new TaskDescriptionColumn { Alignment = Justify.Left },
-                new ProgressBarColumn(),
-                new PercentageColumn(),
-                new ElapsedTimeColumn()
-            ],
-            context =>
+        ProjectBuildWorkflowResult? result = null;
+        var output = ConsoleCapture.Final(view => result = ProjectBuildConsoleUi.RunInteractive(view,
+            new ProjectBuildConsolePlan { ConfigPath = "project.build.json", RootPath = "repository", Build = true },
+            progress =>
             {
-                ledger = new SpectreProgressLedger(context);
-                var items = Enumerable.Range(1, 85)
-                    .Select(index => new SpectreProgressLedgerItem
-                    {
-                        Key = $"package:{index}",
-                        GroupKey = "PackageBuild",
-                        GroupTitle = "Build packages and archives",
-                        GroupOrder = 1,
-                        Title = $"Project.{index:00}",
-                        Kind = ModulePipelineStepKind.PackageBuild.ToString(),
-                        Position = index,
-                        Total = 85
-                    })
-                    .ToArray();
-
-                ledger.Plan(items);
-                Assert.Equal(85, ledger.VisibleTaskCount);
-
+                var detailed = Assert.IsAssignableFrom<IProjectBuildProgressReporterV2>(progress);
+                var items = Enumerable.Range(1, 85).Select(index => new ProjectBuildProgressItem
+                {
+                    Phase = ProjectBuildProgressPhase.PackageBuild,
+                    Key = $"package:{index}",
+                    Title = $"Project.{index:00}",
+                    Position = index,
+                    Total = 85
+                }).ToArray();
+                detailed.ItemsPlanned(ProjectBuildProgressPhase.PackageBuild, items);
                 foreach (var item in items)
                 {
-                    ledger.Update(item, SpectreProgressLedgerState.Started, "building");
-                    Assert.Equal(85, ledger.VisibleTaskCount);
-
+                    detailed.ItemUpdated(item, ProjectBuildProgressItemState.Started, "building");
                     item.Duration = TimeSpan.FromSeconds(item.Position);
-                    ledger.Update(item, SpectreProgressLedgerState.Completed, "1 package, 1 archive");
-                    Assert.Equal(85, ledger.VisibleTaskCount);
-                    if (item.Position == items.Length)
-                    {
-                        var stoppedAt = ledger.GetVisibleElapsedTime(item.Key);
-                        Thread.Sleep(25);
-                        Assert.Equal(stoppedAt, ledger.GetVisibleElapsedTime(item.Key));
-                    }
+                    detailed.ItemUpdated(item, ProjectBuildProgressItemState.Completed, "1 package, 1 archive");
                 }
+                return new ProjectBuildWorkflowResult { Result = new ProjectBuildResult { Success = true } };
+            }));
 
-                Assert.Equal(85, ledger.GetItemCount("PackageBuild"));
-                Assert.Equal(1d, ledger.GetCompletionRatio("PackageBuild"), 5);
-                Assert.Equal(85, ledger.VisibleTaskCount);
-                ledger.ClearLiveTasks();
-                Assert.Equal(0, ledger.VisibleTaskCount);
-            });
+        Assert.True(result!.Result.Success);
+        Assert.Contains("Project 01/85 Project.01", output, StringComparison.Ordinal);
+        Assert.Contains("Project 85/85 Project.85", output, StringComparison.Ordinal);
+        Assert.Contains("1 package, 1 archive - " + ConsoleMonster.Widgets.NumberFormat.Duration(TimeSpan.FromSeconds(85)), output, StringComparison.Ordinal);
+    }
 
-        var snapshots = Assert.IsAssignableFrom<IReadOnlyList<SpectreProgressLedgerSnapshot>>(
-            ledger!.GetSnapshots());
-        Assert.Equal(85, snapshots.Count);
-        Assert.All(snapshots, snapshot => Assert.Equal(SpectreProgressLedgerState.Completed, snapshot.State));
-        Assert.Equal(TimeSpan.FromSeconds(1), snapshots[0].Duration);
-        Assert.Equal(TimeSpan.FromSeconds(85), snapshots[^1].Duration);
-        Assert.All(snapshots, snapshot => Assert.Equal(ModulePipelineStepKind.PackageBuild.ToString(), snapshot.Kind));
+    [Theory]
+    [InlineData(true, "Project 06/06")]
+    [InlineData(false, "Project 05/06")]
+    public void StandaloneConsole_PreservesExplicitCounterInTerminalPhaseState(bool success, string expectedCounter)
+    {
+        var output = ConsoleCapture.Final(view => ProjectBuildConsoleUi.RunInteractive(view,
+            new ProjectBuildConsolePlan { ConfigPath = "project.build.json", RootPath = "repository", Build = true },
+            progress =>
+            {
+                progress.PhaseStarted(ProjectBuildProgressPhase.PackageBuild, 6, "packing");
+                progress.PhaseUpdated(ProjectBuildProgressPhase.PackageBuild, 5, 6, "packing");
+                if (success) progress.PhaseCompleted(ProjectBuildProgressPhase.PackageBuild, "complete");
+                else progress.PhaseFailed(ProjectBuildProgressPhase.PackageBuild, "failed");
+                return new ProjectBuildWorkflowResult { Result = new ProjectBuildResult { Success = success } };
+            }));
 
-        SpectreProgressLedger.WriteLedger(console, snapshots, "Project build details");
-        var output = writer.ToString();
-        Assert.Contains("Project.01", output, StringComparison.Ordinal);
-        Assert.Contains("Project.85", output, StringComparison.Ordinal);
-        Assert.Contains("01:25.000", output, StringComparison.Ordinal);
-        Assert.True(
-            output.Contains("📦", StringComparison.Ordinal) || output.Contains("PK", StringComparison.Ordinal),
-            output);
+        Assert.Contains(expectedCounter, output, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void ProgressLedger_UpdatesFullPlanTopToBottomWithoutMovingRows()
+    public void StandaloneConsole_PrintsTheLedgerBeforeRethrowingFailure()
     {
-        using var writer = new StringWriter();
-        var console = CreateConsole(writer, height: 12);
-        IReadOnlyList<string>? finalTaskDescriptions = null;
-
-        SpectreProgressDisplay.Run(
-            console,
-            SpectreBuildProgressColumns.CreateStandard(),
-            context =>
+        var expected = new InvalidOperationException("synthetic failure");
+        Exception? actual = null;
+        var output = ConsoleCapture.Final(view => actual = Record.Exception(() => ProjectBuildConsoleUi.RunInteractive(view,
+            new ProjectBuildConsolePlan { ConfigPath = "project.build.json", RootPath = "repository", Build = true },
+            progress =>
             {
-                var ledger = new SpectreProgressLedger(context);
-                var items = Enumerable.Range(1, 85)
-                    .Select(index => new SpectreProgressLedgerItem
-                    {
-                        Key = $"package:{index}",
-                        GroupKey = "PackageBuild",
-                        GroupTitle = "Build packages and archives",
-                        GroupOrder = 1,
-                        Title = $"Project.{index:00}",
-                        Position = index,
-                        Total = 85
-                    })
-                    .ToArray();
-
-                ledger.Plan(items);
-                ledger.Update(items[6], SpectreProgressLedgerState.Started, "building");
-                ledger.Update(items[3], SpectreProgressLedgerState.Started, "building");
-                Assert.Equal(85, ledger.VisibleTaskCount);
-            },
-            tasks => finalTaskDescriptions = tasks.Select(task => task.Description).ToArray());
-
-        Assert.NotNull(finalTaskDescriptions);
-        Assert.Equal(85, finalTaskDescriptions!.Count);
-        Assert.Contains("Project.01", finalTaskDescriptions[0], StringComparison.Ordinal);
-        Assert.Contains("Project.04", finalTaskDescriptions[3], StringComparison.Ordinal);
-        Assert.Contains("Project.07", finalTaskDescriptions[6], StringComparison.Ordinal);
-        Assert.Contains("Project.85", finalTaskDescriptions[^1], StringComparison.Ordinal);
-        var output = writer.ToString();
-        Assert.Contains("Project.01", output, StringComparison.Ordinal);
-        Assert.Contains("Project.07", output, StringComparison.Ordinal);
-        Assert.Contains("Project.85", output, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void ProgressLedger_RendersSharedDetailedTitleTargetKindAndTimingLayout()
-    {
-        using var writer = new StringWriter();
-        var console = CreateConsole(writer, height: 12);
-        var presentation = new SpectreProgressPresentation(viewportWidth: 140, unicode: false);
-        IReadOnlyList<string>? finalTaskDescriptions = null;
-
-        SpectreProgressDisplay.Run(
-            console,
-            presentation.CreateColumns(),
-            context =>
-            {
-                var ledger = new SpectreProgressLedger(context, presentation);
-                var item = new SpectreProgressLedgerItem
+                var detailed = Assert.IsAssignableFrom<IProjectBuildProgressReporterV2>(progress);
+                var item = new ProjectBuildProgressItem
                 {
-                    Key = "artefact:unpacked",
-                    GroupKey = "Module",
-                    GroupTitle = "Build PowerShell module",
-                    GroupOrder = 1,
-                    Title = "Pack artefact",
-                    Target = "Unpacked",
-                    CounterLabel = "Module",
-                    Kind = ModulePipelineStepKind.Artefact.ToString(),
+                    Phase = ProjectBuildProgressPhase.PackageBuild,
+                    Key = "package:Sample.Project",
+                    Title = "Sample.Project",
                     Position = 1,
                     Total = 2
                 };
+                detailed.ItemsPlanned(ProjectBuildProgressPhase.PackageBuild, [item]);
+                detailed.ItemUpdated(item, ProjectBuildProgressItemState.Started, "building");
+                item.Duration = TimeSpan.FromSeconds(2);
+                detailed.ItemUpdated(item, ProjectBuildProgressItemState.Completed, "1 package, 1 archive");
+                throw expected;
+            })));
 
-                ledger.Plan([item]);
-                ledger.Update(item, SpectreProgressLedgerState.Started, "packing");
-            },
-            tasks => finalTaskDescriptions = tasks.Select(task => task.Description).ToArray());
-
-        var description = Assert.Single(finalTaskDescriptions!);
-        Assert.StartsWith("Module 01/02 Pack artefact", description, StringComparison.Ordinal);
-        Assert.Contains("packing", description, StringComparison.Ordinal);
-        Assert.EndsWith("Unpacked", description, StringComparison.Ordinal);
-        Assert.Contains("PK", writer.ToString(), StringComparison.Ordinal);
+        Assert.Same(expected, actual);
+        Assert.Contains("Sample.Project", output, StringComparison.Ordinal);
+        Assert.Contains("1 package, 1 archive - " + ConsoleMonster.Widgets.NumberFormat.Duration(TimeSpan.FromSeconds(2)), output, StringComparison.Ordinal);
+        Assert.Contains("skipped after failure", output, StringComparison.Ordinal);
     }
 
+    // A completed phase must not be reopened by late metadata from the package execution.
     [Fact]
-    public void UnifiedReleaseConsole_UsesSharedModuleRowsInCanonicalOrder()
+    public void StandaloneConsole_DoesNotReopenACompletedPhase()
     {
-        using var writer = new StringWriter();
-        var console = CreateConsole(writer, height: 20);
-        var spec = new PowerForgeReleaseSpec
-        {
-            Module = new PowerForgeModuleReleaseOptions
-            {
-                ModuleName = "SampleProgress",
-                ModuleVersion = "1.0.0"
-            }
-        };
-        var request = new PowerForgeReleaseRequest
-        {
-            ConfigPath = "release.json",
-            ModuleOnly = true
-        };
-        var items = new[]
-        {
-            new PowerForgeReleaseProgressItem
-            {
-                Phase = PowerForgeReleaseProgressPhase.Module,
-                Key = "build:stage",
-                Title = "Stage to staging",
-                Kind = ModulePipelineStepKind.Build.ToString(),
-                Position = 1,
-                Total = 3
-            },
-            new PowerForgeReleaseProgressItem
-            {
-                Phase = PowerForgeReleaseProgressPhase.Module,
-                Key = "artefact:unpacked",
-                Title = "Pack artefact",
-                Target = "Unpacked (Local)",
-                Kind = ModulePipelineStepKind.Artefact.ToString(),
-                Position = 2,
-                Total = 3
-            },
-            new PowerForgeReleaseProgressItem
-            {
-                Phase = PowerForgeReleaseProgressPhase.Module,
-                Key = "publish:gallery",
-                Title = "Publish",
-                Target = "PowerShellGallery",
-                Kind = ModulePipelineStepKind.Publish.ToString(),
-                Position = 3,
-                Total = 3
-            }
-        };
-
-        var result = SpectrePowerForgeReleaseConsoleUi.RunInteractive(
-            console,
-            spec,
-            request,
+        var output = ConsoleCapture.Final(view => ProjectBuildConsoleUi.RunInteractive(view,
+            new ProjectBuildConsolePlan { RootPath = "source", PlanOnly = true },
             progress =>
             {
-                var detailed = Assert.IsAssignableFrom<IPowerForgeReleaseProgressReporterV2>(progress);
-                progress.PhaseStarted(PowerForgeReleaseProgressPhase.Module, items.Length);
-                detailed.ItemsPlanned(PowerForgeReleaseProgressPhase.Module, items);
-                detailed.ItemUpdated(items[2], PowerForgeReleaseProgressItemState.Started, "publishing");
-                detailed.ItemUpdated(items[0], PowerForgeReleaseProgressItemState.Completed, "staged");
-                detailed.ItemUpdated(items[1], PowerForgeReleaseProgressItemState.Completed, "packed");
-                detailed.ItemUpdated(items[2], PowerForgeReleaseProgressItemState.Completed, "published");
-                progress.PhaseCompleted(PowerForgeReleaseProgressPhase.Module, "complete");
-                return new PowerForgeReleaseResult { Success = true };
-            });
+                progress.PhaseStarted(ProjectBuildProgressPhase.Plan, 2);
+                progress.PhaseCompleted(ProjectBuildProgressPhase.Plan, "plan prepared");
+                progress.PhaseStarted(ProjectBuildProgressPhase.Plan, 2, "stale metadata start");
+                progress.PhaseUpdated(ProjectBuildProgressPhase.Plan, 1, 2, "stale metadata update");
+                return new ProjectBuildWorkflowResult { Result = new ProjectBuildResult { Success = true } };
+            }));
 
-        Assert.True(result.Success);
-        var output = writer.ToString();
-        var first = output.LastIndexOf("Module 01/03 Stage to staging", StringComparison.Ordinal);
-        var second = output.LastIndexOf("Module 02/03 Pack artefact", StringComparison.Ordinal);
-        var third = output.LastIndexOf("Module 03/03 Publish", StringComparison.Ordinal);
-        Assert.True(first >= 0, output);
-        Assert.True(second > first, output);
-        Assert.True(third > second, output);
-        Assert.Contains("Unpacked (Local)", output, StringComparison.Ordinal);
-        Assert.Contains("PowerShellGallery", output, StringComparison.Ordinal);
-        Assert.Contains("Phase 01/01", output, StringComparison.Ordinal);
-        Assert.DoesNotContain("✓ Phase", output, StringComparison.Ordinal);
-        Assert.DoesNotContain("x Phase", output, StringComparison.Ordinal);
+        Assert.True(System.Text.RegularExpressions.Regex.IsMatch(output, @"\[01/01\] \[OK\] Prepare build plan\s+Step 02/02 - plan prepared"), output);
     }
 
+    // Unified release: module steps and nested package stages stay in their planned order under their phase,
+    // each counted within its own stage.
     [Fact]
-    public void UnifiedReleaseConsole_CompletesModuleOwnedPackageLaneFromDetailedItems()
+    public void UnifiedReleaseConsole_ListsModuleStepsAndNestedPackageStagesInOrder()
     {
-        using var writer = new StringWriter();
-        var console = CreateConsole(writer, height: 20);
         var spec = new PowerForgeReleaseSpec
         {
-            Module = new PowerForgeModuleReleaseOptions
-            {
-                ModuleName = "SampleProgress",
-                ModuleVersion = "1.0.0",
-                IncludesPackages = true
-            }
+            Module = new PowerForgeModuleReleaseOptions { ModuleName = "SampleProgress", ModuleVersion = "1.0.0", IncludesPackages = true }
         };
-        var request = new PowerForgeReleaseRequest
+        var moduleItems = new[]
         {
-            ConfigPath = "release.json"
-        };
-        var package = new PowerForgeReleaseProgressItem
-        {
-            Phase = PowerForgeReleaseProgressPhase.Packages,
-            Key = "module:package:Sample.Core.1.0.0.nupkg",
-            Title = "Sample.Core.1.0.0.nupkg",
-            Kind = ProjectBuildProgressPhase.NuGetPublish.ToString(),
-            Position = 1,
-            Total = 1
+            new PowerForgeReleaseProgressItem { Phase = PowerForgeReleaseProgressPhase.Module, Key = "build:stage", Title = "Stage to staging", Kind = ModulePipelineStepKind.Build.ToString(), Position = 1, Total = 3 },
+            new PowerForgeReleaseProgressItem { Phase = PowerForgeReleaseProgressPhase.Module, Key = "artefact:unpacked", Title = "Pack artefact", Target = "Unpacked (Local)", Kind = ModulePipelineStepKind.Artefact.ToString(), Position = 2, Total = 3 },
+            new PowerForgeReleaseProgressItem { Phase = PowerForgeReleaseProgressPhase.Module, Key = "publish:gallery", Title = "Publish", Target = "PowerShellGallery", Kind = ModulePipelineStepKind.Publish.ToString(), Position = 3, Total = 3 }
         };
 
-        var result = SpectrePowerForgeReleaseConsoleUi.RunInteractive(
-            console,
-            spec,
-            request,
-            progress =>
-            {
-                var detailed = Assert.IsAssignableFrom<IPowerForgeReleaseProgressReporterV2>(progress);
-                progress.PhaseStarted(PowerForgeReleaseProgressPhase.Module, 1);
-                progress.PhaseCompleted(PowerForgeReleaseProgressPhase.Module, "complete");
-                detailed.ItemsPlanned(PowerForgeReleaseProgressPhase.Packages, [package]);
-                detailed.ItemUpdated(package, PowerForgeReleaseProgressItemState.Started, "publishing");
-                detailed.ItemUpdated(package, PowerForgeReleaseProgressItemState.Completed, "published");
-                return new PowerForgeReleaseResult { Success = true };
-            });
-
-        Assert.True(result.Success);
-        var output = writer.ToString();
-        Assert.Contains("Package 01/01 Sample.Core.1.0.0.nupkg", output, StringComparison.Ordinal);
-        Assert.Contains("published", output, StringComparison.Ordinal);
-        Assert.DoesNotContain("Build NuGet packages - not required", output, StringComparison.OrdinalIgnoreCase);
-    }
-
-    [Fact]
-    public void UnifiedReleaseConsole_KeepsNestedPackageStagesOrderedAndLocallyCounted()
-    {
-        using var writer = new StringWriter();
-        var console = CreateConsole(writer, height: 24);
-        var spec = new PowerForgeReleaseSpec
-        {
-            Module = new PowerForgeModuleReleaseOptions
-            {
-                ModuleName = "SampleProgress",
-                ModuleVersion = "1.0.0",
-                IncludesPackages = true
-            }
-        };
-
-        var result = SpectrePowerForgeReleaseConsoleUi.RunInteractive(
-            console,
-            spec,
+        PowerForgeReleaseResult? result = null;
+        var output = ConsoleCapture.Final(view => result = PowerForgeReleaseConsoleUi.RunInteractive(view, spec,
             new PowerForgeReleaseRequest { ConfigPath = "release.json" },
             progress =>
             {
                 var detailed = Assert.IsAssignableFrom<IPowerForgeReleaseProgressReporterV2>(progress);
-                var project = new ProjectBuildReleaseProgressAdapter(
-                    detailed,
-                    PowerForgeReleaseProgressPhase.Packages);
+                progress.PhaseStarted(PowerForgeReleaseProgressPhase.Module, moduleItems.Length);
+                detailed.ItemsPlanned(PowerForgeReleaseProgressPhase.Module, moduleItems);
+                detailed.ItemUpdated(moduleItems[2], PowerForgeReleaseProgressItemState.Started, "publishing");
+                detailed.ItemUpdated(moduleItems[0], PowerForgeReleaseProgressItemState.Completed, "staged");
+                detailed.ItemUpdated(moduleItems[1], PowerForgeReleaseProgressItemState.Completed, "packed");
+                detailed.ItemUpdated(moduleItems[2], PowerForgeReleaseProgressItemState.Completed, "published");
+                progress.PhaseCompleted(PowerForgeReleaseProgressPhase.Module, "complete");
+
+                var project = new ProjectBuildReleaseProgressAdapter(detailed, PowerForgeReleaseProgressPhase.Packages);
                 foreach (var phase in new[]
                          {
                              ProjectBuildProgressPhase.Versioning,
@@ -333,9 +148,6 @@ public sealed class ProjectBuildProgressLedgerTests
                              ProjectBuildProgressPhase.GitHubPublish
                          })
                 {
-                    var counter = phase is ProjectBuildProgressPhase.PackageSigning or ProjectBuildProgressPhase.NuGetPublish
-                        ? "Package"
-                        : phase == ProjectBuildProgressPhase.GitHubPublish ? "Asset" : "Project";
                     var item = new ProjectBuildProgressItem
                     {
                         Phase = phase,
@@ -345,29 +157,23 @@ public sealed class ProjectBuildProgressLedgerTests
                         Position = 1,
                         Total = 2
                     };
+                    project.PhaseStarted(phase, 2);
                     project.ItemsPlanned(phase, [item]);
-                    project.ItemUpdated(item, ProjectBuildProgressItemState.Completed, $"{counter} complete");
+                    project.ItemUpdated(item, ProjectBuildProgressItemState.Completed, "complete");
+                    project.PhaseCompleted(phase);
                 }
 
                 return new PowerForgeReleaseResult { Success = true };
-            });
+            }), width: 110);
 
-        Assert.True(result.Success);
-        var output = writer.ToString();
-        var version = output.LastIndexOf("Resolve project versions", StringComparison.Ordinal);
-        var build = output.LastIndexOf("Build packages and archives", StringComparison.Ordinal);
-        var sign = output.LastIndexOf("Sign NuGet packages", StringComparison.Ordinal);
-        var publish = output.LastIndexOf("Publish NuGet packages", StringComparison.Ordinal);
-        var github = output.LastIndexOf("Publish project GitHub release", StringComparison.Ordinal);
-        Assert.True(version >= 0, output);
-        Assert.True(build > version, output);
-        Assert.True(sign > build, output);
-        Assert.True(publish > sign, output);
-        Assert.True(github > publish, output);
-        Assert.Contains("Project 01/02 Versioning item", output, StringComparison.Ordinal);
-        Assert.Contains("Package 01/02 PackageSigning item", output, StringComparison.Ordinal);
-        Assert.Contains("Asset 01/02 GitHubPublish item", output, StringComparison.Ordinal);
+        Assert.True(result!.Success);
+        GoldenFile.Match(GoldenPath("UnifiedRelease.Ledger.txt"), ConsoleCapture.Ledger(output));
     }
+
+    private static string Ledger(string output) => output.Substring(output.IndexOf("[01/", StringComparison.Ordinal));
+
+    private static string GoldenPath(string name, [System.Runtime.CompilerServices.CallerFilePath] string sourceFile = "")
+        => Path.Combine(Path.GetDirectoryName(sourceFile)!, "Golden", "ConsoleMonster", name);
 
     [Theory]
     [InlineData(1, 9, "01/09")]
@@ -392,142 +198,6 @@ public sealed class ProjectBuildProgressLedgerTests
         string expected)
         => Assert.Equal(expected, ProgressCounterFormatter.GetProjectBuildScope(phase));
 
-    [Theory]
-    [InlineData(nameof(ProjectBuildProgressPhase.PackageSigning), "SG")]
-    [InlineData(nameof(ProjectBuildProgressPhase.NuGetPublish), "PB")]
-    [InlineData(nameof(ProjectBuildProgressPhase.GitHubPublish), "GH")]
-    [InlineData("GitHubAsset", "GH")]
-    [InlineData("ToolPublish", "TL")]
-    [InlineData(nameof(DotNetPublishStepKind.MsiSign), "SG")]
-    [InlineData(nameof(DotNetPublishStepKind.Bundle), "PK")]
-    public void SharedKindIcons_DescribeRealReleaseAdapterKinds(string kind, string expected)
-    {
-        var rendered = SpectreProgressPresentation.GetKindIcon(kind, emoji: false);
-        Assert.Contains(expected, rendered, StringComparison.Ordinal);
-        Assert.DoesNotContain("PF", rendered, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void StandaloneConsole_WritesDetailedLedgerAfterSuccess()
-    {
-        using var writer = new StringWriter();
-        var console = CreateConsole(writer, height: 12);
-
-        var result = SpectreProjectBuildConsoleUi.RunInteractive(
-            console,
-            new ProjectBuildConsolePlan
-            {
-                ConfigPath = "project.build.json",
-                RootPath = "repository",
-                Build = true
-            },
-            progress =>
-            {
-                var detailed = Assert.IsAssignableFrom<IProjectBuildProgressReporterV2>(progress);
-                var item = new ProjectBuildProgressItem
-                {
-                    Phase = ProjectBuildProgressPhase.PackageBuild,
-                    Key = "package:Sample.Project",
-                    Title = "Sample.Project",
-                    Position = 1,
-                    Total = 1,
-                    Duration = TimeSpan.FromSeconds(2)
-                };
-                detailed.ItemsPlanned(ProjectBuildProgressPhase.PackageBuild, [item]);
-                detailed.ItemUpdated(item, ProjectBuildProgressItemState.Started, "building");
-                detailed.ItemUpdated(item, ProjectBuildProgressItemState.Completed, "1 package, 1 archive");
-                return new ProjectBuildWorkflowResult
-                {
-                    Result = new ProjectBuildResult { Success = true }
-                };
-            });
-
-        Assert.True(result.Result.Success);
-        var output = writer.ToString();
-        Assert.Contains("Project build details", output, StringComparison.Ordinal);
-        Assert.Contains("Sample.Project", output, StringComparison.Ordinal);
-        Assert.Contains("00:02.000", output, StringComparison.Ordinal);
-    }
-
-    [Theory]
-    [InlineData(true, "Project 06/06")]
-    [InlineData(false, "Project 05/06")]
-    public void StandaloneConsole_PreservesExplicitCounterInTerminalPhaseState(
-        bool success,
-        string expectedCounter)
-    {
-        using var writer = new StringWriter();
-        var console = CreateConsole(writer, height: 12);
-
-        var result = SpectreProjectBuildConsoleUi.RunInteractive(
-            console,
-            new ProjectBuildConsolePlan
-            {
-                ConfigPath = "project.build.json",
-                RootPath = "repository",
-                Build = true
-            },
-            progress =>
-            {
-                progress.PhaseStarted(ProjectBuildProgressPhase.PackageBuild, 6, "packing");
-                progress.PhaseUpdated(ProjectBuildProgressPhase.PackageBuild, 5, 6, "packing");
-                if (success) {
-                    progress.PhaseCompleted(ProjectBuildProgressPhase.PackageBuild, "complete");
-                }
-                else {
-                    progress.PhaseFailed(ProjectBuildProgressPhase.PackageBuild, "failed");
-                }
-
-                return new ProjectBuildWorkflowResult
-                {
-                    Result = new ProjectBuildResult { Success = success }
-                };
-            });
-
-        Assert.Equal(success, result.Result.Success);
-        Assert.Contains(expectedCounter, writer.ToString(), StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void StandaloneConsole_WritesDetailedLedgerBeforeRethrowingFailure()
-    {
-        using var writer = new StringWriter();
-        var console = CreateConsole(writer, height: 12);
-        var expected = new InvalidOperationException("synthetic failure");
-
-        var actual = Assert.Throws<InvalidOperationException>(() =>
-            SpectreProjectBuildConsoleUi.RunInteractive(
-                console,
-                new ProjectBuildConsolePlan
-                {
-                    ConfigPath = "project.build.json",
-                    RootPath = "repository",
-                    Build = true
-                },
-                progress =>
-                {
-                    var detailed = Assert.IsAssignableFrom<IProjectBuildProgressReporterV2>(progress);
-                    var item = new ProjectBuildProgressItem
-                    {
-                        Phase = ProjectBuildProgressPhase.PackageBuild,
-                        Key = "package:Sample.Project",
-                        Title = "Sample.Project",
-                        Position = 1,
-                        Total = 2
-                    };
-                    detailed.ItemsPlanned(ProjectBuildProgressPhase.PackageBuild, [item]);
-                    detailed.ItemUpdated(item, ProjectBuildProgressItemState.Started, "building");
-                    item.Duration = TimeSpan.FromSeconds(2);
-                    detailed.ItemUpdated(item, ProjectBuildProgressItemState.Completed, "1 package, 1 archive");
-                    throw expected;
-                }));
-
-        Assert.Same(expected, actual);
-        var output = writer.ToString();
-        Assert.Contains("Project build details", output, StringComparison.Ordinal);
-        Assert.Contains("Sample.Project", output, StringComparison.Ordinal);
-        Assert.Contains("00:02.000", output, StringComparison.Ordinal);
-    }
 
     [Fact]
     public void Execute_ReportsPerProjectPackageEventsAndDurations()
@@ -755,14 +425,6 @@ public sealed class ProjectBuildProgressLedgerTests
         }
     }
 
-    private static IAnsiConsole CreateConsole(TextWriter writer, int height)
-        => AnsiConsole.Create(new AnsiConsoleSettings
-        {
-            Out = new TerminalConsoleOutput(writer, height),
-            Ansi = AnsiSupport.Yes,
-            ColorSystem = ColorSystemSupport.NoColors,
-            Interactive = InteractionSupport.Yes
-        });
 
     private static void WriteProject(string rootPath, string name)
     {
@@ -814,18 +476,4 @@ public sealed class ProjectBuildProgressLedgerTests
                 detail));
     }
 
-    private sealed class TerminalConsoleOutput : IAnsiConsoleOutput
-    {
-        public TerminalConsoleOutput(TextWriter writer, int height)
-        {
-            Writer = writer;
-            Height = height;
-        }
-
-        public TextWriter Writer { get; }
-        public bool IsTerminal => true;
-        public int Width => 140;
-        public int Height { get; }
-        public void SetEncoding(System.Text.Encoding encoding) { }
-    }
 }
