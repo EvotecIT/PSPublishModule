@@ -43,10 +43,9 @@ internal sealed partial class ProgressView
     private readonly Dictionary<string, Row> _rows = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<Row> _steps = new();
     private readonly Phases _ledger = new(LedgerId) { StepCounter = true };
-    private readonly LogRegion _log = new(LogId) { Wrap = true, MaxLinesPerEntry = 50, PreferredHeight = 6, ShowElapsed = false, Capacity = 10000 };
+    private readonly LogRegion _log = new(LogId) { Wrap = true, MaxLinesPerEntry = 50, PreferredHeight = 6, ShowElapsed = false, Capacity = 10000, FitToEntries = true };
     private readonly List<(string Level, string Text)> _messages = new();
     private readonly Func<TimeSpan> _clock;
-    private readonly string _separator = ConsoleOutput.CurrentProfile().Glyphs == ConsoleMonster.Capabilities.GlyphTier.Ascii ? " - " : " · ";
     private LiveSession? _session;
     private TimeSpan _idleSince;
     private bool _finished;
@@ -65,33 +64,46 @@ internal sealed partial class ProgressView
     /// <summary>The view running in the current flow, if any; loggers send their messages to it.</summary>
     internal static ProgressView? Current => Active.Value;
 
-    /// <summary>Adds a top-level step, or updates the label of an existing one.</summary>
-    internal void Step(string key, string label, string? kind = null, string? target = null)
+    /// <summary>
+    /// Adds a top-level step at the end, or at <paramref name="index"/> for work planned after the run started; an
+    /// existing step keeps its place and state and takes the new label (work can change what it is doing).
+    /// </summary>
+    internal void Step(string key, string label, string? kind = null, string? target = null, int? index = null)
     {
         if (string.IsNullOrWhiteSpace(key)) return;
         lock (_gate)
         {
             if (_rows.TryGetValue(key, out var existing))
             {
+                if (kind is not null) existing.Kind = kind;
+                if (existing.Label == label) return;
                 existing.Label = label;
+                Send(new LiveEvent(LedgerId, "add", key, text: LabelMarkup(existing)));
                 return;
             }
 
-            var row = new Row(key, null, label, kind, _steps.Count, 0) { Target = target };
+            var position = Math.Max(0, Math.Min(index ?? _steps.Count, _steps.Count));
+            var row = new Row(key, null, null, label, kind) { Target = target };
             _rows[key] = row;
-            _steps.Add(row);
-            if (_session is null) _ledger.Set(key, StatusKind.Pending, LabelMarkup(row));
-            else _session.Post(new LiveEvent(LedgerId, "add", key, text: LabelMarkup(row)));
+            _steps.Insert(position, row);
+            Send(position == _steps.Count - 1
+                ? new LiveEvent(LedgerId, "add", key, text: LabelMarkup(row))
+                : new LiveEvent(LedgerId, "insert", key, text: LabelMarkup(row), value: position));
         }
     }
 
-    /// <summary>Adds an item under a step (created with <see cref="Step"/>), or updates its label.</summary>
-    internal void Item(string step, string key, string label, string? kind = null, string? target = null)
+    /// <summary>
+    /// Adds an item under a step (created with <see cref="Step"/>), or under one of its items (<paramref name="parent"/>,
+    /// a stage and its packages), or updates the label of an existing one.
+    /// </summary>
+    internal void Item(string step, string key, string label, string? kind = null, string? target = null, string? parent = null)
     {
         if (string.IsNullOrWhiteSpace(key)) return;
         lock (_gate)
         {
-            if (!_rows.TryGetValue(step, out var parent) || parent.Step is not null) return;
+            if (!_rows.TryGetValue(step, out var owner) || owner.Step is not null) return;
+            Row? group = null;
+            if (parent is not null && (!_rows.TryGetValue(parent, out group) || group.Step != owner || group.Parent is not null)) return;
             if (_rows.TryGetValue(key, out var existing))
             {
                 // Work can change what it is doing (a publish step that starts signing): keep the row, update its label.
@@ -102,7 +114,10 @@ internal sealed partial class ProgressView
                 return;
             }
 
-            var row = new Row(key, parent, label, kind, parent.Index, ++parent.ItemCount) { Target = target };
+            var row = group is null
+                ? new Row(key, owner, null, label, kind) { ItemIndex = ++owner.ItemCount }
+                : new Row(key, owner, group, label, kind) { ItemIndex = group.ItemIndex, SubIndex = ++group.ItemCount };
+            row.Target = target;
             _rows[key] = row;
             Send(new LiveEvent(LedgerId, "item", EventKey(row), text: LabelMarkup(row), status: nameof(StatusKind.Pending)));
         }
@@ -158,6 +173,7 @@ internal sealed partial class ProgressView
                 row.StartedAt = now;
                 PostState(row, StatusKind.Running, Shorten(row.Detail));
                 if (row.Step is not null && row.Step.State == ProgressState.Planned) StartParent(row.Step, now);
+                if (row.Parent is not null && row.Parent.State == ProgressState.Planned) StartParent(row.Parent, now);
             }
             else
             {
@@ -176,16 +192,13 @@ internal sealed partial class ProgressView
         {
             if (!_rows.TryGetValue(key, out var row)) return;
             var now = _clock();
-            var ran = row.State == ProgressState.Started || duration.HasValue;
-            var took = duration ?? (row.State == ProgressState.Started ? now - row.StartedAt : TimeSpan.Zero);
             row.State = state;
             row.Detail = Clean(detail);
             row.LastActivity = now;
             if (row.Step is null) _idleSince = now;
-            var shown = Shorten(row.Detail);
-            if (ran && state != ProgressState.Skipped)
-                shown = string.IsNullOrEmpty(shown) ? NumberFormat.Duration(took) : shown + _separator + NumberFormat.Duration(took);
-            PostState(row, ToStatus(state), string.IsNullOrEmpty(shown) ? null : shown);
+            // The ledger times a row from its running event; work measured elsewhere passes the time it took.
+            var took = state != ProgressState.Skipped && duration is { } measured ? measured.TotalMilliseconds : 0;
+            PostState(row, ToStatus(state), Shorten(row.Detail), took);
         }
     }
 
@@ -196,7 +209,7 @@ internal sealed partial class ProgressView
     internal void FinishRemaining(bool success)
     {
         Row[] open;
-        lock (_gate) open = _rows.Values.Where(row => !IsTerminal(row.State)).OrderBy(row => row.Index).ThenBy(row => row.ItemIndex).ToArray();
+        lock (_gate) open = InOrder(_rows.Values.Where(row => !IsTerminal(row.State))).ToArray();
         foreach (var row in open)
         {
             if (row.State == ProgressState.Started && !success) Finish(row.Key, ProgressState.Failed, "stopped");
@@ -238,7 +251,7 @@ internal sealed partial class ProgressView
         var previous = Active.Value;
         try
         {
-            using var session = new LiveSession(new Layout(this), options);
+            using var session = new LiveSession(LiveLayout(), options);
             lock (_gate)
             {
                 _session = session;
@@ -272,23 +285,32 @@ internal sealed partial class ProgressView
         PostState(step, StatusKind.Running, null);
     }
 
-    // A step's state event carries its detail; an item's state and detail are separate events.
-    private void PostState(Row row, StatusKind status, string? detail)
+    // A step's state event carries its detail; an item's state and detail are separate events. A finishing event may
+    // carry the time the work took (milliseconds) when it was measured outside the view.
+    private void PostState(Row row, StatusKind status, string? detail, double took = 0)
     {
         if (row.Step is null)
         {
-            Send(new LiveEvent(LedgerId, "state", row.Key, text: detail, status: status.ToString()));
+            Send(new LiveEvent(LedgerId, "state", row.Key, text: detail, status: status.ToString(), value: took));
             return;
         }
 
-        Send(new LiveEvent(LedgerId, "item", EventKey(row), status: status.ToString()));
+        Send(new LiveEvent(LedgerId, "item", EventKey(row), status: status.ToString(), value: took));
         PostDetail(row, detail);
     }
 
     private void PostDetail(Row row, string? detail)
         => Send(new LiveEvent(LedgerId, row.Step is null ? "detail" : "item-detail", EventKey(row), text: detail));
 
-    private static string EventKey(Row row) => row.Step is null ? row.Key : row.Step.Key + ItemSeparator + row.Key;
+    // Phases addresses "step", "step U+001F item" and "step U+001F item U+001F sub-item".
+    private static string EventKey(Row row)
+        => row.Step is null ? row.Key
+            : row.Parent is null ? row.Step.Key + ItemSeparator + row.Key
+            : row.Step.Key + ItemSeparator + row.Parent.Key + ItemSeparator + row.Key;
+
+    // Planned order: step position (steps can be inserted), then item, then sub-item.
+    private IEnumerable<Row> InOrder(IEnumerable<Row> rows)
+        => rows.OrderBy(row => _steps.IndexOf(row.Step ?? row)).ThenBy(row => row.ItemIndex).ThenBy(row => row.SubIndex);
 
     private void Send(LiveEvent liveEvent)
     {
@@ -343,15 +365,17 @@ internal sealed partial class ProgressView
     private static string? Shorten(string? detail)
         => detail is null || detail.Length <= RowDetailLimit ? detail : detail.Substring(0, RowDetailLimit - 3) + "...";
 
-    private sealed class Row(string key, Row? step, string label, string? kind, int index, int itemIndex)
+    // A step (no Step), an item of a step, or a sub-item under an item (Parent).
+    private sealed class Row(string key, Row? step, Row? parent, string label, string? kind)
     {
         internal string Key { get; } = key;
         internal Row? Step { get; } = step;
+        internal Row? Parent { get; } = parent;
         internal string Label { get; set; } = label;
         internal string? Target { get; set; }
         internal string? Kind { get; set; } = kind;
-        internal int Index { get; } = index;
-        internal int ItemIndex { get; } = itemIndex;
+        internal int ItemIndex { get; set; }
+        internal int SubIndex { get; set; }
         internal int ItemCount { get; set; }
         internal ProgressState State { get; set; }
         internal string? Detail { get; set; }

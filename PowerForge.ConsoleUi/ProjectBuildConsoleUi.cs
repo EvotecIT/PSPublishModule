@@ -155,7 +155,12 @@ internal static class ProjectBuildConsoleUi
         {
             var key = $"{item.Phase}:{item.Key}";
             var phase = item.Phase.ToString();
-            if (!view.Contains(phase)) view.Step(phase, GetPhaseName(item.Phase), phase);
+            if (!view.Contains(phase))
+            {
+                // A phase that was not planned goes in at its place in build order.
+                var before = view.StepKeys.Count(step => Enum.TryParse<ProjectBuildProgressPhase>(step, out var planned) && planned < item.Phase);
+                view.Step(phase, GetPhaseName(item.Phase), phase, index: before);
+            }
             view.Item(phase, key, ProgressLedger.Label(ProgressCounterFormatter.GetProjectBuildScope(item.Phase), item.Position, item.Total, item.Title), item.Kind);
             return key;
         }

@@ -81,9 +81,13 @@ internal static partial class ExecutablePublishConsoleUi
     {
         public void StepStarting(DotNetPublishStep step) => view.Start(step.Key);
 
-        // Signing reports its own progress; the row shows the outputs being signed and the provider guidance.
+        // Signing reports its own progress; the running step is retitled to the outputs being signed (as the release
+        // ledger does for its items) and "Current:" adds the provider guidance.
         public void StepProgress(DotNetPublishStep step, string kind, string detail)
-            => view.Detail(step.Key, kind == "Signing" ? $"Sign outputs ({step.TargetName ?? "release evidence"}): {detail}" : detail, kind == "Signing" ? kind : null);
+        {
+            if (kind == "Signing") view.Step(step.Key, $"Sign outputs ({step.TargetName ?? "release evidence"})", kind);
+            view.Detail(step.Key, detail, kind == "Signing" ? kind : null);
+        }
 
         public void StepCompleted(DotNetPublishStep step) => view.Finish(step.Key, ProgressState.Completed);
 

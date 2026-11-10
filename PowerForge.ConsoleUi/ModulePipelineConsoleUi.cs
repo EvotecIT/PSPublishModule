@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.ExceptionServices;
@@ -168,10 +169,12 @@ internal static class ModulePipelineConsoleUi
             ProgressLedger.Apply(view, step.Key, state, detail);
         }
 
-        // Nested keys start with the key of the step that owns them ("<step>:project:PackageSigning:<package>").
+        // Nested keys start with the key of the step that owns them ("<step>:project:PackageSigning:<package>"); a
+        // stage and its packages nest under that step. Work with no owning step goes in after the furthest started step.
         private string Plan(PowerForgeReleaseProgressItem item)
         {
             if (steps.ContainsKey(item.Key)) return item.Key;
+            if (_aliases.TryGetValue(item.Key, out var alias)) return alias;
             if (view.Contains(item.Key)) return item.Key;
 
             var owner = steps.Keys
@@ -180,10 +183,15 @@ internal static class ModulePipelineConsoleUi
                 .FirstOrDefault()
                 ?? view.RunningStep;
             var label = ProgressLedger.Label(item, item.CounterLabel ?? CounterLabel(item));
-            if (owner is null) view.Step(item.Key, label, item.Kind, item.Target);
-            else view.Item(owner, item.Key, label, item.Kind, item.Target);
+            if (owner is not null) return ProgressLedger.PlanItem(view, owner, item.Key, item, label, _aliases);
+
+            var keys = view.StepKeys;
+            var started = keys.Select((key, index) => (key, index)).LastOrDefault(entry => view.StateOf(entry.key) != ProgressState.Planned);
+            view.Step(item.Key, label, item.Kind, item.Target, started.key is null ? keys.Count : started.index + 1);
             return item.Key;
         }
+
+        private readonly ConcurrentDictionary<string, string> _aliases = new(StringComparer.OrdinalIgnoreCase);
 
         private static string? CounterLabel(PowerForgeReleaseProgressItem item)
             => item.Kind switch

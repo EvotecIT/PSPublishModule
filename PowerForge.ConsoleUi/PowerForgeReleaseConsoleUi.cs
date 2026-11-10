@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.ExceptionServices;
@@ -204,14 +205,20 @@ internal static partial class PowerForgeReleaseConsoleUi
             view.FinishRemaining(success);
         }
 
+        // A phase that was not planned (work the run added) goes in at its place in release order.
         private string Plan(PowerForgeReleaseProgressItem item)
         {
             var key = $"{item.Phase}:{item.Key}";
             var phase = item.Phase.ToString();
-            if (!view.Contains(phase)) view.Step(phase, phase, phase);
-            view.Item(phase, key, ProgressLedger.Label(item, item.CounterLabel ?? CounterLabel(item)), item.Kind, item.Target);
-            return key;
+            if (!view.Contains(phase))
+            {
+                var before = view.StepKeys.Count(step => Enum.TryParse<PowerForgeReleaseProgressPhase>(step, out var planned) && planned < item.Phase);
+                view.Step(phase, phase, phase, index: before);
+            }
+            return ProgressLedger.PlanItem(view, phase, key, item, ProgressLedger.Label(item, item.CounterLabel ?? CounterLabel(item)), _aliases);
         }
+
+        private readonly ConcurrentDictionary<string, string> _aliases = new(StringComparer.OrdinalIgnoreCase);
 
         private static string CounterLabel(PowerForgeReleaseProgressItem item)
         {

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using PowerForge;
 
 namespace PowerForge.ConsoleUi;
@@ -17,6 +18,34 @@ internal static class ProgressLedger
 
     internal static string Label(PowerForgeReleaseProgressItem item, string? counterLabel = null)
         => Label(counterLabel ?? item.CounterLabel, item.Position, item.Total, item.Title);
+
+    /// <summary>
+    /// Adds an engine item under <paramref name="step"/> and returns the row key its updates use. Items of a presentation
+    /// group (a project-build stage such as "Sign NuGet packages") nest under one row for that group: the stage's own
+    /// item (no position) becomes the group row, and its packages are listed under it, even when they are planned
+    /// before the stage starts.
+    /// </summary>
+    internal static string PlanItem(ProgressView view, string step, string key, PowerForgeReleaseProgressItem item, string label, IDictionary<string, string> aliases)
+    {
+        if (aliases.TryGetValue(key, out var alias)) return alias;
+        if (string.IsNullOrWhiteSpace(item.GroupKey))
+        {
+            view.Item(step, key, label, item.Kind, item.Target);
+            return key;
+        }
+
+        var group = step + "|" + item.GroupKey;
+        if (item.Position <= 0)
+        {
+            view.Item(step, group, label, item.Kind, item.Target);
+            aliases[key] = group;
+            return group;
+        }
+
+        if (!view.Contains(group)) view.Item(step, group, item.GroupTitle ?? item.GroupKey!, item.Kind);
+        view.Item(step, key, label, item.Kind, item.Target, group);
+        return key;
+    }
 
     /// <summary>Applies one state change; a running row with numeric progress shows "value/maximum" first.</summary>
     internal static void Apply(

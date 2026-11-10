@@ -18,75 +18,53 @@ internal sealed partial class ProgressView
     private static readonly TimeSpan QuietAfter = TimeSpan.FromSeconds(5);
 
     // What "Current:" shows, read under the view's lock.
-    private (string? Label, string? Item, string? Detail, TimeSpan Quiet, bool Signing, TimeSpan Idle, bool Started, bool Finished) CurrentWork()
+    // The furthest running row names the work: its step, then the stage and item under it, and the nearest detail.
+    private (string? Label, string[] Items, string? Detail, TimeSpan Quiet, bool Signing, TimeSpan Idle, bool Started, bool Finished) CurrentWork()
     {
         lock (_gate)
         {
             var now = _clock();
-            var running = _rows.Values
-                .Where(row => row.State == ProgressState.Started)
-                .OrderBy(row => row.Index).ThenBy(row => row.ItemIndex)
-                .LastOrDefault();
+            var running = InOrder(_rows.Values.Where(row => row.State == ProgressState.Started)).LastOrDefault();
             var started = _steps.Any(step => step.State != ProgressState.Planned);
-            if (running is null) return (null, null, null, TimeSpan.Zero, false, now - _idleSince, started, _finished);
+            if (running is null) return (null, Array.Empty<string>(), null, TimeSpan.Zero, false, now - _idleSince, started, _finished);
 
-            var step = running.Step ?? running;
-            var label = running.Step is null ? running.Label : running.Step.Label;
-            var item = running.Step is null ? null : running.Label;
-            var detail = running.Detail ?? (running.Step is null ? null : running.Step.Detail);
-            var activity = running.Step is null ? running.LastActivity : Max(running.LastActivity, running.Step.LastActivity);
-            var signing = IsSigning(running.Kind) || IsSigning(step.Kind);
-            return (label, item, detail, now - activity, signing, TimeSpan.Zero, started, _finished);
+            var chain = new[] { running.Step, running.Parent, running }.Where(row => row is not null).Select(row => row!).Distinct().ToArray();
+            var step = chain[0];
+            var detail = chain.Reverse().Select(row => row.Detail).FirstOrDefault(value => value is not null);
+            var activity = chain.Max(row => row.LastActivity);
+            var signing = chain.Any(row => IsSigning(row.Kind));
+            return (step.Label, chain.Skip(1).Select(row => row.Label).ToArray(), detail, now - activity, signing, TimeSpan.Zero, started, _finished);
         }
     }
 
-    private static TimeSpan Max(TimeSpan a, TimeSpan b) => a > b ? a : b;
 
     private static bool IsSigning(string? kind)
         => kind?.Trim().ToLowerInvariant() is "signing" or "packagesigning" or "msisign";
 
-    // The live area: the ledger takes the rows left after "Current:" and the message log.
-    private sealed class Layout(ProgressView view) : IContainer
-    {
-        public IReadOnlyList<IWidget> Children => new IWidget[] { view._ledger, view._log };
+    // The live area: the ledger takes the rows left after "Current:" and the message log, which takes none until a
+    // message arrives.
+    private Rows LiveLayout()
+        => new Rows()
+            .Add(_ledger, LayoutSize.Fraction())
+            .Add(new Lines((width, context) => CurrentRows(this, width, context)))
+            .Add(new Lines((_, context) => _log.Entries.Count == 0
+                ? new List<StyledLine>()
+                : [StyledLine.From($"Messages ({_log.Entries.Count}; the complete log follows progress)", context.Style(ThemeToken.Muted))]))
+            .Add(_log);
 
+    // Rows computed for the width they are drawn at.
+    private sealed class Lines(Func<int, RenderContext, List<StyledLine>> lines) : IWidget
+    {
         public Size Measure(Constraints constraints, RenderContext context)
         {
-            var footer = FooterHeight(constraints.MaxWidth, context);
-            var available = constraints.IsHeightUnbounded ? Constraints.Unbounded : Math.Max(0, constraints.MaxHeight - footer);
-            var ledger = view._ledger.Measure(new Constraints(constraints.MaxWidth, available), context).Height;
-            var height = ledger + footer;
-            return new Size(constraints.MaxWidth, constraints.IsHeightUnbounded ? height : Math.Min(height, constraints.MaxHeight));
+            var count = lines(constraints.MaxWidth, context).Count;
+            return new Size(constraints.MaxWidth, constraints.IsHeightUnbounded ? count : Math.Min(count, constraints.MaxHeight));
         }
 
         public void Render(Region region, RenderContext context)
         {
-            var current = CurrentRows(view, region.Width, context);
-            var messages = MessageRows();
-            var ledgerHeight = Math.Max(0, region.Height - current.Count - messages);
-            ledgerHeight = Math.Min(ledgerHeight, view._ledger.Measure(new Constraints(region.Width, ledgerHeight), context).Height);
-            if (ledgerHeight > 0) view._ledger.Render(region.Sub(0, 0, region.Width, ledgerHeight), context);
-
-            var y = ledgerHeight;
-            foreach (var line in current)
-            {
-                if (y >= region.Height) return;
-                region.Write(0, y++, line);
-            }
-
-            if (messages == 0 || y >= region.Height) return;
-            var total = view._log.Entries.Count;
-            region.Write(0, y++, $"Messages ({total}; the complete log follows progress)", context.Style(ThemeToken.Muted));
-            var logHeight = Math.Min(messages - 1, region.Height - y);
-            if (logHeight > 0) view._log.Render(region.Sub(0, y, region.Width, logHeight), context);
-        }
-
-        private int FooterHeight(int width, RenderContext context) => CurrentRows(view, width, context).Count + MessageRows();
-
-        private int MessageRows()
-        {
-            var entries = view._log.Entries.Count;
-            return entries == 0 ? 0 : 1 + Math.Min(view._log.PreferredHeight, entries);
+            var rows = lines(region.Width, context);
+            for (var y = 0; y < rows.Count && y < region.Height; y++) region.Write(0, y, rows[y]);
         }
     }
 
@@ -114,7 +92,7 @@ internal sealed partial class ProgressView
             new("Current: ", context.Style(ThemeToken.Accent)),
             new(work.Label, context.Style(ThemeToken.Text))
         };
-        if (work.Item is not null) spans.Add(new TextSpan(" " + context.Glyphs.Get(Glyph.Chevron) + " " + work.Item, context.Style(ThemeToken.Text)));
+        foreach (var item in work.Items) spans.Add(new TextSpan(" " + context.Glyphs.Get(Glyph.Chevron) + " " + item, context.Style(ThemeToken.Text)));
         if (work.Detail is not null) spans.Add(new TextSpan(" - " + work.Detail, context.Style(ThemeToken.Text)));
         if (work.Quiet >= QuietAfter) spans.Add(new TextSpan(dot + "last activity " + NumberFormat.Duration(work.Quiet) + " ago", muted));
         var wrapped = TextWrapper.Wrap(new StyledLine(spans), width);
