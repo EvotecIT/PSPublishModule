@@ -139,6 +139,12 @@ public sealed class PublishManagedModuleCommand : PSCmdlet
     /// <summary>Creates and publishes the package to the selected destination.</summary>
     protected override void ProcessRecord()
     {
+        using (CmdletConsole.Use(this))
+            ProcessRecordCore();
+    }
+
+    private void ProcessRecordCore()
+    {
         var modulePath = ManagedModuleCommandSupport.ResolveProviderPath(this, Path);
         var packagePath = ManagedModuleCommandSupport.ResolveProviderPath(this, NupkgPath);
         var manifestPath = ManagedModuleCommandSupport.ResolveProviderPath(this, ManifestPath);

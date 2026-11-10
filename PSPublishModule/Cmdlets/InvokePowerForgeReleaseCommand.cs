@@ -566,6 +566,12 @@ public sealed partial class InvokePowerForgeReleaseCommand : PSCmdlet
     /// </summary>
     protected override void ProcessRecord()
     {
+        using (CmdletConsole.Use(this))
+            ProcessRecordCore();
+    }
+
+    private void ProcessRecordCore()
+    {
         var boundParameters = MyInvocation?.BoundParameters;
         var isVerbose = boundParameters?.ContainsKey("Verbose") == true;
         var exitCodeMode = ExitCode.IsPresent;

@@ -90,6 +90,12 @@ public sealed class GetManagedModuleCommand : PSCmdlet
     /// <summary>Gets managed module inventory.</summary>
     protected override void ProcessRecord()
     {
+        using (CmdletConsole.Use(this))
+            ProcessRecordCore();
+    }
+
+    private void ProcessRecordCore()
+    {
         try
         {
             var inventory = ResolveInventory();

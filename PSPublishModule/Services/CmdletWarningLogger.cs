@@ -16,7 +16,11 @@ internal sealed class CmdletWarningLogger(PSCmdlet cmdlet, ILogger output) : ILo
     public void Verbose(string message) => output.Verbose(message);
     public void Warn(string message)
     {
-        try { PowerForge.ConsoleUi.SpectreProgressDisplay.WriteExternal(() => cmdlet.WriteWarning(message)); }
+        try
+        {
+            PowerForge.ConsoleUi.ConsoleOutput.WriteOutside(
+                () => PowerForge.ConsoleUi.SpectreProgressDisplay.WriteExternal(() => cmdlet.WriteWarning(message)));
+        }
         catch (Exception ex) when (ex is ActionPreferenceStopException or PipelineStoppedException)
         {
             _warningStop = ExceptionDispatchInfo.Capture(ex);

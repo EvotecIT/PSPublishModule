@@ -45,6 +45,12 @@ public sealed partial class GetModuleDocumentationCommand : PSCmdlet
     /// </summary>
     protected override void ProcessRecord()
     {
+        using (CmdletConsole.Use(this))
+            ProcessRecordCore();
+    }
+
+    private void ProcessRecordCore()
+    {
         var pref = JsonRendererPreference.Auto;
         switch ((JsonRenderer ?? "Auto").ToLowerInvariant())
         {

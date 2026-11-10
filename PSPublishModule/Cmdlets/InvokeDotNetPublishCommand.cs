@@ -193,6 +193,12 @@ public sealed class InvokeDotNetPublishCommand : PSCmdlet
     /// </summary>
     protected override void ProcessRecord()
     {
+        using (CmdletConsole.Use(this))
+            ProcessRecordCore();
+    }
+
+    private void ProcessRecordCore()
+    {
         var boundParameters = MyInvocation?.BoundParameters;
         var isVerbose = boundParameters?.ContainsKey("Verbose") == true;
         var interactive = !Quiet.IsPresent && !NoInteractive.IsPresent &&

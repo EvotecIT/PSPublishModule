@@ -81,6 +81,12 @@ public sealed partial class InvokeProjectBuildCommand : PSCmdlet
     /// <summary>Executes the configured build pipeline.</summary>
     protected override void ProcessRecord()
     {
+        using (CmdletConsole.Use(this))
+            ProcessRecordCore();
+    }
+
+    private void ProcessRecordCore()
+    {
         try
         {
             ExecuteWorkflow();

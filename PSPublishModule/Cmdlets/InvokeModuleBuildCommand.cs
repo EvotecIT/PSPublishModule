@@ -469,6 +469,12 @@ public sealed partial class InvokeModuleBuildCommand : PSCmdlet
     /// </summary>
     protected override void ProcessRecord()
     {
+        using (CmdletConsole.Use(this))
+            ProcessRecordCore();
+    }
+
+    private void ProcessRecordCore()
+    {
         var sw = Stopwatch.StartNew();
         var boundParameters = MyInvocation?.BoundParameters;
         var isVerbose = boundParameters?.ContainsKey("Verbose") == true;
