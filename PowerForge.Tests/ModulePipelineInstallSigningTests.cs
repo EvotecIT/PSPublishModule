@@ -621,7 +621,8 @@ public sealed partial class ModulePipelineInstallSigningTests
             bool importRequired,
             bool importSelf,
             bool verbose,
-            ModuleImportValidationTarget[] targets)
+            ModuleImportValidationTarget[] targets,
+            Action<string>? outputLineReceived = null)
             => throw new InvalidOperationException("Not used in this test.");
     }
 

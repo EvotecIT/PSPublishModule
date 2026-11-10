@@ -796,7 +796,8 @@ public sealed partial class ModulePipelineScriptExecutionSeamTests
             bool importRequired,
             bool importSelf,
             bool verbose,
-            ModuleImportValidationTarget[] targets)
+            ModuleImportValidationTarget[] targets,
+            Action<string>? outputLineReceived = null)
         {
             ImportValidationCalls++;
             LastImportModules = modules ?? Array.Empty<ImportModuleEntry>();
