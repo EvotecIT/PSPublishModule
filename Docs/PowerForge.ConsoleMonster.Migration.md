@@ -105,26 +105,36 @@ unchanged.
 
 ### Found during the port
 
-The port works around these in `PowerForge.ConsoleUi` rather than in ConsoleMonster:
+The port first worked around these in `PowerForge.ConsoleUi`. ConsoleMonster
+2.5.0 closes them, and the workarounds are gone:
 
-- `Phases` appends phases in the order they are added and has one level of
-  items. Work planned after the plan (package-lane stages and their signing rows)
-  therefore goes in as items of the step that runs it; a stage and its packages
-  are siblings rather than a nested group.
-- Re-sending `add` for an existing phase resets it to pending, so a phase label
-  cannot change while it runs. Item labels can (`item` with text and no status).
-- Item rows have no running time of their own; `ProgressView` measures them and
-  writes the duration into the item detail.
-- The folded ledger detail and the running detail use a literal ` · ` separator
-  whatever the glyph tier; on the ASCII tier it is written as `*`.
-- `LogRegion` measures at least one row (and `PreferredHeight` under a height
-  limit) even with no entries, and `Rows` gives an earlier auto row all of the
-  remaining height. `ProgressView` lays out the ledger, the "Current:" line and
-  the log itself so an empty log takes no space and the ledger cannot push the
-  other rows out.
+- `Phases` takes sub-items under an item (`SetSubItem`, or `item` events keyed
+  step, item and sub-item), so a package lane lists its stages and each stage its
+  packages; a finished stage folds into one `done/total · time` row in a short
+  live area. `Phases.Insert` (the `insert` operation) puts work planned after the
+  run started at its place: steps that have no owner go in after the furthest
+  started step, and release and project-build phases in their natural order.
+- Re-sending `add` for an existing phase changes only its label, so a running
+  executable publish step is retitled "Sign outputs (target)" when it starts
+  signing, as release items already were.
+- Items have their own running and finished time, shown after their detail like a
+  step's. `ProgressView` no longer measures items or writes durations into
+  details; engine-measured durations travel as the finishing event's value.
+- The separator before a time follows the glyph tier (a hyphen on ASCII), so the
+  view no longer keeps its own ASCII separator.
+- `Rows` measures fraction rows after the auto rows below them, and
+  `LogRegion.FitToEntries` makes an empty log take no rows and a short one only
+  the rows it needs. The live area is now `Rows` of the ledger (a fraction row),
+  the "Current:" line, a messages header and the log, without a custom layout.
+- Table cells already had a configurable limit (`TableColumn.MaxLines`,
+  `Table.WrapLines`, three lines by default). "Recommended actions" now shows the
+  whole action, so "Suggested command: ..." is no longer cut.
 - Only one live session can capture the console at a time; tests that start one
   run in a non-parallel collection.
 
+Temporary configuration: the branch builds against `2.5.0-local.2`, restored
+from a local package folder into an isolated package cache. Switch the
+ConsoleMonster package references to the published 2.5.0 before this merges.
 ### Should fix
 
 - **One assembly version per Windows PowerShell 5.1 session.** PSPublishModule,
