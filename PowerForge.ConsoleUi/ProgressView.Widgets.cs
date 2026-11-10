@@ -30,7 +30,7 @@ internal sealed partial class ProgressView
 
             var chain = new[] { running.Step, running.Parent, running }.Where(row => row is not null).Select(row => row!).Distinct().ToArray();
             var step = chain[0];
-            var detail = chain.Reverse().Select(row => row.Detail).FirstOrDefault(value => value is not null);
+            var detail = chain.Select(row => row.Detail).LastOrDefault(value => value is not null);
             var activity = chain.Max(row => row.LastActivity);
             var signing = chain.Any(row => IsSigning(row.Kind));
             return (step.Label, chain.Skip(1).Select(row => row.Label).ToArray(), detail, now - activity, signing, TimeSpan.Zero, started, _finished);
