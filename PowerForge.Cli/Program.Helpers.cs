@@ -528,6 +528,6 @@ internal static partial class Program
             return;
         }
 
-        PowerForge.ConsoleUi.SpectrePipelineSummaryWriter.WriteSummary(res);
+        PowerForge.ConsoleUi.ModulePipelineSummary.Write(res);
     }
 }

@@ -32,5 +32,5 @@ internal static class PipelineConsoleUi
     }
 
     public static void WriteFailureSummary(ModulePipelinePlan plan, Exception error)
-        => SpectrePipelineSummaryWriter.WriteFailureSummary(plan, error);
+        => ModulePipelineSummary.WriteFailure(plan, error);
 }

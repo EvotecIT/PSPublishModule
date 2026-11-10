@@ -1,0 +1,23 @@
+ SampleModule 1.0.0 - C:\temp\staging ------------- + built
+ Artefacts                     Published
+ 0                             0
+
+ Needs attention  1 finding - worst first ------------- ! 1
+ ! Public\Get-Thing.ps1...  Avoid Write-Host
+
+ Overview
+ File consistency   Disabled
+ Compatibility      Disabled
+ Module validation  Disabled
+ Formatting         Disabled
+ Signing            Disabled
+ Artefacts          None
+ Publish            Disabled
+ Diagnostics        1 warning
+ Install            Disabled
+
+ Recommended actions
+ Avoid Write-Host
+   Where    Public\Get-Thing.ps1:12:5
+   Do this  Use Write-Information or Write-Output.
+

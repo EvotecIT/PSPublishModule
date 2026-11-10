@@ -599,7 +599,7 @@ public sealed partial class InvokeModuleBuildCommand : PSCmdlet
                     return ModulePipelineConsoleUi.RunInteractive(
                         runner: new ModulePipelineRunner(interactiveLogger), spec: spec, plan: plan, configLabel: configLabel);
                 },
-                writeSummary: Quiet.IsPresent ? null : SpectrePipelineConsoleUi.WriteSummary)
+                writeSummary: Quiet.IsPresent ? null : ModulePipelineSummary.Write)
                 .Execute(preparation, interactive, preparation.ConfigLabel);
         }
 #pragma warning restore CA1031
@@ -620,7 +620,7 @@ public sealed partial class InvokeModuleBuildCommand : PSCmdlet
                 WriteError(new ErrorRecord(ex, outcome.ErrorRecordId, ErrorCategory.NotSpecified, null));
             if (outcome.ShouldWriteInteractiveFailureSummary && workflow?.Plan is not null && ex is not null)
             {
-                try { SpectrePipelineConsoleUi.WriteFailureSummary(workflow.Plan, ex); }
+                try { ModulePipelineSummary.WriteFailure(workflow.Plan, ex); }
                 catch { /* best effort */ }
             }
             if (outcome.ShouldWriteFailureMessage)

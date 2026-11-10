@@ -1,5 +1,4 @@
 using PowerForge.ConsoleUi;
-using Spectre.Console;
 
 namespace PowerForge.Tests;
 
@@ -10,7 +9,6 @@ public sealed class PowerForgeReleaseConsoleVirusTotalTests
     public void InteractiveRelease_VirusTotalPublication_ShowsPhaseAndFailedOutcome()
     {
         using var writer = new StringWriter();
-        var console = CreateConsole(writer);
         var spec = new PowerForgeReleaseSpec
         {
             Module = new PowerForgeModuleReleaseOptions
@@ -49,7 +47,7 @@ public sealed class PowerForgeReleaseConsoleVirusTotalTests
                     }
                 };
             });
-        PowerForgeReleaseConsoleUi.WriteSummary(console, result, TimeSpan.FromSeconds(1));
+        WriteSummary(writer, result, TimeSpan.FromSeconds(1));
 
         Assert.True(result.Success);
         var output = writer.ToString();
@@ -61,10 +59,8 @@ public sealed class PowerForgeReleaseConsoleVirusTotalTests
     public void ReleaseSummary_NoMatchingVirusTotalArtifacts_ShowsSkippedOutcome()
     {
         using var writer = new StringWriter();
-        var console = CreateConsole(writer);
 
-        PowerForgeReleaseConsoleUi.WriteSummary(
-            console,
+        WriteSummary(writer,
             new PowerForgeReleaseResult
             {
                 Success = true,
@@ -86,7 +82,6 @@ public sealed class PowerForgeReleaseConsoleVirusTotalTests
     public void InteractiveRelease_AppleOnlyTarget_DoesNotShowVirusTotalPhase()
     {
         using var writer = new StringWriter();
-        var console = CreateConsole(writer);
         var spec = new PowerForgeReleaseSpec
         {
             Tools = new PowerForgeToolReleaseSpec
@@ -123,7 +118,6 @@ public sealed class PowerForgeReleaseConsoleVirusTotalTests
     public void InteractiveRelease_AppleOnlySwitch_DoesNotShowVirusTotalPhase()
     {
         using var writer = new StringWriter();
-        var console = CreateConsole(writer);
         var spec = new PowerForgeReleaseSpec
         {
             Module = new PowerForgeModuleReleaseOptions
@@ -168,11 +162,6 @@ public sealed class PowerForgeReleaseConsoleVirusTotalTests
         return result!;
     }
 
-    private static IAnsiConsole CreateConsole(TextWriter writer)
-        => AnsiConsole.Create(new AnsiConsoleSettings
-        {
-            Ansi = AnsiSupport.No,
-            ColorSystem = ColorSystemSupport.NoColors,
-            Out = new AnsiConsoleOutput(writer)
-        });
+    private static void WriteSummary(StringWriter writer, PowerForgeReleaseResult result, TimeSpan duration)
+        => writer.Write(ConsoleCapture.Final(_ => PowerForgeReleaseConsoleUi.WriteSummary(result, duration)));
 }

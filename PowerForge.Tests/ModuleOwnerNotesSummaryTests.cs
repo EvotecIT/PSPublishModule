@@ -1,4 +1,3 @@
-using PowerForge.ConsoleUi;
 
 namespace PowerForge.Tests;
 
@@ -36,32 +35,5 @@ public sealed class ModuleOwnerNotesSummaryTests
             totalInlinedFunctions: 0);
 
         Assert.Empty(details);
-    }
-
-    [Fact]
-    public void ShouldRenderOwnerNoteAsPanel_ReturnsTrueWhenNoteHasMeaningfulDetails()
-    {
-        var note = new ModuleOwnerNote(
-            "Module Entry Script",
-            ModuleOwnerNoteSeverity.Info,
-            summary: "Build wrote a merged .psm1 entry script from 92 script source file(s).",
-            details: new[]
-            {
-                "Required modules (2): PSSharedGoods, PSWriteColor",
-                "Functions inlined during merge: 10 top-level function(s) inlined (total 12 including dependencies)."
-            });
-
-        Assert.True(SpectrePipelineSummaryWriter.ShouldRenderOwnerNoteAsPanel(note));
-    }
-
-    [Fact]
-    public void ShouldRenderOwnerNoteAsPanel_ReturnsFalseForSimpleSummaryOnlyNote()
-    {
-        var note = new ModuleOwnerNote(
-            "Manifest",
-            ModuleOwnerNoteSeverity.Info,
-            summary: "Build: refreshed project-root manifest from source manifest inputs.");
-
-        Assert.False(SpectrePipelineSummaryWriter.ShouldRenderOwnerNoteAsPanel(note));
     }
 }

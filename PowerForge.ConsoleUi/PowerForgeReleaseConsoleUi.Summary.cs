@@ -1,73 +1,66 @@
 using System;
 using System.Linq;
+using ConsoleMonster.Frames;
+using ConsoleMonster.Text;
 using PowerForge;
-using Spectre.Console;
 
 namespace PowerForge.ConsoleUi;
 
 internal static partial class PowerForgeReleaseConsoleUi
 {
+    /// <summary>The unified release summary, in the same layout as the module and project build summaries.</summary>
     public static void WriteSummary(PowerForgeReleaseResult result, TimeSpan duration)
-        => WriteSummary(AnsiConsole.Console, result, duration);
-
-    internal static void WriteSummary(IAnsiConsole console, PowerForgeReleaseResult result, TimeSpan duration)
     {
-        if (console is null) throw new ArgumentNullException(nameof(console));
         if (result is null) return;
-        static string Esc(string? value) => Markup.Escape(value ?? string.Empty);
 
-        var unicode = ConsoleEncoding.ShouldRenderUnicode(console.Profile.Capabilities.Unicode);
-        console.Profile.Capabilities.Unicode = unicode;
-        var emoji = ConsoleEncoding.ShouldRenderEmoji(console.Profile.Capabilities.Unicode);
-        var icon = result.Success ? (emoji ? "✅" : "+") : (emoji ? "❌" : "x");
-        var color = result.Success ? "green" : "red";
-        console.Write(new Rule($"[{color}]{icon} Unified release summary[/]").LeftJustified());
-
+        var summary = new SummaryFrame("Unified release", result.Success)
+            .Fact(new BufferedLogSupportService().FormatDuration(duration));
         var packageVersion = result.Packages?.Result.Release?.ResolvedVersion;
         var moduleVersion = result.ModulePlan?.ModuleVersion;
         var toolSteps = result.ToolPlan?.Targets.Sum(target => target.Combinations.Length)
             ?? result.DotNetToolPlan?.Steps.Length
             ?? 0;
-        var table = new Table()
-            .Border(unicode ? TableBorder.Rounded : TableBorder.Simple)
-            .AddColumn(new TableColumn("Item").NoWrap())
-            .AddColumn(new TableColumn("Value"));
-        table.AddRow("Status", result.Success ? "[green]Succeeded[/]" : "[red]Failed[/]");
-        if (!string.IsNullOrWhiteSpace(packageVersion)) table.AddRow("Package build version", Esc(packageVersion));
-        if (!string.IsNullOrWhiteSpace(moduleVersion)) table.AddRow("Module version", Esc(moduleVersion));
-        if (toolSteps > 0) table.AddRow("Tool output steps", toolSteps.ToString());
-        table.AddRow("Release assets", result.ReleaseAssets.Length.ToString());
-        var gitHubReleaseUrl = result.UnifiedGitHubRelease?.ReleaseUrl;
-        if (!string.IsNullOrWhiteSpace(gitHubReleaseUrl))
+
+        if (!string.IsNullOrWhiteSpace(packageVersion)) summary.Line("Package build version", packageVersion);
+        if (!string.IsNullOrWhiteSpace(moduleVersion)) summary.Line("Module version", moduleVersion);
+        if (toolSteps > 0) summary.Line("Tool output steps", toolSteps.ToString());
+        summary.Line("Release assets", result.ReleaseAssets.Length.ToString());
+        summary.Meter(Meter.Count("Release assets", result.ReleaseAssets.Length));
+
+        if (result.UnifiedGitHubRelease is { } github && !string.IsNullOrWhiteSpace(github.ReleaseUrl))
         {
-            table.AddRow("GitHub release", Esc(gitHubReleaseUrl));
-            table.AddRow(
-                "GitHub action",
-                result.UnifiedGitHubRelease!.ReusedExistingRelease
-                    ? "[yellow]Reused existing release[/]"
-                    : "[green]Created new release[/]");
-            table.AddRow(
-                "GitHub assets",
-                Esc(
-                    $"{result.UnifiedGitHubRelease.UploadedAssets.Length} uploaded, " +
-                    $"{result.UnifiedGitHubRelease.SkippedExistingAssets.Length} skipped, " +
-                    $"{result.UnifiedGitHubRelease.ReplacedExistingAssets.Length} replaced"));
+            summary.Line("GitHub release", github.ReleaseUrl);
+            summary.LineMarkup("GitHub action", github.ReusedExistingRelease ? "[warn]Reused existing release[/]" : "[pass]Created new release[/]");
+            summary.Line("GitHub assets",
+                $"{github.UploadedAssets.Length} uploaded, {github.SkippedExistingAssets.Length} skipped, {github.ReplacedExistingAssets.Length} replaced");
+            summary.Meter(Meter.Count("Uploaded", github.UploadedAssets.Length));
         }
+
         if (result.VirusTotalMonitor is { } virusTotal)
         {
-            var monitorSummary = !virusTotal.Success
-                ? $"[red]Failed: {Esc(virusTotal.ErrorMessage ?? "Monitor registration failed")}[/]"
-                : virusTotal.Artifacts.Length == 0
-                    ? "[yellow]Skipped: no configured final release artifacts matched[/]"
-                    : $"[green]Registered {virusTotal.Artifacts.Length} artifact(s); analysis remains asynchronous[/]";
-            table.AddRow("VirusTotal Monitor", monitorSummary);
-            if (!string.IsNullOrWhiteSpace(result.VirusTotalMonitorReceiptPath))
-                table.AddRow("VirusTotal receipt", Esc(result.VirusTotalMonitorReceiptPath));
-        }
-        table.AddRow("Duration", Esc(new BufferedLogSupportService().FormatDuration(duration)));
-        if (!result.Success && !string.IsNullOrWhiteSpace(result.ErrorMessage))
-            table.AddRow("Error", $"[red]{Esc(result.ErrorMessage)}[/]");
-        console.Write(table);
-    }
+            if (!virusTotal.Success)
+            {
+                var message = virusTotal.ErrorMessage ?? "Monitor registration failed";
+                summary.LineMarkup("VirusTotal Monitor", "[fail]Failed: " + Markup.Escape(message) + "[/]");
+                summary.Attention.Add(HealthState.Failing, message, "VirusTotal Monitor");
+            }
+            else if (virusTotal.Artifacts.Length == 0)
+            {
+                summary.LineMarkup("VirusTotal Monitor", "[warn]Skipped: no configured final release artifacts matched[/]");
+                summary.Attention.Add(HealthState.Warning, "Skipped: no configured final release artifacts matched", "VirusTotal Monitor");
+            }
+            else
+            {
+                summary.LineMarkup("VirusTotal Monitor", $"[pass]Registered {virusTotal.Artifacts.Length} artifact(s); analysis remains asynchronous[/]");
+            }
 
+            if (!string.IsNullOrWhiteSpace(result.VirusTotalMonitorReceiptPath))
+                summary.Line("VirusTotal receipt", result.VirusTotalMonitorReceiptPath);
+        }
+
+        if (!result.Success && !string.IsNullOrWhiteSpace(result.ErrorMessage))
+            summary.Attention.Add(HealthState.Failing, result.ErrorMessage!, "Release");
+
+        summary.Write();
+    }
 }

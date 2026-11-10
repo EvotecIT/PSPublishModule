@@ -277,6 +277,45 @@ public sealed class ModuleBuildWorkflowServiceTests
         GoldenFile.Match(GoldenPath("ModuleBuild.CoordinatedRelease.txt"), ConsoleCapture.HeaderAndLedger(output));
     }
 
+    // The module summary lists what needs attention from the run itself (warning diagnostics, with their location),
+    // and keeps the recommended action in the details.
+    [Fact]
+    public void ModuleSummary_ListsWarningDiagnosticsUnderNeedsAttention()
+    {
+        var plan = CreatePlan();
+        var diagnostic = new BuildDiagnostic(
+            ruleId: "VALIDATION-PSSA-PSAVOIDUSINGWRITEHOST",
+            area: BuildDiagnosticArea.Validation,
+            severity: BuildDiagnosticSeverity.Warning,
+            scope: BuildDiagnosticScope.Project,
+            owner: BuildDiagnosticOwner.ModuleAuthor,
+            remediationKind: BuildDiagnosticRemediationKind.ManualFix,
+            canAutoFix: false,
+            summary: "Avoid Write-Host",
+            details: "Public\\Get-Thing.ps1:12:5 - Write-Host is used.",
+            recommendedAction: "Use Write-Information or Write-Output.",
+            sourcePath: "Public\\Get-Thing.ps1:12:5",
+            generatedBy: "PSScriptAnalyzer");
+
+        var output = ConsoleCapture.Final(_ => ModulePipelineSummary.Write(CreateResult(plan, [diagnostic])));
+
+        GoldenFile.Match(GoldenPath("ModuleSummary.Attention.txt"), output);
+    }
+
+    // A failed build shows the plan it ran and the exception itself, inner causes included, rather than a
+    // headline cut from the message.
+    [Fact]
+    public void ModuleFailureSummary_ShowsTheExceptionWithItsInnerCause()
+    {
+        var error = new InvalidOperationException(
+            "Import-Module failed for SampleModule.",
+            new FileNotFoundException("Could not load file or assembly 'Contoso.Native, Version=1.2.0.0'."));
+
+        var output = ConsoleCapture.Final(_ => ModulePipelineSummary.WriteFailure(CreatePlan(), error));
+
+        GoldenFile.Match(GoldenPath("ModuleSummary.Failure.txt"), output);
+    }
+
     private static string GoldenPath(string name, [System.Runtime.CompilerServices.CallerFilePath] string sourceFile = "")
         => Path.Combine(Path.GetDirectoryName(sourceFile)!, "Golden", "ConsoleMonster", name);
 
@@ -368,7 +407,7 @@ public sealed class ModuleBuildWorkflowServiceTests
             deleteGeneratedStagingAfterRun: true);
     }
 
-    private static ModulePipelineResult CreateResult(ModulePipelinePlan plan)
+    private static ModulePipelineResult CreateResult(ModulePipelinePlan plan, BuildDiagnostic[]? diagnostics = null)
     {
         return new ModulePipelineResult(
             plan: plan,
@@ -384,7 +423,7 @@ public sealed class ModuleBuildWorkflowServiceTests
             fileConsistencyLineEndingFix: null,
             compatibilityReport: null,
             validationReport: null,
-            diagnostics: Array.Empty<BuildDiagnostic>(),
+            diagnostics: diagnostics ?? Array.Empty<BuildDiagnostic>(),
             diagnosticsBaseline: null,
             diagnosticsPolicy: null,
             publishResults: Array.Empty<ModulePublishResult>(),

@@ -249,7 +249,7 @@ public sealed class InvokeDotNetRepositoryReleaseCommand : PSCmdlet
         {
             var summary = new DotNetRepositoryReleaseSummaryService().CreateSummary(result);
             var display = new DotNetRepositoryReleaseDisplayService().CreateDisplay(summary, isPlan: !executeBuild);
-            SpectreProjectBuildSummaryWriter.Write(display);
+            ProjectBuildSummary.Write(display);
         }
         WriteObject(result);
     }

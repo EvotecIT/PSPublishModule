@@ -186,7 +186,7 @@ public sealed partial class InvokeProjectBuildCommand : PSCmdlet
             });
             summary.Success = workflow.Result.Success;
             var display = new DotNetRepositoryReleaseDisplayService().CreateDisplay(summary, isPlan: preparation.PlanOnly || !executeBuild);
-            SpectreProjectBuildSummaryWriter.Write(display);
+            ProjectBuildSummary.Write(display);
 
             if (workflow.GitHubPublishSummary is { PerProject: false } publishSummary)
                 WriteGitHubSummary(false, publishSummary.SummaryTag, publishSummary.SummaryReleaseUrl, publishSummary.SummaryAssetsCount, workflow.Result.GitHub);
