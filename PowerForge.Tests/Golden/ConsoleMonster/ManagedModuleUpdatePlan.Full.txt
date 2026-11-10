@@ -1,0 +1,14 @@
+╭─ Managed module update plan ─────────────────────────────────────────────────╮
+│ Name                Contoso.Tools                                            │
+│ Target version      2.1.0                                                    │
+│ Previous version    2.0.3                                                    │
+│ Action              Update                                                   │
+│ Repository          Internal (https://packages.contoso.test/[v3]/index.json) │
+│ Module path         C:\Program Files\PowerShell\Modules\Contoso.Tools\2.1.0  │
+│ Would write         Yes                                                      │
+│ License             MIT                                                      │
+│ License acceptance  ▴ Required                                               │
+│ Source policy       ▴ Needs repair                                           │
+│ Source reason       Installed copy came from PSGallery.                      │
+│ Family actions      Contoso.Tools.Core:Update -> 2.1.0                       │
+╰──────────────────────────────────────────────────────────────────────────────╯

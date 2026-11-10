@@ -195,7 +195,7 @@ Repair-ManagedModule -Inventory $inventory -Latest -Repository PSGallery -ShowSu
 | Existing package publish | Supported | `Publish-ManagedModule -NupkgPath` publishes without repacking |
 | Trust/integrity | Supported | Trusted repository requirement, allowed author policy, expected package SHA256 |
 | WhatIf/Confirm | Supported | Mutating cmdlets use PowerShell `ShouldProcess` |
-| Summaries | Supported | Spectre.Console summaries remain host-side; result objects are still pipeline-friendly |
+| Summaries | Supported | Console summaries remain host-side; result objects are still pipeline-friendly |
 
 ## Migration Alias Decisions
 

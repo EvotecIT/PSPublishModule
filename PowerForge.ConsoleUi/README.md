@@ -7,6 +7,12 @@ Keep reusable pipeline behavior in `PowerForge`; keep only console rendering,
 progress UI and human-facing summary formatting here. Console packages stay out
 of the core engine.
 
+Static output (Markdown help, managed-module and ModuleState summaries, the
+project-build GitHub summary) uses ConsoleMonster. Every ConsoleMonster write goes
+through `ConsoleOutput`, which applies `POWERFORGE_CONSOLE_MODE` and is the one
+place that decides where output goes. Progress views, the logger, and the module,
+project-build and release summaries still use Spectre.Console.
+
 Module builds, project/package builds, executable publishing, and unified releases
 use the same progress display. The current operation appears in a wrapping line
 below the rows. Diagnostics appear below that line while work runs, and the
@@ -28,8 +34,11 @@ calling the signer, leaving packages that have not started queued.
 
 ## Console font compatibility
 
-UTF-8 output and emoji font coverage are separate capabilities. Progress views,
-headers, diagnostics, and summaries select decorative icons using the same policy.
+ConsoleMonster output follows ConsoleMonster's terminal detection (console font,
+glyph tier, `NO_COLOR`, CI, `CONSOLEMONSTER_*` overrides). The Spectre-based views
+use their own policy: UTF-8 output and emoji font coverage are separate capabilities,
+and progress views, headers, diagnostics, and summaries select decorative icons the
+same way.
 Windows Server 2016 / Windows 10 build 1607 and earlier use simpler icons and an
 ASCII spinner while retaining Unicode rules and borders.
 
@@ -37,8 +46,10 @@ Set `POWERFORGE_CONSOLE_MODE` for the current process when the terminal font nee
 a different choice:
 
 - `unicode`: Unicode text and borders with simpler icons and an ASCII spinner.
-- `ascii`: plain icons, labels, and borders.
+  ConsoleMonster output uses its Basic glyph tier.
+- `ascii`: plain icons, labels, and borders. ConsoleMonster uses its ASCII tier.
 - `rich`: decorative icons and a Unicode spinner, including on older Windows.
+  ConsoleMonster uses its Full tier.
 
 An unset value selects the platform default. Changing this setting does not install
 fonts or change terminal preferences. Progress labels fit terminal display cells

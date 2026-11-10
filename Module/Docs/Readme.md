@@ -157,7 +157,7 @@ Analyzes a script or scriptblock and reports functions/commands it calls that ar
 ### [Get-ModuleDocumentation](Get-ModuleDocumentation.md)
 Gets module documentation (README, CHANGELOG, LICENSE, Intro/Upgrade) and renders it in the console.
 
-Resolves documentation files from an installed module (root or Internals folder) and renders them with Spectre.Console. When local files are absent, it will backfill from the module's repository specified by PrivateData.PSData.ProjectUri (GitHub or Azure DevOps), using a token when necessary.
+Resolves documentation files from an installed module (root or Internals folder) and renders them in the console. When local files are absent, it will backfill from the module's repository specified by PrivateData.PSData.ProjectUri (GitHub or Azure DevOps), using a token when necessary.
 
 ### [Get-ModuleInformation](Get-ModuleInformation.md)
 Gets module manifest information from a project directory.
@@ -572,7 +572,7 @@ Updates version information in an Xcode project.
 ### [Show-ModuleDocumentation](Show-ModuleDocumentation.md)
 Displays module documentation (README, CHANGELOG, LICENSE, Intro/Upgrade) in the console.
 
-Resolves documentation files from an installed module (root or Internals folder) and renders them with Spectre.Console. When local files are absent or when requested, it can fetch files directly from the module's repository specified by PrivateData.PSData.ProjectUri (GitHub or Azure DevOps), optionally using a Personal Access Token.
+Resolves documentation files from an installed module (root or Internals folder) and renders them. When local files are absent or when requested, it can fetch files directly from the module's repository specified by PrivateData.PSData.ProjectUri (GitHub or Azure DevOps), optionally using a Personal Access Token.
 
 ### [Start-AppleApp](Start-AppleApp.md)
 Launches an installed Apple app on a physical device.

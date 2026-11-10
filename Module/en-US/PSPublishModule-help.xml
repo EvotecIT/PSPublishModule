@@ -9273,7 +9273,7 @@ those rows can be piped directly to Uninstall-ManagedModule.</maml:para>
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="none">
           <maml:name>ShowSummary</maml:name>
           <maml:description>
-            <maml:para>Write a compact Spectre.Console inventory summary.</maml:para>
+            <maml:para>Write a compact console inventory summary.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
           <dev:type>
@@ -9376,7 +9376,7 @@ those rows can be piped directly to Uninstall-ManagedModule.</maml:para>
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="none">
           <maml:name>ShowSummary</maml:name>
           <maml:description>
-            <maml:para>Write a compact Spectre.Console inventory summary.</maml:para>
+            <maml:para>Write a compact console inventory summary.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
           <dev:type>
@@ -9491,7 +9491,7 @@ those rows can be piped directly to Uninstall-ManagedModule.</maml:para>
       <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="none">
         <maml:name>ShowSummary</maml:name>
         <maml:description>
-          <maml:para>Write a compact Spectre.Console inventory summary.</maml:para>
+          <maml:para>Write a compact console inventory summary.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
         <dev:type>
@@ -10321,12 +10321,12 @@ It is useful when building “portable” scripts/modules where you want to dete
       <command:noun>ModuleDocumentation</command:noun>
       <maml:description>
         <maml:para>Gets module documentation (README, CHANGELOG, LICENSE, Intro/Upgrade) and renders it in the console.</maml:para>
-        <maml:para>Resolves documentation files from an installed module (root or Internals folder) and renders them with Spectre.Console. When local files are absent, it will backfill from the module's repository specified by PrivateData.PSData.ProjectUri (GitHub or Azure DevOps), using a token when necessary.</maml:para>
+        <maml:para>Resolves documentation files from an installed module (root or Internals folder) and renders them in the console. When local files are absent, it will backfill from the module's repository specified by PrivateData.PSData.ProjectUri (GitHub or Azure DevOps), using a token when necessary.</maml:para>
       </maml:description>
     </command:details>
     <maml:description>
       <maml:para>Gets module documentation (README, CHANGELOG, LICENSE, Intro/Upgrade) and renders it in the console.</maml:para>
-      <maml:para>Resolves documentation files from an installed module (root or Internals folder) and renders them with Spectre.Console. When local files are absent, it will backfill from the module's repository specified by PrivateData.PSData.ProjectUri (GitHub or Azure DevOps), using a token when necessary.</maml:para>
+      <maml:para>Resolves documentation files from an installed module (root or Internals folder) and renders them in the console. When local files are absent, it will backfill from the module's repository specified by PrivateData.PSData.ProjectUri (GitHub or Azure DevOps), using a token when necessary.</maml:para>
     </maml:description>
     <command:syntax>
       <command:syntaxItem parameterSetName="ByName">
@@ -10400,11 +10400,12 @@ It is useful when building “portable” scripts/modules where you want to dete
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="none">
           <maml:name>JsonRenderer</maml:name>
           <maml:description>
-            <maml:para>Select JSON renderer for fenced JSON blocks: Auto, Spectre, or System.</maml:para>
+            <maml:para>Select JSON renderer for fenced JSON blocks: Auto, Highlighted (shown as written) or System (reformatted by System.Text.Json). Spectre is accepted as an older name for Highlighted.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <command:parameterValueGroup>
             <command:parameterValue required="false" variableLength="false">Auto</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Highlighted</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">Spectre</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">System</command:parameterValue>
           </command:parameterValueGroup>
@@ -10664,11 +10665,12 @@ It is useful when building “portable” scripts/modules where you want to dete
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="none">
           <maml:name>JsonRenderer</maml:name>
           <maml:description>
-            <maml:para>Select JSON renderer for fenced JSON blocks: Auto, Spectre, or System.</maml:para>
+            <maml:para>Select JSON renderer for fenced JSON blocks: Auto, Highlighted (shown as written) or System (reformatted by System.Text.Json). Spectre is accepted as an older name for Highlighted.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <command:parameterValueGroup>
             <command:parameterValue required="false" variableLength="false">Auto</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Highlighted</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">Spectre</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">System</command:parameterValue>
           </command:parameterValueGroup>
@@ -10940,11 +10942,12 @@ It is useful when building “portable” scripts/modules where you want to dete
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="none">
           <maml:name>JsonRenderer</maml:name>
           <maml:description>
-            <maml:para>Select JSON renderer for fenced JSON blocks: Auto, Spectre, or System.</maml:para>
+            <maml:para>Select JSON renderer for fenced JSON blocks: Auto, Highlighted (shown as written) or System (reformatted by System.Text.Json). Spectre is accepted as an older name for Highlighted.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <command:parameterValueGroup>
             <command:parameterValue required="false" variableLength="false">Auto</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Highlighted</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">Spectre</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">System</command:parameterValue>
           </command:parameterValueGroup>
@@ -11180,11 +11183,12 @@ It is useful when building “portable” scripts/modules where you want to dete
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="none">
           <maml:name>JsonRenderer</maml:name>
           <maml:description>
-            <maml:para>Select JSON renderer for fenced JSON blocks: Auto, Spectre, or System.</maml:para>
+            <maml:para>Select JSON renderer for fenced JSON blocks: Auto, Highlighted (shown as written) or System (reformatted by System.Text.Json). Spectre is accepted as an older name for Highlighted.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <command:parameterValueGroup>
             <command:parameterValue required="false" variableLength="false">Auto</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Highlighted</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">Spectre</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">System</command:parameterValue>
           </command:parameterValueGroup>
@@ -11444,7 +11448,7 @@ It is useful when building “portable” scripts/modules where you want to dete
       <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="none">
         <maml:name>JsonRenderer</maml:name>
         <maml:description>
-          <maml:para>Select JSON renderer for fenced JSON blocks: Auto, Spectre, or System.</maml:para>
+          <maml:para>Select JSON renderer for fenced JSON blocks: Auto, Highlighted (shown as written) or System (reformatted by System.Text.Json). Spectre is accepted as an older name for Highlighted.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
         <command:parameterValueGroup>
@@ -16083,7 +16087,7 @@ trust policies instead of a one-invocation prompt-suppression switch.</maml:para
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="none">
           <maml:name>ShowSummary</maml:name>
           <maml:description>
-            <maml:para>Write a compact Spectre.Console summary for each plan or result.</maml:para>
+            <maml:para>Write a compact console summary for each plan or result.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
           <dev:type>
@@ -16468,7 +16472,7 @@ trust policies instead of a one-invocation prompt-suppression switch.</maml:para
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="none">
           <maml:name>ShowSummary</maml:name>
           <maml:description>
-            <maml:para>Write a compact Spectre.Console summary for each plan or result.</maml:para>
+            <maml:para>Write a compact console summary for each plan or result.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
           <dev:type>
@@ -16817,7 +16821,7 @@ trust policies instead of a one-invocation prompt-suppression switch.</maml:para
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="none">
           <maml:name>ShowSummary</maml:name>
           <maml:description>
-            <maml:para>Write a compact Spectre.Console summary for each plan or result.</maml:para>
+            <maml:para>Write a compact console summary for each plan or result.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
           <dev:type>
@@ -17166,7 +17170,7 @@ trust policies instead of a one-invocation prompt-suppression switch.</maml:para
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="none">
           <maml:name>ShowSummary</maml:name>
           <maml:description>
-            <maml:para>Write a compact Spectre.Console summary for each plan or result.</maml:para>
+            <maml:para>Write a compact console summary for each plan or result.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
           <dev:type>
@@ -17599,7 +17603,7 @@ trust policies instead of a one-invocation prompt-suppression switch.</maml:para
       <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="none">
         <maml:name>ShowSummary</maml:name>
         <maml:description>
-          <maml:para>Write a compact Spectre.Console summary for each plan or result.</maml:para>
+          <maml:para>Write a compact console summary for each plan or result.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
         <dev:type>
@@ -64333,7 +64337,7 @@ expose a container-registry transport.</maml:para>
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="none">
           <maml:name>ShowSummary</maml:name>
           <maml:description>
-            <maml:para>Write a compact Spectre.Console summary for the publish result.</maml:para>
+            <maml:para>Write a compact console summary for the publish result.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
           <dev:type>
@@ -64528,7 +64532,7 @@ expose a container-registry transport.</maml:para>
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="none">
           <maml:name>ShowSummary</maml:name>
           <maml:description>
-            <maml:para>Write a compact Spectre.Console summary for the publish result.</maml:para>
+            <maml:para>Write a compact console summary for the publish result.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
           <dev:type>
@@ -64759,7 +64763,7 @@ expose a container-registry transport.</maml:para>
       <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="none">
         <maml:name>ShowSummary</maml:name>
         <maml:description>
-          <maml:para>Write a compact Spectre.Console summary for the publish result.</maml:para>
+          <maml:para>Write a compact console summary for the publish result.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
         <dev:type>
@@ -67365,7 +67369,7 @@ through the operator's existing remoting/configuration system.</maml:para>
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="none">
           <maml:name>ShowSummary</maml:name>
           <maml:description>
-            <maml:para>Write a compact Spectre.Console summary.</maml:para>
+            <maml:para>Write a compact console summary.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
           <dev:type>
@@ -67796,7 +67800,7 @@ through the operator's existing remoting/configuration system.</maml:para>
       <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="none">
         <maml:name>ShowSummary</maml:name>
         <maml:description>
-          <maml:para>Write a compact Spectre.Console summary.</maml:para>
+          <maml:para>Write a compact console summary.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
         <dev:type>
@@ -68428,7 +68432,7 @@ location when Path is omitted.</maml:para>
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="none">
           <maml:name>ShowSummary</maml:name>
           <maml:description>
-            <maml:para>Write a compact Spectre.Console summary for each plan or result.</maml:para>
+            <maml:para>Write a compact console summary for each plan or result.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
           <dev:type>
@@ -68791,7 +68795,7 @@ location when Path is omitted.</maml:para>
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="none">
           <maml:name>ShowSummary</maml:name>
           <maml:description>
-            <maml:para>Write a compact Spectre.Console summary for each plan or result.</maml:para>
+            <maml:para>Write a compact console summary for each plan or result.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
           <dev:type>
@@ -69178,7 +69182,7 @@ location when Path is omitted.</maml:para>
       <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="none">
         <maml:name>ShowSummary</maml:name>
         <maml:description>
-          <maml:para>Write a compact Spectre.Console summary for each plan or result.</maml:para>
+          <maml:para>Write a compact console summary for each plan or result.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
         <dev:type>
@@ -73622,12 +73626,12 @@ Connect metadata and build selection belong to higher-level Apple release comman
       <command:noun>ModuleDocumentation</command:noun>
       <maml:description>
         <maml:para>Displays module documentation (README, CHANGELOG, LICENSE, Intro/Upgrade) in the console.</maml:para>
-        <maml:para>Resolves documentation files from an installed module (root or Internals folder) and renders them with Spectre.Console. When local files are absent or when requested, it can fetch files directly from the module's repository specified by PrivateData.PSData.ProjectUri (GitHub or Azure DevOps), optionally using a Personal Access Token.</maml:para>
+        <maml:para>Resolves documentation files from an installed module (root or Internals folder) and renders them. When local files are absent or when requested, it can fetch files directly from the module's repository specified by PrivateData.PSData.ProjectUri (GitHub or Azure DevOps), optionally using a Personal Access Token.</maml:para>
       </maml:description>
     </command:details>
     <maml:description>
       <maml:para>Displays module documentation (README, CHANGELOG, LICENSE, Intro/Upgrade) in the console.</maml:para>
-      <maml:para>Resolves documentation files from an installed module (root or Internals folder) and renders them with Spectre.Console. When local files are absent or when requested, it can fetch files directly from the module's repository specified by PrivateData.PSData.ProjectUri (GitHub or Azure DevOps), optionally using a Personal Access Token.</maml:para>
+      <maml:para>Resolves documentation files from an installed module (root or Internals folder) and renders them. When local files are absent or when requested, it can fetch files directly from the module's repository specified by PrivateData.PSData.ProjectUri (GitHub or Azure DevOps), optionally using a Personal Access Token.</maml:para>
     </maml:description>
     <command:syntax>
       <command:syntaxItem parameterSetName="ByName">
@@ -80967,7 +80971,7 @@ Hash-constrained pipeline input is buffered and validated as one package target 
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="none">
           <maml:name>ShowSummary</maml:name>
           <maml:description>
-            <maml:para>Write a compact Spectre.Console summary for each plan or result.</maml:para>
+            <maml:para>Write a compact console summary for each plan or result.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
           <dev:type>
@@ -81460,7 +81464,7 @@ Hash-constrained pipeline input is buffered and validated as one package target 
       <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="none">
         <maml:name>ShowSummary</maml:name>
         <maml:description>
-          <maml:para>Write a compact Spectre.Console summary for each plan or result.</maml:para>
+          <maml:para>Write a compact console summary for each plan or result.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
         <dev:type>

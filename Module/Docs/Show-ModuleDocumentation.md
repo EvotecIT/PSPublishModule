@@ -8,7 +8,7 @@ schema: 2.0.0
 ## SYNOPSIS
 Displays module documentation (README, CHANGELOG, LICENSE, Intro/Upgrade) in the console.
 
-Resolves documentation files from an installed module (root or Internals folder) and renders them with Spectre.Console. When local files are absent or when requested, it can fetch files directly from the module's repository specified by PrivateData.PSData.ProjectUri (GitHub or Azure DevOps), optionally using a Personal Access Token.
+Resolves documentation files from an installed module (root or Internals folder) and renders them. When local files are absent or when requested, it can fetch files directly from the module's repository specified by PrivateData.PSData.ProjectUri (GitHub or Azure DevOps), optionally using a Personal Access Token.
 
 ## SYNTAX
 ### ByName (Default)
@@ -34,7 +34,7 @@ Show-ModuleDocumentation [-ModuleBase <string>] [-File <string>] [-PreferInterna
 ## DESCRIPTION
 Displays module documentation (README, CHANGELOG, LICENSE, Intro/Upgrade) in the console.
 
-Resolves documentation files from an installed module (root or Internals folder) and renders them with Spectre.Console. When local files are absent or when requested, it can fetch files directly from the module's repository specified by PrivateData.PSData.ProjectUri (GitHub or Azure DevOps), optionally using a Personal Access Token.
+Resolves documentation files from an installed module (root or Internals folder) and renders them. When local files are absent or when requested, it can fetch files directly from the module's repository specified by PrivateData.PSData.ProjectUri (GitHub or Azure DevOps), optionally using a Personal Access Token.
 
 ## EXAMPLES
 
