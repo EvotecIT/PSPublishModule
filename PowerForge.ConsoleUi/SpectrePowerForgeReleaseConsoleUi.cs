@@ -5,7 +5,7 @@ using System.Runtime.ExceptionServices;
 using PowerForge;
 using Spectre.Console;
 
-namespace PowerForge.ConsoleShared;
+namespace PowerForge.ConsoleUi;
 
 internal static class SpectrePowerForgeReleaseConsoleUi
 {

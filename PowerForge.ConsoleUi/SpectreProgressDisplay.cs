@@ -7,7 +7,7 @@ using System.Threading;
 using Spectre.Console;
 using Spectre.Console.Rendering;
 
-namespace PowerForge.ConsoleShared;
+namespace PowerForge.ConsoleUi;
 
 /// <summary>
 /// Runs a Spectre progress display and preserves its final frame as normal terminal output.

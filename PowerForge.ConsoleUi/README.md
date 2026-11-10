@@ -1,18 +1,11 @@
-# PowerForge.ConsoleShared
+# PowerForge.ConsoleUi
 
-This folder contains Spectre.Console rendering helpers that are shared by the
-PowerForge CLI and the PSPublishModule PowerShell surface.
-
-The files are source-linked into both consumers instead of built as a separate
-assembly because the two surfaces currently carry different Spectre.Console
-package versions and different packaging/runtime constraints. Keep reusable
-pipeline behavior in `PowerForge`; keep only console rendering, progress UI,
-and human-facing summary formatting here.
-
-If the CLI and PowerShell module later converge on the same console dependency
-and packaging model, this folder can become a small project reference. Until
-then, source linking is intentional and keeps console dependencies out of the
-core engine.
+Console rendering shared by the PowerForge CLI and the PSPublishModule
+PowerShell module. Both reference this project; it targets `net472`, `net8.0`
+and `net10.0` so it loads in Windows PowerShell 5.1, PowerShell 7 and the CLI.
+Keep reusable pipeline behavior in `PowerForge`; keep only console rendering,
+progress UI and human-facing summary formatting here. Console packages stay out
+of the core engine.
 
 Module builds, project/package builds, executable publishing, and unified releases
 use the same progress display. The current operation appears in a wrapping line

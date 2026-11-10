@@ -2,7 +2,7 @@ using System;
 using PowerForge;
 using Spectre.Console;
 
-namespace PowerForge.ConsoleShared;
+namespace PowerForge.ConsoleUi;
 
 /// <summary>Shows elapsed time and diagnostics for operations without detailed progress events.</summary>
 internal static class SpectreStatusConsoleUi

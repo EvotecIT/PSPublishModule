@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using PowerForge;
-using PowerForge.ConsoleShared;
+using PowerForge.ConsoleUi;
 using System.Management.Automation;
 using Spectre.Console;
 

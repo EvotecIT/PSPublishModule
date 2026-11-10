@@ -4,7 +4,7 @@ using System.IO;
 using System.Linq;
 using PowerForge;
 
-namespace PowerForge.ConsoleShared;
+namespace PowerForge.ConsoleUi;
 
 internal sealed class PipelinePublishSummary
 {

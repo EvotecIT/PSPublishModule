@@ -5,7 +5,7 @@ using System.Linq;
 using PowerForge;
 using Spectre.Console;
 
-namespace PowerForge.ConsoleShared;
+namespace PowerForge.ConsoleUi;
 
 internal static partial class SpectreDotNetPublishConsoleUi
 {

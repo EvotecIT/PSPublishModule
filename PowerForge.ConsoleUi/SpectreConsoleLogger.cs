@@ -1,7 +1,7 @@
 using PowerForge;
 using Spectre.Console;
 
-namespace PowerForge.ConsoleShared;
+namespace PowerForge.ConsoleUi;
 
 internal class SpectreConsoleLogger : ILogger
 {

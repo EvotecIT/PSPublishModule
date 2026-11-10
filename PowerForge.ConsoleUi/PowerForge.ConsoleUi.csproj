@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>net472;net8.0;net10.0</TargetFrameworks>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <AssemblyName>PowerForge.ConsoleUi</AssemblyName>
+    <RootNamespace>PowerForge.ConsoleUi</RootNamespace>
+    <Description>Console rendering shared by the PowerForge CLI and the PSPublishModule PowerShell module.</Description>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup Condition=" '$(TargetFramework)' == 'net472' ">
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\PowerForge\PowerForge.csproj">
+      <GlobalPropertiesToRemove>PublishAot;RuntimeIdentifier;SelfContained</GlobalPropertiesToRemove>
+    </ProjectReference>
+    <ProjectReference Include="..\PowerForge.PowerShell\PowerForge.PowerShell.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Spectre.Console" Version="0.57.2" />
+  </ItemGroup>
+
+</Project>

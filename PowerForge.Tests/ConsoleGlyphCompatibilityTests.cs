@@ -1,5 +1,5 @@
 using System.Collections.Concurrent;
-using PowerForge.ConsoleShared;
+using PowerForge.ConsoleUi;
 using Spectre.Console;
 
 namespace PowerForge.Tests;

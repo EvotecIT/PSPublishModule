@@ -1,6 +1,6 @@
 using PowerForge;
 using PowerForge.Cli;
-using PowerForge.ConsoleShared;
+using PowerForge.ConsoleUi;
 using System.Diagnostics;
 using System.Text.Json;
 

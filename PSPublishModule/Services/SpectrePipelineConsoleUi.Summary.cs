@@ -1,7 +1,7 @@
 using System;
 using System.Linq;
 using PowerForge;
-using PowerForge.ConsoleShared;
+using PowerForge.ConsoleUi;
 using Spectre.Console;
 
 namespace PSPublishModule;

@@ -5,7 +5,7 @@ using System.Threading;
 using Spectre.Console;
 using Spectre.Console.Rendering;
 
-namespace PowerForge.ConsoleShared;
+namespace PowerForge.ConsoleUi;
 
 /// <summary>
 /// Projects a bounded live viewport over a complete, canonically ordered task list.

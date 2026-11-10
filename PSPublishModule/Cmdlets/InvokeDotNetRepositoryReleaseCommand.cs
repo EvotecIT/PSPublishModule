@@ -4,7 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Management.Automation;
 using PowerForge;
-using PowerForge.ConsoleShared;
+using PowerForge.ConsoleUi;
 using Spectre.Console;
 
 namespace PSPublishModule;
@@ -236,7 +236,7 @@ public sealed class InvokeDotNetRepositoryReleaseCommand : PSCmdlet
             signAssemblies: DotNetAssemblySigningCallbackFactory.Create(logger),
             validateAssemblySigning: DotNetAssemblySigningCallbackFactory.CreatePreflight(logger));
         var result = interactive
-            ? PowerForge.ConsoleShared.SpectreStatusConsoleUi.Run(
+            ? PowerForge.ConsoleUi.SpectreStatusConsoleUi.Run(
                 "Release repository packages", () => workflow.Execute(preparation, executeBuild), value => value.Success)
             : workflow.Execute(preparation, executeBuild);
         if (interactive)

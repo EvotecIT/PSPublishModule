@@ -8,7 +8,7 @@ using System.Linq;
 using System.Globalization;
 using System.Text;
 
-namespace PowerForge.ConsoleShared;
+namespace PowerForge.ConsoleUi;
 
 /// <summary>
 /// Owns the shared Spectre layout, labels, icons, and fixed timing state used by

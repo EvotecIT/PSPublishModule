@@ -4,7 +4,7 @@ using System.Linq;
 using PowerForge;
 using Spectre.Console;
 
-namespace PowerForge.ConsoleShared;
+namespace PowerForge.ConsoleUi;
 
 /// <summary>
 /// Registers the complete plan in canonical order and updates rows in place.

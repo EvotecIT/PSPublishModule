@@ -5,7 +5,7 @@ using System.Runtime.ExceptionServices;
 using PowerForge;
 using Spectre.Console;
 
-namespace PowerForge.ConsoleShared;
+namespace PowerForge.ConsoleUi;
 
 /// <summary>Renders executable publishing with the shared build ledger in every host.</summary>
 internal static partial class SpectreDotNetPublishConsoleUi

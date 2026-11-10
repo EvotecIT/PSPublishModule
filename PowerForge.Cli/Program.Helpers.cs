@@ -487,7 +487,7 @@ internal static partial class Program
                     logger.Info($" - {a.Type}{(string.IsNullOrWhiteSpace(a.Id) ? string.Empty : $" ({a.Id})")}: {a.OutputPath}");
             }
 
-            var publishSummary = PowerForge.ConsoleShared.PipelinePublishSummaryBuilder.Build(res);
+            var publishSummary = PowerForge.ConsoleUi.PipelinePublishSummaryBuilder.Build(res);
             if (publishSummary.Rows.Count > 0)
             {
                 logger.Info($"Publish: {publishSummary.Rows.Count} result(s) across {publishSummary.ChannelCount} channel(s)");
@@ -528,6 +528,6 @@ internal static partial class Program
             return;
         }
 
-        PowerForge.ConsoleShared.SpectrePipelineSummaryWriter.WriteSummary(res);
+        PowerForge.ConsoleUi.SpectrePipelineSummaryWriter.WriteSummary(res);
     }
 }

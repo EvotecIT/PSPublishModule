@@ -1,5 +1,5 @@
 using PowerForge;
-using PowerForge.ConsoleShared;
+using PowerForge.ConsoleUi;
 
 namespace PowerForge.Cli;
 

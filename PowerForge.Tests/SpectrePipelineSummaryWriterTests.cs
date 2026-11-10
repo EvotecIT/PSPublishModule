@@ -1,5 +1,5 @@
 using System;
-using PowerForge.ConsoleShared;
+using PowerForge.ConsoleUi;
 using Xunit;
 
 namespace PowerForge.Tests;

@@ -3,7 +3,7 @@ using System.Collections.Concurrent;
 using Spectre.Console;
 using Spectre.Console.Rendering;
 
-namespace PowerForge.ConsoleShared;
+namespace PowerForge.ConsoleUi;
 
 /// <summary>
 /// Creates the common Spectre column layout for build and release progress views.

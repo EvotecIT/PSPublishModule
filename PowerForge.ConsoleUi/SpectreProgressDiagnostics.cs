@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using Spectre.Console;
 using Spectre.Console.Rendering;
 
-namespace PowerForge.ConsoleShared;
+namespace PowerForge.ConsoleUi;
 
 /// <summary>
 /// Shows the latest message below live progress; the complete log is written on completion.

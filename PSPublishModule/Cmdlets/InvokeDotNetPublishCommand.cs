@@ -3,7 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Management.Automation;
 using PowerForge;
-using PowerForge.ConsoleShared;
+using PowerForge.ConsoleUi;
 
 namespace PSPublishModule;
 

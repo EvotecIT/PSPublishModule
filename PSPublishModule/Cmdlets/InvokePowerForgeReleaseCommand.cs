@@ -5,7 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Management.Automation;
 using PowerForge;
-using PowerForge.ConsoleShared;
+using PowerForge.ConsoleUi;
 
 namespace PSPublishModule;
 
