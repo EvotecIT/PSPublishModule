@@ -615,7 +615,7 @@ public sealed partial class ModulePipelineScriptExecutionSeamTests
     {
         var method = typeof(ModulePipelineRunner).GetMethod("RunImportModules", BindingFlags.Instance | BindingFlags.NonPublic);
         Assert.True(method is not null, "RunImportModules method signature may have changed.");
-        method!.Invoke(runner, new object?[] { plan, buildResult });
+        method!.Invoke(runner, new object?[] { plan, buildResult, null });
     }
 
     private sealed class FakeMetadataProvider : IModuleDependencyMetadataProvider
