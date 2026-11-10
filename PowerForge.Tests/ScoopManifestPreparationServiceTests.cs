@@ -27,7 +27,7 @@ public sealed class ScoopManifestPreparationServiceTests : IDisposable
     public ScoopManifestPreparationServiceTests()
     {
         Directory.CreateDirectory(_root);
-        foreach (var runtime in new[] { "win-x64", "win-arm64" })
+        foreach (var runtime in new[] { "win-x64", "win-arm64", "win-x86" })
         {
             var name = "studio-1.2.3-" + runtime + ".zip";
             using (var zip = ZipFile.Open(Path.Combine(_root, name), ZipArchiveMode.Create))
@@ -100,6 +100,37 @@ public sealed class ScoopManifestPreparationServiceTests : IDisposable
         var error = Assert.Throws<InvalidOperationException>(() => Prepare());
         Assert.Contains("missing", error.Message);
         Assert.False(Directory.Exists(Output));
+    }
+
+    [Theory]
+    [InlineData("filename", "selected archive filename")]
+    [InlineData("missing-version", "one {Version} token")]
+    [InlineData("duplicate-version", "one {Version} token")]
+    [InlineData("tag-characters", "one {Version} token")]
+    [InlineData("runtime", "Unsupported Scoop runtime")]
+    public void Prepare_RejectsInvalidDownloadAndUpdateDefinitionsBeforeWriting(string change, string message)
+    {
+        switch (change)
+        {
+            case "filename": _spec.Scoop!.UrlTemplate = "https://example.test/$version/other-{Runtime}.zip"; break;
+            case "missing-version": _spec.GitHub!.TagTemplate = "Studio-v1.2.3"; break;
+            case "duplicate-version": _spec.GitHub!.TagTemplate = "Studio-{Version}-{Version}"; break;
+            case "tag-characters": _spec.GitHub!.TagTemplate = "Studio/{Version}"; break;
+            case "runtime": _spec.Scoop!.Runtimes = ["linux-x64"]; break;
+        }
+        Assert.Contains(message, Assert.Throws<InvalidOperationException>(() => Prepare()).Message);
+        Assert.False(Directory.Exists(Output));
+    }
+
+    [Fact]
+    public void Prepare_SelectsX86AsScoop32Bit()
+    {
+        _spec.Scoop!.Runtimes = ["win-x86"];
+        using var json = JsonDocument.Parse(File.ReadAllText(Prepare()));
+        var architecture = json.RootElement.GetProperty("architecture");
+        Assert.Equal("32bit", Assert.Single(architecture.EnumerateObject()).Name);
+        Assert.Equal("https://example.test/Studio-v1.2.3/studio-1.2.3-win-x86.zip", architecture.GetProperty("32bit").GetProperty("url").GetString());
+        Assert.Equal("https://example.test/Studio-v$version/studio-$version-win-x86.zip", json.RootElement.GetProperty("autoupdate").GetProperty("architecture").GetProperty("32bit").GetProperty("url").GetString());
     }
 
     [Fact]
