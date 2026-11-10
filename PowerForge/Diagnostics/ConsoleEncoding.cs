@@ -30,7 +30,7 @@ public static class ConsoleEncoding
     }
 
     /// <summary>
-    /// Best-effort UTF-8 console alignment for interactive Spectre rendering.
+    /// Best-effort UTF-8 console alignment for interactive console rendering.
     /// </summary>
     public static void TryEnableUtf8Console(bool unicodeCapable = true)
     {

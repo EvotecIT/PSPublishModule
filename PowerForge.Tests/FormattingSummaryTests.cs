@@ -1,3 +1,4 @@
+using PowerForge.ConsoleUi;
 using Xunit;
 
 namespace PowerForge.Tests;
@@ -377,7 +378,7 @@ public sealed class FormattingSummaryTests
     [Fact]
     public void FormatPartMarkup_HandlesNullSummary()
     {
-        var result = FormattingSummary.FormatPartMarkup("Test", null!);
+        var result = FormattingSummaryMarkup.FormatPart("Test", null!);
         Assert.Equal("Test [grey]0[/]/0", result);
     }
 
@@ -388,7 +389,7 @@ public sealed class FormattingSummaryTests
         {
             new FormatterResult("file1.ps1", true, "Formatted")
         });
-        var result = FormattingSummary.FormatPartMarkup(null!, summary);
+        var result = FormattingSummaryMarkup.FormatPart(null!, summary);
         Assert.Equal(" [green]1[/][grey]/1[/]", result);
     }
 
@@ -401,7 +402,7 @@ public sealed class FormattingSummaryTests
             new FormatterResult("file2.ps1", false, "Unchanged"),
             new FormatterResult("file3.ps1", true, "Formatted")
         });
-        var result = FormattingSummary.FormatPartMarkup("Scripts", summary);
+        var result = FormattingSummaryMarkup.FormatPart("Scripts", summary);
         Assert.Equal("Scripts [green]2[/][grey]/3[/]", result);
     }
 
@@ -413,7 +414,7 @@ public sealed class FormattingSummaryTests
             new FormatterResult("file1.ps1", false, "Unchanged"),
             new FormatterResult("file2.ps1", false, "Unchanged")
         });
-        var result = FormattingSummary.FormatPartMarkup("Scripts", summary);
+        var result = FormattingSummaryMarkup.FormatPart("Scripts", summary);
         Assert.Equal("Scripts [grey]0[/][grey]/2[/]", result);
     }
 
@@ -426,7 +427,7 @@ public sealed class FormattingSummaryTests
             new FormatterResult("file2.ps1", false, "Skipped: Timeout"),
             new FormatterResult("file3.ps1", false, "Skipped: Missing tool")
         });
-        var result = FormattingSummary.FormatPartMarkup("Scripts", summary);
+        var result = FormattingSummaryMarkup.FormatPart("Scripts", summary);
         Assert.Equal("Scripts [green]1[/][grey]/3[/] [grey](skipped [yellow]2[/])[/]", result);
     }
 
@@ -439,7 +440,7 @@ public sealed class FormattingSummaryTests
             new FormatterResult("file2.ps1", false, "Error: Failed"),
             new FormatterResult("file3.ps1", false, "No result returned")
         });
-        var result = FormattingSummary.FormatPartMarkup("Scripts", summary);
+        var result = FormattingSummaryMarkup.FormatPart("Scripts", summary);
         Assert.Equal("Scripts [green]1[/][grey]/3[/] [grey](errors [red]2[/])[/]", result);
     }
 
@@ -452,7 +453,7 @@ public sealed class FormattingSummaryTests
             new FormatterResult("file2.ps1", false, "Skipped: Timeout"),
             new FormatterResult("file3.ps1", false, "Error: Failed")
         });
-        var result = FormattingSummary.FormatPartMarkup("Scripts", summary);
+        var result = FormattingSummaryMarkup.FormatPart("Scripts", summary);
         Assert.Equal("Scripts [green]1[/][grey]/3[/] [grey](skipped [yellow]1[/], errors [red]1[/])[/]", result);
     }
 

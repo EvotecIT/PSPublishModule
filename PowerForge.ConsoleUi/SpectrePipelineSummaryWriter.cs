@@ -147,13 +147,13 @@ internal static class SpectrePipelineSummaryWriter
         {
             var staging = FormattingSummary.FromResults(res.FormattingStagingResults);
             var status = staging.Status;
-            var parts = new List<string>(2) { FormattingSummary.FormatPartMarkup("staging", staging) };
+            var parts = new List<string>(2) { FormattingSummaryMarkup.FormatPart("staging", staging) };
 
             if (res.Plan.Formatting.Options.UpdateProjectRoot)
             {
                 var project = FormattingSummary.FromResults(res.FormattingProjectResults);
                 status = FormattingSummary.Worst(status, project.Status);
-                parts.Add(FormattingSummary.FormatPartMarkup("project", project));
+                parts.Add(FormattingSummaryMarkup.FormatPart("project", project));
             }
 
             table.AddRow(
