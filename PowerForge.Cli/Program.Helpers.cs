@@ -1,6 +1,5 @@
 using PowerForge;
 using PowerForge.Cli;
-using Spectre.Console;
 using System.Diagnostics;
 using System.Text.Json;
 

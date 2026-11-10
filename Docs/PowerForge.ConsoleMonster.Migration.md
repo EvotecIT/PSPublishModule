@@ -1,6 +1,6 @@
 # Replacing Spectre.Console with ConsoleMonster
 
-Status: assessment, no code changed yet. Date: 2026-11-10.
+Status: ported on `feature/consolemonster-console` against ConsoleMonster 2.5.0 candidate packages; Spectre.Console is removed. Assessment date: 2026-11-10.
 Compared: PSPublishModule `main` at `e67e1bfea`, ConsoleMonster 2.4.0 (`a051278c`).
 
 ## Summary
@@ -103,6 +103,28 @@ unchanged.
    suspend-write-resume call on `LiveSession` (for example `WriteAbove(Action)`)
    replaces our `WriteExternal` cursor manipulation.
 
+### Found during the port
+
+The port works around these in `PowerForge.ConsoleUi` rather than in ConsoleMonster:
+
+- `Phases` appends phases in the order they are added and has one level of
+  items. Work planned after the plan (package-lane stages and their signing rows)
+  therefore goes in as items of the step that runs it; a stage and its packages
+  are siblings rather than a nested group.
+- Re-sending `add` for an existing phase resets it to pending, so a phase label
+  cannot change while it runs. Item labels can (`item` with text and no status).
+- Item rows have no running time of their own; `ProgressView` measures them and
+  writes the duration into the item detail.
+- The folded ledger detail and the running detail use a literal ` · ` separator
+  whatever the glyph tier; on the ASCII tier it is written as `*`.
+- `LogRegion` measures at least one row (and `PreferredHeight` under a height
+  limit) even with no entries, and `Rows` gives an earlier auto row all of the
+  remaining height. `ProgressView` lays out the ledger, the "Current:" line and
+  the log itself so an empty log takes no space and the ledger cannot push the
+  other rows out.
+- Only one live session can capture the console at a time; tests that start one
+  run in a non-parallel collection.
+
 ### Should fix
 
 - **One assembly version per Windows PowerShell 5.1 session.** PSPublishModule,
@@ -155,7 +177,8 @@ These survive the move to ConsoleMonster and change no JSON or quiet output.
 - The MSBuild batch heartbeat in project releases reaches the phase detail as well
   as the log.
 
-Not done yet: the manifest refresh after formatting still runs between steps, and
+Still open: the manifest refresh after formatting runs between steps (the view
+now shows "Preparing next step" with a timer there), and
 artefact zipping has no per-file progress (the zip writer is several layers below
 the artefact step).
 

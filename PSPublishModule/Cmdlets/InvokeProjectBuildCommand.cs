@@ -4,7 +4,6 @@ using System.IO;
 using PowerForge;
 using PowerForge.ConsoleUi;
 using System.Management.Automation;
-using Spectre.Console;
 
 namespace PSPublishModule;
 
@@ -66,7 +65,7 @@ public sealed partial class InvokeProjectBuildCommand : PSCmdlet
     [Parameter]
     public string? PlanPath { get; set; }
 
-    /// <summary>Disables the interactive Spectre progress view.</summary>
+    /// <summary>Disables the interactive progress view.</summary>
     [Parameter]
     public SwitchParameter NoInteractive { get; set; }
 
@@ -103,15 +102,6 @@ public sealed partial class InvokeProjectBuildCommand : PSCmdlet
         var isVerbose = bound?.ContainsKey("Verbose") == true;
 
         ConsoleEncoding.EnsureUtf8();
-        try
-        {
-            if (!Console.IsOutputRedirected && !Console.IsErrorRedirected)
-                AnsiConsole.Profile.Capabilities.Unicode = true;
-        }
-        catch
-        {
-            // best effort only
-        }
 
         var interactive = !Quiet.IsPresent && !NoInteractive.IsPresent &&
                           ModulePipelineConsoleUi.ShouldUseInteractiveView(isVerbose);

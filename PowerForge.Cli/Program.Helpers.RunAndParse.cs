@@ -1,6 +1,5 @@
 using PowerForge;
 using PowerForge.Cli;
-using Spectre.Console;
 using System.Diagnostics;
 using System.Text.Json;
 
@@ -39,7 +38,7 @@ internal static partial class Program
         if (view != ConsoleView.Standard)
             return action();
 
-        if (ConsoleEnvironment.IsCI || !Spectre.Console.AnsiConsole.Profile.Capabilities.Interactive)
+        if (ConsoleEnvironment.IsCI || !PowerForge.ConsoleUi.ConsoleOutput.CanRenderLive)
             return action();
 
         return PowerForge.ConsoleUi.StatusConsoleUi.Run(statusText, action, succeeded);
@@ -49,7 +48,7 @@ internal static partial class Program
     {
         if (requested != ConsoleView.Auto) return requested;
 
-        var interactive = Spectre.Console.AnsiConsole.Profile.Capabilities.Interactive
+        var interactive = PowerForge.ConsoleUi.ConsoleOutput.CanRenderLive
             && !ConsoleEnvironment.IsCI;
 
         return interactive ? ConsoleView.Standard : ConsoleView.Ansi;

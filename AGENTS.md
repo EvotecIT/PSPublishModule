@@ -134,14 +134,14 @@ Stop extracting when the remaining code is only:
 
 - PowerShell parameter binding and parameter-set branching
 - `ShouldProcess`, `WhatIf`, credential prompts, and PowerShell stream routing
-- host-only rendering such as `Host.UI.Write*`, Spectre.Console tables/rules, or pipeline-friendly `WriteObject` behavior
+- host-only rendering such as `Host.UI.Write*`, ConsoleMonster widgets, or pipeline-friendly `WriteObject` behavior
 - compatibility adapters that intentionally map shared models back to stable cmdlet-facing contracts
 
 Preferred pattern for the last 10-20%:
 
 - extract reusable workflow, validation, planning, summary-shaping, and display-line composition into `PowerForge` / `PowerForge.PowerShell`
-- keep the final host-specific rendering in the cmdlet when the rendering technology itself is PowerShell- or Spectre-specific
-- avoid creating fake abstractions just to move `AnsiConsole.Write`, `Host.UI.WriteLine`, or `WriteObject` calls out of cmdlets
+- keep the final host-specific rendering in the cmdlet when the rendering technology itself is PowerShell- or ConsoleMonster-specific
+- avoid creating fake abstractions just to move `ConsoleOutput.Write`, `Host.UI.WriteLine`, or `WriteObject` calls out of cmdlets
 
 ## Quality Gates (Pattern)
 

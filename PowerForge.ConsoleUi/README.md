@@ -5,52 +5,57 @@ PowerShell module. Both reference this project; it targets `net472`, `net8.0`
 and `net10.0` so it loads in Windows PowerShell 5.1, PowerShell 7 and the CLI.
 Keep reusable pipeline behavior in `PowerForge`; keep only console rendering,
 progress UI and human-facing summary formatting here. Console packages stay out
-of the core engine.
+of the core engine. All rendering uses ConsoleMonster.
 
-Static output (Markdown help, managed-module and ModuleState summaries, the
-project-build GitHub summary) uses ConsoleMonster. Every ConsoleMonster write goes
-through `ConsoleOutput`, which applies `POWERFORGE_CONSOLE_MODE` and is the one
-place that decides where output goes. Progress views, the logger, and the module,
-project-build and release summaries still use Spectre.Console.
+## Where output goes
 
-Module builds, project/package builds, executable publishing, and unified releases
-use the same progress display. The current operation appears in a wrapping line
-below the rows. Diagnostics appear below that line while work runs, and the
-complete messages follow the finished progress table with blank-line separators.
-Operations without detailed progress events use one running row with elapsed
-time through `SpectreStatusConsoleUi`.
+Every write goes through `ConsoleOutput`. The CLI writes to the process console.
+The module's cmdlets install their PowerShell host with
+`CmdletConsole.Use(this)`, so output goes through
+`ConsoleMonster.PowerShell.Display.HostOutput` and reaches `Start-Transcript`, the
+ISE, jobs and remoting. Writes made off the pipeline thread go straight to the
+console. PowerShell warnings and prompts run through `ConsoleOutput.WriteOutside`,
+which clears a live area around the host write and redraws it below.
 
-Interactive callers pass their Spectre logger directly to the engine. Buffering
-that logger prevents the live message area from receiving output and hides
-messages on successful runs. JSON and quiet modes keep their separate output
-contracts. PowerShell warnings are synchronous host writes so warning preferences
-and prompts still work; the display clears its live area and resumes below the
-complete warning.
+## Progress
 
-Signing rows show certificate-provider guidance before a potentially blocking
-operation. A running timer indicates elapsed time; it does not confirm that a
-PIN dialog is open. NuGet signing reports each package and retry attempt before
-calling the signer, leaving packages that have not started queued.
+Module builds, project/package builds, executable publishing, unified releases
+and single operations share `ProgressView`: an inline ConsoleMonster live session
+with a numbered step ledger (`Phases` with `StepCounter`), a "Current:" line and
+a message log. `ProgressLedger` maps engine progress events onto it.
+
+- Steps keep their planned order. Work planned later, such as NuGet signing
+  rows, is listed under the step that runs it; a finished step folds its rows
+  into "done/total" while the live area is short. Running rows stay visible.
+- "Current:" names the furthest running work with its latest detail (process
+  output, the file being checked) and "last activity Ns ago" once it goes quiet.
+  While signing it repeats the certificate-provider guidance: a running timer
+  shows elapsed time, it does not confirm that a PIN dialog is open.
+- Between steps the view shows "Preparing next step" with the time since the
+  last step finished.
+- Messages logged during the run appear in the log area and are printed in full
+  after the final ledger, also when the run fails.
+
+The live view is used only on an interactive console without a transcript.
+Verbose, JSON, quiet, redirected and CI runs keep their line-based output.
+
+## Summaries
+
+The module build, project build and unified release summaries use one
+`SummaryFrame` layout (a ConsoleMonster `DashboardFrame`): the outcome on the
+title line, headline meters, a "Needs attention" list counted by an
+`AttentionTally`, an overview and detail sections. A failed module build shows
+the exception through `ExceptionView`.
 
 ## Console font compatibility
 
-ConsoleMonster output follows ConsoleMonster's terminal detection (console font,
-glyph tier, `NO_COLOR`, CI, `CONSOLEMONSTER_*` overrides). The Spectre-based views
-use their own policy: UTF-8 output and emoji font coverage are separate capabilities,
-and progress views, headers, diagnostics, and summaries select decorative icons the
-same way.
-Windows Server 2016 / Windows 10 build 1607 and earlier use simpler icons and an
-ASCII spinner while retaining Unicode rules and borders.
+ConsoleMonster detects the terminal (console font, glyph tier, `NO_COLOR`, CI,
+`CONSOLEMONSTER_*` overrides). Set `POWERFORGE_CONSOLE_MODE` for the current
+process when the terminal font needs a different choice:
 
-Set `POWERFORGE_CONSOLE_MODE` for the current process when the terminal font needs
-a different choice:
+- `ascii`: plain characters; ConsoleMonster's ASCII glyph tier.
+- `unicode`: Unicode text and borders with simpler symbols; the Basic tier.
+- `rich`: the Full tier, including on older Windows.
 
-- `unicode`: Unicode text and borders with simpler icons and an ASCII spinner.
-  ConsoleMonster output uses its Basic glyph tier.
-- `ascii`: plain icons, labels, and borders. ConsoleMonster uses its ASCII tier.
-- `rich`: decorative icons and a Unicode spinner, including on older Windows.
-  ConsoleMonster uses its Full tier.
-
-An unset value selects the platform default. Changing this setting does not install
-fonts or change terminal preferences. Progress labels fit terminal display cells
-and preserve complete text elements when truncated.
+An unset value keeps ConsoleMonster's detection. Changing this setting does not
+install fonts or change terminal preferences.

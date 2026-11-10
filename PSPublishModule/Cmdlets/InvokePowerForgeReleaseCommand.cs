@@ -557,7 +557,7 @@ public sealed partial class InvokePowerForgeReleaseCommand : PSCmdlet
     [Parameter]
     public SwitchParameter ExitCode { get; set; }
 
-    /// <summary>Disables the interactive Spectre renderer while preserving structured pipeline output.</summary>
+    /// <summary>Disables the interactive progress view while preserving structured pipeline output.</summary>
     [Parameter]
     public SwitchParameter NoInteractive { get; set; }
 

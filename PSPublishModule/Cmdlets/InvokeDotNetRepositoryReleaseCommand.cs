@@ -5,7 +5,6 @@ using System.Linq;
 using System.Management.Automation;
 using PowerForge;
 using PowerForge.ConsoleUi;
-using Spectre.Console;
 
 namespace PSPublishModule;
 
@@ -180,15 +179,6 @@ public sealed class InvokeDotNetRepositoryReleaseCommand : PSCmdlet
         var boundParameters = MyInvocation?.BoundParameters;
         var isVerbose = boundParameters?.ContainsKey("Verbose") == true;
         ConsoleEncoding.EnsureUtf8();
-        try
-        {
-            if (!Console.IsOutputRedirected && !Console.IsErrorRedirected)
-                AnsiConsole.Profile.Capabilities.Unicode = true;
-        }
-        catch
-        {
-            // best effort only
-        }
 
         var interactive = ModulePipelineConsoleUi.ShouldUseInteractiveView(isVerbose);
         ILogger logger = interactive

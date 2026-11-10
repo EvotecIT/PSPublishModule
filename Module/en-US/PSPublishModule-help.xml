@@ -20821,7 +20821,7 @@ or export config first via -JsonOnly + -JsonPath.</maml:para>
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="none">
           <maml:name>NoInteractive</maml:name>
           <maml:description>
-            <maml:para>Disables the interactive Spectre progress view.</maml:para>
+            <maml:para>Disables the interactive progress view.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
           <dev:type>
@@ -21087,7 +21087,7 @@ because bundle signing follows the source publish target.</maml:para>
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="none">
           <maml:name>NoInteractive</maml:name>
           <maml:description>
-            <maml:para>Disables the interactive Spectre progress view.</maml:para>
+            <maml:para>Disables the interactive progress view.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
           <dev:type>
@@ -21341,7 +21341,7 @@ because bundle signing follows the source publish target.</maml:para>
       <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="none">
         <maml:name>NoInteractive</maml:name>
         <maml:description>
-          <maml:para>Disables the interactive Spectre progress view.</maml:para>
+          <maml:para>Disables the interactive progress view.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
         <dev:type>
@@ -22728,7 +22728,7 @@ Configuration is provided via a DSL using New-Configuration* cmdlets (typically 
 scriptblock) and then executed by the PowerForge pipeline runner.</maml:para>
       <maml:para>To generate a reusable powerforge.json configuration file (for the PowerForge CLI) without running any build
 steps, use -JsonOnly with -JsonPath.</maml:para>
-      <maml:para>When running in an interactive terminal, pipeline execution uses a Spectre.Console progress UI.
+      <maml:para>When running in an interactive terminal, pipeline execution shows a live progress view.
 Redirect output or use -Verbose to force plain, line-by-line output (useful for CI logs).</maml:para>
       <maml:para>Dependency behavior is composed from the configuration segments you emit. Typically this means:
 New-ConfigurationModule declares dependencies, New-ConfigurationBuild decides whether the build host
@@ -27086,7 +27086,7 @@ and parent directories for standard release config file names.</maml:para>
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="none">
           <maml:name>NoInteractive</maml:name>
           <maml:description>
-            <maml:para>Disables the interactive Spectre renderer while preserving structured pipeline output.</maml:para>
+            <maml:para>Disables the interactive progress view while preserving structured pipeline output.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
           <dev:type>
@@ -28346,7 +28346,7 @@ this switch requires ConfirmAppleAction and is intended only for deliberate reco
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="none">
           <maml:name>NoInteractive</maml:name>
           <maml:description>
-            <maml:para>Disables the interactive Spectre renderer while preserving structured pipeline output.</maml:para>
+            <maml:para>Disables the interactive progress view while preserving structured pipeline output.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
           <dev:type>
@@ -29631,7 +29631,7 @@ and parent directories for standard release config file names.</maml:para>
       <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="none">
         <maml:name>NoInteractive</maml:name>
         <maml:description>
-          <maml:para>Disables the interactive Spectre renderer while preserving structured pipeline output.</maml:para>
+          <maml:para>Disables the interactive progress view while preserving structured pipeline output.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
         <dev:type>
@@ -30419,7 +30419,7 @@ the local date (yyyy.MM.dd) unless a primary project version is available.</maml
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="none">
           <maml:name>NoInteractive</maml:name>
           <maml:description>
-            <maml:para>Disables the interactive Spectre progress view.</maml:para>
+            <maml:para>Disables the interactive progress view.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
           <dev:type>
@@ -30554,7 +30554,7 @@ the local date (yyyy.MM.dd) unless a primary project version is available.</maml
       <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="none">
         <maml:name>NoInteractive</maml:name>
         <maml:description>
-          <maml:para>Disables the interactive Spectre progress view.</maml:para>
+          <maml:para>Disables the interactive progress view.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
         <dev:type>

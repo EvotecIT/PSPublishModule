@@ -23,7 +23,7 @@ namespace PSPublishModule;
 /// steps, use <c>-JsonOnly</c> with <c>-JsonPath</c>.
 /// </para>
 /// <para>
-/// When running in an interactive terminal, pipeline execution uses a Spectre.Console progress UI.
+/// When running in an interactive terminal, pipeline execution shows a live progress view.
 /// Redirect output or use <c>-Verbose</c> to force plain, line-by-line output (useful for CI logs).
 /// </para>
 /// <para>
@@ -483,15 +483,6 @@ public sealed partial class InvokeModuleBuildCommand : PSCmdlet
                            (boundParameters?.TryGetValue(nameof(ExitCode), out var exitCodeValue) == true && IsTrue(exitCodeValue));
 
         ConsoleEncoding.EnsureUtf8();
-        try
-        {
-            if (!Console.IsOutputRedirected && !Console.IsErrorRedirected)
-                Spectre.Console.AnsiConsole.Profile.Capabilities.Unicode = true;
-        }
-        catch
-        {
-            // best effort only
-        }
         ILogger outputLogger = Quiet.IsPresent
             ? new NullLogger { IsVerbose = isVerbose }
             : new ConsoleOutputLogger { IsVerbose = isVerbose };

@@ -170,7 +170,7 @@ public sealed class InvokeDotNetPublishCommand : PSCmdlet
     public SwitchParameter Validate { get; set; }
 
     /// <summary>
-    /// Disables the interactive Spectre progress view.
+    /// Disables the interactive progress view.
     /// </summary>
     [Parameter(ParameterSetName = ParameterSetSettings)]
     [Parameter(ParameterSetName = ParameterSetConfig)]

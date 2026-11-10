@@ -23,8 +23,6 @@
 
   <ItemGroup>
     <PackageReference Include="ConsoleMonster" Version="2.5.0-local.1" />
-    <!-- Live progress and the build summaries stay on Spectre.Console until they move to ConsoleMonster. -->
-    <PackageReference Include="Spectre.Console" Version="0.57.2" />
   </ItemGroup>
 
 </Project>
