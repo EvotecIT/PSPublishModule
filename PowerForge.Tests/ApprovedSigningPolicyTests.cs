@@ -74,7 +74,11 @@ public sealed class ApprovedSigningPolicyTests
                   foreach ($name in @('POWERFORGE_SIGNING_PFX_PATH', 'POWERFORGE_SIGNING_PFX_BASE64', 'POWERFORGE_SIGNING_PFX_PASSWORD', '{{payloadVariable}}', '{{passwordVariable}}')) {
                     if ([Environment]::GetEnvironmentVariable($name, 'Process')) { throw 'Signing secret remained in descendant environment.' }
                   }
-                  [pscustomobject]@{ Status = 'Valid'; SignerCertificate = [pscustomobject]@{ Thumbprint = '{{certificate.Thumbprint}}' } }
+                  [pscustomobject]@{
+                    Status = 'Valid'
+                    SignerCertificate = [pscustomobject]@{ Thumbprint = '{{certificate.Thumbprint}}' }
+                    TimeStamperCertificate = [pscustomobject]@{ Subject = 'CN=Timestamp fixture' }
+                  }
                 }
                 function Get-OpenAuthenticodeSignature {
                   [CmdletBinding()] param([string]$LiteralPath)
@@ -82,6 +86,7 @@ public sealed class ApprovedSigningPolicyTests
                   [pscustomobject]@{ Certificate = $state.SignerCertificate }
                 }
                 function Set-OpenAuthenticodeSignature { throw 'No signing operation is expected for the valid fixture signature.' }
+                function Set-AuthenticodeSignature { throw 'No signing operation is expected for the valid fixture signature.' }
                 """;
             File.WriteAllText(request.ScriptPath!, script.Replace("$ErrorActionPreference = 'Stop'", probe + "\n$ErrorActionPreference = 'Stop'"));
             var child = useDesktop

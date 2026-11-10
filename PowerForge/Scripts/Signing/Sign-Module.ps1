@@ -394,7 +394,13 @@ try {
           }
           if (-not [string]::IsNullOrWhiteSpace($tp)) { $tp = ($tp -replace '\s','').ToUpperInvariant() }
           if (-not [string]::IsNullOrWhiteSpace($tp) -and $tp -eq $thisTp) {
-            $alreadyByThis++
+            # A failed timestamp request can leave a valid own signature behind.
+            # A new release invocation must finish that output rather than accept it.
+            if ($null -eq $sig.PSObject.Properties['TimeStamperCertificate'].Value) {
+              $preDisposition[$f] = 'Target'
+            } else {
+              $alreadyByThis++
+            }
           } elseif (-not $overwrite) {
             if ($null -eq $sig.SignerCertificate -or [string]::IsNullOrWhiteSpace($tp)) {
               $preDisposition[$f] = 'Fail'
