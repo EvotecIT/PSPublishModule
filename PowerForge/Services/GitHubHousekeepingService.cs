@@ -163,6 +163,7 @@ public sealed class GitHubHousekeepingService
                 DiagnosticsRetentionDays = spec.Runner.DiagnosticsRetentionDays,
                 ActionsRetentionDays = spec.Runner.ActionsRetentionDays,
                 WorkspacesRetentionDays = spec.Runner.WorkspacesRetentionDays,
+                ProtectedWorkspaces = spec.Runner.ProtectedWorkspaces,
                 ToolCacheRetentionDays = spec.Runner.ToolCacheRetentionDays,
                 DotNetSdkVersionsToKeepPerMajorMinor = spec.Runner.DotNetSdkVersionsToKeepPerMajorMinor,
                 DryRun = spec.DryRun,
