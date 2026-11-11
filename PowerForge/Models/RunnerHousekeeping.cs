@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace PowerForge;
 
@@ -63,6 +64,11 @@ public sealed class RunnerHousekeepingSpec
     /// any non-active, non-internal workspace immediately eligible for cleanup.
     /// </summary>
     public int WorkspacesRetentionDays { get; set; } = 3;
+
+    /// <summary>
+    /// Top-level workspace directory names that must survive cleanup, keyed by machine name.
+    /// </summary>
+    public Dictionary<string, string[]> ProtectedWorkspaces { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     /// Retention window for runner tool cache directories.

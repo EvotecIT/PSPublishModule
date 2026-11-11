@@ -145,6 +145,11 @@
         "DiagnosticsRetentionDays": { "type": "integer", "minimum": 0 },
         "ActionsRetentionDays": { "type": "integer", "minimum": 0 },
         "WorkspacesRetentionDays": { "type": "integer", "minimum": 0 },
+        "ProtectedWorkspaces": {
+          "type": "object",
+          "description": "Top-level workspace directory names preserved on each machine.",
+          "additionalProperties": { "type": "array", "items": { "type": "string", "minLength": 1 } }
+        },
         "ToolCacheRetentionDays": { "type": "integer", "minimum": 0 },
         "DotNetSdkVersionsToKeepPerMajorMinor": { "type": "integer", "minimum": 1 },
         "Aggressive": { "type": "boolean" },

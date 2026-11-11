@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace PowerForge;
 
@@ -211,6 +212,11 @@ public sealed class GitHubHousekeepingRunnerSpec
     /// that is not the active checkout or a runner-internal directory.
     /// </summary>
     public int WorkspacesRetentionDays { get; set; } = 3;
+
+    /// <summary>
+    /// Top-level workspace directory names that must survive cleanup, keyed by machine name.
+    /// </summary>
+    public Dictionary<string, string[]> ProtectedWorkspaces { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     /// Retention window for tool cache directories.
