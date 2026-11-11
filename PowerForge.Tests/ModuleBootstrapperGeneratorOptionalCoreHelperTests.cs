@@ -22,6 +22,8 @@ public partial class ModuleBootstrapperGeneratorTests
             var helper = BuildFixtureProject(root, "Helper", "DemoModule",
                 "namespace DemoModule; public static class Initialize { public static string Read() => \"core-helper\"; }");
             File.Copy(helper, Path.Combine(libRoot, "DemoModule.dll"));
+            var nativeRoot = Directory.CreateDirectory(Path.Combine(moduleRoot, "Lib", "runtimes", "win-x64", "native")).FullName;
+            File.WriteAllText(Path.Combine(nativeRoot, "example.dll"), "native asset, not a Desktop managed helper");
             File.WriteAllText(Path.Combine(publicRoot, "Get-HelperStatus.ps1"), """
 function Get-HelperStatus {
     if ($PSEdition -eq 'Core') { [DemoModule.Initialize]::Read() } else { 'script-only' }
@@ -29,7 +31,7 @@ function Get-HelperStatus {
 """);
             ModuleBootstrapperGenerator.Generate(moduleRoot, "DemoModule",
                 new ExportSet(new[] { "Get-HelperStatus" }, Array.Empty<string>(), Array.Empty<string>()),
-                new[] { "DemoModule.dll" }, handleRuntimes: false,
+                new[] { "DemoModule.dll" }, handleRuntimes: true,
                 useAssemblyLoadContext: useAssemblyLoadContext, targetFrameworks: new[] { "net8.0" });
 
             var modulePath = Path.Combine(moduleRoot, "DemoModule.psm1").Replace("'", "''", StringComparison.Ordinal);

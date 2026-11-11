@@ -5,6 +5,7 @@ if ($PSEdition -ne 'Core' -and ($Core -or $HasNamedCorePayload) -and -not $Defau
         Where-Object {
             if ($_.Extension -ine '.dll') { return $false }
             $RelativeCandidate = $_.FullName.Substring($LibRoot.Length).TrimStart([char[]]@([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar))
+            if ($RelativeCandidate -match '^runtimes[\\/][^\\/]+[\\/]native[\\/]') { return $false }
             $TopLevelFolder = @($RelativeCandidate -split '[\\/]')[0]
             $TopLevelFolder -notmatch '^Core(?:-(?:net|netcoreapp)\d+\.\d+)?$'
         }).Count -gt 0
