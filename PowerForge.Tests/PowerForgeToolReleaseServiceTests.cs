@@ -272,19 +272,39 @@ public sealed class PowerForgeToolReleaseServiceTests
     [Fact]
     public void RunProcess_cancellation_terminates_the_child_process()
     {
+        var readyPath = Path.Combine(Path.GetTempPath(), $"PowerForge-child-{Guid.NewGuid():N}.ready");
         var startInfo = OperatingSystem.IsWindows()
-            ? new ProcessStartInfo("cmd.exe", "/d /s /c \"ping -n 31 127.0.0.1 > nul\"")
-            : new ProcessStartInfo("/bin/sh", "-c \"sleep 30\"");
+            ? new ProcessStartInfo("cmd.exe", $"/d /s /c \"echo ready > \"{readyPath}\" & ping -n 31 127.0.0.1 > nul\"")
+            : new ProcessStartInfo("/bin/sh", $"-c \"echo ready > '{readyPath}'; sleep 30\"");
         startInfo.RedirectStandardOutput = true;
         startInfo.RedirectStandardError = true;
         startInfo.UseShellExecute = false;
         startInfo.CreateNoWindow = true;
-        using var cancellation = new CancellationTokenSource(TimeSpan.FromMilliseconds(250));
-        var stopwatch = Stopwatch.StartNew();
+        using var cancellation = new CancellationTokenSource();
+        var stopwatch = new Stopwatch();
+        var childStarted = false;
+        // Measure termination after cancellation, independently of a busy test
+        // host's thread-pool timer scheduling or process startup.
+        var cancelThread = new Thread(() =>
+        {
+            childStarted = SpinWait.SpinUntil(() => File.Exists(readyPath), TimeSpan.FromSeconds(10));
+            stopwatch.Start();
+            cancellation.Cancel();
+        });
+        cancelThread.Start();
 
-        Assert.ThrowsAny<OperationCanceledException>(
-            () => PowerForgeToolReleaseService.RunProcess(startInfo, cancellation.Token));
+        try
+        {
+            Assert.ThrowsAny<OperationCanceledException>(
+                () => PowerForgeToolReleaseService.RunProcess(startInfo, cancellation.Token));
+        }
+        finally
+        {
+            cancelThread.Join();
+            File.Delete(readyPath);
+        }
 
+        Assert.True(childStarted, "The child did not signal startup before cancellation.");
         Assert.True(
             stopwatch.Elapsed < TimeSpan.FromSeconds(5),
             $"Cancellation took {stopwatch.Elapsed}.");

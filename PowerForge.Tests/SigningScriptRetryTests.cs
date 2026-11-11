@@ -6,10 +6,14 @@ namespace PowerForge.Tests;
 public sealed class SigningScriptRetryTests
 {
     [Theory]
-    [InlineData(false, 1, 0, 0, 1)]
-    [InlineData(true, 0, 1, 1, 0)]
-    public void ExistingThirdPartySignature_IsPreservedOrOverwrittenWithConsistentEvidence(
+    [InlineData(false, false, false, 1, 0, 0, 1)]
+    [InlineData(true, false, false, 0, 1, 1, 0)]
+    [InlineData(false, true, true, 0, 0, 0, 0)]
+    [InlineData(false, true, false, 0, 1, 1, 0)]
+    public void ExistingSignature_PreservesVendorAndCompleteSignatures_AndRepairsOwnedTimestamp(
         bool overwrite,
+        bool sameSigner,
+        bool timestamped,
         int expectedAlreadyOther,
         int expectedAttempted,
         int expectedResigned,
@@ -18,13 +22,14 @@ public sealed class SigningScriptRetryTests
         if (Path.DirectorySeparatorChar != '\\')
             return;
 
-        var evidence = RunExistingSignatureHarness(overwrite);
+        var evidence = RunExistingSignatureHarness(overwrite, sameSigner, timestamped);
 
         Assert.Equal(expectedAlreadyOther, evidence.AlreadySignedOther);
+        Assert.Equal(sameSigner && timestamped ? 1 : 0, evidence.AlreadySignedByThisCert);
         Assert.Equal(expectedAttempted, evidence.Attempted);
         Assert.Equal(expectedResigned, evidence.Resigned);
         Assert.Equal(expectedPreserved, evidence.PreservedThirdPartySignatures.Length);
-        if (!overwrite)
+        if (expectedPreserved > 0)
         {
             ModuleSigningPreservedSignature signature = Assert.Single(evidence.PreservedThirdPartySignatures);
             Assert.Equal("CN=Vendor", signature.Subject);
@@ -314,7 +319,7 @@ public sealed class SigningScriptRetryTests
         }
     }
 
-    private static ModuleSigningResult RunExistingSignatureHarness(bool overwrite)
+    private static ModuleSigningResult RunExistingSignatureHarness(bool overwrite, bool sameSigner, bool timestamped)
     {
         string rootPath = Directory.CreateDirectory(Path.Combine(
             Path.GetTempPath(),
@@ -332,6 +337,8 @@ public sealed class SigningScriptRetryTests
                 $scriptText = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('{{Convert.ToBase64String(Encoding.UTF8.GetBytes(script))}}'))
                 $rootPath = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('{{Convert.ToBase64String(Encoding.UTF8.GetBytes(rootPath))}}'))
                 $packageFileListPath = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('{{Convert.ToBase64String(Encoding.UTF8.GetBytes(packageFileListPath))}}'))
+                $sameSigner = [Convert]::ToBoolean('{{sameSigner}}')
+                $timestamped = [Convert]::ToBoolean('{{timestamped}}')
                 function Get-Item {
                   [CmdletBinding()]
                   param([string]$LiteralPath)
@@ -350,9 +357,10 @@ public sealed class SigningScriptRetryTests
                   [pscustomobject]@{
                     Status = 'Valid'
                     SignerCertificate = [pscustomobject]@{
-                      Thumbprint = 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
+                      Thumbprint = $(if ($sameSigner) { 'BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB' } else { 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA' })
                       Subject = 'CN=Vendor'
                     }
+                    TimeStamperCertificate = $(if ($timestamped) { [pscustomobject]@{ Subject = 'CN=Timestamp fixture' } } else { $null })
                   }
                 }
                 function Set-AuthenticodeSignature {

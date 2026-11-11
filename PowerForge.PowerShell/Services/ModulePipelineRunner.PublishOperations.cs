@@ -95,7 +95,7 @@ public sealed partial class ModulePipelineRunner
         }
     }
 
-    private void FinalizeAndValidateRepositoryModulePayload(
+    private ReleaseValidationIntegrityCheckpoint? FinalizeAndValidateRepositoryModulePayload(
         ModulePipelinePlan plan,
         ModulePipelineRunState state,
         string moduleRoot,
@@ -103,6 +103,10 @@ public sealed partial class ModulePipelineRunner
         bool finalizeSignatures)
     {
         ValidateDeliveredBinaryDependencies(plan, moduleRoot);
+        if (state.PublicationIntegrity is not null)
+        {
+            return ValidateFinalizedRepositoryPayload(state, moduleRoot);
+        }
         // Preflight validates the derived layout without invoking either signing path.
         SigningOptionsConfiguration? signing = finalizeSignatures && plan.SignModule ? plan.Signing : null;
         if (signing is not null)
@@ -122,6 +126,7 @@ public sealed partial class ModulePipelineRunner
             state.SigningResult,
             signing);
         ValidateDeliveredBinaryDependencies(plan, moduleRoot);
+        return null;
     }
 
     private void PreflightSynchronizedPackageGitHubRetrySafety(
@@ -376,14 +381,22 @@ public sealed partial class ModulePipelineRunner
         try
         {
             ValidateModuleReleaseSourceUnchangedBeforePublish(plan, state, buildResult);
+            ReleaseValidationIntegrityCheckpoint? repositoryPayloadIntegrity = null;
+            void ValidatePreparedRepositoryPayload()
+            {
+                if (repositoryPayloadIntegrity is { } checkpoint)
+                    PowerForgeReleaseService.ValidateIntegrityUnchanged(checkpoint.Paths, checkpoint.Hashes, CancellationToken.None);
+            }
             Action guardedRemotePublishAttempted = () =>
             {
                 ValidateModuleReleaseSourceUnchangedBeforePublish(plan, state, buildResult);
+                ValidatePreparedRepositoryPayload();
                 remotePublishAttempted();
             };
             Action guardedRemoteSideEffectObserved = () =>
             {
                 ValidateModuleReleaseSourceUnchangedBeforePublish(plan, state, buildResult);
+                ValidatePreparedRepositoryPayload();
                 MarkSynchronizedReleaseRemoteSideEffectObserved(state);
             };
             state.PublishResults.Add(ShouldPublishUnifiedGitHubRelease(plan, publish.Configuration)
@@ -397,7 +410,8 @@ public sealed partial class ModulePipelineRunner
                     remotePublishAttempted: guardedRemotePublishAttempted,
                     remoteSideEffectObserved: guardedRemoteSideEffectObserved,
                     finalizeRepositoryModule: (root, moduleName) =>
-                        FinalizeAndValidateRepositoryModulePayload(plan, state, root, moduleName, finalizeSignatures: true),
+                        repositoryPayloadIntegrity = FinalizeAndValidateRepositoryModulePayload(
+                            plan, state, root, moduleName, finalizeSignatures: true),
                     gitHubProgress: gitHubProgress));
             session.Done(step);
         }
@@ -413,6 +427,7 @@ public sealed partial class ModulePipelineRunner
         ModulePipelineRunState state,
         ModuleBuildResult buildResult)
     {
+        ValidatePublicationCheckpointIntegrity(state);
         if (!plan.RequireReleaseSourceUnchanged)
             return;
 

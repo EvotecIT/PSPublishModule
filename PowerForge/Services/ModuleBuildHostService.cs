@@ -399,6 +399,8 @@ public sealed class ModuleBuildHostService
             $"$moduleBuildArguments = @{{ ConfigPath = {QuoteLiteral(configPath)}; ExitCode = $true }}"
         };
 
+        arguments.Add(BuildPublicationCheckpointEnvironmentAssignment(request));
+
         AddDirectStringArgument(arguments, "BuildConfiguration", request.Configuration);
         AddDirectStringArgument(arguments, "BuildFramework", request.Framework);
         if (request.RunMode.HasValue)
@@ -478,6 +480,7 @@ public sealed class ModuleBuildHostService
             "$buildScriptArguments = @{}"
         };
 
+        arguments.Add(BuildPublicationCheckpointEnvironmentAssignment(request));
         if (request.ReleaseCheckpoint)
         {
             arguments.Add("$PSDefaultParameterValues['Invoke-ModuleBuild:PowerForgeReleaseCheckpoint'] = $true");
@@ -565,6 +568,16 @@ public sealed class ModuleBuildHostService
         arguments.Add(". $buildScriptPath @buildScriptArguments");
 
         return string.Join(Environment.NewLine, arguments);
+    }
+
+    private static string BuildPublicationCheckpointEnvironmentAssignment(ModuleBuildHostBuildRequest request)
+    {
+        string? fingerprint = request.ReleaseCheckpoint ? request.PublicationCheckpointSha256 : null;
+        // Publish cannot trust a newly restored checkpoint when the build captured none.
+        if (request.ReleaseCheckpoint && request.RunMode == ConfigurationGateMode.Publish && string.IsNullOrWhiteSpace(fingerprint))
+            fingerprint = "missing";
+        string value = string.IsNullOrWhiteSpace(fingerprint) ? "$null" : QuoteLiteral(fingerprint!);
+        return $"$env:{ModuleBuildSpec.PublicationCheckpointHashEnvironmentVariable} = {value}";
     }
 
     private static void AddOptionalStringArgument(List<string> arguments, string parameterName, string? value)

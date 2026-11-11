@@ -194,7 +194,7 @@ public sealed class AuthenticodeSigningService
     {
         var filesToSign = request.OverwriteSigned
             ? files
-            : GetUnsignedFiles("Get-AuthenticodeSignature", files);
+            : GetFilesRequiringSignature("Get-AuthenticodeSignature", files, request);
         if (filesToSign.Length == 0)
             return Array.Empty<PSObject>();
 
@@ -279,7 +279,7 @@ public sealed class AuthenticodeSigningService
         return signatures;
     }
 
-    private string[] GetUnsignedFiles(string commandName, string[] files)
+    private string[] GetFilesRequiringSignature(string commandName, string[] files, AuthenticodeSignRequest request)
     {
         var signatures = InvokeMany(commandName, ps => ps.AddParameter("FilePath", files));
         var unsigned = new List<string>();
@@ -288,7 +288,15 @@ public sealed class AuthenticodeSigningService
         {
             var signature = signatures[i];
             var status = signature.Properties["Status"]?.Value?.ToString();
-            if (!string.Equals(status, "NotSigned", StringComparison.OrdinalIgnoreCase))
+            var signer = signature.Properties["SignerCertificate"]?.Value as X509Certificate2;
+            // A failed timestamp request can leave a valid code signature behind.
+            // Repair only this identity's partial output; preserve vendor signatures.
+            var needsTimestamp = !string.IsNullOrWhiteSpace(request.TimeStampServer) &&
+                string.Equals(status, "Valid", StringComparison.OrdinalIgnoreCase) &&
+                signer is not null &&
+                NormalizeThumbprint(signer.Thumbprint) == NormalizeThumbprint(request.Certificate.Thumbprint) &&
+                signature.Properties["TimeStamperCertificate"]?.Value is null;
+            if (!string.Equals(status, "NotSigned", StringComparison.OrdinalIgnoreCase) && !needsTimestamp)
                 continue;
 
             var path = signature.Properties["Path"]?.Value?.ToString();

@@ -36,7 +36,8 @@
           "PowerForge.Blazor",
           "PowerForge.Web",
           "PowerForge.Web.Protocols",
-          "PowerForge.Web.Cli"
+          "PowerForge.Web.Cli",
+          "PowerForge.Generators"
         ]
       }
     },

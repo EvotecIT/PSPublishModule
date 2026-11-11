@@ -18,11 +18,15 @@ internal static partial class Program
         string commandName = "release")
     {
         var argv = filteredArgs.Skip(1).ToArray();
+        if (argv.FirstOrDefault() == "prepare-scoop")
+            return CommandScoop(argv.Skip(1).ToArray(), logger);
         if (argv.FirstOrDefault() == "prepare-catalog")
             return CommandReleaseCatalog(argv.Skip(1).ToArray(), logger);
         if (argv.FirstOrDefault() == "catalog")
             return CommandCatalogUpdate(argv.Skip(1).ToArray(), logger);
         var outputJson = IsJsonOutput(argv);
+        if (argv.FirstOrDefault() is { } subcommand && !subcommand.StartsWith("-", StringComparison.Ordinal))
+            return WriteReleaseError(outputJson, commandName, 2, $"Unknown release subcommand '{subcommand}'.", logger);
         if (argv.Any(a => a.Equals("-h", StringComparison.OrdinalIgnoreCase) || a.Equals("--help", StringComparison.OrdinalIgnoreCase)))
         {
             if (outputJson)
