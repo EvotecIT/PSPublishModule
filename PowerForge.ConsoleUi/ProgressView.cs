@@ -193,7 +193,8 @@ internal sealed partial class ProgressView
             if (!_rows.TryGetValue(key, out var row)) return;
             var now = _clock();
             row.State = state;
-            row.Detail = Clean(detail);
+            // A completed stage folds into "done/total · time"; its progress detail ("Package 60/60") would repeat that.
+            row.Detail = state == ProgressState.Completed && _rows.Values.Any(child => child.Parent == row) ? null : Clean(detail);
             row.LastActivity = now;
             if (row.Step is null) _idleSince = now;
             // The ledger times a row from its running event; work measured elsewhere passes the time it took.

@@ -3,13 +3,13 @@
              |-- [OK] Module 02/03 Pack artefact Unpacked (Local)                                       packed
              |-- [OK] Module 03/03 Publish PowerShellGallery                                   published - 0ms
 [02/02] [OK] Build NuGet packages                                          10 detailed step(s) completed - 0ms
-             |-- [OK] Resolve project versions                                             Project 02/02 - 0ms
+             |-- [OK] Resolve project versions                                                             0ms
                  |-- [OK] Project 01/02 Versioning item                                               complete
-             |-- [OK] Build packages and archives                                          Project 02/02 - 0ms
+             |-- [OK] Build packages and archives                                                          0ms
                  |-- [OK] Project 01/02 PackageBuild item                                             complete
-             |-- [OK] Sign NuGet packages                                                  Package 02/02 - 0ms
+             |-- [OK] Sign NuGet packages                                                                  0ms
                  |-- [OK] Package 01/02 PackageSigning item                                           complete
-             |-- [OK] Publish NuGet packages                                               Package 02/02 - 0ms
+             |-- [OK] Publish NuGet packages                                                               0ms
                  |-- [OK] Package 01/02 NuGetPublish item                                             complete
-             |-- [OK] Publish project GitHub release                                       Release 02/02 - 0ms
+             |-- [OK] Publish project GitHub release                                                       0ms
                  |-- [OK] Asset 01/02 GitHubPublish item                                              complete

@@ -16,7 +16,7 @@ Coordinated steps  7
 [01/07] [OK] Prepare module dependencies                                                                   0ms
 [02/07] [OK] Build and publish NuGet packages (SamplePackages)                                             0ms
              |-- [OK] Build packages and archives                              Project 01/01 - 1 package - 0ms
-             |-- [OK] Sign NuGet packages                                                  Package 03/03 - 0ms
+             |-- [OK] Sign NuGet packages                                                                  0ms
                  |-- [OK] Package 01/03 Sample.Part1.1.0.0.nupkg                                  signed - 0ms
                  |-- [OK] Package 02/03 Sample.Part2.1.0.0.nupkg                                  signed - 0ms
                  |-- [OK] Package 03/03 Sample.Part3.1.0.0.nupkg                                  signed - 0ms
