@@ -9,8 +9,15 @@ const scripts = process.env.POWERFORGE_RUNNER_SCRIPTS || path.join(repository, '
 const shells = process.platform === 'win32' ? ['pwsh.exe', 'powershell.exe'] : [];
 
 // Service/worker identity, registry values and the system root location are external
-// boundaries. Directory creation and ACL enforcement are real and require an administrator.
+// boundaries. The fixture is its own virtual filesystem root: hosted image ACLs
+// above it are unrelated to the modeled Program Files/SystemTemp hierarchy.
+// Directory creation and ACL enforcement inside it are real and require an administrator.
 const platformBoundary = `
+function Split-Path {
+    param($Path,[switch]$Parent)
+    if ($Parent -and $Path -eq $env:PROBE_CONTAINER) { return '' }
+    Microsoft.PowerShell.Management\\Split-Path -Path $Path -Parent
+}
 function Join-Path {
     param($Path,$ChildPath)
     if ($Path -eq $env:SystemRoot -and $ChildPath -like 'SystemTemp*') { $Path=$env:PROBE_WINDOWS }
@@ -41,6 +48,19 @@ function Get-CimInstance {
 
 function fixture() {
   const root = fs.mkdtempSync(path.join(process.env.TEST_TMP_ROOT || path.join(process.env.SystemRoot, 'SystemTemp'), 'powerforge-runner-temp-'));
+  const secure = spawnSync('pwsh.exe', ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command', `
+$ErrorActionPreference='Stop'
+$acl=[Security.AccessControl.DirectorySecurity]::new()
+$acl.SetAccessRuleProtection($true,$false)
+$acl.SetOwner([Security.Principal.SecurityIdentifier]::new('S-1-5-32-544'))
+foreach($sid in @('S-1-5-18','S-1-5-32-544')) {
+    $acl.AddAccessRule([Security.AccessControl.FileSystemAccessRule]::new(
+        [Security.Principal.SecurityIdentifier]::new($sid),'FullControl','ContainerInherit,ObjectInherit','None','Allow'))
+}
+Set-Acl -LiteralPath $env:PROBE_CONTAINER -AclObject $acl
+`], { encoding: 'utf8', windowsHide: true, timeout: 30_000, env: { ...process.env, PROBE_CONTAINER: root } });
+  assert.ifError(secure.error);
+  assert.equal(secure.status, 0, secure.stdout + secure.stderr);
   const runner = path.join(root, 'runner');
   const windows = path.join(root, 'windows');
   const programFiles = path.join(root, 'program-files');
@@ -60,7 +80,7 @@ function invoke(shell, f, command, extraEnv = {}) {
   const text = `$ErrorActionPreference='Stop'\nforeach($m in @('Management','Security','Utility')) { Import-Module (Join-Path $PSHOME ('Modules/Microsoft.PowerShell.'+$m+'/Microsoft.PowerShell.'+$m+'.psd1')) -Force -ErrorAction Stop }\n$env:ProgramFiles=$env:PROBE_PROGRAM_FILES\n${platformBoundary}\ntry { ${command}; exit 0 } catch { [Console]::Error.WriteLine($_.Exception.Message); [Console]::Error.WriteLine($_.ScriptStackTrace); exit 1 }`;
   const result = spawnSync(shell, ['-NoLogo', '-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(text, 'utf16le').toString('base64')], {
     cwd: repository, encoding: 'utf8', windowsHide: true, timeout: 30_000,
-    env: { ...process.env, PROBE_WINDOWS: f.windows, PROBE_PROGRAM_FILES: f.programFiles, PROBE_RUNNER: f.runner,
+    env: { ...process.env, PROBE_CONTAINER: f.root, PROBE_WINDOWS: f.windows, PROBE_PROGRAM_FILES: f.programFiles, PROBE_RUNNER: f.runner,
       PROBE_SCRATCH: f.scratch, PROBE_SCRIPTS: scripts, GITHUB_ACTIONS: 'true', GITHUB_RUN_ID: '12345', ...extraEnv }
   });
   assert.ifError(result.error);

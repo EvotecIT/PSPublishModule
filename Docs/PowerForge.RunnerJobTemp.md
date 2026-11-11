@@ -61,6 +61,15 @@ create a disposable marker there, and confirm the completion hook removes it.
 Check that the shared NuGet lock path and another runner's marker survive. Inspect
 the start/completion receipts in the job log and compare disk space before/after.
 
+The manual `Qualify Windows runner temp hooks` workflow provides a short SYSTEM
+canary on one exact fleet label. Before dispatch, choose a unique 32-character
+lowercase hexadecimal probe ID and seed `Canary-<id>.start.tmp` in that runner's
+private root and `Canary-<id>.shared.tmp` in its shared NuGet scratch directory.
+The job checks start cleanup, the shared control and both PowerShell temp paths,
+then creates a completion marker. After the job, independently verify that
+`Canary-<id>.complete.tmp` is gone and the shared marker survives. Remove only the
+owned shared marker. A green job without that post-job check is incomplete proof.
+
 To roll back, admit the idle runner and stop its service again. Run the installer
 with the original arguments and `-Mode Restore`, then restore its service state.
 The original `.env` bytes or original absence are restored. If `.env` changed after

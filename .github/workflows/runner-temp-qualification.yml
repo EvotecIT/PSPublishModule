@@ -1,0 +1,58 @@
+name: Qualify Windows runner temp hooks
+
+on:
+  workflow_dispatch:
+    inputs:
+      runner_label:
+        description: Exact Windows runner label to qualify after idle installation.
+        required: true
+        type: choice
+        options:
+          - runner-github-runner-w
+          - runner-githubrunnerx1
+          - runner-githubrunnerx2
+          - runner-githubrunnerx3
+          - runner-githubrunnerx4
+          - runner-githubrunnerx5
+      probe_id:
+        description: 32-character hexadecimal ID of the marker seeded before dispatch.
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  qualify:
+    # This central fleet-maintenance workflow is maintainer-dispatched only.
+    if: github.repository == 'EvotecIT/PSPublishModule'
+    runs-on: [self-hosted, windows, '${{ inputs.runner_label }}']
+    timeout-minutes: 5
+    steps:
+      - name: Verify SYSTEM temporary storage and prepare completion markers
+        shell: pwsh
+        env:
+          PROBE_ID: ${{ inputs.probe_id }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ($env:PROBE_ID -cnotmatch '^[a-f0-9]{32}$') { throw 'Invalid probe ID.' }
+          if (-not [Security.Principal.WindowsIdentity]::GetCurrent().IsSystem) { throw 'The canary must run as SYSTEM.' }
+          $expected = Join-Path $env:SystemRoot ('SystemTemp\PowerForge.RunnerJobs\' + $env:RUNNER_NAME)
+          foreach ($shell in @('pwsh.exe', 'powershell.exe')) {
+            $actual = & $shell -NoLogo -NoProfile -NonInteractive -Command '[IO.Path]::GetTempPath()'
+            if ($LASTEXITCODE -ne 0 -or -not [string]::Equals($actual.Trim().TrimEnd('\'), $expected, [StringComparison]::OrdinalIgnoreCase)) {
+              throw 'A supported PowerShell runtime is not using private runner temporary storage.'
+            }
+          }
+          $startMarker = Join-Path $expected ('Canary-' + $env:PROBE_ID + '.start.tmp')
+          if (Test-Path -LiteralPath $startMarker) { throw 'The start hook did not remove its seeded marker.' }
+          $shared = $env:NUGET_SCRATCH
+          if ([string]::IsNullOrWhiteSpace($shared) -or $shared.StartsWith($expected, [StringComparison]::OrdinalIgnoreCase)) {
+            throw 'Shared NuGet locks are not isolated from job temporary cleanup.'
+          }
+          $sharedMarker = Join-Path $shared ('Canary-' + $env:PROBE_ID + '.shared.tmp')
+          if (-not (Test-Path -LiteralPath $sharedMarker)) { throw 'The start hook did not preserve its shared control marker.' }
+          $completedMarker = Join-Path $expected ('Canary-' + $env:PROBE_ID + '.complete.tmp')
+          [IO.File]::WriteAllText($completedMarker, 'Disposable SYSTEM job completion marker.')
+          Write-Output 'SYSTEM identity, both PowerShell temp paths, start cleanup and shared-lock preservation verified.'
+          Write-Output 'After the completion hook, verify the completion marker is absent and the shared marker survives; then remove the owned shared marker.'

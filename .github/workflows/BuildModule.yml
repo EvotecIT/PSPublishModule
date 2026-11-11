@@ -299,7 +299,7 @@ jobs:
       - uses: ./.github/actions/setup-dotnet
       - name: Test Windows runner temporary cleanup
         shell: pwsh
-        timeout-minutes: 5
+        timeout-minutes: 8
         run: node --test Build/Tests/runner-job-temp.test.cjs
       - name: Restore NuGet packages
         id: nuget-cache
