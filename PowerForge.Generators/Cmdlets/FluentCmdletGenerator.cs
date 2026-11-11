@@ -306,8 +306,6 @@ namespace PowerForge.Generators.Cmdlets {
                 string summary = Summary(property);
                 return summary == "." ? "Sets " + property.Name + "." : summary.Substring(2);
             }
-
-            private static string Escape(string name) => SyntaxFacts.GetKeywordKind(name) != SyntaxKind.None ? "@" + name : name;
         }
     }
 }

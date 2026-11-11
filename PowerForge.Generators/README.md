@@ -74,6 +74,15 @@ hashtable values are converted with PowerShell's own rules.
 - A name PowerShell or the cmdlet base class already uses is PFF006; a cmdlet that is not partial, or a project without a
   PowerShell reference, is PFF007.
 
+### What stays handwritten
+
+These have no single right mapping, so the cmdlet declares them and the generator steps aside:
+
+- parameter sets, `Mandatory`, `Position`, aliases, validation and argument completers (declare the parameter);
+- children collected from `-Content {}` or the pipeline, and data projection such as `-XProperty`;
+- delegate-valued properties, which would need script blocks;
+- values the cmdlet computes from several inputs or from the host, such as `-NoLive` or a terminal profile.
+
 ## Shared vocabulary
 
 ```xml

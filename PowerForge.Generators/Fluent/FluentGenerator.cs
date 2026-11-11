@@ -622,9 +622,6 @@ namespace PowerForge.Generators.Fluent {
 
                 private static string Cref(IPropertySymbol property) => "<see cref=\"" + (property.GetDocumentationCommentId() ?? property.Name) + "\"/>";
 
-                private static string Escape(string name) =>
-                    SyntaxFacts.GetKeywordKind(name) != SyntaxKind.None ? "@" + name : name;
-
                 private static string Camel(string name) {
                     string camel = char.ToLowerInvariant(name[0]) + name.Substring(1);
                     return SyntaxFacts.GetKeywordKind(camel) != SyntaxKind.None || SyntaxFacts.GetContextualKeywordKind(camel) != SyntaxKind.None ? "@" + camel : camel;

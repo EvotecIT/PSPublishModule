@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Xml.Linq;
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
 
 namespace PowerForge.Generators.Fluent {
     /// <summary>
@@ -117,6 +118,9 @@ namespace PowerForge.Generators.Fluent {
         }
 
         /// <summary>The singular of a collection property name: Items -> Item, Children -> Child, Series -> Series.</summary>
+        // A name as a C# identifier in generated code: keywords get an @ prefix (@event).
+        internal static string Escape(string name) => SyntaxFacts.GetKeywordKind(name) != SyntaxKind.None ? "@" + name : name;
+
         internal static string Singular(IPropertySymbol property) => Singular(property.Name);
 
         internal static string Singular(string name) {
