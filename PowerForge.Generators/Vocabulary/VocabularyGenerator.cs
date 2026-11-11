@@ -35,7 +35,7 @@ namespace PowerForge.Generators.Vocabulary {
         }
 
         private static void Emit(SourceProductionContext output, (string Types, string Namespace) settings) {
-            List<string> requested = settings.Types.Split(new[] { ';', ',' }, StringSplitOptions.RemoveEmptyEntries).Select(name => name.Trim()).Where(name => name.Length > 0).ToList();
+            List<string> requested = FluentModel.ListSetting(settings.Types);
             if (requested.Count == 0) {
                 return;
             }

@@ -140,6 +140,66 @@ public sealed class FluentCmdletGeneratorTests {
         Assert.Equal(new[] { "PFF006", "PFF007", "PFF009" }, diagnostics.Select(d => d.Id).OrderBy(id => id, StringComparer.Ordinal));
     }
 
+    [Fact]
+    public void MembersThatShareAParameterOrKeyAreBuildErrors() {
+        const string module = """
+            using System.Management.Automation;
+            using PowerForge.Fluent;
+
+            namespace Sample {
+                public sealed class Panel {
+                    public bool IsOpen { get; set; }
+                    public bool Open { get; set; }
+                }
+
+                public sealed class Dashboard {
+                    public bool IsVisible { get; set; }
+                    public bool Visible { get; set; }
+                    public Panel Panel { get; set; } = new();
+                }
+
+                [FluentCmdlet(typeof(Dashboard))]
+                [Cmdlet(VerbsCommon.New, "Dashboard")]
+                public sealed partial class NewDashboardCommand : PSCmdlet {
+                }
+            }
+            """;
+
+        (_, ImmutableArray<Diagnostic> diagnostics) = Run(module);
+
+        Assert.Equal(new[] { "PFF003", "PFF003" }, diagnostics.Select(d => d.Id));
+    }
+
+    [Fact]
+    public void SettingsWithLookalikeNamesOrRequiredMembersCompile() {
+        const string module = """
+            using System.Management.Automation;
+            using PowerForge.Fluent;
+
+            namespace A.B { public sealed class C { public int Size { get; set; } } }
+            namespace A { public sealed class BC { public int Size { get; set; } } }
+
+            namespace Sample {
+                public sealed class Border {
+                    public required string Style { get; set; }
+                }
+
+                public sealed class Card {
+                    public A.B.C First { get; set; } = new();
+                    public A.BC Second { get; set; } = new();
+                    public Border Border { get; set; } = new() { Style = "solid" };
+                }
+
+                [FluentCmdlet(typeof(Card))]
+                [Cmdlet(VerbsCommon.New, "Card")]
+                public sealed partial class NewCardCommand : PSCmdlet {
+                }
+            }
+            """;
+
+        Compile(module);
+    }
+
     private static Assembly Compile(string source) {
         (Compilation compilation, ImmutableArray<Diagnostic> diagnostics) = Run(source);
         Assert.Empty(diagnostics);

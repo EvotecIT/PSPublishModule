@@ -35,6 +35,7 @@
     <ItemGroup>
         <None Include="$(OutputPath)$(AssemblyName).dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
         <None Include="build/PowerForge.Generators.props" Pack="true" PackagePath="build" />
+        <None Include="build/PowerForge.Generators.targets" Pack="true" PackagePath="build" />
         <None Include="README.md" Pack="true" PackagePath="\" />
     </ItemGroup>
 

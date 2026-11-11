@@ -20,10 +20,11 @@ namespace PowerForge.Generators.Cmdlets {
     public sealed class FluentCmdletGenerator : IIncrementalGenerator {
         private const string Automation = "global::System.Management.Automation.";
 
-        // PowerShell's common and risk-mitigation parameters.
+        // PowerShell's common and risk-mitigation parameters, with their aliases.
         private static readonly HashSet<string> CommonParameters = new HashSet<string>(StringComparer.OrdinalIgnoreCase) {
             "Verbose", "Debug", "ErrorAction", "WarningAction", "InformationAction", "ProgressAction", "ErrorVariable", "WarningVariable",
-            "InformationVariable", "OutVariable", "OutBuffer", "PipelineVariable", "WhatIf", "Confirm"
+            "InformationVariable", "OutVariable", "OutBuffer", "PipelineVariable", "WhatIf", "Confirm",
+            "vb", "db", "ea", "wa", "infa", "proga", "ev", "wv", "iv", "ov", "ob", "pv", "wi", "cf"
         };
 
         /// <inheritdoc />
@@ -59,7 +60,9 @@ namespace PowerForge.Generators.Cmdlets {
             private readonly StringBuilder _parameters = new StringBuilder();
             private readonly StringBuilder _apply = new StringBuilder();
             private readonly StringBuilder _helpers = new StringBuilder();
-            private readonly HashSet<string> _helperTypes = new HashSet<string>(StringComparer.Ordinal);
+            private readonly Dictionary<INamedTypeSymbol, string> _helpersByType = new Dictionary<INamedTypeSymbol, string>(SymbolEqualityComparer.Default);
+            private readonly HashSet<string> _helperNames = new HashSet<string>(StringComparer.Ordinal);
+            private readonly HashSet<string> _parameterNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             private readonly AttributeData _attribute;
 
             internal Writer(SourceProductionContext output, INamedTypeSymbol cmdlet, INamedTypeSymbol model, Compilation compilation, AttributeData attribute) {
@@ -134,6 +137,10 @@ namespace PowerForge.Generators.Cmdlets {
                 if (Reserved(name)) {
                     _output.ReportDiagnostic(Diagnostic.Create(FluentDiagnostics.ReservedParameter, property.Locations.FirstOrDefault() ?? _cmdlet.Locations.FirstOrDefault() ?? Location.None,
                         _model.Name, property.Name, name));
+                    return;
+                }
+                if (!_parameterNames.Add(name)) {
+                    _output.ReportDiagnostic(Diagnostic.Create(FluentDiagnostics.Duplicate, property.Locations.FirstOrDefault() ?? Location.None, name, _model.Name, property.Name));
                     return;
                 }
                 string member = "model." + Escape(property.Name);
@@ -215,10 +222,15 @@ namespace PowerForge.Generators.Cmdlets {
             // Generates (once per type) the method that applies a hashtable to a settings object, and returns its name.
             private string Configure(INamedTypeSymbol settings) {
                 settings = (INamedTypeSymbol)settings.WithNullableAnnotation(NullableAnnotation.NotAnnotated);
-                string method = "Configure" + string.Concat(settings.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat).Replace("global::", string.Empty).Split('.', '<', '>', ',', ' ', '?').Select(part => part.Length == 0 ? part : char.ToUpperInvariant(part[0]) + part.Substring(1)));
-                if (!_helperTypes.Add(method)) {
-                    return method;
+                if (_helpersByType.TryGetValue(settings, out string? existing)) {
+                    return existing;
                 }
+                string baseName = "Configure" + string.Concat(settings.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat).Replace("global::", string.Empty).Split('.', '<', '>', ',', ' ', '?').Select(part => part.Length == 0 ? part : char.ToUpperInvariant(part[0]) + part.Substring(1)));
+                string method = baseName;
+                for (int suffix = 2; !_helperNames.Add(method); suffix++) {
+                    method = baseName + suffix;
+                }
+                _helpersByType[settings] = method;
                 string type = settings.ToDisplayString(Format);
                 StringBuilder cases = new StringBuilder();
                 List<string> keys = new List<string>();
@@ -244,10 +256,11 @@ namespace PowerForge.Generators.Cmdlets {
                         continue;
                     }
                     // The key is the parameter-style name (Visible); the property name (IsVisible) is accepted too.
-                    List<string> accepted = new[] { key, property.Name }.Select(label => label.ToLowerInvariant()).Where(labels.Add).ToList();
-                    if (accepted.Count == 0) {
+                    if (!labels.Add(key.ToLowerInvariant())) {
+                        _output.ReportDiagnostic(Diagnostic.Create(FluentDiagnostics.Duplicate, property.Locations.FirstOrDefault() ?? Location.None, key, settings.Name, property.Name));
                         continue;
                     }
+                    List<string> accepted = new[] { key.ToLowerInvariant() }.Concat(new[] { property.Name.ToLowerInvariant() }.Where(labels.Add)).ToList();
                     keys.Add(key);
                     foreach (string label in accepted) {
                         cases.Append("                    case \"").Append(label).Append("\":\n");
@@ -275,7 +288,7 @@ namespace PowerForge.Generators.Cmdlets {
 
             // ", new T()" when an unset settings object can be created; otherwise "" (and a null target fails in the helper).
             private static string Create(IPropertySymbol property, INamedTypeSymbol settings) =>
-                IsSettable(property) && settings.InstanceConstructors.Any(c => c.Parameters.Length == 0 && c.DeclaredAccessibility == Accessibility.Public)
+                IsSettable(property) && Creatable(settings)
                     ? " ?? new " + settings.ToDisplayString(Format) + "()"
                     : " ?? throw new global::System.InvalidOperationException(\"" + property.Name + " is not set.\")";
 

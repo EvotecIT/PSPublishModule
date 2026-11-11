@@ -119,6 +119,16 @@ namespace PowerForge.Generators.Fluent {
 
         /// <summary>The singular of a collection property name: Items -> Item, Children -> Child, Series -> Series.</summary>
         // A name as a C# identifier in generated code: keywords get an @ prefix (@event).
+        // A public parameterless constructor that leaves no required member unset.
+        internal static bool Creatable(INamedTypeSymbol type) =>
+            type.TypeKind == TypeKind.Class && !type.IsAbstract && type.InstanceConstructors.Any(c => c.Parameters.Length == 0 && c.DeclaredAccessibility == Accessibility.Public
+                && (c.GetAttributes().Any(a => a.AttributeClass?.ToDisplayString() == "System.Diagnostics.CodeAnalysis.SetsRequiredMembersAttribute")
+                    || !BaseTypes(type).SelectMany(t => t.GetMembers()).Any(m => m is IPropertySymbol { IsRequired: true } || m is IFieldSymbol { IsRequired: true })));
+
+        // An MSBuild list setting. The package's targets turn ';' into ',' because analyzer config treats ';' as a comment.
+        internal static List<string> ListSetting(string? value) =>
+            (value ?? string.Empty).Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries).Select(name => name.Trim()).Where(name => name.Length > 0).ToList();
+
         internal static string Escape(string name) => SyntaxFacts.GetKeywordKind(name) != SyntaxKind.None ? "@" + name : name;
 
         internal static string Singular(IPropertySymbol property) => Singular(property.Name);

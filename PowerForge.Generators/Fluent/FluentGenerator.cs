@@ -69,9 +69,9 @@ namespace PowerForge.Generators.Fluent {
                 _compilation = compilation;
                 _settings = settings;
                 _output = output;
-                // One or more static factory classes, separated by semicolons (ChartForgeX has Chart and Diagram).
-                _factories = (settings.Factory ?? string.Empty).Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries)
-                    .Select(name => compilation.GetTypeByMetadataName(name.Trim())).Where(type => type != null).Select(type => type!).ToList();
+                // One or more static factory classes (ChartForgeX has Chart and Diagram).
+                _factories = ListSetting(settings.Factory)
+                    .Select(name => compilation.GetTypeByMetadataName(name)).Where(type => type != null).Select(type => type!).ToList();
                 // C# 7.3 (the default for netstandard2.0 and .NET Framework) has no nullable annotations or ??=.
                 Nullable = compilation is CSharpCompilation csharp && csharp.LanguageVersion >= LanguageVersion.CSharp8;
                 Format = Nullable ? NullableFormat : SymbolDisplayFormat.FullyQualifiedFormat;
@@ -539,12 +539,6 @@ namespace PowerForge.Generators.Fluent {
                 });
 
                 private INamedTypeSymbol Action(ITypeSymbol argument) => Compilation.GetTypeByMetadataName("System.Action`1")!.Construct(argument);
-
-                // A public parameterless constructor that leaves no required member unset.
-                private static bool Creatable(INamedTypeSymbol type) =>
-                    type.TypeKind == TypeKind.Class && !type.IsAbstract && type.InstanceConstructors.Any(c => c.Parameters.Length == 0 && c.DeclaredAccessibility == Accessibility.Public
-                        && (c.GetAttributes().Any(a => a.AttributeClass?.ToDisplayString() == "System.Diagnostics.CodeAnalysis.SetsRequiredMembersAttribute")
-                            || !BaseTypes(type).SelectMany(t => t.GetMembers()).Any(m => m is IPropertySymbol { IsRequired: true } || m is IFieldSymbol { IsRequired: true })));
 
                 private string Member(IPropertySymbol property) => _receiver + "." + Escape(property.Name);
 

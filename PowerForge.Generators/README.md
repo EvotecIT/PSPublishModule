@@ -43,7 +43,7 @@ MSBuild settings:
 | Property | Meaning |
 | --- | --- |
 | `PowerForgeFluentNaming=Prefixed` | ConsoleMonster's earlier names (`AddX`, `AddXs`, one `Configure`, `X()` for a bool) in one `<Namespace>Fluent` class; an existing method silently wins. For ConsoleMonster until it adopts the convention. |
-| `PowerForgeFluentFactory=Namespace.Type` | Static factory classes (separate several with `;`) whose parameterless methods are used in the generated documentation examples. |
+| `PowerForgeFluentFactory=Namespace.Type` | Static factory classes (separate several with `;` or `,`) whose parameterless methods are used in the generated documentation examples. |
 
 ## Cmdlet parameters
 
@@ -61,7 +61,9 @@ public sealed partial class NewCfxTopologyCommand : PSCmdlet {
 }
 ```
 
-Each public property becomes a parameter named like its fluent method, with the property's summary as help: a bool is a
+Each public property becomes a parameter named like its fluent method, documented with the property's summary. That
+summary is C# XML documentation: it reaches `Get-Help` when the module builds its help with PowerForge, which reads the
+XML documentation file (`GenerateDocumentationFile`). Type mapping: a bool is a
 switch, a settings object takes a hashtable whose keys are its properties (nested hashtables for nested settings; an
 unknown key is an error that lists the valid ones), a collection takes an array, and anything else takes the property's
 type. `ApplyParameters(model)` copies only the parameters the caller bound, so unbound ones keep the model's defaults;
