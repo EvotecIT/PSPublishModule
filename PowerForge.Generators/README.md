@@ -1,6 +1,8 @@
 # PowerForge.Generators
 
-Build-time source generators for Evotec libraries. Reference it as a development dependency; it adds no runtime assembly.
+Build-time source generators for Evotec libraries: fluent methods on the models, PowerShell cmdlet parameters from the
+same models, and the shared `ThemeMode`/`Tone`/`Icon` vocabulary. Reference it as a development dependency; it adds no
+runtime assembly.
 
 ```xml
 <PackageReference Include="PowerForge.Generators" Version="3.0.*" PrivateAssets="all" />
@@ -41,4 +43,46 @@ MSBuild settings:
 | Property | Meaning |
 | --- | --- |
 | `PowerForgeFluentNaming=Prefixed` | ConsoleMonster's earlier names (`AddX`, `AddXs`, one `Configure`, `X()` for a bool) in one `<Namespace>Fluent` class; an existing method silently wins. For ConsoleMonster until it adopts the convention. |
-| `PowerForgeFluentFactory=Namespace.Type` | A static factory class whose parameterless methods are used in the generated documentation examples. |
+| `PowerForgeFluentFactory=Namespace.Type` | Static factory classes (separate several with `;`) whose parameterless methods are used in the generated documentation examples. |
+
+## Cmdlet parameters
+
+A PowerShell module marks a partial cmdlet with the model it builds:
+
+```csharp
+[FluentCmdlet(typeof(TopologyChart), Exclude = new[] { "Theme" })]
+[Cmdlet(VerbsCommon.New, "CfxTopology")]
+public sealed partial class NewCfxTopologyCommand : PSCmdlet {
+    protected override void ProcessRecord() {
+        TopologyChart chart = new TopologyChart();
+        ApplyParameters(chart);
+        WriteObject(chart);
+    }
+}
+```
+
+Each public property becomes a parameter named like its fluent method, with the property's summary as help: a bool is a
+switch, a settings object takes a hashtable whose keys are its properties (nested hashtables for nested settings; an
+unknown key is an error that lists the valid ones), a collection takes an array, and anything else takes the property's
+type. `ApplyParameters(model)` copies only the parameters the caller bound, so unbound ones keep the model's defaults;
+hashtable values are converted with PowerShell's own rules.
+
+- `Include` and `Exclude` choose the properties; an unknown name is PFF009.
+- A `[Parameter]` the cmdlet declares itself replaces the generated one and keeps its validation, completers and help.
+  When its type fits the property, `ApplyParameters` still copies it, so an existing cmdlet adopts the attribute without
+  losing anything.
+- A name PowerShell or the cmdlet base class already uses is PFF006; a cmdlet that is not partial, or a project without a
+  PowerShell reference, is PFF007.
+
+## Shared vocabulary
+
+```xml
+<PowerForgeVocabulary>ThemeMode;Tone;Icon</PowerForgeVocabulary>
+<PowerForgeVocabularyNamespace>ChartForgeX</PowerForgeVocabularyNamespace>
+```
+
+emits the listed types into the library's own namespace (the root namespace when none is set), from one definition, so
+every engine spells them alike without a runtime dependency. `ThemeMode` is `Auto`, `Light` or `Dark`. `Tone` is a
+built-in emphasis (`Neutral`, `Info`, `Success`, `Warning`, `Danger`, `Muted`) or `Tone.Named("brand")` for one the theme
+defines. `Icon` is a catalog key such as `tabler:server`, never a URL or markup. `Tone` and `Icon` parse from strings, so
+PowerShell accepts `-Tone warning`. An unknown type name is PFF008. The generated code compiles as C# 7.3.

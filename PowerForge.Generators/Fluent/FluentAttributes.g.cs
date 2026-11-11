@@ -68,4 +68,26 @@ namespace PowerForge.Fluent {
         /// <summary>The documentation of the value parameter.</summary>
         public string ValueSummary { get; set; }
     }
+
+    /// <summary>
+    /// On a partial PowerShell cmdlet: generates one parameter per public property of <c>model</c> (switches for bools,
+    /// hashtables for settings objects, arrays for collections) and an <c>ApplyParameters(model)</c> method that copies the
+    /// parameters the caller bound. A parameter the cmdlet declares itself replaces the generated one and, when its type
+    /// fits the property, is still copied by <c>ApplyParameters</c>, keeping its own validation, completers and help.
+    /// </summary>
+    [global::Microsoft.CodeAnalysis.Embedded]
+    [global::System.AttributeUsage(global::System.AttributeTargets.Class, Inherited = false)]
+    internal sealed class FluentCmdletAttribute : global::System.Attribute {
+        public FluentCmdletAttribute(global::System.Type model) {
+            Model = model;
+        }
+
+        public global::System.Type Model { get; }
+
+        /// <summary>Only these properties (by property or parameter name) become parameters.</summary>
+        public string[] Include { get; set; }
+
+        /// <summary>These properties (by property or parameter name) do not become parameters.</summary>
+        public string[] Exclude { get; set; }
+    }
 }

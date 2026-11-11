@@ -28,5 +28,25 @@ namespace PowerForge.Generators.Fluent {
             "PFF005", "Fluent name is not a valid identifier",
             "'{0}' on '{1}.{2}' is not a valid C# method name",
             Category, DiagnosticSeverity.Error, isEnabledByDefault: true);
+
+        internal static readonly DiagnosticDescriptor ReservedParameter = new DiagnosticDescriptor(
+            "PFF006", "Cmdlet parameter name is reserved",
+            "'{0}.{1}' would become parameter -{2}, which PowerShell or the cmdlet base class already uses; rename it with [Fluent(\"Name\")] or mark it [NoFluent]",
+            Category, DiagnosticSeverity.Error, isEnabledByDefault: true);
+
+        internal static readonly DiagnosticDescriptor InvalidCmdlet = new DiagnosticDescriptor(
+            "PFF007", "[FluentCmdlet] needs a partial PowerShell cmdlet",
+            "'{0}' must be a partial class deriving from System.Management.Automation.Cmdlet, in a project that references PowerShell",
+            Category, DiagnosticSeverity.Error, isEnabledByDefault: true);
+
+        internal static readonly DiagnosticDescriptor InvalidVocabulary = new DiagnosticDescriptor(
+            "PFF008", "Unknown vocabulary setting",
+            "'{0}' is not a valid value for {1}",
+            Category, DiagnosticSeverity.Error, isEnabledByDefault: true);
+
+        internal static readonly DiagnosticDescriptor UnknownCmdletProperty = new DiagnosticDescriptor(
+            "PFF009", "[FluentCmdlet] names an unknown property",
+            "'{0}' in {1} on '{2}' is not a property of '{3}'",
+            Category, DiagnosticSeverity.Error, isEnabledByDefault: true);
     }
 }

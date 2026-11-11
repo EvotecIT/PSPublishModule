@@ -17,7 +17,7 @@
         <PackageVersion>3.0.189</PackageVersion>
         <VersionPrefix>3.0.189</VersionPrefix>
         <PackageId>PowerForge.Generators</PackageId>
-        <Description>Build-time source generators for Evotec libraries: fluent methods generated on the models themselves from their public properties.</Description>
+        <Description>Build-time source generators for Evotec libraries: fluent methods on the models themselves, PowerShell cmdlet parameters from the same models, and the shared ThemeMode/Tone/Icon vocabulary.</Description>
         <Authors>Przemyslaw Klys</Authors>
         <Company>Evotec Services sp. z o.o.</Company>
         <Copyright>Copyright (c) 2024-2026 Evotec Services sp. z o.o.</Copyright>
@@ -42,6 +42,8 @@
         <!-- Source added to consuming compilations, kept as a real C# file; it is not part of the generator itself. -->
         <Compile Remove="Fluent\FluentAttributes.g.cs" />
         <EmbeddedResource Include="Fluent\FluentAttributes.g.cs" LogicalName="PowerForge.Generators.Fluent.FluentAttributes.g.cs" />
+        <Compile Remove="Vocabulary\*.g.cs" />
+        <EmbeddedResource Include="Vocabulary\*.g.cs" LogicalName="PowerForge.Generators.Vocabulary.%(Filename)%(Extension)" />
     </ItemGroup>
 
     <ItemGroup>
