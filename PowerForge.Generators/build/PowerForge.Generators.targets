@@ -1,0 +1,7 @@
+<Project>
+    <!-- Analyzer config treats ';' as the start of a comment, so list settings reach the generators with ',' instead. -->
+    <PropertyGroup>
+        <PowerForgeFluentFactory>$(PowerForgeFluentFactory.Replace(';', ','))</PowerForgeFluentFactory>
+        <PowerForgeVocabulary>$(PowerForgeVocabulary.Replace(';', ','))</PowerForgeVocabulary>
+    </PropertyGroup>
+</Project>

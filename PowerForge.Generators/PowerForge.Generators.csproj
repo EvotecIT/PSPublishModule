@@ -1,0 +1,54 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <!--
+        Build-time Roslyn generators shared by the Evotec engines. Libraries reference this package as a development
+        dependency; it adds no runtime assembly, so consumers of those libraries get the generated code as ordinary
+        compiled members.
+    -->
+    <PropertyGroup>
+        <TargetFramework>netstandard2.0</TargetFramework>
+        <LangVersion>latest</LangVersion>
+        <Nullable>enable</Nullable>
+        <IsRoslynComponent>true</IsRoslynComponent>
+        <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
+        <IncludeBuildOutput>false</IncludeBuildOutput>
+        <DevelopmentDependency>true</DevelopmentDependency>
+        <SuppressDependenciesWhenPacking>true</SuppressDependenciesWhenPacking>
+        <NoWarn>$(NoWarn);NU5128</NoWarn>
+        <PackageVersion>3.0.189</PackageVersion>
+        <VersionPrefix>3.0.189</VersionPrefix>
+        <PackageId>PowerForge.Generators</PackageId>
+        <Description>Build-time source generators for Evotec libraries: fluent methods on the models themselves, PowerShell cmdlet parameters from the same models, and the shared ThemeMode/Tone/Icon vocabulary.</Description>
+        <Authors>Przemyslaw Klys</Authors>
+        <Company>Evotec Services sp. z o.o.</Company>
+        <Copyright>Copyright (c) 2024-2026 Evotec Services sp. z o.o.</Copyright>
+        <PackageTags>source-generator;fluent;roslyn</PackageTags>
+        <PackageLicenseExpression>MIT</PackageLicenseExpression>
+        <PackageReadmeFile>README.md</PackageReadmeFile>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <!-- .NET 8 is the oldest supported SDK; its compiler loads Roslyn 4.8 generators. -->
+        <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.8.0" PrivateAssets="all" />
+        <PackageReference Include="Microsoft.CodeAnalysis.Analyzers" Version="3.3.4" PrivateAssets="all" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <None Include="$(OutputPath)$(AssemblyName).dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
+        <None Include="build/PowerForge.Generators.props" Pack="true" PackagePath="build" />
+        <None Include="build/PowerForge.Generators.targets" Pack="true" PackagePath="build" />
+        <None Include="README.md" Pack="true" PackagePath="\" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <!-- Source added to consuming compilations, kept as a real C# file; it is not part of the generator itself. -->
+        <Compile Remove="Fluent\FluentAttributes.g.cs" />
+        <EmbeddedResource Include="Fluent\FluentAttributes.g.cs" LogicalName="PowerForge.Generators.Fluent.FluentAttributes.g.cs" />
+        <Compile Remove="Vocabulary\*.g.cs" />
+        <EmbeddedResource Include="Vocabulary\*.g.cs" LogicalName="PowerForge.Generators.Vocabulary.%(Filename)%(Extension)" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <AdditionalFiles Include="AnalyzerReleases.Shipped.md" />
+        <AdditionalFiles Include="AnalyzerReleases.Unshipped.md" />
+    </ItemGroup>
+</Project>
