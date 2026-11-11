@@ -121,6 +121,7 @@ internal sealed class MarkdownHelpWriter
         var doc = new MarkdownDocumentBuilder(blankLineAfterFrontMatter: false);
         doc.FrontMatterRaw("external help file", $"{moduleName}-help.xml");
         doc.FrontMatterRaw("Module Name", moduleName);
+        onlineVersion = string.IsNullOrWhiteSpace(cmd.HelpUri) ? onlineVersion : cmd.HelpUri;
         if (string.IsNullOrWhiteSpace(onlineVersion))
             doc.FrontMatterRaw("online version");
         else
