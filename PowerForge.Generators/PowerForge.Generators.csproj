@@ -39,6 +39,12 @@
     </ItemGroup>
 
     <ItemGroup>
+        <!-- Source added to consuming compilations, kept as a real C# file; it is not part of the generator itself. -->
+        <Compile Remove="Fluent\FluentAttributes.g.cs" />
+        <EmbeddedResource Include="Fluent\FluentAttributes.g.cs" LogicalName="PowerForge.Generators.Fluent.FluentAttributes.g.cs" />
+    </ItemGroup>
+
+    <ItemGroup>
         <AdditionalFiles Include="AnalyzerReleases.Shipped.md" />
         <AdditionalFiles Include="AnalyzerReleases.Unshipped.md" />
     </ItemGroup>
