@@ -348,7 +348,14 @@ internal static partial class ModuleBootstrapperGenerator
                         new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
                         {
                             ["LibraryFileNames"] = BuildPowerShellArrayLiteral(libraryFileNames),
-                            ["RuntimePayloadSelectorBlock"] = ModuleBinaryPayloadLayout.BuildPowerShellRuntimeSelector().TrimEnd()
+                            ["RuntimePayloadSelectorBlock"] = ModuleBinaryPayloadLayout.BuildPowerShellRuntimeSelector().TrimEnd(),
+                            ["DesktopScriptHelperBlock"] = includeScriptLoader && exports.Functions.Length > 0 &&
+                                exports.Cmdlets.Length == 0 && assemblyTypeAcceleratorMode == AssemblyTypeAcceleratorExportMode.None &&
+                                libraryFileNames.All(name => name.IndexOfAny(new[] { '/', '\\' }) < 0 && !Path.IsPathRooted(name))
+                                ? RenderModuleBootstrapperTemplate("DesktopScriptHelper",
+                                    "Scripts/ModuleBootstrapper/DesktopScriptHelper.Template.ps1",
+                                    new Dictionary<string, string>()).TrimEnd()
+                                : string.Empty
                         }).TrimEnd(),
                     ["ModuleName"] = EscapePsSingleQuoted(moduleName),
                     ["LoaderAssemblyName"] = EscapePsSingleQuoted(loaderIdentity?.AssemblyName ?? string.Empty),
