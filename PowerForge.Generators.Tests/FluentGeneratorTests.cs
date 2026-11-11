@@ -2,6 +2,7 @@ using System.Collections.Immutable;
 using System.Reflection;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.Diagnostics;
 using PowerForge.Generators.Fluent;
 using Xunit;
 
@@ -231,6 +232,51 @@ public sealed class FluentGeneratorTests {
     }
 
     [Fact]
+    public void PrefixedNamingKeepsConsoleMonsterNamesAndLetsExistingMethodsWin() {
+        const string library = """
+            using System;
+            using System.Collections.Generic;
+            using PowerForge.Fluent;
+
+            namespace Sample {
+                [Fluent]
+                public class Widget {
+                    public string? Title { get; set; }
+                    public bool IsVisible { get; set; }
+                    public List<string> Tags { get; } = new();
+                    public Func<int, string>? Formatter { get; set; }
+                }
+
+                public sealed class Panel : Widget {
+                    public int Width { get; set; }
+                }
+
+                // Handwritten helpers share the namespace's fluent class; a matching one wins over the generated method.
+                public static partial class SampleFluent {
+                    public static TSelf Title<TSelf>(this TSelf widget, string? title) where TSelf : Widget {
+                        widget.Title = "handwritten " + title;
+                        return widget;
+                    }
+                }
+
+                public static class Usage {
+                    public static object[] Run() {
+                        Panel panel = new Panel().Title("panel").Visible().Width(3)
+                            .AddTag("a").AddTags("b", "c").AddTags(new List<string> { "d" })
+                            .Configure(p => p.Formatter = n => "#" + n);
+                        return new object[] { panel.Title!, panel.IsVisible, panel.Width, string.Join(",", panel.Tags), panel.Formatter!(1) };
+                    }
+                }
+            }
+            """;
+
+        (Compilation compilation, ImmutableArray<Diagnostic> generatorDiagnostics) = Run(library, prefixed: true);
+        Assert.Empty(generatorDiagnostics);
+
+        Assert.Equal(new object[] { "handwritten panel", true, 3, "a,b,c,d", "#1" }, Execute(compilation));
+    }
+
+    [Fact]
     public void GeneratedCodeCompilesAsCSharp73() {
         const string library = @"
             using System.Collections.Generic;
@@ -263,14 +309,15 @@ public sealed class FluentGeneratorTests {
         Assert.Equal(new object[] { "old", true, 1, 4 }, Execute(compilation));
     }
 
-    private static (Compilation Compilation, ImmutableArray<Diagnostic> Diagnostics) Run(string source, LanguageVersion version = LanguageVersion.Latest) {
+    private static (Compilation Compilation, ImmutableArray<Diagnostic> Diagnostics) Run(string source, LanguageVersion version = LanguageVersion.Latest, bool prefixed = false) {
         IEnumerable<MetadataReference> references = ((string)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES")!)
             .Split(Path.PathSeparator).Select(path => MetadataReference.CreateFromFile(path));
         CSharpParseOptions parse = new CSharpParseOptions(version);
         NullableContextOptions nullable = version >= LanguageVersion.CSharp8 ? NullableContextOptions.Enable : NullableContextOptions.Disable;
         CSharpCompilation compilation = CSharpCompilation.Create("Sample", new[] { CSharpSyntaxTree.ParseText(source, parse) },
             references, new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary, nullableContextOptions: nullable));
-        GeneratorDriver driver = CSharpGeneratorDriver.Create(new FluentGenerator()).WithUpdatedParseOptions(parse);
+        AnalyzerConfigOptionsProvider options = new BuildProperties(prefixed ? "Prefixed" : null);
+        GeneratorDriver driver = CSharpGeneratorDriver.Create(new[] { new FluentGenerator().AsSourceGenerator() }, parseOptions: parse, optionsProvider: options);
         driver.RunGeneratorsAndUpdateCompilation(compilation, out Compilation output, out ImmutableArray<Diagnostic> diagnostics);
         return (output, diagnostics);
     }
@@ -281,5 +328,29 @@ public sealed class FluentGeneratorTests {
         Assert.True(emitted.Success, string.Join(Environment.NewLine, emitted.Diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error)));
         Assembly assembly = Assembly.Load(image.ToArray());
         return (object[])assembly.GetType("Sample.Usage")!.GetMethod("Run")!.Invoke(null, null)!;
+    }
+
+    // The MSBuild properties a consuming project passes to the generator.
+    private sealed class BuildProperties : AnalyzerConfigOptionsProvider {
+        private readonly Options _global;
+
+        public BuildProperties(string? naming) {
+            _global = new Options(naming == null ? new Dictionary<string, string>() : new Dictionary<string, string> { ["build_property.PowerForgeFluentNaming"] = naming });
+        }
+
+        public override AnalyzerConfigOptions GlobalOptions => _global;
+
+        public override AnalyzerConfigOptions GetOptions(SyntaxTree tree) => Options.Empty;
+
+        public override AnalyzerConfigOptions GetOptions(AdditionalText textFile) => Options.Empty;
+
+        private sealed class Options : AnalyzerConfigOptions {
+            internal static readonly Options Empty = new Options(new Dictionary<string, string>());
+            private readonly Dictionary<string, string> _values;
+
+            internal Options(Dictionary<string, string> values) => _values = values;
+
+            public override bool TryGetValue(string key, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out string? value) => _values.TryGetValue(key, out value);
+        }
     }
 }
