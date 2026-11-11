@@ -37,11 +37,45 @@ jobs:
           $ErrorActionPreference = 'Stop'
           if ($env:PROBE_ID -cnotmatch '^[a-f0-9]{32}$') { throw 'Invalid probe ID.' }
           if (-not [Security.Principal.WindowsIdentity]::GetCurrent().IsSystem) { throw 'The canary must run as SYSTEM.' }
-          $expected = Join-Path $env:SystemRoot ('SystemTemp\PowerForge.RunnerJobs\' + $env:RUNNER_NAME)
+          if ($env:RUNNER_NAME -cnotmatch '^[A-Za-z0-9][A-Za-z0-9_-]*$') { throw 'Invalid runner name.' }
+          $configurationPath = Join-Path $env:ProgramFiles ('PowerForge.RunnerMaintenance\' + $env:RUNNER_NAME + '\configuration.json')
+          $configuration = Get-Content -LiteralPath $configurationPath -Raw | ConvertFrom-Json
+          $identity = Get-Content -LiteralPath (Join-Path $configuration.runnerRoot '.runner') -Raw | ConvertFrom-Json
+          $agentId = [string]$identity.agentId
+          if ($configuration.schemaVersion -ne 1 -or $identity.agentName -cne $env:RUNNER_NAME -or
+              $identity.agentName -cne $configuration.runnerName -or $identity.gitHubUrl -cne $configuration.gitHubUrl -or
+              $agentId -cnotmatch '\A[1-9][0-9]{0,18}\z') {
+            throw 'Installed configuration does not match the current runner registration.'
+          }
+          $expected = Join-Path $env:SystemRoot ('SystemTemp\PFJ\' + $agentId)
+          if (-not [string]::Equals([IO.Path]::GetFullPath($configuration.tempRoot), $expected, [StringComparison]::OrdinalIgnoreCase)) {
+            throw 'Installed temporary storage does not match the compact registered-ID root.'
+          }
+          $env:PFJ_CANARY_ROOT = $expected
+          $env:PFJ_CANARY_ID = $env:PROBE_ID
+          $fileProbe = @'
+          $ErrorActionPreference = 'Stop'
+          $actual = [IO.Path]::GetTempPath().TrimEnd('\')
+          if (-not [string]::Equals($actual, $env:PFJ_CANARY_ROOT, [StringComparison]::OrdinalIgnoreCase)) {
+            throw 'A supported PowerShell runtime is not using private runner temporary storage.'
+          }
+          $module = 'ExampleXX.ModuleLoadContext.SharedV3_2C34E7FEDCED97F4'
+          $relative = 'PowerForge\module-load-context\' + $module + '_' + $env:PFJ_CANARY_ID +
+              '\target-0\obj\Release\net8.0\' + $module + '.dll'
+          $output = Join-Path $actual $relative
+          $null = [IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($output))
+          $content = 'Synthetic generated module-loader output.'
+          [IO.File]::WriteAllText($output, $content)
+          if (-not [IO.File]::Exists($output) -or [IO.File]::ReadAllText($output) -cne $content) {
+            throw 'Generated module-loader output is not readable through ordinary file APIs.'
+          }
+          Write-Output ('Generated module-loader file access verified at {0} characters in PowerShell {1}.' -f $output.Length, $PSVersionTable.PSVersion)
+          '@
+          $encodedProbe = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($fileProbe))
           foreach ($shell in @('pwsh.exe', 'powershell.exe')) {
-            $actual = & $shell -NoLogo -NoProfile -NonInteractive -Command '[IO.Path]::GetTempPath()'
-            if ($LASTEXITCODE -ne 0 -or -not [string]::Equals($actual.Trim().TrimEnd('\'), $expected, [StringComparison]::OrdinalIgnoreCase)) {
-              throw 'A supported PowerShell runtime is not using private runner temporary storage.'
+            & $shell -NoLogo -NoProfile -NonInteractive -EncodedCommand $encodedProbe
+            if ($LASTEXITCODE -ne 0) {
+              throw 'A supported PowerShell runtime failed the private temporary-file canary.'
             }
           }
           $startMarker = Join-Path $expected ('Canary-' + $env:PROBE_ID + '.start.tmp')
@@ -54,5 +88,6 @@ jobs:
           if (-not (Test-Path -LiteralPath $sharedMarker)) { throw 'The start hook did not preserve its shared control marker.' }
           $completedMarker = Join-Path $expected ('Canary-' + $env:PROBE_ID + '.complete.tmp')
           [IO.File]::WriteAllText($completedMarker, 'Disposable SYSTEM job completion marker.')
-          Write-Output 'SYSTEM identity, both PowerShell temp paths, start cleanup and shared-lock preservation verified.'
+          Write-Output ('Runner temporary storage canary {0} completed its file-access checks.' -f $env:PROBE_ID)
+          Write-Output 'SYSTEM identity, current registration, both PowerShell temp paths and generated-file access, start cleanup and shared-lock preservation verified.'
           Write-Output 'After the completion hook, verify the completion marker is absent and the shared marker survives; then remove the owned shared marker.'

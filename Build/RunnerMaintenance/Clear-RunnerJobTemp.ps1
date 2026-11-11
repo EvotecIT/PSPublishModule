@@ -40,6 +40,10 @@ try {
     if ($identity.agentName -cne $configuration.runnerName -or $identity.gitHubUrl -cne $configuration.gitHubUrl) {
         throw 'Runner registration changed; temporary cleanup is held.'
     }
+    $agentId = [string]$identity.agentId
+    if ($agentId -cnotmatch '\A[1-9][0-9]{0,18}\z') {
+        throw 'Runner registration agentId must contain positive decimal digits only.'
+    }
     if ($env:GITHUB_ACTIONS -cne 'true' -or $env:GITHUB_RUN_ID -notmatch '^\d+$') {
         throw 'Cleanup requires an assigned GitHub Actions job.'
     }
@@ -58,8 +62,8 @@ try {
     }
     if (-not $workerFound) { throw 'Cleanup is not a child of this runner worker.' }
     $failureStage = 'private-directory'
-    $parent = Join-Path $env:SystemRoot 'SystemTemp\PowerForge.RunnerJobs'
-    $expectedRoot = Join-Path $parent $configuration.runnerName
+    $parent = Join-Path $env:SystemRoot 'SystemTemp\PFJ'
+    $expectedRoot = Join-Path $parent $agentId
     if ($configuration.runnerName -notmatch '^[A-Za-z0-9][A-Za-z0-9_-]*$' -or
         -not [string]::Equals([IO.Path]::GetFullPath($configuration.tempRoot), $expectedRoot, [StringComparison]::OrdinalIgnoreCase)) {
         throw 'Temporary directory does not match its runner identity.'

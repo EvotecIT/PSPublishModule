@@ -160,6 +160,10 @@ if ($ExpectedOrganization -notmatch '^[A-Za-z0-9-]+$' -or
     $identity.agentName -notmatch '^[A-Za-z0-9][A-Za-z0-9_-]*$') {
     throw 'Runner organization or name does not match the requested installation.'
 }
+$agentId = [string]$identity.agentId
+if ($agentId -cnotmatch '\A[1-9][0-9]{0,18}\z') {
+    throw 'Runner registration agentId must contain positive decimal digits only.'
+}
 $services = @(Get-CimInstance Win32_Service -ErrorAction Stop | Where-Object {
     $_.PathName -and $_.PathName.Trim('"') -ieq (Join-Path $RunnerRoot 'bin\RunnerService.exe')
 })
@@ -177,8 +181,8 @@ if ($Mode -ne 'Plan') {
 
 $base = Join-Path $env:ProgramFiles 'PowerForge.RunnerMaintenance'
 $installationRoot = Join-Path $base $identity.agentName
-$tempParent = Join-Path $env:SystemRoot 'SystemTemp\PowerForge.RunnerJobs'
-$tempRoot = Join-Path $tempParent $identity.agentName
+$tempParent = Join-Path $env:SystemRoot 'SystemTemp\PFJ'
+$tempRoot = Join-Path $tempParent $agentId
 $envPath = Join-Path $RunnerRoot '.env'
 $statePath = Join-Path $base ($identity.agentName + '.installation.json')
 $hook = Join-Path $installationRoot 'Invoke-RunnerJobTempCleanup.ps1'

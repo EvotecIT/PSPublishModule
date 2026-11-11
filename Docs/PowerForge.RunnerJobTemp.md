@@ -6,11 +6,18 @@ outside GitHub's managed `RUNNER_TEMP` directory. Setting only `TEMP` and `TMP`
 does not redirect that path. See [Microsoft's GetTempPath2 documentation](https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-gettemppath2a).
 
 `Build/RunnerMaintenance/Install-RunnerJobTempCleanup.ps1` configures one runner
-with a private directory under `Windows\SystemTemp\PowerForge.RunnerJobs` and
+with a private directory at `%SystemRoot%\SystemTemp\PFJ\<registered-agentId>` and
 sets `TEMP`, `TMP` and `SystemTemp` in that runner's `.env`. It installs the same
 bounded cleanup hook at job start and completion. Completion removes disposable
 job temporary files; the next start recovers leftovers from an interrupted job.
 The directory and its SYSTEM/administrators permissions remain in place.
+
+The compact root leaves space for generated module-loader paths used by legacy
+Windows `MAX_PATH` file APIs, including Windows PowerShell 5.1. It does not require
+enabling Windows long paths. The Windows directory follows `SystemRoot`; the final
+component is the current `.runner` registration's positive decimal `agentId`,
+validated by both the installer and cleanup worker. Runner names remain in the
+installation directory and configuration; they do not lengthen the job temp root.
 
 The shared NuGet scratch/lock directory is passed explicitly and survives every
 cleanup. Package caches, installed modules and SDKs, runner workspaces, other
@@ -65,16 +72,31 @@ The manual `Qualify Windows runner temp hooks` workflow provides a short SYSTEM
 canary on one exact fleet label. Before dispatch, choose a unique 32-character
 lowercase hexadecimal probe ID and seed `Canary-<id>.start.tmp` in that runner's
 private root and `Canary-<id>.shared.tmp` in its shared NuGet scratch directory.
-The job checks start cleanup, the shared control and both PowerShell temp paths,
-then creates a completion marker. After the job, independently verify that
-`Canary-<id>.complete.tmp` is gone and the shared marker survives. Remove only the
-owned shared marker. A green job without that post-job check is incomplete proof.
+The job reads the installed configuration and its runner's `.runner` registration,
+checks the name and ID against the compact root, and verifies start cleanup, the
+shared control and both PowerShell temp paths. Windows PowerShell 5.1 and PowerShell
+7 each create and read synthetic generated module-loader output with ordinary
+file APIs under the actual private root, without an SDK or package dependency.
+The probe follows the generated loader's nested project and assembly-name layout.
+The job leaves that output and a completion marker for the completion hook.
+After the job, independently verify that `Canary-<id>.complete.tmp` and the synthetic
+output are gone and the shared marker survives. Remove only the owned shared
+marker. A green job without that post-job check is incomplete proof.
 
 To roll back, admit the idle runner and stop its service again. Run the installer
 with the original arguments and `-Mode Restore`, then restore its service state.
 The original `.env` bytes or original absence are restored. If `.env` changed after
 installation, rollback stops rather than overwriting later edits. The private
 backup and temporary data are retained for inspection.
+
+Existing installations using `Windows\SystemTemp\PowerForge.RunnerJobs\<runner-name>`
+need an idle restore with the **original installer revision** before replacement.
+The replacement installer derives the compact root and cannot restore the earlier
+layout's ownership record. The existing Restore retains its private original
+environment backup, installed files and temporary data; preserve that original
+backup during the bounded replacement so rollback still reaches the pre-hook
+environment. Resolve the retained installation and recovery record before applying
+the replacement, using the same idle admission and service-state safeguards.
 
 This job-level cleanup complements the existing scheduled runner housekeeping;
 it adds no scheduler. Broad workspace/tool cleanup and Windows Update installation
