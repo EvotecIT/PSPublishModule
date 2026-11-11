@@ -225,6 +225,39 @@ Normal signed publishing builds the selected working tree, including uncommitted
 - PowerForge forwards the selected publish style into packaging builds through `SelfContained` / `WindowsAppSDKSelfContained`, so `FrameworkDependent` versus `PortableCompat` remains meaningful for Store packages too.
 - Use `MsBuildProperties` for project-specific Store settings that are still too repo-specific to deserve a first-class contract.
 
+## Preparing a Scoop manifest
+
+Use `powerforge release prepare-scoop` to prepare a portable Windows application's manifest from existing release archives. The release configuration supplies its product metadata under `Scoop`:
+
+```json
+{
+  "GitHub": { "Owner": "Contoso", "Repository": "Tools", "TagTemplate": "Studio-v{Version}" },
+  "Scoop": {
+    "Name": "contoso-studio",
+    "Description": "Local document workspace",
+    "Homepage": "https://example.com/studio/",
+    "License": "MIT",
+    "Executable": "Studio.exe",
+    "ShortcutName": "Contoso Studio",
+    "Target": "Studio.Windows",
+    "Runtimes": [ "win-x64", "win-arm64" ],
+    "UrlTemplate": "https://github.com/Contoso/Tools/releases/download/Studio-v$version/Studio-$version-{Runtime}.zip"
+  }
+}
+```
+
+```powershell
+powerforge release prepare-scoop --config ./powerforge.release.json `
+    --manifest ./downloads/release-manifest.json --checksums ./downloads/SHA256SUMS.txt `
+    --asset-root ./downloads --out ./scoop
+```
+
+Download the selected portable ZIPs, release manifest and checksum catalog into one directory. The catalog must include the manifest's own checksum. Each configured runtime selects exactly one `Tool` ZIP for the named target; all selected archives must have the same three-part version. PowerForge verifies their downloaded bytes and executable entries, then writes `<Name>.json` into a new output directory. Archive URLs must resolve to the selected filenames.
+
+The manifest supplies architecture-specific URLs and hashes, a Start menu shortcut, and Scoop `checkver`/`autoupdate` definitions. Update detection considers the first 100 GitHub releases, filters drafts and prereleases, and matches `GitHub.TagTemplate` before extracting the app version. A shared repository's other product releases do not become updates. No matching application release produces no detected update; publish sufficiently frequent application releases or maintain a dedicated release repository when that listing window is insufficient.
+
+Preparation is local: it does not build, sign, reserve versions, download remote archives, publish a bucket, or submit to Scoop Extras. Verify publisher signatures, real install/update/uninstall behavior and application-data retention separately. Scoop's bucket maintainers own acceptance and subsequent automated manifest updates.
+
 ## Submitting To Partner Center
 
 For routine WinGet and MSI Store updates, use the [catalog update profile and

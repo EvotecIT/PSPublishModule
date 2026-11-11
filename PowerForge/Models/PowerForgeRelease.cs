@@ -37,6 +37,8 @@ internal sealed class PowerForgeReleaseSpec
     public PowerForgeVirusTotalOptions? VirusTotal { get; set; }
 
     public PowerForgeReleaseWingetOptions? Winget { get; set; }
+
+    public PowerForgeReleaseScoopOptions? Scoop { get; set; }
 }
 
 /// <summary>
