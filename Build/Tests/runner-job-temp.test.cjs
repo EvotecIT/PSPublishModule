@@ -68,11 +68,11 @@ Set-Acl -LiteralPath $env:PROBE_CONTAINER -AclObject $acl
   fs.mkdirSync(runner, { recursive: true });
   fs.mkdirSync(scratch, { recursive: true });
   fs.mkdirSync(programFiles);
-  fs.writeFileSync(path.join(runner, '.runner'), JSON.stringify({ agentName: 'fixture-runner', gitHubUrl: 'https://github.com/EvotecIT' }));
+  fs.writeFileSync(path.join(runner, '.runner'), JSON.stringify({ agentId: 123, agentName: 'fixture-runner', gitHubUrl: 'https://github.com/EvotecIT' }));
   const original = Buffer.from('UNCHANGED=literal-value\nPATH=keep-this-path\n', 'utf8');
   fs.writeFileSync(path.join(runner, '.env'), original);
   return { root, runner, windows, programFiles, scratch, original,
-    temp: path.join(windows, 'SystemTemp', 'PowerForge.RunnerJobs', 'fixture-runner'),
+    temp: path.join(windows, 'SystemTemp', 'PFJ', '123'),
     installation: path.join(programFiles, 'PowerForge.RunnerMaintenance', 'fixture-runner') };
 }
 
@@ -115,7 +115,7 @@ for (const shell of shells) {
     });
   }
 
-  for (const scenario of ['active-runner', 'existing-hook', 'later-env-edit', 'redirected-temp']) {
+  for (const scenario of ['active-runner', 'existing-hook', 'later-env-edit', 'redirected-temp', 'invalid-agent-id']) {
     test(`${shell}: installation preserves ${scenario}`, () => {
       const f = fixture();
       const outside = path.join(f.root, 'outside');
@@ -129,8 +129,18 @@ for (const shell of shells) {
           result = invoke(shell, f, install('Apply'));
         }
         if (scenario === 'redirected-temp') {
-          fs.symlinkSync(outside, path.join(f.windows, 'SystemTemp', 'PowerForge.RunnerJobs'), 'junction');
+          fs.symlinkSync(outside, path.join(f.windows, 'SystemTemp', 'PFJ'), 'junction');
           result = invoke(shell, f, install('Apply'));
+        }
+        if (scenario === 'invalid-agent-id') {
+          const registration = path.join(f.runner, '.runner');
+          const identity = JSON.parse(fs.readFileSync(registration, 'utf8'));
+          identity.agentId = '../123';
+          fs.writeFileSync(registration, JSON.stringify(identity));
+          result = invoke(shell, f, install('Apply'));
+          assert.deepEqual(fs.readFileSync(path.join(f.runner, '.env')), f.original);
+          assert.equal(fs.existsSync(f.installation), false);
+          assert.equal(fs.existsSync(f.temp), false);
         }
         if (scenario === 'later-env-edit') {
           result = invoke(shell, f, install('Apply'));
@@ -142,7 +152,8 @@ for (const shell of shells) {
         }
         assert.notEqual(result.status, 0, result.stdout + result.stderr);
         const reason = { 'active-runner': /Stop the idle runner/, 'existing-hook': /existing job hook must be preserved/,
-          'later-env-edit': /automatic restore is held/, 'redirected-temp': /Redirected path is not supported/ }[scenario];
+          'later-env-edit': /automatic restore is held/, 'redirected-temp': /Redirected path is not supported/,
+          'invalid-agent-id': /agentId must contain positive decimal digits only/ }[scenario];
         assert.match(result.stdout + result.stderr, reason, 'Rejection must reach the intended boundary.');
         assert.equal(fs.readFileSync(path.join(outside, 'preserve.txt'), 'utf8'), 'foreign');
         if (scenario === 'active-runner') assert.deepEqual(fs.readFileSync(path.join(f.runner, '.env')), f.original);
@@ -246,7 +257,7 @@ ${install('Apply')}`;
       fs.symlinkSync(f.scratch, path.join(f.temp, 'redirected'), 'junction');
       const cleanup = `
 $config=Join-Path $env:ProgramFiles 'PowerForge.RunnerMaintenance/fixture-runner/configuration.json'
-$root=Join-Path $env:SystemRoot 'SystemTemp/PowerForge.RunnerJobs/fixture-runner'
+$root=Join-Path $env:SystemRoot 'SystemTemp/PFJ/123'
 $env:TMP=$root
 $env:TEMP=$root
 $env:SystemTemp=$root
