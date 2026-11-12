@@ -2,6 +2,12 @@
 
 ## Unreleased
 ### What's Changed
+- Resolve signing and package payload checks separately for every framework through MSBuild's `TargetDir` and `TargetPath`, with relative paths anchored to the project. Use a matching conventional framework directory only as a fallback, and fail when any framework remains unresolved.
+- Allow PowerShell-authored module builds to reuse prepared staging through the same no-rebuild controls as JSON-configured builds.
+- Resume a partially published coordinated release with `ReusePreparedPackages` to reuse its verified NuGet packages, symbols and project ZIPs without rebuilding or signing them again. Preserve the original checkpoint when recovery prerequisites or cached contents do not match.
+- Split a website pipeline's consecutive apidocs steps across several machines with `pipeline --split-phase prepare|finish` and the shared website workflows' `apidocs_shards` input. Shards rebuild the earlier steps, run a size-balanced share of the API docs, and archive what they produced; the finishing job verifies the archives cover every generator run exactly once and agree on shared files before running the remaining steps.
+- Preserve commands exported as `Values`, dictionary defaults with member names such as `Count`, and dictionary enumeration in help extraction and build helpers.
+- Keep accelerator registration and removal on the same monitor when an exported type is named `SyncRoot`.
 - Sign only build-owned files in retained Script artefacts. Validate mapped destination kinds against prepared dependency payloads before clearing module output, then reuse those prepared files for delivery.
 - Preserve directory entries, including empty folders, in legacy artefact `CopyFiles` mappings without copying unselected files. Validate copy sources and destination conflicts before changing existing artefact output.
 - Collect parameters named `Keys` without confusing their metadata with a dictionary's key collection or expanding that metadata during JSON serialization.

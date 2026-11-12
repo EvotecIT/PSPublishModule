@@ -41,7 +41,7 @@ internal sealed class AboutTopicWriter
         {
             var candidate = selected[topic];
             var outPath = Path.Combine(aboutOutDir, SanitizeFileName(candidate.TopicName) + ".md");
-            GeneratedTextNormalizer.WriteUtf8NoBom(outPath, candidate.Markdown);
+            GeneratedTextNormalizer.WriteUtf8NoBom(outPath, candidate.Markdown, "\n");
 
             written.Add(new AboutTopicInfo(candidate.TopicName, outPath, candidate.ShortDescription));
         }
@@ -215,7 +215,7 @@ internal sealed class AboutTopicWriter
         }
 
         sb.AppendLine();
-        GeneratedTextNormalizer.WriteUtf8NoBom(indexPath, sb.ToString());
+        GeneratedTextNormalizer.WriteUtf8NoBom(indexPath, sb.ToString(), "\n");
     }
 
     private static string SanitizeFileName(string name)

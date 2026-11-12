@@ -30,6 +30,14 @@ class HealthContracts(unittest.TestCase):
         self.assertTrue(result['healthy'])
         self.assertEqual(3, len(result['databases']))
 
+    def test_monitor_reports_a_different_retention_policy(self):
+        values = self.fixture()
+        values[1]['keepDaily'] = 7
+        result = H.evaluate(*values)
+        self.assertFalse(result['healthy'])
+        for database in result['databases']:
+            self.assertIn('NAS retention/freshness policy differs', database['problems'])
+
     def test_dotnet_fractional_timestamps_work_for_all_health_time_boundaries(self):
         values = self.fixture()
         def dotnet(value):

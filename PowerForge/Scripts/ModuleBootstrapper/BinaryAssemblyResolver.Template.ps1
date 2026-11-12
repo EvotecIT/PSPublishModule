@@ -21,6 +21,7 @@ foreach ($AssemblyFolder in @($AssemblyFolders.Name)) {
 $Framework = if ($Standard) { 'Standard' } elseif ($Core) { 'Core' } else { '' }
 $FrameworkNet = if ($Default) { 'Default' } elseif ($Standard) { 'Standard' } else { '' }
 {{RuntimePayloadSelectorBlock}}
+{{DesktopScriptHelperBlock}}
 $PowerForgeHasNoCompatibleNamedCorePayload = $PSEdition -eq 'Core' -and $HasNamedCorePayload -and ($Framework -eq 'Default' -or [string]::IsNullOrWhiteSpace($Framework))
 
 $PowerForgePreferredBinaryFolders = if ($PSEdition -eq 'Core') {

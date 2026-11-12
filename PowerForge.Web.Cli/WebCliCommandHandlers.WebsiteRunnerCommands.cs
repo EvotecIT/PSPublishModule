@@ -55,7 +55,8 @@ internal static partial class WebCliCommandHandlers
                         Environment.GetEnvironmentVariable("GH_TOKEN"),
                         Environment.GetEnvironmentVariable("GITHUB_TOKEN")),
                     RunnerTempPath = Environment.GetEnvironmentVariable("RUNNER_TEMP"),
-                    MaintenanceModeNote = HasOption(subArgs, "--maintenance-note") || HasOption(subArgs, "--maintenanceModeNote")
+                    MaintenanceModeNote = HasOption(subArgs, "--maintenance-note") || HasOption(subArgs, "--maintenanceModeNote"),
+                    PipelineSplitArguments = ReadWebsiteRunnerSplitArguments(subArgs)
                 },
                 outputJson ? null : Console.WriteLine,
                 outputJson ? null : Console.Error.WriteLine);
@@ -113,6 +114,19 @@ internal static partial class WebCliCommandHandlers
 
     // Untrusted jobs intentionally provide empty PAT variables. Empty values
     // must not hide the read-only job token used to fetch a public binary engine.
+    /// <summary>Forwards non-empty split-run options to the pipeline command; the engine validates them.</summary>
+    internal static string[] ReadWebsiteRunnerSplitArguments(string[] subArgs)
+    {
+        var arguments = new List<string>();
+        foreach (var name in new[] { "--split-phase", "--apidocs-shard", "--split-archive", "--split-archives" })
+        {
+            var value = TryGetOptionValue(subArgs, name);
+            if (!string.IsNullOrWhiteSpace(value))
+                arguments.AddRange(new[] { name, value });
+        }
+        return arguments.ToArray();
+    }
+
     internal static string? ResolveWebsiteRunnerGitHubToken(string? repositoryToken, string? cliToken, string? jobToken)
     {
         if (!string.IsNullOrWhiteSpace(repositoryToken)) return repositoryToken;

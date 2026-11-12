@@ -664,18 +664,21 @@ internal static partial class WebPipelineRunner
             nestedMessages[index] = nestedResult.Message;
         }
 
+        // A split pipeline shard runs only its inputs; suite navigation above still lists every input.
+        var selectedIndexes = CurrentApiDocsInputSelection.Value ?? Enumerable.Range(0, inputs.Length).ToArray();
+
         // Inputs that neither share outputs nor read each other's are independent; parallel runs replay their logs in input order.
         var ranInParallel = AreIndependentApiDocsInputs(baseDir, parentStep) &&
-                            TryRunInParallelWithOrderedOutput(inputs, RunInput);
+                            TryRunInParallelWithOrderedOutput(selectedIndexes, (index, _) => RunInput(inputs[index], index));
         if (!ranInParallel)
         {
-            for (var index = 0; index < inputs.Length; index++)
+            foreach (var index in selectedIndexes)
                 RunInput(inputs[index], index);
         }
 
-        var completed = inputs.Length;
+        var completed = selectedIndexes.Length;
         var notes = new List<string>();
-        for (var index = 0; index < inputs.Length; index++)
+        foreach (var index in selectedIndexes)
         {
             if (!string.IsNullOrWhiteSpace(nestedMessages[index]))
             {
@@ -689,9 +692,10 @@ internal static partial class WebPipelineRunner
         var summary = string.Join("; ", notes.Take(2));
         var suffix = notes.Count > 2 ? $" (+{notes.Count - 2} more)" : string.Empty;
         stepResult.Success = true;
+        var count = completed == inputs.Length ? $"{completed}" : $"{completed} of {inputs.Length}";
         stepResult.Message = string.IsNullOrWhiteSpace(summary)
-            ? $"API docs batch {completed} input(s)"
-            : $"API docs batch {completed} input(s): {summary}{suffix}";
+            ? $"API docs batch {count} input(s)"
+            : $"API docs batch {count} input(s): {summary}{suffix}";
     }
 
     private static JsonDocument CreateMergedApiDocsStepDocument(

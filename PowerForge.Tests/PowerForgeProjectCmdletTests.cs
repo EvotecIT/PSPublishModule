@@ -264,7 +264,10 @@ public sealed class PowerForgeProjectCmdletTests
         var cmdletProperties = WritablePropertyNames(typeof(PSPublishModule.NewConfigurationPackageBuildCommand));
 
         Assert.Equal(schemaProperties, projectBuildProperties);
-        Assert.Empty(projectBuildProperties.Except(packageBuildProperties, StringComparer.Ordinal));
+        // Draft NuGet staging is standalone and is rejected in deferred module lanes.
+        Assert.Empty(projectBuildProperties
+            .Except(new[] { nameof(ProjectBuildConfiguration.StageNuget) }, StringComparer.Ordinal)
+            .Except(packageBuildProperties, StringComparer.Ordinal));
         Assert.Empty(packageBuildProperties.Except(cmdletProperties, StringComparer.Ordinal));
     }
 
@@ -287,24 +290,30 @@ public sealed class PowerForgeProjectCmdletTests
         Assert.Equal("HtmlTinkerX", segment.Configuration.PrimaryProject);
         Assert.True(segment.Configuration.SynchronizeModuleVersion);
         Assert.False(segment.Configuration.ResumeIncompleteRelease);
+        Assert.False(segment.Configuration.ReusePreparedPackages);
         Assert.Equal(new[] { "PackageBuild", "Module" }, segment.Configuration.BuildOrder);
         Assert.Equal(new[] { "NuGet", "PowerShellGallery", "GitHub" }, segment.Configuration.PublishOrder);
     }
 
-    [Fact]
-    public void NewConfigurationRelease_EnablesExplicitIncompleteReleaseResume()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void NewConfigurationRelease_OptsIntoPreparedPackagesOnlyWhenRequested(bool reusePackages)
     {
         using var ps = CreatePowerShellWithModuleImported();
         ps.AddCommand("New-ConfigurationRelease")
             .AddParameter("VersionSource", ReleaseVersionSource.PackageBuild)
             .AddParameter("PrimaryProject", "HtmlTinkerX")
             .AddParameter("ResumeIncompleteRelease");
+        if (reusePackages)
+            ps.AddParameter("ReusePreparedPackages");
 
         var results = ps.Invoke();
 
         Assert.False(ps.HadErrors);
         var segment = Assert.IsType<ConfigurationReleaseSegment>(Assert.Single(results).BaseObject);
         Assert.True(segment.Configuration.ResumeIncompleteRelease);
+        Assert.Equal(reusePackages, segment.Configuration.ReusePreparedPackages);
     }
 
     [Fact]

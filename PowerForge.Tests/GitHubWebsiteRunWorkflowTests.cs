@@ -124,13 +124,18 @@ public sealed class GitHubWebsiteRunWorkflowTests
         Assert.Contains("GITHUB_TOKEN: ${{ (inputs.credential_mode == 'standard' || (inputs.credential_mode == 'public-github' && github.event.repository.private == false && github.event.repository.visibility == 'public')) && github.token || '' }}", workflowYaml, StringComparison.Ordinal);
         Assert.Contains("GITHUB_PACKAGES_TOKEN: ${{ inputs.credential_mode == 'standard' && (secrets.repository_read_token || github.token) || '' }}", workflowYaml, StringComparison.Ordinal);
         Assert.Contains("LICENSING_PACKAGES_TOKEN: ${{ inputs.credential_mode == 'standard' && (secrets.repository_read_token || github.token) || '' }}", workflowYaml, StringComparison.Ordinal);
-        Assert.DoesNotContain("GITHUB_ENV", workflowYaml, StringComparison.Ordinal);
-
-        string pipelineStep = workflowYaml[
-            workflowYaml.IndexOf("      - name: Run website pipeline", StringComparison.Ordinal)..
-            workflowYaml.IndexOf("      - name: Resolve actual PowerForge engine provenance", StringComparison.Ordinal)];
+        // Later steps inherit GITHUB_ENV, so it may carry cache paths but never a credential.
         Assert.All(
-            pipelineStep.Split('\n').Where(static line =>
+            workflowYaml.Split('\n').Where(static line => line.Contains("GITHUB_ENV", StringComparison.Ordinal)),
+            static line =>
+            {
+                Assert.DoesNotContain("TOKEN", line, StringComparison.OrdinalIgnoreCase);
+                Assert.DoesNotContain("secrets.", line, StringComparison.Ordinal);
+            });
+
+        // Every job (prepare, API docs shards, finish) passes secrets only in standard mode.
+        Assert.All(
+            workflowYaml.Split('\n').Where(static line =>
                 line.Contains("secrets.", StringComparison.Ordinal) || line.Contains("LICENSING_PACKAGES_USERNAME:", StringComparison.Ordinal)),
             static line =>
             {
@@ -138,7 +143,11 @@ public sealed class GitHubWebsiteRunWorkflowTests
                 Assert.DoesNotContain("public-github", line, StringComparison.Ordinal);
             });
         Assert.DoesNotContain("inputs.credential_mode != 'none'", workflowYaml, StringComparison.Ordinal);
-        Assert.Contains("          GH_TOKEN: ''", pipelineStep, StringComparison.Ordinal);
+        // Each step that hands the policy token to website code also blanks an ambient CLI credential.
+        var lines = workflowYaml.Split('\n').Select(static line => line.TrimEnd('\r')).ToArray();
+        Assert.Equal(
+            lines.Count(static line => line.Contains("GITHUB_TOKEN: ${{ (inputs.credential_mode == 'standard' ||", StringComparison.Ordinal)),
+            lines.Count(static line => line == "          GH_TOKEN: ''"));
     }
 
     [Fact]
@@ -280,29 +289,6 @@ public sealed class GitHubWebsiteRunWorkflowTests
         Assert.Contains("DOTNET_BUNDLE_EXTRACT_BASE_DIR: ${{ github.workspace }}/.cache/powerforge-runner/dotnet-bundle", workflowYaml, StringComparison.Ordinal);
         Assert.Contains("BUN_INSTALL_CACHE_DIR: ${{ github.workspace }}/.cache/powerforge-runner/bun-install-cache", workflowYaml, StringComparison.Ordinal);
         Assert.Contains("NPM_CONFIG_CACHE: ${{ github.workspace }}/.cache/powerforge-runner/npm-cache", workflowYaml, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void WebsiteRunWorkflow_ShouldScopeNuGetCacheToTheWebsiteJob()
-    {
-        var repoRoot = FindRepoRoot();
-        var workflowPath = Path.Combine(repoRoot, ".github", "workflows", "powerforge-website-run.yml");
-
-        Assert.True(File.Exists(workflowPath), $"Website workflow not found: {workflowPath}");
-
-        var workflowYaml = File.ReadAllText(workflowPath);
-
-        var nugetEnvironmentLines = workflowYaml
-            .Split('\n')
-            .Where(static line => line.Contains("NUGET_PACKAGES:", StringComparison.Ordinal))
-            .ToArray();
-
-        Assert.Equal(2, nugetEnvironmentLines.Length);
-        Assert.All(nugetEnvironmentLines, static line => Assert.StartsWith("          NUGET_PACKAGES:", line, StringComparison.Ordinal));
-        Assert.Contains("path: ${{ runner.temp }}/powerforge-website-nuget-packages", workflowYaml, StringComparison.Ordinal);
-        Assert.Contains("powerforge-website-nuget-v1-${{ runner.os }}-", workflowYaml, StringComparison.Ordinal);
-        Assert.Contains("$env:NUGET_PACKAGES", workflowYaml, StringComparison.Ordinal);
-        Assert.DoesNotContain("path: ~/.nuget/packages", workflowYaml, StringComparison.Ordinal);
     }
 
     [Fact]

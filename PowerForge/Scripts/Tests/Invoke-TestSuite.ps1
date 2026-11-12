@@ -99,9 +99,9 @@ try {
         $funcCount = 0
         $cmdletCount = 0
         $aliasCount = 0
-        try { $funcCount = ($m.ExportedFunctions.Keys | Measure-Object).Count } catch { }
-        try { $cmdletCount = ($m.ExportedCmdlets.Keys | Measure-Object).Count } catch { }
-        try { $aliasCount = ($m.ExportedAliases.Keys | Measure-Object).Count } catch { }
+        try { $funcCount = $m.ExportedFunctions.get_Count() } catch { }
+        try { $cmdletCount = $m.ExportedCmdlets.get_Count() } catch { }
+        try { $aliasCount = $m.ExportedAliases.get_Count() } catch { }
         Write-Output ('PFTEST::EXPORTS::' + $funcCount + '::' + $cmdletCount + '::' + $aliasCount)
       }
     } catch { }

@@ -215,6 +215,52 @@ public sealed class PublishedNuGetAssetRecoveryServiceTests
         }
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Restore_ReplacesOnlyTheReleaseEntryMatchingTheRebuiltAnalyzer(bool hasCollidingLibrary)
+    {
+        var root = Directory.CreateTempSubdirectory();
+        try
+        {
+            const string packageId = "PowerForge.Generators";
+            const string version = "3.0.81";
+            const string packageEntry = "analyzers/dotnet/cs/PowerForge.Generators.dll";
+            const string releaseEntry = "netstandard2.0/PowerForge.Generators.dll";
+            const string unrelatedEntry = "net8.0/PowerForge.Generators.dll";
+            var packagePath = Path.Combine(root.FullName, $"{packageId}.{version}.nupkg");
+            var releaseZipPath = Path.Combine(root.FullName, $"{packageId}.{version}.zip");
+            var libraryEntry = hasCollidingLibrary ? $"lib/{releaseEntry}" : null;
+            File.WriteAllBytes(packagePath, CreatePackage(packageId, version, "rebuilt-analyzer", packageEntry, libraryEntry));
+            var publishedBytes = CreatePackage(packageId, version, "published-analyzer", packageEntry, libraryEntry);
+            using (var release = ZipFile.Open(releaseZipPath, ZipArchiveMode.Create))
+            {
+                WriteTextEntry(release, releaseEntry, "rebuilt-analyzer");
+                WriteTextEntry(release, unrelatedEntry, "unrelated-assembly");
+            }
+
+            var service = new PublishedNuGetAssetRecoveryService(
+                new NullLogger(),
+                new NuGetV3PackageDownloader(new NuGetRecoveryHandler(publishedBytes)));
+
+            var restored = service.Restore(
+                "https://packages.example/v3/index.json",
+                version,
+                [packagePath, releaseZipPath],
+                CancellationToken.None);
+
+            Assert.Equal([packagePath, releaseZipPath], restored);
+            Assert.Equal(publishedBytes, File.ReadAllBytes(packagePath));
+            using var recovered = ZipFile.OpenRead(releaseZipPath);
+            Assert.Equal("published-analyzer", ReadText(Assert.Single(recovered.Entries, entry => entry.FullName == releaseEntry)));
+            Assert.Equal("unrelated-assembly", ReadText(Assert.Single(recovered.Entries, entry => entry.FullName == unrelatedEntry)));
+        }
+        finally
+        {
+            root.Delete(recursive: true);
+        }
+    }
+
     [Fact]
     public void Restore_PrefersEachReleaseZipOwningPackageWhenToolAndLibraryPayloadsCollide()
     {
@@ -531,6 +577,56 @@ public sealed class PublishedNuGetAssetRecoveryServiceTests
     }
 
     [Fact]
+    public void Restore_ReportsThirtyMinuteIndexingBudgetAndHonorsCancellation()
+    {
+        var root = Directory.CreateTempSubdirectory();
+        try
+        {
+            const string version = "3.0.188";
+            string packagePath = Path.Combine(root.FullName, "PowerForge.Web.Build.3.0.188.nupkg");
+            byte[] original = CreatePackage("PowerForge.Web.Build", version, "original-signed-payload");
+            File.WriteAllBytes(packagePath, original);
+            using var cancellation = new CancellationTokenSource();
+            var logger = new BufferedLogger();
+            var handler = new NuGetRecoveryHandler(original, packageNotFoundResponses: 1);
+            var service = new PublishedNuGetAssetRecoveryService(
+                logger,
+                new NuGetV3PackageDownloader(handler),
+                delay: (_, token) =>
+                {
+                    cancellation.Cancel();
+                    token.ThrowIfCancellationRequested();
+                });
+
+            Assert.ThrowsAny<OperationCanceledException>(() => service.Restore(
+                "https://packages.example/v3/index.json", version, [packagePath], cancellation.Token));
+
+            string progress = Assert.Single(logger.Entries).Message;
+            Assert.Contains("elapsed ", progress);
+            Assert.Contains("budget 00:30:00", progress);
+            Assert.Contains("HTTP status 404", progress);
+            Assert.Equal(original, File.ReadAllBytes(packagePath));
+            Assert.Equal([packagePath], Directory.GetFiles(root.FullName));
+
+            var expired = new PublishedNuGetAssetRecoveryService(
+                new NullLogger(),
+                new NuGetV3PackageDownloader(new NuGetRecoveryHandler(original, packageNotFoundResponses: 1)),
+                indexingTimeout: TimeSpan.Zero);
+            var failure = Assert.Throws<InvalidOperationException>(() => expired.Restore(
+                "https://packages.example/v3/index.json", version, [packagePath], CancellationToken.None));
+            Assert.Contains("still unreadable after ", failure.Message);
+            Assert.Contains("indexing budget 00:00:00", failure.Message);
+            Assert.Contains("HTTP status 404", failure.Message);
+            Assert.NotNull(failure.InnerException);
+            Assert.Equal(original, File.ReadAllBytes(packagePath));
+        }
+        finally
+        {
+            root.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
     public void Restore_RetriesUntilNewlyPublishedPackageIsReadable()
     {
         var root = Directory.CreateTempSubdirectory();
@@ -592,7 +688,12 @@ public sealed class PublishedNuGetAssetRecoveryServiceTests
         }
     }
 
-    private static byte[] CreatePackage(string packageId, string version, string signatureMarker)
+    private static byte[] CreatePackage(
+        string packageId,
+        string version,
+        string signatureMarker,
+        string? payloadPath = null,
+        string? collidingLibraryPath = null)
     {
         using var memory = new MemoryStream();
         using (var archive = new ZipArchive(memory, ZipArchiveMode.Create, leaveOpen: true))
@@ -608,7 +709,10 @@ public sealed class PublishedNuGetAssetRecoveryServiceTests
             using (var signatureWriter = new StreamWriter(signature.Open(), new UTF8Encoding(false)))
                 signatureWriter.Write(signatureMarker);
 
-            var payload = archive.CreateEntry($"lib/net10.0/{packageId}.dll");
+            if (collidingLibraryPath is not null)
+                WriteTextEntry(archive, collidingLibraryPath, "unrelated-library");
+
+            var payload = archive.CreateEntry(payloadPath ?? $"lib/net10.0/{packageId}.dll");
             using (var payloadWriter = new StreamWriter(payload.Open(), new UTF8Encoding(false)))
                 payloadWriter.Write(signatureMarker);
         }

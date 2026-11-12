@@ -40,7 +40,7 @@ internal sealed class MarkdownHelpWriter
             progress?.Invoke(i + 1, commands.Length, cmd.Name.Trim());
             var md = RenderCommandMarkdown(moduleName, cmd, onlineVersion, exampleIndentClassifier: _exampleIndentClassifier);
             var path = Path.Combine(docsPath, $"{cmd.Name.Trim()}.md");
-            GeneratedTextNormalizer.WriteUtf8NoBom(path, md);
+            GeneratedTextNormalizer.WriteUtf8NoBom(path, md, "\n");
         }
     }
 
@@ -116,7 +116,7 @@ internal sealed class MarkdownHelpWriter
             // best effort
         }
 
-        GeneratedTextNormalizer.WriteUtf8NoBom(readmePath, doc.ToString());
+        GeneratedTextNormalizer.WriteUtf8NoBom(readmePath, doc.ToString(), "\n");
     }
 
     internal static string RenderCommandMarkdown(
@@ -129,6 +129,7 @@ internal sealed class MarkdownHelpWriter
         var doc = new MarkdownDocumentBuilder(blankLineAfterFrontMatter: false);
         doc.FrontMatterRaw("external help file", $"{moduleName}-help.xml");
         doc.FrontMatterRaw("Module Name", moduleName);
+        onlineVersion = string.IsNullOrWhiteSpace(cmd.HelpUri) ? onlineVersion : cmd.HelpUri;
         if (string.IsNullOrWhiteSpace(onlineVersion))
             doc.FrontMatterRaw("online version");
         else

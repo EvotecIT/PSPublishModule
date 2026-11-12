@@ -628,6 +628,8 @@ Recognition tiers are opt-in, per-account overrides win over GitHub tier mapping
 
 ## GitHub Housekeeping
 
+[Host-local runner maintenance](Docs/PowerForge.RunnerMaintenance.md) provides hourly and job-boundary storage cleanup with shared NuGet coordination and native Windows, Linux and macOS schedules.
+
 PowerForge can clean GitHub Actions artifacts, caches, and runner workspace pressure with safe dry-run defaults:
 
 ```powershell

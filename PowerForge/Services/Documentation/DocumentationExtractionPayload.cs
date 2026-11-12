@@ -56,6 +56,10 @@ internal sealed class DocumentationCommandHelp
     [DataMember(Name = "commandType")]
     public string CommandType { get; set; } = string.Empty;
 
+    /// <summary>Online help URI declared in the command's metadata, when available.</summary>
+    [DataMember(Name = "helpUri")]
+    public string? HelpUri { get; set; }
+
     /// <summary>
     /// Full name of the implementing .NET type for cmdlets (from <c>Get-Command</c>), when available.
     /// Empty for script functions.

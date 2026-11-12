@@ -72,6 +72,21 @@ and the coordinated module GitHub asset set; the tool lane owns runtime-specific
 archives. This is one operator command with one release owner, even when independent product version lines require
 separate GitHub tags.
 
+### Public release preparation
+
+Run `Build/Invoke-PowerForgePublicRelease.ps1 -Operation PrepareMetadata` with the
+selected `-Version` and current `-ExpectedCommit` to update project versions, the
+module manifest, and the generated README Help Version. It uses separate metadata
+output paths and disables signing, installation, and publication. Existing signed
+staging remains available for recovery.
+
+Commit the resulting version metadata before running `Publish` against that new
+commit. `Prepare` continues to build and sign the complete release payload.
+
+Published NuGet payload read-back allows thirty minutes per package for registry
+indexing. Progress includes elapsed time and the last HTTP status. Cancellation
+and an exhausted indexing budget retain the release failure state.
+
 ### Public release credentials
 
 This repository's `Build/Invoke-PowerForgePublicRelease.ps1` keeps its configured
@@ -663,6 +678,15 @@ without building, signing, or publishing.
   A normal new invocation archives any incomplete checkpoint and computes a fresh release; configure
   `ResumeIncompleteRelease` only when the operator intentionally wants to continue that exact release and skip
   destinations that already completed.
+
+For a partial publication with a complete payload cache, add `ReusePreparedPackages` alongside
+`ResumeIncompleteRelease` to retain the prepared NuGet packages, symbols and project release ZIPs
+without another build, pack or signing pass. This also accepts existing schema-5 checkpoints.
+The cache contents, package identities, versions and source snapshot are checked before publication.
+Every packable cached project needs a primary package, and its lane needs `OutputPath` or `StagingPath`.
+Payload-free, non-packable projects retain their identities through a read-only project plan.
+Module preparation and destination checks run normally. Missing or corrupt payloads fail recovery
+and preserve the checkpoint. Controlled provenance rebuilding uses the normal release path.
 
 ## Validation Contract
 

@@ -14,6 +14,7 @@ internal static partial class Program
       powerforge build [--config <BuildSpec|Pipeline>.json] [--project-root <path>] [--output json]
       powerforge docs [--config <Pipeline.json>] [--project-root <path>] [--output json]
       powerforge docs sync --config <docs-sync.json> [--apply] [--output json]
+      powerforge signing prepare --thumbprint <approved-certificate> --out <new-local-directory> [--timestamp-url <url>] [--module-path <installed-manifest>] [--output json]
       powerforge validate-release --config <validation.json> [--project-root <path>] [--version <version>] [--variable <Name=Value>] [--output json]
       powerforge pack [--config <Pipeline.json>] [--project-root <path>] [--out <path>] [--output json]
       powerforge template --script <Build-Module.ps1> [--out <path>] [--project-root <path>] [--powershell <path>] [--output json]
@@ -57,6 +58,7 @@ internal static partial class Program
                         [--reviewed-plan <path> --confirm] [--output json]
       powerforge store submit [--config <powerforge.store.submit.json>] [--list] [--list-assets] [--target <Name>] [--submission-id <id>] [--plan] [--validate] [--no-commit] [--no-wait] [--output json]
       powerforge release prepare-catalog --config <release.json> --manifest <release-manifest.json> --checksums <SHA256SUMS.txt> --asset-root <downloads> --out <new-directory> [--output json]
+      powerforge release prepare-scoop --config <release.json> --manifest <release-manifest.json> --checksums <SHA256SUMS.txt> --asset-root <downloads> --out <new-directory> [--output json]
       powerforge run [--config <run.profiles.json>] [--list] [--target <Name>] [--configuration <Release|Debug>] [--framework <tfm>] [--no-build] [--no-restore]
                      [--allow-root <path[,path...]>] [--include-private-tool-packs] [--testimox-root <path>] [--extra-arg <value>] [--output json]
       powerforge workspace validate [--config <workspace.validation.json>] [--list] [--profile <name>] [--configuration <Release|Debug>] [--enable-feature <name[,name...]>] [--disable-feature <name[,name...]>]
@@ -95,6 +97,7 @@ internal static partial class Program
                                       [--prune-dotnet-sdks] [--clean-windows-component-store] [--skip-diagnostics] [--skip-runner-temp] [--skip-actions-cache] [--skip-tool-cache] [--skip-dotnet-cache]
                                       [--skip-dotnet-sdk-prune] [--skip-windows-component-store]
                                       [--skip-docker] [--no-docker-volumes] [--output json]
+      powerforge github runner maintenance --config <policy.json> [--install | --apply] [--json]
       powerforge homeassistant release prepare --repo <owner/name> --pr-number <N> [--repository-root <path>] [--merge-sha <sha>] [--workflow-run-id <N>] [--apply]
       powerforge homeassistant release build --repository-root <path> --release-version <X.Y.Z> --release-commit <sha>
       powerforge homeassistant release publish --repo <owner/name> --pr-number <N> --release-version <X.Y.Z> --release-commit <sha>

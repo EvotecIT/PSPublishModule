@@ -497,6 +497,12 @@ public sealed class ReleaseConfiguration
     /// </summary>
     public bool ResumeIncompleteRelease { get; set; }
 
+    /// <summary>
+    /// Reuses the verified package and release archive payloads from an incomplete release instead of rebuilding them.
+    /// Requires <see cref="ResumeIncompleteRelease"/> and a complete signed payload cache. Module preparation still runs normally.
+    /// </summary>
+    public bool ReusePreparedPackages { get; set; }
+
     /// <summary>Explicit release version used when <see cref="VersionSource"/> is <see cref="ReleaseVersionSource.Manual"/>.</summary>
     public string? Version { get; set; }
 

@@ -25,6 +25,7 @@ internal static partial class Program
             Console.WriteLine(GitHubHousekeepingUsage);
             Console.WriteLine(GitHubRunnerCleanupUsage);
             Console.WriteLine(GitHubRunnerStorageUsage);
+            Console.WriteLine(RunnerMaintenanceUsage);
             return 2;
         }
 
@@ -189,11 +190,15 @@ internal static partial class Program
         {
             Console.WriteLine(GitHubRunnerCleanupUsage);
             Console.WriteLine(GitHubRunnerStorageUsage);
+            Console.WriteLine(RunnerMaintenanceUsage);
             return 2;
         }
 
         if (argv[0].Equals("storage", StringComparison.OrdinalIgnoreCase))
             return CommandGitHubRunnerStorage(argv.Skip(1).ToArray(), cli, logger);
+
+        if (argv[0].Equals("maintenance", StringComparison.OrdinalIgnoreCase))
+            return CommandGitHubRunnerMaintenance(argv.Skip(1).ToArray(), cli, logger);
 
         if (!argv[0].Equals("cleanup", StringComparison.OrdinalIgnoreCase))
         {

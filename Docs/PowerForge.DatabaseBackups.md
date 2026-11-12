@@ -4,7 +4,7 @@ PowerForge.Backups captures consistent SQL Server and SQLite databases and sends
 
 Capture identifiers use Gregorian UTC timestamps regardless of the workstation's culture. Database and recovery-file identifiers must be portable lowercase names; Windows device basenames such as `aux` and `con` are rejected. Redirected SSH output is bounded while reading, and an input or output failure stops the child before waiting for completion.
 
-The Windows scheduled task runs without an interactive login. A separate NAS task verifies stored native files and retains successful captures from fourteen distinct days. Once maintenance selects a daily recovery point, later uploads cannot replace that selection. The latest complete capture is also retained so same-day retries remain available. Failed or stale backups hold retention. The upload key permits only the receiver protocol, with no shell, forwarding, deletion or retention command.
+The Windows scheduled task runs without an interactive login. A separate NAS task verifies stored native files and retains successful captures for the configured number of distinct days. Once maintenance selects a daily recovery point, later uploads cannot replace that selection. The latest complete capture is also retained so same-day retries remain available. Failed or stale backups hold retention. The upload key permits only the receiver protocol, with no shell, forwarding, deletion or retention command.
 
 ## Capture and verification
 
@@ -71,7 +71,7 @@ The drill verifies recoverability without replacing live service files. During a
 
 ## Monitoring
 
-`Deployment/Monitoring/verify-database-backups.py` reads projected Windows state, the exact Windows scheduled task, NAS receipt and maintenance state, DSM task configuration, and the latest restore drill. Its workstation check covers DDCT, DDNext and Sectigo and flags captures older than 30 hours, disabled or changed schedules, failed attempts, missing verification, cleanup failures and restore drills older than 30 days. A running job can use its still-fresh verified prior capture. History starts with one successful recovery point and accumulates over fourteen days.
+`Deployment/Monitoring/verify-database-backups.py` reads projected Windows state, the exact Windows scheduled task, NAS receipt and maintenance state, DSM task configuration, and the latest restore drill. Its workstation check covers DDCT, DDNext and Sectigo and flags drift from fourteen daily recovery points on Synology, captures older than 30 hours, disabled or changed schedules, failed attempts, missing verification, cleanup failures and restore drills older than 30 days. A running job can use its still-fresh verified prior capture. History starts with one successful recovery point and accumulates as daily captures verify.
 
 Receipt reads bracket the NAS status query and retry if local publication changes during the scan. NAS publication can precede the final local receipt; a matching current attempt permits that handover for at most five minutes after NAS verification and reports `receiptPending`. Failed attempts, cleanup errors, unidentified mismatches and expired handovers remain unhealthy.
 

@@ -58,6 +58,8 @@ public sealed partial class ModulePipelineRunner
                 : ReleaseSourceCommit.Capture(plan.ProjectRoot);
             if (plan.RequireReleaseSourceUnchanged)
                 ValidateReleaseSourceUnchanged(plan, generatedOutputPaths: null, trackedGeneratedOutputPaths: null);
+            if (plan.ReleaseCheckpoint && plan.BuildSpec.ReuseStaging && plan.GateMode == ConfigurationGateMode.Publish)
+                return PublishFinalizedCheckpoint(spec, plan, session, pipeline, state);
             ExecutePreparationAndBuildPhases(plan, session, manifestRequiredModules, manifestExternalModuleDependencies, pipeline, state);
             var approvedForOutput = plan.ApprovedModules ?? Array.Empty<string>();
             var retainedApprovedModules = approvedForOutput.Except(
@@ -116,6 +118,8 @@ public sealed partial class ModulePipelineRunner
 
             var result = BuildPipelineResult(spec, plan, state);
             CompleteSynchronizedReleaseCheckpoint(state);
+            if (plan.ReleaseCheckpoint && !plan.DeleteGeneratedStagingAfterRun)
+                SavePublicationCheckpoint(plan, state);
             return result;
         }
         catch (Exception ex)

@@ -776,9 +776,13 @@ try {
       # best effort: RelatedLinks is optional and shaped differently between PowerShell versions
     }
 
+    $helpUri = ''
+    try { $helpUri = [string]([System.Management.Automation.CommandMetadata]::new($c)).HelpUri } catch { $helpUri = '' }
+
     $result.commands += [ordered]@{
       name = [string]$c.Name
       commandType = [string]$c.CommandType
+      helpUri = $helpUri
       implementingType = $implType
       assemblyPath = $dllPath
       defaultParameterSet = if ($defaultSet) { [string]$defaultSet } else { $null }

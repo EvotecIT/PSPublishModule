@@ -1,13 +1,14 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
+    <PackageVersion>3.0.191</PackageVersion>
     <TargetFrameworks>net472;net8.0;net10.0</TargetFrameworks>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <LangVersion>latest</LangVersion>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <WarningsAsErrors>CS1591</WarningsAsErrors>
-    <VersionPrefix>3.0.186</VersionPrefix>
+    <VersionPrefix>3.0.191</VersionPrefix>
     <PackageId>PowerForge</PackageId>
     <Description>PowerForge core library: reusable engine for building, formatting, packaging and publishing PowerShell modules.</Description>
     <AssemblyName>PowerForge</AssemblyName>

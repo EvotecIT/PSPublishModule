@@ -148,6 +148,7 @@ public sealed partial class InvokeModuleBuildCommand : PSCmdlet
     public string? BuildFramework { get; set; }
 
     /// <summary>Skips the configured .NET project build and reuses the existing module binary payload.</summary>
+    [Parameter(ParameterSetName = ParameterSetModern)]
     [Parameter(ParameterSetName = ParameterSetConfig)]
     public SwitchParameter NoDotnetBuild { get; set; }
 
@@ -338,6 +339,7 @@ public sealed partial class InvokeModuleBuildCommand : PSCmdlet
     public string? StagingPath { get; set; }
 
     /// <summary>Reuses an existing staged module output for an internal deferred publication pass.</summary>
+    [Parameter(ParameterSetName = ParameterSetModern, DontShow = true)]
     [Parameter(ParameterSetName = ParameterSetConfig, DontShow = true)]
     public SwitchParameter ReuseStaging { get; set; }
 

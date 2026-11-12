@@ -1,6 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
+    <PackageVersion>3.0.191</PackageVersion>
     <OutputType>Exe</OutputType>
     <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
     <Nullable>enable</Nullable>
@@ -11,7 +12,7 @@
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>powerforge</ToolCommandName>
     <Description>PowerForge command-line interface for building and publishing PowerShell modules.</Description>
-    <VersionPrefix>3.0.186</VersionPrefix>
+    <VersionPrefix>3.0.191</VersionPrefix>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <Authors>Przemyslaw Klys</Authors>
     <Company>Evotec Services sp. z o.o.</Company>

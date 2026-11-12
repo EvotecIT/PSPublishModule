@@ -5,6 +5,17 @@ namespace PowerForge;
 /// </summary>
 public sealed class ModuleBuildSpec
 {
+    /// <summary>Process-local transport for the release coordinator's finalized checkpoint fingerprint.</summary>
+    internal const string PublicationCheckpointHashEnvironmentVariable = "POWERFORGE_MODULE_PUBLICATION_CHECKPOINT_SHA256";
+
+    /// <summary>Expected checkpoint fingerprint supplied by the build that preceded release validation.</summary>
+    internal string? PublicationCheckpointSha256 { get; set; }
+
+    /// <summary>Locates the finalized publication checkpoint beside its persistent staging directory.</summary>
+    internal static string GetPublicationCheckpointPath(string stagingPath)
+        => Path.GetFullPath(stagingPath).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+           + ".powerforge-publication.json";
+
     /// <summary>Name of the module being built.</summary>
     public string Name { get; set; } = string.Empty;
 

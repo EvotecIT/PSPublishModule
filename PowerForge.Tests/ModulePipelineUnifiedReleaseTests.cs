@@ -1584,6 +1584,18 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
             IGitHubReleaseProgressReporter? gitHubProgress)
         {
             ModulePublishPreflightAction?.Invoke(publish, plan);
+            if (RepositoryPublisher is not null)
+            {
+                var result = RepositoryPublisher.Publish(publish, plan, buildResult, artefactResults,
+                    includeScriptFolders, remotePublishAttempted, remoteSideEffectObserved,
+                    finalizeRepositoryModule: (root, name) =>
+                    {
+                        finalizeRepositoryModule?.Invoke(root, name);
+                        RepositoryPayloadPrepared?.Invoke(root);
+                    });
+                _events.Add($"module:{publish.Destination}");
+                return result;
+            }
             ModulePublishRemoteSideEffectAction?.Invoke(remoteSideEffectObserved);
             remotePublishAttempted?.Invoke();
             ModulePublishAction?.Invoke(publish, plan);

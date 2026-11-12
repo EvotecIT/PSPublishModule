@@ -17,10 +17,12 @@ if ($null -eq $script:PowerForgeAcceleratorOwnerId) {
 }
 $PowerForgeAcceleratorOwnerId = $script:PowerForgeAcceleratorOwnerId
 $RegisteredPowerForgeTypeAccelerators = $script:PowerForgeRegisteredAssemblyTypeAccelerators
+# A type named SyncRoot is a valid key; keep the underlying monitor fixed across mutations.
+$PowerForgeAcceleratorOwnersSyncRoot = $PowerForgeAcceleratorOwners.PSBase.SyncRoot
 
 $RegisterPowerForgeTypeAcceleratorOwner = {
     param([string] $Name, [type] $Type)
-    [Threading.Monitor]::Enter($PowerForgeAcceleratorOwners.SyncRoot)
+    [Threading.Monitor]::Enter($PowerForgeAcceleratorOwnersSyncRoot)
     try {
         $Catalog = $GetTypeAccelerators.GetValue($null)
         if ($Catalog.ContainsKey($Name)) {
@@ -38,12 +40,12 @@ $RegisterPowerForgeTypeAcceleratorOwner = {
             $RegisteredPowerForgeTypeAccelerators[$Name] = $Type
         }
     } finally {
-        [Threading.Monitor]::Exit($PowerForgeAcceleratorOwners.SyncRoot)
+        [Threading.Monitor]::Exit($PowerForgeAcceleratorOwnersSyncRoot)
     }
 }.GetNewClosure()
 
 $UnregisterPowerForgeTypeAcceleratorOwners = {
-    [Threading.Monitor]::Enter($PowerForgeAcceleratorOwners.SyncRoot)
+    [Threading.Monitor]::Enter($PowerForgeAcceleratorOwnersSyncRoot)
     try {
         $Catalog = $GetTypeAccelerators.GetValue($null)
         $RemoveTypeAccelerator = $TypeAccelerators.GetMethod('Remove', [type[]]@([string]))
@@ -60,6 +62,6 @@ $UnregisterPowerForgeTypeAcceleratorOwners = {
         }
         $RegisteredPowerForgeTypeAccelerators.Clear()
     } finally {
-        [Threading.Monitor]::Exit($PowerForgeAcceleratorOwners.SyncRoot)
+        [Threading.Monitor]::Exit($PowerForgeAcceleratorOwnersSyncRoot)
     }
 }.GetNewClosure()

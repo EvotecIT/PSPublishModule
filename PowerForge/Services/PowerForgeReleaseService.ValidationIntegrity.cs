@@ -31,6 +31,8 @@ internal sealed partial class PowerForgeReleaseService
             yield break;
 
         yield return plan.StagingPath;
+        if (!string.IsNullOrWhiteSpace(plan.StagingPath))
+            yield return ModuleBuildSpec.GetPublicationCheckpointPath(plan.StagingPath!);
         yield return plan.ConfigPath;
         yield return plan.ScriptPath;
         yield return plan.ModulePath;
@@ -60,7 +62,8 @@ internal sealed partial class PowerForgeReleaseService
             .ToArray();
     }
 
-    private static Dictionary<string, string> CaptureValidationIntegrity(string[] roots, CancellationToken token)
+    /// <summary>Captures exact file contents and directory inventories for immutable release inputs.</summary>
+    internal static Dictionary<string, string> CaptureValidationIntegrity(string[] roots, CancellationToken token)
     {
         var hashes = new Dictionary<string, string>(PathComparer);
         foreach (var root in roots)
@@ -94,7 +97,8 @@ internal sealed partial class PowerForgeReleaseService
         return hashes;
     }
 
-    private static void ValidateIntegrityUnchanged(string[] roots, Dictionary<string, string> expected, CancellationToken token)
+    /// <summary>Rejects any changed, added, removed or substituted release input.</summary>
+    internal static void ValidateIntegrityUnchanged(string[] roots, Dictionary<string, string> expected, CancellationToken token)
     {
         var actual = CaptureValidationIntegrity(roots, token);
         var changed = expected.Keys.Concat(actual.Keys).Distinct(PathComparer)

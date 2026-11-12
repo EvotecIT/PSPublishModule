@@ -29,8 +29,17 @@ internal static partial class WebPipelineRunner
         public required HashSet<string> PipelineSourcePaths { get; init; }
         public required JsonElement[] EnabledIndexNowSteps { get; init; }
         public required WebPipelineResult Result { get; init; }
+        public WebPipelineSplitOptions? Split { get; init; }
+        public int SplitFirstIndex { get; init; }
+        public int SplitLastIndex { get; init; }
+        public HashSet<int> SplitPrepareSteps { get; init; } = new();
+        public HashSet<int> SplitPreparedHere { get; set; } = new();
+        public HashSet<string> SplitPreparedTouched { get; } = new(StringComparer.Ordinal);
+        public bool SplitArchiveWritten { get; set; }
 
         public object Gate { get; } = new();
+        public object SplitGate { get; } = new();
+        public SplitPlan? SplitPlan { get; set; }
         public Dictionary<int, WebPipelineStepResult> StepResultsByIndex { get; } = new();
         public Dictionary<string, string[]> CacheOutputs { get; } = new(StringComparer.OrdinalIgnoreCase);
         public bool CacheUpdated { get; set; }
@@ -99,6 +108,26 @@ internal static partial class WebPipelineRunner
             return CompletedStepOutcome;
         }
 
+        var splitSkipReason = GetSplitSkipReason(state, definition, out var apiDocsInputSelection);
+        if (splitSkipReason is not null)
+        {
+            // The finishing run continues from the site the earlier build steps produced.
+            if (task.Equals("build", StringComparison.OrdinalIgnoreCase) &&
+                ResolvePath(baseDir, GetString(step, "out") ?? GetString(step, "output")) is { Length: > 0 } skippedBuildOut)
+            {
+                lock (state.Gate)
+                    state.LastBuildOutPath = skippedBuildOut;
+            }
+            stepResult.Success = true;
+            stepResult.Cached = false;
+            stepResult.DurationMs = 0;
+            stepResult.Message = $"skipped ({splitSkipReason})";
+            state.Commit(stepIndex, stepResult);
+            if (state.ProfileEnabled)
+                logger?.Info($"Finished {label} (skipped) in 0 ms");
+            return CompletedStepOutcome;
+        }
+
         logger?.Info($"Starting {label}...");
         var stopwatch = Stopwatch.StartNew();
         var cacheKey = $"{stepIndex}:{task}";
@@ -141,7 +170,10 @@ internal static partial class WebPipelineRunner
             }
         }
         var cacheStateLocal = state.CacheState;
-        var cacheable = state.CacheEnabled && cacheStateLocal is not null && IsCacheableStep(task, step);
+        // A shard's apidocs output must come from this run so its archive records it, and a partial
+        // batch must never satisfy a later full run.
+        var cacheable = state.CacheEnabled && cacheStateLocal is not null && IsCacheableStep(task, step) &&
+                        !(state.Split is not null && task.Equals("apidocs", StringComparison.OrdinalIgnoreCase));
         if (cacheable)
         {
             var fingerprintSalt = state.Fast ? $"fast|{PipelineToolFingerprint}" : PipelineToolFingerprint;
@@ -214,12 +246,15 @@ internal static partial class WebPipelineRunner
             }
             var stepLastBuildOutPath = lastBuildOutPath;
             var stepLastBuildUpdatedFiles = lastBuildUpdatedFiles;
+            var previousInputSelection = CurrentApiDocsInputSelection.Value;
+            CurrentApiDocsInputSelection.Value = apiDocsInputSelection;
             try
             {
                 ExecuteTask(task, step, label, baseDir, state.Fast, state.EffectiveMode, logger, ref stepLastBuildOutPath, ref stepLastBuildUpdatedFiles, stepResult);
             }
             finally
             {
+                CurrentApiDocsInputSelection.Value = previousInputSelection;
                 PublishLastBuildState(state, lastBuildOutPath, lastBuildUpdatedFiles, stepLastBuildOutPath, stepLastBuildUpdatedFiles);
             }
         }

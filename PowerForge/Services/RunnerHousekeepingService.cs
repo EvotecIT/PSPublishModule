@@ -21,7 +21,8 @@ public sealed partial class RunnerHousekeepingService
         "_PipelineMapping",
         "_temp",
         "_tool",
-        "_update"
+        "_update",
+        MaintenanceQuarantine
     };
 
     private readonly ILogger _logger;
@@ -83,6 +84,7 @@ public sealed partial class RunnerHousekeepingService
                 id: "workspaces",
                 title: "Cleanup old repository workspaces",
                 rootPath: normalized.WorkRootPath,
+                protectedNames: normalized.ProtectedWorkspaceNames,
                 retentionDays: normalized.WorkspacesRetentionDays,
                 dryRun: normalized.DryRun,
                 allowSudo: normalized.AllowSudo));
@@ -236,6 +238,7 @@ public sealed partial class RunnerHousekeepingService
         public int DiagnosticsRetentionDays { get; set; }
         public int ActionsRetentionDays { get; set; }
         public int WorkspacesRetentionDays { get; set; }
+        public string[] ProtectedWorkspaceNames { get; set; } = Array.Empty<string>();
         public int ToolCacheRetentionDays { get; set; }
         public int DotNetSdkVersionsToKeepPerMajorMinor { get; set; }
         public bool DryRun { get; set; }
@@ -288,6 +291,7 @@ public sealed partial class RunnerHousekeepingService
             DiagnosticsRetentionDays = Math.Max(0, spec.DiagnosticsRetentionDays),
             ActionsRetentionDays = Math.Max(0, spec.ActionsRetentionDays),
             WorkspacesRetentionDays = Math.Max(0, spec.WorkspacesRetentionDays),
+            ProtectedWorkspaceNames = ResolveProtectedWorkspaceNames(spec.ProtectedWorkspaces),
             ToolCacheRetentionDays = Math.Max(0, spec.ToolCacheRetentionDays),
             DotNetSdkVersionsToKeepPerMajorMinor = Math.Max(1, spec.DotNetSdkVersionsToKeepPerMajorMinor),
             DryRun = spec.DryRun,
@@ -386,7 +390,7 @@ public sealed partial class RunnerHousekeepingService
         return DeleteTargets(id, title, targets, dryRun, allowSudo, isDirectory: true, allowedRootPath: rootPath);
     }
 
-    private RunnerHousekeepingStepResult DeleteWorkspaceDirectoriesOlderThan(string id, string title, string? rootPath, int retentionDays, bool dryRun, bool allowSudo)
+    private RunnerHousekeepingStepResult DeleteWorkspaceDirectoriesOlderThan(string id, string title, string? rootPath, string[] protectedNames, int retentionDays, bool dryRun, bool allowSudo)
     {
         if (rootPath is null || string.IsNullOrWhiteSpace(rootPath) || !Directory.Exists(rootPath))
             return SkippedStep(id, title, $"Path not found: {rootPath ?? "(null)"}");
@@ -397,6 +401,7 @@ public sealed partial class RunnerHousekeepingService
         // which is why workspace cleanup remains opt-in.
         var targets = Directory.EnumerateDirectories(rootPath, "*", SearchOption.TopDirectoryOnly)
             .Where(path => !IsRunnerInternalWorkDirectory(path))
+            .Where(path => !protectedNames.Contains(Path.GetFileName(path), GetPathStringComparer()))
             .Where(path => !PathsEqual(path, currentWorkspaceRoot))
             .Where(path => IsWorkspaceInactiveSince(path, cutoff))
             .OrderBy(path => path, GetPathStringComparer())

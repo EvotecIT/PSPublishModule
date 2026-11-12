@@ -97,7 +97,7 @@ function GetDictionaryCapacity([System.Collections.IDictionary]$value) {
     if ($null -eq $versionField) {
       throw ('Dictionary serialization version is unavailable: ' + $dictionaryType.FullName)
     }
-    if ([int]$versionField.GetValue($value) -ne $value.Count) {
+    if ([int]$versionField.GetValue($value) -ne $value.get_Count()) {
       throw ('Dictionary defaults with non-reconstructible serialization versions are not supported: ' +
         $dictionaryType.FullName)
     }
@@ -122,7 +122,7 @@ function GetDictionaryCapacity([System.Collections.IDictionary]$value) {
     if ($null -eq $versionField) {
       throw ('SortedList serialization version is unavailable: ' + $dictionaryType.FullName)
     }
-    if ([int]$versionField.GetValue($value) -ne $value.Count) {
+    if ([int]$versionField.GetValue($value) -ne $value.get_Count()) {
       throw ('SortedList defaults with non-reconstructible serialization versions are not supported: ' +
         $dictionaryType.FullName)
     }
@@ -149,7 +149,7 @@ function GetDictionaryCapacity([System.Collections.IDictionary]$value) {
     if ($null -eq $versionField) {
       throw ('SortedDictionary serialization version is unavailable: ' + $dictionaryType.FullName)
     }
-    if ([int]$versionField.GetValue($backingSet) -ne $value.Count) {
+    if ([int]$versionField.GetValue($backingSet) -ne $value.get_Count()) {
       throw ('SortedDictionary defaults with non-reconstructible serialization versions are not supported: ' +
         $dictionaryType.FullName)
     }
@@ -345,7 +345,7 @@ function GetDictionaryConstructorExpression(
   [System.Collections.IDictionary]$value,
   [System.Collections.IList]$referenceStack = $null
 ) {
-  if ($value.IsReadOnly -or $value.IsFixedSize) {
+  if ($value.PSBase.IsReadOnly -or $value.PSBase.IsFixedSize) {
     throw ('Read-only or fixed-size dictionary defaults are not supported: ' + $value.GetType().FullName)
   }
   $dictionaryTypeName = GetConstructibleDictionaryTypeName $value
@@ -638,8 +638,8 @@ function ResolveUniqueTypeCaseInsensitive([string]$candidate, [ref]$isAmbiguous)
     }
   }
   $isAmbiguous.Value = $ambiguous
-  if ($ambiguous -or $matches.Count -ne 1) { return $null }
-  foreach ($match in $matches.Values) { return $match }
+  if ($ambiguous -or $matches.get_Count() -ne 1) { return $null }
+  foreach ($match in $matches.get_Values()) { return $match }
   return $null
 }
 
@@ -664,10 +664,10 @@ function ResolveUniqueNestedType([string]$candidate, [ref]$isAmbiguous) {
       $matches[(GetCanonicalTypeNameFromType $resolvedType)] = $resolvedType
     }
   }
-  if ($matches.Count -eq 1) {
-    foreach ($match in $matches.Values) { return $match }
+  if ($matches.get_Count() -eq 1) {
+    foreach ($match in $matches.get_Values()) { return $match }
   }
-  if ($matches.Count -gt 1) {
+  if ($matches.get_Count() -gt 1) {
     $isAmbiguous.Value = $true
     return $null
   }
@@ -681,9 +681,9 @@ function ResolveUniqueNestedType([string]$candidate, [ref]$isAmbiguous) {
       $matches[(GetCanonicalTypeNameFromType $resolvedType)] = $resolvedType
     }
   }
-  $isAmbiguous.Value = $ambiguous -or $matches.Count -gt 1
-  if ($isAmbiguous.Value -or $matches.Count -ne 1) { return $null }
-  foreach ($match in $matches.Values) { return $match }
+  $isAmbiguous.Value = $ambiguous -or $matches.get_Count() -gt 1
+  if ($isAmbiguous.Value -or $matches.get_Count() -ne 1) { return $null }
+  foreach ($match in $matches.get_Values()) { return $match }
   return $null
 }
 

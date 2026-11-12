@@ -139,7 +139,7 @@ internal sealed class ReleaseCatalogPreparationService
             throw new InvalidOperationException("MSI identity or version does not match the catalog configuration and release manifest.");
     }
 
-    private static Dictionary<string, string> ReadChecksums(string path)
+    internal static Dictionary<string, string> ReadChecksums(string path)
     {
         var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         foreach (var line in File.ReadAllLines(path).Where(line => !string.IsNullOrWhiteSpace(line)))
@@ -155,14 +155,14 @@ internal sealed class ReleaseCatalogPreparationService
         return result;
     }
 
-    private static void VerifyChecksum(string path, IReadOnlyDictionary<string, string> checksums)
+    internal static void VerifyChecksum(string path, IReadOnlyDictionary<string, string> checksums)
     {
         if (!checksums.TryGetValue(Path.GetFileName(path), out var expected) ||
             !string.Equals(expected, DotNetPublishReleaseArtifactVerifier.ComputeSha256(path), StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("Missing or mismatched release checksum: " + Path.GetFileName(path));
     }
 
-    private static string FileName(string value)
+    internal static string FileName(string value)
     {
         var name = value.Replace('\\', '/').Split('/').Last();
         if (!PowerForgeReleaseService.IsSafeWingetManifestPathSegment(name) || name is "." or "..")

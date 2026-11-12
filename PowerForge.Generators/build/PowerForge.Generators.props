@@ -1,0 +1,10 @@
+<Project>
+    <!-- Settings the fluent generator reads. See the package README. -->
+    <ItemGroup>
+        <CompilerVisibleProperty Include="PowerForgeFluentNaming" />
+        <CompilerVisibleProperty Include="PowerForgeFluentFactory" />
+        <CompilerVisibleProperty Include="PowerForgeVocabulary" />
+        <CompilerVisibleProperty Include="PowerForgeVocabularyNamespace" />
+        <CompilerVisibleProperty Include="RootNamespace" />
+    </ItemGroup>
+</Project>

@@ -10,6 +10,8 @@ namespace PowerForge.Cli;
     WriteIndented = false,
     UseStringEnumConverter = true)]
 [JsonSerializable(typeof(JsonElement))]
+[JsonSerializable(typeof(RunnerMaintenanceSpec))]
+[JsonSerializable(typeof(RunnerMaintenanceResult))]
 [JsonSerializable(typeof(string))]
 [JsonSerializable(typeof(MarkdownCodeSyncSpec))]
 [JsonSerializable(typeof(MarkdownCodeSyncResult))]

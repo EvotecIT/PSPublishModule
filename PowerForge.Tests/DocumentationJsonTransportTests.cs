@@ -6,19 +6,20 @@ namespace PowerForge.Tests;
 public sealed partial class DocumentationPowerShellCollectorTests
 {
     [Fact]
-    public void Collector_PreservesKeysParametersWithoutSerializingMetadataObjects()
+    public void Collector_PreservesDictionaryMemberNamesAcross134CommandsWithoutSerializingMetadataObjects()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-doc-keys-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
         try
         {
             var manifestPath = Path.Combine(root, "KeysFixture.psd1");
-            File.WriteAllText(manifestPath, """
+            var scaleExports = string.Join(", ", Enumerable.Range(1, 130).Select(index => $"'Get-Scale{index}'"));
+            File.WriteAllText(manifestPath, $$"""
 @{
     RootModule = 'KeysFixture.psm1'
     ModuleVersion = '1.0.0'
     GUID = '56565656-5656-5656-5656-565656565656'
-    FunctionsToExport = @('Get-KeysOnly', 'Get-KeysAndOther', 'Get-KeysDynamic')
+    FunctionsToExport = @('Get-KeysOnly', 'Get-KeysAndOther', 'Get-KeysDynamic', 'Values', {{scaleExports}})
     CmdletsToExport = @()
     AliasesToExport = @()
 }
@@ -38,23 +39,102 @@ Shows keys.
 Keys to show.
 #>
     [CmdletBinding()] param([string] $Keys)
-    dynamicparam { }
+    dynamicparam {
+        $parameters = [System.Management.Automation.RuntimeDefinedParameterDictionary]::new()
+        foreach ($kind in @('OrderedDictionary', 'Dictionary', 'SortedList')) {
+            $map = switch ($kind) {
+                'OrderedDictionary' { [System.Collections.Specialized.OrderedDictionary]::new() }
+                'Dictionary' { [System.Collections.Generic.Dictionary[string, int]]::new() }
+                'SortedList' { [System.Collections.Generic.SortedList[string, int]]::new() }
+            }
+            $map.Add('Count', 99)
+            $map.Add('IsReadOnly', 1)
+            $map.Add('IsFixedSize', 1)
+            $default = [System.Management.Automation.PSDefaultValueAttribute]::new()
+            $default.Value = $map
+            $attributes = [System.Collections.ObjectModel.Collection[System.Attribute]]::new()
+            $attributes.Add($default)
+            $parameters.Add($kind, [System.Management.Automation.RuntimeDefinedParameter]::new($kind, [object], $attributes))
+        }
+        return $parameters
+    }
     process { }
 }
-Export-ModuleMember -Function Get-KeysOnly, Get-KeysAndOther, Get-KeysDynamic
+function Values {
+<#
+.SYNOPSIS
+Exercises exported-command and parameter dictionary collisions.
+.PARAMETER Keys
+The keys to document.
+.PARAMETER Values
+The values to document.
+.PARAMETER Count
+The number to document.
+#>
+    [CmdletBinding()]
+    param([string[]] $Keys, [string[]] $Values, [int] $Count = 4)
+}
+Export-ModuleMember -Function Get-KeysOnly, Get-KeysAndOther, Get-KeysDynamic, Values
 """, new UTF8Encoding(false));
+            var scaleCommands = new StringBuilder();
+            for (var index = 1; index <= 130; index++)
+            {
+                scaleCommands.AppendLine($"function Get-Scale{index} {{ [CmdletBinding()] param([string[]] $Keys, [string[]] $Values, [int] $Count) }}");
+                scaleCommands.AppendLine($"Export-ModuleMember -Function Get-Scale{index}");
+            }
+            File.AppendAllText(Path.Combine(root, "KeysFixture.psm1"), Environment.NewLine + scaleCommands, new UTF8Encoding(false));
             var hosts = OperatingSystem.IsWindows() ? new[] { "pwsh.exe", "powershell.exe" } : new[] { "pwsh" };
             foreach (var host in hosts)
             {
                 var engine = new DocumentationEngine(new ExecutablePowerShellRunner(host, root), new NullLogger());
                 var payload = engine.ExtractHelpPayload(root, manifestPath, TimeSpan.FromMinutes(1));
-                Assert.Equal(3, payload.Commands.Count);
+                Assert.Equal(134, payload.Commands.Count);
+                for (var index = 1; index <= 130; index++)
+                {
+                    var scaled = Assert.Single(payload.Commands, command => command.Name == $"Get-Scale{index}");
+                    Assert.Equal(["Count", "Keys", "Values"], scaled.Parameters.Select(parameter => parameter.Name).ToArray());
+                }
                 var only = Assert.Single(payload.Commands, command => command.Name == "Get-KeysOnly");
                 var other = Assert.Single(payload.Commands, command => command.Name == "Get-KeysAndOther");
                 var dynamic = Assert.Single(payload.Commands, command => command.Name == "Get-KeysDynamic");
                 Assert.Equal("Keys", Assert.Single(only.Parameters).Name);
                 Assert.Equal(["Keys", "Other"], other.Parameters.Select(parameter => parameter.Name).ToArray());
-                Assert.Equal("Keys", Assert.Single(dynamic.Parameters).Name);
+                Assert.Equal(["Dictionary", "Keys", "OrderedDictionary", "SortedList"],
+                    dynamic.Parameters.Select(parameter => parameter.Name).ToArray());
+                foreach (var kind in new[] { "OrderedDictionary", "Dictionary", "SortedList" })
+                {
+                    var defaultHelp = Assert.Single(dynamic.Parameters, parameter => parameter.Name == kind).DefaultValue;
+                    Assert.NotEmpty(defaultHelp);
+                    var verificationPath = Path.Combine(root, "VerifyDefault.ps1");
+                    File.WriteAllText(verificationPath, "$ErrorActionPreference = 'Stop'\n$map = " + defaultHelp + "\n" + """
+if ($map.get_Count() -ne 3 -or $map['Count'] -ne 99 -or
+    $map['IsReadOnly'] -ne 1 -or $map['IsFixedSize'] -ne 1) {
+    throw 'Documented default did not reconstruct the dictionary entries.'
+}
+""", new UTF8Encoding(false));
+                    var verification = new ExecutablePowerShellRunner(host, root).Run(
+                        new PowerShellRunRequest(verificationPath, [], TimeSpan.FromMinutes(1)));
+                    Assert.Equal(0, verification.ExitCode);
+                }
+                var colliding = Assert.Single(payload.Commands, command => command.Name == "Values");
+                Assert.Equal(["Count", "Keys", "Values"], colliding.Parameters.Select(parameter => parameter.Name).ToArray());
+                foreach (var name in new[] { "Keys", "Values", "Count" })
+                {
+                    var parameter = Assert.Single(colliding.Parameters, parameter => parameter.Name == name);
+                    Assert.Equal("The " + (name == "Count" ? "number" : name.ToLowerInvariant()) + " to document.", parameter.Description.Trim());
+                }
+                var mamlPath = new MamlHelpWriter().WriteExternalHelpFile(payload, "KeysFixture", Path.Combine(root, host));
+                var maml = System.Xml.Linq.XDocument.Load(mamlPath);
+                Assert.Equal(134, maml.Descendants().Count(element => element.Name.LocalName == "command"));
+                var docsPath = Path.Combine(root, host, "Docs");
+                new MarkdownHelpWriter().WriteCommandHelpFiles(payload, "KeysFixture", docsPath);
+                Assert.Equal(134, Directory.GetFiles(docsPath, "*.md").Length);
+                var commandHelp = Assert.Single(maml.Descendants().Where(element => element.Name.LocalName == "command"),
+                    element => element.Elements().Single(child => child.Name.LocalName == "details")
+                        .Elements().Single(child => child.Name.LocalName == "name").Value == "Values");
+                var parameterHelp = commandHelp.Elements().Single(element => element.Name.LocalName == "parameters");
+                Assert.Equal(["Count", "Keys", "Values"], parameterHelp.Elements()
+                    .Select(element => element.Elements().Single(child => child.Name.LocalName == "name").Value).ToArray());
             }
         }
         finally
