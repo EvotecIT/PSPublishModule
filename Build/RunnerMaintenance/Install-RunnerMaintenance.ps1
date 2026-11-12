@@ -73,7 +73,7 @@ $scheduled = Join-Path $state 'scheduled.json'
 $name = 'PowerForge.RunnerMaintenance'
 if ($windows) {
     $hostExecutable = Join-Path $PSHOME $(if ($PSVersionTable.PSEdition -eq 'Core') { 'pwsh.exe' } else { 'powershell.exe' })
-    $action = New-ScheduledTaskAction -Execute $hostExecutable -Argument ('-NoLogo -NoProfile -NonInteractive -File "' + $wrapper + '" -Configuration "' + $scheduled + '"') -WorkingDirectory $state
+    $action = New-ScheduledTaskAction -Execute $hostExecutable -Argument ('-NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "' + $wrapper + '" -Configuration "' + $scheduled + '"') -WorkingDirectory $state
     $triggers = @(
         New-ScheduledTaskTrigger -AtStartup
         New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(2) -RepetitionInterval (New-TimeSpan -Hours 1)

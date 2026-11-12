@@ -42,7 +42,8 @@ internal static partial class Program
                 if (install)
                 {
                     service.InstallMaintenance(spec);
-                    Console.WriteLine("Runner hooks enrolled. Register the native scheduler before restarting the enrolled listeners.");
+                    if (json) Console.WriteLine(JsonSerializer.Serialize(new RunnerMaintenanceResult(), PowerForgeCliJsonContext.Default.RunnerMaintenanceResult));
+                    else Console.WriteLine("Runner hooks enrolled. Register the native scheduler before restarting the enrolled listeners.");
                     return 0;
                 }
                 result = service.Maintain(spec, dryRun: !apply);

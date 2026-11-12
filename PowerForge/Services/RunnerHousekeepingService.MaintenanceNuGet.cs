@@ -17,14 +17,27 @@ public sealed partial class RunnerHousekeepingService
         var http = run.Spec.NuGetHttpCachePath;
         if (!string.IsNullOrEmpty(http) && Directory.Exists(http))
         {
-            foreach (var directory in Directory.EnumerateDirectories(http))
+            MaintenanceRetainOnIo(run, http!, () =>
             {
-                if (Path.GetFileName(directory) == MaintenanceQuarantine) continue;
-                MaintenancePhysicalPath(directory);
-                foreach (var path in Directory.EnumerateFiles(directory, "*.dat"))
-                    if (File.GetLastWriteTimeUtc(path) < DateTime.UtcNow.AddMinutes(-30))
-                        MaintenanceIsolate(run, path, http!, directory: false, sensitive: false);
-            }
+                foreach (var directory in Directory.EnumerateDirectories(http))
+                {
+                    if (run.Expired) break;
+                    if (Path.GetFileName(directory) == MaintenanceQuarantine) continue;
+                    MaintenanceRetainOnIo(run, directory, () =>
+                    {
+                        MaintenancePhysicalPath(directory);
+                        foreach (var path in Directory.EnumerateFiles(directory, "*.dat"))
+                        {
+                            if (run.Expired) break;
+                            MaintenanceRetainOnIo(run, path, () =>
+                            {
+                                if (File.GetLastWriteTimeUtc(path) < DateTime.UtcNow.AddMinutes(-30))
+                                    MaintenanceIsolate(run, path, http!, directory: false, sensitive: false);
+                            });
+                        }
+                    });
+                }
+            });
         }
         var packages = run.Spec.NuGetPackagesPath;
         if (!run.Deep || string.IsNullOrEmpty(packages) || !Directory.Exists(packages)) return;
@@ -32,22 +45,32 @@ public sealed partial class RunnerHousekeepingService
             throw new IOException("NuGet maintenance and runners must use the enrolled shared NUGET_SCRATCH directory.");
 
         MaintenancePackageReferences(run, Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".dotnet", "tools", ".store"));
+        if (!run.SharedIdle) return;
 
         var candidates = new List<(string Path, DateTime LastUse)>();
         foreach (var id in Directory.EnumerateDirectories(packages))
         {
             if (run.Expired) return;
             if (Path.GetFileName(id) == MaintenanceQuarantine) continue;
-            MaintenancePhysicalPath(id);
-            foreach (var version in Directory.EnumerateDirectories(id))
+            MaintenanceRetainOnIo(run, id, () =>
             {
-                var key = Path.GetFileName(id) + "/" + Path.GetFileName(version);
-                var metadata = Path.Combine(version, ".nupkg.metadata");
-                if (!File.Exists(metadata)) continue;
-                var lastUse = File.GetLastWriteTimeUtc(metadata);
-                if (run.State.PackageUse.TryGetValue(key.ToLowerInvariant(), out var observed) && observed > lastUse) lastUse = observed;
-                candidates.Add((version, lastUse));
-            }
+                MaintenancePhysicalPath(id);
+                foreach (var version in Directory.EnumerateDirectories(id))
+                {
+                    if (run.Expired) break;
+                    MaintenanceRetainOnIo(run, version, () =>
+                    {
+                        var key = Path.GetFileName(id) + "/" + Path.GetFileName(version);
+                        var metadata = Path.Combine(version, ".nupkg.metadata");
+                        if (!File.Exists(metadata)) return;
+                        var written = File.GetLastWriteTimeUtc(metadata);
+                        var accessed = File.GetLastAccessTimeUtc(metadata);
+                        var lastUse = accessed > written ? accessed : written;
+                        if (run.State.PackageUse.TryGetValue(key.ToLowerInvariant(), out var observed) && observed > lastUse) lastUse = observed;
+                        candidates.Add((version, lastUse));
+                    });
+                }
+            });
         }
         foreach (var candidate in candidates.OrderBy(p => p.LastUse))
         {
@@ -68,7 +91,8 @@ public sealed partial class RunnerHousekeepingService
                 }, cancellation.Token).GetAwaiter().GetResult();
             }
             catch (OperationCanceledException) { run.State.Due = true; break; }
-            catch (Exception error) when (error is IOException || error is JsonException || error is UnauthorizedAccessException)
+            catch (Exception error) when (error is IOException || error is JsonException || error is UnauthorizedAccessException
+                || error is InvalidDataException || error is NuGet.Packaging.Core.PackagingException)
             { run.Retained.Add(candidate.Path + " — " + error.GetType().Name); }
         }
         foreach (var key in run.State.PackageUse.Keys.Where(key => !Directory.Exists(Path.Combine(packages!, key.Replace('/', Path.DirectorySeparatorChar)))).ToArray())

@@ -86,6 +86,11 @@ public sealed partial class RunnerHousekeepingService
             var independentBuild = builds.Length > 0;
             run.IndependentBuild = independentBuild;
             run.SharedIdle = busyWorkers.Length == 0 && !independentBuild;
+            if (snapshotIncomplete)
+            {
+                run.SharedIdle = false;
+                run.Retained.Add("Cleanup retained because the process snapshot is incomplete.");
+            }
             if (!MaintenanceListenersEnrolled(run, fresh))
             {
                 run.SharedIdle = false;
@@ -116,13 +121,13 @@ public sealed partial class RunnerHousekeepingService
                     run.Result.Deferred = run.State.Due = true;
                     foreach (var process in orphanProcesses) run.Retained.Add(runner.Name + " retains output for recorded " + process.Name + " PID " + process.Id + ".");
                 }
-                if (active || unknown || orphanActivity) continue;
+                if (snapshotIncomplete || active || unknown || orphanActivity) continue;
                 MaintenanceRunnerOutput(run, runner);
             }
             if (run.SharedIdle && !run.Expired)
             {
                 MaintenanceLegacyTemp(run);
-                MaintenanceNuGet(run);
+                MaintenanceRetainOnIo(run, "NuGet caches", () => MaintenanceNuGet(run));
                 MaintenanceDocker(run);
                 if (run.Deep && !run.Expired) run.State.LastDeepSweepUtc = DateTime.UtcNow;
             }
@@ -204,6 +209,12 @@ public sealed partial class RunnerHousekeepingService
         if (spec.Runners.Select(r => Path.GetFullPath(r.RootPath)).Distinct(GetPathStringComparer()).Count() != spec.Runners.Length ||
             spec.Runners.Select(r => Path.GetFullPath(r.TempPath)).Distinct(GetPathStringComparer()).Count() != spec.Runners.Length)
             throw new ArgumentException("Runner installation and private temporary roots must be distinct.");
+        foreach (var runner in spec.Runners)
+            if (spec.Runners.Any(other => !ReferenceEquals(runner, other) &&
+                (MaintenanceContains(runner.TempPath, other.TempPath) || MaintenanceContains(other.TempPath, runner.TempPath))))
+                throw new ArgumentException("Private temporary roots cannot contain one another.");
+        foreach (var path in spec.NuGetConfigPaths)
+            if (!Path.IsPathRooted(path)) throw new ArgumentException("NuGet configuration paths must be absolute.");
         foreach (var runner in spec.Runners)
             if (spec.Runners.Any(other => !ReferenceEquals(runner, other) && (PathsEqual(runner.WorkRootPath, other.WorkRootPath) ||
                 MaintenanceContains(runner.WorkRootPath, other.WorkRootPath) || MaintenanceContains(other.WorkRootPath, runner.WorkRootPath))))

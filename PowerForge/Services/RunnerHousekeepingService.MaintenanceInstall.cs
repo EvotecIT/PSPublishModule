@@ -36,11 +36,21 @@ public sealed partial class RunnerHousekeepingService
             runner.WorkRootPath = Path.GetFullPath(Path.Combine(runner.RootPath, value.GetProperty("workFolder").GetString()!));
         }
         ValidateMaintenanceSpec(spec);
-        var processes = _maintenanceProcesses(out _);
+        var processes = _maintenanceProcesses(out var snapshotIncomplete);
+        if (snapshotIncomplete) throw new IOException("Enrollment requires a complete process snapshot.");
         if (processes.Values.Any(p => (RunnerMaintenanceProcesses.IsWorker(p) || p.Name.Equals("Runner.Listener", StringComparison.OrdinalIgnoreCase))
             && (p.Executable is null || spec.Runners.Any(r => MaintenanceProcessBelongs(r, p)))))
             throw new InvalidOperationException("Stop the enrolled listeners during an idle maintenance window before installing hooks.");
 
+        string? powerShell = null;
+        if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        {
+            powerShell = RunnerMaintenanceProcesses.Run("pwsh", "/", "-NoLogo", "-NoProfile", "-NonInteractive", "-Command",
+                "[IO.Path]::Combine($PSHOME, 'pwsh')").Trim();
+            if (!Path.IsPathRooted(powerShell) || !File.Exists(powerShell))
+                throw new IOException("Enrollment requires an absolute PowerShell executable.");
+            MaintenancePhysicalPath(powerShell);
+        }
         Directory.CreateDirectory(spec.StateRootPath);
         using var gate = MaintenanceLock(Path.Combine(spec.StateRootPath, "admission.lock"), TimeSpan.Zero)
             ?? throw new IOException("Maintenance is currently running.");
@@ -66,7 +76,6 @@ public sealed partial class RunnerHousekeepingService
             using (var reader = new StreamReader(stream)) MaintenanceWriteText(wrapper, reader.ReadToEnd());
             foreach (var path in spec.NuGetConfigPaths)
             {
-                if (!Path.IsPathRooted(path)) throw new ArgumentException("NuGet configuration paths must be absolute.");
                 MaintenancePhysicalPath(path);
                 var original = File.Exists(path) ? File.ReadAllText(path) : "<configuration />";
                 var backup = Path.Combine(spec.StateRootPath, "nuget-config-backups", MaintenanceRegistrationKey(path) + ".xml");
@@ -105,7 +114,7 @@ public sealed partial class RunnerHousekeepingService
                         File.WriteAllText(path, "& " + MaintenancePowerShellQuote(wrapper) + " -Configuration " + MaintenancePowerShellQuote(settings) + "\r\nexit $LASTEXITCODE\r\n", new UTF8Encoding(true));
                     else
                     {
-                        File.WriteAllText(path, "#!/bin/sh\nexec pwsh -NoLogo -NoProfile -NonInteractive -File " + MaintenanceShellQuote(wrapper) + " -Configuration " + MaintenanceShellQuote(settings) + "\n");
+                        File.WriteAllText(path, "#!/bin/sh\nexec " + MaintenanceShellQuote(powerShell!) + " -NoLogo -NoProfile -NonInteractive -File " + MaintenanceShellQuote(wrapper) + " -Configuration " + MaintenanceShellQuote(settings) + "\n");
                         RunnerMaintenanceProcesses.Run("chmod", spec.StateRootPath, "700", path);
                     }
                     MaintenanceSetEnvironment(lines, variable, path);

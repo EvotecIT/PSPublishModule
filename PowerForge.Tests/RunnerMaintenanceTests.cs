@@ -10,6 +10,96 @@ public sealed class RunnerMaintenanceCollection;
 public sealed class RunnerMaintenanceTests
 {
     [Fact]
+    public void Maintain_IncompleteProcessInventoryRetainsPrivateAndSharedOutput()
+    {
+        using var fixture = new Installation();
+        var privateFile = Path.Combine(fixture.Runner.TempPath, "output.txt");
+        File.WriteAllText(privateFile, "active output");
+        var cache = Directory.CreateDirectory(Path.Combine(fixture.Root, "http", "source")).FullName;
+        var sharedFile = Path.Combine(cache, "package.dat");
+        File.WriteAllText(sharedFile, "download");
+        File.SetLastWriteTimeUtc(sharedFile, DateTime.UtcNow.AddHours(-2));
+        fixture.Spec.NuGetHttpCachePath = Path.GetDirectoryName(cache);
+        var service = new RunnerHousekeepingService(new NullLogger(), (out bool incomplete) =>
+        {
+            incomplete = true;
+            return new Dictionary<int, RunnerMaintenanceProcess>();
+        });
+        var result = service.Maintain(fixture.Spec, dryRun: false);
+        Assert.True(result.Success, string.Join("\n", result.Errors));
+        Assert.True(result.Deferred);
+        Assert.Empty(result.RemovedPaths);
+        Assert.Equal("active output", File.ReadAllText(privateFile));
+        Assert.Equal("download", File.ReadAllText(sharedFile));
+    }
+
+    [Fact]
+    public void Maintain_RejectsNestedRunnerTemporaryRootsBeforeDeletion()
+    {
+        using var fixture = new Installation();
+        using var other = new Installation();
+        other.Runner.TempPath = Path.Combine(fixture.Runner.TempPath, "nested");
+        Directory.CreateDirectory(other.Runner.TempPath);
+        var file = Path.Combine(other.Runner.TempPath, "active.txt");
+        File.WriteAllText(file, "active job");
+        fixture.Spec.Runners = new[] { fixture.Runner, other.Runner };
+        Assert.Throws<ArgumentException>(() => fixture.Service.Maintain(fixture.Spec, dryRun: false));
+        Assert.Equal("active job", File.ReadAllText(file));
+    }
+
+    [Fact]
+    public void InstallMaintenance_RelativeNuGetConfigurationLeavesEnrollmentUntouched()
+    {
+        using var fixture = new Installation();
+        fixture.PreparePayload();
+        var environment = Path.Combine(fixture.Runner.RootPath, ".env");
+        File.WriteAllText(environment, "CUSTOM_VALUE=keep\n");
+        fixture.Spec.NuGetConfigPaths = new[] { "relative.NuGet.Config" };
+        Assert.Throws<ArgumentException>(() => fixture.Service.InstallMaintenance(fixture.Spec));
+        Assert.Equal("CUSTOM_VALUE=keep\n", File.ReadAllText(environment));
+        Assert.False(File.Exists(Path.Combine(fixture.Spec.StateRootPath, "installation.pending.json")));
+        Assert.False(File.Exists(Path.Combine(fixture.Spec.StateRootPath, "Invoke-RunnerMaintenance.ps1")));
+    }
+
+    [Fact]
+    public void Maintain_CorruptPublicPackageRetainsArchiveAndPersistsState()
+    {
+        using var fixture = new Installation();
+        fixture.Spec.NuGetPackagesPath = Path.Combine(fixture.Root, "packages");
+        fixture.Spec.NuGetScratchPath = NuGet.Common.NuGetEnvironment.GetFolderPath(NuGet.Common.NuGetFolderPath.Temp);
+        var version = Directory.CreateDirectory(Path.Combine(fixture.Spec.NuGetPackagesPath, "example", "1.0.0")).FullName;
+        var archive = Path.Combine(version, "example.1.0.0.nupkg");
+        File.WriteAllText(archive, "corrupt archive");
+        File.WriteAllText(archive + ".sha512", "unused");
+        var metadata = Path.Combine(version, ".nupkg.metadata");
+        File.WriteAllText(metadata, "{\"source\":\"https://api.nuget.org/v3/index.json\"}");
+        File.SetLastWriteTimeUtc(metadata, DateTime.UtcNow.AddDays(-40));
+        File.SetLastAccessTimeUtc(metadata, DateTime.UtcNow.AddDays(-40));
+        var result = fixture.Service.Maintain(fixture.Spec, dryRun: false);
+        Assert.True(result.Success, string.Join("\n", result.Errors));
+        Assert.Contains(result.Retained, path => path.Contains("InvalidDataException"));
+        Assert.Equal("corrupt archive", File.ReadAllText(archive));
+        Assert.True(File.Exists(Path.Combine(fixture.Spec.StateRootPath, "state.json")));
+    }
+
+    [Fact]
+    public void Maintain_InvalidQuarantineRecordPreservesRecordAndContinuesCleanup()
+    {
+        using var fixture = new Installation();
+        var journal = Directory.CreateDirectory(Path.Combine(fixture.Spec.StateRootPath, "journal")).FullName;
+        var record = Path.Combine(journal, Guid.NewGuid().ToString("N") + ".json");
+        File.WriteAllText(record, "{}");
+        var temporary = Path.Combine(fixture.Runner.TempPath, "output.txt");
+        File.WriteAllText(temporary, "completed output");
+        var result = fixture.Service.Maintain(fixture.Spec, dryRun: false);
+        Assert.False(result.Success);
+        Assert.Single(result.Errors);
+        Assert.Equal("{}", File.ReadAllText(record));
+        Assert.False(File.Exists(temporary));
+        Assert.True(File.Exists(Path.Combine(fixture.Spec.StateRootPath, "state.json")));
+    }
+
+    [Fact]
     public void Maintain_PlansThenRemovesDisposableTempAndRetainsPrivatePayload()
     {
         using var fixture = new Installation();

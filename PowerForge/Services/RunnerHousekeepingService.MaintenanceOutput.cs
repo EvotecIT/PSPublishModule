@@ -19,21 +19,34 @@ public sealed partial class RunnerHousekeepingService
         foreach (var record in Directory.EnumerateFiles(directory, "*.json"))
         {
             if (run.Expired) break;
-            var journal = MaintenanceRead(record, RunnerMaintenanceJsonContext.Default.RunnerMaintenanceJournal);
-            if (journal is null || journal.SchemaVersion != 1 || !Guid.TryParseExact(journal.Id, "N", out _) ||
-                Path.GetFileNameWithoutExtension(record) != journal.Id || !roots.Any(r => PathsEqual(r!, journal.Root)) ||
-                !MaintenanceContains(journal.Root, journal.Source) || MaintenanceContains(Path.Combine(journal.Root, MaintenanceQuarantine), journal.Source))
-                throw new IOException("Quarantine record failed its enrolled-root check.");
-            if (journal.RuntimeIpc && (journal.Directory || !MaintenanceRuntimeIpcOwner(journal.Source).HasValue || !run.Spec.Runners.Any(r =>
-                PathsEqual(journal.Root, r.TempPath) || PathsEqual(journal.Root, r.WorkRootPath) && MaintenanceContains(Path.Combine(r.WorkRootPath, "_temp"), journal.Source))))
-                throw new IOException("Runtime IPC journal failed its private temporary-root check.");
-            // Only the cleanup process writes journals. An isolated target is never handed back to a job.
-            var stage = MaintenanceStage(journal);
-            if (File.Exists(stage) || Directory.Exists(stage))
+            try
             {
-                if (!run.DryRun) run.Isolated.Add(journal);
+                var journal = MaintenanceRead(record, RunnerMaintenanceJsonContext.Default.RunnerMaintenanceJournal);
+                if (journal is null || journal.SchemaVersion != 1 || !Guid.TryParseExact(journal.Id, "N", out _) ||
+                    Path.GetFileNameWithoutExtension(record) != journal.Id || !roots.Any(r => PathsEqual(r!, journal.Root)) ||
+                    !MaintenanceContains(journal.Root, journal.Source) || MaintenanceContains(Path.Combine(journal.Root, MaintenanceQuarantine), journal.Source))
+                {
+                    run.Errors.Add("Quarantine record " + Path.GetFileName(record) + " failed its enrolled-root check and was retained.");
+                    continue;
+                }
+                if (journal.RuntimeIpc && (journal.Directory || !MaintenanceRuntimeIpcOwner(journal.Source).HasValue || !run.Spec.Runners.Any(r =>
+                    PathsEqual(journal.Root, r.TempPath) || PathsEqual(journal.Root, r.WorkRootPath) && MaintenanceContains(Path.Combine(r.WorkRootPath, "_temp"), journal.Source))))
+                {
+                    run.Errors.Add("Quarantine record " + Path.GetFileName(record) + " failed its private temporary-root check and was retained.");
+                    continue;
+                }
+                // Only the cleanup process writes journals. An isolated target is never handed back to a job.
+                var stage = MaintenanceStage(journal);
+                if (File.Exists(stage) || Directory.Exists(stage))
+                {
+                    if (!run.DryRun) run.Isolated.Add(journal);
+                }
+                else if (!run.DryRun) File.Delete(record);
             }
-            else if (!run.DryRun) File.Delete(record);
+            catch (Exception error) when (error is IOException || error is UnauthorizedAccessException || error is JsonException || error is ArgumentException)
+            {
+                run.Errors.Add("Quarantine record " + Path.GetFileName(record) + " retained — " + error.Message);
+            }
         }
     }
 
@@ -113,19 +126,28 @@ public sealed partial class RunnerHousekeepingService
 
     private static void MaintenancePackageReferences(MaintenanceRun run, string root)
     {
-        foreach (var directory in MaintenanceDirectories(root, run))
+        try
         {
-            var path = Path.Combine(directory, "project.assets.json");
-            if (!File.Exists(path) || new FileInfo(path).Length > 32 * 1024 * 1024) continue;
-            try
+            foreach (var directory in MaintenanceDirectories(root, run))
             {
-                using var assets = JsonDocument.Parse(File.ReadAllText(path));
-                if (!assets.RootElement.TryGetProperty("libraries", out var libraries)) continue;
-                foreach (var entry in libraries.EnumerateObject())
-                    if (entry.Value.TryGetProperty("type", out var type) && type.GetString() == "package")
-                        run.State.PackageUse[entry.Name.ToLowerInvariant()] = DateTime.UtcNow;
+                var path = Path.Combine(directory, "project.assets.json");
+                if (!File.Exists(path) || new FileInfo(path).Length > 32 * 1024 * 1024) continue;
+                try
+                {
+                    using var assets = JsonDocument.Parse(File.ReadAllText(path));
+                    if (!assets.RootElement.TryGetProperty("libraries", out var libraries)) continue;
+                    foreach (var entry in libraries.EnumerateObject())
+                        if (entry.Value.TryGetProperty("type", out var type) && type.GetString() == "package")
+                            run.State.PackageUse[entry.Name.ToLowerInvariant()] = DateTime.UtcNow;
+                }
+                catch (JsonException) { run.Retained.Add(path + " — invalid assets metadata"); }
             }
-            catch (JsonException) { run.Retained.Add(path + " — invalid assets metadata"); }
+        }
+        catch (Exception error) when (error is IOException || error is UnauthorizedAccessException)
+        {
+            run.Retained.Add(root + " — package references could not be inspected: " + error.Message);
+            run.SharedIdle = false;
+            run.Result.Deferred = run.State.Due = true;
         }
     }
 
@@ -150,15 +172,27 @@ public sealed partial class RunnerHousekeepingService
 
     private static void MaintenanceRunnerOutput(MaintenanceRun run, RunnerMaintenanceRegistration runner)
     {
-        MaintenanceClearChildren(run, runner.TempPath, runner.TempPath, DateTime.MaxValue);
+        MaintenanceRetainOnIo(run, runner.TempPath, () => MaintenanceClearChildren(run, runner.TempPath, runner.TempPath, DateTime.MaxValue));
         MaintenanceLegacyTemp(run, runner.TempPath);
         if (!run.ActiveRunnerRoots.Contains(runner.RootPath))
-            MaintenanceClearChildren(run, Path.Combine(runner.WorkRootPath, "_temp"), runner.WorkRootPath, DateTime.UtcNow.AddDays(-1));
+        {
+            var temporary = Path.Combine(runner.WorkRootPath, "_temp");
+            MaintenanceRetainOnIo(run, temporary, () => MaintenanceClearChildren(run, temporary, runner.WorkRootPath, DateTime.UtcNow.AddDays(-1)));
+        }
         var diagnostics = Path.Combine(runner.RootPath, "_diag");
-        if (Directory.Exists(diagnostics))
+        MaintenanceRetainOnIo(run, diagnostics, () =>
+        {
+            if (!Directory.Exists(diagnostics)) return;
             foreach (var path in Directory.EnumerateFiles(diagnostics, "*.log"))
-                if (File.GetLastWriteTimeUtc(path) < DateTime.UtcNow.AddDays(-7))
-                    MaintenanceIsolate(run, path, diagnostics, directory: false);
+            {
+                if (run.Expired) break;
+                MaintenanceRetainOnIo(run, path, () =>
+                {
+                    if (File.GetLastWriteTimeUtc(path) < DateTime.UtcNow.AddDays(-7))
+                        MaintenanceIsolate(run, path, diagnostics, directory: false);
+                });
+            }
+        });
 
         foreach (var job in run.State.Jobs.Where(j => PathsEqual(j.RunnerRoot, runner.RootPath)).ToArray())
         {
@@ -166,7 +200,15 @@ public sealed partial class RunnerHousekeepingService
             catch (Exception error) when (error is IOException || error is UnauthorizedAccessException)
             { run.Retained.Add(job.Workspace + " — " + error.Message); }
         }
-        if (run.Deep && !run.ActiveRunnerRoots.Contains(runner.RootPath)) MaintenanceCodeQl(run, runner);
+        if (run.Deep && !run.ActiveRunnerRoots.Contains(runner.RootPath))
+            MaintenanceRetainOnIo(run, runner.WorkRootPath, () => MaintenanceCodeQl(run, runner));
+    }
+
+    private static void MaintenanceRetainOnIo(MaintenanceRun run, string path, Action cleanup)
+    {
+        try { cleanup(); }
+        catch (Exception error) when (error is IOException || error is UnauthorizedAccessException)
+        { run.Retained.Add(path + " — " + error.Message); }
     }
 
     private static void MaintenanceWorkspaceOutput(MaintenanceRun run, RunnerMaintenanceRegistration runner, RunnerMaintenanceJob job)
@@ -230,11 +272,14 @@ public sealed partial class RunnerHousekeepingService
         foreach (var child in Directory.EnumerateFileSystemEntries(path))
         {
             if (run.Expired) break;
-            if (Path.GetFileName(child) == MaintenanceQuarantine || File.GetLastWriteTimeUtc(child) >= olderThan) continue;
-            var directory = Directory.Exists(child);
-            var owner = directory ? null : MaintenanceRuntimeIpcOwner(child);
-            if (owner.HasValue && MaintenanceProcessAlive(owner.Value)) continue;
-            MaintenanceIsolate(run, child, root, directory, runtimeIpc: owner.HasValue, olderThan: olderThan == DateTime.MaxValue ? null : olderThan);
+            MaintenanceRetainOnIo(run, child, () =>
+            {
+                if (Path.GetFileName(child) == MaintenanceQuarantine || File.GetLastWriteTimeUtc(child) >= olderThan) return;
+                var directory = Directory.Exists(child);
+                var owner = directory ? null : MaintenanceRuntimeIpcOwner(child);
+                if (owner.HasValue && MaintenanceProcessAlive(owner.Value)) return;
+                MaintenanceIsolate(run, child, root, directory, runtimeIpc: owner.HasValue, olderThan: olderThan == DateTime.MaxValue ? null : olderThan);
+            });
         }
     }
 
@@ -259,35 +304,41 @@ public sealed partial class RunnerHousekeepingService
         if (!run.Deep || run.Expired || producers.Length == 0) return;
         string servicePaths;
         try { servicePaths = MaintenanceServicePaths(run.Spec.Runners[0].RootPath); }
-        catch (IOException)
+        catch (Exception error) when (error is IOException || error is UnauthorizedAccessException)
         {
             run.Retained.Add("Legacy fixtures retained because installed service paths could not be checked.");
             return;
         }
         foreach (var producer in producers)
         {
-            if (!Directory.Exists(producer.RootPath)) continue;
-            foreach (var path in Directory.EnumerateDirectories(producer.RootPath, producer.Prefix + "*"))
+            MaintenanceRetainOnIo(run, producer.RootPath, () =>
             {
-                if (run.Expired) return;
-                if (!Guid.TryParseExact(Path.GetFileName(path).Substring(producer.Prefix.Length), "N", out _)) continue;
-                if (servicePaths.IndexOf(path, GetPathComparison()) >= 0 || run.ExecutablePaths.Any(executable => MaintenanceContains(path, executable)))
+                if (!Directory.Exists(producer.RootPath)) return;
+                foreach (var path in Directory.EnumerateDirectories(producer.RootPath, producer.Prefix + "*"))
                 {
-                    run.Retained.Add(path + " — service or application path");
-                    continue;
+                    if (run.Expired) return;
+                    MaintenanceRetainOnIo(run, path, () =>
+                    {
+                        if (!Guid.TryParseExact(Path.GetFileName(path).Substring(producer.Prefix.Length), "N", out _)) return;
+                        if (servicePaths.IndexOf(path, GetPathComparison()) >= 0 || run.ExecutablePaths.Any(executable => MaintenanceContains(path, executable)))
+                        {
+                            run.Retained.Add(path + " — service or application path");
+                            return;
+                        }
+                        var cutoff = DateTime.UtcNow.AddHours(-producer.MinimumAgeHours);
+                        if (Directory.GetLastWriteTimeUtc(path) >= cutoff) return;
+                        var entries = Directory.EnumerateFileSystemEntries(path).ToArray();
+                        if (entries.Any(p => File.GetLastWriteTimeUtc(p) >= cutoff || (Directory.Exists(p)
+                            ? !producer.DirectoryNames.Contains(Path.GetFileName(p), StringComparer.OrdinalIgnoreCase)
+                            : !producer.FileNames.Contains(Path.GetFileName(p), StringComparer.OrdinalIgnoreCase) && !producer.FileExtensions.Contains(Path.GetExtension(p), StringComparer.OrdinalIgnoreCase)))) return;
+                        var qualified = MaintenanceDirectories(path, run, includeGenerated: true).All(directory => Directory.EnumerateFiles(directory).All(file =>
+                            File.GetLastWriteTimeUtc(file) < cutoff && (producer.FileNames.Contains(Path.GetFileName(file), StringComparer.OrdinalIgnoreCase) ||
+                            producer.FileExtensions.Contains(Path.GetExtension(file), StringComparer.OrdinalIgnoreCase)) &&
+                            !new[] { ".nupkg", ".pfx", ".key" }.Contains(Path.GetExtension(file), StringComparer.OrdinalIgnoreCase)));
+                        if (qualified) MaintenanceIsolate(run, path, producer.RootPath, directory: true, sensitive: false);
+                    });
                 }
-                var cutoff = DateTime.UtcNow.AddHours(-producer.MinimumAgeHours);
-                if (Directory.GetLastWriteTimeUtc(path) >= cutoff) continue;
-                var entries = Directory.EnumerateFileSystemEntries(path).ToArray();
-                if (entries.Any(p => File.GetLastWriteTimeUtc(p) >= cutoff || (Directory.Exists(p)
-                    ? !producer.DirectoryNames.Contains(Path.GetFileName(p), StringComparer.OrdinalIgnoreCase)
-                    : !producer.FileNames.Contains(Path.GetFileName(p), StringComparer.OrdinalIgnoreCase) && !producer.FileExtensions.Contains(Path.GetExtension(p), StringComparer.OrdinalIgnoreCase)))) continue;
-                var qualified = MaintenanceDirectories(path, run, includeGenerated: true).All(directory => Directory.EnumerateFiles(directory).All(file =>
-                    File.GetLastWriteTimeUtc(file) < cutoff && (producer.FileNames.Contains(Path.GetFileName(file), StringComparer.OrdinalIgnoreCase) ||
-                    producer.FileExtensions.Contains(Path.GetExtension(file), StringComparer.OrdinalIgnoreCase)) &&
-                    !new[] { ".nupkg", ".pfx", ".key" }.Contains(Path.GetExtension(file), StringComparer.OrdinalIgnoreCase)));
-                if (qualified) MaintenanceIsolate(run, path, producer.RootPath, directory: true, sensitive: false);
-            }
+            });
         }
     }
 
@@ -320,6 +371,15 @@ public sealed partial class RunnerHousekeepingService
     private static void MaintenanceDocker(MaintenanceRun run)
     {
         if (!run.Deep || !run.Spec.DockerBuilderCacheGiB.HasValue || run.DryRun || run.Expired) return;
-        RunnerMaintenanceProcesses.Run("docker", run.Spec.StateRootPath, new[] { "builder", "prune", "--force", "--filter", "until=168h", "--keep-storage", run.Spec.DockerBuilderCacheGiB.Value + "GB" });
+        try
+        {
+            var remaining = TimeSpan.FromSeconds(run.Spec.MaximumRunSeconds) - run.Clock.Elapsed;
+            RunnerMaintenanceProcesses.Run("docker", run.Spec.StateRootPath, remaining,
+                "builder", "prune", "--force", "--filter", "until=168h", "--keep-storage", run.Spec.DockerBuilderCacheGiB.Value + "GB");
+        }
+        catch (IOException error)
+        {
+            run.Retained.Add("Docker builder cache retained — " + error.Message);
+        }
     }
 }
