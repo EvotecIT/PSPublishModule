@@ -32,7 +32,7 @@ internal sealed class MarkdownHelpWriter
         {
             var md = RenderCommandMarkdown(moduleName, cmd, onlineVersion, exampleIndentClassifier: _exampleIndentClassifier);
             var path = Path.Combine(docsPath, $"{cmd.Name.Trim()}.md");
-            GeneratedTextNormalizer.WriteUtf8NoBom(path, md);
+            GeneratedTextNormalizer.WriteUtf8NoBom(path, md, "\n");
         }
     }
 
@@ -108,7 +108,7 @@ internal sealed class MarkdownHelpWriter
             // best effort
         }
 
-        GeneratedTextNormalizer.WriteUtf8NoBom(readmePath, doc.ToString());
+        GeneratedTextNormalizer.WriteUtf8NoBom(readmePath, doc.ToString(), "\n");
     }
 
     internal static string RenderCommandMarkdown(
