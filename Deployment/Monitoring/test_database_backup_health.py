@@ -16,7 +16,7 @@ class HealthContracts(unittest.TestCase):
         now = dt.datetime.now(dt.timezone.utc)
         stamp = now.isoformat()
         local = {'status': 'success', 'stamp': 'capture', 'captureSha256': 'hash'}
-        nas = {'healthy': True, 'keepDaily': 14, 'maxAgeHours': 30, 'snapshotCount': 1,
+        nas = {'healthy': True, 'keepDaily': 7, 'maxAgeHours': 30, 'snapshotCount': 1,
                'latest': {'verified': True, 'manifestSha256': 'manifest', 'stamp': 'capture', 'captureSha256': 'hash',
                           'databases': [{'id': k, 'provider': v, 'verified': True, 'sizeBytes': 100, 'capturedAtUtc': stamp} for k, v in H.EXPECTED.items()]},
                'maintenance': {'healthy': True, 'completedAtUtc': stamp}}
@@ -29,6 +29,14 @@ class HealthContracts(unittest.TestCase):
         result = H.evaluate(*self.fixture())
         self.assertTrue(result['healthy'])
         self.assertEqual(3, len(result['databases']))
+
+    def test_monitor_reports_a_different_retention_policy(self):
+        values = self.fixture()
+        values[1]['keepDaily'] = 14
+        result = H.evaluate(*values)
+        self.assertFalse(result['healthy'])
+        for database in result['databases']:
+            self.assertIn('NAS retention/freshness policy differs', database['problems'])
 
     def test_dotnet_fractional_timestamps_work_for_all_health_time_boundaries(self):
         values = self.fixture()

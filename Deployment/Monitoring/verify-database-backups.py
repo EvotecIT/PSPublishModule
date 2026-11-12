@@ -31,7 +31,7 @@ def evaluate(local, nas, schedule, nas_schedule, restore, now=None):
     latest = nas.get('latest', {})
     if nas.get('healthy') is not True:
         problems.append('NAS backup status failed or stale')
-    if nas.get('keepDaily') != 14 or nas.get('maxAgeHours') != 30:
+    if nas.get('keepDaily') != 7 or nas.get('maxAgeHours') != 30:
         problems.append('NAS retention/freshness policy differs')
     if not latest.get('verified') or not latest.get('manifestSha256'):
         problems.append('NAS verification receipt missing')
