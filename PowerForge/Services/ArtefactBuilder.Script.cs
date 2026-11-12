@@ -340,6 +340,7 @@ public sealed partial class ArtefactBuilder
         bool clearDestination)
     {
         var include = ResolvePackagingInformation(information, delivery, includeScriptFolders);
+        include.IncludeManifestLoadedFiles = false;
         CopyModulePackage(stagingPath, scriptRoot, include, finalizedPayloadFiles, clearDestination);
 
         RemoveUnsupportedEvidenceFromTransformedScript(scriptRoot, moduleName);

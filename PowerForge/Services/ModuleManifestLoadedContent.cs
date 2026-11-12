@@ -15,12 +15,16 @@ internal static class ModuleManifestLoadedContent
     internal static IEnumerable<string> PropertyNames => Keys.Concat(new[] { "NestedModules" });
 
     internal static string[] ReadRelativePaths(string manifestPath, StringComparer? comparer = null)
+        => Normalize(ReadReferences(manifestPath).Select(static reference => reference.Path), comparer);
+
+    /// <summary>Each manifest-loaded entry with the key that lists it.</summary>
+    internal static IEnumerable<(string Key, string Path)> ReadReferences(string manifestPath)
     {
-        var paths = new List<string>();
         foreach (string key in Keys)
-            paths.AddRange(ModuleManifestValueReader.ReadTopLevelStringOrArray(manifestPath, key));
-        paths.AddRange(ModuleManifestValueReader.ReadTopLevelModuleReferencePaths(manifestPath, "NestedModules"));
-        return Normalize(paths, comparer);
+        foreach (string path in ModuleManifestValueReader.ReadTopLevelStringOrArray(manifestPath, key))
+            yield return (key, path);
+        foreach (string path in ModuleManifestValueReader.ReadTopLevelModuleReferencePaths(manifestPath, "NestedModules"))
+            yield return ("NestedModules", path);
     }
 
     internal static string[] ReadRelativePathsFromText(string manifestText)
