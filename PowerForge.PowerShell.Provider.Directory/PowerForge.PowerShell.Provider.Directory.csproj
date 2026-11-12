@@ -1,14 +1,14 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <PackageVersion>3.0.190</PackageVersion>
+    <PackageVersion>3.0.191</PackageVersion>
     <TargetFrameworks>net472;net8.0;net10.0</TargetFrameworks>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <LangVersion>latest</LangVersion>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <WarningsAsErrors>CS1591</WarningsAsErrors>
-    <VersionPrefix>3.0.190</VersionPrefix>
+    <VersionPrefix>3.0.191</VersionPrefix>
     <PackageId>PowerForge.PowerShell.Provider.Directory</PackageId>
     <Description>Runtime-free typed LDAP provider for PowerForge compiled artifacts.</Description>
     <AssemblyName>PowerForge.PowerShell.Provider.Directory</AssemblyName>
