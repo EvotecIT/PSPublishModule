@@ -27,6 +27,7 @@ internal static partial class ModuleBootstrapperGenerator
             {
                 ["ModuleLoaderImportBlock"] = IndentPowerShell(BuildModuleLoaderImportBlock(
                     "$PowerForgeDevelopmentBinaryRoot, '" + ModuleLoaderAssets.DevelopmentFolderName + "'").TrimEnd(), 12),
+                ["LoadedVersionGuardBlock"] = IndentPowerShell(BuildLoadedVersionGuardBlock().TrimEnd(), 12),
                 ["SharedAssembliesBlock"] = BuildSharedAssembliesBlock(sharedAssemblies, preloadSharedAssemblies,
                     "@([IO.Path]::GetDirectoryName($PowerForgeDevelopmentBinaryPath))"),
                 ["BinaryRootExpression"] = binaryRootExpression,

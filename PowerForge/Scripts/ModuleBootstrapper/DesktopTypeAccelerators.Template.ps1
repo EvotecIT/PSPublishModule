@@ -6,7 +6,9 @@ if ($PSEdition -ne 'Core') {
             '{{Mode}}',
             [string[]]{{RequestedTypes}},
             [string[]]{{RequestedAssemblies}},
-            [string[]]{{IgnoredLibraryFileNames}})
+            [string[]]{{IgnoredLibraryFileNames}},
+            $PowerForgeModuleName,
+            $PSScriptRoot)
 {{RegistrationTrackingBlock}}
     } catch {
         Write-Warning -Message "Desktop type accelerator registration failed: $($_.Exception.Message)"

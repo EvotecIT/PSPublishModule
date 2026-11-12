@@ -5,7 +5,9 @@ try {
         {{LibraryDirectoryExpression}},
         '{{Mode}}',
         [string[]]{{RequestedTypes}},
-        [string[]]{{RequestedAssemblies}})
+        [string[]]{{RequestedAssemblies}},
+        $PowerForgeModuleName,
+        $PSScriptRoot)
 {{RegistrationTrackingBlock}}
 } catch {
     Write-Warning -Message "ALC type accelerator registration failed: $($_.Exception.Message)"

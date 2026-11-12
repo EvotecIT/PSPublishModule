@@ -7,9 +7,16 @@ using System.Text;
 
 namespace PowerForge.ModuleLoader.V1;
 
-/// <summary>Physical-path identity for module assemblies, so one module group maps to one load context.</summary>
-internal static class ModulePath
+/// <summary>Physical-path identity for module files, so one module group maps to one load context.</summary>
+public static class ModulePath
 {
+    /// <summary>True when both paths name the same physical file, including through links or junctions.</summary>
+    public static bool IsSameFile(string first, string second)
+    {
+        try { return Comparer.Equals(Resolve(first), Resolve(second)); }
+        catch { return Comparer.Equals(Path.GetFullPath(first), Path.GetFullPath(second)); }
+    }
+
     internal static readonly StringComparer Comparer =
         RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
 

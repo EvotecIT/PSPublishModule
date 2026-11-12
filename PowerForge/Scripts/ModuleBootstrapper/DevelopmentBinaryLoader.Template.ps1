@@ -40,6 +40,7 @@ if ($PowerForgeDevelopmentEnabled) {
     if ($PowerForgeDevelopmentBinaryPath) {
         try {
 {{ModuleLoaderImportBlock}}
+{{LoadedVersionGuardBlock}}
 {{SharedAssembliesBlock}}
             $ImportModule = Get-Command -Name Import-Module -Module Microsoft.PowerShell.Core
 {{RuntimeHandlerBlock}}

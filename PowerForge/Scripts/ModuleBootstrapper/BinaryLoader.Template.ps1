@@ -1,6 +1,7 @@
 {{BinaryAssemblyResolverBlock}}
 
 {{ModuleLoaderImportBlock}}
+{{LoadedVersionGuardBlock}}
 {{SharedAssembliesBlock}}{{DesktopAssemblyResolverBlock}}{{RuntimeHandlerBlock}}$PowerForgeDesktopLibrariesLoaded = $false
 if ($PSEdition -ne 'Core') {
     $LibrariesScript = [IO.Path]::Combine($PowerForgeModuleRoot, '{{ModuleName}}.Libraries.ps1')

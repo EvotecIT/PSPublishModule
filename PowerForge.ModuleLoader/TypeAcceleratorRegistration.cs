@@ -17,17 +17,27 @@ namespace PowerForge.ModuleLoader.V1;
 /// Remove-Module. PowerShell keeps its accelerator table on an internal type, so this compiled
 /// helper owns the reflection that generated scripts must not contain.
 /// </summary>
+/// <remarks>
+/// One accelerator name maps to one type per process. A name another module already registered stays
+/// with that module; this registration takes it over when that module is removed.
+/// </remarks>
 public sealed class TypeAcceleratorRegistration
 {
     // Shared with modules built by earlier PowerForge releases, which kept the same owner catalog
     // shape from script: a synchronized table of { Type, Owners } entries in AppDomain data.
     private const string OwnersKey = "PowerForge.TypeAcceleratorOwners.v1";
 
+    // Live registrations in import order, shared by every module that uses this loader version.
+    private static readonly List<TypeAcceleratorRegistration> Live = new();
+
     private readonly string _ownerId = Guid.NewGuid().ToString("N");
     private readonly Dictionary<string, Type> _registered = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, Type> _claims = new(StringComparer.OrdinalIgnoreCase);
+    private readonly List<string> _keptByOthers = new();
     private readonly List<string> _warnings = new();
     private readonly List<string> _verbose = new();
     private readonly AcceleratorTable _table;
+    private string _module = string.Empty;
 
     private TypeAcceleratorRegistration(AcceleratorTable table) => _table = table;
 
@@ -47,9 +57,11 @@ public sealed class TypeAcceleratorRegistration
         string libraryDirectory,
         string mode,
         string[]? typeNames,
-        string[]? assemblyNames)
+        string[]? assemblyNames,
+        string moduleName,
+        string? moduleRoot)
     {
-        var registration = Create(out var table);
+        var registration = Create(out var table, moduleName, moduleRoot);
         if (table is null) return registration;
         if (moduleAssembly is null)
             return registration.Warn("Module assembly was not available. ALC dependency type exposure is disabled.");
@@ -72,9 +84,11 @@ public sealed class TypeAcceleratorRegistration
         string mode,
         string[]? typeNames,
         string[]? assemblyNames,
-        string[]? ignoredLibraryFileNames)
+        string[]? ignoredLibraryFileNames,
+        string moduleName,
+        string? moduleRoot)
     {
-        var registration = Create(out var table);
+        var registration = Create(out var table, moduleName, moduleRoot);
         if (table is null) return registration;
         if (string.IsNullOrWhiteSpace(libraryDirectory) || !Directory.Exists(libraryDirectory))
             return registration.Warn("Module library directory was not available. Desktop dependency type exposure is disabled.");
@@ -84,12 +98,16 @@ public sealed class TypeAcceleratorRegistration
         return registration;
     }
 
-    /// <summary>Removes accelerators this registration owns once no other PowerForge module still owns them.</summary>
+    /// <summary>
+    /// Removes accelerators this registration owns once no other PowerForge module still owns them, then
+    /// hands each freed name to the most recently imported module that still wants it.
+    /// </summary>
     public void Unregister()
     {
         var owners = AcceleratorOwners();
         lock (owners.SyncRoot)
         {
+            Live.Remove(this);
             foreach (var owned in _registered.ToArray())
             {
                 if (owners[owned.Key] is not Hashtable entry || !ReferenceEquals(entry["Type"], owned.Value)) continue;
@@ -99,15 +117,27 @@ public sealed class TypeAcceleratorRegistration
                 if (_table.TryGet(owned.Key, out var current) && ReferenceEquals(current, owned.Value))
                     _table.Remove(owned.Key);
                 owners.Remove(owned.Key);
+                if (_table.TryGet(owned.Key, out _)) continue;
+
+                for (var i = Live.Count - 1; i >= 0; i--)
+                {
+                    if (!Live[i]._claims.TryGetValue(owned.Key, out var successor)) continue;
+                    Live[i].Claim(owned.Key, successor, owners);
+                    break;
+                }
             }
             _registered.Clear();
+            _claims.Clear();
         }
     }
 
-    private static TypeAcceleratorRegistration Create(out AcceleratorTable? table)
+    private static TypeAcceleratorRegistration Create(out AcceleratorTable? table, string moduleName, string? moduleRoot)
     {
         table = AcceleratorTable.TryCreate();
-        var registration = new TypeAcceleratorRegistration(table ?? AcceleratorTable.Unavailable);
+        var registration = new TypeAcceleratorRegistration(table ?? AcceleratorTable.Unavailable)
+        {
+            _module = ModuleDescription.Describe(moduleName ?? string.Empty, moduleRoot)
+        };
         if (table is null)
             registration._warnings.Add("PowerShell type accelerator APIs are not available. Dependency type exposure is disabled.");
         return registration;
@@ -181,7 +211,17 @@ public sealed class TypeAcceleratorRegistration
 
             Add(type, source);
         }
+
+        lock (AcceleratorOwners().SyncRoot)
+            Live.Add(this);
+
+        if (_keptByOthers.Count > 0)
+            Warn($"{_module}: {_keptByOthers.Count} type accelerator(s) already point to types another module loaded ({Sample(_keptByOthers)}); " +
+                 "they keep doing so and switch to this module's types when that module is removed. Run Import-Module -Verbose for details.");
     }
+
+    private static string Sample(List<string> names)
+        => string.Join(", ", names.Take(3)) + (names.Count > 3 ? ", ..." : string.Empty);
 
     private void Add(Type type, ITypeSource source)
     {
@@ -191,34 +231,39 @@ public sealed class TypeAcceleratorRegistration
         var owners = AcceleratorOwners();
         lock (owners.SyncRoot)
         {
-            if (_table.TryGet(name!, out var existing))
+            _claims[name!] = type;
+            if (_table.TryGet(name!, out var existing) && !ReferenceEquals(existing, type))
             {
-                if (!ReferenceEquals(existing, type))
-                {
-                    var message = source.DescribeConflict(name!, existing!, type);
-                    if (message.IsVerbose) _verbose.Add(message.Text);
-                    else _warnings.Add(message.Text);
-                    return;
-                }
-            }
-            else
-            {
-                try { _table.Add(name!, type); }
-                catch (Exception ex)
-                {
-                    Warn($"Type accelerator '{name}' could not be registered from {type.Assembly.GetName().Name}: {ex.Message}");
-                    return;
-                }
-
-                if (owners[name!] is not Hashtable previous || !ReferenceEquals(previous["Type"], type))
-                    owners[name!] = NewOwnerEntry(type);
+                var message = source.DescribeConflict(name!, existing!, type);
+                _verbose.Add(message.Text);
+                if (!message.IsVerbose) _keptByOthers.Add(name!);
+                return;
             }
 
-            if (owners[name!] is Hashtable entry && ReferenceEquals(entry["Type"], type) && entry["Owners"] is Hashtable entryOwners)
+            Claim(name!, type, owners);
+        }
+    }
+
+    /// <summary>Points the accelerator at <paramref name="type"/> (unless it already does) and records this owner.</summary>
+    private void Claim(string name, Type type, Hashtable owners)
+    {
+        if (!_table.TryGet(name, out _))
+        {
+            try { _table.Add(name, type); }
+            catch (Exception ex)
             {
-                entryOwners[_ownerId] = true;
-                _registered[name!] = type;
+                Warn($"Type accelerator '{name}' could not be registered from {type.Assembly.GetName().Name}: {ex.Message}");
+                return;
             }
+
+            if (owners[name] is not Hashtable previous || !ReferenceEquals(previous["Type"], type))
+                owners[name] = NewOwnerEntry(type);
+        }
+
+        if (owners[name] is Hashtable entry && ReferenceEquals(entry["Type"], type) && entry["Owners"] is Hashtable entryOwners)
+        {
+            entryOwners[_ownerId] = true;
+            _registered[name] = type;
         }
     }
 

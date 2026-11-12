@@ -32,6 +32,19 @@ if ($PSEdition -ne 'Core' -and $PowerForgeDesktopAssemblyRoots.Count -gt 0) {
     if ($PowerForgeDesktopAssemblyRootPrefixes.Count -eq 0) {
         $PowerForgeDesktopAssemblyRoots = @()
     }
+    # Windows PowerShell holds one copy of an assembly without a strong name per session. Reuse a compatible
+    # copy another module already loaded and say so; stop here with one clear message when it cannot work.
+    $PowerForgeDependencyCheck = [PowerForge.ModuleLoader.V1.DependencyConflictCheck]::Evaluate(
+        $PowerForgeModuleName,
+        $PSScriptRoot,
+        [string[]]$PowerForgeDesktopAssemblyRoots,
+        [string[]]{{IgnoredLibraryFileNames}})
+    foreach ($PowerForgeDependencyWarning in $PowerForgeDependencyCheck.Warnings) {
+        Write-Warning -Message $PowerForgeDependencyWarning
+    }
+    if ($null -ne $PowerForgeDependencyCheck.Error) {
+        throw $PowerForgeDependencyCheck.Error
+    }
     # AssemblyResolve also runs on worker threads that have no runspace, so the handler is compiled
     # code from the PowerForge loader and is limited to this module's own binary folders.
     $PowerForgeDesktopAssemblyResolverState = [PowerForge.ModuleLoader.V1.DesktopAssemblyResolver]::new([string[]]$PowerForgeDesktopAssemblyRoots, [string[]]{{SharedAssemblyNames}})

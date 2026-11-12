@@ -5,6 +5,7 @@
 {{ScriptPreambleBlock}}
 # PowerForge script preamble end
 
+$PowerForgeModuleName = '{{ModuleName}}'
 {{ModuleRootCaptureBlock}}
 $UnregisterPowerForgeDesktopAssemblyResolver = $null
 $PowerForgeModuleImportCompleted = $false

@@ -341,11 +341,12 @@ internal static partial class ModuleBootstrapperGenerator
                         }).TrimEnd(),
                     ["ModuleName"] = EscapePsSingleQuoted(moduleName),
                     ["ModuleLoaderImportBlock"] = BuildModuleLoaderImportBlock("$PowerForgeModuleRoot, '" + ModuleLoaderAssets.PackagedFolderName + "'"),
+                    ["LoadedVersionGuardBlock"] = BuildLoadedVersionGuardBlock(),
                     ["SharedAssemblyNames"] = BuildPowerShellArrayLiteral(NormalizePowerShellStringArray(sharedAssemblies)),
                     ["RuntimePayloadSelectorBlock"] = ModuleBinaryPayloadLayout.BuildPowerShellRuntimeSelector(),
                     ["SharedAssembliesBlock"] = BuildSharedAssembliesBlock(sharedAssemblies, preloadSharedAssemblies,
                         "@($LibraryFileNames | ForEach-Object { (& $ResolvePowerForgeModuleAssembly -LibraryFileName $_).Directory } | Select-Object -Unique)"),
-                    ["DesktopAssemblyResolverBlock"] = BuildDesktopAssemblyResolverBlock(sharedAssemblies),
+                    ["DesktopAssemblyResolverBlock"] = BuildDesktopAssemblyResolverBlock(sharedAssemblies, ignoreLibrariesOnLoad),
                     ["RuntimeHandlerBlock"] = handleRuntimes ? BuildRuntimeHandlerBlock() : string.Empty,
                     ["TypeAcceleratorBlock"] = IndentPowerShell(BuildTypeAcceleratorBlock(
                         assemblyTypeAcceleratorMode,
@@ -440,14 +441,16 @@ internal static partial class ModuleBootstrapperGenerator
             });
     }
 
-    private static string BuildDesktopAssemblyResolverBlock(IReadOnlyList<string>? sharedAssemblies = null)
+    private static string BuildDesktopAssemblyResolverBlock(IReadOnlyList<string>? sharedAssemblies, IReadOnlyList<string>? ignoreLibrariesOnLoad)
     {
         return RenderModuleBootstrapperTemplate(
             "DesktopAssemblyResolver",
             "Scripts/ModuleBootstrapper/DesktopAssemblyResolver.Template.ps1",
             new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
-                ["SharedAssemblyNames"] = BuildPowerShellArrayLiteral(NormalizePowerShellStringArray(sharedAssemblies))
+                ["SharedAssemblyNames"] = BuildPowerShellArrayLiteral(NormalizePowerShellStringArray(sharedAssemblies)),
+                ["IgnoredLibraryFileNames"] = BuildPowerShellArrayLiteral(NormalizeFileNameSet(ignoreLibrariesOnLoad)
+                    .OrderBy(static value => value, StringComparer.OrdinalIgnoreCase).ToArray())
             });
     }
 
@@ -462,6 +465,9 @@ internal static partial class ModuleBootstrapperGenerator
                 ["LoaderFileName"] = ModuleLoaderAssets.FileName,
                 ["LoaderProbeType"] = ModuleLoaderAssets.ProbeTypeName
             });
+
+    private static string BuildLoadedVersionGuardBlock()
+        => RenderModuleBootstrapperTemplate("LoadedVersionGuard", "Scripts/ModuleBootstrapper/LoadedVersionGuard.Template.ps1", new Dictionary<string, string>());
 
     internal static string BuildTypeAcceleratorBlock(
         AssemblyTypeAcceleratorExportMode mode,

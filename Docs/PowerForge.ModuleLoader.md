@@ -28,6 +28,15 @@ ordinary module import instead of the patterns used by attack tooling.
 | Type accelerators | `TypeAcceleratorRegistration.RegisterFromLoadContext` (PowerShell 7) and `RegisterFromDirectory` (Windows PowerShell) apply the `AllowList`, `Assembly` and `Enums` modes. `Remove-Module` calls `Unregister()`; an accelerator another PowerForge module still uses stays registered. |
 | Shared assemblies | `SharedAssemblyPolicy` keeps `NETSharedAssemblies` process-wide, as described in [the development bootstrapper guide](PSPublishModule.DevelopmentBootstrapper.md#process-shared-dependencies). |
 
+## Version conflicts
+
+| Situation | PowerShell 7 | Windows PowerShell 5.1 |
+| --- | --- | --- |
+| Two modules ship different versions of one dependency | Each module loads its own copy in its own context. | Assemblies without a strong name bind by simple name, so the first loaded copy serves every module. Before loading, the bootstrapper compares its payload with what is loaded: the same version, a newer version with the same major, or an older patch release is reused with one warning naming both modules; an older minor release or another major stops the import with one message explaining what to do. Strong-named assemblies load side by side and are not checked. |
+| A second version of the same module | PowerShell cannot import the same cmdlet names from two assemblies into one session. The import stops before loading with a message; `Remove-Module` and import again to switch versions. | The module's own assembly follows the dependency rule above: a newer loaded version is reused with a warning, an older one asks for a new session. |
+| A module ships another module's library (for example `ConsoleMonster.dll`) | Both copies load in separate contexts. Objects from one copy are not instances of the other copy's types; declare the library in `NETSharedAssemblies` when modules must exchange them. | The dependency rule above applies. |
+| Two modules expose the same type accelerator name | The first registration keeps the name. The next module reports it once and takes the name over when the first module is removed. PowerShell caches a type name once a script resolves it, so a name already used in the session keeps its first type. | Same. |
+
 The contract version is part of the assembly name. Modules built by different PowerForge releases
 can load in one session: the first loaded `V1` loader serves every module that needs `V1`, and a
 breaking change ships as `V2` next to it. PowerForge embeds both builds and writes them during the
