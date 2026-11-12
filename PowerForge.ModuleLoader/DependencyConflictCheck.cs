@@ -72,6 +72,12 @@ public sealed class DependencyConflictCheck
             }
         }
 
+        if (blocking.Count > 0)
+        {
+            check.Error = Refusal(check._module, moduleName, blocking);
+            return check;
+        }
+
         foreach (var group in check._reused.GroupBy(entry => entry.Owner, StringComparer.Ordinal))
         {
             var libraries = group.ToArray();
@@ -80,9 +86,6 @@ public sealed class DependencyConflictCheck
                 $"{check._module} uses {subject} that {group.Key} already loaded: {string.Join(", ", libraries.Select(entry => entry.Describe()))}. " +
                 "Windows PowerShell holds one version of an assembly per session; PowerShell 7 keeps each module's copy separate.");
         }
-
-        if (blocking.Count > 0)
-            check.Error = Refusal(check._module, moduleName, blocking);
 
         return check;
     }
