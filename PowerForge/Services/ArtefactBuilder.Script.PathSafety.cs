@@ -34,7 +34,8 @@ public sealed partial class ArtefactBuilder
             information,
             delivery,
             includeScriptFolders,
-            finalizedPayloadFiles);
+            finalizedPayloadFiles,
+            includeManifestLoadedFiles: false);
         string[] destinationFiles = CreateModulePackageCopyPlan(
                 Path.GetFullPath(stagingPath),
                 fullScriptRoot,
@@ -87,7 +88,8 @@ public sealed partial class ArtefactBuilder
                      information,
                      delivery,
                      includeScriptFolders,
-                     finalizedPayloadFiles))
+                     finalizedPayloadFiles,
+                     includeManifestLoadedFiles: false))
         {
             string relativePath = ComputeRelativePath(stagingPath, sourcePath);
             string destination = Path.GetFullPath(Path.Combine(fullScriptRoot, relativePath));

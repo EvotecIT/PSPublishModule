@@ -2,6 +2,7 @@
 
 ## Unreleased
 ### What's Changed
+- Package every file a module manifest loads (`RootModule`, `NestedModules`, `RequiredAssemblies`, `ScriptsToProcess`, `TypesToProcess`, `FormatsToProcess`) even when the include patterns miss it, so a format file outside the default root includes no longer leaves a module that cannot import. A manifest entry whose file is missing from staging stops the artefact build with the manifest key and file name.
 - Resolve signing and package payload checks separately for every framework through MSBuild's `TargetDir` and `TargetPath`, with relative paths anchored to the project. Use a matching conventional framework directory only as a fallback, and fail when any framework remains unresolved.
 - Allow PowerShell-authored module builds to reuse prepared staging through the same no-rebuild controls as JSON-configured builds.
 - Resume a partially published coordinated release with `ReusePreparedPackages` to reuse its verified NuGet packages, symbols and project ZIPs without rebuilding or signing them again. Preserve the original checkpoint when recovery prerequisites or cached contents do not match.

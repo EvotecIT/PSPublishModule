@@ -50,7 +50,8 @@ public sealed partial class ArtefactBuilder
             information,
             delivery,
             includeScriptFolders,
-            finalizedPayloadFiles);
+            finalizedPayloadFiles,
+            includeManifestLoadedFiles: false);
         var selectedPayload = new HashSet<string>(
             packageSourceFiles.Select(Path.GetFullPath),
             CreateCurrentFileSystemPathComparer());
