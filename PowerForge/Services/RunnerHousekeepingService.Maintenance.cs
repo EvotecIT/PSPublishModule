@@ -84,6 +84,7 @@ public sealed partial class RunnerHousekeepingService
             var builds = fresh.Values.Where(p => !ancestors.Contains(p.Id) && !admittedProcesses.Contains(p.Id)
                 && RunnerMaintenanceProcesses.IsBuildProcess(p) && !RunnerMaintenanceProcesses.IsIdleBuildServer(p)).ToArray();
             var independentBuild = builds.Length > 0;
+            run.IndependentBuild = independentBuild;
             run.SharedIdle = busyWorkers.Length == 0 && !independentBuild;
             if (!MaintenanceListenersEnrolled(run, fresh))
             {

@@ -49,8 +49,7 @@ public sealed class RunnerMaintenanceTests
         var bin = Directory.CreateDirectory(Path.Combine(enrolled ? fixture.Runner.RootPath : Path.Combine(fixture.Root, "foreign-runner"), "bin")).FullName;
         var windows = OperatingSystem.IsWindows();
         var executable = Path.Combine(bin, windows ? "Runner.Worker.exe" : "Runner.Worker");
-        File.Copy(windows ? Path.Combine(Environment.SystemDirectory, "cmd.exe") : "/bin/sleep", executable);
-        if (!windows) File.SetUnixFileMode(executable, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        Installation.CopyRunnerProcess(executable);
         using var worker = Process.Start(new ProcessStartInfo(executable, windows ? "/d /c ping -n 60 127.0.0.1 >nul" : "60")
             { UseShellExecute = false, CreateNoWindow = true })!;
         try
@@ -71,6 +70,59 @@ public sealed class RunnerMaintenanceTests
         var idle = fixture.Service.Maintain(fixture.Spec, dryRun: false);
         Assert.True(idle.Success, string.Join("\n", idle.Errors));
         Assert.False(File.Exists(file));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Maintain_PrivateSyntheticFixturesRespectIndependentBuildsAndForeignSharedStorage(bool independentBuild)
+    {
+        using var fixture = new Installation();
+        var shared = Directory.CreateDirectory(Path.Combine(fixture.Root, "shared-temp")).FullName;
+        var own = Path.Combine(fixture.Runner.TempPath, "fixture-" + Guid.NewGuid().ToString("N"));
+        var other = Path.Combine(shared, "fixture-" + Guid.NewGuid().ToString("N"));
+        foreach (var path in new[] { own, other })
+        {
+            Directory.CreateDirectory(path);
+            var database = Path.Combine(path, "fixture.sqlite");
+            File.WriteAllText(database, "synthetic fixture");
+            File.SetLastWriteTimeUtc(database, DateTime.UtcNow.AddDays(-2));
+            Directory.SetLastWriteTimeUtc(path, DateTime.UtcNow.AddDays(-2));
+        }
+        fixture.Spec.LegacyTemporaryRoots = new[] { fixture.Runner.TempPath, shared }.Select(root => new RunnerMaintenanceTemporaryRoot
+        {
+            RootPath = root, Prefix = "fixture-", FileNames = new[] { "fixture.sqlite" }
+        }).ToArray();
+        var foreign = Directory.CreateDirectory(Path.Combine(fixture.Root, "foreign-runner", "bin")).FullName;
+        var windows = OperatingSystem.IsWindows();
+        var executable = Path.Combine(foreign, windows ? "Runner.Listener.exe" : "Runner.Listener");
+        Installation.CopyRunnerProcess(executable);
+        using var listener = Process.Start(new ProcessStartInfo(executable, windows ? "/d /c ping -n 60 127.0.0.1 >nul" : "60")
+            { UseShellExecute = false, CreateNoWindow = true })!;
+        var buildExecutable = Path.Combine(foreign, windows ? "dotnet.exe" : "dotnet");
+        Installation.CopyRunnerProcess(buildExecutable);
+        using var build = independentBuild ? Process.Start(new ProcessStartInfo(buildExecutable, windows ? "/d /c ping -n 60 127.0.0.1 >nul" : "60")
+            { UseShellExecute = false, CreateNoWindow = true }) : null;
+        try
+        {
+            Assert.True(SpinWait.SpinUntil(() => RunnerMaintenanceProcesses.Read().TryGetValue(listener.Id, out var process)
+                && process.Name == "Runner.Listener" && process.Executable is not null, TimeSpan.FromSeconds(5)));
+            var result = fixture.Service.Maintain(fixture.Spec, dryRun: false);
+            Assert.True(result.Success, string.Join("\n", result.Errors));
+            Assert.True(result.Deferred);
+            Assert.True(Directory.Exists(own) == independentBuild, string.Join("\n", result.Retained));
+            Assert.Equal("synthetic fixture", File.ReadAllText(Path.Combine(other, "fixture.sqlite")));
+        }
+        finally
+        {
+            if (build is not null)
+            {
+                if (!build.HasExited) build.Kill(entireProcessTree: true);
+                build.WaitForExit();
+            }
+            if (!listener.HasExited) listener.Kill(entireProcessTree: true);
+            listener.WaitForExit();
+        }
     }
 
     [Fact]
@@ -287,7 +339,11 @@ public sealed class RunnerMaintenanceTests
         using var background = Process.Start(start)!;
         try
         {
-            Assert.Equal(marker, RunnerMaintenanceProcesses.ReadJobMarker(background.Id));
+            Assert.True(SpinWait.SpinUntil(() =>
+            {
+                try { return RunnerMaintenanceProcesses.ReadJobMarker(background.Id) == marker; }
+                catch (IOException) { return false; }
+            }, TimeSpan.FromSeconds(5)), "Marked fixture process did not finish native startup.");
             var state = new RunnerMaintenanceState();
             var job = new RunnerMaintenanceJob { RunnerRoot = fixture.Runner.RootPath,
                 Workspace = Path.Combine(fixture.Runner.WorkRootPath, "Example"), WorkerId = int.MaxValue,
@@ -336,6 +392,15 @@ public sealed class RunnerMaintenanceTests
         internal readonly RunnerMaintenanceSpec Spec;
         internal readonly RunnerMaintenanceRegistration Runner;
         internal readonly RunnerHousekeepingService Service = new(new NullLogger(), ReadOwnedProcesses);
+
+        internal static void CopyRunnerProcess(string executable)
+        {
+            File.Copy(OperatingSystem.IsWindows() ? Path.Combine(Environment.SystemDirectory, "cmd.exe") : "/bin/sleep", executable);
+            if (OperatingSystem.IsWindows()) return;
+            File.SetUnixFileMode(executable, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+            if (OperatingSystem.IsMacOS())
+                RunnerMaintenanceProcesses.Run("/usr/bin/codesign", Path.GetDirectoryName(executable)!, "--force", "--sign", "-", executable);
+        }
 
         private static Dictionary<int, RunnerMaintenanceProcess> ReadOwnedProcesses(out bool incomplete)
         {

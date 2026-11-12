@@ -151,6 +151,7 @@ public sealed partial class RunnerHousekeepingService
     private static void MaintenanceRunnerOutput(MaintenanceRun run, RunnerMaintenanceRegistration runner)
     {
         MaintenanceClearChildren(run, runner.TempPath, runner.TempPath, DateTime.MaxValue);
+        MaintenanceLegacyTemp(run, runner.TempPath);
         if (!run.ActiveRunnerRoots.Contains(runner.RootPath))
             MaintenanceClearChildren(run, Path.Combine(runner.WorkRootPath, "_temp"), runner.WorkRootPath, DateTime.UtcNow.AddDays(-1));
         var diagnostics = Path.Combine(runner.RootPath, "_diag");
@@ -249,9 +250,13 @@ public sealed partial class RunnerHousekeepingService
         catch (System.ComponentModel.Win32Exception) { return true; }
     }
 
-    private static void MaintenanceLegacyTemp(MaintenanceRun run)
+    private static void MaintenanceLegacyTemp(MaintenanceRun run, string? privateTempRoot = null)
     {
-        if (!run.Deep || run.Spec.LegacyTemporaryRoots.Length == 0) return;
+        if (privateTempRoot is not null && run.IndependentBuild) return;
+        var producers = run.Spec.LegacyTemporaryRoots.Where(root => privateTempRoot is not null
+            ? PathsEqual(root.RootPath, privateTempRoot)
+            : !run.Spec.Runners.Any(runner => PathsEqual(root.RootPath, runner.TempPath))).ToArray();
+        if (!run.Deep || run.Expired || producers.Length == 0) return;
         string servicePaths;
         try { servicePaths = MaintenanceServicePaths(run.Spec.Runners[0].RootPath); }
         catch (IOException)
@@ -259,7 +264,7 @@ public sealed partial class RunnerHousekeepingService
             run.Retained.Add("Legacy fixtures retained because installed service paths could not be checked.");
             return;
         }
-        foreach (var producer in run.Spec.LegacyTemporaryRoots)
+        foreach (var producer in producers)
         {
             if (!Directory.Exists(producer.RootPath)) continue;
             foreach (var path in Directory.EnumerateDirectories(producer.RootPath, producer.Prefix + "*"))
@@ -294,12 +299,23 @@ public sealed partial class RunnerHousekeepingService
         if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
             return RunnerMaintenanceProcesses.Run("launchctl", directory, "print", "system") + RunnerMaintenanceProcesses.Run("launchctl", directory, "print",
                 "gui/" + RunnerMaintenanceProcesses.Run("id", directory, "-u").Trim());
-        var units = RunnerMaintenanceProcesses.Run("systemctl", directory, "list-unit-files", "--type=service", "--no-legend", "--no-pager")
-            .Split('\n').Select(line => line.Trim().Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries).FirstOrDefault())
-            .Where(name => name is not null && name.EndsWith(".service", StringComparison.Ordinal)).Cast<string>().ToArray();
-        return units.Length == 0 ? string.Empty : RunnerMaintenanceProcesses.Run("systemctl", directory,
+        var installed = MaintenanceServiceUnitNames(RunnerMaintenanceProcesses.Run("systemctl", directory,
+            "list-unit-files", "--type=service", "--no-legend", "--no-pager"));
+        var loaded = MaintenanceServiceUnitNames(RunnerMaintenanceProcesses.Run("systemctl", directory,
+            "list-units", "--type=service", "--all", "--plain", "--no-legend", "--no-pager"));
+        var templates = installed.Where(name => name.EndsWith("@.service", StringComparison.Ordinal)).ToArray();
+        var units = installed.Concat(loaded).Where(name => !name.EndsWith("@.service", StringComparison.Ordinal)).Distinct(StringComparer.Ordinal).ToArray();
+        var paths = units.Length == 0 ? string.Empty : RunnerMaintenanceProcesses.Run("systemctl", directory,
             new[] { "show", "--property=ExecStart", "--value" }.Concat(units).ToArray());
+        // Uninstantiated templates reject systemctl show. Their installed definitions
+        // retain literal service paths, while loaded instances above resolve specifiers.
+        return templates.Length == 0 ? paths : paths + RunnerMaintenanceProcesses.Run("systemctl", directory,
+            new[] { "cat", "--no-pager" }.Concat(templates).ToArray());
     }
+
+    private static string[] MaintenanceServiceUnitNames(string text) => text.Split('\n')
+        .Select(line => line.Trim().Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries).FirstOrDefault())
+        .Where(name => name is not null && name.EndsWith(".service", StringComparison.Ordinal)).Cast<string>().ToArray();
 
     private static void MaintenanceDocker(MaintenanceRun run)
     {

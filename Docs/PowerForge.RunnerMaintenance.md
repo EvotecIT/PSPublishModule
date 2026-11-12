@@ -81,6 +81,8 @@ Preserved custom hooks retain their foreground duration, output, exit status and
 
 Package eviction uses NuGet's shared per-package lock keyed by the full `.nupkg` path. Directory isolation atomically removes the complete cache entry, including its completion marker. A durable journal records the move before deletion, so interrupted cleanup can resume without rebuilding or restoring the maintenance payload. The NuGet scratch directory must match the enrolled runners.
 
+Source-qualified fixture roots inside a runner's private temp directory follow that registration's activity gate and retain independent build activity. Shared legacy fixture roots wait for host-wide cache admission.
+
 Browser revisions continue through HtmlTinkerX's installation and repair lifecycle. Installed SDKs, Windows servicing, Docker images, containers and volumes keep their separate maintenance procedures.
 
 The GitHub runner refreshes action downloads at job preparation and retires old runner binaries through its updater. PowerForge preserves those installation lifecycles. The lifecycle hooks use GitHub's `ACTIONS_RUNNER_HOOK_JOB_STARTED` and `ACTIONS_RUNNER_HOOK_JOB_COMPLETED` settings. [GitHub job hooks](https://docs.github.com/en/actions/how-tos/manage-runners/self-hosted-runners/run-scripts), [action download lifecycle](https://github.com/actions/runner/blob/main/src/Runner.Worker/ActionManager.cs), [runner updater](https://github.com/actions/runner/blob/main/src/Runner.Listener/SelfUpdater.cs)
