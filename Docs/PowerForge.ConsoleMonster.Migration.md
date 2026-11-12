@@ -1,6 +1,6 @@
 # Replacing Spectre.Console with ConsoleMonster
 
-Status: ported on `feature/consolemonster-console` against ConsoleMonster 2.5.0 candidate packages; Spectre.Console is removed. Assessment date: 2026-11-10.
+Status: ported to ConsoleMonster 2.5.0; Spectre.Console is removed. Assessment date: 2026-11-10.
 Compared: PSPublishModule `main` at `e67e1bfea`, ConsoleMonster 2.4.0 (`a051278c`).
 
 ## Summary
@@ -132,23 +132,20 @@ The port first worked around these in `PowerForge.ConsoleUi`. ConsoleMonster
 - Only one live session can capture the console at a time; tests that start one
   run in a non-parallel collection.
 
-Temporary configuration: the branch builds against `2.5.0-local.2`, restored
-from a local package folder into an isolated package cache. Switch the
-ConsoleMonster package references to the published 2.5.0 before this merges.
+The package references point at ConsoleMonster 2.5.0, which carries both
+blockers and the changes above (ConsoleMonster #152 and #153).
+
 ### Should fix
+
+Done in ConsoleMonster 2.5.0: bounded live queue, captured lines and log entries
+(`MaxQueuedEvents`, `LogRegion.MaxLineLength`), the console mode restored at
+process exit, the step ledger following the furthest running step with frozen
+times for finished rows, and the Spectre guide's shortcode note. Still open:
 
 - **One assembly version per Windows PowerShell 5.1 session.** PSPublishModule,
   TestimoX and the ConsoleMonster module will all ship the DLL. A version policy is
   needed before more than one product adopts it.
-- **Unbounded buffers** (`TODO.md` L6): the live queue, capture writer and log
-  entries grow without limit. Long release runs make this matter.
-- **VT mode left enabled** (`TODO.md` L2): detection turns on VT processing and
-  never restores the previous console mode.
-- **Behaviour to confirm for the step ledger:** a scrolling `LiveTable` should
-  follow the furthest running row, not only the last one, and finished rows should
-  keep a frozen elapsed time.
-- **Smaller items:** a JSON tree widget; correct the Spectre migration guide, which
-  says `:shortcode:` emoji are unsupported although `Markup.Shortcodes` exists.
+- **A JSON tree widget.** Help output uses highlighted JSON, which is enough for now.
 
 ## Progress that looks stuck
 
