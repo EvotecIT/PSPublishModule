@@ -341,7 +341,6 @@ internal static partial class ModuleBootstrapperGenerator
                         }).TrimEnd(),
                     ["ModuleName"] = EscapePsSingleQuoted(moduleName),
                     ["ModuleLoaderImportBlock"] = BuildModuleLoaderImportBlock("$PowerForgeModuleRoot, '" + ModuleLoaderAssets.PackagedFolderName + "'"),
-                    ["LoadedVersionGuardBlock"] = BuildLoadedVersionGuardBlock(),
                     ["SharedAssemblyNames"] = BuildPowerShellArrayLiteral(NormalizePowerShellStringArray(sharedAssemblies)),
                     ["RuntimePayloadSelectorBlock"] = ModuleBinaryPayloadLayout.BuildPowerShellRuntimeSelector(),
                     ["SharedAssembliesBlock"] = BuildSharedAssembliesBlock(sharedAssemblies, preloadSharedAssemblies,
@@ -465,9 +464,6 @@ internal static partial class ModuleBootstrapperGenerator
                 ["LoaderFileName"] = ModuleLoaderAssets.FileName,
                 ["LoaderProbeType"] = ModuleLoaderAssets.ProbeTypeName
             });
-
-    private static string BuildLoadedVersionGuardBlock()
-        => RenderModuleBootstrapperTemplate("LoadedVersionGuard", "Scripts/ModuleBootstrapper/LoadedVersionGuard.Template.ps1", new Dictionary<string, string>());
 
     internal static string BuildTypeAcceleratorBlock(
         AssemblyTypeAcceleratorExportMode mode,

@@ -1,7 +1,6 @@
 {{BinaryAssemblyResolverBlock}}
 
 {{ModuleLoaderImportBlock}}
-{{LoadedVersionGuardBlock}}
 {{SharedAssembliesBlock}}{{DesktopAssemblyResolverBlock}}{{RuntimeHandlerBlock}}if ($PSEdition -ne 'Core') {
     $LibrariesScript = [IO.Path]::Combine($PowerForgeModuleRoot, '{{ModuleName}}.Libraries.ps1')
     if (Test-Path -LiteralPath $LibrariesScript) {
@@ -60,6 +59,11 @@ try {
                     $ModuleAssemblyPath,
                     '{{ModuleName}}',
                     [string[]]{{SharedAssemblyNames}})
+                # On a repeat import (Import-Module -Force, or after Remove-Module) PowerShell returns its cached module
+                # for this assembly without importing the commands here. Drop the cached copy so they import again.
+                foreach ($PowerForgeStaleInnerModule in @(Get-Module -All | Where-Object { [object]::ReferenceEquals($_.ImplementingAssembly, $ModuleAssembly) })) {
+                    Remove-Module -ModuleInfo $PowerForgeStaleInnerModule -Force -ErrorAction SilentlyContinue
+                }
                 $InnerModule = & $ImportModule -Assembly $ModuleAssembly -Force -PassThru -ErrorAction Stop
 
 {{TypeAcceleratorBlock}}
