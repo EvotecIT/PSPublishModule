@@ -44,18 +44,27 @@ internal static partial class RunnerMaintenanceProcesses
     }
 
     internal static Dictionary<int, RunnerMaintenanceProcess> Read()
+        => Read(out _);
+
+    internal static Dictionary<int, RunnerMaintenanceProcess> Read(out bool incomplete)
     {
+        incomplete = false;
         var entries = RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? ReadWindows() : ReadUnix();
         foreach (var entry in entries.Values.ToArray())
         {
+            if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows) && entry.ParentId == Process.GetCurrentProcess().Id && entry.Name == "ps")
+            {
+                entries.Remove(entry.Id);
+                continue;
+            }
             try
             {
                 using var process = Process.GetProcessById(entry.Id);
                 entry.StartTicks = process.StartTime.ToUniversalTime().Ticks;
                 entry.Executable = process.MainModule?.FileName;
             }
-            catch (ArgumentException) { entries.Remove(entry.Id); }
-            catch (InvalidOperationException) { entries.Remove(entry.Id); }
+            catch (ArgumentException) { entries.Remove(entry.Id); incomplete = true; }
+            catch (InvalidOperationException) { entries.Remove(entry.Id); incomplete = true; }
             catch (System.ComponentModel.Win32Exception) { /* Unknown live identities remain blockers. */ }
         }
         return entries;

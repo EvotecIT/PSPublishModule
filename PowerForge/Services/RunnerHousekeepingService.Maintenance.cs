@@ -59,7 +59,8 @@ public sealed partial class RunnerHousekeepingService
             if (run.State.SchemaVersion != 1) throw new IOException("Unsupported maintenance state version.");
             if (run.Result.FreeBytesBefore < GiB(spec.MinimumFreeGiB)) run.State.PressureTargetBytes = GiB(spec.TargetFreeGiB);
             run.Deep = run.State.Due || run.State.PressureTargetBytes > 0 || run.State.LastDeepSweepUtc <= DateTime.UtcNow.AddHours(-spec.DeepIntervalHours);
-            var fresh = RunnerMaintenanceProcesses.Read();
+            var fresh = RunnerMaintenanceProcesses.Read(out var snapshotIncomplete);
+            run.ProcessSnapshotIncomplete = snapshotIncomplete;
             if (run.Job is not null)
             {
                 var parent = RunnerMaintenanceProcesses.Ancestors(fresh, run.Job.WorkerId).Select(id => fresh.TryGetValue(id, out var process) ? process : null)

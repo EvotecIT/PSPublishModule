@@ -31,6 +31,7 @@ public sealed partial class RunnerHousekeepingService
         internal readonly HashSet<string> UnknownJobActivity = new(GetPathStringComparer());
         internal bool DryRun;
         internal bool SharedIdle;
+        internal bool ProcessSnapshotIncomplete;
         internal bool Deep;
         internal long SimulatedFree;
         internal RunnerMaintenanceJob? Job;

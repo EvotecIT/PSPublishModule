@@ -62,6 +62,7 @@ public sealed partial class RunnerHousekeepingService
         }
         var tracked = run.State.Jobs.Where(job => job.TrackingIds.Count > 0).ToArray();
         if (tracked.Length == 0) return;
+        var uncertain = run.ProcessSnapshotIncomplete;
         var found = new HashSet<string>(StringComparer.Ordinal);
         foreach (var process in processes.Values.Where(process => process.StartTicks >= tracked.Min(job => job.WorkerStartTicks)))
         {
@@ -75,13 +76,13 @@ public sealed partial class RunnerHousekeepingService
             {
                 marker = RunnerMaintenanceProcesses.ReadJobMarker(process.Id);
                 using var current = System.Diagnostics.Process.GetProcessById(process.Id);
-                if (current.StartTime.ToUniversalTime().Ticks != process.StartTicks) continue;
+                if (current.HasExited || current.StartTime.ToUniversalTime().Ticks != process.StartTicks) { uncertain = true; continue; }
             }
-            catch (ArgumentException) { continue; }
-            catch (InvalidOperationException) { continue; }
+            catch (ArgumentException) { uncertain = true; continue; }
+            catch (InvalidOperationException) { uncertain = true; continue; }
             catch (Exception error) when (error is IOException || error is UnauthorizedAccessException || error is System.ComponentModel.Win32Exception)
             {
-                if (!MaintenanceProcessAlive(process.Id)) continue;
+                if (!MaintenanceProcessAlive(process.Id)) { uncertain = true; continue; }
                 foreach (var job in tracked.Where(job => process.StartTicks >= job.WorkerStartTicks)) run.UnknownJobActivity.Add(job.RunnerRoot);
                 run.Retained.Add("Job marker could not be inspected for " + process.Name + " PID " + process.Id + ".");
                 continue;
@@ -92,6 +93,12 @@ public sealed partial class RunnerHousekeepingService
                 if (!job.Processes.Any(identity => identity.Id == process.Id && identity.StartTicks == process.StartTicks))
                     job.Processes.Add(new RunnerMaintenanceProcessIdentity { Id = process.Id, StartTicks = process.StartTicks });
         }
+        // A marked parent can hand off to a new child while environments are read.
+        // Require a complete second discovery with no new lifetime before retiring ownership.
+        var after = RunnerMaintenanceProcesses.Read(out var afterIncomplete);
+        uncertain |= afterIncomplete || after.Values.Any(process => !processes.TryGetValue(process.Id, out var before) || before.StartTicks != process.StartTicks);
+        if (uncertain)
+            foreach (var job in tracked) run.UnknownJobActivity.Add(job.RunnerRoot);
         foreach (var job in tracked)
         {
             if (run.UnknownJobActivity.Contains(job.RunnerRoot) || processes.TryGetValue(job.WorkerId, out var worker) && worker.StartTicks == job.WorkerStartTicks) continue;
