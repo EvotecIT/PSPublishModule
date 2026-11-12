@@ -98,13 +98,15 @@ public sealed partial class RunnerHousekeepingService
                 var active = busyWorkers.Any(p => MaintenanceProcessBelongs(runner, p));
                 var unknown = busyWorkers.Any(p => string.IsNullOrEmpty(p.Executable) || !spec.Runners.Any(r => MaintenanceProcessBelongs(r, p)));
                 var jobProcesses = run.State.Jobs.Where(j => PathsEqual(j.RunnerRoot, runner.RootPath)).SelectMany(j => j.Processes).ToArray();
-                var orphanActivity = jobProcesses.Any(identity => fresh.TryGetValue(identity.Id, out var process) && process.StartTicks == identity.StartTicks
-                    && !ancestors.Contains(process.Id) && !admittedProcesses.Contains(process.Id) && !RunnerMaintenanceProcesses.IsIdleBuildServer(process));
+                var orphanProcesses = jobProcesses.Where(identity => fresh.TryGetValue(identity.Id, out var process) && process.StartTicks == identity.StartTicks
+                    && !ancestors.Contains(process.Id) && !admittedProcesses.Contains(process.Id) && !RunnerMaintenanceProcesses.IsIdleBuildServer(process)
+                    && !RunnerMaintenanceProcesses.IsConsoleHost(process)).Select(identity => fresh[identity.Id]).ToArray();
+                var orphanActivity = orphanProcesses.Length > 0;
                 if (orphanActivity)
                 {
                     run.SharedIdle = false;
                     run.Result.Deferred = run.State.Due = true;
-                    run.Retained.Add(runner.Name + " retains output while a process from a recorded job is still active.");
+                    foreach (var process in orphanProcesses) run.Retained.Add(runner.Name + " retains output for recorded " + process.Name + " PID " + process.Id + ".");
                 }
                 if (active || unknown || orphanActivity) continue;
                 MaintenanceRunnerOutput(run, runner);

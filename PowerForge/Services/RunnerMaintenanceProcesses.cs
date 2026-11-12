@@ -63,6 +63,10 @@ internal static class RunnerMaintenanceProcesses
 
     internal static bool IsWorker(RunnerMaintenanceProcess entry) => entry.Name.Equals("Runner.Worker", StringComparison.OrdinalIgnoreCase);
 
+    internal static bool IsConsoleHost(RunnerMaintenanceProcess process) => RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
+        && process.Name.Equals("conhost", StringComparison.OrdinalIgnoreCase)
+        && string.Equals(process.Executable, Path.Combine(Environment.SystemDirectory, "conhost.exe"), StringComparison.OrdinalIgnoreCase);
+
     internal static HashSet<int> Ancestors(Dictionary<int, RunnerMaintenanceProcess> entries, int id)
     {
         var result = new HashSet<int>();
