@@ -100,7 +100,7 @@ public sealed class TypeAcceleratorRegistration
 
     /// <summary>
     /// Removes accelerators this registration owns once no other PowerForge module still owns them, then
-    /// hands each freed name to the most recently imported module that still wants it.
+    /// hands each free name to the most recently imported module that still wants it.
     /// </summary>
     public void Unregister()
     {
@@ -117,17 +117,10 @@ public sealed class TypeAcceleratorRegistration
                 if (_table.TryGet(owned.Key, out var current) && ReferenceEquals(current, owned.Value))
                     _table.Remove(owned.Key);
                 owners.Remove(owned.Key);
-                if (_table.TryGet(owned.Key, out _)) continue;
-
-                for (var i = Live.Count - 1; i >= 0; i--)
-                {
-                    if (!Live[i]._claims.TryGetValue(owned.Key, out var successor)) continue;
-                    Live[i].Claim(owned.Key, successor, owners);
-                    break;
-                }
             }
             _registered.Clear();
             _claims.Clear();
+            ClaimFreedNames(owners);
         }
     }
 
@@ -212,12 +205,37 @@ public sealed class TypeAcceleratorRegistration
             Add(type, source);
         }
 
-        lock (AcceleratorOwners().SyncRoot)
+        var owners = AcceleratorOwners();
+        lock (owners.SyncRoot)
+        {
             Live.Add(this);
+            // A name this registration waited for may have been freed before it became visible to Unregister.
+            ClaimFreedNames(owners);
+        }
 
         if (_keptByOthers.Count > 0)
             Warn($"{_module}: {_keptByOthers.Count} type accelerator(s) already point to types another module loaded ({Sample(_keptByOthers)}); " +
                  "they keep doing so and switch to this module's types when that module is removed. Run Import-Module -Verbose for details.");
+    }
+
+    /// <summary>
+    /// Gives every free name a live registration still wants to the most recently imported one. Runs whenever a
+    /// PowerForge registration is published or removed, which also picks up names an older script-based loader freed.
+    /// Call with the owner catalog locked.
+    /// </summary>
+    private static void ClaimFreedNames(Hashtable owners)
+    {
+        var claimed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        for (var i = Live.Count - 1; i >= 0; i--)
+        {
+            foreach (var claim in Live[i]._claims)
+            {
+                if (claimed.Contains(claim.Key) || Live[i]._registered.ContainsKey(claim.Key) || Live[i]._table.TryGet(claim.Key, out _))
+                    continue;
+                Live[i].Claim(claim.Key, claim.Value, owners);
+                claimed.Add(claim.Key);
+            }
+        }
     }
 
     private static string Sample(List<string> names)

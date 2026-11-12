@@ -62,11 +62,13 @@ public sealed partial class ArtefactBuilder
     }
 
     // Generated binary bootstrappers load the precompiled loader from this folder, so it ships with the
-    // module whatever IncludeAll lists, like Lib does for the payload it loads.
+    // module whatever IncludeAll lists, like Lib does for the payload it loads. Use the exact name in place of any
+    // other casing: package paths take their spelling from this entry, and the bootstrapper asks for 'Loader'.
     private static string[] MergeModuleLoaderIncludeAll(string[] includeAll)
-        => includeAll.Any(x => string.Equals(x, ModuleLoaderAssets.PackagedFolderName, StringComparison.OrdinalIgnoreCase))
-            ? includeAll
-            : includeAll.Concat(new[] { ModuleLoaderAssets.PackagedFolderName }).ToArray();
+        => includeAll
+            .Where(x => !string.Equals(x, ModuleLoaderAssets.PackagedFolderName, StringComparison.OrdinalIgnoreCase))
+            .Concat(new[] { ModuleLoaderAssets.PackagedFolderName })
+            .ToArray();
 
     internal static string[] ResolveModulePackageSourceFiles(
         string stagingRoot,

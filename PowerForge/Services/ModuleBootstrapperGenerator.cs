@@ -416,6 +416,10 @@ internal static partial class ModuleBootstrapperGenerator
                   "$PowerForgeModulePath = $PSCommandPath"
                 : string.Empty,
             ["BinaryLoaderBlock"] = binaryLoaderBlock,
+            ["FailedImportCleanupBlock"] = assemblyTypeAcceleratorMode == AssemblyTypeAcceleratorExportMode.None || string.IsNullOrWhiteSpace(binaryLoaderBlock)
+                ? string.Empty
+                : RenderModuleBootstrapperTemplate("TypeAcceleratorFailedImportCleanup",
+                    "Scripts/ModuleBootstrapper/TypeAcceleratorFailedImportCleanup.Template.ps1", new Dictionary<string, string>()).TrimEnd(),
             ["ScriptLoaderBlock"] = scriptLoaderBlock,
             ["ExportBlock"] = ModuleConditionalExportBlockBuilder.BuildExportBlock(
                 exports,

@@ -38,8 +38,9 @@ ordinary module import instead of the patterns used by attack tooling.
 | Two modules expose the same type accelerator name | The first registration keeps the name. The next module reports it once and takes the name over when the first module is removed. PowerShell caches a type name once a script resolves it, so a name already used in the session keeps its first type. | Same. |
 
 The contract version is part of the assembly name. Modules built by different PowerForge releases
-can load in one session: the first loaded `V1` loader serves every module that needs `V1`, and a
-breaking change ships as `V2` next to it. PowerForge embeds both builds and writes them during the
+can load in one session: the first loaded `V1` loader serves every module that needs `V1`, so any
+change to the members generated scripts call, additions included, ships as `V2` next to it. A fix
+that keeps those members unchanged reaches a session only when its first module was built with it. PowerForge embeds both builds and writes them during the
 module build, so building a module no longer needs the .NET SDK for the loader. Module signing
 signs them with the module's other binaries. Packaging always includes the `Loader` folder,
 whatever `IncludeAll` lists.

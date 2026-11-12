@@ -1,11 +1,15 @@
-<Project Sdk="Microsoft.NET.Sdk">
+<!-- A host's publish settings (AOT, trimming, RID) must not reach this loader in restore or build. -->
+<Project Sdk="Microsoft.NET.Sdk" TreatAsLocalProperty="PublishAot;PublishTrimmed;PublishSingleFile;SelfContained;RuntimeIdentifier">
 
   <!--
     Precompiled loader shipped inside every PowerForge-built binary module (Loader/Core and Loader/Desktop).
     The generated PSM1 only calls public members of this assembly, so module import needs no
     script-level reflection, no Add-Type -TypeDefinition compilation and no private PowerShell APIs.
     The contract version is part of the assembly name so modules built by different PowerForge
-    releases can load side by side in one session. Bump it only for breaking API changes.
+    releases can load side by side in one session. A session keeps the first V1 copy it loads and
+    every later module that needs V1 uses that copy, so bump the version (V2, V3, ...) for any change
+    to the public members the generated scripts call, additions included. Fixes that keep those
+    members unchanged reach a session only when its first module was built with them.
   -->
   <PropertyGroup>
     <TargetFrameworks>net472;netcoreapp3.1</TargetFrameworks>
@@ -26,6 +30,11 @@
     <SuppressTfmSupportBuildWarnings>true</SuppressTfmSupportBuildWarnings>
     <PathMap>$(MSBuildProjectDirectory)=/_/PowerForge.ModuleLoader/</PathMap>
     <DebugType>none</DebugType>
+    <PublishAot>false</PublishAot>
+    <PublishTrimmed>false</PublishTrimmed>
+    <PublishSingleFile>false</PublishSingleFile>
+    <SelfContained>false</SelfContained>
+    <RuntimeIdentifier></RuntimeIdentifier>
     <GenerateDependencyFile>false</GenerateDependencyFile>
   </PropertyGroup>
 

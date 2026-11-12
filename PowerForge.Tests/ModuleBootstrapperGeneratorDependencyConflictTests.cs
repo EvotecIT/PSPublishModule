@@ -72,15 +72,16 @@ foreach ($case in $cases) {
         try
         {
             ModuleLoaderAssets.Write(Path.Combine(root, ModuleLoaderAssets.PackagedFolderName));
-            foreach (var name in new[] { "First", "Second" })
+            foreach (var name in new[] { "First", "Second", "Third" })
             {
                 var lib = Directory.CreateDirectory(Path.Combine(root, name, "Lib")).FullName;
-                EmitAssembly(lib, name + "Types", "namespace Fixture { public sealed class Shared { public string Owner => \"" + name + "\"; } }");
+                var typeName = name == "Third" ? "Other" : "Shared";
+                EmitAssembly(lib, name + "Types", "namespace Fixture { public sealed class " + typeName + " { public string Owner => \"" + name + "\"; } }");
                 File.WriteAllText(Path.Combine(root, name, name + ".psm1"),
                     "$PowerForgeModuleName = '" + name + "'\n" +
                     ModuleBootstrapperGenerator.BuildModuleLoaderImportBlock("$PSScriptRoot, '..', 'Loader'") + "\n" +
                     "$ModuleAssembly = [System.Runtime.Loader.AssemblyLoadContext]::new('" + name + "', $false).LoadFromAssemblyPath((Join-Path $PSScriptRoot 'Lib/" + name + "Types.dll'))\n" +
-                    ModuleBootstrapperGenerator.BuildTypeAcceleratorBlock(AssemblyTypeAcceleratorExportMode.AllowList, ["Fixture.Shared"], [], "(Join-Path $PSScriptRoot 'Lib')"));
+                    ModuleBootstrapperGenerator.BuildTypeAcceleratorBlock(AssemblyTypeAcceleratorExportMode.AllowList, ["Fixture." + typeName], [], "(Join-Path $PSScriptRoot 'Lib')"));
             }
 
             var script = Path.Combine(root, "Test-Handover.ps1");
@@ -95,11 +96,59 @@ Remove-Module First
 if (-not $catalog.ContainsKey('Fixture.Shared') -or $catalog['Fixture.Shared'].Assembly.GetName().Name -ne 'SecondTypes') { throw "The accelerator did not pass to the remaining module: $($catalog['Fixture.Shared'].Assembly.FullName)" }
 Remove-Module Second
 if ($catalog.ContainsKey('Fixture.Shared')) { throw 'The accelerator outlived its last owner.' }
+
+# A module built by an earlier PowerForge release owns the name from script and frees it without a hand-over.
+$accelerators = [psobject].Assembly.GetType('System.Management.Automation.TypeAccelerators')
+$owners = [AppDomain]::CurrentDomain.GetData('PowerForge.TypeAcceleratorOwners.v1')
+$accelerators::Add('Fixture.Shared', [Uri])
+$owners['Fixture.Shared'] = @{ Type = [Uri]; Owners = @{ 'script-owner' = $true } }
+$null = Import-Module (Join-Path $PSScriptRoot 'Second/Second.psm1') 3>&1
+if (-not [object]::ReferenceEquals($catalog['Fixture.Shared'], [Uri])) { throw 'The script-owned accelerator was replaced.' }
+$null = $accelerators::Remove('Fixture.Shared'); $owners.Remove('Fixture.Shared')
+Import-Module (Join-Path $PSScriptRoot 'Third/Third.psm1')
+if (-not $catalog.ContainsKey('Fixture.Shared') -or $catalog['Fixture.Shared'].Assembly.GetName().Name -ne 'SecondTypes') { throw 'A name freed by a script-based owner was not claimed at the next import.' }
+Remove-Module Second, Third
 'ACCELERATOR_HANDOVER_OK'
 """);
             var result = RunProcess(host, $"-NoLogo -NoProfile -NonInteractive -File \"{script}\"", root, timeoutMilliseconds: 60000);
             Assert.True(result.ExitCode == 0, result.StandardOutput + Environment.NewLine + result.StandardError);
             Assert.Contains("ACCELERATOR_HANDOVER_OK", result.StandardOutput);
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { /* loaded fixtures stay locked until the host exits */ }
+        }
+    }
+
+    // The bootstrapper registers shared payloads by the path PowerShell sees; the PowerShell 7 module context asks
+    // with its physical directories. A module reached through a symlink must still find its own shared payload.
+    [Fact]
+    [Trait("Category", "Integration")]
+    public void SharedAssemblyPolicy_ResolvesPayloadRegisteredThroughALinkedFolder()
+    {
+        var host = FindExecutableOnPath(OperatingSystem.IsWindows() ? "pwsh.exe" : "pwsh");
+        if (host is null) return;
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "pf-shared-link-" + Guid.NewGuid().ToString("N"))).FullName;
+        try
+        {
+            var physical = Directory.CreateDirectory(Path.Combine(root, "physical")).FullName;
+            var alias = Path.Combine(root, "alias");
+            try { Directory.CreateSymbolicLink(alias, physical); }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return; } // links need privileges on some Windows hosts
+            ModuleLoaderAssets.Write(Path.Combine(root, ModuleLoaderAssets.PackagedFolderName));
+            EmitAssembly(physical, "SharedLinkFixture", "public static class SharedLinkFixtureMarker { }");
+            var script = Path.Combine(root, "Test-SharedLink.ps1");
+            File.WriteAllText(script, """
+$ErrorActionPreference = 'Stop'
+Add-Type -Path (Join-Path $PSScriptRoot 'Loader/Core/PowerForge.ModuleLoader.V1.dll')
+[PowerForge.ModuleLoader.V1.SharedAssemblyPolicy]::Register([string[]]@('SharedLinkFixture'), [string[]]@((Join-Path $PSScriptRoot 'alias')))
+$assembly = [PowerForge.ModuleLoader.V1.SharedAssemblyPolicy]::Resolve([Reflection.AssemblyName]::new('SharedLinkFixture'), [string[]]@((Join-Path $PSScriptRoot 'physical')))
+if ($assembly.GetName().Name -ne 'SharedLinkFixture') { throw 'Wrong shared assembly.' }
+'SHARED_LINK_OK'
+""");
+            var result = RunProcess(host, $"-NoLogo -NoProfile -NonInteractive -File \"{script}\"", root, timeoutMilliseconds: 60000);
+            Assert.True(result.ExitCode == 0, result.StandardOutput + Environment.NewLine + result.StandardError);
+            Assert.Contains("SHARED_LINK_OK", result.StandardOutput);
         }
         finally
         {

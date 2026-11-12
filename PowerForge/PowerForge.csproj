@@ -67,16 +67,13 @@
   <!--
     The module loader is shipped inside every generated binary module. Embed both builds so module
     builds need no .NET SDK and no import-time compilation (see Docs/PowerForge.ModuleLoader.md).
-    Host publish settings (RID, AOT, trimming) must not flow into the loader build.
   -->
   <ItemGroup>
     <ProjectReference Include="..\PowerForge.ModuleLoader\PowerForge.ModuleLoader.csproj"
                       ReferenceOutputAssembly="false" Private="false" SkipGetTargetFrameworkProperties="true"
-                      UndefineProperties="RuntimeIdentifier;SelfContained;PublishAot;PublishTrimmed;PublishSingleFile"
                       SetTargetFramework="TargetFramework=net472" OutputItemType="PowerForgeModuleLoaderDesktop" />
     <ProjectReference Include="..\PowerForge.ModuleLoader\PowerForge.ModuleLoader.csproj"
                       ReferenceOutputAssembly="false" Private="false" SkipGetTargetFrameworkProperties="true"
-                      UndefineProperties="RuntimeIdentifier;SelfContained;PublishAot;PublishTrimmed;PublishSingleFile"
                       SetTargetFramework="TargetFramework=netcoreapp3.1" OutputItemType="PowerForgeModuleLoaderCore" />
   </ItemGroup>
 

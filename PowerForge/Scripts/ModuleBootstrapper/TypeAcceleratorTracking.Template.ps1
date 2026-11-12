@@ -1,9 +1,5 @@
-foreach ($PowerForgeTypeAcceleratorMessage in $PowerForgeTypeAcceleratorRegistration.Warnings) {
-    Write-Warning -Message $PowerForgeTypeAcceleratorMessage
-}
-foreach ($PowerForgeTypeAcceleratorMessage in $PowerForgeTypeAcceleratorRegistration.VerboseMessages) {
-    Write-Verbose -Message $PowerForgeTypeAcceleratorMessage
-}
+# Track the registration before writing messages: a warning that stops ($WarningPreference = Stop) must not
+# leave accelerators nobody releases. A failed import releases them in the bootstrapper.
 if ($null -eq $script:PowerForgeTypeAcceleratorRegistrations) {
     $script:PowerForgeTypeAcceleratorRegistrations = [System.Collections.Generic.List[object]]::new()
     $PowerForgeTypeAcceleratorRegistrations = $script:PowerForgeTypeAcceleratorRegistrations
@@ -24,3 +20,9 @@ if ($null -eq $script:PowerForgeTypeAcceleratorRegistrations) {
     }
 }
 $script:PowerForgeTypeAcceleratorRegistrations.Add($PowerForgeTypeAcceleratorRegistration)
+foreach ($PowerForgeTypeAcceleratorMessage in $PowerForgeTypeAcceleratorRegistration.Warnings) {
+    Write-Warning -Message $PowerForgeTypeAcceleratorMessage
+}
+foreach ($PowerForgeTypeAcceleratorMessage in $PowerForgeTypeAcceleratorRegistration.VerboseMessages) {
+    Write-Verbose -Message $PowerForgeTypeAcceleratorMessage
+}

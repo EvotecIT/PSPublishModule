@@ -33,4 +33,5 @@ try {
     if (-not $PowerForgeModuleImportCompleted -and $null -ne $UnregisterPowerForgeDesktopAssemblyResolver) {
         & $UnregisterPowerForgeDesktopAssemblyResolver
     }
+{{FailedImportCleanupBlock}}
 }
