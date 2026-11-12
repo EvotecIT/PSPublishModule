@@ -143,9 +143,9 @@ internal static partial class ModulePipelineSummary
         var table = new Table().AddColumn("Path").AddColumn("Issues");
         foreach (var row in rows.Take(MaxFileRows)) table.AddRow(Markup.Escape(row.RelativePath), Markup.Escape(string.Join(", ", row.Reasons)));
         var blocks = new List<IWidget>();
-        if (!string.IsNullOrWhiteSpace(report!.ExportPath)) blocks.Add(new TextBlock("[muted]Report:[/] " + Markup.Escape(report.ExportPath!)));
+        if (!string.IsNullOrWhiteSpace(report!.ExportPath)) blocks.Add(TextBlock.FromMarkup("[muted]Report:[/] " + Markup.Escape(report.ExportPath!)));
         blocks.Add(table);
-        if (rows.Length > MaxFileRows) blocks.Add(new TextBlock($"[muted]... {rows.Length - MaxFileRows} more not shown.[/]"));
+        if (rows.Length > MaxFileRows) blocks.Add(TextBlock.FromMarkup($"[muted]... {rows.Length - MaxFileRows} more not shown.[/]"));
         summary.Detail($"File consistency issues ({label})", new Rows(blocks.ToArray()));
     }
 
@@ -156,10 +156,10 @@ internal static partial class ModulePipelineSummary
 
         var affected = report.Files.Where(file => file.Issues.Length > 0).ToArray();
         var blocks = new List<IWidget> { TextBlock.Plain(overall.Message ?? string.Empty) };
-        if (!string.IsNullOrWhiteSpace(report.ExportPath)) blocks.Add(new TextBlock("[muted]Report:[/] " + Markup.Escape(report.ExportPath!)));
+        if (!string.IsNullOrWhiteSpace(report.ExportPath)) blocks.Add(TextBlock.FromMarkup("[muted]Report:[/] " + Markup.Escape(report.ExportPath!)));
         if (affected.Length == 0)
         {
-            blocks.Add(new TextBlock("[muted]No file-level compatibility items were attached to the report.[/]"));
+            blocks.Add(TextBlock.FromMarkup("[muted]No file-level compatibility items were attached to the report.[/]"));
             summary.Detail("Compatibility details", new Rows(blocks.ToArray()));
             return;
         }
@@ -185,7 +185,7 @@ internal static partial class ModulePipelineSummary
         }
         blocks.Add(table);
         if (affected.Length > MaxCompatibilityFiles)
-            blocks.Add(new TextBlock($"[muted]... {CountLabel(affected.Length - MaxCompatibilityFiles, "more file", "more files")} with compatibility issues not shown.[/]"));
+            blocks.Add(TextBlock.FromMarkup($"[muted]... {CountLabel(affected.Length - MaxCompatibilityFiles, "more file", "more files")} with compatibility issues not shown.[/]"));
         summary.Detail("Compatibility details", new Rows(blocks.ToArray()));
     }
 
@@ -207,7 +207,7 @@ internal static partial class ModulePipelineSummary
             lines.AddRange((note.Details ?? Array.Empty<string>())
                 .Where(line => !string.IsNullOrWhiteSpace(line) && !line.Trim().Equals(note.Summary?.Trim(), StringComparison.OrdinalIgnoreCase))
                 .Select(line => "[muted]-[/] " + Markup.Escape(line.Trim())));
-            rows.Add(new TextBlock(string.Join("\n", lines)));
+            rows.Add(TextBlock.FromMarkup(string.Join("\n", lines)));
         }
         summary.Detail("Owner notes", new Rows(rows.ToArray()) { Gap = 1 });
     }

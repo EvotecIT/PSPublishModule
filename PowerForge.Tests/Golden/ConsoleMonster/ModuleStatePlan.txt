@@ -34,6 +34,6 @@ Showing 20 of 21 actions.
 ├───────────┼─────────────────┼─────────────┼───────────┼──────────────────────┤
 │ ✗ Error   │ DuplicateFamily │ Az.Accounts │ AllUsers  │ Two versions of [Az] │
 │           │                 │             │           │ load first.          │
-│ ▴ Warning │ Shadowed        │ Pester      │           │ A newer copy is      │
+│ ▲ Warning │ Shadowed        │ Pester      │           │ A newer copy is      │
 │           │                 │             │           │ shadowed.            │
 ╰───────────┴─────────────────┴─────────────┴───────────┴──────────────────────╯

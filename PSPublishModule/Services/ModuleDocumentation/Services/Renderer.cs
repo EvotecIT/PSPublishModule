@@ -66,7 +66,7 @@ internal sealed class Renderer
         {
             // An unsupported block should not hide the document: show it as written.
             return new Rows(
-                new TextBlock($"[warn]Showing the source because it could not be rendered: {Markup.Escape(ex.Message)}[/]"),
+                TextBlock.FromMarkup($"[warn]Showing the source because it could not be rendered: {Markup.Escape(ex.Message)}[/]"),
                 TextBlock.Plain(markdown)) { Gap = 1 };
         }
 

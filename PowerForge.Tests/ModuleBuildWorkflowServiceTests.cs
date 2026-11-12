@@ -278,7 +278,8 @@ public sealed class ModuleBuildWorkflowServiceTests
     }
 
     // The module summary lists what needs attention from the run itself (warning diagnostics, with their location),
-    // and keeps the whole recommended action, suggested command included, in the details.
+    // and keeps the whole recommended action, suggested command included, in the details. Owner notes render their
+    // styling rather than showing markup tags.
     [Fact]
     public void ModuleSummary_ListsWarningDiagnosticsUnderNeedsAttention()
     {
@@ -298,7 +299,11 @@ public sealed class ModuleBuildWorkflowServiceTests
             suggestedCommand: "Invoke-ScriptAnalyzer -Path .\\Public\\Get-Thing.ps1 -IncludeRule PSAvoidUsingWriteHost -Settings .\\Build\\PSScriptAnalyzerSettings.psd1 -Recurse -ReportSummary -Severity Warning,Error -ExcludeRule PSUseShouldProcessForStateChangingFunctions,PSUseSingularNouns -CustomRulePath .\\Build\\Rules -RecurseCustomRulePath -EnableExit",
             generatedBy: "PSScriptAnalyzer");
 
-        var output = ConsoleCapture.Final(_ => ModulePipelineSummary.Write(CreateResult(plan, [diagnostic])));
+        var note = new ModuleOwnerNote("Staging", ModuleOwnerNoteSeverity.Info,
+            summary: "Normalized staged line endings to CRLF for 2 file(s).",
+            details: ["Project manifest now tracks the resolved build version 1.0.0."]);
+
+        var output = ConsoleCapture.Final(_ => ModulePipelineSummary.Write(CreateResult(plan, [diagnostic], [note])));
 
         GoldenFile.Match(GoldenPath("ModuleSummary.Attention.txt"), output);
     }
@@ -408,7 +413,7 @@ public sealed class ModuleBuildWorkflowServiceTests
             deleteGeneratedStagingAfterRun: true);
     }
 
-    private static ModulePipelineResult CreateResult(ModulePipelinePlan plan, BuildDiagnostic[]? diagnostics = null)
+    private static ModulePipelineResult CreateResult(ModulePipelinePlan plan, BuildDiagnostic[]? diagnostics = null, ModuleOwnerNote[]? ownerNotes = null)
     {
         return new ModulePipelineResult(
             plan: plan,
@@ -428,7 +433,8 @@ public sealed class ModuleBuildWorkflowServiceTests
             diagnosticsBaseline: null,
             diagnosticsPolicy: null,
             publishResults: Array.Empty<ModulePublishResult>(),
-            artefactResults: Array.Empty<ArtefactBuildResult>());
+            artefactResults: Array.Empty<ArtefactBuildResult>(),
+            ownerNotes: ownerNotes);
     }
 
 }
