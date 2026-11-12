@@ -235,12 +235,9 @@ public sealed partial class ModulePipelineInstallSigningTests
         }
     }
 
-    [Fact]
+    [CaseSensitiveTempFact]
     public void DestinationRoots_PreserveCaseDistinctDirectoriesOnCaseSensitiveFileSystems()
     {
-        if (FrameworkCompatibility.IsWindows())
-            return;
-
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
         try
         {

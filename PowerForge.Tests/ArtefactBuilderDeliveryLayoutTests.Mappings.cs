@@ -175,7 +175,7 @@ public sealed partial class ArtefactBuilderDeliveryLayoutTests
             new ArtefactCopyMapping { Source = "Run.ps1", Destination = "Task.ps1" },
             new ArtefactCopyMapping { Source = "config.json", Destination = "task.ps1" }
         };
-        if (OperatingSystem.IsWindows())
+        if (!TestEnvironment.IsTempFolderCaseSensitive)
             Assert.Throws<InvalidOperationException>(() => fixture.Build(segment));
         else
         {
