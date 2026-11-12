@@ -4,8 +4,11 @@ namespace PowerForge.Tests;
 
 public sealed partial class PowerForgeReleaseServiceTests
 {
-    [Fact]
-    public void Execute_verified_github_recovery_skips_completed_registry_publication()
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public void Execute_verified_github_recovery_skips_completed_registry_publication(bool sourceGuarded, bool firstGitHubRelease)
     {
         var root = CreateSandbox();
         try
@@ -20,6 +23,17 @@ public sealed partial class PowerForgeReleaseServiceTests
             File.WriteAllText(moduleZip, "rebuilt module zip");
             File.WriteAllText(toolZip, "tool zip");
             File.WriteAllText(toolExecutable, "tool");
+
+            var revision = "0123456789abcdef0123456789abcdef01234567";
+            if (sourceGuarded)
+            {
+                RunGitForSourceGuard(root, "init");
+                RunGitForSourceGuard(root, "config user.name \"PowerForge Tests\"");
+                RunGitForSourceGuard(root, "config user.email \"powerforge-tests@example.invalid\"");
+                RunGitForSourceGuard(root, "add .");
+                RunGitForSourceGuard(root, "commit -m \"approved source\"");
+                revision = RunGitForSourceGuard(root, "rev-parse HEAD").Trim();
+            }
 
             var moduleCalls = new List<ModuleExecutionSnapshot>();
             var publishCalls = new List<GitHubReleasePublishRequest>();
@@ -46,7 +60,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                     return new GitHubReleasePublishResult
                     {
                         Succeeded = true,
-                        ReusedExistingRelease = true,
+                        ReusedExistingRelease = !firstGitHubRelease,
                         HtmlUrl = "https://github.com/EvotecIT/example/releases/tag/v1.2.3"
                     };
                 },
@@ -69,12 +83,14 @@ public sealed partial class PowerForgeReleaseServiceTests
                 Owner = "EvotecIT",
                 Repository = "example",
                 TokenEnvName = "PATH",
-                Commitish = "0123456789abcdef0123456789abcdef01234567",
-                ReuseExistingRelease = true,
-                RequireExpectedExistingRelease = true,
-                ExpectedExistingReleaseId = 42,
-                RequirePublishedStableRelease = true,
-                ReplaceExistingAssets = true,
+                Commitish = revision,
+                ReuseExistingRelease = !firstGitHubRelease,
+                RequireExpectedExistingRelease = !firstGitHubRelease,
+                ExpectedExistingReleaseId = firstGitHubRelease ? null : 42,
+                RequirePublishedStableRelease = !firstGitHubRelease,
+                ReplaceExistingAssets = !firstGitHubRelease,
+                RecoverPublishedRegistryAssetsBeforeGitHubRelease = firstGitHubRelease,
+                PublishedModuleAlreadyExists = firstGitHubRelease,
                 RequirePublishedNuGetAssets = true,
                 RequirePublishedModuleAssets = true,
                 PublishedModuleSource = "https://www.powershellgallery.com/api/v2"
@@ -83,16 +99,18 @@ public sealed partial class PowerForgeReleaseServiceTests
             {
                 ConfigPath = releasePath,
                 ModuleRunMode = ConfigurationGateMode.Publish,
-                PublishNuget = true
+                PublishNuget = true,
+                SourceRepositoryRoot = sourceGuarded ? root : null,
+                ExpectedSourceRevision = sourceGuarded ? revision : null
             };
 
             var result = service.Execute(spec, request);
 
             Assert.True(result.Success, result.ErrorMessage);
-            Assert.True(result.RegistryPublishingSkippedForVerifiedGitHubRecovery);
-            Assert.False(request.PublishNuget);
+            Assert.Equal(!firstGitHubRelease, result.RegistryPublishingSkippedForVerifiedGitHubRecovery);
+            Assert.Equal(firstGitHubRelease, request.PublishNuget);
             var module = Assert.Single(moduleCalls);
-            Assert.Equal(ConfigurationGateMode.Publish, module.RunMode);
+            Assert.Equal(sourceGuarded ? ConfigurationGateMode.Build : ConfigurationGateMode.Publish, module.RunMode);
             Assert.False(module.IncludeModulePublishing);
             Assert.Single(publishCalls);
             Assert.Equal(
