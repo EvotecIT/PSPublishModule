@@ -71,7 +71,7 @@ The drill verifies recoverability without replacing live service files. During a
 
 ## Monitoring
 
-`Deployment/Monitoring/verify-database-backups.py` reads projected Windows state, the exact Windows scheduled task, NAS receipt and maintenance state, DSM task configuration, and the latest restore drill. Its workstation check covers DDCT, DDNext and Sectigo and flags drift from seven daily recovery points, captures older than 30 hours, disabled or changed schedules, failed attempts, missing verification, cleanup failures and restore drills older than 30 days. A running job can use its still-fresh verified prior capture. History starts with one successful recovery point and accumulates as daily captures verify.
+`Deployment/Monitoring/verify-database-backups.py` reads projected Windows state, the exact Windows scheduled task, NAS receipt and maintenance state, DSM task configuration, and the latest restore drill. Its workstation check covers DDCT, DDNext and Sectigo and flags drift from fourteen daily recovery points on Synology, captures older than 30 hours, disabled or changed schedules, failed attempts, missing verification, cleanup failures and restore drills older than 30 days. A running job can use its still-fresh verified prior capture. History starts with one successful recovery point and accumulates as daily captures verify.
 
 Receipt reads bracket the NAS status query and retry if local publication changes during the scan. NAS publication can precede the final local receipt; a matching current attempt permits that handover for at most five minutes after NAS verification and reports `receiptPending`. Failed attempts, cleanup errors, unidentified mismatches and expired handovers remain unhealthy.
 
