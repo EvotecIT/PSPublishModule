@@ -58,7 +58,9 @@ Export-ModuleMember -Function $FunctionsToExport -Alias $AliasesToExport -Cmdlet
             }
 
             var initialState = System.Management.Automation.Runspaces.InitialSessionState.CreateDefault2();
-            initialState.ExecutionPolicy = Microsoft.PowerShell.ExecutionPolicy.Bypass;
+            // Execution policy exists only on Windows; setting it elsewhere throws PlatformNotSupportedException.
+            if (OperatingSystem.IsWindows())
+                initialState.ExecutionPolicy = Microsoft.PowerShell.ExecutionPolicy.Bypass;
             using var host = PowerShell.Create(initialState);
             host.AddScript("""
 param($path, $fail)

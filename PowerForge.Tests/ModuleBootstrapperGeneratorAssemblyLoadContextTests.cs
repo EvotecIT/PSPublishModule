@@ -1,10 +1,11 @@
+using PowerForge.Tests;
 using PowerForge;
 using Generic.External.Binary.Dependency;
 using Generic.External.Binary.Module;
 
 public partial class ModuleBootstrapperGeneratorTests
 {
-    [Theory]
+    [PwshNet10Theory]
     [Trait("Category", "Integration")]
     [InlineData(ArtefactType.Script)]
     [InlineData(ArtefactType.ScriptPacked)]

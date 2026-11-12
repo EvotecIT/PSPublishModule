@@ -13,9 +13,10 @@ public sealed partial class ArtefactBuilder
             directory = parent;
         }
 
-        // An empty directory has no names to inspect. Read its Windows flag rather
+        // An empty directory has no names to inspect. Read its Windows or macOS flag rather
         // than caching a case-sensitive guess that could permit a payload collision.
-        if (WindowsDirectoryCaseSensitivity.TryGet(directory, out bool caseSensitive))
+        if (WindowsDirectoryCaseSensitivity.TryGet(directory, out bool caseSensitive) ||
+            MacDirectoryCaseSensitivity.TryGet(directory, out caseSensitive))
             return caseSensitive ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
 
         return FrameworkCompatibility.GetPathStringComparison(directory);

@@ -1,10 +1,11 @@
+using PowerForge.Tests;
 using Generic.External.Binary.Dependency;
 using Generic.External.Binary.Module;
 using PowerForge;
 
 public partial class ModuleBootstrapperGeneratorTests
 {
-    [Fact]
+    [PwshNet10Fact]
     [Trait("Category", "Integration")]
     public void DevelopmentAssemblyLoadContext_UsesHostPowerShellContractWhenOutputContainsPrivateCopy()
     {
