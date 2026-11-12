@@ -146,7 +146,6 @@ public sealed partial class AppleReleaseWorkflowTests
         Assert.Contains("\"PowerForge.ReleaseProvenance.json\"", moduleConfig, StringComparison.Ordinal);
         Assert.Contains("\"PowerForge.ReleaseProvenance.psd1\"", moduleConfig, StringComparison.Ordinal);
         Assert.Contains("Set-PowerForgeAuthorizedReleaseCommitish", script, StringComparison.Ordinal);
-        Assert.Contains("$Operation -eq 'Prepare'", commitishAuthorization, StringComparison.Ordinal);
         Assert.Contains("Add-Member -NotePropertyName Commitish", commitishAuthorization, StringComparison.Ordinal);
         Assert.Contains("Status         = 'Failed'", script, StringComparison.Ordinal);
         Assert.Contains("\"PlanOutputPath\": \"../Artefacts/ProjectBuild/project.build.plan.json\"", releaseConfig, StringComparison.Ordinal);
@@ -157,9 +156,11 @@ public sealed partial class AppleReleaseWorkflowTests
     [Theory]
     [InlineData("powershell", "Plan", "0123456789abcdef0123456789abcdef01234567")]
     [InlineData("powershell", "Prepare", "<absent>")]
+    [InlineData("powershell", "PrepareMetadata", "<absent>")]
     [InlineData("powershell", "Publish", "0123456789abcdef0123456789abcdef01234567")]
     [InlineData("pwsh", "Plan", "0123456789abcdef0123456789abcdef01234567")]
     [InlineData("pwsh", "Prepare", "<absent>")]
+    [InlineData("pwsh", "PrepareMetadata", "<absent>")]
     [InlineData("pwsh", "Publish", "0123456789abcdef0123456789abcdef01234567")]
     public void PublicModuleReleaseOmitsCommitishOnlyWhilePreparingVersionChanges(
         string shell,

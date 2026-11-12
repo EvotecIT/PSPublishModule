@@ -33,7 +33,7 @@ internal sealed partial class PublishedNuGetAssetRecoveryService
 
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _downloader = downloader ?? new NuGetV3PackageDownloader();
-        _indexingTimeout = indexingTimeout ?? TimeSpan.FromMinutes(10);
+        _indexingTimeout = indexingTimeout ?? TimeSpan.FromMinutes(30);
         _retryDelay = retryDelay ?? TimeSpan.FromSeconds(5);
         _serviceIndexRequestTimeoutSeconds = serviceIndexRequestTimeoutSeconds;
         _downloadRequestTimeoutSeconds = downloadRequestTimeoutSeconds;
@@ -229,12 +229,22 @@ internal sealed partial class PublishedNuGetAssetRecoveryService
                 return;
             }
             catch (NuGetPackageDownloadException exception)
-                when (IsRetryableIndexingStatus(exception.StatusCode) &&
-                      DateTime.UtcNow - started < _indexingTimeout)
+                when (IsRetryableIndexingStatus(exception.StatusCode))
             {
+                var elapsed = DateTime.UtcNow - started;
+                if (elapsed >= _indexingTimeout)
+                {
+                    throw new InvalidOperationException(
+                        $"Published NuGet package {packageId} {expectedVersion} is still unreadable after {elapsed:c} " +
+                        $"(indexing budget {_indexingTimeout:c}, last HTTP status {(int)exception.StatusCode}). " +
+                        exception.Message,
+                        exception);
+                }
                 _logger.Info(
-                    $"Published NuGet package {packageId} {expectedVersion} is not readable yet; waiting for registry indexing.");
-                _delay(_retryDelay, cancellationToken);
+                    $"Published NuGet package {packageId} {expectedVersion} is not readable yet; waiting for registry indexing " +
+                    $"(elapsed {elapsed:c}, budget {_indexingTimeout:c}, last HTTP status {(int)exception.StatusCode}).");
+                var remaining = _indexingTimeout - elapsed;
+                _delay(_retryDelay < remaining ? _retryDelay : remaining, cancellationToken);
             }
         }
     }
