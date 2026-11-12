@@ -28,8 +28,8 @@
 
     <ItemGroup>
         <!-- .NET 8 is the oldest supported SDK; its compiler loads Roslyn 4.8 generators. -->
-        <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.8.0" PrivateAssets="all" />
-        <PackageReference Include="Microsoft.CodeAnalysis.Analyzers" Version="3.3.4" PrivateAssets="all" />
+        <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="5.9.0" PrivateAssets="all" />
+        <PackageReference Include="Microsoft.CodeAnalysis.Analyzers" Version="5.9.0" PrivateAssets="all" />
     </ItemGroup>
 
     <ItemGroup>
