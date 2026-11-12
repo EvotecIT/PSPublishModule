@@ -9,6 +9,8 @@ using Microsoft.Win32.SafeHandles;
 
 namespace PowerForge;
 
+internal delegate Dictionary<int, RunnerMaintenanceProcess> RunnerMaintenanceProcessReader(out bool incomplete);
+
 internal sealed class RunnerMaintenanceProcess
 {
     internal int Id { get; set; }

@@ -81,8 +81,7 @@ if ($windows) {
     $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -MultipleInstances IgnoreNew -ExecutionTimeLimit (New-TimeSpan -Minutes 5)
     Register-ScheduledTask -TaskName $name -Action $action -Trigger $triggers -Settings $settings -User 'SYSTEM' -RunLevel Highest -Force | Out-Null
 } else {
-    $hostApplication = Get-Command pwsh -CommandType Application -ErrorAction SilentlyContinue
-    $hostExecutable = if ($hostApplication) { $hostApplication.Source } else { Join-Path $PSHOME 'pwsh' }
+    $hostExecutable = Join-Path $PSHOME 'pwsh'
     if ($RunAsUser -notmatch '^[a-z_][a-z0-9_-]*[$]?$') { throw 'Invalid POSIX service account.' }
     if ($platform -ne 'Darwin') {
         foreach ($directory in @($state) + @($policy.runners | ForEach-Object { $_.tempPath })) {

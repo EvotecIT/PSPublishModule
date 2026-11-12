@@ -52,7 +52,7 @@ public sealed partial class RunnerHousekeepingService
         if (phase == RunnerMaintenancePhase.Completed) MaintenancePackageReferences(run, run.Job.Workspace);
     }
 
-    private static void MaintenanceRefreshJobProcesses(MaintenanceRun run, Dictionary<int, RunnerMaintenanceProcess> processes)
+    private void MaintenanceRefreshJobProcesses(MaintenanceRun run, Dictionary<int, RunnerMaintenanceProcess> processes)
     {
         foreach (var job in run.State.Jobs)
         {
@@ -100,7 +100,7 @@ public sealed partial class RunnerHousekeepingService
         }
         // A marked parent can hand off to a new child while environments are read.
         // Require a complete second discovery with no new lifetime before retiring ownership.
-        var after = RunnerMaintenanceProcesses.Read(out var afterIncomplete);
+        var after = _maintenanceProcesses(out var afterIncomplete);
         uncertain |= afterIncomplete || after.Values.Any(process => !processes.TryGetValue(process.Id, out var before) || before.StartTicks != process.StartTicks);
         if (uncertain)
             foreach (var job in tracked) run.UnknownJobActivity.Add(job.RunnerRoot);

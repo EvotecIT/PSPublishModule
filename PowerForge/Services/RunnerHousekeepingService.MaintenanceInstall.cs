@@ -36,7 +36,7 @@ public sealed partial class RunnerHousekeepingService
             runner.WorkRootPath = Path.GetFullPath(Path.Combine(runner.RootPath, value.GetProperty("workFolder").GetString()!));
         }
         ValidateMaintenanceSpec(spec);
-        var processes = RunnerMaintenanceProcesses.Read();
+        var processes = _maintenanceProcesses(out _);
         if (processes.Values.Any(p => (RunnerMaintenanceProcesses.IsWorker(p) || p.Name.Equals("Runner.Listener", StringComparison.OrdinalIgnoreCase))
             && (p.Executable is null || spec.Runners.Any(r => MaintenanceProcessBelongs(r, p)))))
             throw new InvalidOperationException("Stop the enrolled listeners during an idle maintenance window before installing hooks.");

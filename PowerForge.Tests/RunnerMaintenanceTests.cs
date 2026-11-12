@@ -38,13 +38,15 @@ public sealed class RunnerMaintenanceTests
         Assert.Single(Directory.GetFiles(Path.Combine(fixture.Spec.StateRootPath, "receipts"), "*.json"));
     }
 
-    [Fact]
-    public void Maintain_RealRunnerWorkerDefersItsOutputAndSharedCleanup()
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void Maintain_RealEnrolledOrUnknownWorkerDefersOutputAndSharedCleanup(bool enrolled)
     {
         using var fixture = new Installation();
         var file = Path.Combine(fixture.Runner.TempPath, "active.txt");
         File.WriteAllText(file, "running job");
-        var bin = Directory.CreateDirectory(Path.Combine(fixture.Runner.RootPath, "bin")).FullName;
+        var bin = Directory.CreateDirectory(Path.Combine(enrolled ? fixture.Runner.RootPath : Path.Combine(fixture.Root, "foreign-runner"), "bin")).FullName;
         var windows = OperatingSystem.IsWindows();
         var executable = Path.Combine(bin, windows ? "Runner.Worker.exe" : "Runner.Worker");
         File.Copy(windows ? Path.Combine(Environment.SystemDirectory, "cmd.exe") : "/bin/sleep", executable);
@@ -333,7 +335,16 @@ public sealed class RunnerMaintenanceTests
         internal readonly string Root = Path.Combine(Path.GetTempPath(), "powerforge-maintenance-" + Guid.NewGuid().ToString("N"));
         internal readonly RunnerMaintenanceSpec Spec;
         internal readonly RunnerMaintenanceRegistration Runner;
-        internal readonly RunnerHousekeepingService Service = new(new NullLogger());
+        internal readonly RunnerHousekeepingService Service = new(new NullLogger(), ReadOwnedProcesses);
+
+        private static Dictionary<int, RunnerMaintenanceProcess> ReadOwnedProcesses(out bool incomplete)
+        {
+            var native = RunnerMaintenanceProcesses.Read();
+            var owner = Environment.ProcessId;
+            incomplete = false;
+            return native.Where(entry => RunnerMaintenanceProcesses.Ancestors(native, entry.Key).Contains(owner))
+                .ToDictionary(entry => entry.Key, entry => entry.Value);
+        }
 
         internal Installation()
         {

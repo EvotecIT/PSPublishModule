@@ -9,6 +9,11 @@ namespace PowerForge;
 
 public sealed partial class RunnerHousekeepingService
 {
+    private readonly RunnerMaintenanceProcessReader _maintenanceProcesses = RunnerMaintenanceProcesses.Read;
+
+    internal RunnerHousekeepingService(ILogger logger, RunnerMaintenanceProcessReader processes) : this(logger)
+        => _maintenanceProcesses = processes ?? throw new ArgumentNullException(nameof(processes));
+
     /// <summary>Runs host-local maintenance or an installed job lifecycle hook.</summary>
     /// <param name="spec">Enrolled machine-local policy.</param>
     /// <param name="phase">Scheduler, job admission or completion phase.</param>
@@ -31,7 +36,7 @@ public sealed partial class RunnerHousekeepingService
         string? readyPath = null;
         try
         {
-            var processes = RunnerMaintenanceProcesses.Read();
+            var processes = _maintenanceProcesses(out _);
             var ready = MaintenanceHookContext(spec, phase, runnerRoot, processes, out var job);
             if (ready is not null) ready.CleanupAllowed = hookCleanupAllowed;
             run.Job = job;
@@ -59,7 +64,7 @@ public sealed partial class RunnerHousekeepingService
             if (run.State.SchemaVersion != 1) throw new IOException("Unsupported maintenance state version.");
             if (run.Result.FreeBytesBefore < GiB(spec.MinimumFreeGiB)) run.State.PressureTargetBytes = GiB(spec.TargetFreeGiB);
             run.Deep = run.State.Due || run.State.PressureTargetBytes > 0 || run.State.LastDeepSweepUtc <= DateTime.UtcNow.AddHours(-spec.DeepIntervalHours);
-            var fresh = RunnerMaintenanceProcesses.Read(out var snapshotIncomplete);
+            var fresh = _maintenanceProcesses(out var snapshotIncomplete);
             run.ProcessSnapshotIncomplete = snapshotIncomplete;
             if (run.Job is not null)
             {
