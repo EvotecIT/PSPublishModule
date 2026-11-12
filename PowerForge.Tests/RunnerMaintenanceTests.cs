@@ -204,6 +204,76 @@ public sealed class RunnerMaintenanceTests
     }
 
     [Fact]
+    public void InstallMaintenance_RequiresCapturedServiceHookWhenEnvOmitsIt()
+    {
+        using var fixture = new Installation();
+        fixture.PreparePayload();
+        fixture.Runner.InheritedStartedHook = null;
+        var environment = Path.Combine(fixture.Runner.RootPath, ".env");
+        File.WriteAllText(environment, "CUSTOM_VALUE=keep\n");
+        var old = Environment.GetEnvironmentVariable("ACTIONS_RUNNER_HOOK_JOB_STARTED");
+        try
+        {
+            Environment.SetEnvironmentVariable("ACTIONS_RUNNER_HOOK_JOB_STARTED", Path.Combine(fixture.Root, "installer-only.ps1"));
+            var error = Assert.Throws<InvalidOperationException>(() => fixture.Service.InstallMaintenance(fixture.Spec));
+            Assert.Contains("registered service", error.Message);
+            Assert.Equal("CUSTOM_VALUE=keep\n", File.ReadAllText(environment));
+            Assert.False(File.Exists(Path.Combine(fixture.Spec.StateRootPath, "policy.json")));
+        }
+        finally { Environment.SetEnvironmentVariable("ACTIONS_RUNNER_HOOK_JOB_STARTED", old); }
+    }
+
+    [Fact]
+    public void InstallMaintenance_LateMetadataFailureRestoresPreviousEnrollment()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        using var fixture = new Installation();
+        fixture.PreparePayload();
+        fixture.Service.InstallMaintenance(fixture.Spec);
+        var paths = new[] { Path.Combine(fixture.Runner.RootPath, ".env"), Path.Combine(fixture.Spec.StateRootPath, "policy.json"),
+            Path.Combine(fixture.Spec.StateRootPath, "scheduled.json"), Path.Combine(fixture.Spec.StateRootPath, "installed.json"),
+            Path.Combine(fixture.Spec.StateRootPath, "Invoke-RunnerMaintenance.ps1") };
+        var original = paths.ToDictionary(path => path, File.ReadAllBytes);
+        fixture.Runner.ProtectedWorkspaces = new[] { "new-hold" };
+        using var blocker = new FileStream(paths[3], FileMode.Open, FileAccess.Read, FileShare.Read);
+        Assert.Throws<IOException>(() => fixture.Service.InstallMaintenance(fixture.Spec));
+        foreach (var path in paths) Assert.Equal(original[path], File.ReadAllBytes(path));
+        Assert.False(File.Exists(Path.Combine(fixture.Spec.StateRootPath, "installation.pending.json")));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Maintain_UsesCapturedProcessLifetimeForSurvivingJobActivity(bool sameLifetime)
+    {
+        using var fixture = new Installation();
+        var windows = OperatingSystem.IsWindows();
+        using var background = Process.Start(new ProcessStartInfo(windows ? Path.Combine(Environment.SystemDirectory, "cmd.exe") : "/bin/sleep",
+            windows ? "/d /c ping -n 60 127.0.0.1 >nul" : "60") { UseShellExecute = false, CreateNoWindow = true })!;
+        try
+        {
+            var ticks = background.StartTime.ToUniversalTime().Ticks;
+            var state = new RunnerMaintenanceState();
+            var job = new RunnerMaintenanceJob { RunnerRoot = fixture.Runner.RootPath,
+                Workspace = Path.Combine(fixture.Runner.WorkRootPath, "Example"), WorkerId = background.Id, WorkerStartTicks = ticks - 1 };
+            job.Processes.Add(new RunnerMaintenanceProcessIdentity { Id = background.Id, StartTicks = sameLifetime ? ticks : ticks - 1 });
+            state.Jobs.Add(job);
+            Directory.CreateDirectory(fixture.Spec.StateRootPath);
+            File.WriteAllText(Path.Combine(fixture.Spec.StateRootPath, "state.json"), JsonSerializer.Serialize(state, RunnerMaintenanceJsonContext.Default.RunnerMaintenanceState));
+            var output = Path.Combine(fixture.Runner.TempPath, "output.txt");
+            File.WriteAllText(output, "completed output");
+            var result = fixture.Service.Maintain(fixture.Spec, dryRun: false);
+            Assert.True(result.Success, string.Join("\n", result.Errors));
+            Assert.Equal(sameLifetime, File.Exists(output));
+        }
+        finally
+        {
+            if (!background.HasExited) background.Kill(entireProcessTree: true);
+            background.WaitForExit();
+        }
+    }
+
+    [Fact]
     public void Maintain_ConcurrentSchedulerDefersWithoutWaitingOrDeleting()
     {
         using var fixture = new Installation();
@@ -230,12 +300,20 @@ public sealed class RunnerMaintenanceTests
             Runner = new RunnerMaintenanceRegistration
             {
                 RootPath = Path.Combine(Root, "runner"), WorkRootPath = Path.Combine(Root, "runner", "_work"),
-                TempPath = Path.Combine(Root, "job-temp"), AgentId = 42, Name = "fixture", GitHubUrl = "https://github.com/example"
+                TempPath = Path.Combine(Root, "job-temp"), AgentId = 42, Name = "fixture", GitHubUrl = "https://github.com/example",
+                InheritedStartedHook = string.Empty, InheritedCompletedHook = string.Empty
             };
             Directory.CreateDirectory(Runner.WorkRootPath);
             Directory.CreateDirectory(Runner.TempPath);
             File.WriteAllText(Path.Combine(Runner.RootPath, ".runner"), "{\"agentId\":42,\"agentName\":\"fixture\",\"gitHubUrl\":\"https://github.com/example\",\"workFolder\":\"_work\"}");
             Spec = new RunnerMaintenanceSpec { StateRootPath = Path.Combine(Root, "maintenance"), Runners = new[] { Runner }, MinimumFreeGiB = 0, TargetFreeGiB = 0 };
+        }
+
+        internal void PreparePayload()
+        {
+            Directory.CreateDirectory(Spec.StateRootPath);
+            Spec.ExecutablePath = Path.Combine(Spec.StateRootPath, "PowerForge.Cli");
+            File.WriteAllText(Spec.ExecutablePath, "prebuilt placeholder");
         }
 
         public void Dispose()

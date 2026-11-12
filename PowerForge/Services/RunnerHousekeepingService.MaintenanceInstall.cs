@@ -44,22 +44,31 @@ public sealed partial class RunnerHousekeepingService
         Directory.CreateDirectory(spec.StateRootPath);
         using var gate = MaintenanceLock(Path.Combine(spec.StateRootPath, "admission.lock"), TimeSpan.Zero)
             ?? throw new IOException("Maintenance is currently running.");
+        MaintenanceRestoreInstallation(spec.StateRootPath);
         var policy = Path.Combine(spec.StateRootPath, "policy.json");
         var wrapper = Path.Combine(spec.StateRootPath, "Invoke-RunnerMaintenance.ps1");
-        using (var stream = typeof(RunnerHousekeepingService).Assembly.GetManifestResourceStream("PowerForge.Scripts.RunnerMaintenance.Invoke-RunnerMaintenance.ps1")
-            ?? throw new IOException("Missing maintenance hook resource."))
-        using (var reader = new StreamReader(stream)) MaintenanceWriteText(wrapper, reader.ReadToEnd());
-
-        // Environment backups belong to this private host state. They are never copied into a checkout or diagnostic output.
-        var changed = new List<(string Path, string Original)>();
+        var mutablePaths = new[] { policy, wrapper, Path.Combine(spec.StateRootPath, "scheduled.json"), Path.Combine(spec.StateRootPath, "installed.json") }
+            .Concat(spec.Runners.Select(r => Path.Combine(r.RootPath, ".env"))).Concat(spec.NuGetConfigPaths);
+        var recovery = MaintenanceCaptureInstallation(spec, mutablePaths);
+        // Resolve both effective assignments before touching the installation. Installer-process environment is unrelated to a stopped service.
+        foreach (var runner in spec.Runners)
+        {
+            var path = Path.Combine(runner.RootPath, ".env");
+            var lines = File.Exists(path) ? File.ReadAllLines(path) : Array.Empty<string>();
+            MaintenancePreviousHook(runner, "ACTIONS_RUNNER_HOOK_JOB_STARTED", lines);
+            MaintenancePreviousHook(runner, "ACTIONS_RUNNER_HOOK_JOB_COMPLETED", lines);
+        }
+        MaintenanceWrite(Path.Combine(spec.StateRootPath, MaintenanceInstallationJournal), recovery, RunnerMaintenanceJsonContext.Default.RunnerMaintenanceInstallationRecovery);
         try
         {
+            using (var stream = typeof(RunnerHousekeepingService).Assembly.GetManifestResourceStream("PowerForge.Scripts.RunnerMaintenance.Invoke-RunnerMaintenance.ps1")
+                ?? throw new IOException("Missing maintenance hook resource."))
+            using (var reader = new StreamReader(stream)) MaintenanceWriteText(wrapper, reader.ReadToEnd());
             foreach (var path in spec.NuGetConfigPaths)
             {
                 if (!Path.IsPathRooted(path)) throw new ArgumentException("NuGet configuration paths must be absolute.");
                 MaintenancePhysicalPath(path);
                 var original = File.Exists(path) ? File.ReadAllText(path) : "<configuration />";
-                changed.Add((path, original));
                 var backup = Path.Combine(spec.StateRootPath, "nuget-config-backups", MaintenanceRegistrationKey(path) + ".xml");
                 if (!File.Exists(backup))
                 {
@@ -76,7 +85,6 @@ public sealed partial class RunnerHousekeepingService
             {
                 var environment = Path.Combine(runner.RootPath, ".env");
                 var original = File.Exists(environment) ? File.ReadAllText(environment) : string.Empty;
-                changed.Add((environment, original));
                 var key = MaintenanceRegistrationKey(runner.RootPath);
                 var hooks = Path.Combine(spec.StateRootPath, "hooks", key, Guid.NewGuid().ToString("N"));
                 Directory.CreateDirectory(hooks);
@@ -86,9 +94,7 @@ public sealed partial class RunnerHousekeepingService
                 foreach (var phase in new[] { "starting", "completed" })
                 {
                     var variable = "ACTIONS_RUNNER_HOOK_JOB_" + (phase == "starting" ? "STARTED" : "COMPLETED");
-                    var previous = lines.LastOrDefault(l => l.StartsWith(variable + "=", StringComparison.Ordinal))?.Substring(variable.Length + 1)
-                        ?? Environment.GetEnvironmentVariable(variable);
-                    previous = MaintenanceMigrateTemporaryHook(runner, variable, previous);
+                    var previous = MaintenancePreviousHook(runner, variable, lines);
                     var settings = Path.Combine(hooks, phase + ".json");
                     if (!string.IsNullOrEmpty(previous) && MaintenanceContains(Path.Combine(spec.StateRootPath, "hooks"), previous!))
                         previous = MaintenanceRead(Path.Combine(Path.GetDirectoryName(previous)!, phase + ".json"), RunnerMaintenanceJsonContext.Default.RunnerMaintenanceHook)?.PreviousHook;
@@ -114,21 +120,20 @@ public sealed partial class RunnerHousekeepingService
             MaintenanceWrite(policy, spec, RunnerMaintenanceJsonContext.Default.RunnerMaintenanceSpec);
             MaintenanceWrite(Path.Combine(spec.StateRootPath, "scheduled.json"), new RunnerMaintenanceHook
                 { Executable = spec.ExecutablePath, Policy = policy, Phase = "scheduled" }, RunnerMaintenanceJsonContext.Default.RunnerMaintenanceHook);
-            File.WriteAllText(Path.Combine(spec.StateRootPath, "installed.json"), DateTime.UtcNow.ToString("O"), new UTF8Encoding(false));
+            MaintenanceWriteText(Path.Combine(spec.StateRootPath, "installed.json"), DateTime.UtcNow.ToString("O"));
+            File.Delete(Path.Combine(spec.StateRootPath, MaintenanceInstallationJournal));
         }
         catch
         {
-            foreach (var item in changed) MaintenanceWriteText(item.Path, item.Original);
+            MaintenanceRestoreInstallation(spec.StateRootPath);
             throw;
         }
     }
 
-    /// <summary>Runs a prepared lifecycle hook, preserving an existing hook and its failure behavior.</summary>
+    /// <summary>Runs maintenance for an enrolled lifecycle configuration after its native launcher handles the existing hook.</summary>
     /// <param name="configurationPath">Private hook configuration created by enrollment.</param>
-    /// <param name="standardOutput">Optional raw output sink for the preserved custom hook.</param>
-    /// <param name="standardError">Optional raw error sink for the preserved custom hook.</param>
     /// <returns>Maintenance result for the assigned lifecycle phase.</returns>
-    public RunnerMaintenanceResult InvokeMaintenanceHook(string configurationPath, Action<string>? standardOutput = null, Action<string>? standardError = null)
+    public RunnerMaintenanceResult InvokeMaintenanceHook(string configurationPath)
     {
         var hook = MaintenanceRead(configurationPath, RunnerMaintenanceJsonContext.Default.RunnerMaintenanceHook)
             ?? throw new IOException("Missing maintenance hook configuration.");
@@ -137,30 +142,7 @@ public sealed partial class RunnerHousekeepingService
         if (!MaintenanceContains(spec.StateRootPath, configurationPath) || !PathsEqual(hook.Executable, spec.ExecutablePath) ||
             !Enum.TryParse<RunnerMaintenancePhase>(hook.Phase, true, out var phase)) throw new IOException("Invalid enrolled hook configuration.");
         Environment.SetEnvironmentVariable("NUGET_SCRATCH", spec.NuGetScratchPath);
-        return MaintainCore(spec, phase, hook.RunnerRoot, dryRun: false,
-            previousHook: string.IsNullOrEmpty(hook.PreviousHook) ? null : () => MaintenanceInvokePreviousHook(hook, spec, standardOutput, standardError));
-    }
-
-    private static void MaintenanceInvokePreviousHook(RunnerMaintenanceHook hook, RunnerMaintenanceSpec spec, Action<string>? standardOutput, Action<string>? standardError)
-    {
-            var path = hook.PreviousHook!;
-            var windows = RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
-            string executable;
-            string[] arguments;
-            if (path.EndsWith(".ps1", StringComparison.OrdinalIgnoreCase))
-            {
-                executable = windows && !CommandExists("pwsh") ? "powershell.exe" : "pwsh";
-                arguments = new[] { "-NoLogo", "-NoProfile", "-NonInteractive", "-File", path };
-            }
-            else
-            {
-                executable = windows ? "cmd.exe" : "/bin/bash";
-                arguments = windows ? new[] { "/d", "/s", "/c", "\"" + path + "\"" } : new[] { path };
-            }
-            var previous = new ProcessRunner(ownProcessTree: true).RunAsync(new ProcessRunRequest(executable,
-                string.IsNullOrEmpty(hook.RunnerRoot) ? spec.StateRootPath : hook.RunnerRoot, arguments, TimeSpan.FromSeconds(60),
-                environmentVariables: null, captureOutput: true, captureError: true, outputLineReceived: standardOutput, errorLineReceived: standardError)).GetAwaiter().GetResult();
-            if (!previous.Succeeded) throw new IOException("The preserved job hook failed.");
+        return MaintainCore(spec, phase, hook.RunnerRoot, dryRun: false, hookCleanupAllowed: string.IsNullOrEmpty(hook.PreviousHook));
     }
 
     private static void MaintenanceSetEnvironment(List<string> lines, string name, string value)

@@ -17,9 +17,9 @@ public sealed partial class RunnerHousekeepingService
     /// <returns>Cleanup, deferral and admission result.</returns>
     public RunnerMaintenanceResult Maintain(RunnerMaintenanceSpec spec, RunnerMaintenancePhase phase = RunnerMaintenancePhase.Scheduled,
         string? runnerRoot = null, bool dryRun = true)
-        => MaintainCore(spec, phase, runnerRoot, dryRun, previousHook: null);
+        => MaintainCore(spec, phase, runnerRoot, dryRun, hookCleanupAllowed: true);
 
-    private RunnerMaintenanceResult MaintainCore(RunnerMaintenanceSpec spec, RunnerMaintenancePhase phase, string? runnerRoot, bool dryRun, Action? previousHook)
+    private RunnerMaintenanceResult MaintainCore(RunnerMaintenanceSpec spec, RunnerMaintenancePhase phase, string? runnerRoot, bool dryRun, bool hookCleanupAllowed)
     {
         if (spec is null) throw new ArgumentNullException(nameof(spec));
         ValidateMaintenanceSpec(spec);
@@ -33,6 +33,7 @@ public sealed partial class RunnerHousekeepingService
         {
             var processes = RunnerMaintenanceProcesses.Read();
             var ready = MaintenanceHookContext(spec, phase, runnerRoot, processes, out var job);
+            if (ready is not null) ready.CleanupAllowed = hookCleanupAllowed;
             run.Job = job;
             if (!dryRun)
             {
@@ -51,7 +52,8 @@ public sealed partial class RunnerHousekeepingService
                     return MaintenanceFinish(run);
                 }
             }
-            previousHook?.Invoke();
+            if (File.Exists(Path.Combine(spec.StateRootPath, MaintenanceInstallationJournal)))
+                throw new IOException("Enrollment recovery is pending. Keep its services stopped and retry the installer.");
             run.Result.Admitted = phase != RunnerMaintenancePhase.Scheduled;
             run.State = MaintenanceRead(Path.Combine(spec.StateRootPath, "state.json"), RunnerMaintenanceJsonContext.Default.RunnerMaintenanceState) ?? new RunnerMaintenanceState();
             if (run.State.SchemaVersion != 1) throw new IOException("Unsupported maintenance state version.");
@@ -63,7 +65,7 @@ public sealed partial class RunnerHousekeepingService
                 if (fresh.Values.Any(p => RunnerMaintenanceProcesses.IsWorker(p) && MaintenanceProcessBelongs(registration, p)))
                     run.ActiveRunnerRoots.Add(registration.RootPath);
             var readyWorkers = MaintenanceReadyWorkers(spec, fresh, out var admittedProcesses);
-            if (ready is not null) readyWorkers.Add(ready.WorkerId);
+            if (ready is not null && ready.CleanupAllowed) readyWorkers.Add(ready.WorkerId);
             var busyWorkers = fresh.Values.Where(RunnerMaintenanceProcesses.IsWorker).Where(p => !readyWorkers.Contains(p.Id)).ToArray();
             var ancestors = RunnerMaintenanceProcesses.Ancestors(fresh, Process.GetCurrentProcess().Id);
             var builds = fresh.Values.Where(p => !ancestors.Contains(p.Id) && !admittedProcesses.Contains(p.Id)
@@ -83,13 +85,14 @@ public sealed partial class RunnerHousekeepingService
             MaintenanceDeleteIsolated(run);
             run.Isolated.Clear();
             MaintenanceRecordJob(run, phase);
+            MaintenanceRefreshJobProcesses(run, fresh);
             foreach (var runner in spec.Runners)
             {
                 var active = busyWorkers.Any(p => MaintenanceProcessBelongs(runner, p));
                 var unknown = busyWorkers.Any(p => string.IsNullOrEmpty(p.Executable) || !spec.Runners.Any(r => MaintenanceProcessBelongs(r, p)));
-                var jobWorkers = run.State.Jobs.Where(j => PathsEqual(j.RunnerRoot, runner.RootPath)).Select(j => j.WorkerId).ToArray();
-                var orphanActivity = fresh.Values.Any(p => !ancestors.Contains(p.Id) && !admittedProcesses.Contains(p.Id)
-                    && !RunnerMaintenanceProcesses.IsIdleBuildServer(p) && RunnerMaintenanceProcesses.Ancestors(fresh, p.Id).Any(jobWorkers.Contains));
+                var jobProcesses = run.State.Jobs.Where(j => PathsEqual(j.RunnerRoot, runner.RootPath)).SelectMany(j => j.Processes).ToArray();
+                var orphanActivity = jobProcesses.Any(identity => fresh.TryGetValue(identity.Id, out var process) && process.StartTicks == identity.StartTicks
+                    && !ancestors.Contains(process.Id) && !admittedProcesses.Contains(process.Id) && !RunnerMaintenanceProcesses.IsIdleBuildServer(process));
                 if (orphanActivity)
                 {
                     run.SharedIdle = false;
@@ -241,7 +244,7 @@ public sealed partial class RunnerHousekeepingService
         foreach (var path in Directory.EnumerateFiles(root, "*.json"))
         {
             var value = MaintenanceRead(path, RunnerMaintenanceJsonContext.Default.RunnerMaintenanceReady);
-            if (value is null || !processes.TryGetValue(value.WorkerId, out var worker) || !processes.TryGetValue(value.HookId, out var hook) ||
+            if (value is null || !value.CleanupAllowed || !processes.TryGetValue(value.WorkerId, out var worker) || !processes.TryGetValue(value.HookId, out var hook) ||
                 worker.StartTicks != value.WorkerStartTicks || hook.StartTicks != value.HookStartTicks || !RunnerMaintenanceProcesses.IsWorker(worker)) continue;
             var runner = spec.Runners.FirstOrDefault(r => PathsEqual(r.RootPath, value.RunnerRoot));
             var lineage = RunnerMaintenanceProcesses.Ancestors(processes, hook.Id);

@@ -68,13 +68,16 @@ public sealed partial class RunnerHousekeepingService
         => MaintenanceWriteText(path, JsonSerializer.Serialize(value, type));
 
     private static void MaintenanceWriteText(string path, string value)
+        => MaintenanceWriteBytes(path, new UTF8Encoding(false).GetBytes(value));
+
+    private static void MaintenanceWriteBytes(string path, byte[] value)
     {
         MaintenancePhysicalPath(path);
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         var temporary = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
         try
         {
-            File.WriteAllText(temporary, value, new UTF8Encoding(false));
+            File.WriteAllBytes(temporary, value);
             if (File.Exists(path)) File.Replace(temporary, path, null);
             else File.Move(temporary, path);
         }

@@ -80,6 +80,12 @@ public sealed class RunnerMaintenanceRegistration
 
     /// <summary>Top-level workspace families that must survive maintenance.</summary>
     public string[] ProtectedWorkspaces { get; set; } = Array.Empty<string>();
+
+    /// <summary>Started hook captured from the registered service environment when .env omits it. An empty string records no inherited hook.</summary>
+    public string? InheritedStartedHook { get; set; }
+
+    /// <summary>Completed hook captured from the registered service environment when .env omits it. An empty string records no inherited hook.</summary>
+    public string? InheritedCompletedHook { get; set; }
 }
 
 /// <summary>Explicit source-proven layout for old generated fixture directories.</summary>

@@ -11,6 +11,38 @@ param([Parameter(Mandatory)][string] $Configuration)
 
 $ErrorActionPreference = 'Stop'
 $settings = Get-Content -LiteralPath $Configuration -Raw | ConvertFrom-Json
+$policy = Get-Content -LiteralPath $settings.policy -Raw | ConvertFrom-Json
+if (Test-Path -LiteralPath (Join-Path $policy.stateRootPath 'installation.pending.json')) {
+    throw 'Enrollment recovery is pending. Retry the installer while its services remain stopped.'
+}
+if ($settings.previousHook) {
+    # Enter once before the existing hook. Its live worker then protects its work
+    # until maintenance reaches its own ready marker. Existing hooks keep their
+    # normal foreground lifetime and background descendants.
+    $gate = $null
+    $clock = [Diagnostics.Stopwatch]::StartNew()
+    while (-not $gate) {
+        try {
+            $gate = [IO.File]::Open((Join-Path $policy.stateRootPath 'admission.lock'), 'OpenOrCreate', 'ReadWrite', 'None')
+        } catch [IO.IOException] {
+            if ($clock.Elapsed.TotalSeconds -ge $policy.admissionTimeoutSeconds) { throw 'Existing hook could not enter runner admission.' }
+            Start-Sleep -Milliseconds 100
+        }
+    }
+    $gate.Dispose()
+    $previous = $settings.previousHook
+    switch ([IO.Path]::GetExtension($previous).ToLowerInvariant()) {
+        '.ps1' {
+            $shell = Join-Path $PSHOME $(if ($env:OS -eq 'Windows_NT' -and $PSVersionTable.PSEdition -ne 'Core') { 'powershell.exe' } elseif ($env:OS -eq 'Windows_NT') { 'pwsh.exe' } else { 'pwsh' })
+            $command = '$ErrorActionPreference = ''Stop''; . ''' + $previous.Replace("'", "''") + '''; if (Test-Path variable:LASTEXITCODE) { exit $LASTEXITCODE }'
+            & $shell -NoLogo -NoProfile -NonInteractive -Command $command
+        }
+        '.sh' { & bash -e $previous }
+        '.cmd' { & $env:ComSpec /d /s /c ('"' + $previous + '"') }
+        default { throw 'Unsupported existing GitHub hook language.' }
+    }
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+}
 $start = [Diagnostics.ProcessStartInfo]::new()
 $start.FileName = $settings.executable
 $start.UseShellExecute = $false

@@ -16,6 +16,8 @@ Build a self-contained CLI for the host's platform and copy its complete publish
     {
       "rootPath": "/opt/actions-runner",
       "tempPath": "/var/tmp/powerforge-runner-jobs/primary",
+      "inheritedStartedHook": "",
+      "inheritedCompletedHook": "",
       "protectedWorkspaces": []
     }
   ],
@@ -43,6 +45,8 @@ On macOS, pass `-RunAsUser` with the existing runner account. Windows uses Local
 
 Enrollment captures the installed agent identity and actual work directory from `.runner`, preserves existing custom hooks, enables NuGet package last-access metadata in the specified service configuration, and updates the runner's `.env`. Private temp, HTTP-cache and .NET bundle extraction paths follow the runner's job-temp directory. `NUGET_SCRATCH` remains the shared path from the policy.
 
+Capture inherited hooks from each registered service before stopping it. Windows service environment values, systemd environment files and launchd environment settings can differ from an administrative shell. An explicit `.env` assignment takes precedence. When `.env` omits a hook, supply its captured `inheritedStartedHook` or `inheritedCompletedHook` value. An empty string records that the service has no inherited hook. Enrollment retains the existing configuration when that value is unknown.
+
 ## Run and inspect
 
 The enrolled policy includes the captured identities. A direct invocation defaults to a dry run.
@@ -57,6 +61,8 @@ The result reports actual removed paths and logical bytes, free bytes before and
 Job hooks verify their enrolled `Runner.Worker` ancestry and GitHub job context. Start hooks enter the same admission lock as the timer. Completion hooks run after job steps and post-actions. A busy registration protects its work and temporary output. Shared caches wait until the host's relevant workers and build activity are idle. An unenrolled listener holds shared-cache cleanup.
 
 The maintenance budget is checked between filesystem operations. The PowerShell launcher bounds its owned child process to four minutes. Windows Task Scheduler and systemd also bound the scheduled execution. Cleanup errors remain visible in receipts. A start hook that fails to acquire admission stops job startup.
+
+Preserved custom hooks retain their foreground duration, output, exit status and background processes. The launcher enters admission once before executing a custom hook, then its live worker protects that job until the maintenance phase. Cleanup for that registration waits for worker exit when a custom hook is configured. The four-minute launcher budget applies to the maintenance child.
 
 ## Retention
 
@@ -84,3 +90,5 @@ The GitHub runner refreshes action downloads at job preparation and retires old 
 An interrupted isolated target remains under `.powerforge-quarantine` in its original storage root. Its journal identifies that enrolled root and original path. The next pass validates the record and finishes deletion before selecting new output. A failed target remains observable and independently recoverable.
 
 The private state directory contains the original runner `.env` and NuGet configuration backups. During an idle service window, those files provide the original settings for rollback. Restore only after checking for later intentional edits. Remove the native maintenance schedule when retiring the installation, then verify the runner services and their original hooks.
+
+Enrollment journals the exact previous environments, NuGet files, launcher, policy, scheduled configuration and installation marker before replacing them. A write failure restores the previous enrollment. An interrupted installation leaves `installation.pending.json`, which holds runtime cleanup until the installer replays recovery. Keep the participating services stopped through that recovery. Recorded job processes use their PID and start time together, so PID reuse and a host restart retire obsolete activity associations.

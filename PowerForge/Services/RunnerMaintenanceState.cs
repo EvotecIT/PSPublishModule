@@ -22,10 +22,32 @@ internal sealed class RunnerMaintenanceJob
     public int WorkerId { get; set; }
     public long WorkerStartTicks { get; set; }
     public DateTime CompletedUtc { get; set; }
+    public List<RunnerMaintenanceProcessIdentity> Processes { get; set; } = new();
+}
+
+internal sealed class RunnerMaintenanceProcessIdentity
+{
+    public int Id { get; set; }
+    public long StartTicks { get; set; }
+}
+
+internal sealed class RunnerMaintenanceInstallationBackup
+{
+    public string Path { get; set; } = string.Empty;
+    public byte[]? Bytes { get; set; }
+}
+
+internal sealed class RunnerMaintenanceInstallationRecovery
+{
+    public int SchemaVersion { get; set; } = 1;
+    public string[] RunnerRoots { get; set; } = Array.Empty<string>();
+    public string[] ConfigurationPaths { get; set; } = Array.Empty<string>();
+    public List<RunnerMaintenanceInstallationBackup> Files { get; set; } = new();
 }
 
 internal sealed class RunnerMaintenanceReady
 {
+    public bool CleanupAllowed { get; set; } = true;
     public int WorkerId { get; set; }
     public long WorkerStartTicks { get; set; }
     public int HookId { get; set; }
@@ -63,6 +85,7 @@ internal sealed class RunnerMaintenanceHook
 [JsonSerializable(typeof(RunnerMaintenanceReady))]
 [JsonSerializable(typeof(RunnerMaintenanceJournal))]
 [JsonSerializable(typeof(RunnerMaintenanceHook))]
+[JsonSerializable(typeof(RunnerMaintenanceInstallationRecovery))]
 internal sealed partial class RunnerMaintenanceJsonContext : JsonSerializerContext
 {
 }

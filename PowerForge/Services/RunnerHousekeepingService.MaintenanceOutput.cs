@@ -40,10 +40,25 @@ public sealed partial class RunnerHousekeepingService
     private static void MaintenanceRecordJob(MaintenanceRun run, RunnerMaintenancePhase phase)
     {
         if (run.Job is null) return;
+        run.Job.Processes.AddRange(run.State.Jobs.Where(j => PathsEqual(j.Workspace, run.Job.Workspace)).SelectMany(j => j.Processes));
         run.State.Jobs.RemoveAll(j => PathsEqual(j.Workspace, run.Job.Workspace));
         run.Job.CompletedUtc = phase == RunnerMaintenancePhase.Completed ? DateTime.UtcNow : DateTime.MinValue;
         run.State.Jobs.Add(run.Job);
         if (phase == RunnerMaintenancePhase.Completed) MaintenancePackageReferences(run, run.Job.Workspace);
+    }
+
+    private static void MaintenanceRefreshJobProcesses(MaintenanceRun run, Dictionary<int, RunnerMaintenanceProcess> processes)
+    {
+        foreach (var job in run.State.Jobs)
+        {
+            job.Processes.RemoveAll(identity => !processes.TryGetValue(identity.Id, out var process) || process.StartTicks != identity.StartTicks);
+            if (!processes.TryGetValue(job.WorkerId, out var worker) || worker.StartTicks != job.WorkerStartTicks || !RunnerMaintenanceProcesses.IsWorker(worker)) continue;
+            var descendants = processes.Values.Where(process => process.Id != worker.Id && process.StartTicks > 0
+                && RunnerMaintenanceProcesses.Ancestors(processes, process.Id).Contains(worker.Id));
+            foreach (var process in descendants)
+                if (!job.Processes.Any(identity => identity.Id == process.Id && identity.StartTicks == process.StartTicks))
+                    job.Processes.Add(new RunnerMaintenanceProcessIdentity { Id = process.Id, StartTicks = process.StartTicks });
+        }
     }
 
     private static void MaintenancePackageReferences(MaintenanceRun run, string root)

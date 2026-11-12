@@ -32,7 +32,7 @@ internal static partial class Program
                 throw new ArgumentException("Choose one policy operation or an enrolled hook.");
             var service = new RunnerHousekeepingService(logger);
             RunnerMaintenanceResult result;
-            if (hook is not null) result = service.InvokeMaintenanceHook(Path.GetFullPath(hook), Console.Out.WriteLine, Console.Error.WriteLine);
+            if (hook is not null) result = service.InvokeMaintenanceHook(Path.GetFullPath(hook));
             else
             {
                 var path = Path.GetFullPath(configuration!);
