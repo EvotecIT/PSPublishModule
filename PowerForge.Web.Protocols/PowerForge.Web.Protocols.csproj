@@ -1,11 +1,11 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <PackageVersion>3.0.189</PackageVersion>
+    <PackageVersion>3.0.190</PackageVersion>
     <TargetFrameworks>net472;net8.0</TargetFrameworks>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <LangVersion>latest</LangVersion>
-    <VersionPrefix>3.0.189</VersionPrefix>
+    <VersionPrefix>3.0.190</VersionPrefix>
     <Description>Dependency-free web interchange: IndexNow, sitemaps, syndication feeds and JSON-LD serialization.</Description>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
