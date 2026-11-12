@@ -8,6 +8,7 @@
 $PowerForgeModuleName = '{{ModuleName}}'
 {{ModuleRootCaptureBlock}}
 $UnregisterPowerForgeDesktopAssemblyResolver = $null
+$PowerForgeDependencyCheck = $null
 $PowerForgeModuleImportCompleted = $false
 try {
 {{BinaryLoaderBlock}}
@@ -18,6 +19,16 @@ try {
 {{ExportBlock}}
 # PowerForge exports end
     $PowerForgeModuleImportCompleted = $true
+} catch {
+    # Windows PowerShell: a library reused from another module can still lack a type this module needs.
+    # Report that as the same conflict the dependency check describes, not as a raw type-load error.
+    if ($null -ne $PowerForgeDependencyCheck) {
+        $PowerForgeLoadFailure = $PowerForgeDependencyCheck.ExplainLoadFailure($_.Exception)
+        if ($null -ne $PowerForgeLoadFailure) {
+            throw $PowerForgeLoadFailure
+        }
+    }
+    throw
 } finally {
     if (-not $PowerForgeModuleImportCompleted -and $null -ne $UnregisterPowerForgeDesktopAssemblyResolver) {
         & $UnregisterPowerForgeDesktopAssemblyResolver

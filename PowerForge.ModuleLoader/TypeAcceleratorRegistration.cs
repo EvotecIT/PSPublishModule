@@ -454,7 +454,7 @@ public sealed class TypeAcceleratorRegistration
                 try
                 {
                     var loaded = Assembly.LoadFrom(path);
-                    if (IsModuleAssembly(loaded) || ContentMatches(loaded, path))
+                    if (IsModuleAssembly(loaded) || ContentMatches(loaded, path) || IsAcceptedReuse(loaded, path))
                         return _resolved[simpleName] = loaded;
 
                     _failed.Add(simpleName);
@@ -523,6 +523,25 @@ public sealed class TypeAcceleratorRegistration
                 isVerbose: false);
 
         private bool IsIgnored(Assembly assembly) => _ignored.Contains(assembly.GetName().Name + ".dll");
+
+        // Windows PowerShell binds an assembly without a strong name by simple name, so LoadFrom returns the copy another
+        // module already loaded. The bootstrapper's DependencyConflictCheck stops the import unless that copy is
+        // compatible; when the import got this far, it is the copy this module runs on and the right accelerator target.
+        private bool IsAcceptedReuse(Assembly assembly, string expectedPath)
+        {
+            if (assembly.IsDynamic || assembly.GetName().GetPublicKeyToken() is { Length: > 0 }) return false;
+            try
+            {
+                if (AssemblyName.GetAssemblyName(expectedPath).GetPublicKeyToken() is { Length: > 0 }) return false;
+            }
+            catch
+            {
+                return false;
+            }
+
+            _owner._verbose.Add($"Desktop assembly '{assembly.GetName().Name}' {assembly.GetName().Version} was already loaded by another module; its types are used for type accelerators.");
+            return true;
+        }
 
         private bool IsModuleAssembly(Assembly assembly)
         {

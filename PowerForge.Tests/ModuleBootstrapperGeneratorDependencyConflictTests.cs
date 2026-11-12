@@ -4,8 +4,8 @@ using PowerForge.Tests;
 public sealed partial class ModuleBootstrapperGeneratorWindowsPowerShellTests
 {
     // Windows PowerShell binds assemblies without a strong name by simple name, so the first loaded copy serves
-    // every module. The rule: reuse a loaded copy of the same major that is newer or an older patch release, warn
-    // once; refuse an older minor or another major with one actionable message before anything loads.
+    // every module. The rule: reuse a loaded copy of the same major.minor that is at least as new, warn once;
+    // refuse anything else (minor releases change public API) with one actionable message before anything loads.
     [Fact]
     [Trait("Category", "Integration")]
     public void DependencyConflictCheck_ReusesCompatibleLoadedVersionsAndRefusesIncompatibleOnes()
@@ -18,8 +18,9 @@ public sealed partial class ModuleBootstrapperGeneratorWindowsPowerShellTests
             ModuleLoaderAssets.Write(Path.Combine(root, ModuleLoaderAssets.PackagedFolderName));
             var cases = new (string Name, string Loaded, string Packaged, string Expect)[]
             {
-                ("NewerMinor", "1.1.0.0", "1.0.0.0", "reuse"),
-                ("OlderPatch", "1.0.5.0", "1.0.6.0", "reuse"),
+                ("NewerPatch", "1.0.6.0", "1.0.5.0", "reuse"),
+                ("OlderPatch", "1.0.5.0", "1.0.6.0", "refuse"),
+                ("NewerMinor", "1.1.0.0", "1.0.0.0", "refuse"),
                 ("SameVersion", "1.2.0.0", "1.2.0.0", "silent"),
                 ("OlderMinor", "1.0.0.0", "1.1.0.0", "refuse"),
                 ("NewerMajor", "2.0.0.0", "1.1.0.0", "refuse")
@@ -108,8 +109,10 @@ if ($catalog.ContainsKey('Fixture.Shared')) { throw 'The accelerator outlived it
 
     [WindowsTheory]
     [InlineData("ModA", "ModB", "reuse")]
-    [InlineData("ModB", "ModA", "refuse-minor")]
+    [InlineData("ModB", "ModA", "refuse-patch")]
+    [InlineData("ModD", "ModB", "refuse-minor")]
     [InlineData("ModA", "ModC", "refuse-major")]
+    [InlineData("ModA", "ModE", "explain")]
     [Trait("Category", "Integration")]
     public void GeneratedDesktopModules_WithConflictingDependencyVersions_ReuseOrRefuseClearly(string first, string second, string expectation)
     {
@@ -129,20 +132,23 @@ function New-Fixture([string] $Path, [string] $Source, [string[]] $References = 
 }
 $dependencies = Join-Path $Root 'deps'
 New-Fixture "$dependencies\1.0\Dep.dll" '[assembly: System.Reflection.AssemblyVersion("1.0.0.0")] namespace Dep { public static class Lib { public static string Old() { return "old"; } } }'
-New-Fixture "$dependencies\1.1\Dep.dll" '[assembly: System.Reflection.AssemblyVersion("1.1.0.0")] namespace Dep { public static class Lib { public static string Old() { return "old"; } public static string New() { return "new"; } } }'
+New-Fixture "$dependencies\1.0e\Dep.dll" '[assembly: System.Reflection.AssemblyVersion("1.0.0.0")] namespace Dep { public static class Lib { public static string Old() { return "old"; } } public class Gone { } }'
+New-Fixture "$dependencies\1.0.1\Dep.dll" '[assembly: System.Reflection.AssemblyVersion("1.0.1.0")] namespace Dep { public static class Lib { public static string Old() { return "old"; } public static string New() { return "new"; } } }'
+New-Fixture "$dependencies\1.1\Dep.dll" '[assembly: System.Reflection.AssemblyVersion("1.1.0.0")] namespace Dep { public static class Lib { public static string Old() { return "old"; } } }'
 New-Fixture "$dependencies\2.0\Dep.dll" '[assembly: System.Reflection.AssemblyVersion("2.0.0.0")] namespace Dep { public static class Lib { public static string Next() { return "next"; } } }'
-$modules = @{ ModA = @('1.1', 'New'); ModB = @('1.0', 'Old'); ModC = @('2.0', 'Next') }
+# ModE derives a public type from Dep.Gone, which the 1.0.1 patch no longer has: loading ModE on ModA's copy fails.
+$modules = @{ ModA = @('1.0.1', 'New', ''); ModB = @('1.0', 'Old', ''); ModC = @('2.0', 'Next', ''); ModD = @('1.1', 'Old', ''); ModE = @('1.0e', 'Old', ' public sealed class Derived : Dep.Gone { }') }
 foreach ($name in $modules.Keys) {
-    $version, $call = $modules[$name]
+    $version, $call, $extra = $modules[$name]
     $payload = Join-Path $Root "$name\Lib\Default"
     Copy-Item "$dependencies\$version\Dep.dll" (New-Item -ItemType Directory -Force -Path $payload) -Force
-    New-Fixture "$payload\$name.dll" "using System.Management.Automation; namespace $name { [Cmdlet(VerbsCommon.Get, ""$name"")] public sealed class GetCommand : PSCmdlet { protected override void ProcessRecord() { WriteObject(Dep.Lib.$call()); } } }" @($automation, "$payload\Dep.dll")
+    New-Fixture "$payload\$name.dll" "using System.Management.Automation; namespace $name { [Cmdlet(VerbsCommon.Get, ""$name"")] public sealed class GetCommand : PSCmdlet { protected override void ProcessRecord() { WriteObject(Dep.Lib.$call()); } }$extra }" @($automation, "$payload\Dep.dll")
     Set-Content (Join-Path $Root "$name\$name.psd1") "@{ RootModule = '$name.psm1'; ModuleVersion = '1.0.0'; GUID = '$([guid]::NewGuid())'; CmdletsToExport = @('Get-$name'); FunctionsToExport = @(); AliasesToExport = @() }"
 }
 """);
             var compiled = RunProcess(host, $"-NoLogo -NoProfile -NonInteractive -File \"{compile}\" -Root \"{root}\"", root, timeoutMilliseconds: 60000);
             Assert.True(compiled.ExitCode == 0, compiled.StandardOutput + Environment.NewLine + compiled.StandardError);
-            foreach (var name in new[] { "ModA", "ModB", "ModC" })
+            foreach (var name in new[] { "ModA", "ModB", "ModC", "ModD", "ModE" })
             {
                 ModuleBootstrapperGenerator.Generate(Path.Combine(root, name), name,
                     new ExportSet(Array.Empty<string>(), new[] { "Get-" + name }, Array.Empty<string>()),
@@ -153,7 +159,7 @@ foreach ($name in $modules.Keys) {
             File.WriteAllText(scenario, """
 param([string] $Root, [string] $First, [string] $Second, [string] $Expectation)
 $ErrorActionPreference = 'Stop'
-$expected = @{ ModA = 'new'; ModB = 'old'; ModC = 'next' }
+$expected = @{ ModA = 'new'; ModB = 'old'; ModC = 'next'; ModD = 'old'; ModE = 'old' }
 Import-Module (Join-Path $Root "$First\$First.psd1")
 if ((& "Get-$First") -ne $expected[$First]) { throw "$First does not work on its own." }
 $warnings = @()
@@ -166,14 +172,19 @@ try {
 switch ($Expectation) {
     'reuse' {
         if ($failure) { throw "Compatible dependency was refused: $failure" }
-        if (@($warnings | Where-Object { "$_" -like "*$Second 1.0.0 uses Dep 1.1.0 that module $First 1.0.0 already loaded*" }).Count -ne 1) { throw "Missing reuse warning: $($warnings -join ' | ')" }
+        if ($warnings.Count -ne 1 -or "$($warnings[0])" -notlike "$Second 1.0.0 uses a library that module $First 1.0.0 already loaded: Dep 1.0.1 (ships 1.0.0).*") { throw "Expected one reuse warning: $($warnings -join ' | ')" }
         if ((& "Get-$Second") -ne $expected[$Second]) { throw "$Second does not work with the reused dependency." }
+    }
+    'explain' {
+        if (-not $failure) { throw "$Second loaded although its type derives from one the reused dependency lacks." }
+        if ($failure -notlike "$Second 1.0.0 cannot load in this Windows PowerShell session: it does not work with the library versions module $First 1.0.0 already loaded (Dep 1.0.1 (ships 1.0.0)).*Dep.Gone*separate Windows PowerShell session*") { throw "Load failure was not explained: $failure" }
+        if (Get-Module $Second) { throw "$Second stayed imported after the failure." }
     }
     default {
         if (-not $failure) { throw 'Incompatible dependency was loaded.' }
         if ($failure -notlike "$Second 1.0.0 cannot load in this Windows PowerShell session:*module $First 1.0.0 already loaded Dep*") { throw "Unclear refusal: $failure" }
-        if ($Expectation -eq 'refuse-minor' -and $failure -notlike "*import $Second first*") { throw "Refusal lacks the import-order advice: $failure" }
-        if ($Expectation -eq 'refuse-major' -and $failure -notlike '*cannot be used together*') { throw "Refusal lacks the major-version advice: $failure" }
+        if ($Expectation -eq 'refuse-patch' -and $failure -notlike "*import $Second first*") { throw "Refusal lacks the import-order advice: $failure" }
+        if ($Expectation -in 'refuse-minor', 'refuse-major' -and $failure -notlike '*cannot be used together*') { throw "Refusal lacks the incompatible-version advice: $failure" }
         if (Get-Module $Second) { throw "$Second stayed imported after the refusal." }
     }
 }
@@ -208,8 +219,9 @@ if ((& "Get-$First") -ne $expected[$First]) { throw "$First broke after importin
 
     // Windows PowerShell keeps the first loaded version of a module's own assembly for the session.
     [WindowsTheory]
-    [InlineData("1.1.0", "1.0.0", "reuse")]
-    [InlineData("1.0.0", "1.1.0", "refuse")]
+    [InlineData("1.0.1", "1.0.0", "reuse")]
+    [InlineData("1.0.0", "1.0.1", "refuse")]
+    [InlineData("1.1.0", "1.0.0", "refuse")]
     [Trait("Category", "Integration")]
     public void GeneratedDesktopModule_SecondVersionInOneSession_ReusesNewerOrAsksForNewSession(string first, string second, string expectation)
     {
@@ -222,7 +234,7 @@ if ((& "Get-$First") -ne $expected[$First]) { throw "$First broke after importin
             File.WriteAllText(compile, """
 param([string] $Root)
 $ErrorActionPreference = 'Stop'
-foreach ($version in '1.0.0', '1.1.0') {
+foreach ($version in '1.0.0', '1.0.1', '1.1.0') {
     $payload = New-Item -ItemType Directory -Force -Path (Join-Path $Root "ModS\$version\Lib\Default")
     Add-Type -TypeDefinition "[assembly: System.Reflection.AssemblyVersion(""$version.0"")] namespace ModS { [System.Management.Automation.Cmdlet(""Get"", ""ModS"")] public sealed class GetCommand : System.Management.Automation.PSCmdlet { protected override void ProcessRecord() { WriteObject(""$version""); } } }" -ReferencedAssemblies ([psobject].Assembly.Location) -OutputAssembly (Join-Path $payload 'ModS.dll')
     Set-Content (Join-Path $Root "ModS\$version\ModS.psd1") "@{ RootModule = 'ModS.psm1'; ModuleVersion = '$version'; GUID = '6f1b1d7e-2c34-4a8e-9a63-1b8d2f0c9a11'; CmdletsToExport = @('Get-ModS'); FunctionsToExport = @(); AliasesToExport = @() }"
@@ -230,11 +242,14 @@ foreach ($version in '1.0.0', '1.1.0') {
 """);
             var compiled = RunProcess(host, $"-NoLogo -NoProfile -NonInteractive -File \"{compile}\" -Root \"{root}\"", root, timeoutMilliseconds: 60000);
             Assert.True(compiled.ExitCode == 0, compiled.StandardOutput + Environment.NewLine + compiled.StandardError);
-            foreach (var version in new[] { "1.0.0", "1.1.0" })
+            foreach (var version in new[] { "1.0.0", "1.0.1", "1.1.0" })
             {
+                // The accelerator proves registration uses the reused copy quietly instead of warning per type.
                 ModuleBootstrapperGenerator.Generate(Path.Combine(root, "ModS", version), "ModS",
                     new ExportSet(Array.Empty<string>(), new[] { "Get-ModS" }, Array.Empty<string>()),
-                    new[] { "ModS.dll" }, handleRuntimes: false, useAssemblyLoadContext: true);
+                    new[] { "ModS.dll" }, handleRuntimes: false, useAssemblyLoadContext: true,
+                    assemblyTypeAcceleratorMode: AssemblyTypeAcceleratorExportMode.AllowList,
+                    assemblyTypeAccelerators: new[] { "ModS.GetCommand" });
             }
 
             var scenario = Path.Combine(root, "Test-Version.ps1");
@@ -251,9 +266,10 @@ try {
 }
 if ($Expectation -eq 'reuse') {
     if ($failure) { throw "Newer loaded version was refused: $failure" }
-    if (@($warnings | Where-Object { "$_" -like "ModS $Second uses ModS $First that module ModS $First already loaded*" }).Count -ne 1) { throw "Missing reuse warning: $($warnings -join ' | ')" }
+    if ($warnings.Count -ne 1 -or "$($warnings[0])" -notlike "ModS $Second uses a library that module ModS $First already loaded: ModS $First (ships $Second).*") { throw "Expected one reuse warning: $($warnings -join ' | ')" }
+    if ([ModS.GetCommand].Assembly.GetName().Version.ToString(3) -ne $First) { throw 'The accelerator does not point at the loaded copy.' }
 } else {
-    if ($failure -notlike "ModS $Second cannot load in this Windows PowerShell session:*Another version of ModS is already loaded in this session. Start a new Windows PowerShell session*") { throw "Unclear refusal: $failure" }
+    if ($failure -ne "ModS $Second cannot load: ModS $First is already loaded in this Windows PowerShell session, and its assemblies stay loaded after Remove-Module. Start a new Windows PowerShell session to use ModS $Second.") { throw "Unclear refusal: $failure" }
 }
 if ((Get-ModS) -ne $First) { throw 'The first loaded version stopped serving its command.' }
 "DESKTOP_VERSION_OK:$Expectation"
