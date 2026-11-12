@@ -792,12 +792,20 @@ Markdown only topic body.
             };
 
             new MarkdownHelpWriter().WriteCommandHelpFiles(payload, "DemoModule", root);
+            new MarkdownHelpWriter().WriteModuleReadme(payload, "DemoModule", Path.Combine(root, "Module.md"), root);
+            File.WriteAllText(Path.Combine(root, "about_Demo.help.txt"), "TOPIC\r\n    about_Demo\r\n\r\nSHORT DESCRIPTION\r\n    Demo topic.\r\n");
+            new AboutTopicWriter().Write(root, root);
 
             var text = File.ReadAllText(Path.Combine(root, "Get-Demo.md"));
-            Assert.False(HasIsolatedLf(text), "Markdown help should be normalized to CRLF line endings.");
-            Assert.Contains("Aliases: None\r\n", text, StringComparison.Ordinal);
-            Assert.Contains("Possible values:\r\n\r\nRequired:", text, StringComparison.Ordinal);
-            Assert.DoesNotContain("Possible values: \r\n", text, StringComparison.Ordinal);
+            foreach (var path in new[] { "Get-Demo.md", "Module.md", "About/about_Demo.md", "About/README.md" })
+            {
+                var markdown = File.ReadAllText(Path.Combine(root, path));
+                Assert.Contains("\n", markdown, StringComparison.Ordinal);
+                Assert.DoesNotContain("\r", markdown, StringComparison.Ordinal);
+            }
+            Assert.Contains("Aliases: None\n", text, StringComparison.Ordinal);
+            Assert.Contains("Possible values:\n\nRequired:", text, StringComparison.Ordinal);
+            Assert.DoesNotContain("Possible values: \n", text, StringComparison.Ordinal);
         }
         finally
         {
@@ -840,7 +848,7 @@ Markdown only topic body.
             var markdownRoot = Path.Combine(root, "Docs");
             new MarkdownHelpWriter().WriteCommandHelpFiles(payload, "DemoModule", markdownRoot);
             var markdown = File.ReadAllText(Path.Combine(markdownRoot, "Get-Demo.md"));
-            Assert.Contains("Aliases: ' x ' [encoded 1], X, ' ', ' x '\r\n", markdown, StringComparison.Ordinal);
+            Assert.Contains("Aliases: ' x ' [encoded 1], X, ' ', ' x '\n", markdown, StringComparison.Ordinal);
 
             var mamlPath = new MamlHelpWriter().WriteExternalHelpFile(payload, "DemoModule", root);
             var document = System.Xml.Linq.XDocument.Load(mamlPath, System.Xml.Linq.LoadOptions.PreserveWhitespace);
@@ -885,8 +893,8 @@ Markdown only topic body.
             new MarkdownHelpWriter().WriteCommandHelpFiles(payload, "DemoModule", root);
             var markdown = File.ReadAllText(Path.Combine(root, "Get-Demo.md"));
 
-            Assert.Contains("- `' '`\r\n", markdown, StringComparison.Ordinal);
-            Assert.Contains("- `None`\r\n", markdown, StringComparison.Ordinal);
+            Assert.Contains("- `' '`\n", markdown, StringComparison.Ordinal);
+            Assert.Contains("- `None`\n", markdown, StringComparison.Ordinal);
         }
         finally
         {

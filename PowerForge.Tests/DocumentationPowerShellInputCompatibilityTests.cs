@@ -77,8 +77,8 @@ Export-ModuleMember -Function Install-InputFixture, Get-AuthoredInputFixture
                 var docsPath = Path.Combine(root, "Docs-" + Path.GetFileNameWithoutExtension(host));
                 new MarkdownHelpWriter().WriteCommandHelpFiles(payload, "InputFixture", docsPath);
                 var markdown = File.ReadAllText(Path.Combine(docsPath, "Install-InputFixture.md"));
-                Assert.Contains("- `System.String[]`\r\n", markdown, StringComparison.Ordinal);
-                Assert.Contains("- `System.Management.Automation.PSObject[]`\r\n", markdown, StringComparison.Ordinal);
+                Assert.Contains("- `System.String[]`\n", markdown, StringComparison.Ordinal);
+                Assert.Contains("- `System.Management.Automation.PSObject[]`\n", markdown, StringComparison.Ordinal);
                 Assert.DoesNotContain("%u000D", markdown, StringComparison.Ordinal);
                 Assert.DoesNotContain("%u000A", markdown, StringComparison.Ordinal);
 

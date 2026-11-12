@@ -25,9 +25,9 @@ internal static class GeneratedTextNormalizer
         return ensureFinalNewline ? normalized + newline : normalized;
     }
 
-    internal static void WriteUtf8NoBom(string path, string? text)
+    internal static void WriteUtf8NoBom(string path, string? text, string newline = "\r\n")
     {
-        File.WriteAllText(path, Normalize(text), new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+        File.WriteAllText(path, Normalize(text, newline), new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
     }
 
     internal static void WriteUtf8Bom(string path, string? text)
