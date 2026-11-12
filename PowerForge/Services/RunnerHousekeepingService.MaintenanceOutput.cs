@@ -40,6 +40,10 @@ public sealed partial class RunnerHousekeepingService
     private static void MaintenanceRecordJob(MaintenanceRun run, RunnerMaintenancePhase phase)
     {
         if (run.Job is null) return;
+        var predecessors = run.State.Jobs.Where(j => PathsEqual(j.Workspace, run.Job.Workspace) && j.TrackingIds.Count > 0).ToArray();
+        if (predecessors.Length > 0)
+            run.Job.TrackingStartTicks = predecessors.Select(job => job.TrackingStartTicks > 0 ? job.TrackingStartTicks : job.WorkerStartTicks)
+                .Concat(run.Job.TrackingStartTicks > 0 ? new[] { run.Job.TrackingStartTicks } : Array.Empty<long>()).Min();
         run.Job.Processes.AddRange(run.State.Jobs.Where(j => PathsEqual(j.Workspace, run.Job.Workspace)).SelectMany(j => j.Processes));
         run.Job.TrackingIds = run.Job.TrackingIds.Concat(run.State.Jobs.Where(j => PathsEqual(j.Workspace, run.Job.Workspace)).SelectMany(j => j.TrackingIds)).Distinct(StringComparer.Ordinal).ToList();
         run.State.Jobs.RemoveAll(j => PathsEqual(j.Workspace, run.Job.Workspace));
@@ -62,9 +66,10 @@ public sealed partial class RunnerHousekeepingService
         }
         var tracked = run.State.Jobs.Where(job => job.TrackingIds.Count > 0).ToArray();
         if (tracked.Length == 0) return;
+        var earliest = tracked.Min(job => job.TrackingStartTicks > 0 ? job.TrackingStartTicks : job.WorkerStartTicks);
         var uncertain = run.ProcessSnapshotIncomplete;
         var found = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var process in processes.Values.Where(process => process.StartTicks >= tracked.Min(job => job.WorkerStartTicks)))
+        foreach (var process in processes.Values.Where(process => process.StartTicks >= earliest))
         {
             if (run.Expired)
             {
@@ -83,7 +88,7 @@ public sealed partial class RunnerHousekeepingService
             catch (Exception error) when (error is IOException || error is UnauthorizedAccessException || error is System.ComponentModel.Win32Exception)
             {
                 if (!MaintenanceProcessAlive(process.Id)) { uncertain = true; continue; }
-                foreach (var job in tracked.Where(job => process.StartTicks >= job.WorkerStartTicks)) run.UnknownJobActivity.Add(job.RunnerRoot);
+                foreach (var job in tracked) run.UnknownJobActivity.Add(job.RunnerRoot);
                 run.Retained.Add("Job marker could not be inspected for " + process.Name + " PID " + process.Id + ".");
                 continue;
             }

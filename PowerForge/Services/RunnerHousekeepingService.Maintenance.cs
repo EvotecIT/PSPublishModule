@@ -243,7 +243,11 @@ public sealed partial class RunnerHousekeepingService
         job = new RunnerMaintenanceJob { RunnerRoot = runner.RootPath, Workspace = Path.GetFullPath(workspace),
             SourceSha = Environment.GetEnvironmentVariable("GITHUB_SHA") ?? string.Empty, WorkerId = worker.Id, WorkerStartTicks = worker.StartTicks };
         var trackingId = Environment.GetEnvironmentVariable(RunnerMaintenanceProcesses.JobMarker);
-        if (trackingId is not null && Guid.TryParseExact(trackingId, "N", out _)) job.TrackingIds.Add(trackingId);
+        if (trackingId is not null && Guid.TryParseExact(trackingId, "N", out _))
+        {
+            job.TrackingIds.Add(trackingId);
+            job.TrackingStartTicks = worker.StartTicks;
+        }
         return new RunnerMaintenanceReady { WorkerId = worker.Id, WorkerStartTicks = worker.StartTicks, HookId = current.Id,
             HookStartTicks = current.StartTicks, RunnerRoot = runner.RootPath };
     }

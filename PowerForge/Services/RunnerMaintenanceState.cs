@@ -25,6 +25,7 @@ internal sealed class RunnerMaintenanceJob
     public DateTime CompletedUtc { get; set; }
     public List<RunnerMaintenanceProcessIdentity> Processes { get; set; } = new();
     public List<string> TrackingIds { get; set; } = new();
+    public long TrackingStartTicks { get; set; }
 }
 
 internal sealed class RunnerMaintenanceProcessIdentity

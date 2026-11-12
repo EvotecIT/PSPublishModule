@@ -274,7 +274,7 @@ public sealed class RunnerMaintenanceTests
     }
 
     [Fact]
-    public void Maintain_RecognizesDetachedHookMarkerAndResumesAfterItsExit()
+    public void Maintain_RecognizesInheritedHookMarkerBeforeCurrentWorkerAndResumesAfterItsExit()
     {
         using var fixture = new Installation();
         var windows = OperatingSystem.IsWindows();
@@ -289,7 +289,8 @@ public sealed class RunnerMaintenanceTests
             var state = new RunnerMaintenanceState();
             var job = new RunnerMaintenanceJob { RunnerRoot = fixture.Runner.RootPath,
                 Workspace = Path.Combine(fixture.Runner.WorkRootPath, "Example"), WorkerId = int.MaxValue,
-                WorkerStartTicks = background.StartTime.ToUniversalTime().Ticks - 1 };
+                WorkerStartTicks = background.StartTime.ToUniversalTime().Ticks + TimeSpan.TicksPerSecond,
+                TrackingStartTicks = background.StartTime.ToUniversalTime().Ticks - 1 };
             job.TrackingIds.Add(marker);
             state.Jobs.Add(job);
             Directory.CreateDirectory(fixture.Spec.StateRootPath);
