@@ -12,6 +12,7 @@ internal sealed class RunnerMaintenanceState
     public bool Due { get; set; }
     public Dictionary<string, DateTime> PackageUse { get; set; } = new(StringComparer.OrdinalIgnoreCase);
     public List<RunnerMaintenanceJob> Jobs { get; set; } = new();
+    public Dictionary<string, RunnerMaintenanceProcessIdentity> Listeners { get; set; } = new();
 }
 
 internal sealed class RunnerMaintenanceJob

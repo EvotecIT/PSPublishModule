@@ -60,6 +60,13 @@ public sealed partial class RunnerHousekeepingService
             if (run.Result.FreeBytesBefore < GiB(spec.MinimumFreeGiB)) run.State.PressureTargetBytes = GiB(spec.TargetFreeGiB);
             run.Deep = run.State.Due || run.State.PressureTargetBytes > 0 || run.State.LastDeepSweepUtc <= DateTime.UtcNow.AddHours(-spec.DeepIntervalHours);
             var fresh = RunnerMaintenanceProcesses.Read();
+            if (run.Job is not null)
+            {
+                var parent = RunnerMaintenanceProcesses.Ancestors(fresh, run.Job.WorkerId).Select(id => fresh.TryGetValue(id, out var process) ? process : null)
+                    .FirstOrDefault(process => process is not null && process.Name.Equals("Runner.Listener", StringComparison.OrdinalIgnoreCase)
+                        && spec.Runners.Any(r => PathsEqual(r.RootPath, run.Job.RunnerRoot) && MaintenanceProcessBelongs(r, process)));
+                if (parent is not null) run.State.Listeners[run.Job.RunnerRoot] = new RunnerMaintenanceProcessIdentity { Id = parent.Id, StartTicks = parent.StartTicks };
+            }
             run.ExecutablePaths = fresh.Values.Select(p => p.Executable).Where(p => !string.IsNullOrEmpty(p)).Cast<string>().ToArray();
             foreach (var registration in spec.Runners)
                 if (fresh.Values.Any(p => RunnerMaintenanceProcesses.IsWorker(p) && MaintenanceProcessBelongs(registration, p)))
@@ -72,7 +79,7 @@ public sealed partial class RunnerHousekeepingService
                 && RunnerMaintenanceProcesses.IsBuildProcess(p) && !RunnerMaintenanceProcesses.IsIdleBuildServer(p)).ToArray();
             var independentBuild = builds.Length > 0;
             run.SharedIdle = busyWorkers.Length == 0 && !independentBuild;
-            if (!MaintenanceListenersEnrolled(spec, fresh))
+            if (!MaintenanceListenersEnrolled(run, fresh))
             {
                 run.SharedIdle = false;
                 run.Retained.Add("Shared caches retained because a listener has not loaded this enrollment.");
@@ -257,13 +264,16 @@ public sealed partial class RunnerHousekeepingService
         return ready;
     }
 
-    private static bool MaintenanceListenersEnrolled(RunnerMaintenanceSpec spec, Dictionary<int, RunnerMaintenanceProcess> processes)
+    private static bool MaintenanceListenersEnrolled(MaintenanceRun run, Dictionary<int, RunnerMaintenanceProcess> processes)
     {
+        var spec = run.Spec;
         foreach (var listener in processes.Values.Where(p => p.Name.Equals("Runner.Listener", StringComparison.OrdinalIgnoreCase)))
         {
             var runner = spec.Runners.FirstOrDefault(r => MaintenanceProcessBelongs(r, listener));
             var marker = Path.Combine(spec.StateRootPath, "installed.json");
-            if (runner is null || !File.Exists(marker) || listener.StartTicks <= File.GetLastWriteTimeUtc(marker).Ticks) return false;
+            if (runner is null || !File.Exists(marker)) return false;
+            var observedHook = run.State.Listeners.TryGetValue(runner.RootPath, out var loaded) && loaded.Id == listener.Id && loaded.StartTicks == listener.StartTicks;
+            if (!observedHook && listener.StartTicks <= File.GetLastWriteTimeUtc(marker).Ticks) return false;
             var lines = File.ReadAllLines(Path.Combine(runner.RootPath, ".env"));
             foreach (var phase in new[] { "STARTED", "COMPLETED" })
             {
