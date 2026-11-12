@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Precompiled loader shipped inside every PowerForge-built binary module (Loader/Core and Loader/Desktop).
+    The generated PSM1 only calls public members of this assembly, so module import needs no
+    script-level reflection, no Add-Type -TypeDefinition compilation and no private PowerShell APIs.
+    The contract version is part of the assembly name so modules built by different PowerForge
+    releases can load side by side in one session. Bump it only for breaking API changes.
+  -->
+  <PropertyGroup>
+    <TargetFrameworks>net472;netcoreapp3.1</TargetFrameworks>
+    <AssemblyName>PowerForge.ModuleLoader.V1</AssemblyName>
+    <RootNamespace>PowerForge.ModuleLoader.V1</RootNamespace>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <Deterministic>true</Deterministic>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <AssemblyVersion>1.0.0.0</AssemblyVersion>
+    <FileVersion>1.0.0.0</FileVersion>
+    <Product>PowerForge module loader</Product>
+    <Description>Loads PowerForge-built PowerShell module binaries with AssemblyLoadContext isolation on PowerShell 7 and a scoped AssemblyResolve handler on Windows PowerShell 5.1.</Description>
+    <!-- netcoreapp3.1 is the PowerShell 7.0 runtime floor; the loader must run in every later host. -->
+    <CheckEolTargetFramework>false</CheckEolTargetFramework>
+    <SuppressTfmSupportBuildWarnings>true</SuppressTfmSupportBuildWarnings>
+    <PathMap>$(MSBuildProjectDirectory)=/_/PowerForge.ModuleLoader/</PathMap>
+    <DebugType>none</DebugType>
+    <GenerateDependencyFile>false</GenerateDependencyFile>
+  </PropertyGroup>
+
+  <ItemGroup Condition=" '$(TargetFramework)' == 'net472' ">
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
+  </ItemGroup>
+
+</Project>

@@ -57,9 +57,16 @@ public sealed partial class ArtefactBuilder
             ExcludeFromPackage = Normalize(exclude),
             IncludeRoot = Normalize(includeRoot),
             IncludePS1 = Normalize(includePS1),
-            IncludeAll = MergeDeliveryIncludeAll(Normalize(includeAll), delivery),
+            IncludeAll = MergeModuleLoaderIncludeAll(MergeDeliveryIncludeAll(Normalize(includeAll), delivery)),
         };
     }
+
+    // Generated binary bootstrappers load the precompiled loader from this folder, so it ships with the
+    // module whatever IncludeAll lists, like Lib does for the payload it loads.
+    private static string[] MergeModuleLoaderIncludeAll(string[] includeAll)
+        => includeAll.Any(x => string.Equals(x, ModuleLoaderAssets.PackagedFolderName, StringComparison.OrdinalIgnoreCase))
+            ? includeAll
+            : includeAll.Concat(new[] { ModuleLoaderAssets.PackagedFolderName }).ToArray();
 
     internal static string[] ResolveModulePackageSourceFiles(
         string stagingRoot,

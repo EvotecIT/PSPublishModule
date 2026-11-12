@@ -480,8 +480,9 @@ public sealed partial class BinaryDependencyPreflightServiceTests
             var manifestPath = Path.Combine(moduleRoot.FullName, "TestModule.psd1");
             File.WriteAllText(manifestPath, "@{ ModuleVersion = '1.0.0'; RootModule = 'TestModule.psm1' }");
             File.WriteAllText(Path.Combine(moduleRoot.FullName, "TestModule.psm1"), "# generated binary bootstrapper");
-            var helperFileName = ModuleBootstrapperGenerator.GetAssemblyLoadContextLoaderFileNames(
-                "TestModule", sharedPolicy ? new[] { "SharedCore" } : null)[development ? 1 : 0];
+            // Helper names produced by PowerForge releases before the precompiled loader.
+            var helperFileName = "TestModule." + (development ? "DevelopmentModuleLoadContext" : "ModuleLoadContext") +
+                (sharedPolicy ? ".SharedV3_0123456789ABCDEF" : string.Empty) + ".dll";
             File.Copy(paths.ConsumerAssemblyPath, Path.Combine(defaultRoot.FullName, helperFileName), overwrite: true);
 
             var desktop = new BinaryDependencyPreflightService(new NullLogger()).Analyze(

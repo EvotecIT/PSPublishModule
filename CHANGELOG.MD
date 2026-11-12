@@ -2,6 +2,7 @@
 
 ## Unreleased
 ### What's Changed
+- Load binary and hybrid modules through a precompiled, signed-with-the-module loader (`Loader/Core` and `Loader/Desktop`) instead of script-level reflection, `Add-Type -TypeDefinition` compilation and private `PSModuleInfo` export calls, which endpoint protection such as Cortex XDR flagged at import. AssemblyLoadContext isolation, the Windows PowerShell resolver, type accelerators (AllowList, Assembly, Enums) with cleanup on `Remove-Module`, shared assemblies and development binaries keep their configuration. Module builds no longer need the .NET SDK to compile a per-module load context helper.
 - Resolve signing and package payload checks separately for every framework through MSBuild's `TargetDir` and `TargetPath`, with relative paths anchored to the project. Use a matching conventional framework directory only as a fallback, and fail when any framework remains unresolved.
 - Allow PowerShell-authored module builds to reuse prepared staging through the same no-rebuild controls as JSON-configured builds.
 - Resume a partially published coordinated release with `ReusePreparedPackages` to reuse its verified NuGet packages, symbols and project ZIPs without rebuilding or signing them again. Preserve the original checkpoint when recovery prerequisites or cached contents do not match.

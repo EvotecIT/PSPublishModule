@@ -5,7 +5,7 @@ $payload = if ($PSEdition -eq 'Core') { 'Core' } else { 'Default' }
 $directory = Join-Path $Root "Alpha/Lib/$payload"
 $requested = [Reflection.AssemblyName]::new('SharedDisplay, Version=1.0.0.0, Culture=neutral, PublicKeyToken=0123456789abcdef')
 try {
-    $null = [PowerForge.Generated.SharedAssemblyPolicyV3]::Resolve($requested, [string[]]@($directory))
+    $null = [PowerForge.ModuleLoader.V1.SharedAssemblyPolicy]::Resolve($requested, [string[]]@($directory))
     throw 'The mismatched public key token was accepted.'
 } catch [IO.FileLoadException] { }
 if (@([AppDomain]::CurrentDomain.GetAssemblies() | Where-Object { $_.GetName().Name -eq 'SharedDisplay' }).Count -ne 0) {

@@ -1,11 +1,12 @@
+#nullable disable
 using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
 
-namespace PowerForge.Generated {
-    /// <summary>Process-wide resolution policy compiled once by the PowerShell host.</summary>
-    public static class SharedAssemblyPolicyV3 {
+namespace PowerForge.ModuleLoader.V1 {
+    /// <summary>Process-wide resolution policy for assemblies that several modules declare as shared.</summary>
+    public static class SharedAssemblyPolicy {
         private static readonly object Sync = new object();
         private static readonly Type ContextType = Type.GetType("System.Runtime.Loader.AssemblyLoadContext, System.Private.CoreLib");
         private static readonly Dictionary<string, List<string>> Payloads = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
@@ -127,7 +128,7 @@ namespace PowerForge.Generated {
             }
             sharedContext = selected ?? ContextType.GetProperty("Default").GetValue(null, null);
             EventInfo resolvingEvent = ContextType.GetEvent("Resolving");
-            MethodInfo method = typeof(SharedAssemblyPolicyV3).GetMethod("ResolveCore", BindingFlags.NonPublic | BindingFlags.Static).MakeGenericMethod(ContextType);
+            MethodInfo method = typeof(SharedAssemblyPolicy).GetMethod("ResolveCore", BindingFlags.NonPublic | BindingFlags.Static).MakeGenericMethod(ContextType);
             contextHandler = Delegate.CreateDelegate(resolvingEvent.EventHandlerType, method);
             resolvingEvent.AddEventHandler(sharedContext, contextHandler);
         }

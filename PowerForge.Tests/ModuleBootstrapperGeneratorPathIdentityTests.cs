@@ -60,20 +60,11 @@ public partial class ModuleBootstrapperGeneratorTests
                 $loader = [System.Runtime.Loader.AssemblyLoadContext]::GetLoadContext($first).GetType()
                 $physical = {{Quote(Path.Combine(output, library))}}
                 $alias = {{Quote(Path.Combine(alias, relativeOutput, library))}}
-                if ($loader.GetMethod('LoadModules')) {
-                    $arguments = New-Object object[] 2
-                    $arguments[0] = [string[]]@($physical, $alias)
-                    $arguments[1] = 'PathIdentityModule'
-                    $group = $loader.GetMethod('LoadModules').Invoke($null, $arguments)
-                    if ($group.Length -ne 1 -or -not [object]::ReferenceEquals($first, $group[0])) { throw 'Aliases changed group identity' }
-                    $arguments = New-Object object[] 3
-                    $arguments[0] = [string[]]@($physical)
-                    $arguments[1] = $alias
-                    $arguments[2] = 'PathIdentityModule'
-                    $member = $loader.GetMethod('LoadModuleFromGroup').Invoke($null, $arguments)
-                    if (-not [object]::ReferenceEquals($first, $member)) { throw 'Alias is not recognized as a group member' }
-                }
-                $distinct = $loader.GetMethod('LoadModule').Invoke($null, @({{Quote(Path.Combine(copy, library))}}, 'SeparateModule'))
+                $group = [string[]]@($physical, $alias)
+                $viaPhysical = $loader::LoadModuleFromGroup($group, $physical, 'PathIdentityModule', $null)
+                $viaAlias = $loader::LoadModuleFromGroup($group, $alias, 'PathIdentityModule', $null)
+                if (-not [object]::ReferenceEquals($first, $viaPhysical) -or -not [object]::ReferenceEquals($first, $viaAlias)) { throw 'Aliases changed group identity' }
+                $distinct = $loader::LoadModule({{Quote(Path.Combine(copy, library))}}, 'SeparateModule')
                 if ([object]::ReferenceEquals($first, $distinct)) { throw 'Separate module copies shared a context' }
                 'MODULE-PATH-IDENTITY-OK'
                 """;

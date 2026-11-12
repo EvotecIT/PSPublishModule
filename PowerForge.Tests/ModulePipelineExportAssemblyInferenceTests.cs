@@ -947,9 +947,9 @@ public sealed class ModulePipelineExportAssemblyInferenceTests
             });
 
             var bootstrapper = File.ReadAllText(Path.Combine(result.StagingPath, moduleName + ".psm1"));
-            Assert.Contains("DemoModule.ModuleLoadContext.ModuleAssemblyLoadContext", bootstrapper);
-            Assert.Contains("$Mode = 'AllowList'", bootstrapper);
-            Assert.Contains("$RequestedTypes = @('Dependency.Widget')", bootstrapper);
+            Assert.Contains("[PowerForge.ModuleLoader.V1.ModuleAssemblyLoadContext]::LoadModuleFromGroup(", bootstrapper);
+            Assert.Contains("'AllowList'", bootstrapper);
+            Assert.Contains("[string[]]@('Dependency.Widget')", bootstrapper);
         }
         finally
         {
@@ -1107,7 +1107,7 @@ public sealed class ModulePipelineExportAssemblyInferenceTests
             });
 
             var bootstrapper = File.ReadAllText(Path.Combine(result.StagingPath, moduleName + ".psm1"));
-            Assert.Contains("DemoModule.ModuleLoadContext.ModuleAssemblyLoadContext", bootstrapper);
+            Assert.Contains("[PowerForge.ModuleLoader.V1.ModuleAssemblyLoadContext]::LoadModuleFromGroup(", bootstrapper);
             Assert.Contains(
                 result.BuildNotes,
                 note => note.Summary.Contains("Core: no conflicts", StringComparison.OrdinalIgnoreCase));
@@ -1196,8 +1196,8 @@ public sealed class ModulePipelineExportAssemblyInferenceTests
             });
 
             var bootstrapper = File.ReadAllText(Path.Combine(result.StagingPath, moduleName + ".psm1"));
-            Assert.DoesNotContain("DemoModule.ModuleLoadContext.ModuleAssemblyLoadContext", bootstrapper);
-            Assert.DoesNotContain("$RegisterPowerForgeAssemblyTypeAccelerators", bootstrapper);
+            Assert.DoesNotContain("[PowerForge.ModuleLoader.V1.ModuleAssemblyLoadContext]", bootstrapper);
+            Assert.DoesNotContain("TypeAcceleratorRegistration", bootstrapper);
             Assert.DoesNotContain("Dependency.Widget", bootstrapper);
         }
         finally

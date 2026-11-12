@@ -1,5 +1,6 @@
 {{BinaryAssemblyResolverBlock}}
 
+{{ModuleLoaderImportBlock}}
 {{SharedAssembliesBlock}}{{DesktopAssemblyResolverBlock}}{{RuntimeHandlerBlock}}if ($PSEdition -ne 'Core') {
     $LibrariesScript = [IO.Path]::Combine($PowerForgeModuleRoot, '{{ModuleName}}.Libraries.ps1')
     if (Test-Path -LiteralPath $LibrariesScript) {
@@ -41,12 +42,6 @@ try {
         }
     }
     $PowerForgeCoreModuleAssemblyPaths = [string[]]@($PowerForgeResolvedBinaryModules.Assembly.Path)
-    if ($PSEdition -eq 'Core' -and $PowerForgeResolvedBinaryModules.Count -gt 0) {
-        $LoaderAssemblyPath = [IO.Path]::Combine($PowerForgeResolvedBinaryModules[0].Assembly.Directory, '{{LoaderAssemblyName}}.dll')
-        if (-not ('{{LoaderTypeName}}' -as [type])) {
-            Add-Type -Path $LoaderAssemblyPath -ErrorAction Stop
-        }
-    }
 
     for ($LibraryIndex = 0; $LibraryIndex -lt $PowerForgeResolvedBinaryModules.Count; $LibraryIndex++) {
         $Library = $PowerForgeResolvedBinaryModules[$LibraryIndex].Library
@@ -59,10 +54,11 @@ try {
 
         try {
             if ($PSEdition -eq 'Core') {
-                $ModuleAssembly = [{{LoaderTypeName}}]::LoadModuleFromGroup(
+                $ModuleAssembly = [PowerForge.ModuleLoader.V1.ModuleAssemblyLoadContext]::LoadModuleFromGroup(
                     $PowerForgeCoreModuleAssemblyPaths,
                     $ModuleAssemblyPath,
-                    '{{ModuleName}}')
+                    '{{ModuleName}}',
+                    [string[]]{{SharedAssemblyNames}})
                 $InnerModule = & $ImportModule -Assembly $ModuleAssembly -Force -PassThru -ErrorAction Stop
 
 {{TypeAcceleratorBlock}}
