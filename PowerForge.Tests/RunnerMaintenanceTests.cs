@@ -274,6 +274,45 @@ public sealed class RunnerMaintenanceTests
     }
 
     [Fact]
+    public void Maintain_RecognizesDetachedHookMarkerAndResumesAfterItsExit()
+    {
+        using var fixture = new Installation();
+        var windows = OperatingSystem.IsWindows();
+        var marker = Guid.NewGuid().ToString("N");
+        var start = new ProcessStartInfo(windows ? Path.Combine(Environment.SystemDirectory, "cmd.exe") : "/bin/sleep",
+            windows ? "/d /c ping -n 60 127.0.0.1 >nul" : "60") { UseShellExecute = false, CreateNoWindow = true };
+        start.Environment[RunnerMaintenanceProcesses.JobMarker] = marker;
+        using var background = Process.Start(start)!;
+        try
+        {
+            Assert.Equal(marker, RunnerMaintenanceProcesses.ReadJobMarker(background.Id));
+            var state = new RunnerMaintenanceState();
+            var job = new RunnerMaintenanceJob { RunnerRoot = fixture.Runner.RootPath,
+                Workspace = Path.Combine(fixture.Runner.WorkRootPath, "Example"), WorkerId = int.MaxValue,
+                WorkerStartTicks = background.StartTime.ToUniversalTime().Ticks - 1 };
+            job.TrackingIds.Add(marker);
+            state.Jobs.Add(job);
+            Directory.CreateDirectory(fixture.Spec.StateRootPath);
+            File.WriteAllText(Path.Combine(fixture.Spec.StateRootPath, "state.json"), JsonSerializer.Serialize(state, RunnerMaintenanceJsonContext.Default.RunnerMaintenanceState));
+            var output = Path.Combine(fixture.Runner.TempPath, "output.txt");
+            File.WriteAllText(output, "live helper data");
+            var held = fixture.Service.Maintain(fixture.Spec, dryRun: false);
+            Assert.True(held.Success, string.Join("\n", held.Errors));
+            Assert.True(File.Exists(output));
+            background.Kill(entireProcessTree: true);
+            background.WaitForExit();
+            var resumed = fixture.Service.Maintain(fixture.Spec, dryRun: false);
+            Assert.True(resumed.Success, string.Join("\n", resumed.Errors));
+            Assert.False(File.Exists(output));
+        }
+        finally
+        {
+            if (!background.HasExited) background.Kill(entireProcessTree: true);
+            background.WaitForExit();
+        }
+    }
+
+    [Fact]
     public void Maintain_ConcurrentSchedulerDefersWithoutWaitingOrDeleting()
     {
         using var fixture = new Installation();

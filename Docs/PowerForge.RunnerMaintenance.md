@@ -41,7 +41,7 @@ Drain the participating registrations and stop their idle services. Run the inst
 ./Build/RunnerMaintenance/Install-RunnerMaintenance.ps1 -Configuration /var/lib/powerforge-runner-maintenance/enrollment.json
 ```
 
-On macOS, pass `-RunAsUser` with the existing runner account. Windows uses LocalSystem and Task Scheduler. Linux uses a systemd timer. macOS uses a launch daemon. Each schedule runs hourly and after startup.
+On macOS, run the installer from the existing runner account and pass that account through `-RunAsUser`. Windows uses LocalSystem and Task Scheduler. Linux uses a systemd timer. macOS uses the runner account's launch agent. Each schedule runs hourly and when its service context starts, including login for the macOS runner.
 
 Enrollment captures the installed agent identity and actual work directory from `.runner`, preserves existing custom hooks, enables NuGet package last-access metadata in the specified service configuration, and updates the runner's `.env`. Private temp, HTTP-cache and .NET bundle extraction paths follow the runner's job-temp directory. `NUGET_SCRATCH` remains the shared path from the policy.
 

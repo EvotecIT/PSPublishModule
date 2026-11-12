@@ -16,6 +16,7 @@ if (Test-Path -LiteralPath (Join-Path $policy.stateRootPath 'installation.pendin
     throw 'Enrollment recovery is pending. Retry the installer while its services remain stopped.'
 }
 if ($settings.previousHook) {
+    $env:POWERFORGE_RUNNER_JOB_ID = [Guid]::NewGuid().ToString('N')
     # Enter once before the existing hook. Its live worker then protects its work
     # until maintenance reaches its own ready marker. Existing hooks keep their
     # normal foreground lifetime and background descendants.

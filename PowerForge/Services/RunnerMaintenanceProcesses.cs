@@ -18,7 +18,7 @@ internal sealed class RunnerMaintenanceProcess
     internal long StartTicks { get; set; }
 }
 
-internal static class RunnerMaintenanceProcesses
+internal static partial class RunnerMaintenanceProcesses
 {
     internal static FileStream OpenRegularFile(string path)
     {

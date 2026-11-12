@@ -41,6 +41,7 @@ public sealed partial class RunnerHousekeepingService
     {
         if (run.Job is null) return;
         run.Job.Processes.AddRange(run.State.Jobs.Where(j => PathsEqual(j.Workspace, run.Job.Workspace)).SelectMany(j => j.Processes));
+        run.Job.TrackingIds = run.Job.TrackingIds.Concat(run.State.Jobs.Where(j => PathsEqual(j.Workspace, run.Job.Workspace)).SelectMany(j => j.TrackingIds)).Distinct(StringComparer.Ordinal).ToList();
         run.State.Jobs.RemoveAll(j => PathsEqual(j.Workspace, run.Job.Workspace));
         run.Job.CompletedUtc = phase == RunnerMaintenancePhase.Completed ? DateTime.UtcNow : DateTime.MinValue;
         run.State.Jobs.Add(run.Job);
@@ -58,6 +59,43 @@ public sealed partial class RunnerHousekeepingService
             foreach (var process in descendants)
                 if (!job.Processes.Any(identity => identity.Id == process.Id && identity.StartTicks == process.StartTicks))
                     job.Processes.Add(new RunnerMaintenanceProcessIdentity { Id = process.Id, StartTicks = process.StartTicks });
+        }
+        var tracked = run.State.Jobs.Where(job => job.TrackingIds.Count > 0).ToArray();
+        if (tracked.Length == 0) return;
+        var found = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var process in processes.Values.Where(process => process.StartTicks >= tracked.Min(job => job.WorkerStartTicks)))
+        {
+            if (run.Expired)
+            {
+                foreach (var job in tracked) run.UnknownJobActivity.Add(job.RunnerRoot);
+                break;
+            }
+            string? marker;
+            try
+            {
+                marker = RunnerMaintenanceProcesses.ReadJobMarker(process.Id);
+                using var current = System.Diagnostics.Process.GetProcessById(process.Id);
+                if (current.StartTime.ToUniversalTime().Ticks != process.StartTicks) continue;
+            }
+            catch (ArgumentException) { continue; }
+            catch (InvalidOperationException) { continue; }
+            catch (Exception error) when (error is IOException || error is UnauthorizedAccessException || error is System.ComponentModel.Win32Exception)
+            {
+                if (!MaintenanceProcessAlive(process.Id)) continue;
+                foreach (var job in tracked.Where(job => process.StartTicks >= job.WorkerStartTicks)) run.UnknownJobActivity.Add(job.RunnerRoot);
+                run.Retained.Add("Job marker could not be inspected for " + process.Name + " PID " + process.Id + ".");
+                continue;
+            }
+            if (marker is null) continue;
+            found.Add(marker);
+            foreach (var job in tracked.Where(job => job.TrackingIds.Contains(marker)))
+                if (!job.Processes.Any(identity => identity.Id == process.Id && identity.StartTicks == process.StartTicks))
+                    job.Processes.Add(new RunnerMaintenanceProcessIdentity { Id = process.Id, StartTicks = process.StartTicks });
+        }
+        foreach (var job in tracked)
+        {
+            if (run.UnknownJobActivity.Contains(job.RunnerRoot) || processes.TryGetValue(job.WorkerId, out var worker) && worker.StartTicks == job.WorkerStartTicks) continue;
+            job.TrackingIds.RemoveAll(marker => !found.Contains(marker));
         }
     }
 

@@ -28,6 +28,7 @@ public sealed partial class RunnerHousekeepingService
         internal readonly List<RunnerMaintenanceJournal> Isolated = new();
         internal readonly HashSet<string> ActiveRunnerRoots = new(GetPathStringComparer());
         internal string[] ExecutablePaths = Array.Empty<string>();
+        internal readonly HashSet<string> UnknownJobActivity = new(GetPathStringComparer());
         internal bool DryRun;
         internal bool SharedIdle;
         internal bool Deep;

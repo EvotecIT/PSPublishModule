@@ -102,6 +102,7 @@ public sealed partial class RunnerHousekeepingService
                     && !ancestors.Contains(process.Id) && !admittedProcesses.Contains(process.Id) && !RunnerMaintenanceProcesses.IsIdleBuildServer(process)
                     && !RunnerMaintenanceProcesses.IsConsoleHost(process)).Select(identity => fresh[identity.Id]).ToArray();
                 var orphanActivity = orphanProcesses.Length > 0;
+                orphanActivity |= run.UnknownJobActivity.Contains(runner.RootPath);
                 if (orphanActivity)
                 {
                     run.SharedIdle = false;
@@ -240,6 +241,8 @@ public sealed partial class RunnerHousekeepingService
         if (!MaintenanceContains(runner.WorkRootPath, workspace)) throw new InvalidOperationException("Job workspace is outside its enrolled work root.");
         job = new RunnerMaintenanceJob { RunnerRoot = runner.RootPath, Workspace = Path.GetFullPath(workspace),
             SourceSha = Environment.GetEnvironmentVariable("GITHUB_SHA") ?? string.Empty, WorkerId = worker.Id, WorkerStartTicks = worker.StartTicks };
+        var trackingId = Environment.GetEnvironmentVariable(RunnerMaintenanceProcesses.JobMarker);
+        if (trackingId is not null && Guid.TryParseExact(trackingId, "N", out _)) job.TrackingIds.Add(trackingId);
         return new RunnerMaintenanceReady { WorkerId = worker.Id, WorkerStartTicks = worker.StartTicks, HookId = current.Id,
             HookStartTicks = current.StartTicks, RunnerRoot = runner.RootPath };
     }

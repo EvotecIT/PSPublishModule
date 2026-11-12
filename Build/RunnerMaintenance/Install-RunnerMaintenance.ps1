@@ -27,6 +27,10 @@ Set-StrictMode -Version Latest
 $policy = Get-Content -LiteralPath $Configuration -Raw | ConvertFrom-Json
 $state = [IO.Path]::GetFullPath($policy.stateRootPath)
 $windows = $env:OS -eq 'Windows_NT'
+$platform = if ($windows) { 'Windows' } else { & uname -s }
+if ($platform -eq 'Darwin' -and $RunAsUser -ne (& id -un)) {
+    throw 'Install macOS maintenance from the registered runner account and pass that account as RunAsUser.'
+}
 $paths = @($state, $policy.executablePath) + @($policy.runners | ForEach-Object { $_.tempPath })
 foreach ($path in $paths) {
     if (-not [IO.Path]::IsPathRooted($path) -or $path.IndexOfAny([char[]] @('"', "`r", "`n", '%')) -ge 0) {
@@ -77,17 +81,19 @@ if ($windows) {
     $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -MultipleInstances IgnoreNew -ExecutionTimeLimit (New-TimeSpan -Minutes 5)
     Register-ScheduledTask -TaskName $name -Action $action -Trigger $triggers -Settings $settings -User 'SYSTEM' -RunLevel Highest -Force | Out-Null
 } else {
-    $hostExecutable = Join-Path $PSHOME 'pwsh'
+    $hostApplication = Get-Command pwsh -CommandType Application -ErrorAction SilentlyContinue
+    $hostExecutable = if ($hostApplication) { $hostApplication.Source } else { Join-Path $PSHOME 'pwsh' }
     if ($RunAsUser -notmatch '^[a-z_][a-z0-9_-]*[$]?$') { throw 'Invalid POSIX service account.' }
-    foreach ($directory in @($state) + @($policy.runners | ForEach-Object { $_.tempPath })) {
-        & chown -R $RunAsUser $directory
-        if ($LASTEXITCODE -ne 0) { throw 'Maintenance service ownership failed.' }
+    if ($platform -ne 'Darwin') {
+        foreach ($directory in @($state) + @($policy.runners | ForEach-Object { $_.tempPath })) {
+            & chown -R $RunAsUser $directory
+            if ($LASTEXITCODE -ne 0) { throw 'Maintenance service ownership failed.' }
+        }
+        foreach ($configurationPath in $policy.nuGetConfigPaths) {
+            & chown $RunAsUser $configurationPath
+            if ($LASTEXITCODE -ne 0) { throw 'NuGet service configuration ownership failed.' }
+        }
     }
-    foreach ($configurationPath in $policy.nuGetConfigPaths) {
-        & chown $RunAsUser $configurationPath
-        if ($LASTEXITCODE -ne 0) { throw 'NuGet service configuration ownership failed.' }
-    }
-    $platform = & uname -s
     if ($platform -eq 'Darwin') {
         $escape = { param($text) [Security.SecurityElement]::Escape($text) }
         $arguments = @($hostExecutable, '-NoLogo', '-NoProfile', '-NonInteractive', '-File', $wrapper, '-Configuration', $scheduled)
@@ -98,22 +104,23 @@ if ($windows) {
 <plist version="1.0"><dict>
 <key>Label</key><string>com.evotec.powerforge.runner-maintenance</string>
 <key>ProgramArguments</key><array>$items</array>
-<key>UserName</key><string>$RunAsUser</string>
 <key>RunAtLoad</key><true/><key>StartInterval</key><integer>3600</integer>
 <key>ProcessType</key><string>Background</string>
 </dict></plist>
 "@
-        $destination = '/Library/LaunchDaemons/com.evotec.powerforge.runner-maintenance.plist'
+        $destination = Join-Path ([Environment]::GetFolderPath('UserProfile')) 'Library/LaunchAgents/com.evotec.powerforge.runner-maintenance.plist'
+        [IO.Directory]::CreateDirectory((Split-Path -Parent $destination)) | Out-Null
+        $domain = 'gui/' + (& id -u)
+        $service = $domain + '/com.evotec.powerforge.runner-maintenance'
         [IO.File]::WriteAllText($destination, $plist, [Text.UTF8Encoding]::new($false))
-        & chown root:wheel $destination
         & chmod 644 $destination
-        & launchctl print system/com.evotec.powerforge.runner-maintenance 2>$null | Out-Null
+        & launchctl print $service 2>$null | Out-Null
         if ($LASTEXITCODE -eq 0) {
-            & launchctl bootout system/com.evotec.powerforge.runner-maintenance
+            & launchctl bootout $service
             if ($LASTEXITCODE -ne 0) { throw 'Existing maintenance schedule could not be unloaded.' }
         }
-        & launchctl bootstrap system $destination
-        if ($LASTEXITCODE -ne 0) { throw 'Maintenance launch daemon registration failed.' }
+        & launchctl bootstrap $domain $destination
+        if ($LASTEXITCODE -ne 0) { throw 'Maintenance launch agent registration failed.' }
     } elseif ($platform -eq 'Linux') {
         $unit = @"
 [Unit]
