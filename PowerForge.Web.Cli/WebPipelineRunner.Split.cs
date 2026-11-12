@@ -101,7 +101,6 @@ internal static partial class WebPipelineRunner
         public required string Key { get; init; }
         public required int StepIndex { get; init; }
         public int? InputIndex { get; init; }
-        public long Weight { get; set; }
         public int Shard { get; set; }
     }
 
@@ -143,8 +142,8 @@ internal static partial class WebPipelineRunner
 
     /// <summary>
     /// Lists the generator runs of the enabled apidocs steps and assigns them to shards. Independent batch
-    /// inputs are separate units. Weights come from the documentation inputs, so every shard that built the
-    /// same commit computes the same assignment; the finishing run verifies the coverage either way.
+    /// inputs are separate units. Assign from pipeline order so independently built input sizes cannot
+    /// cause different shards to claim the same unit. The finishing run verifies coverage.
     /// </summary>
     private static SplitPlan BuildSplitPlan(PipelineRunState state, int shardCount)
     {
@@ -173,13 +172,11 @@ internal static partial class WebPipelineRunner
             {
                 for (var index = 0; index < inputs.Length; index++)
                 {
-                    using var merged = CreateMergedApiDocsStepDocument(definition.Element, inputs[index]);
                     var unit = new SplitUnit
                     {
                         Key = $"{definition.Index}:{definition.Id}#{index}",
                         StepIndex = definition.Index,
-                        InputIndex = index,
-                        Weight = GetApiDocsUnitWeight(state.BaseDir, merged.RootElement)
+                        InputIndex = index
                     };
                     units.Add(unit);
                     footprints.Add((unit, stepFootprints[index]));
@@ -190,14 +187,7 @@ internal static partial class WebPipelineRunner
             var whole = new SplitUnit
             {
                 Key = $"{definition.Index}:{definition.Id}",
-                StepIndex = definition.Index,
-                Weight = inputs is { Length: > 0 }
-                    ? inputs.Sum(input =>
-                    {
-                        using var merged = CreateMergedApiDocsStepDocument(definition.Element, input);
-                        return GetApiDocsUnitWeight(state.BaseDir, merged.RootElement);
-                    })
-                    : GetApiDocsUnitWeight(state.BaseDir, definition.Element)
+                StepIndex = definition.Index
             };
             units.Add(whole);
             footprints.AddRange(stepFootprints.Select(footprint => (whole, footprint)));
@@ -216,59 +206,9 @@ internal static partial class WebPipelineRunner
             }
         }
 
-        AssignSplitShards(units, shardCount);
-        return new SplitPlan { FirstIndex = first, LastIndex = last, Units = units };
-    }
-
-    /// <summary>Longest-first greedy assignment: the heaviest remaining unit goes to the lightest shard.</summary>
-    internal static int[] AssignSplitShards(IReadOnlyList<long> weights, int shardCount)
-    {
-        if (shardCount < 1)
-            throw new ArgumentOutOfRangeException(nameof(shardCount));
-        var loads = new long[shardCount];
-        var shards = new int[weights.Count];
-        foreach (var index in Enumerable.Range(0, weights.Count).OrderByDescending(index => weights[index]).ThenBy(static index => index))
-        {
-            var target = 0;
-            for (var shard = 1; shard < shardCount; shard++)
-                if (loads[shard] < loads[target])
-                    target = shard;
-            shards[index] = target + 1;
-            loads[target] += Math.Max(1, weights[index]);
-        }
-        return shards;
-    }
-
-    private static void AssignSplitShards(List<SplitUnit> units, int shardCount)
-    {
-        var shards = AssignSplitShards(units.Select(static unit => unit.Weight).ToArray(), shardCount);
         for (var index = 0; index < units.Count; index++)
-            units[index].Shard = shards[index];
-    }
-
-    private static long GetApiDocsUnitWeight(string baseDir, JsonElement step)
-    {
-        var paths = new List<string?>
-        {
-            GetString(step, "xml"),
-            GetString(step, "assembly"),
-            GetString(step, "help") ?? GetString(step, "helpPath") ?? GetString(step, "help-path")
-        };
-        foreach (var name in new[] { "xmls", "xmlPaths", "assemblies", "assemblyPaths" })
-            paths.AddRange(GetArrayOfStrings(step, name) ?? Array.Empty<string>());
-
-        long weight = 0;
-        foreach (var path in paths)
-        {
-            var resolved = ResolvePath(baseDir, path);
-            if (string.IsNullOrWhiteSpace(resolved))
-                continue;
-            if (File.Exists(resolved))
-                weight += new FileInfo(resolved).Length;
-            else if (Directory.Exists(resolved))
-                weight += new DirectoryInfo(resolved).EnumerateFiles("*", SearchOption.AllDirectories).Sum(static file => file.Length);
-        }
-        return Math.Max(1, weight);
+            units[index].Shard = index % shardCount + 1;
+        return new SplitPlan { FirstIndex = first, LastIndex = last, Units = units };
     }
 
     private static SplitPlan EnsureSplitPlan(PipelineRunState state)

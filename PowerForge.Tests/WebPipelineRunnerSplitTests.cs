@@ -101,6 +101,34 @@ public class WebPipelineRunnerSplitTests
     }
 
     [Fact]
+    public void SplitRun_CoversUnitsOnceWhenInputSizesDifferAcrossShards()
+    {
+        var root = CreateRoot();
+        try
+        {
+            var main = CreateSite(root, "main");
+            var helper = CreateSite(root, "helper");
+            var archives = Path.Combine(root, "archives");
+            // A harmless XML comment models independently produced inputs with different byte sizes.
+            File.AppendAllText(Path.Combine(helper, "alpha.xml"), "\n<!--" + new string('x', 10000) + "-->");
+
+            AssertSucceeded(WebPipelineRunner.RunPipeline(Path.Combine(main, "pipeline.json"), new WebConsoleLogger(),
+                split: Prepare(1, 2, Path.Combine(archives, "main", "shard.tar"))));
+            AssertSucceeded(WebPipelineRunner.RunPipeline(Path.Combine(helper, "pipeline.json"), new WebConsoleLogger(),
+                split: Prepare(2, 2, Path.Combine(archives, "helper", "shard.tar"))));
+
+            var finish = WebPipelineRunner.RunPipeline(Path.Combine(main, "pipeline.json"), new WebConsoleLogger(),
+                split: WebPipelineSplitOptions.Parse("finish", null, null, archives));
+            AssertSucceeded(finish);
+            Assert.Equal(5, Directory.GetDirectories(Path.Combine(main, "_site", "api")).Length);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
     public void SplitFinish_RejectsMissingShardArchive()
     {
         var root = CreateRoot();
@@ -303,19 +331,6 @@ public class WebPipelineRunnerSplitTests
         {
             TryDelete(root);
         }
-    }
-
-    [Fact]
-    public void AssignSplitShards_PutsHeaviestUnitsOnLightestShards()
-    {
-        var shards = WebPipelineRunner.AssignSplitShards(new long[] { 10, 1, 1, 1, 9, 8 }, 3);
-
-        Assert.Equal(new[] { 1, 3, 2, 3, 2, 3 }, shards);
-        var loads = new long[] { 10, 1, 1, 1, 9, 8 }
-            .Select((weight, index) => (weight, shard: shards[index]))
-            .GroupBy(static item => item.shard)
-            .ToDictionary(static group => group.Key, static group => group.Sum(static item => item.weight));
-        Assert.Equal(new long[] { 10, 10, 10 }, loads.OrderBy(static pair => pair.Key).Select(static pair => pair.Value));
     }
 
     [Theory]

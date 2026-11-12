@@ -185,7 +185,9 @@ powerforge-web pipeline --config pipeline.json --mode ci --split-phase finish --
   of the block, and writes an archive with the files that share added, changed
   or deleted (including files outside `out`, such as social cards).
 - Shares are whole steps, or single batch `inputs` when they are independent.
-  They are balanced by the size of their XML, help and assembly inputs.
+  They are assigned round-robin in pipeline order so every machine computes
+  the same plan. Shards receive similar numbers of shares, though their run
+  times can differ when some shares take longer than others.
 - `finish` runs in the workspace that ran a `prepare`. It checks that the
   archives come from one shard each, from the same commit and engine, cover
   every apidocs run once, match their recorded hashes and agree on shared
