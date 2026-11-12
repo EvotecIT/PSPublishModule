@@ -6,15 +6,12 @@ namespace PowerForge.Tests;
 
 public sealed class ModuleMergeComposerTests
 {
-    [Fact]
+    [CaseSensitiveTempFact]
     public void ResolveScriptFiles_OrdersCaseDistinctPathsWithOrdinalTieBreaker()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
         try
         {
-            if (FrameworkCompatibility.GetPathStringComparisonForPath(root.FullName) != StringComparison.Ordinal)
-                return;
-
             string publicRoot = Directory.CreateDirectory(Path.Combine(root.FullName, "Public")).FullName;
             File.WriteAllText(Path.Combine(publicRoot, "foo.ps1"), "'lower'");
             File.WriteAllText(Path.Combine(publicRoot, "Foo.ps1"), "'upper'");
