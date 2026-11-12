@@ -21,7 +21,8 @@ public sealed partial class RunnerHousekeepingService
         "_PipelineMapping",
         "_temp",
         "_tool",
-        "_update"
+        "_update",
+        MaintenanceQuarantine
     };
 
     private readonly ILogger _logger;

@@ -98,6 +98,7 @@ internal static partial class Program
                                       [--prune-dotnet-sdks] [--clean-windows-component-store] [--skip-diagnostics] [--skip-runner-temp] [--skip-actions-cache] [--skip-tool-cache] [--skip-dotnet-cache]
                                       [--skip-dotnet-sdk-prune] [--skip-windows-component-store]
                                       [--skip-docker] [--no-docker-volumes] [--output json]
+      powerforge github runner maintenance --config <policy.json> [--install | --apply] [--json]
       powerforge homeassistant release prepare --repo <owner/name> --pr-number <N> [--repository-root <path>] [--merge-sha <sha>] [--workflow-run-id <N>] [--apply]
       powerforge homeassistant release build --repository-root <path> --release-version <X.Y.Z> --release-commit <sha>
       powerforge homeassistant release publish --repo <owner/name> --pr-number <N> --release-version <X.Y.Z> --release-commit <sha>
