@@ -18,6 +18,12 @@ public sealed class DocumentationXmlSourceRefreshTests
                     <example><code>Get-Test -Path ./sample.txt</code></example>
                   </member>
                   <member name="P:Fixture.GetTest.Path"><summary>Current path help.</summary></member>
+                  <member name="T:Fixture.Input"><summary>Current input help.</summary></member>
+                  <member name="T:Fixture.Output">
+                    <summary>Output summary.</summary>
+                    <remarks>Current output help.</remarks>
+                  </member>
+                  <member name="T:Fixture.Empty"><summary> </summary></member>
                 </members></doc>
                 """);
             var command = new DocumentationCommandHelp
@@ -29,6 +35,17 @@ public sealed class DocumentationXmlSourceRefreshTests
                 {
                     new() { Name = "Path", Description = "Old path help." },
                     new() { Name = "Other", Description = "External help only." }
+                },
+                Inputs = new()
+                {
+                    new() { Name = "Fixture.Input", Description = "Old input help." },
+                    new() { Name = "Fixture.Undocumented", Description = "External input help only." },
+                    new() { Name = "Fixture.Empty", Description = "External empty-type help." }
+                },
+                Outputs = new()
+                {
+                    new() { Name = "Fixture.Output", Description = "Old output help." },
+                    new() { Name = "Fixture.Undocumented", Description = "External output help only." }
                 }
             };
             var payload = new DocumentationExtractionPayload { Commands = new() { command } };
@@ -41,6 +58,11 @@ public sealed class DocumentationXmlSourceRefreshTests
             Assert.Equal("Get-Test -Path ./sample.txt", Assert.Single(command.Examples).Code);
             Assert.Equal("Current path help.", command.Parameters[0].Description);
             Assert.Equal("External help only.", command.Parameters[1].Description);
+            Assert.Equal("Current input help.", command.Inputs[0].Description);
+            Assert.Equal("External input help only.", command.Inputs[1].Description);
+            Assert.Equal("External empty-type help.", command.Inputs[2].Description);
+            Assert.Equal("Current output help.", command.Outputs[0].Description);
+            Assert.Equal("External output help only.", command.Outputs[1].Description);
         }
         finally { root.Delete(recursive: true); }
     }

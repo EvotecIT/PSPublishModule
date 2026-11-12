@@ -175,7 +175,7 @@ internal sealed class XmlDocCommentEnricher
     {
         foreach (var entry in entries ?? Enumerable.Empty<DocumentationTypeHelp>())
         {
-            if (entry is null || !NeedsText(entry.Description))
+            if (entry is null)
                 continue;
 
             foreach (var key in GetTypeLookupKeys(entry))
