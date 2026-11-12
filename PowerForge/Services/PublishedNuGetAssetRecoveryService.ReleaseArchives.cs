@@ -25,6 +25,7 @@ internal sealed partial class PublishedNuGetAssetRecoveryService
                 StringComparer.OrdinalIgnoreCase);
         var payload = ReadPublishedReleasePayload(
             publishedPackagePaths,
+            MapRebuiltAnalyzerEntries(rebuiltPackagePaths[owningPublishedPackagePath], sourceEntries),
             owningPublishedPackagePath,
             sourceEntries,
             rebuiltPackagePaths);
@@ -51,6 +52,7 @@ internal sealed partial class PublishedNuGetAssetRecoveryService
 
     private static IReadOnlyDictionary<string, PublishedPackageEntry> ReadPublishedReleasePayload(
         IEnumerable<string> packagePaths,
+        IReadOnlyDictionary<string, string> analyzerPaths,
         string? owningPackagePath = null,
         IReadOnlyDictionary<string, ZipArchiveEntry>? releaseEntries = null,
         IReadOnlyDictionary<string, string>? rebuiltPackagePaths = null)
@@ -67,6 +69,8 @@ internal sealed partial class PublishedNuGetAssetRecoveryService
         {
             var isOwner = string.Equals(packagePath, normalizedOwner, StringComparison.OrdinalIgnoreCase);
             using var package = ZipFile.OpenRead(packagePath);
+            if (isOwner)
+                ReadPublishedAnalyzerPayload(package, packagePath, analyzerPaths, payload);
             foreach (var entry in package.Entries)
             {
                 if (string.IsNullOrEmpty(entry.Name))
@@ -135,8 +139,58 @@ internal sealed partial class PublishedNuGetAssetRecoveryService
         }
 
         if (payload.Count == 0)
-            throw new InvalidOperationException("Published NuGet package contains no library or tool payload for release ZIP recovery.");
+            throw new InvalidOperationException("Published NuGet package contains no library, tool, or analyzer payload for release ZIP recovery.");
         return payload;
+    }
+
+    private static void ReadPublishedAnalyzerPayload(
+        ZipArchive package,
+        string packagePath,
+        IReadOnlyDictionary<string, string> analyzerPaths,
+        Dictionary<string, PublishedPackageEntry> payload)
+    {
+        foreach (var analyzer in analyzerPaths)
+        {
+            var entry = package.GetEntry(analyzer.Key)
+                ?? throw new InvalidOperationException($"Published package is missing rebuilt analyzer '{analyzer.Key}'.");
+            var published = new PublishedPackageEntry(ReadAllBytes(entry), entry.LastWriteTime, entry.ExternalAttributes, packagePath);
+            if (payload.TryGetValue(analyzer.Value, out var existing))
+            {
+                if (!existing.Bytes.SequenceEqual(published.Bytes))
+                    throw new InvalidOperationException($"Published analyzers contain conflicting release payload '{analyzer.Value}'.");
+                continue;
+            }
+            payload.Add(analyzer.Value, published);
+        }
+    }
+
+    private static Dictionary<string, string> MapRebuiltAnalyzerEntries(
+        string rebuiltPackagePath,
+        IReadOnlyDictionary<string, ZipArchiveEntry> releaseEntries)
+    {
+        var mapped = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        using var package = ZipFile.OpenRead(rebuiltPackagePath);
+        foreach (var entry in package.Entries)
+        {
+            if (!entry.FullName.StartsWith("analyzers/dotnet/", StringComparison.OrdinalIgnoreCase) ||
+                !entry.FullName.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            var name = NormalizeArchivePath(entry.FullName);
+            var fileName = Path.GetFileName(name);
+            var rebuiltBytes = ReadAllBytes(entry);
+            // Analyzer paths omit the target framework. Match the rebuilt bytes before replacing an entry.
+            var matches = releaseEntries
+                .Where(pair => string.Equals(Path.GetFileName(pair.Key), fileName, StringComparison.OrdinalIgnoreCase) &&
+                               ReadAllBytes(pair.Value).SequenceEqual(rebuiltBytes))
+                .Take(2)
+                .ToArray();
+            if (matches.Length > 1)
+                throw new InvalidOperationException($"Rebuilt analyzer '{name}' matches multiple release ZIP entries.");
+            if (matches.Length == 1)
+                mapped.Add(entry.FullName, matches[0].Key);
+        }
+        return mapped;
     }
 
     private static bool TrySelectPublishedDependencyEntry(

@@ -1701,6 +1701,13 @@ internal sealed partial class PowerForgeReleaseService
             ? moduleConfig?.Spec.Build.Name
             : options.ModuleName;
 
+        var releaseCheckpoint = HasPostBuildSourceStateGuard(request);
+        var includeModulePublishing = request.ModuleIncludePublishing ?? true;
+        var moduleRunMode = ResolveModuleRunMode(options, request, packagePublishingRequested);
+        // Verified GitHub recovery still needs module archives when Gallery publishing is skipped.
+        if (publishUnifiedGitHub && releaseCheckpoint && !includeModulePublishing && moduleRunMode == ConfigurationGateMode.Publish)
+            moduleRunMode = ConfigurationGateMode.Build;
+
         var buildRequest = new ModuleBuildHostBuildRequest
         {
             RepositoryRoot = repositoryRoot,
@@ -1709,9 +1716,9 @@ internal sealed partial class PowerForgeReleaseService
             ModulePath = modulePath,
             Configuration = configurationOverride,
             Framework = effectiveModuleFramework,
-            RunMode = ResolveModuleRunMode(options, request, packagePublishingRequested),
+            RunMode = moduleRunMode,
             PowerForgeReleaseStage = true,
-            ReleaseCheckpoint = HasPostBuildSourceStateGuard(request),
+            ReleaseCheckpoint = releaseCheckpoint,
             UnifiedGitHubRelease = publishUnifiedGitHub,
             NoDotnetBuild = noDotnetBuildOverride ?? false,
             NoDotnetBuildWasSpecified = noDotnetBuildOverride.HasValue,
@@ -1727,7 +1734,7 @@ internal sealed partial class PowerForgeReleaseService
             SignModule = signModuleOverride ?? false,
             SignModuleWasSpecified = signModuleOverride.HasValue,
             IncludeProjectPackages = includeProjectPackages,
-            IncludeModulePublishing = request.ModuleIncludePublishing ?? true,
+            IncludeModulePublishing = includeModulePublishing,
             Timeout = TimeSpan.FromSeconds(timeoutSeconds),
             CertificateThumbprint = request.ModuleCertificateThumbprint,
             SignIncludeBinaries = request.ModuleSignIncludeBinaries,
