@@ -8,12 +8,6 @@ namespace PowerForge;
 
 internal static partial class ModuleBootstrapperGenerator
 {
-    // net8.0 is the default modern PowerShell LTS baseline when the module build does not declare a Core TFM.
-    private const string DefaultAssemblyLoadContextTargetFramework = "net8.0";
-    // PowerShell 7.0 runs on .NET Core 3.1; a helper built for that floor loads in every supported later Core host.
-    private const string PowerShell70AssemblyLoadContextTargetFramework = "netcoreapp3.1";
-    private static readonly TimeSpan AssemblyLoadContextLoaderBuildTimeout = TimeSpan.FromMinutes(10);
-
     internal static void Generate(
         string moduleRoot,
         string moduleName,
@@ -55,33 +49,34 @@ internal static partial class ModuleBootstrapperGenerator
         var primaryLibraryName = Path.GetFileNameWithoutExtension(primaryAssemblyName);
         if (string.IsNullOrWhiteSpace(primaryLibraryName)) primaryLibraryName = moduleName;
 
-        var assemblyLoadContextLoaderIdentity = useAssemblyLoadContext
-            ? CreateAssemblyLoadContextLoaderIdentity(moduleName, sharedAssemblies)
-            : null;
+        if (hasLib)
+            ModuleLoaderAssets.Write(Path.Combine(root, ModuleLoaderAssets.PackagedFolderName));
+        if (hasDevelopmentBinaryLoader)
+            ModuleLoaderAssets.Write(Path.Combine(Path.GetFullPath(developmentBinaries!.BinaryRootPath), ModuleLoaderAssets.DevelopmentFolderName));
 
-        if (hasLib && useAssemblyLoadContext && assemblyLoadContextLoaderIdentity is not null)
-            BuildAssemblyLoadContextLoader(root, exportAssemblyFileNames, assemblyLoadContextLoaderIdentity, ResolveAssemblyLoadContextTargetFramework(targetFrameworks), log, sharedAssemblies);
-
+        BinaryPayloadPlan? payloadPlan = null;
         if (hasLib)
         {
-            var librariesPath = Path.Combine(root, $"{moduleName}.Libraries.ps1");
-            var librariesContent = BuildLibrariesScript(
+            var librariesByFolder = BuildLibrariesByFolder(
                 root,
                 moduleName,
                 exportAssemblyFileNames,
-                assemblyLoadContextLoaderIdentity?.AssemblyName,
-                (ignoreLibrariesOnLoad ?? Array.Empty<string>()).Concat((sharedAssemblies ?? Array.Empty<string>()).Select(name => name + ".dll")).ToArray(),
-                targetFrameworks);
-            WritePowerShellFile(librariesPath, librariesContent);
+                (ignoreLibrariesOnLoad ?? Array.Empty<string>()).Concat((sharedAssemblies ?? Array.Empty<string>()).Select(name => name + ".dll")).ToArray());
+            var desktopMayDropCoreOnlyHelper = hasScriptFolders && exports.Functions.Length > 0 &&
+                                               exports.Cmdlets.Length == 0 && assemblyTypeAcceleratorMode == AssemblyTypeAcceleratorExportMode.None &&
+                                               exportAssemblyFileNames.All(name => name.IndexOfAny(new[] { '/', '\\' }) < 0 && !Path.IsPathRooted(name));
+            payloadPlan = ResolveBinaryPayloadPlan(root, exportAssemblyFileNames, librariesByFolder, desktopMayDropCoreOnlyHelper, targetFrameworks);
+
+            var librariesPath = Path.Combine(root, $"{moduleName}.Libraries.ps1");
+            WritePowerShellFile(librariesPath, BuildLibrariesScript(moduleName, payloadPlan));
         }
 
         var psm1Path = Path.Combine(root, $"{moduleName}.psm1");
         var psm1Content = BuildBootstrapperPsm1(
             moduleName,
             primaryLibraryName,
-            exportAssemblyFileNames,
+            payloadPlan,
             exports,
-            includeBinaryLoader: hasLib,
             includeScriptLoader: hasScriptFolders,
             handleRuntimes: handleRuntimes,
             useAssemblyLoadContext: useAssemblyLoadContext,
@@ -92,7 +87,6 @@ internal static partial class ModuleBootstrapperGenerator
             conditionalFunctionDependencies: conditionalFunctionDependencies,
             developmentBinaries: developmentBinaries,
             moduleRoot: root,
-            targetFrameworks: targetFrameworks,
             sharedAssemblies: sharedAssemblies,
             preloadSharedAssemblies: preloadSharedAssemblies);
         WritePowerShellFile(psm1Path, psm1Content);
@@ -149,93 +143,48 @@ internal static partial class ModuleBootstrapperGenerator
         GeneratedTextNormalizer.WriteUtf8Bom(path, content);
     }
 
-    private static string BuildLibrariesScript(
+    private static Dictionary<string, List<string>> BuildLibrariesByFolder(
         string moduleRoot,
         string moduleName,
         IReadOnlyList<string> exportAssemblyFileNames,
-        string? assemblyLoadContextLoaderAssemblyName,
-        IReadOnlyList<string>? ignoreLibrariesOnLoad,
-        IReadOnlyList<string>? targetFrameworks)
+        IReadOnlyList<string>? ignoreLibrariesOnLoad)
     {
-        // Generate a deterministic list of DLLs to Add-Type for each Lib/<Folder>.
+        // A deterministic list of DLLs to Add-Type for each Lib/<Folder>, dependencies before the assemblies that use them.
         var libRoot = Path.Combine(moduleRoot, "Lib");
         var ignored = NormalizeFileNameSet(ignoreLibrariesOnLoad);
         var byFolder = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
         foreach (var folder in Directory.EnumerateDirectories(libRoot, "*", SearchOption.AllDirectories)
                      .Select(path => path.Substring(libRoot.Length).TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar))
                      .Where(static folder => !string.IsNullOrWhiteSpace(folder))
-                     .Select(static folder => folder.Replace('\\', '/'))
-                     .OrderBy(GetPayloadFolderSortOrder)
-                     .ThenBy(static folder => folder, StringComparer.OrdinalIgnoreCase))
+                     .Select(static folder => folder.Replace('\\', '/')))
         {
-            byFolder[folder] = EnumerateDllRelativePaths(
-                libRoot,
-                moduleName,
-                folder,
-                exportAssemblyFileNames,
-                assemblyLoadContextLoaderAssemblyName,
-                ignored);
+            byFolder[folder] = EnumerateDllRelativePaths(libRoot, moduleName, folder, exportAssemblyFileNames, ignored);
         }
-        byFolder[""] = EnumerateDllRelativePaths(libRoot, moduleName, null, exportAssemblyFileNames, assemblyLoadContextLoaderAssemblyName, ignored);
+        byFolder[""] = EnumerateDllRelativePaths(libRoot, moduleName, null, exportAssemblyFileNames, ignored);
+        return byFolder;
+    }
 
-        var map = BuildLibrariesByFolderMap(byFolder);
+    private static string BuildLibrariesScript(string moduleName, BinaryPayloadPlan plan)
+    {
         var template = EmbeddedScripts.Load("Scripts/ModuleBootstrapper/Libraries.Template.ps1");
         var tokens = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
             ["ModuleName"] = moduleName,
-            ["LibrariesByFolderMap"] = map,
-            ["RuntimePayloadSelectorBlock"] = ModuleBinaryPayloadLayout.BuildPowerShellRuntimeSelector()
+            ["LibrariesToLoad"] = RenderPerHostValue(plan, static scenario => BuildMultilineArrayLiteral(scenario.Libraries)),
+            // Matched by module-relative path, so a dependency that shares an export's file name in another folder still stops the import.
+            ["ExportLibraries"] = RenderPerHostValue(plan, static scenario => BuildMultilineArrayLiteral(ExportLibraryEntries(scenario)))
         };
         return ScriptTemplateRenderer.Render("ModuleBootstrapper.Libraries", template, tokens);
     }
 
-    private static string BuildLibrariesByFolderMap(IReadOnlyDictionary<string, List<string>> byFolder)
+    private static IReadOnlyList<string> ExportLibraryEntries(BinaryPayloadScenario scenario)
     {
-        var sb = new StringBuilder(1024);
-        var nonEmptyKeys = byFolder.Keys
-            .Where(key => byFolder.TryGetValue(key, out var list) && list is { Count: > 0 })
-            .OrderBy(GetPayloadFolderSortOrder)
-            .ThenBy(static key => key, StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-
-        if (nonEmptyKeys.Length == 0)
-        {
-            sb.AppendLine("$LibrariesByFolder = @{}");
-        }
-        else
-        {
-            sb.AppendLine("$LibrariesByFolder = @{");
-
-            foreach (var key in nonEmptyKeys)
-            {
-                byFolder.TryGetValue(key, out var list);
-                list ??= new List<string>();
-
-                sb.Append("    ");
-                sb.Append('\'').Append(EscapePsSingleQuoted(key)).Append('\'');
-                sb.Append(" = @(").AppendLine();
-
-                foreach (var rel in list)
-                    sb.Append("        '").Append(EscapePsSingleQuoted(rel)).AppendLine("'");
-
-                sb.AppendLine("    )");
-            }
-
-            sb.AppendLine("}");
-        }
-        return sb.ToString();
-    }
-
-    private static int GetPayloadFolderSortOrder(string? folder)
-    {
-        if (folder is null || folder.Length == 0) return 40;
-        if (folder.Equals("Core", StringComparison.OrdinalIgnoreCase)) return 0;
-        if (folder.StartsWith("Core-", StringComparison.OrdinalIgnoreCase)) return 1;
-        if (folder.Equals("Default", StringComparison.OrdinalIgnoreCase)) return 10;
-        if (folder.StartsWith("Default-", StringComparison.OrdinalIgnoreCase)) return 11;
-        if (folder.Equals("Standard", StringComparison.OrdinalIgnoreCase)) return 20;
-        if (folder.StartsWith("Standard-", StringComparison.OrdinalIgnoreCase)) return 21;
-        return 30;
+        var exportPaths = new HashSet<string>(
+            scenario.Modules
+                .Where(static module => module.Path is not null)
+                .Select(static module => module.Path!.Replace('/', '\\')),
+            StringComparer.OrdinalIgnoreCase);
+        return scenario.Libraries.Where(library => exportPaths.Contains(library.Replace('/', '\\'))).ToArray();
     }
 
     private static List<string> EnumerateDllRelativePaths(
@@ -243,7 +192,6 @@ internal static partial class ModuleBootstrapperGenerator
         string moduleName,
         string? folderName,
         IReadOnlyList<string> exportAssemblyFileNames,
-        string? assemblyLoadContextLoaderAssemblyName,
         ISet<string> ignoredLibraryFileNames)
     {
         var list = new List<string>();
@@ -267,8 +215,6 @@ internal static partial class ModuleBootstrapperGenerator
         }
 
         var excluded = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        if (!string.IsNullOrWhiteSpace(assemblyLoadContextLoaderAssemblyName))
-            excluded.Add(assemblyLoadContextLoaderAssemblyName + ".dll");
         foreach (var ignored in ignoredLibraryFileNames)
             excluded.Add(ignored);
 
@@ -286,7 +232,7 @@ internal static partial class ModuleBootstrapperGenerator
         static string RelativeLibPath(string? folder, string fileName)
         {
             var parts = new List<string> { "Lib" };
-            if (!string.IsNullOrWhiteSpace(folder)) parts.Add(folder!);
+            if (!string.IsNullOrWhiteSpace(folder)) parts.Add(folder!.Replace('/', '\\'));
             parts.Add(fileName);
             return string.Join("\\", parts);
         }
@@ -312,9 +258,8 @@ internal static partial class ModuleBootstrapperGenerator
     private static string BuildBootstrapperPsm1(
         string moduleName,
         string libraryName,
-        IReadOnlyList<string> libraryFileNames,
+        BinaryPayloadPlan? payloadPlan,
         ExportSet exports,
-        bool includeBinaryLoader,
         bool includeScriptLoader,
         bool handleRuntimes,
         bool useAssemblyLoadContext,
@@ -325,78 +270,32 @@ internal static partial class ModuleBootstrapperGenerator
         IReadOnlyDictionary<string, string[]>? conditionalFunctionDependencies,
         ModuleDevelopmentBinaryBootstrapperOptions? developmentBinaries = null,
         string? moduleRoot = null,
-        IReadOnlyList<string>? targetFrameworks = null,
         IReadOnlyList<string>? sharedAssemblies = null,
         IReadOnlyList<string>? preloadSharedAssemblies = null)
     {
-        var loaderIdentity = useAssemblyLoadContext
-            ? CreateAssemblyLoadContextLoaderIdentity(moduleName, sharedAssemblies)
-            : null;
-
-        var binaryLoaderBlock = includeBinaryLoader
-            ? RenderModuleBootstrapperTemplate(
-                useAssemblyLoadContext ? "AssemblyLoadContextBinaryLoader" : "BinaryLoader",
-                useAssemblyLoadContext
-                    ? "Scripts/ModuleBootstrapper/AssemblyLoadContextBinaryLoader.Template.ps1"
-                    : "Scripts/ModuleBootstrapper/BinaryLoader.Template.ps1",
-                new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
-                {
-                    ["LibraryFileNames"] = BuildPowerShellArrayLiteral(libraryFileNames),
-                    ["BinaryAssemblyResolverBlock"] = RenderModuleBootstrapperTemplate(
-                        "BinaryAssemblyResolver",
-                        "Scripts/ModuleBootstrapper/BinaryAssemblyResolver.Template.ps1",
-                        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
-                        {
-                            ["LibraryFileNames"] = BuildPowerShellArrayLiteral(libraryFileNames),
-                            ["RuntimePayloadSelectorBlock"] = ModuleBinaryPayloadLayout.BuildPowerShellRuntimeSelector().TrimEnd(),
-                            ["DesktopScriptHelperBlock"] = includeScriptLoader && exports.Functions.Length > 0 &&
-                                exports.Cmdlets.Length == 0 && assemblyTypeAcceleratorMode == AssemblyTypeAcceleratorExportMode.None &&
-                                libraryFileNames.All(name => name.IndexOfAny(new[] { '/', '\\' }) < 0 && !Path.IsPathRooted(name))
-                                ? RenderModuleBootstrapperTemplate("DesktopScriptHelper",
-                                    "Scripts/ModuleBootstrapper/DesktopScriptHelper.Template.ps1",
-                                    new Dictionary<string, string>()).TrimEnd()
-                                : string.Empty
-                        }).TrimEnd(),
-                    ["ModuleName"] = EscapePsSingleQuoted(moduleName),
-                    ["LoaderAssemblyName"] = EscapePsSingleQuoted(loaderIdentity?.AssemblyName ?? string.Empty),
-                    ["LoaderTypeName"] = loaderIdentity?.TypeName ?? string.Empty,
-                    ["RuntimePayloadSelectorBlock"] = ModuleBinaryPayloadLayout.BuildPowerShellRuntimeSelector(),
-                    ["SharedAssembliesBlock"] = BuildSharedAssembliesBlock(sharedAssemblies, preloadSharedAssemblies,
-                        "@($LibraryFileNames | ForEach-Object { (& $ResolvePowerForgeModuleAssembly -LibraryFileName $_).Directory } | Select-Object -Unique)"),
-                    ["DesktopAssemblyResolverBlock"] = BuildDesktopAssemblyResolverBlock(sharedAssemblies),
-                    ["RuntimeHandlerBlock"] = handleRuntimes ? BuildRuntimeHandlerBlock() : string.Empty,
-                    ["TypeAcceleratorBlock"] = BuildTypeAcceleratorBlock(
-                        assemblyTypeAcceleratorMode,
-                        assemblyTypeAccelerators,
-                        assemblyTypeAcceleratorAssemblies),
-                    ["ExportBridgeBlock"] = IndentPowerShell(
-                        BuildPowerShellModuleExportBridge(
-                            "$InnerModule",
-                            "$LibraryName",
-                            "$ModuleAssemblyPath").TrimEnd(),
-                        12),
-                    ["DesktopTypeAcceleratorBlock"] = IndentPowerShell(
-                        BuildDesktopTypeAcceleratorBlock(
-                            assemblyTypeAcceleratorMode,
-                            assemblyTypeAccelerators,
-                            assemblyTypeAcceleratorAssemblies,
-                            "$PowerForgeDesktopBinaryDirectory",
-                            ignoreLibrariesOnLoad).TrimEnd(),
-                        8)
-                })
-            : string.Empty;
+        var includeBinaryLoader = payloadPlan is not null;
+        var binaryLoaderBlock = payloadPlan is null
+            ? string.Empty
+            : BuildPackagedBinaryLoaderBlock(
+                moduleName,
+                payloadPlan,
+                moduleRoot ?? string.Empty,
+                handleRuntimes,
+                useAssemblyLoadContext,
+                assemblyTypeAcceleratorMode,
+                assemblyTypeAccelerators,
+                assemblyTypeAcceleratorAssemblies,
+                ignoreLibrariesOnLoad,
+                sharedAssemblies,
+                preloadSharedAssemblies);
 
         if (developmentBinaries?.Enabled == true)
         {
-            var developmentLoaderIdentity = useAssemblyLoadContext
-                ? CreateDevelopmentAssemblyLoadContextLoaderIdentity(moduleName, sharedAssemblies)
-                : null;
             var developmentBlock = BuildDevelopmentBinaryLoaderBlock(
                 moduleRoot ?? string.Empty,
                 moduleName,
                 libraryName,
                 useAssemblyLoadContext,
-                developmentLoaderIdentity,
                 handleRuntimes,
                 assemblyTypeAcceleratorMode,
                 assemblyTypeAccelerators,
@@ -439,7 +338,16 @@ internal static partial class ModuleBootstrapperGenerator
                 ? "$PowerForgeModuleRoot = $PSScriptRoot" + Environment.NewLine +
                   "$PowerForgeModulePath = $PSCommandPath"
                 : string.Empty,
-            ["BinaryLoaderBlock"] = binaryLoaderBlock,
+            ["BinaryLoaderBlock"] = string.IsNullOrWhiteSpace(binaryLoaderBlock)
+                ? string.Empty
+                : "    # The loader runs in its own scope, so its working variables do not stay in the module." + Environment.NewLine +
+                  "    & {" + Environment.NewLine +
+                  IndentPowerShell(binaryLoaderBlock.TrimEnd(), 8) + Environment.NewLine +
+                  "    }",
+            ["FailedImportCleanupBlock"] = assemblyTypeAcceleratorMode == AssemblyTypeAcceleratorExportMode.None || string.IsNullOrWhiteSpace(binaryLoaderBlock)
+                ? string.Empty
+                : RenderModuleBootstrapperTemplate("TypeAcceleratorFailedImportCleanup",
+                    "Scripts/ModuleBootstrapper/TypeAcceleratorFailedImportCleanup.Template.ps1", new Dictionary<string, string>()).TrimEnd(),
             ["ScriptLoaderBlock"] = scriptLoaderBlock,
             ["ExportBlock"] = ModuleConditionalExportBlockBuilder.BuildExportBlock(
                 exports,
@@ -451,460 +359,109 @@ internal static partial class ModuleBootstrapperGenerator
         return ScriptTemplateRenderer.Render("ModuleBootstrapper.Bootstrapper", template, tokens);
     }
 
-    private static void BuildAssemblyLoadContextLoader(
+    private static string BuildPackagedBinaryLoaderBlock(
+        string moduleName,
+        BinaryPayloadPlan payloadPlan,
         string moduleRoot,
-        IReadOnlyList<string> exportAssemblyFileNames,
-        AssemblyLoadContextLoaderIdentity identity,
-        string targetFramework,
-        Action<string>? log,
-        IReadOnlyList<string>? sharedAssemblies = null)
+        bool handleRuntimes,
+        bool useAssemblyLoadContext,
+        AssemblyTypeAcceleratorExportMode assemblyTypeAcceleratorMode,
+        IReadOnlyList<string>? assemblyTypeAccelerators,
+        IReadOnlyList<string>? assemblyTypeAcceleratorAssemblies,
+        IReadOnlyList<string>? ignoreLibrariesOnLoad,
+        IReadOnlyList<string>? sharedAssemblies,
+        IReadOnlyList<string>? preloadSharedAssemblies)
     {
-        var libRoot = Path.Combine(moduleRoot, "Lib");
-        if (!Directory.Exists(libRoot))
-        {
-            log?.Invoke("UseAssemblyLoadContext is set but no Lib directory was found; skipping ALC loader generation.");
-            return;
-        }
-
-        var targetDirectories = ResolveAssemblyLoadContextTargetDirectories(libRoot, exportAssemblyFileNames);
-        if (targetDirectories.Length == 0)
-        {
-            log?.Invoke("UseAssemblyLoadContext is set but no compatible Lib directory was found; skipping ALC loader generation.");
-            return;
-        }
-
-        EnsureDotNetSdkAvailable(moduleRoot);
-
-        var buildRoot = Path.Combine(Path.GetTempPath(), "PowerForge", "module-load-context", identity.AssemblyName + "_" + Guid.NewGuid().ToString("N"));
-
-        try
-        {
-            Directory.CreateDirectory(buildRoot);
-
-            var targetGroups = targetDirectories
-                .Select(directory => new
-                {
-                    Directory = directory,
-                    TargetFramework = ResolveAssemblyLoadContextTargetFrameworkForPayload(targetFramework, directory)
-                })
-                .GroupBy(static target => target.TargetFramework, StringComparer.OrdinalIgnoreCase)
-                .ToArray();
-
-            for (var groupIndex = 0; groupIndex < targetGroups.Length; groupIndex++)
+        var plainImportBlock = RenderModuleBootstrapperTemplate(
+            "BinaryModuleImport",
+            "Scripts/ModuleBootstrapper/BinaryModuleImport.Template.ps1",
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
-                var targetGroup = targetGroups[groupIndex];
-                var groupRoot = Path.Combine(buildRoot, "target-" + groupIndex);
-                var outputRoot = Path.Combine(groupRoot, "out");
-                Directory.CreateDirectory(groupRoot);
-                Directory.CreateDirectory(outputRoot);
+                ["ImportedAliasesBlock"] = BuildImportedAliasesBlock()
+            }).TrimEnd();
+        var importBlock = useAssemblyLoadContext
+            ? "if ($PSEdition -eq 'Core') {" + Environment.NewLine +
+              IndentPowerShell(BuildAssemblyLoadContextImportBlock(
+                  "$BinaryModulePaths",
+                  "$ModuleAssemblyPath",
+                  moduleName,
+                  "$LibraryDirectory",
+                  assemblyTypeAcceleratorMode,
+                  assemblyTypeAccelerators,
+                  assemblyTypeAcceleratorAssemblies,
+                  sharedAssemblies), 4) + Environment.NewLine +
+              "} else {" + Environment.NewLine +
+              IndentPowerShell(plainImportBlock, 4) + Environment.NewLine +
+              "}"
+            : plainImportBlock;
+        var desktopTypeAcceleratorBlock = BuildDesktopTypeAcceleratorBlock(
+            assemblyTypeAcceleratorMode,
+            assemblyTypeAccelerators,
+            assemblyTypeAcceleratorAssemblies,
+            "$LoadedDirectory",
+            ignoreLibrariesOnLoad).TrimEnd();
 
-                var projectPath = Path.Combine(groupRoot, identity.AssemblyName + ".csproj");
-                File.WriteAllText(projectPath, BuildAssemblyLoadContextProject(identity, targetGroup.Key), Encoding.UTF8);
-                File.WriteAllText(Path.Combine(groupRoot, "ModuleAssemblyLoadContext.cs"), BuildAssemblyLoadContextSource(identity, sharedAssemblies), Encoding.UTF8);
-
-                log?.Invoke($"Building module-scoped AssemblyLoadContext loader '{identity.AssemblyName}' for {targetGroup.Key}.");
-                var result = RunProcess(
-                    "dotnet",
-                    groupRoot,
-                    // Disable MSBuild node reuse so short-lived helper builds exit cleanly in CI and tests.
-                    new[] { "build", projectPath, "-c", "Release", "-o", outputRoot, "-nologo", "-v:minimal", "-nr:false" },
-                    AssemblyLoadContextLoaderBuildTimeout);
-                if (result.ExitCode != 0)
-                {
-                    var message = string.Join(
-                        Environment.NewLine,
-                        new[]
-                        {
-                            $"Failed to build module-scoped AssemblyLoadContext loader '{identity.AssemblyName}' for {targetGroup.Key} (exit {result.ExitCode}).",
-                            result.StdOut,
-                            result.StdErr
-                        }.Where(static line => !string.IsNullOrWhiteSpace(line)));
-                    throw new InvalidOperationException(message);
-                }
-
-                var loaderPath = Path.Combine(outputRoot, identity.AssemblyName + ".dll");
-                if (!File.Exists(loaderPath))
-                    throw new FileNotFoundException("Module-scoped AssemblyLoadContext loader build did not produce the expected DLL.", loaderPath);
-
-                foreach (var target in targetGroup)
-                    File.Copy(loaderPath, Path.Combine(target.Directory, identity.AssemblyName + ".dll"), overwrite: true);
-            }
-        }
-        finally
-        {
-            try { if (Directory.Exists(buildRoot)) Directory.Delete(buildRoot, recursive: true); }
-            catch { /* best effort */ }
-        }
-    }
-
-    private static void EnsureDotNetSdkAvailable(string workingDirectory)
-    {
-        ProcessRunResult result;
-        try
-        {
-            result = RunProcess("dotnet", workingDirectory, new[] { "--version" }, TimeSpan.FromSeconds(30));
-        }
-        catch (Exception ex)
-        {
-            throw new InvalidOperationException("UseAssemblyLoadContext requires the .NET SDK to be installed and 'dotnet' to be available on PATH.", ex);
-        }
-
-        if (result.ExitCode != 0)
-        {
-            var message = string.Join(
-                Environment.NewLine,
-                new[]
-                {
-                    "UseAssemblyLoadContext requires the .NET SDK to be installed and 'dotnet' to be available on PATH.",
-                    result.StdOut,
-                    result.StdErr
-                }.Where(static line => !string.IsNullOrWhiteSpace(line)));
-            throw new InvalidOperationException(message);
-        }
-    }
-
-    internal static string[] ResolveAssemblyLoadContextTargetDirectories(
-        string libRoot,
-        IReadOnlyList<string>? exportAssemblyFileNames = null)
-    {
-        var runtimeCandidates = ModuleBinaryPayloadLayout.ResolveAssemblyLoadContextTargetDirectories(libRoot);
-        if (exportAssemblyFileNames is { Count: > 0 })
-        {
-            var allTargetDirectories = new List<string>();
-            foreach (var assemblyFileName in exportAssemblyFileNames)
+        return RenderModuleBootstrapperTemplate(
+            "BinaryLoader",
+            "Scripts/ModuleBootstrapper/BinaryLoader.Template.ps1",
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
-                var qualifiedAssemblyPath = ResolveQualifiedAssemblyPath(libRoot, assemblyFileName);
-                if (!string.IsNullOrWhiteSpace(qualifiedAssemblyPath))
-                {
-                    allTargetDirectories.Add(Path.GetDirectoryName(qualifiedAssemblyPath!)!);
-                    continue;
-                }
-
-                var configuredFileName = Path.GetFileName(assemblyFileName);
-                var configuredTargetDirectories = runtimeCandidates.Where(directory =>
-                    Directory.Exists(directory) &&
-                    ModuleBinaryFileLocator.Enumerate(directory, SearchOption.TopDirectoryOnly)
-                        .Any(path => string.Equals(Path.GetFileName(path), configuredFileName, StringComparison.OrdinalIgnoreCase)))
-                    .ToList();
-
-                if (Directory.Exists(libRoot) &&
-                    ModuleBinaryFileLocator.Enumerate(libRoot, SearchOption.TopDirectoryOnly)
-                        .Any(path => string.Equals(Path.GetFileName(path), configuredFileName, StringComparison.OrdinalIgnoreCase)))
-                {
-                    configuredTargetDirectories.Add(libRoot);
-                }
-
-                var defaultDirectory = Path.Combine(libRoot, "Default");
-                if (Directory.Exists(defaultDirectory) &&
-                    ModuleBinaryFileLocator.Enumerate(defaultDirectory, SearchOption.TopDirectoryOnly)
-                        .Any(path => string.Equals(Path.GetFileName(path), configuredFileName, StringComparison.OrdinalIgnoreCase)))
-                {
-                    configuredTargetDirectories.Add(defaultDirectory);
-                }
-
-                // An unqualified runtime reference can fall through preferred folders to a unique
-                // arbitrary nested match when the named Core payload is incompatible with the host.
-                // Emit the helper beside every physical candidate so all runtime-selectable fallbacks
-                // have the same loader available.
-                foreach (var candidate in ModuleBinaryFileLocator.Enumerate(libRoot, SearchOption.AllDirectories)
-                             .Where(path => string.Equals(Path.GetFileName(path), configuredFileName, StringComparison.OrdinalIgnoreCase)))
-                {
-                    configuredTargetDirectories.Add(Path.GetDirectoryName(candidate)!);
-                }
-
-                allTargetDirectories.AddRange(configuredTargetDirectories);
-            }
-
-            return allTargetDirectories.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
-        }
-
-        if (runtimeCandidates.Length > 0)
-            return runtimeCandidates;
-
-        return ModuleBinaryFileLocator.HasAny(libRoot, SearchOption.TopDirectoryOnly)
-            ? new[] { libRoot }
-            : Array.Empty<string>();
+                ["ModuleName"] = EscapePsSingleQuoted(moduleName),
+                ["ModuleLoaderImportBlock"] = BuildModuleLoaderImportBlock("$PowerForgeModuleRoot, '" + ModuleLoaderAssets.PackagedFolderName + "'").TrimEnd(),
+                ["BinaryModules"] = RenderPerHostValue(payloadPlan, static scenario => BuildBinaryModulesLiteral(scenario.Modules)),
+                ["SharedAssembliesBlock"] = BuildSharedAssembliesBlock(sharedAssemblies, preloadSharedAssemblies, "$BinaryModuleDirectories"),
+                ["DesktopAssemblyResolverBlock"] = BuildDesktopAssemblyResolverBlock(sharedAssemblies, ignoreLibrariesOnLoad),
+                ["RuntimeHandlerBlock"] = handleRuntimes ? BuildRuntimeHandlerBlock(moduleRoot) : string.Empty,
+                ["ImportBlock"] = IndentPowerShell(importBlock, 8),
+                // Without an AssemblyLoadContext, PowerShell 7 loads the remaining dependencies after the module.
+                ["LateLibrariesBlock"] = useAssemblyLoadContext
+                    ? string.Empty
+                    : "if ($PSEdition -eq 'Core' -and (Test-Path -LiteralPath $LibrariesScript)) {" + Environment.NewLine +
+                      "    . $LibrariesScript" + Environment.NewLine +
+                      "}" + Environment.NewLine,
+                ["DesktopTypeAcceleratorBlock"] = string.IsNullOrWhiteSpace(desktopTypeAcceleratorBlock)
+                    ? string.Empty
+                    : "foreach ($LoadedDirectory in $LoadedDirectories) {" + Environment.NewLine +
+                      IndentPowerShell(desktopTypeAcceleratorBlock, 4) + Environment.NewLine +
+                      "}" + Environment.NewLine
+            });
     }
 
-    private static string? ResolveQualifiedAssemblyPath(string libRoot, string assemblyReference)
-    {
-        if (string.IsNullOrWhiteSpace(assemblyReference) ||
-            assemblyReference.IndexOf(Path.DirectorySeparatorChar) < 0 &&
-            assemblyReference.IndexOf(Path.AltDirectorySeparatorChar) < 0)
-        {
-            return null;
-        }
-
-        if (Path.IsPathRooted(assemblyReference))
-            return File.Exists(assemblyReference) ? Path.GetFullPath(assemblyReference) : null;
-
-        var normalizedReference = assemblyReference
-            .Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar)
-            .TrimStart(Path.DirectorySeparatorChar);
-        var libPrefix = "Lib" + Path.DirectorySeparatorChar;
-        if (normalizedReference.StartsWith(libPrefix, StringComparison.OrdinalIgnoreCase))
-            normalizedReference = normalizedReference.Substring(libPrefix.Length);
-
-        var normalizedLibRoot = Path.GetFullPath(libRoot)
-            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-        foreach (var candidate in ModuleBinaryFileLocator.Enumerate(normalizedLibRoot, SearchOption.AllDirectories))
-        {
-            var relativeCandidate = Path.GetFullPath(candidate).Substring(normalizedLibRoot.Length)
-                .TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
-                .Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar);
-            if (string.Equals(relativeCandidate, normalizedReference, StringComparison.OrdinalIgnoreCase))
-                return candidate;
-        }
-
-        return null;
-    }
-
-    internal static string ResolveAssemblyLoadContextTargetFrameworkForPayloads(
-        string targetFramework,
-        IReadOnlyList<string>? targetDirectories)
-    {
-        var candidates = (targetDirectories ?? Array.Empty<string>())
-            .Select(directory => ResolveAssemblyLoadContextTargetFrameworkForPayload(targetFramework, directory))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .OrderBy(static framework => GetNetTfmVersion(framework), Comparer<Version>.Create(static (left, right) => left.CompareTo(right)))
-            .ToArray();
-        return candidates.FirstOrDefault() ?? targetFramework;
-    }
-
-    internal static string ResolveAssemblyLoadContextTargetFrameworkForPayload(string targetFramework, string directory)
-    {
-        var payloadFramework = ResolvePayloadAssemblyLoadContextTargetFramework(directory);
-        if (!string.IsNullOrWhiteSpace(payloadFramework))
-        {
-            // The helper only needs to meet the lower of the module's declared runtime floor and
-            // the payload floor. This also keeps future-TFM payload folders buildable by today's SDK.
-            return new[] { targetFramework, payloadFramework! }
-                .OrderBy(static framework => GetNetTfmVersion(framework), Comparer<Version>.Create(static (left, right) => left.CompareTo(right)))
-                .First();
-        }
-
-        // The generic Standard folder is the compatibility fallback selected by older PowerShell 7
-        // hosts when a generic Core payload cannot be proven compatible. Keep its loader at the
-        // PowerShell 7.0 runtime floor while allowing modern Core payloads to use their declared TFM.
-        return string.Equals(Path.GetFileName(directory), "Standard", StringComparison.OrdinalIgnoreCase)
-            ? PowerShell70AssemblyLoadContextTargetFramework
-            : targetFramework;
-    }
-
-    private static string? ResolvePayloadAssemblyLoadContextTargetFramework(string directory)
-    {
-        var folderName = Path.GetFileName(directory) ?? string.Empty;
-        var markerPath = Path.Combine(directory, ModuleBinaryPayloadLayout.TargetFrameworkMarkerFileName);
-        try
-        {
-            if (File.Exists(markerPath))
+    /// <summary>Imports one module assembly into its AssemblyLoadContext on PowerShell 7 and publishes its commands.</summary>
+    private static string BuildAssemblyLoadContextImportBlock(
+        string moduleAssemblyPathsExpression,
+        string moduleAssemblyPathExpression,
+        string contextName,
+        string libraryDirectoryExpression,
+        AssemblyTypeAcceleratorExportMode assemblyTypeAcceleratorMode,
+        IReadOnlyList<string>? assemblyTypeAccelerators,
+        IReadOnlyList<string>? assemblyTypeAcceleratorAssemblies,
+        IReadOnlyList<string>? sharedAssemblies)
+        => RenderModuleBootstrapperTemplate(
+            "AssemblyLoadContextImport",
+            "Scripts/ModuleBootstrapper/AssemblyLoadContextImport.Template.ps1",
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
-                var markerFramework = NormalizePayloadAssemblyLoadContextTargetFramework(File.ReadAllText(markerPath).Trim());
-                if (!string.IsNullOrWhiteSpace(markerFramework))
-                    return markerFramework;
-            }
-        }
-        catch
-        {
-            // Fall back to the deterministic folder contract below.
-        }
+                ["ModuleAssemblyPaths"] = moduleAssemblyPathsExpression,
+                ["ModuleAssemblyPath"] = moduleAssemblyPathExpression,
+                ["ContextName"] = EscapePsSingleQuoted(contextName),
+                ["SharedAssemblyNames"] = BuildPowerShellArrayLiteral(NormalizePowerShellStringArray(sharedAssemblies)),
+                ["TypeAcceleratorBlock"] = BuildTypeAcceleratorBlock(
+                    assemblyTypeAcceleratorMode,
+                    assemblyTypeAccelerators,
+                    assemblyTypeAcceleratorAssemblies,
+                    libraryDirectoryExpression).TrimEnd(),
+                ["ImportedAliasesBlock"] = BuildImportedAliasesBlock(),
+                ["ExportBridgeBlock"] = IndentPowerShell(BuildPowerShellModuleExportBridge("$InnerModule").TrimEnd(), 4)
+            }).TrimEnd();
 
-        foreach (var prefix in new[] { "Core-", "Standard-", "Default-" })
-        {
-            if (folderName.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
-                return NormalizePayloadAssemblyLoadContextTargetFramework(folderName.Substring(prefix.Length));
-        }
+    private static string BuildImportedAliasesBlock()
+        => IndentPowerShell(RenderModuleBootstrapperTemplate(
+            "ImportedAliases",
+            "Scripts/ModuleBootstrapper/ImportedAliases.Template.ps1",
+            new Dictionary<string, string>()).TrimEnd(), 4);
 
-        // Generic payload folder names are resolved against their selection contract by the caller.
-        return null;
-    }
-
-    private static string? NormalizePayloadAssemblyLoadContextTargetFramework(string? framework)
-    {
-        var normalized = framework?.Trim() ?? string.Empty;
-        if (normalized.StartsWith("netcoreapp", StringComparison.OrdinalIgnoreCase) &&
-            TryGetNetTfmVersion(normalized, out var coreVersion) &&
-            coreVersion < new Version(3, 1))
-        {
-            return PowerShell70AssemblyLoadContextTargetFramework;
-        }
-
-        return normalized.Equals("netstandard2.0", StringComparison.OrdinalIgnoreCase) ||
-               normalized.Equals("netstandard2.1", StringComparison.OrdinalIgnoreCase)
-            ? PowerShell70AssemblyLoadContextTargetFramework
-            : NormalizeAssemblyLoadContextTargetFramework(normalized);
-    }
-
-    private static AssemblyLoadContextLoaderIdentity CreateAssemblyLoadContextLoaderIdentity(string moduleName, IReadOnlyList<string>? sharedAssemblies = null)
-    {
-        var safeNamespaceRoot = ToCSharpIdentifierPath(moduleName);
-        var policySuffix = GetSharedAssemblyPolicyIdentitySuffix(sharedAssemblies);
-        var assemblyName = SanitizeAssemblyName(moduleName) + ".ModuleLoadContext" + policySuffix;
-        var ns = safeNamespaceRoot + ".ModuleLoadContext" + policySuffix;
-        return new AssemblyLoadContextLoaderIdentity(assemblyName, ns, ns + ".ModuleAssemblyLoadContext");
-    }
-
-    private static AssemblyLoadContextLoaderIdentity CreateDevelopmentAssemblyLoadContextLoaderIdentity(string moduleName, IReadOnlyList<string>? sharedAssemblies = null)
-    {
-        var safeNamespaceRoot = ToCSharpIdentifierPath(moduleName);
-        var policySuffix = GetSharedAssemblyPolicyIdentitySuffix(sharedAssemblies);
-        var assemblyName = SanitizeAssemblyName(moduleName) + ".DevelopmentModuleLoadContext" + policySuffix;
-        var ns = safeNamespaceRoot + ".DevelopmentModuleLoadContext" + policySuffix;
-        return new AssemblyLoadContextLoaderIdentity(assemblyName, ns, ns + ".ModuleAssemblyLoadContext");
-    }
-
-    internal static string[] GetAssemblyLoadContextLoaderFileNames(string moduleName, IReadOnlyList<string>? sharedAssemblies = null)
-        => new[]
-        {
-            CreateAssemblyLoadContextLoaderIdentity(moduleName, sharedAssemblies).AssemblyName + ".dll",
-            CreateDevelopmentAssemblyLoadContextLoaderIdentity(moduleName, sharedAssemblies).AssemblyName + ".dll"
-        };
-
-    private static string SanitizeAssemblyName(string value)
-    {
-        var chars = (value ?? string.Empty).Select(ch => char.IsLetterOrDigit(ch) || ch is '.' or '_' or '-' ? ch : '_').ToArray();
-        var sanitized = new string(chars).Trim('.', '-', '_');
-        return string.IsNullOrWhiteSpace(sanitized) ? "Module" : sanitized;
-    }
-
-    private static string ToCSharpIdentifierPath(string value)
-    {
-        var parts = (value ?? string.Empty)
-            .Split(new[] { '.', '-' }, StringSplitOptions.RemoveEmptyEntries)
-            .Select(ToCSharpIdentifier)
-            .Where(static part => !string.IsNullOrWhiteSpace(part))
-            .ToArray();
-
-        return parts.Length == 0 ? "Module" : string.Join(".", parts);
-    }
-
-    private static string ToCSharpIdentifier(string value)
-    {
-        if (string.IsNullOrWhiteSpace(value)) return string.Empty;
-
-        var sb = new StringBuilder(value.Length + 1);
-        for (var i = 0; i < value.Length; i++)
-        {
-            var ch = value[i];
-            var valid = i == 0
-                ? char.IsLetter(ch) || ch == '_'
-                : char.IsLetterOrDigit(ch) || ch == '_';
-            sb.Append(valid ? ch : '_');
-        }
-
-        return sb.ToString();
-    }
-
-    internal static string ResolveAssemblyLoadContextTargetFramework(IReadOnlyList<string>? targetFrameworks)
-    {
-        var candidates = (targetFrameworks ?? Array.Empty<string>())
-            .Select(static framework => NormalizeAssemblyLoadContextTargetFramework(framework))
-            .Where(static framework => !string.IsNullOrWhiteSpace(framework))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .OrderBy(static framework => GetNetTfmVersion(framework!), Comparer<Version>.Create(static (left, right) => left.CompareTo(right)))
-            .ToArray();
-
-        return candidates.FirstOrDefault() ?? DefaultAssemblyLoadContextTargetFramework;
-    }
-
-    private static string? NormalizeAssemblyLoadContextTargetFramework(string? framework)
-    {
-        framework ??= string.Empty;
-        if (string.IsNullOrWhiteSpace(framework))
-            return null;
-
-        var normalized = framework.Trim();
-        var platformIndex = normalized.IndexOf('-');
-        if (platformIndex >= 0)
-            normalized = normalized.Substring(0, platformIndex);
-
-        // PowerShell 7.0 runs on .NET Core 3.1. A netstandard2.1 module payload
-        // explicitly promises compatibility with that host, so compile the small
-        // module-scoped loader against the matching runtime baseline as well.
-        if (normalized.Equals("netstandard2.1", StringComparison.OrdinalIgnoreCase))
-            return "netcoreapp3.1";
-
-        if (!TryGetNetTfmVersion(normalized, out var version))
-            return null;
-
-        if (normalized.StartsWith("netcoreapp", StringComparison.OrdinalIgnoreCase) &&
-            version < new Version(3, 0))
-        {
-            return null;
-        }
-
-        return normalized;
-    }
-
-    private static Version GetNetTfmVersion(string framework)
-        => TryGetNetTfmVersion(framework, out var version) ? version : new Version(int.MaxValue, 0);
-
-    private static bool TryGetNetTfmVersion(string framework, out Version version)
-    {
-        version = new Version(0, 0);
-        if (string.IsNullOrWhiteSpace(framework))
-        {
-            return false;
-        }
-
-        var versionStart = framework.StartsWith("netcoreapp", StringComparison.OrdinalIgnoreCase)
-            ? "netcoreapp".Length
-            : framework.StartsWith("net", StringComparison.OrdinalIgnoreCase) &&
-              !framework.StartsWith("netstandard", StringComparison.OrdinalIgnoreCase)
-                ? "net".Length
-                : -1;
-        if (versionStart < 0 ||
-            framework.Length <= versionStart ||
-            !char.IsDigit(framework[versionStart]) ||
-            !Version.TryParse(framework.Substring(versionStart), out var parsed))
-        {
-            return false;
-        }
-
-        version = parsed;
-        return true;
-    }
-
-    private static string BuildAssemblyLoadContextProject(AssemblyLoadContextLoaderIdentity identity, string targetFramework)
-        => $@"<Project Sdk=""Microsoft.NET.Sdk"">
-  <PropertyGroup>
-    <TargetFramework>{EscapeXml(targetFramework)}</TargetFramework>
-    <Nullable>enable</Nullable>
-    <LangVersion>latest</LangVersion>
-    <AssemblyName>{EscapeXml(identity.AssemblyName)}</AssemblyName>
-    <RootNamespace>{EscapeXml(identity.Namespace)}</RootNamespace>
-    <AssemblyVersion>1.0.0.0</AssemblyVersion>
-    <FileVersion>1.0.0.0</FileVersion>
-    <InformationalVersion>1.0.0</InformationalVersion>
-    <Deterministic>true</Deterministic>
-    <PathMap>$(MSBuildProjectDirectory)=/_/</PathMap>
-  </PropertyGroup>
-</Project>
-";
-
-    private static string EscapeXml(string value)
-        => System.Security.SecurityElement.Escape(value) ?? string.Empty;
-
-    private static ProcessRunResult RunProcess(string fileName, string workingDirectory, IReadOnlyList<string> arguments, TimeSpan timeout)
-        => Task.Run(() => new ProcessRunner(ownProcessTree: true).RunAsync(new ProcessRunRequest(fileName, workingDirectory, arguments, timeout)))
-            .GetAwaiter()
-            .GetResult();
-
-    internal sealed class AssemblyLoadContextLoaderIdentity
-    {
-        public AssemblyLoadContextLoaderIdentity(string assemblyName, string ns, string typeName)
-        {
-            AssemblyName = assemblyName;
-            Namespace = ns;
-            TypeName = typeName;
-        }
-
-        public string AssemblyName { get; }
-        public string Namespace { get; }
-        public string TypeName { get; }
-    }
-
-    private static string BuildRuntimeHandlerBlock()
+    private static string BuildRuntimeHandlerBlock(string moduleRoot)
     {
         return RenderModuleBootstrapperTemplate(
             "RuntimeHandler",
@@ -913,33 +470,42 @@ internal static partial class ModuleBootstrapperGenerator
             {
                 ["ArchitectureResolverBlock"] = IndentPowerShell(
                     RenderWindowsRuntimeArchitectureResolver("$Arch", "$ArchFolder").TrimEnd(),
-                    4)
+                    4),
+                ["NativeRuntimeRoots"] = BuildPowerShellArrayLiteral(ResolveNativeRuntimeRoots(moduleRoot))
             });
     }
 
-    private static string BuildDesktopAssemblyResolverBlock(IReadOnlyList<string>? sharedAssemblies = null)
+    private static string BuildDesktopAssemblyResolverBlock(IReadOnlyList<string>? sharedAssemblies, IReadOnlyList<string>? ignoreLibrariesOnLoad)
     {
         return RenderModuleBootstrapperTemplate(
             "DesktopAssemblyResolver",
             "Scripts/ModuleBootstrapper/DesktopAssemblyResolver.Template.ps1",
             new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
-                ["DesktopResolverTypeName"] = sharedAssemblies is { Count: > 0 } ? "DesktopAssemblyResolverV4" : "DesktopAssemblyResolverV2",
-                ["SharedResolverMembers"] = sharedAssemblies is { Count: > 0 } ? SharedDesktopResolverMembers : string.Empty,
-                ["SharedResolverConstructor"] = sharedAssemblies is { Count: > 0 } ? SharedDesktopResolverConstructor : string.Empty,
-                ["SharedResolverResolve"] = sharedAssemblies is { Count: > 0 } ? "                if (sharedNames.Contains(name)) return resolveShared(requested, roots);" : string.Empty,
-                ["SharedResolverParameter"] = sharedAssemblies is { Count: > 0 } ? ", string[] sharedAssemblyNames" : string.Empty,
-                ["SharedResolverArgument"] = sharedAssemblies is { Count: > 0 } ? ", [string[]]" + BuildPowerShellArrayLiteral(sharedAssemblies) : string.Empty
+                ["SharedAssemblyNames"] = BuildPowerShellArrayLiteral(NormalizePowerShellStringArray(sharedAssemblies)),
+                ["IgnoredLibraryFileNames"] = BuildPowerShellArrayLiteral(NormalizeFileNameSet(ignoreLibrariesOnLoad)
+                    .OrderBy(static value => value, StringComparer.OrdinalIgnoreCase).ToArray())
             });
     }
+
+    /// <summary>Loads the precompiled loader for the running edition; <paramref name="loaderRootParts"/> are Path.Combine arguments.</summary>
+    internal static string BuildModuleLoaderImportBlock(string loaderRootParts)
+        => RenderModuleBootstrapperTemplate(
+            "ModuleLoaderImport",
+            "Scripts/ModuleBootstrapper/ModuleLoaderImport.Template.ps1",
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["LoaderRootParts"] = loaderRootParts,
+                ["LoaderFileName"] = ModuleLoaderAssets.FileName,
+                ["LoaderProbeType"] = ModuleLoaderAssets.ProbeTypeName
+            });
 
     internal static string BuildTypeAcceleratorBlock(
         AssemblyTypeAcceleratorExportMode mode,
         IReadOnlyList<string>? typeNames,
-        IReadOnlyList<string>? assemblyNames)
+        IReadOnlyList<string>? assemblyNames,
+        string libraryDirectoryExpression)
     {
-        var normalizedTypes = NormalizePowerShellStringArray(typeNames);
-        var normalizedAssemblies = NormalizePowerShellStringArray(assemblyNames);
         if (mode == AssemblyTypeAcceleratorExportMode.None)
             return string.Empty;
 
@@ -949,9 +515,10 @@ internal static partial class ModuleBootstrapperGenerator
             new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
                 ["Mode"] = mode.ToString(),
-                ["RequestedTypes"] = BuildPowerShellArrayLiteral(normalizedTypes),
-                ["RequestedAssemblies"] = BuildPowerShellArrayLiteral(normalizedAssemblies),
-                ["OwnershipBlock"] = BuildTypeAcceleratorOwnershipBlock(4)
+                ["RequestedTypes"] = BuildPowerShellArrayLiteral(NormalizePowerShellStringArray(typeNames)),
+                ["RequestedAssemblies"] = BuildPowerShellArrayLiteral(NormalizePowerShellStringArray(assemblyNames)),
+                ["LibraryDirectoryExpression"] = libraryDirectoryExpression,
+                ["RegistrationTrackingBlock"] = BuildTypeAcceleratorTrackingBlock(4)
             });
     }
 
@@ -964,9 +531,9 @@ internal static partial class ModuleBootstrapperGenerator
                 .ToArray()
             : Array.Empty<string>();
 
-    private static string BuildTypeAcceleratorOwnershipBlock(int indent)
+    private static string BuildTypeAcceleratorTrackingBlock(int indent)
         => IndentPowerShell(RenderModuleBootstrapperTemplate(
-            "TypeAcceleratorOwnership", "Scripts/ModuleBootstrapper/TypeAcceleratorOwnership.Template.ps1",
+            "TypeAcceleratorTracking", "Scripts/ModuleBootstrapper/TypeAcceleratorTracking.Template.ps1",
             new Dictionary<string, string>()), indent).TrimEnd();
 
     private static string BuildPowerShellArrayLiteral(IReadOnlyList<string> values)

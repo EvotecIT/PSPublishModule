@@ -1,11 +1,12 @@
+#nullable disable
 using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
 
-namespace PowerForge.Generated {
-    /// <summary>Process-wide resolution policy compiled once by the PowerShell host.</summary>
-    public static class SharedAssemblyPolicyV3 {
+namespace PowerForge.ModuleLoader.V1 {
+    /// <summary>Process-wide resolution policy for assemblies that several modules declare as shared.</summary>
+    public static class SharedAssemblyPolicy {
         private static readonly object Sync = new object();
         private static readonly Type ContextType = Type.GetType("System.Runtime.Loader.AssemblyLoadContext, System.Private.CoreLib");
         private static readonly Dictionary<string, List<string>> Payloads = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
@@ -64,7 +65,7 @@ namespace PowerForge.Generated {
                     foreach (string directory in directories) {
                         string selected = Path.GetFullPath(Path.Combine(directory, requested.Name + ".dll"));
                         foreach (string path in paths)
-                            if (String.Equals(path, selected, StringComparison.OrdinalIgnoreCase) && !candidates.Contains(path))
+                            if (SamePayload(path, selected) && !candidates.Contains(path))
                                 candidates.Add(path);
                     }
                 } else candidates.AddRange(paths);
@@ -80,6 +81,23 @@ namespace PowerForge.Generated {
                 }
                 throw new FileNotFoundException("Shared assembly '" + requested.Name + "' was not found in the selected registered module payload.", requested.Name + ".dll");
             }
+        }
+
+        // The bootstrapper registers payload paths as PowerShell sees them, while the PowerShell 7 module context
+        // resolves its directories to physical paths. Compare files by physical identity so a module reached through
+        // a symlink, junction or mapped drive still selects its own registered payload.
+        private static bool SamePayload(string registered, string selected) {
+            if (String.Equals(registered, selected, StringComparison.OrdinalIgnoreCase)) return true;
+#if NETCOREAPP
+            try {
+                return File.Exists(registered) && File.Exists(selected) &&
+                    ModulePath.Comparer.Equals(ModulePath.Resolve(registered), ModulePath.Resolve(selected));
+            } catch (Exception) {
+                return false;
+            }
+#else
+            return false;
+#endif
         }
 
         private static bool MatchesRequestedIdentity(AssemblyName requested, AssemblyName actual) {
@@ -127,7 +145,7 @@ namespace PowerForge.Generated {
             }
             sharedContext = selected ?? ContextType.GetProperty("Default").GetValue(null, null);
             EventInfo resolvingEvent = ContextType.GetEvent("Resolving");
-            MethodInfo method = typeof(SharedAssemblyPolicyV3).GetMethod("ResolveCore", BindingFlags.NonPublic | BindingFlags.Static).MakeGenericMethod(ContextType);
+            MethodInfo method = typeof(SharedAssemblyPolicy).GetMethod("ResolveCore", BindingFlags.NonPublic | BindingFlags.Static).MakeGenericMethod(ContextType);
             contextHandler = Delegate.CreateDelegate(resolvingEvent.EventHandlerType, method);
             resolvingEvent.AddEventHandler(sharedContext, contextHandler);
         }

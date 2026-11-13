@@ -1,23 +1,10 @@
 param(
     [Parameter(Mandatory = $true)][string] $Root,
     [Parameter(Mandatory = $true)][string] $Preload,
-    [switch] $Development,
-    [switch] $Upgrade,
-    [string] $OldLoaderType
+    [switch] $Development
 )
 $ErrorActionPreference = 'Stop'
 if ($Development) { $env:PF_REVIEW_DEVELOPMENT = 'true' }
-if ($Upgrade) {
-    Import-Module (Join-Path $Root 'v1\Retained.psm1') -Force
-    if ((Get-RetainedData) -ne 'old') { throw 'Old generated module did not import' }
-    $oldTypeName = if ($OldLoaderType) { $OldLoaderType } elseif ($Development) {
-        'Retained.DevelopmentModuleLoadContext.ModuleAssemblyLoadContext'
-    } else { 'Retained.ModuleLoadContext.ModuleAssemblyLoadContext' }
-    $oldType = $oldTypeName -as [type]
-    if ($null -eq $oldType) { throw 'This reproduction requires the actual old generated helper' }
-    Remove-Module Retained -Force
-    if (($oldTypeName -as [type]) -ne $oldType) { throw 'Old helper was not retained' }
-}
 Import-Module (Join-Path $Root 'v2\Retained.psm1') -Force
 $shared = @([AppDomain]::CurrentDomain.GetAssemblies() | Where-Object { $_.GetName().Name -in @('SharedCore', 'SharedDisplay') })
 $expectedInitialNames = @(switch ($Preload) {
@@ -49,11 +36,11 @@ foreach ($name in 'SharedCore', 'SharedDisplay') {
     $loaded = @([AppDomain]::CurrentDomain.GetAssemblies() | Where-Object { $_.GetName().Name -eq $name })
     if ($loaded.Count -ne 1) { throw "Expected one $name, found $($loaded.Count)" }
     if ($PSEdition -eq 'Core' -and [System.Runtime.Loader.AssemblyLoadContext]::GetLoadContext($loaded[0]) -ne [System.Runtime.Loader.AssemblyLoadContext]::Default) {
-        throw "$name was privately duplicated by the retained old helper"
+        throw "$name was privately duplicated by the module context"
     }
 }
 Import-Module (Join-Path $Root 'v2\Retained.psm1') -Force
 if ((Get-RetainedData) -ne 'shared:display1:1') { throw 'New data cmdlet did not use the shared runtime' }
 if ($PSEdition -eq 'Core' -and $privateContext -eq [System.Runtime.Loader.AssemblyLoadContext]::Default) { throw 'Product host escaped its private context' }
 Remove-Module Retained -Force
-"REVIEW_PROOF_OK:$PSEdition`:development=$Development`:upgrade=$Upgrade`:preload=$Preload"
+"REVIEW_PROOF_OK:$PSEdition`:development=$Development`:preload=$Preload"

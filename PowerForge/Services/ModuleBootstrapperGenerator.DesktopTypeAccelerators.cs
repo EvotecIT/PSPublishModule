@@ -30,7 +30,7 @@ internal static partial class ModuleBootstrapperGenerator
                 ["RequestedAssemblies"] = BuildPowerShellArrayLiteral(normalizedAssemblies),
                 ["IgnoredLibraryFileNames"] = BuildPowerShellArrayLiteral(ignoredLibraryFileNames),
                 ["LibraryDirectoryExpression"] = libraryDirectoryExpression,
-                ["OwnershipBlock"] = BuildTypeAcceleratorOwnershipBlock(8)
+                ["RegistrationTrackingBlock"] = BuildTypeAcceleratorTrackingBlock(8)
             });
     }
 }

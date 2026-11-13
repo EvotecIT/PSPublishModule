@@ -1,10 +1,11 @@
+using PowerForge.Tests;
 using PowerForge;
 using Generic.External.Binary.Dependency;
 using Generic.External.Binary.Module;
 
 public partial class ModuleBootstrapperGeneratorTests
 {
-    [Theory]
+    [PwshNet10Theory]
     [Trait("Category", "Integration")]
     [InlineData(ArtefactType.Script)]
     [InlineData(ArtefactType.ScriptPacked)]
@@ -122,6 +123,64 @@ public partial class ModuleBootstrapperGeneratorTests
         }
     }
 
+    // The build lists every export assembly; one deleted afterwards must not take the module's other exports down with it,
+    // neither in the AssemblyLoadContext group nor in the .Libraries.ps1 preload.
+    [Theory]
+    [Trait("Category", "Integration")]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void BinaryLoader_ContinuesWhenConfiguredAssemblyIsMissingAfterBuild(bool useAssemblyLoadContext)
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-bootstrapper-missing-export-" + Guid.NewGuid().ToString("N"));
+        var libRoot = Directory.CreateDirectory(Path.Combine(root, "Lib", "Core")).FullName;
+
+        try
+        {
+            var validAssembly = BuildFixtureProject(
+                Path.Combine(root, "Fixture"),
+                "MissingExportFixture" + (useAssemblyLoadContext ? "Alc" : "Default"),
+                "Auxiliary",
+                "namespace Auxiliary; public static class Initialize { public static string Read() => \"remaining-alc-assembly\"; }");
+            File.Copy(validAssembly, Path.Combine(libRoot, "Auxiliary.dll"), overwrite: true);
+            File.Copy(validAssembly, Path.Combine(libRoot, "Removed.dll"), overwrite: true);
+
+            ModuleBootstrapperGenerator.Generate(
+                root,
+                "Removed",
+                new ExportSet(Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>()),
+                new[] { "Removed.dll", "Auxiliary.dll" },
+                handleRuntimes: false,
+                useAssemblyLoadContext: useAssemblyLoadContext,
+                targetFrameworks: new[] { "net8.0", "net472" });
+            File.Delete(Path.Combine(libRoot, "Removed.dll"));
+
+            // Windows PowerShell preloads this list, export assemblies included, before the import loop.
+            var librariesPath = Path.Combine(root, "Removed.Libraries.ps1");
+            Assert.Contains("'Lib\\Core\\Removed.dll'", File.ReadAllText(librariesPath), StringComparison.Ordinal);
+            var preload = RunGeneratedModulePowerShell(
+                root,
+                "$ErrorActionPreference = 'Stop'; . '" + librariesPath.Replace("'", "''", StringComparison.Ordinal) + "'; 'preload-ok'");
+            Assert.True(preload.ExitCode == 0, preload.StdOut + Environment.NewLine + preload.StdErr);
+            Assert.Contains("preload-ok", preload.StdOut, StringComparison.Ordinal);
+
+            var result = RunGeneratedModulePowerShell(
+                root,
+                "$ErrorActionPreference = 'Continue'; Import-Module -Name '" +
+                Path.Combine(root, "Removed.psm1").Replace("'", "''", StringComparison.Ordinal) +
+                "' -Force; [Auxiliary.Initialize]::Read()");
+
+            Assert.True(result.ExitCode == 0, result.StdOut + Environment.NewLine + result.StdErr);
+            Assert.Contains("remaining-alc-assembly", result.StdOut, StringComparison.Ordinal);
+            Assert.Contains("Importing module Removed.dll failed", result.StdOut + result.StdErr, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("Importing module Auxiliary.dll failed", result.StdOut + result.StdErr, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
     [Fact]
     [Trait("Category", "Integration")]
     public void AssemblyLoadContextLoader_IsCopiedBesideLaterFallbackExport()
@@ -149,8 +208,7 @@ public partial class ModuleBootstrapperGeneratorTests
                 useAssemblyLoadContext: true,
                 targetFrameworks: new[] { "net8.0" });
 
-            Assert.True(File.Exists(Path.Combine(futureCoreRoot, "Broken.ModuleLoadContext.dll")));
-            Assert.True(File.Exists(Path.Combine(pluginRoot, "Broken.ModuleLoadContext.dll")));
+            Assert.True(File.Exists(Path.Combine(root, "Loader", "Core", "PowerForge.ModuleLoader.V1.dll")));
             var result = RunGeneratedModulePowerShell(
                 root,
                 "$ErrorActionPreference = 'Continue'; Import-Module -Name '" +
@@ -193,8 +251,6 @@ public partial class ModuleBootstrapperGeneratorTests
                 targetFrameworks: new[] { "net8.0" });
 
             var bootstrapperPath = Path.Combine(root, "DemoModule.psm1");
-            var bootstrapper = File.ReadAllText(bootstrapperPath);
-            Assert.Contains("HashSet[string]", bootstrapper, StringComparison.Ordinal);
             var result = RunGeneratedModulePowerShell(
                 root,
                 "$ErrorActionPreference = 'Stop'; Import-Module -Name '" +
@@ -238,8 +294,7 @@ public partial class ModuleBootstrapperGeneratorTests
                 useAssemblyLoadContext: true,
                 targetFrameworks: new[] { "net8.0" });
 
-            Assert.True(File.Exists(Path.Combine(libRoot, "DemoModule.ModuleLoadContext.dll")));
-            Assert.True(File.Exists(Path.Combine(futureCoreRoot, "DemoModule.ModuleLoadContext.dll")));
+            Assert.True(File.Exists(Path.Combine(root, "Loader", "Core", "PowerForge.ModuleLoader.V1.dll")));
             var result = RunGeneratedModulePowerShell(
                 root,
                 "$ErrorActionPreference = 'Stop'; Import-Module -Name '" +
@@ -283,8 +338,7 @@ public partial class ModuleBootstrapperGeneratorTests
                 useAssemblyLoadContext: true,
                 targetFrameworks: new[] { "net8.0" });
 
-            Assert.True(File.Exists(Path.Combine(pluginRoot, "DemoModule.ModuleLoadContext.dll")));
-            Assert.True(File.Exists(Path.Combine(futureCoreRoot, "DemoModule.ModuleLoadContext.dll")));
+            Assert.True(File.Exists(Path.Combine(root, "Loader", "Core", "PowerForge.ModuleLoader.V1.dll")));
             var result = RunGeneratedModulePowerShell(
                 root,
                 "$ErrorActionPreference = 'Stop'; Import-Module -Name '" +

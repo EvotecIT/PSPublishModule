@@ -1,194 +1,145 @@
-# Agent Guide (PSPublishModule / PowerForge.Web + Websites)
+# PSPublishModule
 
-Last updated: 2026-03-29
+PowerShell module for building, testing, signing and publishing PowerShell
+modules and .NET libraries, backed by PowerForge: a reusable C# engine with the
+`powerforge` CLI, the PowerForge.Web static site engine (`powerforge-web`),
+PowerShell compilation, backups and the PowerForge Studio desktop app.
 
-This file is the "start here" context for any agent working on the PowerForge.Web engine and the tracked sibling repos that build on it.
+## Layout
 
-## Repos / Local Paths
+- `PSPublishModule/`: binary cmdlets (`Cmdlets/`) and thin host adapters
+  (`Services/`). `Module/` holds the manifest, `.psm1`, Pester tests (`Tests/`),
+  generated `Docs/` and `en-US/` help.
+- `PowerForge/`: host-agnostic engine (models in `PowerForge/Models`).
+  `PowerForge.PowerShell/` holds reusable logic that still needs PowerShell
+  host concepts. `PowerForge.ModuleLoader/`, `PowerForge.Generators/` and
+  `PowerForge.PowerShell.Provider*` support generated modules and providers.
+- `PowerForge.Cli/`: `powerforge` tool. `PowerForge.ConsoleUi/`: shared ConsoleMonster UI.
+- `PowerForge.Web/`, `PowerForge.Web.Cli/`, `PowerForge.Web.Protocols/`,
+  `PowerForge.Blazor/`: site engine and `powerforge-web` CLI.
+  `PowerForge.Web.Sample.App/` and `Samples/` are sample sites.
+- `PowerForge.Backups*/`: database backup service and CLI.
+- `PowerForgeStudio.*/`: Studio domain, orchestrator, CLI and WPF app (Windows only).
+- Tests: `PowerForge.Tests/` (main xUnit suite), `PowerForge.Generators.Tests/`,
+  `PowerForge.Web.Protocols.Tests/`, `PowerForge.Backups.Tests/`,
+  `PowerForgeStudio.Tests/`, `PowerForgeStudio.Wpf.Tests/`,
+  `PowerForge.Net472SmokeTests/`. `Tests/` holds sample projects that tests and
+  workflows build.
+- `Build/`: build, release and gate scripts (`release.json` is the release config).
+  `powerforge.json` at the root is the module build config.
+- `Benchmarks/`: benchmark suites and the PowerShell compiler corpus.
+- `Docs/`: engine and module design docs. `Schemas/`: JSON schemas for
+  PowerForge configs (see `JSON_SCHEMA.md`). `Website/`: site content for this repo.
+- `.github/workflows/`: CI plus the reusable `powerforge-*` workflows other
+  repositories call.
 
-These are the maintainer's default Windows paths (safe to assume in this workspace):
+## Build and test
 
-- Engine (this repo): `C:\Support\GitHub\PSPublishModule`
-  - Web engine: `PowerForge.Web\`
-  - Web CLI: `PowerForge.Web.Cli\`
-  - Web docs: `Docs\PowerForge.Web.*.md`
-  - PowerShell module: `PSPublishModule\` (+ packaging under `Module\`)
-  - Core .NET libs/CLI: `PowerForge\`, `PowerForge.Cli\`
+```powershell
+dotnet build PSPublishModule.sln -c Release
+dotnet build PSPublishModule.Core.slnf -c Release            # core projects only
+dotnet test PowerForge.Tests/PowerForge.Tests.csproj -c Release --filter "FullyQualifiedName~ClassName"
+dotnet test PSPublishModule.sln -c Release                    # everything (slow)
+./Build/Build-Project.ps1 -ModuleOnly                         # build the module into Module/
+./PSPublishModule.Tests.ps1                                   # Pester suite, needs the built module
+./Build/Build-Project.ps1 -Plan                               # release plan without building
+./Build/Test-ProductBuild.ps1                                 # packaged product smoke check
+node ./Build/linecount.js . 800                               # file length check
+```
 
-- HtmlForgeX website: `C:\Support\GitHub\HtmlForgeX\Website`
-  - Remote: `https://github.com/EvotecIT/HtmlForgeX.git` (website lives under `Website\`)
-  - Use this location for all HtmlForgeX website work.
+- SDK from `global.json` (.NET 10); `net8.0` is also needed.
+- Targets: `PowerForge`, `PowerForge.PowerShell` and `PSPublishModule` build
+  `net472`, `net8.0` and `net10.0`. `PowerForge.Cli` and `PowerForge.Web`
+  build `net8.0` and `net10.0`. Studio and Backups are `net10.0` (WPF is
+  `net10.0-windows`). `PowerForge.Generators` is `netstandard2.0`.
+- Run the Pester suite under both Windows PowerShell 5.1 and PowerShell 7.
+- `TreatWarningsAsErrors` is on for every project.
+- Release only: `./Build/Build-Project.ps1 -Publish` (or `-RunMode Publish`)
+  signs and publishes the module, NuGet packages and tools.
+  `Build-PowerForge.ps1`, `Build-PowerForgeWeb.ps1`, `Build-AllPackages.ps1` and
+  `Publish-AllPackagesNuget.ps1` are release/packaging helpers.
 
-- IntelligenceX website: `C:\Support\GitHub\IntelligenceX\Website`
-  - Remote: `https://github.com/EvotecIT/IntelligenceX.git`
+## Generated files
 
-- CodeGlyphX website: `C:\Support\GitHub\CodeGlyphX\Website`
-  - Remote: `https://github.com/EvotecIT/CodeGlyphX.git`
+- `Module/Docs/*.md` and `Module/en-US/PSPublishModule-help.xml` come from the
+  cmdlet XML documentation in `PSPublishModule/Cmdlets`. Run
+  `./Build/Build-Project.ps1 -ModuleOnly -RunMode Documentation` after changing
+  cmdlet docs. Never edit the generated files by hand.
+- `Module/Documentation/Templates/AGENTS.MD` is a template the module ships for
+  other repositories, not this repo's agent guide. Leave it alone.
 
-- OfficeIMO website/docs: `C:\Support\GitHub\OfficeIMO\Website`
-  - Remote: `https://github.com/EvotecIT/OfficeIMO.git`
-  - Track this repo when standardizing website workflows, docs generation, and PowerForge-based housekeeping.
+## Architecture
 
-- DomainDetective repo: `C:\Support\GitHub\DomainDetective`
-  - Remote: `https://github.com/EvotecIT/DomainDetective.git`
-  - Track this repo when standardizing PowerForge-adjacent workflows, module usage, and release/build consistency.
+- Keep cmdlets thin: parameter binding, parameter sets, `ShouldProcess`,
+  prompts, stream routing and mapping results to stable cmdlet-facing types.
+- Put reusable logic in `PowerForge` (host-agnostic) or `PowerForge.PowerShell`
+  (needs PowerShell host, module registration or manifest editing). Don't add
+  business logic to `PSPublishModule/Cmdlets` that `PowerForge.Cli`, Studio,
+  tests or another C# host could reuse.
+- Before adding code to a cmdlet, ask: could a test, CLI or other host call it?
+  Could two cmdlets share it? Does it touch files, versions, dependencies,
+  repositories, GitHub, NuGet or build plans? If yes, it belongs in a shared layer.
+- Keep host-specific rendering (`Host.UI.Write*`, ConsoleMonster widgets, `WriteObject`)
+  in the cmdlet. Don't create abstractions just to move those calls out.
+- If a public result type must stay stable, keep the internal model in the
+  shared layer and map it back in `PSPublishModule`.
+- Add a cmdlet by extending a typed service in `PowerForge`, then a thin cmdlet
+  that calls it. Remove the legacy PowerShell function it replaces.
+- Prefer typed models and enums. Keep `Hashtable`/`OrderedDictionary` for
+  legacy adapters only. Don't enable `unsafe` code.
+- Prefer engine fixes over per-site theme hacks when the issue can recur.
 
-- TestimoX website/docs: `C:\Support\GitHub\TestimoX\Website`
-  - Remote: `https://github.com/EvotecIT/TestimoX.git`
-  - Track this repo when standardizing PowerForge-based website workflows, docs generation, and quality gates.
+## Websites (PowerForge.Web)
 
-## Portable Path Discovery (WSL/macOS/Linux)
+Read `Docs/PowerForge.Web.Roadmap.md`, `Pipeline.md`, `QualityGates.md` and
+`WebsiteStarter.md` (all `Docs/PowerForge.Web.*`) before engine changes.
 
-If you're not on Windows or you don't have `C:\Support\GitHub`, use this layout heuristic:
+- Each site has `site.json` with explicit `Features` and `pipeline.json` with a
+  `verify-ci` step (`modes:["ci"]`, baseline, `failOnNewWarnings:true`), an
+  `audit` or `doctor` step (baseline, `failOnNewIssues:true`) and a budget
+  such as `maxTotalFiles`.
+- Commit `.powerforge/verify-baseline.json` and `.powerforge/audit-baseline.json`.
+  Ignore `_site/`, `_temp/` and `_reports/`.
+- CI fails on new warnings and issues; dev mode warns and summarizes.
+- Scriban themes use `pf.nav_links`, `pf.nav_actions` and `pf.menu_tree`,
+  not `navigation.menus[0]`.
+- From a site folder: `powerforge-web pipeline --config ./pipeline.json --mode ci`.
+  Sibling website repos find this engine through `POWERFORGE_ROOT`.
 
-- Common layout: the repos are siblings under one parent folder:
-  - `<root>/PSPublishModule`
-  - `<root>/HtmlForgeX/Website`
-  - `<root>/IntelligenceX/Website`
-  - `<root>/CodeGlyphX/Website`
-  - `<root>/OfficeIMO/Website`
-  - `<root>/DomainDetective`
-  - `<root>/TestimoX/Website`
+## Conventions
 
-Practical search strategy:
+- C#: file-scoped namespaces, XML docs on public types and cmdlet parameters,
+  follow `.editorconfig`.
+- PowerShell scripts and module code run on Windows PowerShell 5.1 and PowerShell 7.
+- Keep files under about 800 lines; split large classes into partial files.
+- Commit and PR titles are short imperative sentences: `Package every file the
+  module manifest loads`.
 
-1. Start at the current repo root (where this `AGENTS.md` lives).
-2. Check `..` (parent) and `../..` (grandparent) for sibling repo folders above.
-3. If you're in WSL, Windows drives usually live under `/mnt/c`:
-   - Example: `/mnt/c/Support/GitHub/PSPublishModule`
+## Gotchas
 
-Recommended environment variable (makes site scripts deterministic):
+- Don't hand-edit fixtures: `PowerForge.Tests/Fixtures/`,
+  `PowerForge.Tests/ApiDocsSourceFixtures/`, `Module/Tests/Fixtures/`, and the
+  compiler corpus under `Benchmarks/PowerShellCompilation/Corpus/`. Corpus
+  `*-baseline.*.json` files are committed census results; update them only by
+  rerunning the corpus runner.
+- Opt-in tests: `POWERFORGE_RUN_WIX_COMPILE_TESTS=1` (WiX compile),
+  `POWERFORGE_RUN_MSI_INSTALL_TESTS=1` (installs an MSI), `POWERFORGE_TEST_LDAP_TARGET`
+  and `POWERFORGE_TEST_CIM_TARGET` (live directory and CIM providers),
+  `POWERFORGE_RUN_PRODUCT_SMOKE` (set by `Test-ProductBuild.ps1`).
+  `POWERFORGE_PWSH76_PATH` points compiler oracle tests at a pinned PowerShell 7.6.
+- Live Azure Artifacts gallery tests need `PSPUBLISHMODULE_AZDO_LIVE=1` and a real feed.
+- Compiler gates (`Build/Invoke-PowerShellCompilerGate.ps1`,
+  `Invoke-PowerShellWholeWorkflowGate.ps1`) are slow; CI runs them.
+- Publishing signs with a certificate from the local store. Local builds
+  (`-ModuleOnly` without `-Publish`) don't sign.
+- Studio WPF projects and `net472` targets build only on Windows.
 
-- Set `POWERFORGE_ROOT` to the engine repo root (path to `PSPublishModule`).
-  - Website `build.ps1` scripts prefer `POWERFORGE_ROOT` when resolving `PowerForge.Web.Cli`.
+## Repository skills
 
-## What To Read First (Canonical)
+In `.agents/skills`:
 
-1. `Docs\PowerForge.Web.Roadmap.md` (inventory: Have/Partial/Missing + milestones)
-2. `Docs\PowerForge.Web.Pipeline.md` (pipeline commands and execution)
-3. `Docs\PowerForge.Web.QualityGates.md` (CI/dev contract, baselines, budgets)
-4. `Docs\PowerForge.Web.WebsiteStarter.md` (golden path for building new sites without surprises)
-5. `Docs\PowerForge.Web.Parity.md` (rough parity notes vs DocFX/Hugo/Astro/etc.)
-
-Reference docs (as needed):
-- `Docs\PowerForge.Web.ContentSpec.md` (content model + navigation)
-- `Docs\PowerForge.Web.Theme.md` (theme anatomy + shortcodes)
-- `Docs\PowerForge.Web.Pipeline.md` (pipeline tasks)
-- `Docs\PowerForge.Web.ApiDocs.md` (API generator)
-- `Docs\PSPublishModule.ProjectBuild.md` (PowerShell module build/publish pipeline)
-
-## Repo Skills (.agents/skills)
-
-This repo ships agent skills under `.agents/skills` so new contributors/agents don't
-need per-user global skill installs.
-
-- Website scaffolding skill: `.agents/skills/powerforge-website-starter`
-- Module pipeline skill: `.agents/skills/powerforge-module-builder`
-- Library/release pipeline skill: `.agents/skills/powerforge-library-builder`
-
-## Working Agreements (Best Practices)
-
-Resolve shared procedures against `CODEX_HOME` (default `~/.codex`). Before adding or changing tests, read `skills/test-audit/SKILL.md` (the authoring gate), then `skills/contract-focused-tests/SKILL.md`. Deliberate pruning follows `skills/test-audit/CAMPAIGN.md`; its coverage evidence is local and never a CI or merge gate.
-
-- Prefer engine fixes over theme hacks when the same issue can recur across sites.
-- Keep `PSPublishModule` cmdlets thin:
-  - parameter binding
-  - `ShouldProcess` / prompting / PowerShell UX
-  - output mapping back to PowerShell-facing contract types
-- Move reusable logic into shared services first:
-  - `PowerForge` for host-agnostic logic
-  - `PowerForge.PowerShell` for logic that still needs PowerShell-host/runtime concepts
-- Do not add new business logic to `PSPublishModule\Cmdlets\` when the same behavior could be reused by `PowerForge.Cli`, PowerForge Studio, tests, or another C# host.
-- If a public PSPublishModule result type must stay stable, keep the reusable internal model in `PowerForge`/`PowerForge.PowerShell` and map it back in `PSPublishModule` instead of forcing cmdlet-specific types into shared layers.
-- CI/release should fail on regressions; dev should warn and summarize:
-  - Verify: use baselines + `failOnNewWarnings:true` in CI.
-  - Audit: use baselines + `failOnNewIssues:true` in CI.
-- Prefer stable theme helpers over ad-hoc rendering:
-  - Scriban: use `pf.nav_links` / `pf.nav_actions` / `pf.menu_tree` (avoid `navigation.menus[0]`).
-- Commit frequently. Avoid "big bang" diffs that mix unrelated changes.
-
-## Module Layering
-
-When touching the PowerShell module stack, prefer this boundary:
-
-- `PSPublishModule\Cmdlets\`
-  - PowerShell-only surface area
-  - minimal orchestration
-  - no reusable build/publish/install rules unless they are truly cmdlet-specific
-- `PSPublishModule\Services\`
-  - cmdlet host adapters or PowerShell-facing compatibility mappers only
-- `PowerForge\`
-  - reusable domain logic, pipelines, models, filesystem/process/network orchestration
-- `PowerForge.PowerShell\`
-  - reusable services that still depend on PowerShell-host concepts, module registration, manifest editing, or other SMA-adjacent behavior
-
-Quick smell test before adding code to a cmdlet:
-
-1. Could this be called from a test, CLI, Studio app, or another C# host?
-2. Could two cmdlets share it?
-3. Does it manipulate files, versions, dependencies, repositories, GitHub, NuGet, or build plans?
-
-If the answer to any of those is yes, the code probably belongs in `PowerForge` or `PowerForge.PowerShell`, not directly in the cmdlet.
-
-Stop extracting when the remaining code is only:
-
-- PowerShell parameter binding and parameter-set branching
-- `ShouldProcess`, `WhatIf`, credential prompts, and PowerShell stream routing
-- host-only rendering such as `Host.UI.Write*`, ConsoleMonster widgets, or pipeline-friendly `WriteObject` behavior
-- compatibility adapters that intentionally map shared models back to stable cmdlet-facing contracts
-
-Preferred pattern for the last 10-20%:
-
-- extract reusable workflow, validation, planning, summary-shaping, and display-line composition into `PowerForge` / `PowerForge.PowerShell`
-- keep the final host-specific rendering in the cmdlet when the rendering technology itself is PowerShell- or ConsoleMonster-specific
-- avoid creating fake abstractions just to move `ConsoleOutput.Write`, `Host.UI.WriteLine`, or `WriteObject` calls out of cmdlets
-
-## Quality Gates (Pattern)
-
-Each website should have:
-- `site.json` with explicit `Features` (docs/apiDocs/blog/search/notFound as applicable)
-- `pipeline.json` with:
-  - `verify-ci` step (`modes:["ci"]`) with baseline + `failOnNewWarnings:true`
-  - `doctor` or `audit` step with baseline + `failOnNewIssues:true`
-  - a simple budget like `maxTotalFiles` to catch output explosions early
-- `.powerforge/verify-baseline.json` committed
-- `.powerforge/audit-baseline.json` committed
-- `.gitignore` ignoring `_site/`, `_temp/`, `_reports/` (keep baselines committed)
-
-## Commands (Engine)
-
-- Tests:
-  - `dotnet test .\PSPublishModule.sln -c Release`
-- File size discipline (line limit):
-  - `node .\Build\linecount.js . 800`
-  - Optional: check more file types:
-    - `node .\Build\linecount.js --root . --max 800 --ext .cs,.ps1,.md`
-
-## Commands (PowerShell Module)
-
-- Module lives under `PSPublishModule\` (plus packaging helpers under `Module\`).
-- The PowerForge.Web engine is .NET; the PSPublishModule is the PowerShell-facing surface.
-
-## Commands (Websites)
-
-From a website repo folder:
-
-- Full build:
-  - `.\build.ps1`
-- Fast dev loop:
-  - `.\build.ps1 -Serve -Watch -Dev`
-- Run CI-gated steps locally:
-  - `powerforge-web pipeline --config .\pipeline.json --mode ci`
-
-Baselines:
-- Verify baseline:
-  - `powerforge-web verify --config .\site.json --baseline .\.powerforge\verify-baseline.json --baseline-generate`
-- Audit baseline:
-  - `powerforge-web audit --site-root .\_site --baseline .\.powerforge\audit-baseline.json --baseline-generate`
-
-## Current State (As Of 2026-02-09)
-
-- Engine branch: `feature/web-engine-contracts` contains recent quality-gate and contract hardening work.
-- Website quality gates (baselines/budgets/CI-vs-dev pattern) were merged to the default branches
-  of the three site repos. Avoid long-lived "quality-gates" branches; prefer small PR branches
-  that get merged and deleted.
+- `powerforge-module-builder`: build, validate, install and publish PowerShell modules.
+- `powerforge-library-builder`: version, pack, sign and publish multi-project .NET libraries.
+- `powerforge-docs-builder`: generated cmdlet docs, external help and about topics.
+- `powerforge-website-starter`: create or standardize PowerForge.Web sites.
+- `powerforge-homeassistant-release`: releases for Home Assistant integrations and HACS plugins.

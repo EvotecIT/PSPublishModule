@@ -122,7 +122,8 @@ public sealed partial class ArtefactBuilder
             information,
             delivery,
             includeScriptFolders,
-            finalizedPayloadFiles);
+            finalizedPayloadFiles,
+            includeManifestLoadedFiles: segment.ArtefactType is not (ArtefactType.Script or ArtefactType.ScriptPacked));
 
         var root = ResolveOutputRoot(cfg.Path, projectRoot, moduleName, moduleVersion, preRelease, segment.ArtefactType);
 

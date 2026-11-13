@@ -24,36 +24,23 @@ public sealed class ModuleBootstrapperGeneratorDesktopTypeAcceleratorTests
                 ignoreLibrariesOnLoad: new[] { "Ignored.Dependency.dll" });
 
             var bootstrapper = File.ReadAllText(Path.Combine(root, "DemoModule.psm1"));
-            Assert.Contains("$RegisterPowerForgeDesktopAssemblyTypeAccelerators = {", bootstrapper);
-            Assert.Contains("[AppDomain]::CurrentDomain.GetAssemblies()", bootstrapper);
-            Assert.Contains("$RegisteredPowerForgeTypeAccelerators = $script:PowerForgeRegisteredAssemblyTypeAccelerators", bootstrapper);
-            Assert.Contains("$IgnoredLibraryFileNames = @('Ignored.Dependency.dll')", bootstrapper);
-            Assert.Contains("if ($IgnoredLibraryFileNames -contains $File.Name)", bootstrapper);
-            Assert.Contains("$TestPowerForgeDesktopIgnoredAssembly = {", bootstrapper);
-            Assert.Contains("$ResolvedPowerForgeDesktopAssemblies = @{}", bootstrapper);
-            Assert.Contains("$FailedPowerForgeDesktopAssemblies = @{}", bootstrapper);
-            Assert.Contains("$AssemblyName.EndsWith('.dll', [StringComparison]::OrdinalIgnoreCase)", bootstrapper);
-            Assert.Contains("$TestPowerForgeDesktopAssemblyContentMatch = {", bootstrapper);
-            Assert.Contains("[Reflection.AssemblyName]::GetAssemblyName($ExpectedPath)", bootstrapper);
-            Assert.Contains("[Security.Cryptography.SHA256]::Create()", bootstrapper);
-            Assert.Contains("return $LoadedHash -eq $ExpectedHash", bootstrapper);
-            Assert.DoesNotContain("[Diagnostics.FileVersionInfo]", bootstrapper);
-            Assert.Contains("& $TestPowerForgeDesktopAssemblyContentMatch -Assembly $Assembly -ExpectedPath $AssemblyPath", bootstrapper);
-            Assert.Contains("A module-owned assembly with this identity exists but could not be selected above", bootstrapper);
-            Assert.Contains("if ($PSEdition -ne 'Core' -and $PowerForgeDesktopBinaryLoaded)", bootstrapper);
+            // Discovery, ignore lists and content matching now live in the compiled loader; the script passes configuration.
+            Assert.Contains("[PowerForge.ModuleLoader.V1.TypeAcceleratorRegistration]::RegisterFromDirectory(", bootstrapper);
+            Assert.Contains("[string[]]@('Ignored.Dependency.dll')", bootstrapper);
+            Assert.Contains("foreach ($LoadedDirectory in $LoadedDirectories) {", bootstrapper);
             Assert.Contains("$PowerForgeModuleRoot = $PSScriptRoot", bootstrapper);
             Assert.Contains("$LibrariesScript = [IO.Path]::Combine($PowerForgeModuleRoot, 'DemoModule.Libraries.ps1')", bootstrapper);
-            Assert.Contains("$ModuleAssemblyPath = $ResolvedModuleAssembly.Path", bootstrapper);
-            Assert.Contains("& $RegisterPowerForgeDesktopAssemblyTypeAccelerators -LibraryDirectory ($PowerForgeDesktopBinaryDirectory)", bootstrapper);
+            Assert.Contains("$ModuleAssemblyPath = $BinaryModule.Path", bootstrapper);
+            Assert.Contains("($LoadedDirectory),", bootstrapper);
             Assert.True(
                 bootstrapper.IndexOf("$PowerForgeModuleRoot = $PSScriptRoot", StringComparison.Ordinal) <
                 bootstrapper.IndexOf(". $LibrariesScript", StringComparison.Ordinal));
             Assert.True(
                 bootstrapper.IndexOf(". $LibrariesScript", StringComparison.Ordinal) <
-                bootstrapper.IndexOf("$PowerForgeDesktopBinaryLoaded = $true", StringComparison.Ordinal));
+                bootstrapper.IndexOf("$LoadedDirectories.Add($LibraryDirectory)", StringComparison.Ordinal));
             Assert.True(
-                bootstrapper.IndexOf("$PowerForgeDesktopBinaryLoaded = $true", StringComparison.Ordinal) <
-                bootstrapper.IndexOf("& $RegisterPowerForgeDesktopAssemblyTypeAccelerators", StringComparison.Ordinal));
+                bootstrapper.IndexOf("$LoadedDirectories.Add($LibraryDirectory)", StringComparison.Ordinal) <
+                bootstrapper.IndexOf("::RegisterFromDirectory(", StringComparison.Ordinal));
             Assert.Contains("# Desktop loads module dependencies", bootstrapper);
         }
         finally
@@ -93,7 +80,7 @@ public sealed class ModuleBootstrapperGeneratorDesktopTypeAcceleratorTests
                 developmentBinaries: developmentOptions);
 
             var bootstrapper = File.ReadAllText(Path.Combine(moduleRoot, "DemoModule.psm1"));
-            Assert.Contains("& $RegisterPowerForgeDesktopAssemblyTypeAccelerators -LibraryDirectory ([IO.Path]::GetDirectoryName($PowerForgeDevelopmentBinaryPath))", bootstrapper);
+            Assert.Contains("([IO.Path]::GetDirectoryName($PowerForgeDevelopmentBinaryPath)),", bootstrapper);
         }
         finally
         {

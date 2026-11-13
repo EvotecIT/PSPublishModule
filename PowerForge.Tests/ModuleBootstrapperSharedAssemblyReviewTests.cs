@@ -2,21 +2,17 @@ using PowerForge;
 
 public sealed partial class ModuleBootstrapperSharedAssemblyTests
 {
-    [Fact]
-    public void SharedPolicy_HelperIdentities_AreStableForNameSetsAndDistinctFromLegacy()
+    [Theory]
+    [InlineData("Retained.ModuleLoadContext.dll")]
+    [InlineData("Retained.DevelopmentModuleLoadContext.dll")]
+    [InlineData("Retained.ModuleLoadContext.SharedV3_0123456789ABCDEF.dll")]
+    [InlineData("Retained.DevelopmentModuleLoadContext.SharedV3_0123456789abcdef.dll")]
+    [InlineData("PowerForge.ModuleLoader.V1.dll")]
+    public void LoaderFileNames_FromEarlierAndCurrentReleases_AreNeverPreloadedAsModuleLibraries(string fileName)
     {
-        var legacy = ModuleBootstrapperGenerator.GetAssemblyLoadContextLoaderFileNames("Retained");
-        Assert.Equal(new[] { "Retained.ModuleLoadContext.dll", "Retained.DevelopmentModuleLoadContext.dll" }, legacy);
-        var current = ModuleBootstrapperGenerator.GetAssemblyLoadContextLoaderFileNames("Retained", new[] { "SharedCore", "SharedDisplay" });
-        Assert.Equal(current, ModuleBootstrapperGenerator.GetAssemblyLoadContextLoaderFileNames("Retained", new[] { "shareddisplay", "sharedcore" }));
-        var coreOnly = ModuleBootstrapperGenerator.GetAssemblyLoadContextLoaderFileNames("Retained", new[] { "SharedCore" });
-        for (var i = 0; i < current.Length; i++)
-        {
-            Assert.NotEqual(legacy[i], current[i]);
-            Assert.NotEqual(coreOnly[i], current[i]);
-            Assert.True(ModuleBootstrapperGenerator.IsAssemblyLoadContextLoaderFileName("Retained", current[i]));
-            Assert.False(ModuleBootstrapperGenerator.IsAssemblyLoadContextLoaderFileName("OtherProduct", current[i]));
-        }
+        Assert.True(ModuleBootstrapperGenerator.IsAssemblyLoadContextLoaderFileName("Retained", fileName));
+        Assert.False(ModuleBootstrapperGenerator.IsAssemblyLoadContextLoaderFileName("Retained", "Retained.Host.dll"));
+        Assert.False(ModuleBootstrapperGenerator.IsAssemblyLoadContextLoaderFileName("Retained", "Retained.ModuleLoadContext.SharedV3_XYZ.dll"));
     }
 
     [Fact]
@@ -32,30 +28,6 @@ public sealed partial class ModuleBootstrapperSharedAssemblyTests
             var output = Run("powershell.exe", root, "-File", probe, "-Root", modules, "-Preload", "none");
             Assert.Contains("REVIEW_PROOF_OK:", output, StringComparison.Ordinal);
             _output.WriteLine("retained payload helper: " + output.Trim());
-        });
-    }
-
-    [Fact]
-    [Trait("Category", "Integration")]
-    public void SharedPolicy_RetainedOldGeneratedHelpers_CannotBypassNewPolicy()
-    {
-        if (!OperatingSystem.IsWindows()) return;
-        WithReviewFixtures((root, fixtures, probe) =>
-        {
-            foreach (var development in new[] { false, true })
-            foreach (var oldShared in new[] { Array.Empty<string>(), new[] { "SharedCore" } })
-            {
-                var modules = Path.Combine(root, (development ? "upgrade-dev" : "upgrade-packaged") + oldShared.Length);
-                GenerateReviewModule(modules, fixtures, "v1", oldShared, oldShared);
-                GenerateReviewModule(modules, fixtures, "v2", new[] { "SharedCore", "SharedDisplay" }, new[] { "SharedCore" });
-                var oldFile = ModuleBootstrapperGenerator.GetAssemblyLoadContextLoaderFileNames("Retained", oldShared)[development ? 1 : 0];
-                var arguments = new List<string> { "-File", probe, "-Root", modules, "-Preload", "core", "-Upgrade",
-                    "-OldLoaderType", Path.GetFileNameWithoutExtension(oldFile) + ".ModuleAssemblyLoadContext" };
-                if (development) arguments.Add("-Development");
-                var output = Run("pwsh.exe", root, arguments.ToArray());
-                Assert.Contains("REVIEW_PROOF_OK:", output, StringComparison.Ordinal);
-                _output.WriteLine(output.Trim());
-            }
         });
     }
 

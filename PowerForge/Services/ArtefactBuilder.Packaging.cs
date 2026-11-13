@@ -16,6 +16,7 @@ public sealed partial class ArtefactBuilder
         public string[] IncludeRoot { get; set; } = Array.Empty<string>();
         public string[] IncludePS1 { get; set; } = Array.Empty<string>();
         public string[] IncludeAll { get; set; } = Array.Empty<string>();
+        public bool IncludeManifestLoadedFiles { get; set; } = true;
     }
 
     private static PackagingInformation ResolvePackagingInformation(
@@ -57,21 +58,32 @@ public sealed partial class ArtefactBuilder
             ExcludeFromPackage = Normalize(exclude),
             IncludeRoot = Normalize(includeRoot),
             IncludePS1 = Normalize(includePS1),
-            IncludeAll = MergeDeliveryIncludeAll(Normalize(includeAll), delivery),
+            IncludeAll = MergeModuleLoaderIncludeAll(MergeDeliveryIncludeAll(Normalize(includeAll), delivery)),
         };
     }
+
+    // Generated binary bootstrappers load the precompiled loader from this folder, so it ships with the
+    // module whatever IncludeAll lists, like Lib does for the payload it loads. Use the exact name in place of any
+    // other casing: package paths take their spelling from this entry, and the bootstrapper asks for 'Loader'.
+    private static string[] MergeModuleLoaderIncludeAll(string[] includeAll)
+        => includeAll
+            .Where(x => !string.Equals(x, ModuleLoaderAssets.PackagedFolderName, StringComparison.OrdinalIgnoreCase))
+            .Concat(new[] { ModuleLoaderAssets.PackagedFolderName })
+            .ToArray();
 
     internal static string[] ResolveModulePackageSourceFiles(
         string stagingRoot,
         InformationConfiguration? information,
         DeliveryOptionsConfiguration? delivery,
         bool includeScriptFolders = true,
-        IReadOnlyList<string>? finalizedPayloadFiles = null)
+        IReadOnlyList<string>? finalizedPayloadFiles = null,
+        bool includeManifestLoadedFiles = true)
     {
         if (finalizedPayloadFiles is { Count: > 0 })
             return ValidateFinalizedPayloadFiles(stagingRoot, finalizedPayloadFiles);
 
         var include = ResolvePackagingInformation(information, delivery, includeScriptFolders);
+        include.IncludeManifestLoadedFiles = includeManifestLoadedFiles;
         return EnumerateModulePackageFiles(stagingRoot, include);
     }
 
@@ -401,7 +413,56 @@ public sealed partial class ArtefactBuilder
                 AddFile);
         }
 
+        // Script artefacts drop the manifest and validate manifest-loaded content themselves.
+        if (include.IncludeManifestLoadedFiles)
+            AddManifestLoadedFiles(src, AddFile);
         return files.ToArray();
+    }
+
+    // File types a manifest entry can load. Other dotted entries (System.Xml, Microsoft.PowerShell.Utility)
+    // name assemblies or modules resolved elsewhere, not files in this package.
+    private static readonly HashSet<string> ManifestLoadedFileExtensions = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ".dll", ".exe", ".ps1", ".psm1", ".psd1", ".ps1xml", ".cdxml"
+    };
+
+    /// <summary>
+    /// Packages every file the module manifest loads, whatever the include patterns say, so a format or type
+    /// file outside IncludeRoot/IncludeAll cannot be dropped and leave a module that fails to import.
+    /// </summary>
+    private static void AddManifestLoadedFiles(string root, Action<string> addFile)
+    {
+        var rootPrefix = root.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        foreach (var manifest in Directory.EnumerateFiles(root, "*.psd1", SearchOption.TopDirectoryOnly))
+        {
+            var missing = new List<string>();
+            foreach (var (key, reference) in ModuleManifestLoadedContent.ReadReferences(manifest))
+            {
+                var relative = reference?.Trim();
+                if (string.IsNullOrWhiteSpace(relative) || !ManifestLoadedFileExtensions.Contains(Path.GetExtension(relative!)))
+                    continue;
+
+                var path = Path.GetFullPath(Path.Combine(root, relative!.Replace('\\', Path.DirectorySeparatorChar).Replace('/', Path.DirectorySeparatorChar)));
+                if (!path.StartsWith(rootPrefix, StringComparison.OrdinalIgnoreCase))
+                    continue; // Outside the module folder: not part of this package.
+
+                if (!File.Exists(path))
+                {
+                    missing.Add($"{key} '{relative}'");
+                    continue;
+                }
+
+                EnsurePackageSourcePathDoesNotTraverseReparsePoints(root, path, "Module manifest-loaded file");
+                addFile(path);
+            }
+
+            if (missing.Count > 0)
+            {
+                throw new InvalidOperationException(
+                    $"Module manifest '{Path.GetFileName(manifest)}' loads files that are not in the staged module: {string.Join(", ", missing)}. " +
+                    "Add them to the module or remove them from the manifest.");
+            }
+        }
     }
 
     private static StringComparer CreateCurrentFileSystemPathComparer()
