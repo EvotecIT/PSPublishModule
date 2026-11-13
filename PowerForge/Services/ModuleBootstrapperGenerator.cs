@@ -68,7 +68,7 @@ internal static partial class ModuleBootstrapperGenerator
             payloadPlan = ResolveBinaryPayloadPlan(root, exportAssemblyFileNames, librariesByFolder, desktopMayDropCoreOnlyHelper, targetFrameworks);
 
             var librariesPath = Path.Combine(root, $"{moduleName}.Libraries.ps1");
-            WritePowerShellFile(librariesPath, BuildLibrariesScript(moduleName, payloadPlan, exportAssemblyFileNames));
+            WritePowerShellFile(librariesPath, BuildLibrariesScript(moduleName, payloadPlan));
         }
 
         var psm1Path = Path.Combine(root, $"{moduleName}.psm1");
@@ -164,18 +164,27 @@ internal static partial class ModuleBootstrapperGenerator
         return byFolder;
     }
 
-    private static string BuildLibrariesScript(string moduleName, BinaryPayloadPlan plan, IReadOnlyList<string> exportAssemblyFileNames)
+    private static string BuildLibrariesScript(string moduleName, BinaryPayloadPlan plan)
     {
         var template = EmbeddedScripts.Load("Scripts/ModuleBootstrapper/Libraries.Template.ps1");
         var tokens = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
             ["ModuleName"] = moduleName,
             ["LibrariesToLoad"] = RenderPerHostValue(plan, static scenario => BuildMultilineArrayLiteral(scenario.Libraries)),
-            ["ExportLibraryNames"] = BuildPowerShellArrayLiteral(NormalizeFileNameSet(exportAssemblyFileNames)
-                .OrderBy(static name => name, StringComparer.OrdinalIgnoreCase)
-                .ToArray())
+            // Matched by module-relative path, so a dependency that shares an export's file name in another folder still stops the import.
+            ["ExportLibraries"] = RenderPerHostValue(plan, static scenario => BuildMultilineArrayLiteral(ExportLibraryEntries(scenario)))
         };
         return ScriptTemplateRenderer.Render("ModuleBootstrapper.Libraries", template, tokens);
+    }
+
+    private static IReadOnlyList<string> ExportLibraryEntries(BinaryPayloadScenario scenario)
+    {
+        var exportPaths = new HashSet<string>(
+            scenario.Modules
+                .Where(static module => module.Path is not null)
+                .Select(static module => module.Path!.Replace('/', '\\')),
+            StringComparer.OrdinalIgnoreCase);
+        return scenario.Libraries.Where(library => exportPaths.Contains(library.Replace('/', '\\'))).ToArray();
     }
 
     private static List<string> EnumerateDllRelativePaths(

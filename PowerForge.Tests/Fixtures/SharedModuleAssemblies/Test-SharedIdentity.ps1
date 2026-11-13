@@ -13,7 +13,7 @@ if (@([AppDomain]::CurrentDomain.GetAssemblies() | Where-Object { $_.GetName().N
 }
 if ($PSEdition -ne 'Core') {
     $module = Get-Module Alpha
-    $resolver = & $module { $PowerForgeDesktopAssemblyResolverState }
+    $resolver = & $module { $PowerForgeDesktopAssemblyResolver }
     if ($null -eq $resolver) { throw 'Desktop resolver was not registered.' }
     $hostAssembly = @([AppDomain]::CurrentDomain.GetAssemblies() | Where-Object { $_.GetName().Name -eq 'Alpha.Host' })[0]
     $flags = [Reflection.BindingFlags]'Instance, NonPublic'

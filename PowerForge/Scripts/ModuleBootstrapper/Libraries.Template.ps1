@@ -3,12 +3,12 @@
 
 # Dependencies for this host, resolved from the Lib layout when the module was built.
 $LibrariesToLoad = {{LibrariesToLoad}}
-$ExportLibraryNames = {{ExportLibraryNames}}
+$ExportLibraries = {{ExportLibraries}}
 foreach ($L in $LibrariesToLoad) {
     try {
         $LibraryPathParts = @($PSScriptRoot) + @($L -split '[\\/]' | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
         $LibraryPath = [IO.Path]::Combine([string[]] $LibraryPathParts)
-        if (-not [IO.File]::Exists($LibraryPath) -and [IO.Path]::GetFileName($LibraryPath) -in $ExportLibraryNames) {
+        if ($L -in $ExportLibraries -and -not [IO.File]::Exists($LibraryPath)) {
             # The module's import loop reports a missing export assembly on its own, so the others still load.
             continue
         }
