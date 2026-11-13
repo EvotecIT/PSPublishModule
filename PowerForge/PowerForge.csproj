@@ -64,10 +64,27 @@
     <Reference Include="System.IO.Compression.FileSystem" />
   </ItemGroup>
 
+  <!--
+    The module loader is shipped inside every generated binary module. Embed both builds so module
+    builds need no .NET SDK and no import-time compilation (see Docs/PowerForge.ModuleLoader.md).
+  -->
   <ItemGroup>
-    <Compile Remove="Scripts/ModuleBootstrapper/*.cs" />
-    <EmbeddedResource Include="Scripts/ModuleBootstrapper/SharedDesktopResolver.*.cs" LogicalName="PowerForge.Scripts.ModuleBootstrapper.%(Filename)%(Extension)" />
-    <EmbeddedResource Include="Scripts/ModuleBootstrapper/SharedAssemblyPolicy.cs" LogicalName="PowerForge.Scripts.ModuleBootstrapper.SharedAssemblyPolicy.cs" />
+    <ProjectReference Include="..\PowerForge.ModuleLoader\PowerForge.ModuleLoader.csproj"
+                      ReferenceOutputAssembly="false" Private="false" SkipGetTargetFrameworkProperties="true"
+                      SetTargetFramework="TargetFramework=net472" OutputItemType="PowerForgeModuleLoaderDesktop" />
+    <ProjectReference Include="..\PowerForge.ModuleLoader\PowerForge.ModuleLoader.csproj"
+                      ReferenceOutputAssembly="false" Private="false" SkipGetTargetFrameworkProperties="true"
+                      SetTargetFramework="TargetFramework=netcoreapp3.1" OutputItemType="PowerForgeModuleLoaderCore" />
+  </ItemGroup>
+
+  <Target Name="EmbedPowerForgeModuleLoader" AfterTargets="ResolveProjectReferences">
+    <ItemGroup>
+      <EmbeddedResource Include="@(PowerForgeModuleLoaderDesktop)" LogicalName="PowerForge.ModuleLoader.Desktop.dll" />
+      <EmbeddedResource Include="@(PowerForgeModuleLoaderCore)" LogicalName="PowerForge.ModuleLoader.Core.dll" />
+    </ItemGroup>
+  </Target>
+
+  <ItemGroup>
     <EmbeddedResource Include="Scripts\\**\\*.ps1"
                       LogicalName="PowerForge.$([System.String]::Copy('%(Identity)').Replace('\', '.').Replace('/', '.'))" />
     <EmbeddedResource Include="Resources\\PowerShellCompilation\\SemanticOracle\\Cases\\*.ps1"

@@ -71,7 +71,7 @@ $PowerForgeTestInnerModule = New-Module -Name BridgeCollisionFixture -ScriptBloc
         Assert.NotNull(method);
         return Assert.IsType<string>(method!.Invoke(
             null,
-            new object?[] { "$PowerForgeTestInnerModule", "ScopeFixture", null }));
+            new object?[] { "$PowerForgeTestInnerModule" }));
     }
 
     private static bool IsCmdletExported(

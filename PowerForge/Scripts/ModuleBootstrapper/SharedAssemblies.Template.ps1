@@ -1,17 +1,6 @@
 # Shared names are policy, not binary exports. Only the explicit preload subset runs here.
-$PowerForgeSharedPolicyLock = [string]::Intern('PowerForge.Generated.SharedAssemblyPolicyV3')
-[Threading.Monitor]::Enter($PowerForgeSharedPolicyLock)
-try {
-    if (-not ('PowerForge.Generated.SharedAssemblyPolicyV3' -as [type])) {
-        Add-Type -TypeDefinition @'
-{{SharedAssemblyPolicySource}}
-'@ -ErrorAction Stop
-    }
-} finally {
-    [Threading.Monitor]::Exit($PowerForgeSharedPolicyLock)
-}
 $PowerForgeSharedAssemblyDirectories = {{SharedAssemblyDirectories}}
-[PowerForge.Generated.SharedAssemblyPolicyV3]::Register([string[]]{{SharedAssemblies}}, [string[]]$PowerForgeSharedAssemblyDirectories)
+[PowerForge.ModuleLoader.V1.SharedAssemblyPolicy]::Register([string[]]{{SharedAssemblies}}, [string[]]$PowerForgeSharedAssemblyDirectories)
 foreach ($PowerForgeSharedAssemblyName in {{PreloadSharedAssemblies}}) {
-    $null = [PowerForge.Generated.SharedAssemblyPolicyV3]::Resolve($PowerForgeSharedAssemblyName, [string[]]$PowerForgeSharedAssemblyDirectories)
+    $null = [PowerForge.ModuleLoader.V1.SharedAssemblyPolicy]::Resolve([string]$PowerForgeSharedAssemblyName, [string[]]$PowerForgeSharedAssemblyDirectories)
 }

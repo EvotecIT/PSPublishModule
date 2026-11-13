@@ -33,7 +33,7 @@ public sealed partial class ModulePipelineScriptExecutionSeamTests
             var content = File.ReadAllText(psm1Path).Replace("\r\n", "\n", StringComparison.Ordinal);
             File.WriteAllText(psm1Path, content + "# Retained source loader revision.\n", new UTF8Encoding(false));
             var original = File.ReadAllBytes(psm1Path);
-            Assert.Contains("\"System.Management.Automation\"", content, StringComparison.Ordinal);
+            Assert.Contains("'TestModule.Development'", content, StringComparison.Ordinal);
 
             var hostedOperations = new FakeHostedOperations();
             var runner = new ModulePipelineRunner(

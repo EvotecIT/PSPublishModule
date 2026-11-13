@@ -3,6 +3,7 @@
     "path": "PSPublishModule.sln",
     "projects": [
       "PowerForge.Cli\\PowerForge.Cli.csproj",
+      "PowerForge.ModuleLoader\\PowerForge.ModuleLoader.csproj",
       "PowerForge.Net472SmokeTests\\PowerForge.Net472SmokeTests.csproj",
       "PowerForge.PowerShell\\PowerForge.PowerShell.csproj",
       "PowerForge.Tests\\PowerForge.Tests.csproj",

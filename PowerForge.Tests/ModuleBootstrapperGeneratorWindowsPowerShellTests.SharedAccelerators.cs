@@ -10,10 +10,10 @@ public sealed partial class ModuleBootstrapperGeneratorWindowsPowerShellTests
     [Trait("Category", "Integration")]
     public void GeneratedAccelerators_RemainUntilLastIdenticalTypeOwnerIsRemoved(bool desktop, bool collidingName)
     {
-        if (!OperatingSystem.IsWindows()) return;
+        if (desktop && !OperatingSystem.IsWindows()) return;
         var host = desktop
             ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "WindowsPowerShell", "v1.0", "powershell.exe")
-            : FindExecutableOnPath("pwsh.exe");
+            : FindExecutableOnPath(OperatingSystem.IsWindows() ? "pwsh.exe" : "pwsh");
         if (host is null) return;
         Assert.True(File.Exists(host));
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "pf-shared-accelerator-" + Guid.NewGuid().ToString("N"))).FullName;
@@ -23,12 +23,13 @@ public sealed partial class ModuleBootstrapperGeneratorWindowsPowerShellTests
             var typeDeclaration = collidingName
                 ? "public class SyncRoot {}"
                 : "namespace PowerForge { public class SharedAcceleratorFixture {} }";
-            var block = desktop
+            ModuleLoaderAssets.Write(Path.Combine(root, ModuleLoaderAssets.PackagedFolderName));
+            var block = ModuleBootstrapperGenerator.BuildModuleLoaderImportBlock("$PSScriptRoot, 'Loader'") + "\n" + (desktop
                 ? ModuleBootstrapperGenerator.BuildDesktopTypeAcceleratorBlock(AssemblyTypeAcceleratorExportMode.AllowList,
                     [typeName], [], "$PSScriptRoot")
-                : "$ModuleAssembly = [" + typeName + "].Assembly\n$LibFolder = $PSScriptRoot\n" +
+                : "$ModuleAssembly = [" + typeName + "].Assembly\n" +
                   ModuleBootstrapperGenerator.BuildTypeAcceleratorBlock(AssemblyTypeAcceleratorExportMode.AllowList,
-                      [typeName], []);
+                      [typeName], [], "$PSScriptRoot"));
             foreach (var name in new[] { "First", "Second" })
                 File.WriteAllText(Path.Combine(root, name + ".psm1"), block);
             var script = Path.Combine(root, "Verify.ps1");
