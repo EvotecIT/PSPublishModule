@@ -20,11 +20,20 @@ script contains no `Add-Type -TypeDefinition` compilation, no private PowerShell
 monitor locking. Endpoint protection that scans script content through AMSI therefore sees an
 ordinary module import instead of the patterns used by attack tooling.
 
+The build also resolves which assemblies each host loads. The `.psm1` lists the export assemblies and
+`<Module>.Libraries.ps1` the Windows PowerShell dependencies, per edition and, when the payload has
+`Core-netX.Y` folders or a Core baseline, per .NET version band, so an import does not search the `Lib`
+folder. A configured export assembly that matches more than one nested `Lib` file fails the build; use a
+path-qualified `ExportAssemblies` entry. The loader runs in its own scope, so the module keeps only the
+`$PowerForge…` state that `Remove-Module` and the Windows PowerShell failure handling need. When the caller's
+`$ErrorActionPreference` is not `Stop`, an export assembly that fails to load is reported as a warning and
+the module's other export assemblies still load.
+
 | Feature | Where it runs |
 | --- | --- |
 | PowerShell 7 isolation | `ModuleAssemblyLoadContext.LoadModuleFromGroup` loads every export assembly of the module into one non-collectible context per physical module path, resolving dependencies from `.deps.json`, `runtimes/<rid>` and the payload folder. Host `System.Management.Automation` always comes from PowerShell. |
 | Windows PowerShell resolution | `DesktopAssemblyResolver` handles `AssemblyResolve` only for assemblies in the module's own payload folders, including the packaged facade binding policy. |
-| Exports | `Import-Module -Assembly` inside the bootstrapper imports the binary module as a nested module; `Export-ModuleMember -Cmdlet/-Alias` publishes its commands on the module, filtered by the manifest as usual. |
+| Exports | `Import-Module -Assembly` inside the bootstrapper imports the binary module as a nested module. Its aliases are defined on the module, because `Import-Module` leaves them in the loader's scope, and `Export-ModuleMember -Cmdlet/-Alias` publishes its commands on the module, filtered by the manifest as usual. |
 | Type accelerators | `TypeAcceleratorRegistration.RegisterFromLoadContext` (PowerShell 7) and `RegisterFromDirectory` (Windows PowerShell) apply the `AllowList`, `Assembly` and `Enums` modes. `Remove-Module` calls `Unregister()`; an accelerator another PowerForge module still uses stays registered. |
 | Shared assemblies | `SharedAssemblyPolicy` keeps `NETSharedAssemblies` process-wide, as described in [the development bootstrapper guide](PSPublishModule.DevelopmentBootstrapper.md#process-shared-dependencies). |
 
