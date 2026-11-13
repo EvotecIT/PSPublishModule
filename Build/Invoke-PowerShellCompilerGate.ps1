@@ -67,6 +67,7 @@ $requiredFamilies = @{
     'hosted lifecycle validation compatibility' = 'PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.Build_HybridLifecyclePreservesUnrepresentedValidationMetadata*'
     'conditional declaration execution' = 'PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.ConditionalDeclarations_ArtifactPreservesSelectedBodyReplacementAndNativeMetadata*'
     'retained executable console presentation' = 'PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.Build_PackageConsolePreservesFormattingStreamsAndAuthoredErrors*'
+    'module rebuild composition' = 'PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.ModuleRebuild_*'
 }
 $windowsRequiredFamilies = @{
     'native Hybrid executable console presentation' = 'PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.Build_NativeHybridConsolePreservesFormattingStreamsAndAuthoredErrors*'

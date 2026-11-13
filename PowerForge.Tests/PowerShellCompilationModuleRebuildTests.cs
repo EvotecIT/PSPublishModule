@@ -7,10 +7,10 @@ namespace PowerForge.Tests;
 public sealed partial class PowerShellCompilationArtifactBuilderTests
 {
     [Fact]
-    public void Build_HybridModuleWithNoTypedFunctionsPreservesCompletePowerShellFallback()
+    public void ModuleRebuild_HybridModuleWithNoTypedFunctionsPreservesCompletePowerShellFallback()
     {
         using var fixture = ArtifactFixture.Create(
-            "function Get-FallbackOnly { return [int](Get-Date -Format yyyy) }",
+            "function Get-FallbackOnly { return $args[0] * 2 }",
             ".psm1");
 
         var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
@@ -23,18 +23,17 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         Assert.Equal(0, result.Manifest!.CompiledMethods);
         Assert.True(result.Manifest.UsesPowerShellRuntimeFallback);
-        var proof = RunModuleProof(result.ArtifactPath!, "[int](Get-FallbackOnly) -gt 2000");
-        Assert.Equal("True", proof);
+        Assert.Equal("42", RunModuleProof(result.ArtifactPath!, "Get-FallbackOnly 21"));
     }
 
     [Fact]
-    public void Build_HybridModuleKeepsMultilineNonCmdletFunctionOnFallback()
+    public void ModuleRebuild_HybridModuleKeepsMultilineNonCmdletFunctionOnFallback()
     {
         using var fixture = ArtifactFixture.Create(
             """
             function HelperProof
             {
-                return [int](Get-Date -Format yyyy)
+                return $args[0] * 2
             }
             """,
             ".psm1");
@@ -48,11 +47,11 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         Assert.Equal(0, result.Manifest!.CompiledMethods);
-        Assert.Equal("True", RunModuleProof(result.ArtifactPath!, "[int](HelperProof) -gt 2000"));
+        Assert.Equal("42", RunModuleProof(result.ArtifactPath!, "HelperProof 21"));
     }
 
     [Fact]
-    public void Build_HybridModuleReplacesMultilineTypedFunctionWithCompiledCmdlet()
+    public void ModuleRebuild_HybridModuleReplacesMultilineTypedFunctionWithCompiledCmdlet()
     {
         using var fixture = ArtifactFixture.Create(
             "    function Get-MultilineTyped" + Environment.NewLine +
@@ -77,7 +76,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     }
 
     [Fact]
-    public void Build_FileListDotSourceIsTransformedByHybridComposerWithoutCollision()
+    public void ModuleRebuild_FileListDotSourceIsTransformedByHybridComposerWithoutCollision()
     {
         using var fixture = ArtifactFixture.Create(
             ". \"$PSScriptRoot/Public/Get-Value.ps1\"; Export-ModuleMember -Function Get-Value",
@@ -99,7 +98,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     }
 
     [Fact]
-    public void Build_ConventionalModuleLoaderCompilesAndStagesDiscoveredFunctionFiles()
+    public void ModuleRebuild_ConventionalModuleLoaderCompilesAndStagesDiscoveredFunctionFiles()
     {
         using var fixture = ArtifactFixture.Create(
             """
@@ -112,7 +111,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Directory.CreateDirectory(Path.Combine(fixture.RootPath, "Public"));
         Directory.CreateDirectory(Path.Combine(fixture.RootPath, "Private"));
         File.WriteAllText(Path.Combine(fixture.RootPath, "Public", "Get-TypedValue.ps1"), "function Get-TypedValue { return 42 }");
-        File.WriteAllText(Path.Combine(fixture.RootPath, "Private", "Get-FallbackValue.ps1"), "function Get-FallbackValue { return [int](Get-Date -Format yyyy) }");
+        File.WriteAllText(Path.Combine(fixture.RootPath, "Private", "Get-FallbackValue.ps1"), "function Get-FallbackValue { return $args[0] * 2 }");
         File.WriteAllText(
             Path.ChangeExtension(fixture.ScriptPath, ".psd1"),
             "@{ RootModule = 'input.psm1'; ModuleVersion = '1.0.0'; FunctionsToExport = @('Get-TypedValue', 'Get-FallbackValue'); CmdletsToExport = @() }");
@@ -128,12 +127,12 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.True(File.Exists(fallbackSource));
         Assert.DoesNotContain("function Get-TypedValue", File.ReadAllText(typedSource), StringComparison.OrdinalIgnoreCase);
         Assert.Contains("function Get-FallbackValue", File.ReadAllText(fallbackSource), StringComparison.OrdinalIgnoreCase);
-        var proof = RunModuleProof(result.ArtifactPath!, "Get-TypedValue; [int](Get-FallbackValue) -gt 2000");
-        Assert.Equal(new[] { "42", "True" }, proof.Split(Environment.NewLine));
+        var proof = RunModuleProof(result.ArtifactPath!, "Get-TypedValue; Get-FallbackValue 21");
+        Assert.Equal(new[] { "42", "42" }, proof.Split(Environment.NewLine));
     }
 
     [Fact]
-    public void Build_PreservesFunctionsExportedByNestedScriptModule()
+    public void ModuleRebuild_PreservesFunctionsExportedByNestedScriptModule()
     {
         using var fixture = ArtifactFixture.Create(
             "function Get-RootValue { return 1 }; Export-ModuleMember -Function Get-RootValue",
@@ -150,7 +149,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     }
 
     [Fact]
-    public void Build_StagesNestedManifestRootAndTransitiveDotSourceClosure()
+    public void ModuleRebuild_StagesNestedManifestRootAndTransitiveDotSourceClosure()
     {
         using var fixture = ArtifactFixture.Create(
             "function Get-RootValue { return 1 }; Export-ModuleMember -Function Get-RootValue",
@@ -175,7 +174,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     }
 
     [Fact]
-    public void Build_PreservesOmittedFunctionExportsForNestedScriptModule()
+    public void ModuleRebuild_PreservesOmittedFunctionExportsForNestedScriptModule()
     {
         using var fixture = ArtifactFixture.Create("function Get-RootValue { return 1 }", ".psm1");
         File.WriteAllText(Path.Combine(fixture.RootPath, "Nested.psm1"), "function Get-NestedDefault { return 23 }");
@@ -191,7 +190,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     }
 
     [Fact]
-    public void Build_DualRoleRuntimeHookStaysUncompiledAndIsPresentInArtifact()
+    public void ModuleRebuild_DualRoleRuntimeHookStaysUncompiledAndIsPresentInArtifact()
     {
         using var fixture = ArtifactFixture.Create(
             ". \"$PSScriptRoot/Shared.ps1\"; Export-ModuleMember -Function Get-SharedValue",
@@ -212,7 +211,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     }
 
     [Fact]
-    public void Build_RejectsExplicitCompilationSourceThatIsAlsoManifestRuntimeHook()
+    public void ModuleRebuild_RejectsExplicitCompilationSourceThatIsAlsoManifestRuntimeHook()
     {
         using var fixture = ArtifactFixture.Create(". \"$PSScriptRoot/Shared.ps1\"", ".psm1");
         var shared = Path.Combine(fixture.RootPath, "Shared.ps1");
@@ -236,7 +235,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     }
 
     [Fact]
-    public void Build_UsesExplicitManifestWhenPreservingNestedModuleFunctionExports()
+    public void ModuleRebuild_UsesExplicitManifestWhenPreservingNestedModuleFunctionExports()
     {
         using var fixture = ArtifactFixture.Create(
             "function Get-RootValue { return 1 }; Export-ModuleMember -Function Get-RootValue",
