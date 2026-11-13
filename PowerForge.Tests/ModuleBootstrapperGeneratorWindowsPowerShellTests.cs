@@ -378,7 +378,7 @@ try {
                 handleRuntimes: false);
 
             var libraries = File.ReadAllText(Path.Combine(root, "DemoModule.Libraries.ps1"));
-            Assert.Contains("'Plugins/Deferred' = @(", libraries, StringComparison.Ordinal);
+            Assert.Contains(@"'Lib\Plugins\Deferred\NestedDependency.dll'", libraries, StringComparison.Ordinal);
             Assert.True(
                 libraries.IndexOf("NestedDependency.dll", StringComparison.Ordinal) <
                 libraries.IndexOf("DemoModule.dll", StringComparison.Ordinal),

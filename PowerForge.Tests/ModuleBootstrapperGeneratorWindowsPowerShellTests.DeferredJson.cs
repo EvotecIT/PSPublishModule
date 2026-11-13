@@ -95,7 +95,7 @@ if ([DemoModule.Initialize]::ReadEncoded() -ne '\u003Cdeferred\u003E') { throw '
 $module = Get-Module DemoModule
 $state = & $module { $PowerForgeDesktopAssemblyResolver }
 if (-not $state.Registered -or $state.BootstrapActive) { throw 'The resolver is not in scoped runtime mode.' }
-$resolver = & $module { $PowerForgeDesktopAssemblyResolver }
+$resolver = $state.Handler
 $name = 'System.Text.Encodings.Web, Version=10.0.0.0, Culture=neutral, PublicKeyToken=cc7b13ffcd2ddd51'
 if ($null -eq $resolver.Invoke($null, [ResolveEventArgs]::new($name))) { throw 'Declared runtime reference was not served.' }
 if ($null -ne $resolver.Invoke($null, [ResolveEventArgs]::new('DemoModule, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null'))) { throw 'Undeclared runtime request was served.' }

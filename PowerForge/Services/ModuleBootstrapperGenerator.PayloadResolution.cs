@@ -13,17 +13,51 @@ internal static partial class ModuleBootstrapperGenerator
     private static readonly Regex CoreOnlyPayloadFolder = new(@"^Core(?:-(?:net|netcoreapp)\d+\.\d+)?$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
     /// <summary>A configured export assembly resolved for one host: a path relative to the module root, or the reason it cannot load.</summary>
-    private sealed record BinaryModulePayload(string Name, string? Path, string? Error);
+    private sealed class BinaryModulePayload
+    {
+        public BinaryModulePayload(string name, string? path, string? error)
+        {
+            Name = name;
+            Path = path;
+            Error = error;
+        }
+
+        public string Name { get; }
+        public string? Path { get; }
+        public string? Error { get; }
+    }
 
     /// <summary>What one host loads: export assemblies for the psm1 and the dependency preload list for Libraries.ps1.</summary>
-    private sealed record BinaryPayloadScenario(Version? MinimumRuntimeVersion, IReadOnlyList<BinaryModulePayload> Modules, IReadOnlyList<string> Libraries);
+    private sealed class BinaryPayloadScenario
+    {
+        public BinaryPayloadScenario(Version? minimumRuntimeVersion, IReadOnlyList<BinaryModulePayload> modules, IReadOnlyList<string> libraries)
+        {
+            MinimumRuntimeVersion = minimumRuntimeVersion;
+            Modules = modules;
+            Libraries = libraries;
+        }
+
+        public Version? MinimumRuntimeVersion { get; }
+        public IReadOnlyList<BinaryModulePayload> Modules { get; }
+        public IReadOnlyList<string> Libraries { get; }
+    }
 
     /// <summary>
     /// Everything the generated scripts load, resolved from the staged Lib layout. Windows PowerShell has one scenario;
     /// PowerShell 7 has one per runtime band (highest first) when named Core payloads or a Core baseline make the
     /// selection depend on the running .NET version.
     /// </summary>
-    private sealed record BinaryPayloadPlan(BinaryPayloadScenario Desktop, IReadOnlyList<BinaryPayloadScenario> Core);
+    private sealed class BinaryPayloadPlan
+    {
+        public BinaryPayloadPlan(BinaryPayloadScenario desktop, IReadOnlyList<BinaryPayloadScenario> core)
+        {
+            Desktop = desktop;
+            Core = core;
+        }
+
+        public BinaryPayloadScenario Desktop { get; }
+        public IReadOnlyList<BinaryPayloadScenario> Core { get; }
+    }
 
     private static BinaryPayloadPlan ResolveBinaryPayloadPlan(
         string moduleRoot,
@@ -50,10 +84,8 @@ internal static partial class ModuleBootstrapperGenerator
         var core = new List<BinaryPayloadScenario>();
         foreach (var version in ModuleBinaryPayloadLayout.ResolveRuntimeSelectionVersions(libRoot))
             core.Add(ResolveBinaryPayloadScenario(moduleRoot, libRoot, libraryReferences, librariesByFolder, isCore: true, runtimeVersion: version, failOnAmbiguity: true));
-        core.Add(ResolveBinaryPayloadScenario(moduleRoot, libRoot, libraryReferences, librariesByFolder, isCore: true, runtimeVersion: new Version(0, 0), failOnAmbiguity: true) with
-        {
-            MinimumRuntimeVersion = null
-        });
+        var fallback = ResolveBinaryPayloadScenario(moduleRoot, libRoot, libraryReferences, librariesByFolder, isCore: true, runtimeVersion: new Version(0, 0), failOnAmbiguity: true);
+        core.Add(new BinaryPayloadScenario(null, fallback.Modules, fallback.Libraries));
 
         return new BinaryPayloadPlan(desktop, core);
     }

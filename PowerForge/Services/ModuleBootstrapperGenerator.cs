@@ -220,7 +220,7 @@ internal static partial class ModuleBootstrapperGenerator
         static string RelativeLibPath(string? folder, string fileName)
         {
             var parts = new List<string> { "Lib" };
-            if (!string.IsNullOrWhiteSpace(folder)) parts.Add(folder!);
+            if (!string.IsNullOrWhiteSpace(folder)) parts.Add(folder!.Replace('/', '\\'));
             parts.Add(fileName);
             return string.Join("\\", parts);
         }
