@@ -14,8 +14,8 @@
         <DevelopmentDependency>true</DevelopmentDependency>
         <SuppressDependenciesWhenPacking>true</SuppressDependenciesWhenPacking>
         <NoWarn>$(NoWarn);NU5128</NoWarn>
-        <PackageVersion>3.0.191</PackageVersion>
-        <VersionPrefix>3.0.191</VersionPrefix>
+        <PackageVersion>3.0.192</PackageVersion>
+        <VersionPrefix>3.0.192</VersionPrefix>
         <PackageId>PowerForge.Generators</PackageId>
         <Description>Build-time source generators for Evotec libraries: fluent methods on the models themselves, PowerShell cmdlet parameters from the same models, and the shared ThemeMode/Tone/Icon vocabulary.</Description>
         <Authors>Przemyslaw Klys</Authors>
