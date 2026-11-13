@@ -28,6 +28,8 @@ Import-Module $manifest
 Remove-Module AliasModule
 Import-Module $manifest
 if ((gaf) -ne 'alias-fixture') { throw 'Commands are missing after Remove-Module and import.' }
+$leaked = & (Get-Module AliasModule) { Get-Variable -Scope Script -Name Default, Core, Framework, Library, LibRoot, LibFolder, ImportModule, ModuleAssembly, InnerModule, BinaryModules -ErrorAction SilentlyContinue }
+if ($leaked) { throw "Loader variables stayed in the module: $($leaked.Name -join ', ')" }
 $context = [System.Runtime.Loader.AssemblyLoadContext]::GetLoadContext((Get-Command Get-AliasFixture).ImplementingType.Assembly)
 if ($context -eq [System.Runtime.Loader.AssemblyLoadContext]::Default) { throw 'The repeat import left the module context.' }
 & {

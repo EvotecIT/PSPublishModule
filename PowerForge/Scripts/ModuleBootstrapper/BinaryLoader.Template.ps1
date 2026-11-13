@@ -1,59 +1,44 @@
-{{BinaryAssemblyResolverBlock}}
-
 {{ModuleLoaderImportBlock}}
-{{SharedAssembliesBlock}}{{DesktopAssemblyResolverBlock}}{{RuntimeHandlerBlock}}$PowerForgeDesktopLibrariesLoaded = $false
-if ($PSEdition -ne 'Core') {
-    $LibrariesScript = [IO.Path]::Combine($PowerForgeModuleRoot, '{{ModuleName}}.Libraries.ps1')
-    if (Test-Path -LiteralPath $LibrariesScript) {
-        try {
-            . $LibrariesScript
-            $PowerForgeDesktopLibrariesLoaded = $true
-        } catch {
-            if ($null -ne $UnregisterPowerForgeDesktopAssemblyResolver) {
-                & $UnregisterPowerForgeDesktopAssemblyResolver
-            }
-            throw
+# Export assemblies for this host, resolved from the Lib layout when the module was built.
+$BinaryModules = {{BinaryModules}}
+$BinaryModulePaths = [string[]]@(foreach ($BinaryModule in $BinaryModules) {
+    if ($BinaryModule['Path']) {
+        $BinaryModule.Path = [IO.Path]::GetFullPath([IO.Path]::Combine($PowerForgeModuleRoot, $BinaryModule.Path))
+        if ([IO.File]::Exists($BinaryModule.Path)) {
+            $BinaryModule.Path
+        } else {
+            # A file removed after the build fails on its own instead of breaking the group of every export.
+            $BinaryModule.Error = "Configured binary module '$($BinaryModule.Name)' was not found at '$($BinaryModule.Path)'."
         }
     }
+})
+$BinaryModuleDirectories = [string[]]@($BinaryModulePaths | ForEach-Object { [IO.Path]::GetDirectoryName($_) } | Select-Object -Unique)
+{{SharedAssembliesBlock}}{{DesktopAssemblyResolverBlock}}{{RuntimeHandlerBlock}}$LibrariesScript = [IO.Path]::Combine($PowerForgeModuleRoot, '{{ModuleName}}.Libraries.ps1')
+if ($PSEdition -ne 'Core' -and (Test-Path -LiteralPath $LibrariesScript)) {
+    # Windows PowerShell loads the dependencies before the module assemblies that need them.
+    . $LibrariesScript
 }
 $ImportModule = Get-Command -Name Import-Module -Module Microsoft.PowerShell.Core
-foreach ($Library in $LibraryFileNames) {
+$LoadedDirectories = [Collections.Generic.List[string]]::new()
+foreach ($BinaryModule in $BinaryModules) {
     try {
-        $ResolvedModuleAssembly = & $ResolvePowerForgeModuleAssembly -LibraryFileName $Library
-        $ModuleAssemblyPath = $ResolvedModuleAssembly.Path
-        $LibraryName = [IO.Path]::GetFileNameWithoutExtension($ModuleAssemblyPath)
-        $Class = "$LibraryName.Initialize"
-
-        if (-not ($Class -as [type])) {
-            & $ImportModule $ModuleAssemblyPath -ErrorAction Stop
-        } else {
-            $Type = "$Class" -as [Type]
-            & $ImportModule -Force -Assembly ($Type.Assembly)
+        if ($BinaryModule['Error']) {
+            throw $BinaryModule['Error']
+        }
+        $ModuleAssemblyPath = $BinaryModule.Path
+        $LibraryDirectory = [IO.Path]::GetDirectoryName($ModuleAssemblyPath)
+{{ImportBlock}}
+        if (-not $LoadedDirectories.Contains($LibraryDirectory)) {
+            $LoadedDirectories.Add($LibraryDirectory)
         }
     } catch {
+        # A caller that does not stop on errors keeps the other export assemblies of the module.
         if ($ErrorActionPreference -eq 'Stop') {
-            if ($null -ne $UnregisterPowerForgeDesktopAssemblyResolver) {
-                & $UnregisterPowerForgeDesktopAssemblyResolver
-            }
             throw
-        } else {
-            Write-Warning -Message "Importing module $Library failed. Fix errors before continuing. Error: $($_.Exception.Message)"
         }
+        Write-Warning -Message "Importing module $($BinaryModule.Name) failed. Fix errors before continuing. Error: $($_.Exception.Message)"
     }
 }
-
-# Dot source all libraries by loading external file
-$LibrariesScript = [IO.Path]::Combine($PowerForgeModuleRoot, '{{ModuleName}}.Libraries.ps1')
-if (-not $PowerForgeDesktopLibrariesLoaded -and (Test-Path -LiteralPath $LibrariesScript)) {
-    try {
-        . $LibrariesScript
-    } catch {
-        if ($null -ne $UnregisterPowerForgeDesktopAssemblyResolver) {
-            & $UnregisterPowerForgeDesktopAssemblyResolver
-        }
-        throw
-    }
-}
-if ($PSEdition -ne 'Core' -and $null -ne $PowerForgeDesktopAssemblyResolverState) {
-    $PowerForgeDesktopAssemblyResolverState.BootstrapActive = $false
+{{LateLibrariesBlock}}{{DesktopTypeAcceleratorBlock}}if ($null -ne $PowerForgeDesktopAssemblyResolver) {
+    $PowerForgeDesktopAssemblyResolver.BootstrapActive = $false
 }

@@ -5,7 +5,6 @@ $PowerForgeDevelopmentBinaryEnvironmentVariable = '{{DevelopmentBinaryEnvironmen
 $PowerForgeDevelopmentConfigurationEnvironmentVariable = '{{DevelopmentConfigurationEnvironmentVariable}}'
 $PowerForgeDevelopmentCoreFrameworks = {{DevelopmentCoreFrameworks}}
 $PowerForgeDevelopmentDesktopFrameworks = {{DevelopmentDesktopFrameworks}}
-$PowerForgeDevelopmentUseAssemblyLoadContext = {{UseAssemblyLoadContext}}
 $PowerForgeDevelopmentEnabled = $false
 if ($PowerForgeDevelopmentBinaryMode -eq 'Auto') {
     $PowerForgeDevelopmentEnabled = $true
@@ -43,19 +42,7 @@ if ($PowerForgeDevelopmentEnabled) {
 {{SharedAssembliesBlock}}
             $ImportModule = Get-Command -Name Import-Module -Module Microsoft.PowerShell.Core
 {{RuntimeHandlerBlock}}
-            if ($PSEdition -eq 'Core' -and $PowerForgeDevelopmentUseAssemblyLoadContext) {
-{{AssemblyLoadContextImportBlock}}
-            } else {
-                $PowerForgeDevelopmentLoadedType = '{{LibraryTypeName}}' -as [type]
-                $PowerForgeDevelopmentLoadedAssembly = if ($PowerForgeDevelopmentLoadedType -and $PowerForgeDevelopmentLoadedType.Assembly) { $PowerForgeDevelopmentLoadedType.Assembly } else { $null }
-                $PowerForgeDevelopmentLoadedAssemblyPath = if ($PowerForgeDevelopmentLoadedAssembly -and -not [string]::IsNullOrWhiteSpace($PowerForgeDevelopmentLoadedAssembly.Location)) { [IO.Path]::GetFullPath($PowerForgeDevelopmentLoadedAssembly.Location) } else { $null }
-                $PowerForgeDevelopmentSelectedBinaryPath = [IO.Path]::GetFullPath($PowerForgeDevelopmentBinaryPath)
-                if ($PowerForgeDevelopmentLoadedAssembly -and [string]::Equals($PowerForgeDevelopmentLoadedAssemblyPath, $PowerForgeDevelopmentSelectedBinaryPath, [StringComparison]::OrdinalIgnoreCase)) {
-                    & $ImportModule -Assembly $PowerForgeDevelopmentLoadedType.Assembly -Force -ErrorAction Stop
-                } else {
-                    & $ImportModule $PowerForgeDevelopmentBinaryPath -ErrorAction Stop
-                }
-            }
+{{ImportBlock}}
 {{DesktopTypeAcceleratorBlock}}
             $PowerForgeDevelopmentBinaryLoaded = $true
         } catch {

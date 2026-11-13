@@ -208,46 +208,26 @@ internal static class ModuleBinaryPayloadLayout
         return hasStandard ? "Standard" : hasCore ? "Core" : string.Empty;
     }
 
-    internal static string BuildPowerShellRuntimeSelector()
+    /// <summary>
+    /// Returns the runtime versions at which <see cref="ResolveRuntimePayloadFolder"/> can select a different
+    /// PowerShell 7 payload: the Core baseline and every portable named Core payload, highest first.
+    /// </summary>
+    internal static Version[] ResolveRuntimeSelectionVersions(string libRoot)
     {
-        var builder = new StringBuilder();
-        builder.AppendLine("if ($PSEdition -eq 'Core') {");
-        builder.AppendLine("    $PowerForgeRuntimeVersion = [Environment]::Version");
-        builder.AppendLine("    $PowerForgeCoreBaselineVersion = $null");
-        builder.AppendLine("    if ($Core) {");
-        builder.AppendLine("        $PowerForgeCoreMarkerPath = [IO.Path]::Combine($LibRoot, 'Core', 'PowerForge.TargetFramework.txt')");
-        builder.AppendLine("        if (Test-Path -LiteralPath $PowerForgeCoreMarkerPath -PathType Leaf) {");
-        builder.AppendLine("            try {");
-        builder.AppendLine("                $PowerForgeCoreTargetFramework = [IO.File]::ReadAllText($PowerForgeCoreMarkerPath).Trim()");
-        builder.AppendLine("                if ($PowerForgeCoreTargetFramework -match '^net(?:coreapp)?(\\d+\\.\\d+)$') {");
-        builder.AppendLine("                    $PowerForgeCoreBaselineVersion = [Version]$Matches[1]");
-        builder.AppendLine("                }");
-        builder.AppendLine("            } catch { $PowerForgeCoreBaselineVersion = $null }");
-        builder.AppendLine("        }");
-        builder.AppendLine("    }");
-        builder.AppendLine("    $PowerForgeSelectedRuntimeVersion = [Version]'0.0'");
-        builder.AppendLine("    $PowerForgeSelectedRuntimeFolder = $null");
-        builder.AppendLine("    if ($Core -and $null -ne $PowerForgeCoreBaselineVersion -and $PowerForgeCoreBaselineVersion -le $PowerForgeRuntimeVersion) {");
-        builder.AppendLine("        $PowerForgeSelectedRuntimeVersion = $PowerForgeCoreBaselineVersion");
-        builder.AppendLine("        $PowerForgeSelectedRuntimeFolder = 'Core'");
-        builder.AppendLine("    }");
-        builder.AppendLine("    foreach ($PowerForgeRuntimeFolder in @($AssemblyFolders.Name)) {");
-        builder.AppendLine("        if ($PowerForgeRuntimeFolder -notmatch '^Core-(?:net|netcoreapp)(\\d+\\.\\d+)$') { continue }");
-        builder.AppendLine("        try { $PowerForgeCandidateRuntimeVersion = [Version]$Matches[1] } catch { continue }");
-        builder.AppendLine("        if ($PowerForgeCandidateRuntimeVersion -le $PowerForgeRuntimeVersion -and $PowerForgeCandidateRuntimeVersion -gt $PowerForgeSelectedRuntimeVersion -and (Test-Path -LiteralPath ([IO.Path]::Combine($LibRoot, $PowerForgeRuntimeFolder)))) {");
-        builder.AppendLine("            $PowerForgeSelectedRuntimeVersion = $PowerForgeCandidateRuntimeVersion");
-        builder.AppendLine("            $PowerForgeSelectedRuntimeFolder = $PowerForgeRuntimeFolder");
-        builder.AppendLine("        }");
-        builder.AppendLine("    }");
-        builder.AppendLine("    if (-not [string]::IsNullOrWhiteSpace($PowerForgeSelectedRuntimeFolder)) {");
-        builder.AppendLine("        $Framework = $PowerForgeSelectedRuntimeFolder");
-        builder.AppendLine("    } elseif ($Core -and (-not $Standard -or ($null -ne $PowerForgeCoreBaselineVersion -and $PowerForgeCoreBaselineVersion -le $PowerForgeRuntimeVersion))) {");
-        builder.AppendLine("        $Framework = 'Core'");
-        builder.AppendLine("    } elseif ($Standard) {");
-        builder.AppendLine("        $Framework = 'Standard'");
-        builder.AppendLine("    }");
-        builder.AppendLine("}");
-        return builder.ToString();
+        if (!Directory.Exists(libRoot))
+            return Array.Empty<Version>();
+
+        var versions = new List<Version>();
+        if (Directory.Exists(Path.Combine(libRoot, "Core")) && TryReadCoreBaselineVersion(libRoot, out var baseline))
+            versions.Add(baseline);
+        foreach (var folder in Directory.EnumerateDirectories(libRoot).Select(Path.GetFileName))
+        {
+            if (folder is not null && IsPortableNamedCorePayload(folder) &&
+                TryParseModernFrameworkVersion(folder.Substring("Core-".Length), out var version))
+                versions.Add(version);
+        }
+
+        return versions.Distinct().OrderByDescending(static version => version).ToArray();
     }
 
     private static ModuleBinaryPayload Parse(string framework)
