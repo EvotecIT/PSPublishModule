@@ -123,6 +123,52 @@ public partial class ModuleBootstrapperGeneratorTests
         }
     }
 
+    // The build lists every export assembly; one deleted afterwards must not take the module's other exports down with it.
+    [Fact]
+    [Trait("Category", "Integration")]
+    public void AssemblyLoadContextLoader_ContinuesWhenConfiguredAssemblyIsMissingAfterBuild()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-bootstrapper-alc-missing-export-" + Guid.NewGuid().ToString("N"));
+        var libRoot = Directory.CreateDirectory(Path.Combine(root, "Lib", "Core")).FullName;
+
+        try
+        {
+            var validAssembly = BuildFixtureProject(
+                Path.Combine(root, "Fixture"),
+                "AlcMissingExportFixture",
+                "Auxiliary",
+                "namespace Auxiliary; public static class Initialize { public static string Read() => \"remaining-alc-assembly\"; }");
+            File.Copy(validAssembly, Path.Combine(libRoot, "Auxiliary.dll"), overwrite: true);
+            File.Copy(validAssembly, Path.Combine(libRoot, "Removed.dll"), overwrite: true);
+
+            ModuleBootstrapperGenerator.Generate(
+                root,
+                "Removed",
+                new ExportSet(Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>()),
+                new[] { "Removed.dll", "Auxiliary.dll" },
+                handleRuntimes: false,
+                useAssemblyLoadContext: true,
+                targetFrameworks: new[] { "net8.0" });
+            File.Delete(Path.Combine(libRoot, "Removed.dll"));
+
+            var result = RunGeneratedModulePowerShell(
+                root,
+                "$ErrorActionPreference = 'Continue'; Import-Module -Name '" +
+                Path.Combine(root, "Removed.psm1").Replace("'", "''", StringComparison.Ordinal) +
+                "' -Force; [Auxiliary.Initialize]::Read()");
+
+            Assert.True(result.ExitCode == 0, result.StdOut + Environment.NewLine + result.StdErr);
+            Assert.Contains("remaining-alc-assembly", result.StdOut, StringComparison.Ordinal);
+            Assert.Contains("Importing module Removed.dll failed", result.StdOut + result.StdErr, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("Importing module Auxiliary.dll failed", result.StdOut + result.StdErr, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
     [Fact]
     [Trait("Category", "Integration")]
     public void AssemblyLoadContextLoader_IsCopiedBesideLaterFallbackExport()

@@ -4,7 +4,12 @@ $BinaryModules = {{BinaryModules}}
 $BinaryModulePaths = [string[]]@(foreach ($BinaryModule in $BinaryModules) {
     if ($BinaryModule['Path']) {
         $BinaryModule.Path = [IO.Path]::GetFullPath([IO.Path]::Combine($PowerForgeModuleRoot, $BinaryModule.Path))
-        $BinaryModule.Path
+        if ([IO.File]::Exists($BinaryModule.Path)) {
+            $BinaryModule.Path
+        } else {
+            # A file removed after the build fails on its own instead of breaking the group of every export.
+            $BinaryModule.Error = "Configured binary module '$($BinaryModule.Name)' was not found at '$($BinaryModule.Path)'."
+        }
     }
 })
 $BinaryModuleDirectories = [string[]]@($BinaryModulePaths | ForEach-Object { [IO.Path]::GetDirectoryName($_) } | Select-Object -Unique)
