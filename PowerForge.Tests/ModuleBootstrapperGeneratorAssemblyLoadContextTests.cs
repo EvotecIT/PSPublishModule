@@ -123,19 +123,22 @@ public partial class ModuleBootstrapperGeneratorTests
         }
     }
 
-    // The build lists every export assembly; one deleted afterwards must not take the module's other exports down with it.
-    [Fact]
+    // The build lists every export assembly; one deleted afterwards must not take the module's other exports down with it,
+    // neither in the AssemblyLoadContext group nor in the .Libraries.ps1 preload.
+    [Theory]
     [Trait("Category", "Integration")]
-    public void AssemblyLoadContextLoader_ContinuesWhenConfiguredAssemblyIsMissingAfterBuild()
+    [InlineData(true)]
+    [InlineData(false)]
+    public void BinaryLoader_ContinuesWhenConfiguredAssemblyIsMissingAfterBuild(bool useAssemblyLoadContext)
     {
-        var root = Path.Combine(Path.GetTempPath(), "pf-bootstrapper-alc-missing-export-" + Guid.NewGuid().ToString("N"));
+        var root = Path.Combine(Path.GetTempPath(), "pf-bootstrapper-missing-export-" + Guid.NewGuid().ToString("N"));
         var libRoot = Directory.CreateDirectory(Path.Combine(root, "Lib", "Core")).FullName;
 
         try
         {
             var validAssembly = BuildFixtureProject(
                 Path.Combine(root, "Fixture"),
-                "AlcMissingExportFixture",
+                "MissingExportFixture" + (useAssemblyLoadContext ? "Alc" : "Default"),
                 "Auxiliary",
                 "namespace Auxiliary; public static class Initialize { public static string Read() => \"remaining-alc-assembly\"; }");
             File.Copy(validAssembly, Path.Combine(libRoot, "Auxiliary.dll"), overwrite: true);
@@ -147,9 +150,18 @@ public partial class ModuleBootstrapperGeneratorTests
                 new ExportSet(Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>()),
                 new[] { "Removed.dll", "Auxiliary.dll" },
                 handleRuntimes: false,
-                useAssemblyLoadContext: true,
-                targetFrameworks: new[] { "net8.0" });
+                useAssemblyLoadContext: useAssemblyLoadContext,
+                targetFrameworks: new[] { "net8.0", "net472" });
             File.Delete(Path.Combine(libRoot, "Removed.dll"));
+
+            // Windows PowerShell preloads this list, export assemblies included, before the import loop.
+            var librariesPath = Path.Combine(root, "Removed.Libraries.ps1");
+            Assert.Contains("'Lib\\Core\\Removed.dll'", File.ReadAllText(librariesPath), StringComparison.Ordinal);
+            var preload = RunGeneratedModulePowerShell(
+                root,
+                "$ErrorActionPreference = 'Stop'; . '" + librariesPath.Replace("'", "''", StringComparison.Ordinal) + "'; 'preload-ok'");
+            Assert.True(preload.ExitCode == 0, preload.StdOut + Environment.NewLine + preload.StdErr);
+            Assert.Contains("preload-ok", preload.StdOut, StringComparison.Ordinal);
 
             var result = RunGeneratedModulePowerShell(
                 root,

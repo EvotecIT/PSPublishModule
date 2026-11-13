@@ -68,7 +68,7 @@ internal static partial class ModuleBootstrapperGenerator
             payloadPlan = ResolveBinaryPayloadPlan(root, exportAssemblyFileNames, librariesByFolder, desktopMayDropCoreOnlyHelper, targetFrameworks);
 
             var librariesPath = Path.Combine(root, $"{moduleName}.Libraries.ps1");
-            WritePowerShellFile(librariesPath, BuildLibrariesScript(moduleName, payloadPlan));
+            WritePowerShellFile(librariesPath, BuildLibrariesScript(moduleName, payloadPlan, exportAssemblyFileNames));
         }
 
         var psm1Path = Path.Combine(root, $"{moduleName}.psm1");
@@ -164,13 +164,16 @@ internal static partial class ModuleBootstrapperGenerator
         return byFolder;
     }
 
-    private static string BuildLibrariesScript(string moduleName, BinaryPayloadPlan plan)
+    private static string BuildLibrariesScript(string moduleName, BinaryPayloadPlan plan, IReadOnlyList<string> exportAssemblyFileNames)
     {
         var template = EmbeddedScripts.Load("Scripts/ModuleBootstrapper/Libraries.Template.ps1");
         var tokens = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
             ["ModuleName"] = moduleName,
-            ["LibrariesToLoad"] = RenderPerHostValue(plan, static scenario => BuildMultilineArrayLiteral(scenario.Libraries))
+            ["LibrariesToLoad"] = RenderPerHostValue(plan, static scenario => BuildMultilineArrayLiteral(scenario.Libraries)),
+            ["ExportLibraryNames"] = BuildPowerShellArrayLiteral(NormalizeFileNameSet(exportAssemblyFileNames)
+                .OrderBy(static name => name, StringComparer.OrdinalIgnoreCase)
+                .ToArray())
         };
         return ScriptTemplateRenderer.Render("ModuleBootstrapper.Libraries", template, tokens);
     }
