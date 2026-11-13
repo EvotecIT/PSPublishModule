@@ -1,6 +1,6 @@
 # Replacing Spectre.Console with ConsoleMonster
 
-Status: ported to ConsoleMonster 2.5.0; Spectre.Console is removed. Assessment date: 2026-11-10.
+Status: ported to ConsoleMonster 2.4.1; Spectre.Console is removed. Assessment date: 2026-11-10.
 Compared: PSPublishModule `main` at `e67e1bfea`, ConsoleMonster 2.4.0 (`a051278c`).
 
 ## Summary
@@ -106,7 +106,7 @@ unchanged.
 ### Found during the port
 
 The port first worked around these in `PowerForge.ConsoleUi`. ConsoleMonster
-2.5.0 closes them, and the workarounds are gone:
+2.4.1 closes them, and the workarounds are gone:
 
 - `Phases` takes sub-items under an item (`SetSubItem`, or `item` events keyed
   step, item and sub-item), so a package lane lists its stages and each stage its
@@ -132,12 +132,12 @@ The port first worked around these in `PowerForge.ConsoleUi`. ConsoleMonster
 - Only one live session can capture the console at a time; tests that start one
   run in a non-parallel collection.
 
-The package references point at ConsoleMonster 2.5.0, which carries both
+The package references point at ConsoleMonster 2.4.1, which carries both
 blockers and the changes above (ConsoleMonster #152 and #153).
 
 ### Should fix
 
-Done in ConsoleMonster 2.5.0: bounded live queue, captured lines and log entries
+Done in ConsoleMonster 2.4.1: bounded live queue, captured lines and log entries
 (`MaxQueuedEvents`, `LogRegion.MaxLineLength`), the console mode restored at
 process exit, the step ledger following the furthest running step with frozen
 times for finished rows, and the Spectre guide's shortcode note. Still open:

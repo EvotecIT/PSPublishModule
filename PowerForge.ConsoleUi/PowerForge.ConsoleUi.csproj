@@ -22,7 +22,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="ConsoleMonster" Version="2.5.0" />
+    <PackageReference Include="ConsoleMonster" Version="2.4.1" />
   </ItemGroup>
 
 </Project>
