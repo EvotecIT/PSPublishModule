@@ -68,6 +68,7 @@ $requiredFamilies = @{
     'conditional declaration execution' = 'PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.ConditionalDeclarations_ArtifactPreservesSelectedBodyReplacementAndNativeMetadata*'
     'retained executable console presentation' = 'PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.Build_PackageConsolePreservesFormattingStreamsAndAuthoredErrors*'
     'module rebuild composition' = 'PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.ModuleRebuild_*'
+    'basic-function Test-Path command lookup' = 'PowerForge.Tests.PowerShellCompilationArtifactHardeningTests.Build_HybridBasicFunctionKeepsTestPathOnPowerShellCommandLookup*'
 }
 $windowsRequiredFamilies = @{
     'native Hybrid executable console presentation' = 'PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.Build_NativeHybridConsolePreservesFormattingStreamsAndAuthoredErrors*'

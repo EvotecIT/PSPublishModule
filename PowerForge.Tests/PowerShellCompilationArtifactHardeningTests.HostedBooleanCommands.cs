@@ -179,7 +179,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
     }
 
     [Fact]
-    public void Build_HybridModuleRetainsBasicHostedBooleanFunction()
+    public void Build_HybridBasicFunctionKeepsTestPathOnPowerShellCommandLookup()
     {
         using var fixture = ArtifactFixture.Create(
             "function Test-BasicPath { return [bool](Test-Path -LiteralPath 'FileSystem::missing' -EA Ignore) }; " +
@@ -194,8 +194,20 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             allowUnreviewedDependencyResolution: true));
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
-        Assert.Equal(0, result.Manifest!.CompiledMethods);
-        Assert.Equal(1, result.Manifest.RuntimeFallbackUnits);
+        Assert.DoesNotContain(
+            result.Manifest!.CommandProviders,
+            static provider => provider.ProviderId == "powerforge.command.hosted-boolean.test-path");
+        var unit = Assert.Single(result.Manifest.UnitDispositionLedger!.Entries, static entry => entry.Name == "Test-BasicPath");
+        Assert.Equal(1, unit.RuntimeCommandRegions);
+        const string command = "Test-BasicPath; function global:Test-Path { $true }; Test-BasicPath";
+        var original = Run("pwsh", "-NoProfile", "-NonInteractive", "-Command",
+            $"Import-Module -Name '{fixture.ScriptPath.Replace("'", "''", StringComparison.Ordinal)}' -Force; {command}");
+        var compiled = Run("pwsh", "-NoProfile", "-NonInteractive", "-Command",
+            $"Import-Module -Name '{result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal)}' -Force; {command}");
+
+        Assert.Equal((0, "False" + Environment.NewLine + "True", string.Empty), (original.ExitCode, original.StandardOutput.Trim(), original.StandardError.Trim()));
+        Assert.Equal((original.ExitCode, original.StandardOutput.Trim(), original.StandardError.Trim()),
+            (compiled.ExitCode, compiled.StandardOutput.Trim(), compiled.StandardError.Trim()));
     }
 
     [Fact]

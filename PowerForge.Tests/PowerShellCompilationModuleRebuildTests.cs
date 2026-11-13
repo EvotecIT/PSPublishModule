@@ -127,8 +127,8 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.True(File.Exists(fallbackSource));
         Assert.DoesNotContain("function Get-TypedValue", File.ReadAllText(typedSource), StringComparison.OrdinalIgnoreCase);
         Assert.Contains("function Get-FallbackValue", File.ReadAllText(fallbackSource), StringComparison.OrdinalIgnoreCase);
-        var proof = RunModuleProof(result.ArtifactPath!, "Get-TypedValue; Get-FallbackValue 21");
-        Assert.Equal(new[] { "42", "42" }, proof.Split(Environment.NewLine));
+        var proof = RunModuleProof(result.ArtifactPath!, "Get-TypedValue; Get-FallbackValue 5");
+        Assert.Equal(new[] { "42", "10" }, proof.Split(Environment.NewLine));
     }
 
     [Fact]
