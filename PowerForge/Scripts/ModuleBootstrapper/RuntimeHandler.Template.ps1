@@ -1,36 +1,16 @@
 # Ensure native runtime libraries are discoverable on Windows
-$IsWindowsPlatform = [System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform([System.Runtime.InteropServices.OSPlatform]::Windows)
-if ($IsWindowsPlatform) {
-    [array] $ResolvedLibraryDirectories = @(
-        foreach ($LibraryFileName in $LibraryFileNames) {
-            try {
-                $ResolvedLibrary = & $ResolvePowerForgeModuleAssembly -LibraryFileName $LibraryFileName
-            } catch {
-                Write-Verbose "Skipping native runtime discovery for '$LibraryFileName'. $($_.Exception.Message)"
-                continue
-            }
-            if ($null -ne $ResolvedLibrary -and -not [string]::IsNullOrWhiteSpace($ResolvedLibrary.Directory)) {
-                $ResolvedLibrary.Directory
-            }
-        }
-    ) | Select-Object -Unique
-    if ($ResolvedLibraryDirectories.Count -gt 0) {
+if ([System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform([System.Runtime.InteropServices.OSPlatform]::Windows) -and $BinaryModuleDirectories.Count -gt 0) {
 {{ArchitectureResolverBlock}}
 
-    # Prefer the active managed-framework folder, then reuse a compatible native
+    # Prefer the folders of this host's module assemblies, then reuse a compatible native
     # runtime bundled under another framework folder. Native assets are selected
     # by process architecture and do not inherit the managed assembly TFM.
-    $LibraryRoot = Join-Path -Path $PSScriptRoot -ChildPath 'Lib'
     $NativeLibraryDirectories = @(
-        $ResolvedLibraryDirectories
-        if (Test-Path -LiteralPath $LibraryRoot) {
-            foreach ($LibraryDirectory in @(Get-ChildItem -LiteralPath $LibraryRoot -Directory -ErrorAction SilentlyContinue)) {
-                if ($LibraryDirectory.FullName -notin $ResolvedLibraryDirectories) {
-                    $LibraryDirectory.FullName
-                }
-            }
-            if ($LibraryRoot -notin $ResolvedLibraryDirectories) {
-                $LibraryRoot
+        $BinaryModuleDirectories
+        foreach ($NativeRuntimeRoot in {{NativeRuntimeRoots}}) {
+            $NativeRuntimeRoot = [IO.Path]::GetFullPath([IO.Path]::Combine($PowerForgeModuleRoot, $NativeRuntimeRoot))
+            if ($NativeRuntimeRoot -notin $BinaryModuleDirectories) {
+                $NativeRuntimeRoot
             }
         }
     )
@@ -52,6 +32,5 @@ if ($IsWindowsPlatform) {
         # inserted a fallback folder, while preserving unrelated PATH order.
         [array] $OrderedPathEntries = @($NativePaths) + @($RemainingPathEntries)
         $env:PATH = [string]::Join([IO.Path]::PathSeparator, $OrderedPathEntries)
-    }
     }
 }

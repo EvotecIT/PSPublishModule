@@ -143,7 +143,7 @@ if ($errors.Count -gt 0) {
 $ErrorActionPreference = 'Stop'
 Import-Module (Join-Path $PSScriptRoot 'DemoModule.psm1') -Force
 $module = Get-Module DemoModule
-$resolverState = & $module { $PowerForgeDesktopAssemblyResolverState }
+$resolverState = & $module { $PowerForgeDesktopAssemblyResolver }
 if ($null -eq $resolverState -or
     $resolverState.PSObject.Properties.Name -notcontains 'Registered' -or
     -not $resolverState.Registered -or $resolverState.BootstrapActive) {
@@ -391,7 +391,7 @@ try {
 $ErrorActionPreference = 'Stop'
 Import-Module (Join-Path $PSScriptRoot 'DemoModule.psm1') -Force
 $module = Get-Module DemoModule
-$resolverState = & $module { $PowerForgeDesktopAssemblyResolverState }
+$resolverState = & $module { $PowerForgeDesktopAssemblyResolver }
 if ($null -ne $resolverState -and $resolverState.BootstrapActive) { throw 'The Desktop resolver retained unrestricted bootstrap resolution.' }
 if ([DemoModule.Initialize]::Read() -ne 'nested-dependency') { throw 'The deferred nested dependency was unavailable.' }
 'NESTED_DEPENDENCY_PRELOADED'

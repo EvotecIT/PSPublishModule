@@ -193,8 +193,6 @@ public partial class ModuleBootstrapperGeneratorTests
                 targetFrameworks: new[] { "net8.0" });
 
             var bootstrapperPath = Path.Combine(root, "DemoModule.psm1");
-            var bootstrapper = File.ReadAllText(bootstrapperPath);
-            Assert.Contains("HashSet[string]", bootstrapper, StringComparison.Ordinal);
             var result = RunGeneratedModulePowerShell(
                 root,
                 "$ErrorActionPreference = 'Stop'; Import-Module -Name '" +

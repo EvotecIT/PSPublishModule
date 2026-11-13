@@ -120,9 +120,10 @@ public sealed class ModuleBuildPipelineReuseStagingTests
             });
 
             var bootstrapper = File.ReadAllText(Path.Combine(result.StagingPath, "SampleModule.psm1"));
-            Assert.Contains("foreach ($PowerForgeRuntimeFolder in @($AssemblyFolders.Name))", bootstrapper);
-            Assert.Contains("$Framework = $PowerForgeSelectedRuntimeFolder", bootstrapper);
-            Assert.DoesNotContain("$Framework = 'Core-net10.0'", bootstrapper, StringComparison.Ordinal);
+            // The staged folders alone decide each host's payload; only the .NET version band is left for import time.
+            Assert.Contains("if ([Environment]::Version -ge [version]'10.0') {", bootstrapper, StringComparison.Ordinal);
+            Assert.Contains("@{ Name = 'SampleModule.dll'; Path = 'Lib/Core-net10.0/SampleModule.dll' }", bootstrapper, StringComparison.Ordinal);
+            Assert.Contains("@{ Name = 'SampleModule.dll'; Path = 'Lib/Standard/SampleModule.dll' }", bootstrapper, StringComparison.Ordinal);
         }
         finally
         {

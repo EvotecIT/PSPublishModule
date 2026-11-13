@@ -12,7 +12,7 @@ public sealed partial class ModuleBootstrapperGeneratorWindowsPowerShellTests
 $ErrorActionPreference = 'Stop'
 Import-Module (Join-Path $PSScriptRoot 'DemoModule.psm1') -Force
 $module = Get-Module DemoModule
-$state = & $module { $PowerForgeDesktopAssemblyResolverState }
+$state = & $module { $PowerForgeDesktopAssemblyResolver }
 $resolver = & $module { $PowerForgeDesktopAssemblyResolver }
 if (-not $state.Registered -or $state.BootstrapActive) { throw 'Resolver did not enter scoped runtime mode.' }
 if ([DemoModule.Initialize]::Count([byte[]](1,2,3)) -ne 3) { throw 'Deferred Memory execution failed.' }
@@ -29,7 +29,7 @@ if ($null -ne $resolver.Invoke($null, [ResolveEventArgs]::new($name.Replace('4.0
 Remove-Module DemoModule
 if ($state.Registered) { throw 'Resolver remained registered after removal.' }
 if ($null -ne $resolver.Invoke($null, [ResolveEventArgs]::new($name, $owner))) { throw 'Removed resolver still served requests.' }
-Set-Content (Join-Path $PSScriptRoot 'Public/Payload.ps1') '$global:FailedFacadeState = $PowerForgeDesktopAssemblyResolverState; throw "facade-late-failure"'
+Set-Content (Join-Path $PSScriptRoot 'Public/Payload.ps1') '$global:FailedFacadeState = $PowerForgeDesktopAssemblyResolver; throw "facade-late-failure"'
 try {
     Import-Module (Join-Path $PSScriptRoot 'DemoModule.psm1') -Force -ErrorAction Stop
     throw 'Late failure was ignored.'

@@ -93,7 +93,7 @@ if (([DemoModule.Initialize]::ReadJsonOnWorker() | ConvertFrom-Json).value -ne '
 if (([DemoModule.Initialize]::ReadJson() | ConvertFrom-Json).value -ne 'deferred-json') { throw 'Deferred JSON failed.' }
 if ([DemoModule.Initialize]::ReadEncoded() -ne '\u003Cdeferred\u003E') { throw 'Direct encoder reference failed.' }
 $module = Get-Module DemoModule
-$state = & $module { $PowerForgeDesktopAssemblyResolverState }
+$state = & $module { $PowerForgeDesktopAssemblyResolver }
 if (-not $state.Registered -or $state.BootstrapActive) { throw 'The resolver is not in scoped runtime mode.' }
 $resolver = & $module { $PowerForgeDesktopAssemblyResolver }
 $name = 'System.Text.Encodings.Web, Version=10.0.0.0, Culture=neutral, PublicKeyToken=cc7b13ffcd2ddd51'
@@ -104,7 +104,7 @@ if ($null -ne $resolver.Invoke($null, [ResolveEventArgs]::new($name, [System.Man
 try { Get-Item (Join-Path $PSScriptRoot 'missing-file') -ErrorAction Stop } catch [System.Management.Automation.ItemNotFoundException] {}
 Remove-Module DemoModule
 if ($state.Registered) { throw 'The resolver remained registered after removal.' }
-Set-Content (Join-Path $PSScriptRoot 'Public/Payload.ps1') '$global:FailedResolverForProof = $PowerForgeDesktopAssemblyResolverState; throw "late-script-failure"'
+Set-Content (Join-Path $PSScriptRoot 'Public/Payload.ps1') '$global:FailedResolverForProof = $PowerForgeDesktopAssemblyResolver; throw "late-script-failure"'
 try {
     Import-Module (Join-Path $PSScriptRoot 'DemoModule.psm1') -Force -ErrorAction Stop
     throw 'Late script failure was ignored.'

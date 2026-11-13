@@ -19,7 +19,6 @@ internal static partial class ModuleBootstrapperGenerator
         var binaryRootExpression = BuildPowerShellPathExpression(moduleRoot, options.BinaryRootPath);
         var coreFrameworks = BuildPowerShellArrayLiteral(NormalizePowerShellStringArray(options.CoreFrameworkCandidates));
         var desktopFrameworks = BuildPowerShellArrayLiteral(NormalizePowerShellStringArray(options.DesktopFrameworkCandidates));
-        var useAlcLiteral = useAssemblyLoadContext ? "$true" : "$false";
         return RenderModuleBootstrapperTemplate(
             "DevelopmentBinaryLoader",
             "Scripts/ModuleBootstrapper/DevelopmentBinaryLoader.Template.ps1",
@@ -35,9 +34,7 @@ internal static partial class ModuleBootstrapperGenerator
                 ["DevelopmentConfigurationEnvironmentVariable"] = EscapePsSingleQuoted(options.ConfigurationEnvironmentVariable),
                 ["DevelopmentCoreFrameworks"] = coreFrameworks,
                 ["DevelopmentDesktopFrameworks"] = desktopFrameworks,
-                ["UseAssemblyLoadContext"] = useAlcLiteral,
                 ["LibraryFileName"] = EscapePsSingleQuoted(libraryName + ".dll"),
-                ["LibraryTypeName"] = EscapePsSingleQuoted(libraryName + ".Initialize"),
                 ["RuntimeHandlerBlock"] = handleRuntimes
                     ? IndentPowerShell(BuildDevelopmentRuntimeHandlerBlock().TrimEnd(), 12)
                     : string.Empty,
@@ -49,47 +46,48 @@ internal static partial class ModuleBootstrapperGenerator
                         "[IO.Path]::GetDirectoryName($PowerForgeDevelopmentBinaryPath)",
                         ignoreLibrariesOnLoad).TrimEnd(),
                     12),
-                ["AssemblyLoadContextImportBlock"] = BuildDevelopmentAssemblyLoadContextImportBlock(
+                ["ImportBlock"] = IndentPowerShell(BuildDevelopmentImportBlock(
                     moduleName,
+                    libraryName,
                     useAssemblyLoadContext,
                     assemblyTypeAcceleratorMode,
                     assemblyTypeAccelerators,
-                    assemblyTypeAcceleratorAssemblies, sharedAssemblies)
+                    assemblyTypeAcceleratorAssemblies, sharedAssemblies), 12)
             });
     }
 
-    private static string BuildDevelopmentAssemblyLoadContextImportBlock(
+    private static string BuildDevelopmentImportBlock(
         string moduleName,
+        string libraryName,
         bool useAssemblyLoadContext,
         AssemblyTypeAcceleratorExportMode assemblyTypeAcceleratorMode,
         IReadOnlyList<string>? assemblyTypeAccelerators,
         IReadOnlyList<string>? assemblyTypeAcceleratorAssemblies, IReadOnlyList<string>? sharedAssemblies = null)
     {
-        if (!useAssemblyLoadContext)
-            return "                & $ImportModule $PowerForgeDevelopmentBinaryPath -ErrorAction Stop";
-
-        var typeAcceleratorBlock = BuildTypeAcceleratorBlock(
-            assemblyTypeAcceleratorMode,
-            assemblyTypeAccelerators,
-            assemblyTypeAcceleratorAssemblies,
-            "[IO.Path]::GetDirectoryName($PowerForgeDevelopmentBinaryPath)");
-        var typeAcceleratorSetupBlock = string.IsNullOrWhiteSpace(typeAcceleratorBlock)
-            ? string.Empty
-            : "                $ModuleAssembly = $PowerForgeDevelopmentModuleAssembly\r\n" +
-              IndentPowerShell(typeAcceleratorBlock.TrimEnd(), 16);
-
-        return RenderModuleBootstrapperTemplate(
-            "DevelopmentAssemblyLoadContextImport",
-            "Scripts/ModuleBootstrapper/DevelopmentAssemblyLoadContextImport.Template.ps1",
+        var plainImportBlock = RenderModuleBootstrapperTemplate(
+            "DevelopmentBinaryImport",
+            "Scripts/ModuleBootstrapper/DevelopmentBinaryImport.Template.ps1",
             new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
-                ["DevelopmentContextName"] = EscapePsSingleQuoted(moduleName + ".Development"),
-                ["SharedAssemblyNames"] = BuildPowerShellArrayLiteral(NormalizePowerShellStringArray(sharedAssemblies)),
-                ["TypeAcceleratorSetupBlock"] = typeAcceleratorSetupBlock,
-                ["ExportBridgeBlock"] = IndentPowerShell(
-                    BuildPowerShellModuleExportBridge("$PowerForgeDevelopmentInnerModule").TrimEnd(),
-                    20)
-            });
+                ["LibraryTypeName"] = EscapePsSingleQuoted(libraryName + ".Initialize"),
+                ["ImportedAliasesBlock"] = BuildImportedAliasesBlock()
+            }).TrimEnd();
+        if (!useAssemblyLoadContext)
+            return plainImportBlock;
+
+        return "if ($PSEdition -eq 'Core') {" + Environment.NewLine +
+               IndentPowerShell(BuildAssemblyLoadContextImportBlock(
+                   "@($PowerForgeDevelopmentBinaryPath)",
+                   "$PowerForgeDevelopmentBinaryPath",
+                   moduleName + ".Development",
+                   "[IO.Path]::GetDirectoryName($PowerForgeDevelopmentBinaryPath)",
+                   assemblyTypeAcceleratorMode,
+                   assemblyTypeAccelerators,
+                   assemblyTypeAcceleratorAssemblies,
+                   sharedAssemblies), 4) + Environment.NewLine +
+               "} else {" + Environment.NewLine +
+               IndentPowerShell(plainImportBlock, 4) + Environment.NewLine +
+               "}";
     }
 
     private static string BuildPowerShellModuleExportBridge(string innerModuleExpression)

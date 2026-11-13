@@ -115,10 +115,11 @@ public partial class ModuleBootstrapperGeneratorTests
                 "The module root must be captured before script folders are discovered.");
             Assert.Contains("$FunctionsToExport = @('Get-Demo')", bootstrapper);
             Assert.Contains("$AliasesToExport = @('gdemo')", bootstrapper);
-            Assert.Contains("$PowerForgeDesktopAssemblyResolverState.BootstrapActive = $false", bootstrapper);
+            Assert.Contains("@{ Name = 'DemoModule.dll'; Path = 'Lib/Core/DemoModule.dll' }", bootstrapper);
+            Assert.Contains("$PowerForgeDesktopAssemblyResolver.BootstrapActive = $false", bootstrapper);
             Assert.Contains("$ExecutionContext.SessionState.Module.OnRemove", bootstrapper);
-            Assert.Contains("$PowerForgeDesktopAssemblyResolverState.Register()", bootstrapper);
-            Assert.Contains("$PowerForgeDesktopAssemblyResolverState.Unregister()", bootstrapper);
+            Assert.Contains("$PowerForgeDesktopAssemblyResolver.Register()", bootstrapper);
+            Assert.Contains("$DesktopAssemblyResolver.Unregister()", bootstrapper);
             Assert.DoesNotContain("ProcessArchitecture", bootstrapper);
         }
         finally
@@ -174,7 +175,7 @@ public partial class ModuleBootstrapperGeneratorTests
     public void Generate_WithHandleRuntimes_EmitsRuntimeBootstrapperBlock()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-bootstrapper-runtime-" + Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(Path.Combine(root, "Lib", "Core"));
+        Directory.CreateDirectory(Path.Combine(root, "Lib", "Core", "runtimes", "win-x64", "native"));
         File.WriteAllText(Path.Combine(root, "Lib", "Core", "DemoModule.dll"), string.Empty);
 
         try
@@ -185,18 +186,8 @@ public partial class ModuleBootstrapperGeneratorTests
             var bootstrapper = File.ReadAllText(Path.Combine(root, "DemoModule.psm1"));
             Assert.Contains("ProcessArchitecture", bootstrapper);
             Assert.Contains("IsOSPlatform([System.Runtime.InteropServices.OSPlatform]::Windows)", bootstrapper);
-            Assert.Contains("$ResolvedLibrary = & $ResolvePowerForgeModuleAssembly -LibraryFileName $LibraryFileName", bootstrapper);
-            var librariesScript = File.ReadAllText(Path.Combine(root, "DemoModule.Libraries.ps1"));
-            Assert.Contains("Skipping preload-folder discovery", librariesScript, StringComparison.Ordinal);
-            Assert.Contains("Skipping Desktop resolver root", bootstrapper, StringComparison.Ordinal);
-            Assert.Contains("Skipping native runtime discovery", bootstrapper, StringComparison.Ordinal);
-            var preloadResolveIndex = librariesScript.IndexOf("$PowerForgeResolvedLibrary = & $ResolvePowerForgeModuleAssembly", StringComparison.Ordinal);
-            Assert.True(
-                librariesScript.LastIndexOf("try {", preloadResolveIndex, StringComparison.Ordinal) >= 0 &&
-                librariesScript.IndexOf("} catch {", preloadResolveIndex, StringComparison.Ordinal) > preloadResolveIndex,
-                "Preload-folder resolution must isolate failures per configured assembly.");
             Assert.Contains("$NativeLibraryDirectories = @(", bootstrapper);
-            Assert.Contains("Get-ChildItem -LiteralPath $LibraryRoot -Directory", bootstrapper);
+            Assert.Contains("foreach ($NativeRuntimeRoot in @('Lib/Core'))", bootstrapper);
             Assert.Contains("foreach ($NativeLibraryDirectory in $NativeLibraryDirectories)", bootstrapper);
             Assert.Contains("Join-Path -Path $NativeLibraryDirectory -ChildPath (\"runtimes\\{0}\\native\" -f $ArchFolder)", bootstrapper);
             Assert.Contains("[array] $NativePaths = foreach", bootstrapper);
@@ -211,12 +202,12 @@ public partial class ModuleBootstrapperGeneratorTests
             Assert.Contains("if ([IntPtr]::Size -eq 4) { 'win-x86' } else { 'win-x64' }", bootstrapper);
             Assert.Contains("Unknown Windows architecture", bootstrapper);
             Assert.True(
-                bootstrapper.IndexOf("$ResolvedLibrary = & $ResolvePowerForgeModuleAssembly", StringComparison.Ordinal) <
+                bootstrapper.IndexOf("$BinaryModuleDirectories = ", StringComparison.Ordinal) <
                 bootstrapper.IndexOf("$env:PATH =", StringComparison.Ordinal),
                 "The managed assembly directory must be resolved before native PATH probing.");
             Assert.True(
                 bootstrapper.IndexOf("$env:PATH =", StringComparison.Ordinal) <
-                bootstrapper.IndexOf("foreach ($Library in $LibraryFileNames)", StringComparison.Ordinal),
+                bootstrapper.IndexOf("foreach ($BinaryModule in $BinaryModules) {\r\n            try {", StringComparison.Ordinal),
                 "Native PATH probing must complete before the binary module import loop.");
             Assert.DoesNotContain("\r\n\r\ntry {", bootstrapper);
         }
@@ -325,12 +316,15 @@ public partial class ModuleBootstrapperGeneratorTests
             var bootstrapper = File.ReadAllText(Path.Combine(root, "DemoModule.psm1"));
             var libraries = File.ReadAllText(Path.Combine(root, "DemoModule.Libraries.ps1"));
 
-            Assert.Contains("$PowerForgeRuntimeVersion = [Environment]::Version", bootstrapper);
-            Assert.Contains("foreach ($PowerForgeRuntimeFolder in @($AssemblyFolders.Name))", bootstrapper);
-            Assert.Contains("$Framework = $PowerForgeSelectedRuntimeFolder", bootstrapper);
-            Assert.Contains("'Core-net10.0' = @(", libraries);
+            // The build resolves each host's payload; only the .NET version band is left for import time.
+            Assert.Contains("if ([Environment]::Version -ge [version]'10.0') {", bootstrapper);
+            Assert.Contains("@{ Name = 'DemoModule.dll'; Path = 'Lib/Core-net10.0/DemoModule.dll' }", bootstrapper);
+            Assert.Contains("@{ Name = 'DemoModule.dll'; Path = 'Lib/Core/DemoModule.dll' }", bootstrapper);
+            Assert.Contains("@{ Name = 'DemoModule.dll'; Path = 'Lib/Default/DemoModule.dll' }", bootstrapper);
+            Assert.DoesNotContain("Get-ChildItem", bootstrapper);
+            Assert.Contains("if ([Environment]::Version -ge [version]'10.0') {", libraries);
             Assert.Contains("Lib\\Core-net10.0\\DemoModule.dll", libraries);
-            Assert.Contains("foreach ($PowerForgeRuntimeFolder in @($AssemblyFolders.Name))", libraries);
+            Assert.Contains("Lib\\Default\\DemoModule.dll", libraries);
         }
         finally
         {
@@ -352,10 +346,9 @@ public partial class ModuleBootstrapperGeneratorTests
             ModuleBootstrapperGenerator.Generate(root, "DemoModule", exports, new[] { "DemoModule.dll" }, handleRuntimes: false);
 
             var bootstrapper = File.ReadAllText(Path.Combine(root, "DemoModule.psm1"));
-            Assert.Contains("$HasNamedCorePayload = $true", bootstrapper);
-            Assert.Contains("$PSEdition -eq 'Core' -and $HasNamedCorePayload", bootstrapper);
-            Assert.Contains("$Framework = $PowerForgeSelectedRuntimeFolder", bootstrapper);
-            Assert.Contains("No compatible PowerShell Core assemblies found", bootstrapper);
+            Assert.Contains("if ([Environment]::Version -ge [version]'10.0') {", bootstrapper);
+            Assert.Contains("@{ Name = 'DemoModule.dll'; Path = 'Lib/Core-net10.0/DemoModule.dll' }", bootstrapper);
+            Assert.Contains("@{ Name = 'DemoModule.dll'; Error = 'No compatible PowerShell Core assemblies found' }", bootstrapper);
         }
         finally
         {
@@ -367,7 +360,7 @@ public partial class ModuleBootstrapperGeneratorTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void Generate_WithDefaultAndNamedCorePayload_RejectsIncompatibleCoreRuntime(bool useAssemblyLoadContext)
+    public void Generate_WithDefaultAndNamedCorePayload_FallsBackToDefaultBelowNamedCoreRuntime(bool useAssemblyLoadContext)
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-bootstrapper-default-named-core-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(Path.Combine(root, "Lib", "Default"));
@@ -387,9 +380,10 @@ public partial class ModuleBootstrapperGeneratorTests
                 useAssemblyLoadContext: useAssemblyLoadContext);
 
             var bootstrapper = File.ReadAllText(Path.Combine(root, "DemoModule.psm1"));
-            Assert.Contains(
-                "$HasNamedCorePayload -and ($Framework -eq 'Default' -or [string]::IsNullOrWhiteSpace($Framework))",
-                bootstrapper);
+            var belowNamedCore = bootstrapper.Substring(bootstrapper.IndexOf("[Environment]::Version -ge [version]'10.0'", StringComparison.Ordinal));
+            Assert.Contains("@{ Name = 'DemoModule.dll'; Path = 'Lib/Core-net10.0/DemoModule.dll' }", belowNamedCore);
+            belowNamedCore = belowNamedCore.Substring(belowNamedCore.IndexOf("} else {", StringComparison.Ordinal));
+            Assert.StartsWith("} else {\r\n                @(\r\n                    @{ Name = 'DemoModule.dll'; Path = 'Lib/Default/DemoModule.dll' }", belowNamedCore);
         }
         finally
         {
@@ -472,16 +466,15 @@ public partial class ModuleBootstrapperGeneratorTests
             var bootstrapper = File.ReadAllText(Path.Combine(root, "DemoModule.psm1"));
             Assert.Contains("[PowerForge.ModuleLoader.V1.ModuleAssemblyLoadContext]::LoadModuleFromGroup(", bootstrapper);
             Assert.Contains("'PowerForge.ModuleLoader.V1.dll'", bootstrapper);
-            Assert.Contains("$PowerForgeCoreModuleAssemblyPaths", bootstrapper);
-            Assert.Contains("$PowerForgeResolvedBinaryModulePaths = [Collections.Generic.HashSet[string]]", bootstrapper);
+            Assert.Contains("[string[]]$BinaryModulePaths,", bootstrapper);
             Assert.Contains("$ModuleAssemblyPath,", bootstrapper);
             Assert.Contains("-PassThru -ErrorAction Stop", bootstrapper);
             Assert.Contains("Export-ModuleMember -Cmdlet ([string[]]@($InnerModule.ExportedCmdlets.Keys)) -Alias ([string[]]@($InnerModule.ExportedAliases.Keys))", bootstrapper);
             foreach (var edrSignal in new[] { "NonPublic", "AddExportedCmdlet", "Add-Type -TypeDefinition", "GetType('System.Management", "LoadFrom(", "Threading.Monitor" })
                 Assert.DoesNotContain(edrSignal, bootstrapper);
             Assert.Contains("$PSEdition -ne 'Core'", bootstrapper);
-            Assert.Contains("$PowerForgeDesktopAssemblyResolverState.Register()", bootstrapper);
-            Assert.Contains("$PowerForgeDesktopAssemblyResolverState.Unregister()", bootstrapper);
+            Assert.Contains("$PowerForgeDesktopAssemblyResolver.Register()", bootstrapper);
+            Assert.Contains("$DesktopAssemblyResolver.Unregister()", bootstrapper);
             Assert.Contains("$LibrariesScript = [IO.Path]::Combine($PowerForgeModuleRoot, 'DemoModule.Libraries.ps1')", bootstrapper);
             Assert.True(
                 bootstrapper.IndexOf(". $LibrariesScript", StringComparison.Ordinal) <
@@ -784,7 +777,7 @@ public partial class ModuleBootstrapperGeneratorTests
                 useAssemblyLoadContext: true);
 
             var bootstrapper = File.ReadAllText(Path.Combine(root, "DemoModule.psm1"));
-            Assert.Contains("$PowerForgePreferredBinaryFolders = if ($PSEdition -eq 'Core')", bootstrapper);
+            Assert.Contains("$BinaryModules = @(\r\n            @{ Name = 'DemoModule.dll'; Path = 'Lib/Default/DemoModule.dll' }\r\n        )", bootstrapper);
             Assert.True(File.Exists(Path.Combine(root, "Loader", "Core", "PowerForge.ModuleLoader.V1.dll")));
 
             var libraries = File.ReadAllText(Path.Combine(root, "DemoModule.Libraries.ps1"));
@@ -821,7 +814,8 @@ public partial class ModuleBootstrapperGeneratorTests
 
             Assert.True(File.Exists(Path.Combine(root, "Loader", "Core", "PowerForge.ModuleLoader.V1.dll")));
             var bootstrapper = File.ReadAllText(Path.Combine(root, "DemoModule.psm1"));
-            Assert.Contains("$LibFolder = $LibraryDirectory", bootstrapper);
+            Assert.Contains("@{ Name = 'DemoModule.dll'; Path = 'Lib/DemoModule.dll' }", bootstrapper);
+            Assert.Contains("RegisterFromLoadContext(\r\n                            $ModuleAssembly,\r\n                            $LibraryDirectory,", bootstrapper);
         }
         finally
         {
@@ -849,10 +843,10 @@ public partial class ModuleBootstrapperGeneratorTests
                 handleRuntimes: false);
 
             var bootstrapper = File.ReadAllText(Path.Combine(root, "DemoModule.psm1"));
-            Assert.Contains("$LibraryFileNames = @('DemoModule.dll', 'Auxiliary.dll')", bootstrapper);
-            Assert.Contains("foreach ($Library in $LibraryFileNames)", bootstrapper);
-            Assert.Contains("Where-Object { $_.Name -ieq $LibraryFileName }", bootstrapper);
-            Assert.Contains("$ModuleAssemblyPath = $ResolvedModuleAssembly.Path", bootstrapper);
+            Assert.Contains(
+                "@{ Name = 'DemoModule.dll'; Path = 'Lib/DemoModule.DLL' }\r\n            @{ Name = 'Auxiliary.dll'; Path = 'Lib/Auxiliary.dll' }",
+                bootstrapper);
+            Assert.Contains("foreach ($BinaryModule in $BinaryModules) {", bootstrapper);
         }
         finally
         {
@@ -883,9 +877,7 @@ public partial class ModuleBootstrapperGeneratorTests
                 targetFrameworks: new[] { "net8.0" });
 
             var bootstrapper = File.ReadAllText(Path.Combine(root, "DemoModule.psm1"));
-            const string expectedReference = "Plugins/DemoModule.dll";
-            Assert.Contains("$LibraryFileNames = @('" + expectedReference + "')", bootstrapper);
-            Assert.Contains("$RelativeCandidate -ieq $RelativeReference", bootstrapper);
+            Assert.Contains("@{ Name = 'Plugins/DemoModule.dll'; Path = 'Lib/Plugins/DemoModule.DLL' }", bootstrapper);
             Assert.True(File.Exists(Path.Combine(root, "Loader", "Core", "PowerForge.ModuleLoader.V1.dll")));
         }
         finally
@@ -926,9 +918,8 @@ public partial class ModuleBootstrapperGeneratorTests
 
             var bootstrapperPath = Path.Combine(moduleRoot, "DemoModule.psm1");
             var bootstrapper = File.ReadAllText(bootstrapperPath);
-            Assert.Contains("$RecursiveMatches = @(Get-ChildItem -LiteralPath $LibRoot -File -Recurse", bootstrapper);
-            Assert.Contains("matched multiple nested Lib payloads", bootstrapper);
-            Assert.Contains("$PowerForgeHasNoCompatibleNamedCorePayload", bootstrapper);
+            Assert.Contains("@{ Name = 'DemoModule.dll'; Path = 'Lib/Plugins/DemoModule.dll' }", bootstrapper);
+            Assert.DoesNotContain("-Recurse", bootstrapper);
             Assert.True(File.Exists(Path.Combine(moduleRoot, "Loader", "Core", "PowerForge.ModuleLoader.V1.dll")));
 
             var processStartInfo = new System.Diagnostics.ProcessStartInfo
@@ -956,6 +947,35 @@ public partial class ModuleBootstrapperGeneratorTests
             Assert.True(
                 process.ExitCode == 0,
                 $"Generated module import failed.{Environment.NewLine}{standardOutput}{Environment.NewLine}{standardError}");
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void Generate_WithAmbiguousNestedExportAssembly_FailsTheBuild()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-bootstrapper-ambiguous-nested-export-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(root, "Lib", "PluginsA"));
+        Directory.CreateDirectory(Path.Combine(root, "Lib", "PluginsB"));
+        File.WriteAllText(Path.Combine(root, "Lib", "PluginsA", "DemoModule.dll"), string.Empty);
+        File.WriteAllText(Path.Combine(root, "Lib", "PluginsB", "DemoModule.dll"), string.Empty);
+
+        try
+        {
+            var error = Assert.Throws<InvalidOperationException>(() => ModuleBootstrapperGenerator.Generate(
+                root,
+                "DemoModule",
+                new ExportSet(Array.Empty<string>(), Array.Empty<string>(), Array.Empty<string>()),
+                new[] { "DemoModule.dll" },
+                handleRuntimes: false));
+
+            Assert.Contains("matched multiple nested Lib payloads", error.Message, StringComparison.Ordinal);
+            Assert.Contains("Lib/PluginsA/DemoModule.dll, Lib/PluginsB/DemoModule.dll", error.Message, StringComparison.Ordinal);
+            Assert.False(File.Exists(Path.Combine(root, "DemoModule.psm1")));
         }
         finally
         {
@@ -1064,7 +1084,7 @@ public partial class ModuleBootstrapperGeneratorTests
                 handleRuntimes: false);
 
             var bootstrapper = File.ReadAllText(Path.Combine(root, "DemoModule.psm1"));
-            Assert.Contains("$LibraryFileNames = @('DemoModule.dll')", bootstrapper, StringComparison.Ordinal);
+            Assert.Contains("@{ Name = 'DemoModule.dll'; Path = 'Lib/Core/DemoModule.dll' }", bootstrapper, StringComparison.Ordinal);
             Assert.DoesNotContain(configuredReference, bootstrapper, StringComparison.OrdinalIgnoreCase);
         }
         finally
@@ -1093,7 +1113,7 @@ public partial class ModuleBootstrapperGeneratorTests
                 handleRuntimes: false);
 
             var bootstrapper = File.ReadAllText(Path.Combine(root, "DemoModule.psm1"));
-            Assert.Contains("$LibraryFileNames = @('DemoModule.dll')", bootstrapper, StringComparison.Ordinal);
+            Assert.Contains("@{ Name = 'DemoModule.dll'; Path = 'Lib/Core/DemoModule.dll' }", bootstrapper, StringComparison.Ordinal);
             Assert.DoesNotContain(configuredReference, bootstrapper, StringComparison.OrdinalIgnoreCase);
         }
         finally
@@ -1411,7 +1431,6 @@ public partial class ModuleBootstrapperGeneratorTests
             Assert.Contains("[IO.Path]::Combine($PowerForgeDevelopmentBinaryRoot, 'PowerForge.ModuleLoader', $PowerForgeLoaderEdition, 'PowerForge.ModuleLoader.V1.dll')", bootstrapper);
             Assert.Contains("[PowerForge.ModuleLoader.V1.ModuleAssemblyLoadContext]::LoadModuleFromGroup(", bootstrapper);
             Assert.Contains("'DemoModule.Development'", bootstrapper);
-            Assert.Contains("$ModuleAssembly = $PowerForgeDevelopmentModuleAssembly", bootstrapper);
             Assert.Contains("[IO.Path]::GetDirectoryName($PowerForgeDevelopmentBinaryPath),", bootstrapper);
             Assert.Contains("[string[]]@('Demo.Dependency')", bootstrapper);
             Assert.True(File.Exists(Path.Combine(developmentOptions.BinaryRootPath, "PowerForge.ModuleLoader", "Core", "PowerForge.ModuleLoader.V1.dll")));
@@ -1419,8 +1438,8 @@ public partial class ModuleBootstrapperGeneratorTests
             Assert.Contains("$PowerForgeDevelopmentLoadedType = 'DemoModule.Initialize' -as [type]", bootstrapper);
             Assert.Contains("$PowerForgeDevelopmentSelectedBinaryPath = [IO.Path]::GetFullPath($PowerForgeDevelopmentBinaryPath)", bootstrapper);
             Assert.Contains("[string]::Equals($PowerForgeDevelopmentLoadedAssemblyPath, $PowerForgeDevelopmentSelectedBinaryPath, [StringComparison]::OrdinalIgnoreCase)", bootstrapper);
-            Assert.Contains("& $ImportModule -Assembly $PowerForgeDevelopmentLoadedType.Assembly -Force -ErrorAction Stop", bootstrapper);
-            Assert.Contains("& $ImportModule $PowerForgeDevelopmentBinaryPath -ErrorAction Stop", bootstrapper);
+            Assert.Contains("& $ImportModule -Assembly $PowerForgeDevelopmentLoadedType.Assembly -Force -PassThru -ErrorAction Stop", bootstrapper);
+            Assert.Contains("& $ImportModule $PowerForgeDevelopmentBinaryPath -PassThru -ErrorAction Stop", bootstrapper);
             Assert.Contains("$PowerForgeCommandModuleDependencies = @", bootstrapper);
             Assert.Contains("'Required.Demo' = @('Get-Demo')", bootstrapper);
             Assert.DoesNotContain("No assemblies found", bootstrapper);

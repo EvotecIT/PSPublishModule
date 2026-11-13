@@ -27,19 +27,19 @@ public sealed class ModuleBootstrapperGeneratorDesktopTypeAcceleratorTests
             // Discovery, ignore lists and content matching now live in the compiled loader; the script passes configuration.
             Assert.Contains("[PowerForge.ModuleLoader.V1.TypeAcceleratorRegistration]::RegisterFromDirectory(", bootstrapper);
             Assert.Contains("[string[]]@('Ignored.Dependency.dll')", bootstrapper);
-            Assert.Contains("if ($PSEdition -ne 'Core' -and $PowerForgeDesktopBinaryLoaded)", bootstrapper);
+            Assert.Contains("foreach ($LoadedDirectory in $LoadedDirectories) {", bootstrapper);
             Assert.Contains("$PowerForgeModuleRoot = $PSScriptRoot", bootstrapper);
             Assert.Contains("$LibrariesScript = [IO.Path]::Combine($PowerForgeModuleRoot, 'DemoModule.Libraries.ps1')", bootstrapper);
-            Assert.Contains("$ModuleAssemblyPath = $ResolvedModuleAssembly.Path", bootstrapper);
-            Assert.Contains("($PowerForgeDesktopBinaryDirectory),", bootstrapper);
+            Assert.Contains("$ModuleAssemblyPath = $BinaryModule.Path", bootstrapper);
+            Assert.Contains("($LoadedDirectory),", bootstrapper);
             Assert.True(
                 bootstrapper.IndexOf("$PowerForgeModuleRoot = $PSScriptRoot", StringComparison.Ordinal) <
                 bootstrapper.IndexOf(". $LibrariesScript", StringComparison.Ordinal));
             Assert.True(
                 bootstrapper.IndexOf(". $LibrariesScript", StringComparison.Ordinal) <
-                bootstrapper.IndexOf("$PowerForgeDesktopBinaryLoaded = $true", StringComparison.Ordinal));
+                bootstrapper.IndexOf("$LoadedDirectories.Add($LibraryDirectory)", StringComparison.Ordinal));
             Assert.True(
-                bootstrapper.IndexOf("$PowerForgeDesktopBinaryLoaded = $true", StringComparison.Ordinal) <
+                bootstrapper.IndexOf("$LoadedDirectories.Add($LibraryDirectory)", StringComparison.Ordinal) <
                 bootstrapper.IndexOf("::RegisterFromDirectory(", StringComparison.Ordinal));
             Assert.Contains("# Desktop loads module dependencies", bootstrapper);
         }
