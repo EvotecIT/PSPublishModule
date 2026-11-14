@@ -31,7 +31,7 @@ public sealed class WebDocumentationMarkdownTests
         for (var run = 0; run < 2; run++)
         {
             WebAgentReadiness.Prepare(options);
-            var markdown = File.ReadAllText(Path.Combine(directory, "index" + extension));
+            var markdown = File.ReadAllText(Path.Combine(directory, "index" + extension)).Replace("\r\n", "\n", StringComparison.Ordinal);
             Assert.StartsWith("# Guide\n\nGuide description", markdown.Replace("\r\n", "\n"));
             Assert.Single(Regex.Matches(markdown, "(?m)^# Guide$"));
             Assert.Contains("**Package**", markdown);
@@ -94,7 +94,7 @@ public sealed class WebDocumentationMarkdownTests
             }
             ```
             """;
-        markdown = markdown.Replace("title: Guide", "title: " + title, StringComparison.Ordinal)
+        markdown = markdown.Replace("\r\n", "\n", StringComparison.Ordinal).Replace("title: Guide", "title: " + title, StringComparison.Ordinal)
             .Replace("# Guide", "# " + title, StringComparison.Ordinal);
         if (!sourceHeading) markdown = markdown.Replace("# " + title + "\n\n", string.Empty, StringComparison.Ordinal);
         var sourcePath = Path.Combine(pages, "guide.md");
@@ -169,6 +169,22 @@ public sealed class WebDocumentationMarkdownTests
         Assert.Contains("text/markdown", File.ReadAllText(Path.Combine(site.Output, "first.html")));
         Assert.DoesNotContain("text/markdown", File.ReadAllText(Path.Combine(site.Output, "second.html")));
         Assert.DoesNotContain("Link:", File.ReadAllText(Path.Combine(site.Output, "_headers")));
+    }
+
+    [Theory]
+    [InlineData("<aside><article><h1>Promo</h1></article></aside>")]
+    [InlineData("<article data-pf-markdown='exclude'><h1>Promo</h1></article>")]
+    public void Prepare_SelectsArticleRootAfterRemovingExcludedChrome(string chrome)
+    {
+        using var site = new DocumentationSite();
+        File.WriteAllText(Path.Combine(site.Output, "index.html"),
+            "<html><head><title>Guide | Docs</title></head><body><main>" + chrome +
+            "<section><h1>Real guide</h1><p>Actual guide content</p></section></main></body></html>");
+        WebAgentReadiness.Prepare(site.Options(".md"));
+        var markdown = File.ReadAllText(Path.Combine(site.Output, "index.md"));
+        Assert.StartsWith("# Real guide", markdown);
+        Assert.Contains("Actual guide content", markdown);
+        Assert.DoesNotContain("Promo", markdown);
     }
 
     private sealed class DocumentationSite : IDisposable
