@@ -60,7 +60,7 @@ internal sealed class DocumentationCommandHelpCollector
         return commands.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
     }
 
-    private string? GetHelpMarkdown(string moduleName, string command, int timeoutSeconds)
+    private string? GetHelpMarkdown(string moduleName, string command, int timeoutSeconds, CancellationToken cancellationToken)
     {
         using var ps = PowerShell.Create();
         // Use -Full for richer content; convert basic sections to markdown headings
@@ -69,13 +69,9 @@ internal sealed class DocumentationCommandHelpCollector
             .AddParameter("Name", command)
             .AddParameter("ErrorAction", ActionPreference.SilentlyContinue)
             .AddCommand("Out-String");
-        var async = ps.BeginInvoke();
-        if (!async.AsyncWaitHandle.WaitOne(TimeSpan.FromSeconds(Math.Max(1, timeoutSeconds))))
-        {
-            try { ps.Stop(); } catch { }
-            return "_Get-Help timed out._";
-        }
-        var text = string.Join("", ps.EndInvoke(async).Select(p => p?.ToString()));
+        var output = GetHelpParser.InvokeHelp(ps, timeoutSeconds, cancellationToken);
+        if (output == null) return "_Get-Help timed out._";
+        var text = string.Join("", output.Select(p => p?.ToString()));
         if (string.IsNullOrWhiteSpace(text)) return null;
         try { return FormatRawHelpMarkdown(text); } catch { }
         // Naive fallback
@@ -297,7 +293,7 @@ internal sealed class DocumentationCommandHelpCollector
             new ParallelOptions { MaxDegreeOfParallelism = degree, CancellationToken = cancellationToken },
             index =>
             {
-                results[index] = RenderCommandHelp(moduleName, commands[index], timeoutSeconds, examplesMode, examplesLayout);
+                results[index] = RenderCommandHelp(moduleName, commands[index], timeoutSeconds, examplesMode, examplesLayout, cancellationToken);
             });
 
         var list = new List<(string, string?, int, bool)>(results.Length);
@@ -319,13 +315,15 @@ internal sealed class DocumentationCommandHelpCollector
         string cmd,
         int timeoutSeconds,
         ExamplesMode examplesMode,
-        ExamplesLayout examplesLayout)
+        ExamplesLayout examplesLayout,
+        CancellationToken cancellationToken)
     {
         var messages = new List<string>();
         var parser = new GetHelpParser();
         string? content = null;
         var structured = false;
-        var model = parser.Parse(cmd, timeoutSeconds, examplesMode);
+        var model = parser.Parse(cmd, timeoutSeconds, examplesMode, cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
         if (model != null)
         {
             content = CommandHelpMarkdownFormatter.Render(moduleName, model, examplesLayout);
@@ -334,8 +332,9 @@ internal sealed class DocumentationCommandHelpCollector
         else
         {
             // Fallback to raw Get-Help text -> markdown
-            content = GetHelpMarkdown(moduleName, cmd, timeoutSeconds);
+            content = GetHelpMarkdown(moduleName, cmd, timeoutSeconds, cancellationToken);
         }
+        cancellationToken.ThrowIfCancellationRequested();
         var lines = string.IsNullOrEmpty(content) ? 0 : content!.Split(new[] {'\n'}, StringSplitOptions.None).Length;
         if (model != null)
         {

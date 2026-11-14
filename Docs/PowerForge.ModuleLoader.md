@@ -55,6 +55,9 @@ The contract version is part of the assembly name. The corrected Desktop resolve
 so an older `V1` loader already loaded by another module cannot replace it. Future public contract
 changes, or fixes that must coexist with an older loader, require a new identity. Rebuild modules
 to give them the corrected loader; importing a newer builder does not rewrite installed modules.
+The type accelerator registrar deliberately keeps its `V1` type name in both assemblies. Generated
+scripts select the first loaded registrar, keeping accelerator ownership and handover shared with
+modules built before V2.
 PowerForge embeds both builds and writes them during the
 module build, so building a module no longer needs the .NET SDK for the loader. Module signing
 signs them with the module's other binaries. Packaging always includes the `Loader` folder,

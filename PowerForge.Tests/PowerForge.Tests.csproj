@@ -36,6 +36,7 @@
     <ProjectReference Include="Fixtures\PowerShellCompilationForgedCancellationProviderFixture\PowerShellCompilationForgedCancellationProviderFixture.csproj" ReferenceOutputAssembly="false" />
     <ProjectReference Include="Fixtures\PowerShellCompilationForgedCancellationReferenceProviderFixture\PowerShellCompilationForgedCancellationReferenceProviderFixture.csproj" ReferenceOutputAssembly="false" />
     <ProjectReference Include="Fixtures\ProcessOutputPressureFixture\ProcessOutputPressureFixture.csproj" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="Fixtures\LegacyModuleLoader\LegacyModuleLoader.csproj" ReferenceOutputAssembly="false" />
   </ItemGroup>
 
   <ItemGroup>

@@ -404,7 +404,7 @@ jobs:
         run: >-
           dotnet test .\PowerForge.Tests\PowerForge.Tests.csproj
           -c Release --nologo
-          --filter 'FullyQualifiedName~ModuleBootstrapperGenerator|FullyQualifiedName~DocumentationRenderIsolationTests|FullyQualifiedName~ModuleMergeComposerImportCleanup|FullyQualifiedName~ModuleMergeComposerTests.SyncMergedPsm1'
+          --filter 'FullyQualifiedName~ModuleBootstrapperGenerator|FullyQualifiedName~DocumentationRenderIsolationTests|FullyQualifiedName~DocumentationHelpCancellationTests|FullyQualifiedName~ModuleMergeComposerImportCleanup|FullyQualifiedName~ModuleMergeComposerTests.SyncMergedPsm1'
 
       - name: Test with Windows PowerShell 5.1
         shell: pwsh

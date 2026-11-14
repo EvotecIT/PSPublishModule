@@ -1135,7 +1135,7 @@ public partial class ModuleBootstrapperGeneratorTests
             new[] { "Dependency" },
             "$LibraryDirectory");
 
-        Assert.Contains("[PowerForge.ModuleLoader.V2.TypeAcceleratorRegistration]::RegisterFromLoadContext(", block);
+        Assert.Contains("[PowerForge.ModuleLoader.V1.TypeAcceleratorRegistration]::RegisterFromLoadContext(", block);
         Assert.Contains("'" + mode + "'", block);
         Assert.Contains("[string[]]@('Dependency.Widget')", block);
         Assert.Contains("[string[]]@('Dependency')", block);

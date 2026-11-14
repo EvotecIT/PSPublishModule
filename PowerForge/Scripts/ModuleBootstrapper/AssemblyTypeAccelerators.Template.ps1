@@ -1,6 +1,6 @@
 # Type accelerators resolve from the module AssemblyLoadContext through the precompiled loader.
 try {
-    $PowerForgeTypeAcceleratorRegistration = [PowerForge.ModuleLoader.V2.TypeAcceleratorRegistration]::RegisterFromLoadContext(
+    $PowerForgeTypeAcceleratorRegistration = [PowerForge.ModuleLoader.V1.TypeAcceleratorRegistration]::RegisterFromLoadContext(
         $ModuleAssembly,
         {{LibraryDirectoryExpression}},
         '{{Mode}}',

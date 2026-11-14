@@ -17,7 +17,7 @@ try {
         [string[]]@([IO.Path]::GetDirectoryName($AssemblyPath)),
         [string[]]@())
     $resolver.Register()
-    Import-Module -Name $AssemblyPath -ErrorAction Stop
+    Import-Module -Name $AssemblyPath -DisableNameChecking -ErrorAction Stop
     $resolver.BootstrapActive = $false
     [PSPublishModule.DocumentationRenderProcess]::Run($RequestPath)
 }

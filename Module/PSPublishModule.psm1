@@ -107,7 +107,7 @@ try {
                     $InnerModule = & $ImportModule -Assembly $ModuleAssembly -Force -PassThru -ErrorAction Stop
                     # Type accelerators resolve from the module AssemblyLoadContext through the precompiled loader.
                     try {
-                        $PowerForgeTypeAcceleratorRegistration = [PowerForge.ModuleLoader.V2.TypeAcceleratorRegistration]::RegisterFromLoadContext(
+                        $PowerForgeTypeAcceleratorRegistration = [PowerForge.ModuleLoader.V1.TypeAcceleratorRegistration]::RegisterFromLoadContext(
                             $ModuleAssembly,
                             $LibraryDirectory,
                             'AllowList',
@@ -240,7 +240,7 @@ try {
             if ($PSEdition -ne 'Core') {
                 # Desktop loads module dependencies into the default AppDomain, so expose the same configured scripting types as Core.
                 try {
-                    $PowerForgeTypeAcceleratorRegistration = [PowerForge.ModuleLoader.V2.TypeAcceleratorRegistration]::RegisterFromDirectory(
+                    $PowerForgeTypeAcceleratorRegistration = [PowerForge.ModuleLoader.V1.TypeAcceleratorRegistration]::RegisterFromDirectory(
                         ($LoadedDirectory),
                         'AllowList',
                         [string[]]@('PowerForge.ModuleTestFailureAnalysis', 'PowerForge.ModuleTestSuiteResult', 'PowerForge.ModuleRepositoryProfileScope', 'PowerForge.PrivateGalleryBootstrapMode', 'PowerForge.PrivateGalleryCredentialSource', 'PowerForge.PublishTool', 'PowerForge.RepositoryRegistrationTool'),
