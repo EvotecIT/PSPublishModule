@@ -24,14 +24,15 @@ public static partial class WebAgentReadiness
         if (contentRoot is null)
             return string.Empty;
 
+        foreach (var chrome in contentRoot.QuerySelectorAll("nav,aside,[role='navigation'],button,form,[data-pf-markdown='exclude']").ToArray())
+            chrome.Remove();
+
         // One article identifies a document. Sibling articles are listing entries.
         var articles = contentRoot.QuerySelectorAll("article").Where(article =>
             article.ParentElement?.Closest("article") is not { } parent || !contentRoot.Contains(parent)).ToArray();
         if (articles.Length == 1)
             contentRoot = articles[0];
 
-        foreach (var chrome in contentRoot.QuerySelectorAll("nav,aside,[role='navigation'],button,form,[data-pf-markdown='exclude']").ToArray())
-            chrome.Remove();
         var title = source?.Title ?? contentRoot.QuerySelector("h1")?.TextContent.Trim() ?? doc.Title?.Trim();
         var description = source?.Description ?? doc.QuerySelector("meta[name='description']")?.GetAttribute("content");
         foreach (var link in contentRoot.QuerySelectorAll("a").Where(link =>
@@ -50,7 +51,8 @@ public static partial class WebAgentReadiness
         if (spec.IncludeTitle && !string.IsNullOrWhiteSpace(title))
             body = "# " + title + "\n\n" + body;
 
-        return body.Trim('\r', '\n') + Environment.NewLine;
+        return body.Trim('\r', '\n').Replace("\r\n", "\n", StringComparison.Ordinal)
+            .Replace("\n", Environment.NewLine, StringComparison.Ordinal) + Environment.NewLine;
     }
 
     private static string RemoveMarkdownTitle(string body, string? title)
