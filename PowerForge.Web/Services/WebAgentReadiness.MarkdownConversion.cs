@@ -17,13 +17,18 @@ public static partial class WebAgentReadiness
             !source.MarkdownContent.Contains("xref:", StringComparison.OrdinalIgnoreCase))
         {
             html = html.Replace(source.HtmlContent,
-                "<div data-pf-markdown-source>" + System.Net.WebUtility.HtmlEncode(RemoveMarkdownTitle(source.MarkdownContent.Trim(), source.Title)) + "</div>", StringComparison.Ordinal);
+                "<div data-pf-markdown-source>" + System.Net.WebUtility.HtmlEncode(RemoveMarkdownTitle(source.MarkdownContent.Trim('\r', '\n'), source.Title)) + "</div>", StringComparison.Ordinal);
         }
         var doc = HtmlParser.ParseWithAngleSharp(html);
-        var main = doc.QuerySelector("main,[role='main']");
-        var contentRoot = main?.QuerySelector("article") ?? doc.QuerySelector("article") ?? main ?? doc.Body ?? doc.DocumentElement;
+        var contentRoot = doc.QuerySelector("main,[role='main']") ?? doc.Body ?? doc.DocumentElement;
         if (contentRoot is null)
             return string.Empty;
+
+        // One article identifies a document. Sibling articles are listing entries.
+        var articles = contentRoot.QuerySelectorAll("article").Where(article =>
+            article.ParentElement?.Closest("article") is not { } parent || !contentRoot.Contains(parent)).ToArray();
+        if (articles.Length == 1)
+            contentRoot = articles[0];
 
         foreach (var chrome in contentRoot.QuerySelectorAll("nav,aside,[role='navigation'],button,form,[data-pf-markdown='exclude']").ToArray())
             chrome.Remove();
@@ -45,15 +50,16 @@ public static partial class WebAgentReadiness
         if (spec.IncludeTitle && !string.IsNullOrWhiteSpace(title))
             body = "# " + title + "\n\n" + body;
 
-        return body.Trim() + Environment.NewLine;
+        return body.Trim('\r', '\n') + Environment.NewLine;
     }
 
     private static string RemoveMarkdownTitle(string body, string? title)
     {
         var lines = body.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n');
         // Only remove the opening source heading. Headings in code examples are content.
-        if (lines.Length > 0 && lines[0].Trim().TrimEnd('#').Trim() == "# " + title)
-            return string.Join("\n", lines.Skip(1)).TrimStart();
+        var heading = Regex.Match(lines[0], @"^ {0,3}#[ \t]+(?<title>.*?)(?:[ \t]+#+)?[ \t]*$", RegexOptions.None, TimeSpan.FromSeconds(1));
+        if (heading.Success && heading.Groups["title"].Value.Equals(title, StringComparison.OrdinalIgnoreCase))
+            return string.Join("\n", lines.Skip(1)).TrimStart('\r', '\n');
         return body;
     }
 
@@ -187,7 +193,7 @@ public static partial class WebAgentReadiness
 
     private static string Block(string text)
     {
-        var normalized = NormalizeMarkdownDocument(text).Trim();
+        var normalized = NormalizeMarkdownDocument(text);
         return string.IsNullOrWhiteSpace(normalized)
             ? string.Empty
             : Environment.NewLine + Environment.NewLine + normalized + Environment.NewLine + Environment.NewLine;
@@ -217,6 +223,7 @@ public static partial class WebAgentReadiness
         var normalized = text.Replace("\r\n", "\n", StringComparison.Ordinal).Replace('\r', '\n');
         var lines = new List<string>();
         string? fence = null;
+        var indentedCode = false;
         foreach (var line in normalized.Split('\n'))
         {
             var trimmed = line.TrimStart();
@@ -224,11 +231,16 @@ public static partial class WebAgentReadiness
                 fence = new string(trimmed[0], trimmed.TakeWhile(c => c == trimmed[0]).Count());
             else if (fence is not null && trimmed.StartsWith(fence, StringComparison.Ordinal) && trimmed.Trim(fence[0]).Length == 0)
                 fence = null;
-            if (fence is null && string.IsNullOrWhiteSpace(line) && lines.Count > 0 && string.IsNullOrWhiteSpace(lines[^1]))
+            if (fence is null && !string.IsNullOrWhiteSpace(line))
+                indentedCode = line.StartsWith("    ", StringComparison.Ordinal) || line.StartsWith('\t');
+            if (fence is null && !indentedCode && string.IsNullOrWhiteSpace(line) && lines.Count > 0 && string.IsNullOrWhiteSpace(lines[^1]))
                 continue;
             lines.Add(line);
         }
-        return string.Join(Environment.NewLine, lines).Trim();
+        var start = lines.FindIndex(line => !string.IsNullOrWhiteSpace(line));
+        if (start < 0) return string.Empty;
+        var end = lines.FindLastIndex(line => !string.IsNullOrWhiteSpace(line));
+        return string.Join(Environment.NewLine, lines.Skip(start).Take(end - start + 1));
     }
 
     private static string EscapeMarkdownLinkText(string text)
