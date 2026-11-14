@@ -19,6 +19,8 @@ public sealed class WebLlmsResult
     public int PackageCount { get; set; }
     /// <summary>Number of installation commands emitted after policy validation.</summary>
     public int InstallCommandCount { get; set; }
+    /// <summary>Reasons installation commands were omitted by publication verification.</summary>
+    public string[] Warnings { get; set; } = Array.Empty<string>();
     /// <summary>Optional count of API types included.</summary>
     public int? ApiTypeCount { get; set; }
     /// <summary>Number of API catalogs represented in the generated files.</summary>

@@ -123,6 +123,12 @@ internal sealed class WebPublicationCatalog
                (!isPowerShellGallery || PackageHasOwner(package.Owners, expectedOwner.Trim()));
     }
 
+    internal string? GetPackageVersion(string packageId, bool isPowerShellModule)
+    {
+        var section = isPowerShellModule ? _powerShellGallery : _nuGet;
+        return section?.Packages.TryGetValue(packageId, out var package) == true ? package.Version : null;
+    }
+
     public static bool HasExactVersion(string? version)
         => !string.IsNullOrWhiteSpace(version) &&
            version.Any(char.IsDigit) &&
