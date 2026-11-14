@@ -9,7 +9,7 @@ namespace PowerForge;
 /// </summary>
 public sealed partial class BenchmarkEvidenceCatalogService
 {
-    private const int SupportedSchemaVersion = 3;
+    private const int SupportedSchemaVersion = 4;
     private static readonly string[] DefaultExpectedPlatforms = { "windows", "linux", "macos" };
     /// <summary>
     /// Adds or replaces one platform/run-mode lane and recomputes comparison and availability state.
@@ -101,7 +101,7 @@ public sealed partial class BenchmarkEvidenceCatalogService
 
         ApplyCompatibility(entries);
         catalog.Entries = entries;
-        catalog.Availability = BuildAvailability(entries, catalog.ExpectedPlatforms);
+        ApplyDefinitions(catalog, catalog.Comparisons);
         return catalog;
     }
 
@@ -807,12 +807,12 @@ public sealed partial class BenchmarkEvidenceCatalogService
     {
         if (catalog is null)
             return;
-        if (catalog.SchemaVersion is 1 or 2 or SupportedSchemaVersion)
+        if (catalog.SchemaVersion is 1 or 2 or 3 or SupportedSchemaVersion)
             return;
 
         throw new InvalidOperationException(
             $"Benchmark evidence catalog schema {catalog.SchemaVersion} is not supported by this build. " +
-            $"Supported schemas are 1, 2, and {SupportedSchemaVersion}; use a compatible PowerForge version before updating the catalog.");
+            $"Supported schemas are 1, 2, 3, and {SupportedSchemaVersion}; use a compatible PowerForge version before updating the catalog.");
     }
 
     private static void ValidateEmbeddedRunModes(BenchmarkRunResult result, string expectedRunMode)

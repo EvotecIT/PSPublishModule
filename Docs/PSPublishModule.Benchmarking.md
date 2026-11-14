@@ -603,3 +603,32 @@ failure counts, median/mean/min/max duration, and custom metrics.
 Comparison rows compare one dimension against a baseline value for one or more
 metrics. They are used by README comparison tables and by reviewable benchmark
 evidence.
+
+### Declared comparison coverage
+
+Schema 4 catalogs carry `areas` and `comparisons` independently of measured
+`entries`. Each declaration contains `comparisonId`, `area`, `title`, `libraries`
+and `expectedPlatforms`. This lets a website show workloads that have never run;
+missing full-mode lanes appear in `availability` with `available: false`.
+Existing schema 3 bundles remain readable. Declarations do not grant publication
+or fill in missing historical environment metadata.
+
+Pass the JSON array of declarations when merging:
+
+```powershell
+Merge-BenchmarkEvidenceCatalog -SourcePath ./windows/index.json, ./linux/index.json, ./macos/index.json -Path ./published/index.json -ComparisonPath ./comparisons.json
+```
+
+To update a subset, include the existing destination catalog in `-SourcePath`
+alongside the incoming bundles. Unchanged comparison/platform/run-mode lanes and
+their immutable artifacts survive. The newest timestamp wins for a matching lane;
+conflicting same-time payloads fail. With `-ComparisonPath`, that declaration
+array is authoritative; otherwise declarations are merged from source catalogs
+and conflicting definitions fail before output replacement. Evidence entries
+receive their matching declaration's `area`. Result payloads and their hashes
+remain unchanged.
+
+Use `-ResultPathPrefix /data/benchmarks/library-comparisons` when consolidating
+portable runner bundles into a website. Result links use that root-relative
+public directory, while content-addressed artifacts are written beside the output
+catalog. This rebases links without changing measured payloads or hashes.

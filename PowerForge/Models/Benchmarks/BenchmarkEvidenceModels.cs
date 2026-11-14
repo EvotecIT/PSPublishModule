@@ -48,10 +48,16 @@ public sealed class BenchmarkEnvironmentInfo
 public sealed class BenchmarkEvidenceCatalog
 {
     /// <summary>Catalog schema version.</summary>
-    public int SchemaVersion { get; set; } = 3;
+    public int SchemaVersion { get; set; } = 4;
 
     /// <summary>Platforms expected for a complete published comparison.</summary>
     public string[] ExpectedPlatforms { get; set; } = { "windows", "linux", "macos" };
+
+    /// <summary>Area identifiers represented by the declared comparisons.</summary>
+    public string[] Areas { get; set; } = Array.Empty<string>();
+
+    /// <summary>All declared comparisons, including those without measured evidence.</summary>
+    public BenchmarkComparisonDefinition[] Comparisons { get; set; } = Array.Empty<BenchmarkComparisonDefinition>();
 
     /// <summary>Independent platform and run-mode evidence lanes.</summary>
     public BenchmarkEvidenceEntry[] Entries { get; set; } = Array.Empty<BenchmarkEvidenceEntry>();
@@ -67,6 +73,9 @@ public sealed class BenchmarkEvidenceEntry
 {
     /// <summary>Stable comparison identifier shared only by equivalent workloads.</summary>
     public string ComparisonId { get; set; } = string.Empty;
+
+    /// <summary>Area identifier from the matching comparison declaration, when supplied.</summary>
+    public string Area { get; set; } = string.Empty;
 
     /// <summary>Normalized platform identifier.</summary>
     public string Platform { get; set; } = string.Empty;
@@ -146,4 +155,23 @@ public sealed class BenchmarkPlatformAvailability
 
     /// <summary>Most recent lane timestamp for this platform.</summary>
     public DateTimeOffset? LatestUtc { get; set; }
+}
+
+/// <summary>A workload declaration independent of whether evidence has been collected.</summary>
+public sealed class BenchmarkComparisonDefinition
+{
+    /// <summary>Stable identifier shared with measured evidence lanes.</summary>
+    public string ComparisonId { get; set; } = string.Empty;
+
+    /// <summary>Product area identifier, such as pdf or excel.</summary>
+    public string Area { get; set; } = string.Empty;
+
+    /// <summary>Human-readable equivalent-work comparison title.</summary>
+    public string Title { get; set; } = string.Empty;
+
+    /// <summary>Libraries exercised by the comparison.</summary>
+    public string[] Libraries { get; set; } = Array.Empty<string>();
+
+    /// <summary>Platforms expected for this comparison.</summary>
+    public string[] ExpectedPlatforms { get; set; } = { "windows", "linux", "macos" };
 }

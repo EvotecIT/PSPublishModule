@@ -32,6 +32,16 @@ public sealed class MergeBenchmarkEvidenceCatalogCommand : PSCmdlet
     [ValidateNotNullOrEmpty]
     public string[]? ExpectedPlatform { get; set; }
 
+    /// <summary>Optional JSON array declaring every comparison, including workloads without results.</summary>
+    [Parameter]
+    [ValidateNotNullOrEmpty]
+    public string? ComparisonPath { get; set; }
+
+    /// <summary>Root-relative public URL directory for result links, such as /data/benchmarks/library-comparisons.</summary>
+    [Parameter]
+    [ValidateNotNullOrEmpty]
+    public string? ResultPathPrefix { get; set; }
+
     /// <summary>Merges the verified bundles.</summary>
     protected override void ProcessRecord()
     {
@@ -45,7 +55,11 @@ public sealed class MergeBenchmarkEvidenceCatalogCommand : PSCmdlet
         BenchmarkEvidenceCatalog result = new BenchmarkEvidenceCatalogService().MergeFiles(
             outputPath,
             sourcePaths,
-            ExpectedPlatform);
+            ExpectedPlatform,
+            string.IsNullOrWhiteSpace(ComparisonPath) ? null :
+                BenchmarkJson.Read<BenchmarkComparisonDefinition[]>(
+                    SessionState.Path.GetUnresolvedProviderPathFromPSPath(ComparisonPath)),
+            ResultPathPrefix);
         WriteObject(result);
     }
 }
