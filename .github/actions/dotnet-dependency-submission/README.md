@@ -2,8 +2,8 @@
 
 Restore explicit project sets on their native hosts, scan their resolved NuGet
 graphs in read-only jobs, and upload snapshots from a separate trusted job.
-PowerForge owns the restore, transport and snapshot conversion. Microsoft
-Component Detection supplies the package graph.
+PowerForge owns the restore, transport and snapshot conversion. Restored
+`project.assets.json` targets supply the package identities and dependency edges.
 
 Use `mode: restore` (the default) after checkout on each native host:
 
@@ -43,13 +43,35 @@ profile's graph artifact from the same workflow run and scan it:
     retention-days: 1
 ```
 
-Use this scan path on pull requests too. It downloads Component Detection 8.0.6
-from its fixed release URL and verifies the SHA-256 digest
-before writing an executable. The scanner child receives runtime and temporary
-paths without job credentials. Scanner binaries, logs and extraction files are
-removed after the scan. Snapshot conversion preserves immediate per-manifest
-edges, direct references and development scopes; it does not infer edges from
-global top-level referrers. Scanned project coverage must match the restore index.
+Use this scan path on pull requests too. Conversion reads the indexed native
+asset files and unions package identities and immediate edges across every
+restored target framework and runtime identifier. Packages reached through
+project references remain in each consuming project's graph. Direct references
+come from that project's target-specific package roots.
+
+Native export records evaluated `IsTestProject` and `DevelopmentDependency`
+properties and explicit package `developmentDependency` metadata from the restored
+NuGet cache. Development projects keep their entire dependency graph in development
+scope. Tooling-only dependency closures also remain development dependencies;
+a shared dependency can have runtime scope through a regular package root.
+
+For regular projects, runtime scope requires a runtime dependency path and
+runtime, native, resource or copied content contributions from the package or its
+permitted dependency closure in at least one restored target. Dependency-only
+meta-packages retain those runtime requirements. `IncludeAssets` restrictions
+apply to each path, including native-only and copied-content-only paths.
+Placeholder `_._` files provide no runtime content. Compile/build/analyzer-only
+paths retain development scope. `PrivateAssets` controls propagation
+to consumers. Development classification uses the evaluated project properties
+and explicit dependency metadata.
+Exact `PackageDownload` inputs are retained as direct development dependencies.
+Manifest identities must match the restore index, and missing dependencies fail
+conversion. Scan mode projects the indexed JSON locally.
+
+Existing version-one graph artifacts remain readable. Artifacts without the
+new scope metadata retain the ordinary NuGet runtime default and require native
+re-export to establish development-project/tooling scope. Scope follows the
+[GitHub dependency submission contract](https://docs.github.com/en/rest/dependency-graph/dependency-submission).
 
 Only the upload job needs `contents: write`. Restrict that job to default-branch
 pushes and manual runs, and make it depend on every profile's successful scan:
