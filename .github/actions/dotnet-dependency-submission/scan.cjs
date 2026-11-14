@@ -13,7 +13,8 @@ const ASSETS = Object.freeze({
 async function downloadScanner(directory, platform = process.platform, request = fetch) {
   const asset = ASSETS[platform];
   if (!asset) throw new Error('Scanning requires Linux x64.');
-  const response = await request(`https://github.com/microsoft/component-detection/releases/download/v${VERSION}/${asset.name}`, {signal: AbortSignal.timeout(120000)});
+  // The detector is a large download; allow slower connections while keeping a finite limit.
+  const response = await request(`https://github.com/microsoft/component-detection/releases/download/v${VERSION}/${asset.name}`, {signal: AbortSignal.timeout(300000)});
   if (!response.ok) throw new Error(`Scanner download failed: HTTP ${response.status}`);
   const bytes = Buffer.from(await response.arrayBuffer());
   if (crypto.createHash('sha256').update(bytes).digest('hex') !== asset.sha256) throw new Error('Scanner SHA-256 verification failed.');
