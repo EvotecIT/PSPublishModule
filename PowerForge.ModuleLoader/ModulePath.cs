@@ -5,7 +5,7 @@ using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
 
-namespace PowerForge.ModuleLoader.V1;
+namespace PowerForge.ModuleLoader.V2;
 
 /// <summary>Physical-path identity for module assemblies, so one module group maps to one load context.</summary>
 internal static class ModulePath

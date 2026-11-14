@@ -112,6 +112,10 @@ Read `Docs/PowerForge.Web.Roadmap.md`, `Pipeline.md`, `QualityGates.md` and
   follow `.editorconfig`.
 - PowerShell scripts and module code run on Windows PowerShell 5.1 and PowerShell 7.
 - Keep files under about 800 lines; split large classes into partial files.
+- Before adding or changing tests, read `skills/test-audit/SKILL.md` and
+  `skills/contract-focused-tests/SKILL.md` under `CODEX_HOME` (default `~/.codex`).
+  Deliberate test pruning follows `skills/test-audit/CAMPAIGN.md`; campaign
+  coverage is local evidence, not a CI or merge gate.
 - Commit and PR titles are short imperative sentences: `Package every file the
   module manifest loads`.
 

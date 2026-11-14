@@ -7,7 +7,7 @@ using System.Reflection;
 using System.Security.Cryptography;
 using System.Threading;
 
-namespace PowerForge.ModuleLoader.V1 {
+namespace PowerForge.ModuleLoader.V2 {
     /// <summary>Windows PowerShell AssemblyResolve handler limited to one module's own binary folders.</summary>
     public sealed class DesktopAssemblyResolver {
         private readonly string[] roots;
@@ -33,15 +33,38 @@ namespace PowerForge.ModuleLoader.V1 {
         public void Register() {
             lock (lifetime) {
                 if (Registered) return;
-                AppDomain.CurrentDomain.AssemblyResolve += Resolve;
                 Interlocked.Exchange(ref registered, 1);
+                try { SubscribeFirst(Resolve); }
+                catch {
+                    Interlocked.Exchange(ref registered, 0);
+                    throw;
+                }
             }
         }
         public void Unregister() {
             lock (lifetime) {
-                AppDomain.CurrentDomain.AssemblyResolve -= Resolve;
                 Interlocked.Exchange(ref registered, 0);
+                AppDomain.CurrentDomain.AssemblyResolve -= Resolve;
             }
+        }
+        private static void SubscribeFirst(ResolveEventHandler handler) {
+            AppDomain domain = AppDomain.CurrentDomain;
+            try {
+                // Framework's event accessors lock this same AppDomain. A version-blind
+                // handler registered by an earlier module must not answer our requests first.
+                FieldInfo field = typeof(AppDomain).GetField("_AssemblyResolve", BindingFlags.Instance | BindingFlags.NonPublic);
+                if (field != null && field.FieldType == typeof(ResolveEventHandler)) {
+                    lock (domain) {
+                        var existing = (ResolveEventHandler)field.GetValue(domain);
+                        field.SetValue(domain, (ResolveEventHandler)Delegate.Combine(handler, existing));
+                    }
+                    return;
+                }
+            } catch {
+                // A different Framework implementation or restricted reflection still
+                // gets the normal scoped resolver, without failing module import.
+            }
+            domain.AssemblyResolve += handler;
         }
         private bool IsModuleAssembly(Assembly assembly) {
             if (assembly == null || assembly.IsDynamic || String.IsNullOrWhiteSpace(assembly.Location)) return false;
@@ -61,7 +84,7 @@ namespace PowerForge.ModuleLoader.V1 {
         private static bool SameIdentity(AssemblyName requested, AssemblyName candidate) {
             if (!String.Equals(requested.Name, candidate.Name, StringComparison.OrdinalIgnoreCase) ||
                 !String.Equals(requested.CultureName ?? "", candidate.CultureName ?? "", StringComparison.OrdinalIgnoreCase) ||
-                (requested.Version != null && candidate.Version < requested.Version)) return false;
+                (requested.Version != null && (candidate.Version == null || candidate.Version < requested.Version))) return false;
             byte[] expected = requested.GetPublicKeyToken() ?? new byte[0];
             byte[] actual = candidate.GetPublicKeyToken() ?? new byte[0];
             if (expected.Length != actual.Length) return false;
@@ -115,11 +138,11 @@ namespace PowerForge.ModuleLoader.V1 {
             if (!resolving.Add(this)) return null;
             try {
                 // Null callers cannot be attributed within an AppDomain. Accept
-                // only exact references declared by this module after bootstrap;
+                // only exact references declared by this module, including during bootstrap;
                 // another null caller requesting that same identity can share it.
                 if (args.RequestingAssembly == null || args.RequestingAssembly.IsDynamic ||
                     String.IsNullOrWhiteSpace(args.RequestingAssembly.Location)) {
-                    if (!BootstrapActive && !IsDeclaredReference(args.Name)) return null;
+                    if (!IsDeclaredReference(args.Name)) return null;
                 } else if (!IsModuleAssembly(args.RequestingAssembly)) return null;
 
                 AssemblyName requested = new AssemblyName(args.Name);
@@ -134,8 +157,14 @@ namespace PowerForge.ModuleLoader.V1 {
                     if (facadeBindings.TryGetValue(candidate, out packagedPolicy) &&
                         !String.Equals(Hash(candidate), packagedPolicy[4], StringComparison.Ordinal)) continue;
                     AssemblyName identity = AssemblyName.GetAssemblyName(candidate);
-                    if (SameIdentity(requested, identity) || MatchesFacadeBinding(requested, identity, candidate))
-                        return Assembly.LoadFrom(candidate);
+                    if (SameIdentity(requested, identity) || MatchesFacadeBinding(requested, identity, candidate)) {
+                        Assembly assembly = Assembly.LoadFrom(candidate);
+                        // Unsigned assemblies may unify with an older copy already loaded.
+                        // Check the returned assembly too, not only the file on disk.
+                        AssemblyName loaded = assembly.GetName();
+                        if (SameIdentity(requested, loaded) || MatchesFacadeBinding(requested, loaded, assembly.Location))
+                            return assembly;
+                    }
                 }
                 return null;
             } catch { return null; }

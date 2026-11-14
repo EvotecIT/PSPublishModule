@@ -10,7 +10,7 @@ using System.Threading;
 using System.Runtime.Loader;
 #endif
 
-namespace PowerForge.ModuleLoader.V1;
+namespace PowerForge.ModuleLoader.V2;
 
 /// <summary>
 /// Registers PowerShell type accelerators for configured module types and removes them again on

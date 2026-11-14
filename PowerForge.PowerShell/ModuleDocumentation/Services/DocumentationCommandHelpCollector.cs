@@ -1,20 +1,33 @@
 using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
-using HtmlForgeX;
-using HtmlForgeX.Extensions;
-using HtmlForgeX.Markdown;
-using PowerForge;
 using System.Collections;
 using System.Management.Automation;
 using System.Management.Automation.Language;
 using System.Threading.Tasks;
+using System.Threading;
 
-namespace PSPublishModule;
+namespace PowerForge;
 
-internal sealed partial class HtmlExporter
+/// <summary>Collects command help in the calling host before isolated HTML rendering loads older dependencies.</summary>
+internal sealed class DocumentationCommandHelpCollector
 {
+    /// <summary>Materializes existing command-help Markdown without loading the HTML renderer in the calling host.</summary>
+    internal DocumentationCommandHelpItem[] Collect(ModuleInfoModel module, Action<string>? log, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (module.SkipCommands) return Array.Empty<DocumentationCommandHelpItem>();
+        var commands = ResolveExportedCommands(module.Name).Take(Math.Max(0, module.MaxCommands)).ToList();
+        return BuildHelpMap(module.Name, commands, module.HelpTimeoutSeconds, module.ExamplesMode,
+            module.ExamplesLayout, log, cancellationToken)
+            .Select(entry => new DocumentationCommandHelpItem
+            {
+                Command = entry.Command,
+                Help = entry.Help,
+                Structured = entry.Structured
+            }).ToArray();
+    }
+
     // Helpers for Commands tab
     private List<string> ResolveExportedCommands(string moduleName)
     {
@@ -269,7 +282,8 @@ internal sealed partial class HtmlExporter
         int timeoutSeconds,
         ExamplesMode examplesMode,
         ExamplesLayout examplesLayout,
-        Action<string>? log)
+        Action<string>? log,
+        CancellationToken cancellationToken)
     {
         if (commands.Count == 0)
             return new List<(string, string?, int, bool)>();
@@ -280,7 +294,7 @@ internal sealed partial class HtmlExporter
         var results = new HelpRenderResult[commands.Count];
         Parallel.ForEach(
             Enumerable.Range(0, commands.Count),
-            new ParallelOptions { MaxDegreeOfParallelism = degree },
+            new ParallelOptions { MaxDegreeOfParallelism = degree, CancellationToken = cancellationToken },
             index =>
             {
                 results[index] = RenderCommandHelp(moduleName, commands[index], timeoutSeconds, examplesMode, examplesLayout);
@@ -370,4 +384,12 @@ internal sealed partial class HtmlExporter
         public IReadOnlyList<string> Messages { get; }
     }
 
+}
+
+/// <summary>Final help content suitable for rendering in a host that cannot import the original module.</summary>
+internal sealed class DocumentationCommandHelpItem
+{
+    public string Command { get; set; } = string.Empty;
+    public string? Help { get; set; }
+    public bool Structured { get; set; }
 }

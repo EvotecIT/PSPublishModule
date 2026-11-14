@@ -208,7 +208,7 @@ public partial class ModuleBootstrapperGeneratorTests
                 useAssemblyLoadContext: true,
                 targetFrameworks: new[] { "net8.0" });
 
-            Assert.True(File.Exists(Path.Combine(root, "Loader", "Core", "PowerForge.ModuleLoader.V1.dll")));
+            Assert.True(File.Exists(Path.Combine(root, "Loader", "Core", "PowerForge.ModuleLoader.V2.dll")));
             var result = RunGeneratedModulePowerShell(
                 root,
                 "$ErrorActionPreference = 'Continue'; Import-Module -Name '" +
@@ -294,7 +294,7 @@ public partial class ModuleBootstrapperGeneratorTests
                 useAssemblyLoadContext: true,
                 targetFrameworks: new[] { "net8.0" });
 
-            Assert.True(File.Exists(Path.Combine(root, "Loader", "Core", "PowerForge.ModuleLoader.V1.dll")));
+            Assert.True(File.Exists(Path.Combine(root, "Loader", "Core", "PowerForge.ModuleLoader.V2.dll")));
             var result = RunGeneratedModulePowerShell(
                 root,
                 "$ErrorActionPreference = 'Stop'; Import-Module -Name '" +
@@ -338,7 +338,7 @@ public partial class ModuleBootstrapperGeneratorTests
                 useAssemblyLoadContext: true,
                 targetFrameworks: new[] { "net8.0" });
 
-            Assert.True(File.Exists(Path.Combine(root, "Loader", "Core", "PowerForge.ModuleLoader.V1.dll")));
+            Assert.True(File.Exists(Path.Combine(root, "Loader", "Core", "PowerForge.ModuleLoader.V2.dll")));
             var result = RunGeneratedModulePowerShell(
                 root,
                 "$ErrorActionPreference = 'Stop'; Import-Module -Name '" +

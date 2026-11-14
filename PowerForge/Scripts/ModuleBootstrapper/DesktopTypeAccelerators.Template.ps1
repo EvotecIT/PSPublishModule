@@ -1,7 +1,7 @@
 if ($PSEdition -ne 'Core') {
     # Desktop loads module dependencies into the default AppDomain, so expose the same configured scripting types as Core.
     try {
-        $PowerForgeTypeAcceleratorRegistration = [PowerForge.ModuleLoader.V1.TypeAcceleratorRegistration]::RegisterFromDirectory(
+        $PowerForgeTypeAcceleratorRegistration = [PowerForge.ModuleLoader.V2.TypeAcceleratorRegistration]::RegisterFromDirectory(
             ({{LibraryDirectoryExpression}}),
             '{{Mode}}',
             [string[]]{{RequestedTypes}},

@@ -25,7 +25,7 @@ public sealed class ModuleBootstrapperGeneratorDesktopTypeAcceleratorTests
 
             var bootstrapper = File.ReadAllText(Path.Combine(root, "DemoModule.psm1"));
             // Discovery, ignore lists and content matching now live in the compiled loader; the script passes configuration.
-            Assert.Contains("[PowerForge.ModuleLoader.V1.TypeAcceleratorRegistration]::RegisterFromDirectory(", bootstrapper);
+            Assert.Contains("[PowerForge.ModuleLoader.V2.TypeAcceleratorRegistration]::RegisterFromDirectory(", bootstrapper);
             Assert.Contains("[string[]]@('Ignored.Dependency.dll')", bootstrapper);
             Assert.Contains("foreach ($LoadedDirectory in $LoadedDirectories) {", bootstrapper);
             Assert.Contains("$PowerForgeModuleRoot = $PSScriptRoot", bootstrapper);

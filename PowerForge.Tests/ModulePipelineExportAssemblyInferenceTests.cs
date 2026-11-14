@@ -947,7 +947,7 @@ public sealed class ModulePipelineExportAssemblyInferenceTests
             });
 
             var bootstrapper = File.ReadAllText(Path.Combine(result.StagingPath, moduleName + ".psm1"));
-            Assert.Contains("[PowerForge.ModuleLoader.V1.ModuleAssemblyLoadContext]::LoadModuleFromGroup(", bootstrapper);
+            Assert.Contains("[PowerForge.ModuleLoader.V2.ModuleAssemblyLoadContext]::LoadModuleFromGroup(", bootstrapper);
             Assert.Contains("'AllowList'", bootstrapper);
             Assert.Contains("[string[]]@('Dependency.Widget')", bootstrapper);
         }
@@ -1107,7 +1107,7 @@ public sealed class ModulePipelineExportAssemblyInferenceTests
             });
 
             var bootstrapper = File.ReadAllText(Path.Combine(result.StagingPath, moduleName + ".psm1"));
-            Assert.Contains("[PowerForge.ModuleLoader.V1.ModuleAssemblyLoadContext]::LoadModuleFromGroup(", bootstrapper);
+            Assert.Contains("[PowerForge.ModuleLoader.V2.ModuleAssemblyLoadContext]::LoadModuleFromGroup(", bootstrapper);
             Assert.Contains(
                 result.BuildNotes,
                 note => note.Summary.Contains("Core: no conflicts", StringComparison.OrdinalIgnoreCase));
@@ -1196,7 +1196,7 @@ public sealed class ModulePipelineExportAssemblyInferenceTests
             });
 
             var bootstrapper = File.ReadAllText(Path.Combine(result.StagingPath, moduleName + ".psm1"));
-            Assert.DoesNotContain("[PowerForge.ModuleLoader.V1.ModuleAssemblyLoadContext]", bootstrapper);
+            Assert.DoesNotContain("[PowerForge.ModuleLoader.V2.ModuleAssemblyLoadContext]", bootstrapper);
             Assert.DoesNotContain("TypeAcceleratorRegistration", bootstrapper);
             Assert.DoesNotContain("Dependency.Widget", bootstrapper);
         }

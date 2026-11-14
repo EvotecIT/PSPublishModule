@@ -3,7 +3,7 @@ using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
 
-namespace PowerForge.ModuleLoader.V1;
+namespace PowerForge.ModuleLoader.V2;
 
 /// <summary>Human-readable "Name Version" for messages, read from the module folder.</summary>
 internal static class ModuleDescription
@@ -25,7 +25,10 @@ internal static class ModuleDescription
             var directory = new DirectoryInfo(Path.GetDirectoryName(filePath)!);
             for (var depth = 0; directory is not null && depth < 6; depth++, directory = directory.Parent)
             {
-                var manifest = directory.EnumerateFiles("*.psd1").FirstOrDefault();
+                // Packages can also contain data files such as PowerForge.ReleaseProvenance.psd1.
+                // ModuleVersion is required on a module manifest, but not on those data files.
+                var manifest = directory.EnumerateFiles("*.psd1")
+                    .FirstOrDefault(file => ReadManifestVersion(file.FullName) is not null);
                 if (manifest is null) continue;
                 var name = Path.GetFileNameWithoutExtension(manifest.Name);
                 return (name, "module " + Describe(name, directory.FullName));
@@ -48,12 +51,21 @@ internal static class ModuleDescription
             if (Version.TryParse(Path.GetFileName(root), out var folderVersion)) return folderVersion.ToString();
             var manifest = Path.Combine(root, moduleName + ".psd1");
             if (!File.Exists(manifest)) return null;
-            var match = ManifestVersion.Match(File.ReadAllText(manifest));
-            return match.Success ? match.Groups[1].Value : null;
+            return ReadManifestVersion(manifest);
         }
         catch
         {
             return null;
         }
+    }
+
+    private static string? ReadManifestVersion(string manifest)
+    {
+        try
+        {
+            var match = ManifestVersion.Match(File.ReadAllText(manifest));
+            return match.Success ? match.Groups[1].Value : null;
+        }
+        catch { return null; }
     }
 }

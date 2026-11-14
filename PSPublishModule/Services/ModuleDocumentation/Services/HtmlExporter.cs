@@ -16,7 +16,8 @@ namespace PSPublishModule;
 /// </summary>
 internal sealed partial class HtmlExporter
 {
-    public string Export(ModuleInfoModel module, IEnumerable<DocumentItem> items, string? destinationPath, bool open, Action<string>? log = null)
+    public string Export(ModuleInfoModel module, IEnumerable<DocumentItem> items, string? destinationPath, bool open, Action<string>? log = null,
+        IReadOnlyList<DocumentationCommandHelpItem>? commandHelp = null)
     {
         var list = items?.ToList() ?? new List<DocumentItem>();
 
@@ -607,12 +608,10 @@ internal sealed partial class HtmlExporter
                                 // Commands tab (help per command) using SmartTab vertical layout
                                 if (!module.SkipCommands)
                                 {
-                                    var commands = ResolveExportedCommands(module.Name).Take(Math.Max(0, module.MaxCommands)).ToList();
-                                    if (commands.Count > 0)
+                                    var helpMap = commandHelp ?? new DocumentationCommandHelpCollector().Collect(module, log, System.Threading.CancellationToken.None);
+                                    if (helpMap.Count > 0)
                                     {
-                                        log?.Invoke($"Adding Commands tab with {commands.Count} commands...");
-                                        // Precompute help so tabs don't duplicate content and we can log line counts
-                                        var helpMap = BuildHelpMap(module.Name, commands, module.HelpTimeoutSeconds, module.ExamplesMode, module.ExamplesLayout, log);
+                                        log?.Invoke($"Adding Commands tab with {helpMap.Count} commands...");
                                         tabs.AddTab("⚙️ Commands", panel =>
                                         {
                                         panel.Tabs(inner => {

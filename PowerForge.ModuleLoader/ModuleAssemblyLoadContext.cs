@@ -8,7 +8,7 @@ using System.Runtime.InteropServices;
 using System.Runtime.Loader;
 using System.Text.Json;
 
-namespace PowerForge.ModuleLoader.V1;
+namespace PowerForge.ModuleLoader.V2;
 
 public sealed class ModuleAssemblyLoadContext : AssemblyLoadContext
 {
