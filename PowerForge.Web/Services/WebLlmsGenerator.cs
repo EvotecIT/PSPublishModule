@@ -141,6 +141,7 @@ public static partial class WebLlmsGenerator
                 primaryPackage?.IsPowerShellModule ?? projectInfo.IsPowerShellModule,
                 primaryPackage?.IsDotNetTool ?? projectInfo.IsDotNetTool)
             : null;
+        var warnings = new List<string>();
         var installCommandCount = ApplyInstallCommandPolicy(
             options,
             packages,
@@ -148,6 +149,7 @@ public static partial class WebLlmsGenerator
             version,
             projectInfo.IsPowerShellModule,
             projectInfo.IsDotNetTool,
+            warnings,
             ref legacyInstallCommand);
         var overview = ResolveOverview(options, projectInfo, siteRoot, name, apiCatalogs.Count > 0);
         WriteLlmsTxt(llmsTxtPath, name, packageId, version, legacyInstallCommand, packages, typeCount, apiCatalogs, overview, quickstart, options.DiscoveryContentPath, includePackageContent);
@@ -164,6 +166,7 @@ public static partial class WebLlmsGenerator
             Version = version ?? string.Empty,
             PackageCount = includePackageContent ? packages.Count == 0 ? 1 : packages.Count : 0,
             InstallCommandCount = installCommandCount,
+            Warnings = warnings.ToArray(),
             ApiTypeCount = typeCount,
             ApiCatalogCount = apiCatalogs.Count
         };

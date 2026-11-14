@@ -60,11 +60,67 @@ meta.author.url: https://publisher.example/about/
 image: /images/event-report.png
 ```
 
-Supported explicit types are `Article`, `BlogPosting` and `NewsArticle`; the
+Supported explicit types are `Article`, `BlogPosting`, `NewsArticle` and `TechArticle`; the
 corresponding site-level `Article` or `NewsArticle` switch still controls output.
 Authors default to `Person`. Use `Organization` for an editorial team and give an
 author URL that identifies the person or organization. Existing `author_names`
 and `author_urls` lists describe multiple authors.
+
+### Technical documentation
+
+Use `TechArticle` for a technical guide. It uses the `StructuredData.Article`
+switch and the same canonical identity, author, publisher and date defaults as
+other articles. Package facts can be supplied through `meta.schema`:
+
+```yaml
+meta.schema:
+  type: TechArticle
+  about:
+    - type: SoftwareSourceCode
+      name: Example.Documents
+      code_repository: https://github.com/example/documents
+      programming_language: C#
+  dependencies: .NET 8 SDK or later
+  mentions:
+    - type: SoftwareApplication
+      name: Example CLI
+      url: /tools/
+  dateModified: 2026-11-10T12:30:00Z
+  relatedLink:
+    - /docs/install/
+    - /api/documents/
+```
+
+`about` and `mentions` accept a single entity or an array of entities. Entity
+keys may use schema.org names (`@type`, `@id`, `codeRepository`,
+`programmingLanguage`, `runtimePlatform`) or the theme-friendly aliases `type`,
+`id`, `code_repository`, `programming_language`, `runtime_platform`. Site-relative
+entity URLs and related links become absolute. `dependencies` accepts text or a
+list of prerequisites. `date_modified` and `related_link` are aliases for
+`dateModified` and `relatedLink`. An explicit valid modification date takes
+precedence over the content timestamp; undated guides do not acquire a
+publication date.
+
+A theme can pass those same facts without writing JSON-LD:
+
+```scriban
+{{ pf.structured_data { schema: {
+  type: "TechArticle",
+  about: data.guide.packages,
+  dependencies: data.guide.dependencies,
+  mentions: data.guide.mentions,
+  dateModified: data.guide.modified,
+  relatedLink: data.guide.related_links
+} } }}
+```
+
+Use this helper instead of `structured_data_html` on the page, so the article
+is emitted once. Supply facts that agree with the visible guide.
+
+For a JSON string in a custom script, use `{{ pf.json_string page.title }}` or
+`{{ page.title | pf.json_string }}`. The result includes its JSON quotes, escapes
+control characters and HTML script delimiters, and renders a null input as
+`null`. Do not add quotes or HTML-escape the result.
 
 Use a representative image from the article, rather than the site's logo. The
 renderer accepts an explicit `article.image` or page image and can use the first

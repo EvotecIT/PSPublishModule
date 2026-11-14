@@ -259,6 +259,74 @@ public class WebSiteStructuredDataLinkedTests
         Assert.Equal(language, app.GetProperty("inLanguage").GetString());
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Render_TechArticleFromFrontMatterOrThemeRetainsPackageFacts(bool theme)
+    {
+        const string frontMatter = """
+            ---
+            title: Library guide
+            meta.schema:
+              type: TechArticle
+              about:
+                - type: SoftwareSourceCode
+                  name: Example.Library
+                  code_repository: https://github.com/example/library
+                  programming_language: C#
+              dependencies: .NET 8 SDK
+              mentions:
+                - type: SoftwareApplication
+                  name: Example Tool
+                  url: /tools/
+              dateModified: 2026-11-10T12:30:00Z
+              relatedLink: [/docs/start/, https://example.test/reference/]
+            ---
+            Guide content.
+            """;
+        var page = Page();
+        if (!theme) page.Meta = FrontMatterParser.Parse(frontMatter).Matter!.Meta;
+        var template = theme ? """
+            {{ pf.structured_data { schema: {
+              type: "TechArticle",
+              about: [{ type: "SoftwareSourceCode", name: "Example.Library", code_repository: "https://github.com/example/library", programming_language: "C#" }],
+              dependencies: ".NET 8 SDK",
+              mentions: [{ type: "SoftwareApplication", name: "Example Tool", url: "/tools/" }],
+              dateModified: "2026-11-10T12:30:00Z",
+              relatedLink: ["/docs/start/", "https://example.test/reference/"]
+            } } }}
+            """ : "{{ structured_data_html }}";
+        var site = Site();
+        site.StructuredData!.Article = true;
+        var html = theme ? RenderTemplate(template, site, page) : WebSiteBuilder.RenderStructuredData(site, page, [], null);
+        var models = Models(html);
+        var article = OfType(models, "TechArticle");
+        Assert.Equal("SoftwareSourceCode", article.GetProperty("about")[0].GetProperty("@type").GetString());
+        Assert.Equal("Example.Library", article.GetProperty("about")[0].GetProperty("name").GetString());
+        Assert.Equal("https://github.com/example/library", article.GetProperty("about")[0].GetProperty("codeRepository").GetString());
+        Assert.Equal("C#", article.GetProperty("about")[0].GetProperty("programmingLanguage").GetString());
+        Assert.Equal(".NET 8 SDK", article.GetProperty("dependencies").GetString());
+        Assert.Equal("https://product.example/tools/", article.GetProperty("mentions")[0].GetProperty("url").GetString());
+        Assert.StartsWith("2026-11-10T12:30:00", article.GetProperty("dateModified").GetString());
+        Assert.Equal("https://product.example/docs/start/", article.GetProperty("relatedLink")[0].GetString());
+        Assert.Equal("https://product.example/pricing/#article", OfType(models, "WebPage").GetProperty("mainEntity").GetProperty("@id").GetString());
+        Assert.False(article.TryGetProperty("datePublished", out _));
+        if (theme) Assert.Empty(page.Meta);
+        page.Meta["structured_data"] = false;
+        Assert.Empty(RenderTemplate(template, site, page));
+    }
+
+    [Fact]
+    public void Render_JsonStringRoundTripsQuotesControlCharactersAndScriptDelimiters()
+    {
+        var page = Page();
+        page.Title = "Quoted \"title\"\n\t\\ </script><script>alert(1)</script> & \u2028";
+        var value = RenderTemplate("{{ pf.json_string page.title }}", Site(), page);
+        Assert.Equal(page.Title, JsonSerializer.Deserialize<string>(value));
+        Assert.DoesNotContain("</script>", value, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal("null", RenderTemplate("{{ pf.json_string null }}", Site(), page));
+    }
+
     private static string RenderTemplate(string template, SiteSpec site, ContentItem page) =>
         new ScribanTemplateEngine().Render(template, new ThemeRenderContext { Site = site, Page = page }, _ => null);
 

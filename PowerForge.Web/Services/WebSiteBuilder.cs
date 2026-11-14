@@ -225,6 +225,7 @@ public static partial class WebSiteBuilder
             WriteAllTextIfChanged(redirectsPath, JsonSerializer.Serialize(redirectsPayload, jsonOptions));
             WriteRedirectOutputs(outDir, redirects);
             EnsureNoJekyllFile(outDir);
+            WriteContentMarkdownArtifacts(outDir, spec, renderItems);
             ReportProgress($"build complete: updated files {updated.Count}");
 
             return new WebBuildResult

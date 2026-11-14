@@ -604,7 +604,7 @@ public partial class WebAgentReadinessTests
             Assert.True(File.Exists(Path.Combine(root, "docs", "index.md")));
 
             var markdown = File.ReadAllText(Path.Combine(root, "index.md"));
-            Assert.Contains("# Example Home", markdown, StringComparison.Ordinal);
+            Assert.StartsWith("# Welcome" + Environment.NewLine, markdown, StringComparison.Ordinal);
             Assert.Contains("Hello **agents**.", markdown, StringComparison.Ordinal);
             Assert.Contains("[Read docs](/docs/)", markdown, StringComparison.Ordinal);
 

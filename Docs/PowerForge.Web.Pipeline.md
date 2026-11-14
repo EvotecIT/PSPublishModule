@@ -948,6 +948,9 @@ Generates `llms.txt`, `llms.json`, and `llms-full.txt`.
 ```
 Notes:
 - `contentKind`: `Package` (default) for installable packages/modules/tools, or `Site` for portals that must not emit package, version, or installation metadata
+- `installPolicy`: `Declared` uses declared package identities; `None` omits installation commands; `VerifiedCatalog` requires `publicationCatalog`, plus `nugetOwner` for .NET packages/tools and `powerShellGalleryOwner` for modules. `packageFiles` supplies each suite package's identity and exact source version; it does not establish publication.
+- `VerifiedCatalog` emits a command only when its source version exactly matches current owner-scoped publication evidence. The ecosystem catalog records one observed version per package, not its complete version history. A newer catalog version therefore also suppresses a command for an older source version. Supply release-aligned manifests and regenerate a fresh catalog; do not replace a source version with the latest registry version just to obtain a command.
+- `publicationCatalogMaxAgeHours` bounds catalog freshness. Missing, invalid, stale or wrong-owner catalogs fail generation. Individual missing/version-mismatched packages are omitted and reported in `WebLlmsResult.Warnings`; the pipeline summary shows the emitted/total command count and the first omission reason. If every package is omitted, there is no `## Install` section. Inspect the warning's source and catalog versions before changing configuration.
 - `Site` content can still include an explicitly configured `quickstart`; package content omits the quickstart section when no meaningful snippet is available
 - API resource metadata is emitted only for an index that exists and contains valid JSON; a configured missing or invalid index fails the step
 - use `apiIndexes` for multiple catalogs under the generated site root, where their published routes can be derived without guessing
