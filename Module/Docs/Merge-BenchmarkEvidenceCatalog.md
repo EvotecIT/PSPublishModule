@@ -11,7 +11,7 @@ Consolidates independently produced platform benchmark evidence bundles.
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-Merge-BenchmarkEvidenceCatalog [-SourcePath] <string[]> [-Path] <string> [-ExpectedPlatform <string[]>] [-WhatIf] [-Confirm] [<CommonParameters>]
+Merge-BenchmarkEvidenceCatalog [-SourcePath] <string[]> [-Path] <string> [-ExpectedPlatform <string[]>] [-ComparisonPath <string>] [-ResultPathPrefix <string>] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -26,6 +26,22 @@ Merge-BenchmarkEvidenceCatalog -SourcePath .\windows\index.json, .\linux\index.j
 
 
 ## PARAMETERS
+
+### -ComparisonPath
+Optional JSON array declaring every comparison, including workloads without results.
+
+```yaml
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
 
 ### -ExpectedPlatform
 Platforms expected before the public comparison is complete.
@@ -54,6 +70,22 @@ Possible values:
 
 Required: True
 Position: 1
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -ResultPathPrefix
+Root-relative public URL directory for result links, such as /data/benchmarks/library-comparisons.
+
+```yaml
+Type: String
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False

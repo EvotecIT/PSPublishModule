@@ -32520,6 +32520,18 @@ the local date (yyyy.MM.dd) unless a primary project version is available.</maml
     <command:syntax>
       <command:syntaxItem parameterSetName="__AllParameterSets">
         <maml:name>Merge-BenchmarkEvidenceCatalog</maml:name>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="none">
+          <maml:name>ComparisonPath</maml:name>
+          <maml:description>
+            <maml:para>Optional JSON array declaring every comparison, including workloads without results.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
         <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="none">
           <maml:name>ExpectedPlatform</maml:name>
           <maml:description>
@@ -32544,6 +32556,18 @@ the local date (yyyy.MM.dd) unless a primary project version is available.</maml
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="none">
+          <maml:name>ResultPathPrefix</maml:name>
+          <maml:description>
+            <maml:para>Root-relative public URL directory for result links, such as /data/benchmarks/library-comparisons.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
         <command:parameter required="true" variableLength="true" globbing="false" pipelineInput="False" position="0" aliases="none">
           <maml:name>SourcePath</maml:name>
           <maml:description>
@@ -32559,6 +32583,18 @@ the local date (yyyy.MM.dd) unless a primary project version is available.</maml
       </command:syntaxItem>
     </command:syntax>
     <command:parameters>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="none">
+        <maml:name>ComparisonPath</maml:name>
+        <maml:description>
+          <maml:para>Optional JSON array declaring every comparison, including workloads without results.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
       <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="none">
         <maml:name>ExpectedPlatform</maml:name>
         <maml:description>
@@ -32577,6 +32613,18 @@ the local date (yyyy.MM.dd) unless a primary project version is available.</maml
           <maml:para>Destination catalog path. Normalized results are published beside it under immutable content-addressed names.</maml:para>
         </maml:description>
         <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="none">
+        <maml:name>ResultPathPrefix</maml:name>
+        <maml:description>
+          <maml:para>Root-relative public URL directory for result links, such as /data/benchmarks/library-comparisons.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
         <dev:type>
           <maml:name>String</maml:name>
           <maml:uri />
