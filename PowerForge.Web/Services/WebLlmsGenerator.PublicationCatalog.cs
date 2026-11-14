@@ -9,6 +9,7 @@ public static partial class WebLlmsGenerator
         string? version,
         bool projectIsPowerShellModule,
         bool projectIsDotNetTool,
+        List<string> warnings,
         ref string? legacyInstallCommand)
     {
         if (options.ContentKind != WebLlmsContentKind.Package)
@@ -41,6 +42,7 @@ public static partial class WebLlmsGenerator
                 !Contains(catalog, packageId, version, projectIsPowerShellModule, options))
             {
                 legacyInstallCommand = null;
+                warnings.Add(InstallOmissionMessage(catalog, packageId ?? string.Empty, version, projectIsPowerShellModule));
             }
             else
             {
@@ -56,7 +58,10 @@ public static partial class WebLlmsGenerator
         foreach (var package in packages)
         {
             if (!Contains(catalog, package.Id, package.Version, package.IsPowerShellModule, options))
+            {
                 package.InstallCommand = null;
+                warnings.Add(InstallOmissionMessage(catalog, package.Id, package.Version, package.IsPowerShellModule));
+            }
             else
                 package.InstallCommand = CreateInstallCommand(
                     package.Id,
@@ -66,6 +71,13 @@ public static partial class WebLlmsGenerator
         }
 
         return packages.Count(HasInstallCommand);
+    }
+
+    private static string InstallOmissionMessage(WebPublicationCatalog catalog, string id, string? version, bool isModule)
+    {
+        var observed = catalog.GetPackageVersion(id, isModule);
+        return $"VerifiedCatalog omitted installation for '{id}': source version '{version ?? "unknown"}', " +
+               $"catalog version '{observed ?? "not found"}'. Supply an exact source version matching current owner-scoped publication evidence.";
     }
 
     private static bool Contains(

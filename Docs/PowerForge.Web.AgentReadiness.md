@@ -350,8 +350,24 @@ External project sites must publish their own API catalogs instead of being
 claimed by the hub. A generated
 `/projects/{slug}/api/index.json` is used as `service-desc` when present.
 
-If `markdownArtifacts.enabled` is true, `agent-ready prepare` converts rendered
-HTML pages to sibling Markdown files such as `index.md` and `docs/index.md`.
+If `markdownArtifacts.enabled` is true, the site build writes sibling Markdown
+files such as `index.md` and `docs/index.md`. Content pages use their preprocessed
+Markdown after includes, shortcodes and content templates. Front matter is
+excluded. Rendered article headers retain their page facts. Pages without usable
+source Markdown, including pages added after the build, are converted from HTML
+by `agent-ready prepare`.
+
+Each HTML page advertises its available copy with a
+`<link rel="alternate" type="text/markdown" href="/docs/index.md">`. With
+`linkHeaders` enabled, preparation adds the corresponding `Link` header to
+`_headers` for the page route and its explicit HTML file. These headers require
+a host that consumes `_headers`; the HTML link works independently of hosting.
+
+Copies include the page title once, the description and article content, with
+Markdown tables, fence languages and code indentation preserved. Article
+extraction excludes navigation, sidebars and edit links. Themes can mark other
+chrome with `data-pf-markdown="exclude"`. A header inside the article remains
+part of its content, including package facts and definition lists.
 These files are useful directly and can be served by host-level rules for
 `Accept: text/markdown`. Keep this disabled on very large sites unless the
 extra files are expected; use `maxPages` for staged rollouts.
@@ -361,7 +377,8 @@ downloadable `recordings/session.md` beside `recordings/session.html` keeps its
 full transcript instead of being replaced by the HTML page's extracted text.
 Preparation reports the collision as a warning. Generated sidecars include a
 content checksum in a trailing HTML comment, so subsequent preparation runs can
-refresh unchanged generated files while preserving edited ones. Unmarked files
+refresh HTML-derived files while preserving edited ones. Source-derived copies
+are retained during preparation and refreshed by the next site build. Unmarked files
 from older builds are also preserved; rebuild a clean output directory to
 regenerate those sidecars. A missing sidecar is generated normally.
 

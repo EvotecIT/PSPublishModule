@@ -59,7 +59,7 @@ public sealed class AgentWebMcpToolSpec
 /// <summary>Static markdown artifacts generated from rendered HTML for agent readers and edge negotiation.</summary>
 public sealed class AgentMarkdownArtifactsSpec
 {
-    /// <summary>Enable markdown artifact generation during agent-ready prepare.</summary>
+    /// <summary>Enable source-based Markdown copies during build and HTML fallback copies during agent-ready prepare.</summary>
     public bool Enabled { get; set; }
     /// <summary>Markdown file extension. Defaults to .md.</summary>
     public string? Extension { get; set; } = ".md";

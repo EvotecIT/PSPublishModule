@@ -138,12 +138,14 @@ public sealed class WebLlmsPublicationCatalogTests
         Assert.Contains("does not match expected owner 'Evotec'", exception.Message, StringComparison.Ordinal);
     }
 
-    [Fact]
-    public void VerifiedCatalog_OmitsCommandWhenOnlyAnOlderPackageVersionIsPublished()
+    [Theory]
+    [InlineData("1.2.2")]
+    [InlineData("1.2.4")]
+    public void VerifiedCatalog_ReportsSourceAndCatalogVersionMismatch(string catalogVersion)
     {
         using var fixture = new PublicationFixture();
         var project = fixture.WriteProject("Future.Package");
-        var catalog = fixture.WriteCatalog("Evotec", ["Future.Package"], packageVersion: "1.2.2");
+        var catalog = fixture.WriteCatalog("Evotec", ["Future.Package"], packageVersion: catalogVersion);
 
         var result = WebLlmsGenerator.Generate(new WebLlmsOptions
         {
@@ -156,6 +158,9 @@ public sealed class WebLlmsPublicationCatalogTests
 
         Assert.Equal(0, result.InstallCommandCount);
         Assert.DoesNotContain("## Install", File.ReadAllText(result.LlmsTxtPath), StringComparison.Ordinal);
+        var warning = Assert.Single(result.Warnings);
+        Assert.Contains("source version '1.2.3'", warning);
+        Assert.Contains("catalog version '" + catalogVersion + "'", warning);
     }
 
     [Fact]

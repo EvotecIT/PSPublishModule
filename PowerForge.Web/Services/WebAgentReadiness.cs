@@ -24,9 +24,6 @@ public static partial class WebAgentReadiness
         @"(?ms)^\s*# BEGIN PowerForge Agent Readiness\s*$.*?^\s*# END PowerForge Agent Readiness\s*$\r?\n?",
         RegexOptions.Compiled);
     private static readonly Regex MarkdownWhitespaceRegex = new(@"\s+", RegexOptions.Compiled);
-    private static readonly Regex MarkdownTrailingWhitespaceRegex = new(@"[ \t]+\n", RegexOptions.Compiled);
-    private static readonly Regex MarkdownBlankLinesRegex = new(@"\n{3,}", RegexOptions.Compiled);
-    private static readonly Regex MarkdownRepeatedSpacesRegex = new(@"[ \t]{2,}", RegexOptions.Compiled);
     private static readonly Regex MarkdownH1Regex = new(@"(?m)^#\s+\S", RegexOptions.Compiled);
     private static readonly Regex MarkdownH2Regex = new(@"(?m)^##\s+\S", RegexOptions.Compiled);
     private static readonly Regex MarkdownListLinkRegex = new(@"(?m)^\s*[-*]\s+\[[^\]\r\n]+\]\([^) \r\n]+[^)\r\n]*\)", RegexOptions.Compiled);
@@ -1154,172 +1151,6 @@ public static partial class WebAgentReadiness
         return value;
     }
 
-    private static string ConvertHtmlDocumentToMarkdown(string html, AgentMarkdownArtifactsSpec spec)
-    {
-        if (string.IsNullOrWhiteSpace(html))
-            return string.Empty;
-
-        var doc = HtmlParser.ParseWithAngleSharp(html);
-        var contentRoot = doc.QuerySelector("main,[role='main'],article") ?? doc.Body ?? doc.DocumentElement;
-        if (contentRoot is null)
-            return string.Empty;
-
-        var body = NormalizeMarkdownDocument(RenderMarkdownChildren(contentRoot));
-        var title = doc.Title?.Trim();
-        if (spec.IncludeTitle &&
-            !string.IsNullOrWhiteSpace(title) &&
-            !body.StartsWith("# " + title, StringComparison.OrdinalIgnoreCase))
-        {
-            body = "# " + title + Environment.NewLine + Environment.NewLine + body.TrimStart();
-        }
-
-        return body.Trim() + Environment.NewLine;
-    }
-
-    private static string RenderMarkdownChildren(INode node)
-    {
-        var sb = new StringBuilder();
-        foreach (var child in node.ChildNodes)
-            sb.Append(RenderMarkdownNode(child));
-        return sb.ToString();
-    }
-
-    private static string RenderMarkdownNode(INode node)
-    {
-        if (node.NodeType == NodeType.Text)
-            return NormalizeInlineWhitespace(node.TextContent);
-
-        if (node is not IElement element)
-            return string.Empty;
-
-        var tag = element.TagName.ToLowerInvariant();
-        return tag switch
-        {
-            "h1" => RenderHeading(element, 1),
-            "h2" => RenderHeading(element, 2),
-            "h3" => RenderHeading(element, 3),
-            "h4" => RenderHeading(element, 4),
-            "h5" => RenderHeading(element, 5),
-            "h6" => RenderHeading(element, 6),
-            "p" => Block(RenderMarkdownChildren(element)),
-            "br" => Environment.NewLine,
-            "strong" or "b" => WrapInline("**", RenderMarkdownChildren(element)),
-            "em" or "i" => WrapInline("*", RenderMarkdownChildren(element)),
-            "code" when !string.Equals(element.ParentElement?.TagName, "pre", StringComparison.OrdinalIgnoreCase) => "`" + element.TextContent.Trim() + "`",
-            "pre" => RenderCodeBlock(element),
-            "a" => RenderLink(element),
-            "img" => RenderImage(element),
-            "ul" => RenderList(element, ordered: false),
-            "ol" => RenderList(element, ordered: true),
-            "li" => RenderMarkdownChildren(element),
-            "blockquote" => RenderBlockquote(element),
-            "hr" => Environment.NewLine + Environment.NewLine + "---" + Environment.NewLine + Environment.NewLine,
-            "script" or "style" or "noscript" or "svg" => string.Empty,
-            _ => IsMarkdownBlockElement(tag) ? Block(RenderMarkdownChildren(element)) : RenderMarkdownChildren(element)
-        };
-    }
-
-    private static string RenderHeading(IElement element, int level)
-    {
-        var text = CollapseMarkdownInline(RenderMarkdownChildren(element));
-        return string.IsNullOrWhiteSpace(text)
-            ? string.Empty
-            : Environment.NewLine + Environment.NewLine + new string('#', level) + " " + text + Environment.NewLine + Environment.NewLine;
-    }
-
-    private static string RenderCodeBlock(IElement element)
-    {
-        var text = element.TextContent.Trim('\r', '\n');
-        return string.IsNullOrWhiteSpace(text)
-            ? string.Empty
-            : Environment.NewLine + Environment.NewLine + "```" + Environment.NewLine + text + Environment.NewLine + "```" + Environment.NewLine + Environment.NewLine;
-    }
-
-    private static string RenderLink(IElement element)
-    {
-        var text = CollapseMarkdownInline(RenderMarkdownChildren(element));
-        var href = element.GetAttribute("href")?.Trim();
-        if (string.IsNullOrWhiteSpace(text))
-            text = href ?? string.Empty;
-        return string.IsNullOrWhiteSpace(href) ? text : $"[{EscapeMarkdownLinkText(text)}]({href})";
-    }
-
-    private static string RenderImage(IElement element)
-    {
-        var src = element.GetAttribute("src")?.Trim();
-        if (string.IsNullOrWhiteSpace(src))
-            return string.Empty;
-        var alt = element.GetAttribute("alt")?.Trim() ?? string.Empty;
-        return $"![{EscapeMarkdownLinkText(alt)}]({src})";
-    }
-
-    private static string RenderList(IElement element, bool ordered)
-    {
-        var index = 1;
-        var lines = new List<string>();
-        foreach (var item in element.Children.Where(static child => child.TagName.Equals("li", StringComparison.OrdinalIgnoreCase)))
-        {
-            var text = NormalizeMarkdownDocument(RenderMarkdownChildren(item)).Trim();
-            if (string.IsNullOrWhiteSpace(text))
-                continue;
-            var prefix = ordered ? $"{index}. " : "- ";
-            lines.Add(prefix + text.Replace(Environment.NewLine, Environment.NewLine + "  ", StringComparison.Ordinal));
-            index++;
-        }
-
-        return lines.Count == 0
-            ? string.Empty
-            : Environment.NewLine + Environment.NewLine + string.Join(Environment.NewLine, lines) + Environment.NewLine + Environment.NewLine;
-    }
-
-    private static string RenderBlockquote(IElement element)
-    {
-        var text = NormalizeMarkdownDocument(RenderMarkdownChildren(element)).Trim();
-        if (string.IsNullOrWhiteSpace(text))
-            return string.Empty;
-        var quoted = string.Join(Environment.NewLine, text.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None).Select(line => "> " + line));
-        return Environment.NewLine + Environment.NewLine + quoted + Environment.NewLine + Environment.NewLine;
-    }
-
-    private static string Block(string text)
-    {
-        var normalized = NormalizeMarkdownDocument(text).Trim();
-        return string.IsNullOrWhiteSpace(normalized)
-            ? string.Empty
-            : Environment.NewLine + Environment.NewLine + normalized + Environment.NewLine + Environment.NewLine;
-    }
-
-    private static string WrapInline(string marker, string text)
-    {
-        var normalized = CollapseMarkdownInline(text);
-        return string.IsNullOrWhiteSpace(normalized) ? string.Empty : marker + normalized + marker;
-    }
-
-    private static bool IsMarkdownBlockElement(string tag)
-        => tag is "address" or "article" or "aside" or "div" or "dl" or "fieldset" or "figcaption" or "figure" or
-            "footer" or "form" or "header" or "main" or "nav" or "section" or "table";
-
-    private static string NormalizeInlineWhitespace(string text)
-        => string.IsNullOrWhiteSpace(text) ? string.Empty : MarkdownWhitespaceRegex.Replace(text, " ");
-
-    private static string CollapseMarkdownInline(string text)
-        => MarkdownWhitespaceRegex.Replace(NormalizeMarkdownDocument(text).Replace(Environment.NewLine, " ", StringComparison.Ordinal), " ").Trim();
-
-    private static string NormalizeMarkdownDocument(string text)
-    {
-        if (string.IsNullOrWhiteSpace(text))
-            return string.Empty;
-
-        var normalized = text.Replace("\r\n", "\n", StringComparison.Ordinal).Replace('\r', '\n');
-        normalized = MarkdownTrailingWhitespaceRegex.Replace(normalized, "\n");
-        normalized = MarkdownBlankLinesRegex.Replace(normalized, "\n\n");
-        normalized = MarkdownRepeatedSpacesRegex.Replace(normalized, " ");
-        return normalized.Replace("\n", Environment.NewLine, StringComparison.Ordinal).Trim();
-    }
-
-    private static string EscapeMarkdownLinkText(string text)
-        => text.Replace("[", "\\[", StringComparison.Ordinal).Replace("]", "\\]", StringComparison.Ordinal);
-
     private static bool ShouldWriteHeaders(AgentReadinessSpec spec, List<HeaderLinkTarget> linkTargets)
         => spec.SecurityHeaders?.Enabled == true ||
            (spec.LinkHeaders && linkTargets.Count > 0) ||
@@ -1353,6 +1184,20 @@ public static partial class WebAgentReadiness
             }
         }
 
+        if (spec.LinkHeaders)
+        {
+            foreach (var markdown in markdownArtifactPaths)
+            {
+                var htmlRoute = ToSiteRoute(siteRoot, Path.ChangeExtension(markdown, ".html"));
+                var target = new HeaderLinkTarget(ToSiteRoute(siteRoot, markdown), "alternate", "text/markdown");
+                foreach (var route in htmlRoute.EndsWith("/index.html", StringComparison.OrdinalIgnoreCase)
+                             ? new[] { htmlRoute[..^10], htmlRoute } : new[] { htmlRoute })
+                {
+                    sb.AppendLine(route);
+                    sb.Append("  Link: ").AppendLine(BuildLinkHeaderValue(target));
+                }
+            }
+        }
         AppendDiscoveryResourceHeaders(sb, siteRoot, spec, security, markdownArtifactPaths);
         sb.AppendLine(AgentBlockEnd);
 
