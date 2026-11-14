@@ -6,7 +6,13 @@ namespace PowerForge.Web;
 public static partial class WebAgentReadiness
 {
     private const string MarkdownArtifactStamp = "\n<!-- PowerForge markdown artifact sha256:";
-    private const string MarkdownSourceStamp = "\n<!-- PowerForge markdown source -->\n";
+    private const string MarkdownSourceStamp = "\n<!-- PowerForge markdown source sha256:";
+
+    private static string SourceMarkdownStamp(string html, AgentMarkdownArtifactsSpec spec)
+        // Fingerprint the current readable page, so asset/head optimizers do not
+        // discard source fidelity while a replacement document invalidates it.
+        => MarkdownSourceStamp + Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(ConvertHtmlDocumentToMarkdown(html, spec)))) +
+           "; title=" + spec.IncludeTitle + " -->\n";
 
     // A matching content stamp establishes ownership without a separate mutable manifest.
     // Unmarked downloads and edited sidecars are always treated as authored content.
@@ -51,6 +57,7 @@ public static partial class WebAgentReadiness
         var available = new List<string>();
         foreach (var htmlPath in candidates)
         {
+            var html = File.ReadAllText(htmlPath, Encoding.UTF8);
             ContentItem? source = null;
             sources?.TryGetValue(htmlPath, out source);
             var outputPath = Path.ChangeExtension(htmlPath, extension);
@@ -62,18 +69,20 @@ public static partial class WebAgentReadiness
                 AdvertiseMarkdownArtifact(siteRoot, htmlPath, outputPath, written);
                 continue;
             }
-            if (source is null && previous?.Contains(MarkdownSourceStamp, StringComparison.Ordinal) == true)
+            if (source is null && previous?.Contains(MarkdownSourceStamp, StringComparison.Ordinal) == true &&
+                previous.Contains(SourceMarkdownStamp(html, spec), StringComparison.Ordinal))
             {
                 available.Add(outputPath);
                 AdvertiseMarkdownArtifact(siteRoot, htmlPath, outputPath, written);
                 continue;
             }
-            var markdown = ConvertHtmlDocumentToMarkdown(File.ReadAllText(htmlPath, Encoding.UTF8), spec, source);
+            var markdown = ConvertHtmlDocumentToMarkdown(html, spec, source);
             if (string.IsNullOrWhiteSpace(markdown))
                 continue;
 
+            AdvertiseMarkdownArtifact(siteRoot, htmlPath, outputPath, written);
             if (source?.MarkdownContent is not null)
-                markdown += MarkdownSourceStamp;
+                markdown += SourceMarkdownStamp(File.ReadAllText(htmlPath, Encoding.UTF8), spec);
             var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(markdown)));
             var next = markdown + MarkdownArtifactStamp + hash + " -->\n";
             if (previous != next)
@@ -82,7 +91,6 @@ public static partial class WebAgentReadiness
                 written.Add(outputPath);
             }
             available.Add(outputPath);
-            AdvertiseMarkdownArtifact(siteRoot, htmlPath, outputPath, written);
         }
 
         var rootMarkdown = Path.Combine(siteRoot, "index" + extension);

@@ -52,8 +52,11 @@ public sealed class WebDocumentationMarkdownTests
         }
     }
 
-    [Fact]
-    public void BuildAndPrepare_PreserveSourceMarkdownAndThemeFacts_ThenRefreshOnBuild()
+    [Theory]
+    [InlineData("Guide", true)]
+    [InlineData("C#", true)]
+    [InlineData("Guide", false)]
+    public void BuildAndPrepare_PreserveSourceMarkdownAndThemeFacts_ThenRefreshOnBuild(string title, bool sourceHeading)
     {
         using var site = new DocumentationSite();
         var pages = Path.Combine(site.Root, "content", "pages");
@@ -74,6 +77,9 @@ public sealed class WebDocumentationMarkdownTests
             ---
             # Guide
 
+                LeadingExample();
+                    IndentedContinuation();
+
             | Class | Description |
             | :--- | ---: |
             | `Document` | Root class |
@@ -88,6 +94,9 @@ public sealed class WebDocumentationMarkdownTests
             }
             ```
             """;
+        markdown = markdown.Replace("title: Guide", "title: " + title, StringComparison.Ordinal)
+            .Replace("# Guide", "# " + title, StringComparison.Ordinal);
+        if (!sourceHeading) markdown = markdown.Replace("# " + title + "\n\n", string.Empty, StringComparison.Ordinal);
         var sourcePath = Path.Combine(pages, "guide.md");
         File.WriteAllText(sourcePath, markdown);
         var spec = new SiteSpec
@@ -102,9 +111,12 @@ public sealed class WebDocumentationMarkdownTests
         {
             if (build == 1) File.WriteAllText(sourcePath, markdown.Replace("Save();", "SaveUpdated();", StringComparison.Ordinal));
             WebSiteBuilder.Build(spec, WebSitePlanner.Plan(spec, config), site.Output);
+            var htmlPath = Path.Combine(site.Output, "docs", "guide", "index.html");
+            File.WriteAllText(htmlPath, File.ReadAllText(htmlPath).Replace("</head>", "<script>const optimized = true;</script></head>", StringComparison.Ordinal));
             for (var prepare = 0; prepare < 2; prepare++) WebAgentReadiness.Prepare(site.Options(".md"));
             var output = File.ReadAllText(Path.Combine(site.Output, "docs", "guide", "index.md")).Replace("\r\n", "\n");
-            Assert.Single(Regex.Matches(output, "(?m)^# Guide$"));
+            Assert.Single(Regex.Matches(output, "(?m)^# " + Regex.Escape(title) + "$"));
+            Assert.Contains("\n\n    LeadingExample();\n        IndentedContinuation();", output);
             Assert.Contains("Source description", output);
             Assert.Contains("Theme package fact", output);
             Assert.Contains("| :--- | ---: |", output); // Authored alignment proves the source path was used.
@@ -112,6 +124,34 @@ public sealed class WebDocumentationMarkdownTests
             Assert.Contains(build == 0 ? "Save();" : "SaveUpdated();", output);
             Assert.DoesNotContain("Sidebar", output);
         }
+
+        // A later API/document generator may replace a scaffold page after the site build.
+        File.WriteAllText(Path.Combine(site.Output, "docs", "guide", "index.html"),
+            "<html><head><title>API suite</title></head><body><main><h1>API suite</h1><p>Generated API members</p></main></body></html>");
+        WebAgentReadiness.Prepare(site.Options(".md"));
+        var refreshed = File.ReadAllText(Path.Combine(site.Output, "docs", "guide", "index.md"));
+        Assert.Contains("Generated API members", refreshed);
+        Assert.DoesNotContain("LeadingExample", refreshed);
+        Assert.DoesNotContain("Theme package fact", refreshed);
+    }
+
+    [Fact]
+    public void Prepare_PreservesAllEntriesInArticleListings()
+    {
+        using var site = new DocumentationSite();
+        File.WriteAllText(Path.Combine(site.Output, "index.html"), """
+            <html><head><title>Examples</title></head><body><main><h1>Examples</h1><aside>Sidebar</aside>
+            <section><article><h2>First example</h2><p>First details</p></article>
+            <article><h2>Second example</h2><p>Second details</p></article></section></main></body></html>
+            """);
+        WebAgentReadiness.Prepare(site.Options(".md"));
+        var markdown = File.ReadAllText(Path.Combine(site.Output, "index.md"));
+        Assert.Contains("# Examples", markdown);
+        Assert.Contains("## First example", markdown);
+        Assert.Contains("First details", markdown);
+        Assert.Contains("## Second example", markdown);
+        Assert.Contains("Second details", markdown);
+        Assert.DoesNotContain("Sidebar", markdown);
     }
 
     [Fact]
