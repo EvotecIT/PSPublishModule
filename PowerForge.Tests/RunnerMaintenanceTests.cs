@@ -140,7 +140,7 @@ public sealed class RunnerMaintenanceTests
         var windows = OperatingSystem.IsWindows();
         var executable = Path.Combine(bin, windows ? "Runner.Worker.exe" : "Runner.Worker");
         Installation.CopyRunnerProcess(executable);
-        using var worker = Process.Start(new ProcessStartInfo(executable, windows ? "/d /c ping -n 60 127.0.0.1 >nul" : "60")
+        using var worker = Process.Start(new ProcessStartInfo(executable, Installation.RunnerProcessArguments)
             { UseShellExecute = false, CreateNoWindow = true })!;
         try
         {
@@ -187,11 +187,11 @@ public sealed class RunnerMaintenanceTests
         var windows = OperatingSystem.IsWindows();
         var executable = Path.Combine(foreign, windows ? "Runner.Listener.exe" : "Runner.Listener");
         Installation.CopyRunnerProcess(executable);
-        using var listener = Process.Start(new ProcessStartInfo(executable, windows ? "/d /c ping -n 60 127.0.0.1 >nul" : "60")
+        using var listener = Process.Start(new ProcessStartInfo(executable, Installation.RunnerProcessArguments)
             { UseShellExecute = false, CreateNoWindow = true })!;
         var buildExecutable = Path.Combine(foreign, windows ? "dotnet.exe" : "dotnet");
         Installation.CopyRunnerProcess(buildExecutable);
-        using var build = independentBuild ? Process.Start(new ProcessStartInfo(buildExecutable, windows ? "/d /c ping -n 60 127.0.0.1 >nul" : "60")
+        using var build = independentBuild ? Process.Start(new ProcessStartInfo(buildExecutable, Installation.RunnerProcessArguments)
             { UseShellExecute = false, CreateNoWindow = true }) : null;
         try
         {
@@ -483,9 +483,14 @@ public sealed class RunnerMaintenanceTests
         internal readonly RunnerMaintenanceRegistration Runner;
         internal readonly RunnerHousekeepingService Service = new(new NullLogger(), ReadOwnedProcesses);
 
+        internal static string RunnerProcessArguments => OperatingSystem.IsWindows()
+            ? "/d /c ping -n 60 127.0.0.1 >nul"
+            : "-c \"sleep 60 & wait\"";
+
         internal static void CopyRunnerProcess(string executable)
         {
-            File.Copy(OperatingSystem.IsWindows() ? Path.Combine(Environment.SystemDirectory, "cmd.exe") : "/bin/sleep", executable);
+            // A copied multicall sleep can reject the synthetic runner name on Linux.
+            File.Copy(OperatingSystem.IsWindows() ? Path.Combine(Environment.SystemDirectory, "cmd.exe") : "/bin/sh", executable);
             if (OperatingSystem.IsWindows()) return;
             File.SetUnixFileMode(executable, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
             if (OperatingSystem.IsMacOS())
