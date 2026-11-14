@@ -101,6 +101,7 @@ public sealed partial class DotNetPublishPipelineRunner
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 progress.StepStarting(step);
+                ActiveProcessLineReceived.Value = CreateProcessLineSink(progress, step);
                 var stepStartedUtc = DateTimeOffset.UtcNow;
                 var stepStopwatch = Stopwatch.StartNew();
                 string? stepError = null;
@@ -346,6 +347,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 }
                 finally
                 {
+                    ActiveProcessLineReceived.Value = null;
                     stepStopwatch.Stop();
                     stepReports.Add(new DotNetPublishRunReportStep
                     {
@@ -519,6 +521,12 @@ public sealed partial class DotNetPublishPipelineRunner
             }
         }
     }
+
+    // Shows the latest dotnet/msbuild output line as the running step's detail.
+    private static Action<string>? CreateProcessLineSink(IDotNetPublishProgressReporter progress, DotNetPublishStep step)
+        => progress is IDotNetPublishProgressReporterV2 detailed
+            ? ProgressDetailThrottle.Create(line => detailed.StepProgress(step, step.Kind.ToString(), line))
+            : null;
 
     private static string BuildArtifactProvenanceKey(DotNetPublishArtefactResult artefact)
         => string.Join(

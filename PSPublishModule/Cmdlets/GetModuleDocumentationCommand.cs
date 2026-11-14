@@ -11,7 +11,7 @@ namespace PSPublishModule;
 
 /// <summary>
 /// <para type="synopsis">Gets module documentation (README, CHANGELOG, LICENSE, Intro/Upgrade) and renders it in the console.</para>
-/// <para type="description">Resolves documentation files from an installed module (root or Internals folder) and renders them with Spectre.Console. When local files are absent, it will backfill from the module's repository specified by <c>PrivateData.PSData.ProjectUri</c> (GitHub or Azure DevOps), using a token when necessary.</para>
+/// <para type="description">Resolves documentation files from an installed module (root or Internals folder) and renders them in the console. When local files are absent, it will backfill from the module's repository specified by <c>PrivateData.PSData.ProjectUri</c> (GitHub or Azure DevOps), using a token when necessary.</para>
 /// <example>
 ///   <summary>Show default documentation in the console</summary>
 ///   <prefix>PS&gt; </prefix>
@@ -45,10 +45,17 @@ public sealed partial class GetModuleDocumentationCommand : PSCmdlet
     /// </summary>
     protected override void ProcessRecord()
     {
+        using (CmdletConsole.Use(this))
+            ProcessRecordCore();
+    }
+
+    private void ProcessRecordCore()
+    {
         var pref = JsonRendererPreference.Auto;
         switch ((JsonRenderer ?? "Auto").ToLowerInvariant())
         {
-            case "spectre": pref = JsonRendererPreference.Spectre; break;
+            case "highlighted":
+            case "spectre": pref = JsonRendererPreference.Highlighted; break;
             case "system":  pref = JsonRendererPreference.System;  break;
             default:         pref = JsonRendererPreference.Auto;    break;
         }

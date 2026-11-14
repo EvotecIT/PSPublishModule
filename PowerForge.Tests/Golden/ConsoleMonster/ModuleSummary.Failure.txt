@@ -1,0 +1,10 @@
+ SampleModule 1.0.0 - C:\repo\SampleModule --- x 1 failed
+
+ Overview -----------------------------------------------
+ Project  C:\repo\SampleModule
+ Staging  (temp)
+
+x InvalidOperationException
+  Import-Module failed for SampleModule.
+  Caused by FileNotFoundException
+    Could not load file or assembly 'Contoso.Native, Version=1.2.0.0'.

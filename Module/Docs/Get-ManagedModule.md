@@ -159,7 +159,7 @@ Accept wildcard characters: False
 ```
 
 ### -ShowSummary
-Write a compact Spectre.Console inventory summary.
+Write a compact console inventory summary.
 
 ```yaml
 Type: SwitchParameter

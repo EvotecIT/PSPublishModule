@@ -546,7 +546,7 @@ Accept wildcard characters: False
 ```
 
 ### -ShowSummary
-Write a compact Spectre.Console summary.
+Write a compact console summary.
 
 ```yaml
 Type: SwitchParameter

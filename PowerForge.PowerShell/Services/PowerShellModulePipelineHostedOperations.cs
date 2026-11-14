@@ -222,7 +222,8 @@ internal sealed partial class PowerShellModulePipelineHostedOperations :
         bool importRequired,
         bool importSelf,
         bool verbose,
-        ModuleImportValidationTarget[] targets)
+        ModuleImportValidationTarget[] targets,
+        Action<string>? outputLineReceived = null)
     {
         var modulesB64 = EncodeImportModules(modules);
         var args = new List<string>(6)
@@ -242,7 +243,8 @@ internal sealed partial class PowerShellModulePipelineHostedOperations :
                 scriptText: script,
                 args: args,
                 timeout: TimeSpan.FromMinutes(5),
-                preferPwsh: target.PreferPwsh);
+                preferPwsh: target.PreferPwsh,
+                outputLineReceived: outputLineReceived);
 
             if (result.ExitCode != 0)
             {

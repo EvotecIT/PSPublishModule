@@ -14,7 +14,7 @@ PowerShell compilation, backups and the PowerForge Studio desktop app.
   `PowerForge.PowerShell/` holds reusable logic that still needs PowerShell
   host concepts. `PowerForge.ModuleLoader/`, `PowerForge.Generators/` and
   `PowerForge.PowerShell.Provider*` support generated modules and providers.
-- `PowerForge.Cli/`: `powerforge` tool. `PowerForge.ConsoleShared/`: shared Spectre.Console UI source.
+- `PowerForge.Cli/`: `powerforge` tool. `PowerForge.ConsoleUi/`: shared ConsoleMonster UI.
 - `PowerForge.Web/`, `PowerForge.Web.Cli/`, `PowerForge.Web.Protocols/`,
   `PowerForge.Blazor/`: site engine and `powerforge-web` CLI.
   `PowerForge.Web.Sample.App/` and `Samples/` are sample sites.
@@ -79,7 +79,7 @@ node ./Build/linecount.js . 800                               # file length chec
 - Before adding code to a cmdlet, ask: could a test, CLI or other host call it?
   Could two cmdlets share it? Does it touch files, versions, dependencies,
   repositories, GitHub, NuGet or build plans? If yes, it belongs in a shared layer.
-- Keep host-specific rendering (`Host.UI.Write*`, Spectre.Console, `WriteObject`)
+- Keep host-specific rendering (`Host.UI.Write*`, ConsoleMonster widgets, `WriteObject`)
   in the cmdlet. Don't create abstractions just to move those calls out.
 - If a public result type must stay stable, keep the internal model in the
   shared layer and map it back in `PSPublishModule`.

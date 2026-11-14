@@ -1636,7 +1636,8 @@ public sealed partial class ModulePipelineUnifiedReleaseTests
             bool importRequired,
             bool importSelf,
             bool verbose,
-            ModuleImportValidationTarget[] targets)
+            ModuleImportValidationTarget[] targets,
+            Action<string>? outputLineReceived = null)
         {
             if (!AllowModuleImportValidation)
                 throw new InvalidOperationException("Import validation is not used in this test.");

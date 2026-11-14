@@ -25,8 +25,8 @@
   <ItemGroup>
     <PackageReference Include="PowerShellStandard.Library" Version="5.1.1" PrivateAssets="all" />
     <PackageReference Include="System.Reflection.MetadataLoadContext" Version="10.0.14" />
-    <PackageReference Include="Spectre.Console" Version="0.57.2" />
-    <PackageReference Include="Spectre.Console.Json" Version="0.57.2" />
+    <PackageReference Include="ConsoleMonster.Markdown" Version="2.4.1" />
+    <PackageReference Include="ConsoleMonster.PowerShell.Display" Version="2.4.1" />
     <PackageReference Include="HtmlForgeX" Version="2.3.0" />
     <PackageReference Include="HtmlForgeX.Markdown" Version="2.3.0" />
     <PackageReference Include="OfficeIMO.Markdown" Version="3.5.3" />
@@ -54,26 +54,7 @@
   <ItemGroup>
     <ProjectReference Include="..\PowerForge\PowerForge.csproj" />
     <ProjectReference Include="..\PowerForge.PowerShell\PowerForge.PowerShell.csproj" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <Compile Include="..\PowerForge.ConsoleShared\SpectrePipelineSummaryWriter.cs" Link="PowerForge.ConsoleShared\SpectrePipelineSummaryWriter.cs" />
-    <Compile Include="..\PowerForge.ConsoleShared\PipelinePublishSummary.cs" Link="PowerForge.ConsoleShared\PipelinePublishSummary.cs" />
-    <Compile Include="..\PowerForge.ConsoleShared\SpectreConsoleLogger.cs" Link="PowerForge.ConsoleShared\SpectreConsoleLogger.cs" />
-    <Compile Include="..\PowerForge.ConsoleShared\SpectreBuildProgressColumns.cs" Link="PowerForge.ConsoleShared\SpectreBuildProgressColumns.cs" />
-    <Compile Include="..\PowerForge.ConsoleShared\SpectreProgressPresentation.cs" Link="PowerForge.ConsoleShared\SpectreProgressPresentation.cs" />
-    <Compile Include="..\PowerForge.ConsoleShared\SpectreProgressDisplay.cs" Link="PowerForge.ConsoleShared\SpectreProgressDisplay.cs" />
-    <Compile Include="..\PowerForge.ConsoleShared\SpectreStatusConsoleUi.cs" Link="PowerForge.ConsoleShared\SpectreStatusConsoleUi.cs" />
-    <Compile Include="..\PowerForge.ConsoleShared\SpectreProgressDiagnostics.cs" Link="PowerForge.ConsoleShared\SpectreProgressDiagnostics.cs" />
-    <Compile Include="..\PowerForge.ConsoleShared\SpectreProgressViewport.cs" Link="PowerForge.ConsoleShared\SpectreProgressViewport.cs" />
-    <Compile Include="..\PowerForge.ConsoleShared\SpectreProgressLedger.cs" Link="PowerForge.ConsoleShared\SpectreProgressLedger.cs" />
-    <Compile Include="..\PowerForge.ConsoleShared\SpectreDotNetPublishConsoleUi.cs" Link="PowerForge.ConsoleShared\SpectreDotNetPublishConsoleUi.cs" />
-    <Compile Include="..\PowerForge.ConsoleShared\SpectreDotNetPublishConsoleUi.Display.cs" Link="PowerForge.ConsoleShared\SpectreDotNetPublishConsoleUi.Display.cs" />
-    <Compile Include="..\PowerForge.ConsoleShared\SpectreDotNetPublishConsoleUi.Labels.cs" Link="PowerForge.ConsoleShared\SpectreDotNetPublishConsoleUi.Labels.cs" />
-    <Compile Include="..\PowerForge.ConsoleShared\SpectreModulePipelineConsoleUi.cs" Link="PowerForge.ConsoleShared\SpectreModulePipelineConsoleUi.cs" />
-    <Compile Include="..\PowerForge.ConsoleShared\SpectreProjectBuildConsoleUi.cs" Link="PowerForge.ConsoleShared\SpectreProjectBuildConsoleUi.cs" />
-    <Compile Include="..\PowerForge.ConsoleShared\SpectreProjectBuildSummaryWriter.cs" Link="PowerForge.ConsoleShared\SpectreProjectBuildSummaryWriter.cs" />
-    <Compile Include="..\PowerForge.ConsoleShared\SpectrePowerForgeReleaseConsoleUi.cs" Link="PowerForge.ConsoleShared\SpectrePowerForgeReleaseConsoleUi.cs" />
+    <ProjectReference Include="..\PowerForge.ConsoleUi\PowerForge.ConsoleUi.csproj" />
   </ItemGroup>
 
 </Project>

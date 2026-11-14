@@ -5,7 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Management.Automation;
 using PowerForge;
-using PowerForge.ConsoleShared;
+using PowerForge.ConsoleUi;
 
 namespace PSPublishModule;
 
@@ -557,7 +557,7 @@ public sealed partial class InvokePowerForgeReleaseCommand : PSCmdlet
     [Parameter]
     public SwitchParameter ExitCode { get; set; }
 
-    /// <summary>Disables the interactive Spectre renderer while preserving structured pipeline output.</summary>
+    /// <summary>Disables the interactive progress view while preserving structured pipeline output.</summary>
     [Parameter]
     public SwitchParameter NoInteractive { get; set; }
 
@@ -565,6 +565,12 @@ public sealed partial class InvokePowerForgeReleaseCommand : PSCmdlet
     /// Executes the unified release workflow.
     /// </summary>
     protected override void ProcessRecord()
+    {
+        using (CmdletConsole.Use(this))
+            ProcessRecordCore();
+    }
+
+    private void ProcessRecordCore()
     {
         var boundParameters = MyInvocation?.BoundParameters;
         var isVerbose = boundParameters?.ContainsKey("Verbose") == true;
@@ -610,9 +616,9 @@ public sealed partial class InvokePowerForgeReleaseCommand : PSCmdlet
 
             var request = BuildRequest(configFullPath, requestDefaults, boundParameters);
             ConsoleEncoding.EnsureUtf8();
-            var interactive = !NoInteractive.IsPresent && SpectrePipelineConsoleUi.ShouldUseInteractiveView(isVerbose);
+            var interactive = !NoInteractive.IsPresent && ModulePipelineConsoleUi.ShouldUseInteractiveView(isVerbose);
             ILogger outputLogger = interactive
-                ? new SpectreConsoleLogger { IsVerbose = isVerbose }
+                ? new ConsoleOutputLogger { IsVerbose = isVerbose }
                 : new CmdletLogger(this, isVerbose);
             var logger = new CmdletWarningLogger(this, outputLogger);
             var service = new PowerForgeReleaseService(
@@ -623,7 +629,7 @@ public sealed partial class InvokePowerForgeReleaseCommand : PSCmdlet
             PowerForgeReleaseResult result;
             if (interactive)
             {
-                result = SpectrePowerForgeReleaseConsoleUi.RunInteractive(
+                result = PowerForgeReleaseConsoleUi.RunInteractive(
                     spec,
                     request,
                     progress =>
@@ -633,7 +639,7 @@ public sealed partial class InvokePowerForgeReleaseCommand : PSCmdlet
                     });
                 watch.Stop();
                 logger.RethrowWarningStop();
-                SpectrePowerForgeReleaseConsoleUi.WriteSummary(result, watch.Elapsed);
+                PowerForgeReleaseConsoleUi.WriteSummary(result, watch.Elapsed);
             }
             else
             {

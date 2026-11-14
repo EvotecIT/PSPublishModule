@@ -1,0 +1,39 @@
+── ModuleState plan ────────────────────────────────────────────────────────────
+Actions        21
+Findings       2
+Errors         1
+Inventory      inventory.json
+Desired state  desired.json
+╭─────────┬──────────┬───────────┬────────┬─────────────┬─────────┬─────────╮
+│ Action  │ Module   │ Installed │ Policy │ Target      │ License │ Reason  │
+├─────────┼──────────┼───────────┼────────┼─────────────┼─────────┼─────────┤
+│ Install │ Module00 │           │ Latest │ CurrentUser │         │ Missing │
+│ Install │ Module01 │           │ Latest │ CurrentUser │         │ Missing │
+│ Install │ Module02 │           │ Latest │ CurrentUser │         │ Missing │
+│ Install │ Module03 │           │ Latest │ CurrentUser │         │ Missing │
+│ Install │ Module04 │           │ Latest │ CurrentUser │         │ Missing │
+│ Install │ Module05 │           │ Latest │ CurrentUser │         │ Missing │
+│ Install │ Module06 │           │ Latest │ CurrentUser │         │ Missing │
+│ Install │ Module07 │           │ Latest │ CurrentUser │         │ Missing │
+│ Install │ Module08 │           │ Latest │ CurrentUser │         │ Missing │
+│ Install │ Module09 │           │ Latest │ CurrentUser │         │ Missing │
+│ Install │ Module10 │           │ Latest │ CurrentUser │         │ Missing │
+│ Install │ Module11 │           │ Latest │ CurrentUser │         │ Missing │
+│ Install │ Module12 │           │ Latest │ CurrentUser │         │ Missing │
+│ Install │ Module13 │           │ Latest │ CurrentUser │         │ Missing │
+│ Install │ Module14 │           │ Latest │ CurrentUser │         │ Missing │
+│ Install │ Module15 │           │ Latest │ CurrentUser │         │ Missing │
+│ Install │ Module16 │           │ Latest │ CurrentUser │         │ Missing │
+│ Install │ Module17 │           │ Latest │ CurrentUser │         │ Missing │
+│ Install │ Module18 │           │ Latest │ CurrentUser │         │ Missing │
+│ Install │ Module19 │           │ Latest │ CurrentUser │         │ Missing │
+╰─────────┴──────────┴───────────┴────────┴─────────────┴─────────┴─────────╯
+Showing 20 of 21 actions.
+╭───────────┬─────────────────┬─────────────┬───────────┬──────────────────────╮
+│ Severity  │ Code            │ Modules     │ Placement │ Message              │
+├───────────┼─────────────────┼─────────────┼───────────┼──────────────────────┤
+│ ✗ Error   │ DuplicateFamily │ Az.Accounts │ AllUsers  │ Two versions of [Az] │
+│           │                 │             │           │ load first.          │
+│ ▲ Warning │ Shadowed        │ Pester      │           │ A newer copy is      │
+│           │                 │             │           │ shadowed.            │
+╰───────────┴─────────────────┴─────────────┴───────────┴──────────────────────╯

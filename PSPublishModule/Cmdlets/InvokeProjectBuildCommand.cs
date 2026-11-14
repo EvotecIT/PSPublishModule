@@ -2,9 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using PowerForge;
-using PowerForge.ConsoleShared;
+using PowerForge.ConsoleUi;
 using System.Management.Automation;
-using Spectre.Console;
 
 namespace PSPublishModule;
 
@@ -66,7 +65,7 @@ public sealed partial class InvokeProjectBuildCommand : PSCmdlet
     [Parameter]
     public string? PlanPath { get; set; }
 
-    /// <summary>Disables the interactive Spectre progress view.</summary>
+    /// <summary>Disables the interactive progress view.</summary>
     [Parameter]
     public SwitchParameter NoInteractive { get; set; }
 
@@ -80,6 +79,12 @@ public sealed partial class InvokeProjectBuildCommand : PSCmdlet
 
     /// <summary>Executes the configured build pipeline.</summary>
     protected override void ProcessRecord()
+    {
+        using (CmdletConsole.Use(this))
+            ProcessRecordCore();
+    }
+
+    private void ProcessRecordCore()
     {
         try
         {
@@ -97,23 +102,14 @@ public sealed partial class InvokeProjectBuildCommand : PSCmdlet
         var isVerbose = bound?.ContainsKey("Verbose") == true;
 
         ConsoleEncoding.EnsureUtf8();
-        try
-        {
-            if (!Console.IsOutputRedirected && !Console.IsErrorRedirected)
-                AnsiConsole.Profile.Capabilities.Unicode = true;
-        }
-        catch
-        {
-            // best effort only
-        }
 
         var interactive = !Quiet.IsPresent && !NoInteractive.IsPresent &&
-                          SpectrePipelineConsoleUi.ShouldUseInteractiveView(isVerbose);
+                          ModulePipelineConsoleUi.ShouldUseInteractiveView(isVerbose);
         BufferedLogger? interactiveBuffer = null;
         ILogger outputLogger = Quiet.IsPresent
             ? interactiveBuffer = new BufferedLogger { IsVerbose = isVerbose }
             : interactive
-                ? new SpectreConsoleLogger { IsVerbose = isVerbose }
+                ? new ConsoleOutputLogger { IsVerbose = isVerbose }
                 : ExitCode.IsPresent
                     ? interactiveBuffer = new BufferedLogger { IsVerbose = isVerbose }
                     : new CmdletLogger(this, isVerbose);
@@ -155,7 +151,7 @@ public sealed partial class InvokeProjectBuildCommand : PSCmdlet
         ProjectBuildWorkflowResult workflow;
         if (interactive)
         {
-            workflow = SpectreProjectBuildConsoleUi.RunInteractive(
+            workflow = ProjectBuildConsoleUi.RunInteractive(
                 new ProjectBuildConsolePlan
                 {
                     ConfigPath = configFullPath,
@@ -180,7 +176,7 @@ public sealed partial class InvokeProjectBuildCommand : PSCmdlet
             });
             summary.Success = workflow.Result.Success;
             var display = new DotNetRepositoryReleaseDisplayService().CreateDisplay(summary, isPlan: preparation.PlanOnly || !executeBuild);
-            SpectreProjectBuildSummaryWriter.Write(display);
+            ProjectBuildSummary.Write(display);
 
             if (workflow.GitHubPublishSummary is { PerProject: false } publishSummary)
                 WriteGitHubSummary(false, publishSummary.SummaryTag, publishSummary.SummaryReleaseUrl, publishSummary.SummaryAssetsCount, workflow.Result.GitHub);
@@ -192,7 +188,7 @@ public sealed partial class InvokeProjectBuildCommand : PSCmdlet
             if (!Quiet.IsPresent && interactiveBuffer is not null)
                 new BufferedLogSupportService().WriteTail(
                     interactiveBuffer.Entries,
-                    new SpectreConsoleLogger { IsVerbose = isVerbose });
+                    new ConsoleOutputLogger { IsVerbose = isVerbose });
         }
 
         CompleteResult(workflow.Result);

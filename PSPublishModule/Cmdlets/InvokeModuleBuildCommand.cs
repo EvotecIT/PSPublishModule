@@ -5,6 +5,7 @@ using System.Diagnostics;
 using System.Linq;
 using System.Management.Automation;
 using PowerForge;
+using PowerForge.ConsoleUi;
 
 namespace PSPublishModule;
 
@@ -22,7 +23,7 @@ namespace PSPublishModule;
 /// steps, use <c>-JsonOnly</c> with <c>-JsonPath</c>.
 /// </para>
 /// <para>
-/// When running in an interactive terminal, pipeline execution uses a Spectre.Console progress UI.
+/// When running in an interactive terminal, pipeline execution shows a live progress view.
 /// Redirect output or use <c>-Verbose</c> to force plain, line-by-line output (useful for CI logs).
 /// </para>
 /// <para>
@@ -471,6 +472,12 @@ public sealed partial class InvokeModuleBuildCommand : PSCmdlet
     /// </summary>
     protected override void ProcessRecord()
     {
+        using (CmdletConsole.Use(this))
+            ProcessRecordCore();
+    }
+
+    private void ProcessRecordCore()
+    {
         var sw = Stopwatch.StartNew();
         var boundParameters = MyInvocation?.BoundParameters;
         var isVerbose = boundParameters?.ContainsKey("Verbose") == true;
@@ -478,18 +485,9 @@ public sealed partial class InvokeModuleBuildCommand : PSCmdlet
                            (boundParameters?.TryGetValue(nameof(ExitCode), out var exitCodeValue) == true && IsTrue(exitCodeValue));
 
         ConsoleEncoding.EnsureUtf8();
-        try
-        {
-            if (!Console.IsOutputRedirected && !Console.IsErrorRedirected)
-                Spectre.Console.AnsiConsole.Profile.Capabilities.Unicode = true;
-        }
-        catch
-        {
-            // best effort only
-        }
         ILogger outputLogger = Quiet.IsPresent
             ? new NullLogger { IsVerbose = isVerbose }
-            : new SpectreConsoleLogger { IsVerbose = isVerbose };
+            : new ConsoleOutputLogger { IsVerbose = isVerbose };
         var logger = new CmdletWarningLogger(this, outputLogger);
         var preparation = new ModuleBuildPreparationService().Prepare(new ModuleBuildPreparationRequest
         {
@@ -584,17 +582,17 @@ public sealed partial class InvokeModuleBuildCommand : PSCmdlet
         else
         {
             var interactive = !Quiet.IsPresent && !NoInteractive.IsPresent &&
-                SpectrePipelineConsoleUi.ShouldUseInteractiveView(isVerbose);
+                ModulePipelineConsoleUi.ShouldUseInteractiveView(isVerbose);
 
             workflow = new ModuleBuildWorkflowService(
                 logger,
                 runInteractive: (spec, plan, configLabel) =>
                 {
                     interactiveLogger = new CmdletWarningLogger(this, outputLogger);
-                    return SpectrePipelineConsoleUi.RunInteractive(
+                    return ModulePipelineConsoleUi.RunInteractive(
                         runner: new ModulePipelineRunner(interactiveLogger), spec: spec, plan: plan, configLabel: configLabel);
                 },
-                writeSummary: Quiet.IsPresent ? null : SpectrePipelineConsoleUi.WriteSummary)
+                writeSummary: Quiet.IsPresent ? null : ModulePipelineSummary.Write)
                 .Execute(preparation, interactive, preparation.ConfigLabel);
         }
 #pragma warning restore CA1031
@@ -615,7 +613,7 @@ public sealed partial class InvokeModuleBuildCommand : PSCmdlet
                 WriteError(new ErrorRecord(ex, outcome.ErrorRecordId, ErrorCategory.NotSpecified, null));
             if (outcome.ShouldWriteInteractiveFailureSummary && workflow?.Plan is not null && ex is not null)
             {
-                try { SpectrePipelineConsoleUi.WriteFailureSummary(workflow.Plan, ex); }
+                try { ModulePipelineSummary.WriteFailure(workflow.Plan, ex); }
                 catch { /* best effort */ }
             }
             if (outcome.ShouldWriteFailureMessage)

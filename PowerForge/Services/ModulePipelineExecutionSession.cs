@@ -66,6 +66,9 @@ internal sealed class ModulePipelineExecutionSession
     internal ModulePipelineStep[] Steps { get; }
     internal ModulePipelineStep[] TestSteps { get; }
 
+    internal ModulePipelineStep? DependenciesStep => GetStep("deps:install");
+    internal ModulePipelineStep? VersionSynchronizationStep => GetStep("version:synchronize");
+    internal ModulePipelineStep? TypeAcceleratorReportStep => GetStep("build:type-accelerators");
     internal ModulePipelineStep? StageStep => GetStep("build:stage");
     internal ModulePipelineStep? BuildStep => GetStep("build:build");
     internal ModulePipelineStep? PrepareStep => GetStep("build:prepare");
@@ -165,6 +168,9 @@ internal sealed class ModulePipelineExecutionSession
         try { _reporterV3.StepProgress(step, value, maximum, detail); } catch { }
     }
 
+    /// <summary>Throttled sink that shows child-process lines as the step's current detail.</summary>
+    internal Action<string>? Detail(ModulePipelineStep? step) => ProgressDetailThrottle.ForStep(Reporter, step);
+
     internal IProjectBuildProgressReporter? CreateProjectBuildProgressReporter(ModulePipelineStep? step)
     {
         if (step is null || _reporterV4 is null)
@@ -175,6 +181,26 @@ internal sealed class ModulePipelineExecutionSession
             nested,
             PowerForgeReleaseProgressPhase.Packages);
     }
+
+    /// <summary>Runs <paramref name="work"/> as <paramref name="step"/>: started, then completed or failed.</summary>
+    internal T Run<T>(ModulePipelineStep? step, Func<T> work)
+    {
+        Start(step);
+        try
+        {
+            var result = work();
+            Done(step);
+            return result;
+        }
+        catch (Exception ex)
+        {
+            Fail(step, ex);
+            throw;
+        }
+    }
+
+    internal void Run(ModulePipelineStep? step, Action work)
+        => Run<object?>(step, () => { work(); return null; });
 
     internal void Fail(ModulePipelineStep? step, Exception error)
     {

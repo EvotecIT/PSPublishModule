@@ -132,12 +132,18 @@ public sealed class PublishManagedModuleCommand : PSCmdlet
     [Parameter(ParameterSetName = PathParameterSet)]
     public SwitchParameter SkipModuleManifestValidate { get; set; }
 
-    /// <summary>Write a compact Spectre.Console summary for the publish result.</summary>
+    /// <summary>Write a compact console summary for the publish result.</summary>
     [Parameter]
     public SwitchParameter ShowSummary { get; set; }
 
     /// <summary>Creates and publishes the package to the selected destination.</summary>
     protected override void ProcessRecord()
+    {
+        using (CmdletConsole.Use(this))
+            ProcessRecordCore();
+    }
+
+    private void ProcessRecordCore()
     {
         var modulePath = ManagedModuleCommandSupport.ResolveProviderPath(this, Path);
         var packagePath = ManagedModuleCommandSupport.ResolveProviderPath(this, NupkgPath);

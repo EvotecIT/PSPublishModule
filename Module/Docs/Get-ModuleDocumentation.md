@@ -8,7 +8,7 @@ schema: 2.0.0
 ## SYNOPSIS
 Gets module documentation (README, CHANGELOG, LICENSE, Intro/Upgrade) and renders it in the console.
 
-Resolves documentation files from an installed module (root or Internals folder) and renders them with Spectre.Console. When local files are absent, it will backfill from the module's repository specified by PrivateData.PSData.ProjectUri (GitHub or Azure DevOps), using a token when necessary.
+Resolves documentation files from an installed module (root or Internals folder) and renders them in the console. When local files are absent, it will backfill from the module's repository specified by PrivateData.PSData.ProjectUri (GitHub or Azure DevOps), using a token when necessary.
 
 ## SYNTAX
 ### ByName (Default)
@@ -34,7 +34,7 @@ Get-ModuleDocumentation [-ModuleBase <string>] [-Type <DocumentationSelection>] 
 ## DESCRIPTION
 Gets module documentation (README, CHANGELOG, LICENSE, Intro/Upgrade) and renders it in the console.
 
-Resolves documentation files from an installed module (root or Internals folder) and renders them with Spectre.Console. When local files are absent, it will backfill from the module's repository specified by PrivateData.PSData.ProjectUri (GitHub or Azure DevOps), using a token when necessary.
+Resolves documentation files from an installed module (root or Internals folder) and renders them in the console. When local files are absent, it will backfill from the module's repository specified by PrivateData.PSData.ProjectUri (GitHub or Azure DevOps), using a token when necessary.
 
 ## EXAMPLES
 
@@ -155,13 +155,13 @@ Accept wildcard characters: False
 ```
 
 ### -JsonRenderer
-Select JSON renderer for fenced JSON blocks: Auto, Spectre, or System.
+Select JSON renderer for fenced JSON blocks: Auto, Highlighted (shown as written) or System (reformatted by System.Text.Json). Spectre is accepted as an older name for Highlighted.
 
 ```yaml
 Type: String
 Parameter Sets: ByName, ByModule, ByPath, ByBase
 Aliases: None
-Possible values: Auto, Spectre, System
+Possible values: Auto, Highlighted, Spectre, System
 
 Required: False
 Position: named

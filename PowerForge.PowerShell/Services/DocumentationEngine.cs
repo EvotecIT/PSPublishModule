@@ -119,6 +119,12 @@ public sealed class DocumentationEngine
             try { progress.StepCompleted(step); } catch { /* best effort */ }
         }
 
+        void SafeProgress(ModulePipelineStep? step, int current, int total, string detail)
+        {
+            if (step is null || progress is not IModulePipelineProgressReporterV3 detailed) return;
+            try { detailed.StepProgress(step, current, total, detail); } catch { /* best effort */ }
+        }
+
         void SafeFail(ModulePipelineStep? step, Exception ex)
         {
             if (step is null || progress is null) return;
@@ -137,7 +143,8 @@ public sealed class DocumentationEngine
                     stagingPath: stagingPath,
                     moduleManifestPath: moduleManifestPath,
                     timeout: timeout ?? TimeSpan.FromMinutes(5),
-                    contexts: buildDocumentation.ParameterDiscoveryContexts);
+                    contexts: buildDocumentation.ParameterDiscoveryContexts,
+                    outputLineReceived: ProgressDetailThrottle.ForStep(progress, extractStep));
                 SafeDeleteExistingExternalHelpFile(stagingPath, moduleName, buildDocumentation);
                 SafeDone(extractStep);
             }
@@ -179,7 +186,7 @@ public sealed class DocumentationEngine
                 if (!string.IsNullOrWhiteSpace(readmePath))
                     Directory.CreateDirectory(Path.GetDirectoryName(readmePath)!);
 
-                writer.WriteCommandHelpFiles(extracted, moduleName, docsPath);
+                writer.WriteCommandHelpFiles(extracted, moduleName, docsPath, (current, total, name) => SafeProgress(writeStep, current, total, name));
                 if (buildDocumentation.IncludeAboutTopics)
                 {
                     try
@@ -219,7 +226,9 @@ public sealed class DocumentationEngine
                 SafeStart(externalHelpStep);
                 try
                 {
-                    externalHelpFile = mamlWriter.WriteExternalHelpFile(extracted, moduleName, externalHelpDir, fileName);
+                    externalHelpFile = mamlWriter.WriteExternalHelpFile(
+                        extracted, moduleName, externalHelpDir, fileName,
+                        (current, total, name) => SafeProgress(externalHelpStep, current, total, name));
                     externalHelpFiles = DocumentationExternalHelpAliasWriter.WriteAliases(extracted, externalHelpFile, moduleName);
                     if (buildDocumentation.IncludeAboutTopics)
                         new AboutTopicWriter().WriteExternalHelpFiles(stagingPath, externalHelpDir, buildDocumentation.AboutTopicsSourcePath);
@@ -276,7 +285,8 @@ public sealed class DocumentationEngine
         string stagingPath,
         string moduleManifestPath,
         TimeSpan timeout,
-        DocumentationDiscoveryContext[]? contexts = null)
+        DocumentationDiscoveryContext[]? contexts = null,
+        Action<string>? outputLineReceived = null)
     {
         var tempDir = Path.Combine(Path.GetTempPath(), "PowerForge", "docs");
         Directory.CreateDirectory(tempDir);
@@ -302,7 +312,8 @@ public sealed class DocumentationEngine
                 args.Add(contextsPath);
             }
 
-            var result = _runner.Run(new PowerShellRunRequest(scriptPath, args.ToArray(), timeout, preferPwsh: true));
+            var result = _runner.Run(new PowerShellRunRequest(scriptPath, args.ToArray(), timeout, preferPwsh: true)
+                .WithOutputLineReceived(outputLineReceived));
             if (result.ExitCode != 0)
             {
                 if (_logger.IsVerbose && !string.IsNullOrWhiteSpace(result.StdOut)) _logger.Verbose(result.StdOut.Trim());

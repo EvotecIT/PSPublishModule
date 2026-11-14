@@ -26,21 +26,17 @@ public sealed partial class ModulePipelineRunner
         {
             PrepareSynchronizedReleaseCheckpoint(plan, state);
             ExecutePackageBuildsBeforeModule(plan, session, state);
-            SynchronizeModuleVersionFromReleaseSource(plan, state);
-            InitializeSynchronizedReleaseCheckpoint(plan, state);
-            PreflightSynchronizedPackageGitHubRetrySafety(plan, state, onlyAvailableResults: true);
+            SynchronizeModuleVersionAndCheckpoint(plan, session, state);
         }
 
         ExecuteActions(ModulePipelineActionStage.BeforeDependencies, plan, session, state);
-        state.DependencyInstallResults = EnsureBuildDependenciesInstalledIfNeeded(plan);
+        state.DependencyInstallResults = session.Run(session.DependenciesStep, () => EnsureBuildDependenciesInstalledIfNeeded(plan));
         ExecuteActions(ModulePipelineActionStage.AfterDependencies, plan, session, state);
 
         if (!synchronizeVersionBeforeLifecycleActions)
         {
             ExecutePackageBuildsBeforeModule(plan, session, state);
-            SynchronizeModuleVersionFromReleaseSource(plan, state);
-            InitializeSynchronizedReleaseCheckpoint(plan, state);
-            PreflightSynchronizedPackageGitHubRetrySafety(plan, state, onlyAvailableResults: true);
+            SynchronizeModuleVersionAndCheckpoint(plan, session, state);
         }
 
         ExecuteActions(ModulePipelineActionStage.BeforeVersioning, plan, session, state);
@@ -159,15 +155,6 @@ public sealed partial class ModulePipelineRunner
             throw;
         }
         ExecuteActions(ModulePipelineActionStage.AfterManifest, plan, session, state);
-    }
-
-    private void ExecuteTypeAcceleratorSurfaceReportPhase(ModulePipelinePlan plan, ModulePipelineRunState state)
-    {
-        var buildResult = state.RequireBuildResult();
-        if (plan.BuildSpec.RefreshManifestOnly)
-            return;
-
-        TryWriteTypeAcceleratorSurfaceReport(plan, buildResult, state);
     }
 
     private void ExecuteDocumentationPhase(
@@ -415,6 +402,7 @@ public sealed partial class ModulePipelineRunner
                         : null;
 
                     var analyzer = new ProjectConsistencyAnalyzer(_logger);
+                    session.Progress(session.FileConsistencyStep, 0, 0, "Checking encodings and line endings");
                     state.FileConsistencyReport = analyzer.Analyze(
                         enumeration: enumeration,
                         projectType: kind.ToString(),
@@ -427,6 +415,7 @@ public sealed partial class ModulePipelineRunner
 
                     if (s.AutoFix)
                     {
+                        session.Progress(session.FileConsistencyStep, 0, 0, "Fixing file encodings");
                         var enc = new EncodingConverter();
                         var encOptions = new EncodingConversionOptions(
                             enumeration: enumeration,
@@ -448,6 +437,7 @@ public sealed partial class ModulePipelineRunner
                         }
                         state.FileConsistencyEncodingFix = enc.Convert(encOptions);
 
+                        session.Progress(session.FileConsistencyStep, 0, 0, "Fixing line endings");
                         var le = new LineEndingConverter();
                         var target = s.RequiredLineEnding.ToLineEnding();
                         var lineEndingOptions = new LineEndingConversionOptions(
@@ -471,6 +461,7 @@ public sealed partial class ModulePipelineRunner
                         }
                         state.FileConsistencyLineEndingFix = le.Convert(lineEndingOptions);
 
+                        session.Progress(session.FileConsistencyStep, 0, 0, "Re-checking after fixes");
                         state.FileConsistencyReport = analyzer.Analyze(
                             enumeration: enumeration,
                             projectType: kind.ToString(),
@@ -527,6 +518,7 @@ public sealed partial class ModulePipelineRunner
                         : null;
 
                     var analyzer = new ProjectConsistencyAnalyzer(_logger);
+                    session.Progress(session.ProjectFileConsistencyStep, 0, 0, "Checking encodings and line endings");
                     state.ProjectFileConsistencyReport = analyzer.Analyze(
                         enumeration: enumeration,
                         projectType: kind.ToString(),
@@ -539,6 +531,7 @@ public sealed partial class ModulePipelineRunner
 
                     if (s.AutoFix)
                     {
+                        session.Progress(session.ProjectFileConsistencyStep, 0, 0, "Fixing file encodings");
                         var enc = new EncodingConverter();
                         var encOptions = new EncodingConversionOptions(
                             enumeration: enumeration,
@@ -560,6 +553,7 @@ public sealed partial class ModulePipelineRunner
                         }
                         state.ProjectFileConsistencyEncodingFix = enc.Convert(encOptions);
 
+                        session.Progress(session.ProjectFileConsistencyStep, 0, 0, "Fixing line endings");
                         var le = new LineEndingConverter();
                         var target = s.RequiredLineEnding.ToLineEnding();
                         var lineEndingOptions = new LineEndingConversionOptions(
@@ -583,6 +577,7 @@ public sealed partial class ModulePipelineRunner
                         }
                         state.ProjectFileConsistencyLineEndingFix = le.Convert(lineEndingOptions);
 
+                        session.Progress(session.ProjectFileConsistencyStep, 0, 0, "Re-checking after fixes");
                         state.ProjectFileConsistencyReport = analyzer.Analyze(
                             enumeration: enumeration,
                             projectType: kind.ToString(),
@@ -628,7 +623,10 @@ public sealed partial class ModulePipelineRunner
 
                 var analyzer = new PowerShellCompatibilityAnalyzer(_logger);
                 var specCompat = new PowerShellCompatibilitySpec(buildResult.StagingPath, recurse: true, excludeDirectories: excludeDirs);
-                var raw = analyzer.Analyze(specCompat, progress: null, exportPath: exportPath);
+                var raw = analyzer.Analyze(
+                    specCompat,
+                    progress: p => session.Progress(session.CompatibilityStep, p.Current, p.Total, Path.GetFileName(p.FilePath)),
+                    exportPath: exportPath);
                 var adjusted = ApplyCompatibilitySettings(raw, s, compatibilitySeverity);
                 state.CompatibilityReport = adjusted;
 
@@ -720,7 +718,7 @@ public sealed partial class ModulePipelineRunner
             session.Start(session.ImportModulesStep);
             try
             {
-                RunImportModules(plan, buildResult);
+                RunImportModules(plan, buildResult, session.Detail(session.ImportModulesStep));
                 session.Done(session.ImportModulesStep);
             }
             catch (Exception ex)

@@ -1,15 +1,14 @@
-using PowerForge.ConsoleShared;
-using Spectre.Console;
+using PowerForge.ConsoleUi;
 
 namespace PowerForge.Tests;
 
+[Collection(ConsoleCapture.Collection)]
 public sealed class PowerForgeReleaseConsoleVirusTotalTests
 {
     [Fact]
     public void InteractiveRelease_VirusTotalPublication_ShowsPhaseAndFailedOutcome()
     {
         using var writer = new StringWriter();
-        var console = CreateConsole(writer);
         var spec = new PowerForgeReleaseSpec
         {
             Module = new PowerForgeModuleReleaseOptions
@@ -31,8 +30,7 @@ public sealed class PowerForgeReleaseConsoleVirusTotalTests
             ModuleRunMode = ConfigurationGateMode.Publish
         };
 
-        var result = SpectrePowerForgeReleaseConsoleUi.RunInteractive(
-            console,
+        var result = Run(writer,
             spec,
             request,
             progress =>
@@ -49,7 +47,7 @@ public sealed class PowerForgeReleaseConsoleVirusTotalTests
                     }
                 };
             });
-        SpectrePowerForgeReleaseConsoleUi.WriteSummary(console, result, TimeSpan.FromSeconds(1));
+        WriteSummary(writer, result, TimeSpan.FromSeconds(1));
 
         Assert.True(result.Success);
         var output = writer.ToString();
@@ -61,10 +59,8 @@ public sealed class PowerForgeReleaseConsoleVirusTotalTests
     public void ReleaseSummary_NoMatchingVirusTotalArtifacts_ShowsSkippedOutcome()
     {
         using var writer = new StringWriter();
-        var console = CreateConsole(writer);
 
-        SpectrePowerForgeReleaseConsoleUi.WriteSummary(
-            console,
+        WriteSummary(writer,
             new PowerForgeReleaseResult
             {
                 Success = true,
@@ -86,7 +82,6 @@ public sealed class PowerForgeReleaseConsoleVirusTotalTests
     public void InteractiveRelease_AppleOnlyTarget_DoesNotShowVirusTotalPhase()
     {
         using var writer = new StringWriter();
-        var console = CreateConsole(writer);
         var spec = new PowerForgeReleaseSpec
         {
             Tools = new PowerForgeToolReleaseSpec
@@ -111,8 +106,7 @@ public sealed class PowerForgeReleaseConsoleVirusTotalTests
             Targets = ["MacApp"]
         };
 
-        _ = SpectrePowerForgeReleaseConsoleUi.RunInteractive(
-            console,
+        _ = Run(writer,
             spec,
             request,
             _ => new PowerForgeReleaseResult { Success = true });
@@ -124,7 +118,6 @@ public sealed class PowerForgeReleaseConsoleVirusTotalTests
     public void InteractiveRelease_AppleOnlySwitch_DoesNotShowVirusTotalPhase()
     {
         using var writer = new StringWriter();
-        var console = CreateConsole(writer);
         var spec = new PowerForgeReleaseSpec
         {
             Module = new PowerForgeModuleReleaseOptions
@@ -150,8 +143,7 @@ public sealed class PowerForgeReleaseConsoleVirusTotalTests
             AppleOnly = true
         };
 
-        _ = SpectrePowerForgeReleaseConsoleUi.RunInteractive(
-            console,
+        _ = Run(writer,
             spec,
             request,
             _ => new PowerForgeReleaseResult { Success = true });
@@ -159,11 +151,17 @@ public sealed class PowerForgeReleaseConsoleVirusTotalTests
         Assert.DoesNotContain("VirusTotal Monitor registration", writer.ToString(), StringComparison.Ordinal);
     }
 
-    private static IAnsiConsole CreateConsole(TextWriter writer)
-        => AnsiConsole.Create(new AnsiConsoleSettings
-        {
-            Ansi = AnsiSupport.No,
-            ColorSystem = ColorSystemSupport.NoColors,
-            Out = new AnsiConsoleOutput(writer)
-        });
+    private static PowerForgeReleaseResult Run(
+        StringWriter writer,
+        PowerForgeReleaseSpec spec,
+        PowerForgeReleaseRequest request,
+        Func<IPowerForgeReleaseProgressReporter, PowerForgeReleaseResult> run)
+    {
+        PowerForgeReleaseResult? result = null;
+        writer.Write(ConsoleCapture.Final(view => result = PowerForgeReleaseConsoleUi.RunInteractive(view, spec, request, run)));
+        return result!;
+    }
+
+    private static void WriteSummary(StringWriter writer, PowerForgeReleaseResult result, TimeSpan duration)
+        => writer.Write(ConsoleCapture.Final(_ => PowerForgeReleaseConsoleUi.WriteSummary(result, duration)));
 }

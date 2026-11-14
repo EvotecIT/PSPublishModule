@@ -224,7 +224,7 @@ public sealed partial class RepairManagedModuleCommand : AsyncPSCmdlet
     [Parameter]
     public SwitchParameter Plan { get; set; }
 
-    /// <summary>Write a compact Spectre.Console summary.</summary>
+    /// <summary>Write a compact console summary.</summary>
     [Parameter]
     public SwitchParameter ShowSummary { get; set; }
 

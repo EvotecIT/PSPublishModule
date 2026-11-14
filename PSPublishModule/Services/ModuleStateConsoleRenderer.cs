@@ -1,62 +1,54 @@
 using System;
 using System.Linq;
-using Spectre.Console;
+using ConsoleMonster.Styling;
+using ConsoleMonster.Text;
+using ConsoleMonster.Widgets;
+using PowerForge.ConsoleUi;
 
 namespace PSPublishModule;
 
 internal static class ModuleStateConsoleRenderer
 {
+    private const int MaxRows = 20;
+
     internal static void WriteInventory(ModuleStateInventoryResult inventory)
     {
         if (inventory is null)
             return;
 
-        WriteRule("ModuleState inventory", inventory.InstalledModules.Length == 0 ? "yellow" : "green");
-        var summary = SummaryTable();
-        summary.AddRow("Source", Esc(inventory.Source));
-        summary.AddRow("Module paths", inventory.ModulePaths.Length.ToString());
-        summary.AddRow("Inventory diagnostics", inventory.Diagnostics.Length.ToString());
-        summary.AddRow("Inventory errors", inventory.Diagnostics.Count(static diagnostic => string.Equals(diagnostic.Severity, "Error", StringComparison.OrdinalIgnoreCase)).ToString());
-        summary.AddRow("Installed modules", inventory.InstalledModules.Length.ToString());
-        summary.AddRow("Loaded modules", inventory.InstalledModules.Count(static module => module.IsLoaded).ToString());
-        summary.AddRow("Effective import candidates", inventory.InstalledModules.Count(static module => module.IsEffectiveImportCandidate).ToString());
-        AnsiConsole.Write(summary);
+        WriteRule("ModuleState inventory", inventory.InstalledModules.Length == 0 ? "warn" : "pass");
+        var summary = new KeyValueList();
+        summary.Add("Source", Esc(inventory.Source));
+        summary.Add("Module paths", inventory.ModulePaths.Length.ToString());
+        summary.Add("Inventory diagnostics", inventory.Diagnostics.Length.ToString());
+        summary.Add("Inventory errors", inventory.Diagnostics.Count(static diagnostic => IsError(diagnostic.Severity)).ToString());
+        summary.Add("Installed modules", inventory.InstalledModules.Length.ToString());
+        summary.Add("Loaded modules", inventory.InstalledModules.Count(static module => module.IsLoaded).ToString());
+        summary.Add("Effective import candidates", inventory.InstalledModules.Count(static module => module.IsEffectiveImportCandidate).ToString());
+        ConsoleOutput.Write(summary);
 
         if (inventory.Diagnostics.Length > 0)
         {
-            var diagnostics = new Table().Border(Border());
-            diagnostics.AddColumn(new TableColumn("Severity").NoWrap());
-            diagnostics.AddColumn(new TableColumn("Code").NoWrap());
-            diagnostics.AddColumn(new TableColumn("Profile").NoWrap());
-            diagnostics.AddColumn(new TableColumn("Path"));
-            diagnostics.AddColumn(new TableColumn("Message"));
-            foreach (var diagnostic in inventory.Diagnostics.Take(20))
+            var diagnostics = CreateTable(("Severity", false), ("Code", false), ("Profile", false), ("Path", true), ("Message", true));
+            foreach (var diagnostic in inventory.Diagnostics.Take(MaxRows))
             {
-                var color = string.Equals(diagnostic.Severity, "Error", StringComparison.OrdinalIgnoreCase) ? "red" : "yellow";
                 diagnostics.AddRow(
-                    $"[{color}]{Esc(diagnostic.Severity)}[/]",
+                    Severity(diagnostic.Severity),
                     Esc(diagnostic.Code),
                     Esc(diagnostic.ProfileName),
                     Esc(diagnostic.Path),
                     Esc(diagnostic.Message));
             }
 
-            AnsiConsole.Write(diagnostics);
-            WriteOverflow(inventory.Diagnostics.Length, 20, "inventory diagnostics");
+            ConsoleOutput.Write(diagnostics);
+            WriteOverflow(inventory.Diagnostics.Length, "inventory diagnostics");
         }
 
         if (inventory.InstalledModules.Length > 0)
         {
-            var modules = new Table().Border(Border());
-            modules.AddColumn(new TableColumn("Module").NoWrap());
-            modules.AddColumn(new TableColumn("Version").NoWrap());
-            modules.AddColumn(new TableColumn("Edition").NoWrap());
-            modules.AddColumn(new TableColumn("Scope").NoWrap());
-            modules.AddColumn(new TableColumn("Profile").NoWrap());
-            modules.AddColumn(new TableColumn("Module root"));
-            modules.AddColumn(new TableColumn("Import").NoWrap());
-            modules.AddColumn(new TableColumn("Loaded").NoWrap());
-            foreach (var module in inventory.InstalledModules.Take(20))
+            var modules = CreateTable(("Module", false), ("Version", false), ("Edition", false), ("Scope", false),
+                ("Profile", false), ("Module root", true), ("Import", false), ("Loaded", false));
+            foreach (var module in inventory.InstalledModules.Take(MaxRows))
             {
                 modules.AddRow(
                     Esc(module.Name),
@@ -65,12 +57,12 @@ internal static class ModuleStateConsoleRenderer
                     Esc(module.Scope),
                     Esc(module.ProfileName),
                     Esc(module.ModuleRoot),
-                    module.IsEffectiveImportCandidate ? "[green]yes[/]" : "[dim]no[/]",
-                    module.IsLoaded ? "[yellow]yes[/]" : "[dim]no[/]");
+                    YesNo(module.IsEffectiveImportCandidate, "pass"),
+                    YesNo(module.IsLoaded, "warn"));
             }
 
-            AnsiConsole.Write(modules);
-            WriteOverflow(inventory.InstalledModules.Length, 20, "modules");
+            ConsoleOutput.Write(modules);
+            WriteOverflow(inventory.InstalledModules.Length, "modules");
         }
     }
 
@@ -79,15 +71,14 @@ internal static class ModuleStateConsoleRenderer
         if (plan is null)
             return;
 
-        var color = plan.HasErrors ? "red" : plan.Actions.Length == 0 ? "green" : "yellow";
-        WriteRule("ModuleState plan", color);
-        var summary = SummaryTable();
-        summary.AddRow("Actions", plan.Actions.Length.ToString());
-        summary.AddRow("Findings", plan.Findings.Length.ToString());
-        summary.AddRow("Errors", plan.Findings.Count(static finding => string.Equals(finding.Severity, "Error", StringComparison.OrdinalIgnoreCase)).ToString());
-        summary.AddRow("Inventory", Esc(plan.InventoryPath));
-        summary.AddRow("Desired state", Esc(plan.DesiredStatePath));
-        AnsiConsole.Write(summary);
+        WriteRule("ModuleState plan", plan.HasErrors ? "fail" : plan.Actions.Length == 0 ? "pass" : "warn");
+        var summary = new KeyValueList();
+        summary.Add("Actions", plan.Actions.Length.ToString());
+        summary.Add("Findings", plan.Findings.Length.ToString());
+        summary.Add("Errors", plan.Findings.Count(static finding => IsError(finding.Severity)).ToString());
+        summary.Add("Inventory", Esc(plan.InventoryPath));
+        summary.Add("Desired state", Esc(plan.DesiredStatePath));
+        ConsoleOutput.Write(summary);
 
         WriteActions(plan.Actions);
         WriteFindings(plan.Findings);
@@ -98,11 +89,11 @@ internal static class ModuleStateConsoleRenderer
         if (result is null)
             return;
 
-        WriteRule(result.IsCompliant ? "ModuleState compliant" : "ModuleState not compliant", result.IsCompliant ? "green" : "red");
-        var summary = SummaryTable();
-        summary.AddRow("Required actions", result.RequiredActionCount.ToString());
-        summary.AddRow("Error findings", result.ErrorCount.ToString());
-        AnsiConsole.Write(summary);
+        WriteRule(result.IsCompliant ? "ModuleState compliant" : "ModuleState not compliant", result.IsCompliant ? "pass" : "fail");
+        var summary = new KeyValueList();
+        summary.Add("Required actions", result.RequiredActionCount.ToString());
+        summary.Add("Error findings", result.ErrorCount.ToString());
+        ConsoleOutput.Write(summary);
         if (includePlan)
             WritePlan(result.Plan);
     }
@@ -112,60 +103,48 @@ internal static class ModuleStateConsoleRenderer
         if (result is null)
             return;
 
-        WriteRule(result.CanApply ? "ModuleState apply" : "ModuleState apply blocked", result.CanApply ? "green" : "red");
-        var summary = SummaryTable();
-        summary.AddRow("Can apply", result.CanApply ? "[green]yes[/]" : "[red]no[/]");
-        summary.AddRow("Actions", result.ActionCount.ToString());
-        summary.AddRow("Findings", result.FindingCount.ToString());
-        summary.AddRow("Execution requested", result.ExecutionRequested ? "yes" : "no");
+        WriteRule(result.CanApply ? "ModuleState apply" : "ModuleState apply blocked", result.CanApply ? "pass" : "fail");
+        var summary = new KeyValueList();
+        AddVerdict(summary, "Can apply", result.CanApply);
+        summary.Add("Actions", result.ActionCount.ToString());
+        summary.Add("Findings", result.FindingCount.ToString());
+        summary.Add("Execution requested", result.ExecutionRequested ? "yes" : "no");
         if (result.ExecutionRequested)
         {
-            summary.AddRow("Execution succeeded", result.ExecutionSucceeded ? "[green]yes[/]" : "[red]no[/]");
-            summary.AddRow("Converged", result.Converged ? "[green]yes[/]" : "[red]no[/]");
+            AddVerdict(summary, "Execution succeeded", result.ExecutionSucceeded);
+            AddVerdict(summary, "Converged", result.Converged);
             if (result.PostApplyTest is not null)
-                summary.AddRow("Post-apply compliant", result.PostApplyTest.IsCompliant ? "[green]yes[/]" : "[red]no[/]");
+                AddVerdict(summary, "Post-apply compliant", result.PostApplyTest.IsCompliant);
         }
         if (!string.IsNullOrWhiteSpace(result.BlockedReason))
-            summary.AddRow("Blocked reason", Esc(result.BlockedReason));
+            summary.Add("Blocked reason", Esc(result.BlockedReason));
         if (!string.IsNullOrWhiteSpace(result.ReceiptPath))
-            summary.AddRow("Receipt", Esc(result.ReceiptPath));
+            summary.Add("Receipt", Esc(result.ReceiptPath));
         if (!string.IsNullOrWhiteSpace(result.MaintenanceReceiptOutputPath))
-            summary.AddRow("Maintenance receipt", Esc(result.MaintenanceReceiptOutputPath));
-        AnsiConsole.Write(summary);
+            summary.Add("Maintenance receipt", Esc(result.MaintenanceReceiptOutputPath));
+        ConsoleOutput.Write(summary);
 
         if (result.Commands.Length > 0)
         {
-            var commands = new Table().Border(Border());
-            commands.AddColumn(new TableColumn("Command").NoWrap());
-            commands.AddColumn(new TableColumn("Module").NoWrap());
-            commands.AddColumn(new TableColumn("Policy").NoWrap());
-            commands.AddColumn(new TableColumn("Repair").NoWrap());
-            commands.AddColumn(new TableColumn("Text"));
-            foreach (var command in result.Commands.Take(20))
+            var commands = CreateTable(("Command", false), ("Module", false), ("Policy", false), ("Repair", false), ("Text", true));
+            foreach (var command in result.Commands.Take(MaxRows))
             {
                 commands.AddRow(
                     Esc(command.CommandName),
                     Esc(command.ModuleName),
                     Esc(command.VersionPolicy),
-                    command.IsRepair ? "[yellow]yes[/]" : "[dim]no[/]",
+                    YesNo(command.IsRepair, "warn"),
                     Esc(command.CommandText));
             }
 
-            AnsiConsole.Write(commands);
-            WriteOverflow(result.Commands.Length, 20, "commands");
+            ConsoleOutput.Write(commands);
+            WriteOverflow(result.Commands.Length, "commands");
         }
 
         if (result.ExecutionResults.Length > 0)
         {
-            var executions = new Table().Border(Border());
-            executions.AddColumn(new TableColumn("Operation").NoWrap());
-            executions.AddColumn(new TableColumn("Target"));
-            executions.AddColumn(new TableColumn("Repository").NoWrap());
-            executions.AddColumn(new TableColumn("Transport").NoWrap());
-            executions.AddColumn(new TableColumn("Performed").NoWrap());
-            executions.AddColumn(new TableColumn("Status").NoWrap());
-            executions.AddColumn(new TableColumn("Dependencies").NoWrap());
-            executions.AddColumn(new TableColumn("Details"));
+            var executions = CreateTable(("Operation", false), ("Target", true), ("Repository", false), ("Transport", false),
+                ("Performed", false), ("Status", false), ("Dependencies", false), ("Details", true));
             foreach (var execution in result.ExecutionResults)
             {
                 executions.AddRow(
@@ -173,13 +152,13 @@ internal static class ModuleStateConsoleRenderer
                     Esc(execution.TargetPath),
                     Esc(execution.RepositoryName),
                     Esc(FormatExecutionTransport(execution)),
-                    execution.OperationPerformed ? "[green]yes[/]" : "[dim]no[/]",
+                    YesNo(execution.OperationPerformed, "pass"),
                     Esc(FormatExecutionStatuses(execution)),
                     execution.DependencyResults.Length.ToString(),
                     Esc(FormatExecutionDetails(execution)));
             }
 
-            AnsiConsole.Write(executions);
+            ConsoleOutput.Write(executions);
         }
     }
 
@@ -188,15 +167,9 @@ internal static class ModuleStateConsoleRenderer
         if (actions.Length == 0)
             return;
 
-        var table = new Table().Border(Border());
-        table.AddColumn(new TableColumn("Action").NoWrap());
-        table.AddColumn(new TableColumn("Module").NoWrap());
-        table.AddColumn(new TableColumn("Installed").NoWrap());
-        table.AddColumn(new TableColumn("Policy").NoWrap());
-        table.AddColumn(new TableColumn("Target").NoWrap());
-        table.AddColumn(new TableColumn("License").NoWrap());
-        table.AddColumn(new TableColumn("Reason"));
-        foreach (var action in actions.Take(20))
+        var table = CreateTable(("Action", false), ("Module", false), ("Installed", false), ("Policy", false),
+            ("Target", false), ("License", false), ("Reason", true));
+        foreach (var action in actions.Take(MaxRows))
         {
             table.AddRow(
                 Esc(action.Kind),
@@ -208,8 +181,8 @@ internal static class ModuleStateConsoleRenderer
                 Esc(action.Reason));
         }
 
-        AnsiConsole.Write(table);
-        WriteOverflow(actions.Length, 20, "actions");
+        ConsoleOutput.Write(table);
+        WriteOverflow(actions.Length, "actions");
     }
 
     private static void WriteFindings(ModuleStateConflictFindingResult[] findings)
@@ -217,27 +190,20 @@ internal static class ModuleStateConsoleRenderer
         if (findings.Length == 0)
             return;
 
-        var table = new Table().Border(Border());
-        table.AddColumn(new TableColumn("Severity").NoWrap());
-        table.AddColumn(new TableColumn("Code").NoWrap());
-        table.AddColumn(new TableColumn("Modules").NoWrap());
-        table.AddColumn(new TableColumn("Placement"));
-        table.AddColumn(new TableColumn("Message"));
-        foreach (var finding in findings.Take(20))
+        var table = CreateTable(("Severity", false), ("Code", false), ("Modules", false), ("Placement", true), ("Message", true));
+        foreach (var finding in findings.Take(MaxRows))
         {
-            var severityColor = string.Equals(finding.Severity, "Error", StringComparison.OrdinalIgnoreCase) ? "red" : "yellow";
             table.AddRow(
-                $"[{severityColor}]{Esc(finding.Severity)}[/]",
+                Severity(finding.Severity),
                 Esc(finding.Code),
                 Esc(string.Join(", ", finding.ModuleNames ?? Array.Empty<string>())),
                 Esc(FormatFindingPlacement(finding)),
                 Esc(finding.Message));
         }
 
-        AnsiConsole.Write(table);
-        WriteOverflow(findings.Length, 20, "findings");
+        ConsoleOutput.Write(table);
+        WriteOverflow(findings.Length, "findings");
     }
-
     private static string FormatTarget(ModuleStatePlanActionResult action)
     {
         var parts = new[]
@@ -312,24 +278,44 @@ internal static class ModuleStateConsoleRenderer
             : $"{execution.RequestedTransport} -> {execution.EffectiveTransport}";
     }
 
-    private static void WriteRule(string title, string color)
-        => AnsiConsole.Write(new Rule($"[{color}]{Markup.Escape(title)}[/]").LeftJustified());
+    private static void WriteRule(string title, string role)
+        => ConsoleOutput.Write(new Rule($"[{role}]{Markup.Escape(title)}[/]"));
 
-    private static Table SummaryTable()
-        => new Table()
-            .Border(Border())
-            .AddColumn(new TableColumn("Item").NoWrap())
-            .AddColumn(new TableColumn("Value"));
+    private static Table CreateTable(params (string Header, bool Wrap)[] columns)
+    {
+        // Keep every column and every wrapped line: paths and messages are the evidence people act on.
+        // When the grid cannot fit, the remaining columns follow in another grid keyed by the first column.
+        var table = new Table { KeepAllColumns = true };
+        for (var i = 0; i < columns.Length; i++)
+        {
+            var column = new TableColumn(Markup.Escape(columns[i].Header)) { IsKey = i == 0 };
+            if (columns[i].Wrap)
+                column.MaxLines = TableColumn.Unlimited;
+            else
+                column.Wrap = false;
+            table.AddColumn(column);
+        }
+        return table;
+    }
 
-    private static TableBorder Border()
-        => AnsiConsole.Profile.Capabilities.Unicode ? TableBorder.Rounded : TableBorder.Simple;
+    private static bool IsError(string? severity)
+        => string.Equals(severity, "Error", StringComparison.OrdinalIgnoreCase);
+
+    private static TableCell Severity(string? severity)
+        => TableCell.ForStatus(IsError(severity) ? StatusKind.Fail : StatusKind.Warn, severity ?? string.Empty);
+
+    private static string YesNo(bool value, string role)
+        => value ? $"[{role}]yes[/]" : "[muted]no[/]";
+
+    private static void AddVerdict(KeyValueList list, string label, bool value)
+        => list.Add(label, value ? "yes" : "no", value ? StatusKind.Pass : StatusKind.Fail);
 
     private static string Esc(string? value)
         => Markup.Escape(value ?? string.Empty);
 
-    private static void WriteOverflow(int count, int shown, string label)
+    private static void WriteOverflow(int count, string label)
     {
-        if (count > shown)
-            AnsiConsole.MarkupLine("[dim]Showing {0} of {1} {2}.[/]", shown, count, Markup.Escape(label));
+        if (count > MaxRows)
+            ConsoleOutput.WriteMarkupLine($"[muted]Showing {MaxRows} of {count} {Markup.Escape(label)}.[/]");
     }
 }

@@ -1,8 +1,12 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using ConsoleMonster.Layout;
+using ConsoleMonster.Styling;
+using ConsoleMonster.Text;
+using ConsoleMonster.Widgets;
 using PowerForge;
-using Spectre.Console;
+using PowerForge.ConsoleUi;
 
 namespace PSPublishModule;
 
@@ -10,136 +14,118 @@ internal static class ManagedModuleSummaryWriter
 {
     public static void Write(ManagedModuleInstallPlan plan)
     {
-        var table = CreateTable("Managed module install plan");
-        Add(table, "Name", plan.Name);
-        Add(table, "Version", plan.Version);
-        Add(table, "Action", plan.Action.ToString());
-        Add(table, "Repository", FormatRepository(plan.RepositoryName, plan.RepositorySource));
-        Add(table, "Module path", plan.ModulePath);
-        Add(table, "Would write", plan.WouldWriteFiles ? "Yes" : "No");
-        AddLicense(table, plan.LicenseAcceptanceRequired, plan.LicenseAccepted, plan.License);
-        AnsiConsole.Write(table);
+        var list = new KeyValueList();
+        Add(list, "Name", plan.Name);
+        Add(list, "Version", plan.Version);
+        Add(list, "Action", plan.Action.ToString());
+        Add(list, "Repository", FormatRepository(plan.RepositoryName, plan.RepositorySource));
+        Add(list, "Module path", plan.ModulePath);
+        Add(list, "Would write", plan.WouldWriteFiles ? "Yes" : "No");
+        AddLicense(list, plan.LicenseAcceptanceRequired, plan.LicenseAccepted, plan.License);
+        Write("Managed module install plan", list);
     }
 
     public static void Write(ManagedModuleInstallResult result)
     {
-        var table = CreateTable("Managed module install");
-        Add(table, "Name", result.Name);
-        Add(table, "Version", result.Version);
-        Add(table, "Status", result.Status.ToString());
-        Add(table, "Repository", FormatRepository(result.RepositoryName, result.RepositorySource));
-        Add(table, "Module path", result.ModulePath);
-        Add(table, "Files", result.FileCount.ToString());
-        Add(table, "Elapsed", FormatElapsed(result.Elapsed));
-        Add(table, "Receipt", result.ReceiptPath);
-        AnsiConsole.Write(table);
+        var list = new KeyValueList();
+        Add(list, "Name", result.Name);
+        Add(list, "Version", result.Version);
+        Add(list, "Status", result.Status.ToString());
+        Add(list, "Repository", FormatRepository(result.RepositoryName, result.RepositorySource));
+        Add(list, "Module path", result.ModulePath);
+        Add(list, "Files", result.FileCount.ToString());
+        Add(list, "Elapsed", FormatElapsed(result.Elapsed));
+        Add(list, "Receipt", result.ReceiptPath);
+        Write("Managed module install", list);
     }
 
     public static void Write(ManagedModuleUpdatePlan plan)
     {
-        var table = CreateTable("Managed module update plan");
-        Add(table, "Name", plan.Name);
-        Add(table, "Target version", plan.TargetVersion);
-        Add(table, "Previous version", plan.PreviousVersion);
-        Add(table, "Action", plan.Action.ToString());
-        Add(table, "Repository", FormatRepository(plan.RepositoryName, plan.RepositorySource));
-        Add(table, "Module path", plan.ModulePath);
-        Add(table, "Would write", plan.WouldWriteFiles ? "Yes" : "No");
-        AddLicense(table, plan.LicenseAcceptanceRequired, plan.LicenseAccepted, plan.License);
-        AddSource(table, plan.SourcePolicySatisfied, plan.SourcePolicyReason);
-        AddFamily(table, plan.FamilyActions);
-        AnsiConsole.Write(table);
+        var list = new KeyValueList();
+        Add(list, "Name", plan.Name);
+        Add(list, "Target version", plan.TargetVersion);
+        Add(list, "Previous version", plan.PreviousVersion);
+        Add(list, "Action", plan.Action.ToString());
+        Add(list, "Repository", FormatRepository(plan.RepositoryName, plan.RepositorySource));
+        Add(list, "Module path", plan.ModulePath);
+        Add(list, "Would write", plan.WouldWriteFiles ? "Yes" : "No");
+        AddLicense(list, plan.LicenseAcceptanceRequired, plan.LicenseAccepted, plan.License);
+        AddSource(list, plan.SourcePolicySatisfied, plan.SourcePolicyReason);
+        AddFamily(list, "Family actions", plan.FamilyActions.Select(static a => FormatFamily(a.Name, a.Action.ToString(), a.TargetVersion)));
+        Write("Managed module update plan", list);
     }
 
     public static void Write(ManagedModuleUpdateResult result)
     {
-        var table = CreateTable("Managed module update");
-        Add(table, "Name", result.Name);
-        Add(table, "Target version", result.TargetVersion);
-        Add(table, "Previous version", result.PreviousVersion);
-        Add(table, "Status", result.Status.ToString());
-        Add(table, "Repository", FormatRepository(result.RepositoryName, result.RepositorySource));
-        Add(table, "Module path", result.ModulePath);
-        Add(table, "Elapsed", FormatElapsed(result.Elapsed));
-        Add(table, "Receipt", result.ReceiptPath);
-        AddSource(table, result.SourcePolicySatisfied, result.SourcePolicyReason);
-        AddFamily(table, result.FamilyResults);
-        AnsiConsole.Write(table);
+        var list = new KeyValueList();
+        Add(list, "Name", result.Name);
+        Add(list, "Target version", result.TargetVersion);
+        Add(list, "Previous version", result.PreviousVersion);
+        Add(list, "Status", result.Status.ToString());
+        Add(list, "Repository", FormatRepository(result.RepositoryName, result.RepositorySource));
+        Add(list, "Module path", result.ModulePath);
+        Add(list, "Elapsed", FormatElapsed(result.Elapsed));
+        Add(list, "Receipt", result.ReceiptPath);
+        AddSource(list, result.SourcePolicySatisfied, result.SourcePolicyReason);
+        AddFamily(list, "Family results", result.FamilyResults.Select(static r => FormatFamily(r.Name, r.Action.ToString(), r.TargetVersion)));
+        Write("Managed module update", list);
     }
 
     public static void Write(ManagedModulePublishResult result)
     {
-        var table = CreateTable("Managed module publish");
-        Add(table, "Name", result.Name);
-        Add(table, "Version", result.Version);
-        Add(table, "Published", result.Published ? "Yes" : "No");
-        Add(table, "Duplicate", result.Duplicate ? "Yes" : "No");
-        Add(table, "Repository", FormatRepository(result.RepositoryName, result.RepositorySource));
-        Add(table, "Publish source", result.PublishSource);
-        Add(table, "Package path", result.PackagePath);
-        Add(table, "Files", result.FileCount.ToString());
-        Add(table, "Package bytes", result.PackageBytes.ToString());
-        Add(table, "Elapsed", FormatElapsed(result.Elapsed));
-        Add(table, "Message", result.Message);
-        AnsiConsole.Write(table);
+        var list = new KeyValueList();
+        Add(list, "Name", result.Name);
+        Add(list, "Version", result.Version);
+        Add(list, "Published", result.Published ? "Yes" : "No", result.Published ? StatusKind.Pass : null);
+        Add(list, "Duplicate", result.Duplicate ? "Yes" : "No", result.Duplicate ? StatusKind.Warn : null);
+        Add(list, "Repository", FormatRepository(result.RepositoryName, result.RepositorySource));
+        Add(list, "Publish source", result.PublishSource);
+        Add(list, "Package path", result.PackagePath);
+        Add(list, "Files", result.FileCount.ToString());
+        Add(list, "Package bytes", result.PackageBytes.ToString());
+        Add(list, "Elapsed", FormatElapsed(result.Elapsed));
+        Add(list, "Message", result.Message);
+        Write("Managed module publish", list);
     }
 
-    private static Table CreateTable(string title)
-        => new Table()
-            .Title(Markup.Escape(title))
-            .Border(TableBorder.Rounded)
-            .BorderColor(Color.Grey)
-            .AddColumn(new TableColumn("[bold]Field[/]"))
-            .AddColumn(new TableColumn("[bold]Value[/]"));
+    private static void Write(string title, KeyValueList list)
+        => ConsoleOutput.Write(new Panel(list, Markup.Escape(title)));
 
-    private static void Add(Table table, string label, string? value)
+    private static void Add(KeyValueList list, string label, string? value, StatusKind? status = null)
     {
         if (string.IsNullOrWhiteSpace(value))
             return;
 
-        table.AddRow(Markup.Escape(label), Markup.Escape(value));
+        list.Add(label, Markup.Escape(value), status);
     }
 
-    private static void AddSource(Table table, bool satisfied, string? reason)
+    private static void AddSource(KeyValueList list, bool satisfied, string? reason)
     {
         if (satisfied && string.IsNullOrWhiteSpace(reason))
             return;
 
-        Add(table, "Source policy", satisfied ? "Satisfied" : "Needs repair");
-        Add(table, "Source reason", reason);
+        Add(list, "Source policy", satisfied ? "Satisfied" : "Needs repair", satisfied ? StatusKind.Pass : StatusKind.Warn);
+        Add(list, "Source reason", reason);
     }
 
-    private static void AddLicense(Table table, bool required, bool accepted, string? license)
+    private static void AddLicense(KeyValueList list, bool required, bool accepted, string? license)
     {
         if (!required && string.IsNullOrWhiteSpace(license))
             return;
 
-        Add(table, "License", license);
+        Add(list, "License", license);
         if (required)
-            Add(table, "License acceptance", accepted ? "Accepted" : "Required");
+            Add(list, "License acceptance", accepted ? "Accepted" : "Required", accepted ? StatusKind.Pass : StatusKind.Warn);
     }
 
-    private static void AddFamily(Table table, IReadOnlyList<ManagedModuleFamilyUpdatePlanItem> actions)
+    private static void AddFamily(KeyValueList list, string label, IEnumerable<string> items)
     {
-        if (actions.Count == 0)
-            return;
-
-        Add(table, "Family actions", string.Join(", ", actions.Select(FormatFamilyPlanAction)));
+        var text = string.Join(", ", items);
+        Add(list, label, text);
     }
 
-    private static void AddFamily(Table table, IReadOnlyList<ManagedModuleFamilyUpdateResult> results)
-    {
-        if (results.Count == 0)
-            return;
-
-        Add(table, "Family results", string.Join(", ", results.Select(FormatFamilyResult)));
-    }
-
-    private static string FormatFamilyPlanAction(ManagedModuleFamilyUpdatePlanItem action)
-        => $"{action.Name}:{action.Action} -> {action.TargetVersion}";
-
-    private static string FormatFamilyResult(ManagedModuleFamilyUpdateResult result)
-        => $"{result.Name}:{result.Action} -> {result.TargetVersion}";
+    private static string FormatFamily(string name, string action, string targetVersion)
+        => $"{name}:{action} -> {targetVersion}";
 
     private static string FormatRepository(string name, string source)
         => string.IsNullOrWhiteSpace(source) ? name : $"{name} ({source})";

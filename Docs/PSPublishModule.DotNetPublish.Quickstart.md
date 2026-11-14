@@ -44,7 +44,7 @@ Invoke-DotNetPublish -ConfigPath '.\powerforge.dotnetpublish.json' -Plan
 Invoke-DotNetPublish -ConfigPath '.\powerforge.dotnetpublish.json' -ExitCode
 ```
 
-Interactive runs use the same Spectre progress layout and step ledger as module and package builds. The ledger preserves completed work and marks later steps skipped after a failure. Publish rows identify each step's selected framework, runtime, and style.
+Interactive runs use the same live progress view and step ledger as module and package builds. The ledger preserves completed work and marks later steps skipped after a failure. Publish rows identify each step's selected framework, runtime, and style.
 
 Use `-NoInteractive` for plain console logging, or `-Quiet` to suppress progress and informational output while retaining result objects, warnings and errors. Both options preserve the build workflow. Warnings use the PowerShell warning stream, so `-WarningVariable`, `-WarningAction SilentlyContinue` and `-WarningAction Stop` work in every display mode.
 
