@@ -565,6 +565,7 @@ public sealed partial class BenchmarkResultImporter
         bool? usesDecimalComma = DetectDecimalComma(records, delimiter, culture);
         var headers = records[0];
         var samples = new List<BenchmarkSample>();
+        var sharedJobColumns = SharedBenchmarkDotNetJobColumns(records).ToArray();
         for (var i = 1; i < records.Length; i++)
         {
             var values = records[i];
@@ -577,7 +578,10 @@ public sealed partial class BenchmarkResultImporter
             var metricHeaders = SampleMetricColumnsFor(headers, isBenchmarkDotNetCsv);
             var metadataColumns = SampleMetadataColumnsFor(map, isBenchmarkDotNetCsv);
             if (isBenchmarkDotNetCsv)
+            {
                 metadataColumns.UnionWith(BenchmarkDotNetStatisticsAfterMean(headers));
+                metadataColumns.UnionWith(sharedJobColumns);
+            }
             var method = GetCsvScenarioName(map, isBenchmarkDotNetCsv) ?? Path.GetFileNameWithoutExtension(path);
             var mean = ParseDuration(
                 GetCsvSampleDuration(map, isBenchmarkDotNetCsv, usesDecimalComma, culture, out var durationHeader),
@@ -652,6 +656,7 @@ public sealed partial class BenchmarkResultImporter
         bool? usesDecimalComma = DetectDecimalComma(records, delimiter, culture);
         var headers = records[0];
         var rows = new List<BenchmarkSummaryRow>();
+        var sharedJobColumns = SharedBenchmarkDotNetJobColumns(records).ToArray();
         for (var i = 1; i < records.Length; i++)
         {
             var values = records[i];
@@ -664,7 +669,10 @@ public sealed partial class BenchmarkResultImporter
             var metricHeaders = SummaryMetricColumnsFor(headers, isBenchmarkDotNetCsv);
             var metadataColumns = SummaryMetadataColumnsFor(map, isBenchmarkDotNetCsv);
             if (isBenchmarkDotNetCsv)
+            {
                 metadataColumns.UnionWith(BenchmarkDotNetStatisticsAfterMean(headers));
+                metadataColumns.UnionWith(sharedJobColumns);
+            }
             var failureCount = ParseInt(Get(map, "FailureCount"), culture) ?? 0;
             double? median = ParseDuration(
                 GetWithHeader(map, out var medianHeader, "MedianMs", "Median [ns]", "Median [us]", "Median [ms]", "Median [s]", "Median"),
@@ -1730,11 +1738,6 @@ public sealed partial class BenchmarkResultImporter
         CultureInfo? culture)
     {
         if (excludedColumns.Contains(key))
-            return true;
-
-        // A BenchmarkDotNet report row carries job characteristics (Runtime, IterationCount, ...) next to
-        // the benchmark parameters. They describe how the run was configured, not which case it measured.
-        if (isBenchmarkDotNetCsv && BenchmarkDotNetColumns.IsJobCharacteristic(key))
             return true;
 
         if (metricColumns is null || !metricColumns.Contains(key))

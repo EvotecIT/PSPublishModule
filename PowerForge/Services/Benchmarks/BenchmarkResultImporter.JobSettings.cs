@@ -7,40 +7,52 @@ namespace PowerForge;
 public sealed partial class BenchmarkResultImporter
 {
     /// <summary>
-    /// Records the BenchmarkDotNet job characteristics of CSV reports as run metadata. They are kept out of
-    /// row variables, so this is where the run configuration stays visible. A characteristic whose value
-    /// differs between rows is recorded as "varies"; the raw value stays in the source report.
+    /// Job characteristics with the same value in every row of a BenchmarkDotNet CSV report. They describe how
+    /// the whole run was configured, so they are recorded once as run metadata instead of as case variables.
+    /// A characteristic that differs between rows (two runtimes in one report) stays a variable, because it is
+    /// part of what distinguishes the measured rows.
     /// </summary>
+    private static IEnumerable<string> SharedBenchmarkDotNetJobColumns(string[][] records)
+        => ReadSharedBenchmarkDotNetJobSettings(records).Keys;
+
+    private static Dictionary<string, string> ReadSharedBenchmarkDotNetJobSettings(string[][] records)
+    {
+        var shared = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        if (records.Length < 2 || !LooksLikeBenchmarkDotNetCsv(records[0]))
+            return shared;
+
+        var headers = records[0];
+        var rows = records.Skip(1).Where(record => record.Length > 0 && !record.All(string.IsNullOrWhiteSpace)).ToArray();
+        for (var column = 0; column < headers.Length; column++)
+        {
+            var name = headers[column].Trim();
+            if (!BenchmarkDotNetColumns.IsJobCharacteristic(name))
+                continue;
+            var values = rows.Select(record => column < record.Length ? record[column].Trim() : string.Empty)
+                .Distinct(StringComparer.Ordinal)
+                .ToArray();
+            if (values.Length == 1)
+                shared[name] = values[0];
+        }
+        return shared;
+    }
+
+    /// <summary>Records the shared job characteristics of BenchmarkDotNet CSV reports as run metadata.</summary>
     private static void ApplyBenchmarkDotNetJobSettings(BenchmarkRunResult result, IEnumerable<string> csvFiles)
     {
         var settings = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var conflicting = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var file in csvFiles)
         {
-            var records = ReadCsvRecords(file, out _);
-            if (records.Length < 2 || !LooksLikeBenchmarkDotNetCsv(records[0]))
-                continue;
-
-            var headers = records[0];
-            for (var column = 0; column < headers.Length; column++)
+            foreach (var setting in ReadSharedBenchmarkDotNetJobSettings(ReadCsvRecords(file, out _)))
             {
-                var name = headers[column].Trim();
-                if (!BenchmarkDotNetColumns.IsJobCharacteristic(name))
-                    continue;
-
-                foreach (var record in records.Skip(1))
-                {
-                    if (column >= record.Length || record.All(string.IsNullOrWhiteSpace))
-                        continue;
-                    var value = record[column].Trim();
-                    if (!settings.TryGetValue(name, out var existing))
-                        settings[name] = value;
-                    else if (!string.Equals(existing, value, StringComparison.Ordinal))
-                        settings[name] = "varies";
-                }
+                if (settings.TryGetValue(setting.Key, out var existing) && !string.Equals(existing, setting.Value, StringComparison.Ordinal))
+                    conflicting.Add(setting.Key);
+                settings[setting.Key] = setting.Value;
             }
         }
 
-        foreach (var setting in settings.OrderBy(item => item.Key, StringComparer.OrdinalIgnoreCase))
+        foreach (var setting in settings.Where(item => !conflicting.Contains(item.Key)).OrderBy(item => item.Key, StringComparer.OrdinalIgnoreCase))
             result.Metadata[BenchmarkDotNetColumns.JobMetadataPrefix + setting.Key] = setting.Value;
     }
 }

@@ -174,6 +174,85 @@ public class BenchmarkComparisonViewTests
         finally { Directory.Delete(root, recursive: true); }
     }
 
+    [Fact]
+    public void Importer_KeepsJobSettingsThatDifferBetweenRowsAsVariables()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "Parse-report.csv"),
+                "Method,Job,Runtime,IterationCount,Mean [ms]\n" +
+                "OfficeIMO,Net8,.NET 8.0,1,2.0\n" +
+                "OfficeIMO,Net10,.NET 10.0,1,1.0\n");
+
+            var result = new BenchmarkResultImporter().Import(root);
+
+            Assert.Equal(2, result.Summary.Length);
+            Assert.Equal(new[] { ".NET 10.0", ".NET 8.0" }, result.Summary.Select(row => row.Variables["Runtime"]).OrderBy(v => v, StringComparer.Ordinal));
+            Assert.All(result.Summary, row => Assert.DoesNotContain("IterationCount", row.Variables.Keys));
+            Assert.False(result.Metadata.ContainsKey("benchmarkdotnet.job.Runtime"));
+            Assert.Equal("1", result.Metadata["benchmarkdotnet.job.IterationCount"]);
+        }
+        finally { Directory.Delete(root, recursive: true); }
+    }
+
+    [Fact]
+    public void Build_KeepsCasesApartWhenAParameterIsMissingOrValuesLookAlike()
+    {
+        var view = BuildSingle(
+            libraries: new[] { "OfficeIMO", "Sylvan" },
+            rows: new[]
+            {
+                Row("OfficeIMO", 1.0, ("Mode", "A")),
+                Row("OfficeIMO", 2.0),
+                Row("Sylvan", 3.0, ("A", "x · B y"), ("B", "z")),
+                Row("Sylvan", 4.0, ("A", "x"), ("B", "y · B z"))
+            });
+
+        var run = Assert.Single(view.Runs);
+        Assert.Equal(4, run.Cases.Length);
+        Assert.Empty(run.Workload);
+        Assert.Equal(new double?[] { 1.0, 2.0, 3.0, 4.0 },
+            run.Cases.SelectMany(c => c.Cells).Where(c => !c.Missing).Select(c => c.TimeMs).OrderBy(t => t));
+    }
+
+    [Fact]
+    public void Build_KeepsRecordedOperationsApart()
+    {
+        BenchmarkSummaryRow WithOperation(string scenario, string operation, double ms)
+        {
+            var row = Row(scenario, ms);
+            row.Operation = operation;
+            return row;
+        }
+
+        var view = BuildSingle(
+            libraries: new[] { "OfficeIMO", "Sylvan" },
+            rows: new[]
+            {
+                WithOperation("OfficeIMO", "Read", 1.0),
+                WithOperation("OfficeIMO", "Write", 2.0),
+                WithOperation("Sylvan", "Read", 1.5),
+                WithOperation("Sylvan", "Write", 1.0)
+            });
+
+        var run = Assert.Single(view.Runs);
+        Assert.Equal(new[] { "Read", "Write" }, run.Cases.Select(c => c.Label));
+        Assert.All(run.Cases, c => Assert.DoesNotContain(c.Cells, cell => cell.Missing));
+    }
+
+    [Fact]
+    public void Build_IdentifiesTheSubjectByItsMatchedLibrary()
+    {
+        var view = BuildSingle(
+            libraries: new[] { "Foo", "Foo.Bar" },
+            rows: new[] { Row("Foo", 2.0), Row("FooBar", 1.0) });
+
+        var run = Assert.Single(view.Runs);
+        Assert.Equal(new[] { true, false }, run.Contenders.Select(c => c.IsSubject));
+        Assert.Equal("Foo.Bar is 2.0× faster than Foo", Assert.Single(run.HeadToHead).Text);
+    }
+
     private static BenchmarkComparisonView BuildSingle(string[] libraries, BenchmarkSummaryRow[] rows)
     {
         var root = CreateTempRoot();

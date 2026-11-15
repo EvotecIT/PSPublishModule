@@ -60,6 +60,56 @@ public class WebSiteBuilderBenchmarkEvidenceTests
         finally { Directory.Delete(root, recursive: true); }
     }
 
+    [Theory]
+    [InlineData("<pre class=\"sample\"><code class=\"sample language-powershell\">Get-Date</code></pre>")]
+    [InlineData("<pre><code class='language-powershell'>Get-Date</code></pre>")]
+    public void Build_DetectsLanguageClassesInAnyQuotingOrOrder(string code)
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            WritePage(root, "---\ntitle: Home\nslug: index\n---\n\nNo code in the content.\n");
+            WriteTheme(root, "<html><head></head><body>{{ content }}" + code + "</body></html>");
+
+            Assert.Contains("prism-autoloader", BuildAndRead(root, BuildSpec()), StringComparison.Ordinal);
+        }
+        finally { Directory.Delete(root, recursive: true); }
+    }
+
+    [Fact]
+    public void Build_KeepsPrismAssetsThatTheLayoutAlreadyLoads()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            WritePage(root, "---\ntitle: Home\nslug: index\n---\n\nNo code in the content.\n");
+            WriteTheme(root, "<html><head><link rel=\"stylesheet\" href=\"/css/prism-theme.css\"></head><body><pre><code class=\"language-powershell\">Get-Date</code></pre><script src=\"/vendor/prism.js\"></script></body></html>");
+
+            var html = BuildAndRead(root, BuildSpec());
+
+            Assert.DoesNotContain("prism-autoloader", html, StringComparison.Ordinal);
+            Assert.Single(System.Text.RegularExpressions.Regex.Matches(html, "prism[^\"]*\\.css").Cast<System.Text.RegularExpressions.Match>());
+        }
+        finally { Directory.Delete(root, recursive: true); }
+    }
+
+    [Fact]
+    public void Build_AddsOnlyPrismScriptsWhenTheLayoutHasAPrismTheme()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            WritePage(root, "---\ntitle: Home\nslug: index\n---\n\nNo code in the content.\n");
+            WriteTheme(root, "<html><head><link rel=\"stylesheet\" href=\"/css/prism-theme.css\"></head><body><pre><code class=\"language-powershell\">Get-Date</code></pre></body></html>");
+
+            var html = BuildAndRead(root, BuildSpec());
+
+            Assert.Contains("prism-autoloader", html, StringComparison.Ordinal);
+            Assert.Single(System.Text.RegularExpressions.Regex.Matches(html, "<link[^>]*prism").Cast<System.Text.RegularExpressions.Match>());
+        }
+        finally { Directory.Delete(root, recursive: true); }
+    }
+
     [Fact]
     public void Render_UsesTheLoopLimitFromTheSiteSpec()
     {

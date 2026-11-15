@@ -167,12 +167,16 @@ public sealed class BenchmarkComparisonViewBuilder
         var rows = NormalizeRows(result.Summary ?? Array.Empty<BenchmarkSummaryRow>(), libraries, subject);
         var statistic = rows.Any(row => row.Statistic == "mean") ? "mean" : "median";
 
-        // Parameters with one value across all rows describe the workload; the rest identify cases.
+        // A parameter present with the same value in every row describes the workload; one that differs or
+        // is missing from any row identifies cases. Identity-only values (job, recorded operation) are not
+        // shown as workload facts when they are constant.
         var parameterValues = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
+        var parameterRows = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         var parameterOrder = new List<string>();
+        var identityOnly = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var row in rows)
         {
-            foreach (var parameter in row.Parameters)
+            foreach (var parameter in row.Parameters.Concat(row.Identity))
             {
                 if (!parameterValues.TryGetValue(parameter.Key, out var values))
                 {
@@ -180,31 +184,45 @@ public sealed class BenchmarkComparisonViewBuilder
                     parameterOrder.Add(parameter.Key);
                 }
                 values.Add(parameter.Value);
+                parameterRows[parameter.Key] = parameterRows.TryGetValue(parameter.Key, out var count) ? count + 1 : 1;
             }
+            foreach (var key in row.Identity.Keys)
+                identityOnly.Add(key);
         }
-        var varying = parameterOrder.Where(name => parameterValues[name].Count > 1).ToArray();
-        var workload = parameterOrder.Where(name => parameterValues[name].Count == 1)
+        bool IsConstant(string name) => parameterValues[name].Count == 1 && parameterRows[name] == rows.Count;
+        var varying = parameterOrder.Where(name => !IsConstant(name)).ToArray();
+        var workload = parameterOrder.Where(name => IsConstant(name) && !identityOnly.Contains(name))
             .Select(name => new BenchmarkParameterView { Name = name, Value = parameterValues[name].First() })
             .ToArray();
 
         var contenderNames = new List<string>();
+        var contenderLibrary = new Dictionary<string, string>(StringComparer.Ordinal);
         var caseOrder = new List<string>();
-        var cases = new Dictionary<string, (BenchmarkParameterView[] Parameters, Dictionary<string, NormalizedRow> Cells)>(StringComparer.Ordinal);
+        var cases = new Dictionary<string, (string Label, BenchmarkParameterView[] Parameters, Dictionary<string, NormalizedRow> Cells)>(StringComparer.Ordinal);
         foreach (var row in rows)
         {
-            var parameters = varying
-                .Select(name => new BenchmarkParameterView { Name = name, Value = row.Parameters.TryGetValue(name, out var value) ? value : "—" })
+            var values = varying
+                .Select(name => (Name: name, Found: row.TryGetValue(name, out var value), Value: value))
                 .ToArray();
-            var label = string.Join(" · ", parameters.Select(p => varying.Length > 1 ? p.Name + " " + p.Value : p.Value));
-            if (!cases.ContainsKey(label))
+            var parameters = values
+                .Select(item => new BenchmarkParameterView { Name = item.Name, Value = item.Found ? item.Value : "—" })
+                .ToArray();
+            // The key is structural, so values that contain the label separator cannot merge two cases.
+            var key = string.Join("\u001f", values.Select(item => item.Found ? "1" + item.Value : "0"));
+            if (!cases.ContainsKey(key))
             {
-                cases[label] = (parameters, new Dictionary<string, NormalizedRow>(StringComparer.Ordinal));
-                caseOrder.Add(label);
+                var label = string.Join(" · ", parameters.Select(p => varying.Length > 1 ? p.Name + " " + p.Value : p.Value));
+                cases[key] = (label, parameters, new Dictionary<string, NormalizedRow>(StringComparer.Ordinal));
+                caseOrder.Add(key);
             }
-            cases[label].Cells[row.Contender] = row;
+            cases[key].Cells[row.Contender] = row;
             if (!contenderNames.Contains(row.Contender, StringComparer.Ordinal))
+            {
                 contenderNames.Add(row.Contender);
+                contenderLibrary[row.Contender] = row.Library;
+            }
         }
+        bool IsSubject(string contender) => string.Equals(contenderLibrary[contender], subject, StringComparison.OrdinalIgnoreCase);
 
         var fastestByCase = caseOrder.ToDictionary(
             label => label,
@@ -226,9 +244,8 @@ public sealed class BenchmarkComparisonViewBuilder
             return (Ratio: GeometricMean(ratios), Wins: wins, Cases: ratios.Count);
         }, StringComparer.Ordinal);
 
-        var subjectKey = Key(subject);
         var ordered = contenderNames
-            .OrderBy(name => IsSubjectName(name, subjectKey) ? 0 : 1)
+            .OrderBy(name => IsSubject(name) ? 0 : 1)
             .ThenBy(name => stats[name].Ratio ?? double.MaxValue)
             .ToArray();
         var ranking = contenderNames
@@ -244,7 +261,7 @@ public sealed class BenchmarkComparisonViewBuilder
             {
                 Name = name,
                 Library = library,
-                IsSubject = IsSubjectName(name, subjectKey),
+                IsSubject = IsSubject(name),
                 Version = versions.TryGetValue(Key(library), out var version) ? version : string.Empty,
                 Relative = Ratio(stats[name].Ratio),
                 Wins = stats[name].Wins,
@@ -255,22 +272,22 @@ public sealed class BenchmarkComparisonViewBuilder
 
         var caseViews = caseOrder.Select(label =>
         {
-            var (parameters, cells) = cases[label];
+            var (caseLabel, parameters, cells) = cases[label];
             var fastest = fastestByCase[label];
             var slowest = cells.Values.Where(Completed).Select(row => row.TimeMs!.Value).DefaultIfEmpty(0).Max();
             return new BenchmarkCaseView
             {
-                Label = label,
+                Label = caseLabel,
                 Parameters = parameters,
                 Cells = ordered.Select(name =>
                 {
                     if (!cells.TryGetValue(name, out var row))
-                        return new BenchmarkCellView { Contender = name, IsSubject = IsSubjectName(name, subjectKey), Missing = true };
+                        return new BenchmarkCellView { Contender = name, IsSubject = IsSubject(name), Missing = true };
                     var completed = Completed(row);
                     return new BenchmarkCellView
                     {
                         Contender = name,
-                        IsSubject = IsSubjectName(name, subjectKey),
+                        IsSubject = IsSubject(name),
                         Failed = row.Failed,
                         TimeMs = row.TimeMs,
                         TimeText = row.Failed ? "Failed" : FormatTime(row.TimeMs),
@@ -283,8 +300,8 @@ public sealed class BenchmarkComparisonViewBuilder
             };
         }).ToArray();
 
-        var subjects = ordered.Where(name => IsSubjectName(name, subjectKey)).ToArray();
-        var others = ordered.Where(name => !IsSubjectName(name, subjectKey)).ToArray();
+        var subjects = ordered.Where(name => IsSubject(name)).ToArray();
+        var others = ordered.Where(name => !IsSubject(name)).ToArray();
         var headToHead = subjects
             .SelectMany(a => others.Select(b => HeadToHead(a, b, caseOrder, cases)))
             .Where(view => view.Cases > 0)
@@ -318,7 +335,7 @@ public sealed class BenchmarkComparisonViewBuilder
         string a,
         string b,
         IEnumerable<string> caseOrder,
-        IReadOnlyDictionary<string, (BenchmarkParameterView[] Parameters, Dictionary<string, NormalizedRow> Cells)> cases)
+        IReadOnlyDictionary<string, (string Label, BenchmarkParameterView[] Parameters, Dictionary<string, NormalizedRow> Cells)> cases)
     {
         var time = new List<double>();
         var memory = new List<double>();
@@ -367,6 +384,10 @@ public sealed class BenchmarkComparisonViewBuilder
         public string Contender = string.Empty;
         public string Library = string.Empty;
         public Dictionary<string, string> Parameters = new(StringComparer.OrdinalIgnoreCase);
+        public Dictionary<string, string> Identity = new(StringComparer.OrdinalIgnoreCase);
+
+        public bool TryGetValue(string name, out string value)
+            => Parameters.TryGetValue(name, out value!) || Identity.TryGetValue(name, out value!);
         public double? TimeMs;
         public string Statistic = "median";
         public double? AllocatedBytes;
@@ -400,7 +421,7 @@ public sealed class BenchmarkComparisonViewBuilder
 
         return parsed.Select(item =>
         {
-            var parameters = CaseParameters(item.Row.Variables);
+            var (parameters, identity) = CaseParameters(item.Row);
             var contender = item.Library;
             if (item.Suffix.Length > 0)
             {
@@ -409,7 +430,8 @@ public sealed class BenchmarkComparisonViewBuilder
                     .Where(op => item.Suffix.StartsWith(op, StringComparison.Ordinal))
                     .OrderByDescending(op => op.Length)
                     .FirstOrDefault();
-                if (operation is not null) parameters["Operation"] = operation;
+                // A recorded operation is authoritative; a suffix only names one when none was recorded.
+                if (operation is not null && !identity.ContainsKey("Operation")) parameters["Operation"] = operation;
                 var variant = (operation is null ? item.Suffix : item.Suffix.Substring(operation.Length)).Trim();
                 if (variant.Length > 0) contender = item.Library + " " + variant;
             }
@@ -420,6 +442,7 @@ public sealed class BenchmarkComparisonViewBuilder
                 Contender = contender,
                 Library = item.Library,
                 Parameters = parameters,
+                Identity = identity,
                 TimeMs = time,
                 Statistic = item.Row.MedianMs.HasValue ? "median" : "mean",
                 AllocatedBytes = Metric(item.Row.Metrics, "BytesAllocatedPerOperation") ?? Metric(item.Row.Metrics, "Allocated"),
@@ -451,31 +474,55 @@ public sealed class BenchmarkComparisonViewBuilder
         return (raw.Replace('_', ' '), string.Empty);
     }
 
-    private static Dictionary<string, string> CaseParameters(IReadOnlyDictionary<string, string?>? variables)
+    /// <summary>
+    /// Splits a row into case parameters and identity values. Identity values (the recorded operation, the
+    /// BenchmarkDotNet job and its characteristics) keep different configurations apart but are only shown
+    /// when they differ between rows.
+    /// </summary>
+    private static (Dictionary<string, string> Parameters, Dictionary<string, string> Identity) CaseParameters(BenchmarkSummaryRow row)
     {
         var parameters = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        if (variables is null) return parameters;
+        var identity = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var variables = (IReadOnlyDictionary<string, string?>?)row.Variables ?? new Dictionary<string, string?>();
+
+        // "Run" is the importer's placeholder for a BenchmarkDotNet method, not a recorded operation.
+        if (!string.IsNullOrWhiteSpace(row.Operation) && !string.Equals(row.Operation, "Run", StringComparison.Ordinal))
+            identity["Operation"] = row.Operation;
+
+        var fromBenchmarkDotNet = variables.ContainsKey("FullName") || variables.ContainsKey("BenchmarkDotNetReport");
+        if (fromBenchmarkDotNet && !string.IsNullOrWhiteSpace(row.Engine))
+            identity["Job"] = row.Engine;
 
         // BenchmarkDotNet's full name lists every parameter exactly; results imported before the importer
         // recovered them from it can hold several parameters joined in one value.
-        if (variables.TryGetValue("FullName", out var fullName) &&
-            BenchmarkDotNetColumns.TryParseFullNameParameters(fullName, out var fromFullName))
+        var fromFullName = variables.TryGetValue("FullName", out var fullName) &&
+            BenchmarkDotNetColumns.TryParseFullNameParameters(fullName, out var listed)
+                ? listed
+                : null;
+        if (fromFullName is not null)
         {
             foreach (var parameter in fromFullName)
                 parameters[parameter.Key] = parameter.Value;
-            return parameters;
         }
 
-        // Rows imported from a BenchmarkDotNet CSV report before job settings and trailing statistics were
-        // separated still carry them as variables.
+        // Rows imported from a BenchmarkDotNet CSV report before trailing statistics were separated still carry them.
         var fromReport = variables.ContainsKey("BenchmarkDotNetReport");
         foreach (var variable in variables)
         {
-            if (BenchmarkDotNetColumns.IsJobCharacteristic(variable.Key) || (fromReport && BenchmarkDotNetColumns.IsStatistic(variable.Key)))
+            if (BenchmarkDotNetColumns.IsJobCharacteristic(variable.Key))
+            {
+                if (!string.Equals(variable.Key, "FullName", StringComparison.OrdinalIgnoreCase) &&
+                    !string.Equals(variable.Key, "Namespace", StringComparison.OrdinalIgnoreCase) &&
+                    !string.Equals(variable.Key, "Type", StringComparison.OrdinalIgnoreCase) &&
+                    !string.Equals(variable.Key, "BenchmarkDotNetReport", StringComparison.OrdinalIgnoreCase))
+                    identity[variable.Key] = variable.Value ?? string.Empty;
+                continue;
+            }
+            if (fromFullName is not null || (fromReport && BenchmarkDotNetColumns.IsStatistic(variable.Key)))
                 continue;
             parameters[variable.Key] = variable.Value ?? string.Empty;
         }
-        return parameters;
+        return (parameters, identity);
     }
 
     private static Dictionary<string, string> ReadVersions(IReadOnlyDictionary<string, string>? metadata)
@@ -539,9 +586,6 @@ public sealed class BenchmarkComparisonViewBuilder
 
     private static double? Metric(IReadOnlyDictionary<string, double>? metrics, string key)
         => metrics is not null && metrics.TryGetValue(key, out var value) && !double.IsNaN(value) && !double.IsInfinity(value) ? value : null;
-
-    private static bool IsSubjectName(string contender, string subjectKey)
-        => subjectKey.Length > 0 && Key(contender).StartsWith(subjectKey, StringComparison.Ordinal);
 
     private static string PlatformLabel(string platform) => platform switch
     {

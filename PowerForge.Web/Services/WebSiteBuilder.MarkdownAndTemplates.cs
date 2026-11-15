@@ -67,12 +67,14 @@ public static partial class WebSiteBuilder
         if (!ContainsMarkdownCode(html))
             return html;
 
-        var (css, scripts) = BuildPrismAssets(meta, spec, rootPath);
-        var firstScript = scripts.Split(new[] { '\n' }, StringSplitOptions.RemoveEmptyEntries).FirstOrDefault()?.Trim();
-        if (!string.IsNullOrEmpty(firstScript) && html.IndexOf(firstScript, StringComparison.Ordinal) >= 0)
+        // A page that already loads Prism, from PowerForge or from its own layout, keeps its assets; a page
+        // that only styles code with a Prism theme gets the scripts without a second stylesheet.
+        if (PrismScriptPattern.IsMatch(html))
             return html;
 
-        html = InsertBefore(html, "</head>", css);
+        var (css, scripts) = BuildPrismAssets(meta, spec, rootPath);
+        if (!PrismStylesheetPattern.IsMatch(html))
+            html = InsertBefore(html, "</head>", css);
         return InsertBefore(html, "</body>", scripts);
     }
 
@@ -269,11 +271,25 @@ public static partial class WebSiteBuilder
         return $"{cdnRoot}/themes/{name}.min.css";
     }
 
+    // A language-* token anywhere in a class attribute, whatever the quoting or class order.
+    private static readonly Regex LanguageClassPattern = new(
+        @"\bclass\s*=\s*(?:""[^""]*?|'[^']*?|)(?<![\w-])language-[\w+#-]+",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
+
+    // A script reference to Prism core or its autoloader, local or from a CDN.
+    private static readonly Regex PrismScriptPattern = new(
+        @"<script\b[^>]*\bsrc\s*=\s*[""']?[^""'\s>]*prism[^""'\s>]*\.js",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
+
+    // A stylesheet reference to a Prism theme.
+    private static readonly Regex PrismStylesheetPattern = new(
+        @"<link\b[^>]*\bhref\s*=\s*[""']?[^""'\s>]*prism[^""'\s>]*\.css",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
+
     private static bool ContainsMarkdownCode(string htmlContent)
     {
         if (string.IsNullOrWhiteSpace(htmlContent)) return false;
-        return htmlContent.IndexOf("class=\"language-", StringComparison.OrdinalIgnoreCase) >= 0 ||
-               htmlContent.IndexOf("class=language-", StringComparison.OrdinalIgnoreCase) >= 0 ||
+        return LanguageClassPattern.IsMatch(htmlContent) ||
                htmlContent.IndexOf("<pre><code", StringComparison.OrdinalIgnoreCase) >= 0;
     }
 
