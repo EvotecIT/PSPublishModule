@@ -611,6 +611,35 @@ public sealed class WebLlmsPublicationCatalogTests
         Assert.Equal(2, exitCode);
     }
 
+    [Fact]
+    public async Task Cli_ReportsEveryOmissionWithoutJsonOutput()
+    {
+        using var fixture = new PublicationFixture();
+        var first = fixture.WriteProject("First.Package");
+        var second = fixture.WriteProject("Second.Package");
+        var catalog = fixture.WriteCatalog("Evotec", ["First.Package", "Second.Package"], packageVersion: "1.2.2");
+        var start = new System.Diagnostics.ProcessStartInfo("dotnet")
+        {
+            RedirectStandardOutput = true, RedirectStandardError = true,
+            UseShellExecute = false, CreateNoWindow = true, WorkingDirectory = fixture.Root
+        };
+        foreach (var argument in new[] { typeof(WebPipelineRunner).Assembly.Location, "llms", "--site-root", fixture.Root,
+                     "--package-files", first + "," + second, "--install-policy", "VerifiedCatalog",
+                     "--publication-catalog", catalog, "--nuget-owner", "Evotec" })
+            start.ArgumentList.Add(argument);
+        using var process = System.Diagnostics.Process.Start(start)!;
+        var output = process.StandardOutput.ReadToEndAsync();
+        var error = process.StandardError.ReadToEndAsync();
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        try { await process.WaitForExitAsync(timeout.Token); }
+        catch (OperationCanceledException) { process.Kill(entireProcessTree: true); throw; }
+        Assert.True(process.ExitCode == 0, await error);
+        var text = await output;
+        Assert.Contains("nuget:First.Package", text);
+        Assert.Contains("nuget:Second.Package", text);
+        Assert.Contains("Source and catalog versions differ", text);
+    }
+
     private sealed class PublicationFixture : IDisposable
     {
         public PublicationFixture()

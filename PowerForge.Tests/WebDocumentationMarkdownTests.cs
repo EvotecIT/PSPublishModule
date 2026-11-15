@@ -56,10 +56,15 @@ public sealed class WebDocumentationMarkdownTests
     }
 
     [Theory]
-    [InlineData("Guide", true)]
-    [InlineData("C#", true)]
-    [InlineData("Guide", false)]
-    public void BuildAndPrepare_PreserveSourceMarkdownAndThemeFacts_ThenRefreshOnBuild(string title, bool sourceHeading)
+    [InlineData("Guide", true, null)]
+    [InlineData("C#", true, null)]
+    [InlineData("Guide", false, null)]
+    [InlineData("Guide", true, "**Guide**")]
+    [InlineData("Guide", true, "`Guide`")]
+    [InlineData("Guide", true, "[Guide](/guide/)")]
+    [InlineData("Guide & tools", true, "Guide &amp; tools")]
+    [InlineData("Guide", true, "Guide\n=====")]
+    public void BuildAndPrepare_PreserveSourceMarkdownAndThemeFacts_ThenRefreshOnBuild(string title, bool sourceHeading, string? formattedHeading)
     {
         using var site = new DocumentationSite();
         var pages = Path.Combine(site.Root, "content", "pages");
@@ -97,8 +102,9 @@ public sealed class WebDocumentationMarkdownTests
             }
             ```
             """;
+        var sourceHeadingText = formattedHeading?.Contains('\n') == true ? formattedHeading : "# " + (formattedHeading ?? title);
         markdown = markdown.Replace("\r\n", "\n", StringComparison.Ordinal).Replace("title: Guide", "title: " + title, StringComparison.Ordinal)
-            .Replace("# Guide", "# " + title, StringComparison.Ordinal);
+            .Replace("# Guide", sourceHeadingText, StringComparison.Ordinal);
         if (!sourceHeading) markdown = markdown.Replace("# " + title + "\n\n", string.Empty, StringComparison.Ordinal);
         var sourcePath = Path.Combine(pages, "guide.md");
         File.WriteAllText(sourcePath, markdown);
@@ -119,6 +125,7 @@ public sealed class WebDocumentationMarkdownTests
             for (var prepare = 0; prepare < 2; prepare++) WebAgentReadiness.Prepare(site.Options(".md"));
             var output = File.ReadAllText(Path.Combine(site.Output, "docs", "guide", "index.md")).Replace("\r\n", "\n");
             Assert.Single(Regex.Matches(output, "(?m)^# " + Regex.Escape(title) + "$"));
+            Assert.Single(Regex.Matches(output, "(?m)^# .+$"));
             Assert.Contains("\n\n    LeadingExample();\n        IndentedContinuation();", output);
             Assert.Contains("Source description", output);
             Assert.Contains("Theme package fact", output);

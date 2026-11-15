@@ -59,10 +59,33 @@ public static partial class WebAgentReadiness
     {
         var lines = body.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n');
         // Only remove the opening source heading. Headings in code examples are content.
-        var heading = Regex.Match(lines[0], @"^ {0,3}#[ \t]+(?<title>.*?)(?:[ \t]+#+)?[ \t]*$", RegexOptions.None, TimeSpan.FromSeconds(1));
-        if (heading.Success && heading.Groups["title"].Value.Equals(title, StringComparison.OrdinalIgnoreCase))
-            return string.Join("\n", lines.Skip(1)).TrimStart('\r', '\n');
+        var start = Array.FindIndex(lines, line => !string.IsNullOrWhiteSpace(line));
+        if (start < 0 || string.IsNullOrWhiteSpace(title))
+            return body;
+        var heading = Regex.Match(lines[start], @"^ {0,3}#[ \t]+(?<title>.*?)(?:[ \t]+#+)?[ \t]*$", RegexOptions.None, TimeSpan.FromSeconds(1));
+        var sourceTitle = heading.Success ? heading.Groups["title"].Value : null;
+        var consumed = 1;
+        if (sourceTitle is null && start + 1 < lines.Length &&
+            Regex.IsMatch(lines[start + 1], @"^ {0,3}=+[ \t]*$", RegexOptions.None, TimeSpan.FromSeconds(1)))
+        {
+            var opening = MarkdownRenderer.RenderToHtml(string.Join("\n", lines.Skip(start).Take(2)));
+            var setext = HtmlParser.ParseWithAngleSharp(opening).Body?.FirstElementChild;
+            if (setext?.TagName == "H1")
+            {
+                sourceTitle = setext.TextContent;
+                consumed = 2;
+            }
+        }
+        if (sourceTitle is not null && (sourceTitle.Equals(title, StringComparison.OrdinalIgnoreCase) ||
+                ReadMarkdownHeadingText(sourceTitle).Equals(ReadMarkdownHeadingText(title), StringComparison.OrdinalIgnoreCase)))
+            return string.Join("\n", lines.Skip(start + consumed)).TrimStart('\r', '\n');
         return body;
+    }
+
+    private static string ReadMarkdownHeadingText(string text)
+    {
+        var document = HtmlParser.ParseWithAngleSharp(MarkdownRenderer.RenderToHtml(text));
+        return MarkdownWhitespaceRegex.Replace(document.Body?.TextContent ?? string.Empty, " ").Trim();
     }
 
     private static bool HasMarkdownOutsideArticle(INode node, IElement article)

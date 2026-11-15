@@ -645,6 +645,8 @@ internal static partial class WebCliCommandHandlers
             return 0;
         }
 
+        foreach (var warning in result.Warnings)
+            logger.Warn(warning);
         logger.Success("LLMS files generated.");
         logger.Info($"llms.txt: {result.LlmsTxtPath}");
         logger.Info($"llms.json: {result.LlmsJsonPath}");
