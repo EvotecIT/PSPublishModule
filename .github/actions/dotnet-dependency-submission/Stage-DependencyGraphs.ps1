@@ -3,7 +3,7 @@
 .SYNOPSIS
 Stages restored NuGet graphs for scanning on another runner.
 .DESCRIPTION
-Export records repository-relative asset and project paths. Import rebases only
+Export records repository-relative paths and evaluated project/package scope. Import rebases only
 restore path metadata in a copy; package identities, targets and edges are kept.
 The output must be new so a failed or partial run cannot reuse old graphs.
 .PARAMETER Mode
@@ -54,7 +54,32 @@ if ($Mode -eq 'Export') {
         $relativeProject = [IO.Path]::GetRelativePath($root, $project).Replace('\', '/')
         $relativeAsset = [IO.Path]::GetRelativePath($root, $file.FullName).Replace('\', '/')
         $null = Get-ContainedPath $root $relativeProject
-        @{ file = $relativeAsset; project = $relativeProject }
+        $propertiesJson = & dotnet msbuild $project -nologo -verbosity:quiet -nodeReuse:false '-getProperty:IsTestProject,DevelopmentDependency'
+        if ($LASTEXITCODE -ne 0) { throw "Could not evaluate dependency scope for $relativeProject" }
+        $properties = ($propertiesJson -join "`n" | ConvertFrom-Json -AsHashtable).Properties
+        $developmentProject = $properties.IsTestProject -eq 'true' -or $properties.DevelopmentDependency -eq 'true'
+        $developmentPackages = @(foreach ($identity in $graph.libraries.Keys) {
+            $library = $graph.libraries[$identity]
+            if ($library.type -ne 'package') { continue }
+            $nuspecFiles = @($library.files | Where-Object { $_ -like '*.nuspec' -and $_ -notmatch '[/\\]' })
+            $nuspecPath = @(foreach ($folder in $graph.packageFolders.Keys) {
+                foreach ($nuspecFile in $nuspecFiles) { Join-Path (Join-Path $folder $library.path) $nuspecFile }
+            }) | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } | Select-Object -First 1
+            if ($nuspecPath) {
+                [xml]$nuspec = Get-Content -LiteralPath $nuspecPath -Raw
+                $developmentDependency = [string]$nuspec.SelectSingleNode("//*[local-name()='metadata']/*[local-name()='developmentDependency']").InnerText
+                if ($developmentDependency.Trim() -eq 'true') {
+                    $identity
+                }
+            }
+        })
+        @{
+            file = $relativeAsset
+            project = $relativeProject
+            scope = if ($developmentProject) { 'development' } else { 'runtime' }
+            projectProperties = $properties
+            developmentPackages = @($developmentPackages | Sort-Object -Unique)
+        }
     })
 } else {
     $index = Get-Content -LiteralPath (Join-Path $root 'dependency-graphs.json') -Raw | ConvertFrom-Json -AsHashtable
@@ -73,6 +98,10 @@ foreach ($entry in $entries) {
     $null = Get-ContainedPath $output $entry.project
     if ([IO.Path]::GetFileName($asset) -cne 'project.assets.json' -or !$seen.Add($entry.file) -or
         !(Test-Path -LiteralPath $asset -PathType Leaf)) { throw 'Invalid, duplicate or missing asset graph.' }
+    if (($entry.ContainsKey('scope') -and $entry.scope -notin @('runtime', 'development')) -or
+        ($entry.ContainsKey('developmentPackages') -and $entry.developmentPackages -isnot [array])) {
+        throw 'Invalid native dependency scope metadata.'
+    }
     if ($Mode -eq 'Import') {
         # Compare source identities as portable strings, not paths on this runner.
         $sourceComparison = if ($sourceRoot -match '^([A-Za-z]:|//)') { [StringComparison]::OrdinalIgnoreCase } else { [StringComparison]::Ordinal }
