@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Management.Automation;
 using System.Management.Automation.Language;
+using System.Threading;
 
 namespace PowerForge;
 
@@ -13,19 +14,17 @@ namespace PowerForge;
 internal sealed partial class GetHelpParser
 {
     public CommandHelpModel? Parse(string commandName, int timeoutSeconds = 5, ExamplesMode examplesMode = ExamplesMode.Auto)
+        => Parse(commandName, timeoutSeconds, examplesMode, CancellationToken.None);
+
+    public CommandHelpModel? Parse(string commandName, int timeoutSeconds, ExamplesMode examplesMode, CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         using var ps = PowerShell.Create();
         ps.AddCommand("Get-Help")
             .AddParameter("Name", commandName)
             .AddParameter("Full")
             .AddParameter("ErrorAction", ActionPreference.SilentlyContinue);
-        var async = ps.BeginInvoke();
-        if (!async.AsyncWaitHandle.WaitOne(TimeSpan.FromSeconds(Math.Max(1, timeoutSeconds))))
-        {
-            try { ps.Stop(); } catch { }
-            return null;
-        }
-        var help = ps.EndInvoke(async).FirstOrDefault() as PSObject;
+        var help = InvokeHelp(ps, timeoutSeconds, cancellationToken)?.FirstOrDefault();
         if (help == null) return null;
 
         var model = new CommandHelpModel
@@ -81,7 +80,8 @@ internal sealed partial class GetHelpParser
         }
 
         // Choose examples according to requested mode
-        var rawExamples = (examplesMode == ExamplesMode.Maml) ? null : TryExtractRawExamples(commandName, timeoutSeconds);
+        cancellationToken.ThrowIfCancellationRequested();
+        var rawExamples = (examplesMode == ExamplesMode.Maml) ? null : TryExtractRawExamples(commandName, timeoutSeconds, cancellationToken);
         if (examplesMode == ExamplesMode.Raw && (rawExamples == null || rawExamples.Count == 0))
         {
             // Forced Raw but none found: leave empty; caller will still have rest of help
@@ -144,7 +144,41 @@ internal sealed partial class GetHelpParser
             if (!string.IsNullOrEmpty(text) || !string.IsNullOrEmpty(uri)) model.RelatedLinks.Add(new RelatedLink { Title = text, Uri = uri });
         }
 
+        cancellationToken.ThrowIfCancellationRequested();
         return model;
+    }
+
+    /// <summary>Waits for help output while allowing cancellation to stop the active pipeline.</summary>
+    internal static PSDataCollection<PSObject>? InvokeHelp(PowerShell ps, int timeoutSeconds, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var async = ps.BeginInvoke();
+        using var completed = async.AsyncWaitHandle;
+        try
+        {
+            var signaled = WaitHandle.WaitAny(new[] { cancellationToken.WaitHandle, completed },
+                TimeSpan.FromSeconds(Math.Max(1, timeoutSeconds)));
+            cancellationToken.ThrowIfCancellationRequested();
+            if (signaled == WaitHandle.WaitTimeout)
+            {
+                try { ps.Stop(); } catch { }
+                cancellationToken.ThrowIfCancellationRequested();
+                return null;
+            }
+
+            var result = ps.EndInvoke(async);
+            cancellationToken.ThrowIfCancellationRequested();
+            return result;
+        }
+        catch (OperationCanceledException)
+        {
+            try { ps.Stop(); } catch { }
+            throw;
+        }
+        catch (PipelineStoppedException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw new OperationCanceledException(cancellationToken);
+        }
     }
 
     // Try to detect trailing narrative that accidentally landed inside Code and split it out to Remarks
@@ -536,7 +570,7 @@ internal sealed partial class GetHelpParser
 // Helper methods for recovering examples from source files to preserve exact formatting
 internal sealed partial class GetHelpParser
 {
-    private List<ExampleHelp>? TryExtractRawExamples(string commandName, int timeoutSeconds)
+    private List<ExampleHelp>? TryExtractRawExamples(string commandName, int timeoutSeconds, CancellationToken cancellationToken)
     {
         try
         {
@@ -547,13 +581,9 @@ internal sealed partial class GetHelpParser
                 .AddParameter("ErrorAction", ActionPreference.SilentlyContinue)
                 .AddCommand("Out-String")
                 .AddParameter("Width", 1048576);
-            var async = ps.BeginInvoke();
-            if (!async.AsyncWaitHandle.WaitOne(TimeSpan.FromSeconds(Math.Max(1, timeoutSeconds))))
-            {
-                try { ps.Stop(); } catch { }
-                return null;
-            }
-            var text = string.Join("", ps.EndInvoke(async).Select(o => o?.ToString()));
+            var output = InvokeHelp(ps, timeoutSeconds, cancellationToken);
+            if (output == null) return null;
+            var text = string.Join("", output.Select(o => o?.ToString()));
             if (string.IsNullOrWhiteSpace(text)) return null;
 
             var nl = text.Replace("\r\n", "\n");
@@ -613,6 +643,7 @@ internal sealed partial class GetHelpParser
             }
             return results;
         }
+        catch (OperationCanceledException) { throw; }
         catch { return null; }
     }
 }

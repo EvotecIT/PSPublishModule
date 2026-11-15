@@ -1,4 +1,4 @@
-$ModuleAssembly = [PowerForge.ModuleLoader.V1.ModuleAssemblyLoadContext]::LoadModuleFromGroup(
+$ModuleAssembly = [PowerForge.ModuleLoader.V2.ModuleAssemblyLoadContext]::LoadModuleFromGroup(
     [string[]]{{ModuleAssemblyPaths}},
     {{ModuleAssemblyPath}},
     '{{ContextName}}',

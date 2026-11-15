@@ -6,23 +6,22 @@
     The generated PSM1 only calls public members of this assembly, so module import needs no
     script-level reflection, no Add-Type -TypeDefinition compilation and no private PowerShell APIs.
     The contract version is part of the assembly name so modules built by different PowerForge
-    releases can load side by side in one session. A session keeps the first V1 copy it loads and
-    every later module that needs V1 uses that copy, so bump the version (V2, V3, ...) for any change
-    to the public members the generated scripts call, additions included. Fixes that keep those
-    members unchanged reach a session only when its first module was built with them.
+    releases can load side by side in one session. V2 keeps the scoped Desktop resolver ahead of
+    version-blind handlers, even when another module has already loaded the older V1 loader.
+    Bump the identity for public contract changes or fixes that must coexist with older loaders.
   -->
   <PropertyGroup>
     <TargetFrameworks>net472;netcoreapp3.1</TargetFrameworks>
-    <AssemblyName>PowerForge.ModuleLoader.V1</AssemblyName>
-    <RootNamespace>PowerForge.ModuleLoader.V1</RootNamespace>
+    <AssemblyName>PowerForge.ModuleLoader.V2</AssemblyName>
+    <RootNamespace>PowerForge.ModuleLoader.V2</RootNamespace>
     <Nullable>enable</Nullable>
     <LangVersion>latest</LangVersion>
     <ImplicitUsings>disable</ImplicitUsings>
     <IsPackable>false</IsPackable>
     <Deterministic>true</Deterministic>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
-    <AssemblyVersion>1.0.0.0</AssemblyVersion>
-    <FileVersion>1.0.0.0</FileVersion>
+    <AssemblyVersion>2.0.0.0</AssemblyVersion>
+    <FileVersion>2.0.0.0</FileVersion>
     <Product>PowerForge module loader</Product>
     <Description>Loads PowerForge-built PowerShell module binaries with AssemblyLoadContext isolation on PowerShell 7 and a scoped AssemblyResolve handler on Windows PowerShell 5.1.</Description>
     <!-- netcoreapp3.1 is the PowerShell 7.0 runtime floor; the loader must run in every later host. -->

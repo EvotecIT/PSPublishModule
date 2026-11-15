@@ -4,7 +4,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
 
-namespace PowerForge.ModuleLoader.V1 {
+namespace PowerForge.ModuleLoader.V2 {
     /// <summary>Process-wide resolution policy for assemblies that several modules declare as shared.</summary>
     public static class SharedAssemblyPolicy {
         private static readonly object Sync = new object();

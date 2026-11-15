@@ -344,6 +344,12 @@
         "HandleAssemblyWithSameName": true,
         "NETProjectPath": "../PSPublishModule",
         "UseAssemblyLoadContext": true,
+        "IgnoreLibraryOnLoad": [
+          "OfficeIMO.Core.dll",
+          "OfficeIMO.Markdown.dll",
+          "HtmlForgeX.Markdown.dll",
+          "HtmlForgeX.dll"
+        ],
         "AssemblyTypeAccelerators": [
           "PowerForge.ModuleTestFailureAnalysis",
           "PowerForge.ModuleTestSuiteResult",

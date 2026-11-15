@@ -26,6 +26,8 @@ public sealed partial class ModuleBootstrapperGeneratorWindowsPowerShellTests
                 ("NewerMajor", "2.0.0.0", "1.1.0.0", "refuse")
             };
             var ownerLib = Directory.CreateDirectory(Path.Combine(root, "Owner", "Lib", "Default")).FullName;
+            File.WriteAllText(Path.Combine(root, "Owner", "A.ReleaseProvenance.psd1"),
+                "@{ ModuleName = 'Owner'; Version = '3.0.9'; SchemaVersion = 1 }");
             File.WriteAllText(Path.Combine(root, "Owner", "Owner.psd1"), "@{ ModuleVersion = '3.0.9' }");
             Directory.CreateDirectory(Path.Combine(root, "Consumer"));
             File.WriteAllText(Path.Combine(root, "Consumer", "Consumer.psd1"), "@{ ModuleVersion = '2.4.0' }");
@@ -38,11 +40,11 @@ public sealed partial class ModuleBootstrapperGeneratorWindowsPowerShellTests
             var script = Path.Combine(root, "Test-Rule.ps1");
             File.WriteAllText(script, "$cases = @(" + string.Join(", ", cases.Select(c => $"@{{ Name = '{c.Name}'; Expect = '{c.Expect}' }}")) + ")\n" + """
 $ErrorActionPreference = 'Stop'
-Add-Type -Path (Join-Path $PSScriptRoot 'Loader/Core/PowerForge.ModuleLoader.V1.dll')
+Add-Type -Path (Join-Path $PSScriptRoot 'Loader/Core/PowerForge.ModuleLoader.V2.dll')
 $owner = [System.Runtime.Loader.AssemblyLoadContext]::new('owner', $false)
 foreach ($case in $cases) { $null = $owner.LoadFromAssemblyPath((Join-Path $PSScriptRoot "Owner/Lib/Default/Dep$($case.Name).dll")) }
 foreach ($case in $cases) {
-    $check = [PowerForge.ModuleLoader.V1.DependencyConflictCheck]::Evaluate('Consumer', (Join-Path $PSScriptRoot 'Consumer'), [string[]]@((Join-Path $PSScriptRoot "Consumer/$($case.Name)")), [string[]]@())
+    $check = [PowerForge.ModuleLoader.V2.DependencyConflictCheck]::Evaluate('Consumer', (Join-Path $PSScriptRoot 'Consumer'), [string[]]@((Join-Path $PSScriptRoot "Consumer/$($case.Name)")), [string[]]@())
     $actual = if ($null -ne $check.Error) { 'refuse' } elseif ($check.Warnings.Count -gt 0) { 'reuse' } else { 'silent' }
     if ($actual -ne $case.Expect) { throw "$($case.Name): expected $($case.Expect), got $actual. $($check.Error) $($check.Warnings)" }
     $message = if ($null -ne $check.Error) { $check.Error } else { $check.Warnings -join ' ' }
@@ -140,9 +142,9 @@ Remove-Module Second, Third
             var script = Path.Combine(root, "Test-SharedLink.ps1");
             File.WriteAllText(script, """
 $ErrorActionPreference = 'Stop'
-Add-Type -Path (Join-Path $PSScriptRoot 'Loader/Core/PowerForge.ModuleLoader.V1.dll')
-[PowerForge.ModuleLoader.V1.SharedAssemblyPolicy]::Register([string[]]@('SharedLinkFixture'), [string[]]@((Join-Path $PSScriptRoot 'alias')))
-$assembly = [PowerForge.ModuleLoader.V1.SharedAssemblyPolicy]::Resolve([Reflection.AssemblyName]::new('SharedLinkFixture'), [string[]]@((Join-Path $PSScriptRoot 'physical')))
+Add-Type -Path (Join-Path $PSScriptRoot 'Loader/Core/PowerForge.ModuleLoader.V2.dll')
+[PowerForge.ModuleLoader.V2.SharedAssemblyPolicy]::Register([string[]]@('SharedLinkFixture'), [string[]]@((Join-Path $PSScriptRoot 'alias')))
+$assembly = [PowerForge.ModuleLoader.V2.SharedAssemblyPolicy]::Resolve([Reflection.AssemblyName]::new('SharedLinkFixture'), [string[]]@((Join-Path $PSScriptRoot 'physical')))
 if ($assembly.GetName().Name -ne 'SharedLinkFixture') { throw 'Wrong shared assembly.' }
 'SHARED_LINK_OK'
 """);

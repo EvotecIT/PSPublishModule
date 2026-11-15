@@ -1,20 +1,33 @@
 using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
-using HtmlForgeX;
-using HtmlForgeX.Extensions;
-using HtmlForgeX.Markdown;
-using PowerForge;
 using System.Collections;
 using System.Management.Automation;
 using System.Management.Automation.Language;
 using System.Threading.Tasks;
+using System.Threading;
 
-namespace PSPublishModule;
+namespace PowerForge;
 
-internal sealed partial class HtmlExporter
+/// <summary>Collects command help in the calling host before isolated HTML rendering loads older dependencies.</summary>
+internal sealed class DocumentationCommandHelpCollector
 {
+    /// <summary>Materializes existing command-help Markdown without loading the HTML renderer in the calling host.</summary>
+    internal DocumentationCommandHelpItem[] Collect(ModuleInfoModel module, Action<string>? log, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (module.SkipCommands) return Array.Empty<DocumentationCommandHelpItem>();
+        var commands = ResolveExportedCommands(module.Name).Take(Math.Max(0, module.MaxCommands)).ToList();
+        return BuildHelpMap(module.Name, commands, module.HelpTimeoutSeconds, module.ExamplesMode,
+            module.ExamplesLayout, log, cancellationToken)
+            .Select(entry => new DocumentationCommandHelpItem
+            {
+                Command = entry.Command,
+                Help = entry.Help,
+                Structured = entry.Structured
+            }).ToArray();
+    }
+
     // Helpers for Commands tab
     private List<string> ResolveExportedCommands(string moduleName)
     {
@@ -47,7 +60,7 @@ internal sealed partial class HtmlExporter
         return commands.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
     }
 
-    private string? GetHelpMarkdown(string moduleName, string command, int timeoutSeconds)
+    private string? GetHelpMarkdown(string moduleName, string command, int timeoutSeconds, CancellationToken cancellationToken)
     {
         using var ps = PowerShell.Create();
         // Use -Full for richer content; convert basic sections to markdown headings
@@ -56,13 +69,9 @@ internal sealed partial class HtmlExporter
             .AddParameter("Name", command)
             .AddParameter("ErrorAction", ActionPreference.SilentlyContinue)
             .AddCommand("Out-String");
-        var async = ps.BeginInvoke();
-        if (!async.AsyncWaitHandle.WaitOne(TimeSpan.FromSeconds(Math.Max(1, timeoutSeconds))))
-        {
-            try { ps.Stop(); } catch { }
-            return "_Get-Help timed out._";
-        }
-        var text = string.Join("", ps.EndInvoke(async).Select(p => p?.ToString()));
+        var output = GetHelpParser.InvokeHelp(ps, timeoutSeconds, cancellationToken);
+        if (output == null) return "_Get-Help timed out._";
+        var text = string.Join("", output.Select(p => p?.ToString()));
         if (string.IsNullOrWhiteSpace(text)) return null;
         try { return FormatRawHelpMarkdown(text); } catch { }
         // Naive fallback
@@ -269,7 +278,8 @@ internal sealed partial class HtmlExporter
         int timeoutSeconds,
         ExamplesMode examplesMode,
         ExamplesLayout examplesLayout,
-        Action<string>? log)
+        Action<string>? log,
+        CancellationToken cancellationToken)
     {
         if (commands.Count == 0)
             return new List<(string, string?, int, bool)>();
@@ -280,10 +290,10 @@ internal sealed partial class HtmlExporter
         var results = new HelpRenderResult[commands.Count];
         Parallel.ForEach(
             Enumerable.Range(0, commands.Count),
-            new ParallelOptions { MaxDegreeOfParallelism = degree },
+            new ParallelOptions { MaxDegreeOfParallelism = degree, CancellationToken = cancellationToken },
             index =>
             {
-                results[index] = RenderCommandHelp(moduleName, commands[index], timeoutSeconds, examplesMode, examplesLayout);
+                results[index] = RenderCommandHelp(moduleName, commands[index], timeoutSeconds, examplesMode, examplesLayout, cancellationToken);
             });
 
         var list = new List<(string, string?, int, bool)>(results.Length);
@@ -305,13 +315,15 @@ internal sealed partial class HtmlExporter
         string cmd,
         int timeoutSeconds,
         ExamplesMode examplesMode,
-        ExamplesLayout examplesLayout)
+        ExamplesLayout examplesLayout,
+        CancellationToken cancellationToken)
     {
         var messages = new List<string>();
         var parser = new GetHelpParser();
         string? content = null;
         var structured = false;
-        var model = parser.Parse(cmd, timeoutSeconds, examplesMode);
+        var model = parser.Parse(cmd, timeoutSeconds, examplesMode, cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
         if (model != null)
         {
             content = CommandHelpMarkdownFormatter.Render(moduleName, model, examplesLayout);
@@ -320,8 +332,9 @@ internal sealed partial class HtmlExporter
         else
         {
             // Fallback to raw Get-Help text -> markdown
-            content = GetHelpMarkdown(moduleName, cmd, timeoutSeconds);
+            content = GetHelpMarkdown(moduleName, cmd, timeoutSeconds, cancellationToken);
         }
+        cancellationToken.ThrowIfCancellationRequested();
         var lines = string.IsNullOrEmpty(content) ? 0 : content!.Split(new[] {'\n'}, StringSplitOptions.None).Length;
         if (model != null)
         {
@@ -370,4 +383,12 @@ internal sealed partial class HtmlExporter
         public IReadOnlyList<string> Messages { get; }
     }
 
+}
+
+/// <summary>Final help content suitable for rendering in a host that cannot import the original module.</summary>
+internal sealed class DocumentationCommandHelpItem
+{
+    public string Command { get; set; } = string.Empty;
+    public string? Help { get; set; }
+    public bool Structured { get; set; }
 }
