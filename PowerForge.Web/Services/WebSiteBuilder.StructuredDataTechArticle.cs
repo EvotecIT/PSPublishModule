@@ -52,10 +52,17 @@ public static partial class WebSiteBuilder
                 _ => pair.Key
             };
             var normalized = NormalizeStructuredDataValue(pair.Value);
-            if (key is "url" or "@id" or "codeRepository" or "relatedLink" && normalized is string url)
-                normalized = ResolveAbsoluteUrl(baseUrl, url);
+            if (key is "url" or "@id" or "codeRepository" or "relatedLink")
+                normalized = NormalizeStructuredEntityUrl(normalized, baseUrl);
             entity[key] = normalized;
         }
         return entity;
     }
+
+    private static object? NormalizeStructuredEntityUrl(object? value, string? baseUrl) => value switch
+    {
+        string url => ResolveAbsoluteUrl(baseUrl, url),
+        object?[] urls => urls.Select(url => NormalizeStructuredEntityUrl(url, baseUrl)).ToArray(),
+        _ => value
+    };
 }

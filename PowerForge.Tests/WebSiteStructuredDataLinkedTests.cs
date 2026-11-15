@@ -278,7 +278,10 @@ public class WebSiteStructuredDataLinkedTests
               mentions:
                 - type: SoftwareApplication
                   name: Example Tool
-                  url: /tools/
+                  url: [/tools/, /downloads/]
+                - type: SoftwareApplication
+                  name: Single tool
+                  url: /single/
               dateModified: 2026-11-10T12:30:00Z
               relatedLink: [/docs/start/, https://example.test/reference/]
             ---
@@ -291,7 +294,7 @@ public class WebSiteStructuredDataLinkedTests
               type: "TechArticle",
               about: [{ type: "SoftwareSourceCode", name: "Example.Library", code_repository: "https://github.com/example/library", programming_language: "C#" }],
               dependencies: ".NET 8 SDK",
-              mentions: [{ type: "SoftwareApplication", name: "Example Tool", url: "/tools/" }],
+              mentions: [{ type: "SoftwareApplication", name: "Example Tool", url: ["/tools/", "/downloads/"] }, { type: "SoftwareApplication", name: "Single tool", url: "/single/" }],
               dateModified: "2026-11-10T12:30:00Z",
               relatedLink: ["/docs/start/", "https://example.test/reference/"]
             } } }}
@@ -306,7 +309,9 @@ public class WebSiteStructuredDataLinkedTests
         Assert.Equal("https://github.com/example/library", article.GetProperty("about")[0].GetProperty("codeRepository").GetString());
         Assert.Equal("C#", article.GetProperty("about")[0].GetProperty("programmingLanguage").GetString());
         Assert.Equal(".NET 8 SDK", article.GetProperty("dependencies").GetString());
-        Assert.Equal("https://product.example/tools/", article.GetProperty("mentions")[0].GetProperty("url").GetString());
+        Assert.Equal(new[] { "https://product.example/tools/", "https://product.example/downloads/" },
+            article.GetProperty("mentions")[0].GetProperty("url").EnumerateArray().Select(url => url.GetString()));
+        Assert.Equal("https://product.example/single/", article.GetProperty("mentions")[1].GetProperty("url").GetString());
         Assert.StartsWith("2026-11-10T12:30:00", article.GetProperty("dateModified").GetString());
         Assert.Equal("https://product.example/docs/start/", article.GetProperty("relatedLink")[0].GetString());
         Assert.Equal("https://product.example/pricing/#article", OfType(models, "WebPage").GetProperty("mainEntity").GetProperty("@id").GetString());

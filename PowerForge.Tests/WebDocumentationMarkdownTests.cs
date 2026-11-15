@@ -8,6 +8,7 @@ public sealed class WebDocumentationMarkdownTests
     [Theory]
     [InlineData(".md")]
     [InlineData(".markdown")]
+    [InlineData(".agent.md")]
     public void Prepare_ExtractsArticleAndAdvertisesEachCopyAcrossReruns(string extension)
     {
         using var site = new DocumentationSite();
@@ -18,6 +19,7 @@ public sealed class WebDocumentationMarkdownTests
             <body><main><aside>Sidebar navigation</aside><article>
             <header><h1>Guide</h1><p>Guide description</p><a href="https://github.com/example/docs/edit/guide.md">Edit on GitHub</a>
             <section class="docs-facts"><dl><dt>Package</dt><dd>Example.Library</dd></dl></section></header>
+            <p><code>first</code> <code>second</code>; <a href="/first/">First link</a> <a href="/second/">Second link</a>; <strong>bold</strong> <em>emphasis</em>.</p>
             <table><thead><tr><th>Class</th><th>Description</th></tr></thead><tbody><tr><td><code>Document</code></td><td>Root class</td></tr></tbody></table>
             <pre><code class="language-csharp">if (ready)
             {
@@ -34,6 +36,7 @@ public sealed class WebDocumentationMarkdownTests
             var markdown = File.ReadAllText(Path.Combine(directory, "index" + extension)).Replace("\r\n", "\n", StringComparison.Ordinal);
             Assert.StartsWith("# Guide\n\nGuide description", markdown.Replace("\r\n", "\n"));
             Assert.Single(Regex.Matches(markdown, "(?m)^# Guide$"));
+            Assert.Contains("`first` `second`; [First link](/first/) [Second link](/second/); **bold** *emphasis*.", markdown);
             Assert.Contains("**Package**", markdown);
             Assert.Contains("Example.Library", markdown);
             Assert.Contains("| Class | Description |", markdown);
@@ -151,6 +154,27 @@ public sealed class WebDocumentationMarkdownTests
         Assert.Contains("First details", markdown);
         Assert.Contains("## Second example", markdown);
         Assert.Contains("Second details", markdown);
+        Assert.DoesNotContain("Sidebar", markdown);
+    }
+
+    [Fact]
+    public void Prepare_KeepsMainContentBeforeAndAfterASingleNestedArticle()
+    {
+        using var site = new DocumentationSite();
+        File.WriteAllText(Path.Combine(site.Output, "index.html"), """
+            <html><head><title>Guide | Docs</title></head><body><main><aside>Sidebar</aside>
+            <h1>Guide</h1><p>Required setup instructions</p><img src="/setup.png" alt="Setup diagram">
+            <section><article><h2>Example</h2><p>Example details</p></article></section>
+            <p>Required final steps</p></main></body></html>
+            """);
+        WebAgentReadiness.Prepare(site.Options(".md"));
+        var markdown = File.ReadAllText(Path.Combine(site.Output, "index.md"));
+        Assert.StartsWith("# Guide", markdown);
+        Assert.Contains("Required setup instructions", markdown);
+        Assert.Contains("![Setup diagram](/setup.png)", markdown);
+        Assert.Contains("## Example", markdown);
+        Assert.Contains("Example details", markdown);
+        Assert.Contains("Required final steps", markdown);
         Assert.DoesNotContain("Sidebar", markdown);
     }
 

@@ -27,10 +27,10 @@ public static partial class WebAgentReadiness
         foreach (var chrome in contentRoot.QuerySelectorAll("nav,aside,[role='navigation'],button,form,[data-pf-markdown='exclude']").ToArray())
             chrome.Remove();
 
-        // One article identifies a document. Sibling articles are listing entries.
+        // Narrow to an article only when the surrounding main element is a shell.
         var articles = contentRoot.QuerySelectorAll("article").Where(article =>
             article.ParentElement?.Closest("article") is not { } parent || !contentRoot.Contains(parent)).ToArray();
-        if (articles.Length == 1)
+        if (articles.Length == 1 && !HasMarkdownOutsideArticle(contentRoot, articles[0]))
             contentRoot = articles[0];
 
         var title = source?.Title ?? contentRoot.QuerySelector("h1")?.TextContent.Trim() ?? doc.Title?.Trim();
@@ -63,6 +63,15 @@ public static partial class WebAgentReadiness
         if (heading.Success && heading.Groups["title"].Value.Equals(title, StringComparison.OrdinalIgnoreCase))
             return string.Join("\n", lines.Skip(1)).TrimStart('\r', '\n');
         return body;
+    }
+
+    private static bool HasMarkdownOutsideArticle(INode node, IElement article)
+    {
+        if (ReferenceEquals(node, article))
+            return false;
+        if (node is IElement element && element.Contains(article))
+            return node.ChildNodes.Any(child => HasMarkdownOutsideArticle(child, article));
+        return !string.IsNullOrWhiteSpace(RenderMarkdownNode(node));
     }
 
     private static string RenderMarkdownChildren(INode node)
@@ -212,7 +221,7 @@ public static partial class WebAgentReadiness
             "footer" or "form" or "header" or "main" or "nav" or "section" or "table";
 
     private static string NormalizeInlineWhitespace(string text)
-        => string.IsNullOrWhiteSpace(text) ? string.Empty : MarkdownWhitespaceRegex.Replace(text, " ");
+        => MarkdownWhitespaceRegex.Replace(text, " ");
 
     private static string CollapseMarkdownInline(string text)
         => MarkdownWhitespaceRegex.Replace(NormalizeMarkdownDocument(text).Replace(Environment.NewLine, " ", StringComparison.Ordinal), " ").Trim();

@@ -159,6 +159,7 @@ public sealed class WebLlmsPublicationCatalogTests
         Assert.Equal(0, result.InstallCommandCount);
         Assert.DoesNotContain("## Install", File.ReadAllText(result.LlmsTxtPath), StringComparison.Ordinal);
         var warning = Assert.Single(result.Warnings);
+        Assert.Contains("nuget:Future.Package", warning);
         Assert.Contains("source version '1.2.3'", warning);
         Assert.Contains("catalog version '" + catalogVersion + "'", warning);
     }
@@ -332,6 +333,7 @@ public sealed class WebLlmsPublicationCatalogTests
         });
 
         Assert.Equal(0, result.InstallCommandCount);
+        Assert.Contains("not an exact", Assert.Single(result.Warnings));
         Assert.DoesNotContain("## Install", File.ReadAllText(result.LlmsTxtPath), StringComparison.Ordinal);
         Assert.DoesNotContain("## Installation", File.ReadAllText(result.LlmsFullPath), StringComparison.Ordinal);
         Assert.DoesNotContain("\"install\"", File.ReadAllText(result.LlmsJsonPath), StringComparison.Ordinal);
@@ -422,10 +424,34 @@ public sealed class WebLlmsPublicationCatalogTests
         });
 
         Assert.Equal(2, result.PackageCount);
+        Assert.Contains(result.Warnings, warning => warning.Contains("nuget:Shared.Package", StringComparison.Ordinal));
+        Assert.Contains(result.Warnings, warning => warning.Contains("powershellgallery:Shared.Package", StringComparison.Ordinal));
         Assert.Equal(0, result.InstallCommandCount);
         Assert.DoesNotContain("## Install", File.ReadAllText(result.LlmsTxtPath), StringComparison.Ordinal);
         Assert.DoesNotContain("## Installation", File.ReadAllText(result.LlmsFullPath), StringComparison.Ordinal);
         Assert.DoesNotContain("\"install\"", File.ReadAllText(result.LlmsJsonPath), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void VerifiedCatalog_ReportsMissingModuleOwnerEvenWhenVersionsMatch()
+    {
+        using var fixture = new PublicationFixture();
+        var module = fixture.WriteModule("PublishedModule");
+        var catalog = fixture.WriteCatalog("Evotec", [], powerShellGalleryOwner: "Przemyslaw.Klys", powerShellModules: ["PublishedModule"]);
+        var payload = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(catalog))!;
+        payload["powerShellGallery"]!["modules"]![0]!["owners"] = "Other.Publisher";
+        File.WriteAllText(catalog, payload.ToJsonString());
+        var result = WebLlmsGenerator.Generate(new WebLlmsOptions
+        {
+            SiteRoot = fixture.Root, ProjectFile = module,
+            InstallCommandPolicy = WebLlmsInstallCommandPolicy.VerifiedCatalog,
+            PublicationCatalogPath = catalog, PowerShellGalleryOwner = "Przemyslaw.Klys"
+        });
+        Assert.Equal(0, result.InstallCommandCount);
+        var warning = Assert.Single(result.Warnings);
+        Assert.Contains("powershellgallery:PublishedModule", warning);
+        Assert.Contains("does not list expected owner 'Przemyslaw.Klys'", warning);
+        Assert.DoesNotContain("Supply an exact source version", warning);
     }
 
     [Fact]

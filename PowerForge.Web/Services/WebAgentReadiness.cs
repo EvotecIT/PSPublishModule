@@ -1186,9 +1186,10 @@ public static partial class WebAgentReadiness
 
         if (spec.LinkHeaders)
         {
+            var markdownExtension = NormalizeMarkdownExtension(spec.MarkdownArtifacts?.Extension);
             foreach (var markdown in markdownArtifactPaths)
             {
-                var htmlRoute = ToSiteRoute(siteRoot, Path.ChangeExtension(markdown, ".html"));
+                var htmlRoute = ToSiteRoute(siteRoot, markdown[..^markdownExtension.Length] + ".html");
                 var target = new HeaderLinkTarget(ToSiteRoute(siteRoot, markdown), "alternate", "text/markdown");
                 foreach (var route in htmlRoute.EndsWith("/index.html", StringComparison.OrdinalIgnoreCase)
                              ? new[] { htmlRoute[..^10], htmlRoute } : new[] { htmlRoute })

@@ -1706,7 +1706,7 @@ internal static partial class WebPipelineRunner
             ? "LLMS generated (site)"
             : $"LLMS generated ({res.Version}; {res.InstallCommandCount}/{res.PackageCount} installation commands)";
         if (res.Warnings.Length > 0)
-            stepResult.Message += $"; {res.Warnings.Length} warnings: {res.Warnings[0]}";
+            stepResult.Message += $"; {res.Warnings.Length} warnings: {string.Join(" | ", res.Warnings)}";
     }
 
     private static void ExecuteCompatibilityMatrix(JsonElement step, string baseDir, WebPipelineStepResult stepResult)

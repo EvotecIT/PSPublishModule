@@ -38,16 +38,17 @@ public static partial class WebLlmsGenerator
 
         if (packages.Count == 0)
         {
-            if (string.IsNullOrWhiteSpace(packageId) ||
-                !Contains(catalog, packageId, version, projectIsPowerShellModule, options))
+            var failure = string.IsNullOrWhiteSpace(packageId) ? "Package identifier is unavailable." :
+                ReadVerificationFailure(catalog, packageId, version, projectIsPowerShellModule, options);
+            if (failure is not null)
             {
                 legacyInstallCommand = null;
-                warnings.Add(InstallOmissionMessage(catalog, packageId ?? string.Empty, version, projectIsPowerShellModule));
+                warnings.Add(InstallOmissionMessage(catalog, packageId ?? string.Empty, version, projectIsPowerShellModule, failure));
             }
             else
             {
                 legacyInstallCommand = CreateInstallCommand(
-                    packageId,
+                    packageId!,
                     projectIsPowerShellModule,
                     projectIsDotNetTool,
                     version);
@@ -57,10 +58,11 @@ public static partial class WebLlmsGenerator
 
         foreach (var package in packages)
         {
-            if (!Contains(catalog, package.Id, package.Version, package.IsPowerShellModule, options))
+            var failure = ReadVerificationFailure(catalog, package.Id, package.Version, package.IsPowerShellModule, options);
+            if (failure is not null)
             {
                 package.InstallCommand = null;
-                warnings.Add(InstallOmissionMessage(catalog, package.Id, package.Version, package.IsPowerShellModule));
+                warnings.Add(InstallOmissionMessage(catalog, package.Id, package.Version, package.IsPowerShellModule, failure));
             }
             else
                 package.InstallCommand = CreateInstallCommand(
@@ -73,20 +75,21 @@ public static partial class WebLlmsGenerator
         return packages.Count(HasInstallCommand);
     }
 
-    private static string InstallOmissionMessage(WebPublicationCatalog catalog, string id, string? version, bool isModule)
+    private static string InstallOmissionMessage(WebPublicationCatalog catalog, string id, string? version, bool isModule, string failure)
     {
         var observed = catalog.GetPackageVersion(id, isModule);
-        return $"VerifiedCatalog omitted installation for '{id}': source version '{version ?? "unknown"}', " +
-               $"catalog version '{observed ?? "not found"}'. Supply an exact source version matching current owner-scoped publication evidence.";
+        var registry = isModule ? "powershellgallery" : "nuget";
+        return $"VerifiedCatalog omitted installation for '{registry}:{id}': source version '{version ?? "unknown"}', " +
+               $"catalog version '{observed ?? "not found"}'. {failure}";
     }
 
-    private static bool Contains(
+    private static string? ReadVerificationFailure(
         WebPublicationCatalog catalog,
         string packageId,
         string? expectedVersion,
         bool isPowerShellModule,
         WebLlmsOptions options)
-        => catalog.ContainsExactOwnedPackage(
+        => catalog.GetPackageVerificationFailure(
             isPowerShellModule ? "powershellgallery" : "nuget",
             packageId,
             expectedVersion,
