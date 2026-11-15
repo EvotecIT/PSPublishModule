@@ -199,6 +199,7 @@ public static partial class WebSiteBuilder
         {
             var html = themeEngine.Render(themeTemplate, renderContext, partialResolver ?? (_ => null));
             html = RebaseSelectedLanguageRootHtml(spec, html);
+            html = EnsureLayoutPrismAssets(html, item.Meta, spec, rootPath);
             if (spec.MediaViewer?.Enabled == true) html = WebMediaContentRenderer.Render(html);
             ReportSlowRenderTiming(item, pageTimer.ElapsedMilliseconds, assetMs, navMs, listMs, headMs, taxonomyMs, localizationMs);
             return html;

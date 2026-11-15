@@ -34,8 +34,7 @@ public static partial class WebSiteBuilder
         if (TryGetMetaBool(meta, "prism", out var prismEnabled) && !prismEnabled)
             return;
 
-        var prismSpec = spec.Prism;
-        var mode = GetMetaStringOrNull(meta, "prism_mode") ?? prismSpec?.Mode ?? "auto";
+        var mode = ResolvePrismMode(meta, spec);
         if (mode.Equals("off", StringComparison.OrdinalIgnoreCase))
             return;
 
@@ -47,6 +46,49 @@ public static partial class WebSiteBuilder
         if (MetaContains(meta, "extra_css", "prism") || MetaContains(meta, "extra_scripts", "prism"))
             return;
 
+        var (css, scripts) = BuildPrismAssets(meta, spec, rootPath);
+        AppendMetaHtml(meta, "extra_css", css);
+        AppendMetaHtml(meta, "extra_scripts", scripts);
+    }
+
+    /// <summary>
+    /// Adds Prism to a rendered page whose layout or partials emit highlighted code that the content
+    /// itself did not contain, such as code samples rendered from data. Pages that already reference
+    /// the Prism assets, or that opt out, are returned unchanged.
+    /// </summary>
+    private static string EnsureLayoutPrismAssets(string html, Dictionary<string, object?>? meta, SiteSpec spec, string rootPath)
+    {
+        if (string.IsNullOrEmpty(html) || meta is null)
+            return html;
+        if (TryGetMetaBool(meta, "prism", out var prismEnabled) && !prismEnabled)
+            return html;
+        if (ResolvePrismMode(meta, spec).Equals("off", StringComparison.OrdinalIgnoreCase))
+            return html;
+        if (!ContainsMarkdownCode(html))
+            return html;
+
+        var (css, scripts) = BuildPrismAssets(meta, spec, rootPath);
+        var firstScript = scripts.Split(new[] { '\n' }, StringSplitOptions.RemoveEmptyEntries).FirstOrDefault()?.Trim();
+        if (!string.IsNullOrEmpty(firstScript) && html.IndexOf(firstScript, StringComparison.Ordinal) >= 0)
+            return html;
+
+        html = InsertBefore(html, "</head>", css);
+        return InsertBefore(html, "</body>", scripts);
+    }
+
+    private static string InsertBefore(string html, string closingTag, string fragment)
+    {
+        if (string.IsNullOrWhiteSpace(fragment)) return html;
+        var index = html.LastIndexOf(closingTag, StringComparison.OrdinalIgnoreCase);
+        return index < 0 ? html + fragment : html.Insert(index, fragment + Environment.NewLine);
+    }
+
+    private static string ResolvePrismMode(Dictionary<string, object?> meta, SiteSpec spec)
+        => GetMetaStringOrNull(meta, "prism_mode") ?? spec.Prism?.Mode ?? "auto";
+
+    private static (string Css, string Scripts) BuildPrismAssets(Dictionary<string, object?> meta, SiteSpec spec, string rootPath)
+    {
+        var prismSpec = spec.Prism;
         var sourceOverride = GetMetaStringOrNull(meta, "prism_source");
         var source = sourceOverride
             ?? prismSpec?.Source
@@ -73,8 +115,7 @@ public static partial class WebSiteBuilder
             ? BuildPrismScriptBundle(localAssets.core, localAssets.autoloader, localAssets.langPath)
             : BuildPrismCdnScripts(meta, prismSpec);
 
-        AppendMetaHtml(meta, "extra_css", css);
-        AppendMetaHtml(meta, "extra_scripts", scripts);
+        return (css, scripts);
     }
 
     private static (string light, string dark, string core, string autoloader, string langPath) ResolvePrismLocalAssets(

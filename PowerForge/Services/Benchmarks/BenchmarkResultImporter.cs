@@ -277,9 +277,11 @@ public sealed partial class BenchmarkResultImporter
             var benchmarkDotNetSamples = benchmarkDotNetFiles
                 .SelectMany(file => ImportCsvSamples(file, suite, defaultSuite, culture))
                 .ToArray();
-            return BuildImportedResult(
+            var imported = BuildImportedResult(
                 suite ?? benchmarkDotNetSamples.FirstOrDefault()?.Suite ?? defaultSuite,
                 benchmarkDotNetSamples);
+            ApplyBenchmarkDotNetJobSettings(imported, benchmarkDotNetFiles);
+            return imported;
         }
 
         var summaryFiles = Directory.GetFiles(path, "summary.csv", SearchOption.AllDirectories)
@@ -372,7 +374,9 @@ public sealed partial class BenchmarkResultImporter
         }
 
         var samples = ImportCsvSamples(path, suite, defaultSuite, culture);
-        return BuildImportedResult(suite ?? samples.FirstOrDefault()?.Suite ?? defaultSuite, samples);
+        var result = BuildImportedResult(suite ?? samples.FirstOrDefault()?.Suite ?? defaultSuite, samples);
+        ApplyBenchmarkDotNetJobSettings(result, new[] { path });
+        return result;
     }
 
     private static BenchmarkRunResult BuildImportedResult(string suite, IReadOnlyList<BenchmarkSample> samples)
@@ -572,6 +576,8 @@ public sealed partial class BenchmarkResultImporter
             var isBenchmarkDotNetCsv = LooksLikeBenchmarkDotNetCsv(headers);
             var metricHeaders = SampleMetricColumnsFor(headers, isBenchmarkDotNetCsv);
             var metadataColumns = SampleMetadataColumnsFor(map, isBenchmarkDotNetCsv);
+            if (isBenchmarkDotNetCsv)
+                metadataColumns.UnionWith(BenchmarkDotNetStatisticsAfterMean(headers));
             var method = GetCsvScenarioName(map, isBenchmarkDotNetCsv) ?? Path.GetFileNameWithoutExtension(path);
             var mean = ParseDuration(
                 GetCsvSampleDuration(map, isBenchmarkDotNetCsv, usesDecimalComma, culture, out var durationHeader),
@@ -657,6 +663,8 @@ public sealed partial class BenchmarkResultImporter
             var isBenchmarkDotNetCsv = LooksLikeBenchmarkDotNetCsv(headers);
             var metricHeaders = SummaryMetricColumnsFor(headers, isBenchmarkDotNetCsv);
             var metadataColumns = SummaryMetadataColumnsFor(map, isBenchmarkDotNetCsv);
+            if (isBenchmarkDotNetCsv)
+                metadataColumns.UnionWith(BenchmarkDotNetStatisticsAfterMean(headers));
             var failureCount = ParseInt(Get(map, "FailureCount"), culture) ?? 0;
             double? median = ParseDuration(
                 GetWithHeader(map, out var medianHeader, "MedianMs", "Median [ns]", "Median [us]", "Median [ms]", "Median [s]", "Median"),
@@ -1724,10 +1732,25 @@ public sealed partial class BenchmarkResultImporter
         if (excludedColumns.Contains(key))
             return true;
 
+        // A BenchmarkDotNet report row carries job characteristics (Runtime, IterationCount, ...) next to
+        // the benchmark parameters. They describe how the run was configured, not which case it measured.
+        if (isBenchmarkDotNetCsv && BenchmarkDotNetColumns.IsJobCharacteristic(key))
+            return true;
+
         if (metricColumns is null || !metricColumns.Contains(key))
             return false;
 
         return !isBenchmarkDotNetCsv || ParseNumericMetric(value, key, usesDecimalComma, culture).HasValue;
+    }
+
+    /// <summary>
+    /// BenchmarkDotNet writes parameters before the Mean column and statistics after it. A statistic after
+    /// Mean, such as Error with the value "NA", is never a parameter even when it does not parse as a number.
+    /// </summary>
+    private static IEnumerable<string> BenchmarkDotNetStatisticsAfterMean(string[] headers)
+    {
+        var mean = Array.FindIndex(headers, header => string.Equals(RemoveBracketUnit(header), "Mean", StringComparison.OrdinalIgnoreCase));
+        return mean < 0 ? Enumerable.Empty<string>() : headers.Skip(mean + 1).Where(IsBenchmarkDotNetStatisticColumn);
     }
 
     private static bool LooksLikeBenchmarkDotNetCsv(string[] headers)
@@ -1749,13 +1772,13 @@ public sealed partial class BenchmarkResultImporter
     private static bool IsBenchmarkDotNetStatisticColumn(string key)
     {
         var normalized = RemoveBracketUnit(key).Replace(" ", string.Empty);
-        return BenchmarkDotNetStatisticColumns.Contains(normalized);
+        return BenchmarkDotNetColumns.IsStatisticName(normalized);
     }
 
     private static bool IsBenchmarkDotNetMetricColumn(string key)
     {
         var normalized = RemoveBracketUnit(key).Replace(" ", string.Empty);
-        return BenchmarkDotNetStatisticColumns.Contains(normalized);
+        return BenchmarkDotNetColumns.IsStatisticName(normalized);
     }
 
     private static IEnumerable<string> BenchmarkDotNetMetricColumnsFor(string[] headers)
@@ -1777,7 +1800,7 @@ public sealed partial class BenchmarkResultImporter
     private static string? BenchmarkDotNetStatisticMetricName(string key)
     {
         var normalized = RemoveBracketUnit(key).Replace(" ", string.Empty);
-        if (!BenchmarkDotNetStatisticColumns.Contains(normalized))
+        if (!BenchmarkDotNetColumns.IsStatisticName(normalized))
             return null;
         if (string.Equals(normalized, "Median", StringComparison.OrdinalIgnoreCase)) return "MedianMs";
         if (string.Equals(normalized, "Mean", StringComparison.OrdinalIgnoreCase)) return "MeanMs";
@@ -1798,14 +1821,6 @@ public sealed partial class BenchmarkResultImporter
         var index = key.IndexOf('[');
         return index < 0 ? key.Trim() : key.Substring(0, index).Trim();
     }
-
-    private static readonly HashSet<string> BenchmarkDotNetStatisticColumns = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "Mean", "Median", "Min", "Max", "Q1", "Q3",
-        "P0", "P25", "P50", "P75", "P90", "P95", "P99", "P100",
-        "Error", "StdErr", "StdDev", "StandardError", "StandardDeviation", "Ratio", "RatioSD",
-        "Gen0", "Gen1", "Gen2", "Allocated", "CodeSize", "OperationsPerSecond", "Op/s", "Rank"
-    };
 
     private static readonly HashSet<string> BenchmarkDotNetPrimaryDurationColumns = new(StringComparer.OrdinalIgnoreCase)
     {

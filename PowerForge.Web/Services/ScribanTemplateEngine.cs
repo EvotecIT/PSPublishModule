@@ -104,6 +104,10 @@ internal sealed class ScribanTemplateEngine : ITemplateEngine
             // inject the template line's leading spaces after every newline in a fragment.
             AutoIndent = false
         };
+        // Data-heavy layouts (benchmark tables, catalogs) can exceed Scriban's default of 1000 iterations;
+        // sites raise or remove it in site.json rather than restructuring templates around it.
+        if (context.Site.Templates?.LoopLimit is int loopLimit)
+            templateContext.LoopLimit = loopLimit;
         templateContext.PushGlobal(globals);
 
         return parsed.Render(templateContext);

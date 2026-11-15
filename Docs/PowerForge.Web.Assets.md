@@ -64,7 +64,10 @@ Example in `theme.json`:
 ```
 
 ## Prism syntax highlighting
-Prism can be injected automatically when code blocks are detected.
+Prism can be injected automatically when code blocks are detected. Detection
+covers the rendered page, so code that a layout or partial renders from data
+(`<code class="language-powershell">`) loads Prism too; `prism: false` in front
+matter or `Mode: "off"` still opts out.
 Configuration lives in `site.json`:
 ```json
 {
