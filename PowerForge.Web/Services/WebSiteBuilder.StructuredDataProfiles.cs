@@ -32,7 +32,7 @@ public static partial class WebSiteBuilder
     private static string ReadStructuredArticleType(ContentItem item)
     {
         var requested = ReadMetaString(item.Meta, "schema.type");
-        return new[] { "Article", "BlogPosting", "NewsArticle" }
+        return new[] { "Article", "BlogPosting", "NewsArticle", "TechArticle" }
             .FirstOrDefault(type => type.Equals(requested, StringComparison.OrdinalIgnoreCase)) ?? string.Empty;
     }
 
@@ -135,6 +135,9 @@ public static partial class WebSiteBuilder
             if (keywords.Length > 0)
                 articleModel["keywords"] = string.Join(", ", keywords);
         }
+
+        if (typeName == "TechArticle")
+            ApplyTechArticleMetadata(articleModel, item, languageBaseUrl);
 
         return BuildJsonLdScript(articleModel);
     }

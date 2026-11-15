@@ -88,6 +88,13 @@ internal sealed class WebPublicationCatalog
         string packageId,
         string? expectedVersion,
         string? expectedOwner)
+        => GetPackageVerificationFailure(ecosystem, packageId, expectedVersion, expectedOwner) is null;
+
+    internal string? GetPackageVerificationFailure(
+        string ecosystem,
+        string packageId,
+        string? expectedVersion,
+        string? expectedOwner)
     {
         if (!ecosystem.Equals("nuget", StringComparison.OrdinalIgnoreCase) &&
             !ecosystem.Equals("powershellgallery", StringComparison.OrdinalIgnoreCase))
@@ -115,12 +122,24 @@ internal sealed class WebPublicationCatalog
                 $"{_contextLabel} publication catalog contains preserved stale {sourceName} data and cannot verify installation commands.");
         }
 
-        return section.Packages.TryGetValue(packageId, out var package) &&
-               HasExactOwnedRegistryVersion(ecosystem, expectedVersion) &&
-               (isPowerShellGallery
-                   ? VersionsEqual(package.Version, expectedVersion)
-                   : WebPackageVersionIdentity.NuGetVersionsEqual(package.Version, expectedVersion)) &&
-               (!isPowerShellGallery || PackageHasOwner(package.Owners, expectedOwner.Trim()));
+        if (!section.Packages.TryGetValue(packageId, out var package))
+            return "Package is absent from the owner-scoped publication catalog.";
+        if (!HasExactOwnedRegistryVersion(isPowerShellGallery ? "powershellgallery" : "nuget", expectedVersion))
+            return $"Source version is not an exact {sourceName} registry version. Supply a supported exact source version.";
+        var versionsMatch = isPowerShellGallery
+            ? VersionsEqual(package.Version, expectedVersion)
+            : WebPackageVersionIdentity.NuGetVersionsEqual(package.Version, expectedVersion);
+        if (!versionsMatch)
+            return "Source and catalog versions differ. Supply an exact source version matching current owner-scoped publication evidence.";
+        if (isPowerShellGallery && !PackageHasOwner(package.Owners, expectedOwner.Trim()))
+            return $"Catalog entry does not list expected owner '{expectedOwner.Trim()}'. Refresh the module's owner-scoped publication evidence.";
+        return null;
+    }
+
+    internal string? GetPackageVersion(string packageId, bool isPowerShellModule)
+    {
+        var section = isPowerShellModule ? _powerShellGallery : _nuGet;
+        return section?.Packages.TryGetValue(packageId, out var package) == true ? package.Version : null;
     }
 
     public static bool HasExactVersion(string? version)

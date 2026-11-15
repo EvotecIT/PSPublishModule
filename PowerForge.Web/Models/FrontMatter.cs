@@ -86,6 +86,8 @@ public sealed class ContentItem
     public string? Template { get; set; }
     /// <summary>Page kind (page, section, taxonomy, term).</summary>
     public PageKind Kind { get; set; } = PageKind.Page;
+    // Preprocessed public content, without front matter; retained for Markdown output.
+    internal string? MarkdownContent { get; set; }
     /// <summary>Rendered HTML content.</summary>
     public string HtmlContent { get; set; } = string.Empty;
     /// <summary>Rendered table of contents HTML.</summary>

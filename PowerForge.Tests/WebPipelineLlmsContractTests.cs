@@ -8,6 +8,32 @@ namespace PowerForge.Tests;
 public sealed class WebPipelineLlmsContractTests
 {
     [Fact]
+    public void Llms_pipeline_reports_every_omitted_package()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "pf-web-llms-warnings-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(root, "_site"));
+        try
+        {
+            foreach (var id in new[] { "First.Package", "Second.Package" })
+                File.WriteAllText(Path.Combine(root, id + ".csproj"),
+                    $"<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><PackageId>{id}</PackageId><Version>1.2.3</Version></PropertyGroup></Project>");
+            File.WriteAllText(Path.Combine(root, "publication.json"), "{\"nuget\":{\"owner\":\"Evotec\",\"packages\":[]}}");
+            var pipelinePath = Path.Combine(root, "pipeline.json");
+            File.WriteAllText(pipelinePath, JsonSerializer.Serialize(new
+            {
+                steps = new[] { new { task = "llms", siteRoot = "_site", packageFiles = new[] { "First.Package.csproj", "Second.Package.csproj" },
+                    installPolicy = "VerifiedCatalog", publicationCatalog = "publication.json", nugetOwner = "Evotec" } }
+            }));
+            var result = WebPipelineRunner.RunPipeline(pipelinePath, logger: null);
+            Assert.True(result.Success);
+            var message = Assert.Single(result.Steps).Message;
+            Assert.Contains("nuget:First.Package", message);
+            Assert.Contains("nuget:Second.Package", message);
+        }
+        finally { TryDeleteDirectory(root); }
+    }
+
+    [Fact]
     public void Llms_pipeline_site_content_omits_package_installation_metadata()
     {
         var root = Path.Combine(Path.GetTempPath(), "pf-web-llms-pipeline-site-" + Guid.NewGuid().ToString("N"));

@@ -289,6 +289,7 @@ public static partial class WebSiteBuilder
             Template = item.Template,
             Kind = item.Kind,
             HtmlContent = item.HtmlContent,
+            MarkdownContent = item.MarkdownContent,
             TocHtml = item.TocHtml,
             Resources = item.Resources,
             ProjectSlug = item.ProjectSlug,

@@ -6,6 +6,13 @@ namespace PowerForge.Web;
 public static partial class WebAgentReadiness
 {
     private const string MarkdownArtifactStamp = "\n<!-- PowerForge markdown artifact sha256:";
+    private const string MarkdownSourceStamp = "\n<!-- PowerForge markdown source sha256:";
+
+    private static string SourceMarkdownStamp(string html, AgentMarkdownArtifactsSpec spec)
+        // Fingerprint the current readable page, so asset/head optimizers do not
+        // discard source fidelity while a replacement document invalidates it.
+        => MarkdownSourceStamp + Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(ConvertHtmlDocumentToMarkdown(html, spec)))) +
+           "; title=" + spec.IncludeTitle + " -->\n";
 
     // A matching content stamp establishes ownership without a separate mutable manifest.
     // Unmarked downloads and edited sidecars are always treated as authored content.
@@ -18,7 +25,17 @@ public static partial class WebAgentReadiness
         return content[stamp..] == MarkdownArtifactStamp + hash + " -->\n";
     }
 
-    private static MarkdownArtifactWriteResult WriteMarkdownArtifacts(string siteRoot, AgentMarkdownArtifactsSpec spec, List<string> warnings)
+    internal static string[] WriteContentMarkdownArtifacts(string siteRoot, AgentMarkdownArtifactsSpec spec, IReadOnlyDictionary<string, ContentItem> sources)
+    {
+        var warnings = new List<string>();
+        var result = WriteMarkdownArtifacts(siteRoot, spec, warnings, sources);
+        foreach (var warning in warnings)
+            System.Diagnostics.Trace.TraceWarning(warning);
+        return result.WrittenPaths;
+    }
+
+    private static MarkdownArtifactWriteResult WriteMarkdownArtifacts(string siteRoot, AgentMarkdownArtifactsSpec spec, List<string> warnings,
+        IReadOnlyDictionary<string, ContentItem>? sources = null)
     {
         if (!Directory.Exists(siteRoot))
             return new MarkdownArtifactWriteResult(Array.Empty<string>(), Array.Empty<string>(), null);
@@ -40,26 +57,59 @@ public static partial class WebAgentReadiness
         var available = new List<string>();
         foreach (var htmlPath in candidates)
         {
+            var html = File.ReadAllText(htmlPath, Encoding.UTF8);
+            ContentItem? source = null;
+            sources?.TryGetValue(htmlPath, out source);
             var outputPath = Path.ChangeExtension(htmlPath, extension);
-            if (File.Exists(outputPath) && !IsUnmodifiedMarkdownArtifact(File.ReadAllText(outputPath, Encoding.UTF8)))
+            var previous = File.Exists(outputPath) ? File.ReadAllText(outputPath, Encoding.UTF8) : null;
+            if (previous is not null && !IsUnmodifiedMarkdownArtifact(previous))
             {
                 warnings.Add($"Preserved existing Markdown file '{ToSiteRoute(siteRoot, outputPath)}'; it is authored or modified content, not an unchanged generated artifact.");
                 available.Add(outputPath);
+                AdvertiseMarkdownArtifact(siteRoot, htmlPath, outputPath, written);
                 continue;
             }
-            var markdown = ConvertHtmlDocumentToMarkdown(File.ReadAllText(htmlPath, Encoding.UTF8), spec);
+            if (source is null && previous?.Contains(MarkdownSourceStamp, StringComparison.Ordinal) == true &&
+                previous.Contains(SourceMarkdownStamp(html, spec), StringComparison.Ordinal))
+            {
+                available.Add(outputPath);
+                AdvertiseMarkdownArtifact(siteRoot, htmlPath, outputPath, written);
+                continue;
+            }
+            var markdown = ConvertHtmlDocumentToMarkdown(html, spec, source);
             if (string.IsNullOrWhiteSpace(markdown))
                 continue;
 
+            AdvertiseMarkdownArtifact(siteRoot, htmlPath, outputPath, written);
+            if (source?.MarkdownContent is not null)
+                markdown += SourceMarkdownStamp(File.ReadAllText(htmlPath, Encoding.UTF8), spec);
             var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(markdown)));
-            File.WriteAllText(outputPath, markdown + MarkdownArtifactStamp + hash + " -->\n", Encoding.UTF8);
-            written.Add(outputPath);
+            var next = markdown + MarkdownArtifactStamp + hash + " -->\n";
+            if (previous != next)
+            {
+                File.WriteAllText(outputPath, next, Encoding.UTF8);
+                written.Add(outputPath);
+            }
             available.Add(outputPath);
         }
 
         var rootMarkdown = Path.Combine(siteRoot, "index" + extension);
         var rootRoute = File.Exists(rootMarkdown) ? ToSiteRoute(siteRoot, rootMarkdown) : null;
         return new MarkdownArtifactWriteResult(available.ToArray(), written.ToArray(), rootRoute);
+    }
+
+    private static void AdvertiseMarkdownArtifact(string siteRoot, string htmlPath, string markdownPath, List<string> written)
+    {
+        var html = File.ReadAllText(htmlPath, Encoding.UTF8);
+        var route = ToSiteRoute(siteRoot, markdownPath);
+        var doc = HtmlTinkerX.HtmlParser.ParseWithAngleSharp(html);
+        if (doc.QuerySelectorAll("link[rel~='alternate'][type='text/markdown']").Any(link => link.GetAttribute("href") == route))
+            return;
+        var end = html.IndexOf("</head>", StringComparison.OrdinalIgnoreCase);
+        if (end < 0) return;
+        var link = "<link rel=\"alternate\" type=\"text/markdown\" href=\"" + System.Net.WebUtility.HtmlEncode(route) + "\" />\n";
+        File.WriteAllText(htmlPath, html.Insert(end, link), Encoding.UTF8);
+        written.Add(htmlPath);
     }
 
     private static bool ShouldSkipMarkdownArtifactCandidate(string siteRoot, string path)
