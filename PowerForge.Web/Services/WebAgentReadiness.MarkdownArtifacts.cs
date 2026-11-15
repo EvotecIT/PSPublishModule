@@ -8,6 +8,10 @@ public static partial class WebAgentReadiness
     private const string MarkdownArtifactStamp = "\n<!-- PowerForge markdown artifact sha256:";
     private const string MarkdownSourceStamp = "\n<!-- PowerForge markdown source sha256:";
 
+    // Pages and sidecars are served as UTF-8 without a byte order mark; a BOM ahead of
+    // <!doctype> makes strict readers place head metadata in the body.
+    private static readonly UTF8Encoding Utf8WithoutBom = new(encoderShouldEmitUTF8Identifier: false);
+
     private static string SourceMarkdownStamp(string html, AgentMarkdownArtifactsSpec spec)
         // Fingerprint the current readable page, so asset/head optimizers do not
         // discard source fidelity while a replacement document invalidates it.
@@ -87,7 +91,7 @@ public static partial class WebAgentReadiness
             var next = markdown + MarkdownArtifactStamp + hash + " -->\n";
             if (previous != next)
             {
-                File.WriteAllText(outputPath, next, Encoding.UTF8);
+                File.WriteAllText(outputPath, next, Utf8WithoutBom);
                 written.Add(outputPath);
             }
             available.Add(outputPath);
@@ -108,7 +112,7 @@ public static partial class WebAgentReadiness
         var end = html.IndexOf("</head>", StringComparison.OrdinalIgnoreCase);
         if (end < 0) return;
         var link = "<link rel=\"alternate\" type=\"text/markdown\" href=\"" + System.Net.WebUtility.HtmlEncode(route) + "\" />\n";
-        File.WriteAllText(htmlPath, html.Insert(end, link), Encoding.UTF8);
+        File.WriteAllText(htmlPath, html.Insert(end, link), Utf8WithoutBom);
         written.Add(htmlPath);
     }
 
