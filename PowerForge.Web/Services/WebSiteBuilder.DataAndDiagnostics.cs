@@ -22,10 +22,30 @@ public static partial class WebSiteBuilder
             data["theme"] = themeData;
 
         LoadDataFromFolder(basePath, data, spec.Markdown);
+        LoadBenchmarkEvidence(spec, rootPath, data);
         LoadProjectData(plan, projects, data, spec.Markdown);
         NormalizeKnownData(data);
 
         return data;
+    }
+
+    private static void LoadBenchmarkEvidence(SiteSpec spec, string rootPath, Dictionary<string, object?> data)
+    {
+        foreach (var evidence in spec.BenchmarkEvidence ?? Array.Empty<BenchmarkEvidenceDataSpec>())
+        {
+            if (string.IsNullOrWhiteSpace(evidence.Name) || string.IsNullOrWhiteSpace(evidence.Catalog))
+                throw new InvalidOperationException("BenchmarkEvidence entries need both Name and Catalog.");
+
+            var catalogPath = Path.IsPathRooted(evidence.Catalog) ? evidence.Catalog : Path.Combine(rootPath, evidence.Catalog);
+            if (!File.Exists(catalogPath))
+                throw new FileNotFoundException($"Benchmark evidence catalog '{evidence.Name}' was not found.", catalogPath);
+
+            // Serialize through the same camelCase JSON contract as data files, so templates see one shape.
+            var view = new PowerForge.BenchmarkComparisonViewBuilder().Build(catalogPath);
+            using var document = JsonDocument.Parse(PowerForge.BenchmarkJson.Serialize(view));
+            var segments = evidence.Name.Split(new[] { '.', '/' }, StringSplitOptions.RemoveEmptyEntries);
+            AddNestedData(data, segments, ConvertJsonElement(document.RootElement), overwrite: true);
+        }
     }
 
     private static void LoadProjectData(WebSitePlan plan, IReadOnlyList<ProjectSpec> projects, Dictionary<string, object?> data, MarkdownSpec? markdown)

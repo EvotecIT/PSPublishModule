@@ -357,7 +357,16 @@ combined result.
 For JSON exports that encode the job in `DisplayInfo`, the engine identity includes
 the job name and settings. Jobs with different settings stay separate even when
 they share a name. The importer reads the exporter's ampersand-separated parameter
-fields while preserving punctuation and empty values in that format.
+fields while preserving punctuation and empty values in that format. When
+`DisplayInfo` cannot be matched, the parameters come from `FullName`
+(`Bench.Merge(Scale: Easy, Producer: IText)`), but only when they reproduce the
+exported `Parameters` text exactly.
+
+BenchmarkDotNet job characteristics (`Runtime`, `IterationCount`, `Affinity`, ...)
+are never case variables. CSV imports record their shared values once as
+`benchmarkdotnet.job.<Name>` metadata. Statistic columns after `Mean`, such as
+`Error` or `Alloc Ratio`, are metrics or dropped, even when their value is `NA`;
+columns named like statistics before `Mean` stay parameters.
 
 ## Cross-Platform Evidence
 
@@ -632,3 +641,32 @@ Use `-ResultPathPrefix /data/benchmarks/library-comparisons` when consolidating
 portable runner bundles into a website. Result links use that root-relative
 public directory, while content-addressed artifacts are written beside the output
 catalog. This rebases links without changing measured payloads or hashes.
+
+### Comparison views for websites
+
+`BenchmarkComparisonViewBuilder` turns a schema 4 catalog and the results beside it
+into a presentation view: for every declared comparison, every run with each
+contender and case side by side, the relative time to the fastest contender, wins,
+and the first declared library (the subject) against each competitor. Contenders
+are matched to the declared libraries ignoring case and punctuation, so
+`MagickNETEncode` belongs to `Magick.NET`; a suffix shared by two or more
+libraries (`Encode`) becomes the case's operation, and one used by a single
+library (`Parallel` in `OfficeIMOEncodeParallel`) names a variant. Results imported
+before job settings were separated are normalized when the view is built, so
+published evidence does not need to be measured again.
+
+PowerForge.Web exposes the view to templates from `site.json`:
+
+```json
+{
+  "BenchmarkEvidence": [
+    { "Name": "benchmarks", "Catalog": "static/data/benchmarks/library-comparisons/index.json" }
+  ]
+}
+```
+
+Templates then read `data.benchmarks.comparisons`, each with `runs`, `overview`,
+`preferredRunId`, and per run `contenders`, `cases[].cells`, `headToHead` and
+`environment.text`. Times, allocations and ratios come with display text
+(`timeText`, `allocatedText`, `relative.text`), so templates do no arithmetic.
+

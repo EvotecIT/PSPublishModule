@@ -31,6 +31,12 @@ public static class BenchmarkJson
         WriteBytes(path, SerializeCanonicalBytes(value));
     }
 
+    /// <summary>Serializes a payload with the benchmark JSON contract (camelCase, string enums).</summary>
+    /// <typeparam name="T">Payload type.</typeparam>
+    /// <param name="value">Payload value.</param>
+    public static string Serialize<T>(T value)
+        => Encoding.UTF8.GetString(SerializeCanonicalBytes(value));
+
     internal static void WriteBytes(string path, byte[] bytes)
     {
         if (string.IsNullOrWhiteSpace(path)) throw new ArgumentException("Output path is required.", nameof(path));

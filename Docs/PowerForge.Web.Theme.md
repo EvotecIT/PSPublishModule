@@ -345,6 +345,16 @@ Project data is available under:
 - `data.projects.<slug>` (all project data)
 - `data.project` (current project's data when rendering that project)
 
+Benchmark evidence declared in `site.json` `BenchmarkEvidence` is available as
+`data.<Name>`; see "Comparison views for websites" in `PSPublishModule.Benchmarking.md`.
+
+Scriban stops a template after 1000 loop iterations by default. Data-heavy
+layouts can raise or remove the limit in `site.json`:
+
+```json
+{ "Templates": { "LoopLimit": 0 } }
+```
+
 Media shortcodes (built-in):
 - `{{< media ... >}}` generic provider wrapper (`youtube`, `video`, `iframe`, `map`, `x`, `screenshot`, `screenshots`)
 - `{{< map query="Evotec Services, Mikolow" title="Office map" size="xl" >}}` (aliases: `google-map`, `googlemaps`)
