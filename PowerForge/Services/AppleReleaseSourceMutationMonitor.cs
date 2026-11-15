@@ -31,7 +31,8 @@ internal sealed class AppleReleaseSourceMutationMonitor : IDisposable {
         bool includeExactPathDescendants = false,
         Func<FileSystemEventArgs, bool>? ignoredMutation = null,
         Func<string, uint, bool>? unchangedMacOSCloneSource = null,
-        bool useNativeMacOSObserver = false) {
+        bool useNativeMacOSObserver = false,
+        IReadOnlyList<string>? macOSExcludedSubdirectories = null) {
         _scopeDescription = scopeDescription;
         _readerDescription = readerDescription;
         _failureInstruction = failureInstruction;
@@ -57,7 +58,7 @@ internal sealed class AppleReleaseSourceMutationMonitor : IDisposable {
                         OnMutation(this, new AppleMacOSFileChangeObserver.ChangeEventArgs(rootPath, path, flags));
                     }
                     catch (Exception exception) { Interlocked.CompareExchange(ref _watcherError, exception, null); }
-                }, OnNativeObserverError);
+                }, OnNativeObserverError, macOSExcludedSubdirectories);
             _observer = native;
             _stopObserving = native.Stop;
             _drainObserving = native.Drain;

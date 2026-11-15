@@ -21,10 +21,12 @@ internal sealed class AppleMacOSFileChangeObserver : IDisposable
     private readonly Action<Exception> _error;
     private readonly string _root;
     private GCHandle _self;
-    private IntPtr _stream, _queue, _paths, _path;
+    private IntPtr _stream, _queue, _paths, _path, _exclusions;
+    private readonly List<IntPtr> _excludedPaths = new();
     private bool _scheduled, _started, _stopped, _disposed;
 
-    internal AppleMacOSFileChangeObserver(string root, Action<string, uint> changed, Action<Exception> error)
+    internal AppleMacOSFileChangeObserver(string root, Action<string, uint> changed, Action<Exception> error,
+        IReadOnlyList<string>? excludedSubdirectories = null)
     {
         if (!OperatingSystem.IsMacOS()) throw new PlatformNotSupportedException();
         _root = Path.GetFullPath(root);
@@ -42,6 +44,24 @@ internal sealed class AppleMacOSFileChangeObserver : IDisposable
             _stream = FSEventStreamCreate(IntPtr.Zero, Callback, ref context, _paths, ulong.MaxValue, 0,
                 0x10 | 0x02 | 0x04); // FileEvents, NoDefer, WatchRoot.
             if (_stream == IntPtr.Zero) throw new IOException("Unable to create the native file mutation observer.");
+            if (excludedSubdirectories is { Count: > 0 })
+            {
+                if (excludedSubdirectories.Count > 8)
+                    throw new ArgumentException("FSEvents supports at most eight excluded directories.", nameof(excludedSubdirectories));
+                foreach (var directory in excludedSubdirectories)
+                {
+                    var fullPath = Path.GetFullPath(directory);
+                    var relative = Path.GetRelativePath(_root, fullPath);
+                    if (relative == "." || Path.IsPathRooted(relative) || relative == ".." || relative.StartsWith("../", StringComparison.Ordinal))
+                        throw new ArgumentException("Excluded directories must be beneath the observed root.", nameof(excludedSubdirectories));
+                    var nativePath = CFStringCreateWithCString(IntPtr.Zero, fullPath, 0x08000100);
+                    if (nativePath == IntPtr.Zero) throw new IOException("Unable to create an FSEvents exclusion path.");
+                    _excludedPaths.Add(nativePath);
+                }
+                _exclusions = CFArrayCreate(IntPtr.Zero, _excludedPaths.ToArray(), _excludedPaths.Count, IntPtr.Zero);
+                if (_exclusions == IntPtr.Zero || !FSEventStreamSetExclusionPaths(_stream, _exclusions))
+                    throw new IOException("Unable to exclude mutable output from the native root-directory observer.");
+            }
             _queue = DispatchQueueCreate("PowerForge.AppleReleaseSource", IntPtr.Zero);
             if (_queue == IntPtr.Zero) throw new IOException("Unable to create the native file mutation queue.");
             FSEventStreamSetDispatchQueue(_stream, _queue);
@@ -135,6 +155,8 @@ internal sealed class AppleMacOSFileChangeObserver : IDisposable
         if (_queue != IntPtr.Zero) DispatchRelease(_queue);
         if (_paths != IntPtr.Zero) CFRelease(_paths);
         if (_path != IntPtr.Zero) CFRelease(_path);
+        if (_exclusions != IntPtr.Zero) CFRelease(_exclusions);
+        foreach (var path in _excludedPaths) CFRelease(path);
         if (_self.IsAllocated) _self.Free();
     }
 
@@ -161,6 +183,9 @@ internal sealed class AppleMacOSFileChangeObserver : IDisposable
         IntPtr paths, ulong sinceWhen, double latency, uint flags);
     [DllImport(Events)]
     private static extern void FSEventStreamSetDispatchQueue(IntPtr stream, IntPtr queue);
+    [DllImport(Events)]
+    [return: MarshalAs(UnmanagedType.I1)]
+    private static extern bool FSEventStreamSetExclusionPaths(IntPtr stream, IntPtr paths);
     [DllImport(Events)]
     [return: MarshalAs(UnmanagedType.I1)]
     private static extern bool FSEventStreamStart(IntPtr stream);
