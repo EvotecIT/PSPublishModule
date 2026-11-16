@@ -16,6 +16,31 @@ public sealed class ServerRecoveryDurableBackupTests
         Assert.Empty(errors);
     }
 
+    [Theory]
+    [InlineData("/var/lib/sqlite-validation", null, true)]
+    [InlineData("/var/lib/sqlite-validation", 8589934592L, true)]
+    [InlineData(null, 8589934592L, false)]
+    [InlineData("/var/lib/sqlite-validation", -1L, false)]
+    [InlineData("/var/lib/sqlite-validation", 1099511627777L, false)]
+    [InlineData("/root", null, false)]
+    [InlineData("/var/lib/sqlite-validation/", null, false)]
+    [InlineData("/var/lib/powerforge-backup-export/validation", null, false)]
+    [InlineData("/var/lib/example-releases/validation", null, false)]
+    [InlineData("/etc/example.env/validation", null, false)]
+    public void Validation_ShouldBoundTheOptionalSqliteValidationWorkspace(string? root, long? reserveBytes, bool accepted)
+    {
+        var manifest = CreateManifest();
+        manifest.DurableBackup!.SqliteValidationRoot = root;
+        manifest.DurableBackup.SqliteValidationReserveBytes = reserveBytes;
+
+        var errors = WebCliCommandHandlers.ValidateServerRecoveryManifest(manifest);
+
+        if (accepted)
+            Assert.Empty(errors);
+        else
+            Assert.Contains(errors, error => error.Contains("sqliteValidation", StringComparison.Ordinal));
+    }
+
     [Fact]
     public void Validation_ShouldRejectUnsafeOrIncompleteDurableBackupContracts()
     {
@@ -109,6 +134,15 @@ public sealed class ServerRecoveryDurableBackupTests
             """)!;
 
         Assert.True(schema.Evaluate(valid, new EvaluationOptions { OutputFormat = OutputFormat.List }).IsValid);
+        var validationWorkspace = valid.DeepClone();
+        validationWorkspace["durableBackup"]!["sqliteValidationRoot"] = "/var/lib/sqlite-validation";
+        validationWorkspace["durableBackup"]!["sqliteValidationReserveBytes"] = 8589934592L;
+        Assert.True(schema.Evaluate(validationWorkspace, new EvaluationOptions { OutputFormat = OutputFormat.List }).IsValid);
+        validationWorkspace["durableBackup"]!["sqliteValidationReserveBytes"] = -1;
+        Assert.False(schema.Evaluate(validationWorkspace, new EvaluationOptions { OutputFormat = OutputFormat.List }).IsValid);
+        validationWorkspace["durableBackup"]!["sqliteValidationReserveBytes"] = 8589934592L;
+        validationWorkspace["durableBackup"]!.AsObject().Remove("sqliteValidationRoot");
+        Assert.False(schema.Evaluate(validationWorkspace, new EvaluationOptions { OutputFormat = OutputFormat.List }).IsValid);
         var sqlite = valid.DeepClone();
         sqlite["durableBackup"]!["databases"]![0]!["provider"] = "sqlite";
         sqlite["durableBackup"]!["databases"]![0]!["database"] = "/var/lib/changeintel/public.db";

@@ -6,6 +6,8 @@ internal sealed class PowerForgeServerDurableBackup
     public string? ExportGroup { get; set; }
     public string? Recipient { get; set; }
     public int StagingRetentionHours { get; set; }
+    public string? SqliteValidationRoot { get; set; }
+    public long? SqliteValidationReserveBytes { get; set; }
     public PowerForgeServerDurableBackupDatabase[]? Databases { get; set; }
     public PowerForgeServerManagedFile[]? EncryptedFiles { get; set; }
     public PowerForgeServerDurableBackupArtifactStore[]? ArtifactStores { get; set; }
