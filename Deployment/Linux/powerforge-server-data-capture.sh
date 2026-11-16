@@ -178,7 +178,7 @@ cleanup_validation_work() {
         -d "$validation_work" && ! -L "$validation_work" &&
         "$($readlink_bin -f -- "${validation_work%/*}")" == "$validation_root" &&
         "$($stat_bin -c '%u' -- "$validation_work")" == '0' ]]; then
-    rm -rf -- "$validation_work"
+    rm -rf -- "$validation_work" || return 1
     validation_work=''
   else
     log "refusing to clean unsafe SQLite validation path: $validation_work"

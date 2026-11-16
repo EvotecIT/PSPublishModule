@@ -29,7 +29,7 @@ cleanup() {
 trap cleanup EXIT
 chmod 0711 "$fixture_root"
 install -d -m 0700 -o nobody "$fixture_root/data"
-install -d -m 0700 "$fixture_root/artifacts" "$fixture_root/restore" "$fixture_root/tools" "$validation_root"
+install -d -m 0700 "$fixture_root/artifacts" "$fixture_root/restore" "$fixture_root/tools/real" "$validation_root"
 mount -t tmpfs -o size=10m,mode=0700 tmpfs "$validation_root"
 for id in first second; do
   runuser -u nobody -- sqlite3 "$fixture_root/data/$id.db" \
@@ -44,8 +44,11 @@ jq -n --arg root "$fixture_root" --arg recipient "$recipient" \
 
 # Faults replace only native I/O tools in this disposable mount namespace.
 # Real copies still run; the wrappers introduce corruption or an I/O failure.
-cp -- /usr/bin/install "$fixture_root/tools/install-real"
-cp -- /usr/bin/dd "$fixture_root/tools/dd-real"
+# Some distributions dispatch a combined coreutils binary by argv[0].
+# Preserve each real tool's basename when relocating it behind a fault wrapper.
+cp -- /usr/bin/install "$fixture_root/tools/real/install"
+cp -- /usr/bin/dd "$fixture_root/tools/real/dd"
+cp -- /usr/bin/rm "$fixture_root/tools/real/rm"
 export PF_FIXTURE_ROOT="$fixture_root" PF_FAULT_MODE='none'
 cat >"$fixture_root/tools/install" <<'INSTALL'
 #!/usr/bin/env bash
@@ -67,24 +70,34 @@ if [[ "$destination" == /var/tmp/powerforge-server-data-capture.*/databases/firs
     [[ -f "$PF_FIXTURE_ROOT/data/attacker-done" ]]
   fi
 fi
-"$PF_FIXTURE_ROOT/tools/install-real" "$@"
+"$PF_FIXTURE_ROOT/tools/real/install" "$@"
 if [[ "$PF_FAULT_MODE" == 'truncated-transfer' && "$destination" == /var/tmp/powerforge-server-data-capture.*/databases/first.sqlite ]]; then
   truncate -s 4096 "$destination"
 fi
 if [[ "$PF_FAULT_MODE" == 'corrupt-transfer' && "$destination" == /var/tmp/powerforge-server-data-capture.*/databases/first.sqlite ]]; then
-  printf 'corrupt transfer' | "$PF_FIXTURE_ROOT/tools/dd-real" of="$destination" conv=notrunc status=none
+  printf 'corrupt transfer' | "$PF_FIXTURE_ROOT/tools/real/dd" of="$destination" conv=notrunc status=none
 fi
 INSTALL
 cat >"$fixture_root/tools/dd" <<'DD'
 #!/usr/bin/env bash
 set -Eeuo pipefail
-"$PF_FIXTURE_ROOT/tools/dd-real" "$@"
+"$PF_FIXTURE_ROOT/tools/real/dd" "$@"
 destination=''
 for argument in "$@"; do [[ "$argument" == of=* ]] && destination="${argument#of=}"; done
 if [[ "$PF_FAULT_MODE" == 'corrupt-seal' && "$destination" == "$PF_FIXTURE_ROOT"/validation/.sqlite-validation.*/first.sqlite ]]; then
-  printf 'not a SQLite db!' | "$PF_FIXTURE_ROOT/tools/dd-real" of="$destination" conv=notrunc status=none
+  printf 'not a SQLite db!' | "$PF_FIXTURE_ROOT/tools/real/dd" of="$destination" conv=notrunc status=none
 fi
 DD
+cat >"$fixture_root/tools/rm" <<'RM'
+#!/usr/bin/env bash
+set -Eeuo pipefail
+destination="${*: -1}"
+if [[ "$PF_FAULT_MODE" == 'cleanup-failure' && -d "$destination" &&
+      "$destination" == "$PF_FIXTURE_ROOT"/validation/.sqlite-validation.* ]]; then
+  exit 42
+fi
+"$PF_FIXTURE_ROOT/tools/real/rm" "$@"
+RM
 cat >"$fixture_root/retained-writer.py" <<'PY'
 import os,pathlib,sys,time
 source,root=sys.argv[1],pathlib.Path(sys.argv[2])
@@ -98,10 +111,11 @@ with open(source,'r+b',buffering=0) as retained:
     os.fsync(retained.fileno())
     (root/'data/attacker-done').touch()
 PY
-chmod 0755 "$fixture_root/tools/install" "$fixture_root/tools/dd"
+chmod 0755 "$fixture_root/tools/install" "$fixture_root/tools/dd" "$fixture_root/tools/rm"
 chmod 0644 "$fixture_root/retained-writer.py"
 mount --bind "$fixture_root/tools/install" /usr/bin/install
 mount --bind "$fixture_root/tools/dd" /usr/bin/dd
+mount --bind "$fixture_root/tools/rm" /usr/bin/rm
 
 configuration() {
   jq --arg exportRoot "$fixture_root/export-$1" '.durableBackup.exportRoot=$exportRoot' "$fixture_root/base.json" >"$fixture_root/$1.json"
@@ -144,6 +158,21 @@ for spec in 'corrupt-seal:reject_corrupt_seal:SQLite backup integrity check fail
   configuration "$name"
   expect_failure "$name" "$message"
 done
+PF_FAULT_MODE='cleanup-failure'
+configuration reject_workspace_cleanup_failure
+if bash "$capture_script" "$fixture_root/reject_workspace_cleanup_failure.json" >"$fixture_root/reject_workspace_cleanup_failure.log" 2>&1; then
+  echo 'Unexpected successful capture: reject_workspace_cleanup_failure' >&2; exit 1
+fi
+grep -F 'unable to clean SQLite validation plaintext' "$fixture_root/reject_workspace_cleanup_failure.log" >/dev/null
+[[ -z "$(find "$fixture_root/export-reject_workspace_cleanup_failure/snapshots" -name READY -print -quit)" ]]
+mapfile -d '' retained_work < <(find "$validation_root" -mindepth 1 -maxdepth 1 -type d -name '.sqlite-validation.*' -print0)
+[[ ${#retained_work[@]} -eq 1 && ! -L "${retained_work[0]}" &&
+   "$(readlink -f "${retained_work[0]%/*}")" == "$validation_root" ]]
+# Restore the real filesystem boundary before removing this fixture's residue.
+PF_FAULT_MODE='none'
+"$fixture_root/tools/real/rm" -rf -- "${retained_work[0]}"
+assert_no_plaintext
+printf 'PASS reject_workspace_cleanup_failure\n'
 PF_FAULT_MODE='none'
 configuration reject_insufficient_reserve
 jq '.durableBackup.sqliteValidationReserveBytes=10485760' "$fixture_root/reject_insufficient_reserve.json" >"$fixture_root/changed.json"
