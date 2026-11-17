@@ -134,6 +134,8 @@ internal static class ModulePipelineConsoleUi
     private sealed class Reporter(ProgressView view, IReadOnlyDictionary<string, PowerForgeReleaseProgressItem> steps)
         : IModulePipelineProgressReporterV4
     {
+        private readonly ConcurrentDictionary<string, byte> finished = new(StringComparer.OrdinalIgnoreCase);
+
         public void StepStarting(ModulePipelineStep step) => Update(step, ProgressState.Started);
 
         public void StepCompleted(ModulePipelineStep step) => Update(step, ProgressState.Completed);
@@ -145,7 +147,8 @@ internal static class ModulePipelineConsoleUi
 
         public void StepProgress(ModulePipelineStep step, double value, double maximum, string? detail = null)
         {
-            if (step is null || !steps.ContainsKey(step.Key)) return;
+            // A late detail (process output read after exit, a throttled trailing line) must not reopen a finished step.
+            if (step is null || !steps.ContainsKey(step.Key) || finished.ContainsKey(step.Key)) return;
             ProgressLedger.Apply(view, step.Key, ProgressState.Started, detail, Math.Max(0, value), Math.Max(0, maximum));
         }
 
@@ -166,6 +169,8 @@ internal static class ModulePipelineConsoleUi
         private void Update(ModulePipelineStep step, ProgressState state, string? detail = null)
         {
             if (step is null || !steps.ContainsKey(step.Key)) return;
+            if (state == ProgressState.Started) finished.TryRemove(step.Key, out _);
+            else finished[step.Key] = 0;
             ProgressLedger.Apply(view, step.Key, state, detail);
         }
 
