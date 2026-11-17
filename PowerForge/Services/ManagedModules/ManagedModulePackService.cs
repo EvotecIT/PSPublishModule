@@ -54,7 +54,11 @@ public sealed class ManagedModulePackService
             foreach (var file in moduleFiles)
             {
                 var relativePath = NormalizeRelativePath(modulePath, file);
+#if NET6_0_OR_GREATER
+                var entry = archive.CreateEntry(relativePath, CompressionLevel.SmallestSize);
+#else
                 var entry = archive.CreateEntry(relativePath, CompressionLevel.Optimal);
+#endif
                 using var source = File.OpenRead(file);
                 using var destination = entry.Open();
                 source.CopyTo(destination);
