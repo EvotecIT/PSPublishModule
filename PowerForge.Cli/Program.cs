@@ -358,7 +358,11 @@ internal static partial class Program
             {
                 var (cmdLogger, logBuffer) = CreateCommandLogger(outputJson, cli, logger);
                 var service = new ModuleTestSuiteService(new PowerShellRunner(), cmdLogger);
-                var res = RunWithStatus(outputJson, cli, "Running test suite", () => service.Run(spec), value => value.FailedCount == 0 && value.ExitCode == 0);
+                // Pester output is shown as it runs (above the status line); JSON mode keeps stdout for the envelope.
+                Action<string>? showLine = outputJson
+                    ? null
+                    : line => PowerForge.ConsoleUi.ConsoleOutput.WriteOutside(() => PowerForge.ConsoleUi.ConsoleOutput.WriteLine(line));
+                var res = RunWithStatus(outputJson, cli, "Running test suite", () => service.Run(spec, showLine), value => value.FailedCount == 0 && value.ExitCode == 0);
 
                 var success = res.FailedCount == 0 && res.ExitCode == 0;
                 var exitCode = success ? 0 : 1;
@@ -378,10 +382,8 @@ internal static partial class Program
                     return exitCode;
                 }
 
-                if (!string.IsNullOrWhiteSpace(res.StdOut))
-                    Console.WriteLine(res.StdOut);
-
-                if (!string.IsNullOrWhiteSpace(res.StdErr))
+                // A passing run already reported its stderr as warnings while streaming.
+                if (!success && !string.IsNullOrWhiteSpace(res.StdErr))
                     logger.Warn(res.StdErr.Trim());
 
                 logger.Info($"Tests: {res.PassedCount}/{res.TotalCount} passed (failed: {res.FailedCount}, skipped: {res.SkippedCount})");
