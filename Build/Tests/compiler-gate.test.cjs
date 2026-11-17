@@ -38,7 +38,7 @@ try {
 }
 `;
 
-function runGate(runtimeIdentifier, lane, artifactsMode) {
+function runGate(runtimeIdentifier, lane, artifactsMode, oracleMode) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'powerforge-compiler-gate-'));
   try {
     const artifacts = artifactsMode ? path.join(root, 'candidate graph') : '';
@@ -63,7 +63,9 @@ function runGate(runtimeIdentifier, lane, artifactsMode) {
         POWERFORGE_GATE_TEST_RID: runtimeIdentifier || '',
         POWERFORGE_GATE_TEST_LANE: lane || '',
         POWERFORGE_GATE_TEST_ARTIFACTS: artifacts,
-        POWERFORGE_TEST_CLI_ASSEMBLY_PATH: callerCli
+        POWERFORGE_TEST_CLI_ASSEMBLY_PATH: callerCli,
+        POWERFORGE_REQUIRE_PINNED_SEMANTIC_HOSTS: oracleMode ? 'true' : '',
+        POWERFORGE_PWSH76_PATH: oracleMode === 'configured' ? process.execPath : ''
       }
     });
     assert.ifError(result.error); // PowerShell 7.4+ is a prerequisite, as for the gate itself.
@@ -130,6 +132,22 @@ test('compiler gate derives an omitted RID from a supported host before reaching
     assert.ok(result.capabilities.excludedRequirements.some(requirement => requirement.family === 'project Windows launch path'));
     assert.ok(result.capabilities.excludedRequirements.some(requirement => requirement.family === 'native Hybrid executable console presentation'));
     assert.equal(result.filter.split('|').includes('FullyQualifiedName~PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.Build_NativeHybridConsolePreservesFormattingStreamsAndAuthoredErrors'), false);
+  }
+});
+
+test('Windows CI opt-in requires the pinned host and selects both oracle contracts', () => {
+  const missing = runGate(undefined, 'Fast', undefined, 'missing');
+  if (!supportedHost(missing) || missing.hostPlatform !== 'Windows') return;
+  assert.match(missing.message, /POWERFORGE_PWSH76_PATH/);
+  assert.equal(missing.dotnetInvoked, false);
+  assert.equal(missing.evidenceCreated, false);
+
+  const configured = runGate(undefined, 'Fast', undefined, 'configured');
+  assert.equal(configured.message, boundaryMessage);
+  assert.ok(configured.capabilities.requiredFamilies.includes('pinned semantic oracle'));
+  assert.ok(configured.capabilities.requiredFamilies.includes('pinned binary module language mode'));
+  for (const method of ['PowerShellCompilationSemanticOracleTests.', 'Build_BinaryModuleLanguageModeMatchesPinnedPowerShell76AndInstalledWindowsPowerShell', 'Build_HybridNativeScriptRootPreservesOrderedUnboundArguments']) {
+    assert.ok(configured.filter.includes(method), method);
   }
 });
 
