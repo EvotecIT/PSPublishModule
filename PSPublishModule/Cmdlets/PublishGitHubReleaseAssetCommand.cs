@@ -112,15 +112,26 @@ public sealed class PublishGitHubReleaseAssetCommand : PSCmdlet
             };
 
             foreach (var result in workflow.Execute(request, shouldPublish))
+            {
                 WriteObject(ToCmdletResult(result));
+                if (!result.Success)
+                {
+                    WriteError(new ErrorRecord(
+                        new InvalidOperationException(result.ErrorMessage ?? "Publishing the GitHub release asset failed."),
+                        "PublishGitHubReleaseAssetFailed",
+                        ErrorCategory.InvalidResult,
+                        (object?)result.ZipPath ?? result.TagName));
+                }
+            }
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not PipelineStoppedException and not ActionPreferenceStopException)
         {
             WriteObject(new PublishGitHubReleaseAssetResult
             {
                 Success = false,
                 ErrorMessage = ex.Message
             });
+            WriteError(new ErrorRecord(ex, "PublishGitHubReleaseAssetFailed", ErrorCategory.NotSpecified, ProjectPath));
         }
     }
 
