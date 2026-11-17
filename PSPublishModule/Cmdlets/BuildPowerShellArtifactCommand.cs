@@ -1,6 +1,8 @@
 using System;
+using System.Diagnostics;
 using System.Linq;
 using System.Management.Automation;
+using System.Threading.Tasks;
 using PowerForge;
 
 namespace PSPublishModule;
@@ -22,7 +24,7 @@ namespace PSPublishModule;
 /// </example>
 [Cmdlet("Build", "PowerShellArtifact", SupportsShouldProcess = true)]
 [OutputType(typeof(PowerShellCompilationBuildResult))]
-public sealed class BuildPowerShellArtifactCommand : PSCmdlet
+public sealed class BuildPowerShellArtifactCommand : AsyncPSCmdlet
 {
     /// <summary>One PowerShell script/module path, or several loose .ps1 files for a typed library or strict binary module.</summary>
     [Parameter(Mandatory = true, Position = 0)]
@@ -145,7 +147,7 @@ public sealed class BuildPowerShellArtifactCommand : PSCmdlet
     public SwitchParameter AllowUnreviewedDependencies { get; set; }
 
     /// <inheritdoc />
-    protected override void ProcessRecord()
+    protected override async Task ProcessRecordAsync()
     {
         var requestedPaths = Path.Select(path => SessionState.Path.GetUnresolvedProviderPathFromPSPath(path)).ToArray();
         var entryPointPath = string.IsNullOrWhiteSpace(EntryPoint)
@@ -206,18 +208,24 @@ public sealed class BuildPowerShellArtifactCommand : PSCmdlet
             ExpectedDependencyLock = DependencyLock,
             AllowUnreviewedDependencyResolution = AllowUnreviewedDependencies.IsPresent
         };
-        var result = new PowerShellCompilationArtifactBuilder().Build(spec);
+        // Phases, heartbeats and build warnings are host lines; the generated build output streams to Verbose.
+        var logger = new CmdletLogger(this, MyInvocation.BoundParameters.ContainsKey("Verbose"));
+        var stopwatch = Stopwatch.StartNew();
+        var result = await Task.Run(() => new PowerShellCompilationArtifactBuilder().Build(spec, logger, CancelToken), CancelToken);
+        stopwatch.Stop();
         if (!result.Succeeded)
         {
-            var message = result.Error ?? "PowerShell artifact build failed.";
-            if (!string.IsNullOrWhiteSpace(result.BuildOutput))
-                message += Environment.NewLine + result.BuildOutput;
+            var message = PowerShellCompilationBuildReport.FormatFailure(result, logger.IsVerbose
+                ? null
+                : "Run again with -Verbose to see the full build output.");
             ThrowTerminatingError(new ErrorRecord(
                 new InvalidOperationException(message),
                 "PowerShellArtifactBuildFailed",
                 ErrorCategory.InvalidResult,
                 spec));
+            return;
         }
+        PowerShellCompilationBuildReport.WriteSuccess(logger, result, stopwatch.Elapsed);
         WriteObject(result);
     }
 
