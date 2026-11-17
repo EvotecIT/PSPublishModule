@@ -3122,7 +3122,7 @@ public sealed partial class ModulePipelineHostedOperationsTests
     {
         var method = typeof(ModulePipelineRunner).GetMethod("RunTestsAfterMerge", BindingFlags.Instance | BindingFlags.NonPublic);
         Assert.True(method is not null, "RunTestsAfterMerge method signature may have changed.");
-        method!.Invoke(runner, new object?[] { plan, buildResult, configuration });
+        method!.Invoke(runner, new object?[] { plan, buildResult, configuration, null });
     }
 
     private static ModulePipelineSpec CreatePublishToolSpec(

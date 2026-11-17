@@ -32,14 +32,24 @@ public sealed partial class ModuleTestSuiteService
     /// </summary>
     /// <exception cref="ArgumentException">Thrown when required values are missing.</exception>
     /// <exception cref="InvalidOperationException">Thrown when Pester cannot be executed.</exception>
-    public ModuleTestSuiteResult Run(ModuleTestSuiteSpec spec)
+    public ModuleTestSuiteResult Run(ModuleTestSuiteSpec spec) => Run(spec, outputLineReceived: null);
+
+    /// <summary>
+    /// Executes the test suite according to <paramref name="spec"/> and passes each Pester output line to
+    /// <paramref name="outputLineReceived"/> while the tests run.
+    /// </summary>
+    /// <param name="spec">Test suite settings.</param>
+    /// <param name="outputLineReceived">Receives Pester output lines as they are written; internal protocol lines are not passed on. Called from a reader thread.</param>
+    /// <exception cref="ArgumentException">Thrown when required values are missing.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when Pester cannot be executed.</exception>
+    public ModuleTestSuiteResult Run(ModuleTestSuiteSpec spec, Action<string>? outputLineReceived)
     {
         if (spec is null) throw new ArgumentNullException(nameof(spec));
         var summaryPath = ResolveOutputPath(spec.ProjectPath, spec.SummaryPath);
         ValidateReportPaths(spec);
         try
         {
-            var result = RunCore(spec);
+            var result = RunCore(spec, outputLineReceived);
             result.SummaryPath = summaryPath;
             WriteSummary(summaryPath, result, null);
             return result;
@@ -51,7 +61,7 @@ public sealed partial class ModuleTestSuiteService
         }
     }
 
-    private ModuleTestSuiteResult RunCore(ModuleTestSuiteSpec spec)
+    private ModuleTestSuiteResult RunCore(ModuleTestSuiteSpec spec, Action<string>? outputLineReceived)
     {
         if (spec is null) throw new ArgumentNullException(nameof(spec));
         if (string.IsNullOrWhiteSpace(spec.ProjectPath))
@@ -111,6 +121,8 @@ public sealed partial class ModuleTestSuiteService
         };
 
         PowerShellRunResult runResult;
+        var operation = $"Pester tests for {moduleName}";
+        var heartbeat = OperationHeartbeat.Start(_logger, operation);
         try
         {
             if (!spec.SkipDependencies)
@@ -125,14 +137,19 @@ public sealed partial class ModuleTestSuiteService
             runResult = _runner.Run(new PowerShellRunRequest(scriptPath, args, timeout,
                 preferPwsh: spec.PreferPwsh,
                 hostRequirement: spec.WindowsPowerShell ? PowerShellHostRequirement.WindowsPowerShell : PowerShellHostRequirement.Any,
-                workingDirectory: projectRoot));
+                workingDirectory: projectRoot).WithOutputLineReceived(ForwardPesterOutput(outputLineReceived)));
         }
         finally
         {
+            heartbeat.Dispose();
             try { File.Delete(scriptPath); } catch { /* ignore */ }
             try { if (Directory.Exists(toolRoot)) Directory.Delete(toolRoot, recursive: true); }
             catch (Exception ex) { _logger.Warn($"Could not remove test-tool directory '{toolRoot}': {ex.Message}"); }
         }
+
+        // Errors written by a passing run (module import, test setup) would otherwise be lost with the captured output.
+        if (runResult.ExitCode == 0)
+            ChildProcessOutput.WarnAboutDiagnostics(_logger, operation, stdOut: null, runResult.StdErr);
 
         var markers = ParseMarkers(runResult.StdOut);
         var sanitizedStdOut = StripMarkerLines(runResult.StdOut);
@@ -525,6 +542,16 @@ public sealed partial class ModuleTestSuiteService
         if (string.IsNullOrWhiteSpace(b64)) return string.Empty;
         try { return Encoding.UTF8.GetString(Convert.FromBase64String(b64)); }
         catch { return string.Empty; }
+    }
+
+    private static Action<string>? ForwardPesterOutput(Action<string>? outputLineReceived)
+    {
+        if (outputLineReceived is null) return null;
+        return line =>
+        {
+            if (line is null || line.StartsWith("PFTEST::", StringComparison.Ordinal)) return;
+            try { outputLineReceived(line); } catch { /* display is best effort; the output is still captured */ }
+        };
     }
 
     private static string BuildTestSuiteScript()

@@ -14,6 +14,11 @@ public sealed class PssaFormatter : IFormatter
     private PssaFormatterSession? _session;
 
     /// <summary>
+    /// Receives (finished files, total files, file name) as the formatter reports each file. Called from a reader thread.
+    /// </summary>
+    internal Action<int, int, string>? Progress { get; set; }
+
+    /// <summary>
     /// Creates a new formatter that uses the provided runner and logger.
     /// </summary>
     public PssaFormatter(IPowerShellRunner runner, ILogger logger)
@@ -83,12 +88,14 @@ public sealed class PssaFormatter : IFormatter
             })), new UTF8Encoding(false));
             args = new List<string> { "-BatchPath", batchPath };
         }
+        var outputLineReceived = CreateProgressReader(Progress, list.Length);
         PowerShellRunResult result;
         try
         {
             result = _session is not null && batchPath is not null
-                ? _session.Run(script, batchPath, timeout ?? TimeSpan.FromMinutes(2))
-                : _runner.Run(new PowerShellRunRequest(scriptPath, args, timeout ?? TimeSpan.FromMinutes(2)));
+                ? _session.Run(script, batchPath, timeout ?? TimeSpan.FromMinutes(2), outputLineReceived)
+                : _runner.Run(new PowerShellRunRequest(scriptPath, args, timeout ?? TimeSpan.FromMinutes(2))
+                    .WithOutputLineReceived(outputLineReceived));
         }
         finally
         {
@@ -113,6 +120,7 @@ public sealed class PssaFormatter : IFormatter
             _logger.Warn("PSSA: PSScriptAnalyzer not found; skipping formatting.");
             return list.Select(p => new FormatterResult(p, false, "Skipped: PSScriptAnalyzer not found")).ToArray();
         }
+        LogFormatterFailure(result);
 
         // Parse lines: FORMATTED::<path> | UNCHANGED::<path> | ERROR::<path>::<message>
         var lines = (result.StdOut ?? string.Empty)
@@ -168,6 +176,45 @@ public sealed class PssaFormatter : IFormatter
         }
 
         return outputs;
+    }
+
+    // Files without a result are reported as skipped; the formatter error output says why.
+    private void LogFormatterFailure(PowerShellRunResult result)
+    {
+        if (result.ExitCode == 0) return;
+        var cause = ChildProcessOutput.Tail(result.StdErr);
+        if (result.ExitCode == 124)
+        {
+            if (cause is not null) _logger.Warn($"PSSA: Formatter errors before the timeout:{Environment.NewLine}{cause}");
+            return;
+        }
+
+        var message = $"PSSA: Formatter failed (exit {result.ExitCode}); files without a result are skipped.";
+        _logger.Warn(cause is null ? message : $"{message}{Environment.NewLine}{cause}");
+    }
+
+    private static Action<string>? CreateProgressReader(Action<int, int, string>? progress, int total)
+    {
+        if (progress is null) return null;
+        var finished = 0;
+        return line =>
+        {
+            var path = ReadResultPath(line);
+            if (path is null) return;
+            var count = Interlocked.Increment(ref finished);
+            try { progress(Math.Min(count, total), total, Path.GetFileName(path)); } catch { /* progress is best effort */ }
+        };
+    }
+
+    private static string? ReadResultPath(string? line)
+    {
+        if (string.IsNullOrEmpty(line)) return null;
+        if (line!.StartsWith("FORMATTED::", StringComparison.Ordinal)) return line.Substring("FORMATTED::".Length);
+        if (line.StartsWith("UNCHANGED::", StringComparison.Ordinal)) return line.Substring("UNCHANGED::".Length);
+        if (!line.StartsWith("ERROR::", StringComparison.Ordinal)) return null;
+        var rest = line.Substring("ERROR::".Length);
+        var separator = rest.IndexOf("::", StringComparison.Ordinal);
+        return separator > 0 ? rest.Substring(0, separator) : null;
     }
 
     /// <summary>

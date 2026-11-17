@@ -67,7 +67,7 @@ public sealed partial class ModulePipelineRunner
             var binaryCommands = mergeInfo.HasLib
                 ? buildResult.Exports.Cmdlets.Concat(buildResult.Exports.Aliases).ToArray()
                 : Array.Empty<string>();
-            missingReport = AnalyzeMissingFunctions(analysisPath, analysisCode, plan, binaryCommands);
+            missingReport = AnalyzeMissingFunctionsWithHeartbeat(analysisPath, analysisCode, plan, binaryCommands);
             LogMergeSummary(plan, mergeInfo, missingReport, dependentRequiredModules);
             if (missingReport is not null)
                 ValidateMissingFunctions(missingReport, plan, dependentRequiredModules);
@@ -247,122 +247,6 @@ public sealed partial class ModulePipelineRunner
 
         var payloadPath = Path.Combine(stagingPath, "Lib", folderName);
         return ModuleBinaryFileLocator.HasAny(payloadPath, SearchOption.AllDirectories);
-    }
-
-    private void RunTestsAfterMerge(
-        ModulePipelinePlan plan,
-        ModuleBuildResult buildResult,
-        TestConfiguration testConfiguration)
-    {
-        if (plan is null || buildResult is null || testConfiguration is null) return;
-
-        var testsPath = testConfiguration.TestsPath ?? string.Empty;
-        if (string.IsNullOrWhiteSpace(testsPath))
-            throw new InvalidOperationException("TestsAfterMerge is enabled but TestsPath is empty.");
-
-        if (!Path.IsPathRooted(testsPath))
-            testsPath = Path.GetFullPath(Path.Combine(plan.ProjectRoot, testsPath));
-
-        var importCfg = plan.ImportModules;
-        var importSelf = importCfg?.Self == true;
-        var importRequired = importCfg?.RequiredModules == true;
-        var importVerbose = importCfg?.Verbose == true;
-
-        var importModules = importRequired
-            ? plan.RequiredModules
-                .Where(m => !string.IsNullOrWhiteSpace(m.ModuleName))
-                .Select(m => new ModuleDependency(
-                    name: m.ModuleName.Trim(),
-                    requiredVersion: m.RequiredVersion,
-                    minimumVersion: m.ModuleVersion,
-                    maximumVersion: m.MaximumVersion))
-                .ToArray()
-            : Array.Empty<ModuleDependency>();
-
-        var spec = new ModuleTestSuiteSpec
-        {
-            ProjectPath = buildResult.StagingPath,
-            TestPath = testsPath,
-            Force = testConfiguration.Force,
-            SkipDependencies = true,
-            SkipImport = !importSelf,
-            ImportModules = importModules,
-            ImportModulesVerbose = importVerbose
-        };
-
-        var result = _hostedOperations.RunModuleTestSuite(spec);
-        if (result.FailedCount > 0)
-        {
-            var failureMessage = BuildTestsAfterMergeFailureMessage(result);
-            if (testConfiguration.Force)
-            {
-                _logger.Warn($"{failureMessage}{Environment.NewLine}Force was set; continuing.");
-            }
-            else
-            {
-                throw new InvalidOperationException(failureMessage);
-            }
-        }
-    }
-
-    private static string BuildTestsAfterMergeFailureMessage(ModuleTestSuiteResult result)
-    {
-        var message = $"TestsAfterMerge failed ({result.FailedCount} failed).";
-        if (result.FailureAnalysis is { FailedTests.Length: > 0 } analysis)
-        {
-            var filteredFailures = analysis.FailedTests
-                .Where(static failure => !string.IsNullOrWhiteSpace(failure.Name) || !string.IsNullOrWhiteSpace(failure.ErrorMessage))
-                .ToArray();
-
-            var lines = filteredFailures
-                .Take(5)
-                .Select(FormatTestsAfterMergeFailureLine)
-                .ToArray();
-
-            if (lines.Length > 0)
-            {
-                var omittedCount = filteredFailures.Length - lines.Length;
-                var details = string.Join(Environment.NewLine, lines);
-                if (omittedCount > 0)
-                    details = $"{details}{Environment.NewLine}Additional failed tests omitted: {omittedCount}.";
-
-                return $"{message}{Environment.NewLine}Failed tests:{Environment.NewLine}{details}";
-            }
-        }
-
-        var stdErrLine = GetFirstMeaningfulLine(result.StdErr);
-        if (!string.IsNullOrWhiteSpace(stdErrLine))
-            return $"{message}{Environment.NewLine}stderr: {stdErrLine}";
-
-        var stdOutLine = GetFirstMeaningfulLine(result.StdOut);
-        if (!string.IsNullOrWhiteSpace(stdOutLine))
-            return $"{message}{Environment.NewLine}stdout: {stdOutLine}";
-
-        return message;
-    }
-
-    private static string FormatTestsAfterMergeFailureLine(ModuleTestFailureInfo failure)
-    {
-        var testName = string.IsNullOrWhiteSpace(failure.Name) ? "<unnamed test>" : failure.Name.Trim();
-        var errorLine = GetFirstMeaningfulLine(failure.ErrorMessage);
-        return string.IsNullOrWhiteSpace(errorLine)
-            ? $"- {testName}"
-            : $"- {testName}: {errorLine}";
-    }
-
-    private static string? GetFirstMeaningfulLine(string? text)
-    {
-        if (text is null || text.Length == 0 || string.IsNullOrWhiteSpace(text))
-            return null;
-
-        foreach (var line in text.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries))
-        {
-            var trimmed = line.Trim();
-            if (trimmed.Length > 0)
-                return trimmed;
-        }
-
-        return null;
     }
 
     private void TryRegenerateBootstrapperFromManifest(

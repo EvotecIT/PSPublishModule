@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Management.Automation;
 using PowerForge;
+using PowerForge.ConsoleUi;
 
 namespace PSPublishModule;
 
@@ -66,7 +67,7 @@ public enum ModuleTestSuiteFailureSummaryFormat
 /// <para>Saves pinned Pester and runs tests in Windows PowerShell 5.1, retaining reports and a failure summary.</para>
 /// </example>
 [Cmdlet(VerbsLifecycle.Invoke, "ModuleTestSuite")]
-public sealed class InvokeModuleTestSuiteCommand : PSCmdlet
+public sealed partial class InvokeModuleTestSuiteCommand : PSCmdlet
 {
     /// <summary>Path to the PowerShell module project directory.</summary>
     [Parameter]
@@ -158,93 +159,80 @@ public sealed class InvokeModuleTestSuiteCommand : PSCmdlet
     {
         try
         {
-            var display = new ModuleTestSuiteDisplayService();
-            var preparation = new ModuleTestSuitePreparationService().Prepare(new ModuleTestSuitePreparationRequest
-            {
-                CurrentPath = SessionState?.Path?.CurrentFileSystemLocation?.Path ?? Environment.CurrentDirectory,
-                ProjectPath = ProjectPath,
-                AdditionalModules = AdditionalModules,
-                SkipModules = SkipModules,
-                TestPath = TestPath,
-                PesterVersion = PesterVersion,
-                ResultsPath = ResultsPath,
-                JUnitResultsPath = JUnitResultsPath,
-                SummaryPath = SummaryPath,
-                WindowsPowerShell = WindowsPowerShell.IsPresent,
-                FailIfNoTests = FailIfNoTests.IsPresent,
-                OutputFormat = MapOutputFormat(OutputFormat),
-                TimeoutSeconds = TimeoutSeconds,
-                EnableCodeCoverage = EnableCodeCoverage.IsPresent,
-                Force = Force.IsPresent,
-                ExitOnFailure = ExitOnFailure.IsPresent,
-                SkipDependencies = SkipDependencies.IsPresent,
-                SkipImport = SkipImport.IsPresent,
-                PassThru = PassThru.IsPresent,
-                CICD = CICD.IsPresent
-            });
-            var projectRoot = preparation.ProjectRoot;
-
-            var psVersionTable = SessionState?.PSVariable?.GetValue("PSVersionTable") as Hashtable;
-            var psVersion = psVersionTable?["PSVersion"]?.ToString() ?? string.Empty;
-            var psEdition = psVersionTable?["PSEdition"]?.ToString() ?? string.Empty;
-            WriteDisplayLines(display.CreateHeader(projectRoot, psVersion, psEdition, CICD.IsPresent));
-
-            WriteDisplayLines(display.CreateModuleInfoHeader());
-            var moduleInfo = new ModuleInformationReader().Read(projectRoot);
-            WriteDisplayLines(display.CreateModuleInfoDetails(moduleInfo));
-
-            WriteDisplayLines(display.CreateExecutionHeader());
-            var logger = new CmdletLogger(this, MyInvocation.BoundParameters.ContainsKey("Verbose"), warningsAsVerbose: false);
-            var workflow = new ModuleTestSuiteWorkflowService(logger).Execute(preparation);
-            var result = workflow.Result;
-
-            // Emit captured Pester output if requested.
-            if (preparation.Spec.OutputFormat != PowerForge.ModuleTestSuiteOutputFormat.Minimal && !string.IsNullOrWhiteSpace(result.StdOut))
-            {
-                HostWriteLineSafe(result.StdOut);
-                HostWriteLineSafe(string.Empty);
-            }
-
-            WriteDisplayLines(display.CreateDependencySummary(result.RequiredModules, AdditionalModules, SkipModules));
-
-            if (!SkipDependencies.IsPresent)
-                WriteDisplayLines(display.CreateDependencyInstallResults(result.DependencyResults));
-
-            WriteDisplayLines(display.CreateCompletionSummary(result));
-
-            if (!workflow.Success)
-            {
-                if (ShowFailureSummary.IsPresent || CICD.IsPresent)
-                {
-                    WriteDisplayLines(display.CreateFailureSummary(
-                        result.FailureAnalysis,
-                        detailed: FailureSummaryFormat == ModuleTestSuiteFailureSummaryFormat.Detailed));
-                    HostWriteLineSafe(string.Empty);
-                }
-
-                foreach (var line in workflow.CiOutputLines)
-                    HostWriteLineSafe(line);
-
-                if (preparation.ExitOnFailure)
-                    Environment.ExitCode = 1;
-
-                if (preparation.PassThru)
-                    WriteObject(result, enumerateCollection: false);
-
-                throw new InvalidOperationException(workflow.FailureMessage);
-            }
-
-            foreach (var line in workflow.CiOutputLines)
-                HostWriteLineSafe(line);
-
-            if (preparation.PassThru)
-                WriteObject(result, enumerateCollection: false);
+            using (CmdletConsole.Use(this))
+                RunSuite();
         }
         catch (Exception ex)
         {
             WriteError(new ErrorRecord(ex, "InvokeModuleTestSuiteFailed", ErrorCategory.NotSpecified, null));
             throw;
         }
+    }
+
+    private void RunSuite()
+    {
+        var preparation = new ModuleTestSuitePreparationService().Prepare(new ModuleTestSuitePreparationRequest
+        {
+            CurrentPath = SessionState?.Path?.CurrentFileSystemLocation?.Path ?? Environment.CurrentDirectory,
+            ProjectPath = ProjectPath,
+            AdditionalModules = AdditionalModules,
+            SkipModules = SkipModules,
+            TestPath = TestPath,
+            PesterVersion = PesterVersion,
+            ResultsPath = ResultsPath,
+            JUnitResultsPath = JUnitResultsPath,
+            SummaryPath = SummaryPath,
+            WindowsPowerShell = WindowsPowerShell.IsPresent,
+            FailIfNoTests = FailIfNoTests.IsPresent,
+            OutputFormat = MapOutputFormat(OutputFormat),
+            TimeoutSeconds = TimeoutSeconds,
+            EnableCodeCoverage = EnableCodeCoverage.IsPresent,
+            Force = Force.IsPresent,
+            ExitOnFailure = ExitOnFailure.IsPresent,
+            SkipDependencies = SkipDependencies.IsPresent,
+            SkipImport = SkipImport.IsPresent,
+            PassThru = PassThru.IsPresent,
+            CICD = CICD.IsPresent
+        });
+        var projectRoot = preparation.ProjectRoot;
+
+        var psVersionTable = SessionState?.PSVariable?.GetValue("PSVersionTable") as Hashtable;
+        var psVersion = psVersionTable?["PSVersion"]?.ToString() ?? string.Empty;
+        var psEdition = psVersionTable?["PSEdition"]?.ToString() ?? string.Empty;
+        var moduleInfo = new ModuleInformationReader().Read(projectRoot);
+        WriteHeader(projectRoot, psVersion, psEdition, moduleInfo);
+
+        // Pester output is shown while the tests run; Minimal keeps the console to the summary.
+        Action<string>? pesterOutput = preparation.Spec.OutputFormat == PowerForge.ModuleTestSuiteOutputFormat.Minimal
+            ? null
+            : line => ConsoleOutput.WriteLine(line);
+        var logger = new CmdletLogger(this, MyInvocation.BoundParameters.ContainsKey("Verbose"), warningsAsVerbose: false);
+        var workflow = new ModuleTestSuiteWorkflowService(
+                logger,
+                runSuite: spec => new ModuleTestSuiteService(new PowerShellRunner(), logger).Run(spec, pesterOutput))
+            .Execute(preparation);
+        var result = workflow.Result;
+
+        WriteSummary(result, workflow.Success, includeDependencies: !SkipDependencies.IsPresent);
+
+        if (!workflow.Success && (ShowFailureSummary.IsPresent || CICD.IsPresent))
+        {
+            WriteFailureSummary(new ModuleTestSuiteDisplayService().CreateFailureSummary(
+                result.FailureAnalysis,
+                detailed: FailureSummaryFormat == ModuleTestSuiteFailureSummaryFormat.Detailed));
+        }
+
+        foreach (var line in workflow.CiOutputLines)
+            ConsoleOutput.WriteLine(line);
+
+        if (!workflow.Success && preparation.ExitOnFailure)
+            Environment.ExitCode = 1;
+
+        if (preparation.PassThru)
+            WriteObject(result, enumerateCollection: false);
+
+        if (!workflow.Success)
+            throw new InvalidOperationException(workflow.FailureMessage);
     }
 
     private static PowerForge.ModuleTestSuiteOutputFormat MapOutputFormat(ModuleTestSuiteOutputFormat format)
@@ -256,31 +244,5 @@ public sealed class InvokeModuleTestSuiteCommand : PSCmdlet
             ModuleTestSuiteOutputFormat.Minimal => PowerForge.ModuleTestSuiteOutputFormat.Minimal,
             _ => PowerForge.ModuleTestSuiteOutputFormat.Detailed
         };
-    }
-
-    private void WriteDisplayLines(IReadOnlyList<ModuleTestSuiteDisplayLine> lines)
-    {
-        foreach (var line in lines)
-            HostWriteLineSafe(line.Text, line.Color);
-    }
-
-    private void HostWriteLineSafe(string text, ConsoleColor? fg = null)
-    {
-        try
-        {
-            if (fg.HasValue)
-            {
-                var bg = Host?.UI?.RawUI?.BackgroundColor ?? ConsoleColor.Black;
-                Host?.UI?.WriteLine(fg.Value, bg, text);
-            }
-            else
-            {
-                Host?.UI?.WriteLine(text);
-            }
-        }
-        catch
-        {
-            // ignore host limitations
-        }
     }
 }
