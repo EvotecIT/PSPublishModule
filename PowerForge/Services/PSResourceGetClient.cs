@@ -352,16 +352,12 @@ public sealed partial class PSResourceGetClient
 
         var result = new ModuleRepositoryRetryPolicy(_logger).RunPowerShell(
             $"Find-PSResource {string.Join(", ", names)}",
-            () => RunScript(script, args, timeout ?? TimeSpan.FromMinutes(2)));
+            () => RunScript(script, args, timeout ?? TimeSpan.FromMinutes(2), heartbeatLabel: $"Find-PSResource {string.Join(", ", names)}"));
         var items = ParseFindOutput(result.StdOut);
 
         if (result.ExitCode != 0)
         {
-            var message = TryExtractError(result.StdOut) ?? result.StdErr;
-            var full = $"Find-PSResource failed (exit {result.ExitCode}). {message}".Trim();
-            if (_logger.IsVerbose) _logger.Verbose(full);
-            if (_logger.IsVerbose && !string.IsNullOrWhiteSpace(result.StdOut)) _logger.Verbose(result.StdOut.Trim());
-            if (_logger.IsVerbose && !string.IsNullOrWhiteSpace(result.StdErr)) _logger.Verbose(result.StdErr.Trim());
+            var full = RepositoryDiagnosticService.DescribeChildFailure("Find-PSResource", result, TryExtractError(result.StdOut));
             if (result.ExitCode == 3)
                 throw new PowerShellToolNotAvailableException("PSResourceGet", full);
             throw new InvalidOperationException(full);
@@ -400,10 +396,12 @@ public sealed partial class PSResourceGetClient
             options.Credential?.Secret ?? string.Empty
         };
 
-        var result = RunScript(script, args, timeout ?? TimeSpan.FromMinutes(10), cancellationToken);
+        var result = RunScript(script, args, timeout ?? TimeSpan.FromMinutes(10), cancellationToken,
+            heartbeatLabel: $"Publish-PSResource {RepositoryDiagnosticService.DescribePackage(options.Path)} to {(string.IsNullOrWhiteSpace(options.Repository) ? options.DestinationPath ?? "PSGallery" : options.Repository)}",
+            redactor: RepositoryDiagnosticService.CreateRedactor(options.ApiKey, options.Credential));
         if (result.ExitCode != 0)
         {
-            var message = TryExtractError(result.StdOut) ?? result.StdErr;
+            var message = RepositoryDiagnosticService.DescribeChildFailure("Publish-PSResource", result, TryExtractError(result.StdOut));
             var failure = RepositoryDiagnosticService.PublishFailure(PublishTool.PSResourceGet, result.ExitCode,
                 message, result.StdOut, options.Repository, options.Path, options.ApiKey, options.Credential, options.ApiKeySource);
             var full = failure.Message;
@@ -446,16 +444,12 @@ public sealed partial class PSResourceGetClient
 
         var result = new ModuleRepositoryRetryPolicy(_logger).RunPowerShell(
             $"Install-PSResource {options.Name} {options.Version}",
-            () => RunScript(script, args, timeout ?? TimeSpan.FromMinutes(10)));
+            () => RunScript(script, args, timeout ?? TimeSpan.FromMinutes(10),
+                heartbeatLabel: $"Install-PSResource {options.Name} {options.Version}".TrimEnd(),
+                redactor: RepositoryDiagnosticService.CreateRedactor(apiKey: null, options.Credential)));
         if (result.ExitCode != 0)
         {
-            var message = TryExtractError(result.StdOut) ?? result.StdErr;
-            var full = $"Install-PSResource failed (exit {result.ExitCode}). {message}".Trim();
-            if (_logger.IsVerbose) _logger.Verbose(full);
-            if (_logger.IsVerbose && !string.IsNullOrWhiteSpace(result.StdOut))
-                _logger.Verbose(result.StdOut.Trim());
-            if (_logger.IsVerbose && !string.IsNullOrWhiteSpace(result.StdErr))
-                _logger.Verbose(result.StdErr.Trim());
+            var full = RepositoryDiagnosticService.DescribeChildFailure("Install-PSResource", result, TryExtractError(result.StdOut));
             if (result.ExitCode == 3)
                 throw new PowerShellToolNotAvailableException("PSResourceGet", full);
             throw new InvalidOperationException(full);
@@ -493,18 +487,14 @@ public sealed partial class PSResourceGetClient
 
         var result = new ModuleRepositoryRetryPolicy(_logger).RunPowerShell(
             $"Save-PSResource {options.Name} {options.Version}",
-            () => RunScript(script, args, timeout ?? TimeSpan.FromMinutes(10)));
+            () => RunScript(script, args, timeout ?? TimeSpan.FromMinutes(10),
+                heartbeatLabel: $"Save-PSResource {options.Name} {options.Version}".TrimEnd(),
+                redactor: RepositoryDiagnosticService.CreateRedactor(apiKey: null, options.Credential)));
         var items = ParseSaveOutput(result.StdOut);
 
         if (result.ExitCode != 0)
         {
-            var message = TryExtractError(result.StdOut) ?? result.StdErr;
-            var full = $"Save-PSResource failed (exit {result.ExitCode}). {message}".Trim();
-            if (_logger.IsVerbose) _logger.Verbose(full);
-            if (_logger.IsVerbose && !string.IsNullOrWhiteSpace(result.StdOut))
-                _logger.Verbose(result.StdOut.Trim());
-            if (_logger.IsVerbose && !string.IsNullOrWhiteSpace(result.StdErr))
-                _logger.Verbose(result.StdErr.Trim());
+            var full = RepositoryDiagnosticService.DescribeChildFailure("Save-PSResource", result, TryExtractError(result.StdOut));
             if (result.ExitCode == 3)
                 throw new PowerShellToolNotAvailableException("PSResourceGet", full);
             throw new InvalidOperationException(full);
@@ -517,7 +507,9 @@ public sealed partial class PSResourceGetClient
         string scriptText,
         IReadOnlyList<string> args,
         TimeSpan timeout,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        string? heartbeatLabel = null,
+        RepositoryDiagnosticRedactor? redactor = null)
     {
         var tempDir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "PowerForge", "psresourceget");
         Directory.CreateDirectory(tempDir);
@@ -525,7 +517,8 @@ public sealed partial class PSResourceGetClient
         File.WriteAllText(scriptPath, scriptText, new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
         try
         {
-            var request = new PowerShellRunRequest(scriptPath, args, timeout, preferPwsh: true);
+            var request = RepositoryDiagnosticService.CreateLiveRequest(scriptPath, args, timeout, _logger, redactor);
+            using var heartbeat = heartbeatLabel is null ? null : OperationHeartbeat.Start(_logger, heartbeatLabel!);
             return _runner is ICancellablePowerShellRunner cancellableRunner
                 ? cancellableRunner.RunAsync(request, cancellationToken).GetAwaiter().GetResult()
                 : RunWithoutCancellation(request, cancellationToken);

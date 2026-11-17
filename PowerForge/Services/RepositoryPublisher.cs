@@ -77,8 +77,9 @@ public sealed class RepositoryPublisher
             {
                 return PublishWithTool(PublishTool.PSResourceGet, request, fullPath, repositoryName, repositorySpecified, repoConfig, credential);
             }
-            catch (PowerShellToolNotAvailableException) when (!request.IsNupkg)
+            catch (PowerShellToolNotAvailableException ex) when (!request.IsNupkg)
             {
+                _logger.Warn($"PSResourceGet is not available, so publishing to '{repositoryName}' falls back to PowerShellGet. {ex.Message}");
                 return PublishWithTool(PublishTool.PowerShellGet, request, fullPath, repositoryName, repositorySpecified, repoConfig, credential);
             }
             catch (PowerShellToolNotAvailableException ex) when (request.IsNupkg)

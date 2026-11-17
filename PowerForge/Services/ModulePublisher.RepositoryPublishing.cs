@@ -42,6 +42,7 @@ public sealed partial class ModulePublisher
         {
             if (useManagedModule)
             {
+                _logger.Info($"Publish tool Auto: using the built-in managed module publisher for repository '{repositoryName}'.");
                 return PublishToRepositoryWithTool(
                     PublishTool.ManagedModule,
                     publish,
@@ -56,12 +57,14 @@ public sealed partial class ModulePublisher
                     finalizeRepositoryModule);
             }
 
+            _logger.Info($"Publish tool Auto: using PSResourceGet for repository '{repositoryName}' because the built-in publisher does not support this repository configuration.");
             try
             {
                 return PublishToRepositoryWithTool(PublishTool.PSResourceGet, publish, plan, buildResult, repositoryName, repoConfig, includeScriptFolders, remotePublishAttempted, remoteSideEffectObserved, cancellationToken, finalizeRepositoryModule);
             }
-            catch (PowerShellToolNotAvailableException)
+            catch (PowerShellToolNotAvailableException ex)
             {
+                _logger.Warn($"PSResourceGet is not available, so publishing to '{repositoryName}' falls back to PowerShellGet. {ex.Message}");
                 return PublishToRepositoryWithTool(PublishTool.PowerShellGet, publish, plan, buildResult, repositoryName, repoConfig, includeScriptFolders, remotePublishAttempted, remoteSideEffectObserved, cancellationToken, finalizeRepositoryModule);
             }
         }
