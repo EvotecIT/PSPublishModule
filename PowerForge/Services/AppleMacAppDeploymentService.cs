@@ -3,7 +3,7 @@ namespace PowerForge;
 /// <summary>
 /// Builds, atomically installs, and launches local macOS application bundles.
 /// </summary>
-public sealed class AppleMacAppDeploymentService
+public sealed partial class AppleMacAppDeploymentService
 {
     private readonly IProcessRunner _processRunner;
     private readonly AppleDeviceDeploymentService _buildService;
