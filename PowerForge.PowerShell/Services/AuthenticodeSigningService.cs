@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Management.Automation;
@@ -101,8 +102,10 @@ public sealed class AuthenticodeSigningService
         {
             throw;
         }
-        catch
+        catch (Exception ex)
         {
+            // Keep the real cause: an access or provider failure is not the same as an empty store.
+            _logger.Warn($"Could not read code-signing certificates from the {storeLocation} certificate store: {ex.Message}");
             return new CodeSigningCertificateLookupResult
             {
                 Certificate = null,
@@ -212,12 +215,13 @@ public sealed class AuthenticodeSigningService
     private IReadOnlyList<PSObject> SignWithOpenAuthenticode(string[] files, AuthenticodeSignRequest request)
     {
         var signatures = new List<PSObject>(files.Length);
+        var progress = new SigningProgress(_logger, files.Length);
         foreach (var file in files)
         {
+            progress.Next(file);
             if (!request.OverwriteSigned && GetOpenSignatures(file, allowUnsigned: true).Count > 0)
                 continue;
 
-            _logger.Verbose($"Signing file: {file}");
             // The writer normally has no output; only a separate read validates the file.
             InvokeMany("Set-OpenAuthenticodeSignature", ps =>
             {
@@ -235,6 +239,7 @@ public sealed class AuthenticodeSigningService
                 throw new InvalidOperationException($"Authenticode signing returned an unexpected signer for '{file}'.");
             signatures.Add(result[0]);
         }
+        progress.Complete(signatures.Count);
         return signatures;
     }
 
@@ -264,9 +269,10 @@ public sealed class AuthenticodeSigningService
     private IReadOnlyList<PSObject> SignIndividually(string command, string[] files, Action<PowerShell, string> configure)
     {
         var signatures = new List<PSObject>(files.Length);
+        var progress = new SigningProgress(_logger, files.Length);
         foreach (var file in files)
         {
-            _logger.Verbose($"Signing file: {file}");
+            progress.Next(file);
             var result = InvokeMany(command, ps => configure(ps, file));
             if (result.Count != 1)
                 throw new InvalidOperationException($"Authenticode signing did not return exactly one signature for '{file}'.");
@@ -276,6 +282,7 @@ public sealed class AuthenticodeSigningService
                 throw new InvalidOperationException($"Authenticode signing failed for '{file}': {status}. {signature.Properties["StatusMessage"]?.Value}");
             signatures.Add(signature);
         }
+        progress.Complete(signatures.Count);
         return signatures;
     }
 
@@ -336,6 +343,8 @@ public sealed class AuthenticodeSigningService
         ps.AddCommand(commandName);
         configure(ps);
         var result = ps.Invoke();
+        foreach (var warning in ps.Streams.Warning)
+            _logger.Warn($"{commandName}: {warning.Message}");
         if (ps.HadErrors)
         {
             var error = ps.Streams.Error.FirstOrDefault();
@@ -343,6 +352,53 @@ public sealed class AuthenticodeSigningService
         }
 
         return result.ToArray();
+    }
+
+    /// <summary>
+    /// Reports signing progress at Info. Small batches show every file; large batches (a module can carry
+    /// thousands of scripts) show a line every <see cref="ReportEveryFiles"/> files or <see cref="ReportInterval"/>.
+    /// </summary>
+    internal sealed class SigningProgress
+    {
+        internal const int ReportEveryFiles = 25;
+        internal static readonly TimeSpan ReportInterval = TimeSpan.FromSeconds(5);
+
+        private readonly ILogger _logger;
+        private readonly int _total;
+        private readonly Stopwatch _stopwatch = Stopwatch.StartNew();
+        private TimeSpan _lastReport;
+        private int _position;
+
+        internal SigningProgress(ILogger logger, int total)
+        {
+            _logger = logger;
+            _total = total;
+        }
+
+        internal void Next(string file)
+        {
+            _position++;
+            var elapsed = _stopwatch.Elapsed;
+            var everyFile = _total <= ReportEveryFiles;
+            if (everyFile || _position == 1 || _position % ReportEveryFiles == 0 || elapsed - _lastReport >= ReportInterval)
+            {
+                _lastReport = elapsed;
+                _logger.Info($"Signing {_position}/{_total}: {(everyFile ? Path.GetFileName(file) : file)}");
+            }
+            else
+            {
+                _logger.Verbose($"Signing {_position}/{_total}: {file}");
+            }
+        }
+
+        internal void Complete(int signed)
+        {
+            _stopwatch.Stop();
+            var skipped = _total - signed;
+            _logger.Info(
+                $"Signed {signed} of {_total} file(s) in {DotNetRepositoryReleaseService.FormatDuration(_stopwatch.Elapsed)}" +
+                (skipped > 0 ? $" ({skipped} already signed)." : "."));
+        }
     }
 
     private static PowerShell CreatePowerShell()
