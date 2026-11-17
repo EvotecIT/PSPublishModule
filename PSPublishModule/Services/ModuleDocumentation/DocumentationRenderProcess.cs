@@ -63,8 +63,10 @@ public static class DocumentationRenderProcess
             foreach (var item in items)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                ConsoleOutput.WriteLine(GetModuleDocumentationCommand.ShouldRenderAsLocalFile(item)
-                    ? File.ReadAllText(item.Path!) : item.Content ?? string.Empty);
+                var text = GetModuleDocumentationCommand.ShouldRenderAsLocalFile(item)
+                    ? File.ReadAllText(item.Path!) : item.Content ?? string.Empty;
+                // Raw Markdown goes to standard output like the rendered worker output, so it can be captured.
+                ConsoleOutput.WriteOutside(() => Console.WriteLine(text));
             }
             return;
         }
