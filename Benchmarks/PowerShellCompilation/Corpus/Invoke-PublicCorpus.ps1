@@ -10,6 +10,7 @@ param(
     [switch] $Offline,
     [switch] $SkipModules,
     [switch] $SkipStrictPrograms,
+    [switch] $RefreshBaseline,
     [ValidateSet('Enforce', 'RecordOnly')] [string] $PerformancePolicy = 'Enforce',
     [switch] $KeepRunArtifacts
 )
@@ -17,6 +18,11 @@ param(
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 . (Join-Path $PSScriptRoot 'Corpus.Runner.Common.ps1')
+. (Join-Path $PSScriptRoot 'Corpus.PublicBaseline.ps1')
+
+if ($RefreshBaseline -and ($SkipModules -or $ModuleId)) {
+    throw 'Refreshing the public baseline requires the complete module packet.'
+}
 
 function Invoke-PowerForgeJson {
     param([string[]] $Arguments, [string] $WorkingDirectory, [int] $TimeoutSeconds = 900)
@@ -68,6 +74,8 @@ if ('ok' -notin $probeOutput) { throw 'The declared corpus probe did not return 
     moduleName = $module.Name
     moduleVersion = $module.Version.ToString()
     exportedCommands = $module.ExportedCommands.Count
+    powerShell = $PSVersionTable.PSVersion.ToString()
+    architecture = [Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture.ToString()
     probeSucceeded = $true
 } | ConvertTo-Json -Compress
 '@
@@ -78,7 +86,8 @@ if ('ok' -notin $probeOutput) { throw 'The declared corpus probe did not return 
         POWERFORGE_CORPUS_MANIFEST = $ManifestPath
         POWERFORGE_CORPUS_PROBE = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($ProbeScript))
     }
-    $process = Invoke-OwnedProcess -FileName 'pwsh' -Arguments @('-NoLogo', '-NoProfile', '-NonInteractive', '-EncodedCommand', $encodedChild) -WorkingDirectory $WorkingDirectory -Environment $environment -TimeoutSeconds 180
+    $executableName = if ($IsWindows) { 'pwsh.exe' } else { 'pwsh' }
+    $process = Invoke-OwnedProcess -FileName (Join-Path $PSHOME $executableName) -Arguments @('-NoLogo', '-NoProfile', '-NonInteractive', '-EncodedCommand', $encodedChild) -WorkingDirectory $WorkingDirectory -Environment $environment -TimeoutSeconds 180
     if ($process.ExitCode -ne 0) {
         throw "Clean module probe failed with exit $($process.ExitCode): $($process.StandardError) $($process.StandardOutput)"
     }
@@ -362,7 +371,16 @@ function Get-CurrentRuntimeIdentifier {
 
 $PacketPath = [IO.Path]::GetFullPath($PacketPath)
 $BaselinePath = [IO.Path]::GetFullPath($BaselinePath)
-$packet = Get-Content -LiteralPath $PacketPath -Raw | ConvertFrom-Json
+$packetBytes = [IO.File]::ReadAllBytes($PacketPath)
+$packetSha256 = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($packetBytes)).ToLowerInvariant()
+$packet = [Text.Encoding]::UTF8.GetString($packetBytes).TrimStart([char] 0xFEFF) | ConvertFrom-Json
+$hostRid = Get-CurrentRuntimeIdentifier
+if (-not $RuntimeIdentifier) { $RuntimeIdentifier = $hostRid }
+if (-not (Test-Path -LiteralPath $BaselinePath -PathType Leaf)) { throw "Public corpus baseline does not exist: $BaselinePath" }
+$baseline = Get-Content -LiteralPath $BaselinePath -Raw | ConvertFrom-Json
+if ($RefreshBaseline -and ($RuntimeIdentifier -ne $hostRid -or $baseline.hybrid.runtimeIdentifier -ne $hostRid)) {
+    throw "The public baseline can only be refreshed on its measured host ($($baseline.hybrid.runtimeIdentifier))."
+}
 if ($packet.schemaVersion -ne 1) { throw "Unsupported public-corpus schema $($packet.schemaVersion)." }
 if (@($packet.modules).Count -lt 10) { throw 'The fixed public packet must contain at least ten modules.' }
 if (@($packet.modules.scenarioFamily | Sort-Object -Unique).Count -lt 5) { throw 'The fixed public packet must span at least five scenario families.' }
@@ -385,7 +403,9 @@ Assert-ContainedPath -Root $WorkspacePath -Path $runRoot -Label 'Corpus run' | O
 New-Item -ItemType Directory -Path $runRoot | Out-Null
 if (-not $EvidencePath) { $EvidencePath = Join-Path $WorkspacePath ('evidence/' + $runId + '.json') }
 $EvidencePath = [IO.Path]::GetFullPath($EvidencePath)
-if (-not $RuntimeIdentifier) { $RuntimeIdentifier = Get-CurrentRuntimeIdentifier }
+if ($RefreshBaseline -and $EvidencePath -eq $BaselinePath) {
+    throw 'The baseline and evidence paths must be different when refreshing.'
+}
 
 $moduleResults = [Collections.Generic.List[object]]::new()
 $strictResults = [Collections.Generic.List[object]]::new()
@@ -435,6 +455,7 @@ try {
                     artifactSha256 = $manifest.artifactSha256
                     artifactBytes = $manifest.artifactSizeBytes
                     cleanImport = $true
+                    importHost = [ordered]@{ runtimeIdentifier = $hostRid; powerShell = $probe.Json.powerShell; architecture = $probe.Json.architecture }
                     invocation = $probe.Json.probeSucceeded
                     exportedCommands = $probe.Json.exportedCommands
                     counts = $counts
@@ -449,6 +470,7 @@ try {
                     succeeded = $true
                 })
             } catch {
+                Write-Warning "Public module $($entry.id): $($_.Exception.Message)"
                 $moduleResults.Add([ordered]@{ id = $entry.id; version = $entry.version; scenarioFamily = $entry.scenarioFamily;
                     succeeded = $false; error = $_.Exception.Message; cliFailure = (Get-CorpusCliFailureEvidence $_.Exception) })
             }
@@ -606,12 +628,16 @@ try {
 
     $failedModules = @($moduleResults | Where-Object { -not $_.succeeded }).Count
     $failedStrict = @($strictResults | Where-Object { -not $_.succeeded }).Count
-    if (-not (Test-Path -LiteralPath $BaselinePath -PathType Leaf)) { throw "Public corpus baseline does not exist: $BaselinePath" }
-    $baseline = Get-Content -LiteralPath $BaselinePath -Raw | ConvertFrom-Json
-    $packetSha256 = (Get-FileHash -LiteralPath $PacketPath -Algorithm SHA256).Hash.ToLowerInvariant()
     $compareModules = -not $SkipModules -and -not $ModuleId
     $compareStrict = -not $SkipStrictPrograms
     $regressions = @(Compare-PublicBaseline -Baseline $baseline -Packet $packet -PacketSha256 $packetSha256 -Modules @($moduleResults) -StrictPrograms @($strictResults) -Rid $RuntimeIdentifier -CompareModules $compareModules -CompareStrict $compareStrict)
+    # A refresh replaces Hybrid measurements. Keep the old comparison visible
+    # while continuing to enforce packet identity and the selected Strict checks.
+    $previousHybridDifferences = @()
+    if ($RefreshBaseline) {
+        $previousHybridDifferences = @($regressions | Where-Object scope -eq 'hybrid')
+        $regressions = @($regressions | Where-Object scope -ne 'hybrid')
+    }
     $disposition = Get-PublicCorpusDisposition -Regressions $regressions -Failures ($failedModules + $failedStrict) -PerformancePolicy $PerformancePolicy
     $regionDecisionRows = @($moduleResults | Where-Object succeeded | ForEach-Object {
         $module = $_
@@ -634,7 +660,7 @@ try {
         generatedAtUtc = [DateTimeOffset]::UtcNow.ToString('O')
         semanticProfile = $packet.semanticProfile
         host = [ordered]@{
-            runtimeIdentifier = Get-CurrentRuntimeIdentifier
+            runtimeIdentifier = $hostRid
             operatingSystem = [Runtime.InteropServices.RuntimeInformation]::OSDescription
             architecture = [Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture.ToString()
             powerShell = $PSVersionTable.PSVersion.ToString()
@@ -645,6 +671,7 @@ try {
         crossWorkloadRetainedRegionFrontier = $crossWorkloadRetainedRegionFrontier
         crossWorkloadRegionOpportunityFrontier = $crossWorkloadRegionOpportunityFrontier
         regressions = $regressions
+        previousHybridDifferences = $previousHybridDifferences
         performancePolicy = $disposition.performancePolicy
         performanceQualification = $disposition.performanceQualification
         baselineScope = [ordered]@{ hybrid = if ($compareModules) { 'Full' } else { 'IdentityOnly' }; strict = if ($compareStrict) { 'Full' } else { 'IdentityOnly' } }
@@ -666,6 +693,9 @@ try {
         }
     }
     Write-Utf8Json -Path $EvidencePath -Value $evidence
+    if ($RefreshBaseline -and $disposition.exitCode -eq 0) {
+        Update-PublicCorpusBaseline -Baseline $baseline -Modules @($moduleResults) -RuntimeIdentifier $hostRid -Path $BaselinePath
+    }
     Write-Host "Evidence: $EvidencePath"
     Write-Host "Modules: $($evidence.summary.modulesPassed)/$($evidence.summary.modulesTotal); promoted typed regions: $($evidence.summary.promotedTypedRegions); retained candidates: $($evidence.summary.rejectedTypedRegions)/$($evidence.summary.regionCandidates); analysis-only opportunities outside terminal candidates: $($evidence.summary.nonTerminalRegionOpportunities)/$($evidence.summary.regionOpportunities); Strict programs: $($evidence.summary.strictProgramsPassed)/$($evidence.summary.strictProgramsTotal)"
     Write-Host "Performance policy: $($disposition.performancePolicy); $($disposition.performanceQualification); timing regressions: $($disposition.performanceRegressions); nonblocking timing regressions: $($disposition.nonBlockingPerformanceRegressions); blocking regressions: $($disposition.blockingRegressions)"
