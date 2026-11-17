@@ -35,8 +35,8 @@ public sealed class ModuleBuildHostDiagnosticsTests
 
         Assert.Equal(exitCode == 0, result.Succeeded);
         var entry = Assert.Single(logger.Entries);
-        Assert.Equal("info", entry.Level);
-        Assert.Equal(warning, entry.Message);
+        Assert.Equal("warn", entry.Level);
+        Assert.Equal("Complete certificate-provider recovery instructions.", entry.Message);
         Assert.Equal(warning, result.StandardOutput);
         Assert.Equal(error, result.StandardError);
         if (exitCode != 0) Assert.Equal("Signing result", result.FailureMessage);

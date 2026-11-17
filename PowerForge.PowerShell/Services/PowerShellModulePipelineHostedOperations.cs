@@ -254,6 +254,9 @@ internal sealed partial class PowerShellModulePipelineHostedOperations :
                         manifestPath,
                         validationTarget: target.Label));
             }
+
+            // Warnings printed while importing (deprecated commands, missing optional dependencies) are part of the result.
+            ChildProcessOutput.WarnAboutDiagnostics(_logger, $"Import-Module ({target.Label})", result.StdOut, result.StdErr);
         }
     }
 
@@ -270,7 +273,8 @@ internal sealed partial class PowerShellModulePipelineHostedOperations :
         var pfxBase64 = signingInput.PfxBase64;
         var pfxPassword = signingInput.PfxPassword;
         var normalizedPackageFilePaths = NormalizePackageFilePaths(packageFilePaths);
-        _logger.Info(ModuleSigningProgressProtocol.UserGuidance);
+        // A caller that reports progress shows the guidance with the running signing step; log it only otherwise.
+        if (progress is null) _logger.Info(ModuleSigningProgressProtocol.UserGuidance);
         progress?.Invoke(0, 0, "Starting signing host");
         var packageFileListPath = WriteTemporaryLineFile(normalizedPackageFilePaths);
         var temporaryPackageFileLists = new List<string> { packageFileListPath };

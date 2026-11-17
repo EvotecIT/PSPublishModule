@@ -106,7 +106,11 @@ public sealed class ModuleBuildHostService
                 if (!string.IsNullOrWhiteSpace(failure))
                     progressFailure = failure;
                 if (progress is not null && !string.IsNullOrWhiteSpace(line) && !ModulePipelineProgressProtocol.IsProtocolLine(line))
-                    _diagnostics?.Info(line);
+                {
+                    // The child host prints its warnings to standard output; keep their level.
+                    if (ChildProcessOutput.TryGetWarning(line, out var warning)) _diagnostics?.Warn(warning);
+                    else _diagnostics?.Info(line);
+                }
             };
         var runRequest = requiredRuntimeMajor > 0
             ? PowerShellRunRequest.ForCompatibleCommand(
