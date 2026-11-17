@@ -66,7 +66,7 @@ internal sealed partial class PowerShellSemanticBinder
     /// Parameter metadata and hosted command pipelines do not enter this value-binding route.</remarks>
     internal static bool IsCompiledValueScriptBlock(ScriptBlockExpressionAst expression, string? targetFramework = null)
         => IsAssignedScriptBlock(expression) || expression.Parent is InvokeMemberExpressionAst invocation &&
-           invocation.Arguments.Any(argument => ReferenceEquals(argument, expression)) || IsSwitchPredicate(expression) ||
+           invocation.Arguments?.Any(argument => ReferenceEquals(argument, expression)) == true || IsSwitchPredicate(expression) ||
            expression.Parent is ConvertExpressionAst conversion && ReferenceEquals(conversion.Child, expression) &&
            conversion.Type.TypeName.GetReflectionType() is { } delegateType &&
            PowerShellGeneratedTypePolicy.IsSupportedDelegateSignature(delegateType, targetFramework);

@@ -2,6 +2,18 @@ namespace PowerForge.Tests;
 
 public sealed partial class PowerShellCompilationBoundPipelineTests
 {
+    [Fact]
+    public void DynamicMemberScriptBlockWithoutArgumentsRetainsOwnerWithoutCrashing()
+    {
+        var document = PowerShellSourceParser.Parse(
+            "function Read-Member { param([object]$Value) $Value.{ 'ToString' }() }",
+            TestPath("dynamic-member-scriptblock.psm1"));
+        var result = new PowerShellSemanticCompilationPipeline().Compile(
+            new[] { document }, "net10.0", PowerShellCompilationCapabilities.HybridModule);
+        Assert.Empty(result.Emitted.Methods);
+        Assert.NotEmpty(result.Emitted.Diagnostics);
+    }
+
     [Theory]
     [InlineData("function Read-Child([Missing.Authored.Type]$Value) { $Value }")]
     [InlineData("filter Read-Child { trap { continue }; $_ }")]
