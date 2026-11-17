@@ -26,6 +26,13 @@ if (-not $PSBoundParameters.ContainsKey('RuntimeIdentifier')) {
 if ($RuntimeIdentifier -ne $hostRuntimeIdentifier) {
     throw "Compiler qualification runtime '$RuntimeIdentifier' does not match the current host '$hostRuntimeIdentifier' (PowerShell process architecture: $processArchitecture). Use the matching runtime or omit -RuntimeIdentifier."
 }
+if ($IsWindows) {
+    if ([string]::IsNullOrWhiteSpace($env:POWERFORGE_PWSH76_PATH) -or
+        -not (Test-Path -LiteralPath $env:POWERFORGE_PWSH76_PATH -PathType Leaf)) {
+        throw 'POWERFORGE_PWSH76_PATH must identify the pinned PowerShell 7.6 executable.'
+    }
+    $env:POWERFORGE_REQUIRE_PINNED_SEMANTIC_HOSTS = 'true'
+}
 $repositoryRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 $previousCliPath = $env:POWERFORGE_TEST_CLI_ASSEMBLY_PATH
 $cliAssemblyPath = if ($PSBoundParameters.ContainsKey('ArtifactsPath')) {
@@ -71,6 +78,7 @@ $requiredFamilies = @{
     'basic-function Test-Path command lookup' = 'PowerForge.Tests.PowerShellCompilationArtifactHardeningTests.Build_HybridBasicFunctionKeepsTestPathOnPowerShellCommandLookup*'
 }
 $windowsRequiredFamilies = @{
+    'pinned semantic oracle' = 'PowerForge.Tests.PowerShellCompilationSemanticOracleTests.MinimizedCasesExecuteOnPinnedPowerShell76AndInstalledWindowsPowerShell*'
     'native Hybrid executable console presentation' = 'PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.Build_NativeHybridConsolePreservesFormattingStreamsAndAuthoredErrors*'
     'project Windows launch path' = 'PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.Project_ExecutableInstallRejectsUnlaunchablePathBeforeCreatingInstallation*'
     'project run' = 'PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.Project_RunRebuildsEditedSource*'
@@ -120,6 +128,12 @@ if ($IsWindows) {
 $fastPatterns = @(
     'PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.CompleteWorkflow_PinnedBinaryToStringPreservesBindingAndOutput'
 ) + @($requiredFamilies.Values | ForEach-Object { $_.TrimEnd('*') })
+if ($IsWindows) {
+    $fastPatterns += @(
+        'PowerForge.Tests.PowerShellCompilationSemanticOracleTests.'
+        'PowerForge.Tests.PowerShellCompilationArtifactHardeningTests.Build_BinaryModuleLanguageModeMatchesPinnedPowerShell76AndInstalledWindowsPowerShell'
+    )
+}
 $fastFilter = ($fastPatterns | ForEach-Object { "FullyQualifiedName~$_" }) -join '|'
 $filter = if ($Lane -eq 'Full') { 'Category=PowerShellCompilerGate|FullyQualifiedName~PowerShellCompilationCensusTests|FullyQualifiedName~PowerShellCompilationBoundPipelineTests|FullyQualifiedName~PowerShellCompilationFuzzTests|' + $fastFilter } else { $fastFilter }
 # Keep the running-test sequence when a subprocess stalls, without retaining large dumps.
@@ -144,6 +158,20 @@ try {
     $passedNames = @($testResults.TestRun.Results.UnitTestResult | Where-Object outcome -eq 'Passed' | ForEach-Object testName)
     foreach ($family in $requiredFamilies.GetEnumerator()) {
         if (-not ($passedNames -like $family.Value)) { throw "The compiler gate is missing passing $($family.Key) tests." }
+    }
+    if ($IsWindows) {
+        $oracleResults = @($testResults.TestRun.Results.UnitTestResult | Where-Object {
+            $_.testName -like 'PowerForge.Tests.PowerShellCompilationSemanticOracleTests.*' -or
+            $_.testName -like 'PowerForge.Tests.PowerShellCompilationArtifactHardeningTests.Build_BinaryModuleLanguageModeMatchesPinnedPowerShell76AndInstalledWindowsPowerShell*'
+        })
+        $oracleSummary = [ordered]@{
+            passed = @($oracleResults | Where-Object outcome -eq 'Passed').Count
+            failed = @($oracleResults | Where-Object outcome -eq 'Failed').Count
+            skipped = @($oracleResults | Where-Object outcome -eq 'NotExecuted').Count
+            pinnedHost = $env:POWERFORGE_PWSH76_PATH
+        }
+        $oracleSummary | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $EvidencePath 'semantic-oracle.json') -Encoding utf8
+        if ($oracleSummary.failed -or $oracleSummary.skipped) { throw 'The pinned semantic oracle must pass without skips.' }
     }
     $moduleWorkflow = 'PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.CompleteWorkflow_PinnedBinaryToStringPreservesBindingAndOutput*'
     if ($IsWindows) {
