@@ -1,12 +1,12 @@
 using PowerForge;
-using PowerForge.ConsoleShared;
+using PowerForge.ConsoleUi;
 
 namespace PowerForge.Cli;
 
 internal static class DotNetPublishConsoleUi
 {
     public static bool ShouldUseInteractiveView(bool outputJson, CliOptions cli)
-        => SpectreModulePipelineConsoleUi.ShouldUseInteractiveView(
+        => ModulePipelineConsoleUi.ShouldUseInteractiveView(
             cli.Verbose, outputJson, cli.Quiet, cli.NoColor, cli.View);
 
     public static DotNetPublishResult Run(
@@ -16,6 +16,6 @@ internal static class DotNetPublishConsoleUi
         bool outputJson,
         CliOptions cli)
         => ShouldUseInteractiveView(outputJson, cli)
-            ? SpectreDotNetPublishConsoleUi.RunInteractive(plan, configPath, progress => runner.Run(plan, progress))
+            ? ExecutablePublishConsoleUi.RunInteractive(plan, configPath, progress => runner.Run(plan, progress))
             : runner.Run(plan, progress: null);
 }

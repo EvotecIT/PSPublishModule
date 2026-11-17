@@ -28,6 +28,7 @@ public sealed partial class DotNetPublishPipelineRunner
     private static readonly AsyncLocal<bool> ActiveNativeAotPublish = new();
     private static readonly AsyncLocal<bool> ActiveStrictDotNetEnvironment = new();
     private static readonly AsyncLocal<bool> ActiveToolSnapshotScope = new();
+    private static readonly AsyncLocal<Action<string>?> ActiveProcessLineReceived = new();
 
     /// <summary>
     /// Creates a new instance using the provided logger.

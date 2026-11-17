@@ -20,7 +20,8 @@ public sealed partial class DotNetRepositoryReleaseService
         ILogger logger,
         out string stdErr,
         out string stdOut,
-        out TimeSpan duration)
+        out TimeSpan duration,
+        Action<string>? heartbeatDetail = null)
     {
         stdErr = string.Empty;
         stdOut = string.Empty;
@@ -62,7 +63,8 @@ public sealed partial class DotNetRepositoryReleaseService
             elapsed => $"MSBuild batch {heartbeatOperation} still running ({projectCount} project(s), {FormatDuration(elapsed)} elapsed).",
             out stdErr,
             out stdOut,
-            out duration);
+            out duration,
+            heartbeatDetail);
         LogProcessOutput(logger, "MSBuild batch", logOperation, stdOut, stdErr);
         return exitCode;
     }
@@ -484,7 +486,8 @@ public sealed partial class DotNetRepositoryReleaseService
         Func<TimeSpan, string> heartbeatMessage,
         out string stdErr,
         out string stdOut,
-        out TimeSpan duration)
+        out TimeSpan duration,
+        Action<string>? heartbeatDetail = null)
     {
         stdErr = string.Empty;
         stdOut = string.Empty;
@@ -523,7 +526,9 @@ public sealed partial class DotNetRepositoryReleaseService
             if (stopwatch.Elapsed < nextProgress)
                 continue;
 
-            logger.Info(heartbeatMessage(stopwatch.Elapsed));
+            var message = heartbeatMessage(stopwatch.Elapsed);
+            logger.Info(message);
+            try { heartbeatDetail?.Invoke(message); } catch { /* progress is best effort */ }
             nextProgress += HeartbeatInterval;
         }
 

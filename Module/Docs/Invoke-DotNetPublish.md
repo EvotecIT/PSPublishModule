@@ -140,7 +140,7 @@ Accept wildcard characters: False
 ```
 
 ### -NoInteractive
-Disables the interactive Spectre progress view.
+Disables the interactive progress view.
 
 ```yaml
 Type: SwitchParameter

@@ -4,8 +4,12 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Management.Automation;
+using ConsoleMonster.Layout;
+using ConsoleMonster.Styling;
+using ConsoleMonster.Text;
+using ConsoleMonster.Widgets;
 using PowerForge;
-using Spectre.Console;
+using PowerForge.ConsoleUi;
 
 namespace PSPublishModule;
 
@@ -54,9 +58,6 @@ public sealed partial class InvokeProjectBuildCommand
         int assetsCount,
         IReadOnlyList<ProjectBuildGitHubResult> results)
     {
-        var unicode = ConsoleEncoding.ShouldRenderUnicode(AnsiConsole.Profile.Capabilities.Unicode);
-        AnsiConsole.Profile.Capabilities.Unicode = unicode;
-        var border = unicode ? TableBorder.Rounded : TableBorder.Simple;
         var summary = new ProjectBuildGitHubPublishSummary
         {
             PerProject = perProject,
@@ -68,18 +69,10 @@ public sealed partial class InvokeProjectBuildCommand
             summary.Results.Add(result);
 
         var display = new ProjectBuildGitHubDisplayService().CreateSummary(summary);
-        var title = ConsoleEncoding.ShouldRenderEmoji(AnsiConsole.Profile.Capabilities.Unicode)
-            ? $"✅ {display.Title}" : display.Title;
-        AnsiConsole.Write(new Rule($"[green]{title}[/]").LeftJustified());
-
-        var table = new Table()
-            .Border(border)
-            .AddColumn(new TableColumn("Item").NoWrap())
-            .AddColumn(new TableColumn("Value"));
-
+        var list = new KeyValueList();
         foreach (var row in display.Rows)
-            table.AddRow(row.Label, Markup.Escape(row.Value));
+            list.Add(row.Label, Markup.Escape(row.Value));
 
-        AnsiConsole.Write(table);
+        ConsoleOutput.Write(new Panel(list, Markup.Escape(display.Title)) { Verdict = true, Status = StatusKind.Pass });
     }
 }

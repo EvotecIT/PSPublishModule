@@ -81,24 +81,6 @@ public sealed class FormattingSummary
         return $"{label} {s.Changed}/{s.Total}{suffix}";
     }
 
-    /// <summary>
-    /// Formats a summary part using Spectre.Console markup.
-    /// </summary>
-    public static string FormatPartMarkup(string label, FormattingSummary s)
-    {
-        label ??= string.Empty;
-        if (s is null) return $"{label} [grey]0[/]/0";
-
-        var c = s.Changed > 0 ? $"[green]{s.Changed}[/]" : "[grey]0[/]";
-        var baseText = $"{label} {c}[grey]/{s.Total}[/]";
-
-        var extras = new List<string>(2);
-        if (s.Skipped > 0) extras.Add($"skipped [yellow]{s.Skipped}[/]");
-        if (s.Errors > 0) extras.Add($"errors [red]{s.Errors}[/]");
-        if (extras.Count > 0) baseText += $" [grey]({string.Join(", ", extras)})[/]";
-        return baseText;
-    }
-
     internal static bool IsErrorMessage(string message)
     {
         var token = LeadingToken(message);

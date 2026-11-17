@@ -3,7 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Management.Automation;
 using PowerForge;
-using PowerForge.ConsoleShared;
+using PowerForge.ConsoleUi;
 
 namespace PSPublishModule;
 
@@ -170,7 +170,7 @@ public sealed class InvokeDotNetPublishCommand : PSCmdlet
     public SwitchParameter Validate { get; set; }
 
     /// <summary>
-    /// Disables the interactive Spectre progress view.
+    /// Disables the interactive progress view.
     /// </summary>
     [Parameter(ParameterSetName = ParameterSetSettings)]
     [Parameter(ParameterSetName = ParameterSetConfig)]
@@ -193,15 +193,21 @@ public sealed class InvokeDotNetPublishCommand : PSCmdlet
     /// </summary>
     protected override void ProcessRecord()
     {
+        using (CmdletConsole.Use(this))
+            ProcessRecordCore();
+    }
+
+    private void ProcessRecordCore()
+    {
         var boundParameters = MyInvocation?.BoundParameters;
         var isVerbose = boundParameters?.ContainsKey("Verbose") == true;
         var interactive = !Quiet.IsPresent && !NoInteractive.IsPresent &&
-                          SpectrePipelineConsoleUi.ShouldUseInteractiveView(isVerbose);
+                          ModulePipelineConsoleUi.ShouldUseInteractiveView(isVerbose);
         var buffer = Quiet.IsPresent || !interactive && ExitCode.IsPresent
             ? new BufferedLogger { IsVerbose = isVerbose }
             : null;
         ILogger outputLogger = buffer is not null ? buffer
-            : interactive ? new SpectreConsoleLogger { IsVerbose = isVerbose }
+            : interactive ? new ConsoleOutputLogger { IsVerbose = isVerbose }
             : new CmdletLogger(this, isVerbose);
         var logger = new CmdletWarningLogger(this, outputLogger);
         DotNetPublishWorkflowResult workflow;
@@ -241,7 +247,7 @@ public sealed class InvokeDotNetPublishCommand : PSCmdlet
                 {
                     var runner = new DotNetPublishPipelineRunner(logger);
                     return interactive
-                        ? SpectreDotNetPublishConsoleUi.RunInteractive(
+                        ? ExecutablePublishConsoleUi.RunInteractive(
                             plan, preparation.SourceLabel, detailed => runner.Run(plan, detailed))
                         : runner.Run(plan, progress);
                 }).Execute(preparation);
@@ -257,7 +263,7 @@ public sealed class InvokeDotNetPublishCommand : PSCmdlet
         logger.RethrowWarningStop();
         if (!Quiet.IsPresent && buffer is not null && (!interactive || workflow.Result is null))
         {
-            new BufferedLogSupportService().WriteTail(buffer.Entries, new SpectreConsoleLogger { IsVerbose = isVerbose });
+            new BufferedLogSupportService().WriteTail(buffer.Entries, new ConsoleOutputLogger { IsVerbose = isVerbose });
         }
 
         if (!string.IsNullOrWhiteSpace(workflow.JsonOutputPath))

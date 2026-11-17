@@ -21,7 +21,8 @@ internal sealed class MamlHelpWriter
         DocumentationExtractionPayload payload,
         string moduleName,
         string outputDirectory,
-        string? outputFileName = null)
+        string? outputFileName = null,
+        Action<int, int, string>? progress = null)
     {
         if (payload is null) throw new ArgumentNullException(nameof(payload));
         if (string.IsNullOrWhiteSpace(moduleName)) throw new ArgumentException("ModuleName is required.", nameof(moduleName));
@@ -51,11 +52,14 @@ internal sealed class MamlHelpWriter
             writer.WriteStartElement("helpItems", MshNs);
             writer.WriteAttributeString("schema", "maml");
 
-            foreach (var cmd in (payload.Commands ?? Enumerable.Empty<DocumentationCommandHelp>())
-                         .Where(c => c is not null && !string.IsNullOrWhiteSpace(c.Name))
-                         .OrderBy(c => c.Name, StringComparer.OrdinalIgnoreCase))
+            var commands = (payload.Commands ?? Enumerable.Empty<DocumentationCommandHelp>())
+                .Where(c => c is not null && !string.IsNullOrWhiteSpace(c.Name))
+                .OrderBy(c => c.Name, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+            for (var i = 0; i < commands.Length; i++)
             {
-                WriteCommand(writer, cmd);
+                progress?.Invoke(i + 1, commands.Length, commands[i].Name.Trim());
+                WriteCommand(writer, commands[i]);
             }
 
             writer.WriteEndElement(); // helpItems

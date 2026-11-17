@@ -200,7 +200,7 @@ public sealed class SaveManagedModuleCommand : AsyncPSCmdlet
     [Alias("MetadataPath", "OfflineBundleMetadataPath")]
     public string? BundleMetadataPath { get; set; }
 
-    /// <summary>Write a compact Spectre.Console summary for each plan or result.</summary>
+    /// <summary>Write a compact console summary for each plan or result.</summary>
     [Parameter]
     public SwitchParameter ShowSummary { get; set; }
 

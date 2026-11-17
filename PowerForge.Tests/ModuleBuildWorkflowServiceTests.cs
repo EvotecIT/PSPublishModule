@@ -1,9 +1,10 @@
 using PowerForge;
-using PowerForge.ConsoleShared;
-using Spectre.Console;
+using PowerForge.ConsoleUi;
+using ConsoleMonster.Testing;
 
 namespace PowerForge.Tests;
 
+[Collection(ConsoleCapture.Collection)]
 public sealed class ModuleBuildWorkflowServiceTests
 {
     [Fact]
@@ -146,8 +147,6 @@ public sealed class ModuleBuildWorkflowServiceTests
     [Fact]
     public void DirectModuleConsole_UsesSharedRichRowsInCanonicalOrder()
     {
-        using var writer = new StringWriter();
-        var console = CreateConsole(writer);
         var plan = CreatePlan(
             artefacts:
             [
@@ -171,8 +170,9 @@ public sealed class ModuleBuildWorkflowServiceTests
             installEnabled: true);
         var steps = ModulePipelineStep.Create(plan);
 
-        var result = SpectreModulePipelineConsoleUi.RunInteractive(
-            console,
+        ModulePipelineResult? result = null;
+        var output = ConsoleCapture.Final(view => result = ModulePipelineConsoleUi.RunInteractive(
+            view,
             plan,
             "powerforge.json",
             progress =>
@@ -184,10 +184,9 @@ public sealed class ModuleBuildWorkflowServiceTests
                 }
 
                 return CreateResult(plan);
-            });
+            }), 140);
 
-        Assert.Same(plan, result.Plan);
-        var output = writer.ToString();
+        Assert.Same(plan, result!.Plan);
         Assert.Contains("PowerForge", output, StringComparison.Ordinal);
         Assert.Contains("SampleModule 1.0.0", output, StringComparison.Ordinal);
         Assert.Contains("Unpacked (ToGitHub)", output, StringComparison.Ordinal);
@@ -204,11 +203,11 @@ public sealed class ModuleBuildWorkflowServiceTests
         Assert.True(install > publish, output);
     }
 
+    // Regression: NuGet signing rows planned while the package lane runs used to be appended after every module
+    // step. They belong under the lane step, in planned order, and the final ledger lists each of them.
     [Fact]
-    public void DirectModuleConsole_DescribesCoordinatedModuleAndNuGetReleaseTruthfully()
+    public void DirectModuleConsole_ListsLatePlannedPackageWorkUnderItsLaneStep()
     {
-        using var writer = new StringWriter();
-        var console = CreateConsole(writer);
         var plan = CreatePlan(
             projectBuilds:
             [
@@ -232,76 +231,99 @@ public sealed class ModuleBuildWorkflowServiceTests
                 }
             });
         var steps = ModulePipelineStep.Create(plan);
-        var transported = ModulePipelineProgressItemFactory.Create(plan);
-        var packageLane = Assert.Single(
-            transported,
-            item => item.Kind == ModulePipelineStepKind.PackageBuild.ToString());
-        Assert.Equal(PowerForgeReleaseProgressPhase.Packages, packageLane.Phase);
-        Assert.Equal(1, packageLane.Position);
-        Assert.Equal(1, packageLane.Total);
-        var moduleItems = transported
-            .Where(item => item.Phase == PowerForgeReleaseProgressPhase.Module)
-            .ToArray();
-        Assert.NotEmpty(moduleItems);
-        Assert.Equal(
-            Enumerable.Range(1, moduleItems.Length),
-            moduleItems.Select(item => item.Position));
-        Assert.All(moduleItems, item => Assert.Equal(moduleItems.Length, item.Total));
+        var lane = Assert.Single(steps, step => step.Kind == ModulePipelineStepKind.PackageBuild);
 
-        SpectreModulePipelineConsoleUi.RunInteractive(
-            console,
+        var output = ConsoleCapture.Final(view => ModulePipelineConsoleUi.RunInteractive(
+            view,
             plan,
             "powerforge.json",
             progress =>
             {
                 var detailed = Assert.IsAssignableFrom<IModulePipelineProgressReporterV4>(progress);
-                var packageItems = new[]
-                {
-                    new PowerForgeReleaseProgressItem
-                    {
-                        Phase = PowerForgeReleaseProgressPhase.Packages,
-                        Key = "package:publish:one",
-                        Title = "Sample.Core.1.0.0.nupkg",
-                        Kind = nameof(ProjectBuildProgressPhase.NuGetPublish),
-                        Position = 1,
-                        Total = 2
-                    },
-                    new PowerForgeReleaseProgressItem
-                    {
-                        Phase = PowerForgeReleaseProgressPhase.Packages,
-                        Key = "package:publish:two",
-                        Title = "Sample.Syntax.1.0.0.nupkg",
-                        Kind = nameof(ProjectBuildProgressPhase.NuGetPublish),
-                        Position = 2,
-                        Total = 2
-                    }
-                };
-                detailed.ItemsPlanned(PowerForgeReleaseProgressPhase.Packages, packageItems);
-                foreach (var item in packageItems)
-                    detailed.ItemUpdated(item, PowerForgeReleaseProgressItemState.Completed, "published");
-
                 foreach (var step in steps)
                 {
                     progress.StepStarting(step);
+                    if (step == lane)
+                    {
+                        var project = new ProjectBuildReleaseProgressAdapter(
+                            new ModulePipelineNestedProgressAdapter(detailed, lane),
+                            PowerForgeReleaseProgressPhase.Packages);
+                        project.PhaseStarted(ProjectBuildProgressPhase.PackageBuild, 1);
+                        project.PhaseCompleted(ProjectBuildProgressPhase.PackageBuild, "1 package");
+                        var packages = Enumerable.Range(1, 3).Select(index => new ProjectBuildProgressItem
+                        {
+                            Phase = ProjectBuildProgressPhase.PackageSigning,
+                            Key = $"sign:{index}",
+                            Title = $"Sample.Part{index}.1.0.0.nupkg",
+                            Kind = nameof(ProjectBuildProgressPhase.PackageSigning),
+                            Position = index,
+                            Total = 3
+                        }).ToArray();
+                        project.PhaseStarted(ProjectBuildProgressPhase.PackageSigning, packages.Length);
+                        project.ItemsPlanned(ProjectBuildProgressPhase.PackageSigning, packages);
+                        foreach (var package in packages)
+                        {
+                            project.ItemUpdated(package, ProjectBuildProgressItemState.Started, "attempt 1");
+                            project.ItemUpdated(package, ProjectBuildProgressItemState.Completed, "signed");
+                        }
+                        project.PhaseCompleted(ProjectBuildProgressPhase.PackageSigning);
+                    }
                     progress.StepCompleted(step);
                 }
 
                 return CreateResult(plan);
-            });
+            }), 110);
 
-        var output = writer.ToString();
-        Assert.Contains("Coordinated release", output, StringComparison.Ordinal);
-        Assert.Contains("PowerShell module + 1 NuGet package lane", output, StringComparison.Ordinal);
-        Assert.Contains("Packages → Module", output, StringComparison.Ordinal);
-        Assert.Contains("NuGet → PowerShell Gallery → GitHub", output, StringComparison.Ordinal);
-        Assert.Contains("Build and publish NuGet packages (SamplePackages)", output, StringComparison.Ordinal);
-        Assert.Contains("Package 01/02 Sample.Core.1.0.0.nupkg", output, StringComparison.Ordinal);
-        Assert.Contains("Package 02/02 Sample.Syntax.1.0.0.nupkg", output, StringComparison.Ordinal);
-        Assert.Contains("published", output, StringComparison.Ordinal);
-        Assert.Contains("Module artefacts", output, StringComparison.Ordinal);
-        Assert.Contains("Module publishes", output, StringComparison.Ordinal);
-        Assert.Contains("Coordinated steps", output, StringComparison.Ordinal);
+        GoldenFile.Match(GoldenPath("ModuleBuild.CoordinatedRelease.txt"), ConsoleCapture.HeaderAndLedger(output));
     }
+
+    // The module summary lists what needs attention from the run itself (warning diagnostics, with their location),
+    // and keeps the whole recommended action, suggested command included, in the details. Owner notes render their
+    // styling rather than showing markup tags.
+    [Fact]
+    public void ModuleSummary_ListsWarningDiagnosticsUnderNeedsAttention()
+    {
+        var plan = CreatePlan();
+        var diagnostic = new BuildDiagnostic(
+            ruleId: "VALIDATION-PSSA-PSAVOIDUSINGWRITEHOST",
+            area: BuildDiagnosticArea.Validation,
+            severity: BuildDiagnosticSeverity.Warning,
+            scope: BuildDiagnosticScope.Project,
+            owner: BuildDiagnosticOwner.ModuleAuthor,
+            remediationKind: BuildDiagnosticRemediationKind.ManualFix,
+            canAutoFix: false,
+            summary: "Avoid Write-Host",
+            details: "Public\\Get-Thing.ps1:12:5 - Write-Host is used.",
+            recommendedAction: "Use Write-Information or Write-Output.",
+            sourcePath: "Public\\Get-Thing.ps1:12:5",
+            suggestedCommand: "Invoke-ScriptAnalyzer -Path .\\Public\\Get-Thing.ps1 -IncludeRule PSAvoidUsingWriteHost -Settings .\\Build\\PSScriptAnalyzerSettings.psd1 -Recurse -ReportSummary -Severity Warning,Error -ExcludeRule PSUseShouldProcessForStateChangingFunctions,PSUseSingularNouns -CustomRulePath .\\Build\\Rules -RecurseCustomRulePath -EnableExit",
+            generatedBy: "PSScriptAnalyzer");
+
+        var note = new ModuleOwnerNote("Staging", ModuleOwnerNoteSeverity.Info,
+            summary: "Normalized staged line endings to CRLF for 2 file(s).",
+            details: ["Project manifest now tracks the resolved build version 1.0.0."]);
+
+        var output = ConsoleCapture.Final(_ => ModulePipelineSummary.Write(CreateResult(plan, [diagnostic], [note])));
+
+        GoldenFile.Match(GoldenPath("ModuleSummary.Attention.txt"), output);
+    }
+
+    // A failed build shows the plan it ran and the exception itself, inner causes included, rather than a
+    // headline cut from the message.
+    [Fact]
+    public void ModuleFailureSummary_ShowsTheExceptionWithItsInnerCause()
+    {
+        var error = new InvalidOperationException(
+            "Import-Module failed for SampleModule.",
+            new FileNotFoundException("Could not load file or assembly 'Contoso.Native, Version=1.2.0.0'."));
+
+        var output = ConsoleCapture.Final(_ => ModulePipelineSummary.WriteFailure(CreatePlan(), error));
+
+        GoldenFile.Match(GoldenPath("ModuleSummary.Failure.txt"), output);
+    }
+
+    private static string GoldenPath(string name, [System.Runtime.CompilerServices.CallerFilePath] string sourceFile = "")
+        => Path.Combine(Path.GetDirectoryName(sourceFile)!, "Golden", "ConsoleMonster", name);
 
     private static ModuleBuildPreparedContext CreatePreparedContext()
     {
@@ -391,7 +413,7 @@ public sealed class ModuleBuildWorkflowServiceTests
             deleteGeneratedStagingAfterRun: true);
     }
 
-    private static ModulePipelineResult CreateResult(ModulePipelinePlan plan)
+    private static ModulePipelineResult CreateResult(ModulePipelinePlan plan, BuildDiagnostic[]? diagnostics = null, ModuleOwnerNote[]? ownerNotes = null)
     {
         return new ModulePipelineResult(
             plan: plan,
@@ -407,31 +429,12 @@ public sealed class ModuleBuildWorkflowServiceTests
             fileConsistencyLineEndingFix: null,
             compatibilityReport: null,
             validationReport: null,
-            diagnostics: Array.Empty<BuildDiagnostic>(),
+            diagnostics: diagnostics ?? Array.Empty<BuildDiagnostic>(),
             diagnosticsBaseline: null,
             diagnosticsPolicy: null,
             publishResults: Array.Empty<ModulePublishResult>(),
-            artefactResults: Array.Empty<ArtefactBuildResult>());
+            artefactResults: Array.Empty<ArtefactBuildResult>(),
+            ownerNotes: ownerNotes);
     }
 
-    private static IAnsiConsole CreateConsole(TextWriter writer)
-        => AnsiConsole.Create(new AnsiConsoleSettings
-        {
-            Out = new TestConsoleOutput(writer),
-            Ansi = AnsiSupport.Yes,
-            ColorSystem = ColorSystemSupport.NoColors,
-            Interactive = InteractionSupport.Yes
-        });
-
-    private sealed class TestConsoleOutput : IAnsiConsoleOutput
-    {
-        internal TestConsoleOutput(TextWriter writer)
-            => Writer = writer;
-
-        public TextWriter Writer { get; }
-        public bool IsTerminal => true;
-        public int Width => 140;
-        public int Height => 24;
-        public void SetEncoding(System.Text.Encoding encoding) { }
-    }
 }

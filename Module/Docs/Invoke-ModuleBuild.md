@@ -32,7 +32,7 @@ scriptblock) and then executed by the PowerForge pipeline runner.
 To generate a reusable powerforge.json configuration file (for the PowerForge CLI) without running any build
 steps, use -JsonOnly with -JsonPath.
 
-When running in an interactive terminal, pipeline execution uses a Spectre.Console progress UI.
+When running in an interactive terminal, pipeline execution shows a live progress view.
 Redirect output or use -Verbose to force plain, line-by-line output (useful for CI logs).
 
 Dependency behavior is composed from the configuration segments you emit. Typically this means:

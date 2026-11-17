@@ -52,7 +52,8 @@ internal interface IModulePipelineHostedOperations
         bool importRequired,
         bool importSelf,
         bool verbose,
-        ModuleImportValidationTarget[] targets);
+        ModuleImportValidationTarget[] targets,
+        Action<string>? outputLineReceived = null);
 
     ModuleSigningResult SignModuleOutput(
         string moduleName,

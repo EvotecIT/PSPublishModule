@@ -1,3 +1,5 @@
+using System;
+
 namespace PowerForge;
 
 /// <summary>
@@ -6,15 +8,20 @@ namespace PowerForge;
 public enum JsonRendererPreference
 {
     /// <summary>
-    /// Automatically choose the best available renderer (Spectre for styling, fallback to System.Text.Json on errors).
+    /// Automatically choose the best available renderer (currently <see cref="Highlighted"/>).
     /// </summary>
-    Auto,
+    Auto = 0,
     /// <summary>
-    /// Force Spectre.Console.Json to render JSON with colors and formatting.
+    /// Show the JSON as written, with syntax highlighting.
     /// </summary>
-    Spectre,
+    Highlighted = 1,
     /// <summary>
-    /// Render JSON via System.Text.Json serialization with minimal styling.
+    /// Former name of <see cref="Highlighted"/>.
     /// </summary>
-    System
+    [Obsolete("Use Highlighted. JSON is no longer rendered by Spectre.Console.")]
+    Spectre = Highlighted,
+    /// <summary>
+    /// Reformat JSON via System.Text.Json serialization with minimal styling.
+    /// </summary>
+    System = 2
 }

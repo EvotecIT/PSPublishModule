@@ -443,7 +443,9 @@ public sealed partial class DotNetRepositoryReleaseService
                             packable.Length);
                         batchPackResult = PackProjectsWithMsBuildAndTrackProgress(
                             batchCandidates, spec, _logger, signAssemblyOutputs ? signAssemblies : null,
-                            packageProgressItems, packageWatches, detailedProgress);
+                            packageProgressItems, packageWatches, detailedProgress,
+                            heartbeatDetail: message => progress?.PhaseUpdated(
+                                ProjectBuildProgressPhase.PackageBuild, 0, packable.Length, message));
                         if (!batchPackResult.Success)
                         {
                             var batchError = $"{batchPackResult.ErrorMessage ?? "MSBuild batch pack failed."} (MSBuild batch failed; enable verbose logging to see per-project MSBuild output.)";

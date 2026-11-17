@@ -6,7 +6,6 @@
 - [ ] Add contract-focused tests around shared service boundaries and CLI integration.
 - [ ] Regenerate generated command docs after managed-module command surfaces settle.
 - [ ] Regenerate external help after managed-module command surfaces settle.
-- [ ] Split `PowerForge.ConsoleShared\SpectrePipelineSummaryWriter.cs` by rendering responsibility.
 
 ## PowerForge.Web
 

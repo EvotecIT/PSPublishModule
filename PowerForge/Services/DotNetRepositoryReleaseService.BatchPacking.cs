@@ -40,11 +40,12 @@ public sealed partial class DotNetRepositoryReleaseService
         Action<DotNetReleaseBuildAssemblySigningRequest>? signAssemblies,
         IReadOnlyDictionary<DotNetRepositoryProjectResult, ProjectBuildProgressItem> items,
         IReadOnlyDictionary<DotNetRepositoryProjectResult, Stopwatch> watches,
-        IProjectBuildProgressReporterV2? detailedProgress)
+        IProjectBuildProgressReporterV2? detailedProgress,
+        Action<string>? heartbeatDetail = null)
     {
         try
         {
-            return PackProjectsWithMsBuild(projects, spec, logger, signAssemblies);
+            return PackProjectsWithMsBuild(projects, spec, logger, signAssemblies, heartbeatDetail);
         }
         finally
         {
@@ -56,7 +57,8 @@ public sealed partial class DotNetRepositoryReleaseService
         IReadOnlyList<DotNetRepositoryProjectResult> projects,
         DotNetRepositoryReleaseSpec spec,
         ILogger logger,
-        Action<DotNetReleaseBuildAssemblySigningRequest>? signAssemblies)
+        Action<DotNetReleaseBuildAssemblySigningRequest>? signAssemblies,
+        Action<string>? heartbeatDetail = null)
     {
         var result = new DotNetPackResult();
         if (projects.Count == 0)
@@ -127,7 +129,8 @@ public sealed partial class DotNetRepositoryReleaseService
                     logger,
                     out stdErr,
                     out stdOut,
-                    out duration);
+                    out duration,
+                    heartbeatDetail);
                 result.Duration += duration;
 
                 if (exitCode != 0)
@@ -168,7 +171,8 @@ public sealed partial class DotNetRepositoryReleaseService
                     logger,
                     out stdErr,
                     out stdOut,
-                    out duration);
+                    out duration,
+                    heartbeatDetail);
                 result.Duration += duration;
             }
             else
@@ -183,7 +187,8 @@ public sealed partial class DotNetRepositoryReleaseService
                     logger,
                     out stdErr,
                     out stdOut,
-                    out duration);
+                    out duration,
+                    heartbeatDetail);
                 result.Duration += duration;
             }
 

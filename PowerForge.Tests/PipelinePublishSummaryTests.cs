@@ -1,4 +1,4 @@
-using PowerForge.ConsoleShared;
+using PowerForge.ConsoleUi;
 
 namespace PowerForge.Tests;
 

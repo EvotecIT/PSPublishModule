@@ -218,7 +218,7 @@ public sealed class UpdateManagedModuleCommand : AsyncPSCmdlet
     [Parameter]
     public SwitchParameter Plan { get; set; }
 
-    /// <summary>Write a compact Spectre.Console summary for each plan or result.</summary>
+    /// <summary>Write a compact console summary for each plan or result.</summary>
     [Parameter]
     public SwitchParameter ShowSummary { get; set; }
 

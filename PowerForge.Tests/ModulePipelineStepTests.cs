@@ -4,7 +4,7 @@ using Xunit;
 
 namespace PowerForge.Tests;
 
-public sealed class ModulePipelineStepTests
+public sealed partial class ModulePipelineStepTests
 {
     [Theory]
     [InlineData(false, false)]

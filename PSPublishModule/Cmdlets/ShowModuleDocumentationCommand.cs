@@ -9,7 +9,7 @@ namespace PSPublishModule;
 
 /// <summary>
 /// <para type="synopsis">Displays module documentation (README, CHANGELOG, LICENSE, Intro/Upgrade) in the console.</para>
-/// <para type="description">Resolves documentation files from an installed module (root or Internals folder) and renders them with Spectre.Console. When local files are absent or when requested, it can fetch files directly from the module's repository specified by <c>PrivateData.PSData.ProjectUri</c> (GitHub or Azure DevOps), optionally using a Personal Access Token.</para>
+/// <para type="description">Resolves documentation files from an installed module (root or Internals folder) and renders them. When local files are absent or when requested, it can fetch files directly from the module's repository specified by <c>PrivateData.PSData.ProjectUri</c> (GitHub or Azure DevOps), optionally using a Personal Access Token.</para>
 /// <example>
 ///   <summary>Export HTML using only local documentation</summary>
 ///   <prefix>PS&gt; </prefix>

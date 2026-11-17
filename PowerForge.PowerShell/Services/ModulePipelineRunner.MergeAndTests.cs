@@ -104,7 +104,7 @@ public sealed partial class ModulePipelineRunner
             plan.PlaceHolderOption);
     }
 
-    private void RunImportModules(ModulePipelinePlan plan, ModuleBuildResult buildResult)
+    private void RunImportModules(ModulePipelinePlan plan, ModuleBuildResult buildResult, Action<string>? outputLineReceived = null)
     {
         var cfg = plan.ImportModules;
         if (cfg is null) return;
@@ -136,7 +136,8 @@ public sealed partial class ModulePipelineRunner
             importRequired,
             importSelf,
             cfg.Verbose == true,
-            targets);
+            targets,
+            outputLineReceived);
     }
 
     private void RunBinaryDependencyPreflight(ModulePipelinePlan plan, ModuleBuildResult buildResult)

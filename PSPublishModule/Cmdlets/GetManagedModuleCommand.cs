@@ -83,12 +83,18 @@ public sealed class GetManagedModuleCommand : PSCmdlet
     [Parameter]
     public SwitchParameter AsJson { get; set; }
 
-    /// <summary>Write a compact Spectre.Console inventory summary.</summary>
+    /// <summary>Write a compact console inventory summary.</summary>
     [Parameter]
     public SwitchParameter ShowSummary { get; set; }
 
     /// <summary>Gets managed module inventory.</summary>
     protected override void ProcessRecord()
+    {
+        using (CmdletConsole.Use(this))
+            ProcessRecordCore();
+    }
+
+    private void ProcessRecordCore()
     {
         try
         {

@@ -780,7 +780,7 @@ Accept wildcard characters: False
 ```
 
 ### -NoInteractive
-Disables the interactive Spectre renderer while preserving structured pipeline output.
+Disables the interactive progress view while preserving structured pipeline output.
 
 ```yaml
 Type: SwitchParameter

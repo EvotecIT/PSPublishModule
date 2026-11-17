@@ -316,7 +316,7 @@ Accept wildcard characters: False
 ```
 
 ### -ShowSummary
-Write a compact Spectre.Console summary for the publish result.
+Write a compact console summary for the publish result.
 
 ```yaml
 Type: SwitchParameter

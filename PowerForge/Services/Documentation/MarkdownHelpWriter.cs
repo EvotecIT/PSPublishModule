@@ -16,7 +16,11 @@ internal sealed class MarkdownHelpWriter
         _exampleIndentClassifier = exampleIndentClassifier;
     }
 
-    public void WriteCommandHelpFiles(DocumentationExtractionPayload payload, string moduleName, string docsPath)
+    public void WriteCommandHelpFiles(
+        DocumentationExtractionPayload payload,
+        string moduleName,
+        string docsPath,
+        Action<int, int, string>? progress = null)
     {
         if (payload is null) throw new ArgumentNullException(nameof(payload));
         if (string.IsNullOrWhiteSpace(moduleName)) throw new ArgumentException("ModuleName is required.", nameof(moduleName));
@@ -26,10 +30,14 @@ internal sealed class MarkdownHelpWriter
         var onlineVersion = !string.IsNullOrWhiteSpace(payload.HelpInfoUri)
             ? payload.HelpInfoUri!.Trim()
             : string.IsNullOrWhiteSpace(payload.ProjectUri) ? null : payload.ProjectUri!.Trim();
-        foreach (var cmd in (payload.Commands ?? Enumerable.Empty<DocumentationCommandHelp>())
-                     .Where(c => c is not null && !string.IsNullOrWhiteSpace(c.Name))
-                     .OrderBy(c => c.Name, StringComparer.OrdinalIgnoreCase))
+        var commands = (payload.Commands ?? Enumerable.Empty<DocumentationCommandHelp>())
+            .Where(c => c is not null && !string.IsNullOrWhiteSpace(c.Name))
+            .OrderBy(c => c.Name, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        for (var i = 0; i < commands.Length; i++)
         {
+            var cmd = commands[i];
+            progress?.Invoke(i + 1, commands.Length, cmd.Name.Trim());
             var md = RenderCommandMarkdown(moduleName, cmd, onlineVersion, exampleIndentClassifier: _exampleIndentClassifier);
             var path = Path.Combine(docsPath, $"{cmd.Name.Trim()}.md");
             GeneratedTextNormalizer.WriteUtf8NoBom(path, md, "\n");

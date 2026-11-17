@@ -6,8 +6,10 @@ using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
 using System.Threading;
+using ConsoleMonster;
+using ConsoleMonster.Capabilities;
 using PowerForge;
-using Spectre.Console;
+using PowerForge.ConsoleUi;
 
 namespace PSPublishModule;
 
@@ -29,7 +31,9 @@ public static class DocumentationRenderProcess
                 ?? throw new InvalidDataException("The documentation render request is empty.");
             if (request.Module == null)
             {
-                AnsiConsole.Profile.Width = Math.Max(1, request.ConsoleWidth);
+                // Output is redirected to the parent, so detection would see a pipe; use the parent's console instead.
+                Terminal.Profile = TerminalProfile.Fixed(Math.Max(1, request.ConsoleWidth), Math.Max(1, request.ConsoleHeight),
+                    request.ColorDepth, request.Glyphs, OutputMode.Stream);
                 RenderConsoleDirect(request.Items, request.JsonPreference, request.DefaultLanguage);
             }
             else
@@ -59,19 +63,27 @@ public static class DocumentationRenderProcess
             foreach (var item in items)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                Console.WriteLine(GetModuleDocumentationCommand.ShouldRenderAsLocalFile(item)
-                    ? File.ReadAllText(item.Path!) : item.Content ?? string.Empty);
+                var text = GetModuleDocumentationCommand.ShouldRenderAsLocalFile(item)
+                    ? File.ReadAllText(item.Path!) : item.Content ?? string.Empty;
+                // Raw Markdown goes to standard output like the rendered worker output, so it can be captured.
+                ConsoleOutput.WriteOutside(() => Console.WriteLine(text));
             }
             return;
         }
 #if NETFRAMEWORK
-        RunWorker(new DocumentationRenderRequest
+        var profile = ConsoleOutput.CurrentProfile();
+        var response = RunWorker(new DocumentationRenderRequest
         {
             Items = items,
             JsonPreference = preference,
             DefaultLanguage = language,
-            ConsoleWidth = AnsiConsole.Profile.Width
+            ConsoleWidth = profile.Width,
+            ConsoleHeight = profile.Height,
+            ColorDepth = profile.ColorDepth,
+            Glyphs = profile.Glyphs
         }, cancellationToken, null);
+        // The worker's output is already encoded for this console.
+        ConsoleOutput.WriteOutside(() => Console.Write(response.Output));
 #else
         RenderConsoleDirect(items, preference, language);
 #endif
@@ -146,7 +158,6 @@ public static class DocumentationRenderProcess
                 workingDirectory: Environment.CurrentDirectory, environmentVariables: WorkerEnvironment());
             var runner = (ICancellablePowerShellRunner)new PowerShellRunner(new ProcessRunner(ownProcessTree: true));
             var result = runner.RunAsync(runRequest, cancellationToken).GetAwaiter().GetResult();
-            Console.Write(result.StdOut);
             var responsePath = requestPath + ".response.json";
             var response = File.Exists(responsePath)
                 ? JsonSerializer.Deserialize(File.ReadAllText(responsePath),
@@ -161,6 +172,7 @@ public static class DocumentationRenderProcess
             }
             if (!string.IsNullOrWhiteSpace(result.StdErr))
                 throw new InvalidOperationException("Documentation rendering reported an error. " + result.StdErr);
+            response.Output = result.StdOut;
             return response;
         }
         finally

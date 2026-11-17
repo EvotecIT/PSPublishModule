@@ -3563,7 +3563,8 @@ public sealed partial class ModulePipelineHostedOperationsTests
             bool importRequired,
             bool importSelf,
             bool verbose,
-            ModuleImportValidationTarget[] targets)
+            ModuleImportValidationTarget[] targets,
+            Action<string>? outputLineReceived = null)
         {
             if (!AllowModuleImportValidation)
                 throw new InvalidOperationException("Not used in this test.");

@@ -35,6 +35,8 @@ public enum ModulePipelineStepKind
     ExternalAsset = 13,
     /// <summary>Compile or restore the staged PowerShell binary module.</summary>
     Compilation = 14,
+    /// <summary>Install or verify the modules the build itself needs.</summary>
+    Dependencies = 15,
 }
 
 /// <summary>
@@ -113,8 +115,19 @@ public sealed class ModulePipelineStep
         var steps = new List<ModulePipelineStep>();
 
         AddActionSteps(steps, plan, ModulePipelineActionStage.BeforeDependencies);
+        steps.Add(new ModulePipelineStep(
+            kind: ModulePipelineStepKind.Dependencies,
+            key: "deps:install",
+            title: "Prepare module dependencies"));
         AddActionSteps(steps, plan, ModulePipelineActionStage.AfterDependencies);
         AddPackageBuildSteps(steps, plan, beforeModule: true);
+        if (SynchronizesModuleVersion(plan))
+        {
+            steps.Add(new ModulePipelineStep(
+                kind: ModulePipelineStepKind.Versioning,
+                key: "version:synchronize",
+                title: "Synchronize module version"));
+        }
         AddActionSteps(steps, plan, ModulePipelineActionStage.BeforeVersioning);
         if (plan.AppleApps is { Length: > 0 })
         {
@@ -221,6 +234,14 @@ public sealed class ModulePipelineStep
                 title: "Sign module"));
         }
         AddActionSteps(steps, plan, ModulePipelineActionStage.AfterSigning);
+
+        if (ReportsTypeAccelerators(plan))
+        {
+            steps.Add(new ModulePipelineStep(
+                kind: ModulePipelineStepKind.Build,
+                key: "build:type-accelerators",
+                title: "Report type accelerators"));
+        }
 
         // Docs (split into extraction + writing so users can see where time goes).
         AddActionSteps(steps, plan, ModulePipelineActionStage.BeforeDocumentation);
@@ -474,6 +495,20 @@ public sealed class ModulePipelineStep
             }
         }
     }
+
+    /// <summary>Whether the run takes its module version from a package or project build release source.</summary>
+    internal static bool SynchronizesModuleVersion(ModulePipelinePlan plan)
+        => plan.Release?.Configuration?.SynchronizeModuleVersion == true &&
+           plan.GateMode is not ConfigurationGateMode.Manifest and not ConfigurationGateMode.Documentation;
+
+    /// <summary>Whether the run writes the assembly type accelerator surface report.</summary>
+    internal static bool ReportsTypeAccelerators(ModulePipelinePlan plan)
+        => !plan.BuildSpec.RefreshManifestOnly &&
+           plan.GateMode != ConfigurationGateMode.Documentation &&
+           AssemblyTypeAcceleratorOptions.ResolveMode(
+               plan.BuildSpec.AssemblyTypeAcceleratorMode,
+               plan.BuildSpec.AssemblyTypeAccelerators,
+               plan.BuildSpec.AssemblyTypeAcceleratorAssemblies) != AssemblyTypeAcceleratorExportMode.None;
 
     private static string GetPackageLaneAction(bool? publishNuget)
         => publishNuget switch

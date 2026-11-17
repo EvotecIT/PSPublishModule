@@ -62,9 +62,9 @@ public sealed partial class GetModuleDocumentationCommand
     /// <summary>Enable repository access for remote documentation fallback and repository path enumeration.</summary>
     [Parameter] public SwitchParameter Online { get; set; }
 
-    /// <summary>Select JSON renderer for fenced JSON blocks: Auto, Spectre, or System.</summary>
+    /// <summary>Select JSON renderer for fenced JSON blocks: Auto, Highlighted (shown as written) or System (reformatted by System.Text.Json). Spectre is accepted as an older name for Highlighted.</summary>
     [Parameter]
-    [ValidateSet("Auto","Spectre","System")]
+    [ValidateSet("Auto","Highlighted","Spectre","System")]
     public string JsonRenderer { get; set; } = "Auto";
     /// <summary>Default language for unlabeled code fences (Auto, PowerShell, Json, None).</summary>
     [Parameter]

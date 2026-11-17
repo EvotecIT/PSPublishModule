@@ -1,6 +1,5 @@
-﻿using PowerForge;
+using PowerForge;
 using PowerForge.Cli;
-using Spectre.Console;
 using System.Diagnostics;
 using System.Text.Json;
 
@@ -268,8 +267,8 @@ internal static partial class Program
     static ILogger CreateTextLogger(CliOptions cli)
     {
         ILogger baseLogger = cli.NoColor
-            ? new ConsoleLogger { IsVerbose = cli.Verbose }
-            : new SpectreConsoleLogger { IsVerbose = cli.Verbose };
+            ? new PowerForge.ConsoleUi.ConsoleOutputLogger { IsVerbose = cli.Verbose }
+            : new PowerForge.ConsoleUi.ConsoleOutputLogger { IsVerbose = cli.Verbose };
 
         return cli.Quiet ? new QuietLogger(baseLogger) : baseLogger;
     }
@@ -490,7 +489,7 @@ internal static partial class Program
                     logger.Info($" - {a.Type}{(string.IsNullOrWhiteSpace(a.Id) ? string.Empty : $" ({a.Id})")}: {a.OutputPath}");
             }
 
-            var publishSummary = PowerForge.ConsoleShared.PipelinePublishSummaryBuilder.Build(res);
+            var publishSummary = PowerForge.ConsoleUi.PipelinePublishSummaryBuilder.Build(res);
             if (publishSummary.Rows.Count > 0)
             {
                 logger.Info($"Publish: {publishSummary.Rows.Count} result(s) across {publishSummary.ChannelCount} channel(s)");
@@ -531,6 +530,6 @@ internal static partial class Program
             return;
         }
 
-        PowerForge.ConsoleShared.SpectrePipelineSummaryWriter.WriteSummary(res);
+        PowerForge.ConsoleUi.ModulePipelineSummary.Write(res);
     }
 }

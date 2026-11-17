@@ -1,0 +1,32 @@
+ SampleModule 1.0.0 - C:\temp\staging --------------------------------------------------- + built
+ Artefacts                     Published
+ 0                             0
+
+ Needs attention  1 finding | worst first --------------------------------------------------- ! 1
+ ! Public\Get-Thing.ps1:12:5  Avoid Write-Host
+
+ Overview ---------------------------------------------------------------------------------------
+ File consistency   Disabled
+ Compatibility      Disabled
+ Module validation  Disabled
+ Formatting         Disabled
+ Signing            Disabled
+ Artefacts          None
+ Publish            Disabled
+ Diagnostics        1 warning
+ Owner notes        1 FYI
+ Install            Disabled
+
+ Recommended actions ----------------------------------------------------------------------------
+ Avoid Write-Host
+   Where    Public\Get-Thing.ps1:12:5
+   Do this  Use Write-Information or Write-Output. Suggested command: Invoke-ScriptAnalyzer -Path
+            .\Public\Get-Thing.ps1 -IncludeRule PSAvoidUsingWriteHost -Settings
+            .\Build\PSScriptAnalyzerSettings.psd1 -Recurse -ReportSummary -Severity Warning,Error
+            -ExcludeRule PSUseShouldProcessForStateChangingFunctions,PSUseSingularNouns
+            -CustomRulePath .\Build\Rules -RecurseCustomRulePath -EnableExit
+
+ Owner notes ------------------------------------------------------------------------------------
+ Staging
+ Normalized staged line endings to CRLF for 2 file(s).
+ - Project manifest now tracks the resolved build version 1.0.0.

@@ -98,7 +98,7 @@ public sealed partial class ModulePipelineRunner
             }
 
             ExecuteFormattingAndSigningPhases(plan, session, manifestRequiredModules, manifestExternalModuleDependencies, state);
-            ExecuteTypeAcceleratorSurfaceReportPhase(plan, state);
+            ExecuteTypeAcceleratorSurfaceReportPhase(plan, session, state);
             ExecuteDocumentationPhase(plan, session, session.Reporter, state);
             // Refresh the project-root manifest before validation or tests can abort the run so callers always see current metadata.
             state.ProjectManifestSyncMessage = SyncBuildManifestToProjectRoot(

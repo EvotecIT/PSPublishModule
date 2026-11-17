@@ -583,13 +583,18 @@ public sealed partial class DotNetPublishPipelineRunner
                 environmentVariables,
                 inheritedVariableNames,
                 removeUnapprovedAmbient: ActiveStrictDotNetEnvironment.Value);
+        var lineReceived = ActiveProcessLineReceived.Value;
         var result = _processRunner.RunAsync(
                 new ProcessRunRequest(
                     fileName,
                     string.IsNullOrWhiteSpace(workingDir) ? Environment.CurrentDirectory : workingDir,
                     args,
                     Timeout.InfiniteTimeSpan,
-                    safeEnvironment),
+                    safeEnvironment,
+                    captureOutput: true,
+                    captureError: true,
+                    outputLineReceived: lineReceived,
+                    errorLineReceived: lineReceived),
                 _cancellationToken.Value)
             .GetAwaiter()
             .GetResult();
