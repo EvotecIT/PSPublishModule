@@ -214,16 +214,13 @@ public sealed class PowerShellGetClient
 
         var result = new ModuleRepositoryRetryPolicy(_logger).RunPowerShell(
             $"Find-Module {string.Join(", ", names)}",
-            () => RunScript(script, args, timeout ?? TimeSpan.FromMinutes(2)));
+            () => RunScript(script, args, timeout ?? TimeSpan.FromMinutes(2), heartbeatLabel: $"Find-Module {string.Join(", ", names)}"));
         var items = ParseFindOutput(result.StdOut);
 
         if (result.ExitCode != 0)
         {
-            var message = TryExtractError(result.StdOut) ?? result.StdErr;
-            var full = $"Find-Module failed (exit {result.ExitCode}). {message}".Trim();
-            _logger.Error(full);
-            if (_logger.IsVerbose && !string.IsNullOrWhiteSpace(result.StdOut)) _logger.Verbose(result.StdOut.Trim());
-            if (_logger.IsVerbose && !string.IsNullOrWhiteSpace(result.StdErr)) _logger.Verbose(result.StdErr.Trim());
+            // The caller reports the thrown error; logging it here as well would show it twice.
+            var full = RepositoryDiagnosticService.DescribeChildFailure("Find-Module", result, TryExtractError(result.StdOut));
             if (result.ExitCode == 3)
                 throw new PowerShellToolNotAvailableException("PowerShellGet", full);
             throw new InvalidOperationException(full);
@@ -258,14 +255,17 @@ public sealed class PowerShellGetClient
             options.Credential?.Secret ?? string.Empty
         };
 
-        var result = RunScript(script, args, timeout ?? TimeSpan.FromMinutes(10), cancellationToken);
+        var result = RunScript(script, args, timeout ?? TimeSpan.FromMinutes(10), cancellationToken,
+            heartbeatLabel: $"Publish-Module {RepositoryDiagnosticService.DescribePackage(options.Path)} to {options.Repository ?? "PSGallery"}",
+            redactor: RepositoryDiagnosticService.CreateRedactor(options.ApiKey, options.Credential));
         if (result.ExitCode != 0)
         {
-            var message = TryExtractError(result.StdOut) ?? result.StdErr;
+            var message = RepositoryDiagnosticService.DescribeChildFailure("Publish-Module", result, TryExtractError(result.StdOut));
             var failure = RepositoryDiagnosticService.PublishFailure(PublishTool.PowerShellGet, result.ExitCode,
                 message, result.StdOut, options.Repository, options.Path, options.ApiKey, options.Credential, options.ApiKeySource);
             var full = failure.Message;
-            _logger.Error(full);
+            // The caller reports the thrown error; logging it here as well would show it twice.
+            if (_logger.IsVerbose) _logger.Verbose(full);
             if (result.ExitCode == 3)
                 throw new PowerShellToolNotAvailableException("PowerShellGet", full);
             throw failure;
@@ -304,16 +304,13 @@ public sealed class PowerShellGetClient
 
         var result = new ModuleRepositoryRetryPolicy(_logger).RunPowerShell(
             $"Save-Module {options.Name} {options.RequiredVersion}",
-            () => RunScript(script, args, timeout ?? TimeSpan.FromMinutes(10)));
+            () => RunScript(script, args, timeout ?? TimeSpan.FromMinutes(10), heartbeatLabel: $"Save-Module {options.Name} {options.RequiredVersion}".TrimEnd()));
         var items = ParseSaveOutput(result.StdOut);
 
         if (result.ExitCode != 0)
         {
-            var message = TryExtractError(result.StdOut) ?? result.StdErr;
-            var full = $"Save-Module failed (exit {result.ExitCode}). {message}".Trim();
-            _logger.Error(full);
-            if (_logger.IsVerbose && !string.IsNullOrWhiteSpace(result.StdOut)) _logger.Verbose(result.StdOut.Trim());
-            if (_logger.IsVerbose && !string.IsNullOrWhiteSpace(result.StdErr)) _logger.Verbose(result.StdErr.Trim());
+            // The caller reports the thrown error; logging it here as well would show it twice.
+            var full = RepositoryDiagnosticService.DescribeChildFailure("Save-Module", result, TryExtractError(result.StdOut));
             if (result.ExitCode == 3)
                 throw new PowerShellToolNotAvailableException("PowerShellGet", full);
             throw new InvalidOperationException(full);
@@ -348,16 +345,14 @@ public sealed class PowerShellGetClient
             credential?.Secret ?? string.Empty
         };
 
-        var result = RunScript(script, args, timeout ?? TimeSpan.FromMinutes(2));
+        var result = RunScript(script, args, timeout ?? TimeSpan.FromMinutes(2),
+            redactor: RepositoryDiagnosticService.CreateRedactor(apiKey: null, credential));
         var created = ParseRepositoryCreated(result.StdOut);
 
         if (result.ExitCode != 0)
         {
-            var message = TryExtractError(result.StdOut) ?? result.StdErr;
-            var full = $"Register-PSRepository failed (exit {result.ExitCode}). {message}".Trim();
-            _logger.Error(full);
-            if (_logger.IsVerbose && !string.IsNullOrWhiteSpace(result.StdOut)) _logger.Verbose(result.StdOut.Trim());
-            if (_logger.IsVerbose && !string.IsNullOrWhiteSpace(result.StdErr)) _logger.Verbose(result.StdErr.Trim());
+            // The caller reports the thrown error; logging it here as well would show it twice.
+            var full = RepositoryDiagnosticService.DescribeChildFailure("Register-PSRepository", result, TryExtractError(result.StdOut));
             if (result.ExitCode == 3)
                 throw new PowerShellToolNotAvailableException("PowerShellGet", full);
             throw new InvalidOperationException(full);
@@ -379,11 +374,8 @@ public sealed class PowerShellGetClient
         var result = RunScript(script, args, timeout ?? TimeSpan.FromMinutes(2));
         if (result.ExitCode != 0)
         {
-            var message = TryExtractError(result.StdOut) ?? result.StdErr;
-            var full = $"Unregister-PSRepository failed (exit {result.ExitCode}). {message}".Trim();
-            _logger.Error(full);
-            if (_logger.IsVerbose && !string.IsNullOrWhiteSpace(result.StdOut)) _logger.Verbose(result.StdOut.Trim());
-            if (_logger.IsVerbose && !string.IsNullOrWhiteSpace(result.StdErr)) _logger.Verbose(result.StdErr.Trim());
+            // The caller reports the thrown error; logging it here as well would show it twice.
+            var full = RepositoryDiagnosticService.DescribeChildFailure("Unregister-PSRepository", result, TryExtractError(result.StdOut));
             if (result.ExitCode == 3)
                 throw new PowerShellToolNotAvailableException("PowerShellGet", full);
             throw new InvalidOperationException(full);
@@ -394,7 +386,9 @@ public sealed class PowerShellGetClient
         string scriptText,
         IReadOnlyList<string> args,
         TimeSpan timeout,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        string? heartbeatLabel = null,
+        RepositoryDiagnosticRedactor? redactor = null)
     {
         var tempDir = Path.Combine(Path.GetTempPath(), "PowerForge", "powershellget");
         Directory.CreateDirectory(tempDir);
@@ -402,7 +396,8 @@ public sealed class PowerShellGetClient
         File.WriteAllText(scriptPath, scriptText, new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
         try
         {
-            var request = new PowerShellRunRequest(scriptPath, args, timeout, preferPwsh: true);
+            var request = RepositoryDiagnosticService.CreateLiveRequest(scriptPath, args, timeout, _logger, redactor);
+            using var heartbeat = heartbeatLabel is null ? null : OperationHeartbeat.Start(_logger, heartbeatLabel!);
             return _runner is ICancellablePowerShellRunner cancellableRunner
                 ? cancellableRunner.RunAsync(request, cancellationToken).GetAwaiter().GetResult()
                 : RunWithoutCancellation(request, cancellationToken);
@@ -502,7 +497,7 @@ public sealed class PowerShellGetClient
 
     private static string BuildFindScript()
     {
-        return EmbeddedScripts.Load("Scripts/PowerShellGet/Find-Module.ps1");
+        return LoadWithNuGetBootstrap("Scripts/PowerShellGet/Find-Module.ps1");
     }
 
     private static string BuildAvailabilityScript()
@@ -512,18 +507,27 @@ public sealed class PowerShellGetClient
 
     private static string BuildPublishScript()
     {
-        return RepositoryDiagnosticService.Compose(EmbeddedScripts.Load("Scripts/PowerShellGet/Publish-Module.ps1"));
+        return RepositoryDiagnosticService.Compose(LoadWithNuGetBootstrap("Scripts/PowerShellGet/Publish-Module.ps1"));
     }
 
     private static string BuildSaveScript()
     {
-        return EmbeddedScripts.Load("Scripts/PowerShellGet/Save-Module.ps1");
+        return LoadWithNuGetBootstrap("Scripts/PowerShellGet/Save-Module.ps1");
     }
 
     private static string BuildEnsureRepositoryScript()
     {
-        return EmbeddedScripts.Load("Scripts/PowerShellGet/Ensure-Repository.ps1");
+        return LoadWithNuGetBootstrap("Scripts/PowerShellGet/Ensure-Repository.ps1");
     }
+
+    /// <summary>
+    /// Adds the non-interactive NuGet provider and NuGet.exe bootstrap. Without it Windows PowerShell 5.1 stops at a
+    /// download prompt that <c>-NonInteractive</c> turns into a confusing "NuGet.exe is required" failure.
+    /// </summary>
+    internal static string LoadWithNuGetBootstrap(string resourcePath)
+        => EmbeddedScripts.Load(resourcePath).Replace(
+            "# POWERFORGE_NUGET_BOOTSTRAP",
+            EmbeddedScripts.Load("Scripts/PowerShellGet/Initialize-NuGet.ps1"));
 
     private static string BuildUnregisterRepositoryScript()
     {

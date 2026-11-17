@@ -34,6 +34,7 @@ try {
 try {
   $nugetProvider = Get-PackageProvider -Name NuGet -ErrorAction SilentlyContinue
   if ($null -eq $nugetProvider) {
+    Write-Output ('PFMOD::INFO::' + (Enc 'Installing the NuGet package provider that PowerShellGet needs (one-time download).'))
     Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Scope CurrentUser -Force -ErrorAction Stop | Out-Null
   }
   Import-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force -ErrorAction SilentlyContinue | Out-Null

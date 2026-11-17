@@ -27,6 +27,16 @@ try {
   exit 3
 }
 
+# POWERFORGE_NUGET_BOOTSTRAP
+
+try {
+  Initialize-PFNuGetProvider
+} catch {
+  $msg = 'NuGet package provider is not available for PowerShellGet: ' + $_.Exception.Message
+  Write-Output ('PFPWSGET::ERROR::' + (Enc $msg))
+  exit 4
+}
+
 $names = @(DecodeLines $NamesB64)
 $repos = @(DecodeLines $ReposB64)
 $prerelease = ($PrereleaseFlag -eq '1')

@@ -25,6 +25,16 @@ try {
   exit 3
 }
 
+# POWERFORGE_NUGET_BOOTSTRAP
+
+try {
+  Initialize-PFNuGetProvider
+} catch {
+  $msg = 'NuGet package provider is not available for PowerShellGet: ' + $_.Exception.Message
+  Write-Output ('PFPWSGET::ERROR::' + (Enc $msg))
+  exit 4
+}
+
 $saveCmd = Get-Command Save-Module -ErrorAction Stop
 $params = @{ ErrorAction = 'Stop' }
 $params.Name = $Name
