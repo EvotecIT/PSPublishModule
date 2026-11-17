@@ -39,13 +39,15 @@ internal sealed class ModuleRepositoryRetryPolicy
     {
         for (var attempt = 1; ; attempt++)
         {
-            _logger.Info($"{operation}: attempt {attempt}/{MaximumAttempts}.");
+            // The first attempt is the normal case; only retries are worth a visible line.
+            if (attempt == 1) { if (_logger.IsVerbose) _logger.Verbose($"{operation}: attempt {attempt}/{MaximumAttempts}."); }
+            else _logger.Info($"{operation}: attempt {attempt}/{MaximumAttempts}.");
             try { return run(); }
             catch (Exception ex) when (IsTransientException(ex))
             {
                 if (attempt == MaximumAttempts)
                     throw new InvalidOperationException($"{operation} failed after {attempt} attempts. Verify the repository, package name and requested version; for Gallery outages retry later. Last error: {ex.Message}", ex);
-                Wait(operation, attempt, ex is TimeoutException ? "timeout" : "transient repository failure (404/408/429/5xx or transport error)");
+                Wait(operation, attempt, ex is TimeoutException ? "timeout" : "transient repository failure (404/408/429/5xx or transport error)", ex.Message);
             }
         }
     }
@@ -66,11 +68,18 @@ internal sealed class ModuleRepositoryRetryPolicy
 
     internal sealed class TransientRepositoryFailure(string message) : Exception(message);
 
-    private void Wait(string operation, int attempt, string reason)
+    private void Wait(string operation, int attempt, string reason, string? error)
     {
         var delay = Backoff(TimeSpan.FromSeconds(1), attempt);
-        _logger.Warn($"{operation}: {reason} on attempt {attempt}/{MaximumAttempts}; retrying in {delay.TotalSeconds:0} seconds.");
+        var detail = FirstLine(error);
+        _logger.Warn($"{operation}: {reason} on attempt {attempt}/{MaximumAttempts}; retrying in {delay.TotalSeconds:0} seconds (attempt {attempt + 1}/{MaximumAttempts} next).{(detail.Length == 0 ? string.Empty : " Error: " + detail)}");
         _delay(delay);
+    }
+
+    private static string FirstLine(string? text)
+    {
+        var line = (text ?? string.Empty).Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries).FirstOrDefault()?.Trim() ?? string.Empty;
+        return line.Length > 300 ? line.Substring(0, 300) + "..." : line;
     }
 
     private static string ReadError(PowerShellRunResult result)

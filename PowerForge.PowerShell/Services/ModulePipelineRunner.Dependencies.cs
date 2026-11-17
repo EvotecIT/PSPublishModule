@@ -139,7 +139,7 @@ public sealed partial class ModulePipelineRunner
 
         var failures = results.Where(r => r.Status == ModuleDependencyInstallStatus.Failed).ToArray();
         if (failures.Length > 0)
-            throw new InvalidOperationException($"Dependency installation failed for {failures.Length} module{(failures.Length == 1 ? string.Empty : "s")}.");
+            throw new InvalidOperationException(DescribeDependencyInstallFailures("Dependency installation", failures));
 
         ValidateRepositoryDependencyGuids(
             installable.Select(item => (item.Dependency, item.InstallRequest, item.Source)).ToArray(),
@@ -477,7 +477,7 @@ public sealed partial class ModulePipelineRunner
 
         var failures = results.Where(r => r.Status == ModuleDependencyInstallStatus.Failed).ToArray();
         if (failures.Length > 0)
-            throw new InvalidOperationException($"Build feature tool dependency installation failed for {failures.Length} module{(failures.Length == 1 ? string.Empty : "s")}.");
+            throw new InvalidOperationException(DescribeDependencyInstallFailures("Build feature tool dependency installation", failures));
 
         if (results.Count > 0)
         {

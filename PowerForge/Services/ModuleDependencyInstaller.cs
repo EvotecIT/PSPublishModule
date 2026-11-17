@@ -80,9 +80,11 @@ public sealed partial class ModuleDependencyInstaller
 
         var actions = new List<ActionItem>(list.Length);
         var perModuleTimeout = timeoutPerModule ?? TimeSpan.FromMinutes(5);
+        var position = 0;
 
         foreach (var dep in list)
         {
+            var progress = $"{++position}/{list.Length}";
             var installedBefore = before.TryGetValue(dep.Name, out var v) ? v : null;
             if (skip.Contains(dep.Name))
             {
@@ -90,6 +92,7 @@ public sealed partial class ModuleDependencyInstaller
                 continue;
             }
 
+            var moduleTimer = System.Diagnostics.Stopwatch.StartNew();
             Decision? decision = null;
             try
             {
@@ -139,14 +142,14 @@ public sealed partial class ModuleDependencyInstaller
                 {
                     if (RequiresScopedInstall(dep) && !CanUseScopedDependencyProbe(dep))
                     {
-                        var scopedInstallStatus = TryInstall(dep, BuildVersionArgument(dep), repository, credential, prerelease, force, preferPowerShellGet, allowClobber, timeout: perModuleTimeout);
+                        var scopedInstallStatus = TryInstall(progress, dep, BuildVersionArgument(dep), repository, credential, prerelease, force, preferPowerShellGet, allowClobber, timeout: perModuleTimeout);
                         actions.Add(new ActionItem(dep.Name, installedBefore, currentDecision.RequestedVersion, ModuleDependencyInstallStatus.Updated, installer: scopedInstallStatus, message: "Module is not installed in requested scope"));
                         continue;
                     }
 
                     if (RequiresScopedInstall(dep) && !HasInstalledModuleSatisfyingDependency(dep))
                     {
-                        var scopedInstallStatus = TryInstall(dep, BuildVersionArgument(dep), repository, credential, prerelease, force, preferPowerShellGet, allowClobber, timeout: perModuleTimeout);
+                        var scopedInstallStatus = TryInstall(progress, dep, BuildVersionArgument(dep), repository, credential, prerelease, force, preferPowerShellGet, allowClobber, timeout: perModuleTimeout);
                         actions.Add(new ActionItem(dep.Name, installedBefore, currentDecision.RequestedVersion, ModuleDependencyInstallStatus.Updated, installer: scopedInstallStatus, message: "Module is not installed in requested scope"));
                         continue;
                     }
@@ -156,11 +159,12 @@ public sealed partial class ModuleDependencyInstaller
                 }
 
                 var installStatus = installedBefore is null ? ModuleDependencyInstallStatus.Installed : ModuleDependencyInstallStatus.Updated;
-                var usedInstaller = TryInstall(dep, currentDecision.VersionArgument, repository, credential, prerelease, force, preferPowerShellGet, allowClobber, perModuleTimeout);
+                var usedInstaller = TryInstall(progress, dep, currentDecision.VersionArgument, repository, credential, prerelease, force, preferPowerShellGet, allowClobber, perModuleTimeout);
                 actions.Add(new ActionItem(dep.Name, installedBefore, currentDecision.RequestedVersion, installStatus, installer: usedInstaller, message: currentDecision.Reason));
             }
             catch (Exception ex)
             {
+                LogModuleFailure(dep.Name, progress, moduleTimer.Elapsed, ex);
                 actions.Add(new ActionItem(
                     dep.Name,
                     installedBefore,
@@ -300,9 +304,11 @@ public sealed partial class ModuleDependencyInstaller
 
         var actions = new List<ActionItem>(list.Length);
         var perModuleTimeout = timeoutPerModule ?? TimeSpan.FromMinutes(5);
+        var position = 0;
 
         foreach (var dep in list)
         {
+            var progress = $"{++position}/{list.Length}";
             var installedBefore = before.TryGetValue(dep.Name, out var v) ? v : null;
             if (skip.Contains(dep.Name))
             {
@@ -310,16 +316,17 @@ public sealed partial class ModuleDependencyInstaller
                 continue;
             }
 
+            var moduleTimer = System.Diagnostics.Stopwatch.StartNew();
             try
             {
                 if (string.IsNullOrWhiteSpace(installedBefore))
                 {
-                    var installStatus = TryInstall(dep, BuildVersionArgument(dep), repository, credential, prerelease, force: false, preferPowerShellGet: preferPowerShellGet, allowClobber: false, timeout: perModuleTimeout);
+                    var installStatus = TryInstall(progress, dep, BuildVersionArgument(dep), repository, credential, prerelease, force: false, preferPowerShellGet: preferPowerShellGet, allowClobber: false, timeout: perModuleTimeout);
                     actions.Add(new ActionItem(dep.Name, installedBefore, dep.RequiredVersion ?? dep.MinimumVersion, ModuleDependencyInstallStatus.Installed, installer: installStatus, message: "Not installed"));
                 }
                 else if (force)
                 {
-                    var installStatus = TryInstall(dep, BuildVersionArgument(dep), repository, credential, prerelease, force: true, preferPowerShellGet: preferPowerShellGet, allowClobber: false, timeout: perModuleTimeout);
+                    var installStatus = TryInstall(progress, dep, BuildVersionArgument(dep), repository, credential, prerelease, force: true, preferPowerShellGet: preferPowerShellGet, allowClobber: false, timeout: perModuleTimeout);
                     actions.Add(new ActionItem(dep.Name, installedBefore, dep.RequiredVersion ?? dep.MinimumVersion, ModuleDependencyInstallStatus.Updated, installer: installStatus, message: "Force requested", force: true));
                 }
                 else if (!string.IsNullOrWhiteSpace(dep.RequiredVersion))
@@ -341,7 +348,7 @@ public sealed partial class ModuleDependencyInstaller
                         continue;
                     }
 
-                    var installStatus = TryInstall(dep, BuildVersionArgument(dep), repository, credential, prerelease, force: false, preferPowerShellGet: preferPowerShellGet, allowClobber: false, timeout: perModuleTimeout);
+                    var installStatus = TryInstall(progress, dep, BuildVersionArgument(dep), repository, credential, prerelease, force: false, preferPowerShellGet: preferPowerShellGet, allowClobber: false, timeout: perModuleTimeout);
                     actions.Add(new ActionItem(dep.Name, installedBefore, exactRequiredVersion, ModuleDependencyInstallStatus.Updated, installer: installStatus, message: $"Exact version required: {exactRequiredVersion} (installed: {installedBefore})"));
                 }
                 else
@@ -349,7 +356,7 @@ public sealed partial class ModuleDependencyInstaller
                     string? updateStatus;
                     if (RequiresScopedInstall(dep) && (!CanUseScopedDependencyProbe(dep) || !HasInstalledModuleSatisfyingDependency(dep)))
                     {
-                        updateStatus = TryInstall(dep, BuildVersionArgument(dep), repository, credential, prerelease, force: false, preferPowerShellGet: preferPowerShellGet, allowClobber: false, timeout: perModuleTimeout);
+                        updateStatus = TryInstall(progress, dep, BuildVersionArgument(dep), repository, credential, prerelease, force: false, preferPowerShellGet: preferPowerShellGet, allowClobber: false, timeout: perModuleTimeout);
                     }
                     else if (HasVersionConstraint(dep))
                     {
@@ -365,11 +372,11 @@ public sealed partial class ModuleDependencyInstaller
                             continue;
                         }
 
-                        updateStatus = TryInstall(dep, BuildVersionArgument(dep), repository, credential, prerelease, force: true, preferPowerShellGet: preferPowerShellGet, allowClobber: false, timeout: perModuleTimeout);
+                        updateStatus = TryInstall(progress, dep, BuildVersionArgument(dep), repository, credential, prerelease, force: true, preferPowerShellGet: preferPowerShellGet, allowClobber: false, timeout: perModuleTimeout);
                     }
                     else
                     {
-                        updateStatus = TryUpdate(dep, installedBefore!, repository, credential, prerelease, preferPowerShellGet, perModuleTimeout);
+                        updateStatus = TryUpdate(progress, dep, installedBefore!, repository, credential, prerelease, preferPowerShellGet, perModuleTimeout);
                     }
 
                     actions.Add(new ActionItem(dep.Name, installedBefore, dep.RequiredVersion ?? dep.MinimumVersion, ModuleDependencyInstallStatus.Updated, installer: updateStatus, message: "Update requested"));
@@ -377,6 +384,7 @@ public sealed partial class ModuleDependencyInstaller
             }
             catch (Exception ex)
             {
+                LogModuleFailure(dep.Name, progress, moduleTimer.Elapsed, ex);
                 actions.Add(new ActionItem(dep.Name, installedBefore, dep.RequiredVersion ?? dep.MinimumVersion, ModuleDependencyInstallStatus.Failed, installer: null, message: ex.Message));
             }
         }
@@ -468,6 +476,7 @@ public sealed partial class ModuleDependencyInstaller
     }
 
     private string TryInstall(
+        string progress,
         ModuleDependency dep,
         string? versionArgument,
         string? repository,
@@ -484,12 +493,13 @@ public sealed partial class ModuleDependencyInstaller
             {
                 try
                 {
-                    InstallWithPowerShellGet(dep, repository, credential, prerelease, allowClobber, timeout);
+                    RunInstallStep(progress, dep, versionArgument, "PowerShellGet", "Installing",
+                        () => InstallWithPowerShellGet(dep, repository, credential, prerelease, allowClobber, timeout));
                     return "PowerShellGet";
                 }
-                catch (PowerShellToolNotAvailableException)
+                catch (PowerShellToolNotAvailableException ex)
                 {
-                    _logger.Warn($"PowerShellGet not available; trying PSResourceGet Install-PSResource for '{dep.Name}'.");
+                    _logger.Warn($"PowerShellGet not available; trying PSResourceGet Install-PSResource for '{dep.Name}'. {ex.Message}");
                 }
             }
             else
@@ -514,27 +524,30 @@ public sealed partial class ModuleDependencyInstaller
                 acceptLicense: true,
                 quiet: true,
                 credential: credential);
-            client.Install(opts, timeout);
+            RunInstallStep(progress, dep, versionArgument, "PSResourceGet", "Installing", () => client.Install(opts, timeout));
             return "PSResourceGet";
         }
-        catch (PowerShellToolNotAvailableException)
+        catch (PowerShellToolNotAvailableException ex)
         {
-            _logger.Warn($"PSResourceGet not available; falling back to PowerShellGet Install-Module for '{dep.Name}'.");
+            _logger.Warn($"PSResourceGet not available; falling back to PowerShellGet Install-Module for '{dep.Name}'. {ex.Message}");
             try
             {
-                InstallWithPowerShellGet(dep, repository, credential, prerelease, allowClobber, timeout);
+                RunInstallStep(progress, dep, versionArgument, "PowerShellGet", "Installing",
+                    () => InstallWithPowerShellGet(dep, repository, credential, prerelease, allowClobber, timeout));
                 return "PowerShellGet";
             }
-            catch (PowerShellToolNotAvailableException) when (CanDirectBootstrapPSResourceGet(dep, repository, credential))
+            catch (PowerShellToolNotAvailableException fallbackEx) when (CanDirectBootstrapPSResourceGet(dep, repository, credential))
             {
-                _logger.Warn("PowerShellGet not available; installing Microsoft.PowerShell.PSResourceGet directly from PowerShell Gallery.");
-                InstallPSResourceGetDirect(dep, prerelease, force, timeout);
+                _logger.Warn($"PowerShellGet not available; installing Microsoft.PowerShell.PSResourceGet directly from PowerShell Gallery. {fallbackEx.Message}");
+                RunInstallStep(progress, dep, versionArgument, "a direct PowerShell Gallery download", "Installing",
+                    () => InstallPSResourceGetDirect(dep, prerelease, force, timeout));
                 return "DirectPowerShellGallery";
             }
         }
     }
 
     private string? TryUpdate(
+        string progress,
         ModuleDependency dep,
         string installedVersion,
         string? repository,
@@ -547,30 +560,34 @@ public sealed partial class ModuleDependencyInstaller
         {
             try
             {
-                return UpdateWithPowerShellGet(dep, installedVersion, repository, credential, prerelease, timeout);
+                return RunInstallStep(progress, dep, null, "PowerShellGet", "Updating",
+                    () => UpdateWithPowerShellGet(dep, installedVersion, repository, credential, prerelease, timeout));
             }
-            catch (PowerShellToolNotAvailableException)
+            catch (PowerShellToolNotAvailableException ex)
             {
-                _logger.Warn($"PowerShellGet not available; trying PSResourceGet Update-PSResource for '{dep.Name}'.");
+                _logger.Warn($"PowerShellGet not available; trying PSResourceGet Update-PSResource for '{dep.Name}'. {ex.Message}");
             }
         }
 
         try
         {
-            UpdateWithPSResourceGet(dep, repository, credential, prerelease, timeout);
+            RunInstallStep(progress, dep, null, "PSResourceGet", "Updating",
+                () => UpdateWithPSResourceGet(dep, repository, credential, prerelease, timeout));
             return "PSResourceGet";
         }
-        catch (PowerShellToolNotAvailableException)
+        catch (PowerShellToolNotAvailableException ex)
         {
-            _logger.Warn($"PSResourceGet not available; falling back to PowerShellGet Update-Module for '{dep.Name}'.");
-            return UpdateWithPowerShellGet(dep, installedVersion, repository, credential, prerelease, timeout);
+            _logger.Warn($"PSResourceGet not available; falling back to PowerShellGet Update-Module for '{dep.Name}'. {ex.Message}");
+            return RunInstallStep(progress, dep, null, "PowerShellGet", "Updating",
+                () => UpdateWithPowerShellGet(dep, installedVersion, repository, credential, prerelease, timeout));
         }
         catch (InvalidOperationException ex)
         {
             _logger.Warn($"Update-PSResource failed for '{dep.Name}'; trying PowerShellGet Update-Module fallback. {ex.Message}");
             try
             {
-                return UpdateWithPowerShellGet(dep, installedVersion, repository, credential, prerelease, timeout);
+                return RunInstallStep(progress, dep, null, "PowerShellGet", "Updating",
+                    () => UpdateWithPowerShellGet(dep, installedVersion, repository, credential, prerelease, timeout));
             }
             catch (Exception fallbackEx) when (fallbackEx is PowerShellToolNotAvailableException or InvalidOperationException)
             {
@@ -604,11 +621,10 @@ public sealed partial class ModuleDependencyInstaller
         };
         var result = new ModuleRepositoryRetryPolicy(_logger).RunPowerShell(
             $"Install-Module {dep.Name} {dep.RequiredVersion ?? dep.MinimumVersion}",
-            () => RunScript(script, args, timeout));
+            () => RunScript(script, args, timeout, $"Install-Module {dep.Name}", credential));
         if (result.ExitCode != 0)
         {
-            var msg = TryExtractError(result.StdOut) ?? result.StdErr;
-            var full = $"Install-Module failed (exit {result.ExitCode}). {msg}".Trim();
+            var full = RepositoryDiagnosticService.DescribeChildFailure("Install-Module", result, TryExtractError(result.StdOut));
             if (result.ExitCode == 3)
                 throw new PowerShellToolNotAvailableException("PowerShellGet", full);
             throw new InvalidOperationException(full);
@@ -627,11 +643,10 @@ public sealed partial class ModuleDependencyInstaller
             credential?.Secret ?? string.Empty,
             dep.InstallScope ?? string.Empty
         };
-        var result = RunScript(script, args, timeout);
+        var result = RunScript(script, args, timeout, $"Update-PSResource {dep.Name}", credential);
         if (result.ExitCode != 0)
         {
-            var msg = TryExtractError(result.StdOut) ?? result.StdErr;
-            var full = $"Update-PSResource failed (exit {result.ExitCode}). {msg}".Trim();
+            var full = RepositoryDiagnosticService.DescribeChildFailure("Update-PSResource", result, TryExtractError(result.StdOut));
             if (result.ExitCode == 3)
                 throw new PowerShellToolNotAvailableException("PSResourceGet", full);
             throw new InvalidOperationException(full);
@@ -666,11 +681,10 @@ public sealed partial class ModuleDependencyInstaller
             credential?.Secret ?? string.Empty,
             ResolveInstallScope(dep)
         };
-        var result = RunScript(script, args, timeout);
+        var result = RunScript(script, args, timeout, $"Update-Module {dep.Name}", credential);
         if (result.ExitCode != 0)
         {
-            var msg = TryExtractError(result.StdOut) ?? result.StdErr;
-            var full = $"Update-Module failed (exit {result.ExitCode}). {msg}".Trim();
+            var full = RepositoryDiagnosticService.DescribeChildFailure("Update-Module", result, TryExtractError(result.StdOut));
             if (result.ExitCode == 3)
                 throw new PowerShellToolNotAvailableException("PowerShellGet", full);
             throw new InvalidOperationException(full);
@@ -726,7 +740,8 @@ public sealed partial class ModuleDependencyInstaller
         return map;
     }
 
-    private PowerShellRunResult RunScript(string scriptText, IReadOnlyList<string> args, TimeSpan timeout)
+    private PowerShellRunResult RunScript(string scriptText, IReadOnlyList<string> args, TimeSpan timeout,
+        string? heartbeatLabel = null, RepositoryCredential? credential = null)
     {
         var tempDir = Path.Combine(Path.GetTempPath(), "PowerForge", "moduledeps");
         Directory.CreateDirectory(tempDir);
@@ -734,7 +749,10 @@ public sealed partial class ModuleDependencyInstaller
         File.WriteAllText(scriptPath, scriptText, new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
         try
         {
-            return _runner.Run(new PowerShellRunRequest(scriptPath, args, timeout, preferPwsh: true));
+            var request = RepositoryDiagnosticService.CreateLiveRequest(scriptPath, args, timeout, _logger,
+                RepositoryDiagnosticService.CreateRedactor(apiKey: null, credential));
+            using var heartbeat = heartbeatLabel is null ? null : OperationHeartbeat.Start(_logger, heartbeatLabel!);
+            return _runner.Run(request);
         }
         finally
         {
