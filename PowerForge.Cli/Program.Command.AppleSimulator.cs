@@ -38,7 +38,7 @@ internal static partial class Program
                     CliJson.SerializeToElement(status, CliJson.Context.AppleSimulatorSessionStatus));
                 else
                 {
-                    Console.WriteLine($"Owner: {status.OwnerState}; device: {status.DeviceState ?? "none"}; needs attention: {status.NeedsAttention}; receipt: {status.ReceiptPath}");
+                    PowerForge.ConsoleUi.ConsoleOutput.WriteLine($"Owner: {status.OwnerState}; device: {status.DeviceState ?? "none"}; needs attention: {status.NeedsAttention}; receipt: {status.ReceiptPath}");
                     if (status.DiscoveryError is not null) logger.Error(status.DiscoveryError);
                 }
                 return status.NeedsAttention ? 1 : 0;
@@ -48,7 +48,7 @@ internal static partial class Program
                 if (separator >= 0) throw new ArgumentException("acknowledge does not accept a child command.");
                 var receipt = service.AcknowledgeAsync(RequiredAppleSimulatorValue(values, "--session"), stateRoot, cancellation.Token).GetAwaiter().GetResult();
                 if (json) WriteAppleSimulatorJson("acknowledge", true, 0, CliJson.SerializeToElement(receipt, CliJson.Context.AppleSimulatorSessionReceipt));
-                else Console.WriteLine($"Acknowledged {receipt.SessionId}; verified device state: {receipt.FinalState}.");
+                else PowerForge.ConsoleUi.ConsoleOutput.WriteLine($"Acknowledged {receipt.SessionId}; verified device state: {receipt.FinalState}.");
                 return 0;
             }
             if (separator < 0 || separator + 1 >= args.Length) throw new ArgumentException("run requires -- followed by a foreground executable and arguments.");
@@ -77,7 +77,7 @@ internal static partial class Program
                 }
                 if (result.Error is not null) logger.Error(result.Error);
                 if (result.CleanupError is not null) logger.Error(result.CleanupError);
-                Console.WriteLine($"Simulator {result.Receipt.DeviceId}: {result.Receipt.InitialState} -> {result.Receipt.FinalState}; release verified: {result.Receipt.CleanupSucceeded}; receipt: {result.ReceiptPath}");
+                PowerForge.ConsoleUi.ConsoleOutput.WriteLine($"Simulator {result.Receipt.DeviceId}: {result.Receipt.InitialState} -> {result.Receipt.FinalState}; release verified: {result.Receipt.CleanupSucceeded}; receipt: {result.ReceiptPath}");
             }
             return result.ExitCode;
         }

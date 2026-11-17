@@ -266,9 +266,8 @@ internal static partial class Program
 
     static ILogger CreateTextLogger(CliOptions cli)
     {
-        ILogger baseLogger = cli.NoColor
-            ? new PowerForge.ConsoleUi.ConsoleOutputLogger { IsVerbose = cli.Verbose }
-            : new PowerForge.ConsoleUi.ConsoleOutputLogger { IsVerbose = cli.Verbose };
+        // --no-color is applied through NO_COLOR at startup, so one logger serves both.
+        ILogger baseLogger = new PowerForge.ConsoleUi.ConsoleOutputLogger { IsVerbose = cli.Verbose };
 
         return cli.Quiet ? new QuietLogger(baseLogger) : baseLogger;
     }

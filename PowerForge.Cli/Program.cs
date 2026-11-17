@@ -14,6 +14,8 @@ internal static partial class Program
     ConsoleEncoding.EnsureUtf8();
 
     var cli = ParseCliOptions(args, out var cliParseError);
+    // ConsoleMonster reads NO_COLOR when it first detects the console, which happens after this point.
+    if (cli.NoColor) Environment.SetEnvironmentVariable("NO_COLOR", "1");
     if (!string.IsNullOrWhiteSpace(cliParseError))
     {
         if (IsJsonOutput(args ?? Array.Empty<string>()))
