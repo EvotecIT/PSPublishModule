@@ -133,7 +133,7 @@ public sealed partial class RunnerHousekeepingService
     private static bool MaintenanceSensitive(string path)
     {
         var extension = Path.GetExtension(path);
-        return new[] { ".nupkg", ".pfx", ".key", ".db", ".sqlite" }.Contains(extension, StringComparer.OrdinalIgnoreCase)
+        return new[] { ".nupkg", ".dat", ".pfx", ".key", ".db", ".sqlite" }.Contains(extension, StringComparer.OrdinalIgnoreCase)
             || path.EndsWith("-wal", StringComparison.OrdinalIgnoreCase) || path.EndsWith("-shm", StringComparison.OrdinalIgnoreCase);
     }
 

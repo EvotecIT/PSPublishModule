@@ -133,14 +133,16 @@ public sealed class RunnerMaintenanceTests
         Assert.True(File.Exists(Path.Combine(fixture.Spec.StateRootPath, "state.json")));
     }
 
-    [Fact]
-    public void Maintain_PlansThenRemovesDisposableTempAndRetainsPrivatePayload()
+    [Theory]
+    [InlineData("private.nupkg")]
+    [InlineData("nupkg_private.1.0.0.dat")]
+    public void Maintain_PlansThenRemovesDisposableTempAndRetainsPrivatePayload(string privateLeaf)
     {
         using var fixture = new Installation();
         var disposable = Path.Combine(fixture.Runner.TempPath, "build", "output.txt");
         Directory.CreateDirectory(Path.GetDirectoryName(disposable)!);
         File.WriteAllText(disposable, "regenerable");
-        var privatePackage = Path.Combine(fixture.Runner.TempPath, "private.nupkg");
+        var privatePackage = Path.Combine(fixture.Runner.TempPath, privateLeaf);
         File.WriteAllText(privatePackage, "private qualification");
         var diagnostic = Path.Combine(fixture.Runner.RootPath, "_diag", "Worker_old.log");
         Directory.CreateDirectory(Path.GetDirectoryName(diagnostic)!);
@@ -328,8 +330,10 @@ public sealed class RunnerMaintenanceTests
         Assert.True(File.Exists(Path.Combine(fixture.Runner.RootPath, ".runner")));
     }
 
-    [Fact]
-    public void Maintain_RetiresRecordedDetachedCheckoutAndPreservesProtectedFamily()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Maintain_RetiresRecordedDetachedCheckoutAndPreservesProtectedFamily(bool privateCache)
     {
         using var fixture = new Installation();
         fixture.Runner.ProtectedWorkspaces = new[] { "retained" };
@@ -340,20 +344,33 @@ public sealed class RunnerMaintenanceTests
             RunnerMaintenanceProcesses.Run("git", workspace, "init", "--quiet");
             RunnerMaintenanceProcesses.Run("git", workspace, "config", "core.hooksPath", Path.Combine(workspace, ".git", "no-hooks"));
             File.WriteAllText(Path.Combine(workspace, "Example.csproj"), "<Project Sdk=\"Microsoft.NET.Sdk\" />");
-            File.WriteAllText(Path.Combine(workspace, ".gitignore"), "bin/\nobj/\n");
+            File.WriteAllText(Path.Combine(workspace, ".gitignore"), "bin/\nobj/\npackages/\n");
             RunnerMaintenanceProcesses.Run("git", workspace, "add", "Example.csproj", ".gitignore");
             RunnerMaintenanceProcesses.Run("git", workspace, "-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid", "-c", "commit.gpgsign=false", "commit", "--quiet", "-m", "fixture");
             var sha = RunnerMaintenanceProcesses.Run("git", workspace, "rev-parse", "HEAD").Trim();
             RunnerMaintenanceProcesses.Run("git", workspace, "checkout", "--quiet", "--detach");
             Directory.CreateDirectory(Path.Combine(workspace, "bin"));
             File.WriteAllText(Path.Combine(workspace, "bin", "generated.txt"), "completed output");
+            if (privateCache)
+            {
+                Directory.CreateDirectory(Path.Combine(workspace, "packages"));
+                File.WriteAllText(Path.Combine(workspace, "packages", "private.nupkg"), "retained private package");
+            }
             state.Jobs.Add(new RunnerMaintenanceJob { RunnerRoot = fixture.Runner.RootPath, Workspace = workspace, SourceSha = sha, CompletedUtc = DateTime.UtcNow.AddDays(-4) });
         }
         Directory.CreateDirectory(fixture.Spec.StateRootPath);
         File.WriteAllText(Path.Combine(fixture.Spec.StateRootPath, "state.json"), JsonSerializer.Serialize(state, RunnerMaintenanceJsonContext.Default.RunnerMaintenanceState));
+        var completed = Path.Combine(fixture.Runner.WorkRootPath, "completed", "completed");
+        var plan = fixture.Service.Maintain(fixture.Spec);
+        Assert.True(plan.Success, string.Join("\n", plan.Errors));
+        Assert.Contains(privateCache ? Path.Combine(completed, "bin") : completed, plan.PlannedPaths);
+        Assert.DoesNotContain(privateCache ? completed : Path.Combine(completed, "bin"), plan.PlannedPaths);
+        Assert.True(File.Exists(Path.Combine(completed, "bin", "generated.txt")));
         var result = fixture.Service.Maintain(fixture.Spec, dryRun: false);
         Assert.True(result.Success, string.Join("\n", result.Errors));
-        Assert.False(Directory.Exists(Path.Combine(fixture.Runner.WorkRootPath, "completed", "completed")));
+        Assert.Equal(privateCache, Directory.Exists(completed));
+        Assert.False(Directory.Exists(Path.Combine(completed, "bin")));
+        if (privateCache) Assert.Equal("retained private package", File.ReadAllText(Path.Combine(completed, "packages", "private.nupkg")));
         Assert.Equal("completed output", File.ReadAllText(Path.Combine(fixture.Runner.WorkRootPath, "retained", "retained", "bin", "generated.txt")));
     }
 

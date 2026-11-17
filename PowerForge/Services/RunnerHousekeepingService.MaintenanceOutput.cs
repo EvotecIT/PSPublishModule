@@ -177,8 +177,18 @@ public sealed partial class RunnerHousekeepingService
 
     private static void MaintenanceRunnerOutput(MaintenanceRun run, RunnerMaintenanceRegistration runner)
     {
-        MaintenanceRetainOnIo(run, runner.TempPath, () => MaintenanceClearChildren(run, runner.TempPath, runner.TempPath, DateTime.MaxValue));
+        // Confirmed CI output must not wait behind a large mixed temporary tree.
+        // The persisted queue resumes with unvisited workspaces after a bounded pass.
+        foreach (var job in run.State.Jobs.Where(j => PathsEqual(j.RunnerRoot, runner.RootPath)).ToArray())
+        {
+            if (run.Expired) break;
+            try { MaintenanceWorkspaceOutput(run, runner, job); }
+            catch (Exception error) when (error is IOException || error is UnauthorizedAccessException)
+            { run.Retained.Add(job.Workspace + " — " + error.Message); }
+            finally { run.State.Jobs.Remove(job); run.State.Jobs.Add(job); }
+        }
         MaintenanceLegacyTemp(run, runner.TempPath);
+        MaintenanceRetainOnIo(run, runner.TempPath, () => MaintenanceClearChildren(run, runner.TempPath, runner.TempPath, DateTime.MaxValue));
         if (!run.ActiveRunnerRoots.Contains(runner.RootPath))
         {
             var temporary = Path.Combine(runner.WorkRootPath, "_temp");
@@ -199,12 +209,6 @@ public sealed partial class RunnerHousekeepingService
             }
         });
 
-        foreach (var job in run.State.Jobs.Where(j => PathsEqual(j.RunnerRoot, runner.RootPath)).ToArray())
-        {
-            try { MaintenanceWorkspaceOutput(run, runner, job); }
-            catch (Exception error) when (error is IOException || error is UnauthorizedAccessException)
-            { run.Retained.Add(job.Workspace + " — " + error.Message); }
-        }
         if (run.Deep && !run.ActiveRunnerRoots.Contains(runner.RootPath))
             MaintenanceRetainOnIo(run, runner.WorkRootPath, () => MaintenanceCodeQl(run, runner));
     }
@@ -236,7 +240,7 @@ public sealed partial class RunnerHousekeepingService
                 && RunnerMaintenanceProcesses.Run("git", job.Workspace, "rev-parse", "--abbrev-ref", "HEAD").Trim() == "HEAD")
             {
                 MaintenanceIsolate(run, job.Workspace, runner.WorkRootPath, directory: true, repository: true);
-                return;
+                if (!Directory.Exists(job.Workspace) || run.DryRun && run.Planned.Contains(job.Workspace)) return;
             }
             foreach (var directory in MaintenanceDirectories(job.Workspace, run).ToArray())
             {
