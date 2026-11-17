@@ -15,8 +15,8 @@ internal static class CmdletConsole
 {
     public static IDisposable Use(PSCmdlet cmdlet) => ConsoleOutput.Use(new Host(cmdlet));
 
-    // Host writes are only valid on the pipeline thread. Writes from engine worker threads keep going straight
-    // to the console, as they always have.
+    // Host writes are only valid on the pipeline thread. An AsyncPSCmdlet marshals widget writes there in order with
+    // its other output; for other cmdlets, writes from engine worker threads go straight to the console.
     private sealed class Host(PSCmdlet cmdlet) : IConsoleHost
     {
         private readonly int _pipelineThread = Thread.CurrentThread.ManagedThreadId;
@@ -25,16 +25,20 @@ internal static class CmdletConsole
 
         public void Write(IWidget widget)
         {
-            if (OnPipelineThread) HostOutput.Write(cmdlet, widget);
+            if (cmdlet is AsyncPSCmdlet asyncCmdlet) asyncCmdlet.RunOnPipelineThread(() => HostOutput.Write(cmdlet, widget));
+            else if (OnPipelineThread) HostOutput.Write(cmdlet, widget);
             else ConsoleOutput.TerminalHost.Instance.Write(widget);
         }
 
         public void WriteMarkup(string markup, bool newLine)
         {
-            if (OnPipelineThread) HostOutput.WriteMarkup(cmdlet, markup, newLine);
+            if (cmdlet is AsyncPSCmdlet asyncCmdlet) asyncCmdlet.RunOnPipelineThread(() => HostOutput.WriteMarkup(cmdlet, markup, newLine));
+            else if (OnPipelineThread) HostOutput.WriteMarkup(cmdlet, markup, newLine);
             else ConsoleOutput.TerminalHost.Instance.WriteMarkup(markup, newLine);
         }
 
+        // Callers rely on exceptions from the action (for example -WarningAction Stop) reaching them synchronously,
+        // so this is never queued.
         public void WriteOutside(Action write)
         {
             if (OnPipelineThread) HostOutput.Run(cmdlet, write);

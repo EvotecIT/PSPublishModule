@@ -247,8 +247,15 @@ public sealed partial class RepairManagedModuleCommand : AsyncPSCmdlet
     [Alias("CredentialPath", "TokenPath")]
     public string? CredentialSecretFilePath { get; set; }
 
-    /// <summary>Repairs managed modules.</summary>
+    /// <summary>Runs the command with its console output sent through the PowerShell host.</summary>
     protected override async Task ProcessRecordAsync()
+    {
+        using (CmdletConsole.Use(this))
+            await ProcessRecordCoreAsync().ConfigureAwait(false);
+    }
+
+    /// <summary>Repairs managed modules.</summary>
+    private async Task ProcessRecordCoreAsync()
     {
         try
         {

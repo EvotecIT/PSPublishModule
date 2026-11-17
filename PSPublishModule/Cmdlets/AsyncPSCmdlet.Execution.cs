@@ -120,6 +120,9 @@ public abstract partial class AsyncPSCmdlet
                     case PipelineType.CommandDetail:
                         base.WriteCommandDetail((string)item.Value!);
                         break;
+                    case PipelineType.HostCallback:
+                        ((Action)item.Value!)();
+                        break;
                     case PipelineType.ShouldProcessTarget:
                         item.ReplyPipe!.Publish(
                             () => base.ShouldProcess((string)item.Value!));
