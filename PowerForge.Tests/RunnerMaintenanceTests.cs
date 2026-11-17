@@ -417,6 +417,53 @@ public sealed class RunnerMaintenanceTests
         }
     }
 
+    [Theory]
+    [InlineData(500, false)]
+    [InlineData(1000, true)]
+    [InlineData(1500, true)]
+    public void Maintain_ReusedParentPidDoesNotClaimPreexistingProcess(long childStartTicks, bool retainsOutput)
+    {
+        using var fixture = new Installation();
+        const int workerId = 100101;
+        const int childId = 100102;
+        var worker = new RunnerMaintenanceProcess
+        {
+            Id = workerId, Name = "Runner.Worker", StartTicks = 1000,
+            Executable = Path.Combine(fixture.Runner.RootPath, "bin", "Runner.Worker.exe")
+        };
+        var child = new RunnerMaintenanceProcess
+        {
+            Id = childId, ParentId = workerId, Name = "fixture-service", StartTicks = childStartTicks,
+            Executable = Path.Combine(fixture.Root, "fixture-service.exe")
+        };
+        var snapshot = new Dictionary<int, RunnerMaintenanceProcess> { [workerId] = worker, [childId] = child };
+        var service = new RunnerHousekeepingService(new NullLogger(), (out bool incomplete) =>
+        {
+            incomplete = false;
+            return snapshot;
+        });
+        var state = new RunnerMaintenanceState();
+        state.Jobs.Add(new RunnerMaintenanceJob
+        {
+            RunnerRoot = fixture.Runner.RootPath, Workspace = Path.Combine(fixture.Runner.WorkRootPath, "Example"),
+            WorkerId = workerId, WorkerStartTicks = worker.StartTicks, CompletedUtc = DateTime.UtcNow.AddDays(-4)
+        });
+        Directory.CreateDirectory(fixture.Spec.StateRootPath);
+        var statePath = Path.Combine(fixture.Spec.StateRootPath, "state.json");
+        File.WriteAllText(statePath, JsonSerializer.Serialize(state, RunnerMaintenanceJsonContext.Default.RunnerMaintenanceState));
+        var output = Path.Combine(fixture.Runner.TempPath, "output.txt");
+        File.WriteAllText(output, "completed output");
+
+        var active = service.Maintain(fixture.Spec, dryRun: false);
+        Assert.True(active.Success, string.Join("\n", active.Errors));
+        Assert.True(File.Exists(output));
+        snapshot = new Dictionary<int, RunnerMaintenanceProcess> { [childId] = child };
+        var completed = service.Maintain(fixture.Spec, dryRun: false);
+        Assert.True(completed.Success, string.Join("\n", completed.Errors));
+        Assert.Equal(retainsOutput, File.Exists(output));
+        Assert.Equal(retainsOutput ? 0 : "completed output".Length, completed.RemovedBytes);
+    }
+
     [Fact]
     public void Maintain_RecognizesInheritedHookMarkerBeforeCurrentWorkerAndResumesAfterItsExit()
     {

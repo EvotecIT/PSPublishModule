@@ -81,7 +81,13 @@ internal static partial class RunnerMaintenanceProcesses
     internal static HashSet<int> Ancestors(Dictionary<int, RunnerMaintenanceProcess> entries, int id)
     {
         var result = new HashSet<int>();
-        while (id > 0 && result.Add(id) && entries.TryGetValue(id, out var entry)) id = entry.ParentId;
+        while (id > 0 && result.Add(id) && entries.TryGetValue(id, out var entry))
+        {
+            // Windows can retain a dead parent's PID after that PID belongs to a newer worker.
+            if (entries.TryGetValue(entry.ParentId, out var parent) && entry.StartTicks > 0
+                && parent.StartTicks > entry.StartTicks) break;
+            id = entry.ParentId;
+        }
         return result;
     }
 
