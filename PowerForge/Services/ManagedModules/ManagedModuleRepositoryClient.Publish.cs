@@ -128,6 +128,11 @@ public sealed partial class ManagedModuleRepositoryClient
             throw new FileNotFoundException($"Package file was not found: {package}", package);
 
         var publishAddress = await ResolvePackagePublishAddressAsync(repository, credential, cancellationToken).ConfigureAwait(false);
+        var uploadTarget = DescribeUploadTarget(publishAddress);
+        var uploadSize = DotNetRepositoryReleaseService.FormatBytes(new FileInfo(package).Length);
+        _logger.Info($"Uploading '{Path.GetFileName(package)}' ({uploadSize}) to {uploadTarget}.");
+        var uploadTimer = System.Diagnostics.Stopwatch.StartNew();
+        using var heartbeat = OperationHeartbeat.Start(_logger, $"Upload of '{Path.GetFileName(package)}' ({uploadSize}) to {uploadTarget}");
         using var response = await SendWithPolicyAsync(
             () =>
             {
@@ -151,6 +156,8 @@ public sealed partial class ManagedModuleRepositoryClient
                 return request;
             },
             cancellationToken).ConfigureAwait(false);
+        heartbeat.Dispose();
+        _logger.Info($"Upload to {uploadTarget} finished with HTTP {(int)response.StatusCode} in {DotNetRepositoryReleaseService.FormatDuration(uploadTimer.Elapsed)}.");
         if (response.StatusCode == System.Net.HttpStatusCode.Conflict)
         {
             return new ManagedModulePackagePublishResult
@@ -185,6 +192,11 @@ public sealed partial class ManagedModuleRepositoryClient
             Published = true
         };
     }
+
+    private static string DescribeUploadTarget(string publishAddress)
+        => Uri.TryCreate(publishAddress, UriKind.Absolute, out var uri) && !string.IsNullOrWhiteSpace(uri.Host)
+            ? uri.Host
+            : "<repository endpoint>";
 
     private ManagedModulePackagePublishResult PublishLocalPackage(
         ManagedModuleRepository repository,

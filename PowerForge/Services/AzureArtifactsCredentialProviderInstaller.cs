@@ -157,8 +157,9 @@ public sealed class AzureArtifactsCredentialProviderInstaller
         }
         catch (Exception ex)
         {
-            var message = $"Azure Artifacts Credential Provider install failed. {ex.Message}".Trim();
-            if (_logger.IsVerbose) _logger.Verbose(message);
+            // The thrown error carries the cause; logging it here as well would show it twice.
+            var earlierSteps = string.Join(" ", messages.Where(static step => !string.IsNullOrWhiteSpace(step)));
+            var message = $"Azure Artifacts Credential Provider install failed. {ex.Message} {earlierSteps}".Trim();
             throw new InvalidOperationException(message, ex);
         }
         finally
@@ -546,7 +547,9 @@ throw 'Install-PSResource and Install-Module are not available.'
         }
 
         var failure = string.IsNullOrWhiteSpace(result.StdErr) ? result.StdOut : result.StdErr;
-        messages.Add($"{ArtefactsModuleName} could not be installed from the configured PowerShell gallery. {failure}".Trim());
+        var failureMessage = $"{ArtefactsModuleName} could not be installed from the configured PowerShell gallery. {failure}".Trim();
+        _logger.Warn(failureMessage + " Falling back to the public credential-provider package.");
+        messages.Add(failureMessage);
         return new ArtefactsModuleInstallResult(false, Array.Empty<string>());
     }
 
@@ -620,7 +623,15 @@ throw 'Install-PSResource and Install-Module are not available.'
             throw new InvalidOperationException($"Configured credential-provider package source is not a valid local path or absolute URI: {source.Value}");
 
         var packagePath = Path.Combine(tempRoot, $"{packageKind}.zip");
-        return _downloadPackage(uri, packagePath, timeout);
+        var target = RepositoryDiagnosticRedactor.Endpoint(uri.AbsoluteUri);
+        _logger.Info($"Downloading the Azure Artifacts Credential Provider {packageKind} package from {target}.");
+        var timer = System.Diagnostics.Stopwatch.StartNew();
+        string downloaded;
+        using (OperationHeartbeat.Start(_logger, $"Download of the Azure Artifacts Credential Provider {packageKind} package"))
+            downloaded = _downloadPackage(uri, packagePath, timeout);
+        var size = File.Exists(downloaded) ? $" ({DotNetRepositoryReleaseService.FormatBytes(new FileInfo(downloaded).Length)})" : string.Empty;
+        _logger.Info($"Downloaded the Azure Artifacts Credential Provider {packageKind} package{size} in {DotNetRepositoryReleaseService.FormatDuration(timer.Elapsed)}.");
+        return downloaded;
     }
 
     private void ValidateSha256(string packagePath, string? expectedSha256)
