@@ -4,6 +4,13 @@ PowerForge keeps self-hosted GitHub runners within bounded storage retention thr
 
 I use one policy per host, including every runner registration that shares its caches. Each registration has a private job-temp directory. NuGet scratch locks remain shared across those registrations.
 
+Set a registration's `cleanupEnabled` to `false` when it participates only in
+activity checks and admission. Its temporary files, diagnostics, checkout output,
+CodeQL versions and pending private quarantine remain untouched. The default is
+`true` for existing policies. This option does not disable host-wide cache
+maintenance: omit `nuGetPackagesPath`, `nuGetHttpCachePath` and
+`dockerBuilderCacheGiB` when that storage has no retirement authorization.
+
 ## Install
 
 Build a self-contained CLI for the host's platform and copy its complete publish directory into a private maintenance directory. Prepare a machine-local policy with absolute physical paths.

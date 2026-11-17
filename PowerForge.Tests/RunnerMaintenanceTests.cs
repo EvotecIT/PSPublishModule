@@ -10,6 +10,40 @@ public sealed class RunnerMaintenanceCollection;
 public sealed class RunnerMaintenanceTests
 {
     [Fact]
+    public void Maintain_DisabledInstallationRetainsOutputAndQuarantineWhileOtherRunnerCleans()
+    {
+        using var fixture = new Installation();
+        using var other = new Installation();
+        other.Runner.CleanupEnabled = false;
+        fixture.Spec.Runners = new[] { fixture.Runner, other.Runner };
+        var output = Path.Combine(fixture.Runner.TempPath, "completed.txt");
+        var protectedOutput = Path.Combine(other.Runner.TempPath, "completed.txt");
+        File.WriteAllText(output, "owned output");
+        File.WriteAllText(protectedOutput, "foreign output");
+        var id = Guid.NewGuid().ToString("N");
+        var stage = Path.Combine(other.Runner.TempPath, ".powerforge-quarantine", id);
+        Directory.CreateDirectory(stage);
+        File.WriteAllText(Path.Combine(stage, "output.txt"), "foreign quarantine");
+        var journalRoot = Directory.CreateDirectory(Path.Combine(fixture.Spec.StateRootPath, "journal")).FullName;
+        var journal = Path.Combine(journalRoot, id + ".json");
+        File.WriteAllText(journal, JsonSerializer.Serialize(new RunnerMaintenanceJournal
+        {
+            Id = id, Root = other.Runner.TempPath, Source = Path.Combine(other.Runner.TempPath, "previous-output"),
+            Directory = true, Bytes = "foreign quarantine".Length, Moved = true
+        }, RunnerMaintenanceJsonContext.Default.RunnerMaintenanceJournal));
+
+        var result = fixture.Service.Maintain(fixture.Spec, dryRun: false);
+
+        Assert.True(result.Success, string.Join("\n", result.Errors));
+        Assert.False(File.Exists(output));
+        Assert.Equal("owned output".Length, result.RemovedBytes);
+        Assert.Equal("foreign output", File.ReadAllText(protectedOutput));
+        Assert.Equal("foreign quarantine", File.ReadAllText(Path.Combine(stage, "output.txt")));
+        Assert.True(File.Exists(journal));
+        Assert.Contains(result.Retained, reason => reason.Contains("installation cleanup is disabled"));
+    }
+
+    [Fact]
     public void Maintain_IncompleteProcessInventoryRetainsPrivateAndSharedOutput()
     {
         using var fixture = new Installation();
