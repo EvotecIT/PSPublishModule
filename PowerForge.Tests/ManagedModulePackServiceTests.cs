@@ -7,6 +7,34 @@ namespace PowerForge.Tests;
 public sealed class ManagedModulePackServiceTests
 {
     [Fact]
+    public void Pack_compresses_binary_payload_more_tightly_without_changing_it()
+    {
+        using var moduleRoot = new TemporaryDirectory();
+        using var output = new TemporaryDirectory();
+        CreateModule(moduleRoot.Path, "Company.Tools", "1.2.3", prerelease: null);
+        var source = typeof(ManagedModulePackService).Assembly.Location;
+        File.Copy(source, Path.Combine(moduleRoot.Path, "payload.dll"));
+
+        var result = new ManagedModulePackService().Pack(new ManagedModulePackRequest
+        {
+            ModulePath = moduleRoot.Path,
+            OutputDirectory = output.Path
+        });
+
+        using var baselineBytes = new MemoryStream();
+        using (var baseline = new ZipArchive(baselineBytes, ZipArchiveMode.Create, leaveOpen: true))
+            baseline.CreateEntryFromFile(source, "payload.dll", CompressionLevel.Optimal);
+        baselineBytes.Position = 0;
+        using var optimalArchive = new ZipArchive(baselineBytes, ZipArchiveMode.Read);
+        using var actualArchive = ZipFile.OpenRead(result.PackagePath);
+        var actual = actualArchive.GetEntry("payload.dll")!;
+        Assert.True(actual.CompressedLength < optimalArchive.GetEntry("payload.dll")!.CompressedLength);
+        using var extracted = new MemoryStream();
+        using (var input = actual.Open()) input.CopyTo(extracted);
+        Assert.Equal(File.ReadAllBytes(source), extracted.ToArray());
+    }
+
+    [Fact]
     public void Pack_creates_readable_module_package_from_manifest()
     {
         using var moduleRoot = new TemporaryDirectory();
