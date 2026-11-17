@@ -36,6 +36,8 @@ the running app's paths and compares the mapped executable's device/inode with
 the installed file. It also verifies the executable hash against the approved
 snapshot. `AppleMacAppBundleDeploymentResult` exposes that PID, path, hash and
 file identity. `Succeeded` requires this evidence when launch was requested.
+Contained executable links are resolved consistently for the running path and
+the installed file's device/inode; the link's own inode is not execution proof.
 
 An app that refuses termination holds installation. A launch that exits before
 verification, opens another copy or maps a different inode fails verification.

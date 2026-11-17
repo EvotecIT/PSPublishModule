@@ -7,8 +7,8 @@ namespace PowerForge;
 public sealed partial class AppleMacAppDeploymentService
 {
     private const string LaunchServicesRegister = "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister";
-    private const string RunningAppsScript = "ObjC.import('AppKit'); function run(a) { return JSON.stringify($.NSWorkspace.sharedWorkspace.runningApplications.js.filter(x => ObjC.unwrap(x.bundleIdentifier) === a[0]).map(x => ({pid:Number(x.processIdentifier), executable:ObjC.unwrap(x.executableURL.path), bundle:ObjC.unwrap(x.bundleURL.path), started:Number(x.launchDate.timeIntervalSince1970)}))); }";
-    private const string TerminateAppScript = "ObjC.import('AppKit'); function run(a) { const apps=$.NSWorkspace.sharedWorkspace.runningApplications.js.filter(x => Number(x.processIdentifier) === Number(a[0])); if (apps.length === 0) return 'already-exited'; const app=apps[0]; if (ObjC.unwrap(app.bundleURL.path) !== a[1] || ObjC.unwrap(app.executableURL.path) !== a[2] || Number(app.launchDate.timeIntervalSince1970) !== Number(a[3])) throw Error('Application identity changed before termination'); if (!app.terminate) throw Error('Application refused termination'); return 'termination-requested'; }";
+    private const string RunningAppsScript = "ObjC.import('AppKit'); function run(a) { return JSON.stringify($.NSWorkspace.sharedWorkspace.runningApplications.js.filter(x => ObjC.unwrap(x.bundleIdentifier) === a[0]).map(x => ({pid:Number(x.processIdentifier), executable:ObjC.unwrap(x.executableURL.URLByResolvingSymlinksInPath.path), bundle:ObjC.unwrap(x.bundleURL.URLByResolvingSymlinksInPath.path), started:Number(x.launchDate.timeIntervalSince1970)}))); }";
+    private const string TerminateAppScript = "ObjC.import('AppKit'); function run(a) { const apps=$.NSWorkspace.sharedWorkspace.runningApplications.js.filter(x => Number(x.processIdentifier) === Number(a[0])); if (apps.length === 0) return 'already-exited'; const app=apps[0]; if (ObjC.unwrap(app.bundleURL.URLByResolvingSymlinksInPath.path) !== a[1] || ObjC.unwrap(app.executableURL.URLByResolvingSymlinksInPath.path) !== a[2] || Number(app.launchDate.timeIntervalSince1970) !== Number(a[3])) throw Error('Application identity changed before termination'); if (!app.terminate) throw Error('Application refused termination'); return 'termination-requested'; }";
 
     /// <summary>Hashes a staged bundle, including the link and file rules used by the installer.</summary>
     /// <param name="appPath">Existing application bundle.</param>
@@ -85,11 +85,13 @@ public sealed partial class AppleMacAppDeploymentService
             AppleTrustedExecutionEnvironment.ResolveSystemTool(request.OpenExecutable, "open", "/usr/bin/open", "Staged bundle launch"),
             null, cancellationToken).ConfigureAwait(false);
         if (!result.Launch.Succeeded) return result;
-        var executable = Path.Combine(destination, "Contents", "MacOS", executableName!);
+        var executable = AppleReleaseArtifactService.ResolvePhysicalPath(Path.Combine(destination, "Contents", "MacOS", executableName!));
+        AppleDeviceDeploymentService.EnsurePathWithinBuildRoot(executable, destination,
+            FrameworkCompatibility.GetPathStringComparisonForPath(destination));
         var binaryHash = HashBundleExecutable(Path.Combine(snapshot.AppPath, "Contents", "MacOS", executableName!));
         if (HashBundleExecutable(executable) != binaryHash)
             throw new InvalidOperationException("The installed executable differs from the approved bundle.");
-        var identity = (await RunBundleToolAsync("/usr/bin/stat", installRoot, new[] { "-f", "%d:%i", executable }, cancellationToken).ConfigureAwait(false)).StdOut.Trim();
+        var identity = (await RunBundleToolAsync("/usr/bin/stat", installRoot, new[] { "-L", "-f", "%d:%i", executable }, cancellationToken).ConfigureAwait(false)).StdOut.Trim();
         for (var attempt = 0; attempt < 50; attempt++)
         {
             cancellationToken.ThrowIfCancellationRequested();
