@@ -68,14 +68,12 @@ public partial class OnModuleImportAndRemove : IModuleAssemblyInitializer, IModu
     /// <returns></returns>
     private static Assembly? MyResolveEventHandler(object? sender, ResolveEventArgs args) {
         //This code is used to resolve the assemblies
-        //Console.WriteLine($"Resolving {args.Name}");
         var directoryPath = Path.GetDirectoryName(typeof(OnModuleImportAndRemove).Assembly.Location);
         if (directoryPath != null) {
             var requestedName = new AssemblyName(args.Name).Name;
             if (!string.IsNullOrWhiteSpace(requestedName)) {
                 var candidate = Path.Combine(directoryPath, requestedName + ".dll");
                 if (File.Exists(candidate)) {
-                    //Console.WriteLine($"Loading {args.Name} assembly {Path.GetFileName(candidate)}");
                     return Assembly.LoadFrom(candidate);
                 }
             }

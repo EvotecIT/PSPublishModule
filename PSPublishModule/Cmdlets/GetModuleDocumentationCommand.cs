@@ -73,8 +73,7 @@ public sealed partial class GetModuleDocumentationCommand : PSCmdlet
         var pref = JsonRendererPreference.Auto;
         switch ((JsonRenderer ?? "Auto").ToLowerInvariant())
         {
-            case "highlighted":
-            case "spectre": pref = JsonRendererPreference.Highlighted; break;
+            case "highlighted": pref = JsonRendererPreference.Highlighted; break;
             case "system":  pref = JsonRendererPreference.System;  break;
             default:         pref = JsonRendererPreference.Auto;    break;
         }

@@ -1,5 +1,3 @@
-using System;
-
 namespace PowerForge;
 
 /// <summary>
@@ -15,11 +13,6 @@ public enum JsonRendererPreference
     /// Show the JSON as written, with syntax highlighting.
     /// </summary>
     Highlighted = 1,
-    /// <summary>
-    /// Former name of <see cref="Highlighted"/>.
-    /// </summary>
-    [Obsolete("Use Highlighted. JSON is no longer rendered by Spectre.Console.")]
-    Spectre = Highlighted,
     /// <summary>
     /// Reformat JSON via System.Text.Json serialization with minimal styling.
     /// </summary>
