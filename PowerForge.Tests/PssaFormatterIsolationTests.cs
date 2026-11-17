@@ -181,6 +181,29 @@ public sealed class PssaFormatterIsolationTests
     }
 
     [Fact]
+    public void FormatFiles_ReportsEachFileAndLogsTheFormatterErrorWhenItFails()
+    {
+        var logger = new CollectingLogger();
+        var runner = new StubRunner(new PowerShellRunResult(
+            1,
+            "FORMATTED::first.ps1\r\nUNCHANGED::second.ps1\r\n",
+            "Invoke-Formatter: Unexpected token '}' in expression or statement.",
+            "pwsh"));
+        var progress = new List<string>();
+        var formatter = new PssaFormatter(runner, logger)
+        {
+            Progress = (done, total, file) => progress.Add($"{done}/{total} {file}")
+        };
+
+        var results = formatter.FormatFiles(new[] { "first.ps1", "second.ps1", "third.ps1" });
+
+        Assert.Equal(new[] { "1/3 first.ps1", "2/3 second.ps1" }, progress);
+        Assert.Equal("Skipped: PSSA failed (exit 1)", Assert.Single(results, result => result.Path == "third.ps1").Message);
+        Assert.Contains(logger.Warnings, warning => warning.Contains("exit 1", StringComparison.Ordinal) &&
+                                                    warning.Contains("Unexpected token '}'", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void FormatFiles_LogsCompatibilityWarningWithoutTurningItIntoAnError()
     {
         var logger = new CollectingLogger();
@@ -438,7 +461,13 @@ public sealed class PssaFormatterIsolationTests
 
         public StubRunner(PowerShellRunResult result) => _result = result;
 
-        public PowerShellRunResult Run(PowerShellRunRequest request) => _result;
+        // Like the real runner, pass each captured output line to the request's callback before returning.
+        public PowerShellRunResult Run(PowerShellRunRequest request)
+        {
+            foreach (var line in _result.StdOut.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries))
+                request.OutputLineReceived?.Invoke(line);
+            return _result;
+        }
     }
 
     private sealed class EnvironmentPowerShellRunner : IPowerShellRunner
