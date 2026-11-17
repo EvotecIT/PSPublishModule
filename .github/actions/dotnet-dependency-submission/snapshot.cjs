@@ -1,4 +1,4 @@
-// Convert the pinned scanner's per-manifest graph into GitHub's snapshot format.
+// Project every restored NuGet target into GitHub's per-manifest snapshot format.
 const path = require('node:path');
 
 const DETECTOR = Object.freeze({name: 'PowerForgeNuGet', version: '1.0.0', url: 'https://github.com/EvotecIT/PSPublishModule'});
@@ -12,38 +12,111 @@ function relativeProject(root, file) {
   return relative;
 }
 
-function buildCandidate(scan, root, expectedProjects, now = new Date()) {
-  if (scan.resultCode !== 'Success' || !scan.dependencyGraphs || !Array.isArray(scan.componentsFound)) {
-    throw new Error('Component Detection did not produce a successful graph.');
+function packageUrl(identity) {
+  const parts = identity.split('/');
+  if (parts.length !== 2 || !parts.every(Boolean)) throw new Error(`Invalid NuGet identity: ${identity}`);
+  return `pkg:nuget/${encodeURIComponent(parts[0].toLowerCase())}@${encodeURIComponent(parts[1].toLowerCase())}`;
+}
+
+const primaryAssetKinds = ['runtime', 'native', 'contentfiles'];
+
+function runtimeAssetKinds(library) {
+  const kinds = new Set();
+  const hasFiles = section => Object.keys(library[section] || {}).some(file => path.posix.basename(file) !== '_._');
+  if (hasFiles('runtime') || hasFiles('resource')) kinds.add('runtime');
+  if (hasFiles('native')) kinds.add('native');
+  for (const [file, asset] of Object.entries(library.runtimeTargets || {})) {
+    if (path.posix.basename(file) !== '_._') kinds.add(asset.assetType === 'native' ? 'native' : 'runtime');
   }
-  const components = new Map(scan.componentsFound.map(item => [item.component.id, item.component]));
-  function packageUrl(id) {
-    const component = components.get(id);
-    if (!component) throw new Error(`Graph references an unknown component: ${id}`);
-    if (component.type !== 'NuGet') return null;
-    if (!component.name || !component.version) throw new Error(`Incomplete NuGet identity: ${id}`);
-    return `pkg:nuget/${encodeURIComponent(component.name.toLowerCase())}@${encodeURIComponent(component.version)}`;
+  for (const [file, asset] of Object.entries(library.contentFiles || {})) {
+    if (path.posix.basename(file) !== '_._' && asset.copyToOutput === true) kinds.add('contentfiles');
   }
+  return kinds;
+}
+
+function buildCandidate(graphs, root, expectedProjects, now = new Date()) {
   const manifests = Object.create(null);
   const observed = new Set();
-  for (const [file, entry] of Object.entries(scan.dependencyGraphs)) {
-    const relative = relativeProject(root, file);
+  for (const graph of graphs) {
+    const relative = relativeProject(root, graph.project?.restore?.projectPath || '');
     if (observed.has(relative)) throw new Error(`Duplicate manifest: ${relative}`);
     observed.add(relative);
-    if (!entry.graph || !Array.isArray(entry.explicitlyReferencedComponentIds) || !Array.isArray(entry.developmentDependencies)) {
-      throw new Error(`Invalid dependency graph for ${relative}`);
+    if (!graph.targets || !Object.keys(graph.targets).length || !graph.project?.frameworks) {
+      throw new Error(`Invalid restored dependency graph for ${relative}`);
     }
-    const direct = new Set(entry.explicitlyReferencedComponentIds);
-    const development = new Set(entry.developmentDependencies);
     const resolved = Object.create(null);
-    for (const [id, children] of Object.entries(entry.graph)) {
-      const url = packageUrl(id);
-      if (!url) continue;
-      if (children !== null && !Array.isArray(children)) throw new Error(`Invalid edges for ${id}`);
-      const dependencies = [...new Set((children || []).map(packageUrl).filter(Boolean))].sort();
-      if (Object.hasOwn(resolved, url)) throw new Error(`Duplicate NuGet identity in manifest: ${url}`);
-      resolved[url] = {package_url: url, relationship: direct.has(id) ? 'direct' : 'indirect',
-        scope: development.has(id) ? 'development' : 'runtime', dependencies};
+    const developmentPackages = new Set((graph.developmentPackages || []).map(identity => identity.toLowerCase()));
+    function include(identity, direct, runtime, dependencies = []) {
+      const url = packageUrl(identity);
+      const item = resolved[url] ||= {package_url: url, relationship: 'indirect', scope: 'development', dependencies: []};
+      if (direct) item.relationship = 'direct';
+      if (runtime) item.scope = 'runtime';
+      item.dependencies = [...new Set([...item.dependencies, ...dependencies])].sort();
+    }
+    for (const [targetName, target] of Object.entries(graph.targets)) {
+      const tfm = targetName.split('/')[0];
+      const framework = Object.entries(graph.project.frameworks).find(([name, value]) =>
+        [name, value.targetAlias, value.framework].includes(tfm))?.[1];
+      if (!framework) throw new Error(`Missing restored framework metadata: ${relative} (${targetName})`);
+      const direct = new Set(Object.entries(framework.dependencies || {})
+        .filter(([, value]) => value.target !== 'Project').map(([name]) => name.toLowerCase()));
+      const identities = new Map();
+      for (const identity of Object.keys(target)) {
+        const name = identity.split('/')[0].toLowerCase();
+        if (identities.has(name)) throw new Error(`Ambiguous dependency in ${relative} (${targetName}): ${name}`);
+        identities.set(name, identity);
+      }
+      const runtimeReachable = new Map();
+      function visitRuntime(identity, kinds) {
+        if (developmentPackages.has(identity.toLowerCase())) return;
+        const allowed = runtimeReachable.get(identity) || new Set();
+        const added = kinds.filter(kind => !allowed.has(kind));
+        if (!added.length) return;
+        for (const kind of added) allowed.add(kind);
+        runtimeReachable.set(identity, allowed);
+        for (const name of Object.keys(target[identity].dependencies || {})) {
+          const child = identities.get(name.toLowerCase());
+          if (child) visitRuntime(child, added);
+        }
+      }
+      for (const [identity, library] of Object.entries(target)) {
+        const name = identity.split('/')[0].toLowerCase();
+        const dependency = Object.entries(framework.dependencies || {}).find(([id]) => id.toLowerCase() === name)?.[1];
+        const included = dependency?.include?.toLowerCase().split(/[,;\s]+/) || ['all'];
+        const kinds = included.includes('all') ? primaryAssetKinds : included.filter(kind => primaryAssetKinds.includes(kind));
+        if (direct.has(name) || library.type === 'project') visitRuntime(identity, library.type === 'project' ? primaryAssetKinds : kinds);
+      }
+      function hasRuntimeUse(identity, kinds, visited = new Set()) {
+        if (visited.has(identity) || developmentPackages.has(identity.toLowerCase())) return false;
+        visited.add(identity);
+        if ([...runtimeAssetKinds(target[identity])].some(kind => kinds.has(kind))) return true;
+        return Object.keys(target[identity].dependencies || {}).some(name => {
+          const child = identities.get(name.toLowerCase());
+          return child && hasRuntimeUse(child, kinds, visited);
+        });
+      }
+      for (const [identity, library] of Object.entries(target)) {
+        if (library.type === 'project') continue;
+        if (library.type !== 'package') throw new Error(`Unsupported restored library type: ${identity}`);
+        const dependencies = [];
+        for (const name of Object.keys(library.dependencies || {})) {
+          const child = identities.get(name.toLowerCase());
+          if (!child) throw new Error(`Missing restored dependency: ${identity} -> ${name} (${targetName})`);
+          if (target[child].type === 'package') dependencies.push(packageUrl(child));
+        }
+        include(identity, direct.has(identity.split('/')[0].toLowerCase()),
+          graph.scope !== 'development' && runtimeReachable.has(identity) && hasRuntimeUse(identity, runtimeReachable.get(identity)), dependencies);
+      }
+    }
+    // PackageDownload references are exact development inputs outside target library graphs.
+    for (const framework of Object.values(graph.project.frameworks)) {
+      for (const download of framework.downloadDependencies || []) {
+        const version = /^\[([^,\]]+)(?:,\s*([^\]]+))?\]$/.exec(download.version || '');
+        if (!version || (version[2] && version[1].trim() !== version[2].trim())) {
+          throw new Error(`PackageDownload requires an exact restored version: ${download.name}`);
+        }
+        include(`${download.name}/${version[1].trim()}`, true, false);
+      }
     }
     // A missing leaf must fail instead of silently dropping a dependency edge.
     for (const item of Object.values(resolved)) {

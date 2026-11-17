@@ -51,6 +51,16 @@ namespace PSPublishModule;
 [Alias("Show-Documentation")]
 public sealed partial class ShowModuleDocumentationCommand : PSCmdlet
 {
+    private readonly System.Threading.CancellationTokenSource _renderCancellation = new();
+
+    /// <summary>Terminates the owned render worker when the pipeline is stopped.</summary>
+    protected override void StopProcessing()
+    {
+        try { _renderCancellation.Cancel(); } catch (ObjectDisposedException) { }
+    }
+
+    /// <inheritdoc />
+    protected override void EndProcessing() => _renderCancellation.Dispose();
 
     // Remote repository support (legacy duplicates removed)
 
@@ -58,6 +68,16 @@ public sealed partial class ShowModuleDocumentationCommand : PSCmdlet
     /// Executes the cmdlet processing logic and renders requested documents.
     /// </summary>
     protected override void ProcessRecord()
+    {
+        try { ProcessDocumentation(); }
+        catch
+        {
+            _renderCancellation.Dispose();
+            throw;
+        }
+    }
+
+    private void ProcessDocumentation()
     {
         var finder   = new DocumentationFinder();
         string rootBase;
@@ -466,10 +486,14 @@ public sealed partial class ShowModuleDocumentationCommand : PSCmdlet
         WriteVerbose(meta.SkipCommands ? "Skipping Commands tab." : $"Commands will be rendered (max {meta.MaxCommands}, per-help timeout {meta.HelpTimeoutSeconds}s).");
 
         // Always export HTML (Word can be added later). If no path provided, write to temp.
-        var html = new HtmlExporter();
         var open = Open.IsPresent && !DoNotShow.IsPresent;
         WriteVerbose("Rendering HTML...");
-        var path = html.Export(meta, finalExportItems, OutputPath, open, s => { if (!string.IsNullOrEmpty(s) && s.StartsWith("[WARN]")) { WriteWarning(s.Substring(6)); } else { WriteVerbose(s); } });
+        var path = DocumentationRenderProcess.ExportHtml(meta, finalExportItems.ToArray(), OutputPath,
+            s => { if (!string.IsNullOrEmpty(s) && s.StartsWith("[WARN]")) { WriteWarning(s.Substring(6)); } else { WriteVerbose(s); } },
+            _renderCancellation.Token);
+        _renderCancellation.Token.ThrowIfCancellationRequested();
+        if (open)
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(path) { UseShellExecute = true });
         WriteVerbose($"HTML exported to {path}");
         WriteObject(path);
         return;

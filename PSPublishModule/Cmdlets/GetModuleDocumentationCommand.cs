@@ -40,16 +40,35 @@ namespace PSPublishModule;
 [Cmdlet(VerbsCommon.Get, "ModuleDocumentation", DefaultParameterSetName = "ByName")]
 public sealed partial class GetModuleDocumentationCommand : PSCmdlet
 {
+    private readonly System.Threading.CancellationTokenSource _renderCancellation = new();
+
+    /// <summary>Terminates the owned render worker when the pipeline is stopped.</summary>
+    protected override void StopProcessing()
+    {
+        try { _renderCancellation.Cancel(); } catch (ObjectDisposedException) { }
+    }
+
+    /// <inheritdoc />
+    protected override void EndProcessing() => _renderCancellation.Dispose();
+
     /// <summary>
     /// Executes the cmdlet and writes formatted documentation to the console.
     /// </summary>
     protected override void ProcessRecord()
     {
-        using (CmdletConsole.Use(this))
-            ProcessRecordCore();
+        try
+        {
+            using (CmdletConsole.Use(this))
+                ProcessDocumentation();
+        }
+        catch
+        {
+            _renderCancellation.Dispose();
+            throw;
+        }
     }
 
-    private void ProcessRecordCore()
+    private void ProcessDocumentation()
     {
         var pref = JsonRendererPreference.Auto;
         switch ((JsonRenderer ?? "Auto").ToLowerInvariant())
@@ -67,7 +86,6 @@ public sealed partial class GetModuleDocumentationCommand : PSCmdlet
             case "none":       defLang = "";           break;
             default:            defLang = null;          break;
         }
-        var renderer = new Renderer(pref, defLang);
         var finder   = new DocumentationFinder();
         string rootBase;
         string? internalsBase;
@@ -239,13 +257,7 @@ public sealed partial class GetModuleDocumentationCommand : PSCmdlet
         };
         var plan = planner.Execute(reqObj);
 
-        foreach (var di in plan.Items)
-        {
-            if (ShouldRenderAsLocalFile(di))
-                renderer.ShowFile(di.Title, di.Path!, Raw);
-            else
-                renderer.ShowContent(di.Title, di.Content, Raw);
-        }
+        DocumentationRenderProcess.RenderConsole(plan.Items.ToArray(), Raw, pref, defLang, _renderCancellation.Token);
     }
 
     internal static bool ShouldRenderAsLocalFile(DocumentItem item)

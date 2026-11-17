@@ -22,6 +22,17 @@ internal static partial class WebCliCommandHandlers
             errors.Add("durableBackup.exportGroup must be a valid Linux group name.");
         if (backup.StagingRetentionHours is < 24 or > 720)
             errors.Add("durableBackup.stagingRetentionHours must be from 24 through 720.");
+        var validationRoot = backup.SqliteValidationRoot is null
+            ? null
+            : NormalizeCapturePath(backup.SqliteValidationRoot, "durableBackup.sqliteValidationRoot", errors);
+        if (validationRoot is not null &&
+            (validationRoot is "/" or "/etc" or "/home" or "/root" or "/srv" or "/var" or "/var/lib" or "/tmp" or "/var/tmp" or "/dev" or "/dev/shm" ||
+             HasTrailingPathSeparator(backup.SqliteValidationRoot) || validationRoot.IndexOfAny(['*', '?', '[', ']']) >= 0))
+            errors.Add("durableBackup.sqliteValidationRoot must be a dedicated exact private directory.");
+        if (backup.SqliteValidationReserveBytes is < 0 or > 1099511627776)
+            errors.Add("durableBackup.sqliteValidationReserveBytes must be from 0 through 1099511627776.");
+        if (backup.SqliteValidationReserveBytes is not null && validationRoot is null)
+            errors.Add("durableBackup.sqliteValidationReserveBytes requires sqliteValidationRoot.");
 
         var recipient = backup.Recipient;
         if (!IsValidAgeX25519Recipient(recipient))
@@ -107,6 +118,14 @@ internal static partial class WebCliCommandHandlers
                 if (PathContains(encryptedPath, artifactPath) || PathContains(artifactPath, encryptedPath))
                     errors.Add($"Durable encrypted path '{encryptedPath}' must not overlap artifact store '{artifactPath}'.");
             }
+        }
+        if (validationRoot is not null)
+        {
+            var capturedPaths = sqlitePaths.Concat(encryptedPaths).Concat(artifactPaths);
+            if (exportRoot is not null)
+                capturedPaths = capturedPaths.Append(exportRoot);
+            if (capturedPaths.Any(path => PathContains(validationRoot, path) || PathContains(path, validationRoot)))
+                errors.Add("durableBackup.sqliteValidationRoot must not overlap export or captured input paths.");
         }
     }
 

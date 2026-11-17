@@ -44,6 +44,20 @@ public sealed partial class BenchmarkResultImporter
         return job;
     }
 
+    /// <summary>
+    /// Recovers parameter fields from FullName when DisplayInfo cannot be matched. The fields are used only
+    /// when joining them with '&amp;' reproduces the exported Parameters text exactly, so a literal '&amp;'
+    /// inside a value is never mistaken for a separator.
+    /// </summary>
+    private static string[]? GetBenchmarkDotNetFullNameParameters(JsonElement benchmark, string? parameterText)
+    {
+        if (string.IsNullOrEmpty(parameterText) ||
+            !BenchmarkDotNetColumns.TryParseFullNameParameters(GetString(benchmark, "FullName"), out var parameters))
+            return null;
+        var fields = parameters.Select(parameter => parameter.Key + "=" + parameter.Value).ToArray();
+        return string.Equals(string.Join("&", fields), parameterText, StringComparison.Ordinal) ? fields : null;
+    }
+
     private static bool MatchesBenchmarkDotNetDisplayParameters(string display, int start, string printInfo, out string[] fields)
     {
         // PrintInfo joins fields with '&'; DisplayInfo uses ', '. Literal '&' in a value stays '&'.
@@ -100,7 +114,9 @@ public sealed partial class BenchmarkResultImporter
                 mean *= 0.000001;
 
             var displayJob = GetBenchmarkDotNetDisplayJob(benchmark, out string[]? nativeParameters);
-            var variables = ParseBenchmarkDotNetParameters(GetString(benchmark, "Parameters"), nativeParameters);
+            var parameterText = GetString(benchmark, "Parameters");
+            nativeParameters ??= GetBenchmarkDotNetFullNameParameters(benchmark, parameterText);
+            var variables = ParseBenchmarkDotNetParameters(parameterText, nativeParameters);
             AddBenchmarkDotNetIdentityVariables(benchmark, variables, method);
             var engine = GetBenchmarkDotNetEngine(benchmark, displayJob);
             var metrics = ExtractBenchmarkDotNetMetrics(statistics);

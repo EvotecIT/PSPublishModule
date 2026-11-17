@@ -77,6 +77,7 @@ internal sealed class ScribanTemplateEngine : ITemplateEngine
         var pf = new ScriptObject();
         pf.Import("menu", new Func<string?, NavigationMenu?>(helpers.Menu));
         pf.Import("structured_data", new Func<object?, string>(helpers.StructuredData));
+        pf.Import("json_string", new Func<string?, string>(helpers.JsonString));
         pf.Import("surface", new Func<string?, NavigationSurfaceRuntime?>(helpers.Surface));
         pf.Import("nav_actions", new Func<string>(helpers.NavActions));
         pf.Add("nav_links", new PfNavLinksFunction(helpers));
@@ -104,6 +105,10 @@ internal sealed class ScribanTemplateEngine : ITemplateEngine
             // inject the template line's leading spaces after every newline in a fragment.
             AutoIndent = false
         };
+        // Data-heavy layouts (benchmark tables, catalogs) can exceed Scriban's default of 1000 iterations;
+        // sites raise or remove it in site.json rather than restructuring templates around it.
+        if (context.Site.Templates?.LoopLimit is int loopLimit)
+            templateContext.LoopLimit = loopLimit;
         templateContext.PushGlobal(globals);
 
         return parsed.Render(templateContext);

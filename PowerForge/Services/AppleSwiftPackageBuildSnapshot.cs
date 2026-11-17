@@ -103,8 +103,12 @@ internal sealed class AppleSwiftPackageBuildSnapshot : IDisposable
             Directory.CreateDirectory(derivedDataPath);
             Directory.CreateDirectory(Path.Combine(root, "ArchiveDerivedData"));
             var initializedRootIdentity = ExistingFilePathIdentityResolver.ResolveDirectoryStatus(root).MutationIdentity;
+            var rootObserverPath = parent;
+#if NET8_0_OR_GREATER
+            if (OperatingSystem.IsMacOS()) rootObserverPath = root;
+#endif
             rootMonitor = new AppleReleaseSourceMutationMonitor(
-                parent,
+                rootObserverPath,
                 "private Swift package snapshot directory",
                 "xcodebuild exact-source package resolution and build",
                 "Discard the Apple product and resolve the exact package graph again.",
@@ -113,7 +117,16 @@ internal sealed class AppleSwiftPackageBuildSnapshot : IDisposable
                 includeExactPathDescendants: false,
                 // Use the same synchronously drainable native boundary as package inputs.
                 // FileSystemWatcher offers no flush for delayed macOS setup notifications.
-                useNativeMacOSObserver: true);
+                useNativeMacOSObserver: true,
+                // WatchRoot retains root/ancestor rename detection. Filter descendants at
+                // the event source so compiler output cannot overflow this directory-only
+                // guard. The separate package-input observer still watches SourcePackages.
+                macOSExcludedSubdirectories: new[]
+                {
+                    sourcePackagesPath,
+                    derivedDataPath,
+                    Path.Combine(root, "ArchiveDerivedData")
+                });
             // FSEvents may deliver this directory's own create/chmod notifications after
             // subscription. Drain them during setup, while binding the ORIGINAL directory
             // and its private permissions, then arm before any resolver process can start.

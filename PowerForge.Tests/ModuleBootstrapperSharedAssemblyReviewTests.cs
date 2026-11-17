@@ -8,6 +8,7 @@ public sealed partial class ModuleBootstrapperSharedAssemblyTests
     [InlineData("Retained.ModuleLoadContext.SharedV3_0123456789ABCDEF.dll")]
     [InlineData("Retained.DevelopmentModuleLoadContext.SharedV3_0123456789abcdef.dll")]
     [InlineData("PowerForge.ModuleLoader.V1.dll")]
+    [InlineData("PowerForge.ModuleLoader.V2.dll")]
     public void LoaderFileNames_FromEarlierAndCurrentReleases_AreNeverPreloadedAsModuleLibraries(string fileName)
     {
         Assert.True(ModuleBootstrapperGenerator.IsAssemblyLoadContextLoaderFileName("Retained", fileName));

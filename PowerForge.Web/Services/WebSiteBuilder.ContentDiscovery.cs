@@ -240,6 +240,7 @@ public static partial class WebSiteBuilder
                     Template = matter?.Template,
                     Kind = kind,
                     HtmlContent = htmlContent,
+                    MarkdownContent = renderMarkdown ? processedBody : null,
                     TocHtml = toc,
                     Resources = isSectionIndex || isBundleIndex
                         ? BuildBundleResources(Path.GetDirectoryName(file) ?? string.Empty)

@@ -256,7 +256,7 @@ public sealed partial class BenchmarkServicesTests
             "full",
             publish: true);
 
-        Assert.Equal(3, updated.SchemaVersion);
+        Assert.Equal(4, updated.SchemaVersion);
         Assert.False(Assert.Single(updated.Entries, entry => entry.Platform == "linux").Publish);
         Assert.True(Assert.Single(updated.Entries, entry => entry.Platform == "windows").Publish);
         Assert.Contains(

@@ -6,10 +6,13 @@ using System.Linq;
 using System.Reflection;
 using System.Security.Cryptography;
 using System.Threading;
+using PowerForge.ModuleLoader.V2;
 #if NETCOREAPP
 using System.Runtime.Loader;
 #endif
 
+// Keep the script-facing registrar name stable across loader assemblies. PowerShell resolves
+// this name to the first loaded registrar, so V1 and V2 modules share its live ownership list.
 namespace PowerForge.ModuleLoader.V1;
 
 /// <summary>

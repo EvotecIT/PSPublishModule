@@ -4,7 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 
-namespace PowerForge.ModuleLoader.V1;
+namespace PowerForge.ModuleLoader.V2;
 
 /// <summary>
 /// Windows PowerShell keeps every module in one AppDomain, and .NET Framework binds an assembly without a

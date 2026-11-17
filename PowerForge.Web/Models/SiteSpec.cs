@@ -34,6 +34,10 @@ public sealed class SiteSpec
     public string? SharedRoot { get; set; }
     /// <summary>Optional data root.</summary>
     public string? DataRoot { get; set; }
+    /// <summary>Benchmark evidence catalogs exposed to templates as comparison views.</summary>
+    public BenchmarkEvidenceDataSpec[] BenchmarkEvidence { get; set; } = Array.Empty<BenchmarkEvidenceDataSpec>();
+    /// <summary>Template engine limits.</summary>
+    public TemplateLimitsSpec? Templates { get; set; }
     /// <summary>Optional archetypes root for content scaffolding.</summary>
     public string? ArchetypesRoot { get; set; }
     /// <summary>Static asset mappings to copy.</summary>

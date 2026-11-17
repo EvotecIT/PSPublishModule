@@ -4,7 +4,7 @@ namespace PowerForge.Tests;
 
 public sealed class ArtefactBuilderModuleLoaderPackagingTests
 {
-    // The generated bootstrapper loads Loader/<edition>/PowerForge.ModuleLoader.V1.dll, so packages always carry that
+    // The generated bootstrapper loads Loader/<edition>/PowerForge.ModuleLoader.V2.dll, so packages always carry that
     // exact folder. On a case-sensitive file system an IncludeAll entry such as 'loader' names a different folder.
     [Fact]
     public void ResolveModulePackageSourceFiles_AlwaysShipsTheExactLoaderFolder()
@@ -21,8 +21,8 @@ public sealed class ArtefactBuilderModuleLoaderPackagingTests
                 .Select(path => Path.GetRelativePath(root, path).Replace('\\', '/'))
                 .ToArray();
 
-            Assert.Contains("Loader/Core/PowerForge.ModuleLoader.V1.dll", files);
-            Assert.Contains("Loader/Desktop/PowerForge.ModuleLoader.V1.dll", files);
+            Assert.Contains("Loader/Core/PowerForge.ModuleLoader.V2.dll", files);
+            Assert.Contains("Loader/Desktop/PowerForge.ModuleLoader.V2.dll", files);
         }
         finally
         {

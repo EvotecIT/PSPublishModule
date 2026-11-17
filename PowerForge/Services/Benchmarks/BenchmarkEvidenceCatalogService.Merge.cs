@@ -19,12 +19,28 @@ public sealed partial class BenchmarkEvidenceCatalogService
         string catalogPath,
         IEnumerable<string> sourceCatalogPaths,
         IEnumerable<string>? expectedPlatforms = null)
+        => MergeFiles(catalogPath, sourceCatalogPaths, expectedPlatforms, null, null);
+
+    /// <summary>Merges portable evidence with declared coverage and optional public result URL rebasing.</summary>
+    /// <param name="catalogPath">Destination catalog path.</param>
+    /// <param name="sourceCatalogPaths">Source catalog paths, including the destination to preserve omitted lanes.</param>
+    /// <param name="expectedPlatforms">Optional expected platform set.</param>
+    /// <param name="comparisons">Authoritative declarations, or null to merge source declarations.</param>
+    /// <param name="resultPathPrefix">Optional root-relative public URL directory. Artifacts are published directly in the output catalog directory.</param>
+    /// <returns>The consolidated catalog.</returns>
+    public BenchmarkEvidenceCatalog MergeFiles(
+        string catalogPath,
+        IEnumerable<string> sourceCatalogPaths,
+        IEnumerable<string>? expectedPlatforms,
+        IEnumerable<BenchmarkComparisonDefinition>? comparisons,
+        string? resultPathPrefix = null)
     {
         if (string.IsNullOrWhiteSpace(catalogPath))
             throw new ArgumentException("Output catalog path is required.", nameof(catalogPath));
         if (sourceCatalogPaths is null)
             throw new ArgumentNullException(nameof(sourceCatalogPaths));
 
+        string? publicPrefix = NormalizeResultPathPrefix(resultPathPrefix);
         string outputCatalogPath = BenchmarkJson.ResolveWritePath(catalogPath);
         string[] sources = sourceCatalogPaths
             .Where(path => !string.IsNullOrWhiteSpace(path))
@@ -37,6 +53,7 @@ public sealed partial class BenchmarkEvidenceCatalogService
         using var fileLease = BenchmarkFileUpdateLock.Acquire(outputCatalogPath);
         var candidates = new List<BundleLane>();
         var platformSets = new List<string>();
+        var declarations = new List<BenchmarkComparisonDefinition>();
         foreach (string sourceCatalogPath in sources)
         {
             if (!File.Exists(sourceCatalogPath))
@@ -51,6 +68,7 @@ public sealed partial class BenchmarkEvidenceCatalogService
                     "Update it with the current PowerForge version before merging so legacy publish flags are demoted and revalidated.");
             }
             platformSets.AddRange(source.ExpectedPlatforms);
+            declarations.AddRange(source.Comparisons);
             foreach (BenchmarkEvidenceEntry entry in source.Entries)
                 candidates.Add(LoadBundleLane(sourceCatalogPath, entry));
         }
@@ -72,7 +90,8 @@ public sealed partial class BenchmarkEvidenceCatalogService
         foreach (BundleLane lane in selected)
         {
             lane.Entry.ResultPath = CreateContentAddressedResultPath(
-                lane.Entry.ResultPath,
+                publicPrefix is null ? lane.Entry.ResultPath :
+                    publicPrefix + "/" + Uri.EscapeDataString(ExtractBundleArtifactFileName(lane.Entry.ResultPath)),
                 lane.Entry.ResultSha256);
             lane.Entry.ArtifactRelativePath =
                 ExtractBundleArtifactRelativePath(lane.Entry.ResultPath);
@@ -98,6 +117,8 @@ public sealed partial class BenchmarkEvidenceCatalogService
             Entries = entries,
             Availability = BuildAvailability(entries, platforms)
         };
+
+        ApplyDefinitions(merged, comparisons ?? declarations);
 
         Directory.CreateDirectory(outputDirectory);
         foreach (BundleLane lane in selected)
@@ -247,8 +268,9 @@ public sealed partial class BenchmarkEvidenceCatalogService
                          lane.Entry.RunMode),
                      StringComparer.OrdinalIgnoreCase))
         {
-            BundleLane first = group.First();
-            if (group.Skip(1).Any(candidate => !EquivalentLane(first.Entry, candidate.Entry)))
+            BundleLane first = group.OrderByDescending(candidate => candidate.Entry.GeneratedUtc).First();
+            if (group.Where(candidate => candidate.Entry.GeneratedUtc == first.Entry.GeneratedUtc)
+                .Any(candidate => !EquivalentLane(first.Entry, candidate.Entry)))
             {
                 throw new InvalidOperationException(
                     $"Benchmark evidence bundles contain conflicting copies of lane " +
@@ -265,17 +287,23 @@ public sealed partial class BenchmarkEvidenceCatalogService
         BenchmarkEvidenceEntry left,
         BenchmarkEvidenceEntry right)
         => string.Equals(left.ResultSha256, right.ResultSha256, StringComparison.OrdinalIgnoreCase) &&
-           string.Equals(left.ResultPath, right.ResultPath, StringComparison.Ordinal) &&
-           string.Equals(
-               EffectiveBundleArtifactRelativePath(left),
-               EffectiveBundleArtifactRelativePath(right),
-               StringComparison.OrdinalIgnoreCase) &&
            string.Equals(left.Suite, right.Suite, StringComparison.Ordinal) &&
            left.GeneratedUtc == right.GeneratedUtc &&
            left.Publish == right.Publish &&
            DictionariesMatch(left.Compatibility, right.Compatibility) &&
            BenchmarkJson.ComputeSha256(left.Environment) ==
            BenchmarkJson.ComputeSha256(right.Environment);
+
+    private static string? NormalizeResultPathPrefix(string? prefix)
+    {
+        if (string.IsNullOrWhiteSpace(prefix))
+            return null;
+        string value = prefix!.Trim().TrimEnd('/');
+        if (!value.StartsWith("/", StringComparison.Ordinal) || value.StartsWith("//", StringComparison.Ordinal) ||
+            value.IndexOfAny(new[] { '\\', '?', '#' }) >= 0)
+            throw new ArgumentException("Result path prefix must be a root-relative public URL directory without a query or fragment.", nameof(prefix));
+        return "/" + NormalizeBundleArtifactRelativePath(value.Substring(1), value).Replace('\\', '/');
+    }
 
     private static bool DictionariesMatch(
         IReadOnlyDictionary<string, string> left,
@@ -631,6 +659,7 @@ public sealed partial class BenchmarkEvidenceCatalogService
         => new()
         {
             ComparisonId = entry.ComparisonId,
+            Area = entry.Area,
             Platform = entry.Platform,
             RunMode = entry.RunMode,
             GeneratedUtc = entry.GeneratedUtc,

@@ -26,12 +26,14 @@ $targetType = $core.GetType('PowerForge.ModuleImportValidationTarget')
 $target = [Activator]::CreateInstance($targetType, @('pwsh', 'Core', $true))
 $targets = [Array]::CreateInstance($targetType, 1)
 $targets.SetValue($target, 0)
-$arguments = [object[]]::new(6)
+$validate = $operationsType.GetMethod('ValidateModuleImports')
+# Reflection does not fill optional parameters; trailing ones stay null (their default).
+$arguments = [object[]]::new($validate.GetParameters().Count)
 $arguments[0] = ''
 $arguments[1] = $entries
 $arguments[2] = $true
 $arguments[3] = $false
 $arguments[4] = $false
 $arguments[5] = $targets
-$null = $operationsType.GetMethod('ValidateModuleImports').Invoke($operations, $arguments)
+$null = $validate.Invoke($operations, $arguments)
 'Hosted import passed'

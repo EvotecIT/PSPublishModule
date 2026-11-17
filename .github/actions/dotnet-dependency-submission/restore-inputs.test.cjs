@@ -158,7 +158,16 @@ function stage(mode, source, output) {
 
 test('transport rebases a real restored graph without changing package targets or edges', t => {
   const root = fixture(t);
+  fs.writeFileSync(path.join(root, 'Example.csproj'), '<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><TargetFramework>net8.0</TargetFramework><IsTestProject>true</IsTestProject></PropertyGroup></Project>');
   assert.equal(run(root, ['Example.csproj']).status, 0);
+  const nativeFile = path.join(root, 'obj', 'project.assets.json');
+  const native = JSON.parse(fs.readFileSync(nativeFile, 'utf8'));
+  const packages = path.join(root, 'packages');
+  fs.mkdirSync(path.join(packages, 'tooling', '1.0.0'), {recursive: true});
+  fs.writeFileSync(path.join(packages, 'tooling', '1.0.0', 'tooling.nuspec'), '<package><metadata><id>Tooling</id><version>1.0.0</version><developmentDependency> true </developmentDependency></metadata></package>');
+  native.packageFolders = {[packages]: {}};
+  native.libraries['Tooling/1.0.0'] = {type: 'package', path: 'tooling/1.0.0', files: ['tooling.nuspec']};
+  fs.writeFileSync(nativeFile, JSON.stringify(native));
   const exported = root + '-export';
   const imported = root + '-import';
   t.after(() => { for (const dir of [exported, imported]) fs.rmSync(dir, {recursive: true, force: true}); });
@@ -173,6 +182,18 @@ test('transport rebases a real restored graph without changing package targets o
   fs.writeFileSync(file, JSON.stringify(original));
   const indexFile = path.join(exported, 'dependency-graphs.json');
   const index = JSON.parse(fs.readFileSync(indexFile, 'utf8'));
+  assert.equal(index.assets[0].scope, 'development');
+  assert.equal(index.assets[0].projectProperties.IsTestProject.toLowerCase(), 'true');
+  assert.deepEqual(index.assets[0].developmentPackages, ['Tooling/1.0.0']);
+  const developmentExport = root + '-development-export';
+  t.after(() => fs.rmSync(developmentExport, {recursive: true, force: true}));
+  fs.writeFileSync(path.join(root, 'Example.csproj'), '<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><TargetFramework>net8.0</TargetFramework><IsTestProject>false</IsTestProject><DevelopmentDependency>true</DevelopmentDependency></PropertyGroup></Project>');
+  result = stage('Export', root, developmentExport);
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  const developmentIndex = JSON.parse(fs.readFileSync(path.join(developmentExport, 'dependency-graphs.json'), 'utf8'));
+  assert.equal(developmentIndex.assets[0].scope, 'development');
+  assert.equal(developmentIndex.assets[0].projectProperties.IsTestProject.toLowerCase(), 'false');
+  assert.equal(developmentIndex.assets[0].projectProperties.DevelopmentDependency.toLowerCase(), 'true');
   index.sourceRoot = '/Users/runner/work/Product/Product';
   fs.writeFileSync(indexFile, JSON.stringify(index));
   result = stage('Import', exported, imported);

@@ -49,13 +49,13 @@ paths_overlap() {
 }
 
 assert_root_controlled_ancestry() {
-  local current="$1" leaf="$1" mode
+  local current="$1" leaf="$1" label="${2:-export}" mode
   while :; do
-    [[ "$($stat_bin -c '%u' -- "$current")" == '0' ]] || die "export ancestry must be owned by root: $current"
+    [[ "$($stat_bin -c '%u' -- "$current")" == '0' ]] || die "$label ancestry must be owned by root: $current"
     mode="$($stat_bin -c '%a' -- "$current")"
     if (( (8#$mode & 0022) != 0 )); then
       if [[ "$current" == "$leaf" ]] || (( (8#$mode & 01000) == 0 )); then
-        die "export ancestry must not be writable by non-root accounts: $current"
+        die "$label ancestry must not be writable by non-root accounts: $current"
       fi
     fi
     [[ "$current" != '/' ]] || break
@@ -116,6 +116,14 @@ export_root="$($jq_bin -er '.durableBackup.exportRoot' "$manifest")"
 export_group="$($jq_bin -er '.durableBackup.exportGroup' "$manifest")"
 recipient="$($jq_bin -er '.durableBackup.recipient' "$manifest")"
 retention_hours="$($jq_bin -er '.durableBackup.stagingRetentionHours' "$manifest")"
+validation_root="$($jq_bin -er 'if .durableBackup | has("sqliteValidationRoot") then .durableBackup.sqliteValidationRoot | select(type == "string" and length > 0) else "-" end' "$manifest")" ||
+  die 'sqliteValidationRoot must be a nonempty absolute path when set'
+validation_reserve="$($jq_bin -er 'if .durableBackup | has("sqliteValidationReserveBytes") then .durableBackup.sqliteValidationReserveBytes | select(type == "number" and floor == . and . >= 0 and . <= 1099511627776) else 4294967296 end' "$manifest")" ||
+  die 'sqliteValidationReserveBytes must be an integer from 0 through 1099511627776'
+[[ "$validation_reserve" =~ ^(0|[1-9][0-9]{0,12})$ ]] || die 'invalid SQLite validation reserve'
+if [[ "$validation_root" == '-' ]] && "$jq_bin" -e '.durableBackup | has("sqliteValidationReserveBytes")' "$manifest" >/dev/null; then
+  die 'sqliteValidationReserveBytes requires sqliteValidationRoot'
+fi
 assert_absolute_path "$export_root"
 assert_dedicated_export_root "$export_root"
 assert_unix_identity "$export_group"
@@ -161,7 +169,22 @@ partial="$export_root/snapshots/.partial-${stamp}-$$"
 final="$export_root/snapshots/$stamp"
 checksum_temp="$export_root/.checksums-${stamp}-$$"
 work=''
+validation_work=''
 [[ ! -e "$partial" && ! -e "$final" ]] || die "capture path already exists: $final"
+
+cleanup_validation_work() {
+  [[ -n "${validation_work:-}" ]] || return 0
+  if [[ "$validation_root" != '-' && "$validation_work" == "$validation_root/.sqlite-validation."* &&
+        -d "$validation_work" && ! -L "$validation_work" &&
+        "$($readlink_bin -f -- "${validation_work%/*}")" == "$validation_root" &&
+        "$($stat_bin -c '%u' -- "$validation_work")" == '0' ]]; then
+    rm -rf -- "$validation_work" || return 1
+    validation_work=''
+  else
+    log "refusing to clean unsafe SQLite validation path: $validation_work"
+    return 1
+  fi
+}
 
 cleanup() {
   if [[ -n "${partial:-}" && "$partial" == "$export_root/snapshots/.partial-"* && -d "$partial" ]]; then
@@ -177,6 +200,7 @@ cleanup() {
   if [[ -n "${work:-}" && "$work" == /var/tmp/powerforge-server-data-capture.* && -d "$work" ]]; then
     rm -rf -- "$work"
   fi
+  cleanup_validation_work || true
 }
 trap cleanup EXIT INT TERM
 
@@ -201,6 +225,45 @@ encrypted_rows="$($jq_bin -r '.durableBackup.encryptedFiles[] | [.target, (.requ
   die 'encrypted-file manifest decoding failed'
 artifact_rows="$($jq_bin -r '.durableBackup.artifactStores[] | [.id, .path, (.required // false)] | @tsv' "$manifest")" ||
   die 'artifact-store manifest decoding failed'
+
+if [[ "$validation_root" != '-' ]]; then
+  assert_absolute_path "$validation_root"
+  case "$validation_root" in
+    /etc|/home|/root|/srv|/var|/var/lib|/tmp|/var/tmp|/dev|/dev/shm)
+      die 'SQLite validation root must be a dedicated private directory' ;;
+  esac
+  [[ -d "$validation_root" && ! -L "$validation_root" && "$($readlink_bin -f -- "$validation_root")" == "$validation_root" ]] ||
+    die 'SQLite validation root must be an existing canonical non-link directory'
+  assert_root_controlled_ancestry "$validation_root" 'SQLite validation'
+  [[ "$($stat_bin -c '%a' -- "$validation_root")" == '700' ]] || die 'SQLite validation root must have mode 0700'
+  paths_overlap "$validation_root" "$export_root" && die 'SQLite validation root overlaps durable export root'
+  while IFS=$'\t' read -r _ provider database _ _; do
+    if [[ "$provider" == 'sqlite' ]] && paths_overlap "$validation_root" "$database"; then
+      die 'SQLite validation root overlaps a live SQLite source'
+    fi
+  done <<<"$database_rows"
+  while IFS=$'\t' read -r encrypted_path _; do
+    paths_overlap "$validation_root" "$encrypted_path" && die 'SQLite validation root overlaps an encrypted input'
+  done <<<"$encrypted_rows"
+  while IFS=$'\t' read -r _ source _; do
+    paths_overlap "$validation_root" "$source" && die 'SQLite validation root overlaps an artifact store'
+  done <<<"$artifact_rows"
+  dd_bin="$(require_command dd)"
+  df_bin="$(require_command df)"
+  # Serialize users of this fast workspace even when their export locks differ.
+  validation_lock="$validation_root/.validation.lock"
+  if [[ -e "$validation_lock" || -L "$validation_lock" ]]; then
+    [[ -f "$validation_lock" && ! -L "$validation_lock" && "$($stat_bin -c '%u:%h' -- "$validation_lock")" == '0:1' ]] ||
+      die 'SQLite validation lock is unsafe'
+  fi
+  exec 8>>"$validation_lock"
+  chmod 0600 "$validation_lock"
+  "$flock_bin" -n 8 || die 'another SQLite validation workspace user is running'
+  validation_work="$($mktemp_bin -d "$validation_root/.sqlite-validation.XXXXXXXX")"
+  [[ -d "$validation_work" && ! -L "$validation_work" && "$($stat_bin -c '%u:%a' -- "$validation_work")" == '0:700' ]] ||
+    die 'unable to create a private SQLite validation directory'
+fi
+
 while IFS=$'\t' read -r id provider database run_as required; do
   assert_identifier "$id"
   [[ ! -v seen_database_ids["$id"] ]] || die "duplicate database id: $id"
@@ -256,15 +319,43 @@ while IFS=$'\t' read -r id provider database run_as required; do
       install -d -m 0700 -o root -g root "$work/sqlite/$id"
       [[ -s "$staging_path" && -f "$staging_path" && ! -L "$staging_path" ]] || die "SQLite backup is missing or unsafe: $id"
       dump_path="$work/databases/$id.sqlite"
-      install -m 0600 -o root -g root -- "$staging_path" "$dump_path"
-      [[ "$("$sqlite3_bin" -readonly "$dump_path" 'PRAGMA integrity_check;')" == 'ok' ]] ||
-        die "SQLite backup integrity check failed: $id"
+      if [[ "$validation_root" == '-' ]]; then
+        install -m 0600 -o root -g root -- "$staging_path" "$dump_path"
+        [[ "$("$sqlite3_bin" -readonly "$dump_path" 'PRAGMA integrity_check;')" == 'ok' ]] ||
+          die "SQLite backup integrity check failed: $id"
+      else
+        staging_bytes="$($stat_bin -c '%s' -- "$staging_path")"
+        available_bytes="$($df_bin -B1 --output=avail -- "$validation_work" | tail -n 1 | tr -d ' ')"
+        [[ "$staging_bytes" =~ ^[1-9][0-9]*$ && "$available_bytes" =~ ^[0-9]+$ ]] || die 'unable to measure SQLite validation capacity'
+        (( available_bytes >= validation_reserve && staging_bytes <= available_bytes - validation_reserve )) ||
+          die "insufficient SQLite validation space including reserve: $id"
+        validation_copy="$validation_work/$id.sqlite"
+        install -m 0600 -o root -g root /dev/null "$validation_copy"
+        # A service account may retain its staging descriptor. Bound reads to the
+        # measured size and create a different root-only inode before validation.
+        if ! "$dd_bin" if="$staging_path" of="$validation_copy" bs=1M iflag=count_bytes,fullblock count="$staging_bytes" status=none; then
+          die "SQLite sealed copy failed: $id"
+        fi
+        [[ "$($stat_bin -c '%s' -- "$validation_copy")" == "$staging_bytes" ]] || die "SQLite sealed copy size mismatch: $id"
+        [[ "$("$sqlite3_bin" -readonly "$validation_copy" 'PRAGMA integrity_check;')" == 'ok' ]] ||
+          die "SQLite backup integrity check failed: $id"
+        validation_digest="$($sha256_bin -- "$validation_copy" | awk '{print $1}')"
+        [[ "$validation_digest" =~ ^[a-f0-9]{64}$ ]] || die "SQLite validation digest failed: $id"
+        if ! install -m 0600 -o root -g root -- "$validation_copy" "$dump_path"; then
+          die "SQLite validated transfer failed: $id"
+        fi
+        [[ "$($stat_bin -c '%s' -- "$dump_path")" == "$staging_bytes" &&
+           "$($sha256_bin -- "$dump_path" | awk '{print $1}')" == "$validation_digest" ]] ||
+          die "SQLite validated transfer verification failed: $id"
+        rm -- "$validation_copy"
+      fi
       ;;
     *) die "unsupported database provider for $id: $provider" ;;
   esac
   database_ids+=("$id")
 done <<<"$database_rows"
 (( ${#database_ids[@]} > 0 )) || die 'durable capture did not produce any database dump'
+cleanup_validation_work || die 'unable to clean SQLite validation plaintext'
 
 if [[ -n "$pg_dump_bin" ]]; then
   install -d -m 0711 -o root -g root "$work/postgresql"

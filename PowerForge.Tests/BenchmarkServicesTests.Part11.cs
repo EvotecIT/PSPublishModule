@@ -211,9 +211,12 @@ public sealed partial class BenchmarkServicesTests
         string secondRoot = Path.Combine(root, "second");
         Directory.CreateDirectory(firstRoot);
         Directory.CreateDirectory(secondRoot);
+        BenchmarkRunResult firstResult = Result("Windows", "fixture-a", 10);
+        BenchmarkRunResult secondResult = Result("Windows", "fixture-a", 12);
+        secondResult.FinishedUtc = firstResult.FinishedUtc;
         service.UpdateFile(
             Path.Combine(firstRoot, "index.json"),
-            Result("Windows", "fixture-a", 10),
+            firstResult,
             "comparison-a",
             "/data/benchmarks/windows-full.json",
             "full",
@@ -221,7 +224,7 @@ public sealed partial class BenchmarkServicesTests
             resultArtifactPath: Path.Combine(firstRoot, "windows-full.json"));
         service.UpdateFile(
             Path.Combine(secondRoot, "index.json"),
-            Result("Windows", "fixture-a", 12),
+            secondResult,
             "comparison-a",
             "/data/benchmarks/windows-full.json",
             "full",

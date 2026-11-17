@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net472</TargetFramework>
+    <AssemblyName>PowerForge.ModuleLoader.V1</AssemblyName>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <AssemblyVersion>1.0.0.0</AssemblyVersion>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- The registrar's unchanged V1 contract is deliberately compiled into both loader identities. -->
+    <Compile Include="../../../PowerForge.ModuleLoader/TypeAcceleratorRegistration.cs" Link="TypeAcceleratorRegistration.cs" />
+    <Compile Include="../../../PowerForge.ModuleLoader/ModuleDescription.cs" Link="ModuleDescription.cs" />
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
+  </ItemGroup>
+</Project>

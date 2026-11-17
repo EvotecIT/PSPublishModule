@@ -9,6 +9,7 @@ on:
       - "Deployment/Linux/powerforge-server-encrypted-capture.sh"
       - "Deployment/Linux/powerforge-server-data-capture.sh"
       - "Deployment/Linux/tests/powerforge-server-data-capture-sqlite-fixture.sh"
+      - "Deployment/Linux/tests/powerforge-server-data-capture-validation-fixture.sh"
       - "PowerForge.Tests/GitHubServerRecoveryValidation*.cs"
       - "PowerForge.Tests/ServerRecovery*.cs"
       - "PowerForge.Tests/ServerScaffoldTests.cs"
@@ -26,6 +27,7 @@ on:
       - "Deployment/Linux/powerforge-server-encrypted-capture.sh"
       - "Deployment/Linux/powerforge-server-data-capture.sh"
       - "Deployment/Linux/tests/powerforge-server-data-capture-sqlite-fixture.sh"
+      - "Deployment/Linux/tests/powerforge-server-data-capture-validation-fixture.sh"
       - "PowerForge.Tests/GitHubServerRecoveryValidation*.cs"
       - "PowerForge.Tests/ServerRecovery*.cs"
       - "PowerForge.Tests/ServerScaffoldTests.cs"
@@ -73,6 +75,7 @@ jobs:
           sudo apt-get install -y -qq age jq postgresql rsync sqlite3 shellcheck
           sudo service postgresql start
           pg_isready -q
-          bash -n Deployment/Linux/powerforge-server-data-capture.sh Deployment/Linux/tests/powerforge-server-data-capture-sqlite-fixture.sh
-          shellcheck Deployment/Linux/powerforge-server-data-capture.sh Deployment/Linux/tests/powerforge-server-data-capture-sqlite-fixture.sh
+          bash -n Deployment/Linux/powerforge-server-data-capture.sh Deployment/Linux/tests/powerforge-server-data-capture-sqlite-fixture.sh Deployment/Linux/tests/powerforge-server-data-capture-validation-fixture.sh
+          shellcheck Deployment/Linux/powerforge-server-data-capture.sh Deployment/Linux/tests/powerforge-server-data-capture-sqlite-fixture.sh Deployment/Linux/tests/powerforge-server-data-capture-validation-fixture.sh
           sudo bash Deployment/Linux/tests/powerforge-server-data-capture-sqlite-fixture.sh
+          sudo bash Deployment/Linux/tests/powerforge-server-data-capture-validation-fixture.sh

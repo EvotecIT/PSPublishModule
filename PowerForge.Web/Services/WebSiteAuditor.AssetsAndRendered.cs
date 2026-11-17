@@ -406,15 +406,19 @@ public static partial class WebSiteAuditor
         var bytes = File.ReadAllBytes(filePath);
         try
         {
-            return new UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true).GetString(bytes);
+            // Browsers drop a leading byte order mark before parsing; keep it from turning head metadata into body text.
+            return StripByteOrderMark(new UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true).GetString(bytes));
         }
         catch (DecoderFallbackException ex)
         {
             var offset = ex.Index >= 0 ? $" at byte offset {ex.Index}" : string.Empty;
             addIssue("error", "utf8", relativePath, $"invalid UTF-8 byte sequence{offset} ({ex.Message}).", "utf8-invalid");
-            return Encoding.UTF8.GetString(bytes);
+            return StripByteOrderMark(Encoding.UTF8.GetString(bytes));
         }
     }
+
+    private static string StripByteOrderMark(string text)
+        => text.Length > 0 && text[0] == '﻿' ? text.Substring(1) : text;
 
     private static bool HasUtf8Meta(AngleSharp.Dom.IDocument doc)
     {
