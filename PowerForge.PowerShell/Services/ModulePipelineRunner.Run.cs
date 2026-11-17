@@ -43,7 +43,10 @@ public sealed partial class ModulePipelineRunner
         var packagingRequiredModules = plan.RequiredModulesForPackaging ?? Array.Empty<RequiredModuleReference>();
         var manifestExternalModuleDependencies = plan.ExternalModuleDependencies ?? Array.Empty<string>();
 
-        var session = ModulePipelineExecutionSession.Create(plan, progress);
+        // Without a live view (CI, redirected output, -Verbose) steps are reported as log lines with a heartbeat.
+        var session = ModulePipelineExecutionSession.Create(
+            plan,
+            progress ?? new LoggingModulePipelineProgressReporter(_logger, ModulePipelineStep.Create(plan)));
         var cleanupStep = session.CleanupStep;
 
         var pipeline = ModuleBuildPipelineFactory.Create(_logger);
