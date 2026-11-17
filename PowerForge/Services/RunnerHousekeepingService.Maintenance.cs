@@ -122,7 +122,7 @@ public sealed partial class RunnerHousekeepingService
                     foreach (var process in orphanProcesses) run.Retained.Add(runner.Name + " retains output for recorded " + process.Name + " PID " + process.Id + ".");
                 }
                 if (snapshotIncomplete || active || unknown || orphanActivity) continue;
-                MaintenanceRunnerOutput(run, runner);
+                if (runner.CleanupEnabled) MaintenanceRunnerOutput(run, runner);
             }
             if (run.SharedIdle && !run.Expired)
             {

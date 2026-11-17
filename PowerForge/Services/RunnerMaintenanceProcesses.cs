@@ -113,9 +113,13 @@ internal static partial class RunnerMaintenanceProcesses
         => Run(executable, directory, TimeSpan.FromSeconds(15), arguments);
 
     internal static string Run(string executable, string directory, TimeSpan timeout, params string[] arguments)
+        => Run(executable, directory, timeout, null, arguments);
+
+    internal static string Run(string executable, string directory, TimeSpan timeout,
+        IReadOnlyDictionary<string, string?>? environment, params string[] arguments)
     {
         if (timeout <= TimeSpan.Zero) throw new IOException("Maintenance command execution budget reached.");
-        var request = new ProcessRunRequest(executable, directory, arguments, timeout);
+        var request = new ProcessRunRequest(executable, directory, arguments, timeout, environment);
         var result = new ProcessRunner(ownProcessTree: true).RunAsync(request).GetAwaiter().GetResult();
         if (result.ExitCode != 0 || result.TimedOut || result.StartFailed)
             throw new IOException($"Maintenance command '{executable}' failed with exit code {result.ExitCode}.");
