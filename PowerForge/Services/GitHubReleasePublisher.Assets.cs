@@ -431,6 +431,37 @@ public sealed partial class GitHubReleasePublisher {
     private void WaitBeforeAssetUploadRetry(TimeSpan delay, CancellationToken cancellationToken)
         => _assetRetryDelay(delay, cancellationToken);
 
+    private static readonly TimeSpan LongWaitThreshold = TimeSpan.FromSeconds(30);
+
+    /// <summary>
+    /// Waits for a retry delay. A rate-limit reset can be up to an hour away, so long waits name the time
+    /// they end and keep reporting how much is left instead of going quiet.
+    /// </summary>
+    private void WaitReportingRemaining(TimeSpan delay, CancellationToken cancellationToken)
+    {
+        if (delay < LongWaitThreshold)
+        {
+            Task.Delay(delay, cancellationToken).ConfigureAwait(false).GetAwaiter().GetResult();
+            return;
+        }
+
+        var until = DateTimeOffset.Now + delay;
+        var interval = delay >= TimeSpan.FromMinutes(5) ? TimeSpan.FromMinutes(1) : TimeSpan.FromSeconds(15);
+        _logger.Info($"Waiting for GitHub until {until:HH:mm:ss} ({DotNetRepositoryReleaseService.FormatDuration(delay)}) before retrying.");
+        while (true)
+        {
+            var remaining = until - DateTimeOffset.Now;
+            if (remaining <= TimeSpan.Zero)
+                return;
+
+            Task.Delay(remaining < interval ? remaining : interval, cancellationToken)
+                .ConfigureAwait(false).GetAwaiter().GetResult();
+            remaining = until - DateTimeOffset.Now;
+            if (remaining > TimeSpan.FromSeconds(1))
+                _logger.Info($"Waiting for GitHub, {DotNetRepositoryReleaseService.FormatDuration(remaining)} left (until {until:HH:mm:ss}).");
+        }
+    }
+
     private static string FormatRetryDelay(TimeSpan delay)
         => delay.TotalSeconds >= 1
             ? $"{delay.TotalSeconds:0.#}s"
