@@ -43,15 +43,25 @@ internal sealed partial class PowerForgeToolReleaseService
         }
     }
 
-    private static string TrimForMessage(string? stdErr, string? stdOut)
+    private const int MessageHeadCharacters = 500;
+    private const int MessageTailCharacters = 2500;
+
+    /// <summary>
+    /// Bounds failed process output for an exception message. dotnet and MSBuild print the actual
+    /// error and the build summary last, so the tail is kept and only a short head is retained.
+    /// </summary>
+    internal static string TrimForMessage(string? stdErr, string? stdOut)
     {
         var combined = string.Join(
             Environment.NewLine,
             new[] { stdErr?.Trim(), stdOut?.Trim() }.Where(text => !string.IsNullOrWhiteSpace(text)));
-        if (combined.Length <= 3000)
+        if (combined.Length <= MessageHeadCharacters + MessageTailCharacters)
             return combined;
 
-        return combined.Substring(0, 3000) + "...";
+        var omitted = combined.Length - MessageHeadCharacters - MessageTailCharacters;
+        return combined.Substring(0, MessageHeadCharacters) +
+               $"{Environment.NewLine}... {omitted} character(s) omitted ...{Environment.NewLine}" +
+               combined.Substring(combined.Length - MessageTailCharacters);
     }
 
     internal readonly struct ProcessExecutionResult
