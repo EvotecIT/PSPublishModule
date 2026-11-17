@@ -318,9 +318,26 @@ public sealed partial class DotNetRepositoryReleaseService
     internal static PackagePushResult PushPackage(DotNetNuGetPushRequest request)
         => PushPackage(request, CancellationToken.None);
 
+    private PackagePushResult PushPackageWithHeartbeat(
+        string packagePath,
+        string apiKey,
+        string source,
+        bool skipDuplicate,
+        bool suppressCompanionSymbols,
+        string? workingDirectory)
+        => PushPackage(new DotNetNuGetPushRequest(
+            packagePath,
+            apiKey,
+            source,
+            skipDuplicate,
+            workingDirectory,
+            timeout: null,
+            suppressCompanionSymbols), ActiveCancellationToken.Value, _logger);
+
     internal static PackagePushResult PushPackage(
         DotNetNuGetPushRequest request,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        ILogger? logger = null)
     {
         if (request is null)
             throw new ArgumentNullException(nameof(request));
@@ -339,7 +356,7 @@ public sealed partial class DotNetRepositoryReleaseService
             return localResult;
         }
 
-        var push = new DotNetNuGetClient()
+        var push = new DotNetNuGetClient { Logger = logger }
             .PushPackageAsync(request, cancellationToken)
             .GetAwaiter()
             .GetResult();
@@ -411,8 +428,40 @@ public sealed partial class DotNetRepositoryReleaseService
         }
     }
 
-    private static void LogProcessOutput(ILogger logger, string projectName, string operation, string stdOut, string stdErr)
+    private const int MaxSurfacedWarningLines = 50;
+
+    private static readonly Regex BuildWarningLinePattern = new(
+        @"\bwarning\s+[A-Za-z]+\d+\b|:\s*warning\s*:",
+        RegexOptions.CultureInvariant);
+
+    /// <summary>
+    /// Returns the distinct compiler, MSBuild and NuGet warning lines (CS, MSB, NU5xxx, ...) from process output.
+    /// </summary>
+    internal static IReadOnlyList<string> ExtractWarningLines(string? stdOut, string? stdErr)
+        => new[] { stdOut, stdErr }
+            .Where(text => !string.IsNullOrWhiteSpace(text))
+            .SelectMany(text => text!.Replace("\r\n", "\n").Split('\n'))
+            .Select(line => line.Trim())
+            .Where(line => line.Length > 0 && BuildWarningLinePattern.IsMatch(line))
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+
+    /// <summary>
+    /// Reports the warning lines of a dotnet run at Warn, so packaging and compiler warnings are seen without
+    /// -Verbose. MSBuild repeats each warning in its final summary; repeated lines are reported once.
+    /// </summary>
+    internal static void LogWarningLines(ILogger logger, string prefix, string? stdOut, string? stdErr)
     {
+        var warnings = ExtractWarningLines(stdOut, stdErr);
+        foreach (var warning in warnings.Take(MaxSurfacedWarningLines))
+            logger.Warn($"{prefix}: {warning}");
+        if (warnings.Count > MaxSurfacedWarningLines)
+            logger.Warn($"{prefix}: {warnings.Count - MaxSurfacedWarningLines} more warning line(s); run with -Verbose to see the full output.");
+    }
+
+    internal static void LogProcessOutput(ILogger logger, string projectName, string operation, string stdOut, string stdErr)
+    {
+        LogWarningLines(logger, $"{projectName}: {operation}", stdOut, stdErr);
         if (!logger.IsVerbose)
             return;
 

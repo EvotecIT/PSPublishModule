@@ -41,9 +41,7 @@ public sealed class NuGetPackagePublishServiceTests
             Assert.Equal(packagePath, Assert.Single(result.FailedItems));
             Assert.Equal(response, result.ErrorMessage);
             Assert.Contains(logger.Entries, entry =>
-                entry.Level == "warn" && entry.Message.Contains(packagePath));
-            Assert.Contains(logger.Entries, entry =>
-                entry.Level == "warn" && entry.Message == response);
+                entry.Level == "warn" && entry.Message.Contains(packagePath) && entry.Message.Contains(response));
         }
         finally
         {

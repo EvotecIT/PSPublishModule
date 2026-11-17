@@ -1,4 +1,5 @@
 using System.IO.Compression;
+using System.Text.RegularExpressions;
 
 namespace PowerForge;
 
@@ -32,6 +33,15 @@ public sealed partial class DotNetNuGetClient
     }
 
     /// <summary>
+    /// Optional logger. When set, pushes and signing report a heartbeat while <c>dotnet nuget</c> is running,
+    /// so a slow feed or a signing prompt never looks like a hung release.
+    /// </summary>
+    public ILogger? Logger { get; set; }
+
+    private OperationHeartbeat? StartHeartbeat(string label)
+        => Logger is null ? null : OperationHeartbeat.Start(Logger, label);
+
+    /// <summary>
     /// Executes <c>dotnet nuget push</c> using a temporary response file.
     /// </summary>
     /// <param name="request">Push request.</param>
@@ -62,13 +72,17 @@ public sealed partial class DotNetNuGetClient
                     pushContext.Value.PackagePath,
                     pushContext.Value.Source));
 
-            var processResult = await _processRunner.RunAsync(
-                new ProcessRunRequest(
-                    _dotNetExecutable,
-                    pushContext.Value.WorkingDirectory,
-                    [$"@{responseFilePath}"],
-                    request.Timeout ?? _defaultTimeout),
-                cancellationToken).ConfigureAwait(false);
+            ProcessRunResult processResult;
+            using (StartHeartbeat($"dotnet nuget push {Path.GetFileName(pushContext.Value.PackagePath)}"))
+            {
+                processResult = await _processRunner.RunAsync(
+                    new ProcessRunRequest(
+                        _dotNetExecutable,
+                        pushContext.Value.WorkingDirectory,
+                        [$"@{responseFilePath}"],
+                        request.Timeout ?? _defaultTimeout),
+                    cancellationToken).ConfigureAwait(false);
+            }
 
             var transcript = string.Join(Environment.NewLine, processResult.StdOut, processResult.StdErr);
             bool duplicate = request.SkipDuplicate && !processResult.TimedOut &&
@@ -101,7 +115,7 @@ public sealed partial class DotNetNuGetClient
                 processResult.TimedOut,
                 (processResult.ExitCode == 0 || duplicate) && !processResult.TimedOut
                     ? null
-                    : FirstLine(processResult.StdErr) ?? FirstLine(processResult.StdOut) ?? $"dotnet nuget push failed with exit code {processResult.ExitCode}.")
+                    : SummarizeFailureOutput(processResult.StdErr, processResult.StdOut) ?? $"dotnet nuget push failed with exit code {processResult.ExitCode}.")
             { SkippedDuplicate = duplicate };
         }
         finally
@@ -171,13 +185,20 @@ public sealed partial class DotNetNuGetClient
         if (request.Overwrite)
             arguments.Add("--overwrite");
 
-        var processResult = await _processRunner.RunAsync(
-            new ProcessRunRequest(
-                _dotNetExecutable,
-                ResolveWorkingDirectory(request.WorkingDirectory, request.PackagePath),
-                arguments,
-                request.Timeout ?? _defaultTimeout),
-            cancellationToken).ConfigureAwait(false);
+        var signLabel = packagePaths.Length == 1
+            ? Path.GetFileName(packagePaths[0])
+            : $"{packagePaths.Length} packages";
+        ProcessRunResult processResult;
+        using (StartHeartbeat($"Signing {signLabel} (dotnet nuget sign waits here while the certificate or hardware token asks for a PIN)"))
+        {
+            processResult = await _processRunner.RunAsync(
+                new ProcessRunRequest(
+                    _dotNetExecutable,
+                    ResolveWorkingDirectory(request.WorkingDirectory, request.PackagePath),
+                    arguments,
+                    request.Timeout ?? _defaultTimeout),
+                cancellationToken).ConfigureAwait(false);
+        }
 
         var preservationMessage = skippedSignedPackages > 0
             ? $"Preserved {skippedSignedPackages} already signed NuGet package(s)."
@@ -197,7 +218,7 @@ public sealed partial class DotNetNuGetClient
             processResult.TimedOut,
             processResult.ExitCode == 0 && !processResult.TimedOut
                 ? null
-                : FirstLine(processResult.StdErr) ?? FirstLine(processResult.StdOut) ?? $"dotnet nuget sign failed with exit code {processResult.ExitCode}.");
+                : SummarizeFailureOutput(processResult.StdErr, processResult.StdOut) ?? $"dotnet nuget sign failed with exit code {processResult.ExitCode}.");
     }
 
     private static bool HasNuGetSignature(string packagePath, string? workingDirectory)
@@ -382,18 +403,43 @@ public sealed partial class DotNetNuGetClient
         }
     }
 
-    private static string? FirstLine(string? value)
+    private const int MaxFailureLines = 20;
+    private const int FailureTailLines = 5;
+
+    private static readonly Regex DiagnosticLinePattern = new(
+        @"\b(?:NU|MSB|CS)\d{4}\b|^\s*(?:error|warn(?:ing)?)\b|:\s*(?:error|warning)\b",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+
+    /// <summary>
+    /// Builds a failure message that keeps the real cause: every line carrying a NuGet/MSBuild code
+    /// (NU1xxx, NU3xxx, ...) or an error/warning marker, and otherwise the last lines of output.
+    /// </summary>
+    internal static string? SummarizeFailureOutput(string? stdErr, string? stdOut)
     {
-        if (string.IsNullOrWhiteSpace(value))
+        var lines = SplitLines(stdErr).Concat(SplitLines(stdOut)).ToArray();
+        if (lines.Length == 0)
             return null;
 
-        var nonEmptyValue = value!;
+        var diagnostics = lines
+            .Where(line => DiagnosticLinePattern.IsMatch(line))
+            .Distinct(StringComparer.Ordinal)
+            .Take(MaxFailureLines)
+            .ToArray();
+        if (diagnostics.Length > 0)
+            return string.Join(Environment.NewLine, diagnostics);
 
-        return nonEmptyValue
-            .Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries)
-            .FirstOrDefault()
-            ?.Trim();
+        var source = SplitLines(stdErr).ToArray();
+        if (source.Length == 0)
+            source = lines;
+        return string.Join(Environment.NewLine, source.Skip(Math.Max(0, source.Length - FailureTailLines)));
     }
+
+    private static IEnumerable<string> SplitLines(string? value)
+        => string.IsNullOrWhiteSpace(value)
+            ? Array.Empty<string>()
+            : value!.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries)
+                .Select(line => line.Trim())
+                .Where(line => line.Length > 0);
 
     private static string NormalizeRuntimeDirectoryRoot(string? runtimeDirectoryRoot)
         => string.IsNullOrWhiteSpace(runtimeDirectoryRoot)
