@@ -83,6 +83,7 @@ public sealed class PublishNugetPackageCommand : PSCmdlet
     {
         try
         {
+            var logger = new CmdletLogger(this, MyInvocation?.BoundParameters.ContainsKey("Verbose") == true);
             var source = Source;
             var apiKey = ApiKey;
             string? profileName = null;
@@ -116,7 +117,7 @@ public sealed class PublishNugetPackageCommand : PSCmdlet
                     artefactsPSResourceGetUri: endpoint.PSResourceGetUri,
                     artefactsPowerShellGetSourceUri: endpoint.PowerShellGetSourceUri);
                 foreach (var message in prerequisites.Messages)
-                    WriteVerbose(message);
+                    logger.Info(message);
 
                 source = endpoint.PSResourceGetUri;
                 repositoryName = endpoint.RepositoryName;
@@ -135,7 +136,6 @@ public sealed class PublishNugetPackageCommand : PSCmdlet
                 }
             }
 
-            var logger = new CmdletLogger(this, MyInvocation?.BoundParameters.ContainsKey("Verbose") == true);
             var service = new NuGetPackagePublishService(logger);
             var resolvedRoots = ResolveRoots(Path);
             var serviceResult = service.Execute(new NuGetPackagePublishRequest
@@ -148,14 +148,48 @@ public sealed class PublishNugetPackageCommand : PSCmdlet
             }, package => ShouldProcess(package, $"Publish NuGet package to {source}"));
 
             WriteObject(ToCmdletResult(serviceResult, source, profileName, repositoryName));
+            WritePushErrors(serviceResult);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not PipelineStoppedException and not ActionPreferenceStopException)
         {
             WriteObject(new PublishNugetPackageResult
             {
                 Success = false,
                 ErrorMessage = ex.Message
             });
+            WriteError(new ErrorRecord(ex, "PublishNugetPackageFailed", ErrorCategory.NotSpecified, Path));
+        }
+    }
+
+    /// <summary>
+    /// Reports each failed package as a non-terminating error, so failures reach $Error, -ErrorVariable and
+    /// -ErrorAction Stop instead of only the returned result object.
+    /// </summary>
+    private void WritePushErrors(PowerForge.NuGetPackagePublishResult result)
+    {
+        if (result.Success)
+            return;
+
+        if (result.FailedItems.Count == 0)
+        {
+            WriteError(new ErrorRecord(
+                new InvalidOperationException(result.ErrorMessage ?? "Publishing NuGet packages failed."),
+                "PublishNugetPackageFailed",
+                ErrorCategory.InvalidOperation,
+                Path));
+            return;
+        }
+
+        foreach (var package in result.FailedItems)
+        {
+            var cause = result.PackagePushResults.TryGetValue(package, out var push) && !string.IsNullOrWhiteSpace(push.Message)
+                ? push.Message
+                : result.ErrorMessage ?? "dotnet nuget push failed.";
+            WriteError(new ErrorRecord(
+                new InvalidOperationException($"Pushing {System.IO.Path.GetFileName(package)} failed: {cause}"),
+                "PublishNugetPackagePushFailed",
+                ErrorCategory.WriteError,
+                package));
         }
     }
 

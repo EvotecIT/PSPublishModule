@@ -120,7 +120,8 @@ public sealed partial class DotNetRepositoryReleaseService
             result.ErrorMessage = error;
             result.Success = false;
             MarkPackageSigningFailure(projects, failedPackages, error);
-            _logger.Warn(error);
+            // Unsigned packages are never published, so this ends the release as a failure.
+            _logger.Error($"Package signing failed; nothing will be published. {error}");
             foreach (var package in packages)
             {
                 if (reportedPackages.Contains(package)) continue;
@@ -333,7 +334,10 @@ public sealed partial class DotNetRepositoryReleaseService
                         break;
                     default:
                         result.FailedPackages.Add(artifact);
-                        _logger.Warn($"NuGet push failed for {artifact} after {FormatDuration(packageWatch.Elapsed)}: {pushResult.Message}");
+                        // A failed push always fails the release; without fail-fast the remaining packages are still pushed.
+                        _logger.Error(
+                            $"NuGet push failed for {artifact} after {FormatDuration(packageWatch.Elapsed)}: {pushResult.Message}" +
+                            (spec.PublishFailFast ? string.Empty : " Continuing with the remaining packages."));
                         break;
                 }
             }

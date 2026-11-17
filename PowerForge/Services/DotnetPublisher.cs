@@ -313,11 +313,10 @@ public sealed class DotnetPublisher
             psi.ArgumentList.Add(arg);
 #endif
 
-        using var process = Process.Start(psi)!;
-        var stdout = process.StandardOutput.ReadToEnd();
-        var stderr = process.StandardError.ReadToEnd();
-        process.WaitForExit();
-        if (process.ExitCode == 0)
+        var (exitCode, stdout, stderr) = RunCaptured(
+            psi,
+            $"dotnet msbuild evaluation of {Path.GetFileName(projectPath)} ({tfm ?? "project-declared frameworks"})");
+        if (exitCode == 0)
         {
             var jsonStart = stdout.IndexOf('{');
             var jsonEnd = stdout.LastIndexOf('}');
@@ -374,7 +373,7 @@ public sealed class DotnetPublisher
             $"{stderr}\n{stdout}");
         throw new InvalidOperationException(
             $"dotnet msbuild could not evaluate PathMap/project references for {projectPath} " +
-            $"({tfm ?? "project-declared frameworks"}, exit {process.ExitCode})");
+            $"({tfm ?? "project-declared frameworks"}, exit {exitCode})");
     }
 
     private sealed class ProjectEvaluationRequest
@@ -433,16 +432,26 @@ public sealed class DotnetPublisher
             psi.ArgumentList.Add(arg);
 #endif
 
-        using var process = Process.Start(psi)!;
-        var stdout = process.StandardOutput.ReadToEnd();
-        var stderr = process.StandardError.ReadToEnd();
-        process.WaitForExit();
-
-        if (process.ExitCode == 0)
+        var (exitCode, stdout, stderr) = RunCaptured(psi, $"dotnet {phase} ({tfm})");
+        if (exitCode == 0)
             return;
 
         _logger.Error($"dotnet {phase} failed for {tfm}: {stderr}\n{stdout}");
-        throw new InvalidOperationException($"dotnet {phase} failed for {tfm} (exit {process.ExitCode})");
+        throw new InvalidOperationException($"dotnet {phase} failed for {tfm} (exit {exitCode})");
+    }
+
+    /// <summary>
+    /// Runs the process while draining stdout and stderr concurrently, so a full stderr pipe cannot block the
+    /// child, and reports a heartbeat so long publishes and evaluations never look hung.
+    /// </summary>
+    private (int ExitCode, string StdOut, string StdErr) RunCaptured(ProcessStartInfo psi, string label)
+    {
+        using var heartbeat = OperationHeartbeat.Start(_logger, label);
+        using var process = Process.Start(psi)!;
+        var stdoutTask = process.StandardOutput.ReadToEndAsync();
+        var stderrTask = process.StandardError.ReadToEndAsync();
+        process.WaitForExit();
+        return (process.ExitCode, stdoutTask.GetAwaiter().GetResult(), stderrTask.GetAwaiter().GetResult());
     }
 
     private static string[] NormalizeRestoreSources(IEnumerable<string>? restoreSources)

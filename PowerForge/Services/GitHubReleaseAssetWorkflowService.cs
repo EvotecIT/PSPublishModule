@@ -6,6 +6,7 @@ namespace PowerForge;
 
 internal sealed class GitHubReleaseAssetWorkflowService
 {
+    private readonly ILogger _logger;
     private readonly Func<GitHubReleasePublishRequest, GitHubReleasePublishResult> _publishRelease;
 
     public GitHubReleaseAssetWorkflowService(
@@ -15,6 +16,7 @@ internal sealed class GitHubReleaseAssetWorkflowService
         if (logger is null)
             throw new ArgumentNullException(nameof(logger));
 
+        _logger = logger;
         _publishRelease = publishRelease ?? (request => new GitHubReleasePublisher(logger).PublishRelease(request));
     }
 
@@ -75,13 +77,18 @@ internal sealed class GitHubReleaseAssetWorkflowService
 
                     succeeded = publishResult.Succeeded;
                     releaseUrl = publishResult.HtmlUrl;
+                    if (!succeeded)
+                        errorMessage = DescribeFailure(first.TagName, assets.Length, publishResult);
                 }
                 catch (Exception ex)
                 {
                     succeeded = false;
                     releaseUrl = null;
-                    errorMessage = ex.Message;
+                    errorMessage = $"Publishing GitHub release {first.TagName} failed: {ex.Message}";
                 }
+
+                if (!succeeded)
+                    _logger.Warn(errorMessage!);
             }
 
             foreach (var entry in group)
@@ -99,6 +106,20 @@ internal sealed class GitHubReleaseAssetWorkflowService
         }
 
         return results;
+    }
+
+    internal static string DescribeFailure(string tagName, int assetCount, GitHubReleasePublishResult result)
+    {
+        if (!result.ReleaseCreationSucceeded)
+            return $"GitHub release {tagName} could not be created or reused.";
+
+        if (result.AllAssetUploadsSucceeded == false)
+        {
+            var completed = result.UploadedAssets.Count + result.SkippedExistingAssets.Count + result.ReplacedExistingAssets.Count;
+            return $"GitHub release {tagName} exists, but only {completed} of {assetCount} asset(s) were uploaded.";
+        }
+
+        return $"GitHub release {tagName} did not report success.";
     }
 
     private static PreparedEntry TryPrepareEntry(string? projectPath, GitHubReleaseAssetWorkflowRequest request)

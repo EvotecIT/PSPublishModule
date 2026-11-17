@@ -17,7 +17,7 @@ internal sealed class NuGetPackagePublishService
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _pushPackage = pushPackage is null
-            ? PushPackage
+            ? (request, cancellationToken) => DotNetRepositoryReleaseService.PushPackage(request, cancellationToken, _logger)
             : (request, _) => pushPackage(request);
         _workingDirectory = workingDirectory;
     }
@@ -64,8 +64,10 @@ internal sealed class NuGetPackagePublishService
             return result;
         }
 
-        foreach (var package in packages)
+        for (var index = 0; index < packages.Length; index++)
         {
+            var package = packages[index];
+            var position = $"{index + 1}/{packages.Length}";
             if (shouldPublishPackage is not null && !shouldPublishPackage(package))
             {
                 result.PublishedItems.Add(package);
@@ -76,6 +78,7 @@ internal sealed class NuGetPackagePublishService
                 continue;
             }
 
+            _logger.Info($"Pushing {Path.GetFileName(package)} ({position})");
             var pushResult = _pushPackage(new DotNetNuGetPushRequest(
                     package,
                     request.ApiKey,
@@ -96,24 +99,28 @@ internal sealed class NuGetPackagePublishService
             {
                 case DotNetRepositoryReleaseService.PackagePushOutcome.Published:
                     result.PublishedItems.Add(package);
+                    _logger.Success($"Pushed {Path.GetFileName(package)} ({position})");
                     break;
                 case DotNetRepositoryReleaseService.PackagePushOutcome.SkippedDuplicate:
                     result.PublishedItems.Add(package);
                     result.SkippedDuplicateItems.Add(package);
+                    _logger.Info($"Skipped {Path.GetFileName(package)} ({position}): this version already exists on the feed");
                     break;
                 default:
                     result.Success = false;
                     result.FailedItems.Add(package);
-                    _logger.Warn($"dotnet nuget push failed for {package}.");
-                    if (pushResult.Message is string message && message.Length > 0)
+                    LogPushFailure(package, position, pushResult.Message, continuing: index + 1 < packages.Length);
+                    if (pushResult.Message is string message && message.Length > 0 &&
+                        string.IsNullOrWhiteSpace(result.ErrorMessage))
                     {
-                        _logger.Warn(message);
-                        if (string.IsNullOrWhiteSpace(result.ErrorMessage))
-                            result.ErrorMessage = message;
+                        result.ErrorMessage = message;
                     }
                     break;
             }
         }
+
+        if (string.IsNullOrWhiteSpace(result.ErrorMessage) && !result.Success)
+            result.ErrorMessage = $"{result.FailedItems.Count} package(s) failed to push.";
 
         return result;
     }
@@ -237,6 +244,9 @@ internal sealed class NuGetPackagePublishService
 
             remotePublishAttempted?.Invoke();
             cancellationToken.ThrowIfCancellationRequested();
+            var position = $"{completed + 1}/{packagePaths.Length}";
+            if (progress is null)
+                _logger.Info($"Pushing {Path.GetFileName(package)} ({position})");
             var pushResult = _pushPackage(new DotNetNuGetPushRequest(
                     package,
                     apiKey,
@@ -260,11 +270,15 @@ internal sealed class NuGetPackagePublishService
                 case DotNetRepositoryReleaseService.PackagePushOutcome.Published:
                     result.PublishedItems.Add(package);
                     detailedProgress?.ItemUpdated(item, ProjectBuildProgressItemState.Completed, "published");
+                    if (progress is null)
+                        _logger.Success($"Pushed {Path.GetFileName(package)} ({position})");
                     break;
                 case DotNetRepositoryReleaseService.PackagePushOutcome.SkippedDuplicate:
                     result.PublishedItems.Add(package);
                     result.SkippedDuplicateItems.Add(package);
                     detailedProgress?.ItemUpdated(item, ProjectBuildProgressItemState.Completed, "already existed");
+                    if (progress is null)
+                        _logger.Info($"Skipped {Path.GetFileName(package)} ({position}): this version already exists on the feed");
                     break;
                 default:
                     result.Success = false;
@@ -273,12 +287,15 @@ internal sealed class NuGetPackagePublishService
                         item,
                         ProjectBuildProgressItemState.Failed,
                         pushResult.Message);
-                    _logger.Warn($"dotnet nuget push failed for {package}.");
-                    if (pushResult.Message is string message && message.Length > 0)
+                    LogPushFailure(
+                        package,
+                        position,
+                        pushResult.Message,
+                        continuing: !publishFailFast && completed + 1 < packagePaths.Length);
+                    if (pushResult.Message is string message && message.Length > 0 &&
+                        string.IsNullOrWhiteSpace(result.ErrorMessage))
                     {
-                        _logger.Warn(message);
-                        if (string.IsNullOrWhiteSpace(result.ErrorMessage))
-                            result.ErrorMessage = message;
+                        result.ErrorMessage = message;
                     }
                     if (publishFailFast)
                     {
@@ -308,8 +325,14 @@ internal sealed class NuGetPackagePublishService
         return result;
     }
 
-    private static DotNetRepositoryReleaseService.PackagePushResult PushPackage(
-        DotNetNuGetPushRequest request,
-        CancellationToken cancellationToken)
-        => DotNetRepositoryReleaseService.PushPackage(request, cancellationToken);
+    /// <summary>
+    /// Reported as a warning: the publish result carries the failure and hosts turn it into an error.
+    /// When later packages are still attempted, the message says so, so the next lines are not read as a recovery.
+    /// </summary>
+    private void LogPushFailure(string package, string position, string? message, bool continuing)
+    {
+        var cause = string.IsNullOrWhiteSpace(message) ? "dotnet nuget push reported no details" : message;
+        var suffix = continuing ? " Continuing with the remaining packages." : string.Empty;
+        _logger.Warn($"Push failed for {package} ({position}): {cause}{suffix}");
+    }
 }

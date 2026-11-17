@@ -325,6 +325,34 @@ public sealed partial class DotNetNuGetClientTests
     }
 
     [Fact]
+    public async Task SignPackageAsync_FailureMessageKeepsTheNuGetErrorCodeLines()
+    {
+        // dotnet nuget sign prints a progress line first; the NU3xxx cause comes later on stdout.
+        var processRunner = new StubProcessRunner(request => new ProcessRunResult(
+            1,
+            "Signing package(s) with certificate:" + Environment.NewLine +
+            "  Subject Name: CN=Test" + Environment.NewLine +
+            "error: NU3018: The author primary signature found a chain building issue: RevocationStatusUnknown" + Environment.NewLine +
+            "error: NU3037: The timestamp signature validity period has expired.",
+            string.Empty,
+            request.FileName,
+            TimeSpan.Zero,
+            timedOut: false));
+        var client = new DotNetNuGetClient(processRunner);
+
+        var result = await client.SignPackageAsync(new DotNetNuGetSignRequest(
+            packagePath: @"C:\repo\Artifacts\Test.1.0.0.nupkg",
+            certificateFingerprint: "ABC123",
+            certificateStoreLocation: "CurrentUser",
+            timeStampServer: "http://timestamp.digicert.com"));
+
+        Assert.False(result.Succeeded);
+        Assert.Contains("NU3018", result.ErrorMessage, StringComparison.Ordinal);
+        Assert.Contains("NU3037", result.ErrorMessage, StringComparison.Ordinal);
+        Assert.DoesNotContain("Subject Name", result.ErrorMessage, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task SignPackageAsync_AcceptsMultiplePackagesInOneProcess()
     {
         ProcessRunRequest? captured = null;

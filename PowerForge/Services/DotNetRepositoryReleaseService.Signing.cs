@@ -10,13 +10,23 @@ namespace PowerForge;
 
 public sealed partial class DotNetRepositoryReleaseService
 {
-    private static bool SignPackages(
+    private bool SignPackagesWithHeartbeat(
         IReadOnlyList<string> packages,
         DotNetRepositoryReleaseSpec spec,
         string sha256,
         Action<string, int, DotNetNuGetSignResult?>? progress,
         out string[] failedPackages,
         out string error)
+        => SignPackages(packages, spec, sha256, progress, out failedPackages, out error, _logger);
+
+    private static bool SignPackages(
+        IReadOnlyList<string> packages,
+        DotNetRepositoryReleaseSpec spec,
+        string sha256,
+        Action<string, int, DotNetNuGetSignResult?>? progress,
+        out string[] failedPackages,
+        out string error,
+        ILogger? logger)
     {
         failedPackages = Array.Empty<string>();
         error = string.Empty;
@@ -38,6 +48,7 @@ public sealed partial class DotNetRepositoryReleaseService
             timeStampServer,
             spec.OverwriteSignedPackages,
             progress,
+            logger,
             out failedPackages);
         if (result.Succeeded) return true;
 
@@ -53,9 +64,10 @@ public sealed partial class DotNetRepositoryReleaseService
         string timeStampServer,
         bool overwriteSignedPackages,
         Action<string, int, DotNetNuGetSignResult?>? progress,
+        ILogger? logger,
         out string[] failedPackages)
     {
-        (DotNetNuGetSignResult Result, string[] FailedPackages) outcome = new DotNetNuGetClient()
+        (DotNetNuGetSignResult Result, string[] FailedPackages) outcome = new DotNetNuGetClient { Logger = logger }
             .SignPackagesIndividuallyAsync(new DotNetNuGetSignRequest(
                 packagePaths: packagePaths,
                 certificateFingerprint: sha256,
