@@ -159,7 +159,10 @@ public sealed class BenchmarkComparisonSummaryView
     /// <summary>Eligibility.</summary>
     public BenchmarkEligibilityView Eligibility { get; set; } = new();
 
-    /// <summary>Head-to-head text of the preferred run, such as "OfficeIMO is 2.0× faster than Sep".</summary>
+    /// <summary>
+    /// Head-to-head text of the published run (full before standard, then newest), such as
+    /// "OfficeIMO is 2.0× faster than Sep". Empty when the comparison has no published run.
+    /// </summary>
     public string[] Headlines { get; set; } = Array.Empty<string>();
 }
 

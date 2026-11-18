@@ -107,8 +107,9 @@ public sealed partial class BenchmarkComparisonViewBuilder
             .ToArray();
         MakeRunIdsUnique(runViews);
 
+        // Published evidence is shown by default; an unpublished full run never outranks a published standard one.
         var preferred = runViews
-            .OrderByDescending(run => (run.IsFull ? 4 : 0) + (run.Published ? 2 : 0) + (run.Platform == "windows" ? 1 : 0))
+            .OrderByDescending(run => (run.Published ? 4 : 0) + (run.IsFull ? 2 : 0) + (run.Platform == "windows" ? 1 : 0))
             .ThenByDescending(run => run.GeneratedUtc)
             .FirstOrDefault();
 

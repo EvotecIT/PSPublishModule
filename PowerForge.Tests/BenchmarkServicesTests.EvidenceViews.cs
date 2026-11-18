@@ -108,10 +108,74 @@ public sealed partial class BenchmarkServicesTests
         Assert.DoesNotContain("\nold\n", text.Replace("\r\n", "\n"), StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void ComparisonView_ShowsAndHeadlinesPublishedRunsBeforeUnpublishedOnes()
+    {
+        string root = CreateTempRoot();
+        string catalogPath = RecordViewCatalog(root);
+        var service = new BenchmarkEvidenceCatalogService();
+        BenchmarkDeclarationDocument declarations = ViewDeclarations();
+        declarations.Comparisons =
+        [
+            .. declarations.Comparisons,
+            new BenchmarkComparisonDefinition { ComparisonId = "comparison-b", Area = "csv", Title = "CSV typed write", Subject = "OfficeIMO", Libraries = ["OfficeIMO", "Sep"] }
+        ];
+        BenchmarkEvidenceUpdateRequest unpublishedFull = PublishRequest(
+            MeasuredResult(("OfficeIMO", "Read", Spread(30, 10)), ("Sep", "Read", Spread(10, 10))), declarations);
+        unpublishedFull.Profile = BenchmarkEvidenceProfile.Full;
+        unpublishedFull.Publish = false;
+        unpublishedFull.ResultPath = "windows-full.json";
+        service.UpdateFile(catalogPath, unpublishedFull);
+        BenchmarkEvidenceUpdateRequest diagnostic = PublishRequest(
+            MeasuredResult(("OfficeIMO", "Read", Spread(10, 10)), ("Sep", "Read", Spread(40, 10))), declarations);
+        diagnostic.ComparisonId = "comparison-b";
+        diagnostic.Profile = BenchmarkEvidenceProfile.Diagnostic;
+        diagnostic.Publish = false;
+        diagnostic.ResultPath = "windows-diagnostic.json";
+        service.UpdateFile(catalogPath, diagnostic);
+
+        BenchmarkComparisonCatalogView view = new BenchmarkComparisonViewBuilder().Build(catalogPath);
+
+        BenchmarkComparisonView read = Assert.Single(view.Comparisons, comparison => comparison.Id == "comparison-a");
+        Assert.Equal(2, read.Runs.Length);
+        Assert.True(Assert.Single(read.Runs, run => run.Id == read.PreferredRunId).Published);
+        BenchmarkAreaIndexView csv = Assert.Single(view.Index.Areas, area => area.Id == "csv");
+        Assert.Equal(new[] { "OfficeIMO is 1.96× faster than Sep" }, Assert.Single(csv.Comparisons, comparison => comparison.Id == "comparison-a").Headlines);
+        Assert.Empty(Assert.Single(csv.Comparisons, comparison => comparison.Id == "comparison-b").Headlines);
+    }
+
+    [Fact]
+    public void ReadmeRenderer_ExplainsEveryWithheldLibraryAndTheWorkload()
+    {
+        string root = CreateTempRoot();
+        string catalogPath = Path.Combine(root, "index.json");
+        BenchmarkRunResult result = MeasuredResult(
+            ("OfficeIMO", "Read", Spread(10, 10)), ("Sep", "Read", Spread(20, 10)), ("EPPlus", "Read", null));
+        foreach (BenchmarkSample sample in result.Samples)
+            sample.Variables["Rows"] = "100000";
+        result.Summary = new BenchmarkSummaryService().Summarize(result.Samples);
+        new BenchmarkEvidenceCatalogService().UpdateFile(catalogPath, PublishRequest(result, ThreeLibraryDeclarations()));
+        BenchmarkComparisonCatalogView view = new BenchmarkComparisonViewBuilder().Build(catalogPath);
+
+        string markdown = new BenchmarkComparisonMarkdownRenderer().Render(view, new BenchmarkComparisonMarkdownRequest { Comparisons = ["comparison-a"] });
+
+        Assert.Contains("Workload: Rows=100000", markdown, StringComparison.Ordinal);
+        Assert.Contains("- EPPlus: not published. Cell failed", markdown, StringComparison.Ordinal);
+    }
+
     /// <summary>A catalog with one published lane (EPPlus licence-restricted) and one declared single-library comparison.</summary>
     private static string RecordViewCatalog(string root)
     {
         string catalogPath = Path.Combine(root, "index.json");
+        BenchmarkRunResult result = MeasuredResult(
+            ("OfficeIMO", "Read", Spread(10, 10)), ("Sep", "Read", Spread(20, 10)), ("EPPlus", "Read", Spread(5, 10)));
+        result.Runner!.Affinity = "0xff";
+        new BenchmarkEvidenceCatalogService().UpdateFile(catalogPath, PublishRequest(result, ViewDeclarations()));
+        return catalogPath;
+    }
+
+    private static BenchmarkDeclarationDocument ViewDeclarations()
+    {
         BenchmarkDeclarationDocument declarations = ThreeLibraryDeclarations();
         declarations.Libraries.Single(value => value.Id == "EPPlus").Restriction = BenchmarkLibraryRestriction.PublishRestricted;
         declarations.Libraries.Single(value => value.Id == "EPPlus").Reason = "Publishing results needs permission.";
@@ -122,10 +186,6 @@ public sealed partial class BenchmarkServicesTests
             declarations.Comparisons[0],
             new BenchmarkComparisonDefinition { ComparisonId = "single-library", Area = "pdf", Group = "merge", Title = "PDF merge", Subject = "OfficeIMO", Libraries = ["OfficeIMO"] }
         ];
-        BenchmarkRunResult result = MeasuredResult(
-            ("OfficeIMO", "Read", Spread(10, 10)), ("Sep", "Read", Spread(20, 10)), ("EPPlus", "Read", Spread(5, 10)));
-        result.Runner!.Affinity = "0xff";
-        new BenchmarkEvidenceCatalogService().UpdateFile(catalogPath, PublishRequest(result, declarations));
-        return catalogPath;
+        return declarations;
     }
 }

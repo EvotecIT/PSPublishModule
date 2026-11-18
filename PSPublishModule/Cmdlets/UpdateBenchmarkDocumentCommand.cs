@@ -72,7 +72,10 @@ public sealed class UpdateBenchmarkDocumentCommand : PSCmdlet
     [ValidateNotNullOrEmpty]
     public string Platform { get; set; } = "windows";
 
-    /// <summary>Target framework of the run to show, such as net10.0. The newest published run is used when omitted.</summary>
+    /// <summary>
+    /// Target framework of the run to show, such as net10.0. A published full run is shown before a standard one,
+    /// then the newest; when omitted, runs of every framework on the platform are considered.
+    /// </summary>
     [Parameter(ParameterSetName = CatalogParameterSet)]
     [ValidateNotNullOrEmpty]
     public string? Framework { get; set; }

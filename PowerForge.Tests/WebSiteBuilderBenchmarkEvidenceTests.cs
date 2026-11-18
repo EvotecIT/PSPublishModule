@@ -47,9 +47,40 @@ public class WebSiteBuilderBenchmarkEvidenceTests
         finally { Directory.Delete(root, recursive: true); }
     }
 
+    [Fact]
+    public void Build_DoesNotWriteBenchmarkFilesThroughALinkedOutputDirectory()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            WriteMergeCatalog(root);
+            var catalog = Path.Combine(root, "evidence", "index.json");
+            var original = File.ReadAllText(catalog);
+            WritePage(root, "---\ntitle: Benchmarks\nslug: index\n---\n\nBenchmarks\n");
+            WriteTheme(root, "<html><body>{{ content }}</body></html>");
+            Directory.CreateDirectory(Path.Combine(root, "_site", "data"));
+            CreateDirectoryLink(Path.Combine(root, "_site", "data", "benchmarks"), Path.Combine(root, "evidence"));
+            var spec = BuildSpec();
+            spec.BenchmarkEvidence = new[] { new BenchmarkEvidenceDataSpec { Name = "benchmarks", Catalog = "evidence/index.json", Output = "data/benchmarks" } };
+
+            var error = Assert.Throws<InvalidOperationException>(() => BuildAndRead(root, spec));
+
+            Assert.Contains("symbolic link or reparse point", error.Message, StringComparison.Ordinal);
+            Assert.Equal(original, File.ReadAllText(catalog));
+        }
+        finally
+        {
+            var link = Path.Combine(root, "_site", "data", "benchmarks");
+            if (Directory.Exists(link))
+                Directory.Delete(link);
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
     [Theory]
     [InlineData(null, true, "needs Output")]
     [InlineData("../outside", false, "inside the site output")]
+    [InlineData("../_SITE/benchmarks", false, "inside the site output")]
     public void Build_RejectsBenchmarkOutputsThatCannotBeServed(string? output, bool indexOnly, string message)
     {
         var root = CreateTempRoot();
@@ -207,6 +238,24 @@ public class WebSiteBuilderBenchmarkEvidenceTests
             { "schemaVersion": 2, "contractVersion": 2, "name": "t", "engine": "scriban", "layoutsPath": "layouts", "defaultLayout": "base" }
             """);
         File.WriteAllText(Path.Combine(themeRoot, "layouts", "base.html"), layout);
+    }
+
+    // Windows symbolic links need a privilege; a junction is the link type any user can create there.
+    private static void CreateDirectoryLink(string link, string target)
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            Directory.CreateSymbolicLink(link, target);
+            return;
+        }
+        using var process = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("cmd.exe", $"/c mklink /J \"{link}\" \"{target}\"")
+        {
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true
+        })!;
+        process.WaitForExit();
+        Assert.True(Directory.Exists(link), "The junction was not created.");
     }
 
     private static string CreateTempRoot()

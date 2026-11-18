@@ -103,7 +103,8 @@ Accept wildcard characters: False
 ```
 
 ### -Framework
-Target framework of the run to show, such as net10.0. The newest published run is used when omitted.
+Target framework of the run to show, such as net10.0. A published full run is shown before a standard one,
+then the newest; when omitted, runs of every framework on the platform are considered.
 
 ```yaml
 Type: String

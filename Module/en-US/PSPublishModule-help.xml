@@ -80731,7 +80731,8 @@ across physical roots and selected dependents are removed before their selected 
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="none">
           <maml:name>Framework</maml:name>
           <maml:description>
-            <maml:para>Target framework of the run to show, such as net10.0. The newest published run is used when omitted.</maml:para>
+            <maml:para>Target framework of the run to show, such as net10.0. A published full run is shown before a standard one,&#xD;
+then the newest; when omitted, runs of every framework on the platform are considered.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
@@ -80818,7 +80819,8 @@ across physical roots and selected dependents are removed before their selected 
       <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="none">
         <maml:name>Framework</maml:name>
         <maml:description>
-          <maml:para>Target framework of the run to show, such as net10.0. The newest published run is used when omitted.</maml:para>
+          <maml:para>Target framework of the run to show, such as net10.0. A published full run is shown before a standard one,&#xD;
+then the newest; when omitted, runs of every framework on the platform are considered.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
         <dev:type>

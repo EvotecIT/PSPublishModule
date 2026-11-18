@@ -560,8 +560,9 @@ Update-BenchmarkDocument `
 
 Update a block from published evidence in a schema 5 catalog. `-Comparison` takes
 comparison ids or group names; each comparison gets a table of its published run on
-the platform (and framework, when given), with the head-to-head lines, the statistic,
-the runner settings and a note for any library whose results are not published:
+the platform (and framework, when given), with the workload parameters shared by
+every case, the head-to-head lines, the statistic, the runner settings and a note for
+each library whose results are not published, giving the licence or the policy reason:
 
 ```powershell
 Update-BenchmarkDocument `
@@ -782,6 +783,8 @@ Templates then read `data.benchmarks.comparisons`, each with `runs`, `overview`,
 `preferredRunId`, and per run `contenders`, `cases[].cells`, `headToHead` and
 `environment.text`. Times, allocations and ratios come with display text
 (`timeText`, `allocatedText`, `relative.text`), so templates do no arithmetic.
+`preferredRunId` names the run to show by default: a published run before an
+unpublished one, then full before standard, then Windows, then the newest.
 
 Each comparison also carries the declared facts a page needs to explain what it
 shows:
@@ -820,6 +823,7 @@ keeps every page's data small:
 
 Templates then read `data.benchmarks.areas`, each with `id`, `file`, `groups`,
 `measured` and `comparisons[].headlines`, and fetch `/data/benchmarks/<file>` for
-the full comparisons. `IndexOnly` requires `Output`, and `Output` must stay inside
+the full comparisons. Headlines come only from a published run, so a comparison
+measured only in diagnostic or unpublished runs has none. `IndexOnly` requires `Output`, and `Output` must stay inside
 the site output.
 

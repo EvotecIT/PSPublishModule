@@ -55,7 +55,10 @@ public sealed class BenchmarkComparisonView
     /// <summary>True when at least one run has been published.</summary>
     public bool Measured { get; set; }
 
-    /// <summary>Identifier of the run to show first: full before quick, published before unpublished, newest first.</summary>
+    /// <summary>
+    /// Identifier of the run to show first: published before unpublished, then full before standard and diagnostic,
+    /// then Windows, then newest.
+    /// </summary>
     public string PreferredRunId { get; set; } = string.Empty;
 
     /// <summary>Measured runs, ordered by platform and run mode.</summary>

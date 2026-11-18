@@ -73,16 +73,23 @@ public sealed partial class BenchmarkComparisonViewBuilder
                         Libraries = comparison.Libraries,
                         Measured = comparison.Measured,
                         Eligibility = comparison.Eligibility,
-                        Headlines = comparison.Runs
-                            .Where(run => run.Id == comparison.PreferredRunId)
-                            .SelectMany(run => run.HeadToHead.Select(item => item.Text))
+                        Headlines = HeadlineRun(comparison)?.HeadToHead
+                            .Select(item => item.Text)
                             .Where(text => text.Length > 0)
-                            .ToArray()
+                            .ToArray() ?? Array.Empty<string>()
                     }).ToArray()
                 };
             }).ToArray()
         };
     }
+
+    // Headlines are public claims, so they come only from a published run: full over standard, then newest.
+    private static BenchmarkRunView? HeadlineRun(BenchmarkComparisonView comparison)
+        => comparison.Runs
+            .Where(run => run.Published)
+            .OrderBy(run => run.IsFull ? 0 : 1)
+            .ThenByDescending(run => run.GeneratedUtc)
+            .FirstOrDefault();
 
     // Area ids become file names: lower-case letters, digits and dashes, unique within the index.
     private static string UniqueAreaFile(string area, ISet<string> used)

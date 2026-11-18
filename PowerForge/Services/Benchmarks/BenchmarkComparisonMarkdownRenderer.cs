@@ -14,7 +14,10 @@ public sealed class BenchmarkComparisonMarkdownRequest
     /// <summary>Platform whose published run is shown, such as windows.</summary>
     public string Platform { get; set; } = "windows";
 
-    /// <summary>Optional target framework; when omitted, the newest published run on the platform is shown.</summary>
+    /// <summary>
+    /// Optional target framework. A published full run is shown before a standard one, then the newest; when omitted,
+    /// runs of every framework on the platform are considered.
+    /// </summary>
     public string? Framework { get; set; }
 }
 
@@ -77,6 +80,8 @@ public sealed class BenchmarkComparisonMarkdownRenderer
         facts.Add(run.Date);
         if (run.Environment.Text.Length > 0) facts.Add(run.Environment.Text);
         builder.AppendLine(Escape(string.Join(" · ", facts))).AppendLine();
+        if (run.Workload.Length > 0)
+            builder.Append("Workload: ").AppendLine(Escape(string.Join(" · ", run.Workload.Select(value => value.Name + "=" + value.Value)))).AppendLine();
 
         builder.Append("| Case | ").Append(string.Join(" | ", run.Contenders.Select(contender => Escape(contender.Name)))).AppendLine(" |");
         builder.Append("| --- |").Append(string.Concat(run.Contenders.Select(_ => " ---: |"))).AppendLine();
@@ -93,8 +98,10 @@ public sealed class BenchmarkComparisonMarkdownRenderer
             builder.Append("- **").Append(Escape(headToHead.Text)).Append("** (").Append(Escape(headToHead.Detail)).AppendLine(")");
         if (run.Statistic.Length > 0)
             builder.Append("- Times are ").Append(run.Statistic).AppendLine("s; results whose confidence intervals overlap are reported as even.");
-        foreach (BenchmarkNotPublishedView dropped in run.NotPublished.Where(value => value.Licence))
-            builder.Append("- ").Append(Escape(dropped.Library)).AppendLine(": not published (licence).");
+        foreach (BenchmarkNotPublishedView dropped in run.NotPublished)
+            builder.Append("- ").Append(Escape(dropped.Library)).AppendLine(dropped.Licence
+                ? ": not published (licence)."
+                : ": not published. " + Sentence(dropped.Text));
         if (run.Runner.Text.Length > 0)
             builder.Append("- Runner: ").AppendLine(Escape(run.Runner.Text));
     }
@@ -107,6 +114,12 @@ public sealed class BenchmarkComparisonMarkdownRenderer
         return cell.Relative.IsFastest || string.IsNullOrWhiteSpace(cell.Relative.Text) || cell.Relative.Text == "—"
             ? "**" + time + "**"
             : time + " (" + Escape(cell.Relative.Text) + ")";
+    }
+
+    private static string Sentence(string text)
+    {
+        string value = Escape(text).Trim();
+        return value.Length == 0 || value.EndsWith(".", StringComparison.Ordinal) ? value : value + ".";
     }
 
     private static string Escape(string? text)
