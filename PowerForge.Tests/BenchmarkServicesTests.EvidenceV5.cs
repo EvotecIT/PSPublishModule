@@ -429,6 +429,39 @@ public sealed partial class BenchmarkServicesTests
     }
 
     [Fact]
+    public void EvidenceCatalog_RedactsComparisonsOfRestrictedLibrariesSharingAnEngineName()
+    {
+        string root = CreateTempRoot();
+        string catalogPath = Path.Combine(root, "index.json");
+        BenchmarkDeclarationDocument declarations = ThreeLibraryDeclarations();
+        declarations.Libraries.Single(value => value.Id == "EPPlus").Restriction = BenchmarkLibraryRestriction.PublishRestricted;
+        declarations.Libraries.Single(value => value.Id == "EPPlus").Reason = "Publishing results needs permission.";
+        BenchmarkRunResult result = MeasuredResult(
+            ("OfficeIMO", "Read", Spread(10, 10)), ("Sep", "Read", Spread(20, 10)),
+            ("EPPlus", "Write", Spread(5, 10)), ("Sep", "Write", Spread(7, 10)));
+        // OfficeIMO and the restricted EPPlus run under one engine name in different cases.
+        foreach (BenchmarkSample sample in result.Samples.Where(sample => sample.Library is "OfficeIMO" or "EPPlus"))
+            sample.Engine = "Shared";
+        result.Summary = new BenchmarkSummaryService().Summarize(result.Samples);
+        result.Comparison = new BenchmarkSummaryService().Compare(result.Summary, "Sep");
+        Assert.Contains(result.Comparison, row => row.Scenario == "Write" && row.Engine == "Shared");
+
+        BenchmarkEvidenceEntry entry = Assert.Single(new BenchmarkEvidenceCatalogService().UpdateFile(catalogPath, PublishRequest(result, declarations)).Entries);
+
+        BenchmarkRunResult stored = BenchmarkJson.Read<BenchmarkRunResult>(Path.Combine(root, entry.ArtifactRelativePath));
+        Assert.DoesNotContain(stored.Comparison, row => row.Scenario == "Write" && row.Engine == "Shared");
+        Assert.Contains(stored.Comparison, row => row.Scenario == "Read" && row.Engine == "Shared");
+        Assert.Contains(stored.Comparison, row => row.Scenario == "Write" && row.Engine == "Sep");
+        Assert.Equal(
+            BenchmarkJson.Serialize(new BenchmarkSummaryService().Compare(stored.Summary, "Sep")),
+            BenchmarkJson.Serialize(stored.Comparison));
+
+        // The merge path removes the same rows and the redacted result still validates.
+        BenchmarkEvidenceCatalog merged = new BenchmarkEvidenceCatalogService().MergeFiles(Path.Combine(root, "merged", "index.json"), [catalogPath], null, declarations);
+        Assert.True(Assert.Single(merged.Entries).Publish);
+    }
+
+    [Fact]
     public void ComparisonView_ShowsOnlyCellsThePublishPolicyAccepted()
     {
         string root = CreateTempRoot();

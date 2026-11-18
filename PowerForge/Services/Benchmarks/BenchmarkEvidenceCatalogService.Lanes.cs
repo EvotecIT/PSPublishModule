@@ -265,18 +265,36 @@ public sealed partial class BenchmarkEvidenceCatalogService
 
         BenchmarkRunResult copy = BenchmarkJson.ReadBytes<BenchmarkRunResult>(BenchmarkJson.SerializeCanonicalBytes(result), "benchmark result");
         bool Restricted(string? library) => !string.IsNullOrWhiteSpace(library) && restricted.Contains(library!);
-        var removedEngines = new HashSet<string>(
-            copy.Summary.Where(row => Restricted(row.Library)).Select(row => row.Engine)
-                .Concat(copy.Samples.Where(sample => Restricted(sample.Library)).Select(sample => sample.Engine)),
-            StringComparer.Ordinal);
         copy.Samples = copy.Samples.Where(sample => !Restricted(sample.Library)).ToArray();
         copy.Summary = copy.Summary.Where(row => !Restricted(row.Library)).ToArray();
-        removedEngines.ExceptWith(copy.Summary.Select(row => row.Engine));
-        copy.Comparison = copy.Comparison
-            .Where(row => !removedEngines.Contains(row.Engine) && !removedEngines.Contains(row.BaselineEngine))
-            .ToArray();
+        copy.Comparison = RecomputeComparisons(copy.Comparison, copy.Summary);
         copy.Validations = copy.Validations.Where(validation => !Restricted(validation.Library)).ToArray();
         return copy;
+    }
+
+    // Comparison rows are rebuilt from the retained summaries for each baseline definition, so no row of a removed
+    // library survives through an engine name shared with a retained one. A definition whose baseline no longer
+    // exists in every compared group is dropped, matching how published comparisons are validated.
+    private static BenchmarkComparisonRow[] RecomputeComparisons(
+        IEnumerable<BenchmarkComparisonRow> comparisons,
+        BenchmarkSummaryRow[] retained)
+    {
+        var rows = new List<BenchmarkComparisonRow>();
+        var service = new BenchmarkSummaryService();
+        foreach (var definition in comparisons
+                     .Select(row => (row.BaselineEngine, row.Metric, row.TieTolerance))
+                     .Distinct())
+        {
+            try
+            {
+                rows.AddRange(service.Compare(retained, definition.BaselineEngine, definition.Metric, definition.TieTolerance));
+            }
+            catch (InvalidOperationException)
+            {
+                // The baseline was a removed library in at least one group.
+            }
+        }
+        return rows.ToArray();
     }
 
     private static BenchmarkSupersededLane CreateSuperseded(BenchmarkEvidenceEntry entry, DateTimeOffset supersededBy)
