@@ -25,6 +25,13 @@ function Get-CorpusCompilerIdentity {
 function Assert-CorpusTimingIdentity {
     param([object] $Entry, [object] $Build, [string] $WorkspacePath, [string] $ArtifactRoot)
 
+    Assert-CorpusTimingSource -Entry $Entry -WorkspacePath $WorkspacePath
+    Assert-CorpusTimingArtifact -Entry $Entry -Build $Build -ArtifactRoot $ArtifactRoot
+}
+
+function Assert-CorpusTimingSource {
+    param([object] $Entry, [string] $WorkspacePath)
+
     $package = Join-Path $WorkspacePath ('packages/' + $Entry.sha256 + '.nupkg')
     if ((Get-FileHash -LiteralPath $package -Algorithm SHA256).Hash.ToLowerInvariant() -cne $Entry.sha256) {
         throw 'Timing source package hash mismatch.'
@@ -36,7 +43,7 @@ function Assert-CorpusTimingIdentity {
     try {
         foreach ($file in $archive.Entries) {
             if ($file.FullName.EndsWith('/', [StringComparison]::Ordinal)) { continue }
-            $relative = $file.FullName.Replace('\', '/')
+            $relative = $file.FullName.Replace('\', '/').Split('/', [StringSplitOptions]::RemoveEmptyEntries) -join '/'
             $sourceFiles.Add($relative) | Out-Null
             $path = Assert-ContainedPath -Root $sourceRoot -Path (Join-Path $sourceRoot $relative) -Label 'Timing source file'
             $stream = $file.Open()
@@ -47,12 +54,18 @@ function Assert-CorpusTimingIdentity {
             }
         }
     } finally { $archive.Dispose() }
-    foreach ($file in Get-ChildItem -LiteralPath $sourceRoot -Recurse -File) {
+    foreach ($file in Get-ChildItem -LiteralPath $sourceRoot -Recurse -File -Force) {
         $relative = [IO.Path]::GetRelativePath($sourceRoot, $file.FullName).Replace('\', '/')
         if ($relative -ne '.powerforge-corpus-package.json' -and -not $sourceFiles.Contains($relative)) {
             throw "Unexpected timing source payload: $relative"
         }
     }
+}
+
+function Assert-CorpusTimingArtifact {
+    param([object] $Entry, [object] $Build, [string] $ArtifactRoot)
+
+    $pathComparer = if ($IsWindows) { [StringComparer]::OrdinalIgnoreCase } else { [StringComparer]::Ordinal }
     $inventory = @(Get-CorpusProperty $Build 'artifactFiles' @())
     if ($inventory.Count -eq 0) { throw 'Timing requires the successful build file inventory; rerun the corpus build.' }
     $artifactFiles = [Collections.Generic.HashSet[string]]::new($pathComparer)
@@ -66,7 +79,31 @@ function Assert-CorpusTimingIdentity {
     # The main module is named after the packet entry; its complete directory can
     # contain executable scripts and managed dependencies in addition to the root.
     $moduleRoot = Join-Path $ArtifactRoot $Entry.id
-    foreach ($file in Get-ChildItem -LiteralPath $moduleRoot -Recurse -File) {
+    foreach ($file in Get-ChildItem -LiteralPath $moduleRoot -Recurse -File -Force) {
         if (-not $artifactFiles.Contains($file.FullName)) { throw "Unexpected timing artifact payload: $($file.Name)" }
     }
+}
+
+function Find-CorpusTimingArtifact {
+    param([object] $Entry, [object] $Build, [string] $WorkspacePath, [string] $RunId)
+
+    Assert-CorpusTimingSource -Entry $Entry -WorkspacePath $WorkspacePath
+    $runs = Join-Path $WorkspacePath 'runs'
+    $search = if ($RunId) {
+        Assert-ContainedPath -Root $runs -Path (Join-Path $runs $RunId) -Label 'Timing run'
+    } else { $runs }
+    $manifests = @(Get-ChildItem -LiteralPath $search -Recurse -File -Force -Filter ($Entry.id + '.psd1') |
+        Where-Object { (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant() -ceq $Build.artifactSha256 })
+    $verifiedManifests = @()
+    $failures = @()
+    foreach ($manifest in $manifests) {
+        try {
+            Assert-CorpusTimingArtifact -Entry $Entry -Build $Build -ArtifactRoot $manifest.Directory.Parent.FullName
+            $verifiedManifests += $manifest
+        } catch { $failures += $_.Exception.Message }
+    }
+    if ($verifiedManifests.Count -ne 1) {
+        throw "Cannot identify one inventory-matching timing artifact for $($Entry.id): $($verifiedManifests.Count) verified; $($failures -join '; ')"
+    }
+    return $verifiedManifests[0]
 }

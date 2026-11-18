@@ -19,9 +19,13 @@ param(
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'Corpus.Runner.Common.ps1')
 . (Join-Path $PSScriptRoot 'Corpus.TimingIdentity.ps1')
+. (Join-Path $PSScriptRoot 'Corpus.TimingRecords.ps1')
+$BaselineWorkspacePath = [IO.Path]::GetFullPath($BaselineWorkspacePath)
+$CandidateWorkspacePath = [IO.Path]::GetFullPath($CandidateWorkspacePath)
 $packetPath = Join-Path $PSScriptRoot 'public-corpus.net10.json'
-$packet = Get-Content $packetPath -Raw | ConvertFrom-Json
-$packetHash = (Get-FileHash $packetPath -Algorithm SHA256).Hash.ToLowerInvariant()
+$packetRecord = Read-CorpusTimingRecord -Path $packetPath
+$packet = $packetRecord.value
+$packetHash = $packetRecord.sha256
 $repository = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../..'))
 $hostExecutable = Join-Path $PSHOME $(if ($IsWindows) { 'pwsh.exe' } else { 'pwsh' })
 $runtimeRoot = [Runtime.InteropServices.RuntimeEnvironment]::GetRuntimeDirectory()
@@ -33,11 +37,12 @@ $inputs = [ordered]@{
 $identities = [ordered]@{}
 foreach ($variant in $inputs.Keys) {
     $inputRecord = $inputs[$variant]
-    $inputRecord.report = Get-Content $inputRecord.evidence -Raw | ConvertFrom-Json
+    $record = Read-CorpusTimingRecord -Path $inputRecord.evidence
+    $inputRecord.report = $record.value
     if ($inputRecord.report.packetSha256 -cne $packetHash) { throw 'Revision report belongs to a different packet.' }
     $identities[$variant] = [ordered]@{
         compilerSourceCommit = $inputRecord.report.sourceCommit
-        corpusEvidenceSha256 = (Get-FileHash $inputRecord.evidence -Algorithm SHA256).Hash.ToLowerInvariant()
+        corpusEvidenceSha256 = $record.sha256
     }
 }
 $report = [ordered]@{
@@ -62,7 +67,7 @@ $report = [ordered]@{
         priority = [Diagnostics.Process]::GetCurrentProcess().PriorityClass.ToString()
         affinity = [Diagnostics.Process]::GetCurrentProcess().ProcessorAffinity.ToString('X')
         cpu = if ($IsWindows) { @((Get-CimInstance Win32_Processor).Name | ForEach-Object { $_.Trim() }) } else { $null }
-        powerPlan = if ($IsWindows) { (powercfg /getactivescheme | Out-String).Trim() } else { $null }
+        powerPlan = Get-CorpusTimingPowerPlan
     }
     policy = [ordered]@{
         pairs = 8; order = 'AlternatingPairs'; percentile = 'Nearest rank'
@@ -71,6 +76,7 @@ $report = [ordered]@{
     }
     modules = [Collections.Generic.List[object]]::new()
 }
+$EvidencePath = New-CorpusTimingEvidence -Path $EvidencePath -Value $report
 try {
     foreach ($id in ($ModuleId | Select-Object -Unique)) {
         $entries = @($packet.modules | Where-Object id -eq $id)
@@ -82,17 +88,18 @@ try {
             $builds = @($inputRecord.report.modules | Where-Object id -eq $id)
             if ($builds.Count -ne 1 -or -not $builds[0].succeeded) { throw "Missing successful build: $variant/$id" }
             $build = $builds[0]
-            $manifests = @(Get-ChildItem (Join-Path $inputRecord.workspace 'runs') -Recurse -File -Filter ($id + '.psd1') |
-                Where-Object { (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant() -eq $build.artifactSha256 })
-            if ($manifests.Count -ne 1) { throw "Cannot identify unique artifact: $variant/$id" }
-            $root = $manifests[0].Directory.Parent.FullName
-            Assert-CorpusTimingIdentity -Entry $entry -Build $build -WorkspacePath $inputRecord.workspace -ArtifactRoot $root
-            $resolved[$variant] = @{ manifest = $manifests[0].FullName; root = $root; build = $build }
+            $manifest = Find-CorpusTimingArtifact -Entry $entry -Build $build -WorkspacePath $inputRecord.workspace -RunId (Get-CorpusProperty $inputRecord.report 'runId' '')
+            $root = $manifest.Directory.Parent.FullName
+            $resolved[$variant] = @{ manifest = $manifest.FullName; root = $root; build = $build }
         }
         Write-Host "[$id] eight alternating Hybrid revision pairs"
         $row = [ordered]@{
             id = $id; version = $entry.version; packageSha256 = $entry.sha256
             artifactSha256 = @{ baseline = $resolved.baseline.build.artifactSha256; candidate = $resolved.candidate.build.artifactSha256 }
+            typedAssemblySha256 = @{
+                baseline = (Get-FileHash -LiteralPath (Join-Path $resolved.baseline.root "$id/$id.dll") -Algorithm SHA256).Hash.ToLowerInvariant()
+                candidate = (Get-FileHash -LiteralPath (Join-Path $resolved.candidate.root "$id/$id.dll") -Algorithm SHA256).Hash.ToLowerInvariant()
+            }
             probeScript = $entry.probeScript; succeeded = $false
             samples = [Collections.Generic.List[object]]::new(); summary = [ordered]@{}
         }

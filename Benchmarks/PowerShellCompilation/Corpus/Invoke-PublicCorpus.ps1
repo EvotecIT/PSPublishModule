@@ -21,6 +21,8 @@ $ProgressPreference = 'SilentlyContinue'
 . (Join-Path $PSScriptRoot 'Corpus.PublicBaseline.ps1')
 . (Join-Path $PSScriptRoot 'Corpus.RuntimeStorage.ps1')
 . (Join-Path $PSScriptRoot 'Corpus.TimingIdentity.ps1')
+. (Join-Path $PSScriptRoot 'Corpus.CompilerSnapshot.ps1')
+. (Join-Path $PSScriptRoot 'Corpus.SourceHost.ps1')
 
 if ($RefreshBaseline -and ($SkipModules -or $ModuleId)) {
     throw 'Refreshing the public baseline requires the complete module packet.'
@@ -392,7 +394,6 @@ $repositoryRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..\..'))
 if (-not $CliAssemblyPath) { $CliAssemblyPath = Join-Path $repositoryRoot 'PowerForge.Cli/bin/Release/net10.0/PowerForge.Cli.dll' }
 $CliAssemblyPath = [IO.Path]::GetFullPath($CliAssemblyPath)
 if (-not (Test-Path -LiteralPath $CliAssemblyPath -PathType Leaf)) { throw "Build the PowerForge CLI first: $CliAssemblyPath" }
-$compilerIdentity = Get-CorpusCompilerIdentity -CliAssemblyPath $CliAssemblyPath
 if (-not $WorkspacePath) { $WorkspacePath = Join-Path ([IO.Path]::GetTempPath()) 'PowerForge/PublicCorpus' }
 $WorkspacePath = [IO.Path]::GetFullPath($WorkspacePath)
 New-Item -ItemType Directory -Path $WorkspacePath -Force | Out-Null
@@ -412,6 +413,17 @@ if ($RefreshBaseline -and $EvidencePath -eq $BaselinePath) {
 
 $moduleResults = [Collections.Generic.List[object]]::new()
 $strictResults = [Collections.Generic.List[object]]::new()
+try {
+    $compilerSnapshot = New-CorpusCompilerSnapshot -CliAssemblyPath $CliAssemblyPath -SnapshotPath (Join-Path $runRoot 'compiler')
+    $CliAssemblyPath = $compilerSnapshot.cliAssemblyPath
+    $compilerIdentity = Get-CorpusCompilerIdentity -CliAssemblyPath $CliAssemblyPath
+    $compilerIdentity.storage = 'RunPrivateSnapshot'
+    $compilerIdentity.snapshotFiles = $compilerSnapshot.files
+    $compilerIdentity.snapshotSha256 = $compilerSnapshot.sha256
+} catch {
+    if (-not $KeepRunArtifacts) { Remove-Item -LiteralPath $runRoot -Recurse -ErrorAction Stop }
+    throw
+}
 try {
     if (-not $SkipModules) {
         $selectedModules = @($packet.modules)
@@ -548,12 +560,13 @@ try {
                     }
 
                     $runtimeStorage = Get-CorpusRuntimeStorage -ArtifactPath $build.Json.result.artifactPath -WorkingDirectory $runRoot
+                    $sourceHost = Get-CorpusSourceHost -WorkingDirectory $runRoot
                     $sampleCount = [int] $qualification.startupSamples
                     if ($sampleCount -lt 4 -or $sampleCount -gt 20 -or $sampleCount % 2 -ne 0) { throw 'Strict application startupSamples must be an even number between 4 and 20.' }
                     $sourceSamples = [Collections.Generic.List[double]]::new()
                     $artifactSamples = [Collections.Generic.List[double]]::new()
                     $sampleOrder = [Collections.Generic.List[string]]::new()
-                    $sourceWarmup = Invoke-OwnedProcess -FileName 'pwsh' -Arguments @('-NoLogo', '-NoProfile', '-NonInteractive', '-File', $entryPoint) -WorkingDirectory $runRoot -Environment @{} -TimeoutSeconds 120
+                    $sourceWarmup = Invoke-OwnedProcess -FileName $sourceHost.executablePath -Arguments @('-NoLogo', '-NoProfile', '-NonInteractive', '-File', $entryPoint) -WorkingDirectory $runRoot -Environment @{} -TimeoutSeconds 120
                     $artifactWarmup = Invoke-OwnedProcess -FileName $build.Json.result.artifactPath -Arguments @() -WorkingDirectory $runRoot -Environment @{} -TimeoutSeconds 120
                     if ($sourceWarmup.ExitCode -ne 0 -or $artifactWarmup.ExitCode -ne 0 -or
                         $sourceWarmup.StandardOutput -cne $artifactWarmup.StandardOutput -or
@@ -564,12 +577,12 @@ try {
                     for ($sample = 0; $sample -lt $sampleCount; $sample++) {
                         if ($sample % 2 -eq 0) {
                             $sampleOrder.Add('source-first')
-                            $sourceSample = Invoke-OwnedProcess -FileName 'pwsh' -Arguments @('-NoLogo', '-NoProfile', '-NonInteractive', '-File', $entryPoint) -WorkingDirectory $runRoot -Environment @{} -TimeoutSeconds 120
+                            $sourceSample = Invoke-OwnedProcess -FileName $sourceHost.executablePath -Arguments @('-NoLogo', '-NoProfile', '-NonInteractive', '-File', $entryPoint) -WorkingDirectory $runRoot -Environment @{} -TimeoutSeconds 120
                             $artifactSample = Invoke-OwnedProcess -FileName $build.Json.result.artifactPath -Arguments @() -WorkingDirectory $runRoot -Environment @{} -TimeoutSeconds 120
                         } else {
                             $sampleOrder.Add('artifact-first')
                             $artifactSample = Invoke-OwnedProcess -FileName $build.Json.result.artifactPath -Arguments @() -WorkingDirectory $runRoot -Environment @{} -TimeoutSeconds 120
-                            $sourceSample = Invoke-OwnedProcess -FileName 'pwsh' -Arguments @('-NoLogo', '-NoProfile', '-NonInteractive', '-File', $entryPoint) -WorkingDirectory $runRoot -Environment @{} -TimeoutSeconds 120
+                            $sourceSample = Invoke-OwnedProcess -FileName $sourceHost.executablePath -Arguments @('-NoLogo', '-NoProfile', '-NonInteractive', '-File', $entryPoint) -WorkingDirectory $runRoot -Environment @{} -TimeoutSeconds 120
                         }
                         if ($sourceSample.ExitCode -ne 0 -or $sourceSample.ExitCode -ne $artifactSample.ExitCode -or
                             $sourceSample.StandardOutput -cne $artifactSample.StandardOutput -or
@@ -580,6 +593,7 @@ try {
                         $sourceSamples.Add([double] $sourceSample.DurationMilliseconds)
                         $artifactSamples.Add([double] $artifactSample.DurationMilliseconds)
                     }
+                    Assert-CorpusSourceHostUnchanged -SourceHost $sourceHost
                     $sourceP50 = Get-PercentileMilliseconds -Values $sourceSamples.ToArray() -Percentile 0.50
                     $artifactP50 = Get-PercentileMilliseconds -Values $artifactSamples.ToArray() -Percentile 0.50
                     $qualificationEvidence = [ordered]@{
@@ -603,6 +617,7 @@ try {
                         }
                         startup = [ordered]@{
                             runtimeStorage = $runtimeStorage
+                            sourceHost = $sourceHost.metadata
                             warmupsPerSurface = 1
                             samples = $sampleCount
                             orderPolicy = 'AlternatingPairs'
@@ -669,6 +684,7 @@ try {
         schemaVersion = 1
         packetId = $packet.packetId
         packetSha256 = $packetSha256
+        runId = $runId
         generatedAtUtc = [DateTimeOffset]::UtcNow.ToString('O')
         sourceCommit = $compilerIdentity.sourceCommit
         compiler = $compilerIdentity

@@ -14,9 +14,6 @@ function Assert-CorpusRuntimeMount {
 function Get-CorpusRuntimeStorage {
     param([string] $ArtifactPath, [string] $WorkingDirectory)
 
-    if (-not $IsLinux) {
-        return [ordered]@{ checked = $false; reason = 'Linux mount check only' }
-    }
     $tracePath = Join-Path $WorkingDirectory ('host-trace-' + [guid]::NewGuid().ToString('N') + '.txt')
     try {
         $probe = Invoke-OwnedProcess -FileName $ArtifactPath -Arguments @() -WorkingDirectory $WorkingDirectory -Environment @{
@@ -24,23 +21,40 @@ function Get-CorpusRuntimeStorage {
             DOTNET_HOST_TRACEFILE = $tracePath
             COREHOST_TRACE = '1'
             COREHOST_TRACEFILE = $tracePath
+            DOTNET_HOST_TRACE_VERBOSITY = '4'
+            COREHOST_TRACE_VERBOSITY = '4'
         } -TimeoutSeconds 120
         if ($probe.ExitCode -ne 0) { throw 'Runtime storage probe failed to execute the artifact.' }
         $trace = [IO.File]::ReadAllText($tracePath)
-        $paths = @([regex]::Matches($trace, '(?m)/[^\r\n\[\]''"=]*?/(?:libhostfxr|libhostpolicy|libcoreclr|libclrjit)\.so') |
+        $pattern = if ($IsLinux) { '(?m)/[^\r\n\[\]''"=]*?/(?:libhostfxr|libhostpolicy|libcoreclr|libclrjit)\.so' }
+            elseif ($IsWindows) { '(?im)[a-z]:[\\/][^\r\n\[\]''"=]*?[\\/](?:hostfxr|hostpolicy|coreclr|clrjit)\.dll' }
+            else { throw 'Runtime storage inspection supports Windows and Linux.' }
+        $paths = @([regex]::Matches($trace, $pattern) |
             ForEach-Object { $_.Value.Trim() } | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } | Sort-Object -Unique)
-        if (-not @($paths | Where-Object { $_.EndsWith('/libcoreclr.so', [StringComparison]::Ordinal) }).Count) {
+        $coreClr = @($paths | Where-Object { [IO.Path]::GetFileName($_) -in @('libcoreclr.so', 'coreclr.dll') })
+        if (-not $coreClr.Count) {
             throw 'Host trace did not resolve CoreCLR; timing budgets cannot be evaluated.'
         }
         $mounts = @($paths | ForEach-Object {
-            $mount = Invoke-OwnedProcess -FileName 'findmnt' -Arguments @('-n', '-o', 'FSTYPE', '--target', $_) -WorkingDirectory $WorkingDirectory -TimeoutSeconds 30
-            if ($mount.ExitCode -ne 0) { throw "findmnt failed for runtime '$_'." }
-            $fileSystem = $mount.StandardOutput.Trim()
-            Assert-CorpusRuntimeMount -Path $_ -FileSystem $fileSystem
-            [ordered]@{ path = $_; fileSystem = $fileSystem }
+            $fileSystem = Get-CorpusRuntimeFileSystem -Path $_ -WorkingDirectory $WorkingDirectory
+            [ordered]@{ path = $_; fileSystem = $fileSystem; sha256 = (Get-FileHash -LiteralPath $_ -Algorithm SHA256).Hash.ToLowerInvariant() }
         })
-        return [ordered]@{ checked = $true; libraries = $mounts }
+        return [ordered]@{ checked = $true; libraries = $mounts; coreClrVersion = [IO.Path]::GetFileName((Split-Path -Parent $coreClr[0])) }
     } finally {
         if (Test-Path -LiteralPath $tracePath) { Remove-Item -LiteralPath $tracePath -ErrorAction Stop }
     }
+}
+
+function Get-CorpusRuntimeFileSystem {
+    param([string] $Path, [string] $WorkingDirectory)
+
+    if ($IsLinux) {
+        $mount = Invoke-OwnedProcess -FileName 'findmnt' -Arguments @('-n', '-o', 'FSTYPE', '--target', $Path) -WorkingDirectory $WorkingDirectory -TimeoutSeconds 30
+        if ($mount.ExitCode -ne 0) { throw "findmnt failed for runtime '$Path'." }
+        $fileSystem = $mount.StandardOutput.Trim()
+        Assert-CorpusRuntimeMount -Path $Path -FileSystem $fileSystem
+        return $fileSystem
+    }
+    if ($IsWindows) { return [IO.DriveInfo]::new([IO.Path]::GetPathRoot($Path)).DriveFormat }
+    throw 'Runtime storage inspection supports Windows and Linux.'
 }

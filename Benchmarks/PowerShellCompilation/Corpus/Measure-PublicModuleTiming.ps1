@@ -10,7 +10,7 @@ The workspace used by Invoke-PublicCorpus with KeepRunArtifacts.
 .PARAMETER CorpusEvidencePath
 The successful report identifying the exact package and artifact hashes.
 .PARAMETER EvidencePath
-Destination for raw samples, host metadata and nearest-rank summaries.
+A new file for raw samples, host metadata and nearest-rank summaries.
 .PARAMETER InvocationOnly
 Keeps each module loaded after its first import and measures repeated calls.
 .EXAMPLE
@@ -27,10 +27,15 @@ param(
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'Corpus.Runner.Common.ps1')
 . (Join-Path $PSScriptRoot 'Corpus.TimingIdentity.ps1')
+. (Join-Path $PSScriptRoot 'Corpus.TimingRecords.ps1')
+$WorkspacePath = [IO.Path]::GetFullPath($WorkspacePath)
+$CorpusEvidencePath = [IO.Path]::GetFullPath($CorpusEvidencePath)
 $packetPath = Join-Path $PSScriptRoot 'public-corpus.net10.json'
-$packet = Get-Content -LiteralPath $packetPath -Raw | ConvertFrom-Json
-$corpus = Get-Content -LiteralPath $CorpusEvidencePath -Raw | ConvertFrom-Json
-if ($corpus.packetSha256 -cne (Get-FileHash $packetPath -Algorithm SHA256).Hash.ToLowerInvariant()) {
+$packetRecord = Read-CorpusTimingRecord -Path $packetPath
+$packet = $packetRecord.value
+$corpusRecord = Read-CorpusTimingRecord -Path $CorpusEvidencePath
+$corpus = $corpusRecord.value
+if ($corpus.packetSha256 -cne $packetRecord.sha256) {
     throw 'Corpus report belongs to a different packet.'
 }
 $repository = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../..'))
@@ -45,7 +50,7 @@ $report = [ordered]@{
     harnessSha256 = (Get-FileHash -LiteralPath $PSCommandPath -Algorithm SHA256).Hash.ToLowerInvariant()
     childSha256 = (Get-FileHash -LiteralPath (Join-Path $PSScriptRoot 'Measure-ModuleChild.ps1') -Algorithm SHA256).Hash.ToLowerInvariant()
     packetSha256 = $corpus.packetSha256
-    corpusEvidenceSha256 = (Get-FileHash $CorpusEvidencePath -Algorithm SHA256).Hash.ToLowerInvariant()
+    corpusEvidenceSha256 = $corpusRecord.sha256
     host = [ordered]@{
         operatingSystem = [Runtime.InteropServices.RuntimeInformation]::OSDescription
         architecture = [Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture.ToString()
@@ -56,7 +61,7 @@ $report = [ordered]@{
         priority = $process.PriorityClass.ToString()
         affinity = $process.ProcessorAffinity.ToString('X')
         cpu = if ($IsWindows) { @((Get-CimInstance Win32_Processor).Name | ForEach-Object { $_.Trim() }) } else { $null }
-        powerPlan = if ($IsWindows) { (powercfg /getactivescheme | Out-String).Trim() } else { $null }
+        powerPlan = Get-CorpusTimingPowerPlan
     }
     policy = [ordered]@{
         pairs = 8
@@ -68,14 +73,13 @@ $report = [ordered]@{
     }
     modules = [Collections.Generic.List[object]]::new()
 }
+$EvidencePath = New-CorpusTimingEvidence -Path $EvidencePath -Value $report
 foreach ($entry in $packet.modules) {
     Write-Host "[$($entry.id)] eight source/Hybrid timing pairs"
     $built = @($corpus.modules | Where-Object id -eq $entry.id)
     if ($built.Count -ne 1 -or -not $built[0].succeeded) { throw "Missing successful corpus build: $($entry.id)" }
     $source = Join-Path $WorkspacePath ('extract/' + $entry.sha256 + '/' + $entry.entryPoint)
-    $artifacts = @(Get-ChildItem -LiteralPath (Join-Path $WorkspacePath 'runs') -Recurse -File -Filter ($entry.id + '.psd1') |
-        Where-Object { (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant() -eq $built[0].artifactSha256 })
-    if ($artifacts.Count -ne 1) { throw "Cannot identify unique measured artifact: $($entry.id)" }
+    $artifacts = @(Find-CorpusTimingArtifact -Entry $entry -Build $built[0] -WorkspacePath $WorkspacePath -RunId (Get-CorpusProperty $corpus 'runId' ''))
     $artifactRoot = $artifacts[0].Directory.Parent.FullName
     Assert-CorpusTimingIdentity -Entry $entry -Build $built[0] -WorkspacePath $WorkspacePath -ArtifactRoot $artifactRoot
     $samples = [Collections.Generic.List[object]]::new()
