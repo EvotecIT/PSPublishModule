@@ -433,9 +433,13 @@ public sealed class BenchmarkComparisonViewBuilder
     /// The case of a row that records its library: the scenario, unless the scenario is only the library's name.
     /// Keeping it apart stops two methods of one library from collapsing into one cell.
     /// </summary>
-    private static string RecordedCase(BenchmarkSummaryRow row)
+    private static string RecordedCase(BenchmarkSummaryRow row, ISet<string> sharedScenarios)
     {
         var scenario = (row.Scenario ?? string.Empty).Trim();
+        // A scenario recorded for two or more libraries is an authoritative shared case name; it is never trimmed
+        // by one library's name, even when it happens to start with it ("SepRead" for Sep and OfficeIMO).
+        if (sharedScenarios.Contains(scenario))
+            return scenario;
         var library = row.Library ?? string.Empty;
         if (Key(scenario) == Key(library))
             return string.Empty;
@@ -451,6 +455,14 @@ public sealed class BenchmarkComparisonViewBuilder
             .Where(library => library.Key.Length > 0)
             .OrderByDescending(library => library.Key.Length)
             .ToArray();
+
+        var rowsWithLibrary = summary.Where(row => !string.IsNullOrWhiteSpace(row.Library)).ToArray();
+        var sharedScenarios = new HashSet<string>(
+            rowsWithLibrary
+                .GroupBy(row => (row.Scenario ?? string.Empty).Trim(), StringComparer.Ordinal)
+                .Where(group => group.Select(row => row.Library).Distinct(StringComparer.OrdinalIgnoreCase).Count() > 1)
+                .Select(group => group.Key),
+            StringComparer.Ordinal);
 
         var parsed = summary.Select(row =>
         {
@@ -475,7 +487,7 @@ public sealed class BenchmarkComparisonViewBuilder
             var (parameters, identity) = CaseParameters(item.Row);
             if (!string.IsNullOrWhiteSpace(item.Row.Library))
             {
-                var recordedCase = RecordedCase(item.Row);
+                var recordedCase = RecordedCase(item.Row, sharedScenarios);
                 if (recordedCase.Length > 0)
                 {
                     // A workload parameter that is itself named Case keeps its value; the scenario gets another name.

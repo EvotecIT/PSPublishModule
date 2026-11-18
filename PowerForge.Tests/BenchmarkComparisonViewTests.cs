@@ -342,6 +342,24 @@ public class BenchmarkComparisonViewTests
         Assert.All(run.Cases, c => Assert.DoesNotContain(c.Cells, cell => cell.Missing));
     }
 
+    [Fact]
+    public void Build_KeepsASharedCaseNameThatStartsWithALibraryName()
+    {
+        static BenchmarkSummaryRow Recorded(string library, double medianMs)
+        {
+            BenchmarkSummaryRow row = Row("SepRead", medianMs);
+            row.Library = library;
+            return row;
+        }
+
+        var view = BuildSingle(libraries: new[] { "OfficeIMO", "Sep" }, rows: new[] { Recorded("OfficeIMO", 1.0), Recorded("Sep", 2.0) });
+
+        var run = Assert.Single(view.Runs);
+        var shared = Assert.Single(run.Cases);
+        Assert.DoesNotContain(shared.Cells, cell => cell.Missing);
+        Assert.Equal("OfficeIMO is 2.0× faster than Sep", Assert.Single(run.HeadToHead).Text);
+    }
+
     private static BenchmarkComparisonView BuildSingle(string[] libraries, BenchmarkSummaryRow[] rows)
     {
         var root = CreateTempRoot();
