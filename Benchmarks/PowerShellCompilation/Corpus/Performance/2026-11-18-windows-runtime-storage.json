@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "runtime": "Microsoft.NETCore.App 10.0.15",
+  "fileSystem": "NTFS",
+  "coreClrPath": "C:/Program Files/dotnet/shared/Microsoft.NETCore.App/10.0.15/coreclr.dll",
+  "hostTraceLine": "CoreCLR path = 'C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\10.0.15\\coreclr.dll', CoreCLR dir = 'C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\10.0.15\\'",
+  "compilerSourceCommit": "4de8da59af7e2b58242dee5303b429ea5b0c63e6",
+  "sourceHost": {
+    "powerShell": "7.6.9",
+    "runtime": ".NET 10.0.14",
+    "runtimeLocation": "<PowerShellHostRoot>",
+    "executablePath": "<PowerShellHostRoot>/pwsh.exe",
+    "executableSha256": "2a6769a3330dc1084d0154bfde7d164ab750ca7f700f313f9d417c1be78b2233",
+    "observedAfterMeasurementUtc": "2026-11-18T09:54:45.4317992+00:00",
+    "runtimeLayout": "Self-contained PowerShell host; installation prefix omitted.",
+    "scope": "Post-measurement observation only; these source-host bytes were not captured at the historical timed launches."
+  },
+  "artifactSha256": "9bdef115ce160f6aee5cb5efa3bee386a9c9ca91f65fa1dc77ff0019d58ec755"
+}

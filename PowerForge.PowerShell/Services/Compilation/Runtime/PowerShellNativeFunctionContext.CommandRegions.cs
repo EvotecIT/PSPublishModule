@@ -1,7 +1,6 @@
 namespace PowerForge.Generated.Runtime
 {
     using System;
-    using System.Collections.Generic;
     using System.Linq;
     using System.Linq.Expressions;
     using System.Management.Automation.Language;
@@ -9,8 +8,6 @@ namespace PowerForge.Generated.Runtime
 
     public sealed partial class PowerShellNativeFunctionContext
     {
-        private readonly Dictionary<string, NativeAstOperation> _commandRegions = new(StringComparer.Ordinal);
-
         /// <summary>Executes an explicitly hosted pipeline region in the existing native invocation.</summary>
         public void InvokeCommandRegion(string source, string file, int line, int column,
             string? sourceDocument = null, int startOffset = -1, int endOffset = -1)
@@ -70,11 +67,15 @@ namespace PowerForge.Generated.Runtime
         {
             EnsureActive();
             var key = file + "\0" + line + "\0" + column + "\0" + capture + "\0" + preservePartialOutput + "\0" +
-                startOffset + "\0" + endOffset + "\0" + source + "\0" + sourceDocument + "\0" + guardedDotSourceRelativePath + "\0" +
+                startOffset + "\0" + endOffset + "\0" + source + "\0" + GetCommandRegionSourceId(sourceDocument) + "\0" + guardedDotSourceRelativePath + "\0" +
                 string.Join(",", guardedPathOperands ?? Array.Empty<int>());
-            if (!_commandRegions.TryGetValue(key, out var region))
-                _commandRegions.Add(key, region = NativeCommandRegion.Create(this, source, file, line, column,
-                    capture, preservePartialOutput, sourceDocument, startOffset, endOffset, guardedDotSourceRelativePath, guardedPathOperands));
+            var regions = GetCommandRegionPlans();
+            if (!regions.TryGetValue(key, out var region))
+            {
+                var compiled = NativeCommandRegion.Create(this, source, file, line, column,
+                    capture, preservePartialOutput, sourceDocument, startOffset, endOffset, guardedDotSourceRelativePath, guardedPathOperands);
+                region = regions.GetOrAdd(key, compiled);
+            }
             return region;
         }
 

@@ -13,16 +13,12 @@ namespace PowerForge.Generated.Runtime
             string sourceDocument, int startOffset, int endOffset)
         {
             EnsureActive();
-            var key = "access-mutation\0" + file + "\0" + startOffset + "\0" + endOffset + "\0" +
-                operation + "\0" + target + "\0" + sourceDocument;
-            if (!_assignments.TryGetValue(key, out var mutation))
-                _assignments.Add(key, mutation = CreateAccessMutation(target, operation, file, line, column,
-                    sourceDocument, startOffset, endOffset));
+            var mutation = GetAssignmentPlan(target, operation, file, line, column, sourceDocument, startOffset, endOffset, mutation: true);
             return mutation.Invoke(FunctionContext, null);
         }
 
         private NativeAstOperation CreateAccessMutation(string target, string operation, string file, int line, int column,
-            string sourceDocument, int startOffset, int endOffset)
+            string sourceDocument, int startOffset, int endOffset, out bool reusable)
         {
             var token = operation switch
             {
@@ -32,9 +28,8 @@ namespace PowerForge.Generated.Runtime
                 "PostDecrement" => TokenKind.PostfixMinusMinus,
                 _ => throw new ArgumentOutOfRangeException(nameof(operation))
             };
-            var arguments = new object[] { sourceDocument, file, null!, null! };
-            var document = (ScriptBlockAst)PowerShellNativeFunctionHost.Invoke(_contract.ParseInputWithFile, null, arguments)!;
-            ValidateSelectedSyntax((ParseError[])arguments[3],
+            var document = ParseAssignmentDocument(sourceDocument, file, out var errors);
+            ValidateSelectedSyntax(errors,
                 token is TokenKind.PlusPlus or TokenKind.MinusMinus ?
                     (token == TokenKind.PlusPlus ? "++" : "--") + target :
                     target + (token == TokenKind.PostfixPlusPlus ? "++" : "--"), nameof(target));
@@ -46,6 +41,7 @@ namespace PowerForge.Generated.Runtime
             if (authored is null || authored.Child is not MemberExpressionAst and not IndexExpressionAst ||
                 FindNativeAccessMutationReceiver(authored.Child) is null)
                 throw new ArgumentException("The native mutation does not match its qualified authored access target.", nameof(target));
+            reusable = CanReuseAssignmentPlan(authored.Child);
             var selected = (UnaryExpressionAst)authored.Copy();
             var statement = new CommandExpressionAst(selected.Extent, selected, null);
             var ast = new ScriptBlockAst(selected.Extent, null,

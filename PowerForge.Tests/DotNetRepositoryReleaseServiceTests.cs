@@ -821,6 +821,45 @@ public sealed class DotNetRepositoryReleaseServiceTests
     }
 
     [Fact]
+    public void Execute_WithAssemblySigning_RunsSigningPreflightBeforeProjectDiscovery()
+    {
+        // The preflight unlocks a hardware token, so its PIN prompt must come before the
+        // (long) discovery and build. An empty root would otherwise fail discovery first.
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            DotNetReleaseBuildAssemblySigningPreflightRequest? preflight = null;
+            var spec = new DotNetRepositoryReleaseSpec
+            {
+                RootPath = root.FullName,
+                Pack = true,
+                Publish = false,
+                CertificateThumbprint = "ABC123",
+                SignAssemblies = true
+            };
+
+            var result = new DotNetRepositoryReleaseService(new NullLogger()).Execute(
+                spec,
+                _ => { },
+                request =>
+                {
+                    preflight = request;
+                    throw new InvalidOperationException("Token unavailable.");
+                });
+
+            Assert.False(result.Success);
+            Assert.Equal("Assembly signing preflight failed. Token unavailable.", result.ErrorMessage);
+            Assert.NotNull(preflight);
+            Assert.True(preflight!.UnlockSigningKey);
+            Assert.Equal("http://timestamp.digicert.com", preflight.TimeStampServer);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void Execute_WithAssemblySigning_SignsBuildOutputsBeforePacking()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));

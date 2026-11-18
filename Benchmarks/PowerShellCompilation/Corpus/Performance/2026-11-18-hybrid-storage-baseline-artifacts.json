@@ -1,0 +1,4013 @@
+{
+  "schemaVersion": 1,
+  "runId": "20261118T182016864Z-95f2dfa2",
+  "sourceCommit": "c60b615af27806f9407f9faf9ef017e622bce237",
+  "harnessCommit": "4e3e6b9eed3cba0e83d39c0e2a674d37be2bd3c6",
+  "generatedAtUtc": "2026-11-18T18:29:04.9256787+00:00",
+  "packetSha256": "ef64781013a85a48701dd6334435facce8f8bec5c1ecc1a36817b8e4d300b00e",
+  "host": {
+    "runtimeIdentifier": "win-x64",
+    "operatingSystem": "Microsoft Windows 10.0.26300",
+    "architecture": "X64",
+    "powerShell": "7.6.9",
+    "dotnet": "10.0.404"
+  },
+  "compiler": {
+    "sourceCommit": "c60b615af27806f9407f9faf9ef017e622bce237",
+    "files": [
+      {
+        "name": "PowerForge.Cli.dll",
+        "productVersion": "3.0.194+c60b615af27806f9407f9faf9ef017e622bce237",
+        "sourceCommit": "c60b615af27806f9407f9faf9ef017e622bce237",
+        "sha256": "befe28669e4bdd5023b195c05ca23089b0db7bd0a4c5fdee7675f6c2cca609a4"
+      },
+      {
+        "name": "PowerForge.dll",
+        "productVersion": "3.0.194+c60b615af27806f9407f9faf9ef017e622bce237",
+        "sourceCommit": "c60b615af27806f9407f9faf9ef017e622bce237",
+        "sha256": "16680d93903dc1d64962acc44d67654e7756014b89b64e593bcc9f995e5c0a81"
+      },
+      {
+        "name": "PowerForge.PowerShell.dll",
+        "productVersion": "3.0.194+c60b615af27806f9407f9faf9ef017e622bce237",
+        "sourceCommit": "c60b615af27806f9407f9faf9ef017e622bce237",
+        "sha256": "b8b95a46d13341cf99c3f7f3a2d0f12ae25247d2f42f057f0668494c0b4b0388"
+      }
+    ],
+    "storage": "RunPrivateSnapshot",
+    "snapshotFiles": [
+      {
+        "relativePath": "ConsoleMonster.dll",
+        "sha256": "2fa911c446fa7deab0b908cd65ff2455bcd03cf9acfc68258f1e581b35468d04"
+      },
+      {
+        "relativePath": "ru/System.ServiceModel.NetFramingBase.resources.dll",
+        "sha256": "246409362513a66b90ea156ac87b6534c8fe951df27919cfafbc74ae3612909b"
+      },
+      {
+        "relativePath": "ru/System.ServiceModel.Http.resources.dll",
+        "sha256": "6678aefcae0163532670f0097308739ba476e4801021a7c2e7b53adc0e66359c"
+      },
+      {
+        "relativePath": "ru/Microsoft.CodeAnalysis.resources.dll",
+        "sha256": "5153d18368224e120d2415262c49302100bb76ef7aff8aa686300d4225766c67"
+      },
+      {
+        "relativePath": "ru/Microsoft.CodeAnalysis.CSharp.resources.dll",
+        "sha256": "d0b7b57bb90a4aed649f10c30fcdae5c9efb8280447287a76a3d64eb0db13e41"
+      },
+      {
+        "relativePath": "ref/WindowsBase.dll",
+        "sha256": "0ec46a38f29a234b9a4d0ae9364c8322f661a47c831c5b948f2787b7ca12dbbd"
+      },
+      {
+        "relativePath": "ref/System.Xml.XPath.XDocument.dll",
+        "sha256": "b8f74e198c3c2cd00ccc90549579f1b69c6ae1655f8b348ace414fd9075c921f"
+      },
+      {
+        "relativePath": "ref/System.Xml.XPath.dll",
+        "sha256": "0e68260b4c36d00c9a77c30a270100461123c0e7e1a37402bb7f67174051b8f3"
+      },
+      {
+        "relativePath": "ref/System.Xml.XmlSerializer.dll",
+        "sha256": "f957611b80e082a453264a13bf27b5b251faf598f377f948195123a374b2e8f6"
+      },
+      {
+        "relativePath": "ref/System.Xml.XmlDocument.dll",
+        "sha256": "a50b9b3a03596e36e73e7a7d54f4d018e8dcfaa7fe79e8cf900af8838ef3ec36"
+      },
+      {
+        "relativePath": "ref/System.Xml.XDocument.dll",
+        "sha256": "05f6380411a81245960714a9fd81f6134f7bd279cd70b248a1e1586977798f1a"
+      },
+      {
+        "relativePath": "ref/System.Xml.Serialization.dll",
+        "sha256": "489694401c60905cb6dca8ef0bf738cb609cd45b337126a01c825b913086ba43"
+      },
+      {
+        "relativePath": "ru/System.ServiceModel.NetTcp.resources.dll",
+        "sha256": "6802f57e3707b8e2f84b48e1aad9b56e76fa55d5253c49717d0946a12fac6b9b"
+      },
+      {
+        "relativePath": "ref/System.Xml.ReaderWriter.dll",
+        "sha256": "942964d32f72ba10288593f212e3a52c4811b65ca4d5f1a3979c92d2d526aa4c"
+      },
+      {
+        "relativePath": "ref/System.Xml.dll",
+        "sha256": "277a84ba155fe7808a514f32694a8157ec9f0eeeef00ef9643e5250004054ff0"
+      },
+      {
+        "relativePath": "ref/System.Windows.dll",
+        "sha256": "716eee98ceee87d38f0b301224462f8442aa793f4b1b9c3ffac315753320ab37"
+      },
+      {
+        "relativePath": "ref/System.Web.HttpUtility.dll",
+        "sha256": "f26b0586048fdf472e0fb33ca9435b163c91325de4281fce8684251cacc304cc"
+      },
+      {
+        "relativePath": "ref/System.Web.dll",
+        "sha256": "bc260b3db247ad9a6e4a82a275da85c3691a41272cc745cb7eaefcf1f31cc817"
+      },
+      {
+        "relativePath": "ref/System.ValueTuple.dll",
+        "sha256": "07a5347f6a597e5e0d72109efa1a525697e8c3f74fb0029005500f8ebbf9187a"
+      },
+      {
+        "relativePath": "ref/System.Transactions.Local.dll",
+        "sha256": "c9faffc186d677de7800ff7d4d1b0d204ae7614e6b8518add582c840d7532a3b"
+      },
+      {
+        "relativePath": "ref/System.Transactions.dll",
+        "sha256": "56abfca0350c111d077b3d86a2469ea3da4fccc1871f7c51a8b4fdb664bb0ede"
+      },
+      {
+        "relativePath": "ref/System.Threading.Timer.dll",
+        "sha256": "9e4620846572f49aeb476aa99405071b4bbd0df4323e4e232787ed73642b1ee5"
+      },
+      {
+        "relativePath": "ref/System.Threading.ThreadPool.dll",
+        "sha256": "12fedf2de6449bfec4c1a08d762493bc0188e1b9b0a58028289105ed81b983f5"
+      },
+      {
+        "relativePath": "ref/System.Threading.Thread.dll",
+        "sha256": "fff2281f039c07e564bcb198e041627082702beda24dccc8df39683701ea25a0"
+      },
+      {
+        "relativePath": "ref/System.Threading.Tasks.Parallel.dll",
+        "sha256": "97f9ccb69d9f1d4d86df2869e1ef667c4c68285b04f336b1188e633c8f814d05"
+      },
+      {
+        "relativePath": "ref/System.Xml.Linq.dll",
+        "sha256": "ae04903b25717fa4695e7e63489091f0d461e791e0bd264c6c85250d668f540d"
+      },
+      {
+        "relativePath": "ref/System.Threading.Tasks.Extensions.dll",
+        "sha256": "f148e3a1414b7c2763ae21529ad79ad759f7cfd3c885256b64b0d2209dec2613"
+      },
+      {
+        "relativePath": "ru/System.ServiceModel.Primitives.resources.dll",
+        "sha256": "6b39b7d8c9a20f8ee3b085a3b44d12b523387cd80450ae433a5994bd8e70ece6"
+      },
+      {
+        "relativePath": "runtimes/android-arm/native/libSystem.IO.Ports.Native.so",
+        "sha256": "04238e8c68410f320e1b5d9eb7bc5c46cfcf826d93471aeb7880a624836af7ad"
+      },
+      {
+        "relativePath": "runtimes/linux-x64/native/libSystem.IO.Ports.Native.so",
+        "sha256": "4eafe25b8ada81fe9ff6365edf68bfcf55aa98cb9d27d2a1e7d7f69b92c65dce"
+      },
+      {
+        "relativePath": "runtimes/linux-x64/native/libpsl-native.so",
+        "sha256": "d5c02bd3d05f74156f2f34fcfd3b6cb351a0835f988b817a44e8fb22c0ea80c1"
+      },
+      {
+        "relativePath": "runtimes/linux-x64/native/build.manifest.sig",
+        "sha256": "49239a1bc524e160c0d25dce82b4b037089cd62a09ae3c27ccff3fddd73a3eba"
+      },
+      {
+        "relativePath": "runtimes/linux-x64/native/build.manifest",
+        "sha256": "d327454de95adcf5da7fd80468eedb67e59772acbb3278f0b162a99b046c2d55"
+      },
+      {
+        "relativePath": "runtimes/linux-musl-x64/native/libSystem.IO.Ports.Native.so",
+        "sha256": "de6bf66a5d751190581c0ced542416858b78766e7d957c20a158153d77a89d38"
+      },
+      {
+        "relativePath": "runtimes/linux-musl-x64/native/libpsl-native.so",
+        "sha256": "fb54d46dbce3d42b4823492c44ad1f02204a6ddba1e69d2282870a4b9e77b7f2"
+      },
+      {
+        "relativePath": "runtimes/linux-musl-x64/native/build.manifest.sig",
+        "sha256": "19c6e9fc862b27de1635bad1078b62665dbcedb41cbc911fb546144c5c141871"
+      },
+      {
+        "relativePath": "runtimes/linux-musl-x64/native/build.manifest",
+        "sha256": "c6121c5a9d43d81e181433beb69067ecb628901fa34ed0534bc20471bf158157"
+      },
+      {
+        "relativePath": "runtimes/linux-musl-arm64/native/libSystem.IO.Ports.Native.so",
+        "sha256": "3f4604bfc91225734c012e0c79de3d55a331e7000558110e555db305cfe88513"
+      },
+      {
+        "relativePath": "runtimes/linux-musl-arm/native/libSystem.IO.Ports.Native.so",
+        "sha256": "2e629a34a5fcd56288d4aa0476dda0f7e2a0c0465d7e424775ae48b3a6b5d2b1"
+      },
+      {
+        "relativePath": "runtimes/linux-bionic-x64/native/libSystem.IO.Ports.Native.so",
+        "sha256": "fa630ff852ee911910dc2a0d4173b2bc77dc3de0c82979d588189c296587c973"
+      },
+      {
+        "relativePath": "ru/System.Web.Services.Description.resources.dll",
+        "sha256": "8a4a757c2e49221a4db673ff7459a7a56bcc32410cd5a1ae8fdabb58d63edf30"
+      },
+      {
+        "relativePath": "runtimes/linux-bionic-arm64/native/libSystem.IO.Ports.Native.so",
+        "sha256": "5dbacf35dea3688e415150967dbf1fe52c819e7d7ded12c3ec384564811ca4d5"
+      },
+      {
+        "relativePath": "runtimes/linux-arm64/native/libpsl-native.so",
+        "sha256": "82447c998a7ec2378969b8a20b1f79e7acabb3e4769ba43fbb0745544ee75966"
+      },
+      {
+        "relativePath": "runtimes/linux-arm64/native/build.manifest.sig",
+        "sha256": "4c362f02086d81d79c50ce64b9a39b07dc1bbdcf53776b3763a4927f3f9474d5"
+      },
+      {
+        "relativePath": "runtimes/linux-arm64/native/build.manifest",
+        "sha256": "129d9a1a54f2f8a8243dc0586999031a7d3b3e154dcd4fc8a6d216d0ff5a8ea2"
+      },
+      {
+        "relativePath": "runtimes/linux-arm/native/libSystem.IO.Ports.Native.so",
+        "sha256": "7962415d0736babfe031d1f3a8bb79dfb7ab8bbc8c8d535987707ff6b6b076bd"
+      },
+      {
+        "relativePath": "runtimes/linux-arm/native/libpsl-native.so",
+        "sha256": "9ece8e5da3db8e269bcfdfdbb34f29d033a4172baf1df2d1861b0999e0d09fc2"
+      },
+      {
+        "relativePath": "runtimes/linux-arm/native/build.manifest.sig",
+        "sha256": "f8e5a31244c41bf06e5ff872420abb425e92e61e8340cfab8a25f13bd09e1f00"
+      },
+      {
+        "relativePath": "runtimes/linux-arm/native/build.manifest",
+        "sha256": "70ef9ab5142aaeadabde02695a59f800df6ed42e7fe8ac16f93b6759e0669ac4"
+      },
+      {
+        "relativePath": "runtimes/linux/lib/net10.0/System.DirectoryServices.Protocols.dll",
+        "sha256": "74ed5c1e63e867396214e62c724f8d5ea131cbf3a503387b8497fd743fb214fc"
+      },
+      {
+        "relativePath": "runtimes/android-x86/native/libSystem.IO.Ports.Native.so",
+        "sha256": "e70b3ed7379ce90a49e2c5d06857641b01702d8704a1e2a6848a73fa02da4d7b"
+      },
+      {
+        "relativePath": "runtimes/android-x64/native/libSystem.IO.Ports.Native.so",
+        "sha256": "18da59730cf6f58bb97fb50afddae27e53cae8e118b56d0eba1d4344f9d85815"
+      },
+      {
+        "relativePath": "runtimes/android-arm64/native/libSystem.IO.Ports.Native.so",
+        "sha256": "198d4a7171e9734910a35e2a5e989b966ef1096dfa19b8e28d0ffddcea13ff70"
+      },
+      {
+        "relativePath": "runtimes/linux-arm64/native/libSystem.IO.Ports.Native.so",
+        "sha256": "3bf9699e39d2369e6ee80456413483ae5a9fab585cf2171cfa47f30ee28367be"
+      },
+      {
+        "relativePath": "runtimes/maccatalyst-arm64/native/libSystem.IO.Ports.Native.dylib",
+        "sha256": "1fe83414d0ab3ad029d799a69fab5b2ea67956ec98959fdbab5a61508d127ff4"
+      },
+      {
+        "relativePath": "ref/System.Threading.Tasks.dll",
+        "sha256": "f80b21f7dae04377b73945456cabe25e2ab1f4b564095aed546c2aa571644567"
+      },
+      {
+        "relativePath": "ref/System.Threading.Overlapped.dll",
+        "sha256": "7837d3bd05e28f95749029c832fb1d0ce5bf403a17bef7bf95df522ba93dac3a"
+      },
+      {
+        "relativePath": "ref/System.Runtime.Serialization.Formatters.dll",
+        "sha256": "ef24bb5669b54b31da46eb13238fb2b7f880dd780dc9b34a224a69dd59d93af8"
+      },
+      {
+        "relativePath": "ref/System.Runtime.Serialization.dll",
+        "sha256": "d565fc261ca98cbd14833821f777860291e8a0f775de7aee91778a9f6647f6f4"
+      },
+      {
+        "relativePath": "ref/System.Runtime.Numerics.dll",
+        "sha256": "4afc84f3e73b63ff6683941fcfda44e8a6aa5227b6afc128dcb979865e23d183"
+      },
+      {
+        "relativePath": "ref/System.Runtime.Loader.dll",
+        "sha256": "42884bcdc89ebd4ee509d5fcb4a679b1d7eebd6ddd9b66cb9e118063ddd30482"
+      },
+      {
+        "relativePath": "ref/System.Runtime.Intrinsics.dll",
+        "sha256": "df8f497f64b6a3ac02941fae92e057faddf93f3f135f2f6444f725617c38b619"
+      },
+      {
+        "relativePath": "ref/System.Runtime.InteropServices.RuntimeInformation.dll",
+        "sha256": "c26d9f94329422bd000f28f6c65fdc162bf9397a6d29e418a189d4ca49c5c3ec"
+      },
+      {
+        "relativePath": "ref/System.Runtime.InteropServices.JavaScript.dll",
+        "sha256": "cb551cc19df1067dd8897d14bf02ecfa63d8ecf96067a21902406791d68ce226"
+      },
+      {
+        "relativePath": "ref/System.Runtime.InteropServices.dll",
+        "sha256": "8ced47e6a2a717c459c3fa13f76a521b35917e123a9b1ee7ed1b5de13db80709"
+      },
+      {
+        "relativePath": "ref/System.Runtime.Handles.dll",
+        "sha256": "985457a3e6a67e96a445ee0fb69b2d58bcdadc4c964253fb63e2d5061a36b050"
+      },
+      {
+        "relativePath": "ref/System.Runtime.Extensions.dll",
+        "sha256": "3d7b517d4fd89ee58c53e0f642cc9be42e7a8669b51a85e861dafe118067cbfd"
+      },
+      {
+        "relativePath": "ref/System.Runtime.dll",
+        "sha256": "10ceaa9b398f512b46def6fd16fb5374c82ac03a7495859adbaaa70868fe70aa"
+      },
+      {
+        "relativePath": "ref/System.Runtime.Serialization.Json.dll",
+        "sha256": "de7eeca7df9f6bb664383fbead141719bd08d88b6aef43c0605528719f607e62"
+      },
+      {
+        "relativePath": "ref/System.Runtime.CompilerServices.VisualC.dll",
+        "sha256": "1e5eb23824055d6af5babb6a7ce47e314f78b0b464466db32b60f543304a9140"
+      },
+      {
+        "relativePath": "ref/System.Resources.Writer.dll",
+        "sha256": "7e772363e799c78d8d1d37fe1d412723da9350496a6d7bacd37491f2bb777cc4"
+      },
+      {
+        "relativePath": "ref/System.Resources.ResourceManager.dll",
+        "sha256": "f709eb5cf16e26679782784c428825019785fcc7085562092425d4999bece03d"
+      },
+      {
+        "relativePath": "ref/System.Resources.Reader.dll",
+        "sha256": "20bdb5d302b5e28f6042c9f281cfa3ae2f2358544cc40783052fe5abf6aa859b"
+      },
+      {
+        "relativePath": "ref/System.Reflection.TypeExtensions.dll",
+        "sha256": "78178074bdb0f7714c634e4a1b425570264b13b2ca5b9ad6880622bff0bda58e"
+      },
+      {
+        "relativePath": "ref/System.Reflection.Primitives.dll",
+        "sha256": "fa52402a7b4096ef109853f6bf03adef0e1de67e3652bb31f413d197f19f9b22"
+      },
+      {
+        "relativePath": "ref/System.Reflection.Metadata.dll",
+        "sha256": "92ec811516b768220cc41fb6a7197f7ba735f97b694716dfd1bfdf274078a90a"
+      },
+      {
+        "relativePath": "ref/System.Reflection.Extensions.dll",
+        "sha256": "ceb1b81e1eb488d87bd43d16dc54450b2a78e0b653c44c988aae2a20abc162bc"
+      },
+      {
+        "relativePath": "ref/System.Reflection.Emit.Lightweight.dll",
+        "sha256": "eef97e1049d8dd7ecc695080dd22c199ee8ca82b1cfcb3e33866cf7125dbd1a4"
+      },
+      {
+        "relativePath": "ref/System.Reflection.Emit.ILGeneration.dll",
+        "sha256": "0201069b706d397c573b9342902613a71879a2701994a48e2821c32d43101ae4"
+      },
+      {
+        "relativePath": "ref/System.Reflection.Emit.dll",
+        "sha256": "29021699e4128964365a86c22afb3b0a8368da7a3f7463c9c1a8fc0a1402a39f"
+      },
+      {
+        "relativePath": "ref/System.Reflection.dll",
+        "sha256": "95059346d6271dd6d0322cc321e5fb8cceab662f550c67aee7615059e41739bb"
+      },
+      {
+        "relativePath": "ref/System.Runtime.CompilerServices.Unsafe.dll",
+        "sha256": "6e685ec0477b21a688cd38bfcafc673888cdf186c99df3c96fab352e96d6fdc8"
+      },
+      {
+        "relativePath": "ref/System.Threading.Tasks.Dataflow.dll",
+        "sha256": "5d605d4c470c38bc37a04d58b4023a9c60179172790a29f4f7cb92aba6251648"
+      },
+      {
+        "relativePath": "ref/System.Runtime.Serialization.Primitives.dll",
+        "sha256": "a547b0d205cebe84508c2ddefd56d063c48cdfeae5b0c44bde6bae9f3d72f98a"
+      },
+      {
+        "relativePath": "ref/System.Security.AccessControl.dll",
+        "sha256": "2bd23d6aa92b920dafd374e1ab47ecb597ef3b1cf1652a4ec4944a0defb1a4ac"
+      },
+      {
+        "relativePath": "ref/System.Threading.dll",
+        "sha256": "0c2a3b4fddb2d732b8ebd0bca9ac57a8c66c9d4f5fbcb55fcd17e3cbcf678a4b"
+      },
+      {
+        "relativePath": "ref/System.Threading.Channels.dll",
+        "sha256": "c72028e4423fb04f3a644a76e1807e3651191aeb606b8f7b15b3650e4714cdca"
+      },
+      {
+        "relativePath": "ref/System.Threading.AccessControl.dll",
+        "sha256": "8449a1ee09edf8bdc69c61605bebec602c7b28a9ca401ca463512e4d369a3b7b"
+      },
+      {
+        "relativePath": "ref/System.Text.RegularExpressions.dll",
+        "sha256": "347c497cf2bd60a298efb59fe47156909ca854fdab4dabb944af7d6f8c270cef"
+      },
+      {
+        "relativePath": "ref/System.Text.Json.dll",
+        "sha256": "4133a8597a10eeb99d56a962ff581db9fd3ac85506ee3a20a2d23119c73a4346"
+      },
+      {
+        "relativePath": "ref/System.Text.Encodings.Web.dll",
+        "sha256": "f9f6120753fc9faeaa5b09e10ef309594dbd4c20c8cdf1717eb910455549793a"
+      },
+      {
+        "relativePath": "ref/System.Text.Encoding.Extensions.dll",
+        "sha256": "d6224360b0e91dfe544ec3baf0d5ded78a13349f6378493c96344a310c8caf08"
+      },
+      {
+        "relativePath": "ref/System.Text.Encoding.dll",
+        "sha256": "5e347db6b4f9b2746d50e1ac85be2d9cc7dc4038fde98ac4295bc7030c83cda9"
+      },
+      {
+        "relativePath": "ref/System.Text.Encoding.CodePages.dll",
+        "sha256": "2d66f9ae5e7439756eba063c0df86d6d3a0dc571f4bb07add18c59d6f10138ce"
+      },
+      {
+        "relativePath": "ref/System.ServiceProcess.dll",
+        "sha256": "63fc498c9d04e3c4345dfdb8016ad0639d54562dd7d8c707c072792c854df944"
+      },
+      {
+        "relativePath": "ref/System.ServiceModel.Web.dll",
+        "sha256": "ce91013ee3a9a9d69a85e258f7749e6ece488295d7cb66f7c1079f2e8678fc5e"
+      },
+      {
+        "relativePath": "ref/System.Runtime.Serialization.Xml.dll",
+        "sha256": "117bcb0dd828eaf6bfad06d8380ba32d32729b45879d907d7023fe73e9655bd9"
+      },
+      {
+        "relativePath": "ref/System.Security.SecureString.dll",
+        "sha256": "73aac97072b7deefa4de9647bf822162224f1452ad467841b989ff89d4d94595"
+      },
+      {
+        "relativePath": "ref/System.Security.Principal.dll",
+        "sha256": "1d3e351058be3a33214b23b308fe57f78cd6fd4d8fad448fc84cbbe7376129f9"
+      },
+      {
+        "relativePath": "ref/System.Security.dll",
+        "sha256": "d8efd304765e859369698efef9b3ca707defa8e142721fe5605d7a2de7d38375"
+      },
+      {
+        "relativePath": "ref/System.Security.Cryptography.X509Certificates.dll",
+        "sha256": "7439c3b90bc2ee49a9275b28ed29052b4d48b45999ac1b7d25593033b1bb8dd6"
+      },
+      {
+        "relativePath": "ref/System.Security.Cryptography.Primitives.dll",
+        "sha256": "194cccea9354bb248e44c954b5373f9069163f8f21524b3ee4b3185fe436bc15"
+      },
+      {
+        "relativePath": "ref/System.Security.Cryptography.OpenSsl.dll",
+        "sha256": "1a8902bbad1b577a98bec62a8472105dc1e9a253e390f69fbe3d167e93206968"
+      },
+      {
+        "relativePath": "ref/System.Security.Cryptography.Encoding.dll",
+        "sha256": "994494aec7760f40fade2264aa7c13eebae36360f0b1399a7134bb19c9d58fda"
+      },
+      {
+        "relativePath": "ref/System.Security.Cryptography.dll",
+        "sha256": "a700a7f6c32169e62be879088aa2218bdd5450c3945ed6c6d0acb3d25db0b1bf"
+      },
+      {
+        "relativePath": "ref/System.Security.Cryptography.Csp.dll",
+        "sha256": "4002af141e9cb29875b677841adf64a9681e5672c2595492dcbc161460d4e121"
+      },
+      {
+        "relativePath": "ref/System.Security.Cryptography.Cng.dll",
+        "sha256": "7319f97896d92a7d0729cf28dc6c4d1f797c1520b656ee01a780eec726ec2c16"
+      },
+      {
+        "relativePath": "ref/System.Security.Cryptography.Algorithms.dll",
+        "sha256": "eb99ae7dbe058a1b015aba6769ce1f65155b7ff51ff9a7203fcf6d7cdea5fef7"
+      },
+      {
+        "relativePath": "ref/System.Security.Claims.dll",
+        "sha256": "693a61dc317ab5a651ef598578a4b55912ac39342a0842fea003761f861b0caf"
+      },
+      {
+        "relativePath": "ref/System.Security.Principal.Windows.dll",
+        "sha256": "4b8eab6e832e99e8c08db2b9649f95ae8298e1105deea45a62e7d3b68c6593b7"
+      },
+      {
+        "relativePath": "runtimes/maccatalyst-x64/native/libSystem.IO.Ports.Native.dylib",
+        "sha256": "992b955d76b120f5d2d9b9ceae8a75aef6187a7610d9034ad46a050ef02845d5"
+      },
+      {
+        "relativePath": "runtimes/osx/lib/net10.0/System.DirectoryServices.Protocols.dll",
+        "sha256": "e58f2173a8d1195b9b3a37f2787dc0dfd9c2c914971bc21136e21b1907a86368"
+      },
+      {
+        "relativePath": "runtimes/osx/native/libpsl-native.dylib",
+        "sha256": "6b7e9c979e62e6a99b5f1432bbe3bcc97b256c5f431f93b9317ecbaac92ee382"
+      },
+      {
+        "relativePath": "runtimes/win-x86/lib/net5.0/getfilesiginforedistwrapper.dll",
+        "sha256": "3ce1d677a1d139dfc4219626d8d8d9b2249e52e0451065d0883276a377f290b2"
+      },
+      {
+        "relativePath": "runtimes/win-x64/native/sni.dll",
+        "sha256": "68705c4ef9ab818f2956a78e05f3fefce501a1448793b073b46110beb49b47d6"
+      },
+      {
+        "relativePath": "runtimes/win-x64/native/pwrshplugin.dll",
+        "sha256": "fbf2c8fc0d8a3cd5f2dee9e0f15315f92862b6df26bf1b02209588a07cc0d429"
+      },
+      {
+        "relativePath": "runtimes/win-x64/native/PowerShell.Core.Instrumentation.dll",
+        "sha256": "aeeb8062aaff1057e90e9485f610b508b1179aac4df7fc465090bdee49e3cff3"
+      },
+      {
+        "relativePath": "runtimes/win-x64/native/microsoft.management.infrastructure.native.unmanaged.dll",
+        "sha256": "9bee4e35576355156f00e2e47ef57aa2c8ca64390c112f083a772f2219026293"
+      },
+      {
+        "relativePath": "runtimes/win-x64/native/getfilesiginforedist.dll",
+        "sha256": "153eefb2eafa8b2b909854cc1f941350efb1170e179a299de8836b8ec5ce6a7a"
+      },
+      {
+        "relativePath": "runtimes/win-x64/native/build.manifest.sig",
+        "sha256": "5e8f9ebcee16a53e65bf204c4cff40cf137d567229143126c9ba789e5b75fca1"
+      },
+      {
+        "relativePath": "runtimes/win-x64/native/build.manifest",
+        "sha256": "58a354c02f0674cf951ceff4e780f7532eaee9c814b1fc75bdd3b943dd109f7a"
+      },
+      {
+        "relativePath": "runtimes/win-x64/lib/netstandard1.6/microsoft.management.infrastructure.native.dll",
+        "sha256": "ef675cf5c7e0e4ba6291e4644d3ceba378ce9685eb179c6afa8f0bf8f9cadc32"
+      },
+      {
+        "relativePath": "runtimes/win-x64/lib/netstandard1.6/microsoft.management.infrastructure.dll",
+        "sha256": "50557f6674bc1570308b3f326ae7b6b72839cc9bbac8934ab16ff563178d28f9"
+      },
+      {
+        "relativePath": "runtimes/win-x64/lib/net5.0/getfilesiginforedistwrapper.dll",
+        "sha256": "eb772c8740c77e5c5996b5fa8f034bbfb777b6d2bd4889d3b35023255b899cab"
+      },
+      {
+        "relativePath": "runtimes/win-x86/lib/netstandard1.6/microsoft.management.infrastructure.dll",
+        "sha256": "8a0dffa7fef0a09f49afd46eee3d0f1007e08e07ce300e58f6a73730de14b1d2"
+      },
+      {
+        "relativePath": "runtimes/win-arm64/native/sni.dll",
+        "sha256": "ef18458c4dcb93f6b4eac07e1589cf3450bf878f2dd623f5d34f6a0f1b16e57a"
+      },
+      {
+        "relativePath": "runtimes/win-arm64/native/PowerShell.Core.Instrumentation.dll",
+        "sha256": "c1af94e410e6dc23ca2db43abd0d086bebb667b0714cae460672d77435762319"
+      },
+      {
+        "relativePath": "runtimes/win-arm64/native/microsoft.management.infrastructure.native.unmanaged.dll",
+        "sha256": "02672d11cedfb7b1b91581c7cabc76b6cdec1646e2c9cbeda04f54a244999a2b"
+      },
+      {
+        "relativePath": "runtimes/win-arm64/native/getfilesiginforedist.dll",
+        "sha256": "c90b649db04c4b52184c14a91e5ac87f30b9d35f41f2704b081add4f79b827d1"
+      },
+      {
+        "relativePath": "runtimes/win-arm64/native/build.manifest.sig",
+        "sha256": "0cbaae0c5581e0b688e79d06bcd79bab452ec382cf9fbc09d59e0bcb5958170f"
+      },
+      {
+        "relativePath": "runtimes/win-arm64/native/build.manifest",
+        "sha256": "73878941185ac219fed38eafcfc734e606eba7bd637f34adcf4f702dd0924ada"
+      },
+      {
+        "relativePath": "runtimes/win-arm64/lib/netstandard1.6/microsoft.management.infrastructure.native.dll",
+        "sha256": "53198434c0133b36e6eb6b2ff4ee30b700b1c960e2b1af94545846c1732d7c25"
+      },
+      {
+        "relativePath": "runtimes/win-arm64/lib/netstandard1.6/microsoft.management.infrastructure.dll",
+        "sha256": "07a7688bbecc1f4c8787b0fa51f1d31573df73b45fe49bc3536103ec51b55fda"
+      },
+      {
+        "relativePath": "runtimes/win-arm64/lib/net5.0/getfilesiginforedistwrapper.dll",
+        "sha256": "2c70fbe0d92e17b3696239821383ebf210cb7f9b1f72dc88c544ff1cc0dc44e5"
+      },
+      {
+        "relativePath": "runtimes/win/lib/net8.0/System.Data.SqlClient.dll",
+        "sha256": "9d864a90b92bded2e59baf4a4bf37c6d3aca31316c8918e062d18995a895bfcc"
+      },
+      {
+        "relativePath": "runtimes/win/lib/net10.0/Modules/PSDiagnostics/PSDiagnostics.psm1",
+        "sha256": "64d8c5e6ea1e4e503f703a896a92944ff8df8a641daec55e307fb77d9c5b0aa4"
+      },
+      {
+        "relativePath": "runtimes/win/lib/net10.0/Modules/PSDiagnostics/PSDiagnostics.psd1",
+        "sha256": "05514bd0e9646823c36d4cb8c3e979b640d531b97aac0df2b40ae5f061664d29"
+      },
+      {
+        "relativePath": "runtimes/win-arm64/native/pwrshplugin.dll",
+        "sha256": "6dce9c108533b4818c7049723f7a176199f7c85cbb4d0be72e556d9351449702"
+      },
+      {
+        "relativePath": "runtimes/win/lib/net10.0/Modules/Microsoft.WSMan.Management/WSMan.format.ps1xml",
+        "sha256": "762e98d08ddb58ec98c2692903a25667880e227bac7f09f837098b8871a223aa"
+      },
+      {
+        "relativePath": "runtimes/win-x86/lib/netstandard1.6/microsoft.management.infrastructure.native.dll",
+        "sha256": "e086f284fa886680761612c5d1e017f56c4d8227f69ef52cd6eede1c5d96523b"
+      },
+      {
+        "relativePath": "runtimes/win-x86/native/build.manifest.sig",
+        "sha256": "12fa4d07140a28e762435771d315ed40528d91ed21043c0f29f0a166ad854ab9"
+      },
+      {
+        "relativePath": "zh-Hant/System.ServiceModel.NetTcp.resources.dll",
+        "sha256": "30c0335b44dde12cafa833017f1b77a9584cf249b8f789160bec1b19a62dc3bb"
+      },
+      {
+        "relativePath": "zh-Hant/System.ServiceModel.NetFramingBase.resources.dll",
+        "sha256": "c6a92655096d90baec95670e2524de635f6c8d306ab229e1447db0f58450b21c"
+      },
+      {
+        "relativePath": "zh-Hant/System.ServiceModel.Http.resources.dll",
+        "sha256": "805be34f0ea30638711d963fd0f3c57c57c9b51d873c9f0f8205b3212cf0837d"
+      },
+      {
+        "relativePath": "zh-Hant/Microsoft.CodeAnalysis.resources.dll",
+        "sha256": "e1b882a624fc2fef8fc63a2dd0a61e19543f6c2974b0ae5f1a8e580c0a490aed"
+      },
+      {
+        "relativePath": "zh-Hant/Microsoft.CodeAnalysis.CSharp.resources.dll",
+        "sha256": "515e77ddebd633c7f79dfae31c8d5b343ed278832119357bdc3228c726c3e48d"
+      },
+      {
+        "relativePath": "zh-Hans/System.Web.Services.Description.resources.dll",
+        "sha256": "434dcd85ba8b63190a60d1208cb81f956931b25cbd1c20cdeca52b527e2e313c"
+      },
+      {
+        "relativePath": "zh-Hans/System.ServiceModel.Primitives.resources.dll",
+        "sha256": "209dfdfb183c21719092390be1e5086e744a3689a1e55cafd42d38d388b9e58c"
+      },
+      {
+        "relativePath": "zh-Hans/System.ServiceModel.NetTcp.resources.dll",
+        "sha256": "9607788eca2e3ba2a5c8aef11896bb3e78403fe2f7adce38c6fa5461e28c3b00"
+      },
+      {
+        "relativePath": "zh-Hans/System.ServiceModel.NetFramingBase.resources.dll",
+        "sha256": "66aa0065fa234888d1c9e94674aa7ef9cafd2a8d5e277903cbb43f3e7d6a2f78"
+      },
+      {
+        "relativePath": "zh-Hans/System.ServiceModel.Http.resources.dll",
+        "sha256": "a9abf8c9234cc79ca1e85e549c4d3b70ee79347c7e7dad80eb4a71b294eb3ade"
+      },
+      {
+        "relativePath": "zh-Hans/Microsoft.CodeAnalysis.resources.dll",
+        "sha256": "2b8460e62d86c91cce2182c31b59dc3cef9cf8ac7face19ae0592516c3227897"
+      },
+      {
+        "relativePath": "runtimes/win-x86/native/build.manifest",
+        "sha256": "2b988c88d36624089d0f8637631451358366f7ec536ad71a9f269060af91da2f"
+      },
+      {
+        "relativePath": "zh-Hans/Microsoft.CodeAnalysis.CSharp.resources.dll",
+        "sha256": "fe526a7cdfb9a06e2c679a67bc07f1f4f4f1afcb4ac2d176f38ea2fc4b11bfbe"
+      },
+      {
+        "relativePath": "tr/System.ServiceModel.Primitives.resources.dll",
+        "sha256": "376ac3bc331f34e3e48f2ba6711be4868a67977ba9288081b8ef91d9a1b60082"
+      },
+      {
+        "relativePath": "tr/System.ServiceModel.NetTcp.resources.dll",
+        "sha256": "91b607f5ab9178fe3d2fc221c7539e2d2206c632dafa46bc58f3d9d86b5e1eb6"
+      },
+      {
+        "relativePath": "tr/System.ServiceModel.NetFramingBase.resources.dll",
+        "sha256": "b5f96d25f2cd984993a1f1a1ab708a577f69c2fdf30a1e745eab830bdf9b32fb"
+      },
+      {
+        "relativePath": "tr/System.ServiceModel.Http.resources.dll",
+        "sha256": "36acc8538d9c211ac82cca95ca8ee4337e2e203cf96fb7416df6feed1449373b"
+      },
+      {
+        "relativePath": "tr/Microsoft.CodeAnalysis.resources.dll",
+        "sha256": "5fde98451be8b9d11efa9aa0783c64dcfba6c552f405d03b82a575ceff631027"
+      },
+      {
+        "relativePath": "tr/Microsoft.CodeAnalysis.CSharp.resources.dll",
+        "sha256": "09ff456d47d79b6f1a7ee5512662a490afdaa05c60eb8190a7dcd76ae050dc0e"
+      },
+      {
+        "relativePath": "runtimes/win-x86/native/sni.dll",
+        "sha256": "1446d6b26da49a5a9f366972f89f4e236f916955f31ddc38ebb96217c1cace9c"
+      },
+      {
+        "relativePath": "runtimes/win-x86/native/pwrshplugin.dll",
+        "sha256": "4fdc70876554e08b6635b263d43a4bca386b85c5df5f062026aa4032ba773e75"
+      },
+      {
+        "relativePath": "runtimes/win-x86/native/PowerShell.Core.Instrumentation.dll",
+        "sha256": "3ce4dc4f21e486186bf739e1c279d75906bbf46afdbd91a75af3f86e32dbad62"
+      },
+      {
+        "relativePath": "runtimes/win-x86/native/microsoft.management.infrastructure.native.unmanaged.dll",
+        "sha256": "8fef324494e8cb23d6f428525b307fa68f6bdfabe49ec15f28fc766e2fc40e7e"
+      },
+      {
+        "relativePath": "runtimes/win-x86/native/getfilesiginforedist.dll",
+        "sha256": "63456844f43a10892cb7e18ec9f319d0d2962a9d2e768c03c80b9c6c3916b969"
+      },
+      {
+        "relativePath": "tr/System.Web.Services.Description.resources.dll",
+        "sha256": "e5a684b013851d4ca84e201e14834cedb52cd13e7d5a07cfef9c5df6990745d1"
+      },
+      {
+        "relativePath": "runtimes/win/lib/net10.0/Modules/Microsoft.WSMan.Management/Microsoft.WSMan.Management.psd1",
+        "sha256": "514e59abc5b45f610e31a309ff8da3eab10f27d18e1490f97d48eb19d306b699"
+      },
+      {
+        "relativePath": "runtimes/win/lib/net10.0/Modules/Microsoft.PowerShell.Utility/Microsoft.PowerShell.Utility.psd1",
+        "sha256": "b98159180f81d3c51d51ea40c8d22a78ea8ce06499152cc206811379493e95ce"
+      },
+      {
+        "relativePath": "runtimes/win/lib/net10.0/Modules/Microsoft.PowerShell.Security/Security.types.ps1xml",
+        "sha256": "d1fd165a6ab05b7625033e841bcec0dd6e6049160309a09edf346af6358767ac"
+      },
+      {
+        "relativePath": "runtimes/win/lib/net10.0/Microsoft.PowerShell.Security.dll",
+        "sha256": "91d2af3aabbd51837d65b4699b683e094fea0dc03aaa07a6de63c9223c783576"
+      },
+      {
+        "relativePath": "runtimes/win/lib/net10.0/Microsoft.PowerShell.SDK.dll",
+        "sha256": "a3ac53e3795f33dcb03304f91a16b2836de9c9112cbb1e1a1ba92a9954cbe763"
+      },
+      {
+        "relativePath": "runtimes/win/lib/net10.0/Microsoft.PowerShell.CoreCLR.Eventing.dll",
+        "sha256": "4e8bb43f78a5fa4c9993613eab9c49723cb75444624806db4866d28454b149c6"
+      },
+      {
+        "relativePath": "runtimes/win/lib/net10.0/Microsoft.PowerShell.ConsoleHost.dll",
+        "sha256": "68d508e03ad6df2c126b6d6625af3558c7b5a5007936e12b470bf6cf26bce629"
+      },
+      {
+        "relativePath": "runtimes/win/lib/net10.0/Microsoft.PowerShell.Commands.Utility.dll",
+        "sha256": "b57ea42fcf5457442f7de975ad68c4c23a437f4aa02a2b0eac0f8b84efd06d08"
+      },
+      {
+        "relativePath": "runtimes/win/lib/net10.0/Microsoft.PowerShell.Commands.Management.dll",
+        "sha256": "dcaad198d59a6c6158a6ad2eac2febe9caa8bc1bf7cdcf230533eefe2d1140ce"
+      },
+      {
+        "relativePath": "runtimes/win/lib/net10.0/Microsoft.PowerShell.Commands.Diagnostics.dll",
+        "sha256": "2237de74810f4d68ffe6e1e684ead261f94480110684d2b99c0390366d1a3392"
+      },
+      {
+        "relativePath": "runtimes/win/lib/net10.0/Microsoft.Management.Infrastructure.CimCmdlets.dll",
+        "sha256": "e74f4fe2d734ad8d394902585633c8c921448cfc2991e19245f543e40a3422ed"
+      },
+      {
+        "relativePath": "runtimes/unix/lib/netstandard1.6/Microsoft.Management.Infrastructure.dll",
+        "sha256": "e600e2473e2404859789c76529671c5ea12b66dca552cb3f43e960bda13b9434"
+      },
+      {
+        "relativePath": "runtimes/unix/lib/net8.0/System.Data.SqlClient.dll",
+        "sha256": "42f211a6a6b2195585f9f35c5baa3af20130dce51b931ee2eca22953fc46a56f"
+      },
+      {
+        "relativePath": "runtimes/unix/lib/net10.0/Modules/Microsoft.PowerShell.Utility/Microsoft.PowerShell.Utility.psd1",
+        "sha256": "e75743e368e71c0c1bcf1e8f3870f814c975c09c37084ec74793d7b2534f3c1d"
+      },
+      {
+        "relativePath": "runtimes/win/lib/net10.0/Microsoft.Win32.Registry.AccessControl.dll",
+        "sha256": "ae1aeb636d9dd930cbb7e35c3dfbd2e32ea91f2e995195d5e0463406d85c88d5"
+      },
+      {
+        "relativePath": "runtimes/unix/lib/net10.0/Modules/Microsoft.PowerShell.Security/Microsoft.PowerShell.Security.psd1",
+        "sha256": "e3c2a5d298b60a938d5c969da8ff6c1140d4407dd8bee7ed0c17a15adaafff2f"
+      },
+      {
+        "relativePath": "runtimes/unix/lib/net10.0/Modules/Microsoft.PowerShell.Host/Microsoft.PowerShell.Host.psd1",
+        "sha256": "246a00696ff9e60c5eccde7453b241ac62584ee07240be8057ac785e76dd39a5"
+      },
+      {
+        "relativePath": "runtimes/unix/lib/net10.0/System.Management.Automation.dll",
+        "sha256": "0841fbefbca8072a6a12b251e9fe6074c9d704e4dd47e46b1bfc87076dea5df7"
+      },
+      {
+        "relativePath": "runtimes/unix/lib/net10.0/System.IO.Ports.dll",
+        "sha256": "48a428753280b400858ca0e758139917080872f5ebaffe2e4cf973722e4bf791"
+      },
+      {
+        "relativePath": "runtimes/unix/lib/net10.0/System.Data.Odbc.dll",
+        "sha256": "d1db1a826ebaa14d467d0989c85664581a26cebc93da0585d2afd23de0321926"
+      },
+      {
+        "relativePath": "runtimes/unix/lib/net10.0/Microsoft.PowerShell.Security.dll",
+        "sha256": "24965542ef1df152ad66b0410dd54c3354795b990052551fa81e045fbef379c5"
+      },
+      {
+        "relativePath": "runtimes/unix/lib/net10.0/Microsoft.PowerShell.SDK.dll",
+        "sha256": "c729542ac124df35ad7d0b50422ebd54ad1daeba53e23340bb254466fc6fe16b"
+      },
+      {
+        "relativePath": "runtimes/unix/lib/net10.0/Microsoft.PowerShell.ConsoleHost.dll",
+        "sha256": "731c97bfdde3ec1b93be2d4b9a50f72d218ff0dac7df9479af4879e004b3020b"
+      },
+      {
+        "relativePath": "runtimes/unix/lib/net10.0/Microsoft.PowerShell.Commands.Utility.dll",
+        "sha256": "4ff0691d396783de4881d351cf066d9b2c5ae794b6a3ccf923a9b7594cb63b1b"
+      },
+      {
+        "relativePath": "runtimes/unix/lib/net10.0/Microsoft.PowerShell.Commands.Management.dll",
+        "sha256": "5b8f96bb55570db89bbf21747052ba0432b586295909fe7b1f84e6c689adc46a"
+      },
+      {
+        "relativePath": "runtimes/osx-x64/native/libSystem.IO.Ports.Native.dylib",
+        "sha256": "098527e274d212e47d3ec340cc1cb3915310f7ff3876d93052c80aa53a5de37a"
+      },
+      {
+        "relativePath": "runtimes/osx-arm64/native/libSystem.IO.Ports.Native.dylib",
+        "sha256": "96e2b32d489f44985c4e617055854b5c0b750347c58d36f5e6f94b64a4db0ba8"
+      },
+      {
+        "relativePath": "runtimes/unix/lib/net10.0/Modules/Microsoft.PowerShell.Management/Microsoft.PowerShell.Management.psd1",
+        "sha256": "e1380aec2682d1cf226b7ac00cfcf37c2fbac79d369b2201c5a6988882282ef3"
+      },
+      {
+        "relativePath": "runtimes/win/lib/net10.0/Microsoft.Win32.SystemEvents.dll",
+        "sha256": "fb565ccbc084725df0932d530c5b0d2d435253ed86122df9c3e04982dad3e318"
+      },
+      {
+        "relativePath": "runtimes/win/lib/net10.0/Microsoft.WSMan.Management.dll",
+        "sha256": "ba3c3d5434e5352b38cb8b59e570ca993505e00678f98f05411b31e71e435529"
+      },
+      {
+        "relativePath": "runtimes/win/lib/net10.0/Microsoft.WSMan.Runtime.dll",
+        "sha256": "4af4cd953b4d3cebab50d1623c1c59f57e0f3ca3d6474a1909d22eba78d5e03d"
+      },
+      {
+        "relativePath": "runtimes/win/lib/net10.0/Modules/Microsoft.PowerShell.Security/Microsoft.PowerShell.Security.psd1",
+        "sha256": "d4d155af40f550191473926e73fb1a0185f603598d5c5af532269960e784dd24"
+      },
+      {
+        "relativePath": "runtimes/win/lib/net10.0/Modules/Microsoft.PowerShell.Management/Microsoft.PowerShell.Management.psd1",
+        "sha256": "7d42aa4773470c75fdca8a98212667aecdc43f072772f7fcb2fe4714a08bfa0b"
+      },
+      {
+        "relativePath": "runtimes/win/lib/net10.0/Modules/Microsoft.PowerShell.Host/Microsoft.PowerShell.Host.psd1",
+        "sha256": "d71134f323bec4b58fcd90caa90705e9c3f2444c9c0eace6def0882db875c099"
+      },
+      {
+        "relativePath": "runtimes/win/lib/net10.0/Modules/Microsoft.PowerShell.Diagnostics/Microsoft.PowerShell.Diagnostics.psd1",
+        "sha256": "45c5200936b014215fa501417490782c180314629e3acbd31dcaad126f97da98"
+      },
+      {
+        "relativePath": "runtimes/win/lib/net10.0/Modules/Microsoft.PowerShell.Diagnostics/GetEvent.types.ps1xml",
+        "sha256": "f4c171b42079f78a682f1ba77dadb924b87f23c1427506224c612af51c0763c9"
+      },
+      {
+        "relativePath": "runtimes/win/lib/net10.0/Modules/Microsoft.PowerShell.Diagnostics/Event.format.ps1xml",
+        "sha256": "62b8bd2776cf6748a6c8ec7d31231ad1a671fac2fee4de62eb1b45aa7a611ba8"
+      },
+      {
+        "relativePath": "runtimes/win/lib/net10.0/Modules/Microsoft.PowerShell.Diagnostics/Diagnostics.format.ps1xml",
+        "sha256": "2ba820a81b8ca71370f1382101b2dd22cc3fc5091fd1e54c1493e10df925cc6c"
+      },
+      {
+        "relativePath": "runtimes/win/lib/net10.0/Modules/CimCmdlets/CimCmdlets.psd1",
+        "sha256": "1a9c9fc01eb3cc0b163d0c558bb7d6eb8a02189f3331e5560310ed6add403b31"
+      },
+      {
+        "relativePath": "runtimes/win/lib/net10.0/System.Windows.Extensions.dll",
+        "sha256": "5ae6d5596d96c203378521a4fefb6ecffeb06a68d271e26bab86f7a1a1f0b304"
+      },
+      {
+        "relativePath": "runtimes/win/lib/net10.0/System.Speech.dll",
+        "sha256": "d90047d9d1800e938bbc8f3059bc467f07700693a8987ecce989973d8fd57398"
+      },
+      {
+        "relativePath": "runtimes/win/lib/net10.0/System.ServiceProcess.ServiceController.dll",
+        "sha256": "98fdd7940fb7f3cc4c6eef24ae58f08df33b3f5afa23c8b3401dae5d5ce8e04e"
+      },
+      {
+        "relativePath": "runtimes/win/lib/net10.0/System.Security.Cryptography.Pkcs.dll",
+        "sha256": "af14ca7e101cfbfb47f977aca1515f0e70e0b1e2f8b0e8d93c485e414ba9cd8c"
+      },
+      {
+        "relativePath": "runtimes/win/lib/net10.0/System.Runtime.Caching.dll",
+        "sha256": "8096ec87f1281d59e971092f2aa0a74d9a4c9e9434e859ca795c058c2096eddc"
+      },
+      {
+        "relativePath": "runtimes/win/lib/net10.0/System.Net.Http.WinHttpHandler.dll",
+        "sha256": "fa473dace6b54814da7eb9cfe8d0c91a7d29dbbdcb0161a8c91237a48ddb2417"
+      },
+      {
+        "relativePath": "runtimes/win/lib/net10.0/System.Management.dll",
+        "sha256": "b54deff63d4c23cc4bbea00cea659727872f7ceb8ade74475577d45aa92e6216"
+      },
+      {
+        "relativePath": "runtimes/win/lib/net10.0/System.Management.Automation.dll",
+        "sha256": "1d818360f6184268abc763bd8342d35e6c10a1922a08adc35862fd954bc804f4"
+      },
+      {
+        "relativePath": "runtimes/win/lib/net10.0/System.IO.Ports.dll",
+        "sha256": "5577768044d341b4abff0490753d61ae0edb544b91d5e3de6fec2a8b04a357be"
+      },
+      {
+        "relativePath": "runtimes/win/lib/net10.0/System.DirectoryServices.Protocols.dll",
+        "sha256": "362c2f39e9434a978666d603e471584a2cbce4e2082a4d253b7d1882e7779ff4"
+      },
+      {
+        "relativePath": "runtimes/win/lib/net10.0/System.DirectoryServices.dll",
+        "sha256": "804ff14c0016ec869d655babb48b8781d1feb2df2c16daed56f1285bfdf99c3d"
+      },
+      {
+        "relativePath": "runtimes/win/lib/net10.0/System.DirectoryServices.AccountManagement.dll",
+        "sha256": "2eacdbad43bb878658e9f8a6872d60c2a4143bce4d258c24d9cb6341f7db5827"
+      },
+      {
+        "relativePath": "runtimes/win/lib/net10.0/System.Diagnostics.PerformanceCounter.dll",
+        "sha256": "1373b897e46747ec313451b95dfd795dbfb33409d4b9b26a536f9b2431baf571"
+      },
+      {
+        "relativePath": "runtimes/win/lib/net10.0/System.Diagnostics.EventLog.Messages.dll",
+        "sha256": "7ec09e9d61fe2c2e8076fa6a3bfe6877cb4635dff0c731b387785e9ee6b2287a"
+      },
+      {
+        "relativePath": "runtimes/win/lib/net10.0/System.Diagnostics.EventLog.dll",
+        "sha256": "9f4975cc738087e1579fc3db2a7252c25a5c191e0e54f1085c344592f91edf15"
+      },
+      {
+        "relativePath": "runtimes/win/lib/net10.0/System.Data.OleDb.dll",
+        "sha256": "89bedf05af721ab775485e06a541b1630d6aed02b7ae15c2308f9a3d140905b9"
+      },
+      {
+        "relativePath": "runtimes/win/lib/net10.0/System.Data.Odbc.dll",
+        "sha256": "d96e990beff575c51b58078e68080a607c487a666cf2c9360268559072734c35"
+      },
+      {
+        "relativePath": "ref/System.Reflection.DispatchProxy.dll",
+        "sha256": "0d46dfb9c4ffc27d05a1c089d8f60a1cb365855140a9b30972133208270dd08b"
+      },
+      {
+        "relativePath": "ref/System.ObjectModel.dll",
+        "sha256": "3a591e043cd443761537580084f714392bb3278176c9a19f1be8700a29ef6f56"
+      },
+      {
+        "relativePath": "ref/System.Numerics.Vectors.dll",
+        "sha256": "cc06324f279c581d8f76c0c8f6b011cf8d05efd0c95e998d68f9243da124eb52"
+      },
+      {
+        "relativePath": "ref/System.Numerics.dll",
+        "sha256": "35adc9360421b3b7a3d50399cb2c651c160158d7e8c302907acbce5f61f4a4f7"
+      },
+      {
+        "relativePath": "de/Microsoft.CodeAnalysis.resources.dll",
+        "sha256": "cd62a1bfe99811c971bec1328a548dbc5f24e3bc9cd27f9715373c1e52abf32f"
+      },
+      {
+        "relativePath": "de/Microsoft.CodeAnalysis.CSharp.resources.dll",
+        "sha256": "74ee2d88897be211e89ad4cd11a145a973bd4af0e74877b5a64f8d227e0ba409"
+      },
+      {
+        "relativePath": "cs/System.Web.Services.Description.resources.dll",
+        "sha256": "8dc211bc71e53e3fd0864571861a34276a0274e551623e3641fa9a49fd6aeb20"
+      },
+      {
+        "relativePath": "cs/System.ServiceModel.Primitives.resources.dll",
+        "sha256": "f68461129e0d3a0f3e94c41565421d954b3de1921ed64f1cf207d4c99513bb1d"
+      },
+      {
+        "relativePath": "cs/System.ServiceModel.NetTcp.resources.dll",
+        "sha256": "d2bc0844d217d2ce93247f068cb6a5bf9cd7d3a9feaf1aac8975a1d32b13a5e0"
+      },
+      {
+        "relativePath": "cs/System.ServiceModel.NetFramingBase.resources.dll",
+        "sha256": "ad8ca88a82e24cf6bbd628bd12698e6c0bbe8f87d6bcb6fd6ba8b2a2f1ded8fd"
+      },
+      {
+        "relativePath": "cs/System.ServiceModel.Http.resources.dll",
+        "sha256": "00ebaf783dc6c6d5ca5e3b5704cd3d9ef425ebcaa913f026db5e65976ea9c0c0"
+      },
+      {
+        "relativePath": "cs/Microsoft.CodeAnalysis.resources.dll",
+        "sha256": "b6f9770c7c83160b27d96e41486da99ed43deb71bbfb8d15bd70f25dc452c1ab"
+      },
+      {
+        "relativePath": "cs/Microsoft.CodeAnalysis.CSharp.resources.dll",
+        "sha256": "1b7a95334e0457ed334646cb62e1287b88e908e50a5ccdce60891613fff7295c"
+      },
+      {
+        "relativePath": "VirusTotalAnalyzer.dll",
+        "sha256": "c4a7363bed902b7cabdd8d1c086016f15c8b5dc78775987bfd7762db0ddfdf7e"
+      },
+      {
+        "relativePath": "System.Windows.Extensions.dll",
+        "sha256": "d040b3a4b70e0c35d481ab9520ddfc94141731f88e9249d8dcb4edad0c644287"
+      },
+      {
+        "relativePath": "de/System.ServiceModel.Http.resources.dll",
+        "sha256": "efb4e988c0914645496727f54502ef3ff295873f6f4d4378e59c468739a4dcc7"
+      },
+      {
+        "relativePath": "System.Web.Services.Description.dll",
+        "sha256": "2243b61900d3b7b30ab6751970aadf04d490507ad0d74dbec05db5f86de0cbfc"
+      },
+      {
+        "relativePath": "System.ServiceProcess.ServiceController.dll",
+        "sha256": "10235b1b719ba4572720a2bac9a13ed28ba3a0228a865c7340fbe50ba8226ea5"
+      },
+      {
+        "relativePath": "System.ServiceModel.Syndication.dll",
+        "sha256": "2aa091a2ee093fc5e1690cf649349af0d9a3c38365578e947e6048bc8e06e65c"
+      },
+      {
+        "relativePath": "System.ServiceModel.Security.dll",
+        "sha256": "99ec51765cf53b36dc1064a48db4c910edb17c92e176e03b947e5e200b82f7d2"
+      },
+      {
+        "relativePath": "System.ServiceModel.Primitives.dll",
+        "sha256": "b20cb0dd2543955fa35457df8334577d0a8ba083b090ce5e146878e0127418b2"
+      },
+      {
+        "relativePath": "System.ServiceModel.NetTcp.dll",
+        "sha256": "54362a47ce9c62ae82f43a4577e6c1dbce0a4490269ffe94b11a3a85541f25f8"
+      },
+      {
+        "relativePath": "System.ServiceModel.NetFramingBase.dll",
+        "sha256": "dd826dfc0eead2b316e422ec4fb0924005b1dfa58f447f2b17a8cc3560453cac"
+      },
+      {
+        "relativePath": "System.ServiceModel.Http.dll",
+        "sha256": "f40aa945bfb46b8b545e0b701da75520757a37e9e0544fc2e9d72cdec1ae3faf"
+      },
+      {
+        "relativePath": "System.ServiceModel.Duplex.dll",
+        "sha256": "5e7d8985922c7d7d673d2d204c2f6d12e3f70f70d0e9ff15507fecd2026a8815"
+      },
+      {
+        "relativePath": "System.ServiceModel.dll",
+        "sha256": "cf390c8379f3249937da11dad3a5ba88804a7453503a246be01fc849b899653b"
+      },
+      {
+        "relativePath": "System.Security.Permissions.dll",
+        "sha256": "c7605537f788aa9a3f49371578f0103d9808363e7529f91c5a2099595646cdd3"
+      },
+      {
+        "relativePath": "System.Security.Cryptography.Xml.dll",
+        "sha256": "15f69545d550f4b65d799b9dddfeba90dc2228348d8e9105efe4bf53a8887d88"
+      },
+      {
+        "relativePath": "System.Speech.dll",
+        "sha256": "e9486209b44c23ac9a1e931d4cba6150f6e5fc9e440f272f97bbd645cb7f13dd"
+      },
+      {
+        "relativePath": "System.Security.Cryptography.ProtectedData.dll",
+        "sha256": "7c87a15154e254ab0bf62abbf42d92ca2961656b3354c13f49676f6516c4364e"
+      },
+      {
+        "relativePath": "de/System.ServiceModel.NetFramingBase.resources.dll",
+        "sha256": "499a53cf9aad6e779825276998f49cfd097d67c20e6661de09d775c1ba579026"
+      },
+      {
+        "relativePath": "de/System.ServiceModel.Primitives.resources.dll",
+        "sha256": "e9c5fafd06479ba2b9c64ae8cd0d8cf20e2b9b69edc939de187c4e7bb14aeece"
+      },
+      {
+        "relativePath": "ja/Microsoft.CodeAnalysis.resources.dll",
+        "sha256": "f66432a517a834ca169317c170d32a610094c3ebc0c2b1f59d0087b33e2d36ad"
+      },
+      {
+        "relativePath": "ja/Microsoft.CodeAnalysis.CSharp.resources.dll",
+        "sha256": "4d2baad888d7da2f20d528d27f6b56286961a6caa294a3d3927f834a3459f71d"
+      },
+      {
+        "relativePath": "it/System.Web.Services.Description.resources.dll",
+        "sha256": "39bcdad1a8efcb6a0555209cf2b86d8cdf4e8d4c8941c9a673ed0b072ae0753e"
+      },
+      {
+        "relativePath": "it/System.ServiceModel.Primitives.resources.dll",
+        "sha256": "bf51220a2b94d1a44c81d93c2e25545ec23d7ec787dc3169befe92782252c167"
+      },
+      {
+        "relativePath": "it/System.ServiceModel.NetTcp.resources.dll",
+        "sha256": "f1b0b0fb5a33fa518cec286bfb5462cc5a457f7c4c033e02908b138728bedebe"
+      },
+      {
+        "relativePath": "it/System.ServiceModel.NetFramingBase.resources.dll",
+        "sha256": "b59557685d24a51347332117fa5fe78465b0a93b53fb850b064809aa94e78567"
+      },
+      {
+        "relativePath": "it/System.ServiceModel.Http.resources.dll",
+        "sha256": "b3bf6b1ada063dd9d9d54c00b693cee2e38b5992217da4c8faaf7ef4fc475126"
+      },
+      {
+        "relativePath": "it/Microsoft.CodeAnalysis.resources.dll",
+        "sha256": "321a24f5ac605314380585f4991db0d99bcac59ec976be896a589fe842fef7a0"
+      },
+      {
+        "relativePath": "it/Microsoft.CodeAnalysis.CSharp.resources.dll",
+        "sha256": "a853f3e433c9892150c47ad5bbedd46d3acb755bbc20ed58796b9e3e75aa9250"
+      },
+      {
+        "relativePath": "fr/System.Web.Services.Description.resources.dll",
+        "sha256": "448f62e3401a9a97db31fa1889f4d5d816bbb9afa75365dd083f2c4e51d4c5b9"
+      },
+      {
+        "relativePath": "fr/System.ServiceModel.Primitives.resources.dll",
+        "sha256": "dc67088d30c5b06e0af77b98c88bf0e2d26b70bacd0cdbaa2fdc0c50a82ee337"
+      },
+      {
+        "relativePath": "de/System.ServiceModel.NetTcp.resources.dll",
+        "sha256": "2c567de350b96df466c15205aeed22d2529fe53b49ef5005ec8da554b370885e"
+      },
+      {
+        "relativePath": "fr/System.ServiceModel.NetTcp.resources.dll",
+        "sha256": "3e449923cf8e50fe41a09c146de05bc37bfe964e93ed8e1eda53c142e0dae024"
+      },
+      {
+        "relativePath": "fr/System.ServiceModel.Http.resources.dll",
+        "sha256": "ca7d94cb6f2a6ac5f8878df90d294f1f56573fa3545044bf4ced391577d64e4f"
+      },
+      {
+        "relativePath": "fr/Microsoft.CodeAnalysis.resources.dll",
+        "sha256": "80f5a07838b046388fda788223279c1c6638eccf9610fe80a598bb17f3b20f22"
+      },
+      {
+        "relativePath": "fr/Microsoft.CodeAnalysis.CSharp.resources.dll",
+        "sha256": "463e22ba0fdfee0025d6fb00314a0a7cf8a47d6b6689d88e0429686025a8f53c"
+      },
+      {
+        "relativePath": "es/System.Web.Services.Description.resources.dll",
+        "sha256": "20bdf772953483d7c1594f397a3566ebcfbf07d86dd81e5085a6a777ee89c2b2"
+      },
+      {
+        "relativePath": "es/System.ServiceModel.Primitives.resources.dll",
+        "sha256": "e6bf43e5a95bdd060efe61622e1a6632c0cc23886bf6fc9c6fa5074a42baa97b"
+      },
+      {
+        "relativePath": "es/System.ServiceModel.NetTcp.resources.dll",
+        "sha256": "88bb4a08cf5a46bb44929aed324583216de2a3f719e90c8f0cc458c50dd2ca04"
+      },
+      {
+        "relativePath": "es/System.ServiceModel.NetFramingBase.resources.dll",
+        "sha256": "a408b9046d630b2e43ddb799a69e4d2ef27672adec1ec4243f36832c72e4c945"
+      },
+      {
+        "relativePath": "es/System.ServiceModel.Http.resources.dll",
+        "sha256": "bfac34465cf4b0d4b1e4753bed006a2aa8d0b1a7e4d4aee0dcdc344f78fb59ab"
+      },
+      {
+        "relativePath": "es/Microsoft.CodeAnalysis.resources.dll",
+        "sha256": "4c741b47fa2becf2f1283e96ec6f76d958f1defc2868d93c2c011cafcbc9f9f4"
+      },
+      {
+        "relativePath": "es/Microsoft.CodeAnalysis.CSharp.resources.dll",
+        "sha256": "719bc0f799e12704498649267e473166f91015b629f4116474091f8ee9253e4d"
+      },
+      {
+        "relativePath": "de/System.Web.Services.Description.resources.dll",
+        "sha256": "663db7f9cc29123264df9f37409c062b90a834775419c0700fe4ad16f073847d"
+      },
+      {
+        "relativePath": "fr/System.ServiceModel.NetFramingBase.resources.dll",
+        "sha256": "e3264dc16b9d7cbc93265a98113044d4926823a574363aff08789d660e03e7cc"
+      },
+      {
+        "relativePath": "System.Security.Cryptography.Pkcs.dll",
+        "sha256": "fee526bc764c85a873764022d61247a0d68f87dc9efcb7ef0de1b5136d8fc6cc"
+      },
+      {
+        "relativePath": "System.Runtime.Caching.dll",
+        "sha256": "9b740b45ef9271e5274b7121d3823888397ae3f58d3b36f5af58f422b1d83786"
+      },
+      {
+        "relativePath": "System.Reflection.MetadataLoadContext.dll",
+        "sha256": "bd1de640a27a48d1e25270519bd8114aedcaa8442b8fec546f38bf5e85619ce7"
+      },
+      {
+        "relativePath": "PowerForge.Cli.runtimeconfig.json",
+        "sha256": "c230a317a54dd960bcbeb5f347f52e18dc665a26f7efda2159fced9a5ac7e097"
+      },
+      {
+        "relativePath": "PowerForge.Cli.pdb",
+        "sha256": "719065aeb94277152d1d7ebcf82a19aadb3a476915e5abe87f15b547f1e6d240"
+      },
+      {
+        "relativePath": "PowerForge.Cli.exe",
+        "sha256": "6f7ea92f35fc37343a284670af1fe421670a01d9f4856dfa91e1cd7173bcb9f4"
+      },
+      {
+        "relativePath": "PowerForge.Cli.dll",
+        "sha256": "befe28669e4bdd5023b195c05ca23089b0db7bd0a4c5fdee7675f6c2cca609a4"
+      },
+      {
+        "relativePath": "PowerForge.Cli.deps.json",
+        "sha256": "6cafc570e4fda7998ceebedcca6155333bb8cdd126e9e89db90939eaa5400f74"
+      },
+      {
+        "relativePath": "NuGet.Versioning.dll",
+        "sha256": "fc2f75a7a5f3be9b4c3dcfc21644b871bb5a41ada8615c92d778713d2a310670"
+      },
+      {
+        "relativePath": "NuGet.Packaging.dll",
+        "sha256": "80fb5126f79664c8ad628f18041cb13d2c887b071edc9d8b353b14af24bc59d1"
+      },
+      {
+        "relativePath": "NuGet.Frameworks.dll",
+        "sha256": "52c4e004a50f6e0552ae73843cff4d68f05c94531287f8fa3da78283166b1949"
+      },
+      {
+        "relativePath": "NuGet.Configuration.dll",
+        "sha256": "6566f9cc2a6db2052caab346a53ae89f178ded40c1384bc4441dbe2224d6a5ab"
+      },
+      {
+        "relativePath": "NuGet.Common.dll",
+        "sha256": "c863232a273017d8a82a8bfe058c1ccc95322e2e5076b2138c78112ab63eca5b"
+      },
+      {
+        "relativePath": "Newtonsoft.Json.dll",
+        "sha256": "a28c251dfe36d881e9e2462e171441b8b0ec156fe3f452602c9149b1b9efe05b"
+      },
+      {
+        "relativePath": "PowerForge.Cli.xml",
+        "sha256": "8cda7f9a413ced5871104ae945866eadeb381e75453e8f47350c69c9244fc344"
+      },
+      {
+        "relativePath": "Microsoft.Win32.SystemEvents.dll",
+        "sha256": "e50176bbcd0c78f8b1a89033d89690808dc3378bd88d8a0c488851520e4634a0"
+      },
+      {
+        "relativePath": "Microsoft.PowerShell.MarkdownRender.dll",
+        "sha256": "e6b409570b35e7f469b3e3941cf5d9870b7924085196400de4d79c569de0ab59"
+      },
+      {
+        "relativePath": "Microsoft.Extensions.ObjectPool.dll",
+        "sha256": "6b5852443a00f78865969aa5dc1a2662262529411ff787bf9085060ac1e34d7f"
+      },
+      {
+        "relativePath": "Microsoft.CodeAnalysis.dll",
+        "sha256": "10f489db67b8ac7489e58d392166c928302ba5698506dd652311da5d89f0a0f8"
+      },
+      {
+        "relativePath": "Microsoft.CodeAnalysis.CSharp.dll",
+        "sha256": "36f5ac8da30a6107f53a2ca6509b61e284c08eb59aa1b22956d4e200e4514aa5"
+      },
+      {
+        "relativePath": "Microsoft.Bcl.AsyncInterfaces.dll",
+        "sha256": "e925fe423d376b8c795c17ef57ef61a749f3bd34f044e72b2243103feadac1ec"
+      },
+      {
+        "relativePath": "Microsoft.ApplicationInsights.dll",
+        "sha256": "bf9a4b88c7f94267e1cc7ed0700c575d3eb3266ff25bcb76e4f40f1b0fba022d"
+      },
+      {
+        "relativePath": "Markdig.Signed.dll",
+        "sha256": "338bc2d41e59330e0667c342a61364c96c08eaf9ab6d9b2f40f3a39f2b33ccad"
+      },
+      {
+        "relativePath": "JsonSchema.Net.dll",
+        "sha256": "feea47a2731b9840f05ce01e049ac05ad71917b0977c1d222e8e3a5b6d2f45f1"
+      },
+      {
+        "relativePath": "JsonPointer.Net.dll",
+        "sha256": "94f6e275163ccba97444bd1b080589456d0c45b73a318e9b93ab45ad98549b10"
+      },
+      {
+        "relativePath": "Json.More.dll",
+        "sha256": "d4ba3acb556d39d6583a68807e60cb73c0c79f351092d749ffa9a5447c03b7d2"
+      },
+      {
+        "relativePath": "Humanizer.dll",
+        "sha256": "d6853075547d7e303efd60354d911a2ff18edba582cda2fa59d91a2e5dcf9e98"
+      },
+      {
+        "relativePath": "Microsoft.Win32.Registry.AccessControl.dll",
+        "sha256": "e527b5571d5b4806df607fae56c203c1c474cb93a8434997817730581d6b49de"
+      },
+      {
+        "relativePath": "PowerForge.ConsoleUi.dll",
+        "sha256": "9ef6c7034598fe9c274066c224dd5f4b3919baf5b860ffed41cc2343b8b316ce"
+      },
+      {
+        "relativePath": "PowerForge.ConsoleUi.pdb",
+        "sha256": "1ea81b23dabc85ab481d694ecd4848904fbc039eb352d0e94388afb7dc652f10"
+      },
+      {
+        "relativePath": "PowerForge.dll",
+        "sha256": "16680d93903dc1d64962acc44d67654e7756014b89b64e593bcc9f995e5c0a81"
+      },
+      {
+        "relativePath": "System.Reflection.Context.dll",
+        "sha256": "f217f5c871ce2851790fe141260227ba73402e4af2a6b4a1295bd4b09272c024"
+      },
+      {
+        "relativePath": "System.Private.Windows.GdiPlus.dll",
+        "sha256": "521d8c7d7a99e61cdd3cceaa1119a68ad978413789c51814dbbaf1b1c6564f17"
+      },
+      {
+        "relativePath": "System.Private.Windows.Core.dll",
+        "sha256": "5b79816c75b85e239e928ee365d57cce191b017d5f79ac10f7389d2b32d2a772"
+      },
+      {
+        "relativePath": "System.Net.Http.WinHttpHandler.dll",
+        "sha256": "6928523528c976a300bd5e391da9b0827090450c40ba41105e1616ed1fe973d1"
+      },
+      {
+        "relativePath": "System.Management.dll",
+        "sha256": "527ff1125d7b4a3ebe76c7c28a0eb524678abcf00108fe0166c9e8c22ef4da9a"
+      },
+      {
+        "relativePath": "System.IO.Ports.dll",
+        "sha256": "498085f31eb276d02a0e86f5d6573ec1d9f926746613a5b561082d22d75abe9a"
+      },
+      {
+        "relativePath": "System.IO.Packaging.dll",
+        "sha256": "e7edd384f413f0508c47c24b9a18ae20b33e5488e1b094d2e11fb59c54067e9a"
+      },
+      {
+        "relativePath": "System.Drawing.Common.dll",
+        "sha256": "e92fb2b9cf46f24e2ce16397ec8753424d7dae0f747c0faf7b328ddb6aef6e1c"
+      },
+      {
+        "relativePath": "System.DirectoryServices.Protocols.dll",
+        "sha256": "abfa36747cf34463f8dff435d2f5d6d168904a76e2aeda2d84ae03e07a7e56aa"
+      },
+      {
+        "relativePath": "System.DirectoryServices.dll",
+        "sha256": "fee613da0ee1f395b8d4463988532341e8f768f8b86b4dea5cc40be9ebb08c96"
+      },
+      {
+        "relativePath": "System.DirectoryServices.AccountManagement.dll",
+        "sha256": "8e6cbe9e2497e996c7f565122881a707ccf87da32e719484450f9ef8025526f0"
+      },
+      {
+        "relativePath": "System.Diagnostics.PerformanceCounter.dll",
+        "sha256": "53bcd4cdd35aaa7bd2146e5ba9ff4f92207304487f5343531718c335e62aaa89"
+      },
+      {
+        "relativePath": "System.Diagnostics.EventLog.dll",
+        "sha256": "d3a509594129c7e7e6826bd14ee57894b4cac705a6ee6ebd0ce1b0a5c2eae641"
+      },
+      {
+        "relativePath": "System.Data.SqlClient.dll",
+        "sha256": "9d2eabbf4523e456aac1e31f7ebb27f83c9205ad94e970b64b0cfb27c8ff0683"
+      },
+      {
+        "relativePath": "System.Data.OleDb.dll",
+        "sha256": "4deb8ae405bd7c0c9dfb5048dd4424ff45fa5cddb7d0c2a04e79242dbea64ed3"
+      },
+      {
+        "relativePath": "System.Data.Odbc.dll",
+        "sha256": "313861049370783c87b928dad5664046c438e90e0abc68bdbf593374cd9eda57"
+      },
+      {
+        "relativePath": "System.Configuration.ConfigurationManager.dll",
+        "sha256": "b4db66769e8c81afa1ad8fce586fbe2f08bf3c3fd6a481f412f3b87d744b4c04"
+      },
+      {
+        "relativePath": "System.ComponentModel.Composition.Registration.dll",
+        "sha256": "13bb158fbfd409776f692d7ec539575ffb8f37c576c63429558fb78eade30077"
+      },
+      {
+        "relativePath": "System.ComponentModel.Composition.dll",
+        "sha256": "c5ce4d866d86730f4e39a9b78090078f2c125340c9323df7b62e35678c18a97c"
+      },
+      {
+        "relativePath": "System.CodeDom.dll",
+        "sha256": "34c344795ccad6407669c1bfd7e4bb44ed7d6d28ee358676214e39e6fbb09bae"
+      },
+      {
+        "relativePath": "PowerForge.xml",
+        "sha256": "e3745ed43eb6f62951eed0beba0a0493abe0b346a1928dd502740c5e11730496"
+      },
+      {
+        "relativePath": "PowerForge.PowerShell.xml",
+        "sha256": "03787a56f1e088d42aa2c558f0bd3bd9193a935d3c96920bcbf16f0142b2017f"
+      },
+      {
+        "relativePath": "PowerForge.PowerShell.pdb",
+        "sha256": "3624a4ed05774dd488111f7d68b6b4c1a3b2c533609f86514bc1bc0f01aecfb8"
+      },
+      {
+        "relativePath": "PowerForge.PowerShell.dll",
+        "sha256": "b8b95a46d13341cf99c3f7f3a2d0f12ae25247d2f42f057f0668494c0b4b0388"
+      },
+      {
+        "relativePath": "PowerForge.pdb",
+        "sha256": "119e78302ffbe843d0fd74bcc6d797b97fcbcbab387ce53bfd96039153d31f07"
+      },
+      {
+        "relativePath": "ja/System.ServiceModel.Http.resources.dll",
+        "sha256": "9a718d452010776c7b8b520c6da22dbcf1d2e47076c0d62092e6dcd10458263c"
+      },
+      {
+        "relativePath": "zh-Hant/System.ServiceModel.Primitives.resources.dll",
+        "sha256": "bfa95e38f68afc9f271bc4a58824355e4c5e0a7549001b2a3f6737759b521721"
+      },
+      {
+        "relativePath": "ja/System.ServiceModel.NetFramingBase.resources.dll",
+        "sha256": "db937544cc678ecb0700c3430b7018742d1b17344fa0d44397fd6d7863ac49bb"
+      },
+      {
+        "relativePath": "ja/System.ServiceModel.Primitives.resources.dll",
+        "sha256": "a84a09eed94d49328aa82491c4d1e5573ef356eaa214cc58ee76d3bf658342b5"
+      },
+      {
+        "relativePath": "ref/System.IO.Pipes.AccessControl.dll",
+        "sha256": "80fda558926f7d7a085a6a210596000d281e4af2fb235e4c8dc9cbef8f1a87d0"
+      },
+      {
+        "relativePath": "ref/System.IO.Pipelines.dll",
+        "sha256": "08344a31693477a61b45dff21739bf576c7482b394fab2fa26d2d8ba87b2cb91"
+      },
+      {
+        "relativePath": "ref/System.IO.MemoryMappedFiles.dll",
+        "sha256": "028850f2cebbcc3ccb48fcef97751522ea6455c05ff9234686a16cc088fac5a4"
+      },
+      {
+        "relativePath": "ref/System.IO.IsolatedStorage.dll",
+        "sha256": "6720027218d12697d30640fb97acdb02438649cccb038ffdb3ad80dc27f6f736"
+      },
+      {
+        "relativePath": "ref/System.IO.FileSystem.Watcher.dll",
+        "sha256": "07fc2b07b7d53173c695e60e93f2da4325b68c797c4351fff571923f01f8054c"
+      },
+      {
+        "relativePath": "ref/System.IO.FileSystem.Primitives.dll",
+        "sha256": "d3b21b8b38e48c6b4d1cb5cfe9adfe4abad7b3353601febd3c7e4027f9ef9c6b"
+      },
+      {
+        "relativePath": "ref/System.IO.FileSystem.DriveInfo.dll",
+        "sha256": "5ce6349a752189b3bcaa553fef38f9c0cdd1fb2e39e7caba67c966f52ef66391"
+      },
+      {
+        "relativePath": "ref/System.IO.FileSystem.dll",
+        "sha256": "c251f33b29382c47b773d907463edd9fe978a06e39efd5670ef3b3b1d4f8c2b7"
+      },
+      {
+        "relativePath": "ref/System.IO.FileSystem.AccessControl.dll",
+        "sha256": "38eb787fd20b30f36e207364387fd34a5c68207baffddf318986216f4b6cc6b1"
+      },
+      {
+        "relativePath": "ref/System.IO.dll",
+        "sha256": "388400ccb189b819d6ec5f1ef70710a39641d93ed5b870fc9324866b75dfb78b"
+      },
+      {
+        "relativePath": "ref/System.IO.Compression.ZipFile.dll",
+        "sha256": "c34ef5004f535f10adceb66b3f20f743b15656ed4c7dcf5946a8b83a6cdee329"
+      },
+      {
+        "relativePath": "ref/System.IO.Pipes.dll",
+        "sha256": "0b7aaa8fea2a9483857b2ac918814ad1d8ff3303c98d6ef71d4593b16adee9ba"
+      },
+      {
+        "relativePath": "ref/System.IO.Compression.FileSystem.dll",
+        "sha256": "4aeec2c0189f73ba8122f05c0d759008ddae1a8873b167cc8a558d53f2af80e1"
+      },
+      {
+        "relativePath": "ref/System.IO.Compression.Brotli.dll",
+        "sha256": "1401375a39b7ba5e65e0b49274c0168b6c8b7e5455afefd269c1418fd019e997"
+      },
+      {
+        "relativePath": "ref/System.Globalization.Extensions.dll",
+        "sha256": "be0390557cc72078a7217cf94fd44b9ab66aa30838c00a92aa78c62469c44aa0"
+      },
+      {
+        "relativePath": "ref/System.Globalization.dll",
+        "sha256": "66902cffd057673b4b77aa68faf80d33ffa4c94510e61db2a067943cc53b7702"
+      },
+      {
+        "relativePath": "ref/System.Globalization.Calendars.dll",
+        "sha256": "e0f3f3f6e4acc7b6755782fed5cb075ecf70beee4fc5d404579ae99bc0883ef2"
+      },
+      {
+        "relativePath": "ref/System.Formats.Tar.dll",
+        "sha256": "c6d0aa4d2e3ed3ab6c1949669d79bfc763fc9e7b04830ab7174d4cc55569757c"
+      },
+      {
+        "relativePath": "ref/System.Formats.Asn1.dll",
+        "sha256": "c6f8cb70a20321ac4c93219ccb5264f50d21d7f7cdd0bd61c02360ff87cd38f4"
+      },
+      {
+        "relativePath": "ref/System.Dynamic.Runtime.dll",
+        "sha256": "c0eac30c791db8c1a2b50b61c50d029f4ddd0eadfdd35433745001688a3e7466"
+      },
+      {
+        "relativePath": "ref/System.Drawing.Primitives.dll",
+        "sha256": "8ffda23fafb73bdac7b6c8dfcac1c06894c729f65157e218980db9a4b74c7427"
+      },
+      {
+        "relativePath": "ref/System.Drawing.dll",
+        "sha256": "585a8da9952d715f8de7a7b1879b59d68ff8608b92f6ed1c5f0e1d251180d3c6"
+      },
+      {
+        "relativePath": "ref/System.dll",
+        "sha256": "ff11e2ab9009ef141e315187254f8327dd1e2591e44b8bf158730869028f1f0e"
+      },
+      {
+        "relativePath": "ref/System.Diagnostics.Tracing.dll",
+        "sha256": "e0f72905eb1b1cfd6db130e6b2f18424788769d79fae486054a242615d713a50"
+      },
+      {
+        "relativePath": "ref/System.IO.Compression.dll",
+        "sha256": "ac573888ba94e958243674d82e51e88692e5bea6fd94bb68d87d30c28cdaecf5"
+      },
+      {
+        "relativePath": "ref/System.Diagnostics.TraceSource.dll",
+        "sha256": "ecfe5b354ea6b7bf3736d8c4b02ae322c766f2bccf260182632a492f3309d883"
+      },
+      {
+        "relativePath": "ref/System.IO.UnmanagedMemoryStream.dll",
+        "sha256": "ad6a5f859589e1951103a00f45566da079cf87bd8b03f0c6ad985a6f39f19c5a"
+      },
+      {
+        "relativePath": "ref/System.Linq.dll",
+        "sha256": "9cb73d57c035503bdc70fdc422dee5bf4f9de97b812cd0dcb379d652c6f91205"
+      },
+      {
+        "relativePath": "ref/System.Net.WebSockets.dll",
+        "sha256": "c16043d3ffa90a8fdaf193f0df91f99d6c23518d8432b4caa2d70a92d4c3cfa7"
+      },
+      {
+        "relativePath": "ref/System.Net.WebSockets.Client.dll",
+        "sha256": "5ac14d45c1b92e9c831b37591941ea01f3097a39d130bc292506dd099aeb7260"
+      },
+      {
+        "relativePath": "ref/System.Net.WebProxy.dll",
+        "sha256": "42c8eb8bf1563806069e1dd1c6c651159daa5589b7f69ff817cdeab3bd02915f"
+      },
+      {
+        "relativePath": "ref/System.Net.WebHeaderCollection.dll",
+        "sha256": "c4ee735a52b966f3805cfbd5c172f151ffe013bd70c080f15c2f68be628cd357"
+      },
+      {
+        "relativePath": "ref/System.Net.WebClient.dll",
+        "sha256": "e4e6cc79e23892c8e67a4cb594bb304a26a0328507c45dc2d1998bc6836311a0"
+      },
+      {
+        "relativePath": "ref/System.Net.Sockets.dll",
+        "sha256": "8b7cebafd550083a8d242dbcfb7501384d17142ad6c2bbb047dd37a524762179"
+      },
+      {
+        "relativePath": "ref/System.Net.ServicePoint.dll",
+        "sha256": "84fa83cd96e62fda02991b8a8e99fa1c7b3ac08807b04f7486a896cfe6b4a760"
+      },
+      {
+        "relativePath": "ref/System.Net.ServerSentEvents.dll",
+        "sha256": "87ba81cd8fd6ab3a9a3f4dce922849aea832928f52495788d371dda66e57da01"
+      },
+      {
+        "relativePath": "ref/System.Net.Security.dll",
+        "sha256": "c4af7099d2077e34c7074e94efeb57ac5707af128ee6e5e0e75d398b8e5843ba"
+      },
+      {
+        "relativePath": "ref/System.Net.Requests.dll",
+        "sha256": "d45910c06d2c2fcd6039e8b4076b5878fd195d0fc09d27c4ceb4009ad9491672"
+      },
+      {
+        "relativePath": "ref/System.Net.Quic.dll",
+        "sha256": "f9651dcde17f5823c7d42be080059fd9f88aed81d91c64e58f95afca44a2e24a"
+      },
+      {
+        "relativePath": "ref/System.Linq.AsyncEnumerable.dll",
+        "sha256": "3367b7d6d2be9d171e158b544979131e8b97328b293d6e77917234a2a7279507"
+      },
+      {
+        "relativePath": "ref/System.Net.Primitives.dll",
+        "sha256": "129e7b324fbc12f8c54b89e6d6706b08455532fb64a8913038add92be2924244"
+      },
+      {
+        "relativePath": "ref/System.Net.NetworkInformation.dll",
+        "sha256": "b90b729446f4ed3fa470b5c96e9c5adecbf4e438eaa91d0548832c58673a4c18"
+      },
+      {
+        "relativePath": "ref/System.Net.NameResolution.dll",
+        "sha256": "97e0cc175bf13e4861e1508820f08561b38f28e98ebc9c5addb28c58fa7c344d"
+      },
+      {
+        "relativePath": "ref/System.Net.Mail.dll",
+        "sha256": "8193e3652b1ecb1aa46258087bb5f44becd72693552da120e1274ef1ad443e53"
+      },
+      {
+        "relativePath": "ref/System.Net.HttpListener.dll",
+        "sha256": "03ca98abeb9ea2c7e372c31aa460d2a9e526617c22fa97c9d8750977167a9634"
+      },
+      {
+        "relativePath": "ref/System.Net.Http.Json.dll",
+        "sha256": "bf97fcfa0d20adb597878f902b761480fb02fa0f9f81521f16f2455ddc6a1ed2"
+      },
+      {
+        "relativePath": "ref/System.Net.Http.dll",
+        "sha256": "3ff081221d0adeb99b5cf40788e20dab1d0d706618044b34e68a47529c761601"
+      },
+      {
+        "relativePath": "ref/System.Net.dll",
+        "sha256": "481b38c912f8779b3510cd00f079e45096ea22b6defdaab66780d5ac3ae6986a"
+      },
+      {
+        "relativePath": "ref/System.Memory.dll",
+        "sha256": "d7e674a1feff0546c9932b0fcffa9d055976736342a4b1904f1f27894f3c0ed6"
+      },
+      {
+        "relativePath": "ref/System.Linq.Queryable.dll",
+        "sha256": "5baf83b98f103d9304eac427c4296c9dd501d320b7b5495ed8ede892aaf1076d"
+      },
+      {
+        "relativePath": "ref/System.Linq.Parallel.dll",
+        "sha256": "b4b597374ffebccf8a46793f03d5e6d5e477dfc5047157217d79449f9729e761"
+      },
+      {
+        "relativePath": "ref/System.Linq.Expressions.dll",
+        "sha256": "772112c3f1c10fb713ccc3ad62cc313c2cad1cbaf122ef6d25120aa7b65b0447"
+      },
+      {
+        "relativePath": "ref/System.Net.Ping.dll",
+        "sha256": "f623594e3309d40d36a7dd63dcb5251f72eb94eb2e74246805b4a0d23fc8c6b0"
+      },
+      {
+        "relativePath": "ref/System.Diagnostics.Tools.dll",
+        "sha256": "841c5e2b6c171fa9aaff0fc6295f3fbc93dc5dcab44118b62f1c942bb674aff2"
+      },
+      {
+        "relativePath": "ref/System.Diagnostics.TextWriterTraceListener.dll",
+        "sha256": "2c567ad9a2efe67d171e0ab06d0c7035383508588cae62b3c3d08f579a064595"
+      },
+      {
+        "relativePath": "ref/System.Diagnostics.StackTrace.dll",
+        "sha256": "e287630abe5753b658e64e947616c8bc8291bcd27bfcadc745a33818a43ad30d"
+      },
+      {
+        "relativePath": "ref/Microsoft.VisualBasic.Core.dll",
+        "sha256": "7a7e44d7ac1f870e0b7d8f3f7598cca79e35cab12e77c58ed46e9b6b3c78bcfb"
+      },
+      {
+        "relativePath": "ref/Microsoft.CSharp.dll",
+        "sha256": "ae0ecd8f42ea3efacc2612ade56f29feea9a123fce9faa455126ec9f4a4540cf"
+      },
+      {
+        "relativePath": "pt-BR/System.Web.Services.Description.resources.dll",
+        "sha256": "dd4a6d97ef8d385098ac98ef90796311ab2d6b9c144912aa060c1886e5e53af0"
+      },
+      {
+        "relativePath": "pt-BR/System.ServiceModel.Primitives.resources.dll",
+        "sha256": "62c156a9ac44de4346d1156797eb74c70479f9b3ce2728b6c562e4e3a83cc7fe"
+      },
+      {
+        "relativePath": "pt-BR/System.ServiceModel.NetTcp.resources.dll",
+        "sha256": "43fd708ccab604c7b04952d1139ce63b648a8864a21399a37cbfbf15456f0f64"
+      },
+      {
+        "relativePath": "pt-BR/System.ServiceModel.NetFramingBase.resources.dll",
+        "sha256": "6a4557a8e825701e7a2d2f798703bd6622da1a21af4112c241fb33d524e67255"
+      },
+      {
+        "relativePath": "pt-BR/System.ServiceModel.Http.resources.dll",
+        "sha256": "4d3d953ed5f0384f28dfbf387479c36e42ed0fdede8d7fcfa32b6a767075e420"
+      },
+      {
+        "relativePath": "pt-BR/Microsoft.CodeAnalysis.resources.dll",
+        "sha256": "8ffdb0eff7c2de635a38f0093da5e95f52ca905ec2080cab4efac42585dd0143"
+      },
+      {
+        "relativePath": "pt-BR/Microsoft.CodeAnalysis.CSharp.resources.dll",
+        "sha256": "0188246fa239eadad25885093f21c20df4a775f794fc34468430729974a8c1ec"
+      },
+      {
+        "relativePath": "pl/System.Web.Services.Description.resources.dll",
+        "sha256": "8721e90ccd477fa5653d6084651558f35653a36279021b41b07ac7456e931602"
+      },
+      {
+        "relativePath": "pl/System.ServiceModel.Primitives.resources.dll",
+        "sha256": "2e4083abcac7df89d63206c029f71777a7bc56095991e472294e64778572f145"
+      },
+      {
+        "relativePath": "ref/Microsoft.VisualBasic.dll",
+        "sha256": "e192508adde6a758138a5a8e28998dccb64e7f45eaf30d8ab3564f87749028b1"
+      },
+      {
+        "relativePath": "pl/System.ServiceModel.NetTcp.resources.dll",
+        "sha256": "36bda6c9f9f9a86244648e602ae4d83f629cd481ddb0b89f25e6ef645cc9639d"
+      },
+      {
+        "relativePath": "pl/System.ServiceModel.Http.resources.dll",
+        "sha256": "a9e65897bd766abd9c5ec6c8ed24acb9fabd55ddae416963a34f9af23f194bd0"
+      },
+      {
+        "relativePath": "pl/Microsoft.CodeAnalysis.resources.dll",
+        "sha256": "f8779e45b1f699fe722898b1865377bedaf5a433c1aab6298af5b3edf067e88f"
+      },
+      {
+        "relativePath": "pl/Microsoft.CodeAnalysis.CSharp.resources.dll",
+        "sha256": "39b5e1471817790a31ec4038639188f7b89fd6713ea19c88472bdcf4fa56f795"
+      },
+      {
+        "relativePath": "ko/System.Web.Services.Description.resources.dll",
+        "sha256": "ca30366ae9eb509ad5d620a58d2ecb16cb9a33108ad1c7cd213d7597f2303c13"
+      },
+      {
+        "relativePath": "ko/System.ServiceModel.Primitives.resources.dll",
+        "sha256": "23044d77ccaff048b4187bf3558066dea66066ddc9aa10f65e2d68793b88f2f9"
+      },
+      {
+        "relativePath": "ko/System.ServiceModel.NetTcp.resources.dll",
+        "sha256": "5b13f94c8741a8274c40215de25d2f9e9488aa67fd9ed88aea4cb131272f23ca"
+      },
+      {
+        "relativePath": "ko/System.ServiceModel.NetFramingBase.resources.dll",
+        "sha256": "fc9bdbba365884a15b9833114378ad7e828457d81b68d0cae7f22273d6a51295"
+      },
+      {
+        "relativePath": "ko/System.ServiceModel.Http.resources.dll",
+        "sha256": "7d7ef0f3c651aef766048169ac12d0562f4414e09d51b0aa6844546a88700479"
+      },
+      {
+        "relativePath": "ko/Microsoft.CodeAnalysis.resources.dll",
+        "sha256": "1033d3d5d10557f7070430be5643dc89620d84cbeac2112cfb8c4a1d1580845f"
+      },
+      {
+        "relativePath": "ko/Microsoft.CodeAnalysis.CSharp.resources.dll",
+        "sha256": "6a2e477c2a8604157f2c9f8e3756a98ab07995c0e6fcfe22f2e7bf6679f30389"
+      },
+      {
+        "relativePath": "ja/System.Web.Services.Description.resources.dll",
+        "sha256": "215f9ff9fc86e91cb7d03f47094dfd520adf9de4016366078643446098073076"
+      },
+      {
+        "relativePath": "pl/System.ServiceModel.NetFramingBase.resources.dll",
+        "sha256": "681b3f643059549c614b94234ec8527a3750a4b6c4a9008516315d5952f8d100"
+      },
+      {
+        "relativePath": "ref/Microsoft.Win32.Primitives.dll",
+        "sha256": "ab197dec717c52f5a72c8f2366c33e2fc5149bfa7cf49acd59bbfb563defcd05"
+      },
+      {
+        "relativePath": "ref/Microsoft.Win32.Registry.dll",
+        "sha256": "e8eb7f780b9ceca6dae35e74a11fa85e26a1b8b4a7edd5237cccc6b63b4e4b7a"
+      },
+      {
+        "relativePath": "ref/mscorlib.dll",
+        "sha256": "894d95d82126559637417b4f14c48ed20bb1168b13a0e65bd1337cdc2a981d1b"
+      },
+      {
+        "relativePath": "ref/System.Diagnostics.Process.dll",
+        "sha256": "cd121308cb25b34ebc2549d72da361e56a093b29ef5ab0a85870d13fb91de052"
+      },
+      {
+        "relativePath": "ref/System.Diagnostics.FileVersionInfo.dll",
+        "sha256": "ae73589f3288fc3648a718797361f0ab37606cc18667c8aaebea2787f62736a3"
+      },
+      {
+        "relativePath": "ref/System.Diagnostics.DiagnosticSource.dll",
+        "sha256": "6caa24c3fe3819a6f78aedb0e8f718a6bd83eab4d9a786c609a228e330557bb0"
+      },
+      {
+        "relativePath": "ref/System.Diagnostics.Debug.dll",
+        "sha256": "8b160ffe7518588bf64e13c01c6dcb2ef504d64f38bbf0f198d31e7b698db92c"
+      },
+      {
+        "relativePath": "ref/System.Diagnostics.Contracts.dll",
+        "sha256": "4366ccd79a875fb64e38813a81bdf2f61915b4c838cb74572d87919c2e7dee41"
+      },
+      {
+        "relativePath": "ref/System.Data.dll",
+        "sha256": "8bee1d4675fee975b5454e7407827aa3c6d4a2e53b9efb40be5409ac50900edb"
+      },
+      {
+        "relativePath": "ref/System.Data.DataSetExtensions.dll",
+        "sha256": "aeeae0755c8c7f6747765cdf82fa43182e320e97f2035e3a0a19f21905e6c113"
+      },
+      {
+        "relativePath": "ref/System.Data.Common.dll",
+        "sha256": "e563226dce5e8d2f1ecf24b13a37d8948e42208d7b93bc9812475074382f2303"
+      },
+      {
+        "relativePath": "ref/System.Core.dll",
+        "sha256": "ac23faf1b37fa49f1b117baad951a65609e799a6e669a6df06d3552677e0c086"
+      },
+      {
+        "relativePath": "ref/System.Console.dll",
+        "sha256": "783e5ea6d049218ec30316598654e031415f0d1ec6ce6932c2d1a9cbd97a77e0"
+      },
+      {
+        "relativePath": "ref/System.Configuration.dll",
+        "sha256": "3952a72e1f18774f16952b46c20e80ed2bc601a06eca01f33fa924c738022a9c"
+      },
+      {
+        "relativePath": "ref/System.ComponentModel.TypeConverter.dll",
+        "sha256": "98a3e34140052c828ab7bdb81040421616fa4e6356c27f7970df141ef5681b42"
+      },
+      {
+        "relativePath": "ref/System.ComponentModel.Primitives.dll",
+        "sha256": "09a575c38bd010f3131704e9294941ff9740a0ba70be0fd6ab8fa54c44dbfca7"
+      },
+      {
+        "relativePath": "ref/System.ComponentModel.EventBasedAsync.dll",
+        "sha256": "b96d6d2f159ee5e192b2406a0ec993c8ad470a847f2e7acd2aa92cbc0a4c6a58"
+      },
+      {
+        "relativePath": "ref/System.ComponentModel.dll",
+        "sha256": "8811e7cc4288c435f54b0350afbffcbb13f77618cf9c0d3436cad89a83d29b23"
+      },
+      {
+        "relativePath": "ref/System.ComponentModel.DataAnnotations.dll",
+        "sha256": "d40e8c7062e6b9ce11ba83eab3d26be0eec8066b99970ea88b8e87fb75f411bd"
+      },
+      {
+        "relativePath": "ref/System.ComponentModel.Annotations.dll",
+        "sha256": "43c467051feafaa27144cc672836f38108377439245833fc8d99de97d3667c37"
+      },
+      {
+        "relativePath": "ref/System.Collections.Specialized.dll",
+        "sha256": "17ef2b9433a1f1e9fc956786067f8d60672437d3feb76af84175f2b3bee4ded1"
+      },
+      {
+        "relativePath": "ref/System.Collections.NonGeneric.dll",
+        "sha256": "99adf08652a16e5af30797b98742851b94604aa44bab677ddc38c7826bd529a5"
+      },
+      {
+        "relativePath": "ref/System.Collections.Immutable.dll",
+        "sha256": "d4145735395753187965a6f0a8bf6bb6f301563c4d4080249614b8487b0604ac"
+      },
+      {
+        "relativePath": "ref/System.Collections.dll",
+        "sha256": "130fcdd915c3ff8d8279fefd9a198b784d37693f4c1e96d1f2cff3edc96b638d"
+      },
+      {
+        "relativePath": "ref/System.Collections.Concurrent.dll",
+        "sha256": "27b446a401163baa325f9cd82f787dfd32d0e205011093e0ab3057e5da609555"
+      },
+      {
+        "relativePath": "ref/System.Buffers.dll",
+        "sha256": "a1a35f5524e2f831d08ca55f702fbddcb8c6dfecd264f0f563d81a1c8b8280bd"
+      },
+      {
+        "relativePath": "ref/System.AppContext.dll",
+        "sha256": "d9dd9fa44e019f27172d6b2662e2b6038f48c270912ac8aae53d4d909da7e9be"
+      },
+      {
+        "relativePath": "ref/netstandard.dll",
+        "sha256": "3dc81dbc9dacd28261632c94410859eda24c2db50cd6c14309cbb2a434b50c57"
+      },
+      {
+        "relativePath": "ja/System.ServiceModel.NetTcp.resources.dll",
+        "sha256": "3ef0582eea426476db7fd34be9507403fa04051ab02e533ea37db81d5c006222"
+      },
+      {
+        "relativePath": "zh-Hant/System.Web.Services.Description.resources.dll",
+        "sha256": "58d7f25834bebd938815ca3d573045dc6ec9d988c72ec883dab02b6ec6700a62"
+      }
+    ],
+    "snapshotSha256": "72bac888a3a1e11335669086707857a7ebc037b942f44c70765d1a9810df53ab"
+  },
+  "modules": [
+    {
+      "id": "PSFramework",
+      "version": "1.14.457",
+      "packageSha256": "0c8f6b5c2f72b5512f684bbd3c35cd6ded5a709588d57d9b68cd046d427da1c9",
+      "dependencyLockSha256": "4a739eec4faa135a41b8b384e2ea30cefccbdb67703de8c67c8999ce6c60a1f6",
+      "artifactSha256": "806e8f3ca909223f2a62bf53c9361a102a4c9c3992b06be79dcbf9d36950add5",
+      "artifactFiles": [
+        {
+          "relativePath": "PSFramework/PSFramework.psm1",
+          "sha256": "8a7e6026c841e26bbd8d54f405616042addc24064a1cb3697fa347e03e46b0b4",
+          "role": "PrimaryModule"
+        },
+        {
+          "relativePath": "PSFramework/PSFramework.dll",
+          "sha256": "c17853824942090b3669535b4c042e2f9384731a92789b053c7437c460e5b77f",
+          "role": "TypedAssembly"
+        },
+        {
+          "relativePath": "PSFramework/PSFramework.pdb",
+          "sha256": "678c8cb00228c2309e46fc3a8a45a34ea554574b42190d992ebfcac46dae5028",
+          "role": "DebugSymbols"
+        },
+        {
+          "relativePath": "PSFramework/PSFramework.psd1",
+          "sha256": "806e8f3ca909223f2a62bf53c9361a102a4c9c3992b06be79dcbf9d36950add5",
+          "role": "PrimaryModuleManifest"
+        },
+        {
+          "relativePath": "PSFramework/xml/PSFramework.Format.ps1xml",
+          "sha256": "ee5919bb85f31b7264712a9abe37b7156a692a2fe15fb7d6c5492dad786404b9",
+          "role": "ModuleDependency"
+        },
+        {
+          "relativePath": "PSFramework/.powerforge-corpus-package.json",
+          "sha256": "93afccad8525285c3ca47948515d63f4f513bac812cab46009c3a0a783ba355a",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/bin/assembly.ps1",
+          "sha256": "ffaf4c1f99181578e0e7d3fa7bc30fed417e1d60d7fa9a43e37b25a91a1266ed",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/bin/PS4/PSFramework.dll",
+          "sha256": "d4e89f750ddd686c10e2005fc730b25a9c22bb79e3a3a32bbea356b8fb87502f",
+          "role": "ManagedDependency"
+        },
+        {
+          "relativePath": "PSFramework/bin/PS4/PSFramework.xml",
+          "sha256": "43f3388d399aec237295c5ca52971f006db6fac4626f77b7180be81987b22bd9",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/bin/PSFramework.dll",
+          "sha256": "836039e005e06ffebcaa9242760aa4b02d9e2f0510867fc44d78b9c286624f40",
+          "role": "ManagedDependency"
+        },
+        {
+          "relativePath": "PSFramework/bin/PSFramework.pdb",
+          "sha256": "46838ccd556300f02ab7491f6749d19afa17f7ee676828a516955c96cdf46172",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/bin/PSFramework.xml",
+          "sha256": "0d9f935bba07b1e7eaa2e680d794ad3e90217517db012575f6f0edb3614752dd",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/bin/readme.md",
+          "sha256": "aa54f0b14caf74e775fcf6af3e0f7a0f768dbcbbb173683f6e8e4efd67d9b295",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/bin/type-aliases.ps1",
+          "sha256": "8f9ebf88e48a8e915e7f4cc6841ee560f20085cd0961d87d4ccfe2bcec8a56ee",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/bin/type-extensions.ps1",
+          "sha256": "1d023db625eca1beb2ee06acdbaaedcf24dda3155ed0213be5cf310d12b027ab",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/changelog.md",
+          "sha256": "27d8af4f32efe5ef2aaeb34d6de04ea490eaa6fe9210d8951cad60ee295e41ee",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/en-us/about_psframework.help.txt",
+          "sha256": "aa7fd9528638f9b5fb411dc920426159cd4efa29b5cf058035b485d88ddb129a",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/en-us/about_psf_flowcontrol.help.txt",
+          "sha256": "8d8096c7c81cc1bff1ab2f80336bd08a290ceb7e3812b1f4b8e7883d866c4def",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/en-us/about_psf_license.help.txt",
+          "sha256": "623aa4fe85cc4d01f53524d94ff9022049c3ddfdcd732527c85fd6afd7389912",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/en-us/about_psf_message.help.txt",
+          "sha256": "0d588b6f3df35659fefd190b5445fa6cf40b7e0c576a57e77eb2f82b0b5bfc84",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/en-us/about_psf_resultcache.help.txt",
+          "sha256": "84e55dc35ca860c1f26d87bd62dcb5cc3550b1eea480a925d45bd7449191fb56",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/en-us/about_psf_tabexpansion.help.txt",
+          "sha256": "f635bc91a4a19b4cc9ba59ced929a1952479aec8a082bf66d8220b3b86ecfb0e",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/en-us/about_psf_taskengine.help.txt",
+          "sha256": "1f52003025f42c6c16c51e708f705aa86628bd2e08c9ef14c0723aee36b36f3b",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/en-us/PSFramework.dll-Help.xml",
+          "sha256": "0ce375476df6b644ddb047ac3a81851cf50c3835ff1a8007dcd0879a9bc35de2",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/en-us/strings.psd1",
+          "sha256": "b038989dd49f37b32f605918b64604099795d6fc5e8b689209606f6e62892eeb",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/Caching/New-PSFCache.ps1",
+          "sha256": "781c176d857fe2ab469d16c68807a9e65e092122ae420ae49a4792b8727f3fa2",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/ComputerManagement/Invoke-PSFCommand.ps1",
+          "sha256": "02f84065ba7afb8906db3e598cb7a98c4a4147e51870e069cbe8bbaf107c18d8",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/ComputerManagement/New-PSFSessionContainer.ps1",
+          "sha256": "2f6ae7f6035165bcde56daa47f25a4dd0c98fd2d23e9baa9378aa89adfaad43e",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/ComputerManagement/Register-PSFSessionObjectType.ps1",
+          "sha256": "73a23cd70b14868f8154e6f09fb5c1c28b9a5f8f8492797b6c3fa88645c52727",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/configuration/Export-PSFConfig.ps1",
+          "sha256": "86d73a70826d2b4a4c13167c95d232c6d187cf42795a98eda1834ba05d549949",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/configuration/Get-PSFConfig.ps1",
+          "sha256": "a5a29830d6c05a1103e5b71f7d2e5e3d92f1af180b84720cb151d588bf7c69af",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/configuration/Get-PSFConfigValue.ps1",
+          "sha256": "e352dcb6e9e39cb575fc7946998ecd44d90b8c35227e96698aa1a4cf31e89c6f",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/configuration/Import-PSFConfig.ps1",
+          "sha256": "b87584a4fe634f9b09b1de860a5c7635190fa2b45afb9e1f3527b16946c547b8",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/configuration/Register-PSFConfig.ps1",
+          "sha256": "99bb3a3c6eab839f650a445afb363b9cd15571925caffff2f4961e4237490f40",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/configuration/Register-PSFConfigSchema.ps1",
+          "sha256": "4ec7917ba07450f95068093c754c2558e3b4affb0037efacef36ae0516a96caa",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/configuration/Register-PSFConfigValidation.ps1",
+          "sha256": "4a7523fa8b0a7df671feb92c895a4e7328b08986488384a313fa6c09d2bcaebb",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/configuration/Remove-PSFConfig.ps1",
+          "sha256": "732df6697d3ee7f51dcac3ae537309f95fe7c36ffa352b325d069f4926626c4c",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/configuration/Reset-PSFConfig.ps1",
+          "sha256": "833b0b8732d76110e1dfab260fecb24a0cd443808663816cab1e4631cf86a57c",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/configuration/Select-PSFConfig.ps1",
+          "sha256": "b7521ae68b03e221a44366d8ebe10cdf3bcbb8da1befebc7cdaa10527a67ae97",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/configuration/Unregister-PSFConfig.ps1",
+          "sha256": "96b09aa0427ece55964ed66cf718c960410d8ea378d4f557bcf080aa806db422",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/data/ConvertTo-PSFPsd1.ps1",
+          "sha256": "ad39fd4bf306ec323250c139ae5b7311c1f53b82fa406efa4b6cbe2e9ce0c87c",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/data/Export-PSFJson.ps1",
+          "sha256": "dc59b19af5d62f74fc6b916f3b92dae909209520fd69d5071952ff791133ec1b",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/data/Export-PSFPowerShellDataFile.ps1",
+          "sha256": "93ac62667906ab565796c2a452ece339c97c476f38e758a9c224075ccd64a528",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/data/Get-PSFFileContent.ps1",
+          "sha256": "360f0f6cbeb53d4f99301ed10e8a5b06507a3bd0d6e4ed59a51fcfdb5f527c8e",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/data/Import-PSFJson.ps1",
+          "sha256": "dbbeed3bdf4cda9b432347de04c4797035d6d29f7174e771984ef1370338fb5d",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/data/Import-PSFPowerShellDataFile.ps1",
+          "sha256": "4a619b1cd87a308983d634e5eb1579b696a555cb5a807778bedfef028474555c",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/data/Register-PSFPsd1Converter.ps1",
+          "sha256": "8f91ee973077ba875fd350d5358d12896b896b45997ec6b5da8efb563c3c8677",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/data/Set-PSFFileContent.ps1",
+          "sha256": "d99632fd4bf6d11a275efbc7bb6e22876b8e38ae44c274746a1b3286dd42703b",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/feature/Get-PSFFeature.ps1",
+          "sha256": "bbb5986ba98e870c1e9403b4b32d91ccea50fdcac61106df7c31238fc439c38b",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/feature/Register-PSFFeature.ps1",
+          "sha256": "8704587790c8058d234bdbc854e9dd79216f223d54fa81e4d02b188b80d05207",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/feature/Set-PSFFeature.ps1",
+          "sha256": "5880b9d935bef617cd1733b20abf573431df9899720587c12d45569a6e4d9138",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/feature/Test-PSFFeature.ps1",
+          "sha256": "abd873fe2e7b50f508edc3275cc076a1eb126704ce14c786bbedc7c660a763a9",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/filter/Add-PSFFilterCondition.ps1",
+          "sha256": "6991e64ae58fb559a0731ad736577507d8ee58ede7fb4f1ecd9c7611e45b23c4",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/filter/Get-PSFFilterCondition.ps1",
+          "sha256": "e8c5fdb246f5c6202a45001c10af7ca5c956c0d81aa1173da7d6fff9d5da0ed6",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/filter/Get-PSFFilterConditionSet.ps1",
+          "sha256": "39c0f9d2151298e86059c7568801698fe09fab872ad121fe42e758764d1b9fd7",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/filter/Invoke-PSFFilter.ps1",
+          "sha256": "ceed85b1eb5bd37be33f9538fd94dc74bfdb882201ecc1abc670ae5eb50983cd",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/filter/New-PSFFilter.ps1",
+          "sha256": "9fb4434ac572c8df22b59a0e1e43341971c2ce3e20f262d8fc1458412d90996a",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/filter/New-PSFFilterCondition.ps1",
+          "sha256": "d6fffc7a9c3be2bca31ba26cd937342ad7788cf71152e4f713ec5fa88329d7ac",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/filter/New-PSFFilterConditionSet.ps1",
+          "sha256": "4a008a5b4349315328d3c992043fb760d4eef337852d8c1eb5f6f0c787ace887",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/filter/Test-PSFFilter.ps1",
+          "sha256": "538c0223c3f9ab52e136afc8c2f912904e597c8193633bbf841695c7f97d10e1",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/flowcontrol/Get-PSFCallback.ps1",
+          "sha256": "3b1ab677189311ec23a6868014921b247e3af439b22ce3b52c6db55812580cda",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/flowcontrol/Get-PSFUserChoice.ps1",
+          "sha256": "0be965ee0ab47dc8950ea83704270dc3e4dc3972a26c01b3512970a08b6cea90",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/flowcontrol/Register-PSFCallback.ps1",
+          "sha256": "091aa324465d54c2c340a11411df795873440efede91885f92e36e4dc58fa378",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/flowcontrol/Stop-PSFFunction.ps1",
+          "sha256": "30afd8732764bd0b9e66d720063b72ef302aa04ee65427bb300f3c5a7fcaa791",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/flowcontrol/Test-PSFFunctionInterrupt.ps1",
+          "sha256": "7bf8adc816a3abb03c61478eded96fabedb026b95a02238d31fd6468b5f35b9e",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/flowcontrol/Test-PSFLanguageMode.ps1",
+          "sha256": "652425d7d1c69282c3074cd39b9866f095b0b3b25d599efbd769d5e103b93aff",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/flowcontrol/Test-PSFParameterBinding.ps1",
+          "sha256": "0221d214ed9749408d1cfe774543b648bd1df8d75a829e3b8c9865ee50fcb198",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/flowcontrol/Test-PSFPowerShell.ps1",
+          "sha256": "b9a1b16c10a98a3dd18c164449df5af12880c78220d98c0031b2165df69c851e",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/flowcontrol/Unregister-PSFCallback.ps1",
+          "sha256": "9e354734f13d01e52b0732e8f90a99e24e2121ac338d2ee6dae04386c8f381ac",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/import/Export-PSFModuleClass.ps1",
+          "sha256": "c3c7f48902b66e0df0cafcc861f995d88fd5069573a30d5833831c28ab8d9110",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/import/Import-PSFCmdlet.ps1",
+          "sha256": "e999b836a3fa11a8502fcd6122d3c0cab40bed6e3fe23a64f2c6a30a96d8d924",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/import/Register-PSFParameterClassMapping.ps1",
+          "sha256": "bd13d01ec4dd602a4bf80072f1be72a3f9033c84797197794c49b6d1b865ab63",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/import/Set-PSFTypeAlias.ps1",
+          "sha256": "7348aa43e790bc0c2031c1385e42a3c43ff89016ae00efd28355b44e3e43e50c",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/license/Get-PSFLicense.ps1",
+          "sha256": "3d00db21a21599f144ffe9988fbccc329208fc96c50350bcb472905e57aac746",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/license/New-PSFLicense.ps1",
+          "sha256": "09bbcd75cc3f2277d4795949ce8c8b0c5b9334704b9750495accf1d07576dadd",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/license/Remove-PSFLicense.ps1",
+          "sha256": "42cb15d70691262f50994b9709caad6372f530bdb72e521d9dff7d1cd2720ade",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/localization/Get-PSFLocalizedString.ps1",
+          "sha256": "f4d04d5e207f6d7ccf10f1f4d93a356b3926bcf0d363932fe0672809ae6fdc4b",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/localization/Import-PSFLocalizedString.ps1",
+          "sha256": "299d8a37f1bb6eefb5f10ae38047744a2359f8e8bf70f2a73b59fc3cd7722009",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/logging/Add-PSFLoggingProviderRunspace.ps1",
+          "sha256": "c27ccd3ca5b0ff9ce32e8a5ccbe564169fae67d35b356705c3817bdc650e53ae",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/logging/Disable-PSFLoggingProvider.ps1",
+          "sha256": "425325fdbaa32da172c80bf3d291b9c5afabbead4a315a2bc3381be40ad551b1",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/logging/Get-PSFLoggingError.ps1",
+          "sha256": "1045f792ab171cb4da092e742ec2c2c92cb9ac5b7e528c376eac85f9f0c9e42d",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/logging/Get-PSFLoggingProvider.ps1",
+          "sha256": "e6b01642f7ac54b6714d4b8f437a973092da1e31e4e0acd2ea9ec42900f2c933",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/logging/Get-PSFLoggingProviderInstance.ps1",
+          "sha256": "23fb0c0ce531c13498d1f7d2acc52e580fd1d68e8dbfaa2e57c22b4922d35914",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/logging/Import-PSFLoggingProvider.ps1",
+          "sha256": "9fb752807bb678d86a27fe4f21acf2ce61cb58e608a3a995093a05a4cbdedd65",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/logging/Install-PSFLoggingProvider.ps1",
+          "sha256": "f16072d589513c34fdfc8c724e757945298488228ebbb2f8164381ca778b04dc",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/logging/Register-PSFLoggingProvider.ps1",
+          "sha256": "4f292c3c2aaac164d9058becfd0a51177646bfeda2ce57bc3eb3c239811eb1e2",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/logging/Remove-PSFLoggingProviderRunspace.ps1",
+          "sha256": "f6d2da16c7c725152913d3d4046c52b84869b64fc2e81a52915a657480588570",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/logging/Set-PSFLoggingProvider.ps1",
+          "sha256": "0c6fe48bcd9106d1f3a8201d65c2145e2598c2b79e5f5eba10d043f35c0234c8",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/message/Clear-PSFMessage.ps1",
+          "sha256": "1e3a5b3e26688b24ec9a4b99fcc108498f9f07cbb8957731dc1d7ece5089688d",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/message/Get-PSFMessage.ps1",
+          "sha256": "942c9d60e9be7345edc55bdb80fba2720364b34578772000d95bc0cd93cca035",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/message/Get-PSFMessageColorTransform.ps1",
+          "sha256": "8e3fad61ae093116b364a5f5202546cab667b75cee8d303e50bebf11bc595069",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/message/Get-PSFMessageLevelModifier.ps1",
+          "sha256": "4c64d316c52963aa3fd78c63f0f0030ac7095a988bf732e6678787b19f6b357a",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/message/New-PSFMessageLevelModifier.ps1",
+          "sha256": "fdd892834c67132ddd09661cd4d777cba26d24d9fb79d4509bda0fef2dccfe32",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/message/Register-PSFMessageColorTransform.ps1",
+          "sha256": "e330e4bcb0d5b49f2c3a47426a8b20c8538055f45698f2bd29b3dac45dbd30bc",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/message/Register-PSFMessageEvent.ps1",
+          "sha256": "973ce28363d5246bf6f02d269fb5dcca1f951098a9724bdd7471c8bd180df654",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/message/Register-PSFMessageTransform.ps1",
+          "sha256": "dc3fd95ee012f01cf137c133be028f5e94e956f89b28c975173b7f2d6246dc12",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/message/Remove-PSFMessageLevelModifier.ps1",
+          "sha256": "163c2e5bda3947abc7d0f5b4480b2560c1f8f237e638dc88924c550bdfb0e951",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/message/Unregister-PSFMessageColorTransform.ps1",
+          "sha256": "5116d5ee4b16a401fb6c81d6c636c84708b97a426201434a10503d90b0652aab",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/message/Wait-PSFMessage.ps1",
+          "sha256": "187b88743d7ca7de0fa34fd3d4ed26caf5881910677d3d3f2edba07cecf7bdb6",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/message/Write-PSFHostColor.ps1",
+          "sha256": "7ddef98a394b26d10d9c7e126c943b071e07ecd5c57b39f43388524d279aba1e",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/message/Write-PSFMessageProxy.ps1",
+          "sha256": "6f30a2a73bca696e1e527bdc7bb09703a165d41e8a9d7eab3230b04c52db15e0",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/meta/Get-PSFPipeline.ps1",
+          "sha256": "76b7dc2379e1f46350dd2ccad7b2d09e8ae615987bfe926775002400ddf974a3",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/readme.md",
+          "sha256": "89f8d5d05e79676b01c3385e76da71336c3de4b637bc6191c2969068be9d1758",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/resultcache/Clear-PSFresultCache.ps1",
+          "sha256": "badec3cf894267829204e162a61064696ea592d41274ee31f05806aced4854ce",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/resultcache/Get-PSFResultCache.ps1",
+          "sha256": "dfc959c2e5023287bf091d5e58f2e61e95bb1f4f546bdef2bdff8c7a552e6635",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/resultcache/Set-PSFResultCache.ps1",
+          "sha256": "4e197bef80e6d24b08b351aff4e7b6349a4d3e6452f9df65fc066b44c795ec84",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/runspace/Add-PSFRunspaceWorker.ps1",
+          "sha256": "5833b0d5bdfe5d8a6ebe429c654bc447268729c3ecef06d735d0b42e0290076d",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/runspace/Get-PSFDynamicContentObject.ps1",
+          "sha256": "0610d01d80180e2fafedf45e7e7c0475260af376d11f025a66651d5f8ddb32cc",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/runspace/Get-PSFRunspace.ps1",
+          "sha256": "79926c65342a385e28fbb7db057692c7fb9ea6b89c5b8b26824c3365f3b5d448",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/runspace/Get-PSFRunspaceLock.ps1",
+          "sha256": "d1050c1806136a01c6913533ed3b735c49323c0ec4a3525d7cc0055e47b3a841",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/runspace/Get-PSFRunspaceWorker.ps1",
+          "sha256": "3ec45a9e86ab6fae80559c077bfd3f95b63fc67f8ff418c59184f6c534d0d619",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/runspace/Get-PSFRunspaceWorkflow.ps1",
+          "sha256": "52687ea681fc4e1ea40866bd6de5da10e751447736bf2bc95696ac5b3cd73164",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/runspace/Invoke-PSFRunspace.ps1",
+          "sha256": "74183c933cea4e2f058a81ea7aeea3f089445e54c3b812198c465643df2b5870",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/runspace/New-PSFRunspaceWorkflow.ps1",
+          "sha256": "ee4554122b55f766c6a2727dd69236acc25f42bbed64d600cb489211d9c8cc3a",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/runspace/Read-PSFRunspaceQueue.ps1",
+          "sha256": "01959bc37c9b77695d13047dae4eedb6bf55d147799f0833ce8eab97f86ccf8b",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/runspace/Register-PSFRunspace.ps1",
+          "sha256": "265e1b8e4d53ddb60322fe5e159a612c671f43bf5aee2219ddc38a06571b986e",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/runspace/Remove-PSFRunspaceWorkflow.ps1",
+          "sha256": "b7c2f2f2f6736a8d7456824bb525f77015ea1f700ea952d4289eec8619449c82",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/runspace/Reset-PSFRsAgentInactivity.ps1",
+          "sha256": "67097711e802b198acb5ee93249da9e5ec0561669fbc28103fd48fc145bc584e",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/runspace/Set-PSFDynamicContentObject.ps1",
+          "sha256": "f74b8ff734ae5aed8f72db1fdedc99f69afaf8c538d251f85aa2246d53359b1c",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/runspace/Start-PSFRunspace.ps1",
+          "sha256": "b3afb61d08d94a8ab29cd36a9c27df20675de2d46322096f698768ee668e91fe",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/runspace/Start-PSFRunspaceWorker.ps1",
+          "sha256": "19bf2d50267ad00707df2f9ceb49509213764c85af7c1aca5c531bf9c7e5c519",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/runspace/Start-PSFRunspaceWorkflow.ps1",
+          "sha256": "61a827457c1488fa3099697a16ae18b5239a4364d72310eb274e0d01dfb6e02f",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/runspace/Stop-PSFRunspace.ps1",
+          "sha256": "786c49d64b5588e0fc48370f97fa0eb95db4a441173c169f96d0edecc6ae77be",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/runspace/Stop-PSFRunspaceWorker.ps1",
+          "sha256": "174147e550d18c6ec3e7777ac526e3399bb01436bfba1db069c06a5df84eaf74",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/runspace/Stop-PSFRunspaceWorkflow.ps1",
+          "sha256": "4cf8011745950546f4400fd298501bff0b9e35ca3132ebf2e9345d5f7421d280",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/runspace/Wait-PSFRunspaceWorkflow.ps1",
+          "sha256": "15311de5960b1ba0cbf267a4c6c6b44cfdd24328e20e88b56d182617716f59fb",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/runspace/Write-PSFRunspaceQueue.ps1",
+          "sha256": "0bf17a4821f1fe39e6e9ed67e210ca6cbe12fdf3966f836b3a4126e6950a1ea7",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/serialization/ConvertFrom-PSFClixml.ps1",
+          "sha256": "82e783e22221b166a7411da667f5e7c4af976e9a1f601fe624e67a3be8a1b50a",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/serialization/ConvertTo-PSFClixml.ps1",
+          "sha256": "d9b8260c40973ac0e0610dbe3cea7b28a21f328a50d5ad97ea2c4dc11bf4c946",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/serialization/Export-PSFClixml.ps1",
+          "sha256": "08e0219e400638a4ece1d3f4e455d4273bbf7268fd6c81962ca16f3c872c0386",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/serialization/Get-PSFTypeSerializationData.ps1",
+          "sha256": "54924052f67147a361a0b8688b8699d5e0135ec9e555c94d680c3af932f33e0b",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/serialization/Import-PSFClixml.ps1",
+          "sha256": "0f0d2ac3d4e0c4e9c31af42ac59d1a24d7660034b26df2dcdb2ac42834d1e9b3",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/serialization/Register-PSFTypeAssemblyMapping.ps1",
+          "sha256": "0f8c8d65f2aac23d98c85013d417308379bc1bae2fa19fdf9e070d5af175fcf4",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/serialization/Register-PSFTypeSerializationData.ps1",
+          "sha256": "fc5198b5f9427d4142728a733c145519b71628ed7d36d3b5283fa882c499beb2",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/tabexpansion/Add-PSFTeppCompletion.ps1",
+          "sha256": "058cb925f215eea3f3d8252fa467fc4d787ca45f9fb6ef26395d3a6f823ef2ff",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/tabexpansion/Get-PSFTeppCompletion.ps1",
+          "sha256": "b8381e1ec319cac1fd7d1b15e18d144a7507e05654671fb317609c8c572d7192",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/tabexpansion/New-PSFTeppCompletionResult.ps1",
+          "sha256": "9ca796a6dc77b9f67fa4ebc160539d2e17d970265473633f2d7d87231655368b",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/tabexpansion/Register-PSFTeppArgumentCompleter.ps1",
+          "sha256": "e647b4d055fa8de89cdad67d38ca54f10651d4679ef12917dab599e2975475b8",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/tabexpansion/Register-PSFTeppScriptblock.ps1",
+          "sha256": "2a9df7d127ed68047f21eaa730e9c2cec4a9c499c805a7c209a0318a9ec9eb16",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/tabexpansion/Remove-PSFTeppCompletion.ps1",
+          "sha256": "e551ce48db73832d13dd513d7e5760c2f2dcd2cdf12c18870e79eaa5a93acb87",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/tabexpansion/Set-PSFTeppResult.ps1",
+          "sha256": "04a5b09deadc1a102f2f38ae6e00d4bdae595e08b06af4fb4b7c717117a7552c",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/taskengine/Disable-PSFTaskEngineTask.ps1",
+          "sha256": "901a58f338381e913a08009d6021863e988ba01232e30d368dccb6d8fa1a154c",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/taskengine/Enable-PSFTaskEngineTask.ps1",
+          "sha256": "2a7a2f72ddd44fc2287868fdeb4a6628a4b7af40b9fcef3995fe8c619cb7d016",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/taskengine/Get-PSFTaskEngineCache.ps1",
+          "sha256": "12023e9ffe71c27de401964c762f3f319155d8d14bb8a30ed397258b977a49ff",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/taskengine/Get-PSFTaskEngineTask.ps1",
+          "sha256": "27d7e252e65db2a4df4b80956dd72026dceb1ef74bb6e337c8dd148e35b719e2",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/taskengine/Register-PSFTaskEngineTask.ps1",
+          "sha256": "cd20019a9fb69c92a0513e4a7719bff26053feb131be9e8730ee10cbc3860b86",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/taskengine/Set-PSFTaskEngineCache.ps1",
+          "sha256": "2abb76509a7db548b119ed60a1fc322ce84dcfc3337f88e8a7b132ffe619ae10",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/taskengine/Test-PSFTaskEngineCache.ps1",
+          "sha256": "3986cd51c2e052dfeff478f41f86fe02b6c7b43d2416bab3ddfe3d2911bb925e",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/taskengine/Test-PSFTaskEngineTask.ps1",
+          "sha256": "6becbee822df259db9cac30c99a313cc4dcaba57ebb513282796c9b437077d69",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/temp/Get-PSFTempItem.ps1",
+          "sha256": "26f775f84daddfde5c4157a31ffcf33208888c90932854e0917e881fa071fb72",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/temp/New-PSFTempDirectory.ps1",
+          "sha256": "2649936f660357d7aedfcad287145067aba0d79e60aa18cfc7f1281e9157776d",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/temp/New-PSFTempFile.ps1",
+          "sha256": "d5cb592b720def39abc4f9261c88438b8eb30489e11065caa2feb86169609b7f",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/temp/New-PSFTempItem.ps1",
+          "sha256": "c50d410fe6508d8e13252f06daef26603c72067bed18e3b320debaccb782e1fd",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/temp/Register-PSFTempProvider.ps1",
+          "sha256": "172a78ae8ed301aa31b4ac60e9c2870b39a4f8c7e48ca794321f46ad9d2115b6",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/temp/Remove-PSFTempItem.ps1",
+          "sha256": "f629b224b668e795b3b6c369b0557832e6f39d86f5b9448bee9fdd2b890d8f4b",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/utility/Compare-PSFArray.ps1",
+          "sha256": "5bf76d0de8af5f792cfcb499632f8212c038657e13c6dc41151c422798cfc66e",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/utility/ConvertFrom-PSFArray.ps1",
+          "sha256": "f671a60f9f496cccf6c84d28760b3842caa8ed4962d6ef6fec56d594acc51ad0",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/utility/Disable-PSFConsoleInterrupt.ps1",
+          "sha256": "b7608970157888c5d497ee511aed96455f2deeb588f85577cdbd253320a5b7cf",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/utility/Enable-PSFConsoleInterrupt.ps1",
+          "sha256": "f2620d9016b5f1641450e2da7306a2fe937f5df00b574c7ad11402176c115c80",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/utility/Get-PSFPath.ps1",
+          "sha256": "70bce3101343bcc1f9d19ae3b66dc9cd03675857c57869cfc19d981fa7951584",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/utility/Get-PSFScriptblock.ps1",
+          "sha256": "49df572a5b96d37eca2431547f562b8c96b718277c4a2775e764074c09c67ed1",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/utility/Join-PSFPath.ps1",
+          "sha256": "fad17ef8e6de8d0401fe7385583b1b7289a420b3e3a1382331904abf68d180c5",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/utility/New-PSFHashtable.ps1",
+          "sha256": "647397e5754186597bc36addd75e2c41ddda5944ac82ec0f4c004d69557d1184",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/utility/New-PSFSupportPackage.ps1",
+          "sha256": "8f0d414d37fa867dd3cb5c42294bb0ef0ab5f17003052f868a80d428be2bcc80",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/utility/New-PSFThrottle.ps1",
+          "sha256": "2dc5933e1ddd6c2fc3662a86ed79aa4d4c6b52f76ecbde2d8529e20648f3b02d",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/utility/Register-PSFArgumentTransformationScriptblock.ps1",
+          "sha256": "d63fc6c66c5ca586ac1e9ecbf5bfa07085c05de8d7501ce1aee0c5babe9effc9",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/utility/Register-PSFSupportDataProvider.ps1",
+          "sha256": "699cf97a939f438489663ba37deda9b9c7bfc2ccf011241e626348355e4778af",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/utility/Remove-PSFAlias.ps1",
+          "sha256": "af67a06077eefd1fcd8f463d8913d25934300cebc409c7690f0d92bcc9a94638",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/utility/Resolve-PSFDefaultParameterValue.ps1",
+          "sha256": "c070d36c58f982d9a3ec9b6174b33e44bc7a81a9ca41d25cc89deb39b99442f7",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/utility/Resolve-PSFItem.ps1",
+          "sha256": "d808775ffe0a6c2f28a0bc9ee453600cf6b76789a426e71ea8a3ffa16428b93d",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/utility/Resolve-PSFPath.ps1",
+          "sha256": "b230d810fa6e07c1216d5a63dfd2b11cae10fac7cdaeb1d593c74a24f95f1088",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/utility/Select-PSFPropertyValue.ps1",
+          "sha256": "f70d5f9180883bdbe2fadd79697b2ff5267dbb329630c829862d9343c743cd9d",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/utility/Set-PSFPath.ps1",
+          "sha256": "cfdfa2cfd99f5e792dea944c5c404829fde6f9de70b55951a39a9e52a23c8d73",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/functions/utility/Set-PSFScriptblock.ps1",
+          "sha256": "c4a8869562bd0cd065284a4bb79ab259a85d832da50b0bf3c968587726ca5cf8",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/internal/configurations/computermanagement.ps1",
+          "sha256": "31ef3c56c41ce20bd268cb3f5bc69623f79faeced952f5aa378e4fcd909794eb",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/internal/configurations/general.ps1",
+          "sha256": "2c45acab9c5a9b12adc06a315a0f630b6a6bd8c84dfb2b61e9ee51f3b8be24b0",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/internal/configurations/logging.ps1",
+          "sha256": "f7c65c8277938811d55f855f2f5dcfee41f42c917a0fa2e112798cdfba069bca",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/internal/configurations/message.ps1",
+          "sha256": "1b58b65edc9ebaf13640ef8c942e31dde93feb7b30ec12c452b1f919f0773d49",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/internal/configurations/path.ps1",
+          "sha256": "fbc9b5d17f979116f2479288d55d9a6d9ef2210f503d9a9dbae6da994728e04a",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/internal/configurations/runspace.ps1",
+          "sha256": "9dd3cde93fa493df1cb93675229cf9d9d783c25fb90733e8361e4dff2bb6bc31",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/internal/configurations/serialization.ps1",
+          "sha256": "f079f337598e8816ac94017b3b2ee52719ac7174cc0ea02ade7749fe9b04a3e3",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/internal/configurations/tabexpansion.ps1",
+          "sha256": "143f655c9bb8635cf2295180d7215a7cef22d87b9e896e881fb44c01e68bc593",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/internal/configurations/utility.ps1",
+          "sha256": "e14497603926c5c0677b0d773df332ddc3c549e1085fabb9c8c5f5b30cb4670b",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/internal/configurationschemata/default.ps1",
+          "sha256": "93504a6f31ec2d4c02c11c96c170daff514223a940505263fea7d638377b89a6",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/internal/configurationschemata/metajson.ps1",
+          "sha256": "0b4281406eec5925850ea1eafac09a96d94021ea963585a6654052c9b30d1603",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/internal/configurationvalidation/bool.ps1",
+          "sha256": "40d6ad895f5c5726fa6ca6f261e1b476a66be9887783eaae05d6a360d036bacd",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/internal/configurationvalidation/consolecolor.ps1",
+          "sha256": "70348877934668c74882e9755598edf71d51f3dcfb7068ee0235cfe3743386b4",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/internal/configurationvalidation/credential.ps1",
+          "sha256": "04a02233b0dcccc4ef081c4d07baf91e7498ad7c618bf8bbe8126c73d55d2270",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/internal/configurationvalidation/datetime.ps1",
+          "sha256": "4be57087cc63126644c060ce9fba8f781ce3b45ccf560693501028ca94f6e4cc",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/internal/configurationvalidation/double.ps1",
+          "sha256": "c69f6edab46f257b5b2a17bc79d5cd9b2c0ddbbe7e1effa08afd4a076b01c343",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/internal/configurationvalidation/guid.ps1",
+          "sha256": "a12a2466f96a8a28c2dfd4bf2e9dbd7e07d562b2ea51d26fc224e9ab89bbfa38",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/internal/configurationvalidation/guidarray.ps1",
+          "sha256": "d5c7bd0cd7cfcf4c5409bf56d42716d320a763b18586e52ff6140d31dd2ce5e9",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/internal/configurationvalidation/integer.ps1",
+          "sha256": "09eb4beb346f369185e1f104e32295b0281a9c6992df65c3f631778330bde6df",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/internal/configurationvalidation/integer0to9.ps1",
+          "sha256": "bd38b7f70b1471a24475d18328b81046734586a0cf0c0c437311853ba4f7129f",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/internal/configurationvalidation/integer1to9.ps1",
+          "sha256": "5e873977f8c1be179add34c776ba95a9b09eb7d1c2fd522887f2e07284698b2f",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/internal/configurationvalidation/integerarray.ps1",
+          "sha256": "96c46fe56cc468b9cd15bdea541b53cfa975e90d3dd50c9805d270a2662d6713",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/internal/configurationvalidation/integerpositive.ps1",
+          "sha256": "b6a313723071f866f6d0c3d209f3ced92ceee9028140db7824bd5b1c4f2a7fb0",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/internal/configurationvalidation/languagecode.ps1",
+          "sha256": "7ecda6be8533141633db0cc695fd97b37b6a52d091cf8e1df03aafe99d25cb53",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/internal/configurationvalidation/logfilefiletype.ps1",
+          "sha256": "393fd8e301fc576ebfae82fc0af2c333fac7a5f04bc7b0ce318a124d8c8f9806",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/internal/configurationvalidation/long.ps1",
+          "sha256": "e8d0e58ca7d84f5f3cfe87884b2509560cba873b956a0948ff5e4d227fe7d8e3",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/internal/configurationvalidation/rstimeout.ps1",
+          "sha256": "88be70c921a9375517616c531f54e92507f95832e248e49bbf54f3e3c93cb37d",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/internal/configurationvalidation/secret.ps1",
+          "sha256": "456e90a057849fd028d934686df20dd4740d38c54aebf71824865c4b4a3ee981",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/internal/configurationvalidation/sizestyle.ps1",
+          "sha256": "0d575e31da1b001d37b868daa58e980a83073a02c50ecb0e9e4cb435ee79d366",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/internal/configurationvalidation/string.ps1",
+          "sha256": "669177531f186ac354f9383484705ce686253cffdea53ad8a770706631074c80",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/internal/configurationvalidation/stringarray.ps1",
+          "sha256": "a945343427018fd4c70f29c8dd4b046a6eee18cb006556d4d1ac0ba1d3a9f030",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/internal/configurationvalidation/timespan.ps1",
+          "sha256": "4a95157881f2f563329a15310a3d4e323ddd1a80aae1c84d1743ee838d988264",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/internal/configurationvalidation/uriabsolute.ps1",
+          "sha256": "27cff79311c64411320e90f8b00e5c857a67ec25b7f26b72cd1feb797d3580de",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/internal/configurationvalidation/urihttp.ps1",
+          "sha256": "cb12d94cfc26ad85b986ac4f08eb5580dd6bf607aaca45335344d65732835a6f",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/internal/filter/environment.filter.ps1",
+          "sha256": "52e14dcd61d13625ab3b566ab8aba43d902add41654c4cc444896ed54d5fa8eb",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/internal/functions/configuration/Convert-PsfConfigValue.ps1",
+          "sha256": "b133f40d7669f5f00072b7fb2f0a1626107735b32c1394a9757e5944c1bd070c",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/internal/functions/configuration/Read-PsfConfigEnvironment.ps1",
+          "sha256": "32828af047574a0068acfbb89fe3de029a8d63e0b56eefe5539b54843fbe464c",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/internal/functions/configuration/Read-PsfConfigFile.ps1",
+          "sha256": "701026ebf1f5b10a39f25297531f92cbd6930afce65c2bf9af9023f7ded0c656",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/internal/functions/configuration/Read-PsfConfigPersisted.ps1",
+          "sha256": "da899bd4de00ff0a8de2846529267c8766c5cbbb86fbd8367078856932623bfe",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/internal/functions/configuration/Write-PsfConfigFile.ps1",
+          "sha256": "af6ff79d1cf76e1d941b7ba44f7b07009cf65a7f769edacafdd12218c2472f80",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/internal/functions/filter/Resolve-PsfFilterConditionSet.ps1",
+          "sha256": "bacae4140da0715a1c379f9d4028b2d270f1366864542b0f11c6c4235a250727",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/internal/functions/flowcontrol/Invoke-PsfTerminatingException.ps1",
+          "sha256": "324d67bf33264e8f97ffaf58d9d82ce7ae6e44d2d72191169caf8b23bb07f027",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/internal/functions/message/Convert-PsfMessageException.ps1",
+          "sha256": "86936eede7b997e295d7c13f6e1c487196c88a6f44162b3d65085e1ff5945e0c",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/internal/functions/message/Convert-PsfMessageLevel.ps1",
+          "sha256": "16e4d945e5803ca64670bc18d216b31dc0bea51f0ae8e1e67453d900f9176337",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/internal/functions/message/Convert-PsfMessageTarget.ps1",
+          "sha256": "562e5ac3152c6ba61e748c13ae350f3caf5818820d2472dac06708a31bc16c7e",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/internal/functions/runspace/ConvertFrom-PsfUsingStatement.ps1",
+          "sha256": "2dfef8677e1ba513a5f83fcc9b4899596579876ed141a7d3c69446e1515903db",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/internal/functions/runspace/Resolve-PsfRunspaceWorkflow.ps1",
+          "sha256": "b9d97d68a30b02df9a961539dc2d812590ff2cfae6cc0050c2c608f243a241ef",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/internal/loggingProviders/azureloganalytics.provider.ps1",
+          "sha256": "4067e1f81c671c992ced672d8150414e1acb96cbb655d2db6468f3215d07deee",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/internal/loggingProviders/console.provider.ps1",
+          "sha256": "cebb9c666b68c6cdcde87312d885f8a63c7cd97410eff5d9618c26a590729c6b",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/internal/loggingProviders/eventlog.provider.ps1",
+          "sha256": "ab5468a9f2b295f3e0677fa399b99c01c751cf63ff74910615c7db2bafd2b93d",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/internal/loggingProviders/filesystem.provider.ps1",
+          "sha256": "2f601a840aa6a79f50f7d064a9a81e98aa69b9119d01d827b805727e62417747",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/internal/loggingProviders/gelf.provider.ps1",
+          "sha256": "96903d610015c6be6901b71d917f89fca1d19a6d6a920e64fa029e70cc895106",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/internal/loggingProviders/logfile.provider.ps1",
+          "sha256": "fe8edf14f5fedee6bede3862ea3d9d89d7fcf2ceda00f03dc3d648da075572ff",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/internal/loggingProviders/splunk.provider.ps1",
+          "sha256": "272fb819a8b4b17503395f562a3ffc7e9c3b6fe3e6b243d37c9955917004cac3",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/internal/loggingProviders/sql.provider.ps1",
+          "sha256": "b1d2e6cd45ffbaed1f233e5c34c7fdbe16dda5918e3ef5b86ef9f82423a4cb79",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/internal/parameters/ComputerParameter.ps1",
+          "sha256": "9fae7e535d3bab8a9d9f5779919e30e9a8768dfa42ab4b29740c9042f713ca34",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/internal/parameters/readme.md",
+          "sha256": "4d5c78dc9a7c7333766da418361227a7d801b985a897d4572d7c2f6ac398b259",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/internal/readme.md",
+          "sha256": "75662640b7356a56c8b93f8f7bd5b96d3766ac31e31e8fafa05012932f4535b0",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/internal/scriptblocks/filters.validate.ps1",
+          "sha256": "b5b94801e1f2568806f8996ae977c3cae97e11fcb67da249a07eb2b72dc10900",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/internal/scriptblocks/paths.validate.ps1",
+          "sha256": "d213d88d5c5a4d8b728f7c0ac7a6126be75a403c906c47eb24315d23425f43d3",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/internal/scriptblocks/strings.validate.ps1",
+          "sha256": "e72fcd87b6ecb1dd3f6177f9675fae71e7637c84e1032f8e38476cec562d3b86",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/internal/scriptblocks/timespan.validate.ps1",
+          "sha256": "8c307c8d9f5a0a4345d8682ca81ede630ed0947706a59dae2bafd3619c301d0d",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/internal/scripts/async-logging2.ps1",
+          "sha256": "9546fbb617ecec7fdd3ad25647cef91d4044fe07f3c3765c81aee41e6c116099",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/internal/scripts/cacheCollectorCode.ps1",
+          "sha256": "38e714c228fd800446ef008cd2ce4bd1af684cb9430e9ea1ee8739c0db956671",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/internal/scripts/cmdlets.ps1",
+          "sha256": "6174debd512415cc5c241ba9784047aed5bf82e143c487cb41dc440375ce72ca",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/internal/scripts/environment.ps1",
+          "sha256": "9c1caa108b2312d3826c3db321adf8b6fcc397e2efff1e78d5bb2a3cb3486062",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/internal/scripts/license.ps1",
+          "sha256": "d0eeb61051469d69e7992226615e22ded1247769e8e0a3fd82b678c16c54ba67",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/internal/scripts/loadConfigurationPersisted.ps1",
+          "sha256": "6e6c0c01fba11478d973c15d23a478521bc8bc0e03f9728f253d5941fa530aa2",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/internal/scripts/loggingProviderInstanceModuleCode.ps1",
+          "sha256": "ec3f6bc5126f7e6bedc01fb8c994ffb1f3e96d7f5d3332a48185932c0f3bbcab",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/internal/scripts/postimport.ps1",
+          "sha256": "25a2a2080706d3d2141d6c3a5088606f76213e3608a1e9f5712dc49a8f65a105",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/internal/scripts/preimport.ps1",
+          "sha256": "08df2927cd807be1dda821e45748959d6cb7fbb8fa134d3aabd4361f2665c52e",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/internal/scripts/removalEvent.ps1",
+          "sha256": "169079b6b4a288c668fa4bd61e18843d832b3a828d36b56041b156f6dbb4f4ee",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/internal/scripts/runspaceManagedGen2.ps1",
+          "sha256": "0a95d70ceb840611164a007140e93cd4c6aa9d7a6a157e52315fb6a140b4350d",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/internal/scripts/runspaceWorkerCode.ps1",
+          "sha256": "9a72a156fdc39df72330b55181cfdd7cc83de29c63016759b9a738501564dd6a",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/internal/scripts/sessionRegistration.ps1",
+          "sha256": "09ad62b2004c6ae9547552083954847372eda0da249ed76aeec88749c200d2ba",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/internal/scripts/strings.ps1",
+          "sha256": "1fbd49ad329b898bc5274ea2c99c3047a49025cd3765394e278520711dede316",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/internal/scripts/taskEngine.ps1",
+          "sha256": "1fd340e7deb1ded90cf81203c3832ce247512e85301723b8adcd7f43d8f387a6",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/internal/scripts/teppCoreCode.ps1",
+          "sha256": "9eb067ab1ab39975e97fb5a6d003cac6e8a3a39eed7f39593548db8b9a20340f",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/internal/scripts/teppInputResources.ps1",
+          "sha256": "267d390bb5d134f9aace92b8e64a45524cb300ed707911f5c68dc4587e898696",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/internal/scripts/teppSimpleCompleter.ps1",
+          "sha256": "55176d0963ebaa6d761bdde9c19a68a0f9c35fd17276d2061d7ecfa957f555b5",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/internal/scripts/variables.ps1",
+          "sha256": "4a1160fc57a3080b460057ddfd7d912364bedccf42c5dfcc031896e0ac132ad4",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/internal/tepp/scripts/callback-name.ps1",
+          "sha256": "8801688da73150626822ad7f5c1a96f63405b184c1872d728dfba666e95648df",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/internal/tepp/scripts/config-fullname.ps1",
+          "sha256": "654a4393007ae3c1cfaa0f567933d22d4777b193379a0eb6b0773be24c752873",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/internal/tepp/scripts/config-module.ps1",
+          "sha256": "1ae01cc5230a19b48452ec485b332335a478a9403fe9d8c159ad3ecc2680d58f",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/internal/tepp/scripts/config-name.ps1",
+          "sha256": "5e3d8fef884286705aff8a68a0ca2fb9b3af4489a8cbdd7480a6703eaad54c15",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/internal/tepp/scripts/config-schema.ps1",
+          "sha256": "b1b819d87f1d464d3ba36c745400feb61c44c5b404f9310bf927f5c5defafd50",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/internal/tepp/scripts/config-validation.ps1",
+          "sha256": "46e70a8689439fa3c783fed1d4e15fe9efec89aa82c42b175c74cf9f932d1d36",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/internal/tepp/scripts/dynamiccontentobject-name.ps1",
+          "sha256": "db1cde57044464d965fde016b2daf256ad426bf5d589e3a3c660e3a774df0d90",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/internal/tepp/scripts/encoding.ps1",
+          "sha256": "f57594cb684ab387fc4086993de08a56db5f0de77f809a30c758f938cbb53d73",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/internal/tepp/scripts/features.ps1",
+          "sha256": "18f8a37f1957eb90644ea389596c2023cb382f0a5e5235f1fb100e1a868d4181",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/internal/tepp/scripts/filter.ps1",
+          "sha256": "8a93131dc659ec9c6ea706b0076f6624447e358ad03855e9802a020b1ba9ec8c",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/internal/tepp/scripts/input.ps1",
+          "sha256": "612fedb4b25107fc51f53cfd288d8174e7eafaed65e8fc1974db718988c09c96",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/internal/tepp/scripts/license-name.ps1",
+          "sha256": "e52fa41b0dd7da288e6493e8ef4919bf361f48fd9db051a52f246fbba8882460",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/internal/tepp/scripts/localization.ps1",
+          "sha256": "ceecb1273728b27841a101c8d7e0e02219d01df1df37425c5682acccdf33fb37",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/internal/tepp/scripts/logging-provider.ps1",
+          "sha256": "c51b017f7e01475f5c3e506471ed6ad2ab63c314a70b93a2b755b7d5774de5ad",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/internal/tepp/scripts/message.ps1",
+          "sha256": "f160928ea2bea909a579477843a88ac13f58af0bfdd41b171a68216c1454956b",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/internal/tepp/scripts/parametersetNames.ps1",
+          "sha256": "760ac45ce9a604719deb6d0941701a17bf2b3cfd0d3d62f94dd1e8462ebe04a1",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/internal/tepp/scripts/pathName.ps1",
+          "sha256": "3f34567329c6a03c3074f5deccb72a64800eb0a811664df320cdbee145928055",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/internal/tepp/scripts/psprovider.ps1",
+          "sha256": "da4f675e7496a31d42f3ec4242f1e7699d9dcc91d5573365bec97774fd0a9765",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/internal/tepp/scripts/runspace.ps1",
+          "sha256": "8343cfa81d17e6ff7282882ce7a9e0b7065a2509dcfb6bd4557526f432fd0a38",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/internal/tepp/scripts/scriptblocks.ps1",
+          "sha256": "2a238aa83ef9315433f2ebc126fed0096752f566c94edf2979ffbc95f8f5ded1",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/internal/tepp/scripts/temp.ps1",
+          "sha256": "b0db133530008a4b76fbf5210cd7079872c6b1f68d0253ad859db1dd1f5059cd",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/internal/tepp/scripts/tepp.ps1",
+          "sha256": "6dc16fa9965e38eea0f3e950ddc62f3823550a0aac87093e6aded27a4606ea41",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/internal/tepp/scripts/Unregister-PSFConfig.ps1",
+          "sha256": "06f79d4b505b41cea03609f371097356b6b8608cb6db147c3bdcf83ee9b6ea0c",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/internal/tepp/tepp-assignment.ps1",
+          "sha256": "4ece7c6057b87202fc471ca3b632036d35c6bc9a442706b37a85b024aa902082",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/package/services/metadata/core-properties/c25c827d01aa45ccb62944fa32b378ab.psmdcp",
+          "sha256": "b0b5ae59e744230933bc8cf2f3c6d120c4436f7c726d050b5350663e682ff6b0",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/PSFramework.nuspec",
+          "sha256": "d7b34ffbd725f34b475ccd7d5972bfb1b80a491bf1e8682cbeec89c2c163ed2e",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/snippets/help_par_EnableException.snippet",
+          "sha256": "349dd37f612b0981a830d7cad324417d418def84042d7d7d39ffacfbc847335e",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/tests/extensions/BeTrueFOrAll.ps1",
+          "sha256": "a8fb7e60ee286a9dc6fc0829c447b4aae66436a5f6ff542d50015b592cabad6a",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/tests/extensions/BeTrueForAny.ps1",
+          "sha256": "f158902b9e7aa5a35c0402231bf8e91f00efaaa9aac14d9e0bb863ff62358e6a",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/tests/extensions/HaveParameters.ps1",
+          "sha256": "e1159e0000a7eca9728c2c69e84ce5be8da957b9faee0a611e08d9e66fa9ef49",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/tests/extensions/HaveProperty.ps1",
+          "sha256": "5aa5d8c0caeee0cae5c4d89eabf2a933748befda40a99eb92b7b9c036f2d7cbe",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/tests/functions/caching/New-PSFCache.Tests.ps1",
+          "sha256": "e3be2b6852d78e713bd7c7074ab673b1f5f15289c4e0a20b54193094d1122566",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/tests/functions/configuration/Export-PSFConfig.Tests.ps1",
+          "sha256": "49250d34093b378f4230ccddc9b94f9c0a25b484f38171ceebd52274fc32e4d7",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/tests/functions/configuration/Get-PSFConfig.Tests.ps1",
+          "sha256": "f275925ca983c82ec18d353699a29ae9e6df8ef99e5954e69edb7c909d775680",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/tests/functions/configuration/Get-PSFConfigValue.Tests.ps1",
+          "sha256": "002f5892ddbe18bbe417dff4f4107b2f764c8403a3ede731fa6eaaf5c9b160b9",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/tests/functions/configuration/Import-PSFConfig.Tests.ps1",
+          "sha256": "c8f90417bd59d0790e8763f8c918baf4451b6ec78208f142c77253e78c94cdd0",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/tests/functions/configuration/Register-PSFConfig.Tests.ps1",
+          "sha256": "07b6a1ca6e6ecd9e0b7ba6f725fc70516405674794f613d652d04c6bcb01d21b",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/tests/functions/configuration/Register-PSFConfigValidation.Tests.ps1",
+          "sha256": "0df975000748fc3b147fae31b09f1777480e17f2335b15fde23c707027511366",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/tests/functions/configuration/Remove-PSFConfig.Tests.ps1",
+          "sha256": "01e9c5776c8341d148d3a9f441c1b3d3cb5712e5f628fff4eeae5e1f043ce51d",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/tests/functions/configuration/Set-PSFConfig.Tests.ps1",
+          "sha256": "8adf0b534cac2031b7eba97292e54efd41c1703f7890bce94ba1ff89f989eb6c",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/tests/functions/configuration/Unregister-PSFConfig.Tests.ps1",
+          "sha256": "6a3344c38c0d0f285b7cfb1629f5b1edca42ab7b55b7cad0768aab88fd39db3d",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/tests/functions/configuration/validations/bool.Tests.ps1",
+          "sha256": "fc4ef04346ba1c5c8264b08a0127abbe7b9ff0f066b6fc76fa93953efc273475",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/tests/functions/configuration/validations/consolecolor.Tests.ps1",
+          "sha256": "ddaba903757938a54e688f078cacbe8c0d12707dbe8f7e44fee9a7fd25f6c64f",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/tests/functions/configuration/validations/credential.Tests.ps1",
+          "sha256": "166c56e1aff284238af9f500e8b6a7c25aaec4e95786d246b385be6c4da9e757",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/tests/functions/configuration/validations/datetime.Tests.ps1",
+          "sha256": "0b1f4032856247afb95992c634bce8029d1bfae8f0e5a4a31c476e4f8726a9b9",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/tests/functions/configuration/validations/double.Tests.ps1",
+          "sha256": "3b46387959102ad3dcddc91c7f07dded386a1cdf370948ea64d7dab49f6f79d1",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/tests/functions/configuration/validations/guid.Tests.ps1",
+          "sha256": "2e3afb24a97487d36f105722fdb280ffcaa1dd9ef2667621a46506ab118d0bc8",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/tests/functions/configuration/validations/guidarray.Tests.ps1",
+          "sha256": "b689e334efd30cfccca37450c03183b927db5eb993c01c8f8680f08e9aa8774e",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/tests/functions/configuration/validations/integer.Tests.ps1",
+          "sha256": "a482644847b038c067b403827e6300771ed1b26a70a900b56cb7db46b754c25b",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/tests/functions/configuration/validations/integer0to9.Tests.ps1",
+          "sha256": "57b4428ed3bfa32001bf115b7f3786fd5dd509cc719ade269ebbd2ee1db7e4a9",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/tests/functions/configuration/validations/integer1to9.Tests.ps1",
+          "sha256": "c1423697d85845e80853105498b1f9d9f73250411432bcb1cd42c96c6dcb3c19",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/tests/functions/configuration/validations/integerarray.Tests.ps1",
+          "sha256": "557dbe9e4aadec218db5101b3b3f75fb3e26d1d20256dc4752d38643f95b75e1",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/tests/functions/configuration/validations/integerpositive.Tests.ps1",
+          "sha256": "af6789d21747a7d5157e73d75da400b16ffa0bd1968dcca988a71ce83a7b19de",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/tests/functions/configuration/validations/languagecode.Tests.ps1",
+          "sha256": "45e22c5e40995a4519019d6cb77d9350bda66ddac787cbbd9f9bd4a3661ed948",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/tests/functions/configuration/validations/long.Tests.ps1",
+          "sha256": "6daa105e6d995c25fbcb5f1e1b95bbb503ea0570a9640f8e89d08d887af90e94",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/tests/functions/configuration/validations/psframework.logfilefiletype.Tests.ps1",
+          "sha256": "bcac784d922055fd9430ec540423e554ca8222c572904429e7490bc411f7d302",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/tests/functions/configuration/validations/rstimeout.Tests.ps1",
+          "sha256": "f19b91cbb876b209973c01497a214db648f02920b36ad3bb5acb11f6265a0cee",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/tests/functions/configuration/validations/secret.Tests.ps1",
+          "sha256": "f0f0017bc509a479905ff14699cff594ad0a142257c6185c6308e92a72c75d80",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/tests/functions/configuration/validations/sizestyle.Tests.ps1",
+          "sha256": "94295d127cf97a7f7cbdaedd9a6f6ee93fa5b8297ed86d0136f1eedaafda6c38",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/tests/functions/configuration/validations/string.Tests.ps1",
+          "sha256": "e64be0fd3f588d8bc4591da22b44621ad8f22b9d783f9e261a535285ec308714",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/tests/functions/configuration/validations/stringarray.Tests.ps1",
+          "sha256": "ccfb477659541e96d0d0e174de002d0c97bee9218b06a3dc4981d4cefe1cc22e",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/tests/functions/configuration/validations/timespan.Tests.ps1",
+          "sha256": "cfe884a8aecb543e6b0a9dac96c678bd294acb45766720e0aefe3929281eeb5c",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/tests/functions/configuration/validations/uriabsolute.Tests.ps1",
+          "sha256": "bcced34c2f5697916c2723769ababc3d773db336b73596277640e74bf647518b",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/tests/functions/configuration/validations/urihttp.Tests.ps1",
+          "sha256": "db82f1c1250c7091bdb8687ca080f646ea3b61f50ae42a7209bcbec9ff0b0fa8",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/tests/functions/flowcontrol/Invoke-PSFProtectedCommand.Tests.ps1",
+          "sha256": "079ef64c987ec677a106415c285672089f7a490e1982f3010883296174ef50dc",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/tests/functions/logging/providerV2.Tests.ps1",
+          "sha256": "36a127a06dd4e79802ca704ad0239cc479ac70a949adc14e93cd8ebc13cbfdba",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/tests/functions/message/New-PSFMessageLevelModifier.Tests.ps1",
+          "sha256": "2699037ef72b0e9725a0d393a10cca29d146ebcfc999ceeacff9978ea22a4b8f",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/tests/functions/message/Write-PSFMessage.Tests.ps1",
+          "sha256": "b671add5c9b5779b2ad5dead5773a1d990e7ff4989b682cf393e15a77f795b97",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/tests/functions/parameter/PsfFile.Parameter.Tests.ps1",
+          "sha256": "9e96a4dc583800b7aa65bf5d1e24bf6418683e7cbf9468aeaa7b81eba15fe747",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/tests/functions/pipeline/Remove-PSFNull.Tests.ps1",
+          "sha256": "1c6b63dff4de5a99e771b055dd542ce12be1758edf2a1023e050b2ec6a369025",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/tests/functions/readme.md",
+          "sha256": "7dd0d5462e1c76c526c45b070346ee39b43ec831492310bfbcf6eb5a4bbba431",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/tests/functions/runspace/Add-PSFRunspaceWorker.Tests.ps1",
+          "sha256": "b654cadbecec07fc5f9caaf79f9d030bd69e0ac6d1950f6fdd8f28d0b5a4ca8b",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/tests/functions/runspace/end-to-end.Tests.ps1",
+          "sha256": "5c35ffb787d7289bc33d0f5584729c53beb216c8a8f03290558b11c59ecf796c",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/tests/functions/runspace/Get-PSFRunspaceDispatcher.Tests.ps1",
+          "sha256": "bd7a2aadb61a95d2c29a6fa161efec1cc0b4c6eb4d9d5a99936261cad91a14bf",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/tests/functions/runspace/Get-PSFRunspaceWorker.Tests.ps1",
+          "sha256": "f6aee95a6b632cd88896fda6a4672a1355e2913e980de2b3e2b3599ca7b1e924",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/tests/functions/runspace/New-PSFRunspaceDispatcher.Tests.ps1",
+          "sha256": "78a0b352c53892eb4a9c2cfc4da834e9d34dd83736698a0e6329ebad0e928d95",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/tests/functions/runspace/Read-PSFRunspaceQueue.Tests.ps1",
+          "sha256": "4b662876d5d4f70d3d62bf44bf23ae4c4e55d0387db8ddd566ac8041c7dd8af6",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/tests/functions/runspace/Remove-PSFRunspaceDispatcher.Tests.ps1",
+          "sha256": "4b662876d5d4f70d3d62bf44bf23ae4c4e55d0387db8ddd566ac8041c7dd8af6",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/tests/functions/runspace/Start-PSFRunspaceDispatcher.Tests.ps1",
+          "sha256": "4b662876d5d4f70d3d62bf44bf23ae4c4e55d0387db8ddd566ac8041c7dd8af6",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/tests/functions/runspace/Start-PSFRunspaceWorker.Tests.ps1",
+          "sha256": "4b662876d5d4f70d3d62bf44bf23ae4c4e55d0387db8ddd566ac8041c7dd8af6",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/tests/functions/runspace/Stop-PSFRunspaceDispatcher.Tests.ps1",
+          "sha256": "4b662876d5d4f70d3d62bf44bf23ae4c4e55d0387db8ddd566ac8041c7dd8af6",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/tests/functions/runspace/Stop-PSFRunspaceWorker.Tests.ps1",
+          "sha256": "4b662876d5d4f70d3d62bf44bf23ae4c4e55d0387db8ddd566ac8041c7dd8af6",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/tests/functions/runspace/Write-PSFRunspaceQueue.Tests.ps1",
+          "sha256": "4b662876d5d4f70d3d62bf44bf23ae4c4e55d0387db8ddd566ac8041c7dd8af6",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/tests/functions/tabexpansion/input.Tests.ps1",
+          "sha256": "708e15db466ff8cbc9ad9c28ca5626131076bb7e09bb3b3a15942a85d62a41e1",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/tests/functions/tabexpansion/teppSystem.Tests.ps1",
+          "sha256": "95da8b9ce9f63372dfd0a97ae65df4cfd18baf13d0eb00c927379d94ddbf9712",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/tests/functions/utility/ConvertTo-PSFHashtable.Tests.ps1",
+          "sha256": "38d07d9dfb65d3164daf4c4566966741624ac3d905032a0e4dc09b8b0ab3a81b",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/tests/functions/utility/Import-PSFPowerShellDataFile.Tests.ps1",
+          "sha256": "b5ffda4c71aac71bde38dee9e6addc978c8e29a7036601cc51846b2fd9500a6b",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/tests/functions/utility/Select-PSFObject.Tests.ps1",
+          "sha256": "b1d73812fe7e89d1b7ce0c5828d5ab52b28b8b074d979b0cf2cc24f4258c92b3",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/tests/functions/utility/Select-PSFPropertyValue.Tests.ps1",
+          "sha256": "2e6de78e509610fb3db23d5dfecc1fdcb97d54ee67387207a6dfb0085b32cfc9",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/tests/general/FileIntegrity.Exceptions.ps1",
+          "sha256": "0a74172ebf1ec61cbefa4ef5e766a31adcf5f1aba25b982c9d15c05c723df60b",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/tests/general/FileIntegrity.Tests.ps1",
+          "sha256": "76c4beb42aec7204eefc1ef393322a7f0ba551f5c5af0ff47bc86358ab3708e1",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/tests/general/Help.Exceptions.ps1",
+          "sha256": "6a0f98564da4f501bb57c375832ceb25b7a8effa006da6046290a0fd0a3e5736",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/tests/general/Help.Tests.ps1",
+          "sha256": "c1a82dd5229df673378a3c02bee0d353291bfcc0197f3638751ad24c6217c1dd",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/tests/general/manifest.Tests.ps1",
+          "sha256": "acbb0ab131bf8dd09c006cf6774ad3c8436f1c7393c60d310ff0255ef6d1d685",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/tests/general/PSScriptAnalyzer.Tests.ps1",
+          "sha256": "078be9c536a12dcacab1efa7b4907309c56e742eccba6fb1dc98f65836f64812",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/tests/general/strings.Exceptions.ps1",
+          "sha256": "3e202a9eba616497f18bcd1bfef28760bccede704e9e47323c70ab9ea944a139",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/tests/general/strings.Tests.ps1",
+          "sha256": "0ac0e3ce7cb9194d8a7b5312c41fa60450a28ce59c33e8d17db68a53514ab025",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/tests/pester.ps1",
+          "sha256": "da744e433ffc6a748de40ae7561d58037b78a6aa48c391c128fa726a3c5c9c04",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/tests/readme.md",
+          "sha256": "e4fc96deae22b02920b637cef8cbe152a2165ef03d5a0f36c1c4730cdb6f21f7",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/tests/testdata/configdata.json",
+          "sha256": "0ff58049586ea3d0e083dfa2aff9e8f416f881e9e90afbe75e7856a404f73c68",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/tests/testdata/utility/ImportJson.json",
+          "sha256": "203659a81e8cb10fcfcfe696ac90df129c9199645087ac57e1dc18b49a1c6a63",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/tests/testdata/utility/ImportPsd1.psd1",
+          "sha256": "2a0128981ac48658723f59d526490b6c06097946571611073afcb044fa274255",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/The PSFramework Reliability Promise.md",
+          "sha256": "4cc353d26ac7fe59ed5561ae5229ded74d0e32affa7c06532edf224289ddd891",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/xml/PSFramework.Types.ps1xml",
+          "sha256": "b566e2624dfeea2b4ba69a4b91dcd7cfa63e34080df460bc517c8b9c8b99cb0a",
+          "role": "ModuleTypeData"
+        },
+        {
+          "relativePath": "PSFramework/xml/readme.md",
+          "sha256": "f55a491042bfd9fe8ab8a1a8ff7a38b0d8406f0ffdbf82f3a8823879b826b37e",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/[Content_Types].xml",
+          "sha256": "e0026a61fccb9131f351ff84d5eba46c6c5cf7358f610503cd8fb78eab470f9b",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework/_rels/.rels",
+          "sha256": "5ee92c084764e1b12a28301eaed54eaa25bc1e0a076d38b13f1df42a351b0910",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "PSFramework.powerforge-target.json",
+          "sha256": "90180f20d4060b1d15573552f333e59b81e8c77f1bdfb9e4b9a3da8bdc269c78",
+          "role": "TargetContract"
+        },
+        {
+          "relativePath": "PSFramework.powerforge-provenance.json",
+          "sha256": "fd48e6cce3f27c8164b7a71d314dfcab6f3e60e6d3f76170ecfebec04a0aa40a",
+          "role": "BuildProvenance"
+        },
+        {
+          "relativePath": "PSFramework.powerforge-sbom.cdx.json",
+          "sha256": "f886adef29e5a4d5372b40259a59ef47e1246cf05d98df9d47da6339133867e6",
+          "role": "Sbom"
+        },
+        {
+          "relativePath": "PSFramework/en-US/PSFramework-help.xml",
+          "sha256": "fc936aefb4734d5376c8414e594f8ed1dc8e271b8633adb97afe236cc079b540",
+          "role": "ExternalHelp"
+        }
+      ],
+      "succeeded": true,
+      "cleanImport": true,
+      "invocation": true,
+      "importHost": {
+        "runtimeIdentifier": "win-x64",
+        "powerShell": "7.6.9",
+        "architecture": "X64"
+      },
+      "exportedCommands": 162,
+      "counts": {
+        "analyzedUnits": 176,
+        "boundUnits": 38,
+        "emittedClrUnits": 38,
+        "promotedTypedRegions": 0,
+        "exportedCmdletUnits": 2,
+        "hostedRegions": 90.0,
+        "retainedSourceUnits": 138,
+        "semanticFallbackUnits": 138,
+        "shapingFallbackUnits": 0,
+        "runtimeRoutedUnits": 165,
+        "omittedUnits": 0,
+        "rejectedUnits": 0,
+        "leadingFallbackCauses": [
+          {
+            "featureId": "syntax.unsupported",
+            "units": 76
+          },
+          {
+            "featureId": "parameter.type",
+            "units": 75
+          },
+          {
+            "featureId": "parameter.metadata",
+            "units": 28
+          },
+          {
+            "featureId": "syntax.typeexpression",
+            "units": 4
+          },
+          {
+            "featureId": "expression.conversion",
+            "units": 3
+          },
+          {
+            "featureId": "scriptblock.typed",
+            "units": 2
+          },
+          {
+            "featureId": "assignment.target",
+            "units": 1
+          },
+          {
+            "featureId": "runtime.scope",
+            "units": 1
+          },
+          {
+            "featureId": "syntax.invokememberexpression",
+            "units": 1
+          }
+        ]
+      }
+    },
+    {
+      "id": "Microsoft.PowerShell.Archive",
+      "version": "1.2.6",
+      "packageSha256": "fc7e304bffcc14ea95828eedf52c5992432c6233fef36416a6f5fb4628d13c47",
+      "dependencyLockSha256": "e9224e4864e0b6f964c59462591dce48992e1821d6a34f90887d77da32c63a69",
+      "artifactSha256": "47915084fbecbb16d79035cd18da0cd0a3607cab1a45ee160359cf3d03a35018",
+      "artifactFiles": [
+        {
+          "relativePath": "Microsoft.PowerShell.Archive/Microsoft.PowerShell.Archive.psm1",
+          "sha256": "a6f6ed6a3ddafb7fa563ee0669a0fcdaa2ca51043aaa018b5c4a0cc11724a117",
+          "role": "PrimaryModule"
+        },
+        {
+          "relativePath": "Microsoft.PowerShell.Archive/Microsoft.PowerShell.Archive.dll",
+          "sha256": "f3a2c3a758faabc048fd1e462aacc7a483f025105a5066e86ec5a505a33d94e5",
+          "role": "TypedAssembly"
+        },
+        {
+          "relativePath": "Microsoft.PowerShell.Archive/Microsoft.PowerShell.Archive.pdb",
+          "sha256": "f76c1e3cee498550f7393071c5cac5a45be32c5da316ea0c553453456054da44",
+          "role": "DebugSymbols"
+        },
+        {
+          "relativePath": "Microsoft.PowerShell.Archive/Microsoft.PowerShell.Archive.psd1",
+          "sha256": "47915084fbecbb16d79035cd18da0cd0a3607cab1a45ee160359cf3d03a35018",
+          "role": "PrimaryModuleManifest"
+        },
+        {
+          "relativePath": "Microsoft.PowerShell.Archive/.powerforge-corpus-package.json",
+          "sha256": "cc32e3f85511a9e9a6bd0351d8787e6b7b3958c834494b9ac5f0d426f2ef51d4",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "Microsoft.PowerShell.Archive/.signature.p7s",
+          "sha256": "1c4ee42e1fa99a2768fa8feddaadf70a84f8ea8f273234061a6781d41da0fad4",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "Microsoft.PowerShell.Archive/en-US/ArchiveResources.psd1",
+          "sha256": "15c2c0874890e5c715aa513c744ca99803a2629466cbb3c62e41ae3cfc857d66",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "Microsoft.PowerShell.Archive/Microsoft.PowerShell.Archive.nuspec",
+          "sha256": "09279b00e6ee23419529e121a816abec0e5b52eddb36a7867ede15d61cf41e9d",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "Microsoft.PowerShell.Archive/package/services/metadata/core-properties/7ea125c968984000bd1cf4575be29b0d.psmdcp",
+          "sha256": "884ac663b94453ca188eea1ddc2ce434fabb985124caa0e4f14abaa2334c38d7",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "Microsoft.PowerShell.Archive/[Content_Types].xml",
+          "sha256": "3bbdd86d32f8be085c6b98342e44a899fb1ecc2d4097b285880d084c741dd5a4",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "Microsoft.PowerShell.Archive/_rels/.rels",
+          "sha256": "c4c43f4e1a2003965a99f4154ce5f10a645df43b5a567282990103157b1f28f5",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "Microsoft.PowerShell.Archive.powerforge-target.json",
+          "sha256": "90180f20d4060b1d15573552f333e59b81e8c77f1bdfb9e4b9a3da8bdc269c78",
+          "role": "TargetContract"
+        },
+        {
+          "relativePath": "Microsoft.PowerShell.Archive.powerforge-provenance.json",
+          "sha256": "f8000ecd8dacf0509f64f8d318d4803d332c82bffbb0456fa70660eee2085bc0",
+          "role": "BuildProvenance"
+        },
+        {
+          "relativePath": "Microsoft.PowerShell.Archive.powerforge-sbom.cdx.json",
+          "sha256": "b4e7ee69a2a3a89def5c13fb7982b8e705fbc6d0121d6cd2e5a2f70371e4831e",
+          "role": "Sbom"
+        }
+      ],
+      "succeeded": true,
+      "cleanImport": true,
+      "invocation": true,
+      "importHost": {
+        "runtimeIdentifier": "win-x64",
+        "powerShell": "7.6.9",
+        "architecture": "X64"
+      },
+      "exportedCommands": 2,
+      "counts": {
+        "analyzedUnits": 21,
+        "boundUnits": 19,
+        "emittedClrUnits": 19,
+        "promotedTypedRegions": 0,
+        "exportedCmdletUnits": 0,
+        "hostedRegions": 115.0,
+        "retainedSourceUnits": 2,
+        "semanticFallbackUnits": 2,
+        "shapingFallbackUnits": 0,
+        "runtimeRoutedUnits": 18,
+        "omittedUnits": 0,
+        "rejectedUnits": 0,
+        "leadingFallbackCauses": [
+          {
+            "featureId": "parameter.type",
+            "units": 1
+          },
+          {
+            "featureId": "syntax.datastatement",
+            "units": 1
+          },
+          {
+            "featureId": "syntax.invokememberexpression",
+            "units": 1
+          }
+        ]
+      }
+    },
+    {
+      "id": "powershell-yaml",
+      "version": "0.4.12",
+      "packageSha256": "d4602bc7a4a093766520422d53ca8b09acde162286fae11e2ee6c8edfea07810",
+      "dependencyLockSha256": "f9c68e7fa3fb284503b96bbe1ab1ea8eab6541c233be6161c946bf60be696c8a",
+      "artifactSha256": "fe841eef6b910bf4bbe6c22bca6ca28fc518a4cb14719073de9ca77824512f76",
+      "artifactFiles": [
+        {
+          "relativePath": "powershell-yaml/powershell-yaml.psm1",
+          "sha256": "7d2bf761a7764eb0684ebd6c485966e117dbb7a180f0598cafc53aaf18b535a3",
+          "role": "PrimaryModule"
+        },
+        {
+          "relativePath": "powershell-yaml/powershell-yaml.dll",
+          "sha256": "1d3a6e39bbed20e6af61ee1185666e50730ba111a9d33da131f2d52b2b446015",
+          "role": "TypedAssembly"
+        },
+        {
+          "relativePath": "powershell-yaml/powershell-yaml.pdb",
+          "sha256": "cd4a66e35b4d4bd10b9df4891d4cf0d83f70c0a0882b13837b6e472b11c94e32",
+          "role": "DebugSymbols"
+        },
+        {
+          "relativePath": "powershell-yaml/powershell-yaml.psd1",
+          "sha256": "fe841eef6b910bf4bbe6c22bca6ca28fc518a4cb14719073de9ca77824512f76",
+          "role": "PrimaryModuleManifest"
+        },
+        {
+          "relativePath": "powershell-yaml/.powerforge-corpus-package.json",
+          "sha256": "3610b7b776582cee8f1841502a2a4b52a0390fe1f1687fd702d5a3e49c3f94a3",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "powershell-yaml/build.ps1",
+          "sha256": "1b239ed96f566421b9ad8b49ef36b2586d3dad41d4555397b539c4691b729124",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "powershell-yaml/lib/net47/LICENSE.txt",
+          "sha256": "daea8b7f1b2bab48ea12ad50b0ce91634669d99d7dd0cb64aed8dffeeef69ed3",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "powershell-yaml/lib/net47/PowerShellYamlSerializer.dll",
+          "sha256": "a5bdd33675629ca88cf05cd08150a19a69bc20b21cbe1d1e5e55fe63a332062a",
+          "role": "ManagedDependency"
+        },
+        {
+          "relativePath": "powershell-yaml/lib/net47/YamlDotNet.dll",
+          "sha256": "d35c770d92632bd94bba4203db05eee5ebce6e6ea6d92e7ebe8997a942b5321c",
+          "role": "ManagedDependency"
+        },
+        {
+          "relativePath": "powershell-yaml/lib/net47/YamlDotNet.xml",
+          "sha256": "9a39a8c9122b6c146ad39ccc373f596f277f4b4b998bc2d4dfc18c8368a2f555",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "powershell-yaml/lib/netstandard2.1/LICENSE.txt",
+          "sha256": "daea8b7f1b2bab48ea12ad50b0ce91634669d99d7dd0cb64aed8dffeeef69ed3",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "powershell-yaml/lib/netstandard2.1/PowerShellYamlSerializer.dll",
+          "sha256": "c9193f2fb5afa40af61d908589fdd0929ab58472be215fc2afb692194d53210d",
+          "role": "ManagedDependency"
+        },
+        {
+          "relativePath": "powershell-yaml/lib/netstandard2.1/YamlDotNet.dll",
+          "sha256": "d7543a03a69f14ca1e302aa2bbb09777200b72e0c6db0d0eb7614593f5c33e0f",
+          "role": "ManagedDependency"
+        },
+        {
+          "relativePath": "powershell-yaml/lib/netstandard2.1/YamlDotNet.xml",
+          "sha256": "9a39a8c9122b6c146ad39ccc373f596f277f4b4b998bc2d4dfc18c8368a2f555",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "powershell-yaml/LICENSE",
+          "sha256": "929f1557083885c9ea16be5ef9112b55c415e6b3867279b996ed4abc5d93b271",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "powershell-yaml/package/services/metadata/core-properties/3e307b8996374dc699debaba76cd8e5a.psmdcp",
+          "sha256": "51cf41807198a82a09090a8b73b0c56866283c12ea1657bc85612f9d8fa9c321",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "powershell-yaml/powershell-yaml.nuspec",
+          "sha256": "bf4682ea15b32ad6a44dea8b37c6cae06b12329dcec30755a3118e7a099a362a",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "powershell-yaml/README.md",
+          "sha256": "d64f022a08cf7f406f38f6ce69f1dd0de2155ba393e39e1609772bbabd0831ef",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "powershell-yaml/Tests/powershell-yaml.Tests.ps1",
+          "sha256": "29602f1e025ea0986c5286718e4e5f090f3b813bfd81a7876aefafcf943deabd",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "powershell-yaml/[Content_Types].xml",
+          "sha256": "d7fbc58010f1e4f7a281218dec909c74255a228c273684d420a6b8a80eb3e721",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "powershell-yaml/_rels/.rels",
+          "sha256": "9a324eb81a348626ff17c3a3b9bf05a2161b3ecf08e68f9a0b3eef3a1cef2a55",
+          "role": "ModuleResource"
+        },
+        {
+          "relativePath": "powershell-yaml.powerforge-target.json",
+          "sha256": "90180f20d4060b1d15573552f333e59b81e8c77f1bdfb9e4b9a3da8bdc269c78",
+          "role": "TargetContract"
+        },
+        {
+          "relativePath": "powershell-yaml.powerforge-provenance.json",
+          "sha256": "f1bab8730e0c5f8aeae3ff92387599464735ec7bba7e12833f18a7aafbd3a03d",
+          "role": "BuildProvenance"
+        },
+        {
+          "relativePath": "powershell-yaml.powerforge-sbom.cdx.json",
+          "sha256": "13ea843818b9c51ee5d0cb7497a123b6c859363b53f5201b71bc947d1f311e91",
+          "role": "Sbom"
+        }
+      ],
+      "succeeded": true,
+      "cleanImport": true,
+      "invocation": true,
+      "importHost": {
+        "runtimeIdentifier": "win-x64",
+        "powerShell": "7.6.9",
+        "architecture": "X64"
+      },
+      "exportedCommands": 4,
+      "counts": {
+        "analyzedUnits": 15,
+        "boundUnits": 15,
+        "emittedClrUnits": 14,
+        "promotedTypedRegions": 0,
+        "exportedCmdletUnits": 0,
+        "hostedRegions": 38.0,
+        "retainedSourceUnits": 1,
+        "semanticFallbackUnits": 0,
+        "shapingFallbackUnits": 1,
+        "runtimeRoutedUnits": 14,
+        "omittedUnits": 0,
+        "rejectedUnits": 0,
+        "leadingFallbackCauses": []
+      }
+    }
+  ]
+}

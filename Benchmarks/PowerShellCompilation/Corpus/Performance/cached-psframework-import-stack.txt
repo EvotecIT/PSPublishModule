@@ -1,0 +1,368 @@
+Top 160 Functions (Inclusive)                                                  Inclusive           Exclusive
+1.   (Non-Activities)                                                          100%                0%
+2.   Threads                                                                   100%                0%
+3.   Thread.StartCallback()                                                    74.01%              0%
+4.   PortableThreadPool+WorkerThread.WorkerThreadStart()                       37.17%              0.1%
+5.   LowLevelLifoSemaphore.WaitForSignal(int32)                                36.07%              0%
+6.   il!Interop+Kernel32.GetQueuedCompletionStatus(int,unsigned int32&,unsi    36.07%              36.07%
+     gned int&,int&,int32)
+7.   PortableThreadPool+IOCompletionPoller.Poll()                              22.11%              22.11%
+8.   WaitHandle.WaitOneNoCheck(int32,bool,class System.Object,value class W    20.92%              20.92%
+     aitHandleWaitSourceMap)
+9.   Thread+StartHelper.Callback(class System.Object)                          17.65%              0%
+10.  ExecutionContext.RunInternal(class System.Threading.ExecutionContext,c    17.6%               0%
+     lass System.Threading.ContextCallback,class System.Object)
+11.  EnterTryCatchFinallyInstruction.Run(class System.Management.Automation    10.79%              0.01%
+     .Interpreter.InterpretedFrame)
+12.  Interpreter.Run(class System.Management.Automation.Interpreter.Interpr    10.79%              0%
+     etedFrame)
+13.  LightLambda.RunVoid1(!!0)                                                 10.79%              0%
+14.  __Canon].Run(class System.Management.Automation.Interpreter.Interprete    10.76%              0%
+     dFrame)
+15.  PipelineOps.InvokePipeline(class System.Object,bool,class System.Manag    10.76%              0%
+     ement.Automation.CommandParameterInternal[][],class System.Management.
+     Automation.Language.CommandBaseAst[],class System.Management.Automatio
+     n.CommandRedirection[][],class System.Management.Automation.Language.F
+     unctionContext)
+16.  LocalPipeline.InvokeHelper()                                              10.54%              0%
+17.  LocalPipeline.InvokeThreadProc()                                          10.38%              0%
+18.  ScriptBlock.InvokeWithPipe(bool,value class ErrorHandlingBehavior,clas    9.88%               0%
+     s System.Object,class System.Object,class System.Object,class System.M
+     anagement.Automation.Internal.Pipe,class System.Management.Automation.
+     InvocationInfo,bool,class System.Collections.Generic.List`1<class Syst
+     em.Management.Automation.PSVariable>,class System.Collections.Generic.
+     Dictionary`2<class System.String,class System.Management.Automation.Sc
+     riptBlock>,class System.Object[])
+19.  ScriptBlock.InvokeWithPipeImpl(value class System.Management.Automatio    9.8%                0%
+     n.ScriptBlockClauseToInvoke,bool,class System.Collections.Generic.Dict
+     ionary`2<class System.String,class System.Management.Automation.Script
+     Block>,class System.Collections.Generic.List`1<class System.Management
+     .Automation.PSVariable>,value class ErrorHandlingBehavior,class System
+     .Object,class System.Object,class System.Object,class System.Managemen
+     t.Automation.Internal.Pipe,class System.Management.Automation.Invocati
+     onInfo,class System.Object[])
+20.  PSScriptCmdlet.RunClause(class System.Action`1<class System.Management    8.44%               0%
+     .Automation.Language.FunctionContext>,class System.Object,class System
+     .Object)
+21.  ManagedPSEntry.Main(class System.String[])                                7.48%               0%
+22.  UnmanagedPSEntry.Start(class System.String[],int32)                       7.47%               0%
+23.  ImportModuleCommand.ImportModule_LocallyViaName(value class ImportModu    7.46%               0%
+     leOptions,class System.String)
+24.  PortableThreadPool+GateThread.GateThreadStart()                           7.46%               0%
+25.  ImportModuleCommand.ImportModule_LocallyViaName_WithTelemetry(value cl    7.45%               0%
+     ass ImportModuleOptions,class System.String)
+26.  ConsoleHost.Start(class System.String,class System.String,bool)           7.4%                0%
+27.  ConsoleHost.Run(class Microsoft.PowerShell.CommandLineParameterParser,    7.39%               0%
+     bool)
+28.  ConsoleHost.CreateRunspace(class Microsoft.PowerShell.RunspaceCreation    7.39%               0%
+     EventArgs)
+29.  ConsoleHost.DoRunspaceLoop(class System.String,bool,class System.Colle    7.39%               0%
+     ctions.ObjectModel.Collection`1<class System.Management.Automation.Run
+     spaces.CommandParameter>,bool,class System.String,class System.String)
+
+30.  Task.InternalWait(int32,value class System.Threading.CancellationToken    7.38%               0%
+     )
+31.  Task.InternalWaitCore(int32,value class System.Threading.CancellationT    7.38%               0%
+     oken)
+32.  Task.SpinThenBlockingWait(int32,value class System.Threading.Cancellat    7.38%               0%
+     ionToken)
+33.  ManualResetEventSlim.Wait(int32,value class System.Threading.Cancellat    7.37%               0%
+     ionToken)
+34.  Monitor.Wait(class System.Object,int32)                                   7.37%               7.37%
+35.  NamedPipeServerStream.WaitForConnection()                                 7.36%               0%
+36.  TaskAwaiter.HandleNonSuccessAndDebuggerNotification(class System.Threa    7.36%               0%
+     ding.Tasks.Task,value class System.Threading.Tasks.ConfigureAwaitOptio
+     ns)
+37.  ConsoleHost.DoRunspaceInitialization(class Microsoft.PowerShell.Runspa    7.34%               0%
+     ceCreationEventArgs)
+38.  Executor.ExecuteCommandAsyncHelper(class System.Management.Automation.    7.33%               0%
+     Runspaces.Pipeline,class System.Exception&,value class ExecutionOption
+     s)
+39.  WaitHandle.WaitOne()                                                      7.33%               0%
+40.  TimerQueue.TimerThread()                                                  7.28%               0%
+41.  ModuleIntrinsics.CreateModuleImplementation(class System.String,class     7.08%               0%
+     System.String,class System.Object,class System.Management.Automation.L
+     anguage.IScriptExtent,class System.Management.Automation.SessionState,
+     class System.Object,class System.Collections.Generic.List`1<class Syst
+     em.Object>&,class System.Object[])
+42.  PipelineThread.WorkerProc()                                               6.94%               0%
+43.  PowerShellNativeFunctionHost.Run(class System.Action`1<class PowerForg    5.3%                0.01%
+     e.Generated.Runtime.PowerShellNativeFunctionContext>,class System.Obje
+     ct,bool)
+44.  PowerShellNativeFunctionContext.AssignTarget(class System.String,class    3.63%               0%
+      System.String,class System.Func`1<class System.Object>,class System.S
+     tring,int32,int32,class System.String,int32,int32)
+45.  PSFrameworkMethodsNativeFunctions+<>c.<Create_Test_PSFParameterBinding    2.77%               0%
+     >b__24_0(class PowerForge.Generated.Runtime.PowerShellNativeFunctionCo
+     ntext)
+46.  PSFrameworkMethodsNativeFunctions.<Create_Test_PSFParameterBinding>g__    2.77%               0%
+     Invoke|24_1(class PowerForge.Generated.Runtime.PowerShellNativeFunctio
+     nContext,int32)
+47.  PSFrameworkMethods.Test_PSFParameterBinding(class PowerForge.Generated    2.77%               0%
+     .Runtime.PowerShellNativeFunctionContext,class PowerForge.Generated.Ru
+     ntime.PowerShellStatementErrorContext,class System.Action,class System
+     .Action`1<class System.Object>,class System.Action`1<class System.Stri
+     ng>,class System.Action`1<class System.String>,class System.Action`1<c
+     lass System.String>,class System.Action`1<class System.String>,class S
+     ystem.Action`1<class System.String>,class System.Action`1<class System
+     .String>)
+48.  PowerShellNativeFunctionContext.CreateAssignmentTarget(class System.St    2.75%               0%
+     ring,class System.String,class System.String,int32,int32,class System.
+     String,int32,int32)
+49.  ScriptBlockAst.InternalVisit(class System.Management.Automation.Langua    2.73%               0.07%
+     ge.AstVisitor)
+50.  NamedBlockAst.InternalVisit(class System.Management.Automation.Languag    2.72%               0.07%
+     e.AstVisitor)
+51.  ScriptBlock.InvokeUsingCmdlet(class System.Management.Automation.Cmdle    2.67%               0%
+     t,bool,value class ErrorHandlingBehavior,class System.Object,class Sys
+     tem.Object,class System.Object,class System.Object[])
+52.  ModuleCmdletBase.RemoveModule(class System.Management.Automation.PSMod    2.67%               0%
+     uleInfo,class System.String)
+53.  StatementBlockAst.InternalVisit(class System.Management.Automation.Lan    2.51%               0.06%
+     guage.AstVisitor,class System.Collections.ObjectModel.ReadOnlyCollecti
+     on`1<class System.Management.Automation.Language.TrapStatementAst>,cla
+     ss System.Collections.ObjectModel.ReadOnlyCollection`1<class System.Ma
+     nagement.Automation.Language.StatementAst>,value class System.Manageme
+     nt.Automation.Language.AstVisitAction)
+54.  __Canon].Run(class System.Management.Automation.Interpreter.Interprete    2.49%               0%
+     dFrame)
+55.  CallSite.Target(pMT: 00007FF8A66DFD60,pMT: 00007FF8A62CCEE8,class Syst    2.35%               0%
+     em.Object)
+56.  UpdateDelegates.UpdateAndExecute1(class System.Runtime.CompilerService    2.31%               0%
+     s.CallSite,!!0)
+57.  RunspaceContainer.Stop()                                                  2.26%               0%
+58.  Thread.Sleep(int32)                                                       2.26%               2.26%
+59.  Parser.ParseTask(class System.String,class System.String,class System.    2.14%               0%
+     Collections.Generic.List`1<class System.Management.Automation.Language
+     .Token>,bool,value class System.Management.Automation.Language.ParseMo
+     de)
+60.  RuntimeMethodInfo.Invoke(class System.Object,value class System.Reflec    2.06%               0%
+     tion.BindingFlags,class System.Reflection.Binder,class System.Object[]
+     ,class System.Globalization.CultureInfo)
+61.  Ast.FindAll(class System.Func`2<class System.Management.Automation.Lan    2.05%               0%
+     guage.Ast,bool>,bool)
+62.  FunctionDefinitionAst.InternalVisit(class System.Management.Automation    2.05%               0%
+     .Language.AstVisitor)
+63.  MethodBase.Invoke(class System.Object,class System.Object[])              2.03%               0%
+64.  PowerShellNativeFunctionHost.Invoke(class System.Reflection.MethodInfo    2.01%               0%
+     ,class System.Object,class System.Object[])
+65.  MethodBaseInvoker.InvokeWithFewArgs(class System.Object,value class Sy    1.99%               0.01%
+     stem.Reflection.BindingFlags,class System.Reflection.Binder,class Syst
+     em.Object[],class System.Globalization.CultureInfo)
+66.  MethodBaseInvoker.InvokeDirectByRefWithFewArgs(class System.Object,val    1.94%               0%
+     ue class System.Span`1<class System.Object>,value class System.Reflect
+     ion.BindingFlags)
+67.  Parser.ParseInput(class System.String,class System.String,class System    1.93%               0%
+     .Management.Automation.Language.Token[]&,class System.Management.Autom
+     ation.Language.ParseError[]&)
+68.  InvokeStub_Parser.ParseInput(class System.Object,class System.Object,i    1.93%               0%
+     nt*)
+69.  il!Interop+Kernel32.GetSystemTimes(int64&,int64&,int64&)                  1.77%               1.77%
+70.  PortableThreadPool+CpuUtilizationReader.get_CurrentUtilization()          1.77%               0%
+71.  Thread.<PollGC>g__PollGCWorker|70_0()                                     1.71%               1.71%
+72.  PSFrameworkMethodsNativeFunctions.<Create_Read_PsfConfigFile>g__Invoke    1.4%                0.01%
+     |12_1(class PowerForge.Generated.Runtime.PowerShellNativeFunctionConte
+     xt,int32)
+73.  PSFrameworkMethodsNativeFunctions+<>c.<Create_Read_PsfConfigFile>b__12    1.4%                0%
+     _0(class PowerForge.Generated.Runtime.PowerShellNativeFunctionContext)
+
+74.  Parser.ScriptBlockBodyRule(class System.Management.Automation.Language    1.4%                0.05%
+     .Token,class System.Collections.Generic.List`1<class System.Management
+     .Automation.Language.UsingStatementAst>,class System.Management.Automa
+     tion.Language.ParamBlockAst,bool,class System.Management.Automation.La
+     nguage.StatementAst)
+75.  PSFrameworkMethods.Read_PsfConfigFile(class PowerForge.Generated.Runti    1.39%               0%
+     me.PowerShellNativeFunctionContext,class PowerForge.Generated.Runtime.
+     PowerShellStatementErrorContext,class System.Action,class System.Actio
+     n`1<class System.Object>,class System.Action`1<class System.String>,cl
+     ass System.Action`1<class System.String>,class System.Action`1<class S
+     ystem.String>,class System.Action`1<class System.String>,class System.
+     Action`1<class System.String>,class System.Action`1<class System.Strin
+     g>)
+76.  Parser.StatementRule()                                                    1.39%               0%
+77.  Parser.StatementListRule(class System.Collections.Generic.List`1<class    1.35%               0%
+      System.Management.Automation.Language.StatementAst>,class System.Coll
+     ections.Generic.List`1<class System.Management.Automation.Language.Tra
+     pStatementAst>)
+78.  StatementBlockAst.InternalVisit(class System.Management.Automation.Lan    1.3%                0.24%
+     guage.AstVisitor)
+79.  Parser.ScriptBlockRule(class System.Management.Automation.Language.Tok    1.24%               0%
+     en,bool,class System.Management.Automation.Language.StatementAst)
+80.  PowerShellNativeFunctionHost.ParseCore(class System.String,class Syste    1.19%               0%
+     m.String,class System.Management.Automation.Language.ParseError[]&)
+81.  PowerShellNativeFunctionContext.FindFunctionDefinition(class System.St    1.18%               0%
+     ring,class System.String,int32,int32)
+82.  PowerShellNativeFunctionHost.ParseSelectedDocument(class System.String    1.18%               0%
+     ,class System.String,int32,int32)
+83.  Parser.PipelineChainRule()                                                1.13%               0%
+84.  PipelineAst.InternalVisit(class System.Management.Automation.Language.    1.12%               0.11%
+     AstVisitor)
+85.  IfStatementAst.InternalVisit(class System.Management.Automation.Langua    1.09%               0.15%
+     ge.AstVisitor)
+86.  CommandExpressionAst.InternalVisit(class System.Management.Automation.    1.05%               0.13%
+     Language.AstVisitor)
+87.  AssignmentStatementAst.InternalVisit(class System.Management.Automatio    1%                  0.07%
+     n.Language.AstVisitor)
+88.  __Canon].CopyTo(!0[],int32)                                               0.94%               0%
+89.  Enumerable.ICollectionToArray(class System.Collections.Generic.ICollec    0.93%               0.07%
+     tion`1<!!0>)
+90.  Parser.FunctionDeclarationRule(class System.Management.Automation.Lang    0.92%               0%
+     uage.Token)
+91.  Parser.StatementBlockRule()                                               0.91%               0%
+92.  LowLevelLifoSemaphore.Wait(int32,bool)                                    0.87%               0%
+93.  LowLevelSpinWaiter.Wait(int32,int32,bool)                                 0.87%               0.87%
+94.  Parser.PipelineRule(class System.Management.Automation.Language.Expres    0.87%               0.01%
+     sionAst,bool)
+95.  LocationGlobber.GetGlobbedProviderPathsFromMonadPath(class System.Stri    0.78%               0%
+     ng,bool,class System.Management.Automation.CmdletProviderContext,class
+      System.Management.Automation.ProviderInfo&,class System.Management.Au
+     tomation.Provider.CmdletProvider&)
+96.  ScriptBlockExpressionAst.InternalVisit(class System.Management.Automat    0.78%               0%
+     ion.Language.AstVisitor)
+97.  LocationGlobber.GenerateRelativePath(class System.Management.Automatio    0.77%               0%
+     n.PSDriveInfo,class System.String,bool,class System.Management.Automat
+     ion.Provider.CmdletProvider,class System.Management.Automation.CmdletP
+     roviderContext)
+98.  NavigationCmdletProvider.ContractRelativePath(class System.String,clas    0.77%               0%
+     s System.String,bool,class System.Management.Automation.CmdletProvider
+     Context)
+99.  NavigationCmdletProvider.TokenizePathToStack(class System.String,class    0.77%               0%
+      System.String)
+100. LocationGlobber.GetDriveRootRelativePathFromPSPath(class System.String    0.77%               0%
+     ,class System.Management.Automation.CmdletProviderContext,bool,class S
+     ystem.Management.Automation.PSDriveInfo&,class System.Management.Autom
+     ation.Provider.CmdletProvider&)
+101. RegistryProvider.ItemExists(class System.String)                          0.76%               0%
+102. RegistryProvider.GetRegkeyForPath(class System.String,bool)               0.76%               0.02%
+103. Parser.IfStatementRule(class System.Management.Automation.Language.Tok    0.73%               0%
+     en)
+104. CommandAst.InternalVisit(class System.Management.Automation.Language.A    0.72%               0.3%
+     stVisitor)
+105. ScriptBlockAst.PerformPostParseChecks(class System.Management.Automati    0.72%               0%
+     on.Language.Parser)
+106. Parser.PrimaryExpressionRule(bool)                                        0.67%               0.01%
+107. ForEachStatementAst.InternalVisit(class System.Management.Automation.L    0.66%               0.06%
+     anguage.AstVisitor)
+108. PowerShellNativeFunctionContext.DeclareFunction(class System.String,in    0.66%               0%
+     t32,int32,class System.Management.Automation.ScriptBlock)
+109. RegistryKey.GetSubKeyNames()                                              0.66%               0%
+110. il!Interop+Advapi32.RegEnumKeyEx(class Microsoft.Win32.SafeHandles.Saf    0.66%               0.66%
+     eRegistryHandle,int32,wchar&,int32&,int32[],wchar[],int32[],int64[])
+111. PowerShellNativeFunctionContext.CreateFunctionBody(class System.String    0.64%               0%
+     ,int32,int32,class System.Action`1<class PowerForge.Generated.Runtime.
+     PowerShellNativeFunctionContext>,class System.Action`1<class PowerForg
+     e.Generated.Runtime.PowerShellNativeFunctionContext>,class System.Acti
+     on`1<class PowerForge.Generated.Runtime.PowerShellNativeFunctionContex
+     t>,class System.Action`1<class PowerForge.Generated.Runtime.PowerShell
+     NativeFunctionContext>)
+112. StartSleepCommand.Sleep(int32)                                            0.63%               0%
+113. WaitHandle.WaitOne(int32)                                                 0.63%               0%
+114. __Canon].Compile()                                                        0.63%               0%
+115. DynamicMethod.CreateDelegate(class System.Type,class System.Object)       0.6%                0.56%
+116. Parser.ScriptBlockExpressionRule(class System.Management.Automation.La    0.59%               0%
+     nguage.Token)
+117. LocationGlobber.GetProviderPath(class System.String,class System.Manag    0.59%               0%
+     ement.Automation.CmdletProviderContext,bool,class System.Management.Au
+     tomation.ProviderInfo&,class System.Management.Automation.PSDriveInfo&
+     )
+118. PSFrameworkMethodsNativeFunctions.<Create_Set_PSFTypeAlias>g__Invoke|2    0.56%               0.02%
+     6_2(class PowerForge.Generated.Runtime.PowerShellNativeFunctionContext
+     ,int32)
+119. Parser.NamedBlockListRule(class System.Management.Automation.Language.    0.56%               0%
+     Token,class System.Collections.Generic.List`1<class System.Management.
+     Automation.Language.UsingStatementAst>,class System.Management.Automat
+     ion.Language.ParamBlockAst)
+120. Missing Symbol                                                            0.55%               0%
+121. PowerShellNativeFunctionContext+NativeAstOperation.Invoke(class System    0.55%               0%
+     .Object,class System.Func`1<class System.Object>,bool,class System.Act
+     ion`1<class System.Management.Automation.Language.IScriptExtent>)
+122. PSFrameworkMethods.Set_PSFTypeAlias(class PowerForge.Generated.Runtime    0.53%               0%
+     .PowerShellNativeFunctionContext,class PowerForge.Generated.Runtime.Po
+     werShellStatementErrorContext,class System.Action,class System.Action`
+     1<class System.Object>,class System.Action`1<class System.String>,clas
+     s System.Action`1<class System.String>,class System.Action`1<class Sys
+     tem.String>,class System.Action`1<class System.String>,class System.Ac
+     tion`1<class System.String>,class System.Action`1<class System.String>
+     )
+123. PowerShellNativeFunctionContext+NativeCommandRegion.Create(class Power    0.53%               0%
+     Forge.Generated.Runtime.PowerShellNativeFunctionContext,class System.S
+     tring,class System.String,int32,int32,bool,bool,class System.String,in
+     t32,int32,class System.String,int32[])
+124. PowerShellNativeFunctionContext.GetCommandRegion(class System.String,c    0.53%               0%
+     lass System.String,int32,int32,bool,bool,class System.String,int32,int
+     32,class System.String,int32[])
+125. Parser.BinaryExpressionRule(bool)                                         0.51%               0%
+126. Parser.ExpressionRule(bool)                                               0.51%               0%
+127. ParamBlockAst.InternalVisit(class System.Management.Automation.Languag    0.5%                0.05%
+     e.AstVisitor)
+128. ItemCmdletProvider.ItemExists(class System.String,class System.Managem    0.5%                0%
+     ent.Automation.CmdletProviderContext)
+129. LocationGlobber.ResolveDriveQualifiedPath(class System.String,class Sy    0.49%               0%
+     stem.Management.Automation.CmdletProviderContext,bool,class System.Man
+     agement.Automation.Provider.CmdletProvider&)
+130. LocationGlobber.GetGlobbedMonadPathsFromMonadPath(class System.String,    0.49%               0%
+     bool,class System.Management.Automation.CmdletProviderContext,class Sy
+     stem.Management.Automation.Provider.CmdletProvider&)
+131. NavigationCmdletProvider.GetChildName(class System.String)                0.48%               0%
+132. RegistryProvider.GetChildName(class System.String)                        0.48%               0%
+133. Parser.CommandRule(bool)                                                  0.48%               0%
+134. Parser.ArrayLiteralRule(bool)                                             0.46%               0%
+135. .ctor(class System.Management.Automation.Language.IScriptExtent,class     0.46%               0%
+     System.Collections.Generic.IEnumerable`1<class System.Management.Autom
+     ation.Language.CommandBaseAst>,bool)
+136. Parser.UnaryExpressionRule(bool)                                          0.46%               0.01%
+137. PSFrameworkMethodsNativeFunctions+<>c.<Create_Resolve_PSFPath>b__68_0(    0.45%               0%
+     class PowerForge.Generated.Runtime.PowerShellNativeFunctionContext)
+138. PSFrameworkMethodsNativeFunctions.<Create_Resolve_PSFPath>g__Invoke|68    0.45%               0.02%
+     _1(class PowerForge.Generated.Runtime.PowerShellNativeFunctionContext,
+     int32)
+139. SymbolResolver.ResolveSymbols(class System.Management.Automation.Langu    0.44%               0%
+     age.Parser,class System.Management.Automation.Language.ScriptBlockAst)
+
+140. PowerShellNativeFunctionContext.CaptureCommandRegion(class System.Stri    0.43%               0%
+     ng,class System.String,int32,int32,bool,class System.String,int32,int3
+     2,int32[])
+141. LambdaCompiler.Compile(class System.Linq.Expressions.LambdaExpression)    0.43%               0%
+
+142. PSFrameworkMethods.Resolve_PSFPath(class PowerForge.Generated.Runtime.    0.43%               0%
+     PowerShellNativeFunctionContext,class PowerForge.Generated.Runtime.Pow
+     erShellStatementErrorContext,class System.Action,class System.Action`1
+     <class System.Object>,class System.Action`1<class System.String>,class
+      System.Action`1<class System.String>,class System.Action`1<class Syst
+     em.String>,class System.Action`1<class System.String>,class System.Act
+     ion`1<class System.String>,class System.Action`1<class System.String>)
+
+143. Ast.Visit(class System.Management.Automation.Language.AstVisitor)         0.41%               0%
+144. PowerShellNativeFunctionContext+NativeAstCompiler.Compile()               0.41%               0%
+145. CmdletParameterBinderController.BindCommandLineParameters(class System    0.4%                0%
+     .Collections.ObjectModel.Collection`1<class System.Management.Automati
+     on.CommandParameterInternal>)
+146. CallSiteBinder.BindCore(class System.Runtime.CompilerServices.CallSite    0.39%               0%
+     `1<!!0>,class System.Object[])
+147. CmdletParameterBinderController.BindCommandLineParametersNoValidation(    0.39%               0%
+     class System.Collections.ObjectModel.Collection`1<class System.Managem
+     ent.Automation.CommandParameterInternal>)
+148. SessionStateInternal.GetProperty(class System.String[],class System.Co    0.36%               0%
+     llections.ObjectModel.Collection`1<class System.String>,class System.M
+     anagement.Automation.CmdletProviderContext)
+149. PSFrameworkMethods+<>c__DisplayClass52_0.<Resolve_PSFPath>b__19()         0.35%               0%
+150. SwitchStatementAst.InternalVisit(class System.Management.Automation.La    0.33%               0.01%
+     nguage.AstVisitor)
+151. Parser.ForeachStatementRule(class System.Management.Automation.Languag    0.33%               0%
+     e.LabelToken,class System.Management.Automation.Language.Token)
+152. PSFrameworkMethodsNativeFunctions+<>c.<Create_Set_PSFTypeAlias>b__26_0    0.33%               0%
+     (class PowerForge.Generated.Runtime.PowerShellNativeFunctionContext)
+153. PSFrameworkMethods.__Create___PowerForgeNestedFunction_8414c6972f8b0b6    0.32%               0%
+     90b516bd72924dc8bcfddf9a31999ac6489c4db0ebffc5dd2_58180(class PowerFor
+     ge.Generated.Runtime.PowerShellNativeFunctionContext)
+154. CmdletParameterBinderController.HandleCommandLineDynamicParameters(cla    0.32%               0%
+     ss System.Management.Automation.ParameterBindingException&)
+155. CoreCommandBase.GetDynamicParameters()                                    0.32%               0%
+156. PSFrameworkMethods.__Create___PowerForgeNestedFunction_8414c6972f8b0b6    0.32%               0%
+     90b516bd72924dc8bcfddf9a31999ac6489c4db0ebffc5dd2_57653(class PowerFor
+     ge.Generated.Runtime.PowerShellNativeFunctionContext)
+157. GC.RunFinalizers()                                                        0.31%               0%
+158. ComObject.Finalize()                                                      0.31%               0%
+159. IIUnknownCacheStrategy.Clear(class System.Runtime.InteropServices.Mars    0.31%               0%
+     halling.IIUnknownStrategy)
+160. IIUnknownCacheStrategy+TableInfo].GetEnumerator()                         0.31%               0.31%

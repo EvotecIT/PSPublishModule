@@ -1,0 +1,292 @@
+{
+  "schemaVersion": 1,
+  "packetId": "powerforge-public-powershell-modules-net10-v1",
+  "packetSha256": "ef64781013a85a48701dd6334435facce8f8bec5c1ecc1a36817b8e4d300b00e",
+  "generatedAtUtc": "2026-11-17T22:14:23.1604373+00:00",
+  "semanticProfile": "PowerForge.Oracle.PowerShell/7.6",
+  "host": {
+    "runtimeIdentifier": "linux-x64",
+    "operatingSystem": "Ubuntu 24.04.3 LTS",
+    "architecture": "X64",
+    "powerShell": "7.6.5",
+    "dotnet": "10.0.303"
+  },
+  "modules": [],
+  "strictPrograms": [
+    {
+      "id": "strict-number-theory",
+      "scenarioFamily": "integral-remainder-number-theory",
+      "runtimeIdentifier": "linux-x64",
+      "dependencyLockSha256": "e290849b48fdd0dc3cbd0903052a1cea0aa8c5622b5aa4fb560796afb836b972",
+      "artifactSha256": "c5addc479dc6d020f3ff4fbcf01287770aef7250432b79546a8491417c288147",
+      "artifactBytes": 110559,
+      "counts": {
+        "analyzedUnits": 3,
+        "boundUnits": 3,
+        "emittedClrUnits": 3,
+        "promotedTypedRegions": 0,
+        "exportedCmdletUnits": 0,
+        "hostedRegions": 0.0,
+        "retainedSourceUnits": 0,
+        "semanticFallbackUnits": 0,
+        "shapingFallbackUnits": 0,
+        "runtimeRoutedUnits": 0,
+        "omittedUnits": 0,
+        "rejectedUnits": 0,
+        "leadingFallbackCauses": []
+      },
+      "expectedOutput": "21|25",
+      "completeStrictProgram": true,
+      "qualification": null,
+      "durationMilliseconds": {
+        "analyze": 607,
+        "build": 5711,
+        "execute": 32
+      },
+      "succeeded": true
+    },
+    {
+      "id": "strict-calendar-rules",
+      "scenarioFamily": "calendar-rule-evaluation",
+      "runtimeIdentifier": "linux-x64",
+      "dependencyLockSha256": "a79869e0a0d118960d6c955b4efc40cd9abb41fbb3d89020a9367ec6c0fa2ba4",
+      "artifactSha256": "808c9bfb876c25cd1ecad549061131b43553ff8099a009a8a957541a1a9ccba7",
+      "artifactBytes": 110053,
+      "counts": {
+        "analyzedUnits": 3,
+        "boundUnits": 3,
+        "emittedClrUnits": 3,
+        "promotedTypedRegions": 0,
+        "exportedCmdletUnits": 0,
+        "hostedRegions": 0.0,
+        "retainedSourceUnits": 0,
+        "semanticFallbackUnits": 0,
+        "shapingFallbackUnits": 0,
+        "runtimeRoutedUnits": 0,
+        "omittedUnits": 0,
+        "rejectedUnits": 0,
+        "leadingFallbackCauses": []
+      },
+      "expectedOutput": "1900-2100|49|False|True",
+      "completeStrictProgram": true,
+      "qualification": null,
+      "durationMilliseconds": {
+        "analyze": 811,
+        "build": 4475,
+        "execute": 27
+      },
+      "succeeded": true
+    },
+    {
+      "id": "strict-recursion-local-call",
+      "scenarioFamily": "compute-recursion-control-flow",
+      "runtimeIdentifier": "linux-x64",
+      "dependencyLockSha256": "23ee5fce8067c96c3691676b2f7bcd360742e7ad2d98d53c1f5fd19c91993446",
+      "artifactSha256": "59e4bb392dc087b4449729fdbbe4739ec636fd9032b7b64b802c92a66f4e4523",
+      "artifactBytes": 109577,
+      "counts": {
+        "analyzedUnits": 3,
+        "boundUnits": 3,
+        "emittedClrUnits": 3,
+        "promotedTypedRegions": 0,
+        "exportedCmdletUnits": 0,
+        "hostedRegions": 0.0,
+        "retainedSourceUnits": 0,
+        "semanticFallbackUnits": 0,
+        "shapingFallbackUnits": 0,
+        "runtimeRoutedUnits": 0,
+        "omittedUnits": 0,
+        "rejectedUnits": 0,
+        "leadingFallbackCauses": []
+      },
+      "expectedOutput": "8",
+      "completeStrictProgram": true,
+      "qualification": null,
+      "durationMilliseconds": {
+        "analyze": 639,
+        "build": 4019,
+        "execute": 24
+      },
+      "succeeded": true
+    },
+    {
+      "id": "strict-collection-mutation",
+      "scenarioFamily": "object-collection-mutation",
+      "runtimeIdentifier": "linux-x64",
+      "dependencyLockSha256": "57cafb3717fad6660e6f516edce2e54ff8b1538fa91a9fc04b8d9778efcfc18b",
+      "artifactSha256": "d68281f4699dc47d3b61898ccdd28e3b2f734e0b345cdede36c3d577810b09a3",
+      "artifactBytes": 108035,
+      "counts": {
+        "analyzedUnits": 2,
+        "boundUnits": 2,
+        "emittedClrUnits": 2,
+        "promotedTypedRegions": 0,
+        "exportedCmdletUnits": 0,
+        "hostedRegions": 0.0,
+        "retainedSourceUnits": 0,
+        "semanticFallbackUnits": 0,
+        "shapingFallbackUnits": 0,
+        "runtimeRoutedUnits": 0,
+        "omittedUnits": 0,
+        "rejectedUnits": 0,
+        "leadingFallbackCauses": []
+      },
+      "expectedOutput": "2",
+      "completeStrictProgram": true,
+      "qualification": null,
+      "durationMilliseconds": {
+        "analyze": 580,
+        "build": 3824,
+        "execute": 24
+      },
+      "succeeded": true
+    },
+    {
+      "id": "strict-switch-control-flow",
+      "scenarioFamily": "switch-control-flow",
+      "runtimeIdentifier": "linux-x64",
+      "dependencyLockSha256": "a48169bfe8a5ba5631bfa9147b3f3cd15bd28bf4f0b418b94afeda98ec8598c0",
+      "artifactSha256": "a7cbde221a42ae4db04badeb17816cf900c46800b115ff1bfe0c1d507b3664f3",
+      "artifactBytes": 108035,
+      "counts": {
+        "analyzedUnits": 2,
+        "boundUnits": 2,
+        "emittedClrUnits": 2,
+        "promotedTypedRegions": 0,
+        "exportedCmdletUnits": 0,
+        "hostedRegions": 0.0,
+        "retainedSourceUnits": 0,
+        "semanticFallbackUnits": 0,
+        "shapingFallbackUnits": 0,
+        "runtimeRoutedUnits": 0,
+        "omittedUnits": 0,
+        "rejectedUnits": 0,
+        "leadingFallbackCauses": []
+      },
+      "expectedOutput": "20",
+      "completeStrictProgram": true,
+      "qualification": null,
+      "durationMilliseconds": {
+        "analyze": 461,
+        "build": 3632,
+        "execute": 21
+      },
+      "succeeded": true
+    },
+    {
+      "id": "strict-multifile-application",
+      "scenarioFamily": "multifile-domain-aggregation-reporting",
+      "runtimeIdentifier": "linux-x64",
+      "dependencyLockSha256": "3fa92a83ade9e5c987d4b10d58e9ee3afd9742528d4ec8836fe6bca444e5942f",
+      "artifactSha256": "d463d9270dd1d64958b2762d10ffd170ce416a6b0970ce75d2257ae5de369a3f",
+      "artifactBytes": 112655,
+      "counts": {
+        "analyzedUnits": 11,
+        "boundUnits": 11,
+        "emittedClrUnits": 11,
+        "promotedTypedRegions": 0,
+        "exportedCmdletUnits": 0,
+        "hostedRegions": 0.0,
+        "retainedSourceUnits": 0,
+        "semanticFallbackUnits": 0,
+        "shapingFallbackUnits": 0,
+        "runtimeRoutedUnits": 0,
+        "omittedUnits": 0,
+        "rejectedUnits": 0,
+        "leadingFallbackCauses": []
+      },
+      "expectedOutput": "READY|42|15|3|high",
+      "completeStrictProgram": true,
+      "qualification": {
+        "succeeded": true,
+        "dependency": {
+          "lockSha256": "3fa92a83ade9e5c987d4b10d58e9ee3afd9742528d4ec8836fe6bca444e5942f",
+          "sourceFiles": 4,
+          "graphNodes": 5
+        },
+        "resource": {
+          "sha256": "3658a4189f0d5c038f20d4c92e82dd1266fc5a0e802a52c08ed1811388ca7b4f",
+          "includedFiles": 1,
+          "consumed": true
+        },
+        "streams": {
+          "successExitCode": 0,
+          "successOutputSha256": "99d2b2dec772e780fc3d31cfb10506da8139ff395e9a9a6133cff1cec26c8644",
+          "successErrorSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "failureExitCode": 1,
+          "failureOutputSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "failureSourceErrorSha256": "f595d56aa1019dfd568e5d65aa55a3b7f6895653e44c9326373b559c161e9168",
+          "failureArtifactErrorSha256": "5f32197d90f2689d70ec86703ef81030e8b2594d764f27ead96e04d21675d487",
+          "failureContractSha256": "436358d5bfeb2310bdc545f50f8c189afe95b21532ff02dc74ec2627b4fa3582",
+          "failureMarkerObservedOnBoth": true
+        },
+        "startup": {
+          "warmupsPerSurface": 1,
+          "samples": 6,
+          "orderPolicy": "AlternatingPairs",
+          "order": [
+            "source-first",
+            "artifact-first",
+            "source-first",
+            "artifact-first",
+            "source-first",
+            "artifact-first"
+          ],
+          "sourceMilliseconds": [
+            187.0,
+            187.0,
+            185.0,
+            185.0,
+            189.0,
+            187.0
+          ],
+          "artifactMilliseconds": [
+            25.0,
+            25.0,
+            25.0,
+            24.0,
+            26.0,
+            25.0
+          ],
+          "sourceP50Milliseconds": 187.0,
+          "sourceP95Milliseconds": 189.0,
+          "artifactP50Milliseconds": 25.0,
+          "artifactP95Milliseconds": 26.0,
+          "artifactToSourceP50Ratio": 0.134
+        }
+      },
+      "durationMilliseconds": {
+        "analyze": 633,
+        "build": 3866,
+        "execute": 25
+      },
+      "succeeded": true
+    }
+  ],
+  "crossWorkloadRetainedRegionFrontier": [],
+  "crossWorkloadRegionOpportunityFrontier": [],
+  "regressions": [],
+  "previousHybridDifferences": [],
+  "performancePolicy": "Enforce",
+  "performanceQualification": "NoPerformanceBudgetRegressions",
+  "baselineScope": {
+    "hybrid": "IdentityOnly",
+    "strict": "Full"
+  },
+  "summary": {
+    "modulesPassed": 0,
+    "modulesTotal": 0,
+    "strictProgramsPassed": 6,
+    "strictProgramsTotal": 6,
+    "failures": 0,
+    "regressions": 0,
+    "blockingRegressions": 0,
+    "performanceRegressions": 0,
+    "nonBlockingPerformanceRegressions": 0,
+    "promotedTypedRegions": 0,
+    "regionCandidates": 0,
+    "rejectedTypedRegions": 0,
+    "regionOpportunities": 0,
+    "nonTerminalRegionOpportunities": 0
+  }
+}

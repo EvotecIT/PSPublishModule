@@ -42,15 +42,16 @@ class ReceiverContracts(unittest.TestCase):
         created = now.strftime('%Y-%m-%dT%H:%M:%S') + '.1234567+00:00' if dotnet_timestamp else now.isoformat()
         stamp = now.strftime('%Y%m%dT%H%M%SZ') + '-' + suffix
         database = b'SQLite format 3\x00synthetic-fixture'
-        databases = [{'id': 'sample', 'provider': 'sqlite', 'entry': 'sample.sqlite', 'capturedAtUtc': created,
-                      'verified': True, 'sizeBytes': len(database), 'sha256': hashlib.sha256(database).hexdigest()}]
+        databases = [{'id': identity, 'provider': 'sqlite', 'entry': identity + '.sqlite', 'capturedAtUtc': created,
+                      'verified': True, 'sizeBytes': len(database), 'sha256': hashlib.sha256(database).hexdigest()}
+                     for identity in self.config['databases']]
         recovery = [('config/' + identity + '.json', b'{"service":"synthetic-fixture"}') for identity in self.config.get('configurationIds', [])]
         recovery_files = [{'entry': name, 'sizeBytes': len(data), 'sha256': hashlib.sha256(data).hexdigest()} for name, data in recovery]
         manifest_data = {'schemaVersion': 2, 'format': 'native', 'hostId': 'sample', 'stamp': stamp, 'createdAtUtc': created, 'databases': databases, 'files': recovery_files}
         if mutate_manifest:
             mutate_manifest(manifest_data)
         manifest = json.dumps(manifest_data).encode()
-        entries = [('sample.sqlite', database)] + recovery + [('manifest.json', manifest)]
+        entries = [(db['entry'], database) for db in databases] + recovery + [('manifest.json', manifest)]
         files = [{'entry': name, 'sizeBytes': len(data), 'sha256': hashlib.sha256(data).hexdigest()} for name, data in entries]
         body = b''.join(data for _, data in entries)
         header = {'schemaVersion': 2, 'format': 'native', 'hostId': 'sample', 'stamp': stamp,
@@ -190,6 +191,28 @@ class ReceiverContracts(unittest.TestCase):
         receipt = self.upload()
         self.assertTrue(self.receiver.status(verify=True)['healthy'])
         self.assertEqual(receipt['stamp'], self.receiver.maintain()['verifiedStamp'])
+
+    def test_older_points_stay_valid_when_a_database_joins_or_leaves_the_inventory(self):
+        for day in (2, 1):
+            self.upload(days=day, suffix='0000000' + str(day))
+        self.config['databases'] = {'sample': 'sqlite', 'added': 'sqlite'}
+        self.receiver = R.Receiver(self.config)
+        self.upload()
+        result = self.receiver.maintain()
+        self.assertEqual(3, result['retainedDaily'])
+        for folder in self.receiver.snapshots.iterdir():
+            self.receiver.inspect(folder, verify=True)
+        self.config['databases'] = {'added': 'sqlite'}
+        self.receiver = R.Receiver(self.config)
+        self.upload(suffix='89abcdef')
+        self.assertEqual(3, self.receiver.maintain()['retainedDaily'])
+
+    def test_new_upload_still_needs_the_exact_configured_inventory(self):
+        self.upload(days=1)
+        self.receiver = R.Receiver(dict(self.config, databases={'sample': 'sqlite', 'added': 'sqlite'}))
+        with self.assertRaises(ValueError):
+            self.upload()
+        self.assertEqual(1, len(list(self.receiver.snapshots.iterdir())))
 
     def test_same_day_upload_cannot_replace_a_previously_retained_daily_point(self):
         trusted = self.upload()

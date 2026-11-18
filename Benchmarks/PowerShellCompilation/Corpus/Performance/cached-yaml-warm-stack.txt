@@ -1,0 +1,370 @@
+Top 160 Functions (Inclusive)                                                  Inclusive           Exclusive
+1.   (Non-Activities)                                                          100%                0%
+2.   Threads                                                                   100%                0%
+3.   Thread.StartCallback()                                                    74.14%              0%
+4.   PortableThreadPool+WorkerThread.WorkerThreadStart()                       40.73%              0.01%
+5.   LowLevelLifoSemaphore.WaitForSignal(int32)                                40.57%              0%
+6.   il!Interop+Kernel32.GetQueuedCompletionStatus(int,unsigned int32&,unsi    40.57%              40.57%
+     gned int&,int&,int32)
+7.   PortableThreadPool+IOCompletionPoller.Poll()                              20.01%              20.01%
+8.   WaitHandle.WaitOneNoCheck(int32,bool,class System.Object,value class W    19.94%              19.94%
+     aitHandleWaitSourceMap)
+9.   Thread+StartHelper.Callback(class System.Object)                          12.72%              0%
+10.  ExecutionContext.RunInternal(class System.Threading.ExecutionContext,c    12.72%              0%
+     lass System.Threading.ContextCallback,class System.Object)
+11.  UnmanagedPSEntry.Start(class System.String[],int32)                       6.86%               0%
+12.  ManagedPSEntry.Main(class System.String[])                                6.86%               0%
+13.  PortableThreadPool+GateThread.GateThreadStart()                           6.85%               0%
+14.  ConsoleHost.Start(class System.String,class System.String,bool)           6.71%               0%
+15.  Task.InternalWait(int32,value class System.Threading.CancellationToken    6.68%               0%
+     )
+16.  Task.InternalWaitCore(int32,value class System.Threading.CancellationT    6.68%               0%
+     oken)
+17.  Task.SpinThenBlockingWait(int32,value class System.Threading.Cancellat    6.68%               0%
+     ionToken)
+18.  ConsoleHost.DoRunspaceLoop(class System.String,bool,class System.Colle    6.68%               0%
+     ctions.ObjectModel.Collection`1<class System.Management.Automation.Run
+     spaces.CommandParameter>,bool,class System.String,class System.String)
+
+19.  ConsoleHost.Run(class Microsoft.PowerShell.CommandLineParameterParser,    6.68%               0%
+     bool)
+20.  Monitor.Wait(class System.Object,int32)                                   6.67%               6.67%
+21.  TaskAwaiter.HandleNonSuccessAndDebuggerNotification(class System.Threa    6.67%               0%
+     ding.Tasks.Task,value class System.Threading.Tasks.ConfigureAwaitOptio
+     ns)
+22.  NamedPipeServerStream.WaitForConnection()                                 6.67%               0%
+23.  ManualResetEventSlim.Wait(int32,value class System.Threading.Cancellat    6.67%               0%
+     ionToken)
+24.  ConsoleHost.CreateRunspace(class Microsoft.PowerShell.RunspaceCreation    6.63%               0%
+     EventArgs)
+25.  ConsoleHost.DoRunspaceInitialization(class Microsoft.PowerShell.Runspa    6.58%               0%
+     ceCreationEventArgs)
+26.  WaitHandle.WaitOne()                                                      6.55%               0%
+27.  Executor.ExecuteCommandAsyncHelper(class System.Management.Automation.    6.55%               0%
+     Runspaces.Pipeline,class System.Exception&,value class ExecutionOption
+     s)
+28.  TimerQueue.TimerThread()                                                  6.55%               0%
+29.  EnterTryCatchFinallyInstruction.Run(class System.Management.Automation    6.52%               0%
+     .Interpreter.InterpretedFrame)
+30.  PipelineOps.InvokePipeline(class System.Object,bool,class System.Manag    6.52%               0%
+     ement.Automation.CommandParameterInternal[][],class System.Management.
+     Automation.Language.CommandBaseAst[],class System.Management.Automatio
+     n.CommandRedirection[][],class System.Management.Automation.Language.F
+     unctionContext)
+31.  Interpreter.Run(class System.Management.Automation.Interpreter.Interpr    6.51%               0%
+     etedFrame)
+32.  LightLambda.RunVoid1(!!0)                                                 6.5%                0%
+33.  PowerShellNativeFunctionHost.Run(class System.Action`1<class PowerForg    6.32%               0%
+     e.Generated.Runtime.PowerShellNativeFunctionContext>,class System.Obje
+     ct,bool)
+34.  PSScriptCmdlet.RunClause(class System.Action`1<class System.Management    6.25%               0%
+     .Automation.Language.FunctionContext>,class System.Object,class System
+     .Object)
+35.  powershell_yamlMethodsNativeFunctions.<Create_ConvertFrom_Yaml>g__Invo    6.25%               0%
+     ke|22_3(class PowerForge.Generated.Runtime.PowerShellNativeFunctionCon
+     text,int32)
+36.  powershell_yamlMethods.ConvertFrom_Yaml(class PowerForge.Generated.Run    6.24%               0%
+     time.PowerShellNativeFunctionContext,class PowerForge.Generated.Runtim
+     e.PowerShellStatementErrorContext,class System.Action,class System.Act
+     ion`1<class System.Object>,class System.Action`1<class System.String>,
+     class System.Action`1<class System.String>,class System.Action`1<class
+      System.String>,class System.Action`1<class System.String>,class Syste
+     m.Action`1<class System.String>,class System.Action`1<class System.Str
+     ing>)
+37.  LocalPipeline.InvokeHelper()                                              6.18%               0%
+38.  LocalPipeline.InvokeThreadProc()                                          6.12%               0%
+39.  PipelineThread.WorkerProc()                                               6.1%                0%
+40.  Anonymously Hosted DynamicMethods Assembly!dynamicClass.lambda_method8    5.83%               0%
+     07(pMT: 00007FF8A669D400,class System.Object[],pMT: 00007FF8A65E2F18<c
+     lass System.Object>[],pMT: 00007FF8A6862340)
+41.  GC.RunFinalizers()                                                        5.76%               0%
+42.  PowerShellNativeFunctionContext+NativeAstOperation.Invoke(class System    5.75%               0%
+     .Object,class System.Func`1<class System.Object>,bool,class System.Act
+     ion`1<class System.Management.Automation.Language.IScriptExtent>)
+43.  Anonymously Hosted DynamicMethods Assembly!dynamicClass.<ScriptBlock>(    5.46%               0%
+     pMT: 00007FF8A669D400,pMT: 00007FF8A628C560)
+44.  PowerShellNativeFunctionContext.AssignTarget(class System.String,class    5.07%               0%
+      System.String,class System.Func`1<class System.Object>,class System.S
+     tring,int32,int32,class System.String,int32,int32)
+45.  Anonymously Hosted DynamicMethods Assembly!dynamicClass.lambda_method2    4.95%               0%
+     08(pMT: 00007FF8A669D400,class System.Object,pMT: 00007FF8A6078838<cla
+     ss System.Object>)
+46.  powershell_yamlMethodsNativeFunctions.<Create_Convert_YamlDocumentToPS    4.94%               0%
+     Object>g__Invoke|12_1(class PowerForge.Generated.Runtime.PowerShellNat
+     iveFunctionContext,int32)
+47.  powershell_yamlMethods.Convert_YamlDocumentToPSObject(class PowerForge    4.94%               0.01%
+     .Generated.Runtime.PowerShellNativeFunctionContext,class PowerForge.Ge
+     nerated.Runtime.PowerShellStatementErrorContext,class System.Action,cl
+     ass System.Action`1<class System.Object>,class System.Action`1<class S
+     ystem.String>,class System.Action`1<class System.String>,class System.
+     Action`1<class System.String>,class System.Action`1<class System.Strin
+     g>,class System.Action`1<class System.String>,class System.Action`1<cl
+     ass System.String>)
+48.  PowerShellNativeFunctionContext+NativeAstCompiler.Compile()               4.92%               0%
+49.  __Canon].Compile()                                                        4.9%                0%
+50.  powershell_yamlMethodsNativeFunctions+<>c.<Create_ConvertFrom_Yaml>b__    4.25%               0%
+     22_2(class PowerForge.Generated.Runtime.PowerShellNativeFunctionContex
+     t)
+51.  DynamicResolver+DestroyScout.Finalize()                                   4.11%               4.11%
+52.  Anonymously Hosted DynamicMethods Assembly!dynamicClass.lambda_method2    4.02%               0%
+     23(pMT: 00007FF8A669D400,class System.Object,pMT: 00007FF8A6078838<cla
+     ss System.Object>)
+53.  powershell_yamlMethodsNativeFunctions.<Create_Convert_YamlMappingToHas    3.99%               0%
+     htable>g__Invoke|8_1(class PowerForge.Generated.Runtime.PowerShellNati
+     veFunctionContext,int32)
+54.  powershell_yamlMethods.Convert_YamlMappingToHashtable(class PowerForge    3.99%               0%
+     .Generated.Runtime.PowerShellNativeFunctionContext,class PowerForge.Ge
+     nerated.Runtime.PowerShellStatementErrorContext,class System.Action,cl
+     ass System.Action`1<class System.Object>,class System.Action`1<class S
+     ystem.String>,class System.Action`1<class System.String>,class System.
+     Action`1<class System.String>,class System.Action`1<class System.Strin
+     g>,class System.Action`1<class System.String>,class System.Action`1<cl
+     ass System.String>)
+55.  PowerShellNativeFunctionContext.InvokeCommandRegion(class System.Strin    3.48%               0%
+     g,class System.String,int32,int32,class System.Action`1<class System.O
+     bject>,class System.String,int32,int32,class System.Action`1<class Sys
+     tem.Management.Automation.Language.IScriptExtent>,int32[])
+56.  PowerShellNativeFunctionContext.InvokeCommandRegion(class System.Strin    3.47%               0%
+     g,class System.String,int32,int32,class System.String,int32,int32,clas
+     s System.Action`1<class System.Management.Automation.Language.IScriptE
+     xtent>,int32[])
+57.  powershell_yamlMethods+<>c__DisplayClass6_0.<Convert_YamlMappingToHash    3.32%               0%
+     table>b__6()
+58.  Anonymously Hosted DynamicMethods Assembly!dynamicClass.lambda_method2    3.32%               0%
+     33(pMT: 00007FF8A669D400,class System.Object,pMT: 00007FF8A6078838<cla
+     ss System.Object>)
+59.  PowerShellNativeFunctionContext.CaptureCommandRegion(class System.Stri    3.08%               0%
+     ng,class System.String,int32,int32,bool,class System.String,int32,int3
+     2,int32[])
+60.  powershell_yamlMethodsNativeFunctions+<>c.<Create_Convert_YamlDocument    2.97%               0%
+     ToPSObject>b__12_0(class PowerForge.Generated.Runtime.PowerShellNative
+     FunctionContext)
+61.  powershell_yamlMethodsNativeFunctions+<>c.<Create_Convert_YamlMappingT    2.96%               0%
+     oHashtable>b__8_0(class PowerForge.Generated.Runtime.PowerShellNativeF
+     unctionContext)
+62.  PowerShellNativeFunctionContext.CreateAssignmentTarget(class System.St    2.83%               0%
+     ring,class System.String,class System.String,int32,int32,class System.
+     String,int32,int32)
+63.  Anonymously Hosted DynamicMethods Assembly!dynamicClass.lambda_method2    2.4%                0%
+     40(pMT: 00007FF8A669D400,class System.Object,pMT: 00007FF8A6078838<cla
+     ss System.Object>)
+64.  powershell_yamlMethodsNativeFunctions.<Create_Convert_ValueToProperTyp    2.38%               0%
+     e>g__Invoke|6_1(class PowerForge.Generated.Runtime.PowerShellNativeFun
+     ctionContext,int32)
+65.  powershell_yamlMethods.Convert_ValueToProperType(class PowerForge.Gene    2.38%               0%
+     rated.Runtime.PowerShellNativeFunctionContext,class PowerForge.Generat
+     ed.Runtime.PowerShellStatementErrorContext,class System.Action,class S
+     ystem.Action`1<class System.Object>,class System.Action`1<class System
+     .String>,class System.Action`1<class System.String>,class System.Actio
+     n`1<class System.String>,class System.Action`1<class System.String>,cl
+     ass System.Action`1<class System.String>,class System.Action`1<class S
+     ystem.String>)
+66.  DynamicMethod.CreateDelegate(class System.Type,class System.Object)       2.25%               2.23%
+67.  Missing Symbol                                                            2.23%               0%
+68.  LambdaCompiler.CreateDelegate()                                           2.21%               2.18%
+69.  PowerShellNativeFunctionContext+NativeVariableStorage.Compile(class Po    2.01%               0%
+     werForge.Generated.Runtime.PowerShellNativeFunctionContext,class Syste
+     m.String,value class System.Nullable`1<int32>,bool)
+70.  .ctor(class PowerForge.Generated.Runtime.PowerShellNativeFunctionConte    1.89%               0%
+     xt,class System.String,value class System.Nullable`1<int32>)
+71.  .ctor(class PowerForge.Generated.Runtime.PowerShellNativeFunctionConte    1.84%               0%
+     xt)
+72.  PowerShellNativeFunctionContext.EnterSwitch()                             1.81%               0%
+73.  powershell_yamlMethodsNativeFunctions+<>c.<Create_Convert_ValueToPrope    1.79%               0%
+     rType>b__6_0(class PowerForge.Generated.Runtime.PowerShellNativeFuncti
+     onContext)
+74.  ComObject.Finalize()                                                      1.65%               1.65%
+75.  Thread.<PollGC>g__PollGCWorker|70_0()                                     1.29%               1.29%
+76.  LambdaCompiler.Compile(class System.Linq.Expressions.LambdaExpression)    1.25%               0%
+
+77.  __Canon].Run(class System.Management.Automation.Interpreter.Interprete    1.05%               0%
+     dFrame)
+78.  powershell_yamlMethods+<>c__DisplayClass13_0.<ConvertFrom_Yaml>b__5()     0.74%               0%
+79.  Anonymously Hosted DynamicMethods Assembly!dynamicClass.lambda_method1    0.74%               0%
+     84(pMT: 00007FF8A669D400,class System.Object,pMT: 00007FF8A6078838<cla
+     ss System.Object>)
+80.  powershell_yamlMethodsNativeFunctions.<Create_Get_YamlDocuments>g__Inv    0.72%               0%
+     oke|4_1(class PowerForge.Generated.Runtime.PowerShellNativeFunctionCon
+     text,int32)
+81.  powershell_yamlMethods.Get_YamlDocuments(class PowerForge.Generated.Ru    0.72%               0%
+     ntime.PowerShellNativeFunctionContext,class PowerForge.Generated.Runti
+     me.PowerShellStatementErrorContext,class System.Action`1<class System.
+     Object>,class System.Action`1<class System.String>,class System.Action
+     `1<class System.String>,class System.Action`1<class System.String>,cla
+     ss System.Action`1<class System.String>,class System.Action`1<class Sy
+     stem.String>,class System.Action`1<class System.String>)
+82.  powershell_yamlMethodsNativeFunctions+<>c.<Create_Get_YamlDocuments>b_    0.54%               0%
+     _4_0(class PowerForge.Generated.Runtime.PowerShellNativeFunctionContex
+     t)
+83.  RuntimeMethodInfo.Invoke(class System.Object,value class System.Reflec    0.43%               0%
+     tion.BindingFlags,class System.Reflection.Binder,class System.Object[]
+     ,class System.Globalization.CultureInfo)
+84.  PowerShellNativeFunctionHost.Invoke(class System.Reflection.MethodInfo    0.41%               0%
+     ,class System.Object,class System.Object[])
+85.  ScriptBlockAst.InternalVisit(class System.Management.Automation.Langua    0.34%               0%
+     ge.AstVisitor)
+86.  NamedBlockAst.InternalVisit(class System.Management.Automation.Languag    0.34%               0%
+     e.AstVisitor)
+87.  __Canon].AddWithResize(!0)                                                0.34%               0%
+88.  FunctionDefinitionAst.InternalVisit(class System.Management.Automation    0.34%               0%
+     .Language.AstVisitor)
+89.  .ctor(class PowerForge.Generated.Runtime.PowerShellNativeFunctionConte    0.32%               0%
+     xt)
+90.  MethodBase.Invoke(class System.Object,class System.Object[])              0.3%                0%
+91.  .ctor(class PowerForge.Generated.Runtime.PowerShellNativeFunctionConte    0.3%                0%
+     xt,class System.Management.Automation.Language.ScriptBlockAst,bool,boo
+     l)
+92.  MethodBaseInvoker.InvokeWithFewArgs(class System.Object,value class Sy    0.28%               0%
+     stem.Reflection.BindingFlags,class System.Reflection.Binder,class Syst
+     em.Object[],class System.Globalization.CultureInfo)
+93.  Array.Copy(class System.Array,class System.Array,int32)                   0.27%               0%
+94.  IfStatementAst.InternalVisit(class System.Management.Automation.Langua    0.26%               0%
+     ge.AstVisitor)
+95.  PowerShellNativeFunctionContext.EnterForEach()                            0.26%               0%
+96.  Ast.FindAll(class System.Func`2<class System.Management.Automation.Lan    0.24%               0%
+     guage.Ast,bool>,bool)
+97.  LambdaCompiler.EmitLambdaBody(class System.Linq.Expressions.Compiler.C    0.23%               0%
+     ompilerScope,bool,value class CompilationFlags)
+98.  LambdaCompiler.EmitExpression(class System.Linq.Expressions.Expression    0.23%               0%
+     ,value class CompilationFlags)
+99.  StatementBlockAst.InternalVisit(class System.Management.Automation.Lan    0.22%               0%
+     guage.AstVisitor,class System.Collections.ObjectModel.ReadOnlyCollecti
+     on`1<class System.Management.Automation.Language.TrapStatementAst>,cla
+     ss System.Collections.ObjectModel.ReadOnlyCollection`1<class System.Ma
+     nagement.Automation.Language.StatementAst>,value class System.Manageme
+     nt.Automation.Language.AstVisitAction)
+100. Monitor.Enter_Slowpath(class System.Object)                               0.2%                0.2%
+101. VariableBinder.VisitLambda(class System.Linq.Expressions.Expression`1<    0.18%               0%
+     !!0>)
+102. ImportModuleCommand.ImportModule_LocallyViaName_WithTelemetry(value cl    0.16%               0%
+     ass ImportModuleOptions,class System.String)
+103. ImportModuleCommand.ImportModule_LocallyViaName(value class ImportModu    0.16%               0%
+     leOptions,class System.String)
+104. StatementBlockAst.InternalVisit(class System.Management.Automation.Lan    0.16%               0%
+     guage.AstVisitor)
+105. VariableAnalysis.FinishAnalysis(bool)                                     0.15%               0%
+106. ScriptBlock.InvokeWithPipeImpl(value class System.Management.Automatio    0.15%               0%
+     n.ScriptBlockClauseToInvoke,bool,class System.Collections.Generic.Dict
+     ionary`2<class System.String,class System.Management.Automation.Script
+     Block>,class System.Collections.Generic.List`1<class System.Management
+     .Automation.PSVariable>,value class ErrorHandlingBehavior,class System
+     .Object,class System.Object,class System.Object,class System.Managemen
+     t.Automation.Internal.Pipe,class System.Management.Automation.Invocati
+     onInfo,class System.Object[])
+107. ScriptBlock.InvokeWithPipe(bool,value class ErrorHandlingBehavior,clas    0.15%               0%
+     s System.Object,class System.Object,class System.Object,class System.M
+     anagement.Automation.Internal.Pipe,class System.Management.Automation.
+     InvocationInfo,bool,class System.Collections.Generic.List`1<class Syst
+     em.Management.Automation.PSVariable>,class System.Collections.Generic.
+     Dictionary`2<class System.String,class System.Management.Automation.Sc
+     riptBlock>,class System.Object[])
+108. powershell_yamlMethodsNativeFunctions+<>c.<Create_ConvertFrom_Yaml>b__    0.15%               0%
+     22_0(class PowerForge.Generated.Runtime.PowerShellNativeFunctionContex
+     t)
+109. RuntimeType.GetCorElementType()                                           0.15%               0%
+110. ModuleIntrinsics.CreateModuleImplementation(class System.String,class     0.14%               0%
+     System.String,class System.Object,class System.Management.Automation.L
+     anguage.IScriptExtent,class System.Management.Automation.SessionState,
+     class System.Object,class System.Collections.Generic.List`1<class Syst
+     em.Object>&,class System.Object[])
+111. AssignmentStatementAst.InternalVisit(class System.Management.Automatio    0.14%               0%
+     n.Language.AstVisitor)
+112. Task.ExecuteWithThreadLocal(class System.Threading.Tasks.Task&,class S    0.14%               0%
+     ystem.Threading.Thread)
+113. LambdaCompiler.EmitInlinedInvoke(class System.Linq.Expressions.Invocat    0.13%               0%
+     ionExpression,value class CompilationFlags)
+114. powershell_yamlMethodsNativeFunctions+<>c.<Create_ConvertFrom_Yaml>b__    0.13%               0%
+     22_1(class PowerForge.Generated.Runtime.PowerShellNativeFunctionContex
+     t)
+115. SecuritySupport.GetSaferPolicy(class System.String,class System.Runtim    0.13%               0.13%
+     e.InteropServices.SafeHandle)
+116. InitialSessionState.CreateDefault2()                                      0.13%               0%
+117. ThreadPoolWorkQueue.Dispatch()                                            0.12%               0%
+118. SystemPolicy.GetSystemLockdownPolicy()                                    0.12%               0%
+119. RuntimeHelpers.<GetHashCode>g__GetHashCodeWorker|15_0(class System.Obj    0.12%               0.12%
+     ect)
+120. SystemPolicy.GetLockdownPolicy(class System.String,class System.Runtim    0.12%               0%
+     e.InteropServices.SafeHandle)
+121. SystemPolicy.GetLockdownPolicy(class System.String,class System.Runtim    0.12%               0%
+     e.InteropServices.SafeHandle,value class System.Nullable`1<value class
+      System.Management.Automation.Security.SystemScriptFileEnforcement>)
+122. .cctor()                                                                  0.12%               0%
+123. SystemPolicy.TestSaferPolicy(class System.String,class System.String)     0.12%               0%
+124. SystemPolicy.GetAppLockerPolicy(class System.String,class System.Runti    0.12%               0%
+     me.InteropServices.SafeHandle)
+125. AstSearcher.Check(class System.Management.Automation.Language.Ast)        0.12%               0%
+126. LambdaCompiler.Emit(class System.Linq.Expressions.BlockExpression,valu    0.12%               0%
+     e class CompilationFlags)
+127. ExecutionContext.RunFromThreadPoolDispatchLoop(class System.Threading.    0.12%               0.01%
+     Thread,class System.Threading.ExecutionContext,class System.Threading.
+     ContextCallback,class System.Object)
+128. VariableBinder.Bind(class System.Linq.Expressions.LambdaExpression)       0.11%               0%
+129. ExecutionContext.CreateCommand(class System.String,bool,bool)             0.11%               0%
+130. CommandDiscovery.LookupCommandInfo(class System.String,value class Sys    0.1%                0%
+     tem.Management.Automation.CommandTypes,value class System.Management.A
+     utomation.SearchResolutionOptions,value class System.Management.Automa
+     tion.CommandOrigin,class System.Management.Automation.ExecutionContext
+     )
+131. ExpressionVisitor.Visit(class System.Collections.ObjectModel.ReadOnlyC    0.1%                0%
+     ollection`1<class System.Linq.Expressions.Expression>)
+132. SignatureHelper.AddOneArgTypeHelperWorker(class System.Type,bool)         0.1%                0%
+133. VariableBinder.VisitInvocation(class System.Linq.Expressions.Invocatio    0.1%                0%
+     nExpression)
+134. __Canon].ToArray()                                                        0.09%               0%
+135. Type.GetRootElementType()                                                 0.09%               0%
+136. UpdateDelegates.UpdateAndExecute1(class System.Runtime.CompilerService    0.09%               0%
+     s.CallSite,!!0)
+137. LambdaCompiler.EmitInvocationExpression(class System.Linq.Expressions.    0.09%               0%
+     Expression,value class CompilationFlags)
+138. PowerShellNativeFunctionContext.InvokeMember(class System.Object,class    0.09%               0%
+      System.String,bool,class System.Object[],class System.Type,class Syst
+     em.Type[])
+139. __Canon].GetHashCode(!0)                                                  0.09%               0%
+140. SZArrayHelper.CopyTo(!!0[],int32)                                         0.08%               0%
+141. PowerShellNativeFunctionContext+NativeAstCompiler.Invoke(class System.    0.08%               0%
+     String,class System.Object[])
+142. Enumerable.ICollectionToArray(class System.Collections.Generic.ICollec    0.08%               0%
+     tion`1<!!0>)
+143. Array.CopyImpl(class System.Array,int32,class System.Array,int32,int32    0.08%               0%
+     ,bool)
+144. VariableBinder.VisitUnary(class System.Linq.Expressions.UnaryExpressio    0.08%               0%
+     n)
+145. AstSearcher.VisitAssignmentStatement(class System.Management.Automatio    0.08%               0%
+     n.Language.AssignmentStatementAst)
+146. RuntimeType.get_ContainsGenericParameters()                               0.08%               0%
+147. Anonymously Hosted DynamicMethods Assembly!dynamicClass.lambda_method2    0.08%               0%
+     32(pMT: 00007FF8A669D400,class System.Object,pMT: 00007FF8A6078838<cla
+     ss System.Object>)
+148. CallSiteBinder.BindCore(class System.Runtime.CompilerServices.CallSite    0.07%               0%
+     `1<!!0>,class System.Object[])
+149. powershell_yamlMethods.Invoke_LoadAssembly(class PowerForge.Generated.    0.07%               0%
+     Runtime.PowerShellNativeFunctionContext,class PowerForge.Generated.Run
+     time.PowerShellStatementErrorContext,class System.Action`1<class Syste
+     m.Object>,class System.Action`1<class System.String>,class System.Acti
+     on`1<class System.String>,class System.Action`1<class System.String>,c
+     lass System.Action`1<class System.String>,class System.Action`1<class
+     System.String>,class System.Action`1<class System.String>)
+150. powershell_yamlMethodsNativeFunctions+<>c.<Create_Invoke_LoadAssembly>    0.07%               0%
+     b__2_0(class PowerForge.Generated.Runtime.PowerShellNativeFunctionCont
+     ext)
+151. powershell_yamlMethodsNativeFunctions.<Create_Invoke_LoadAssembly>g__I    0.07%               0%
+     nvoke|2_1(class PowerForge.Generated.Runtime.PowerShellNativeFunctionC
+     ontext,int32)
+152. LambdaCompiler.EmitExpressionAsVoid(class System.Linq.Expressions.Expr    0.07%               0%
+     ession,value class CompilationFlags)
+153. CmdletParameterBinderController.BindCommandLineParameters(class System    0.07%               0%
+     .Collections.ObjectModel.Collection`1<class System.Management.Automati
+     on.CommandParameterInternal>)
+154. __Canon].ToArray()                                                        0.07%               0%
+155. CmdletParameterBinderController.BindCommandLineParametersNoValidation(    0.07%               0%
+     class System.Collections.ObjectModel.Collection`1<class System.Managem
+     ent.Automation.CommandParameterInternal>)
+156. LambdaCompiler.EmitVariableAssignment(class System.Linq.Expressions.As    0.07%               0%
+     signBinaryExpression,value class CompilationFlags)
+157. LambdaCompiler.EmitArguments(class System.Reflection.MethodBase,class     0.07%               0%
+     System.Linq.Expressions.IArgumentProvider,int32)
+158. UpdateDelegates.UpdateAndExecute2(class System.Runtime.CompilerService    0.07%               0%
+     s.CallSite,!!0,!!1)
+159. TypeUtils.ValidateType(class System.Type,class System.String,int32)       0.07%               0%
+160. ExpressionVisitor.VisitBinary(class System.Linq.Expressions.BinaryExpr    0.06%               0%
+     ession)

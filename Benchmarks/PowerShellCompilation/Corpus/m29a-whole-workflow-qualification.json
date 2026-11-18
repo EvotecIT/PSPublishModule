@@ -899,6 +899,8 @@
     }
   },
   "performance": {
+    "startupMeasurementStatus": "Superseded: the framework-dependent Linux executable loaded .NET from a Windows-mounted 9p filesystem. Raw samples and controlled runtime-location comparison are preserved in Performance/2026-11-17-runtime-location-ab.json.",
+    "startupMeasurementReplacement": "Performance/startup-evidence.json",
     "policy": "RecordOnly",
     "functionalQualificationPassed": true,
     "performanceQualified": false,
