@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "packetId": "powerforge-public-powershell-modules-net10-v1",
   "packetSha256": "ef64781013a85a48701dd6334435facce8f8bec5c1ecc1a36817b8e4d300b00e",
-  "generatedAtUtc": "2026-11-18T09:20:43.915833+01:00",
+  "generatedAtUtc": "2026-11-18T08:20:43.9158330+00:00",
   "semanticProfile": "PowerForge.Oracle.PowerShell/7.6",
   "host": {
     "runtimeIdentifier": "linux-x64",

@@ -71,8 +71,9 @@ The Strict corpus contains six small programs. With .NET and the executable on
 WSL2 ext4, the small application started in **25/26 ms p50/p95** on 2026-11-17
 and **32/35 ms** on 2026-11-18; the latter source run took **242/278 ms**.
 A separate Linux NativeAOT run measured **3.878/4.370 ms**. The
-Windows framework-dependent run measured **79/85 ms**, versus **415/579 ms** for
-source. The earlier Linux **346/1,506 ms** result loaded .NET from a Windows-mounted 9p filesystem and is
+later Windows framework-dependent run measured **168/221 ms**, versus **757/1,570 ms**
+for source, with its source host identified before timing. The earlier Windows
+**79/85 ms** samples remain available. The earlier Linux **346/1,506 ms** result loaded .NET from a Windows-mounted 9p filesystem and is
 superseded. These fresh-process measurements use warmed OS caches and describe
 this fixture and host. See the [raw startup records](../Benchmarks/PowerShellCompilation/Corpus/Performance/startup-evidence.json)
 and [measurement limits](PowerForge.PowerShellCompilation.Coverage.md#semantic-and-performance-limits).
@@ -80,7 +81,8 @@ and [measurement limits](PowerForge.PowerShellCompilation.Coverage.md#semantic-a
 Hybrid is not a general speedup for these Gallery modules. Its first-import p50
 is slower in **10 of 10 modules** in the recorded comparison. The YAML probe in an
 already-loaded module measures **0.440 ms for source / 21.029 ms for Hybrid**;
-the Archive round-trip measures **17.741 / 149.830 ms**. A separate alternating
+the Archive extraction probe measures **17.741 / 149.830 ms**. That probe checks
+the expanded file's existence rather than byte equality. A separate alternating
 revision comparison measured **2.59x** and **4.45x** lower loaded-call p50 after
 command-plan reuse; that benefit does not establish faster first imports. See the
 [complete module comparison](performance/powershell-compiler.md#hybrid-modules-versus-source)

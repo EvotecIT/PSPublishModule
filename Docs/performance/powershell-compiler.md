@@ -9,8 +9,9 @@ neither a language-wide speedup nor performance on every Linux or Windows host.
 All startup times cover process launch through exit. Each sample's output is
 checked after timing.
 The six-sample corpus runs alternate source and artifact order after one warmup
-of each. The guarded Linux run also launches an untimed host-resolution probe
-before warmup. The separate NativeAOT comparison rotates nine executable variants over
+of each. Runtime inspection adds an untimed host-resolution probe; the later
+Windows run also identifies the source host before warmup and checks its
+executable, CoreCLR and SMA hashes after timing. The separate NativeAOT comparison rotates nine executable variants over
 48 rounds after three warmups; its raw record includes the order and each sample.
 Percentiles use nearest rank.
 
@@ -18,7 +19,7 @@ Percentiles use nearest rank.
 | --- | --- | --- | ---: | ---: |
 | WSL2, 2026-11-17 | Framework-dependent | 10.0.11, ext4 | 25 / 26 | 187 / 189 |
 | WSL2, 2026-11-18 | Framework-dependent | 10.0.14, ext4 | 32 / 35 | 242 / 278 |
-| Windows x64, 2026-11-18 | Framework-dependent | 10.0.15, NTFS | 79 / 85 | 415 / 579 |
+| Windows x64, 2026-11-18, host identified before timing | Framework-dependent | 10.0.15, NTFS | 168 / 221 | 757 / 1570 |
 | WSL2, 2026-11-17 | NativeAOT | Compiled 10.0.14 runtime, executable on ext4 | 3.878 / 4.370 | 273.658 / 309.541 |
 
 The [startup index](../../Benchmarks/PowerShellCompilation/Corpus/Performance/startup-evidence.json)
@@ -28,6 +29,13 @@ the available processor set. CPU placement was not fixed to a single cache or
 frequency domain; changes in scheduling, runtime versions and host activity can
 change absolute times. The NativeAOT row uses a different deployment and SDK
 from the framework-dependent 2026-11-17 row.
+
+The earlier Windows run remains in the index at **79/85 ms**, with **415/579 ms**
+for source. Its source-host digest was observed after sampling, so it does not
+establish the source executable's identity at launch. The later run records
+that identity before timing, checks it afterward and uses a verified private
+copy of the compiler. Both runs produced the same Strict executable hash;
+the different absolute times do not establish a compiler-code regression.
 
 The historical **346/1,506 ms** startup record is preserved and marked as
 superseded. Although the executable was on ext4, hostfxr, hostpolicy, CoreCLR and
@@ -41,8 +49,9 @@ includes the original six samples, library paths, file hashes, page faults and
 the paired measurements.
 
 Before accepting new Linux startup samples, the corpus runner launches an
-untimed host-resolution probe and checks the resolved libraries with `findmnt`.
-It rejects 9p/drvfs and missing filesystem evidence under both `Enforce` and
+untimed host-resolution probe, requires a resolved CoreCLR path and checks the
+existing host/runtime/JIT library paths found in the trace with `findmnt`.
+It rejects 9p/drvfs, missing CoreCLR and missing mount evidence under both `Enforce` and
 `RecordOnly`. A real executable was checked successfully with an ext4 runtime
 and [rejected with a 9p runtime](../../Benchmarks/PowerShellCompilation/Corpus/Performance/2026-11-18-linux-guard-rejection.json).
 
@@ -62,6 +71,8 @@ records the first call followed by five more calls in that same loaded module.
 Results after reimport and results from an already-loaded module stay separate.
 Each invocation is the exact packet probe, including its assertions and declared
 I/O; it is a bounded representative operation, not a complete application benchmark.
+The Archive probe checks that the extracted file exists; it does not compare
+its bytes with the input. Passing means the declared packet assertions passed.
 
 Before and after sampling, the runner compares every source file with the
 verified Gallery archive and every Hybrid file with the successful build's
@@ -120,9 +131,11 @@ record the source revisions and hashes of the CLI and both compiler assemblies.
 ## Assignment preparation cost
 
 The [sampled PSFramework import stack](../../Benchmarks/PowerShellCompilation/Corpus/Performance/psframework-import-stack.txt)
-identified repeated `CreateAssignmentTarget`, `Parser.ParseInput` and
-`AssignTarget` calls underneath the generated `Test-PSFParameterBinding` method.
-Assignment preparation reparsed the complete source document in each native
+lists `CreateAssignmentTarget`, `Parser.ParseInput`, `AssignTarget` and the
+generated `Test-PSFParameterBinding` method as separate inclusive entries.
+These flat entries do not establish caller/callee edges. Runtime source
+inspection identified whole-document parsing in assignment preparation: it
+reparsed the complete source document in each native
 invocation, even when earlier calls had already parsed the same document.
 
 The runtime now reuses parsed assignment documents within the same PowerShell
@@ -139,7 +152,7 @@ module comparison is the basis for source/Hybrid conclusions.
 ## Hosted operation preparation cost
 
 Before command-plan reuse, the loaded YAML probe measured
-**112.802 ms** for Hybrid versus **0.766 ms** for source; the Archive round-trip
+**112.802 ms** for Hybrid versus **0.766 ms** for source; the Archive extraction
 probe measured **824.990 ms** versus **26.169 ms**. The separate
 [YAML stack](../../Benchmarks/PowerShellCompilation/Corpus/Performance/yaml-warm-stack.txt)
 and [Archive stack](../../Benchmarks/PowerShellCompilation/Corpus/Performance/archive-warm-stack.txt)
@@ -185,8 +198,9 @@ loaded YAML probe and **149.830 / 17.741 ms** for Archive, Hybrid/source.
 The current [YAML](../../Benchmarks/PowerShellCompilation/Corpus/Performance/cached-yaml-warm-stack.txt),
 [Archive](../../Benchmarks/PowerShellCompilation/Corpus/Performance/cached-archive-warm-stack.txt)
 and [PSFramework import](../../Benchmarks/PowerShellCompilation/Corpus/Performance/cached-psframework-import-stack.txt)
-stacks still show `CreateAssignmentTarget`, `NativeAstCompiler.Compile` and
-`NativeVariableStorage.Compile` in the generated function paths. These operations
+exports list `CreateAssignmentTarget`, `NativeAstCompiler.Compile` and
+`NativeVariableStorage.Compile` alongside generated function methods. Source
+inspection shows that these operations
 prepare assignments and variable access within each native invocation, even
 when command plans are already available.
 
@@ -239,6 +253,8 @@ and `-EvidencePath`. It uses the same payload verification and loaded-module
 timing child as the source comparison. The corpus report records compiler
 assembly versions and hashes; a missing or inconsistent source revision is
 reported as `NotRecorded` rather than inferred from the harness checkout.
+Both timing commands require a new output file, preserving existing input and
+timing records. Relative paths follow PowerShell's current filesystem location.
 
 For a NativeAOT comparison, build the same application with
 `--kind exe --mode Strict --framework net10.0 --rid linux-x64 --optimization NativeAot --self-contained --include-resource report-label.txt --allow-unreviewed-dependencies`.

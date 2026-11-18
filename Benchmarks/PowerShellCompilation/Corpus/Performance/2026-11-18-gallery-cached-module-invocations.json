@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "completed": true,
   "mode": "LoadedModuleInvocation",
-  "generatedAtUtc": "2026-11-18T11:53:07.9978303+01:00",
+  "generatedAtUtc": "2026-11-18T10:53:07.9978303+00:00",
   "harnessCommit": "62aa73f9017cdb37eea8ad22738c7fc8d1e82379",
   "compilerSourceCommit": "62aa73f9017cdb37eea8ad22738c7fc8d1e82379",
   "harnessSha256": "64533a8b77fa47af65c21000725b9b5974b4282c971ed9a69bf93acd6e192366",
@@ -14855,6 +14855,5 @@
         }
       }
     }
-  ],
-  "originalObservationSha256": "2b584c92fe10e478b0177365d04bf1be645538b22f73b21bfab6a202232d6d9c"
+  ]
 }

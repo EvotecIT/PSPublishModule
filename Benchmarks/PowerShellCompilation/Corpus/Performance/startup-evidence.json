@@ -12,7 +12,7 @@
   "records": [
     {
       "record": "2026-11-17-current-enforced.json",
-      "generatedAtUtc": "2026-11-17T23:14:23.1604373+01:00",
+      "generatedAtUtc": "2026-11-17T22:14:23.1604373+00:00",
       "compilerSourceCommit": "4fa2c7321ab9d30e74eec9820f05e713c8736221",
       "host": {
         "runtimeIdentifier": "linux-x64",
@@ -64,7 +64,7 @@
     },
     {
       "record": "2026-11-18-linux-corpus.json",
-      "generatedAtUtc": "2026-11-18T09:20:43.915833+01:00",
+      "generatedAtUtc": "2026-11-18T08:20:43.9158330+00:00",
       "compilerSourceCommit": "671c8eca1adee81d4c95dad2ca4f7797562bfc0e",
       "host": {
         "runtimeIdentifier": "linux-x64",
@@ -1154,10 +1154,150 @@
         "runtimeLocation": "<PowerShellHostRoot>",
         "executablePath": "<PowerShellHostRoot>/pwsh.exe",
         "executableSha256": "2a6769a3330dc1084d0154bfde7d164ab750ca7f700f313f9d417c1be78b2233",
-        "observedAfterMeasurementUtc": "2026-11-18T10:54:45.4317992+01:00",
-        "runtimeLayout": "Self-contained PowerShell host; installation prefix omitted."
+        "observedAfterMeasurementUtc": "2026-11-18T09:54:45.4317992+00:00",
+        "runtimeLayout": "Self-contained PowerShell host; installation prefix omitted.",
+        "scope": "Post-measurement observation only; these source-host bytes were not captured at the historical timed launches."
       },
-      "runtimeStorageRecord": "2026-11-18-windows-runtime-storage.json"
+      "runtimeStorageRecord": "2026-11-18-windows-runtime-storage.json",
+      "status": "Historical; source-host digest observed after timing. Use the later identified-host record for a launch-identified source comparison."
+    },
+    {
+      "record": "2026-11-18-windows-identified-host-corpus.json",
+      "recordSha256": "e23a519c22322ba14b81458f32c1862969ae57dbc4fb1d52cfd2e7f3af9e3d0f",
+      "generatedAtUtc": "2026-11-18T12:18:20.6567104+00:00",
+      "compilerSourceCommit": "62aa73f9017cdb37eea8ad22738c7fc8d1e82379",
+      "harnessCommit": "b411640708ec7368b5bafb33c37960956606e89b",
+      "host": {
+        "runtimeIdentifier": "win-x64",
+        "operatingSystem": "Microsoft Windows 10.0.26300",
+        "architecture": "X64",
+        "powerShell": "7.6.9",
+        "dotnet": "10.0.404"
+      },
+      "deployment": "FrameworkDependent",
+      "runtime": "Microsoft.NETCore.App 10.0.15",
+      "runtimeLocation": "C:/Program Files/dotnet/shared/Microsoft.NETCore.App/10.0.15",
+      "runtimeFileSystem": "NTFS",
+      "executableFileSystem": "NTFS",
+      "artifactSha256": "9bdef115ce160f6aee5cb5efa3bee386a9c9ca91f65fa1dc77ff0019d58ec755",
+      "startup": {
+        "runtimeStorage": {
+          "checked": true,
+          "libraries": [
+            {
+              "path": "C:\\Program Files\\dotnet\\host\\fxr\\10.0.15\\hostfxr.dll",
+              "fileSystem": "NTFS",
+              "sha256": "2c14e9b4a540d98971b60cbaffcdde4f22328bd24bf75b68aa9e6bee13c2ca25"
+            },
+            {
+              "path": "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\10.0.15\\clrjit.dll",
+              "fileSystem": "NTFS",
+              "sha256": "22231ec740134103c575c7869b060b4ba2250b4ab9b5f964b93e94298b53a1e1"
+            },
+            {
+              "path": "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\10.0.15\\coreclr.dll",
+              "fileSystem": "NTFS",
+              "sha256": "a6988fc77326c245873986446de4f15218df929664750d333cb2d42486c071da"
+            },
+            {
+              "path": "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\10.0.15\\hostpolicy.dll",
+              "fileSystem": "NTFS",
+              "sha256": "20405152b719ccb8d4e0361f3259db8875d8d4f3c97d1fbea4e1ca6cc6d21902"
+            }
+          ],
+          "coreClrVersion": "10.0.15"
+        },
+        "sourceHost": {
+          "capturedBeforeTimingUtc": "2026-11-18T12:18:12.5521220+00:00",
+          "powerShell": "7.6.9",
+          "runtime": ".NET 10.0.14",
+          "architecture": "X64",
+          "operatingSystem": "Microsoft Windows 10.0.26300",
+          "executablePath": "<PowerShellHostRoot>/pwsh.exe",
+          "runtimeLocation": "<SourceRuntimeRoot>",
+          "runtimeLayout": "Installation prefixes omitted; actual executable and loaded runtime identified before timing.",
+          "runtimeFileSystem": "NTFS",
+          "files": [
+            {
+              "role": "Executable",
+              "name": "pwsh.exe",
+              "sha256": "2a6769a3330dc1084d0154bfde7d164ab750ca7f700f313f9d417c1be78b2233"
+            },
+            {
+              "role": "CoreCLR",
+              "name": "coreclr.dll",
+              "sha256": "1bc65b8d45474b19adf3ca85ce881087aff599ffc72b2c1a323e878227757b65"
+            },
+            {
+              "role": "PowerShellAssembly",
+              "name": "System.Management.Automation.dll",
+              "sha256": "e767f5c26347b254dd06fa0b65e18424cc4eb93fc3102c5a8fdd9dd88355db97"
+            }
+          ]
+        },
+        "warmupsPerSurface": 1,
+        "samples": 6,
+        "orderPolicy": "AlternatingPairs",
+        "order": [
+          "source-first",
+          "artifact-first",
+          "source-first",
+          "artifact-first",
+          "source-first",
+          "artifact-first"
+        ],
+        "sourceMilliseconds": [
+          1570.0,
+          757.0,
+          569.0,
+          694.0,
+          843.0,
+          902.0
+        ],
+        "artifactMilliseconds": [
+          107.0,
+          173.0,
+          202.0,
+          221.0,
+          168.0,
+          116.0
+        ],
+        "sourceP50Milliseconds": 757.0,
+        "sourceP95Milliseconds": 1570.0,
+        "artifactP50Milliseconds": 168.0,
+        "artifactP95Milliseconds": 221.0,
+        "artifactToSourceP50Ratio": 0.222
+      },
+      "sourceHost": {
+        "capturedBeforeTimingUtc": "2026-11-18T12:18:12.5521220+00:00",
+        "powerShell": "7.6.9",
+        "runtime": ".NET 10.0.14",
+        "architecture": "X64",
+        "operatingSystem": "Microsoft Windows 10.0.26300",
+        "executablePath": "<PowerShellHostRoot>/pwsh.exe",
+        "runtimeLocation": "<SourceRuntimeRoot>",
+        "runtimeLayout": "Installation prefixes omitted; actual executable and loaded runtime identified before timing.",
+        "runtimeFileSystem": "NTFS",
+        "files": [
+          {
+            "role": "Executable",
+            "name": "pwsh.exe",
+            "sha256": "2a6769a3330dc1084d0154bfde7d164ab750ca7f700f313f9d417c1be78b2233"
+          },
+          {
+            "role": "CoreCLR",
+            "name": "coreclr.dll",
+            "sha256": "1bc65b8d45474b19adf3ca85ce881087aff599ffc72b2c1a323e878227757b65"
+          },
+          {
+            "role": "PowerShellAssembly",
+            "name": "System.Management.Automation.dll",
+            "sha256": "e767f5c26347b254dd06fa0b65e18424cc4eb93fc3102c5a8fdd9dd88355db97"
+          }
+        ]
+      },
+      "scope": "Source executable, CoreCLR and SMA identified before timing and checked afterward; compiler copied to a verified private run directory before builds. Native artifact bytes match the earlier Windows record."
     }
-  ]
+  ],
+  "latestWindowsRecord": "2026-11-18-windows-identified-host-corpus.json"
 }

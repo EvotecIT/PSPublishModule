@@ -584,7 +584,8 @@ To reproduce the Linux timing check on Linux x64 with PowerShell and .NET 10:
 ```
 
 This runs the checked-in Strict programs and records alternating source/artifact
-startup samples. The Linux check inspects resolved runtime libraries with
+startup samples. The Linux check requires a resolved CoreCLR path and inspects
+the existing host/runtime/JIT library paths found in the trace with
 `findmnt` and refuses 9p/drvfs or unresolved runtime locations. `RecordOnly` records timing failures without treating them as
 semantic failures; it does not change the committed budgets or mark performance
 as qualified. Build the current CLI first or pass `-CliAssemblyPath`.

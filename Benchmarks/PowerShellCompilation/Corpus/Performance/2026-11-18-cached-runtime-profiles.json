@@ -56,5 +56,5 @@
       "record": "cached-archive-warm-stack.txt"
     }
   ],
-  "reproduction": "Use the recorded host and verified artifacts from the updated compiler. For PSFramework remove/import and run its packet probe each time. For YAML/Archive import once and repeat the exact packet probe. Collect dotnet-trace --profile dotnet-sampled-thread-time --duration 00:00:00:20, then report topN --number 160 --inclusive --verbose."
+  "reproduction": "For each recorded workload, launch its verified manifest under: dotnet-trace collect --profile dotnet-sampled-thread-time --duration 00:00:00:20 --output profile.nettrace -- pwsh -NoLogo -NoProfile -NonInteractive -File ./Benchmarks/PowerShellCompilation/Corpus/Invoke-ModuleProfileProbe.ps1 -ManifestPath <verified-manifest.psd1> -ModuleId <recorded-id> -Calls <requestedProbeCalls>. Add -Reimport for the PSFramework import sequence. Then run: dotnet-trace report profile.nettrace topN --number 160 --inclusive --verbose. This reproduces the recorded procedure; collection may stop before all requested calls complete."
 }

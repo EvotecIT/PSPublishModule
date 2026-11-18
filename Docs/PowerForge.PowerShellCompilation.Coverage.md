@@ -74,8 +74,10 @@ locations. On Ubuntu 24.04 under WSL2, with both the executable and .NET on ext4
 the 2026-11-17 framework-dependent run measured **25 ms p50 / 26 ms p95**. The
 2026-11-18 run measured **32/35 ms**, versus **242/278 ms** for source, using
 SDK 10.0.403 and .NET 10.0.14. Both passed the existing **100/250 ms** budgets.
-Windows x64 measured **79/85 ms**, versus **415/579 ms** for source, with
-.NET 10.0.15 on the same development host; its startup budgets also passed.
+The later Windows x64 run measured **168/221 ms**, versus **757/1,570 ms** for
+source, with .NET 10.0.15. It records source-host identity before timing and
+checks it afterward; its existing startup budgets passed. The earlier
+**79/85 ms** Windows samples remain in the index with their source-identity limit.
 The separate Linux NativeAOT comparison measured **3.878/4.370 ms** across 48
 launches. These are measurements of the small Strict application, with warmed OS
 caches, on one development host; they do not predict arbitrary module performance.
@@ -90,7 +92,8 @@ was on ext4. A controlled comparison of identical runtime files measured
 location cost without reproducing the original tail exactly. The
 [raw comparison](../Benchmarks/PowerShellCompilation/Corpus/Performance/2026-11-17-runtime-location-ab.json)
 preserves both sets of samples. The timing runner now checks the resolved Linux
-runtime libraries with `findmnt` and refuses 9p/drvfs or unresolved locations
+CoreCLR and the other existing runtime-library paths resolved in the host trace
+with `findmnt`. It refuses 9p/drvfs, missing CoreCLR or missing mount evidence
 before measuring startup, including with `-PerformancePolicy RecordOnly`.
 
 The [Gallery performance comparison](performance/powershell-compiler.md#hybrid-modules-versus-source)

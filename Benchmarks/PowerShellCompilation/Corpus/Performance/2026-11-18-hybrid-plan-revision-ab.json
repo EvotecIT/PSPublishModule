@@ -1002,6 +1002,10 @@
             "p50": 25.7532
           }
         }
+      },
+      "typedAssemblySha256": {
+        "baseline": "5f61f51a25c10b14d16f8524bb2fe83bdc25746f2146f99289840afdec4094df",
+        "candidate": "bb281a4176e2bb1e6e97b50c80999f9079ede45a667cfc488bd52bec1155296b"
       }
     },
     {
@@ -1965,7 +1969,12 @@
             "p50": 133.5308
           }
         }
+      },
+      "typedAssemblySha256": {
+        "baseline": "578eeb403985be0148c6271256a51b03011c3ccfffe9f6138e319f8534b5c3ca",
+        "candidate": "06a7bfd6d834254570575973e3d7629d8908c70386e00f0cbf405d40b4ec095a"
       }
     }
-  ]
+  ],
+  "assemblyIdentityBasis": "Typed assembly digests copied from the byte-identified input inventories. Timing observations and summaries are unchanged."
 }

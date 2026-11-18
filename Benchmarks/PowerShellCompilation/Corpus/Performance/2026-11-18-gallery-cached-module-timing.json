@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "completed": true,
   "mode": "ImportAndReimport",
-  "generatedAtUtc": "2026-11-18T11:41:49.5864355+01:00",
+  "generatedAtUtc": "2026-11-18T10:41:49.5864355+00:00",
   "harnessCommit": "62aa73f9017cdb37eea8ad22738c7fc8d1e82379",
   "compilerSourceCommit": "62aa73f9017cdb37eea8ad22738c7fc8d1e82379",
   "harnessSha256": "64533a8b77fa47af65c21000725b9b5974b4282c971ed9a69bf93acd6e192366",
@@ -14935,6 +14935,5 @@
         }
       }
     }
-  ],
-  "originalObservationSha256": "40a491a6ec11b306bf75cd0567957ba8686d81a319a2a0ff31b13cda5102298b"
+  ]
 }
