@@ -114,20 +114,19 @@ public sealed class ModulePipelineStep
 
         var steps = new List<ModulePipelineStep>();
 
+        // A release that takes the module version from its packages builds them and synchronizes the version
+        // before dependency preparation; otherwise they follow it. Keep the list in the order the runner executes.
+        var synchronizesVersion = SynchronizesModuleVersion(plan);
+        if (synchronizesVersion)
+            AddPackageBuildAndVersionSteps(steps, plan);
         AddActionSteps(steps, plan, ModulePipelineActionStage.BeforeDependencies);
         steps.Add(new ModulePipelineStep(
             kind: ModulePipelineStepKind.Dependencies,
             key: "deps:install",
             title: "Prepare module dependencies"));
         AddActionSteps(steps, plan, ModulePipelineActionStage.AfterDependencies);
-        AddPackageBuildSteps(steps, plan, beforeModule: true);
-        if (SynchronizesModuleVersion(plan))
-        {
-            steps.Add(new ModulePipelineStep(
-                kind: ModulePipelineStepKind.Versioning,
-                key: "version:synchronize",
-                title: "Synchronize module version"));
-        }
+        if (!synchronizesVersion)
+            AddPackageBuildAndVersionSteps(steps, plan);
         AddActionSteps(steps, plan, ModulePipelineActionStage.BeforeVersioning);
         if (plan.AppleApps is { Length: > 0 })
         {
@@ -436,6 +435,18 @@ public sealed class ModulePipelineStep
                 key: $"action:{stage}:{i + 1:00}",
                 title: $"Run action ({label})",
                 actionSegment: action));
+        }
+    }
+
+    private static void AddPackageBuildAndVersionSteps(List<ModulePipelineStep> steps, ModulePipelinePlan plan)
+    {
+        AddPackageBuildSteps(steps, plan, beforeModule: true);
+        if (SynchronizesModuleVersion(plan))
+        {
+            steps.Add(new ModulePipelineStep(
+                kind: ModulePipelineStepKind.Versioning,
+                key: "version:synchronize",
+                title: "Synchronize module version"));
         }
     }
 
