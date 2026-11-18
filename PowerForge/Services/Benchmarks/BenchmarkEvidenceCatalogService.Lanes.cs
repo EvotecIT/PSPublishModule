@@ -310,8 +310,40 @@ public sealed partial class BenchmarkEvidenceCatalogService
             Publish = entry.Publish,
             ResultPath = entry.ResultPath,
             ResultSha256 = entry.ResultSha256,
-            Libraries = MeasuredLibraries(entry.Cells)
+            Libraries = MeasuredLibraries(entry.Cells),
+            ArtifactRelativePath = entry.ArtifactRelativePath
         };
+
+    /// <summary>Libraries the catalog's declarations do not publish under its policy.</summary>
+    private static HashSet<string> UnpublishedLibraries(BenchmarkEvidenceCatalog catalog)
+    {
+        BenchmarkPublishPolicy policy = catalog.Policy ?? BenchmarkPublishPolicy.CreateDefault();
+        return new HashSet<string>(
+            catalog.Libraries.Where(library => !library.IsPublishableUnder(policy)).Select(library => library.Id),
+            StringComparer.OrdinalIgnoreCase);
+    }
+
+    // Redaction works on library identity. While any declared library is unpublished, rows without one cannot be
+    // shown to belong to a publishable library, so they are refused rather than stored.
+    private static void RejectRowsWithoutLibrary(BenchmarkEvidenceCatalog catalog, IEnumerable<BenchmarkEvidenceCell> cells, string laneDescription)
+    {
+        if (UnpublishedLibraries(catalog).Count == 0)
+            return;
+        if (cells.Any(cell => string.IsNullOrWhiteSpace(cell.Library)))
+        {
+            throw new InvalidOperationException(
+                $"Benchmark lane '{laneDescription}' has rows without a library while the library policy restricts some libraries. " +
+                "Record the library on every row (BenchmarkCategory library:<id>, -LibraryMap or the Library field).");
+        }
+    }
+
+    /// <summary>Replaces the content hash in a content-addressed result path.</summary>
+    private static string ReplaceContentHash(string resultPath, string previousHash, string hash)
+    {
+        int marker = resultPath.LastIndexOf("." + previousHash, StringComparison.OrdinalIgnoreCase);
+        string stripped = marker >= 0 ? resultPath.Remove(marker, previousHash.Length + 1) : resultPath;
+        return CreateContentAddressedResultPath(stripped, hash);
+    }
 
     private static BenchmarkSupersededLane[] NormalizeSuperseded(
         IEnumerable<BenchmarkSupersededLane> superseded,

@@ -128,7 +128,9 @@ public sealed partial class BenchmarkServicesTests
                 }
                 break;
             case "invalid-interval":
+                // A summary-only producer supplies its own intervals; with raw samples PowerForge computes them.
                 result.Runner!.Statistic = "mean";
+                result.Samples = [];
                 foreach (BenchmarkSummaryRow row in result.Summary)
                     row.ConfidenceInterval = row.Library == "Sep"
                         ? new BenchmarkConfidenceInterval { Level = 0.95 }
@@ -284,6 +286,13 @@ public sealed partial class BenchmarkServicesTests
         Assert.Equal(entry.ResultSha256, Assert.Single(catalog.Entries).ResultSha256);
         BenchmarkSupersededLane lateHistory = Assert.Single(catalog.Superseded, value => value.GeneratedUtc == late.FinishedUtc);
         Assert.Equal(lateHistory.ResultSha256, BenchmarkJson.ComputeFileSha256(Path.Combine(root, "data", $"windows.{lateHistory.ResultSha256}.json")));
+
+        // Both superseded files are found through their local paths and copied into a fresh merged bundle.
+        string mergedRoot = Path.Combine(root, "published");
+        BenchmarkEvidenceCatalog merged = service.MergeFiles(Path.Combine(mergedRoot, "index.json"), [catalogPath], null, null, "/data/benchmarks");
+        Assert.Equal(2, merged.Superseded.Length);
+        Assert.All(merged.Superseded, history =>
+            Assert.Equal(history.ResultSha256, BenchmarkJson.ComputeFileSha256(Path.Combine(mergedRoot, history.ArtifactRelativePath))));
     }
 
     [Theory]
@@ -395,6 +404,11 @@ public sealed partial class BenchmarkServicesTests
         Assert.DoesNotContain(BenchmarkJson.Read<BenchmarkRunResult>(historyPath).Summary, row => row.Library == "Sep");
         BenchmarkEvidenceEntry current = Assert.Single(merged.Entries);
         Assert.DoesNotContain(BenchmarkJson.Read<BenchmarkRunResult>(Path.Combine(mergedRoot, current.ArtifactRelativePath)).Summary, row => row.Library == "Sep");
+
+        // Merging the output again together with the original bundle selects the same redacted runs.
+        BenchmarkEvidenceCatalog remerged = service.MergeFiles(Path.Combine(mergedRoot, "index.json"), [Path.Combine(mergedRoot, "index.json"), catalogPath], null, restricted);
+        Assert.Equal(current.ResultSha256, Assert.Single(remerged.Entries).ResultSha256);
+        Assert.Single(remerged.Superseded);
     }
 
     [Fact]
@@ -715,6 +729,61 @@ public sealed partial class BenchmarkServicesTests
         Assert.Equal("net10.0-windows", BenchmarkEvidenceIdentity.ResolveFramework(result, "net10.0-windows"));
         result.Metadata["benchmark.workload.framework"] = "net10.0";
         Assert.Throws<InvalidOperationException>(() => BenchmarkEvidenceIdentity.ResolveFramework(result, "net10.0-windows"));
+    }
+
+    [Fact]
+    public void CellIdentity_KeepsSuiteHostsApart()
+    {
+        BenchmarkRunResult result = MeasuredResult(("ImportExcel", "Read", Spread(10, 10)), ("ImportExcel", "Read", Spread(12, 10)));
+        foreach (BenchmarkSample sample in result.Samples.Skip(10))
+            sample.Host = "Desktop-5.1";
+        result.Summary = new BenchmarkSummaryService().Summarize(result.Samples);
+
+        BenchmarkEvidenceCell[] cells = BenchmarkEvidenceCellBuilder.Build(result, "comparison-a", BenchmarkPublishPolicy.CreateDefault());
+
+        Assert.Equal(new[] { "Desktop-5.1", "dotnet" }, cells.Select(cell => cell.Parameters["Host"]).OrderBy(value => value, StringComparer.Ordinal));
+    }
+
+    [Fact]
+    public void MeanConfidenceInterval_UsesStudentT()
+    {
+        BenchmarkConfidenceInterval interval = BenchmarkEvidenceIdentity.MeanConfidenceInterval(Enumerable.Range(1, 10).Select(value => (double)value), 0.95)!;
+
+        // mean 5.5, standard error 0.9574, t(0.975, 9) = 2.262
+        Assert.Equal(3.334, interval.LowerMs, 2);
+        Assert.Equal(7.666, interval.UpperMs, 2);
+        Assert.Null(BenchmarkEvidenceIdentity.MeanConfidenceInterval([1.0], 0.95));
+    }
+
+    [Fact]
+    public void EvidenceCatalog_MergeKeepsTheSourcesPolicyAndRefusesUnattributedRowsUnderRestrictions()
+    {
+        string root = CreateTempRoot();
+        string catalogPath = Path.Combine(root, "index.json");
+        BenchmarkEvidenceUpdateRequest strict = PublishRequest(
+            MeasuredResult(("OfficeIMO", "Read", Spread(10, 12)), ("Sep", "Read", Spread(20, 12))), TestDeclarations());
+        strict.Policy = new BenchmarkPublishPolicy { MinimumMeasuredSamples = 11 };
+        new BenchmarkEvidenceCatalogService().UpdateFile(catalogPath, strict);
+
+        BenchmarkEvidenceCatalog merged = new BenchmarkEvidenceCatalogService().MergeFiles(Path.Combine(root, "merged", "index.json"), [catalogPath]);
+        Assert.Equal(11, merged.Policy.MinimumMeasuredSamples);
+
+        BenchmarkDeclarationDocument declarations = ThreeLibraryDeclarations();
+        declarations.Libraries.Single(value => value.Id == "EPPlus").Restriction = BenchmarkLibraryRestriction.PublishRestricted;
+        declarations.Libraries.Single(value => value.Id == "EPPlus").Reason = "Publishing results needs permission.";
+        BenchmarkRunResult unattributed = MeasuredResult(("OfficeIMO", "Read", Spread(10, 10)), ("AsposeRead", "Read", Spread(5, 10)));
+        foreach (BenchmarkSample sample in unattributed.Samples.Where(sample => sample.Library == "AsposeRead"))
+            sample.Library = string.Empty;
+        unattributed.Summary = new BenchmarkSummaryService().Summarize(unattributed.Samples);
+        BenchmarkEvidenceUpdateRequest diagnostic = PublishRequest(unattributed, declarations);
+        diagnostic.Publish = false;
+        diagnostic.Profile = BenchmarkEvidenceProfile.Diagnostic;
+        foreach (BenchmarkSample sample in unattributed.Samples) sample.RunMode = "diagnostic";
+        foreach (BenchmarkSummaryRow row in unattributed.Summary) row.RunMode = "diagnostic";
+
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
+            new BenchmarkEvidenceCatalogService().UpdateFile(Path.Combine(root, "diagnostic", "index.json"), diagnostic));
+        Assert.Contains("rows without a library", exception.Message, StringComparison.Ordinal);
     }
 
     [Fact]

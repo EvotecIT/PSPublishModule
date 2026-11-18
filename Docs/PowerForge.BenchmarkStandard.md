@@ -139,8 +139,10 @@ loses; they stay in the matrix and in the published evidence.
 
 - Report one statistic per runner, recorded in the runner block: `median` by default,
   `mean` only when the runner cannot produce a median.
-- Record a confidence interval for that statistic for every cell. PowerForge computes
-  a distribution-free interval of the median from the raw samples (95% by default).
+- Record a confidence interval for that statistic for every cell. From raw samples,
+  PowerForge computes a distribution-free interval of the median, or a Student's t
+  interval of the mean, using the same samples as the statistic (95% by default).
+  A producer's own interval is used only for summary-only results.
 - When the intervals of two cells overlap, the comparison says **even**, not "faster".
   Ratios between overlapping cells are not claims.
 - Publish every run of a lane that was published. Never pick the best of several runs.

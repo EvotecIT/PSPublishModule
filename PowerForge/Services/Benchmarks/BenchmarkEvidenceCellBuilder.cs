@@ -37,9 +37,16 @@ internal static class BenchmarkEvidenceCellBuilder
             double? value = statistic == "mean"
                 ? row.MeanMs ?? (declared ? null : row.MedianMs)
                 : row.MedianMs ?? (declared ? null : row.MeanMs);
+            // With raw samples the interval is computed from the same samples the statistic used (after the summary's
+            // outlier policy); a producer's interval is used only for summary-only results.
             BenchmarkConfidenceInterval? interval = row.ConfidenceInterval;
-            if (statistic == "median" && durations is { Length: > 0 })
-                interval = BenchmarkEvidenceIdentity.MedianConfidenceInterval(durations, policy.ConfidenceLevel) ?? interval;
+            if (durations is { Length: > 0 })
+            {
+                double[] used = TrimOutliers(durations, row.OutlierCount);
+                interval = statistic == "mean"
+                    ? BenchmarkEvidenceIdentity.MeanConfidenceInterval(used, policy.ConfidenceLevel)
+                    : BenchmarkEvidenceIdentity.MedianConfidenceInterval(used, policy.ConfidenceLevel);
+            }
             string status = string.IsNullOrWhiteSpace(row.Status)
                 ? row.SampleCount > 0 ? "Succeeded" : hasSkippedSamples ? "Skipped" : "Failed"
                 : row.Status;
@@ -50,7 +57,7 @@ internal static class BenchmarkEvidenceCellBuilder
                 Case = row.Scenario,
                 Operation = row.Operation,
                 Library = row.Library ?? string.Empty,
-                Parameters = CellParameters(row.Variables),
+                Parameters = CellParameters(row),
                 Status = status,
                 Reason = row.FailureReasons.Count == 0
                     ? string.Empty
@@ -114,9 +121,29 @@ internal static class BenchmarkEvidenceCellBuilder
         return parameters;
     }
 
+    /// <summary>
+    /// Cell parameters of a summary row: its workload variables plus the host it ran on, when the runner recorded
+    /// one (an Invoke-BenchmarkSuite host axis), so rows that differ only by host stay separate cells.
+    /// </summary>
+    internal static Dictionary<string, string?> CellParameters(BenchmarkSummaryRow row)
+    {
+        Dictionary<string, string?> parameters = CellParameters(row.Variables);
+        if (!string.IsNullOrWhiteSpace(row.Host) && !parameters.ContainsKey("Host"))
+            parameters["Host"] = row.Host;
+        return parameters;
+    }
+
+    private static double[] TrimOutliers(double[] durations, int outlierCount)
+    {
+        if (outlierCount <= 0 || durations.Length <= outlierCount)
+            return durations;
+        int each = outlierCount / 2;
+        return durations.OrderBy(value => value).Skip(each).Take(durations.Length - outlierCount).ToArray();
+    }
+
     /// <summary>Identity of the cell a summary row produces: case, operation, library and parameters.</summary>
     internal static string Identity(BenchmarkSummaryRow row)
-        => string.Join("\u001f", Fold(row.Scenario), Fold(row.Operation), Fold(row.Library), FormatParameters(CellParameters(row.Variables)));
+        => string.Join("\u001f", Fold(row.Scenario), Fold(row.Operation), Fold(row.Library), FormatParameters(CellParameters(row)));
 
     internal static string Identity(BenchmarkEvidenceCell cell)
         => string.Join("\u001f", Fold(cell.Case), Fold(cell.Operation), Fold(cell.Library), FormatParameters(cell.Parameters));

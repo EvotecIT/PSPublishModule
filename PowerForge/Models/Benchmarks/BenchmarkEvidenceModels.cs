@@ -329,6 +329,9 @@ public sealed class BenchmarkSupersededLane
 
     /// <summary>Libraries whose measurements the stored result contains.</summary>
     public string[] Libraries { get; set; } = Array.Empty<string>();
+
+    /// <summary>Portable path of the stored result within this catalog's bundle, independent of a public URL.</summary>
+    public string ArtifactRelativePath { get; set; } = string.Empty;
 }
 
 /// <summary>

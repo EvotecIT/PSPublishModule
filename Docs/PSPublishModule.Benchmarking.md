@@ -507,6 +507,10 @@ never overwritten. Every update also re-evaluates the lanes already in the catal
 against the current declarations and policy, and refuses the update if a published
 lane no longer meets them.
 
+A merge keeps the publish policy of its source catalogs unless `-Policy` is given,
+and fails when the sources disagree. When the declarations restrict libraries, every
+row must carry its library, so redaction can tell which rows to remove.
+
 The merge verifies every normalized result against the SHA-256 and lane metadata
 recorded by its source catalog, re-evaluates every lane against the declarations
 and publish policy, and rejects conflicting copies of the same lane. Verified

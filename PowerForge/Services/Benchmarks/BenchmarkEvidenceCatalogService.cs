@@ -106,6 +106,7 @@ public sealed partial class BenchmarkEvidenceCatalogService
 
         // No stored result keeps measurements of a library whose licence class is not published, in a published or
         // a diagnostic lane: their rows are removed and their cells stay only as "not published (licence)" markers.
+        RejectRowsWithoutLibrary(catalog, evaluation.Cells, normalizedComparisonId);
         payload = RedactLicenceRestricted(result, evaluation.Cells);
         var entry = new BenchmarkEvidenceEntry
         {
@@ -263,6 +264,13 @@ public sealed partial class BenchmarkEvidenceCatalogService
         artifactExisted = File.Exists(artifactPath);
         if (artifactExisted)
             previousArtifact = File.ReadAllBytes(artifactPath);
+        if (!inputWasSelected)
+        {
+            // The incoming run went straight to history; record where its file lives in this bundle.
+            foreach (BenchmarkSupersededLane history in updated.Superseded.Where(value =>
+                         string.Equals(value.ResultSha256, inputHash, StringComparison.OrdinalIgnoreCase)))
+                history.ArtifactRelativePath = ResolveArtifactRelativePath(fullPath, artifactPath, resultPath);
+        }
         if (inputWasSelected)
         {
             string artifactDestinationSha256 =

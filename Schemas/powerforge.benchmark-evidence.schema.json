@@ -166,7 +166,8 @@
         "publish": { "type": "boolean" },
         "resultPath": { "type": "string" },
         "resultSha256": { "type": "string" },
-        "libraries": { "type": "array", "items": { "type": "string" }, "description": "Libraries whose measurements the stored result contains." }
+        "libraries": { "type": "array", "items": { "type": "string" }, "description": "Libraries whose measurements the stored result contains." },
+        "artifactRelativePath": { "type": "string", "description": "Portable path of the stored result within the bundle." }
       }
     },
     "availability": {

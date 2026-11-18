@@ -58,6 +58,7 @@ public sealed partial class BenchmarkEvidenceCatalogService
         var comparisons = new List<BenchmarkComparisonDefinition>();
         var libraries = new List<BenchmarkLibraryDeclaration>();
         var superseded = new List<BenchmarkSupersededLane>();
+        var sourcePolicies = new List<BenchmarkPublishPolicy>();
         // Every artifact the sources can supply, by hash, so superseded runs travel with the merged bundle.
         var availableArtifacts = new Dictionary<string, byte[]>(StringComparer.OrdinalIgnoreCase);
         foreach (string sourceCatalogPath in sources)
@@ -69,6 +70,7 @@ public sealed partial class BenchmarkEvidenceCatalogService
             platformSets.AddRange(source.ExpectedPlatforms);
             comparisons.AddRange(source.Comparisons);
             libraries.AddRange(source.Libraries);
+            sourcePolicies.Add(source.Policy ?? BenchmarkPublishPolicy.CreateDefault());
             superseded.AddRange(source.Superseded);
             foreach (BenchmarkSupersededLane history in source.Superseded)
             {
@@ -82,7 +84,7 @@ public sealed partial class BenchmarkEvidenceCatalogService
         var merged = new BenchmarkEvidenceCatalog
         {
             SchemaVersion = CurrentSchemaVersion,
-            Policy = policy ?? BenchmarkPublishPolicy.CreateDefault()
+            Policy = policy ?? MergePolicies(sourcePolicies)
         };
         if (declarations is not null)
         {
@@ -94,13 +96,20 @@ public sealed partial class BenchmarkEvidenceCatalogService
             merged.Comparisons = comparisons.ToArray();
         }
 
+        // Libraries the merged declarations do not publish are removed from every candidate before lanes are
+        // compared, so a redacted copy and its original select as the same run.
+        HashSet<string> unpublished = UnpublishedLibraries(merged);
         foreach (BundleLane candidate in candidates)
+        {
+            RedactCandidate(candidate, unpublished);
             availableArtifacts[candidate.Entry.ResultSha256] = candidate.ArtifactBytes;
+        }
         BundleLane[] selected = SelectDistinctLanes(candidates, superseded);
         foreach (BundleLane lane in selected)
         {
             // Licence markers have no rows in the stored result; they are carried over from the source lane.
             BenchmarkEvidenceCell[] markers = lane.Entry.Cells.Where(IsLicenceMarker).ToArray();
+            RejectRowsWithoutLibrary(merged, lane.Entry.Cells, lane.Entry.LaneKey);
             BenchmarkPolicyEvaluation evaluation = Evaluate(
                 merged,
                 lane.Result,
@@ -153,18 +162,20 @@ public sealed partial class BenchmarkEvidenceCatalogService
         ApplyCompatibility(entries);
         merged.ExpectedPlatforms = NormalizeExpectedPlatforms(expectedPlatforms ?? platformSets);
         merged.Entries = entries;
-        merged.Superseded = NormalizeSuperseded(superseded, entries);
-        var supersededArtifacts = new List<(string Path, string Sha256, byte[] Bytes)>();
         // Historical runs follow the same licence policy as current ones: libraries the merged declarations do not
-        // publish are removed from their copies too.
-        string[] unpublished = merged.Libraries
-            .Where(library => !library.IsPublishableUnder(merged.Policy))
-            .Select(library => library.Id)
-            .ToArray();
-        foreach (BenchmarkSupersededLane history in merged.Superseded)
+        // publish are removed from their copies too. Records are normalized after redaction so an original and its
+        // redacted copy collapse into one record.
+        var historyBytesByHash = new Dictionary<string, byte[]>(StringComparer.OrdinalIgnoreCase);
+        var redactedHistoryRecords = new List<BenchmarkSupersededLane>();
+        foreach (BenchmarkSupersededLane history in superseded)
         {
             if (!availableArtifacts.TryGetValue(history.ResultSha256, out byte[]? historyBytes))
+            {
+                // Without its file the run cannot be redacted; a record still claiming an unpublished library is dropped.
+                if (!history.Libraries.Any(unpublished.Contains))
+                    redactedHistoryRecords.Add(history);
                 continue;
+            }
             BenchmarkRunResult historyResult = BenchmarkJson.ReadBytes<BenchmarkRunResult>(historyBytes, history.ResultPath);
             BenchmarkRunResult redactedHistory = RedactLibraries(historyResult, unpublished);
             history.Libraries = redactedHistory.Summary.Select(row => row.Library)
@@ -178,16 +189,24 @@ public sealed partial class BenchmarkEvidenceCatalogService
                 string previousHash = history.ResultSha256.ToLowerInvariant();
                 historyBytes = BenchmarkJson.SerializeCanonicalBytes(redactedHistory);
                 history.ResultSha256 = ComputeSha256(historyBytes);
-                int marker = history.ResultPath.LastIndexOf("." + previousHash, StringComparison.OrdinalIgnoreCase);
-                if (marker >= 0)
-                    history.ResultPath = history.ResultPath.Remove(marker, previousHash.Length + 1);
+                history.ResultPath = ReplaceContentHash(history.ResultPath, previousHash, history.ResultSha256);
             }
+            historyBytesByHash[history.ResultSha256] = historyBytes;
+            redactedHistoryRecords.Add(history);
+        }
+        merged.Superseded = NormalizeSuperseded(redactedHistoryRecords, entries);
+        var supersededArtifacts = new List<(string Path, string Sha256, byte[] Bytes)>();
+        foreach (BenchmarkSupersededLane history in merged.Superseded)
+        {
+            if (!historyBytesByHash.TryGetValue(history.ResultSha256, out byte[]? historyBytes))
+                continue;
             history.ResultPath = CreateContentAddressedResultPath(
                 publicPrefix is null ? history.ResultPath :
                     publicPrefix + "/" + Uri.EscapeDataString(ExtractBundleArtifactFileName(history.ResultPath)),
                 history.ResultSha256);
+            history.ArtifactRelativePath = ExtractBundleArtifactRelativePath(history.ResultPath).Replace('\\', '/');
             supersededArtifacts.Add((
-                ResolveBundleArtifactPath(outputCatalogPath, ExtractBundleArtifactRelativePath(history.ResultPath), history.ResultPath),
+                ResolveBundleArtifactPath(outputCatalogPath, history.ArtifactRelativePath, history.ResultPath),
                 history.ResultSha256,
                 historyBytes));
         }
@@ -233,7 +252,10 @@ public sealed partial class BenchmarkEvidenceCatalogService
         bytes = null;
         try
         {
-            string path = ResolveBundleArtifactPath(sourceCatalogPath, ExtractBundleArtifactRelativePath(history.ResultPath), history.ResultPath);
+            string relative = !string.IsNullOrWhiteSpace(history.ArtifactRelativePath)
+                ? history.ArtifactRelativePath
+                : ExtractBundleArtifactRelativePath(history.ResultPath);
+            string path = ResolveBundleArtifactPath(sourceCatalogPath, relative, history.ResultPath);
             if (!File.Exists(path))
                 return false;
             byte[] candidate = File.ReadAllBytes(path);
@@ -253,19 +275,53 @@ public sealed partial class BenchmarkEvidenceCatalogService
     private static void RedactMergedLane(BundleLane lane, BenchmarkEvidenceCell[] cells)
     {
         BenchmarkRunResult redacted = RedactLicenceRestricted(lane.Result, cells);
-        if (ReferenceEquals(redacted, lane.Result))
+        if (!ReferenceEquals(redacted, lane.Result))
+            ReplaceLaneResult(lane, redacted);
+    }
+
+    // Removes unpublished libraries from a candidate before lanes are compared; their cells become cleared markers.
+    private static void RedactCandidate(BundleLane lane, ISet<string> unpublished)
+    {
+        if (unpublished.Count == 0)
             return;
+        foreach (BenchmarkEvidenceCell cell in lane.Entry.Cells.Where(cell => unpublished.Contains(cell.Library)))
+        {
+            cell.ValueMs = null;
+            cell.ConfidenceInterval = null;
+            cell.SampleCount = 0;
+            cell.FailureCount = 0;
+            cell.ValidationDetail = string.Empty;
+            cell.Outcome = string.Empty;
+            cell.Publishable = false;
+            if (!IsLicenceMarker(cell))
+                cell.Issues = cell.Issues.Append(BenchmarkPublishPolicyEvaluator.NotPublishedLicence + $"library '{cell.Library}' is not published.").ToArray();
+        }
+        BenchmarkRunResult redacted = RedactLibraries(lane.Result, unpublished);
+        if (!ReferenceEquals(redacted, lane.Result))
+            ReplaceLaneResult(lane, redacted);
+    }
+
+    private static void ReplaceLaneResult(BundleLane lane, BenchmarkRunResult redacted)
+    {
         byte[] bytes = BenchmarkJson.SerializeCanonicalBytes(redacted);
         string previousHash = lane.Entry.ResultSha256.ToLowerInvariant();
         string hash = ComputeSha256(bytes);
         lane.ArtifactBytes = bytes;
+        lane.Result = redacted;
         lane.Entry.ResultSha256 = hash;
         lane.Entry.Compatibility = BuildCompatibility(redacted);
-        string resultPath = lane.Entry.ResultPath;
-        int marker = resultPath.LastIndexOf("." + previousHash, StringComparison.OrdinalIgnoreCase);
-        if (marker >= 0)
-            resultPath = resultPath.Remove(marker, previousHash.Length + 1);
-        lane.Entry.ResultPath = resultPath;
+        lane.Entry.ResultPath = ReplaceContentHash(lane.Entry.ResultPath, previousHash, hash);
+    }
+
+    private static BenchmarkPublishPolicy MergePolicies(IReadOnlyCollection<BenchmarkPublishPolicy> policies)
+    {
+        string[] distinct = policies.Select(value => BenchmarkJson.Serialize(value)).Distinct(StringComparer.Ordinal).ToArray();
+        if (distinct.Length > 1)
+        {
+            throw new InvalidOperationException(
+                "Benchmark evidence source catalogs use different publish policies. Pass the policy to merge with explicitly.");
+        }
+        return policies.FirstOrDefault() ?? BenchmarkPublishPolicy.CreateDefault();
     }
 
     private static BenchmarkLibraryDeclaration[] MergeLibraries(IEnumerable<BenchmarkLibraryDeclaration> libraries)
@@ -761,7 +817,7 @@ public sealed partial class BenchmarkEvidenceCatalogService
             Result = result;
         }
 
-        internal BenchmarkRunResult Result { get; }
+        internal BenchmarkRunResult Result { get; set; }
 
         internal BenchmarkEvidenceEntry Entry { get; }
         internal byte[] ArtifactBytes { get; set; }
