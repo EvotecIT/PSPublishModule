@@ -2729,9 +2729,29 @@ public sealed partial class ModulePipelineHostedOperationsTests
     public void SigningScript_FailsClosedForInvalidCertificatesAndUnknownSignatures()
     {
         var script = EmbeddedScripts.Load("Scripts/Signing/Sign-Module.ps1");
+        var ast = System.Management.Automation.Language.Parser.ParseInput(script, out _, out var parseErrors);
+        Assert.Empty(parseErrors);
+        var function = ast.Find(
+            node => node is System.Management.Automation.Language.FunctionDefinitionAst definition &&
+                    definition.Name.Equals("Get-SigningCertificateRejection", StringComparison.Ordinal),
+            searchNestedScriptBlocks: true);
+        Assert.NotNull(function);
 
-        Assert.Contains("outside its validity period", script, StringComparison.Ordinal);
-        Assert.Contains("if ($status -eq 'Valid')", script, StringComparison.Ordinal);
+        using var powerShell = System.Management.Automation.PowerShell.Create();
+        powerShell.AddScript("function Test-CodeSigningCertificate([object]$certificate) { $true }\n" + function!.Extent.Text + "\n" + """
+            $now = [DateTime]::UtcNow
+            function New-Certificate([bool]$key, [DateTime]$from, [DateTime]$to) { [pscustomobject]@{ HasPrivateKey = $key; NotBefore = $from; NotAfter = $to } }
+            Get-SigningCertificateRejection -certificate $null
+            Get-SigningCertificateRejection -certificate (New-Certificate $false $now.AddDays(-1) $now.AddDays(1))
+            Get-SigningCertificateRejection -certificate (New-Certificate $true $now.AddDays(1) $now.AddDays(2))
+            Get-SigningCertificateRejection -certificate (New-Certificate $true $now.AddDays(-2) $now.AddDays(-1))
+            if ($null -eq (Get-SigningCertificateRejection -certificate (New-Certificate $true $now.AddDays(-1) $now.AddDays(1)))) { 'usable' }
+            """);
+
+        var results = powerShell.Invoke().Select(result => result.ToString()).ToArray();
+
+        Assert.Empty(powerShell.Streams.Error);
+        Assert.Equal(new[] { "not found", "no private key", "not yet valid", "expired", "usable" }, results);
         Assert.DoesNotContain("$status -eq 'Valid' -or $status -eq 'UnknownError'", script, StringComparison.Ordinal);
     }
 
