@@ -114,20 +114,19 @@ public sealed class ModulePipelineStep
 
         var steps = new List<ModulePipelineStep>();
 
+        // A release that takes the module version from its packages builds them and synchronizes the version
+        // before dependency preparation; otherwise they follow it. Keep the list in the order the runner executes.
+        var synchronizesVersion = SynchronizesModuleVersion(plan);
+        if (synchronizesVersion)
+            AddPackageBuildAndVersionSteps(steps, plan);
         AddActionSteps(steps, plan, ModulePipelineActionStage.BeforeDependencies);
         steps.Add(new ModulePipelineStep(
             kind: ModulePipelineStepKind.Dependencies,
             key: "deps:install",
             title: "Prepare module dependencies"));
         AddActionSteps(steps, plan, ModulePipelineActionStage.AfterDependencies);
-        AddPackageBuildSteps(steps, plan, beforeModule: true);
-        if (SynchronizesModuleVersion(plan))
-        {
-            steps.Add(new ModulePipelineStep(
-                kind: ModulePipelineStepKind.Versioning,
-                key: "version:synchronize",
-                title: "Synchronize module version"));
-        }
+        if (!synchronizesVersion)
+            AddPackageBuildAndVersionSteps(steps, plan);
         AddActionSteps(steps, plan, ModulePipelineActionStage.BeforeVersioning);
         if (plan.AppleApps is { Length: > 0 })
         {
@@ -439,6 +438,18 @@ public sealed class ModulePipelineStep
         }
     }
 
+    private static void AddPackageBuildAndVersionSteps(List<ModulePipelineStep> steps, ModulePipelinePlan plan)
+    {
+        AddPackageBuildSteps(steps, plan, beforeModule: true);
+        if (SynchronizesModuleVersion(plan))
+        {
+            steps.Add(new ModulePipelineStep(
+                kind: ModulePipelineStepKind.Versioning,
+                key: "version:synchronize",
+                title: "Synchronize module version"));
+        }
+    }
+
     private static void AddPackageBuildSteps(
         List<ModulePipelineStep> steps,
         ModulePipelinePlan plan,
@@ -456,7 +467,7 @@ public sealed class ModulePipelineStep
                     continue;
 
                 var name = segment.Configuration.Name;
-                var label = GetPackageLaneAction(segment.Configuration.PublishNuget);
+                var label = GetPackageLaneAction(plan, segment.Configuration.PublishNuget);
                 if (!string.IsNullOrWhiteSpace(name))
                     label += $" ({name})";
                 else if (!string.IsNullOrWhiteSpace(segment.Configuration.ConfigPath))
@@ -482,7 +493,7 @@ public sealed class ModulePipelineStep
                     continue;
 
                 var name = segment.Configuration.Name;
-                var action = GetPackageLaneAction(segment.Configuration.PublishNuget);
+                var action = GetPackageLaneAction(plan, segment.Configuration.PublishNuget);
                 var label = string.IsNullOrWhiteSpace(name)
                     ? $"{action} (inline)"
                     : $"{action} ({name})";
@@ -510,13 +521,17 @@ public sealed class ModulePipelineStep
                plan.BuildSpec.AssemblyTypeAccelerators,
                plan.BuildSpec.AssemblyTypeAcceleratorAssemblies) != AssemblyTypeAcceleratorExportMode.None;
 
-    private static string GetPackageLaneAction(bool? publishNuget)
-        => publishNuget switch
-        {
-            true => "Build and publish NuGet packages",
-            false => "Build NuGet packages",
-            _ => "Run NuGet package lane"
-        };
+    // Build, Manifest and Documentation runs skip the publish phase, so the lane only builds even when the
+    // configuration enables NuGet publishing.
+    private static string GetPackageLaneAction(ModulePipelinePlan plan, bool? publishNuget)
+        => plan.GateMode is ConfigurationGateMode.Build or ConfigurationGateMode.Manifest or ConfigurationGateMode.Documentation
+            ? "Build NuGet packages"
+            : publishNuget switch
+            {
+                true => "Build and publish NuGet packages",
+                false => "Build NuGet packages",
+                _ => "Run NuGet package lane"
+            };
 
     private static void AddExternalAssetSteps(List<ModulePipelineStep> steps, ModulePipelinePlan plan)
     {

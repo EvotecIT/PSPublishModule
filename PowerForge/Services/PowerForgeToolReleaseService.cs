@@ -513,7 +513,13 @@ internal sealed partial class PowerForgeToolReleaseService
 
         psi.Arguments = string.Join(" ", args);
 
-        var processResult = _runProcess(psi, cancellationToken);
+        ProcessExecutionResult processResult;
+        using (OperationHeartbeat.Start(
+                   _logger,
+                   $"dotnet publish {target.Name} ({combination.Framework}, {combination.Runtime}, {combination.Flavor})"))
+        {
+            processResult = _runProcess(psi, cancellationToken);
+        }
         cancellationToken.ThrowIfCancellationRequested();
         if (processResult.ExitCode != 0)
         {

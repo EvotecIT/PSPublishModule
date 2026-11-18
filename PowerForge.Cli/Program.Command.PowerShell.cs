@@ -191,7 +191,10 @@ internal static partial class Program
                 spec.TimeoutSeconds = timeoutSeconds;
             }
 
-            var result = new PowerShellCompilationArtifactBuilder().Build(spec);
+            var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+            // JSON output stays machine-readable: no progress is reported while it is requested.
+            var result = new PowerShellCompilationArtifactBuilder().Build(spec, outputJson ? null : logger, CancellationToken.None);
+            stopwatch.Stop();
             var exitCode = result.Succeeded ? 0 : 1;
             if (outputJson)
             {
@@ -209,20 +212,14 @@ internal static partial class Program
 
             if (!result.Succeeded)
             {
-                logger.Error(result.Error ?? "PowerShell artifact build failed.");
-                if (!string.IsNullOrWhiteSpace(result.BuildOutput)) logger.Error(result.BuildOutput);
+                // The build output was streamed at Verbose while it ran; repeat only the error lines here.
+                logger.Error(PowerShellCompilationBuildReport.FormatFailure(result, logger.IsVerbose
+                    ? null
+                    : "Run again with --verbose to see the full build output, or with --output json to get it as buildOutput."));
                 return exitCode;
             }
 
-            logger.Success($"Built {resolved.Kind}: {result.ArtifactPath}");
-            logger.Info($"Manifest: {result.ManifestPath}");
-            if (!string.IsNullOrWhiteSpace(result.GeneratedSourcePath))
-                logger.Info($"Generated source: {result.GeneratedSourcePath}");
-            logger.Info(result.Manifest!.UsesPowerShellRuntimeFallback
-                ? $"Runtime-packaged artifact: {result.Manifest.RuntimeFallbackUnits} unit(s) execute through PowerShell; {result.Manifest.PromotedTypedRegions} typed region(s) run in generated CLR helpers."
-                : result.Manifest.RequiresPowerShellRuntime
-                    ? $"Typed PowerShell binary module: {result.Manifest.CompiledMethods} cmdlet(s), no dynamic script fallback."
-                    : $"Typed CLR artifact: {result.Manifest.CompiledMethods} method(s), {result.Manifest.OmittedUnits} unsupported unit(s) omitted, no PowerShell runtime dependency.");
+            PowerShellCompilationBuildReport.WriteSuccess(logger, result, stopwatch.Elapsed);
             return 0;
         }
         catch (Exception ex)

@@ -35,8 +35,21 @@ public sealed partial class PowerShellCompilationArtifactBuilder
 
     /// <summary>Builds an artifact, canceling child build processes and checking cancellation before publication.</summary>
     public PowerShellCompilationBuildResult Build(PowerShellCompilationBuildSpec spec, CancellationToken cancellationToken)
+        => Build(spec, logger: null, cancellationToken);
+
+    /// <summary>
+    /// Builds an artifact and reports its phases (analysis, code generation, restore, build or publish, packaging)
+    /// with elapsed times to <paramref name="logger"/>. While the generated <c>dotnet</c> process runs, a heartbeat
+    /// says it is still working, its warning and error lines are shown as they arrive and the rest goes to Verbose.
+    /// A null logger builds silently, exactly like the other overloads.
+    /// </summary>
+    /// <param name="spec">Build specification.</param>
+    /// <param name="logger">Optional progress logger; it must accept calls from any thread.</param>
+    /// <param name="cancellationToken">Cancels child build processes and publication.</param>
+    public PowerShellCompilationBuildResult Build(PowerShellCompilationBuildSpec spec, ILogger? logger, CancellationToken cancellationToken)
     {
         if (spec is null) throw new ArgumentNullException(nameof(spec));
+        var progress = logger is null ? PowerShellCompilationBuildProgress.None : new PowerShellCompilationBuildProgress(logger);
         cancellationToken.ThrowIfCancellationRequested();
         ApplyExplicitTargetContract(spec);
         ValidateSpec(spec);
@@ -49,6 +62,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             spec.OutputDirectory,
             $"PowerShell compilation output directory '{spec.OutputDirectory}' must not be a symbolic link or junction.");
         var artifactName = PowerShellCompilationArtifactName.Normalize(spec.ArtifactName, nameof(spec.ArtifactName));
+        progress.Announce($"Building {spec.Kind} '{artifactName}' ({spec.Mode}) from {spec.SourcePath}");
         // Microsoft.PowerShell.SDK carries deeply nested content files. Keeping the disposable
         // generated project below the durable output directory can exceed MAX_PATH on Windows
         // even when the user's final artifact path is otherwise reasonable.
@@ -111,6 +125,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                     throw new FileNotFoundException($"Required module manifest file reference '{missingManifestReference.RelativePath}' was not found.", missingManifestReference.SourcePath);
                 throw new FileNotFoundException($"Required PowerShell compilation dependency was not found: {string.Join(", ", missingDependencies.Select(static dependency => dependency.RelativePath))}.");
             }
+            progress.Completed($"Resolved {compilationSourcePaths.Length} source file(s), {dependencyPlan.Length} dependency item(s) and the .NET SDK");
             failureStage = PowerShellCompilationFailureStage.Analysis;
             var capabilities = PowerShellCompilationBuildSpec.GetCapabilities(spec.Kind, spec.Mode);
             var nativeManifestPath = spec.Kind == PowerShellCompilationArtifactKind.BinaryModule
@@ -125,6 +140,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             failurePlan = plan;
             if (plan.ParseErrorFiles > 0)
                 throw new InvalidOperationException("PowerShell source contains parser errors; no artifact was produced.");
+            progress.Completed($"Analyzed {plan.TotalUnits} unit(s) ({spec.Mode}): {plan.CompilableUnits} eligible for typed code");
 
             var publishDirectory = Path.Combine(workspace, "publish");
             Directory.CreateDirectory(publishDirectory);
@@ -379,17 +395,22 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                 !string.Equals(publicAbi?.Sha256, spec.ExpectedPublicAbiSha256, StringComparison.OrdinalIgnoreCase))
                 throw new InvalidOperationException("The generated public ABI does not match the expected ABI SHA-256.");
 
+            progress.Completed($"Generated the {spec.Kind} project: {compiledMethods} typed method(s)");
             var resolvedPackageLockSha256 = PrepareExactNuGetClosureLock(spec, projectPath);
             GeneratedBuildProcessResult? restore = null;
             var authenticatedPublishRequired = RequiresAuthenticatedSdkPublish(spec);
             if (authenticatedPublishRequired || spec.UseBuildCache || !string.IsNullOrWhiteSpace(spec.NuGetLockFilePath))
             {
                 failureStage = PowerShellCompilationFailureStage.Restore;
-                restore = RunDotNetRestore(spec, projectPath, runtimeIdentifier, cancellationToken);
+                restore = RunDotNetRestore(spec, projectPath, runtimeIdentifier, cancellationToken, progress: progress);
                 if (restore.TimedOut)
                     throw new TimeoutException($"Generated .NET restore exceeded {spec.TimeoutSeconds} seconds.");
                 if (restore.ExitCode != 0)
+                {
+                    // Keep the unredacted restore output with the result, as a failed build does.
+                    result.BuildOutput = BoundOutput(restore.Output);
                     throw new InvalidOperationException($"Generated .NET restore failed with exit code {restore.ExitCode}.{Environment.NewLine}{BoundOutput(restore.Output)}");
+                }
             }
             var authenticatedPublish = authenticatedPublishRequired ? PrepareAuthenticatedSdkPublish(spec, workspace, projectPath,
                 runtimeIdentifier!, dependencyGraph, toolchain, providerResolution.Lock, cancellationToken) : null;
@@ -404,10 +425,12 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             failureStage = spec.Optimization == PowerShellCompilationExecutableOptimization.None
                 ? PowerShellCompilationFailureStage.Build
                 : PowerShellCompilationFailureStage.Optimization;
-            var process = authenticatedPublish is null && PowerShellCompilationArtifactBuildCache.TryRestore(spec, buildCache, publishDirectory)
+            var cacheHit = authenticatedPublish is null && PowerShellCompilationArtifactBuildCache.TryRestore(spec, buildCache, publishDirectory);
+            if (cacheHit) progress.Completed("Reused the verified build cache; dotnet was not run");
+            var process = cacheHit
                 ? new GeneratedBuildProcessResult(0, "PowerForge compilation build cache: verified content-addressed hit.", timedOut: false)
                 : RunDotNetBuild(spec, projectPath, publishDirectory, runtimeIdentifier, restoreCompleted: restore is not null, cancellationToken,
-                    authenticatedPublish?.PackageRoot);
+                    authenticatedPublish?.PackageRoot, progress);
             cancellationToken.ThrowIfCancellationRequested();
             result.BuildOutput = BoundOutput(string.Join(Environment.NewLine,
                 new[] { restore?.Output, authenticatedPublish?.RestoreOutput, process.Output }.Where(static output => !string.IsNullOrWhiteSpace(output))));
@@ -652,6 +675,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                             .Select(static dependency => dependency.SourcePath!))
                         .Distinct(PowerShellCompilationPathSafety.PathComparer));
 
+                progress.Completed($"Packaged {manifest.Files.Length} file(s) into {spec.OutputDirectory}");
                 result.Succeeded = true;
                 result.ArtifactPath = artifactPath;
                 result.ManifestPath = manifestPath;

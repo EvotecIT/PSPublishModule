@@ -270,6 +270,61 @@ public sealed class PowerForgeToolReleaseServiceTests
     }
 
     [Fact]
+    public void Run_KeepsTheErrorAtTheEndOfLongFailedPublishOutput()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge.ToolReleaseTests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var projectPath = Path.Combine(root, "Sample.Tool.csproj");
+            File.WriteAllText(projectPath, "<Project />");
+            // MSBuild prints restore and build chatter first and the actual error last.
+            var chatter = string.Join(Environment.NewLine, Enumerable.Range(1, 400).Select(i => $"  Restored dependency {i} of 400 for Sample.Tool."));
+            const string error = "Program.cs(12,5): error CS0103: The name 'missing' does not exist in the current context";
+            var service = new PowerForgeToolReleaseService(
+                new NullLogger(),
+                _ => new PowerForgeToolReleaseService.ProcessExecutionResult(1, chatter + Environment.NewLine + error, string.Empty));
+            var outputPath = Path.Combine(root, "output");
+
+            var result = service.Run(new PowerForgeToolReleasePlan
+            {
+                ProjectRoot = root,
+                Configuration = "Release",
+                Targets =
+                [
+                    new PowerForgeToolReleaseTargetPlan
+                    {
+                        Name = "Sample.Tool",
+                        ProjectPath = projectPath,
+                        OutputName = "Sample.Tool",
+                        Version = "1.2.3",
+                        ArtifactRootPath = outputPath,
+                        MsBuildProperties = new Dictionary<string, string>(),
+                        Combinations =
+                        [
+                            new PowerForgeToolReleaseCombinationPlan
+                            {
+                                Runtime = "win-x64",
+                                Framework = "net10.0",
+                                Flavor = PowerForgeToolReleaseFlavor.SingleFx,
+                                OutputPath = outputPath
+                            }
+                        ]
+                    }
+                ]
+            });
+
+            Assert.False(result.Success);
+            Assert.Contains(error, result.ErrorMessage, StringComparison.Ordinal);
+            Assert.True(result.ErrorMessage!.Length < chatter.Length, "The failure message should stay bounded.");
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch { }
+        }
+    }
+
+    [Fact]
     public void RunProcess_cancellation_terminates_the_child_process()
     {
         var readyPath = Path.Combine(Path.GetTempPath(), $"PowerForge-child-{Guid.NewGuid():N}.ready");

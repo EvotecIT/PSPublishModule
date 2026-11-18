@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Management.Automation;
 using System.Linq;
+using System.Threading.Tasks;
 using PowerForge;
 
 namespace PSPublishModule;
@@ -32,7 +33,7 @@ namespace PSPublishModule;
 /// <para>Creates a draft prerelease that can be reviewed before publishing.</para>
 /// </example>
 [Cmdlet(VerbsCommunications.Send, "GitHubRelease")]
-public sealed class SendGitHubReleaseCommand : PSCmdlet
+public sealed class SendGitHubReleaseCommand : AsyncPSCmdlet
 {
     /// <summary>GitHub username owning the repository.</summary>
     [Parameter(Mandatory = true)]
@@ -90,7 +91,7 @@ public sealed class SendGitHubReleaseCommand : PSCmdlet
     public bool ReuseExistingReleaseOnConflict { get; set; }
 
     /// <summary>Creates the release and uploads assets.</summary>
-    protected override void ProcessRecord()
+    protected override async Task ProcessRecordAsync()
     {
         var isVerbose = MyInvocation?.BoundParameters.ContainsKey("Verbose") == true;
         var logger = new CmdletLogger(this, isVerbose);
@@ -125,7 +126,8 @@ public sealed class SendGitHubReleaseCommand : PSCmdlet
 
         try
         {
-            var publishResult = publisher.PublishRelease(new GitHubReleasePublishRequest
+            // The upload runs off the pipeline thread so byte progress and log lines reach the host while it runs.
+            var request = new GitHubReleasePublishRequest
             {
                 Owner = GitHubUsername,
                 Repository = GitHubRepositoryName,
@@ -138,8 +140,10 @@ public sealed class SendGitHubReleaseCommand : PSCmdlet
                 IsDraft = IsDraft,
                 IsPreRelease = IsPreRelease,
                 ReuseExistingReleaseOnConflict = ReuseExistingReleaseOnConflict,
-                AssetFilePaths = assets
-            });
+                AssetFilePaths = assets,
+                Progress = new CmdletAssetProgress(this)
+            };
+            var publishResult = await Task.Run(() => publisher.PublishRelease(request, CancelToken), CancelToken);
 
             result.ReleaseCreationSucceeded = publishResult.ReleaseCreationSucceeded;
             result.ReusedExistingRelease = publishResult.ReusedExistingRelease;
@@ -147,9 +151,19 @@ public sealed class SendGitHubReleaseCommand : PSCmdlet
             result.AllAssetUploadsSucceeded = publishResult.AllAssetUploadsSucceeded;
             result.SkippedExistingAssets.AddRange(publishResult.SkippedExistingAssets);
             result.Succeeded = publishResult.Succeeded;
+            if (!result.Succeeded)
+                result.ErrorMessage = GitHubReleaseAssetWorkflowService.DescribeFailure(TagName, assets.Length, publishResult);
             WriteObject(result);
+            if (!result.Succeeded)
+            {
+                WriteError(new ErrorRecord(
+                    new InvalidOperationException(result.ErrorMessage),
+                    "SendGitHubReleaseIncomplete",
+                    ErrorCategory.InvalidResult,
+                    TagName));
+            }
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not PipelineStoppedException and not ActionPreferenceStopException and not OperationCanceledException)
         {
             if (!result.ReleaseCreationSucceeded)
                 result.ReleaseCreationSucceeded = false;
@@ -158,7 +172,72 @@ public sealed class SendGitHubReleaseCommand : PSCmdlet
             result.AllAssetUploadsSucceeded = thereAreNoAssetsToInclude ? null : false;
             result.ErrorMessage = ex.Message;
             WriteObject(result);
+            WriteError(new ErrorRecord(ex, "SendGitHubReleaseFailed", ErrorCategory.NotSpecified, TagName));
         }
+    }
+
+    /// <summary>
+    /// Shows asset uploads with Write-Progress: one bar for the asset plan, with the bytes of the current upload.
+    /// Byte updates are rate-limited; state changes are always shown.
+    /// </summary>
+    private sealed class CmdletAssetProgress : IGitHubReleaseProgressReporter
+    {
+        private const int ActivityId = 0x6748;
+        private static readonly TimeSpan MinimumInterval = TimeSpan.FromMilliseconds(250);
+        private readonly AsyncPSCmdlet _cmdlet;
+        private readonly object _gate = new();
+        private DateTime _lastUpdate = DateTime.MinValue;
+
+        internal CmdletAssetProgress(AsyncPSCmdlet cmdlet) => _cmdlet = cmdlet;
+
+        public void Report(GitHubReleaseAssetProgress progress)
+        {
+            if (progress is null || progress.State == GitHubReleaseAssetProgressState.Planned)
+                return;
+
+            lock (_gate)
+            {
+                var now = DateTime.UtcNow;
+                if (progress.State == GitHubReleaseAssetProgressState.Uploading &&
+                    progress.BytesTransferred < progress.TotalBytes &&
+                    now - _lastUpdate < MinimumInterval)
+                {
+                    return;
+                }
+
+                _lastUpdate = now;
+                var status = $"Asset {progress.Position}/{progress.TotalAssets}: {progress.FileName} ({Describe(progress)})";
+                var record = new ProgressRecord(ActivityId, "Uploading GitHub release assets", status);
+                if (progress.TotalAssets > 0)
+                {
+                    var done = progress.State is GitHubReleaseAssetProgressState.Uploaded
+                        or GitHubReleaseAssetProgressState.Skipped
+                        or GitHubReleaseAssetProgressState.Failed
+                        ? 1d
+                        : progress.TotalBytes > 0 ? (double)progress.BytesTransferred / progress.TotalBytes : 0d;
+                    record.PercentComplete = (int)Math.Min(100, Math.Max(0, (progress.Position - 1 + done) * 100 / progress.TotalAssets));
+                }
+
+                if (progress.Position >= progress.TotalAssets &&
+                    progress.State is not GitHubReleaseAssetProgressState.Uploading and not GitHubReleaseAssetProgressState.Replacing)
+                {
+                    record.RecordType = ProgressRecordType.Completed;
+                }
+
+                try { _cmdlet.WriteProgress(record); } catch (Exception ex) when (ex is not PipelineStoppedException) { }
+            }
+        }
+
+        private static string Describe(GitHubReleaseAssetProgress progress)
+            => progress.State switch
+            {
+                GitHubReleaseAssetProgressState.Uploading when progress.TotalBytes > 0 =>
+                    $"{DotNetRepositoryReleaseService.FormatBytes(Math.Max(0, progress.BytesTransferred))} / {DotNetRepositoryReleaseService.FormatBytes(progress.TotalBytes)}",
+                GitHubReleaseAssetProgressState.Replacing => "replacing existing asset",
+                GitHubReleaseAssetProgressState.Skipped => "already exists",
+                GitHubReleaseAssetProgressState.Failed => string.IsNullOrWhiteSpace(progress.Detail) ? "failed" : $"failed: {progress.Detail}",
+                _ => progress.State.ToString().ToLowerInvariant()
+            };
     }
 
     private static void ValidateAssetFilePathsOrThrow(string[] assets)

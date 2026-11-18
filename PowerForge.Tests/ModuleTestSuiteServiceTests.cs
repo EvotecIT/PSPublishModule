@@ -101,6 +101,54 @@ public sealed class ModuleTestSuiteServiceTests
         }
     }
 
+    [Fact]
+    public void Run_StreamsPesterOutputWithoutProtocolLinesAndWarnsAboutErrorsFromAPassingRun()
+    {
+        var projectRoot = Directory.CreateDirectory(
+            Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(projectRoot.FullName, "Tests"));
+            File.WriteAllText(Path.Combine(projectRoot.FullName, "SampleModule.psm1"), string.Empty);
+            File.WriteAllText(
+                Path.Combine(projectRoot.FullName, "SampleModule.psd1"),
+                "@{ RootModule = 'SampleModule.psm1'; ModuleVersion = '1.0.0'; FunctionsToExport = @(); CmdletsToExport = @(); AliasesToExport = @() }");
+
+            var runner = new RecordingPowerShellRunner(request =>
+            {
+                foreach (var line in new[] { "PFTEST::PESTER::5.7.1", "Describing Get-Sample", "  [+] returns a value 12ms", "PFTEST::COUNTS::1::1::0::0" })
+                    request.OutputLineReceived?.Invoke(line);
+                return new PowerShellRunResult(0, "PFTEST::COUNTS::1::1::0::0", "Import-Module: optional dependency 'Az.Accounts' was not found.", "pwsh.exe");
+            });
+            var logger = new CollectingLogger();
+            var streamed = new List<string>();
+
+            var result = new ModuleTestSuiteService(runner, logger).Run(
+                new ModuleTestSuiteSpec { ProjectPath = projectRoot.FullName, SkipDependencies = true },
+                streamed.Add);
+
+            Assert.Equal(1, result.PassedCount);
+            Assert.Equal(new[] { "Describing Get-Sample", "  [+] returns a value 12ms" }, streamed);
+            Assert.Contains(logger.Warnings, warning => warning.Contains("optional dependency 'Az.Accounts' was not found", StringComparison.Ordinal));
+        }
+        finally
+        {
+            try { projectRoot.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    private sealed class CollectingLogger : ILogger
+    {
+        public List<string> Warnings { get; } = new();
+        public bool IsVerbose => false;
+        public void Info(string message) { }
+        public void Success(string message) { }
+        public void Warn(string message) => Warnings.Add(message);
+        public void Error(string message) { }
+        public void Verbose(string message) { }
+    }
+
     private sealed class RecordingPowerShellRunner : IPowerShellRunner
     {
         private readonly Func<PowerShellRunRequest, PowerShellRunResult> _run;

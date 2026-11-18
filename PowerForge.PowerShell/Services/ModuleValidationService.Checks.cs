@@ -173,12 +173,17 @@ public sealed partial class ModuleValidationService
         {
             try
             {
-                var installResults = _ensureRuntimeDependencies(
-                    new[] { new ModuleDependency("PSScriptAnalyzer") },
-                    new RuntimeToolDependencyOptions
-                    {
-                        TimeoutPerModule = TimeSpan.FromMinutes(5)
-                    });
+                _logger.Info("Ensuring PSScriptAnalyzer is available; it is installed from the PowerShell Gallery when missing.");
+                IReadOnlyList<ModuleDependencyInstallResult> installResults;
+                using (OperationHeartbeat.Start(_logger, "PSScriptAnalyzer installation"))
+                {
+                    installResults = _ensureRuntimeDependencies(
+                        new[] { new ModuleDependency("PSScriptAnalyzer") },
+                        new RuntimeToolDependencyOptions
+                        {
+                            TimeoutPerModule = TimeSpan.FromMinutes(5)
+                        });
+                }
                 var failures = installResults
                     .Where(r => r.Status == ModuleDependencyInstallStatus.Failed)
                     .ToArray();
@@ -221,7 +226,10 @@ public sealed partial class ModuleValidationService
             };
 
             var timeout = TimeSpan.FromSeconds(Math.Max(1, settings.TimeoutSeconds));
-            var result = _runner.Run(new PowerShellRunRequest(scriptPath, args, timeout, preferPwsh: true));
+            _logger.Info($"Running PSScriptAnalyzer on {CountLabel(scripts.Length, "script", "scripts")}.");
+            PowerShellRunResult result;
+            using (OperationHeartbeat.Start(_logger, $"PSScriptAnalyzer ({CountLabel(scripts.Length, "script", "scripts")})"))
+                result = _runner.Run(new PowerShellRunRequest(scriptPath, args, timeout, preferPwsh: true));
 
             if (result.ExitCode != 0)
             {

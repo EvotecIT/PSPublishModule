@@ -1,11 +1,12 @@
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using System.Threading;
 
 namespace PowerForge;
 
 /// <summary>Collects read-only repository diagnostics and explains publish failures without exposing secrets.</summary>
-public sealed class RepositoryDiagnosticService
+public sealed partial class RepositoryDiagnosticService
 {
     internal const string Marker = "PFREPO::DIAGNOSTIC::";
     private readonly IPowerShellRunner _runner;
@@ -74,11 +75,25 @@ public sealed class RepositoryDiagnosticService
         var redactor = new RepositoryDiagnosticRedactor(apiKey, credential?.Secret, credential?.UserName, encodedBasic);
         var report = PublishReport(tool, stdout, repository, packagePath, apiKey, credential, apiKeySource);
         var safeMessage = redactor.Text(message);
-        var summary = safeMessage.IndexOf("401", StringComparison.Ordinal) >= 0
-            ? "Repository authentication was rejected (HTTP 401)." : "Repository publishing failed.";
+        var summary = ClassifyPublishFailure(safeMessage);
         var findings = string.Join(" ", report.Findings.Select(f => f.Message));
         return new RepositoryPublishDiagnosticException(
             $"{summary} {tool} exited with code {exitCode}. {safeMessage} {findings} Inspect local settings with Get-ModuleRepositoryDiagnostic -RepositoryName '<repository>' -Tool {tool}.", report);
+    }
+
+    /// <summary>Explains a publish failure from the publisher's error text in one sentence.</summary>
+    internal static string ClassifyPublishFailure(string? message)
+    {
+        var text = message ?? string.Empty;
+        if (Regex.IsMatch(text, @"(?i)\bAPI\s*key\b[^.\r\n]{0,80}\b(invalid|expired|revoked)\b|\b(invalid|expired)\s+API\s*key\b"))
+            return "The repository rejected the API key: it is invalid, expired, or not allowed to push this package. Create a new key scoped to this package and update the key used for publishing.";
+        if (Regex.IsMatch(text, @"(?i)(?<!\d)409(?!\d)|\bconflict\b|already exists|cannot be published as the current version|is already available in the repository|has already been pushed|feed already contains"))
+            return "This version already exists in the repository (HTTP 409); increase the module version before publishing again.";
+        if (Regex.IsMatch(text, @"(?i)(?<!\d)403(?!\d)|\bforbidden\b"))
+            return "The repository refused the upload (HTTP 403): the API key or credential lacks permission to push this package, or the package ID belongs to another owner.";
+        if (Regex.IsMatch(text, @"(?i)(?<!\d)401(?!\d)|\bunauthorized\b"))
+            return "Repository authentication was rejected (HTTP 401).";
+        return "Repository publishing failed.";
     }
 
     internal static RepositoryDiagnosticReport PublishReport(PublishTool tool, string stdout, string? repository,

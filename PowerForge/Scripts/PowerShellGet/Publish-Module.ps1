@@ -23,6 +23,24 @@ try {
   exit 3
 }
 
+# POWERFORGE_NUGET_BOOTSTRAP
+
+try {
+  Initialize-PFNuGetProvider
+} catch {
+  $msg = 'NuGet package provider is not available for PowerShellGet: ' + $_.Exception.Message
+  Write-Output ('PFPWSGET::ERROR::' + (Enc $msg))
+  exit 4
+}
+
+try {
+  Initialize-PFNuGetExe
+} catch {
+  $msg = 'NuGet.exe is not available for PowerShellGet publishing: ' + $_.Exception.Message
+  Write-Output ('PFPWSGET::ERROR::' + (Enc $msg))
+  exit 4
+}
+
 $params = @{ ErrorAction = 'Stop' }
 $params.Path = $Path
 if (-not [string]::IsNullOrWhiteSpace($Repository)) { $params.Repository = $Repository }

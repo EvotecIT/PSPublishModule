@@ -319,10 +319,10 @@ public sealed class DocumentationEngine
                 if (_logger.IsVerbose && !string.IsNullOrWhiteSpace(result.StdOut)) _logger.Verbose(result.StdOut.Trim());
                 if (_logger.IsVerbose && !string.IsNullOrWhiteSpace(result.StdErr)) _logger.Verbose(result.StdErr.Trim());
 
-                var message = ExtractError(result.StdOut) ?? result.StdErr;
-                message = AppendRequiredModulesHint(moduleManifestPath, message);
-                throw new InvalidOperationException(string.IsNullOrWhiteSpace(message) ? "Documentation help extraction failed." : message.Trim());
+                throw new InvalidOperationException(BuildExtractionFailureMessage(result, moduleManifestPath));
             }
+
+            ChildProcessOutput.WarnAboutDiagnostics(_logger, "Documentation help extraction", stdOut: null, result.StdErr);
 
             if (!File.Exists(jsonPath))
                 throw new FileNotFoundException("Documentation help extraction did not produce output JSON.", jsonPath);
@@ -361,6 +361,27 @@ public sealed class DocumentationEngine
         stream.Position = 0;
         return serializer.ReadObject(stream) as DocumentationExtractionPayload ??
             new DocumentationExtractionPayload();
+    }
+
+    // The script's own error marker names the cause; the end of the process output shows what led to it.
+    private static string BuildExtractionFailureMessage(PowerShellRunResult result, string moduleManifestPath)
+    {
+        var scriptError = ExtractError(result.StdOut);
+        var errorTail = ChildProcessOutput.Tail(result.StdErr);
+        var outputTail = ChildProcessOutput.Tail(string.Join(
+            Environment.NewLine,
+            SplitLines(result.StdOut).Where(static line => !line.StartsWith("PFDOCS::", StringComparison.Ordinal))));
+
+        string? message;
+        if (!string.IsNullOrWhiteSpace(scriptError))
+            message = errorTail is null ? scriptError : $"{scriptError!.TrimEnd()}{Environment.NewLine}Error output:{Environment.NewLine}{errorTail}";
+        else
+            message = errorTail ?? outputTail;
+
+        message = AppendRequiredModulesHint(moduleManifestPath, message);
+        return string.IsNullOrWhiteSpace(message)
+            ? $"Documentation help extraction failed (exit {result.ExitCode})."
+            : message.Trim();
     }
 
     private static string AppendRequiredModulesHint(string moduleManifestPath, string? message)

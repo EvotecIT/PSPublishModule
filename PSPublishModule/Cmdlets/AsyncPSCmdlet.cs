@@ -95,6 +95,7 @@ public abstract partial class AsyncPSCmdlet : PSCmdlet, IDisposable
         InformationWithTags,
         Progress,
         CommandDetail,
+        HostCallback,
         ShouldProcessTarget,
         ShouldProcess,
         ShouldProcessVerbose,
@@ -738,6 +739,37 @@ public abstract partial class AsyncPSCmdlet : PSCmdlet, IDisposable
         {
             using var pipelineContext = EnterDirectPipelineAccess();
             base.WriteDebug(message);
+            return;
+        }
+
+        if (Volatile.Read(ref _currentOutPipe) is null)
+            return;
+
+        _ = TryQueue(item);
+    }
+
+    /// <summary>
+    /// Runs <paramref name="write"/> on the pipeline thread, in order with the cmdlet's other output, for host output
+    /// that PowerShell only accepts there (ConsoleMonster widgets written through the host by <c>CmdletConsole</c>).
+    /// </summary>
+    internal void RunOnPipelineThread(Action write)
+    {
+        if (write is null) throw new ArgumentNullException(nameof(write));
+        if (ShouldDropClosedCanceledStreamWrite())
+            return;
+
+        ThrowIfStopped();
+        var item = new PipelineItem(write, PipelineType.HostCallback);
+        if (IsPumpingPipelineItem)
+        {
+            _ = TryQueue(item);
+            return;
+        }
+
+        if (CanAccessPipelineDirectly)
+        {
+            using var pipelineContext = EnterDirectPipelineAccess();
+            write();
             return;
         }
 

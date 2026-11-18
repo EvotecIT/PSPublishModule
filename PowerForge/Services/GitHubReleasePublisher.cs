@@ -35,8 +35,7 @@ public sealed partial class GitHubReleasePublisher
         Action<TimeSpan, CancellationToken>? assetRetryDelay)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-        _assetRetryDelay = assetRetryDelay ?? ((delay, cancellationToken) =>
-            Task.Delay(delay, cancellationToken).ConfigureAwait(false).GetAwaiter().GetResult());
+        _assetRetryDelay = assetRetryDelay ?? WaitReportingRemaining;
     }
 
     /// <summary>

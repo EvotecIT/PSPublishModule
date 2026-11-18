@@ -19,4 +19,21 @@ public sealed class ProgressDetailThrottleTests
         var detail = Assert.Single(details);
         Assert.Equal("Restored C:\\repo\\src\\Project.csproj (in 1.2 sec).", detail);
     }
+
+    [Fact]
+    public void ProcessThatGoesQuiet_StillShowsItsLastLine()
+    {
+        var details = new System.Collections.Concurrent.ConcurrentQueue<string>();
+        var sink = ProgressDetailThrottle.Create(details.Enqueue, TimeSpan.FromMilliseconds(50));
+
+        sink("Restoring packages");
+        sink("Signing PowerForge.1.0.0.nupkg");
+        sink("Waiting for the certificate PIN");
+
+        var deadline = DateTime.UtcNow.AddSeconds(5);
+        while (details.Count < 2 && DateTime.UtcNow < deadline)
+            System.Threading.Thread.Sleep(10);
+
+        Assert.Equal(new[] { "Restoring packages", "Waiting for the certificate PIN" }, details.ToArray());
+    }
 }

@@ -221,8 +221,15 @@ public sealed class InstallManagedModuleCommand : AsyncPSCmdlet
     [Parameter]
     public SwitchParameter Quiet { get; set; }
 
+    /// <summary>Runs the command with its console output sent through the PowerShell host.</summary>
+    protected override async Task ProcessRecordAsync()
+    {
+        using (CmdletConsole.Use(this))
+            await ProcessRecordCoreAsync().ConfigureAwait(false);
+    }
+
     /// <summary>Installs the requested modules.</summary>
-    protected override Task ProcessRecordAsync()
+    private Task ProcessRecordCoreAsync()
     {
         var targets = ResolveTargets().ToArray();
         if (!string.IsNullOrWhiteSpace(ExpectedPackageSha256))

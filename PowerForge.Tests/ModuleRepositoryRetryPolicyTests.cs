@@ -17,7 +17,7 @@ public sealed class ModuleRepositoryRetryPolicyTests
         Assert.Equal(0, result.ExitCode);
         Assert.Equal(2, calls);
         Assert.Equal(new[] { TimeSpan.FromSeconds(1) }, waits);
-        Assert.Contains(logger.Messages, message => message.Contains("attempt 1/4"));
+        Assert.Contains(logger.Messages, message => message.Contains("attempt 1/4") && message.Contains("404 (Not Found)"));
         Assert.Contains(logger.Messages, message => message.Contains("attempt 2/4"));
     }
 

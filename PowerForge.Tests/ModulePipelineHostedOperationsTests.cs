@@ -3122,7 +3122,7 @@ public sealed partial class ModulePipelineHostedOperationsTests
     {
         var method = typeof(ModulePipelineRunner).GetMethod("RunTestsAfterMerge", BindingFlags.Instance | BindingFlags.NonPublic);
         Assert.True(method is not null, "RunTestsAfterMerge method signature may have changed.");
-        method!.Invoke(runner, new object?[] { plan, buildResult, configuration });
+        method!.Invoke(runner, new object?[] { plan, buildResult, configuration, null });
     }
 
     private static ModulePipelineSpec CreatePublishToolSpec(
@@ -3449,6 +3449,7 @@ public sealed partial class ModulePipelineHostedOperationsTests
         public string? LastRepository { get; private set; }
         public RepositoryCredential? LastCredential { get; private set; }
         public ModuleSkipConfiguration? LastSkipModules { get; private set; }
+        public Dictionary<string, string> DependencyFailures { get; } = new(StringComparer.OrdinalIgnoreCase);
         public ModuleTestSuiteResult? NextTestSuiteResult { get; set; }
         public List<ModulePipelineActionContext> ActionContexts { get; } = new();
         public List<string> ActionContextPaths { get; } = new();
@@ -3477,9 +3478,9 @@ public sealed partial class ModulePipelineHostedOperationsTests
                     installedVersion: dependency.RequiredVersion ?? dependency.MinimumVersion,
                     resolvedVersion: dependency.RequiredVersion ?? dependency.MinimumVersion,
                     requestedVersion: dependency.RequiredVersion ?? dependency.MinimumVersion,
-                    status: ModuleDependencyInstallStatus.Satisfied,
+                    status: DependencyFailures.ContainsKey(dependency.Name) ? ModuleDependencyInstallStatus.Failed : ModuleDependencyInstallStatus.Satisfied,
                     installer: "fake",
-                    message: "ok"))
+                    message: DependencyFailures.TryGetValue(dependency.Name, out var failure) ? failure : "ok"))
                 .ToArray();
         }
 

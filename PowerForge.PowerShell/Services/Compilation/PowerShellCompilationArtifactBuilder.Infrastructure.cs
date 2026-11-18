@@ -33,11 +33,13 @@ public sealed partial class PowerShellCompilationArtifactBuilder
         string? runtimeIdentifier,
         bool restoreCompleted,
         CancellationToken cancellationToken,
-        string? authenticatedPackageRoot = null)
+        string? authenticatedPackageRoot = null,
+        PowerShellCompilationBuildProgress? progress = null)
     {
+        var verb = spec.Kind == PowerShellCompilationArtifactKind.Executable ? "publish" : "build";
         var arguments = new List<string>
         {
-            spec.Kind == PowerShellCompilationArtifactKind.Executable ? "publish" : "build",
+            verb,
             projectPath,
             "--configuration", "Release",
             "--output", publishDirectory,
@@ -51,11 +53,14 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             arguments.Add(runtimeIdentifier!);
         }
 
-        var run = new ProcessRunner(ownProcessTree: true).RunAsync(CreateSdkProcessRequest(
-                spec, projectPath, arguments, authenticatedPackageRoot), cancellationToken)
+        progress ??= PowerShellCompilationBuildProgress.None;
+        using var report = progress.StartProcess(DescribeDotNetProcess(spec, verb, projectPath, runtimeIdentifier));
+        var run = new ProcessRunner(ownProcessTree: true).RunAsync(progress.Stream(CreateSdkProcessRequest(
+                spec, projectPath, arguments, authenticatedPackageRoot)), cancellationToken)
             .GetAwaiter()
             .GetResult();
         cancellationToken.ThrowIfCancellationRequested();
+        report.Finished(run.ExitCode, run.TimedOut);
         var output = string.IsNullOrWhiteSpace(run.StdErr)
             ? run.StdOut
             : run.StdOut + Environment.NewLine + run.StdErr;
@@ -67,7 +72,8 @@ public sealed partial class PowerShellCompilationArtifactBuilder
         string projectPath,
         string? runtimeIdentifier,
         CancellationToken cancellationToken,
-        string? authenticatedPackageRoot = null)
+        string? authenticatedPackageRoot = null,
+        PowerShellCompilationBuildProgress? progress = null)
     {
         var arguments = new List<string>
         {
@@ -96,11 +102,22 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             arguments.Add("--runtime");
             arguments.Add(runtimeIdentifier!);
         }
-        var run = new ProcessRunner(ownProcessTree: true).RunAsync(CreateSdkProcessRequest(
-            spec, projectPath, arguments, authenticatedPackageRoot), cancellationToken).GetAwaiter().GetResult();
+        progress ??= PowerShellCompilationBuildProgress.None;
+        using var report = progress.StartProcess(DescribeDotNetProcess(spec, "restore", projectPath, runtimeIdentifier));
+        var run = new ProcessRunner(ownProcessTree: true).RunAsync(progress.Stream(CreateSdkProcessRequest(
+            spec, projectPath, arguments, authenticatedPackageRoot)), cancellationToken).GetAwaiter().GetResult();
         cancellationToken.ThrowIfCancellationRequested();
+        report.Finished(run.ExitCode, run.TimedOut);
         var output = string.IsNullOrWhiteSpace(run.StdErr) ? run.StdOut : run.StdOut + Environment.NewLine + run.StdErr;
         return new GeneratedBuildProcessResult(run.ExitCode, output, run.TimedOut);
+    }
+
+    private static string DescribeDotNetProcess(PowerShellCompilationBuildSpec spec, string verb, string projectPath, string? runtimeIdentifier)
+    {
+        var details = new List<string> { spec.TargetFramework };
+        if (spec.Kind == PowerShellCompilationArtifactKind.Executable && !string.IsNullOrWhiteSpace(runtimeIdentifier)) details.Add(runtimeIdentifier!);
+        if (verb == "publish" && spec.Optimization != PowerShellCompilationExecutableOptimization.None) details.Add(spec.Optimization.ToString());
+        return $"dotnet {verb} {Path.GetFileNameWithoutExtension(projectPath)} ({string.Join(", ", details)})";
     }
 
     private static ProcessRunRequest CreateSdkProcessRequest(PowerShellCompilationBuildSpec spec, string projectPath,

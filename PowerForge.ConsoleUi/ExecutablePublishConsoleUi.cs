@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.IO;
 using System.Linq;
 using System.Runtime.ExceptionServices;
@@ -79,19 +80,34 @@ internal static partial class ExecutablePublishConsoleUi
 
     private sealed class Reporter(ProgressView view) : IDotNetPublishProgressReporterV2
     {
-        public void StepStarting(DotNetPublishStep step) => view.Start(step.Key);
+        private readonly ConcurrentDictionary<string, byte> finished = new(StringComparer.OrdinalIgnoreCase);
+
+        public void StepStarting(DotNetPublishStep step)
+        {
+            finished.TryRemove(step.Key, out _);
+            view.Start(step.Key);
+        }
 
         // Signing reports its own progress; the running step is retitled to the outputs being signed (as the release
         // ledger does for its items) and "Current:" adds the provider guidance.
         public void StepProgress(DotNetPublishStep step, string kind, string detail)
         {
+            // A late detail must not retitle or reopen a finished step.
+            if (finished.ContainsKey(step.Key)) return;
             if (kind == "Signing") view.Step(step.Key, $"Sign outputs ({step.TargetName ?? "release evidence"})", kind);
             view.Detail(step.Key, detail, kind == "Signing" ? kind : null);
         }
 
-        public void StepCompleted(DotNetPublishStep step) => view.Finish(step.Key, ProgressState.Completed);
+        public void StepCompleted(DotNetPublishStep step)
+        {
+            finished[step.Key] = 0;
+            view.Finish(step.Key, ProgressState.Completed);
+        }
 
         public void StepFailed(DotNetPublishStep step, Exception error)
-            => view.Finish(step.Key, ProgressState.Failed, error.GetBaseException().Message);
+        {
+            finished[step.Key] = 0;
+            view.Finish(step.Key, ProgressState.Failed, error.GetBaseException().Message);
+        }
     }
 }

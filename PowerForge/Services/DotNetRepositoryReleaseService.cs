@@ -48,7 +48,7 @@ public sealed partial class DotNetRepositoryReleaseService
     /// Creates a new repository release service.
     /// </summary>
     public DotNetRepositoryReleaseService(ILogger logger)
-        : this(logger, SignPackages, CodeSigningCertificateValidation.GetSha256FromStore, PushPackage)
+        : this(logger, signPackages: null, getCertificateSha256: null, pushPackage: null)
     {
     }
 
@@ -60,9 +60,9 @@ public sealed partial class DotNetRepositoryReleaseService
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _resolver = new NuGetPackageVersionResolver(_logger);
-        _signPackages = signPackages ?? SignPackages;
+        _signPackages = signPackages ?? SignPackagesWithHeartbeat;
         _getCertificateSha256 = getCertificateSha256 ?? CodeSigningCertificateValidation.GetSha256FromStore;
-        _pushPackage = pushPackage ?? PushPackage;
+        _pushPackage = pushPackage ?? PushPackageWithHeartbeat;
     }
 
 }

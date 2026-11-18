@@ -26,12 +26,12 @@ internal sealed class PssaFormatterSession : IDisposable
         _released = released;
     }
 
-    internal PowerShellRunResult Run(string script, string batchPath, TimeSpan timeout)
+    internal PowerShellRunResult Run(string script, string batchPath, TimeSpan timeout, Action<string>? outputLineReceived = null)
     {
         lock (_requests)
         {
             if (_disposed) throw new ObjectDisposedException(nameof(PssaFormatterSession));
-            var phase = new Phase();
+            var phase = new Phase(outputLineReceived);
             lock (_output) _phase = phase;
             using var deadlineCancellation = new CancellationTokenSource();
             var deadline = Task.Delay(timeout > TimeSpan.Zero ? timeout : Timeout.InfiniteTimeSpan, deadlineCancellation.Token);
@@ -100,14 +100,22 @@ internal sealed class PssaFormatterSession : IDisposable
 
     private void ReceiveOutput(string line)
     {
+        Action<string>? forward = null;
         lock (_output)
         {
             if (_phase is null) return;
             if (line == "PSSA_PHASE_DONE::" + _phase.Id)
+            {
                 _phase.Completion.TrySetResult(true);
+            }
             else
+            {
                 _phase.Output.AppendLine(line);
+                forward = _phase.OutputLineReceived;
+            }
         }
+
+        try { forward?.Invoke(line); } catch { /* progress is best effort */ }
     }
 
     private void ReceiveError(string line)
@@ -168,8 +176,9 @@ internal sealed class PssaFormatterSession : IDisposable
         }
     }
 
-    private sealed class Phase
+    private sealed class Phase(Action<string>? outputLineReceived)
     {
+        internal Action<string>? OutputLineReceived { get; } = outputLineReceived;
         internal string Id { get; } = Guid.NewGuid().ToString("N");
         internal StringBuilder Output { get; } = new();
         internal StringBuilder Error { get; } = new();

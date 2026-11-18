@@ -248,6 +248,7 @@ public sealed partial class ModulePipelineRunner
             session.Start(session.FormatStagingStep);
             try
             {
+                formattingPipeline.FileProgress = (done, total, file) => session.Progress(session.FormatStagingStep, done, total, file);
                 state.FormattingStagingResults = FormatPowerShellTree(
                     rootPath: buildResult.StagingPath,
                     moduleName: plan.ModuleName,
@@ -278,6 +279,7 @@ public sealed partial class ModulePipelineRunner
                 session.Start(session.FormatProjectStep);
                 try
                 {
+                    formattingPipeline.FileProgress = (done, total, file) => session.Progress(session.FormatProjectStep, done, total, file);
                     var projectManifest = Path.Combine(plan.ProjectRoot, $"{plan.ModuleName}.psd1");
                     state.FormattingProjectResults = FormatPowerShellTree(
                         rootPath: plan.ProjectRoot,
@@ -341,7 +343,10 @@ public sealed partial class ModulePipelineRunner
                     delivery: plan.Delivery,
                     includeScriptFolders: !state.PackageWithoutScriptFolders,
                     finalizedPayloadFiles: buildResult.FinalizedPayloadFiles,
-                    progress: (completed, total, detail) => session.Progress(session.SignStep, completed, total, detail));
+                    // A host that shows step detail renders the certificate-provider guidance under the signing row.
+                    progress: session.Detail(session.SignStep) is null
+                        ? null
+                        : (completed, total, detail) => session.Progress(session.SignStep, completed, total, detail));
                 session.Done(session.SignStep);
             }
             catch (Exception ex)
@@ -737,7 +742,7 @@ public sealed partial class ModulePipelineRunner
                 session.Start(step);
                 try
                 {
-                    RunTestsAfterMerge(plan, buildResult, cfg);
+                    RunTestsAfterMerge(plan, buildResult, cfg, session.Detail(step));
                     session.Done(step);
                 }
                 catch (Exception ex)

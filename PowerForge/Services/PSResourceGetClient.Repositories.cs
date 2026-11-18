@@ -60,10 +60,8 @@ public sealed partial class PSResourceGetClient
         if (result.ExitCode != 0)
         {
             var message = TryExtractError(result.StdOut) ?? result.StdErr;
-            var full = $"Register-PSResourceRepository failed (exit {result.ExitCode}). {message}".Trim();
+            var full = RepositoryDiagnosticService.DescribeChildFailure("Register-PSResourceRepository", result, message);
             if (_logger.IsVerbose) _logger.Verbose(full);
-            if (_logger.IsVerbose && !string.IsNullOrWhiteSpace(result.StdOut)) _logger.Verbose(result.StdOut.Trim());
-            if (_logger.IsVerbose && !string.IsNullOrWhiteSpace(result.StdErr)) _logger.Verbose(result.StdErr.Trim());
             if (result.ExitCode == 3)
                 throw new PowerShellToolNotAvailableException("PSResourceGet", full);
             throw new InvalidOperationException(full);
@@ -104,10 +102,8 @@ public sealed partial class PSResourceGetClient
         if (result.ExitCode != 0)
         {
             var message = TryExtractError(result.StdOut) ?? result.StdErr;
-            var full = $"Unregister-PSResourceRepository failed (exit {result.ExitCode}). {message}".Trim();
+            var full = RepositoryDiagnosticService.DescribeChildFailure("Unregister-PSResourceRepository", result, message);
             if (_logger.IsVerbose) _logger.Verbose(full);
-            if (_logger.IsVerbose && !string.IsNullOrWhiteSpace(result.StdOut)) _logger.Verbose(result.StdOut.Trim());
-            if (_logger.IsVerbose && !string.IsNullOrWhiteSpace(result.StdErr)) _logger.Verbose(result.StdErr.Trim());
             if (result.ExitCode == 3)
                 throw new PowerShellToolNotAvailableException("PSResourceGet", full);
             throw new InvalidOperationException(full);

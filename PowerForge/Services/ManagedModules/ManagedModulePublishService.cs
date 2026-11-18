@@ -8,6 +8,7 @@ public sealed class ManagedModulePublishService
     private readonly ManagedModulePackService _packService;
     private readonly ManagedModuleRepositoryClient _repositoryClient;
     private readonly ManagedModulePackageReader _packageReader;
+    private readonly ILogger _logger;
 
     /// <summary>
     /// Creates a managed module publish service.
@@ -16,8 +17,9 @@ public sealed class ManagedModulePublishService
     /// <param name="repositoryClient">Optional repository client.</param>
     public ManagedModulePublishService(ILogger logger, ManagedModuleRepositoryClient? repositoryClient = null)
     {
+        _logger = logger ?? new NullLogger();
         _packService = new ManagedModulePackService();
-        _repositoryClient = repositoryClient ?? new ManagedModuleRepositoryClient(logger ?? new NullLogger());
+        _repositoryClient = repositoryClient ?? new ManagedModuleRepositoryClient(_logger);
         _packageReader = new ManagedModulePackageReader();
     }
 
@@ -34,9 +36,13 @@ public sealed class ManagedModulePublishService
         Validate(request);
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
 
-        var package = string.IsNullOrWhiteSpace(request.PackagePath)
+        var packed = string.IsNullOrWhiteSpace(request.PackagePath);
+        var package = packed
             ? PackModule(request)
             : PrepareExistingPackage(request);
+        _logger.Info(packed
+            ? $"Packed {package.Name} {package.Version} into '{package.PackagePath}' ({DotNetRepositoryReleaseService.FormatBytes(package.PackageBytes)}, {package.FileCount} files) in {DotNetRepositoryReleaseService.FormatDuration(stopwatch.Elapsed)}."
+            : $"Using package '{package.PackagePath}' ({DotNetRepositoryReleaseService.FormatBytes(package.PackageBytes)}) for {package.Name} {package.Version}.");
         var metadata = _packageReader.ReadMetadata(package.PackagePath);
         await VerifyDependenciesAsync(request, metadata, cancellationToken).ConfigureAwait(false);
         var publishRepository = request.PublishRepository ?? request.Repository;

@@ -43,13 +43,13 @@ internal static partial class Program
                 {
                     service.InstallMaintenance(spec);
                     if (json) Console.WriteLine(JsonSerializer.Serialize(new RunnerMaintenanceResult(), PowerForgeCliJsonContext.Default.RunnerMaintenanceResult));
-                    else Console.WriteLine("Runner hooks enrolled. Register the native scheduler before restarting the enrolled listeners.");
+                    else PowerForge.ConsoleUi.ConsoleOutput.WriteLine("Runner hooks enrolled. Register the native scheduler before restarting the enrolled listeners.");
                     return 0;
                 }
                 result = service.Maintain(spec, dryRun: !apply);
             }
             if (hook is not null)
-                Console.WriteLine($"Runner maintenance removed {result.RemovedPaths.Length} targets ({result.RemovedBytes} logical bytes), deferred {result.Deferred}, errors {result.Errors.Length}. Detailed receipts are in the private maintenance state directory.");
+                PowerForge.ConsoleUi.ConsoleOutput.WriteLine($"Runner maintenance removed {result.RemovedPaths.Length} targets ({result.RemovedBytes} logical bytes), deferred {result.Deferred}, errors {result.Errors.Length}. Detailed receipts are in the private maintenance state directory.");
             else Console.WriteLine(JsonSerializer.Serialize(result, PowerForgeCliJsonContext.Default.RunnerMaintenanceResult));
             // A cleanup error is observable in its receipt. Admission failure must stop a new job from entering the gate.
             return result.Success || (hook is not null && result.Admitted) ? 0 : 1;

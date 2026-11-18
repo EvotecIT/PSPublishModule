@@ -184,9 +184,30 @@ public sealed class PublishManagedModuleCommand : PSCmdlet
             .GetAwaiter()
             .GetResult();
 
+        ReportUnpublishedResult(result);
         WriteObject(result);
         if (ShowSummary.IsPresent)
             ManagedModuleSummaryWriter.Write(result);
+    }
+
+    private void ReportUnpublishedResult(ManagedModulePublishResult result)
+    {
+        if (result.Published)
+            return;
+
+        var status = result.StatusCode is int code ? $" (HTTP {code})" : string.Empty;
+        if (result.Duplicate)
+        {
+            WriteWarning($"{result.Name} {result.Version} was not published because this version already exists in repository '{result.RepositoryName}'{status}. Increase the module version, or use -Force for a local folder repository. {result.Message}".TrimEnd());
+            return;
+        }
+
+        var reason = string.IsNullOrWhiteSpace(result.Message) ? "The repository did not accept the package." : result.Message;
+        WriteError(new ErrorRecord(
+            new InvalidOperationException($"{result.Name} {result.Version} was not published to repository '{result.RepositoryName}'{status}. {reason}"),
+            "ManagedModulePublishFailed",
+            ErrorCategory.InvalidResult,
+            result.PackagePath));
     }
 
     private ManagedModuleRepository ResolveRepository()

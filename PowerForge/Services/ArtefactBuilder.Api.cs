@@ -476,6 +476,10 @@ public sealed partial class ArtefactBuilder
         var tempRoot = Path.Combine(Path.GetTempPath(), "PowerForge", "artefacts", "saved", $"{name}_{Guid.NewGuid():N}");
         Directory.CreateDirectory(tempRoot);
 
+        var downloadVersionText = requiredVersionArgument ?? (minimumVersionArgument is null ? "latest" : $">= {minimumVersionArgument}");
+        var repositoryText = string.IsNullOrWhiteSpace(repository) ? "the default repository" : $"'{repository}'";
+        _logger.Info($"Downloading required module '{name}' ({downloadVersionText}) from {repositoryText}.");
+        var heartbeat = OperationHeartbeat.Start(_logger, $"Download of required module '{name}'");
         try
         {
             IReadOnlyList<PSResourceInfo> saved;
@@ -593,6 +597,7 @@ public sealed partial class ArtefactBuilder
         }
         finally
         {
+            heartbeat.Dispose();
             try { Directory.Delete(tempRoot, recursive: true); } catch { /* best effort */ }
         }
     }

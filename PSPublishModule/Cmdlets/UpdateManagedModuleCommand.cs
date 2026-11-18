@@ -226,8 +226,15 @@ public sealed class UpdateManagedModuleCommand : AsyncPSCmdlet
     [Parameter]
     public SwitchParameter Quiet { get; set; }
 
+    /// <summary>Runs the command with its console output sent through the PowerShell host.</summary>
+    protected override async Task ProcessRecordAsync()
+    {
+        using (CmdletConsole.Use(this))
+            await ProcessRecordCoreAsync().ConfigureAwait(false);
+    }
+
     /// <summary>Updates requested modules.</summary>
-    protected override Task ProcessRecordAsync()
+    private Task ProcessRecordCoreAsync()
     {
         if (!string.IsNullOrWhiteSpace(ExpectedPackageSha256))
         {

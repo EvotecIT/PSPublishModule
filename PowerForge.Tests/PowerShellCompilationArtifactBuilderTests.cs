@@ -325,10 +325,18 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             "PowerForge.HybridLibraryProof",
             PowerShellCompilationArtifactKind.Library,
             PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true);
+        var logger = new BufferedLogger();
 
-        var result = new PowerShellCompilationArtifactBuilder().Build(spec);
+        var result = new PowerShellCompilationArtifactBuilder().Build(spec, logger, CancellationToken.None);
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        // The generated dotnet build is announced and its end reported, so a long build never looks stuck.
+        Assert.Contains(logger.Entries, entry => entry.Level == "info" && entry.Message.StartsWith("dotnet build PowerForge.HybridLibraryProof (net10.0)...", StringComparison.Ordinal));
+        Assert.Contains(logger.Entries, entry => entry.Level == "info" && entry.Message.StartsWith("dotnet build PowerForge.HybridLibraryProof (net10.0) finished in ", StringComparison.Ordinal));
+        // The success summary names the unit that did not become typed code, with its source location and blocking feature.
+        PowerShellCompilationBuildReport.WriteSuccess(logger, result, TimeSpan.FromSeconds(1));
+        Assert.Contains(logger.Entries, entry => entry.Message == "Units: 1 of 2 compiled to typed code, 1 omitted; no PowerShell runtime dependency");
+        Assert.Contains(logger.Entries, entry => System.Text.RegularExpressions.Regex.IsMatch(entry.Message, @"^  input\.ps1:7 \[[^\]]+\] Get-DynamicValue \(omitted\)$"));
         Assert.NotNull(result.Manifest);
         Assert.False(result.Manifest.RequiresPowerShellRuntime);
         Assert.False(result.Manifest.UsesPowerShellRuntimeFallback);

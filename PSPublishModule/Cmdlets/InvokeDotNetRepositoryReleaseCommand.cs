@@ -181,9 +181,12 @@ public sealed class InvokeDotNetRepositoryReleaseCommand : PSCmdlet
         ConsoleEncoding.EnsureUtf8();
 
         var interactive = ModulePipelineConsoleUi.ShouldUseInteractiveView(isVerbose);
-        ILogger logger = interactive
+        ILogger outputLogger = interactive
             ? new ConsoleOutputLogger { IsVerbose = isVerbose }
             : new CmdletLogger(this, isVerbose);
+        // Engine warnings go to the PowerShell warning stream in every view, so -WarningAction and
+        // -WarningVariable see them even while the live view owns the console.
+        var logger = new CmdletWarningLogger(this, outputLogger);
         var currentPath = SessionState.Path.CurrentFileSystemLocation.Path;
         var preparation = new DotNetRepositoryReleasePreparationService().Prepare(new DotNetRepositoryReleasePreparationRequest
         {
@@ -231,10 +234,22 @@ public sealed class InvokeDotNetRepositoryReleaseCommand : PSCmdlet
             logger,
             signAssemblies: DotNetAssemblySigningCallbackFactory.Create(logger),
             validateAssemblySigning: DotNetAssemblySigningCallbackFactory.CreatePreflight(logger));
-        var result = interactive
-            ? StatusConsoleUi.Run(
-                "Release repository packages", () => workflow.Execute(preparation, executeBuild), value => value.Success)
-            : workflow.Execute(preparation, executeBuild);
+        DotNetRepositoryReleaseResult result;
+        try
+        {
+            result = interactive
+                ? StatusConsoleUi.Run(
+                    "Release repository packages", () => workflow.Execute(preparation, executeBuild), value => value.Success)
+                : workflow.Execute(preparation, executeBuild);
+        }
+        catch (Exception ex) when (ex is not PipelineStoppedException)
+        {
+            logger.RethrowWarningStop();
+            throw;
+        }
+
+        // The engine reports failures as results. A PowerShell warning stop must still terminate the cmdlet.
+        logger.RethrowWarningStop();
         if (interactive)
         {
             var summary = new DotNetRepositoryReleaseSummaryService().CreateSummary(result);

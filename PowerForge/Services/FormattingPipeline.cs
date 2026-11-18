@@ -37,6 +37,13 @@ public sealed class FormattingPipeline
     /// <summary>Owns the isolated PSSA host across sequential formatting phases.</summary>
     internal IDisposable? BeginSession() => _pssa.BeginSession();
 
+    /// <summary>Receives (finished files, total files, file name) while PSScriptAnalyzer formats; set it per phase.</summary>
+    internal Action<int, int, string>? FileProgress
+    {
+        get => _pssa.Progress;
+        set => _pssa.Progress = value;
+    }
+
     internal IReadOnlyList<FormatterResult> RunBatches(IReadOnlyList<FormattingBatch> batches)
     {
         var prepared = new List<(FormattingBatch Batch, List<NormalizationResult> Normalized, IReadOnlyList<FormatterResult> Preprocessed)>();

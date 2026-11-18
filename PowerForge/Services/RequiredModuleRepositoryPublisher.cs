@@ -70,6 +70,7 @@ internal sealed class RequiredModuleRepositoryPublisher
         try
         {
             Directory.CreateDirectory(tempRoot);
+            _logger.Info($"Saving required module '{moduleName}' {selectedVersion} and its dependencies from repository '{sourceRepository}'.");
             var savedItems = _psResourceGet.Save(
                 new PSResourceSaveOptions(
                     name: moduleName,
@@ -88,23 +89,28 @@ internal sealed class RequiredModuleRepositoryPublisher
             if (savedModulePath is null)
                 throw new InvalidOperationException($"Save-PSResource completed for required module '{moduleName}' {selectedVersion}, but the saved module manifest was not found under '{tempRoot}'.");
 
-            foreach (var package in FindSavedModulePackagesForPublish(tempRoot, savedItems, moduleName, selectedVersion))
+            var packages = FindSavedModulePackagesForPublish(tempRoot, savedItems, moduleName, selectedVersion).ToArray();
+            var position = 0;
+            foreach (var package in packages)
             {
+                var progress = $"{++position}/{packages.Length}";
                 var packageKey = $"{package.Name}|{package.Version}";
                 if (mirroredPackages is not null && mirroredPackages.Contains(packageKey))
                 {
-                    _logger.Info($"Skipping already mirrored required module package '{package.Name}' {package.Version}.");
+                    _logger.Info($"Skipping already mirrored required module package '{package.Name}' {package.Version} ({progress}).");
                     continue;
                 }
 
                 if (targetContainsPackage?.Invoke(package.Name, package.Version) ??
                     TargetRepositoryContainsPackage(targetRepositoryNameValue, targetCredential, package))
                 {
-                    _logger.Info($"Skipping required module package '{package.Name}' {package.Version} because it already exists in repository '{targetRepositoryNameValue}'.");
+                    _logger.Info($"Skipping required module package '{package.Name}' {package.Version} ({progress}) because it already exists in repository '{targetRepositoryNameValue}'.");
                     mirroredPackages?.Add(packageKey);
                     continue;
                 }
 
+                _logger.Info($"Publishing required module package '{package.Name}' {package.Version} ({progress}) to repository '{targetRepositoryNameValue}'.");
+                var packageTimer = System.Diagnostics.Stopwatch.StartNew();
                 _repositoryPublisher.Publish(
                     new RepositoryPublishRequest
                     {
@@ -120,6 +126,7 @@ internal sealed class RequiredModuleRepositoryPublisher
                         RemotePublishAttempted = remoteSideEffectObserved
                     });
                 mirroredPackages?.Add(packageKey);
+                _logger.Info($"Published required module package '{package.Name}' {package.Version} ({progress}) in {DotNetRepositoryReleaseService.FormatDuration(packageTimer.Elapsed)}.");
             }
 
             _logger.Info($"Published required module '{moduleName}' {selectedVersion} to repository '{targetRepositoryNameValue}'.");

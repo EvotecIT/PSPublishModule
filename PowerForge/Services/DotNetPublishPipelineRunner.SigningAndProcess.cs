@@ -72,7 +72,7 @@ public sealed partial class DotNetPublishPipelineRunner
         if (targets.Length == 0)
         {
             var noTargetsScope = string.IsNullOrWhiteSpace(scope) ? "outputs" : scope!.Trim();
-            HandlePolicy(
+            HandleSigningFailure(
                 sign.OnSignFailure,
                 $"Signing requested for {noTargetsScope}, but no matching files were found. Set IncludeDlls=true to include DLL outputs when a publish produces no executables.");
             return Array.Empty<string>();
@@ -114,7 +114,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 progress?.Invoke($"Signing file {index + 1}/{targets.Length}: {Path.GetFileName(file)}");
                 if (!File.Exists(file))
                 {
-                    HandlePolicy(sign.OnSignFailure, $"Signing target not found: {file}");
+                    HandleSigningFailure(sign.OnSignFailure, $"Signing target not found: {file}");
                     continue;
                 }
 
@@ -143,18 +143,18 @@ public sealed partial class DotNetPublishPipelineRunner
                     timeout);
                 if (res.ExitCode != 0)
                 {
-                    var details = TailLines(res.StdErr, maxLines: 10, maxChars: 2000) ?? string.Empty;
+                    var details = SigningToolFailureDetails(res);
                     var message = string.IsNullOrWhiteSpace(details)
                         ? $"Signing failed for '{file}' (exit code: {res.ExitCode})."
                         : $"Signing failed for '{file}' (exit code: {res.ExitCode}). {details.Trim()}";
-                    HandlePolicy(sign.OnSignFailure, message);
+                    HandleSigningFailure(sign.OnSignFailure, message);
                     continue;
                 }
 
                 if (sign.Provider == DotNetPublishSigningProvider.AzureArtifactSigning
                     && !_signatureMatchesPublisher(file, GetPublisherMatchOptions(sign)))
                 {
-                    HandlePolicy(
+                    HandleSigningFailure(
                         sign.OnSignFailure,
                         $"Azure Artifact Signing produced a signature for '{file}' that does not match the configured publisher subject.");
                     continue;
@@ -228,7 +228,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 TimeSpan.FromSeconds(Math.Max(1, sign.TimeoutSeconds)));
             if (result.ExitCode != 0)
             {
-                string details = TailLines(result.StdErr, maxLines: 10, maxChars: 2000) ?? string.Empty;
+                string details = SigningToolFailureDetails(result);
                 throw new InvalidOperationException(
                     string.IsNullOrWhiteSpace(details)
                         ? $"Azure Artifact Signing failed for the portable inventory (exit code: {result.ExitCode})."
@@ -553,6 +553,7 @@ public sealed partial class DotNetPublishPipelineRunner
                 stdErr: stderr);
         }
 
+        DotNetRepositoryReleaseService.LogWarningLines(_logger, $"dotnet {FirstArgument(args)}", result.StdOut, result.StdErr);
         if (_logger.IsVerbose)
         {
             if (!string.IsNullOrWhiteSpace(result.StdOut)) _logger.Verbose(result.StdOut.TrimEnd());
