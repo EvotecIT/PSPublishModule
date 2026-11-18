@@ -61,7 +61,9 @@ public sealed partial class DotNetRepositoryReleaseService
         return results;
     }
 
-    private void ReplayBufferedLogs(BufferedLogger? bufferedLogger)
+    private void ReplayBufferedLogs(BufferedLogger? bufferedLogger) => ReplayBufferedLogs(_logger, bufferedLogger);
+
+    private static void ReplayBufferedLogs(ILogger target, BufferedLogger? bufferedLogger)
     {
         if (bufferedLogger is null)
             return;
@@ -71,19 +73,19 @@ public sealed partial class DotNetRepositoryReleaseService
             switch (entry.Level)
             {
                 case "success":
-                    _logger.Success(entry.Message);
+                    target.Success(entry.Message);
                     break;
                 case "warn":
-                    _logger.Warn(entry.Message);
+                    target.Warn(entry.Message);
                     break;
                 case "error":
-                    _logger.Error(entry.Message);
+                    target.Error(entry.Message);
                     break;
                 case "verbose":
-                    _logger.Verbose(entry.Message);
+                    target.Verbose(entry.Message);
                     break;
                 default:
-                    _logger.Info(entry.Message);
+                    target.Info(entry.Message);
                     break;
             }
         }

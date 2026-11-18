@@ -53,6 +53,8 @@ public sealed partial class DotNetRepositoryReleaseService
         }
     }
 
+    internal const string RestoreEvaluationProperties = "MSBuildRestoreSessionId=powerforge-batch-restore;ExcludeRestorePackageImports=true";
+
     private static DotNetPackResult PackProjectsWithMsBuild(
         IReadOnlyList<DotNetRepositoryProjectResult> projects,
         DotNetRepositoryReleaseSpec spec,
@@ -85,29 +87,18 @@ public sealed partial class DotNetRepositoryReleaseService
         var traversalPath = Path.Combine(tempRoot, "pack.proj");
         try
         {
-            var forceBatchRebuild = false;
-            foreach (var project in projects)
+            var cleanup = RemoveStaleBatchPackageOutputs(projects, spec, logger);
+            result.Duration += cleanup.Duration;
+            if (cleanup.Error is not null)
             {
-                if (!TryRemoveStalePrimaryPackageOutputs(
-                        project,
-                        string.IsNullOrWhiteSpace(spec.Configuration) ? "Release" : spec.Configuration.Trim(),
-                        logger,
-                        out _,
-                        out var removedIntermediatePrimaryOutput,
-                        out var cleanupDuration,
-                        out var cleanupError))
-                {
-                    result.Duration += cleanupDuration;
-                    result.ErrorMessage = cleanupError;
-                    return result;
-                }
-
-                result.Duration += cleanupDuration;
-                forceBatchRebuild |= !removedIntermediatePrimaryOutput;
+                result.ErrorMessage = cleanup.Error;
+                return result;
             }
 
+            var forceBatchRebuild = cleanup.ForceRebuild;
+
             if (forceBatchRebuild)
-                logger.Info("MSBuild batch freshness could not prove every intermediate output was removed; using the Rebuild safety target.");
+                logger.Info("MSBuild batch freshness could not prove every intermediate output was removed; cleaning every project before the build.");
 
             var shouldSignAssemblies = signAssemblies is not null && !string.IsNullOrWhiteSpace(spec.CertificateThumbprint);
             WritePackTraversalProject(traversalPath, projects, spec, outputPath, forceBatchRebuild,
@@ -275,15 +266,27 @@ public sealed partial class DotNetRepositoryReleaseService
                         new XAttribute("Targets", "Restore"),
                         new XAttribute("BuildInParallel", "false"),
                         new XAttribute("StopOnFirstFailure", "true"),
+                        // Restore under its own global properties, as msbuild -restore does. Otherwise the build
+                        // reuses the evaluation cached before restore wrote the NuGet imports, and a project whose
+                        // references come from packages (netstandard2.0, for example) compiles without them.
+                        new XAttribute("Properties", buildProperties + ";" + RestoreEvaluationProperties))),
+                new XElement("Target",
+                    new XAttribute("Name", "CleanSelected"),
+                    new XElement("MSBuild",
+                        new XAttribute("Projects", "@(PackProject)"),
+                        new XAttribute("Targets", "Clean"),
+                        new XAttribute("BuildInParallel", "true"),
+                        new XAttribute("StopOnFirstFailure", "true"),
                         new XAttribute("Properties", buildProperties))),
                 new XElement("Target",
                     new XAttribute("Name", "BuildSelected"),
-                    new XAttribute("DependsOnTargets", "RestoreSelected"),
+                    // Freshness cleanup normally permits an incremental Build. When an intermediate compiler output
+                    // was not removed, every project is cleaned before any project builds. A parallel Rebuild would
+                    // let one project's Clean delete outputs another project is compiling against.
+                    new XAttribute("DependsOnTargets", forceRebuild ? "RestoreSelected;CleanSelected" : "RestoreSelected"),
                     new XElement("MSBuild",
                         new XAttribute("Projects", "@(PackProject)"),
-                        // Freshness cleanup normally permits an incremental Build. Rebuild remains
-                        // the safety target when an intermediate compiler output was not removed.
-                        new XAttribute("Targets", forceRebuild ? "Rebuild" : "Build"),
+                        new XAttribute("Targets", "Build"),
                         new XAttribute("BuildInParallel", "true"),
                         new XAttribute("StopOnFirstFailure", "true"),
                         new XAttribute("Properties", buildProperties))),
@@ -300,97 +303,5 @@ public sealed partial class DotNetRepositoryReleaseService
                     new XAttribute("DependsOnTargets", "BuildSelected;PackOnlySelected"))));
 
         document.Save(traversalPath);
-    }
-
-    private static DotNetPackResult SignBatchBuildOutputs(
-        IReadOnlyList<DotNetRepositoryProjectResult> projects,
-        DotNetRepositoryReleaseSpec spec,
-        string packageOutputPath,
-        ILogger logger,
-        Action<DotNetReleaseBuildAssemblySigningRequest> signAssemblies,
-        ISet<DotNetRepositoryProjectResult> onlyPackToolProjects)
-    {
-        var result = new DotNetPackResult();
-        var watch = Stopwatch.StartNew();
-
-        try
-        {
-            var configuration = string.IsNullOrWhiteSpace(spec.Configuration) ? "Release" : spec.Configuration.Trim();
-            var signedOutputCount = 0;
-            var files = new List<string>();
-
-            foreach (var project in projects)
-            {
-                var csprojDir = Path.GetDirectoryName(project.CsprojPath) ?? string.Empty;
-                var includePatterns = ResolveAssemblySigningIncludePatterns(project, spec, csprojDir, configuration, logger);
-                var outputDirectories = ResolveBuildOutputDirectories(project.CsprojPath, csprojDir, configuration, project.ProjectName, logger, includePatterns);
-                var signingPlan = BuildAssemblySigningPlan(
-                    outputDirectories,
-                    includePatterns,
-                    ResolvePackToolIntermediateAssemblyPaths(
-                        project.CsprojPath,
-                        csprojDir,
-                        configuration,
-                        project.ProjectName,
-                        logger,
-                        includePatterns,
-                        spec.SignDependencyAssemblies,
-                        packageOutputPath),
-                    recursiveBuildOutputs: !onlyPackToolProjects.Contains(project));
-                if (signingPlan.Files.Length == 0 && !spec.SignDependencyAssemblies)
-                {
-                    var evaluatedIncludePatterns = ResolveAssemblySigningIncludePatterns(project, spec, csprojDir, configuration, logger);
-                    if (!SamePatterns(includePatterns, evaluatedIncludePatterns))
-                    {
-                        includePatterns = evaluatedIncludePatterns;
-                        outputDirectories = ResolveBuildOutputDirectories(project.CsprojPath, csprojDir, configuration, project.ProjectName, logger, includePatterns);
-                        signingPlan = BuildAssemblySigningPlan(
-                            outputDirectories,
-                            includePatterns,
-                            ResolvePackToolIntermediateAssemblyPaths(
-                                project.CsprojPath,
-                                csprojDir,
-                                configuration,
-                                project.ProjectName,
-                                logger,
-                                includePatterns,
-                                includePreparedPublishOutput: false,
-                                packageOutputPath));
-                    }
-                }
-                logger.Info($"{project.ProjectName}: assembly signing include pattern(s): {string.Join(", ", includePatterns)}.");
-                files.AddRange(signingPlan.Files);
-                signedOutputCount += signingPlan.OutputDirectoryCount;
-            }
-
-            var filePaths = files
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .ToArray();
-            if (filePaths.Length > 0)
-                signAssemblies(new DotNetReleaseBuildAssemblySigningRequest
-                {
-                    ReleasePath = spec.RootPath,
-                    LocalStore = spec.CertificateStore,
-                    CertificateThumbprint = spec.CertificateThumbprint!.Trim(),
-                    TimeStampServer = string.IsNullOrWhiteSpace(spec.TimeStampServer) ? "http://timestamp.digicert.com" : spec.TimeStampServer!.Trim(),
-                    OverwriteSigned = spec.OverwriteSignedAssemblies,
-                    IncludePatterns = Array.Empty<string>(),
-                    FilePaths = filePaths
-                });
-
-            watch.Stop();
-            result.Duration = watch.Elapsed;
-            result.Success = true;
-            logger.Success($"MSBuild batch assembly signing completed for {signedOutputCount} output directorie(s), {filePaths.Length} file(s), in {FormatDuration(watch.Elapsed)}.");
-            return result;
-        }
-        catch (Exception ex)
-        {
-            watch.Stop();
-            result.Duration = watch.Elapsed;
-            result.SigningFailed = true;
-            result.ErrorMessage = $"MSBuild batch assembly signing failed. {ex.Message}";
-            return result;
-        }
     }
 }

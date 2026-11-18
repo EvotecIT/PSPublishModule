@@ -6,6 +6,46 @@ public sealed class DotNetRepositoryBatchRestoreTests
 {
     [Fact]
     [Trait("Category", "DotNetPublishPrGate")]
+    public async Task BuildSelected_FromCleanCheckout_BuildsProjectsWhoseReferencesComeFromPackages()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            // netstandard2.0 gets its framework references from the NETStandard.Library package, so it only compiles
+            // when the build evaluates the project after restore wrote the NuGet imports.
+            var projectDirectory = Directory.CreateDirectory(Path.Combine(root.FullName, "Sample.Standard"));
+            var projectPath = Path.Combine(projectDirectory.FullName, "Sample.Standard.csproj");
+            File.WriteAllText(projectPath, """
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <PropertyGroup>
+                    <TargetFramework>netstandard2.0</TargetFramework>
+                  </PropertyGroup>
+                </Project>
+                """);
+            File.WriteAllText(Path.Combine(projectDirectory.FullName, "Code.cs"), "namespace Sample.Standard { public static class Code { public static string Name => typeof(Code).Assembly.GetName().Name; } }");
+            var traversal = Path.Combine(root.FullName, "pack.proj");
+            DotNetRepositoryReleaseService.WritePackTraversalProject(traversal,
+                new[] { new DotNetRepositoryProjectResult { ProjectName = "Sample.Standard", PackageId = "Sample.Standard", CsprojPath = projectPath, IsPackable = true } },
+                new DotNetRepositoryReleaseSpec { RootPath = root.FullName, Configuration = "Release" },
+                Path.Combine(root.FullName, "packages"));
+
+            var result = await new ProcessRunner(ownProcessTree: true).RunAsync(new ProcessRunRequest(
+                "dotnet", root.FullName,
+                new[] { "msbuild", traversal, "-target:BuildSelected", "-nodeReuse:false", "-verbosity:minimal" },
+                TimeSpan.FromMinutes(3)));
+
+            Assert.False(result.TimedOut, result.StdOut + result.StdErr);
+            Assert.True(result.ExitCode == 0, result.StdOut + result.StdErr);
+            Assert.True(File.Exists(Path.Combine(projectDirectory.FullName, "bin", "Release", "netstandard2.0", "Sample.Standard.dll")));
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    [Trait("Category", "DotNetPublishPrGate")]
     public async Task RestoreSelected_SharedDependencyOutputs_DoNotOverlap()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));

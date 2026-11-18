@@ -600,9 +600,9 @@ public sealed class DotNetRepositoryReleaseServiceTests
     }
 
     [Theory]
-    [InlineData(false, "Build")]
-    [InlineData(true, "Rebuild")]
-    public void WritePackTraversalProject_EmitsBatchPackProjectWithEscapedProperties(bool forceRebuild, string expectedBuildTarget)
+    [InlineData(false, "RestoreSelected")]
+    [InlineData(true, "RestoreSelected;CleanSelected")]
+    public void WritePackTraversalProject_EmitsBatchPackProjectWithEscapedProperties(bool forceRebuild, string expectedBuildDependencies)
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
         try
@@ -635,8 +635,10 @@ public sealed class DotNetRepositoryReleaseServiceTests
             var packProject = Assert.Single(document.Descendants("PackProject"));
             Assert.Equal(Path.GetFullPath(csprojPath), packProject.Attribute("Include")?.Value);
 
+            // Restore, Clean, Build and Pack, in that order. Clean only runs ahead of Build when freshness is unproven,
+            // and never as a parallel Rebuild that could delete outputs another project is compiling against.
             var msbuildTasks = document.Descendants("MSBuild").ToArray();
-            Assert.Equal(3, msbuildTasks.Length);
+            Assert.Equal(4, msbuildTasks.Length);
             Assert.All(msbuildTasks, msbuild =>
             {
                 Assert.Equal("@(PackProject)", msbuild.Attribute("Projects")?.Value);
@@ -645,21 +647,19 @@ public sealed class DotNetRepositoryReleaseServiceTests
             Assert.Equal("false", msbuildTasks[0].Attribute("BuildInParallel")?.Value);
             Assert.All(msbuildTasks.Skip(1), msbuild =>
                 Assert.Equal("true", msbuild.Attribute("BuildInParallel")?.Value));
-            Assert.Equal("Restore", msbuildTasks[0].Attribute("Targets")?.Value);
-            Assert.Equal(expectedBuildTarget, msbuildTasks[1].Attribute("Targets")?.Value);
-            Assert.Equal("Pack", msbuildTasks[2].Attribute("Targets")?.Value);
-            Assert.Equal("Configuration=Release", msbuildTasks[0].Attribute("Properties")?.Value);
-            Assert.Equal("Configuration=Release", msbuildTasks[1].Attribute("Properties")?.Value);
-            Assert.Equal("RestoreSelected", msbuildTasks[0].Parent?.Attribute("Name")?.Value);
-            Assert.Equal("BuildSelected", msbuildTasks[1].Parent?.Attribute("Name")?.Value);
-            Assert.Equal("PackOnlySelected", msbuildTasks[2].Parent?.Attribute("Name")?.Value);
-            Assert.Equal("RestoreSelected", msbuildTasks[1].Parent?.Attribute("DependsOnTargets")?.Value);
+            Assert.Equal(new[] { "Restore", "Clean", "Build", "Pack" }, msbuildTasks.Select(static task => task.Attribute("Targets")?.Value));
+            Assert.Equal("Configuration=Release;" + DotNetRepositoryReleaseService.RestoreEvaluationProperties, msbuildTasks[0].Attribute("Properties")?.Value);
+            Assert.All(msbuildTasks.Skip(1).Take(2), task => Assert.Equal("Configuration=Release", task.Attribute("Properties")?.Value));
+            Assert.Equal(
+                new[] { "RestoreSelected", "CleanSelected", "BuildSelected", "PackOnlySelected" },
+                msbuildTasks.Select(static task => task.Parent?.Attribute("Name")?.Value));
+            Assert.Equal(expectedBuildDependencies, msbuildTasks[2].Parent?.Attribute("DependsOnTargets")?.Value);
             Assert.Equal("BuildSelected;PackOnlySelected", document.Descendants("Target")
                 .Single(target => string.Equals(target.Attribute("Name")?.Value, "PackSelected", StringComparison.Ordinal))
                 .Attribute("DependsOnTargets")?.Value);
             Assert.Equal(
                 $"Configuration=Release;PackageOutputPath={outputPath.Replace("%", "%25").Replace(";", "%3B").Replace("=", "%3D").Replace("$", "%24").Replace("@", "%40")};_IsPacking=true;NoBuild=true;BuildProjectReferences=false",
-                msbuildTasks[2].Attribute("Properties")?.Value);
+                msbuildTasks[3].Attribute("Properties")?.Value);
         }
         finally
         {
