@@ -19,7 +19,7 @@ internal sealed partial class ReleaseVersionCommitSession
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     private static readonly Regex ManifestPrereleaseLine = new(
-        @"^(?<key>\s*Prerelease\s*=\s*)(?<quote>['""])(?<value>[^'""]*)\k<quote>(?<tail>\s*[,;]?\s*)$",
+        @"^(?<key>\s*Prerelease\s*=\s*)(?<quote>['""])(?<value>[^'""]*)\k<quote>(?<tail>\s*[,;]?\s*(?:#.*)?)$",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     private static readonly Regex InsertedPropertyGroup = new(
@@ -425,6 +425,14 @@ internal sealed partial class ReleaseVersionCommitSession
         var changesVersion = false;
         foreach (var line in added)
         {
+            // Label lines first: a label can itself look like a version (2.0.0-1.2.3).
+            if (next < removed.Count && IsPrereleaseLabelChange(removed[next], line, isReleaseVersion))
+            {
+                changesVersion = true;
+                next++;
+                continue;
+            }
+
             if (next < removed.Count &&
                 string.Equals(NormalizeVersions(removed[next]), NormalizeVersions(line), StringComparison.Ordinal))
             {
@@ -439,13 +447,6 @@ internal sealed partial class ReleaseVersionCommitSession
                     changesVersion = true;
                 }
 
-                next++;
-                continue;
-            }
-
-            if (next < removed.Count && IsPrereleaseLabelChange(removed[next], line, isReleaseVersion))
-            {
-                changesVersion = true;
                 next++;
                 continue;
             }

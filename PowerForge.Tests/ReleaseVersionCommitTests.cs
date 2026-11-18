@@ -287,6 +287,22 @@ public sealed class ReleaseVersionCommitTests
     }
 
     [Fact]
+    public void Session_AcceptsNumericLabelsAndCommentedPrereleaseLines()
+    {
+        using var repo = GitFixture.Create();
+        repo.Write("Lib/Lib.csproj", "<Project Sdk=\"Microsoft.NET.Sdk\">\n  <PropertyGroup>\n    <VersionPrefix>2.0.0</VersionPrefix>\n    <VersionSuffix>1.2.2</VersionSuffix>\n  </PropertyGroup>\n</Project>\n");
+        repo.Write("Module/Sample.psd1", "@{\n    ModuleVersion = '2.0.0'\n    PrivateData = @{ PSData = @{\n        Prerelease = 'alpha' # channel\n    } }\n}\n");
+        repo.Git("commit", "--quiet", "-am", "Numeric prerelease");
+
+        using var session = ReleaseVersionCommitSession.Begin(new RecordingLogger(), repo.Root, ReleaseVersionCommitMode.Commit, publishing: true);
+        repo.Write("Lib/Lib.csproj", "<Project Sdk=\"Microsoft.NET.Sdk\">\n  <PropertyGroup>\n    <VersionPrefix>2.0.0</VersionPrefix>\n    <VersionSuffix>1.2.3</VersionSuffix>\n  </PropertyGroup>\n</Project>\n");
+        repo.Write("Module/Sample.psd1", "@{\n    ModuleVersion = '2.0.0'\n    PrivateData = @{ PSData = @{\n        Prerelease = '1.2.3' # channel\n    } }\n}\n");
+        var commit = session.Complete(releaseSucceeded: true, "Sample", "2.0.0-1.2.3", new[] { "2.0.0-1.2.3" })!;
+
+        Assert.Equal(new[] { "Lib/Lib.csproj", "Module/Sample.psd1" }, commit.Files);
+    }
+
+    [Fact]
     public void Session_KeepsEachReleasesRecordedStampsApart()
     {
         using var repo = GitFixture.Create();
