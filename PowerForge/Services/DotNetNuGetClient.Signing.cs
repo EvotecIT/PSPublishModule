@@ -27,6 +27,9 @@ public sealed partial class DotNetNuGetClient
             maxParallelism,
             index =>
             {
+                // SignPackageAsync preserves an already signed package without touching the key;
+                // that must not count as the unlock that lets other packages start in parallel.
+                var preserved = !request.Overwrite && HasNuGetSignature(packages[index], request.WorkingDirectory);
                 var last = SignPackageAsync(
                         new DotNetNuGetSignRequest(
                             packages[index],
@@ -41,7 +44,9 @@ public sealed partial class DotNetNuGetClient
                     .GetAwaiter()
                     .GetResult();
                 results[index] = last;
-                return last.Succeeded;
+                return !last.Succeeded ? SigningItemOutcome.Failed
+                    : preserved ? SigningItemOutcome.Skipped
+                    : SigningItemOutcome.Signed;
             },
             started: index => progress?.Invoke(packages[index], 1, null),
             finished: (index, _, error) =>

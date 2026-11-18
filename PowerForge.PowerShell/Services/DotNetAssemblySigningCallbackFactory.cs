@@ -66,6 +66,12 @@ public static class DotNetAssemblySigningCallbackFactory
             reason = "the session is not interactive";
             return false;
         }
+        // On Unix UserInteractive is always true, so require a terminal for any prompt.
+        if (Environment.OSVersion.Platform != PlatformID.Win32NT && (Console.IsInputRedirected || Console.IsOutputRedirected))
+        {
+            reason = "no terminal is attached";
+            return false;
+        }
         reason = string.Empty;
         return true;
     }

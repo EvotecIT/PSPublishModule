@@ -135,6 +135,8 @@ public sealed class ModuleSigningProgressTests
                   [pscustomobject]@{ Status='NotSigned'; SignerCertificate=$null }
                 }
                 Import-Module '{{modulePath}}' -Force
+                # Fixed here so POWERFORGE_SIGNING_PARALLELISM on the machine cannot make the run serial.
+                $Parallelism = '4'
                 """;
                 var script = File.ReadAllText(request.ScriptPath!);
                 script = script.Replace("$ErrorActionPreference = 'Stop'", fixtures + Environment.NewLine + "$ErrorActionPreference = 'Stop'");

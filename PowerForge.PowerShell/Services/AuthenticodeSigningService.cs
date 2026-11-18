@@ -255,7 +255,7 @@ public sealed class AuthenticodeSigningService
         {
             var result = InvokeMany("Set-AuthenticodeSignature", ps =>
             {
-                ps.AddParameter("FilePath", file);
+                ps.AddParameter("LiteralPath", file);
                 ps.AddParameter("Certificate", request.Certificate);
                 ps.AddParameter("TimestampServer", request.TimeStampServer);
                 ps.AddParameter("IncludeChain", request.WindowsIncludeChain);
@@ -316,10 +316,13 @@ public sealed class AuthenticodeSigningService
         if (pool is null)
             parallelism = 1;
         else
-            _logger.Verbose($"Signing the first file alone, then up to {parallelism} file(s) at a time.");
+            _logger.Verbose($"Signing files one at a time until the key is used, then up to {parallelism} file(s) at a time.");
 
         try
         {
+            // Serial items (until the key is unlocked) run on this thread in the current runspace;
+            // worker threads use the pool.
+            var callerThread = Environment.CurrentManagedThreadId;
             Func<PowerShell> createPooled = () =>
             {
                 var ps = PowerShell.Create();
@@ -331,8 +334,10 @@ public sealed class AuthenticodeSigningService
                 parallelism,
                 index =>
                 {
-                    results[index] = signOne(index == 0 || pool is null ? CreatePowerShell : createPooled, files[index]);
-                    return true;
+                    var onCaller = pool is null || Environment.CurrentManagedThreadId == callerThread;
+                    results[index] = signOne(onCaller ? CreatePowerShell : createPooled, files[index]);
+                    // A preserved (already signed) file did not use the key, so it does not unlock it.
+                    return results[index] is null ? SigningItemOutcome.Skipped : SigningItemOutcome.Signed;
                 },
                 started: index => progress.Next(files[index]));
 
@@ -367,13 +372,8 @@ public sealed class AuthenticodeSigningService
         try
         {
             var state = InitialSessionState.CreateDefault2();
-#if !NET472
-            // Worker runspaces load modules under the same policy as the calling runspace.
-            // Windows PowerShell's reference assemblies do not expose this; there the
-            // process-level policy applies to every runspace.
-            if (Runspace.DefaultRunspace?.InitialSessionState is { } callerState)
-                state.ExecutionPolicy = callerState.ExecutionPolicy;
-#endif
+            // The execution policy is left unset: worker runspaces use the process policy, and
+            // setting it here would change the process-level policy when the pool opens.
             foreach (var name in commandNames)
             {
                 using var ps = CreatePowerShell();

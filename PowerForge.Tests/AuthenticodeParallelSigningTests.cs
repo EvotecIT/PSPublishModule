@@ -73,7 +73,7 @@ public sealed class AuthenticodeParallelSigningTests
                     foreach ($file in $FilePath) { [pscustomobject]@{ Path = $file; Status = 'NotSigned' } }
                 }
                 function Set-AuthenticodeSignature {
-                    param([string]$FilePath, $Certificate, $TimestampServer, $IncludeChain, $HashAlgorithm, [switch]$Force)
+                    param([Alias('LiteralPath')][string]$FilePath, $Certificate, $TimestampServer, $IncludeChain, $HashAlgorithm, [switch]$Force)
                     $name = [IO.Path]::GetFileName($FilePath)
                     $log = Join-Path '{{_logDirectory}}' $name
                     [IO.File]::WriteAllText($log + '.start', [DateTime]::UtcNow.Ticks.ToString())

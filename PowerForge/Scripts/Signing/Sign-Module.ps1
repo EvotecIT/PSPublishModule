@@ -481,12 +481,41 @@ try {
       }
     }
 
+    # Dot-sourced with $job set to a finished worker.
+    $collectWorker = {
+      $f = $job.File
+      $r = $null
+      $signError = $null
+      try {
+        $output = $job.Worker.EndInvoke($job.Handle)
+        if ($job.Worker.Streams.Error.Count -gt 0) {
+          $signError = $job.Worker.Streams.Error[0].Exception.Message
+        } elseif ($output.Count -gt 0) {
+          $r = $output[$output.Count - 1]
+        }
+      } catch {
+        $inner = $_.Exception
+        while ($inner.InnerException) { $inner = $inner.InnerException }
+        $signError = $inner.Message
+      } finally {
+        $job.Worker.Dispose()
+      }
+      . $recordSigningResult
+    }
+
     $processedTargets = 0
     $nextTarget = 0
     $pool = $null
     $inFlight = New-Object 'System.Collections.Generic.List[object]'
     try {
       while ($true) {
+        # Collect every finished worker before refilling a slot, so a failure that has
+        # already completed always stops new signing work.
+        foreach ($job in @($inFlight | Where-Object { $_.Handle.IsCompleted })) {
+          [void]$inFlight.Remove($job)
+          . $collectWorker
+        }
+
         $canStart = -not $signingFailureMessage -and $nextTarget -lt $targets.Count
         $inline = $nextTarget -eq 0 -or $parallel -le 1
         if ($canStart -and $inline -and $inFlight.Count -eq 0) {
@@ -536,27 +565,7 @@ try {
 
         if ($inFlight.Count -eq 0) { break }
         $handles = [System.Threading.WaitHandle[]]@($inFlight | ForEach-Object { $_.Handle.AsyncWaitHandle })
-        $doneIndex = [System.Threading.WaitHandle]::WaitAny($handles)
-        $job = $inFlight[$doneIndex]
-        $inFlight.RemoveAt($doneIndex)
-        $f = $job.File
-        $r = $null
-        $signError = $null
-        try {
-          $output = $job.Worker.EndInvoke($job.Handle)
-          if ($job.Worker.Streams.Error.Count -gt 0) {
-            $signError = $job.Worker.Streams.Error[0].Exception.Message
-          } elseif ($output.Count -gt 0) {
-            $r = $output[$output.Count - 1]
-          }
-        } catch {
-          $inner = $_.Exception
-          while ($inner.InnerException) { $inner = $inner.InnerException }
-          $signError = $inner.Message
-        } finally {
-          $job.Worker.Dispose()
-        }
-        . $recordSigningResult
+        [void][System.Threading.WaitHandle]::WaitAny($handles)
       }
     } finally {
       foreach ($job in $inFlight) { $job.Worker.Dispose() }
