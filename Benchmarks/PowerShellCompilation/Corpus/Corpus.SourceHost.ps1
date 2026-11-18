@@ -19,13 +19,14 @@ function Get-CorpusSourceHost {
     $identity = $probe.StandardOutput | ConvertFrom-Json
     $coreClr = Join-Path $identity.runtimeRoot $(if ($IsWindows) { 'coreclr.dll' } else { 'libcoreclr.so' })
     $files = @(
+        @{ role = 'Launcher'; path = $launcher },
         @{ role = 'Executable'; path = $identity.executable },
         @{ role = 'CoreCLR'; path = $coreClr },
         @{ role = 'PowerShellAssembly'; path = $identity.sma }
     )
     foreach ($file in $files) { $file.sha256 = (Get-FileHash -LiteralPath $file.path -Algorithm SHA256).Hash.ToLowerInvariant() }
     return [pscustomobject]@{
-        executablePath = $identity.executable
+        executablePath = $launcher
         files = $files
         metadata = [ordered]@{
             capturedBeforeTimingUtc = [DateTimeOffset]::UtcNow.ToString('o')
@@ -34,6 +35,7 @@ function Get-CorpusSourceHost {
             architecture = $identity.architecture
             operatingSystem = $identity.operatingSystem
             executablePath = '<PowerShellHostRoot>/' + [IO.Path]::GetFileName($identity.executable)
+            launcherPath = '<PowerShellLauncherRoot>/' + [IO.Path]::GetFileName($launcher)
             runtimeLocation = '<SourceRuntimeRoot>'
             runtimeLayout = 'Installation prefixes omitted; actual executable and loaded runtime identified before timing.'
             runtimeFileSystem = Get-CorpusRuntimeFileSystem -Path $coreClr -WorkingDirectory $WorkingDirectory

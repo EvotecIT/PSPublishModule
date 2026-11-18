@@ -426,7 +426,10 @@ try {
     $compilerIdentity.snapshotFiles = $compilerSnapshot.files
     $compilerIdentity.snapshotSha256 = $compilerSnapshot.sha256
 } catch {
-    if (-not $KeepRunArtifacts) { Remove-Item -LiteralPath $runRoot -Recurse -ErrorAction Stop }
+    if (-not $KeepRunArtifacts) {
+        try { Remove-Item -LiteralPath $runRoot -Recurse -Force -ErrorAction Stop }
+        catch { Write-Warning "Cannot remove incomplete corpus run '$runRoot': $($_.Exception.Message)" }
+    }
     throw
 }
 try {
@@ -599,6 +602,7 @@ try {
                         $artifactSamples.Add([double] $artifactSample.DurationMilliseconds)
                     }
                     Assert-CorpusSourceHostUnchanged -SourceHost $sourceHost
+                    Assert-CorpusRuntimeStorageUnchanged -Storage $runtimeStorage -ArtifactPath $build.Json.result.artifactPath -WorkingDirectory $runRoot
                     $sourceP50 = Get-PercentileMilliseconds -Values $sourceSamples.ToArray() -Percentile 0.50
                     $artifactP50 = Get-PercentileMilliseconds -Values $artifactSamples.ToArray() -Percentile 0.50
                     $qualificationEvidence = [ordered]@{

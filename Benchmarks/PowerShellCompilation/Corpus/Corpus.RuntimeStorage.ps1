@@ -26,8 +26,8 @@ function Get-CorpusRuntimeStorage {
         } -TimeoutSeconds 120
         if ($probe.ExitCode -ne 0) { throw 'Runtime storage probe failed to execute the artifact.' }
         $trace = [IO.File]::ReadAllText($tracePath)
-        $pattern = if ($IsLinux) { '(?m)/[^\r\n\[\]''"=]*?/(?:libhostfxr|libhostpolicy|libcoreclr|libclrjit)\.so' }
-            elseif ($IsWindows) { '(?im)[a-z]:[\\/][^\r\n\[\]''"=]*?[\\/](?:hostfxr|hostpolicy|coreclr|clrjit)\.dll' }
+        $pattern = if ($IsLinux) { '(?m)/[^\r\n''"=]*?/(?:libhostfxr|libhostpolicy|libcoreclr|libclrjit)\.so' }
+            elseif ($IsWindows) { '(?im)[a-z]:[\\/][^\r\n''"=]*?[\\/](?:hostfxr|hostpolicy|coreclr|clrjit)\.dll' }
             else { throw 'Runtime storage inspection supports Windows and Linux.' }
         $paths = @([regex]::Matches($trace, $pattern) |
             ForEach-Object { $_.Value.Trim() } | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } | Sort-Object -Unique)
@@ -55,6 +55,21 @@ function Get-CorpusRuntimeFileSystem {
         Assert-CorpusRuntimeMount -Path $Path -FileSystem $fileSystem
         return $fileSystem
     }
-    if ($IsWindows) { return [IO.DriveInfo]::new([IO.Path]::GetPathRoot($Path)).DriveFormat }
+    if ($IsWindows) {
+        $volumes = @(Get-Volume -FilePath $Path -ErrorAction Stop)
+        if ($volumes.Count -ne 1 -or [string]::IsNullOrWhiteSpace($volumes[0].FileSystem)) {
+            throw "Cannot establish runtime volume for '$Path'."
+        }
+        return [string] $volumes[0].FileSystem
+    }
     throw 'Runtime storage inspection supports Windows and Linux.'
+}
+
+function Assert-CorpusRuntimeStorageUnchanged {
+    param([object] $Storage, [string] $ArtifactPath, [string] $WorkingDirectory)
+
+    $after = Get-CorpusRuntimeStorage -ArtifactPath $ArtifactPath -WorkingDirectory $WorkingDirectory
+    if (($Storage | ConvertTo-Json -Depth 10 -Compress) -cne ($after | ConvertTo-Json -Depth 10 -Compress)) {
+        throw 'The artifact runtime changed during timing; samples cannot be accepted.'
+    }
 }

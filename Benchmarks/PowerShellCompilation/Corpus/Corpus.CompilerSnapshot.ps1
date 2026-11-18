@@ -56,7 +56,8 @@ function New-CorpusCompilerSnapshot {
             sha256 = $expected
         }
     } catch {
-        Remove-Item -LiteralPath $target -Recurse -ErrorAction Stop
+        try { Remove-Item -LiteralPath $target -Recurse -Force -ErrorAction Stop }
+        catch { Write-Warning "Cannot remove incomplete compiler snapshot '$target': $($_.Exception.Message)" }
         throw
     }
 }

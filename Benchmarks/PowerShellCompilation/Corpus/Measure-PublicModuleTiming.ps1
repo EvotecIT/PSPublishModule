@@ -74,7 +74,7 @@ $report = [ordered]@{
     }
     modules = [Collections.Generic.List[object]]::new()
 }
-$EvidencePath = New-CorpusTimingEvidence -Path $EvidencePath -Value $report
+$EvidencePath = New-CorpusTimingEvidence -Path $EvidencePath -Value $report -WorkspacePath $WorkspacePath
 foreach ($entry in $packet.modules) {
     Write-Host "[$($entry.id)] eight source/Hybrid timing pairs"
     $built = @($corpus.modules | Where-Object id -eq $entry.id)

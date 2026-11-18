@@ -43,7 +43,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
     [Trait("Category", "PowerShellCompilerGate")]
     public void RuntimeTraceResolutionChecksTheResolvedLibrariesBeforeAcceptingSamples(string fileSystem, bool coreClrPresent, bool accepted)
     {
-        var root = Path.Combine(Path.GetTempPath(), "PowerForge runtime trace", Guid.NewGuid().ToString("N"));
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge runtime [trace]", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
         try
         {
@@ -82,6 +82,14 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
                 try {
                     $storage = Get-CorpusRuntimeStorage -ArtifactPath 'artifact-probe' -WorkingDirectory '{{root.Replace("'", "''", StringComparison.Ordinal)}}'
                     if ($storage.libraries.Count -ne 2) { throw 'A resolved library was omitted' }
+                    Assert-CorpusRuntimeStorageUnchanged -Storage $storage -ArtifactPath 'artifact-probe' -WorkingDirectory '{{root.Replace("'", "''", StringComparison.Ordinal)}}'
+                    [IO.File]::AppendAllText($script:policy, ' changed runtime')
+                    try {
+                        Assert-CorpusRuntimeStorageUnchanged -Storage $storage -ArtifactPath 'artifact-probe' -WorkingDirectory '{{root.Replace("'", "''", StringComparison.Ordinal)}}'
+                        throw 'Accepted changed runtime bytes'
+                    } catch {
+                        if ($_.Exception.Message -notmatch 'artifact runtime changed during timing') { throw }
+                    }
                     [Console]::Out.Write('accepted traced runtime')
                 } catch {
                     if (-not $_.Exception.Message.Contains('{{expectedError}}')) { throw }

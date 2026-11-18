@@ -54,6 +54,9 @@ existing host/runtime/JIT library paths found in the trace with `findmnt`.
 It rejects 9p/drvfs, missing CoreCLR and missing mount evidence under both `Enforce` and
 `RecordOnly`. A real executable was checked successfully with an ext4 runtime
 and [rejected with a 9p runtime](../../Benchmarks/PowerShellCompilation/Corpus/Performance/2026-11-18-linux-guard-rejection.json).
+New runs also repeat artifact runtime inspection after the last sample and reject
+changed library paths, hashes or filesystems. This detects changes between the
+two inspections; it does not prove that no temporary change occurred between them.
 
 ## Hybrid modules versus source
 

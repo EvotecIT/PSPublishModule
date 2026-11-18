@@ -79,7 +79,7 @@ $report = [ordered]@{
     }
     modules = [Collections.Generic.List[object]]::new()
 }
-$EvidencePath = New-CorpusTimingEvidence -Path $EvidencePath -Value $report
+$EvidencePath = New-CorpusTimingEvidence -Path $EvidencePath -Value $report -WorkspacePath @($BaselineWorkspacePath, $CandidateWorkspacePath)
 try {
     foreach ($id in ($ModuleId | Select-Object -Unique)) {
         $entries = @($packet.modules | Where-Object id -eq $id)
@@ -100,8 +100,8 @@ try {
             id = $id; version = $entry.version; packageSha256 = $entry.sha256
             artifactSha256 = @{ baseline = $resolved.baseline.build.artifactSha256; candidate = $resolved.candidate.build.artifactSha256 }
             typedAssemblySha256 = @{
-                baseline = (Get-FileHash -LiteralPath (Join-Path $resolved.baseline.root "$id/$id.dll") -Algorithm SHA256).Hash.ToLowerInvariant()
-                candidate = (Get-FileHash -LiteralPath (Join-Path $resolved.candidate.root "$id/$id.dll") -Algorithm SHA256).Hash.ToLowerInvariant()
+                baseline = (Get-FileHash -LiteralPath (Join-Path (Split-Path -Parent $resolved.baseline.manifest) ($entry.id + '.dll')) -Algorithm SHA256).Hash.ToLowerInvariant()
+                candidate = (Get-FileHash -LiteralPath (Join-Path (Split-Path -Parent $resolved.candidate.manifest) ($entry.id + '.dll')) -Algorithm SHA256).Hash.ToLowerInvariant()
             }
             probeScript = $entry.probeScript; succeeded = $false
             samples = [Collections.Generic.List[object]]::new(); summary = [ordered]@{}

@@ -18,7 +18,12 @@ if ($entries.Count -ne 1) { throw "Unknown packet module: $ModuleId" }
 $probe = [scriptblock]::Create($entries[0].probeScript)
 for ($call = 0; $call -lt $Calls; $call++) {
     if ($Reimport) { Remove-Module -Name $ModuleId -ErrorAction SilentlyContinue }
-    if ($call -eq 0 -or $Reimport) { Import-Module -Name $ManifestPath -Force -ErrorAction Stop }
+    if ($call -eq 0 -or $Reimport) {
+        $imported = @(Import-Module -Name $ManifestPath -Force -PassThru -ErrorAction Stop)
+        if ($imported.Count -ne 1 -or $imported[0].Name -ine $entries[0].id) {
+            throw 'Profile manifest does not match the selected packet module.'
+        }
+    }
     $output = @(& $probe)
     if ('ok' -notin $output) { throw 'Profile probe failed validation.' }
 }
