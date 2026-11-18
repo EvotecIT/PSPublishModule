@@ -41,4 +41,49 @@ public sealed partial class ModulePipelineStepTests
             try { root.Delete(recursive: true); } catch { /* best effort */ }
         }
     }
+
+    [Theory]
+    [InlineData(ConfigurationGateMode.Build, "Build NuGet packages (Lane)")]
+    [InlineData(ConfigurationGateMode.Publish, "Build and publish NuGet packages (Lane)")]
+    public void Create_NamesPackageLaneByWhatTheRunDoes(ConfigurationGateMode mode, string expected)
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            const string moduleName = "TestModule";
+            WriteMinimalModule(root.FullName, moduleName, "1.0.0");
+            var projectConfig = Path.Combine(root.FullName, "project.build.json");
+            File.WriteAllText(projectConfig, "{}");
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec { Name = moduleName, SourcePath = root.FullName, Version = "1.0.0", CsprojPath = null },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = new IConfigurationSegment[]
+                {
+                    new ConfigurationGateSegment { Configuration = new GateConfiguration { Mode = mode } },
+                    new ConfigurationProjectBuildSegment
+                    {
+                        Configuration = new ProjectBuildConfigurationReference
+                        {
+                            Name = "Lane",
+                            ConfigPath = projectConfig,
+                            BuildBeforeModule = true,
+                            PublishNuget = true
+                        }
+                    }
+                }
+            };
+
+            var plan = new ModulePipelineRunner(new NullLogger()).Plan(spec);
+            var lane = Assert.Single(ModulePipelineStep.Create(plan), static step => step.Kind == ModulePipelineStepKind.PackageBuild);
+
+            // A build-only run must not say it publishes.
+            Assert.Equal(expected, lane.Title);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
 }

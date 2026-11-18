@@ -456,7 +456,7 @@ public sealed class ModulePipelineStep
                     continue;
 
                 var name = segment.Configuration.Name;
-                var label = GetPackageLaneAction(segment.Configuration.PublishNuget);
+                var label = GetPackageLaneAction(plan, segment.Configuration.PublishNuget);
                 if (!string.IsNullOrWhiteSpace(name))
                     label += $" ({name})";
                 else if (!string.IsNullOrWhiteSpace(segment.Configuration.ConfigPath))
@@ -482,7 +482,7 @@ public sealed class ModulePipelineStep
                     continue;
 
                 var name = segment.Configuration.Name;
-                var action = GetPackageLaneAction(segment.Configuration.PublishNuget);
+                var action = GetPackageLaneAction(plan, segment.Configuration.PublishNuget);
                 var label = string.IsNullOrWhiteSpace(name)
                     ? $"{action} (inline)"
                     : $"{action} ({name})";
@@ -510,13 +510,17 @@ public sealed class ModulePipelineStep
                plan.BuildSpec.AssemblyTypeAccelerators,
                plan.BuildSpec.AssemblyTypeAcceleratorAssemblies) != AssemblyTypeAcceleratorExportMode.None;
 
-    private static string GetPackageLaneAction(bool? publishNuget)
-        => publishNuget switch
-        {
-            true => "Build and publish NuGet packages",
-            false => "Build NuGet packages",
-            _ => "Run NuGet package lane"
-        };
+    // Build, Manifest and Documentation runs skip the publish phase, so the lane only builds even when the
+    // configuration enables NuGet publishing.
+    private static string GetPackageLaneAction(ModulePipelinePlan plan, bool? publishNuget)
+        => plan.GateMode is ConfigurationGateMode.Build or ConfigurationGateMode.Manifest or ConfigurationGateMode.Documentation
+            ? "Build NuGet packages"
+            : publishNuget switch
+            {
+                true => "Build and publish NuGet packages",
+                false => "Build NuGet packages",
+                _ => "Run NuGet package lane"
+            };
 
     private static void AddExternalAssetSteps(List<ModulePipelineStep> steps, ModulePipelinePlan plan)
     {
