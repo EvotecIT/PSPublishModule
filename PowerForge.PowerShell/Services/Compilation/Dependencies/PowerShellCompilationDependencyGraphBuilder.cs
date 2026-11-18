@@ -43,6 +43,7 @@ internal sealed partial class PowerShellCompilationDependencyGraphBuilder
         bool includeRuntimePack = false,
         string? nuGetPackageRoot = null)
     {
+        runtimeIdentifier = string.IsNullOrWhiteSpace(runtimeIdentifier) ? null : runtimeIdentifier;
         var builder = new PowerShellCompilationDependencyGraphBuilder(moduleRoot, mode, artifactKind, nuGetPackageRoot);
         return builder.BuildCore(
             sourcePath,

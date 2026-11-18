@@ -125,6 +125,7 @@ public sealed partial class PowerShellCompilationBoundPipelineTests
     [InlineData("param($__writeOutput) $__writeOutput")]
     [InlineData("break")]
     [InlineData("continue")]
+    [InlineData("exit 7")]
     public void SwitchPredicates_RetainOwnerWhenChildCannotCompile(string body)
     {
         var document = PowerShellSourceParser.Parse("function Read-Owner { param([object]$Value) switch($Value) { { " +

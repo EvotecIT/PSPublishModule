@@ -87,6 +87,7 @@ internal static class PowerShellNativeFunctionBindingPolicy
         PowerShellCompilationCapability capabilities)
         => RequiresNativeBasicCommandHost(function, capabilities) ||
            function.Body.Find(static node =>
+               node is ExitStatementAst ||
                node is BreakStatementAst { Label: null } && !PowerShellControlFlowBindingPolicy.HasBreakableAncestor(node) ||
                node is ContinueStatementAst { Label: null } && !PowerShellControlFlowBindingPolicy.HasContinuableAncestor(node),
                searchNestedScriptBlocks: false) is not null ||

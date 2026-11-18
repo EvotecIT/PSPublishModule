@@ -99,7 +99,7 @@ internal sealed partial class PowerShellSemanticBinder
         var statements = PowerShellSemanticAnalyzer.EnumerateStatements(body).ToArray();
         var writes = statements.OfType<PowerShellBoundStreamWriteStatement>().ToArray();
         if (writes.Length == 0 || statements.Any(static statement =>
-                statement is PowerShellBoundReturnStatement or PowerShellBoundThrowStatement or
+                statement is PowerShellBoundReturnStatement or PowerShellBoundThrowStatement or PowerShellBoundExitStatement or
                     PowerShellBoundOutputCaptureStatement or PowerShellBoundCommandRegionStatement or
                     PowerShellBoundCommandCaptureStatement))
             return false;

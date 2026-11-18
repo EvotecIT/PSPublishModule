@@ -133,6 +133,8 @@ internal sealed class PowerShellBoundOptimizer
                 OptimizeBlock(loop.Body),
                 loop.DeclareVariable,
                 loop.NullCollectionElement is null ? null : OptimizeExpression(loop.NullCollectionElement), loop.CheckHostInterrupts, loop.NativeBinding, loop.Label),
+            PowerShellBoundExitStatement exited => new PowerShellBoundExitStatement(exited.Span,
+                exited.Expression is null ? null : OptimizeExpression(exited.Expression)),
             PowerShellBoundThrowStatement thrown => new PowerShellBoundThrowStatement(
                 thrown.Span, thrown.Expression is null ? null : OptimizeExpression(thrown.Expression),
                 thrown.PreserveStatementErrors, thrown.SourcePath, thrown.SourceText),

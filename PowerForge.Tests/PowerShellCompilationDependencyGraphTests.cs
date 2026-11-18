@@ -7,6 +7,20 @@ namespace PowerForge.Tests;
 public sealed class PowerShellCompilationDependencyGraphTests
 {
     [Fact]
+    public void UnspecifiedRuntimeIdentifiersProduceTheSameExternalProcessLock()
+    {
+        using var fixture = new GraphFixture();
+        var script = fixture.Write("Installer.ps1", "function Invoke-Installer { Start-Process 'msiexec'; Start-Process 'ln' }");
+        var input = new PowerShellCompilationInputResolver().Resolve(script,
+            PowerShellCompilationArtifactKind.BinaryModule, PowerShellCompilationMode.Hybrid);
+        var planner = new PowerShellCompilationDependencyPlanner();
+        var expected = planner.AnalyzeGraph(input, PowerShellCompilationMode.Hybrid, targetFramework: "net10.0");
+        Assert.Contains(expected.Nodes, node => node.Kind == PowerShellCompilationDependencyNodeKind.ExternalProcess);
+        foreach (var rid in new[] { "", " ", "\t" })
+            Assert.Equal(expected.LockSha256, planner.AnalyzeGraph(input, PowerShellCompilationMode.Hybrid,
+                targetFramework: "net10.0", runtimeIdentifier: rid).LockSha256);
+    }
+    [Fact]
     public void Resolve_BuildsDeterministicSharedDependencyGraphWithoutExecutingSource()
     {
         using var fixture = new GraphFixture();

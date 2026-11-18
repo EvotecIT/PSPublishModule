@@ -534,6 +534,8 @@ internal sealed partial class PowerShellTypedLowerer
                 switchStatement.MatchMode,
                 switchStatement.CaseSensitive,
                 switchStatement.InputKind, switchStatement.NativeSourcePath, switchStatement.NativeInputSourceText),
+            PowerShellBoundExitStatement exited => new PowerShellLoweredExitStatement(exited.Span,
+                exited.Expression is null ? null : LowerExpression(exited.Expression, functions, names, targetCapabilities)),
             PowerShellBoundThrowStatement thrown => new PowerShellLoweredThrowStatement(
                 thrown.Span,
                 thrown.Expression is null ? null : LowerExpression(thrown.Expression, functions, names, targetCapabilities),

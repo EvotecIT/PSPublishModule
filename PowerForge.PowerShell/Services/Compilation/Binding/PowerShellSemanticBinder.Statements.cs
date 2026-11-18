@@ -45,7 +45,7 @@ internal sealed partial class PowerShellSemanticBinder
                 _semanticProfile.Family == PowerShellCompilationSemanticHostFamily.WindowsPowerShell51)
             : null;
         var nativeSequencePoint = capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding) &&
-            statement is AssignmentStatementAst or PipelineAst or BreakStatementAst or ContinueStatementAst or ReturnStatementAst or ThrowStatementAst;
+            statement is AssignmentStatementAst or PipelineAst or BreakStatementAst or ContinueStatementAst or ReturnStatementAst or ThrowStatementAst or ExitStatementAst;
         if (!nativeSequencePoint && !nativeSuccessStatus.HasValue && !bound.Capabilities.HasFlag(PowerShellRequiredCapability.PowerShellStatementErrors) &&
             !(bound is PowerShellBoundThrowStatement && capabilities.HasFlag(PowerShellCompilationCapability.PowerShellStatementErrors))) return bound;
         // A failed RHS leaves the previous slot intact. A successful constructor's
@@ -273,6 +273,14 @@ internal sealed partial class PowerShellSemanticBinder
                     mutation.Operation,
                     mutation.NormalizeNullString,
                     mutation.IntegralSemantics, mutation.PreserveStatementErrors);
+        }
+        if (statement is ExitStatementAst exitStatement && capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding))
+        {
+            var expression = exitStatement.Pipeline is null ? null : BindExpression(document, exitStatement.Pipeline,
+                symbols, functions, diagnostics, targetFramework: targetFramework, capabilities: capabilities);
+            return exitStatement.Pipeline is null || expression is not null
+                ? new PowerShellBoundExitStatement(PowerShellSourceParser.GetSpan(document, exitStatement.Extent), expression)
+                : null;
         }
         if (statement is ReturnStatementAst returnStatement)
         {

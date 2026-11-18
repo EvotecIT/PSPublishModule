@@ -127,6 +127,17 @@ internal sealed partial class PowerShellSemanticBinder
         foreach (var clause in statement.Clauses)
         {
             var nativePredicate = nativeRuntimeValues && clause.Item1 is ScriptBlockExpressionAst;
+            if (nativePredicate && ((ScriptBlockExpressionAst)clause.Item1).ScriptBlock.FindAll(static node =>
+                    node is ExitStatementAst ||
+                    node is BreakStatementAst && !PowerShellControlFlowBindingPolicy.HasBreakableAncestor(node) ||
+                    node is ContinueStatementAst && !PowerShellControlFlowBindingPolicy.HasContinuableAncestor(node),
+                    searchNestedScriptBlocks: false).Any())
+            {
+                diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2306",
+                    "A switch predicate cannot transfer control outside its compiled predicate body.",
+                    PowerShellSourceParser.GetSpan(document, clause.Item1.Extent)));
+                return null;
+            }
             var clauseSymbols = CloneSymbols(baselineSymbols);
             var clauseValue = BindExpression(
                 document,

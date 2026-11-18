@@ -478,6 +478,10 @@ internal sealed partial class PowerShellSemanticAnalyzer
         {
             yield return thrown.Expression;
         }
+        else if (statement is PowerShellBoundExitStatement { Expression: not null } exited)
+        {
+            yield return exited.Expression;
+        }
     }
 
     internal static IEnumerable<PowerShellBoundVariableExpression> EnumerateVariableReads(PowerShellBoundExpression expression)

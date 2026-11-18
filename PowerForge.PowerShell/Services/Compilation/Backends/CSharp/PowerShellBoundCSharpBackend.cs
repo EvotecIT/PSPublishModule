@@ -257,6 +257,10 @@ internal sealed partial class PowerShellBoundCSharpBackend
                         successOutputSink: successOutputSink);
                 }
                 return;
+            case PowerShellLoweredExitStatement exited:
+                builder.Append(prefix).Append("__nativeFunction.Exit(")
+                    .Append(exited.Expression is null ? "null" : EmitExpression(exited.Expression)).AppendLine(");");
+                return;
             case PowerShellLoweredBreakStatement transfer:
                 if (transfer.TransferToCaller) builder.Append(prefix).AppendLine("__nativeFunction.TransferToCaller(true);");
                 else EmitLoopTransfer(builder, transfer.TargetLoop, prefix, isContinue: false);
