@@ -7,7 +7,7 @@ import re
 import subprocess
 
 UTC = dt.timezone.utc
-EXPECTED = {'ddct': 'sqlserver', 'ddnext': 'sqlite', 'sectigo': 'sqlite'}
+EXPECTED = {'ddct': 'sqlserver', 'ddnext': 'sqlite', 'sectigo': 'sqlite', 'ledger': 'sqlite', 'ledger-coordination': 'sqlite'}
 NAS_TASK = 'Evotec database backup verification and retention'
 INSTALL = pathlib.Path(os.environ.get('EVOTEC_DATABASE_BACKUP_ROOT', str(pathlib.Path(os.environ.get('ProgramData', r'C:\ProgramData')) / 'PowerForge/DatabaseBackups')))
 NAS_CONFIG = '/usr/local/etc/powerforge-database-backup-evomagic.json'

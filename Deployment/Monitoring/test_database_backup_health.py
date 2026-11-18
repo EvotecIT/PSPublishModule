@@ -28,7 +28,7 @@ class HealthContracts(unittest.TestCase):
     def test_initial_single_recovery_point_is_healthy_while_history_accumulates(self):
         result = H.evaluate(*self.fixture())
         self.assertTrue(result['healthy'])
-        self.assertEqual(3, len(result['databases']))
+        self.assertEqual(len(H.EXPECTED), len(result['databases']))
 
     def test_monitor_reports_a_different_retention_policy(self):
         values = self.fixture()
