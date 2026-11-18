@@ -90,7 +90,95 @@
         "url": "https://raw.githubusercontent.com/PowerShell/PowerShell/eb8b76e7c669423a016b5b405be5c9431849a338/tools/install-powershell.ps1",
         "sha256": "e84ea7b8c429c1d474664f5601f23f88201b21152a32f0a47906866da290273c"
       },
-      "entryPoint": "install-powershell.ps1"
+      "entryPoint": "install-powershell.ps1",
+      "qualification": {
+        "kind": "HybridModuleWorkflow",
+        "artifactName": "PowerShellInstaller",
+        "completeFunctionInventory": true,
+        "requiredExports": [
+          "Expand-ArchiveInternal",
+          "Remove-Destination",
+          "Test-PathNotInSettings",
+          "Add-PathTToSettings"
+        ],
+        "requiredAliases": [],
+        "requiredCompiledOwnedFunctions": [
+          {
+            "relativePath": "install-powershell.ps1",
+            "name": "Expand-ArchiveInternal"
+          },
+          {
+            "relativePath": "install-powershell.ps1",
+            "name": "Remove-Destination"
+          },
+          {
+            "relativePath": "install-powershell.ps1",
+            "name": "Test-PathNotInSettings"
+          },
+          {
+            "relativePath": "install-powershell.ps1",
+            "name": "Add-PathTToSettings"
+          }
+        ],
+        "requiredScenarioIds": [
+          "portable-install",
+          "isolated-path-registration",
+          "overwrite-contract"
+        ],
+        "publicExportScenarios": {
+          "Expand-ArchiveInternal": [
+            "portable-install"
+          ],
+          "Remove-Destination": [
+            "portable-install",
+            "overwrite-contract"
+          ],
+          "Test-PathNotInSettings": [
+            "isolated-path-registration"
+          ],
+          "Add-PathTToSettings": [
+            "isolated-path-registration"
+          ]
+        },
+        "observerScript": "Workflows/Installers/Observe-PowerShellInstaller.ps1",
+        "observerSha256": "34a9cc69cdae84ddae4d89521e07d221b02dabf2ac534b09bb174fb1558b1803",
+        "observerSupport": [
+          {
+            "path": "Workflows/Installers/Installer.Observer.Common.ps1",
+            "sha256": "db85f5429db0f3eac09832dcb200057743f45315200b5fd94f63eb1d75e4c259"
+          },
+          {
+            "path": "Workflows/Installers/InstallerRegistryScope.cs",
+            "sha256": "8e890c800e00ce1e6b4fae7a7a3fc2a3ce23fbbb1075f2f521b7af5bbf24334d"
+          },
+          {
+            "path": "Workflows/Installers/installer-payloads.json",
+            "sha256": "1650ebdd13ff89225eaed9f21f51da1e61b54704833af0f15463846a9e85fb62"
+          }
+        ],
+        "fixtureScript": "Workflows/Installers/Invoke-PowerShellInstallerFixture.ps1",
+        "fixtureSha256": "6dd3bce6290b884c51e76286694810cfddc5bdfd08ab4b4e2fb188b9e8535d90",
+        "fixtureSupport": [
+          {
+            "path": "Workflows/Installers/Invoke-InstallerFixture.ps1",
+            "sha256": "db032e8ec55854139733ac30f3754273a4993c51568d14c2ed2c76f64145b6f8"
+          },
+          {
+            "path": "Workflows/Installers/Serve-InstallerPayloads.ps1",
+            "sha256": "b9e640b2c50820cf9bb517a912b91798a6aa9ddaec7ab8b499a69bc71aad57e1"
+          },
+          {
+            "path": "Workflows/Installers/Test-InstallerModule.ps1",
+            "sha256": "cac38bb505cf92bcf45318a8adff48f72557e76f84becde33a92170cfd3b78f9"
+          }
+        ]
+      },
+      "sourceInputs": [
+        {
+          "path": "install-powershell.ps1",
+          "sha256": "e84ea7b8c429c1d474664f5601f23f88201b21152a32f0a47906866da290273c"
+        }
+      ]
     },
     {
       "id": "scoop-install-script",
@@ -108,13 +196,254 @@
       },
       "entryPoint": "install.ps1",
       "qualification": {
-        "kind": "HybridModuleCommand",
-        "originalImportSurface": "DotSource",
-        "compiledImportSurface": "TypedAssembly",
-        "unitName": "Test-IsAdministrator",
-        "setupScript": "$env:CI = 'true'; $env:SCOOP_NOINSTALL = 'true'",
-        "probeScript": "(Test-IsAdministrator).ToString()"
-      }
+        "kind": "HybridModuleWorkflow",
+        "artifactName": "ScoopInstaller",
+        "completeFunctionInventory": true,
+        "requiredExports": [
+          "Install-Scoop",
+          "Test-Prerequisite",
+          "Test-ValidateParameter",
+          "Optimize-SecurityProtocol",
+          "Get-Downloader",
+          "Test-CommandAvailable",
+          "Expand-ZipArchive",
+          "Test-isFileLocked",
+          "Import-ScoopShim",
+          "Out-UTF8File",
+          "Add-ShimsDirToPath",
+          "Get-Env",
+          "Write-Env",
+          "Publish-Env",
+          "Add-DefaultConfig",
+          "Add-Config",
+          "Use-Config",
+          "Write-InstallInfo",
+          "Test-LanguageMode",
+          "Write-DebugInfo",
+          "Test-ShouldRunInstall",
+          "Test-IsAdministrator",
+          "Deny-Install",
+          "Exit-Install"
+        ],
+        "requiredAliases": [],
+        "requiredCompiledOwnedFunctions": [
+          {
+            "relativePath": "install.ps1",
+            "name": "Install-Scoop"
+          },
+          {
+            "relativePath": "install.ps1",
+            "name": "Test-Prerequisite"
+          },
+          {
+            "relativePath": "install.ps1",
+            "name": "Test-ValidateParameter"
+          },
+          {
+            "relativePath": "install.ps1",
+            "name": "Optimize-SecurityProtocol"
+          },
+          {
+            "relativePath": "install.ps1",
+            "name": "Get-Downloader"
+          },
+          {
+            "relativePath": "install.ps1",
+            "name": "Test-CommandAvailable"
+          },
+          {
+            "relativePath": "install.ps1",
+            "name": "Expand-ZipArchive"
+          },
+          {
+            "relativePath": "install.ps1",
+            "name": "Test-isFileLocked"
+          },
+          {
+            "relativePath": "install.ps1",
+            "name": "Import-ScoopShim"
+          },
+          {
+            "relativePath": "install.ps1",
+            "name": "Out-UTF8File"
+          },
+          {
+            "relativePath": "install.ps1",
+            "name": "Add-ShimsDirToPath"
+          },
+          {
+            "relativePath": "install.ps1",
+            "name": "Get-Env"
+          },
+          {
+            "relativePath": "install.ps1",
+            "name": "Write-Env"
+          },
+          {
+            "relativePath": "install.ps1",
+            "name": "Publish-Env"
+          },
+          {
+            "relativePath": "install.ps1",
+            "name": "Add-DefaultConfig"
+          },
+          {
+            "relativePath": "install.ps1",
+            "name": "Add-Config"
+          },
+          {
+            "relativePath": "install.ps1",
+            "name": "Use-Config"
+          },
+          {
+            "relativePath": "install.ps1",
+            "name": "Write-InstallInfo"
+          },
+          {
+            "relativePath": "install.ps1",
+            "name": "Test-LanguageMode"
+          },
+          {
+            "relativePath": "install.ps1",
+            "name": "Write-DebugInfo"
+          },
+          {
+            "relativePath": "install.ps1",
+            "name": "Test-ShouldRunInstall"
+          },
+          {
+            "relativePath": "install.ps1",
+            "name": "Test-IsAdministrator"
+          },
+          {
+            "relativePath": "install.ps1",
+            "name": "Deny-Install"
+          },
+          {
+            "relativePath": "install.ps1",
+            "name": "Exit-Install"
+          }
+        ],
+        "requiredScenarioIds": [
+          "install-from-pinned-repositories",
+          "file-lock-contract",
+          "controlled-install-failure"
+        ],
+        "publicExportScenarios": {
+          "Install-Scoop": [
+            "install-from-pinned-repositories"
+          ],
+          "Test-Prerequisite": [
+            "install-from-pinned-repositories"
+          ],
+          "Test-ValidateParameter": [
+            "install-from-pinned-repositories"
+          ],
+          "Optimize-SecurityProtocol": [
+            "install-from-pinned-repositories"
+          ],
+          "Get-Downloader": [
+            "install-from-pinned-repositories"
+          ],
+          "Test-CommandAvailable": [
+            "install-from-pinned-repositories"
+          ],
+          "Expand-ZipArchive": [
+            "install-from-pinned-repositories"
+          ],
+          "Test-isFileLocked": [
+            "install-from-pinned-repositories",
+            "file-lock-contract"
+          ],
+          "Import-ScoopShim": [
+            "install-from-pinned-repositories"
+          ],
+          "Out-UTF8File": [
+            "install-from-pinned-repositories"
+          ],
+          "Add-ShimsDirToPath": [
+            "install-from-pinned-repositories"
+          ],
+          "Get-Env": [
+            "install-from-pinned-repositories"
+          ],
+          "Write-Env": [
+            "install-from-pinned-repositories"
+          ],
+          "Publish-Env": [
+            "install-from-pinned-repositories"
+          ],
+          "Add-DefaultConfig": [
+            "install-from-pinned-repositories"
+          ],
+          "Add-Config": [
+            "install-from-pinned-repositories"
+          ],
+          "Use-Config": [
+            "install-from-pinned-repositories"
+          ],
+          "Write-InstallInfo": [
+            "install-from-pinned-repositories",
+            "controlled-install-failure"
+          ],
+          "Test-LanguageMode": [
+            "install-from-pinned-repositories"
+          ],
+          "Write-DebugInfo": [
+            "install-from-pinned-repositories"
+          ],
+          "Test-ShouldRunInstall": [
+            "install-from-pinned-repositories"
+          ],
+          "Test-IsAdministrator": [
+            "install-from-pinned-repositories"
+          ],
+          "Deny-Install": [
+            "controlled-install-failure"
+          ],
+          "Exit-Install": [
+            "controlled-install-failure"
+          ]
+        },
+        "observerScript": "Workflows/Installers/Observe-ScoopInstaller.ps1",
+        "observerSha256": "9ace0421832076a3a81dae658ac97294a9a1ba930c4a997d5fe521424ecad6c0",
+        "observerSupport": [
+          {
+            "path": "Workflows/Installers/Installer.Observer.Common.ps1",
+            "sha256": "db85f5429db0f3eac09832dcb200057743f45315200b5fd94f63eb1d75e4c259"
+          },
+          {
+            "path": "Workflows/Installers/InstallerRegistryScope.cs",
+            "sha256": "8e890c800e00ce1e6b4fae7a7a3fc2a3ce23fbbb1075f2f521b7af5bbf24334d"
+          },
+          {
+            "path": "Workflows/Installers/installer-payloads.json",
+            "sha256": "1650ebdd13ff89225eaed9f21f51da1e61b54704833af0f15463846a9e85fb62"
+          }
+        ],
+        "fixtureScript": "Workflows/Installers/Invoke-ScoopInstallerFixture.ps1",
+        "fixtureSha256": "269f7112a2e237836e60f5e8164d6f25bc40a14196e4ff9e3735c5e6abf259a9",
+        "fixtureSupport": [
+          {
+            "path": "Workflows/Installers/Invoke-InstallerFixture.ps1",
+            "sha256": "db032e8ec55854139733ac30f3754273a4993c51568d14c2ed2c76f64145b6f8"
+          },
+          {
+            "path": "Workflows/Installers/Serve-InstallerPayloads.ps1",
+            "sha256": "b9e640b2c50820cf9bb517a912b91798a6aa9ddaec7ab8b499a69bc71aad57e1"
+          },
+          {
+            "path": "Workflows/Installers/Test-InstallerModule.ps1",
+            "sha256": "cac38bb505cf92bcf45318a8adff48f72557e76f84becde33a92170cfd3b78f9"
+          }
+        ]
+      },
+      "sourceInputs": [
+        {
+          "path": "install.ps1",
+          "sha256": "94f983b190438311e006b957db7c8422709e0ba62a6c2ac04e278164108f2512"
+        }
+      ]
     },
     {
       "id": "github-api-client-helpers",

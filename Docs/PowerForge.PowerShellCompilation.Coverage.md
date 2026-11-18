@@ -1,9 +1,10 @@
 # PowerShell compiler measurements: 2026-11-18
 
 These results describe two fixed external packets on Windows x64 with SDK
-10.0.404. The public module probes and external assessment runner use
-PowerShell 7.6.9. The semantic oracle uses the pinned
-PowerShell 7.6.6 package.
+10.0.404. The public module probes use PowerShell 7.6.9. The external assessment
+runner, workload observers and semantic oracle use the
+pinned PowerShell 7.6.6 package; applicable oracle forms also run on Windows
+PowerShell 5.1.
 
 An emitted unit is a complete CLR method in the final output. A smaller compiled
 region inside retained source does not count as another emitted unit. A method
@@ -12,12 +13,12 @@ runtime-free execution.
 
 | Packet | Complete emitted units | Complete emitted functions | Execution proof |
 | --- | ---: | ---: | --- |
-| Ten public Gallery modules | 436/753 (57.90%) | Not measured separately | 10/10 Hybrid artifacts built, imported, and passed an invocation probe |
-| Seven external workloads | 130/196 (66.33%) | 130/183 (71.04%) | 1/7 complete workloads passed; ten helper functions in ten scenarios on original, built, and installed surfaces |
+| Ten public Gallery modules | 601/753 (79.81%) | Not measured separately | 10/10 Hybrid artifacts built, imported, and passed an invocation probe |
+| Seven external workloads | 134/196 (68.37%) | 134/183 (73.22%) | 3/7 complete workloads passed; 38 owned functions in 16 scenarios on original, built, and installed surfaces |
 
 The external assessment discovers 155 source files, with zero parser errors and
 zero acquisition/analysis failures. It records five promoted regions in retained
-functions. The public packet records 317 retained source units, 626 runtime-routed
+functions. The public packet records 152 retained source units, 586 runtime-routed
 units, and zero promoted regions. Those probes exercise Hybrid artifacts in
 PowerShell. The ratios describe the measured packets and their discovered units.
 
@@ -29,8 +30,8 @@ denominator. Earlier documents and `m29a-*` files preserve development results. 
 result from 2026-10-03 is a separate targeted maintainer packet and has not been
 rerun here. It must not replace either external measurement above.
 
-The same 753-unit packet rises from **114/753 (15.14%)** to **436/753 (57.90%)**:
-322 additional complete methods, with no loss in another module. All ten artifact
+The same 753-unit packet rises from **114/753 (15.14%)** to **601/753 (79.81%)**:
+487 additional complete methods, with no loss in another module. All ten artifact
 probes pass. The complete-method counts by module are:
 
 | Module | Before | After |
@@ -38,14 +39,14 @@ probes pass. The complete-method counts by module are:
 | ImportExcel | 0/2 | 0/2 |
 | InvokeBuild | 0/1 | 0/1 |
 | Microsoft.PowerShell.Archive | 19/21 | 19/21 |
-| Pester | 0/491 | 322/491 |
+| Pester | 0/491 | 403/491 |
 | platyPS | 42/43 | 42/43 |
 | Pode | 0/1 | 0/1 |
 | powershell-yaml | 14/15 | 14/15 |
-| PSFramework | 38/176 | 38/176 |
+| PSFramework | 38/176 | 122/176 |
 | PSScriptAnalyzer | 1/2 | 1/2 |
 | ThreadJob | 0/1 | 0/1 |
-| **Total** | **114/753** | **436/753** |
+| **Total** | **114/753** | **601/753** |
 
 A separate three-test Pester run also passes on the pinned PowerShell 7.6.6 host
 against both the original and generated modules: three passed, zero failed, and
@@ -71,6 +72,29 @@ eager command registration. Duplicate names, typed cmdlet hoisting, executable
 entry rules, dependent authored types, and unsupported function metadata retain
 their existing guards. These two frontier counts are sequential and overlap;
 they are not additive coverage gains.
+
+At the 436/753 checkpoint, Pester retained 169 units and PSFramework retained
+138: together, 307 of the packet's 317 retained units. PSFramework's overlapping
+parameter-type, syntax and parameter-metadata diagnostics affected 68, 53 and 26
+units; they were the sole visible blockers for 55, 41 and 23 respectively.
+The next slice therefore admits types from delivered, authenticated managed
+dependencies and the selected PowerShell syntax-tree and completion types.
+Those changes add 80 Pester methods and 84 PSFramework methods, reaching
+600/753. Native caller transfer and exit admission add one further Pester
+method, bringing the current packet to 601/753.
+
+The Gallery runner builds with CompleteModule resources. At the type-admission
+checkpoint, Pester's default Declared-resource census emits 333/491; its complete
+artifact delivers both managed compatibility variants and emits 402/491. The
+current complete artifact emits 403/491 after caller transfer and exit admission.
+Same-identity variants leave
+type selection to the authored loader and native binder within a non-conflicting
+dependency graph. Distinct assembly owners
+of the same type name remain ambiguous. The compiler reads managed metadata
+without loading dependency code, and binding still depends on the actual module
+initialization and host type identity. SDK syntax-tree parameters retain their
+borrowed AST identity, parent and source extent. These forms require Hybrid
+native binding and do not broaden Strict.
 
 The emitted bodies use the existing PowerShell command and binding implementation for
 pipeline stages, cmdlet invocation, advanced parameters, and
@@ -112,16 +136,36 @@ Execution mode creates fresh projects and requires online package restore;
 verified source payloads alone do not supply that environment. It cannot be
 combined with `-Offline`. Census-only assessment can use a verified offline cache.
 
-The complete external workload is the unchanged ten-function GitHub helper
-library. Its contract covers SHA512 hashing, logging, invocation redaction,
+The unchanged ten-function GitHub helper library passes ten scenarios covering
+SHA512 hashing, logging, invocation redaction,
 deep copying, temporary and reusable directories, noninteractive output, path
 resolution, an HTTP response, and error-record creation. Configuration and time
 are fixed in the importing module; HTTP uses an owned loopback server. All ten
 functions have complete CLR bodies and execute through Analyze/Lock/Restore/
 Build/Test/Pack/Install, with the compiler input withdrawn before observing the
-built and installed artifacts. The other six workloads have no complete
-execution contract and are reported as unattempted. These scenarios do not
-test live GitHub operations, exhaustive branches, or runtime-free execution.
+built and installed artifacts.
+
+Two unchanged installer inputs add complete application contracts through module
+adapters. The PowerShell installer executes all four functions across portable
+installation, isolated user/machine PATH registration and overwrite protection;
+the installed 7.6.6 executable is launched and its bytes verified. Scoop executes
+all 24 functions across installation from pinned Scoop/Main archives, file-lock
+behavior and controlled failure. The observers invoke the delivered roots through
+native script-block module scopes: advanced-script binding for PowerShell and
+Scoop's documented downstream entry mode. They create actual repositories,
+configuration and shims in owned directories. PowerShell and CMD shim dispatch
+are checked with offline help; the PowerShell shim also preserves a failing
+command's exit code. The Unix shim is created and target-checked, with no Unix
+execution claim.
+
+The installer contracts use exact content-pinned ZIP payloads over an owned
+loopback server, real filesystem/process behavior and process-local replacement
+registry hives. Their three scenarios each run on Original/Built/Installed with
+compiler input withdrawn for artifact observation, through the same canonical
+project lifecycle. The four workloads without complete contracts remain
+unattempted. These results do not qualify live GitHub operations, arbitrary
+installer branches, MSI/global installations, direct executable packaging of
+the installers, or runtime-free execution.
 
 ## Semantic and performance limits
 

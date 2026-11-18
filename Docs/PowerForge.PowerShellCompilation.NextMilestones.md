@@ -83,14 +83,18 @@ Independent native-bound functions can also compile beside retained
 document-scope types, and early module-scope discovery preserves authored native
 declaration timing. The [current packet measurements](PowerForge.PowerShellCompilation.Coverage.md)
 separate this emitted-method growth from hosted type initialization and dynamic
-command execution: the fixed Gallery packet grows **114/753 → 436/753 complete
-units (15.14% → 57.90%)**, with all ten artifact import/invocation probes passing.
-The seven-workload assessment executes all ten functions of
-one complete helper-library workload through original, built, and installed
-surfaces; the remaining six workloads have no complete execution contract.
+command execution: the fixed Gallery packet grows **114/753 → 601/753 complete
+units (15.14% → 79.81%)**, with all ten artifact import/invocation probes passing.
+The seven-workload assessment emits **134/196 units** and **134/183 functions**
+and executes three complete workloads through original, built and installed
+surfaces: the GitHub helper library and PowerShell/Scoop installer module adapters.
+Their 38 owned functions pass 16 scenarios; four workloads remain unattempted.
 The pinned PowerShell 7.6.6 and installed Windows PowerShell 5.1 oracle covers
 binding, multi-stage command pipelines, lifecycle, failure/continuation, stop,
 reuse, discovery, and retained type identity for the admitted mixed-module form.
+The same native owner preserves caller-directed unlabeled break/continue and
+function exit conversion, partial output, finally, script termination and host
+recovery. Switch predicates that transfer outside their own bodies remain hosted.
 
 **Boundaries to preserve:** terminal success sinks, unsupported basic-function/common-parameter collisions, unproved error-state observers, broader mutable receivers, and unregistered runtime-free adapters retain their own admission decisions. Record an unsupported shape explicitly rather than routing only its success stream.
 
@@ -103,6 +107,18 @@ reuse, discovery, and retained type identity for the admitted mixed-module form.
 **Outcome:** several safe regions share one module state owner without creating another PowerShell runtime.
 
 The selector admits a maximal approved candidate from each non-overlapping canonical run and preserves independently safe suffixes when a larger candidate fails policy. It does not promise every arbitrary source span. Canonical graph inputs/outputs must match transfer metadata. The guarded prefix remains the fresh-local owner; additional regions cannot invent ownership. Hybrid state stays in the parent module. Strict stateful libraries use a separate runtime-free instance/lifetime contract.
+
+The November 18 extension also qualifies native-bound type consumers in modules
+that deliver authenticated managed dependencies. Public type metadata is read
+without loading the dependency into the compiler. The authored initialization
+and active PowerShell binder retain actual type identity, conversion, custom
+attributes and shared state. Non-conflicting compatibility variants with the same
+assembly identity preserve native loader selection; distinct owners of a type
+name remain ambiguous. Missing runtime initialization preserves its binding
+failure and later recovery from the relocated artifact. Pinned 7.6.6 and Windows
+PowerShell 5.1 oracles compare original and generated artifacts for these forms.
+This does not qualify arbitrary root-module authored types, unresolved type
+accelerators, assemblies with native imports, or runtime-free dependency binding.
 
 **Evidence:** the same-function `Get-ObjectEnumValues` two-region workflow; synthetic four-scalar-plus-factory region composition; full pinned registry and saved-state modules; and a stateful reservation library consumed by ordinary C#. Tests cover two runspaces, nesting/reentrancy, retained mutation, initialization failure, stop/cancellation, reuse, removal/reimport, independent instances, reset, concurrency, and disposal within their selected shapes.
 
@@ -184,6 +200,18 @@ An M29 standalone probe exposed a separate Windows long-path robustness gap: pro
 ## Milestone 29a — Make ordinary PowerShell forms useful
 
 **Status: Partial; complete ordinary workflows are the active slice.** The earlier Windows launcher/diagnostic and Unix packaging corrections are integrated, with their Full and affected-case evidence kept at the recorded candidates. The current portfolio still requires one stable candidate and the remaining whole-artifact qualification. M29 proved bounded real-workload gains, but that does not mean a familiar cmdlet name works in every form. The recorded one-function Hybrid build showed that the module quickstart's `Get-Date -Format yyyy` sits inside an emitted CLR method with a hosted command region. Literal-format binding makes a qualified call, or an unqualified host-free Strict call, runtime-free. In a Hybrid PowerShell host, an unqualified command still respects aliases, functions, imports, and session command precedence; its name alone cannot authorize a direct CLR rewrite.
+
+The November 18 external packet qualifies three of seven complete workloads:
+the ten-function GitHub helper library, four-function PowerShell installer and
+24-function Scoop installer. All owned functions emit complete CLR bodies, with
+16 scenarios across Original/Built/Installed and compiler input withdrawn during
+artifact observation. The installer adapters preserve native advanced-script or
+documented downstream entry binding. Exact payloads use loopback transport;
+real extraction, installed PowerShell execution, Windows shim dispatch, file
+locks, controlled failure and process-local registry replacements bound the
+qualified application paths. Four workloads have no complete contract. This
+does not qualify global installations, MSI branches, Unix shim execution,
+arbitrary application entry forms or runtime-free Hybrid behavior.
 
 The [observed support-gap inventory](PowerForge.PowerShellCompilation.SupportGaps.md) separates the final pinned module census, concrete blocked forms, and deliberate hosted boundaries. It is the starting evidence for this milestone; its affected-unit totals are not promised unlock counts.
 

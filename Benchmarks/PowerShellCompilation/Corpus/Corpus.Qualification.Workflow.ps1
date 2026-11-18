@@ -480,6 +480,10 @@ function Invoke-WholeWorkflowQualification {
             throw 'net472 workflow observation requires Windows PowerShell on Windows.'
         }
         'powershell.exe'
+    } elseif ($Packet.semanticProfile -eq 'PowerForge.Oracle.PowerShell/7.6' -and $env:POWERFORGE_PWSH76_PATH) {
+        $pinnedHost = [IO.Path]::GetFullPath($env:POWERFORGE_PWSH76_PATH)
+        if (-not (Test-Path -LiteralPath $pinnedHost -PathType Leaf)) { throw 'The configured pinned semantic host was not found.' }
+        $pinnedHost
     } else { 'pwsh' }
     $original = Invoke-WorkflowObserver $Entry $observer $sourcePath 'Original' $scenarioRoot $evidenceRoot $hostExecutable
     Assert-WorkflowSourceIdentities $Entry $inputRoot
@@ -500,6 +504,12 @@ function Invoke-WholeWorkflowQualification {
         }
         $artifact | Add-Member -NotePropertyName testArguments -NotePropertyValue @(Get-WorkflowProperty $testInvocation 'testArguments' @()) -Force
         $artifact | Add-Member -NotePropertyName testWorkingDirectory -NotePropertyValue (Get-WorkflowProperty $testInvocation 'testWorkingDirectory') -Force
+        $moduleTest = Get-WorkflowProperty $testInvocation 'moduleTest'
+        if ($null -ne $moduleTest) {
+            if ($kind -ne 'dll') { throw 'A module acceptance script requires a module workflow.' }
+            $project.schemaVersion = 2
+            $artifact | Add-Member -NotePropertyName moduleTest -NotePropertyValue $moduleTest -Force
+        }
     }
     Write-Utf8Json -Path $projectPath -Value $project
     $steps = [ordered]@{}

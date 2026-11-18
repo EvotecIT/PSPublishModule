@@ -143,10 +143,15 @@ if ($Scope -in @('All', 'OfflineMode')) {
             -CliAssemblyPath $missingCli -WorkspacePath $offlineRoot -Offline -AllowExternalExecution
     } 'For an existing retained project, run normal project restore first'
     if (Test-Path -LiteralPath $offlineRoot) { throw 'Public Offline refusal created a workspace.' }
-    Assert-RejectedContract 'command-only qualification preserves Offline admission' {
-        & (Join-Path $PSScriptRoot 'Invoke-ExternalQualification.ps1') -PacketPath (Join-Path $PSScriptRoot 'external-assessment.net10.json') `
+    $commandPacket = Copy-ContractValue $workflowPacket
+    $commandPacket.workloads[0].qualification.kind = 'HybridModuleCommand'
+    $commandPacketPath = Join-Path ([IO.Path]::GetFullPath($WorkspacePath)) ('command-packet-' + [guid]::NewGuid().ToString('N') + '.json')
+    Write-Utf8Json -Path $commandPacketPath -Value $commandPacket
+    try { Assert-RejectedContract 'command-only qualification preserves Offline admission' {
+        & (Join-Path $PSScriptRoot 'Invoke-ExternalQualification.ps1') -PacketPath $commandPacketPath `
             -CliAssemblyPath $missingCli -WorkspacePath $offlineRoot -Offline -AllowExternalExecution
-    } 'Build the PowerForge CLI first'
+    } 'Build the PowerForge CLI first' }
+    finally { Remove-Item -LiteralPath $commandPacketPath -Force }
     if ($Scope -eq 'OfflineMode') {
         $result=[ordered]@{schemaVersion=1;passed=$true;checks=@($checked);checkCount=$checked.Count;scope='Offline mode admission and early refusal only; no CLI, SDK, source execution, acquisition or network';cliInvocations=$script:offlineCliInvocations}
         if($EvidencePath) {Write-Utf8Json -Path $EvidencePath -Value $result}

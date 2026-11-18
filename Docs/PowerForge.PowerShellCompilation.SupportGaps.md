@@ -12,18 +12,38 @@ existing admission rules. This extends the existing native binding, cmdlet,
 pipeline, and `begin`/`process`/`end` paths into realistic mixed modules. It does
 not add general authored-class or pipeline support to Strict.
 
-The fixed Gallery packet emits **436/753 complete units (57.90%)**, up from
-114/753 (15.14%). Pester rises from 0/491 to 322/491; the other nine modules keep
-their previous complete-method counts. All ten Hybrid artifacts build, import,
-and pass their invocation probes. The packet still retains 317 source units;
+The fixed Gallery packet emits **601/753 complete units (79.81%)**, up from
+114/753 (15.14%). Pester rises from 0/491 to 403/491 and PSFramework from 38/176
+to 122/176; the other eight modules keep their previous complete-method counts.
+All ten Hybrid artifacts build, import,
+and pass their invocation probes. The packet still retains 152 source units;
 these results do not establish complete execution of the ten modules.
 
-The seven-workload packet still emits 130/196 units and 130/183 functions. It now
-executes one complete workload: all ten GitHub helper functions pass ten scenarios
-on original, built, and installed surfaces, with compiler input withdrawn for
-artifact observation. Fixed configuration/time and loopback HTTP keep external
-effects bounded. The six workloads without complete execution contracts remain
-unattempted; live GitHub behavior and exhaustive branches are not tested.
+Native-bound Hybrid functions can use public, non-nested, non-generic types
+from authenticated delivered managed DLLs, including supported one-dimensional
+arrays and closed containers. Actual loading, conversion, attributes and type
+identity remain with PowerShell. Same-assembly-identity compatibility variants
+can share a type name within a non-conflicting dependency graph; distinct assembly owners remain ambiguous. Assemblies
+with native imports, unresolved type accelerators, nested/open generic types and
+unsupported constrained accesses keep their existing guards. Borrowed `Ast` and
+`FunctionDefinitionAst` parameters and `CompletionResultType` use native binding.
+Unlabeled caller-directed break/continue also use the host's flow-control owner.
+Admitted function `exit` statements use the active SDK's exit conversion and
+script termination. Switch predicates that transfer outside their own body stay
+hosted. None of these forms adds general dependency-type or caller-transfer
+support to Strict.
+
+The seven-workload packet emits 134/196 units and 134/183 functions and executes
+three complete workloads: ten GitHub helper functions in ten scenarios, four
+PowerShell installer functions in three scenarios and 24 Scoop installer functions
+in three scenarios. Original, built and installed surfaces pass with compiler
+input withdrawn for artifact observation. The installers use native module
+adapters, verified payloads over loopback HTTP, actual extraction/process behavior
+and process-local registry replacements. The PowerShell and CMD shims execute
+offline help; the Unix shim is only created and target-checked. The four workloads
+without complete contracts remain unattempted. Live GitHub behavior, exhaustive
+branches, MSI/global installation and direct installer executable packaging are
+not qualified.
 
 Historical inventory: 2026-10-11. This section preserves the October 3 retained-function snapshot and earlier M29/M29a discovery and qualification checkpoints. The compiler continuation is integrated in main; the five-module historical census has not been rerun; the external and public packets use the dated report above. The [next milestones](PowerForge.PowerShellCompilation.NextMilestones.md#current-continuation-october-11-audit) own current work and exit gates; the [assessment](PowerForge.PowerShellCompilation.Assessment.md) owns execution evidence.
 

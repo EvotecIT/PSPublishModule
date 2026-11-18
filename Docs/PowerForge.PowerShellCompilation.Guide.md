@@ -17,6 +17,10 @@ manifest shows which methods compiled and where the artifact relies on PowerShel
 | Cmdlet calls and multi-stage pipelines in admitted Hybrid functions | Generally unsupported in Strict | Complete emitted method bodies use PowerShell command resolution, binding, streams, and pipeline execution |
 | Advanced function parameters and `begin`/`process`/`end` | No general runtime-free binding support | Native-bound Hybrid functions preserve the host's parameter binder and lifecycle; admission still checks each body |
 | Functions beside authored classes | No general runtime-free authored-class support | Hybrid retains type initialization; unsupported direct type annotations and expressions stay hosted, while runtime type lookup and calls to retained helpers can remain inside emitted bodies |
+| Delivered managed dependency types in parameters, casts and metadata | No general dependency-type binding support | Hybrid reads authenticated delivered DLL metadata; PowerShell owns actual loading, type identity, conversion, attributes and validation |
+| `Ast`, `FunctionDefinitionAst` and `CompletionResultType` parameters | No general runtime-free host-type support | Native Hybrid binding preserves the host's syntax-tree references and completion enum values |
+| Unlabeled `break` and `continue` targeting a caller's loop | No general runtime-free caller transfer | Native Hybrid functions use PowerShell flow control, including finally and caller-loop behavior |
+| `exit` in admitted Hybrid functions | Unsupported in Strict | The active PowerShell SDK owns exit conversion and script termination; caller-transfer predicates remain hosted |
 | Providers, remoting, dynamic script blocks | No general Strict support | Hybrid or Package uses the supported hosted paths; provider or service behavior needs separate execution proof |
 | Dynamic commands, `Invoke-Expression`, authored classes, WPF | No general runtime-free support | Retained source or explicitly supported hosted paths |
 
@@ -63,15 +67,17 @@ for repeatable dependency review and delivery.
 The [coverage report](PowerForge.PowerShellCompilation.Coverage.md) records the
 2026-11-18 reruns of both fixed packets. It distinguishes complete emitted units
 from retained source and smaller compiled regions. The seven-workload external
-assessment emits **130/196 units (66.33%)** and **130/183 functions (71.04%)**,
-with zero parser errors. **One of seven complete workloads passes**: all ten
-GitHub helper functions execute in ten scenarios on original, built, and installed
-surfaces. Configuration and time are fixed at the module boundary and HTTP uses
-a loopback response; live GitHub operations and the other six workloads remain
-untested.
-The public Gallery packet emits **436/753 (57.90%)** of its units as complete CLR
-methods, up from 114/753 (15.14%). Pester supplies the 322 additional methods;
-the other modules lose none. All ten Hybrid artifacts pass the checked-in
+assessment emits **134/196 units (68.37%)** and **134/183 functions (73.22%)**,
+with zero parser errors. **Three of seven complete workloads pass**: the ten-function
+GitHub helper library and the four-function PowerShell and twenty-four-function
+Scoop installers execute 16 scenarios on original, built, and installed surfaces.
+The installers use native module adapters, pinned payloads, owned directories and
+process-local registry replacements; PowerShell and CMD shim dispatch are checked.
+Live services, global installations, exhaustive branches and the other four
+workloads remain unqualified.
+The public Gallery packet emits **601/753 (79.81%)** of its units as complete CLR
+methods, up from 114/753 (15.14%). Pester emits 403/491 and PSFramework emits
+122/176; the other modules lose none. All ten Hybrid artifacts pass the checked-in
 invocation probes.
 Neither packet measures the percentage of the PowerShell language supported.
 The maintainer's five-module packet is separate, targeted historical evidence.
