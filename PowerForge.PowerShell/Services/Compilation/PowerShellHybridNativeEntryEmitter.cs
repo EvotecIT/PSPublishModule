@@ -20,6 +20,7 @@ internal static class PowerShellHybridNativeEntryEmitter
             sourceHash = BitConverter.ToString(sha.ComputeHash(Encoding.UTF8.GetBytes(File.ReadAllText(sourcePath))))
                 .Replace("-", string.Empty).ToLowerInvariant();
         var builder = new StringBuilder("#nullable enable\nnamespace " + NamespaceName + ";\npublic static class " + TypeName + "\n{\n")
+            .AppendLine(string.Join(Environment.NewLine, PowerShellCSharpSourceDocumentPool.Declarations(new[] { method })))
             .AppendLine(method.Source)
             .AppendLine("    public static global::System.Management.Automation.ExternalScriptInfo Create(global::System.Management.Automation.Runspaces.Runspace runspace, string path)")
             .AppendLine("    {")

@@ -1,10 +1,67 @@
 {
   "schemaVersion": 2,
   "packetId": "powerforge-external-powershell-assessment-net10-v1",
-  "packetSha256": "7e3f29e89862b3e34fcffd029762f468dfaf50d840763d544083d72c6bd926e7",
-  "recordedOn": "2026-11-17",
+  "packetSha256": "5116711446cc8ccd6f42588e77921675aeb9026a292809cd3b0a352c03887887",
+  "recordedOn": "2026-11-18",
   "semanticProfile": "PowerForge.Oracle.PowerShell/7.6",
   "targetFramework": "net10.0",
+  "execution": {
+    "requested": true,
+    "workloadsTotal": 7,
+    "workloadsAttempted": 1,
+    "workloadsPassed": 1,
+    "workloads": [
+      {
+        "id": "locksmith",
+        "attempted": false,
+        "succeeded": false,
+        "reason": "No complete owned-function and execution-scenario contract is declared."
+      },
+      {
+        "id": "locksmith2",
+        "attempted": false,
+        "succeeded": false,
+        "reason": "No complete owned-function and execution-scenario contract is declared."
+      },
+      {
+        "id": "get-windows-autopilot-info",
+        "attempted": false,
+        "succeeded": false,
+        "reason": "No complete owned-function and execution-scenario contract is declared."
+      },
+      {
+        "id": "getbios",
+        "attempted": false,
+        "succeeded": false,
+        "reason": "No complete owned-function and execution-scenario contract is declared."
+      },
+      {
+        "id": "powershell-install-script",
+        "attempted": false,
+        "succeeded": false,
+        "reason": "No complete owned-function and execution-scenario contract is declared."
+      },
+      {
+        "id": "scoop-install-script",
+        "attempted": false,
+        "succeeded": false,
+        "reason": "No complete owned-function and execution-scenario contract is declared."
+      },
+      {
+        "id": "github-api-client-helpers",
+        "attempted": true,
+        "succeeded": true,
+        "completeWorkloadExecution": true,
+        "scenarioCount": 10,
+        "surfaces": [
+          "Original",
+          "Built",
+          "Installed"
+        ],
+        "functions": 10
+      }
+    ]
+  },
   "workloads": [
     {
       "id": "locksmith",

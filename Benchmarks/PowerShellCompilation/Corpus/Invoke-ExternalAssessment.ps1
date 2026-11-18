@@ -11,6 +11,7 @@ param(
     [long] $MaxArchiveTotalBytes = 1073741824,
     [double] $MaxArchiveCompressionRatio = 200.0,
     [switch] $Offline,
+    [switch] $ExecuteWorkloads,
     [switch] $RefreshBaseline,
     [switch] $KeepRunArtifacts
 )
@@ -18,6 +19,10 @@ param(
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 . (Join-Path $PSScriptRoot 'Corpus.Runner.Common.ps1')
+
+if ($ExecuteWorkloads -and $Offline) {
+    throw 'Complete workload execution creates fresh projects and requires authenticated online restore; omit -Offline.'
+}
 
 function Get-VerifiedPayload {
     param([object] $Entry, [string] $PayloadCache, [switch] $OfflineMode)
@@ -70,7 +75,7 @@ function Invoke-Census {
 }
 
 function ConvertTo-Baseline {
-    param([object] $Packet, [string] $PacketSha256, [object[]] $Results)
+    param([object] $Packet, [string] $PacketSha256, [object[]] $Results, [object[]] $Executions = @())
 
     return [ordered]@{
         schemaVersion = 2
@@ -79,6 +84,13 @@ function ConvertTo-Baseline {
         recordedOn = [DateTimeOffset]::UtcNow.ToString('yyyy-MM-dd')
         semanticProfile = $Packet.semanticProfile
         targetFramework = $Packet.targetFramework
+        execution = [ordered]@{
+            requested = [bool] $ExecuteWorkloads
+            workloadsTotal = $Results.Count
+            workloadsAttempted = @($Executions | Where-Object attempted).Count
+            workloadsPassed = @($Executions | Where-Object { $_.attempted -and $_.succeeded }).Count
+            workloads = @($Executions)
+        }
         workloads = @($Results | Where-Object succeeded | ForEach-Object {
             [ordered]@{
                 id = $_.id
@@ -254,6 +266,7 @@ $EvidencePath = [IO.Path]::GetFullPath($EvidencePath)
 $packetSha256 = (Get-FileHash -LiteralPath $PacketPath -Algorithm SHA256).Hash.ToLowerInvariant()
 $results = [Collections.Generic.List[object]]::new()
 $frontierRows = [Collections.Generic.List[object]]::new()
+$sourceRootsById = @{}
 
 try {
     $selected = @($packet.workloads)
@@ -265,6 +278,7 @@ try {
         try {
             $payloadPath = Get-VerifiedPayload -Entry $entry -PayloadCache $payloadCache -OfflineMode:$Offline
             $sourceRoot = Get-AssessmentSourceRoot -Entry $entry -PayloadPath $payloadPath -ExtractCache $extractCache -ArchiveEntryLimit $MaxArchiveEntries -ArchiveEntryByteLimit $MaxArchiveEntryBytes -ArchiveTotalByteLimit $MaxArchiveTotalBytes -ArchiveCompressionRatioLimit $MaxArchiveCompressionRatio
+            $sourceRootsById[$entry.id] = $sourceRoot
             $entryPoint = Assert-ContainedPath -Root $sourceRoot -Path (Join-Path $sourceRoot $entry.entryPoint) -Label 'Assessment entry point'
             if (-not (Test-Path -LiteralPath $entryPoint -PathType Leaf)) { throw "Assessment entry point does not exist: $entryPoint" }
             $census = Invoke-Census -EntryPoint $entryPoint -TargetFramework $packet.targetFramework -WorkingDirectory $runRoot
@@ -336,11 +350,46 @@ try {
         }
     }
 
+    $executions = [Collections.Generic.List[object]]::new()
+    if ($ExecuteWorkloads) {
+        foreach ($entry in $selected) {
+            if ($null -eq $entry.PSObject.Properties['qualification'] -or
+                $entry.qualification.kind -notin @('HybridModuleWorkflow', 'HybridScriptApplication') -or
+                (Get-CorpusProperty $entry.qualification 'completeFunctionInventory' $false) -ne $true) {
+                $executions.Add([ordered]@{ id = $entry.id; attempted = $false; succeeded = $false;
+                    reason = 'No complete owned-function and execution-scenario contract is declared.' })
+                continue
+            }
+            $executionPath = Join-Path $WorkspacePath ("executions/$runId/$($entry.id).json")
+            try {
+                $LASTEXITCODE = 0
+                & (Join-Path $PSScriptRoot 'Invoke-ExternalQualification.ps1') -PacketPath $PacketPath `
+                    -CliAssemblyPath $CliAssemblyPath -SourceRoot $sourceRootsById[$entry.id] `
+                    -WorkspacePath (Join-Path $WorkspacePath 'qualification') -EvidencePath $executionPath `
+                    -WorkloadId $entry.id -AllowExternalExecution
+                if ($LASTEXITCODE -ne 0) { throw "Complete workload execution exited with $LASTEXITCODE." }
+                $execution = Get-Content -LiteralPath $executionPath -Raw | ConvertFrom-Json
+                $qualified = @($execution.qualifications | Where-Object id -EQ $entry.id)
+                if ($qualified.Count -ne 1 -or -not $qualified[0].succeeded -or -not $qualified[0].completeWorkloadExecution) {
+                    throw 'The complete workload did not pass its ownership, lifecycle and execution contract.'
+                }
+                $executions.Add([ordered]@{ id = $entry.id; attempted = $true; succeeded = $true;
+                    completeWorkloadExecution = $true; scenarioCount = $qualified[0].scenarioCount;
+                    surfaces = $qualified[0].scenarioSurfaces; functions = @($qualified[0].compiledOwnedFunctions).Count })
+            } catch {
+                $executions.Add([ordered]@{ id = $entry.id; attempted = $true; succeeded = $false; error = $_.Exception.Message })
+            }
+        }
+    }
     if ($RefreshBaseline) {
         if ($results.Count -ne @($packet.workloads).Count -or @($results | Where-Object { -not $_.succeeded }).Count -gt 0) {
             throw 'A baseline refresh requires every declared workload to complete successfully.'
         }
-        Write-Utf8Json -Path $BaselinePath -Value (ConvertTo-Baseline -Packet $packet -PacketSha256 $packetSha256 -Results @($results))
+        if ($ExecuteWorkloads -and (@($executions | Where-Object attempted).Count -eq 0 -or
+            @($executions | Where-Object { $_.attempted -and -not $_.succeeded }).Count -gt 0)) {
+            throw 'A baseline refresh with execution requires at least one complete workload and no failed attempted workloads.'
+        }
+        Write-Utf8Json -Path $BaselinePath -Value (ConvertTo-Baseline -Packet $packet -PacketSha256 $packetSha256 -Results @($results) -Executions @($executions))
     }
     if (-not (Test-Path -LiteralPath $BaselinePath -PathType Leaf)) { throw "Assessment baseline does not exist: $BaselinePath" }
     $baseline = Get-Content -LiteralPath $BaselinePath -Raw | ConvertFrom-Json
@@ -401,6 +450,7 @@ try {
             dotnet = (& dotnet --version)
         }
         workloads = @($results)
+        executions = @($executions)
         crossWorkloadFunctionFrontier = $crossWorkloadFrontier
         crossWorkloadRetainedRegionFrontier = $crossWorkloadRetainedRegionFrontier
         crossWorkloadRegionOpportunityFrontier = $crossWorkloadRegionOpportunityFrontier
@@ -423,7 +473,9 @@ try {
             parseErrorFiles = $parseErrorFiles
             acquisitionOrAnalysisFailures = @($results | Where-Object { -not $_.succeeded }).Count
             regressions = $regressions.Count
-            completeWorkloadExecutions = 0
+            completeWorkloadExecutions = @($executions | Where-Object { $_.attempted -and $_.succeeded }).Count
+            workloadExecutionsAttempted = @($executions | Where-Object attempted).Count
+            workloadExecutionFailures = @($executions | Where-Object { $_.attempted -and -not $_.succeeded }).Count
             powerShellLanguageCoveragePercentage = $null
         }
         interpretation = 'Assessment success means pinned acquisition and post-emission census completed without regression. It does not mean the workload compiled completely or executed without PowerShell.'
@@ -431,7 +483,12 @@ try {
     Write-Utf8Json -Path $EvidencePath -Value $evidence
     Write-Information "Evidence: $EvidencePath" -InformationAction Continue
     Write-Information "Assessed: $($successful.Count)/$($results.Count); emitted functions: $emittedFunctions/$totalFunctions; emitted units: $emittedUnits/$totalUnits; promoted typed regions: $promotedTypedRegions; retained candidates: $rejectedTypedRegions/$regionCandidates; analysis-only opportunities outside terminal candidates: $nonTerminalRegionOpportunities/$regionOpportunities; regressions: $($regressions.Count)" -InformationAction Continue
-    if ($evidence.summary.acquisitionOrAnalysisFailures -gt 0 -or $regressions.Count -gt 0) { exit 1 }
+    if ($ExecuteWorkloads) {
+        Write-Information "Complete workloads executed: $($evidence.summary.completeWorkloadExecutions)/$($results.Count); attempted: $($evidence.summary.workloadExecutionsAttempted); failed: $($evidence.summary.workloadExecutionFailures)" -InformationAction Continue
+    }
+    if ($evidence.summary.acquisitionOrAnalysisFailures -gt 0 -or $regressions.Count -gt 0 -or
+        $evidence.summary.workloadExecutionFailures -gt 0 -or
+        ($ExecuteWorkloads -and $evidence.summary.workloadExecutionsAttempted -eq 0)) { exit 1 }
 } finally {
     if (-not $KeepRunArtifacts -and (Test-Path -LiteralPath $runRoot)) {
         Assert-ContainedPath -Root $WorkspacePath -Path $runRoot -Label 'Assessment run cleanup' | Out-Null

@@ -343,7 +343,7 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
         PowerShellCompilationPathSafety.EnsureProcessLaunchPaths(host, Path.GetDirectoryName(manifestPath)!);
         const string script = "$ErrorActionPreference = 'Stop'; $ProgressPreference = 'SilentlyContinue'; " +
                               "$env:PSModulePath = [IO.Path]::Combine($PSHOME, 'Modules'); " +
-                              "Import-Module -Name $env:POWERFORGE_MODULE_TEST_PATH -Force -ErrorAction Stop; 'ok'";
+                              "Import-Module -Name $env:POWERFORGE_MODULE_TEST_PATH -Force -DisableNameChecking -ErrorAction Stop; 'ok'";
         var encodedCommand = Convert.ToBase64String(Encoding.Unicode.GetBytes(script));
         var run = new ProcessRunner().RunAsync(new ProcessRunRequest(
             host,

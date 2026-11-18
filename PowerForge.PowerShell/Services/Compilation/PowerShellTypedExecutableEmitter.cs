@@ -42,6 +42,7 @@ internal static class PowerShellTypedExecutableEmitter
             .AppendLine()
             .AppendLine("public static class " + TypeName)
             .AppendLine("{")
+            .AppendLine(string.Join(Environment.NewLine, PowerShellCSharpSourceDocumentPool.Declarations(compilation.LocalMethods.Append(method))))
             .AppendLine(string.Join(Environment.NewLine, compilation.LocalMethods.Select(static local => local.Source)))
             .AppendLine(method.Source)
             .AppendLine("}")

@@ -231,7 +231,7 @@ try {
             passed = @($results | Where-Object succeeded).Count
             total = $results.Count
             emittedCommandsInvoked = @($results | Where-Object { $_.succeeded -and $_.emittedClrMethod }).Count
-            completeWorkloadExecutions = 0
+            completeWorkloadExecutions = @($results | Where-Object { $_.succeeded -and $_.completeWorkloadExecution }).Count
             wholeArtifactWorkflowsQualified = @($results | Where-Object { $_.succeeded -and $_.wholeArtifactWorkflowQualified }).Count
             declaredWorkflowScenarios = [int] (($results | Where-Object { $_.succeeded -and $_.wholeArtifactWorkflowQualified } |
                 ForEach-Object { $_.scenarioCount } | Measure-Object -Sum).Sum)

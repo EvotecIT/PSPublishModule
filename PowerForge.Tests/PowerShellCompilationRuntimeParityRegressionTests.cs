@@ -264,16 +264,20 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         Assert.Equal(1, result.Manifest!.CompiledMethods);
         Assert.Equal(1, result.Manifest.RuntimeFallbackUnits);
-        var escapedPath = result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal);
-        var run = Run(
-            "pwsh",
-            "-NoProfile",
-            "-NonInteractive",
-            "-Command",
-            $"$importOutput = @(& {{ Import-Module -Name '{escapedPath}' -Force }} 2>$null); " +
-            "\"import=$($importOutput.Count);later=$([bool](Get-Command Get-Later -ErrorAction SilentlyContinue))\"");
-        Assert.Equal(0, run.ExitCode);
-        Assert.Equal("import=0;later=False", run.StandardOutput.Trim());
+        string Observe(string modulePath)
+        {
+            var escapedPath = modulePath.Replace("'", "''", StringComparison.Ordinal);
+            var run = Run("pwsh", "-NoProfile", "-NonInteractive", "-Command",
+                $"$importOutput = @(& {{ Import-Module -Name '{escapedPath}' -Force }} 2>$null); " +
+                "$missing = @($Error | Where-Object { $_.FullyQualifiedErrorId -like 'CommandNotFoundException*' }).Count; " +
+                "\"import=$($importOutput.Count);missing=$missing;later=$([bool](Get-Command Get-Later -ErrorAction SilentlyContinue));value=$(Get-Later)\"");
+            Assert.Equal(0, run.ExitCode);
+            Assert.True(string.IsNullOrWhiteSpace(run.StandardError), run.StandardError);
+            return run.StandardOutput.Trim();
+        }
+        var original = Observe(fixture.ScriptPath);
+        Assert.Equal("import=0;missing=1;later=True;value=7", original);
+        Assert.Equal(original, Observe(result.ArtifactPath!));
     }
 
     private static string RuntimeParityRunModuleProof(string modulePath, string command)

@@ -1,8 +1,8 @@
-# PowerShell compiler measurements: 2026-11-17
+# PowerShell compiler measurements: 2026-11-18
 
 These results describe two fixed external packets on Windows x64 with SDK
-10.0.404. The public module probes use PowerShell 7.6.9. The external
-assessment runner used PowerShell 7.6.10. The semantic oracle uses the pinned
+10.0.404. The public module probes and external assessment runner use
+PowerShell 7.6.9. The semantic oracle uses the pinned
 PowerShell 7.6.6 package.
 
 An emitted unit is a complete CLR method in the final output. A smaller compiled
@@ -12,12 +12,12 @@ runtime-free execution.
 
 | Packet | Complete emitted units | Complete emitted functions | Execution proof |
 | --- | ---: | ---: | --- |
-| Ten public Gallery modules | 114/753 (15.14%) | Not measured separately | 10/10 Hybrid artifacts built, imported, and passed an invocation probe |
-| Seven external workloads | 130/196 (66.33%) | 130/183 (71.04%) | Acquisition and census only; zero complete-workload executions |
+| Ten public Gallery modules | 436/753 (57.90%) | Not measured separately | 10/10 Hybrid artifacts built, imported, and passed an invocation probe |
+| Seven external workloads | 130/196 (66.33%) | 130/183 (71.04%) | 1/7 complete workloads passed; ten helper functions in ten scenarios on original, built, and installed surfaces |
 
 The external assessment discovers 155 source files, with zero parser errors and
 zero acquisition/analysis failures. It records five promoted regions in retained
-functions. The public packet records 639 retained source units, 732 runtime-routed
+functions. The public packet records 317 retained source units, 626 runtime-routed
 units, and zero promoted regions. Those probes exercise Hybrid artifacts in
 PowerShell. The ratios describe the measured packets and their discovered units.
 
@@ -28,6 +28,58 @@ compiler discovers 753 for the same packet, so each ratio uses its own census
 denominator. Earlier documents and `m29a-*` files preserve development results. In particular, the five-module **545/565**
 result from 2026-10-03 is a separate targeted maintainer packet and has not been
 rerun here. It must not replace either external measurement above.
+
+The same 753-unit packet rises from **114/753 (15.14%)** to **436/753 (57.90%)**:
+322 additional complete methods, with no loss in another module. All ten artifact
+probes pass. The complete-method counts by module are:
+
+| Module | Before | After |
+| --- | ---: | ---: |
+| ImportExcel | 0/2 | 0/2 |
+| InvokeBuild | 0/1 | 0/1 |
+| Microsoft.PowerShell.Archive | 19/21 | 19/21 |
+| Pester | 0/491 | 322/491 |
+| platyPS | 42/43 | 42/43 |
+| Pode | 0/1 | 0/1 |
+| powershell-yaml | 14/15 | 14/15 |
+| PSFramework | 38/176 | 38/176 |
+| PSScriptAnalyzer | 1/2 | 1/2 |
+| ThreadJob | 0/1 | 0/1 |
+| **Total** | **114/753** | **436/753** |
+
+A separate three-test Pester run also passes on the pinned PowerShell 7.6.6 host
+against both the original and generated modules: three passed, zero failed, and
+zero skipped on each surface. It exercises pipeline assertions, object-property
+assertions, and an expected throwing script block. It does not execute every
+emitted Pester method or replace the fixed packet's invocation probes.
+
+## Why these forms were selected
+
+The starting census reproduced 114/753 complete methods. Pester accounted for
+491 units and emitted none. Its document-wide `source.type-definition`
+diagnostic affected all 491 units and was the sole visible blocker for 331.
+PSFramework emitted 38/176; its overlapping type, syntax, and parameter-metadata
+boundaries affected 68, 53, and 26 units respectively. The larger first gain was
+therefore independent functions sharing a file with a hosted type, rather than
+another isolated operator.
+
+Removing that file-wide blocker exposed a shaping boundary: early command
+discovery kept 475 Pester units hosted, with `function.graph` the sole remaining
+visible blocker for 320. Native-bound Hybrid functions install at their authored
+declaration statement, so those methods can preserve discovery timing without
+eager command registration. Duplicate names, typed cmdlet hoisting, executable
+entry rules, dependent authored types, and unsupported function metadata retain
+their existing guards. These two frontier counts are sequential and overlap;
+they are not additive coverage gains.
+
+The emitted bodies use the existing PowerShell command and binding implementation for
+pipeline stages, cmdlet invocation, advanced parameters, and
+`begin`/`process`/`end`. A pinned 7.6.6 and installed 5.1 oracle compares original
+and generated modules for zero/one/many records, by-value and by-property binding,
+aliases and abbreviated names, validation errors and continuation, verbose
+records, downstream stop and finally, repeated invocation, early discovery, and
+retained class identity. General Strict pipelines and runtime-free authored
+classes remain unsupported.
 
 ## Reproduce the measurements
 
@@ -43,16 +95,28 @@ $scratch = Join-Path ([IO.Path]::GetTempPath()) 'PowerForgeCoverage'
     -EvidencePath "$scratch/public.json" -PerformancePolicy RecordOnly -RefreshBaseline
 ./Benchmarks/PowerShellCompilation/Corpus/Invoke-ExternalAssessment.ps1 `
     -CliAssemblyPath $cli -WorkspacePath "$scratch/external" `
-    -EvidencePath "$scratch/external.json" -RefreshBaseline
+    -EvidencePath "$scratch/external.json" -ExecuteWorkloads -RefreshBaseline
 ```
 
 Both commands acquire exact hashes from the checked-in packets. Public module
-probes execute acquired source in clean child processes; external assessment
-never imports or executes its acquired workloads. `-RefreshBaseline` deliberately
+probes execute acquired source in clean child processes. External assessment
+with `-ExecuteWorkloads` runs the reviewed complete-workload contracts; without
+that option it performs acquisition and census only. `-RefreshBaseline` deliberately
 records new measured counts. Omit it for comparison against the committed counts.
 The public refresh requires the complete module packet on the baseline host.
 It keeps the comparison to the previous Hybrid results and saves the run report
 before replacing the Hybrid baseline. The Strict timing budgets remain in place.
+
+The complete external workload is the unchanged ten-function GitHub helper
+library. Its contract covers SHA512 hashing, logging, invocation redaction,
+deep copying, temporary and reusable directories, noninteractive output, path
+resolution, an HTTP response, and error-record creation. Configuration and time
+are fixed in the importing module; HTTP uses an owned loopback server. All ten
+functions have complete CLR bodies and execute through Analyze/Lock/Restore/
+Build/Test/Pack/Install, with the compiler input withdrawn before observing the
+built and installed artifacts. The other six workloads have no complete
+execution contract and are reported as unattempted. These scenarios do not
+test live GitHub operations, exhaustive branches, or runtime-free execution.
 
 ## Semantic and performance limits
 

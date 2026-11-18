@@ -14,7 +14,10 @@ manifest shows which methods compiled and where the artifact relies on PowerShel
 | `if`, `for`, `while`, `do`, array `foreach`, `return` | Supported within the typed rules | Dynamic enumeration and labeled loop control |
 | Local function calls | Supported when the complete reachable code compiles | An unsupported reachable function prevents a Strict build |
 | Selected CLR members, typed exceptions, bounded `try`/`catch`/`finally` | Supported where analysis proves the contract | Runtime type lookup and unsupported exception behavior |
-| Cmdlets, providers, remoting, general pipelines, script blocks | Generally unsupported in Strict | Hybrid or Package keeps these operations hosted |
+| Cmdlet calls and multi-stage pipelines in admitted Hybrid functions | Generally unsupported in Strict | Complete emitted method bodies use PowerShell command resolution, binding, streams, and pipeline execution |
+| Advanced function parameters and `begin`/`process`/`end` | No general runtime-free binding support | Native-bound Hybrid functions preserve the host's parameter binder and lifecycle; admission still checks each body |
+| Independent functions beside authored classes | No general runtime-free authored-class support | Hybrid retains document-scope type initialization; independent function bodies can compile while type-dependent functions remain hosted |
+| Providers, remoting, dynamic script blocks | No general Strict support | Hybrid or Package uses the supported hosted paths; provider or service behavior needs separate execution proof |
 | Dynamic commands, `Invoke-Expression`, authored classes, WPF | No general runtime-free support | Retained source or explicitly supported hosted paths |
 
 This table describes categories, not a promise that every expression in a
@@ -58,12 +61,18 @@ for repeatable dependency review and delivery.
 ## What the measurements establish
 
 The [coverage report](PowerForge.PowerShellCompilation.Coverage.md) records the
-2026-11-17 reruns of both fixed packets. It distinguishes complete emitted units
+2026-11-18 reruns of both fixed packets. It distinguishes complete emitted units
 from retained source and smaller compiled regions. The seven-workload external
 assessment emits **130/196 units (66.33%)** and **130/183 functions (71.04%)**,
-with zero parser errors. It performs **zero complete-workload executions**.
-The public Gallery packet emits **114/753 (15.14%)** of its units as complete CLR
-methods. All ten Hybrid artifacts pass the checked-in invocation probes.
+with zero parser errors. **One of seven complete workloads passes**: all ten
+GitHub helper functions execute in ten scenarios on original, built, and installed
+surfaces. Configuration and time are fixed at the module boundary and HTTP uses
+a loopback response; live GitHub operations and the other six workloads remain
+untested.
+The public Gallery packet emits **436/753 (57.90%)** of its units as complete CLR
+methods, up from 114/753 (15.14%). Pester supplies the 322 additional methods;
+the other modules lose none. All ten Hybrid artifacts pass the checked-in
+invocation probes.
 Neither packet measures the percentage of the PowerShell language supported.
 The maintainer's five-module packet is separate, targeted historical evidence.
 

@@ -79,6 +79,19 @@ The existing native invocation owns PowerShell command resolution, parameter set
 
 **Evidence:** complete pipeline and implicit-output matrices, random-name calls, statement-error and output-unwind tests, and both supported hosted artifact lanes. Provider replacements qualify compiler composition without granting live administration or network-operation coverage.
 
+Independent native-bound functions can also compile beside retained
+document-scope types, and early module-scope discovery preserves authored native
+declaration timing. The [current packet measurements](PowerForge.PowerShellCompilation.Coverage.md)
+separate this emitted-method growth from hosted type initialization and dynamic
+command execution: the fixed Gallery packet grows **114/753 → 436/753 complete
+units (15.14% → 57.90%)**, with all ten artifact import/invocation probes passing.
+The seven-workload assessment executes all ten functions of
+one complete helper-library workload through original, built, and installed
+surfaces; the remaining six workloads have no complete execution contract.
+The pinned PowerShell 7.6.6 and installed Windows PowerShell 5.1 oracle covers
+binding, multi-stage command pipelines, lifecycle, failure/continuation, stop,
+reuse, discovery, and retained type identity for the admitted mixed-module form.
+
 **Boundaries to preserve:** terminal success sinks, unsupported basic-function/common-parameter collisions, unproved error-state observers, broader mutable receivers, and unregistered runtime-free adapters retain their own admission decisions. Record an unsupported shape explicitly rather than routing only its success stream.
 
 **Gate for any expansion:** two complete commands in their original module context, including multiple output-producing local calls and a retained provider stage. Compare zero/one/many inputs, ordered success and non-success streams, partial failure, stop, cancellation, cleanup, and subsequent invocation. PowerShell 5.1 cannot be credited for syntax that its parser does not support.

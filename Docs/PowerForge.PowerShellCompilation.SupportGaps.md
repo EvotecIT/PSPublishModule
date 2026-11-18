@@ -1,6 +1,27 @@
 # PowerShell compiler: observed support gaps
 
-For measurements from both fixed external packets, see the [2026-11-17 coverage report](PowerForge.PowerShellCompilation.Coverage.md). The results below describe earlier compiler revisions.
+For measurements from both fixed external packets, see the [coverage report](PowerForge.PowerShellCompilation.Coverage.md). The historical results below describe earlier compiler revisions.
+
+Hybrid modules can compile independent functions beside document-scope authored
+classes or enums while retaining their hosted initialization. The source type
+closure still rejects a function whose metadata or body consumes an unsupported
+authored type; nested type declarations and script initializers keep their
+existing admission rules. This extends the existing native binding, cmdlet,
+pipeline, and `begin`/`process`/`end` paths into realistic mixed modules. It does
+not add general authored-class or pipeline support to Strict.
+
+The fixed Gallery packet emits **436/753 complete units (57.90%)**, up from
+114/753 (15.14%). Pester rises from 0/491 to 322/491; the other nine modules keep
+their previous complete-method counts. All ten Hybrid artifacts build, import,
+and pass their invocation probes. The packet still retains 317 source units;
+these results do not establish complete execution of the ten modules.
+
+The seven-workload packet still emits 130/196 units and 130/183 functions. It now
+executes one complete workload: all ten GitHub helper functions pass ten scenarios
+on original, built, and installed surfaces, with compiler input withdrawn for
+artifact observation. Fixed configuration/time and loopback HTTP keep external
+effects bounded. The six workloads without complete execution contracts remain
+unattempted; live GitHub behavior and exhaustive branches are not tested.
 
 Historical inventory: 2026-10-11. This section preserves the October 3 retained-function snapshot and earlier M29/M29a discovery and qualification checkpoints. The compiler continuation is integrated in main; the five-module historical census has not been rerun; the external and public packets use the dated report above. The [next milestones](PowerForge.PowerShellCompilation.NextMilestones.md#current-continuation-october-11-audit) own current work and exit gates; the [assessment](PowerForge.PowerShellCompilation.Assessment.md) owns execution evidence.
 

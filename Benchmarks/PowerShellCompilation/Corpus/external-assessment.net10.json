@@ -132,12 +132,121 @@
       },
       "entryPoint": "PowerShellForGitHub-fd4fa65f23ca30f18f85312a85348e660c287a9c/Helpers.ps1",
       "qualification": {
-        "kind": "HybridModuleCommand",
-        "originalImportSurface": "DotSource",
-        "compiledImportSurface": "TypedAssembly",
-        "unitName": "Get-SHA512Hash",
-        "probeScript": "Get-SHA512Hash -PlainText 'PowerForge'"
-      }
+        "kind": "HybridModuleWorkflow",
+        "artifactName": "GitHubHelpers",
+        "completeFunctionInventory": true,
+        "requiredExports": [
+          "Get-SHA512Hash",
+          "Write-Log",
+          "Write-InvocationLog",
+          "DeepCopy-Object",
+          "New-TemporaryDirectory",
+          "Write-InteractiveHost",
+          "Resolve-UnverifiedPath",
+          "Ensure-Directory",
+          "Get-HttpWebResponseContent",
+          "New-ErrorRecord"
+        ],
+        "requiredAliases": [],
+        "requiredCompiledOwnedFunctions": [
+          {
+            "relativePath": "Helpers.ps1",
+            "name": "Get-SHA512Hash"
+          },
+          {
+            "relativePath": "Helpers.ps1",
+            "name": "Write-Log"
+          },
+          {
+            "relativePath": "Helpers.ps1",
+            "name": "Write-InvocationLog"
+          },
+          {
+            "relativePath": "Helpers.ps1",
+            "name": "DeepCopy-Object"
+          },
+          {
+            "relativePath": "Helpers.ps1",
+            "name": "New-TemporaryDirectory"
+          },
+          {
+            "relativePath": "Helpers.ps1",
+            "name": "Write-InteractiveHost"
+          },
+          {
+            "relativePath": "Helpers.ps1",
+            "name": "Resolve-UnverifiedPath"
+          },
+          {
+            "relativePath": "Helpers.ps1",
+            "name": "Ensure-Directory"
+          },
+          {
+            "relativePath": "Helpers.ps1",
+            "name": "Get-HttpWebResponseContent"
+          },
+          {
+            "relativePath": "Helpers.ps1",
+            "name": "New-ErrorRecord"
+          }
+        ],
+        "requiredScenarioIds": [
+          "sha512",
+          "logging",
+          "invocation-redaction",
+          "deep-copy",
+          "temporary-directory",
+          "noninteractive-host",
+          "unverified-path",
+          "ensure-directory",
+          "http-response",
+          "error-record"
+        ],
+        "publicExportScenarios": {
+          "Get-SHA512Hash": [
+            "sha512"
+          ],
+          "Write-Log": [
+            "logging"
+          ],
+          "Write-InvocationLog": [
+            "invocation-redaction"
+          ],
+          "DeepCopy-Object": [
+            "deep-copy"
+          ],
+          "New-TemporaryDirectory": [
+            "temporary-directory"
+          ],
+          "Write-InteractiveHost": [
+            "noninteractive-host"
+          ],
+          "Resolve-UnverifiedPath": [
+            "unverified-path"
+          ],
+          "Ensure-Directory": [
+            "ensure-directory"
+          ],
+          "Get-HttpWebResponseContent": [
+            "http-response"
+          ],
+          "New-ErrorRecord": [
+            "error-record"
+          ]
+        },
+        "observerScript": "Workflows/GitHubHelpers/Observe-GitHubHelpers.ps1",
+        "observerSha256": "0e3304f5739c6e4813258b0a756ed5f366b5e8a05dfa140d32e1907843d953a8"
+      },
+      "sourceInputs": [
+        {
+          "path": "PowerShellForGitHub-fd4fa65f23ca30f18f85312a85348e660c287a9c/Helpers.ps1",
+          "sha256": "90e1ad0bfc2f07e888efdfa438ee4ec6ea3bde0fbdd19478088764922b8aaef9"
+        },
+        {
+          "path": "PowerShellForGitHub-fd4fa65f23ca30f18f85312a85348e660c287a9c/LICENSE",
+          "sha256": "bea100d8314e79f8463556b8df43993b22e1df25062dcb2f1db2c454709d4b61"
+        }
+      ]
     }
   ]
 }

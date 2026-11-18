@@ -53,6 +53,6 @@ internal sealed partial class PowerShellBoundCSharpBackend
     private string EmitNativeAssignmentLocation(PowerShellNativeAssignmentTarget target)
         => ", " +
             QuotePortableSourcePath(target.SourcePath) + ", " + target.Span.StartLine + ", " +
-            target.Span.StartColumn + ", " + PowerShellCSharpLiteral.QuoteString(target.SourceDocument) + ", " +
+            target.Span.StartColumn + ", " + _nativeSourceDocuments.Reference(target.SourceDocument) + ", " +
             target.StartOffset + ", " + target.EndOffset + ")";
 }

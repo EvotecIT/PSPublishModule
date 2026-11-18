@@ -13,14 +13,17 @@ internal sealed partial class PowerShellBoundCSharpBackend
     private PowerShellCompilationSemanticHostFamily _semanticHostFamily;
     private PowerShellCompilationCapability _targetCapabilities;
     private IReadOnlyDictionary<string, PowerShellLoweredFunction> _functions = new Dictionary<string, PowerShellLoweredFunction>();
+    private PowerShellCSharpSourceDocumentPool _nativeSourceDocuments = new();
     internal PowerShellBoundCSharpResult Emit(PowerShellLoweredProgram program)
     {
         if (program is null) throw new ArgumentNullException(nameof(program));
         // Each function owns its temporary names and generated helper registry.
         var functions = program.Functions.ToDictionary(static function => function.Symbol.StableKey, StringComparer.Ordinal);
+        var sourceDocuments = new PowerShellCSharpSourceDocumentPool();
         var methods = program.Functions.Select(function => new PowerShellBoundCSharpBackend
         {
             _functions = functions,
+            _nativeSourceDocuments = sourceDocuments,
             _semanticHostFamily = program.SemanticHostFamily,
             _targetCapabilities = program.TargetCapabilities
         }.EmitFunction(function, program.TargetCapabilities)).ToArray();

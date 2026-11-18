@@ -209,6 +209,10 @@ function Assert-WorkflowCompiledOwnership {
         }
         $checked.Add($unit)
     }
+    if ((Get-WorkflowProperty $Contract 'completeFunctionInventory' $false) -eq $true) {
+        $functions = @($Ledger.entries | Where-Object { $_.kind -eq 'Function' })
+        Assert-WorkflowNameSet @($functions.unitId) @($checked | ForEach-Object unitId) 'Complete owned function inventory'
+    }
     return @($checked)
 }
 
@@ -246,6 +250,21 @@ function Assert-WorkflowObservation {
             if ($name -notin $scenario.executedExports) {
                 throw "$Surface scenario '$id' did not report executing required public export '$name'."
             }
+        }
+    }
+    if ((Get-WorkflowProperty $Contract 'completeFunctionInventory' $false) -eq $true) {
+        foreach ($required in $Contract.requiredCompiledOwnedFunctions) {
+            $unitId = Get-WorkflowProperty $required 'unitId'
+            $startLine = Get-WorkflowProperty $required 'startLine'
+            $executed = @($Report.scenarios | ForEach-Object {
+                @(Get-WorkflowProperty $_ 'executedOwnedFunctions' @()) | Where-Object {
+                    $_.relativePath.Replace('\', '/') -ceq $required.relativePath.Replace('\', '/') -and
+                    $_.name -ceq $required.name -and
+                    (-not $unitId -or (Get-WorkflowProperty $_ 'unitId') -ceq $unitId) -and
+                    ($null -eq $startLine -or (Get-WorkflowProperty $_ 'startLine') -eq $startLine)
+                }
+            })
+            if ($executed.Count -eq 0) { throw "$Surface did not execute owned function '$($required.name)'." }
         }
     }
 }
@@ -490,7 +509,8 @@ function Invoke-WholeWorkflowQualification {
     Assert-WorkflowObservationParity $Entry.qualification $original $installedReport
     $qualificationResult = [ordered]@{
         id = $Entry.id; kind = $Entry.qualification.kind; succeeded = $true; emittedClrMethod = $null
-        completeWorkloadExecution = $false; wholeArtifactWorkflowQualified = $true
+        completeWorkloadExecution = ((Get-WorkflowProperty $Entry.qualification 'completeFunctionInventory' $false) -eq $true)
+        wholeArtifactWorkflowQualified = $true
         scenarioCount = @($Entry.qualification.requiredScenarioIds).Count; scenarioSurfaces = @('Original', 'Built', 'Installed')
         requiredExports = @($Entry.qualification.requiredExports); requiredAliases = @($Entry.qualification.requiredAliases)
         compiledOwnedFunctions = $owned; unitDispositionLedger = $buildReceipt.manifest.unitDispositionLedger

@@ -1,6 +1,6 @@
 # Generic compiler corpus
 
-The [2026-11-17 coverage report](../../../Docs/PowerForge.PowerShellCompilation.Coverage.md) records the current public and external results and the commands used to refresh them. `Invoke-PublicCorpus.ps1 -RefreshBaseline` records measured module counts only after the complete module packet succeeds; partial selections cannot refresh it, and Strict timing budgets stay unchanged.
+The [coverage report](../../../Docs/PowerForge.PowerShellCompilation.Coverage.md) records the current public and external results and the commands used to refresh them. `Invoke-PublicCorpus.ps1 -RefreshBaseline` records measured module counts only after the complete module packet succeeds; partial selections cannot refresh it, and Strict timing budgets stay unchanged.
 
 This checked-in corpus is the portable, product-neutral acceptance surface for PowerForge PowerShell compilation. It does not encode module names, command names, paths, or special cases from an external repository.
 
@@ -42,7 +42,15 @@ Run the external frontier assessment after building the CLI:
 ./Benchmarks/PowerShellCompilation/Corpus/Invoke-ExternalAssessment.ps1
 ```
 
-The assessment runner accepts any packet that follows the checked-in schema. It supports exact-hash HTTPS files and ZIP archives, validates archive containment and portable path collisions, bounds entry count, per-entry bytes, total expansion, and compression ratio, never imports or executes the external source, and can rerun from its verified cache with `-Offline`. Use `-RefreshBaseline` only when intentionally changing the pinned packet or accepting a reviewed compiler-coverage change. Assessment success means acquisition and post-emission census completed without regression; it is not a complete-program pass.
+The assessment runner accepts any packet that follows the checked-in schema. It supports exact-hash HTTPS files and ZIP archives, validates archive containment and portable path collisions, and bounds entry count, per-entry bytes, total expansion, and compression ratio. By default it performs acquisition and post-emission census without executing the source; that mode can rerun from its verified cache with `-Offline`. Use `-RefreshBaseline` only when intentionally changing the pinned packet or accepting a reviewed compiler-coverage change.
+
+Add `-ExecuteWorkloads` to execute the packet's reviewed complete-workload contracts through the existing project qualification lane:
+
+```powershell
+./Benchmarks/PowerShellCompilation/Corpus/Invoke-ExternalAssessment.ps1 -ExecuteWorkloads
+```
+
+This mode reports passed, attempted, and unattempted workloads separately. A complete-workload contract must declare every authored function in the final artifact ledger, require a complete CLR method for each, and observe every function in at least one scenario on the original, built, and installed surfaces. Same-name declarations require `unitId` or `startLine` in both the required-function entry and its execution observation; a name-only observation cannot stand in for several conditional bodies. The GitHub helper-library contract executes all ten functions across ten scenarios. It fixes configuration and time at the importing module boundary, uses an owned loopback HTTP response, and withdraws compiler input before observing delivered artifacts. It does not exercise the GitHub service or every branch. The other six workloads have no complete-workload contract and receive no execution credit. `-ExecuteWorkloads -RefreshBaseline` records these results alongside the census and rejects failed attempts or zero attempts. It requires online project restore and cannot be combined with `-Offline`.
 
 Run the separate opt-in qualification lane only when local execution of the reviewed third-party packet is acceptable:
 
@@ -50,7 +58,7 @@ Run the separate opt-in qualification lane only when local execution of the revi
 ./Benchmarks/PowerShellCompilation/Corpus/Invoke-ExternalQualification.ps1 -AllowExternalExecution
 ```
 
-This lane builds a Hybrid artifact, verifies that the packet's named unit was emitted as CLR, loads the original and generated surfaces in separate clean child processes, and compares the selected command invocation. The reviewed metadata can select manifest import, direct root-module import, safe dot-sourcing, or the generated typed assembly independently; these are harness choices and never compiler eligibility inputs. The fixed packet currently proves four commands across three scenario families. A passing qualification proves only the selected command, not the complete workload.
+Command qualifications build a Hybrid artifact, verify that the packet's named unit was emitted as CLR, load the original and generated surfaces in separate clean child processes, and compare the selected command invocation. The reviewed metadata can select manifest import, direct root-module import, safe dot-sourcing, or the generated typed assembly independently; these are harness choices and never compiler eligibility inputs. A passing command qualification proves only the selected command. Whole-workflow qualifications use the lifecycle and inventory rules below; complete-workload credit additionally requires `completeFunctionInventory: true` and execution observations for every owned function.
 
 Packets with `HybridModuleWorkflow` or `HybridScriptApplication` qualification use fresh disposable project roots and the full Analyze/Lock/Restore/Build/Test/Pack/Install lifecycle. These whole-workflow lanes reject `-Offline` before CLI bootstrap, source execution or acquisition; a cached source archive cannot supply a fresh project's authenticated package environment. Run whole-workflow qualification without `-Offline` to acquire and verify that environment. For disconnected use of an existing retained project, complete a normal `powerforge powershell project restore <project>` first, then use `powerforge powershell project restore <project> --offline` to authenticate the saved environment and exact closure locks. Discovery and assessment retain their verified-cache `-Offline` behavior. In command-only qualification, `-Offline` controls source-payload acquisition; it does not promise a disconnected artifact build.
 
