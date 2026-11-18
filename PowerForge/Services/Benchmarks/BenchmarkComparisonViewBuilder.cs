@@ -166,6 +166,19 @@ public sealed class BenchmarkComparisonViewBuilder
     {
         var preferMean = string.Equals(result.Runner?.Statistic, "mean", StringComparison.OrdinalIgnoreCase);
         var rows = NormalizeRows(PublishedRows(entry, result.Summary ?? Array.Empty<BenchmarkSummaryRow>()), libraries, subject, preferMean);
+        // Published cells carry the confidence interval the publish policy accepted; overlapping intervals are even.
+        if (entry.Publish && entry.Cells is { Length: > 0 })
+        {
+            var intervals = entry.Cells
+                .Where(cell => cell.Publishable && cell.ConfidenceInterval is not null)
+                .GroupBy(BenchmarkEvidenceCellBuilder.Identity, StringComparer.Ordinal)
+                .ToDictionary(group => group.Key, group => group.First().ConfidenceInterval!, StringComparer.Ordinal);
+            foreach (var row in rows)
+            {
+                if (row.Source is not null && intervals.TryGetValue(BenchmarkEvidenceCellBuilder.Identity(row.Source), out var interval))
+                    row.Interval = interval;
+            }
+        }
         var statistic = rows.Any(row => row.Statistic == "mean") ? "mean" : "median";
 
         // A parameter present with the same value in every row describes the workload; one that differs or
@@ -346,7 +359,9 @@ public sealed class BenchmarkComparisonViewBuilder
             var cells = cases[label].Cells;
             if (!cells.TryGetValue(a, out var x) || !cells.TryGetValue(b, out var y) || !Completed(x) || !Completed(y) || y.TimeMs <= 0)
                 continue;
-            time.Add(x.TimeMs!.Value / y.TimeMs!.Value);
+            // Cases whose accepted confidence intervals overlap are even, whatever their point estimates say.
+            bool even = x.Interval is not null && y.Interval is not null && BenchmarkEvidenceIdentity.Overlaps(x.Interval, y.Interval);
+            time.Add(even ? 1.0 : x.TimeMs!.Value / y.TimeMs!.Value);
             if (x.AllocatedBytes > 0 && y.AllocatedBytes > 0)
                 memory.Add(x.AllocatedBytes!.Value / y.AllocatedBytes!.Value);
         }
@@ -394,6 +409,8 @@ public sealed class BenchmarkComparisonViewBuilder
         public string Statistic = "median";
         public double? AllocatedBytes;
         public bool Failed;
+        public BenchmarkSummaryRow? Source;
+        public BenchmarkConfidenceInterval? Interval;
     }
 
     private static bool Completed(NormalizedRow row) => !row.Failed && row.TimeMs is > 0;
@@ -487,7 +504,8 @@ public sealed class BenchmarkComparisonViewBuilder
                 TimeMs = time,
                 Statistic = useMean ? "mean" : "median",
                 AllocatedBytes = Metric(item.Row.Metrics, "BytesAllocatedPerOperation") ?? Metric(item.Row.Metrics, "Allocated"),
-                Failed = !string.IsNullOrWhiteSpace(item.Row.Status) && !string.Equals(item.Row.Status, "Succeeded", StringComparison.OrdinalIgnoreCase)
+                Failed = !string.IsNullOrWhiteSpace(item.Row.Status) && !string.Equals(item.Row.Status, "Succeeded", StringComparison.OrdinalIgnoreCase),
+                Source = item.Row
             };
         }).ToList();
     }

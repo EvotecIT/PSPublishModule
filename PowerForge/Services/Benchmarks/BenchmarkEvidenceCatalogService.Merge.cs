@@ -159,10 +159,27 @@ public sealed partial class BenchmarkEvidenceCatalogService
         merged.Entries = entries;
         merged.Superseded = NormalizeSuperseded(superseded, entries);
         var supersededArtifacts = new List<(string Path, string Sha256, byte[] Bytes)>();
+        // Historical runs follow the same licence policy as current ones: libraries the merged declarations do not
+        // publish are removed from their copies too.
+        string[] unpublished = merged.Libraries
+            .Where(library => !library.IsPublishableUnder(merged.Policy))
+            .Select(library => library.Id)
+            .ToArray();
         foreach (BenchmarkSupersededLane history in merged.Superseded)
         {
             if (!availableArtifacts.TryGetValue(history.ResultSha256, out byte[]? historyBytes))
                 continue;
+            BenchmarkRunResult historyResult = BenchmarkJson.ReadBytes<BenchmarkRunResult>(historyBytes, history.ResultPath);
+            BenchmarkRunResult redactedHistory = RedactLibraries(historyResult, unpublished);
+            if (!ReferenceEquals(redactedHistory, historyResult))
+            {
+                string previousHash = history.ResultSha256.ToLowerInvariant();
+                historyBytes = BenchmarkJson.SerializeCanonicalBytes(redactedHistory);
+                history.ResultSha256 = ComputeSha256(historyBytes);
+                int marker = history.ResultPath.LastIndexOf("." + previousHash, StringComparison.OrdinalIgnoreCase);
+                if (marker >= 0)
+                    history.ResultPath = history.ResultPath.Remove(marker, previousHash.Length + 1);
+            }
             history.ResultPath = CreateContentAddressedResultPath(
                 publicPrefix is null ? history.ResultPath :
                     publicPrefix + "/" + Uri.EscapeDataString(ExtractBundleArtifactFileName(history.ResultPath)),

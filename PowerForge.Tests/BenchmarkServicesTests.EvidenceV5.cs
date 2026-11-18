@@ -321,6 +321,62 @@ public sealed partial class BenchmarkServicesTests
     }
 
     [Fact]
+    public void ComparisonView_ReportsOverlappingConfidenceIntervalsAsEven()
+    {
+        string root = CreateTempRoot();
+        string catalogPath = Path.Combine(root, "index.json");
+        // Medians differ by about 5%, but the accepted intervals overlap.
+        new BenchmarkEvidenceCatalogService().UpdateFile(catalogPath, PublishRequest(
+            MeasuredResult(("OfficeIMO", "Read", Spread(10, 10)), ("Sep", "Read", Spread(10.5, 10))), TestDeclarations()));
+
+        BenchmarkRunView run = Assert.Single(Assert.Single(new BenchmarkComparisonViewBuilder().Build(catalogPath).Comparisons,
+            comparison => comparison.Id == "comparison-a").Runs);
+
+        BenchmarkHeadToHeadView headToHead = Assert.Single(run.HeadToHead);
+        Assert.Equal("even", headToHead.Outcome);
+        Assert.Equal("OfficeIMO and Sep are about as fast", headToHead.Text);
+    }
+
+    [Fact]
+    public void EvidenceCatalog_RestrictingAPublishedLibraryRequiresAMergeThatRedactsHistoryToo()
+    {
+        string root = CreateTempRoot();
+        string catalogPath = Path.Combine(root, "index.json");
+        var service = new BenchmarkEvidenceCatalogService();
+        BenchmarkRunResult older = MeasuredResult(("OfficeIMO", "Read", Spread(10, 10)), ("Sep", "Read", Spread(20, 10)));
+        older.StartedUtc = older.StartedUtc.AddMinutes(-30);
+        older.FinishedUtc = older.FinishedUtc.AddMinutes(-30);
+        service.UpdateFile(catalogPath, PublishRequest(older, TestDeclarations()));
+        service.UpdateFile(catalogPath, PublishRequest(
+            MeasuredResult(("OfficeIMO", "Read", Spread(9, 10)), ("Sep", "Read", Spread(20, 10))), TestDeclarations()));
+        BenchmarkDeclarationDocument restricted = TestDeclarations();
+        restricted.Libraries.Single(value => value.Id == "Sep").Restriction = BenchmarkLibraryRestriction.PublishRestricted;
+        restricted.Libraries.Single(value => value.Id == "Sep").Reason = "Publishing results needs permission.";
+
+        // An update cannot rewrite stored results, so it refuses to restrict a library a published lane measured.
+        BenchmarkRunResult linux = MeasuredResult(("OfficeIMO", "Read", Spread(10, 10)));
+        linux.Environment.OsFamily = "Linux";
+        foreach (BenchmarkSample sample in linux.Samples) sample.Os = "Linux";
+        foreach (BenchmarkSummaryRow row in linux.Summary) row.Os = "Linux";
+        BenchmarkEvidenceUpdateRequest diagnostic = PublishRequest(linux, restricted);
+        diagnostic.Publish = false;
+        diagnostic.Profile = BenchmarkEvidenceProfile.Diagnostic;
+        diagnostic.ResultPath = "linux.json";
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() => service.UpdateFile(catalogPath, diagnostic));
+        Assert.Contains("Merge-BenchmarkEvidenceCatalog", exception.Message, StringComparison.Ordinal);
+
+        // The merge redacts the current run and the superseded run it carries.
+        string mergedRoot = Path.Combine(root, "merged");
+        BenchmarkEvidenceCatalog merged = service.MergeFiles(Path.Combine(mergedRoot, "index.json"), [catalogPath], null, restricted);
+        BenchmarkSupersededLane history = Assert.Single(merged.Superseded);
+        string historyPath = Path.Combine(mergedRoot, history.ResultPath.Substring(history.ResultPath.LastIndexOf('/') + 1));
+        Assert.Equal(history.ResultSha256, BenchmarkJson.ComputeFileSha256(historyPath));
+        Assert.DoesNotContain(BenchmarkJson.Read<BenchmarkRunResult>(historyPath).Summary, row => row.Library == "Sep");
+        BenchmarkEvidenceEntry current = Assert.Single(merged.Entries);
+        Assert.DoesNotContain(BenchmarkJson.Read<BenchmarkRunResult>(Path.Combine(mergedRoot, current.ArtifactRelativePath)).Summary, row => row.Library == "Sep");
+    }
+
+    [Fact]
     public void ComparisonView_ShowsOnlyCellsThePublishPolicyAccepted()
     {
         string root = CreateTempRoot();

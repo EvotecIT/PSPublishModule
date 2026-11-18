@@ -177,6 +177,14 @@ public sealed partial class BenchmarkEvidenceCatalogService
                     string.Join(" ", evaluation.LaneIssues) +
                     " Record the lane again or rebuild the catalog with Merge-BenchmarkEvidenceCatalog.");
             }
+            // A library restricted after the lane was published still has measurements in its stored result, which
+            // an update cannot rewrite; the merge path redacts stored results.
+            if (entry.Publish && evaluation.Cells.Any(cell => IsLicenceMarker(cell) && (cell.ValueMs is not null || cell.SampleCount > 0)))
+            {
+                throw new InvalidOperationException(
+                    $"Published benchmark lane '{entry.LaneKey}' has measurements of a library the current declarations no longer publish. " +
+                    "Rebuild the catalog with Merge-BenchmarkEvidenceCatalog and the new declarations so its stored result is redacted.");
+            }
             ApplyEvaluation(entry, evaluation);
         }
     }
@@ -191,12 +199,6 @@ public sealed partial class BenchmarkEvidenceCatalogService
     /// </summary>
     private static BenchmarkRunResult RedactLicenceRestricted(BenchmarkRunResult result, BenchmarkEvidenceCell[] cells)
     {
-        var restricted = new HashSet<string>(
-            cells.Where(IsLicenceMarker).Select(cell => cell.Library),
-            StringComparer.OrdinalIgnoreCase);
-        if (restricted.Count == 0)
-            return result;
-
         foreach (BenchmarkEvidenceCell cell in cells.Where(IsLicenceMarker))
         {
             cell.ValueMs = null;
@@ -206,6 +208,18 @@ public sealed partial class BenchmarkEvidenceCatalogService
             cell.ValidationDetail = string.Empty;
             cell.Outcome = string.Empty;
         }
+        return RedactLibraries(result, cells.Where(IsLicenceMarker).Select(cell => cell.Library));
+    }
+
+    /// <summary>Removes the rows of the given libraries from a result; returns the same instance when none are present.</summary>
+    private static BenchmarkRunResult RedactLibraries(BenchmarkRunResult result, IEnumerable<string> libraries)
+    {
+        var restricted = new HashSet<string>(libraries.Where(value => !string.IsNullOrWhiteSpace(value)), StringComparer.OrdinalIgnoreCase);
+        if (restricted.Count == 0 ||
+            (!result.Samples.Any(sample => restricted.Contains(sample.Library ?? string.Empty)) &&
+             !result.Summary.Any(row => restricted.Contains(row.Library ?? string.Empty)) &&
+             !result.Validations.Any(validation => restricted.Contains(validation.Library ?? string.Empty))))
+            return result;
 
         BenchmarkRunResult copy = BenchmarkJson.ReadBytes<BenchmarkRunResult>(BenchmarkJson.SerializeCanonicalBytes(result), "benchmark result");
         bool Restricted(string? library) => !string.IsNullOrWhiteSpace(library) && restricted.Contains(library!);
