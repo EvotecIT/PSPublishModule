@@ -626,10 +626,16 @@ public sealed class PowerShellRunner : IPowerShellRunner, ICancellablePowerShell
         if (request.HostRequirement != PowerShellHostRequirement.WindowsPowerShell)
             return request.EnvironmentVariables;
 
+        return WindowsPowerShellEnvironment(request.EnvironmentVariables);
+    }
+
+    internal static IReadOnlyDictionary<string, string?> WindowsPowerShellEnvironment(IReadOnlyDictionary<string, string?>? overrides)
+    {
+
         var environment = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
-        if (request.EnvironmentVariables is not null)
+        if (overrides is not null)
         {
-            foreach (var entry in request.EnvironmentVariables)
+            foreach (var entry in overrides)
                 environment[entry.Key] = entry.Value;
         }
 

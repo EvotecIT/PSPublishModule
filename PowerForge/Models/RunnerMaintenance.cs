@@ -60,6 +60,9 @@ public sealed class RunnerMaintenanceSpec
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed class RunnerMaintenanceRegistration
 {
+    /// <summary>Whether this installation's output may be retired. Disabled installations still participate in host admission and activity checks.</summary>
+    public bool CleanupEnabled { get; set; } = true;
+
     /// <summary>Installation directory containing the non-secret .runner registration.</summary>
     public string RootPath { get; set; } = string.Empty;
 

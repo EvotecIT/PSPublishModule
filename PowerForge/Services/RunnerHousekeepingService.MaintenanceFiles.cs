@@ -133,15 +133,25 @@ public sealed partial class RunnerHousekeepingService
     private static bool MaintenanceSensitive(string path)
     {
         var extension = Path.GetExtension(path);
-        return new[] { ".nupkg", ".pfx", ".key", ".db", ".sqlite" }.Contains(extension, StringComparer.OrdinalIgnoreCase)
+        return new[] { ".nupkg", ".dat", ".pfx", ".key", ".db", ".sqlite" }.Contains(extension, StringComparer.OrdinalIgnoreCase)
             || path.EndsWith("-wal", StringComparison.OrdinalIgnoreCase) || path.EndsWith("-shm", StringComparison.OrdinalIgnoreCase);
     }
 
     private static string MaintenanceStage(RunnerMaintenanceJournal journal) => Path.Combine(journal.Root, MaintenanceQuarantine, journal.Id);
 
+    private static bool MaintenanceExcludedInstallation(MaintenanceRun run, string path)
+        => run.Spec.Runners.Where(r => !r.CleanupEnabled)
+            .SelectMany(r => new[] { r.RootPath, r.WorkRootPath, r.TempPath })
+            .Any(root => PathsEqual(root, path) || MaintenanceContains(root, path) || MaintenanceContains(path, root));
+
     private static void MaintenanceIsolate(MaintenanceRun run, string path, string root, bool directory, bool sensitive = true, bool repository = false, bool runtimeIpc = false, DateTime? olderThan = null)
     {
         if (run.Expired || !MaintenanceContains(root, path) || Path.GetFileName(path) == MaintenanceQuarantine) return;
+        if (MaintenanceExcludedInstallation(run, path))
+        {
+            run.Retained.Add(path + " — installation cleanup is disabled");
+            return;
+        }
         try
         {
             MaintenancePhysicalPath(root);
