@@ -1,0 +1,46 @@
+{{~ # powerforge/benchmarks/index: areas with their comparison summaries ($1, the BenchmarkEvidence data). ~}}
+{{~ # With Output set, each area loads its rendered file when opened; otherwise the full view is rendered inline. ~}}
+{{~ v = $1 ~}}
+{{~ idx = v.index ~}}
+{{~ if v.areas && v.areas.size > 0 && v.areas[0].file; idx = v; end ~}}
+<div class="pf-bench-index" data-pf-bench-index>
+  {{~ for area in idx.areas ~}}
+  <section class="pf-bench-index__area" id="benchmarks-{{ if area.id != "" }}{{ area.id | html.escape }}{{ else }}other{{ end }}">
+    <header class="pf-bench-index__header">
+      <h2 class="pf-bench-index__title">{{ if area.id != "" }}{{ area.id | html.escape }}{{ else }}Other{{ end }}</h2>
+      <p class="pf-bench-index__meta">{{ area.measured }} of {{ area.comparisons.size }} measured</p>
+    </header>
+    <ul class="pf-bench-index__list">
+      {{~ for s in area.comparisons ~}}
+      <li>
+        <span class="pf-bench-index__name">{{ s.title | html.escape }}</span>
+        {{~ if s.headlines.size > 0 ~}}
+        {{~ for line in s.headlines ~}}
+        <span class="pf-bench-index__headline">{{ line | html.escape }}</span>
+        {{~ end ~}}
+        {{~ else if !s.measured ~}}
+        <span class="pf-bench-index__state">Not measured yet.</span>
+        {{~ else ~}}
+        <span class="pf-bench-index__state">No published run yet.</span>
+        {{~ end ~}}
+      </li>
+      {{~ end ~}}
+    </ul>
+    {{~ if v.areaFiles && v.areaFiles != "" ~}}
+    <details class="pf-bench-index__details" data-pf-bench-area-src="{{ v.areaFiles | html.escape }}{{ area.file | string.replace ".json" ".html" | html.escape }}">
+      <summary>Show results</summary>
+      <div class="pf-bench-index__body" data-pf-bench-area-body></div>
+    </details>
+    {{~ else if v.comparisons ~}}
+    <details class="pf-bench-index__details">
+      <summary>Show results</summary>
+      <div class="pf-bench-index__body">
+        {{~ for c in v.comparisons; if c.area == area.id ~}}
+        {{ include "powerforge/benchmarks/comparison" c }}
+        {{~ end; end ~}}
+      </div>
+    </details>
+    {{~ end ~}}
+  </section>
+  {{~ end ~}}
+</div>

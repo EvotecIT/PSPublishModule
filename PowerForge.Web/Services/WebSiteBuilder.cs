@@ -171,6 +171,7 @@ public static partial class WebSiteBuilder
             ReportProgress("copying static assets");
             CopyStaticAssets(spec, plan.RootPath, outDir);
             EnsureMediaViewerAssets(spec, outDir);
+            EnsureBenchmarkComponentAssets(spec, outDir);
             ReportProgress("rendering content");
             foreach (var item in renderItems)
             {

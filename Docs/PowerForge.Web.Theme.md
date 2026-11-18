@@ -347,6 +347,9 @@ Project data is available under:
 
 Benchmark evidence declared in `site.json` `BenchmarkEvidence` is available as
 `data.<Name>`; see "Comparison views for websites" in `PSPublishModule.Benchmarking.md`.
+PowerForge also ships benchmark partials (`powerforge/benchmarks/comparison`,
+`run`, `area`, `index`) that any Scriban theme can include, with their own
+stylesheet and script; see "Website components" in the same guide.
 
 Scriban stops a template after 1000 loop iterations by default. Data-heavy
 layouts can raise or remove the limit in `site.json`:

@@ -1,0 +1,6 @@
+{{~ # powerforge/benchmarks/area: every comparison of one area ($1, an area file's content). ~}}
+<div class="pf-bench-area" data-pf-bench-area="{{ $1.id | html.escape }}">
+  {{~ for c in $1.comparisons ~}}
+  {{ include "powerforge/benchmarks/comparison" c }}
+  {{~ end ~}}
+</div>

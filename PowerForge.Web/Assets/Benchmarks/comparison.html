@@ -1,0 +1,48 @@
+{{~ # powerforge/benchmarks/comparison: one comparison from the benchmark view ($1). Only published runs are shown. ~}}
+{{~ c = $1 ~}}
+{{~ shown = [] ~}}
+{{~ for r in c.runs; if r.published; shown = shown | array.add r; end; end ~}}
+{{~ default_id = "" ~}}
+{{~ for r in shown; if r.id == c.preferredRunId; default_id = r.id; end; end ~}}
+{{~ if default_id == "" && shown.size > 0; default_id = shown[0].id; end ~}}
+<section class="pf-bench" id="benchmark-{{ c.id | html.escape }}" data-pf-bench data-pf-bench-default="{{ default_id | html.escape }}">
+  <header class="pf-bench__header">
+    <h3 class="pf-bench__title">{{ c.title | html.escape }}</h3>
+    {{~ if c.group != "" ~}}
+    <p class="pf-bench__group">{{ c.group | html.escape }}</p>
+    {{~ end ~}}
+  </header>
+  {{~ if !c.eligibility.publishable && c.eligibility.reason != "" ~}}
+  <p class="pf-bench__note pf-bench__note--policy">{{ c.eligibility.reason | html.escape }}</p>
+  {{~ end ~}}
+  {{~ if c.availability.size > 0 ~}}
+  <ul class="pf-bench__availability" aria-label="Platforms">
+    {{~ for a in c.availability ~}}
+    <li class="pf-bench__platform{{ if a.available }} is-measured{{ else }} is-missing{{ end }}">{{ a.text | html.escape }}</li>
+    {{~ end ~}}
+  </ul>
+  {{~ end ~}}
+  {{~ if shown.size == 0 ~}}
+  <p class="pf-bench__empty">No published run yet.</p>
+  {{~ else ~}}
+  {{~ if shown.size > 1 ~}}
+  <div class="pf-bench__tabs" role="tablist" aria-label="Platform and framework" data-pf-bench-tabs hidden>
+    {{~ for r in shown ~}}
+    <button type="button" role="tab" class="pf-bench__tab" data-pf-bench-tab="{{ r.id | html.escape }}" aria-controls="benchmark-{{ c.id | html.escape }}-{{ r.id | html.escape }}">{{ r.platformLabel | html.escape }}{{ if r.framework != "" }} &middot; {{ r.framework | html.escape }}{{ end }}</button>
+    {{~ end ~}}
+  </div>
+  {{~ end ~}}
+  {{~ for r in shown ~}}
+  {{ include "powerforge/benchmarks/run" r c }}
+  {{~ end ~}}
+  {{~ end ~}}
+  {{~ withheld = [] ~}}
+  {{~ for s in c.libraryStates; if s.note != ""; withheld = withheld | array.add s; end; end ~}}
+  {{~ if withheld.size > 0 ~}}
+  <ul class="pf-bench__notes pf-bench__notes--libraries">
+    {{~ for s in withheld ~}}
+    <li>{{ s.id | html.escape }}: {{ s.note | html.escape }}.</li>
+    {{~ end ~}}
+  </ul>
+  {{~ end ~}}
+</section>

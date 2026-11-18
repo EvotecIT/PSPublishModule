@@ -7,7 +7,8 @@ namespace PowerForge.Web;
 /// <summary>Benchmark evidence files written into the site output.</summary>
 public static partial class WebSiteBuilder
 {
-    // Writes each evidence view with an Output directory as index.json plus one file per area under the site output.
+    // Writes each evidence view with an Output directory as index.json plus one JSON file and one rendered HTML
+    // file per area under the site output.
     private static void WriteBenchmarkEvidenceFiles(SiteSpec spec, string rootPath, string outputRoot)
     {
         foreach (var evidence in spec.BenchmarkEvidence ?? Array.Empty<BenchmarkEvidenceDataSpec>())
@@ -31,10 +32,12 @@ public static partial class WebSiteBuilder
 
             // A linked directory or file would redirect the writes outside the site output, possibly onto the evidence itself.
             var label = $"'{evidence.Name}' output";
-            VisualStoryPathGuard.EnsureContainedPath(fullOutputRoot, directory, label, subject: "BenchmarkEvidence");
+            void Guard(string path) => VisualStoryPathGuard.EnsureContainedPath(fullOutputRoot, path, label, subject: "BenchmarkEvidence");
+            Guard(directory);
             foreach (var file in view.Index.Areas.Select(area => area.File).Prepend("index.json"))
-                VisualStoryPathGuard.EnsureContainedPath(fullOutputRoot, Path.Combine(directory, file), label, subject: "BenchmarkEvidence");
+                Guard(Path.Combine(directory, file));
             PowerForge.BenchmarkComparisonViewBuilder.WriteAreaFiles(view, directory);
+            WriteBenchmarkAreaFragments(spec, rootPath, view, directory, Guard);
         }
     }
 }

@@ -827,3 +827,66 @@ the full comparisons. Headlines come only from a published run, so a comparison
 measured only in diagnostic or unpublished runs has none. `IndexOnly` requires `Output`, and `Output` must stay inside
 the site output.
 
+Each cell also carries `interval` (`level`, `lowerMs`, `upperMs` and `text`, such as
+`95% CI 10.1 ms – 10.8 ms`) when the evidence records one, and `even`, which is true
+when its interval overlaps the fastest cell's interval in that case.
+
+### Website components
+
+PowerForge.Web ships Scriban partials that render the view, so every site presents
+benchmarks the same way. They need no files in the theme:
+
+| Partial | Argument | Renders |
+| --- | --- | --- |
+| `powerforge/benchmarks/comparison` | one comparison | Title, group, platform availability, a platform and framework switcher, and the published runs, followed by licence notes |
+| `powerforge/benchmarks/run` | a run and its comparison | Run facts, environment, workload, the case table with times, confidence intervals and "fastest", "even" or the ratio, head-to-head lines, withheld libraries and runner settings |
+| `powerforge/benchmarks/area` | an area file's content | Every comparison of one area |
+| `powerforge/benchmarks/index` | the `BenchmarkEvidence` data | Areas with comparison headlines, and each area's results on demand |
+
+Only published runs are shown. A comparison without one shows "No published run
+yet.", platforms that were never measured are listed as "not measured", and a
+comparison that cannot be published shows the reason.
+
+To adopt them in a site:
+
+1. Declare the evidence in `site.json`. Add `Output` (and `IndexOnly` for large
+   catalogs) to load areas on demand:
+
+   ```json
+   {
+     "BenchmarkEvidence": [
+       { "Name": "benchmarks", "Catalog": "static/data/benchmarks/index.json", "Output": "data/benchmarks", "IndexOnly": true }
+     ]
+   }
+   ```
+
+2. Include a component in a Scriban layout or partial. A summary page with every
+   area:
+
+   ```html
+   {{ include "powerforge/benchmarks/index" data.benchmarks }}
+   ```
+
+   or one comparison, when the full view is loaded (no `IndexOnly`):
+
+   ```html
+   {{ for c in data.benchmarks.comparisons }}
+     {{ if c.id == "excel-read" }}{{ include "powerforge/benchmarks/comparison" c }}{{ end }}
+   {{ end }}
+   ```
+
+3. Build the site. A page that renders a component gets
+   `assets/powerforge/benchmarks.v1.css` and `assets/powerforge/benchmarks.v1.js`
+   added to its head and body. With `Output`, the build also writes
+   `<area>.html` next to each `<area>.json`, rendered with the same partials, and
+   the index loads it when an area is opened. The script resolves these files
+   from the site root it was loaded from, so a site served from a sub-path works
+   unchanged.
+
+Without the script, every published run is shown in turn and areas without
+`Output` render inline. Themes restyle the components through the `--pf-bench-*`
+CSS properties (accent, even, failed, border, radius), or replace one by adding
+`partials/powerforge/benchmarks/<name>.html`; the build then uses the theme's
+version, including for the area files. The partials HTML-escape every value from
+the evidence.
+

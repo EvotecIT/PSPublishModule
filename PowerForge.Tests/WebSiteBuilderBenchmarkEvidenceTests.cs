@@ -177,7 +177,7 @@ public class WebSiteBuilderBenchmarkEvidenceTests
         Assert.Equal(1500, new ScribanTemplateEngine().Render(template, context, _ => null).Length);
     }
 
-    private static SiteSpec BuildSpec() => new()
+    internal static SiteSpec BuildSpec() => new()
     {
         Name = "Benchmark evidence test",
         BaseUrl = "https://example.test",
@@ -188,7 +188,7 @@ public class WebSiteBuilderBenchmarkEvidenceTests
         Collections = new[] { new CollectionSpec { Name = "pages", Input = "content/pages", Output = "/" } }
     };
 
-    private static string BuildAndRead(string root, SiteSpec spec)
+    internal static string BuildAndRead(string root, SiteSpec spec)
     {
         var configPath = Path.Combine(root, "site.json");
         File.WriteAllText(configPath, "{}");
@@ -222,14 +222,14 @@ public class WebSiteBuilderBenchmarkEvidenceTests
         });
     }
 
-    private static void WritePage(string root, string markdown)
+    internal static void WritePage(string root, string markdown)
     {
         var pages = Path.Combine(root, "content", "pages");
         Directory.CreateDirectory(pages);
         File.WriteAllText(Path.Combine(pages, "index.md"), markdown);
     }
 
-    private static void WriteTheme(string root, string layout)
+    internal static void WriteTheme(string root, string layout)
     {
         var themeRoot = Path.Combine(root, "themes", "t");
         Directory.CreateDirectory(Path.Combine(themeRoot, "layouts"));

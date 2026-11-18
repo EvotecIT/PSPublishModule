@@ -164,6 +164,21 @@ public sealed partial class BenchmarkComparisonViewBuilder
         }).ToArray();
     }
 
+    internal static BenchmarkIntervalView? DescribeInterval(BenchmarkConfidenceInterval? interval)
+        => interval is null
+            ? null
+            : new BenchmarkIntervalView
+            {
+                Level = interval.Level,
+                LowerMs = interval.LowerMs,
+                UpperMs = interval.UpperMs,
+                Text = (interval.Level * 100).ToString("0.#", CultureInfo.InvariantCulture) + "% CI " +
+                       FormatTime(interval.LowerMs) + " – " + FormatTime(interval.UpperMs)
+            };
+
+    private static bool IsEven(BenchmarkConfidenceInterval? cell, BenchmarkConfidenceInterval? fastest)
+        => cell is not null && fastest is not null && BenchmarkEvidenceIdentity.Overlaps(cell, fastest);
+
     internal static string DescribeProfile(BenchmarkEvidenceProfile profile, bool published) => profile switch
     {
         BenchmarkEvidenceProfile.Full => published ? "Full BenchmarkDotNet run" : "Full BenchmarkDotNet run (not published)",

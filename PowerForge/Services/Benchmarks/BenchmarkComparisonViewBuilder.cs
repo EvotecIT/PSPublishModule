@@ -301,6 +301,7 @@ public sealed partial class BenchmarkComparisonViewBuilder
         {
             var (caseLabel, parameters, cells) = cases[label];
             var fastest = fastestByCase[label];
+            var fastestRow = cells.Values.Where(Completed).OrderBy(row => row.TimeMs!.Value).FirstOrDefault();
             var slowest = cells.Values.Where(Completed).Select(row => row.TimeMs!.Value).DefaultIfEmpty(0).Max();
             return new BenchmarkCaseView
             {
@@ -311,6 +312,7 @@ public sealed partial class BenchmarkComparisonViewBuilder
                     if (!cells.TryGetValue(name, out var row))
                         return new BenchmarkCellView { Contender = name, IsSubject = IsSubject(name), Missing = true };
                     var completed = Completed(row);
+                    var relative = completed && !double.IsNaN(fastest) ? Ratio(row.TimeMs!.Value / fastest) : new BenchmarkRatioView();
                     return new BenchmarkCellView
                     {
                         Contender = name,
@@ -320,7 +322,9 @@ public sealed partial class BenchmarkComparisonViewBuilder
                         TimeText = row.Failed ? "Failed" : FormatTime(row.TimeMs),
                         AllocatedBytes = row.AllocatedBytes,
                         AllocatedText = FormatBytes(row.AllocatedBytes),
-                        Relative = completed && !double.IsNaN(fastest) ? Ratio(row.TimeMs!.Value / fastest) : new BenchmarkRatioView(),
+                        Relative = relative,
+                        Interval = completed ? DescribeInterval(row.Interval) : null,
+                        Even = completed && !relative.IsFastest && IsEven(row.Interval, fastestRow?.Interval),
                         BarPercent = completed && slowest > 0 ? Math.Round(Math.Max(1.5, row.TimeMs!.Value / slowest * 100), 1) : 0
                     };
                 }).ToArray()

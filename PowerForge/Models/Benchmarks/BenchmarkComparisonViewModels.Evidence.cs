@@ -3,6 +3,22 @@ using System.Collections.Generic;
 
 namespace PowerForge;
 
+/// <summary>A confidence interval of a measured time.</summary>
+public sealed class BenchmarkIntervalView
+{
+    /// <summary>Confidence level, such as 0.95.</summary>
+    public double Level { get; set; }
+
+    /// <summary>Lower bound in milliseconds.</summary>
+    public double LowerMs { get; set; }
+
+    /// <summary>Upper bound in milliseconds.</summary>
+    public double UpperMs { get; set; }
+
+    /// <summary>Display text such as "95% CI 9.80 ms – 10.2 ms".</summary>
+    public string Text { get; set; } = string.Empty;
+}
+
 /// <summary>Whether a comparison can be published, and why not.</summary>
 public sealed class BenchmarkEligibilityView
 {
