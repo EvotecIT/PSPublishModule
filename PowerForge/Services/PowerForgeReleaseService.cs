@@ -263,9 +263,9 @@ internal sealed partial class PowerForgeReleaseService
     }
 
     /// <summary>
-    /// Executes the unified release workflow.
+    /// Executes the unified release workflow without the version commit step.
     /// </summary>
-    public PowerForgeReleaseResult Execute(PowerForgeReleaseSpec spec, PowerForgeReleaseRequest request)
+    private PowerForgeReleaseResult ExecuteRelease(PowerForgeReleaseSpec spec, PowerForgeReleaseRequest request)
     {
         if (spec is null)
             throw new ArgumentNullException(nameof(spec));

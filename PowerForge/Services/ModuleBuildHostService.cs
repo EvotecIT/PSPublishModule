@@ -90,12 +90,12 @@ public sealed class ModuleBuildHostService
     {
         var startedAt = Stopwatch.StartNew();
         var executableOverride = Environment.GetEnvironmentVariable("RELEASE_OPS_STUDIO_POWERSHELL_EXE");
-        var environment = !captureModuleProtocol
+        var environment = ReleaseVersionCommitSession.AddOwnerEnvironment(!captureModuleProtocol
             ? null
             : new Dictionary<string, string?>
             {
                 [ModulePipelineProgressProtocol.EnvironmentVariable] = "1"
-            };
+            });
         string? progressFailure = null;
         var artefactOutputs = new List<PowerForgeModuleArtefactOutputSummary>();
         Action<string>? outputLineReceived = !captureModuleProtocol

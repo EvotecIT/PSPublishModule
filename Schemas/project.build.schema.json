@@ -148,6 +148,12 @@
     "PublishGitHub": {
       "type": "boolean"
     },
+    "CommitVersionChanges": {
+      "type": "string",
+      "enum": ["Off", "Commit", "Push"],
+      "default": "Off",
+      "description": "Saves the version numbers the release wrote into tracked files to Git after every publish step succeeds. Off leaves them uncommitted, Commit commits them locally, Push also pushes to the current branch. Only version-only changes are committed; other uncommitted work is left alone, and problems become a warning that never fails the release."
+    },
     "CreateReleaseZip": {
       "type": "boolean"
     },

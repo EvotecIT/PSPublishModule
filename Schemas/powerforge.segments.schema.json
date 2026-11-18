@@ -1151,6 +1151,38 @@
       "required": ["Type"]
     },
 
+    "ReleaseConfiguration": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "StageRoot": { "type": ["string", "null"] },
+        "VersionSource": { "type": "string", "enum": ["Module", "ProjectBuild", "PackageBuild", "Manual"] },
+        "Version": { "type": ["string", "null"] },
+        "PrimaryProject": { "type": ["string", "null"] },
+        "SynchronizeModuleVersion": { "type": "boolean" },
+        "ResumeIncompleteRelease": { "type": "boolean" },
+        "ReusePreparedPackages": { "type": "boolean" },
+        "CommitVersionChanges": {
+          "type": "string",
+          "enum": ["Off", "Commit", "Push"],
+          "default": "Off",
+          "description": "Saves the version numbers a publish run wrote into tracked files to Git after every publish step succeeds. Off leaves them uncommitted, Commit commits them locally, Push also pushes to the current branch. Only version-only changes are committed; problems become a warning and never fail the release."
+        },
+        "BuildOrder": { "type": ["array", "null"], "items": { "type": "string" } },
+        "PublishOrder": { "type": ["array", "null"], "items": { "type": "string" } }
+      }
+    },
+
+    "ReleaseSegment": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "Type": { "const": "Release" },
+        "Configuration": { "$ref": "#/$defs/ReleaseConfiguration" }
+      },
+      "required": ["Type", "Configuration"]
+    },
+
     "ConfigurationSegment": {
       "oneOf": [
         { "$ref": "#/$defs/ManifestSegment" },
@@ -1178,7 +1210,8 @@
         { "$ref": "#/$defs/TestsAfterMergeSegment" },
         { "$ref": "#/$defs/PublishSegment" },
         { "$ref": "#/$defs/ArtefactSegment" },
-        { "$ref": "#/$defs/ModuleDependencySegment" }
+        { "$ref": "#/$defs/ModuleDependencySegment" },
+        { "$ref": "#/$defs/ReleaseSegment" }
       ]
     }
   }

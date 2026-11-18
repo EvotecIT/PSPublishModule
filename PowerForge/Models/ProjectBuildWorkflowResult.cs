@@ -4,4 +4,5 @@ internal sealed class ProjectBuildWorkflowResult
 {
     public ProjectBuildResult Result { get; set; } = new();
     public ProjectBuildGitHubPublishSummary? GitHubPublishSummary { get; set; }
+    public ReleaseVersionCommitResult? VersionCommit { get; set; }
 }

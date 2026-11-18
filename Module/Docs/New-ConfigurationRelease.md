@@ -11,7 +11,7 @@ Creates repo-level release coordination settings for a module and package build.
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-New-ConfigurationRelease [-StageRoot <string>] [-VersionSource <ReleaseVersionSource>] [-Version <string>] [-PrimaryProject <string>] [-SynchronizeModuleVersion] [-ResumeIncompleteRelease] [-ReusePreparedPackages] [-BuildOrder <string[]>] [-PublishOrder <string[]>] [<CommonParameters>]
+New-ConfigurationRelease [-StageRoot <string>] [-VersionSource <ReleaseVersionSource>] [-Version <string>] [-PrimaryProject <string>] [-SynchronizeModuleVersion] [-ResumeIncompleteRelease] [-ReusePreparedPackages] [-CommitVersionChanges <ReleaseVersionCommitMode>] [-BuildOrder <string[]>] [-PublishOrder <string[]>] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -35,6 +35,26 @@ Type: String[]
 Parameter Sets: __AllParameterSets
 Aliases: None
 Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -CommitVersionChanges
+Saves the version numbers a publish run wrote into tracked files (module manifest, project files and other
+version metadata) to Git once every publish step succeeds. Off (default) leaves them uncommitted,
+Commit commits them locally and Push also pushes the commit to the current branch.
+Only files whose changes are limited to version numbers are committed; other uncommitted work is left alone.
+Anything that goes wrong becomes a warning with the command to finish by hand, and never fails the release.
+
+```yaml
+Type: ReleaseVersionCommitMode
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values: Off, Commit, Push
 
 Required: False
 Position: named

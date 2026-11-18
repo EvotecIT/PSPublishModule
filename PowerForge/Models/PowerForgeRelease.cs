@@ -39,6 +39,12 @@ internal sealed class PowerForgeReleaseSpec
     public PowerForgeReleaseWingetOptions? Winget { get; set; }
 
     public PowerForgeReleaseScoopOptions? Scoop { get; set; }
+
+    /// <summary>
+    /// Saves the version numbers the release wrote into tracked files to Git after every publish step succeeds:
+    /// <c>Off</c> (default), <c>Commit</c> or <c>Push</c>. Problems become a warning and never fail the release.
+    /// </summary>
+    public ReleaseVersionCommitMode CommitVersionChanges { get; set; }
 }
 
 /// <summary>
@@ -310,6 +316,9 @@ internal sealed class PowerForgeReleaseRequest
 internal sealed class PowerForgeReleaseResult
 {
     public bool Success { get; set; }
+
+    /// <summary>Outcome of saving the release's version changes to Git, when that step ran.</summary>
+    public ReleaseVersionCommitResult? VersionCommit { get; set; }
 
     public string? ErrorMessage { get; set; }
 

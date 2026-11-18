@@ -7,11 +7,11 @@ using System.Text;
 namespace PowerForge;
 
 internal sealed class HomeAssistantReleaseGitService {
-    private readonly GitClient _git;
+    private readonly ReleaseGitRunner _git;
     private readonly IProcessRunner _processRunner;
 
     internal HomeAssistantReleaseGitService(GitClient? git = null, IProcessRunner? processRunner = null) {
-        _git = git ?? new GitClient(defaultTimeout: TimeSpan.FromMinutes(2));
+        _git = new ReleaseGitRunner(git);
         _processRunner = processRunner ?? new ProcessRunner();
     }
 
@@ -29,7 +29,7 @@ internal sealed class HomeAssistantReleaseGitService {
     }
 
     internal string GetHeadSha(string repositoryRoot)
-        => Run(repositoryRoot, "rev-parse", "HEAD").StdOut.Trim();
+        => _git.GetHeadSha(repositoryRoot);
 
     internal string? FindPreparedReleaseCommit(
         string repositoryRoot,
@@ -186,19 +186,9 @@ internal sealed class HomeAssistantReleaseGitService {
         }
     }
 
-    private ProcessRunResult Run(string repositoryRoot, params string[] arguments) {
-        var result = RunAllowFailure(repositoryRoot, arguments);
-        if (!result.Succeeded) {
-            var detail = string.IsNullOrWhiteSpace(result.StdErr) ? result.StdOut : result.StdErr;
-            throw new InvalidOperationException($"git {string.Join(" ", arguments)} failed with exit code {result.ExitCode}. {detail.Trim()}");
-        }
-
-        return result;
-    }
+    private ProcessRunResult Run(string repositoryRoot, params string[] arguments)
+        => _git.Run(repositoryRoot, arguments);
 
     private ProcessRunResult RunAllowFailure(string repositoryRoot, params string[] arguments)
-        => _git.RunRawAsync(repositoryRoot, arguments, TimeSpan.FromMinutes(2))
-            .ConfigureAwait(false)
-            .GetAwaiter()
-            .GetResult();
+        => _git.RunAllowFailure(repositoryRoot, arguments);
 }

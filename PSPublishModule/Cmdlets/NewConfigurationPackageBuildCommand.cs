@@ -481,6 +481,15 @@ public sealed class NewConfigurationReleaseCommand : PSCmdlet
     /// </summary>
     [Parameter] public SwitchParameter ReusePreparedPackages { get; set; }
 
+    /// <summary>
+    /// Saves the version numbers a publish run wrote into tracked files (module manifest, project files and other
+    /// version metadata) to Git once every publish step succeeds. <c>Off</c> (default) leaves them uncommitted,
+    /// <c>Commit</c> commits them locally and <c>Push</c> also pushes the commit to the current branch.
+    /// Only files whose changes are limited to version numbers are committed; other uncommitted work is left alone.
+    /// Anything that goes wrong becomes a warning with the command to finish by hand, and never fails the release.
+    /// </summary>
+    [Parameter] public ReleaseVersionCommitMode CommitVersionChanges { get; set; }
+
     /// <summary>Preferred build order for high-level release lanes.</summary>
     [Parameter] public string[]? BuildOrder { get; set; }
 
@@ -503,6 +512,7 @@ public sealed class NewConfigurationReleaseCommand : PSCmdlet
                      VersionSource is ReleaseVersionSource.ProjectBuild or ReleaseVersionSource.PackageBuild),
                 ResumeIncompleteRelease = ResumeIncompleteRelease.IsPresent,
                 ReusePreparedPackages = ReusePreparedPackages.IsPresent,
+                CommitVersionChanges = CommitVersionChanges,
                 BuildOrder = BuildOrder,
                 PublishOrder = PublishOrder
             }

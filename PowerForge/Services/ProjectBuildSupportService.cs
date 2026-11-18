@@ -35,6 +35,7 @@ internal sealed class ProjectBuildSupportService
             ReadCommentHandling = JsonCommentHandling.Skip,
             AllowTrailingCommas = true
         };
+        options.Converters.Add(new JsonStringEnumConverter());
 
         using var document = JsonDocument.Parse(json, new JsonDocumentOptions
         {

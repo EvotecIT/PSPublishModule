@@ -50,6 +50,80 @@ internal sealed class ProjectBuildWorkflowService
         if (preparation is null)
             throw new ArgumentNullException(nameof(preparation));
 
+        // Only a run that publishes itself saves its version changes; plans, local builds,
+        // staging and deferred publication leave them to whoever publishes.
+        var publishes = executeBuild &&
+                        !preparation.PlanOnly &&
+                        !deferPublishing &&
+                        !preparation.StageNuget &&
+                        (preparation.PublishNuget || preparation.PublishGitHub);
+        using var versionCommit = ReleaseVersionCommitSession.Begin(
+            _logger,
+            configDir,
+            config.CommitVersionChanges ?? ReleaseVersionCommitMode.Off,
+            publishes);
+        ProjectBuildWorkflowResult workflow;
+        try
+        {
+            workflow = ExecuteWorkflow(
+                config,
+                configDir,
+                preparation,
+                executeBuild,
+                remotePublishAttempted,
+                coordinatedReleaseCheckpointActive,
+                progress,
+                cancellationToken,
+                deferPublishing);
+        }
+        catch
+        {
+            versionCommit.Complete(releaseSucceeded: false, config.GitHubRepositoryName, version: null);
+            throw;
+        }
+
+        workflow.VersionCommit = versionCommit.Complete(
+            workflow.Result.Success,
+            config.GitHubRepositoryName,
+            ResolveReleaseVersion(config, workflow.Result.Release));
+        return workflow;
+    }
+
+    private static string? ResolveReleaseVersion(ProjectBuildConfiguration config, DotNetRepositoryReleaseResult? release)
+    {
+        if (release is null)
+            return null;
+
+        var primary = config.GitHubPrimaryProject;
+        if (!string.IsNullOrWhiteSpace(primary))
+        {
+            var project = release.Projects.FirstOrDefault(candidate =>
+                string.Equals(candidate.ProjectName, primary, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(candidate.PackageId, primary, StringComparison.OrdinalIgnoreCase));
+            if (!string.IsNullOrWhiteSpace(project?.NewVersion))
+                return project!.NewVersion;
+        }
+
+        var versions = release.Projects
+            .Where(static project => project.IsPackable && !string.IsNullOrWhiteSpace(project.NewVersion))
+            .Select(static project => project.NewVersion!)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        return versions.Length == 1 ? versions[0] : null;
+    }
+
+    private ProjectBuildWorkflowResult ExecuteWorkflow(
+        ProjectBuildConfiguration config,
+        string configDir,
+        ProjectBuildPreparedContext preparation,
+        bool executeBuild,
+        Action? remotePublishAttempted,
+        bool coordinatedReleaseCheckpointActive,
+        IProjectBuildProgressReporter? progress,
+        CancellationToken cancellationToken,
+        bool deferPublishing)
+    {
+
         using var operationLock = executeBuild && !preparation.PlanOnly
             ? ProjectBuildOperationLock.Acquire(preparation)
             : null;

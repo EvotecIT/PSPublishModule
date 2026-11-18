@@ -28,6 +28,44 @@ public sealed partial class ModulePipelineRunner
         if (spec is null) throw new ArgumentNullException(nameof(spec));
         if (plan is null) throw new ArgumentNullException(nameof(plan));
 
+        using var versionCommit = ReleaseVersionCommitSession.Begin(
+            _logger,
+            plan.ProjectRoot,
+            plan.Release?.Configuration?.CommitVersionChanges ?? ReleaseVersionCommitMode.Off,
+            PublishesFromThisRun(plan));
+        ModulePipelineResult result;
+        try
+        {
+            result = RunPipeline(spec, plan, progress, preflightPrecomputedPlan);
+        }
+        catch
+        {
+            versionCommit.Complete(releaseSucceeded: false, plan.ModuleName, FormatReleaseVersion(plan));
+            throw;
+        }
+
+        versionCommit.Complete(releaseSucceeded: true, plan.ModuleName, FormatReleaseVersion(result.Plan ?? plan));
+        return result;
+    }
+
+    /// <summary>A publish run that has somewhere to publish; builds, plans and docs never commit.</summary>
+    private static bool PublishesFromThisRun(ModulePipelinePlan plan)
+        => plan.GateMode is null or ConfigurationGateMode.Publish &&
+           (plan.Publishes?.Length ?? 0) > 0;
+
+    private static string? FormatReleaseVersion(ModulePipelinePlan plan)
+        => string.IsNullOrWhiteSpace(plan.ResolvedVersion)
+            ? null
+            : string.IsNullOrWhiteSpace(plan.PreRelease)
+                ? plan.ResolvedVersion
+                : $"{plan.ResolvedVersion}-{plan.PreRelease}";
+
+    private ModulePipelineResult RunPipeline(
+        ModulePipelineSpec spec,
+        ModulePipelinePlan plan,
+        IModulePipelineProgressReporter? progress,
+        bool preflightPrecomputedPlan)
+    {
         if (plan.GateMode == ConfigurationGateMode.Documentation)
             EnsureDocumentationGateConfigured(plan);
 

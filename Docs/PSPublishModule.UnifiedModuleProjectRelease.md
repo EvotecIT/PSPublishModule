@@ -576,6 +576,33 @@ The equivalent JSON segment is:
 }
 ```
 
+## Saving Version Changes To Git
+
+A release writes the new version into tracked files: the module manifest, project files, and other version
+metadata. `CommitVersionChanges` saves those changes to Git once every publish step has succeeded, so the
+repository shows the version that shipped. It is off by default and takes one line to turn on:
+
+```powershell
+New-ConfigurationRelease -VersionSource ProjectBuild -PrimaryProject 'Contoso.Core' -CommitVersionChanges Push
+```
+
+In `release.json` or `project.build.json`, add `"CommitVersionChanges": "Push"` at the top level.
+
+- `Off`: leave the version changes uncommitted.
+- `Commit`: commit them on the current branch with the message `Release <name> <version>`.
+- `Push`: commit them and push the commit to the branch's upstream. It never forces, rebases, or pulls.
+
+Only files whose changes are limited to version numbers are committed, using your usual Git identity and
+signing settings. Generated build output, other uncommitted or untracked work, and anything already staged are
+left as they were. A version file that already held your own edits before the release is skipped with a warning.
+
+This step never fails or blocks a release. A failed publish, a moved `HEAD`, a detached checkout, a rejected push
+(protected branch or a newer remote commit), no network, or Git not being available each becomes a single warning
+that says what was left and the command that finishes it, such as `git push origin HEAD:main`. A resumed release
+commits stamped files left by the failed attempt once; rerunning it again finds nothing to commit. Plans,
+validation runs, and local builds that do not publish never commit. When a release runs another release host
+(for example `release.json` building a module or project packages), only the outermost one commits.
+
 ## Non-Goals
 
 - Do not make `Build-Module.ps1` responsible for NuGet package publishing mechanics.
