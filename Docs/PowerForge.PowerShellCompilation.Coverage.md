@@ -73,7 +73,7 @@ entry rules, dependent authored types, and unsupported function metadata retain
 their existing guards. These two frontier counts are sequential and overlap;
 they are not additive coverage gains.
 
-At the 436/753 checkpoint, Pester retained 169 units and PSFramework retained
+At the 436/753 measurement, Pester retained 169 units and PSFramework retained
 138: together, 307 of the packet's 317 retained units. PSFramework's overlapping
 parameter-type, syntax and parameter-metadata diagnostics affected 68, 53 and 26
 units; they were the sole visible blockers for 55, 41 and 23 respectively.
@@ -104,6 +104,13 @@ aliases and abbreviated names, validation errors and continuation, verbose
 records, downstream stop and finally, repeated invocation, early discovery, and
 retained class identity. General Strict pipelines and runtime-free authored
 classes remain unsupported.
+
+The external execution choices follow the complete-function census: the GitHub
+helpers already emit 10/10 functions and the PowerShell installer 4/4; Scoop
+emits 23/24 before its exit helper becomes complete. Their contracts qualify
+actual entries and delivered artifacts rather than treating those emission
+counts as execution proof. The current packet emits all 38 owned functions in
+these three workloads, while the other four receive no complete-workload credit.
 
 ## Reproduce the measurements
 
@@ -166,6 +173,20 @@ project lifecycle. The four workloads without complete contracts remain
 unattempted. These results do not qualify live GitHub operations, arbitrary
 installer branches, MSI/global installations, direct executable packaging of
 the installers, or runtime-free execution.
+
+The integrated focused suite passes 29 cases with zero failures and zero skips.
+Its semantic cases compare original and generated artifacts on the pinned
+7.6.6 and installed 5.1 profiles for delivered type identity, native conversion
+and validation, lazy attributes, shared state, borrowed syntax trees, completion
+enums, compatibility variants, missing initialization and recovery. Caller
+transfer cases cover native and compiled loops, begin/process/end partial output,
+finally, calls outside a loop and subsequent invocation. Exit cases cover ten
+value/computed-operand forms through a real child script, preserving native
+conversion, output, catch bypass, cleanup, script termination and host recovery.
+Project acceptance cases additionally compare three source encodings with native
+file execution on both hosts and reject changed script bytes and schema-1
+acceptance declarations. These checks preserve the distinct retained boundary
+for switch predicates that transfer outside their own bodies.
 
 ## Semantic and performance limits
 
