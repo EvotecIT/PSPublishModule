@@ -23,6 +23,7 @@ public sealed partial class DotNetRepositoryReleaseService
             progressTotal,
             "Evaluating project metadata");
         var resolutions = ResolveProjectPlanningItems(
+            "Evaluating project metadata",
             candidates.Count,
             (index, logger) =>
             {
