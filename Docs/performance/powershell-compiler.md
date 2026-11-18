@@ -194,31 +194,63 @@ before/after. The JSON retains first-import and first-call samples as well as
 loaded calls. Neither the paired result nor the complete source comparison
 establishes faster Hybrid module startup.
 
-## Next performance milestone: assignment and variable-storage preparation
+## Assignment and variable-storage plan reuse
 
-The current source comparison still measures **21.029 / 0.440 ms** for the
+The earlier source comparison measured **21.029 / 0.440 ms** for the
 loaded YAML probe and **149.830 / 17.741 ms** for Archive, Hybrid/source.
-The current [YAML](../../Benchmarks/PowerShellCompilation/Corpus/Performance/cached-yaml-warm-stack.txt),
+The [YAML](../../Benchmarks/PowerShellCompilation/Corpus/Performance/cached-yaml-warm-stack.txt),
 [Archive](../../Benchmarks/PowerShellCompilation/Corpus/Performance/cached-archive-warm-stack.txt)
 and [PSFramework import](../../Benchmarks/PowerShellCompilation/Corpus/Performance/cached-psframework-import-stack.txt)
 exports list `CreateAssignmentTarget`, `NativeAstCompiler.Compile` and
 `NativeVariableStorage.Compile` alongside generated function methods. Source
-inspection shows that these operations
-prepare assignments and variable access within each native invocation, even
-when command plans are already available.
+inspection showed that assignments and iterator-variable access were prepared
+again for each invocation even when command plans were already available.
 
-Sharing these plans needs additional identity for optimized-variable slot maps
-and optimized versus dynamic storage. The command-plan cache does not qualify
-that reuse. The next milestone is to specialize assignment and storage plans
-while preserving current invocation values, constraints, target evaluation
-order, errors and source extents on both supported PowerShell hosts. Compare
-the same packet and alternate old/new artifacts before making another claim.
+Eligible assignment, member/index mutation and foreach/switch storage plans
+now share compiled delegates within a defining function and runspace. The
+cache distinguishes the actual local name-to-index map, tuple type,
+optimization state, and language mode. Assignment plans also distinguish the
+source document and authored site. Targets containing type syntax, attributes,
+commands or script blocks still compile within their invocation. The delegates
+receive the active function context and value producer on each call. Iterator
+cursors and saved automatic-variable values belong to each loop.
 
 The [profile metadata](../../Benchmarks/PowerShellCompilation/Corpus/Performance/2026-11-18-cached-runtime-profiles.json)
 records the compiler, host, artifact hashes, requested work and completed probe
 status. Profiles are separate from the unprofiled timings and include setup and
 waiting threads. The bounded PSFramework collection ended before its requested
 import sequence completed; it is diagnostic stack evidence, not a functional pass.
+
+The [alternating before/after samples](../../Benchmarks/PowerShellCompilation/Corpus/Performance/2026-11-18-hybrid-storage-revision-ab.json)
+compare the previous runtime with plan reuse on Windows x64, PowerShell 7.6.9
+and .NET 10.0.14. The [before](../../Benchmarks/PowerShellCompilation/Corpus/Performance/2026-11-18-hybrid-storage-baseline-artifacts.json)
+and [after](../../Benchmarks/PowerShellCompilation/Corpus/Performance/2026-11-18-hybrid-storage-candidate-artifacts.json)
+records identify the compiler and complete measured payloads. Package bytes,
+dependency locks, export counts and emitted-unit counts match. Each of eight
+alternating pairs per module starts a fresh process for each revision, imports
+once and runs the same packet probe six times. All 288 calls passed the packet
+assertions. Archive's probe checks for the extracted file.
+
+| Module | First import p50, before → after (ms) | First call p50, before → after (ms) | Loaded-call p50, before → after (ms) |
+| --- | ---: | ---: | ---: |
+| powershell-yaml 0.4.12 | 717.489 → 707.382 | 349.681 → 272.944 | 28.875 → 0.859 |
+| Microsoft.PowerShell.Archive 1.2.6 | 242.506 → 431.321 | 1034.179 → 1219.775 | 186.094 → 26.060 |
+| PSFramework 1.14.457 | 5242.255 → 4742.201 | 37.959 → 39.049 | 7.182 → 6.829 |
+
+Loaded-call p50 improved **33.61×** for YAML and **7.14×** for Archive. Both
+had faster loaded-call medians in all eight process pairs. The PSFramework
+loaded-call difference was small, and its first-call p50 increased slightly.
+The [Archive confirmation](../../Benchmarks/PowerShellCompilation/Corpus/Performance/2026-11-18-hybrid-storage-archive-confirmation.json)
+used eight more alternating pairs on the same host and passed all 96 calls.
+Its first-import p50 moved from **283.507 to 308.070 ms** and first-call p50
+from **925.687 to 1093.046 ms**. Its loaded-call p50 fell from **150.763 to
+23.120 ms**, a **6.52×** improvement. Archive's first-use medians rose in
+both runs, with a variable import gap. First use still compiles and stores
+the plans. The samples establish a repeated-call improvement and leave the
+cause of the cold timing differences open.
+
+These comparisons measure two Hybrid revisions on one host. The source
+comparison above describes the earlier revision.
 
 ## Reproduce
 
