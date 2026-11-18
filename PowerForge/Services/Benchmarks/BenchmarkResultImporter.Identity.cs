@@ -19,6 +19,12 @@ public sealed class BenchmarkImportOptions
     /// </summary>
     public IDictionary<string, string>? LibraryMap { get; set; }
 
+    /// <summary>
+    /// Declared map from benchmark method name to the shared case name, used when each library has its own
+    /// method for the same workload. <c>[BenchmarkCategory("case:&lt;name&gt;")]</c> does the same in code.
+    /// </summary>
+    public IDictionary<string, string>? CaseMap { get; set; }
+
     /// <summary>Output validation recorded by the benchmark before timing.</summary>
     public BenchmarkOutputValidation[]? Validations { get; set; }
 
@@ -30,6 +36,9 @@ public sealed partial class BenchmarkResultImporter
 {
     /// <summary>BenchmarkDotNet category prefix that names a library, as in <c>[BenchmarkCategory("library:OfficeIMO")]</c>.</summary>
     public const string LibraryCategoryPrefix = "library:";
+
+    /// <summary>BenchmarkDotNet category prefix that names the shared case, as in <c>[BenchmarkCategory("case:ReadTyped")]</c>.</summary>
+    public const string CaseCategoryPrefix = "case:";
 
     private static readonly Regex RunnerVersion = new(@"v?(?<version>\d+(\.\d+)+)", RegexOptions.CultureInvariant);
 
@@ -46,6 +55,7 @@ public sealed partial class BenchmarkResultImporter
     private static void ApplyImportOptions(BenchmarkRunResult result, BenchmarkImportOptions options)
     {
         ApplyLibraryIdentity(result, options.LibraryMap);
+        ApplyCaseIdentity(result, options.CaseMap);
         ApplyBenchmarkDotNetRunner(result);
         if (options.Validations is { Length: > 0 })
             result.Validations = result.Validations.Concat(options.Validations).ToArray();
@@ -105,20 +115,57 @@ public sealed partial class BenchmarkResultImporter
     }
 
     internal static string? LibraryFromCategories(string? categories)
+        => CategoryValue(categories, LibraryCategoryPrefix, "library");
+
+    private static string? CategoryValue(string? categories, string prefix, string kind)
     {
         if (string.IsNullOrWhiteSpace(categories))
             return null;
-        string[] libraries = categories!
+        string[] values = categories!
             .Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries)
             .Select(value => value.Trim())
-            .Where(value => value.StartsWith(LibraryCategoryPrefix, StringComparison.OrdinalIgnoreCase))
-            .Select(value => value.Substring(LibraryCategoryPrefix.Length).Trim())
+            .Where(value => value.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            .Select(value => value.Substring(prefix.Length).Trim())
             .Where(value => value.Length > 0)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
-        if (libraries.Length > 1)
-            throw new InvalidOperationException($"Benchmark categories '{categories}' name more than one library.");
-        return libraries.Length == 1 ? libraries[0] : null;
+        if (values.Length > 1)
+            throw new InvalidOperationException($"Benchmark categories '{categories}' name more than one {kind}.");
+        return values.Length == 1 ? values[0] : null;
+    }
+
+    // A library's own method name becomes the shared case name; the method is kept as a producer identity
+    // variable that is not part of the measured cell.
+    private static void ApplyCaseIdentity(BenchmarkRunResult result, IDictionary<string, string>? map)
+    {
+        var normalizedMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (KeyValuePair<string, string> item in map ?? new Dictionary<string, string>())
+        {
+            if (string.IsNullOrWhiteSpace(item.Key) || string.IsNullOrWhiteSpace(item.Value))
+                throw new ArgumentException("Case map entries need a method name and a case name.", nameof(map));
+            normalizedMap[item.Key.Trim()] = item.Value.Trim();
+        }
+
+        string? Resolve(string scenario, IReadOnlyDictionary<string, string?> variables)
+            => CategoryValue(variables.TryGetValue("Categories", out string? categories) ? categories : null, CaseCategoryPrefix, "case")
+               ?? (normalizedMap.TryGetValue(scenario ?? string.Empty, out string? mapped) ? mapped : null);
+
+        foreach (BenchmarkSample sample in result.Samples)
+        {
+            string? name = Resolve(sample.Scenario, sample.Variables);
+            if (name is null || string.Equals(name, sample.Scenario, StringComparison.Ordinal))
+                continue;
+            sample.Variables["Method"] = sample.Scenario;
+            sample.Scenario = name;
+        }
+        foreach (BenchmarkSummaryRow row in result.Summary)
+        {
+            string? name = Resolve(row.Scenario, row.Variables);
+            if (name is null || string.Equals(name, row.Scenario, StringComparison.Ordinal))
+                continue;
+            row.Variables["Method"] = row.Scenario;
+            row.Scenario = name;
+        }
     }
 
     internal static string? ReadBenchmarkDotNetCategories(JsonElement benchmark)

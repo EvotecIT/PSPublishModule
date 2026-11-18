@@ -27,7 +27,7 @@ public sealed partial class BenchmarkServicesTests
         office.Ratio = 2;
 
         InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
-            UpdateDeclared(new BenchmarkEvidenceCatalogService(), 
+            UpdateDeclared(new BenchmarkEvidenceCatalogService(),
                 null,
                 result,
                 "comparison-a",
@@ -58,7 +58,7 @@ public sealed partial class BenchmarkServicesTests
         ];
 
         InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
-            UpdateDeclared(new BenchmarkEvidenceCatalogService(), 
+            UpdateDeclared(new BenchmarkEvidenceCatalogService(),
                 null,
                 result,
                 "comparison-a",
@@ -76,7 +76,7 @@ public sealed partial class BenchmarkServicesTests
         result.Summary[0].Suite = "Different";
 
         InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
-            UpdateDeclared(new BenchmarkEvidenceCatalogService(), 
+            UpdateDeclared(new BenchmarkEvidenceCatalogService(),
                 null,
                 result,
                 "comparison-a",
@@ -110,7 +110,7 @@ public sealed partial class BenchmarkServicesTests
         ];
 
         InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
-            UpdateDeclared(new BenchmarkEvidenceCatalogService(), 
+            UpdateDeclared(new BenchmarkEvidenceCatalogService(),
                 null,
                 result,
                 "comparison-a",
@@ -136,14 +136,14 @@ public sealed partial class BenchmarkServicesTests
         linux.Environment.LogicalCoreCount = 10;
         var service = new BenchmarkEvidenceCatalogService();
 
-        BenchmarkEvidenceCatalog catalog = UpdateDeclared(service, 
+        BenchmarkEvidenceCatalog catalog = UpdateDeclared(service,
             null,
             windows,
             "comparison-a",
             "windows.json",
             "full",
             publish: true);
-        catalog = UpdateDeclared(service, 
+        catalog = UpdateDeclared(service,
             catalog,
             linux,
             "comparison-a",
@@ -163,12 +163,12 @@ public sealed partial class BenchmarkServicesTests
     {
         string root = CreateTempRoot();
         string catalogPath = Path.Combine(root, "index.json");
-        string resultPath = Path.Combine(root, "windows.json");
-        File.WriteAllText(resultPath, "{\"suite\":\"stale\"}");
+        string stalePath = Path.Combine(root, "windows.json");
+        File.WriteAllText(stalePath, "{\"suite\":\"stale\"}");
         BenchmarkRunResult result = Result("Windows", "fixture-a", 10);
 
         BenchmarkEvidenceCatalog catalog =
-            UpdateFileDeclared(new BenchmarkEvidenceCatalogService(), 
+            UpdateFileDeclared(new BenchmarkEvidenceCatalogService(),
                 catalogPath,
                 result,
                 "comparison-a",
@@ -176,6 +176,8 @@ public sealed partial class BenchmarkServicesTests
                 "full",
                 publish: true);
 
+        string resultPath = Path.Combine(root, Assert.Single(catalog.Entries).ArtifactRelativePath);
+        Assert.Equal("{\"suite\":\"stale\"}", File.ReadAllText(stalePath));
         BenchmarkRunResult written = BenchmarkJson.Read<BenchmarkRunResult>(resultPath);
         Assert.Equal(result.RunId, written.RunId);
         Assert.Equal(
@@ -213,7 +215,7 @@ public sealed partial class BenchmarkServicesTests
         BenchmarkRunResult result = Result("Windows", "fixture-a", 10);
 
         BenchmarkEvidenceCatalog catalog =
-            UpdateFileDeclared(new BenchmarkEvidenceCatalogService(), 
+            UpdateFileDeclared(new BenchmarkEvidenceCatalogService(),
                 catalogPath,
                 result,
                 "comparison-a",
@@ -223,7 +225,8 @@ public sealed partial class BenchmarkServicesTests
                 resultArtifactPath: artifactPath);
 
         BenchmarkEvidenceEntry entry = Assert.Single(catalog.Entries);
-        Assert.Equal("/data/benchmarks/windows.json", entry.ResultPath);
+        Assert.Equal($"/data/benchmarks/windows.{entry.ResultSha256}.json", entry.ResultPath);
+        artifactPath = Path.Combine(Path.GetDirectoryName(artifactPath)!, $"windows.{entry.ResultSha256}.json");
         Assert.Equal(result.RunId, BenchmarkJson.Read<BenchmarkRunResult>(artifactPath).RunId);
         Assert.Equal(BenchmarkJson.ComputeFileSha256(artifactPath), entry.ResultSha256);
     }
@@ -255,16 +258,16 @@ public sealed partial class BenchmarkServicesTests
 
         string root = CreateTempRoot();
         string catalogPath = Path.Combine(root, "index.json");
-        string resultPath = Path.Combine(root, "windows.json");
         var service = new BenchmarkEvidenceCatalogService();
         BenchmarkRunResult original = Result("Windows", "fixture-a", 10);
-        UpdateFileDeclared(service, 
+        BenchmarkEvidenceCatalog first = UpdateFileDeclared(service,
             catalogPath,
             original,
             "comparison-a",
             "windows.json",
             "full",
             publish: true);
+        string resultPath = Path.Combine(root, Assert.Single(first.Entries).ArtifactRelativePath);
         byte[] expectedArtifact = File.ReadAllBytes(resultPath);
         File.SetAttributes(catalogPath, File.GetAttributes(catalogPath) | FileAttributes.ReadOnly);
         try
@@ -272,7 +275,7 @@ public sealed partial class BenchmarkServicesTests
             BenchmarkRunResult replacement = Result("Windows", "fixture-a", 20);
             replacement.FinishedUtc = original.FinishedUtc.AddMinutes(1);
 
-            Assert.ThrowsAny<Exception>(() => UpdateFileDeclared(service, 
+            Assert.ThrowsAny<Exception>(() => UpdateFileDeclared(service,
                 catalogPath,
                 replacement,
                 "comparison-a",
@@ -281,6 +284,8 @@ public sealed partial class BenchmarkServicesTests
                 publish: true));
 
             Assert.Equal(expectedArtifact, File.ReadAllBytes(resultPath));
+            // The replacement's own content-addressed artifact is rolled back with the failed catalog commit.
+            Assert.Equal(new[] { resultPath }, Directory.GetFiles(root, "windows.*.json"));
         }
         finally
         {
@@ -295,7 +300,7 @@ public sealed partial class BenchmarkServicesTests
         result.Metadata["importedUtc"] = DateTimeOffset.UtcNow.ToString("O");
 
         InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
-            UpdateDeclared(new BenchmarkEvidenceCatalogService(), 
+            UpdateDeclared(new BenchmarkEvidenceCatalogService(),
                 null,
                 result,
                 "comparison-a",
@@ -314,7 +319,7 @@ public sealed partial class BenchmarkServicesTests
         result.Metadata["benchmark.provenance.source"] = "sidecar";
 
         InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
-            UpdateDeclared(new BenchmarkEvidenceCatalogService(), 
+            UpdateDeclared(new BenchmarkEvidenceCatalogService(),
                 null,
                 result,
                 "comparison-a",
@@ -326,27 +331,23 @@ public sealed partial class BenchmarkServicesTests
     }
 
     [Fact]
-    public void EvidenceCatalog_RejectsPublishedLanesSharingOneResultPath()
+    public void EvidenceCatalog_LanesSharingAResultPathGetSeparateContentAddressedFiles()
     {
+        string root = CreateTempRoot();
+        string catalogPath = Path.Combine(root, "index.json");
+        string shared = Path.Combine(root, "site", "result.json");
         var service = new BenchmarkEvidenceCatalogService();
-        BenchmarkEvidenceCatalog catalog = UpdateDeclared(service, 
-            null,
-            Result("Windows", "fixture-a", 10),
-            "comparison-a",
-            "shared.json",
-            "full",
-            publish: true);
+        UpdateFileDeclared(service, catalogPath, Result("Windows", "fixture-a", 10), "comparison-a", "/data/result.json", "full", publish: true, resultArtifactPath: shared);
+        BenchmarkEvidenceCatalog catalog = UpdateFileDeclared(service, catalogPath, Result("Linux", "fixture-a", 11), "comparison-a", "/data/result.json", "full", publish: true, resultArtifactPath: shared);
 
-        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
-            UpdateDeclared(service, 
-                catalog,
-                Result("Linux", "fixture-a", 11),
-                "comparison-a",
-                "shared.json",
-                "full",
-                publish: true));
-
-        Assert.Contains("distinct result paths", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(2, catalog.Entries.Select(entry => entry.ResultPath).Distinct(StringComparer.Ordinal).Count());
+        Assert.All(catalog.Entries, entry =>
+        {
+            Assert.Equal($"/data/result.{entry.ResultSha256}.json", entry.ResultPath);
+            Assert.Equal(entry.ResultSha256, BenchmarkJson.ComputeFileSha256(Path.Combine(root, "site", $"result.{entry.ResultSha256}.json")));
+        });
+        BenchmarkEvidenceCatalog merged = service.MergeFiles(Path.Combine(root, "merged", "index.json"), [catalogPath]);
+        Assert.Equal(2, merged.Entries.Length);
     }
 
     [Fact]
@@ -356,7 +357,7 @@ public sealed partial class BenchmarkServicesTests
         result.Environment.ProcessorName = string.Empty;
 
         InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
-            UpdateDeclared(new BenchmarkEvidenceCatalogService(), 
+            UpdateDeclared(new BenchmarkEvidenceCatalogService(),
                 null,
                 result,
                 "comparison-a",
@@ -422,7 +423,7 @@ public sealed partial class BenchmarkServicesTests
             BenchmarkResultImporter.ComputeValidatedProductionContentSha256(imported));
         Assert.Equal(capture.StartedUtc, imported.StartedUtc);
 
-        BenchmarkEvidenceCatalog catalog = UpdateDeclared(new BenchmarkEvidenceCatalogService(), 
+        BenchmarkEvidenceCatalog catalog = UpdateDeclared(new BenchmarkEvidenceCatalogService(),
             null,
             imported,
             "markpflug-65k-xlsx",

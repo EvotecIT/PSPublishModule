@@ -64,11 +64,13 @@ expression or `LicenseRef-*`), optional `licenseUrl`, `restriction` and `reason`
 drifts: a new `OnePdfLayout` case with `Scale=Easy|Medium|High` appears in the code,
 nobody adds it to the list, and the comparison silently stops publishing. Instead:
 
-- Tag every BenchmarkDotNet method with its library:
-  `[BenchmarkCategory("library:ClosedXML")]`. The importer reads that category, so
-  no name matching is needed. A project that cannot use categories passes an
-  explicit method-to-library map (`Import-BenchmarkResult -LibraryMap`); every
-  method must be mapped or the import fails.
+- Tag every BenchmarkDotNet method with its library and the shared case it measures:
+  `[BenchmarkCategory("library:ClosedXML", "case:ReadTyped")]`. The importer reads
+  those categories, so no name matching is needed, and methods of different
+  libraries that measure the same case line up as one workload. A project that
+  cannot use categories passes explicit maps (`Import-BenchmarkResult -LibraryMap … -CaseMap …`);
+  every method must have a library or the import fails. Two methods of one library
+  that resolve to the same cell fail the catalog update.
 - Generate the `cases`, `axes` and `libraries` of each comparison from the benchmark
   code (for example a `--list-declarations` switch in the benchmark host, or a small
   generator over the benchmark attributes) and check the generated file in.
@@ -141,7 +143,8 @@ loses; they stay in the matrix and in the published evidence.
   Ratios between overlapping cells are not claims.
 - Publish every run of a lane that was published. Never pick the best of several runs.
   A newer run replaces the latest lane; the earlier one stays in the catalog's
-  superseded history with its date and hash.
+  superseded history with its date and hash. Result files are content-addressed
+  (`windows.<sha256>.json`), so the superseded run's file is never overwritten.
 - Keep failed and skipped cells in the evidence with their reason. A crash of one
   library is a result, not something to hide.
 
@@ -153,8 +156,12 @@ Every library in the library policy has a restriction class:
 | --- | --- | --- |
 | `open` | Yes | Yes |
 | `publish-restricted` | Locally, for development | No. Its cells are dropped from the published lane and shown as "not published (licence)"; the other libraries are still published. |
-| `acceptance-required` | Only when the person running the benchmark explicitly accepts the licence for that run | No by default; its cells are recorded and dropped the same way |
+| `acceptance-required` | Only after the person running the benchmark explicitly accepts the licence for that run | Never under the standard policy. The accepted run's cells are recorded, then dropped from the published lane the same way. |
 | `excluded` | Never | Never |
+
+The standard publish policy publishes only `open` libraries
+(`PublishableRestrictions = open`). Accepting a licence lets a library run; it never
+makes its results publishable.
 
 A restricted library never makes a comparison unpublishable. The published lane
 leaves out that library's cells and publishes the rest. Only a comparison declared
@@ -203,6 +210,19 @@ changes.
 
 ## 8. Runs fail partially; evidence is written incrementally
 
+A **failed cell** and **declaration drift** are different things, and PowerForge
+treats them differently:
+
+| Situation | Recorded as | Effect on publishing |
+| --- | --- | --- |
+| A declared case ran and crashed, timed out or failed validation | A cell with status `Failed` (or failed validation) and its reason | The cell is left out; the rest of the lane is published and marked `partial` |
+| A case, library or axis value ran but is not declared | Drift: `unexpected-case`, `unexpected-library`, `unexpected-axis-value` | The lane is not published until the declaration is regenerated |
+| A declared case or axis value has no cell at all | Drift: `missing-case`, `missing-axis-value`, `missing-axis-parameter` | The lane is not published |
+
+A runner that crashes must still write the failed cell. A case that leaves no cell
+behind is indistinguishable from one that was never run, so it is drift.
+
+
 - A crash, timeout or non-zero exit of one library's case is recorded as a failed
   cell with its reason (exit code, exception message). The run continues with the
   other cells and the other comparisons.
@@ -240,7 +260,7 @@ standard thresholds are the floor for public claims.
 | Requirement | Enforced by |
 | --- | --- |
 | Declaration fields, pinned versions, licence and reason, clean comparison ids | `Test-BenchmarkDeclaration` (lint), and every catalog update |
-| Declaration drift (unexpected or missing cases, libraries, axis values) | `Test-BenchmarkDeclaration` with a result; publishing fails on drift |
+| Declaration drift (unexpected or missing cases, libraries, axis values; failed cells are not drift) | `Test-BenchmarkDeclaration` with a result; publishing fails on drift |
 | Library identity from categories or an explicit map | `Import-BenchmarkResult`; unmapped methods fail the import |
 | Runner block, statistic, warmups, samples, confidence interval | publish policy |
 | Output validation per library and case | publish policy |
@@ -248,7 +268,8 @@ standard thresholds are the floor for public claims.
 | Clean provenance, no machine name, pinned packages with hashes | publish policy, provenance capture |
 | Failed cells kept, partial lanes marked | catalog cells and `completeness` |
 | Lane identity (framework and affinity as dimensions) | catalog lane keys; framework or affinity in an id is rejected |
-| Superseded runs kept with date and hash | catalog `superseded` history |
+| Superseded runs kept with date and hash, their files never overwritten | catalog `superseded` history, content-addressed result paths |
+| Recorded lanes still meet replaced declarations or policy | every catalog update re-evaluates all lanes |
 | Measurements unchanged after provenance capture | import and publish validation |
 
 Equivalence of the work, breadth of the matrix, competitor configuration and the

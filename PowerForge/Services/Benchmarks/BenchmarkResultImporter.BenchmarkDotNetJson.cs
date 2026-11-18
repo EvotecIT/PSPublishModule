@@ -99,6 +99,7 @@ public sealed partial class BenchmarkResultImporter
         var environment = GetBenchmarkDotNetEnvironment(root);
         var samples = new List<BenchmarkSample>();
         int? warmups = null, iterations = null, launches = null;
+        bool countsMissing = false;
         foreach (var benchmark in benchmarks.EnumerateArray())
         {
             if (benchmark.ValueKind != JsonValueKind.Object)
@@ -119,12 +120,17 @@ public sealed partial class BenchmarkResultImporter
             nativeParameters ??= GetBenchmarkDotNetFullNameParameters(benchmark, parameterText);
             var variables = ParseBenchmarkDotNetParameters(parameterText, nativeParameters);
             AddBenchmarkDotNetIdentityVariables(benchmark, variables, method);
+            string? categories = ReadBenchmarkDotNetCategories(benchmark);
+            if (!string.IsNullOrWhiteSpace(categories))
+                variables["Categories"] = categories;
             var engine = GetBenchmarkDotNetEngine(benchmark, displayJob);
             var metrics = ExtractBenchmarkDotNetMetrics(statistics);
             AddBenchmarkDotNetMemoryMetrics(TryGetObject(benchmark, "Memory"), metrics);
             double[] originalValues = GetBenchmarkDotNetOriginalValues(statistics);
-            string? library = LibraryFromCategories(ReadBenchmarkDotNetCategories(benchmark));
+            string? library = LibraryFromCategories(categories);
             (int? Warmups, int? Iterations, int? Launches) counts = CountBenchmarkDotNetMeasurements(benchmark);
+            // One benchmark without recorded counts makes the aggregate unknown, never the other benchmarks' value.
+            countsMissing |= counts.Warmups is null || counts.Iterations is null || counts.Launches is null;
             warmups = Min(warmups, counts.Warmups);
             iterations = Min(iterations, counts.Iterations);
             launches = Min(launches, counts.Launches);
@@ -169,8 +175,9 @@ public sealed partial class BenchmarkResultImporter
 
         result = BuildImportedResult(suite ?? GetString(root, "Title") ?? Path.GetFileNameWithoutExtension(path), samples);
         result.Environment = environment;
-        if (warmups.HasValue || iterations.HasValue || launches.HasValue)
-            result.Runner = new BenchmarkRunnerInfo { Kind = "benchmarkdotnet", Warmups = warmups, Iterations = iterations, Launches = launches };
+        result.Runner = countsMissing
+            ? new BenchmarkRunnerInfo { Kind = "benchmarkdotnet" }
+            : new BenchmarkRunnerInfo { Kind = "benchmarkdotnet", Warmups = warmups, Iterations = iterations, Launches = launches };
         return true;
     }
 

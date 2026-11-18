@@ -274,17 +274,16 @@ public sealed partial class BenchmarkResultImporter
             combined.Environment = CopyEnvironment(
                 importedReports.Select(result => result.Environment).FirstOrDefault(HasEnvironment)
                 ?? new BenchmarkEnvironmentInfo());
-            BenchmarkRunnerInfo[] runners = importedReports.Where(result => result.Runner is not null).Select(result => result.Runner!).ToArray();
-            if (runners.Length > 0)
+            // Counts are known only when every report recorded them; otherwise the aggregate stays unknown.
+            BenchmarkRunnerInfo?[] runners = importedReports.Select(result => result.Runner).ToArray();
+            bool countsKnown = runners.All(runner => runner?.Warmups is not null && runner.Iterations is not null && runner.Launches is not null);
+            combined.Runner = new BenchmarkRunnerInfo
             {
-                combined.Runner = new BenchmarkRunnerInfo
-                {
-                    Kind = "benchmarkdotnet",
-                    Warmups = runners.Min(runner => runner.Warmups),
-                    Iterations = runners.Min(runner => runner.Iterations),
-                    Launches = runners.Min(runner => runner.Launches)
-                };
-            }
+                Kind = "benchmarkdotnet",
+                Warmups = countsKnown ? runners.Min(runner => runner!.Warmups) : null,
+                Iterations = countsKnown ? runners.Min(runner => runner!.Iterations) : null,
+                Launches = countsKnown ? runners.Min(runner => runner!.Launches) : null
+            };
             return combined;
         }
 

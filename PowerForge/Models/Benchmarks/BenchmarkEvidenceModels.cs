@@ -167,6 +167,9 @@ public sealed class BenchmarkEvidenceEntry
     /// <summary>Provenance required before a lane can be published.</summary>
     public BenchmarkEvidenceProvenance Provenance { get; set; } = new();
 
+    /// <summary>Libraries whose licence acceptance was recorded for this run.</summary>
+    public string[] AcceptedLibraries { get; set; } = Array.Empty<string>();
+
     /// <summary>One cell per case, operation, library and parameter set, including failed cells.</summary>
     public BenchmarkEvidenceCell[] Cells { get; set; } = Array.Empty<BenchmarkEvidenceCell>();
 

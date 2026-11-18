@@ -148,4 +148,14 @@ public sealed partial class BenchmarkEvidenceCatalogService
             return false;
         }
     }
+
+    private static string ContentAddressedFilePath(string artifactPath, string sha256)
+    {
+        string directory = Path.GetDirectoryName(artifactPath) ?? string.Empty;
+        string stem = Path.GetFileNameWithoutExtension(artifactPath);
+        string hash = sha256.ToLowerInvariant();
+        if (stem.EndsWith("." + hash, StringComparison.OrdinalIgnoreCase))
+            return artifactPath;
+        return Path.Combine(directory, stem + "." + hash + Path.GetExtension(artifactPath));
+    }
 }

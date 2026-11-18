@@ -105,12 +105,13 @@ public sealed partial class BenchmarkEvidenceCatalogService
             LaneKey = BenchmarkEvidenceIdentity.CreateLaneKey(normalizedComparisonId, resolvedPlatform, framework, request.Profile, parameters),
             GeneratedUtc = generatedUtc,
             Publish = request.Publish,
-            ResultPath = request.ResultPath,
             ResultSha256 = BenchmarkJson.ComputeSha256(result),
             Suite = result.Suite,
             Environment = CopyEnvironment(result.Environment),
             Compatibility = BuildCompatibility(result)
         };
+        // Result paths are content-addressed so a newer run never overwrites the artifact of a superseded one.
+        entry.ResultPath = CreateContentAddressedResultPath(request.ResultPath, entry.ResultSha256);
         ApplyEvaluation(entry, evaluation);
 
         BenchmarkEvidenceEntry? existingLane = catalog.Entries
@@ -138,8 +139,9 @@ public sealed partial class BenchmarkEvidenceCatalogService
             .ToArray();
         ValidateDistinctPublishedResultPaths(entries);
 
-        ApplyCompatibility(entries);
         catalog.Entries = entries;
+        ReevaluateRetainedLanes(catalog, ReferenceEquals(selectedEntry, entry) ? entry : null);
+        ApplyCompatibility(entries);
         catalog.Superseded = NormalizeSuperseded(superseded, entries);
         ApplyDefinitions(catalog);
         return catalog;
@@ -195,7 +197,7 @@ public sealed partial class BenchmarkEvidenceCatalogService
         if (string.IsNullOrWhiteSpace(catalogPath)) throw new ArgumentException("Catalog path is required.", nameof(catalogPath));
         if (request is null) throw new ArgumentNullException(nameof(request));
         BenchmarkRunResult result = request.Result ?? throw new ArgumentException("Benchmark result is required.", nameof(request));
-        string resultPath = request.ResultPath;
+        if (string.IsNullOrWhiteSpace(request.ResultPath)) throw new ArgumentException("Result path is required.", nameof(request));
         if (result.FinishedUtc == default)
         {
             if (result.HasValidatedProductionProvenance)
@@ -224,6 +226,7 @@ public sealed partial class BenchmarkEvidenceCatalogService
         BenchmarkEvidenceEntry writtenEntry = updated.Entries.Single(entry =>
             string.Equals(entry.LaneKey, laneKey, StringComparison.OrdinalIgnoreCase));
         string inputHash = BenchmarkJson.ComputeSha256(result);
+        string resultPath = CreateContentAddressedResultPath(request.ResultPath, inputHash);
         bool inputWasSelected = string.Equals(
                                     writtenEntry.ResultSha256,
                                     inputHash,
@@ -234,10 +237,9 @@ public sealed partial class BenchmarkEvidenceCatalogService
                                     StringComparison.Ordinal);
         if (inputWasSelected)
         {
-            artifactPath = ResolveResultArtifactPath(
-                fullPath,
-                resultPath,
-                request.ResultArtifactPath);
+            artifactPath = ContentAddressedFilePath(
+                ResolveResultArtifactPath(fullPath, resultPath, request.ResultArtifactPath),
+                inputHash);
             if (string.Equals(artifactPath, fullPath, StringComparison.OrdinalIgnoreCase))
             {
                 throw new InvalidOperationException(

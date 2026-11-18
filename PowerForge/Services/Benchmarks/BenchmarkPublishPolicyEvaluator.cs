@@ -5,7 +5,12 @@ namespace PowerForge;
 /// <summary>Lane being evaluated against the publish policy.</summary>
 internal sealed class BenchmarkPolicyLane
 {
-    internal BenchmarkRunResult Result { get; set; } = new();
+    // Either a result (first evaluation) or the parts a catalog entry stores (re-evaluation under new rules).
+    internal BenchmarkRunResult? Result { get; set; }
+    internal BenchmarkEvidenceCell[]? Cells { get; set; }
+    internal BenchmarkRunnerInfo? Runner { get; set; }
+    internal BenchmarkEvidenceProvenance? Provenance { get; set; }
+    internal string[]? AcceptedLibraries { get; set; }
     internal string ComparisonId { get; set; } = string.Empty;
     internal string Framework { get; set; } = string.Empty;
     internal BenchmarkEvidenceProfile Profile { get; set; }
@@ -23,6 +28,7 @@ internal sealed class BenchmarkPolicyEvaluation
     internal BenchmarkEvidenceProvenance Provenance { get; set; } = new();
     internal string[] LaneIssues { get; set; } = Array.Empty<string>();
     internal string Completeness { get; set; } = string.Empty;
+    internal string[] AcceptedLibraries { get; set; } = Array.Empty<string>();
 }
 
 /// <summary>
@@ -36,10 +42,16 @@ internal static class BenchmarkPublishPolicyEvaluator
     internal static BenchmarkPolicyEvaluation Evaluate(BenchmarkPolicyLane lane)
     {
         BenchmarkPublishPolicy policy = lane.Policy;
-        BenchmarkRunResult result = lane.Result;
-        BenchmarkRunnerInfo runner = CopyRunner(result.Runner);
-        BenchmarkEvidenceProvenance provenance = BuildProvenance(result);
-        BenchmarkEvidenceCell[] cells = BenchmarkEvidenceCellBuilder.Build(result, lane.ComparisonId, policy);
+        BenchmarkRunResult? result = lane.Result;
+        BenchmarkRunnerInfo runner = lane.Runner ?? CopyRunner(result?.Runner);
+        BenchmarkEvidenceProvenance provenance = lane.Provenance ?? BuildProvenance(result ?? throw new ArgumentException("A result or stored lane parts are required.", nameof(lane)));
+        BenchmarkEvidenceCell[] cells = lane.Cells ?? BenchmarkEvidenceCellBuilder.Build(result!, lane.ComparisonId, policy);
+        lane.AcceptedLibraries ??= result?.AcceptedLibraries ?? Array.Empty<string>();
+        foreach (BenchmarkEvidenceCell cell in cells)
+        {
+            cell.Publishable = false;
+            cell.Outcome = string.Empty;
+        }
 
         var laneIssues = new List<string>();
         if (lane.Publish)
@@ -78,7 +90,8 @@ internal static class BenchmarkPublishPolicyEvaluator
             Runner = runner,
             Provenance = provenance,
             LaneIssues = laneIssues.ToArray(),
-            Completeness = completeness
+            Completeness = completeness,
+            AcceptedLibraries = lane.AcceptedLibraries.ToArray()
         };
     }
 
@@ -103,7 +116,7 @@ internal static class BenchmarkPublishPolicyEvaluator
 
     private static void AddProvenanceIssues(
         BenchmarkPolicyLane lane,
-        BenchmarkRunResult result,
+        BenchmarkRunResult? result,
         BenchmarkEvidenceProvenance provenance,
         List<string> issues)
     {
@@ -115,8 +128,10 @@ internal static class BenchmarkPublishPolicyEvaluator
             issues.Add("Published evidence needs the logical core count.");
         if (string.IsNullOrWhiteSpace(provenance.Sdk) && lane.Framework.Length > 0)
             issues.Add($"Published {lane.Framework} evidence needs the .NET SDK version.");
-        if (!string.IsNullOrWhiteSpace(result.Environment.MachineName) ||
-            MachineIdentityKeys.Any(key => result.Metadata.Keys.Any(existing => string.Equals(existing, key, StringComparison.OrdinalIgnoreCase))))
+        // Stored lanes never keep a machine name; the result itself is checked when it is first recorded.
+        if (result is not null &&
+            (!string.IsNullOrWhiteSpace(result.Environment.MachineName) ||
+             MachineIdentityKeys.Any(key => result.Metadata.Keys.Any(existing => string.Equals(existing, key, StringComparison.OrdinalIgnoreCase)))))
             issues.Add("Published evidence must not carry a machine or user name. Remove Environment.MachineName and the machine/user metadata before publishing.");
     }
 
@@ -184,7 +199,7 @@ internal static class BenchmarkPublishPolicyEvaluator
                 if (!policy.PublishableRestrictions.Contains(library.Restriction))
                     yield return $"Not published (licence): library '{library.Id}' is {BenchmarkKebabCaseEnumConverter<BenchmarkLibraryRestriction>.Format(library.Restriction)}. {library.Reason}";
                 if (library.Restriction == BenchmarkLibraryRestriction.AcceptanceRequired &&
-                    !lane.Result.AcceptedLibraries.Contains(library.Id, StringComparer.OrdinalIgnoreCase))
+                    !(lane.AcceptedLibraries ?? Array.Empty<string>()).Contains(library.Id, StringComparer.OrdinalIgnoreCase))
                     yield return $"Library '{library.Id}' ran without a recorded licence acceptance.";
             }
         }
@@ -194,6 +209,8 @@ internal static class BenchmarkPublishPolicyEvaluator
             yield return $"Cell has {cell.SampleCount} measured samples; at least {policy.MinimumMeasuredSamples} are required.";
         if (cell.ConfidenceInterval is null)
             yield return "Cell has no confidence interval for its statistic.";
+        else if (!IsValidInterval(cell.ConfidenceInterval, cell.ValueMs))
+            yield return "Cell confidence interval is invalid: the level must be between 0 and 1 and the bounds finite, ordered and around the reported value.";
         else if (cell.ConfidenceInterval.Level + 1e-9 < policy.ConfidenceLevel)
             yield return $"Cell confidence interval level {cell.ConfidenceInterval.Level.ToString("0.###", CultureInfo.InvariantCulture)} is below {policy.ConfidenceLevel.ToString("0.###", CultureInfo.InvariantCulture)}.";
         if (policy.RequireOutputValidation && !string.Equals(cell.Validation, "passed", StringComparison.OrdinalIgnoreCase))
@@ -206,7 +223,7 @@ internal static class BenchmarkPublishPolicyEvaluator
     {
         foreach (IGrouping<string, BenchmarkEvidenceCell> group in cells
                      .Where(cell => cell.Publishable && cell.ValueMs.HasValue && cell.ConfidenceInterval is not null)
-                     .GroupBy(cell => string.Join("\u001f", cell.Case, cell.Operation, BenchmarkEvidenceCellBuilder.FormatParameters(cell.Parameters)), StringComparer.OrdinalIgnoreCase))
+                     .GroupBy(BenchmarkEvidenceCellBuilder.WorkloadIdentity, StringComparer.OrdinalIgnoreCase))
         {
             BenchmarkEvidenceCell fastest = group.OrderBy(cell => cell.ValueMs!.Value).First();
             foreach (BenchmarkEvidenceCell cell in group)
@@ -227,7 +244,7 @@ internal static class BenchmarkPublishPolicyEvaluator
                     lane.Policy.PublishableRestrictions.Contains(library.Restriction)))
                 .ToArray();
         bool complete = cells
-            .GroupBy(cell => string.Join("\u001f", cell.Case, cell.Operation, BenchmarkEvidenceCellBuilder.FormatParameters(cell.Parameters)), StringComparer.OrdinalIgnoreCase)
+            .GroupBy(BenchmarkEvidenceCellBuilder.WorkloadIdentity, StringComparer.OrdinalIgnoreCase)
             .All(group => expectedLibraries.All(library => group.Any(cell =>
                 cell.Publishable && string.Equals(cell.Library, library, StringComparison.OrdinalIgnoreCase))));
         return complete ? "complete" : "partial";
@@ -278,6 +295,14 @@ internal static class BenchmarkPublishPolicyEvaluator
             Affinity = runner.Affinity ?? string.Empty,
             Priority = runner.Priority ?? string.Empty
         };
+
+    private static bool IsValidInterval(BenchmarkConfidenceInterval interval, double? value)
+        => interval.Level > 0 && interval.Level < 1 &&
+           IsFinite(interval.LowerMs) && IsFinite(interval.UpperMs) &&
+           interval.LowerMs >= 0 && interval.LowerMs <= interval.UpperMs &&
+           value.HasValue && value.Value >= interval.LowerMs && value.Value <= interval.UpperMs;
+
+    private static bool IsFinite(double value) => !double.IsNaN(value) && !double.IsInfinity(value);
 
     private static string Describe(int? value) => value?.ToString(CultureInfo.InvariantCulture) ?? "none";
 }

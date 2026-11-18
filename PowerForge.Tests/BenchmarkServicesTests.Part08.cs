@@ -197,7 +197,7 @@ public sealed partial class BenchmarkServicesTests
         result.Summary[0].MedianMs = null;
 
         InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
-            UpdateDeclared(new BenchmarkEvidenceCatalogService(), 
+            UpdateDeclared(new BenchmarkEvidenceCatalogService(),
                 null,
                 result,
                 "comparison-a",
@@ -215,7 +215,7 @@ public sealed partial class BenchmarkServicesTests
         result.Summary[0].FailureCount = 1;
 
         InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
-            UpdateDeclared(new BenchmarkEvidenceCatalogService(), 
+            UpdateDeclared(new BenchmarkEvidenceCatalogService(),
                 null,
                 result,
                 "comparison-a",
@@ -238,7 +238,7 @@ public sealed partial class BenchmarkServicesTests
         result.Comparison = [comparison];
 
         Assert.Throws<InvalidOperationException>(() =>
-            UpdateDeclared(new BenchmarkEvidenceCatalogService(), 
+            UpdateDeclared(new BenchmarkEvidenceCatalogService(),
                 null,
                 result,
                 "comparison-a",
@@ -256,7 +256,7 @@ public sealed partial class BenchmarkServicesTests
         result.Comparison = [comparison];
 
         InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
-            UpdateDeclared(new BenchmarkEvidenceCatalogService(), 
+            UpdateDeclared(new BenchmarkEvidenceCatalogService(),
                 null,
                 result,
                 "comparison-a",
@@ -289,7 +289,7 @@ public sealed partial class BenchmarkServicesTests
         result.Summary[0].MedianMs = 100;
 
         InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
-            UpdateDeclared(new BenchmarkEvidenceCatalogService(), 
+            UpdateDeclared(new BenchmarkEvidenceCatalogService(),
                 null,
                 result,
                 "comparison-a",
@@ -307,7 +307,7 @@ public sealed partial class BenchmarkServicesTests
         result.Metadata.Remove("gitSha");
 
         InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
-            UpdateDeclared(new BenchmarkEvidenceCatalogService(), 
+            UpdateDeclared(new BenchmarkEvidenceCatalogService(),
                 null,
                 result,
                 "comparison-a",
@@ -325,7 +325,7 @@ public sealed partial class BenchmarkServicesTests
         result.Summary[0].SampleCount = 0;
 
         InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
-            UpdateDeclared(new BenchmarkEvidenceCatalogService(), 
+            UpdateDeclared(new BenchmarkEvidenceCatalogService(),
                 null,
                 result,
                 "comparison-a",
@@ -358,7 +358,7 @@ public sealed partial class BenchmarkServicesTests
         ];
 
         InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
-            UpdateDeclared(new BenchmarkEvidenceCatalogService(), 
+            UpdateDeclared(new BenchmarkEvidenceCatalogService(),
                 null,
                 result,
                 "comparison-a",
@@ -381,7 +381,7 @@ public sealed partial class BenchmarkServicesTests
             result.Environment.Runner = string.Empty;
 
         InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
-            UpdateDeclared(new BenchmarkEvidenceCatalogService(), 
+            UpdateDeclared(new BenchmarkEvidenceCatalogService(),
                 null,
                 result,
                 "comparison-a",
@@ -402,7 +402,7 @@ public sealed partial class BenchmarkServicesTests
         result.Metadata["gitSha"] = gitSha;
 
         InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
-            UpdateDeclared(new BenchmarkEvidenceCatalogService(), 
+            UpdateDeclared(new BenchmarkEvidenceCatalogService(),
                 null,
                 result,
                 "comparison-a",
@@ -419,7 +419,7 @@ public sealed partial class BenchmarkServicesTests
         BenchmarkRunResult result = Result("Windows", "fixture-a", 10);
         result.Metadata["gitSha"] = new string('b', 64);
 
-        BenchmarkEvidenceCatalog catalog = UpdateDeclared(new BenchmarkEvidenceCatalogService(), 
+        BenchmarkEvidenceCatalog catalog = UpdateDeclared(new BenchmarkEvidenceCatalogService(),
             null,
             result,
             "comparison-a",
@@ -438,7 +438,7 @@ public sealed partial class BenchmarkServicesTests
         result.Summary[0].RunMode = "quick";
 
         InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
-            UpdateDeclared(new BenchmarkEvidenceCatalogService(), 
+            UpdateDeclared(new BenchmarkEvidenceCatalogService(),
                 null,
                 result,
                 "comparison-a",
@@ -457,7 +457,7 @@ public sealed partial class BenchmarkServicesTests
         result.Metadata["runMode"] = "import";
         result.Summary[0].RunMode = "import";
 
-        BenchmarkEvidenceCatalog catalog = UpdateDeclared(new BenchmarkEvidenceCatalogService(), 
+        BenchmarkEvidenceCatalog catalog = UpdateDeclared(new BenchmarkEvidenceCatalogService(),
             null,
             result,
             "comparison-a",
@@ -483,7 +483,7 @@ public sealed partial class BenchmarkServicesTests
         }).ToArray();
 
         InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
-            UpdateDeclared(new BenchmarkEvidenceCatalogService(), 
+            UpdateDeclared(new BenchmarkEvidenceCatalogService(),
                 null,
                 result,
                 "comparison-a",
@@ -511,7 +511,7 @@ public sealed partial class BenchmarkServicesTests
         ];
 
         InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
-            UpdateDeclared(new BenchmarkEvidenceCatalogService(), 
+            UpdateDeclared(new BenchmarkEvidenceCatalogService(),
                 null,
                 result,
                 "comparison-a",
@@ -532,7 +532,7 @@ public sealed partial class BenchmarkServicesTests
         File.WriteAllText(path, futureCatalog);
 
         InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
-            UpdateFileDeclared(new BenchmarkEvidenceCatalogService(), 
+            UpdateFileDeclared(new BenchmarkEvidenceCatalogService(),
                 path,
                 Result("Windows", "fixture-a", 10),
                 "comparison-a",
@@ -548,7 +548,7 @@ public sealed partial class BenchmarkServicesTests
     public void EvidenceCatalog_PreservesConfiguredPlatformsWhenUpdateOmitsThem()
     {
         var service = new BenchmarkEvidenceCatalogService();
-        var catalog = UpdateDeclared(service, 
+        var catalog = UpdateDeclared(service,
             null,
             Result("Windows", "fixture-a", 10),
             "comparison-a",
@@ -557,7 +557,7 @@ public sealed partial class BenchmarkServicesTests
             true,
             new[] { "windows", "linux" });
 
-        catalog = UpdateDeclared(service, 
+        catalog = UpdateDeclared(service,
             catalog,
             Result("Linux", "fixture-a", 11),
             "comparison-a",
@@ -582,7 +582,7 @@ public sealed partial class BenchmarkServicesTests
         };
         Publishable(result);
 
-        BenchmarkEvidenceCatalog catalog = UpdateDeclared(new BenchmarkEvidenceCatalogService(), 
+        BenchmarkEvidenceCatalog catalog = UpdateDeclared(new BenchmarkEvidenceCatalogService(),
             null,
             result,
             "comparison-a",
@@ -604,7 +604,7 @@ public sealed partial class BenchmarkServicesTests
         result.Summary[0].Os = "Linux";
 
         InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
-            UpdateDeclared(new BenchmarkEvidenceCatalogService(), 
+            UpdateDeclared(new BenchmarkEvidenceCatalogService(),
                 null,
                 result,
                 "comparison-a",
@@ -623,7 +623,7 @@ public sealed partial class BenchmarkServicesTests
         BenchmarkRunResult result = Result(string.Empty, "fixture-a", 10);
         result.Summary[0].Os = string.Empty;
 
-        BenchmarkEvidenceCatalog catalog = UpdateDeclared(new BenchmarkEvidenceCatalogService(), 
+        BenchmarkEvidenceCatalog catalog = UpdateDeclared(new BenchmarkEvidenceCatalogService(),
             null,
             result,
             "comparison-a",
@@ -705,14 +705,14 @@ public sealed partial class BenchmarkServicesTests
         linux.Environment.ProcessArchitecture = "Arm64";
         var service = new BenchmarkEvidenceCatalogService();
 
-        BenchmarkEvidenceCatalog catalog = UpdateDeclared(service, 
+        BenchmarkEvidenceCatalog catalog = UpdateDeclared(service,
             null,
             windows,
             "comparison-a",
             "windows.json",
             "full",
             publish: true);
-        catalog = UpdateDeclared(service, 
+        catalog = UpdateDeclared(service,
             catalog,
             linux,
             "comparison-a",
@@ -736,14 +736,14 @@ public sealed partial class BenchmarkServicesTests
         BenchmarkRunResult linux = Result("Linux", "fixture-a", 11);
         linux.Summary[0].Scenario = "DifferentScenario";
 
-        BenchmarkEvidenceCatalog catalog = UpdateDeclared(service, 
+        BenchmarkEvidenceCatalog catalog = UpdateDeclared(service,
             null,
             windows,
             "comparison-a",
             "windows.json",
             "full",
             publish: true);
-        catalog = UpdateDeclared(service, 
+        catalog = UpdateDeclared(service,
             catalog,
             linux,
             "comparison-a",
@@ -768,14 +768,14 @@ public sealed partial class BenchmarkServicesTests
         windows.Summary[0].Host = "Core";
         macos.Summary[0].Host = "Desktop";
 
-        BenchmarkEvidenceCatalog catalog = UpdateDeclared(service, 
+        BenchmarkEvidenceCatalog catalog = UpdateDeclared(service,
             null,
             windows,
             "comparison-a",
             "windows.json",
             "full",
             publish: true);
-        catalog = UpdateDeclared(service, 
+        catalog = UpdateDeclared(service,
             catalog,
             macos,
             "comparison-a",
@@ -795,14 +795,14 @@ public sealed partial class BenchmarkServicesTests
     public void EvidenceCatalog_ComparesEachUnpublishedLaneAgainstPublishedEvidence()
     {
         var service = new BenchmarkEvidenceCatalogService();
-        BenchmarkEvidenceCatalog catalog = UpdateDeclared(service, 
+        BenchmarkEvidenceCatalog catalog = UpdateDeclared(service,
             null,
             Result("Linux", "fixture-a", 10),
             "comparison-a",
             "linux.json",
             "full",
             publish: true);
-        catalog = UpdateDeclared(service, 
+        catalog = UpdateDeclared(service,
             catalog,
             Result("Windows", "fixture-b", 11),
             "comparison-a",
@@ -828,14 +828,14 @@ public sealed partial class BenchmarkServicesTests
         windows.Metadata["benchmark.fixture.path"] = "Cases/Foo.csv";
         linux.Metadata["benchmark.fixture.path"] = "Cases/foo.csv";
 
-        BenchmarkEvidenceCatalog catalog = UpdateDeclared(service, 
+        BenchmarkEvidenceCatalog catalog = UpdateDeclared(service,
             null,
             windows,
             "comparison-a",
             "windows.json",
             "full",
             publish: true);
-        catalog = UpdateDeclared(service, 
+        catalog = UpdateDeclared(service,
             catalog,
             linux,
             "comparison-a",
@@ -859,14 +859,14 @@ public sealed partial class BenchmarkServicesTests
         BenchmarkRunResult linux = Result("Linux", "fixture-a", 11);
         linux.Environment.RuntimeVersion = ".NET 10.0.11";
 
-        BenchmarkEvidenceCatalog catalog = UpdateDeclared(service, 
+        BenchmarkEvidenceCatalog catalog = UpdateDeclared(service,
             null,
             windows,
             "comparison-a",
             "windows.json",
             "full",
             true);
-        catalog = UpdateDeclared(service, 
+        catalog = UpdateDeclared(service,
             catalog,
             linux,
             "comparison-a",
@@ -891,14 +891,14 @@ public sealed partial class BenchmarkServicesTests
         windows.Metadata["warmupCount"] = "1";
         linux.Metadata["warmupCount"] = "3";
 
-        BenchmarkEvidenceCatalog catalog = UpdateDeclared(service, 
+        BenchmarkEvidenceCatalog catalog = UpdateDeclared(service,
             null,
             windows,
             "comparison-a",
             "windows.json",
             "full",
             true);
-        catalog = UpdateDeclared(service, 
+        catalog = UpdateDeclared(service,
             catalog,
             linux,
             "comparison-a",
@@ -923,14 +923,14 @@ public sealed partial class BenchmarkServicesTests
         windows.Environment.Runner = "PowerShell 7.6.0";
         macos.Environment.Runner = "PowerShell 7.7.0";
 
-        BenchmarkEvidenceCatalog catalog = UpdateDeclared(service, 
+        BenchmarkEvidenceCatalog catalog = UpdateDeclared(service,
             null,
             windows,
             "comparison-a",
             "windows.json",
             "full",
             true);
-        catalog = UpdateDeclared(service, 
+        catalog = UpdateDeclared(service,
             catalog,
             macos,
             "comparison-a",
@@ -952,7 +952,7 @@ public sealed partial class BenchmarkServicesTests
         string root = CreateTempRoot();
         string path = Path.Combine(root, "index.json");
         var service = new BenchmarkEvidenceCatalogService();
-        BenchmarkEvidenceCatalog catalog = UpdateDeclared(service, 
+        BenchmarkEvidenceCatalog catalog = UpdateDeclared(service,
             null,
             Result("Windows", "fixture-a", 10),
             "comparison-a",
@@ -967,7 +967,7 @@ public sealed partial class BenchmarkServicesTests
                 StringComparer.Ordinal);
         BenchmarkJson.Write(path, catalog);
 
-        catalog = UpdateFileDeclared(service, 
+        catalog = UpdateFileDeclared(service,
             path,
             Result("Linux", "fixture-a", 11),
             "comparison-a",
@@ -1092,7 +1092,7 @@ public sealed partial class BenchmarkServicesTests
         catalog = UpdateDeclared(service, catalog, Result("Windows", "fixture-a", 11), "tabular-65k-v1", "new.json", "quick", false);
 
         var entry = Assert.Single(catalog.Entries);
-        Assert.Equal("new.json", entry.ResultPath);
+        Assert.Equal($"new.{entry.ResultSha256}.json", entry.ResultPath);
     }
 
     [Fact]
@@ -1105,14 +1105,14 @@ public sealed partial class BenchmarkServicesTests
         older.FinishedUtc = newer.FinishedUtc.AddMinutes(-5);
         older.StartedUtc = older.FinishedUtc.AddMinutes(-1);
 
-        BenchmarkEvidenceCatalog catalog = UpdateDeclared(service, 
+        BenchmarkEvidenceCatalog catalog = UpdateDeclared(service,
             null,
             newer,
             "comparison-a",
             "newer.json",
             "full",
             true);
-        catalog = UpdateDeclared(service, 
+        catalog = UpdateDeclared(service,
             catalog,
             older,
             "comparison-a",
@@ -1120,7 +1120,7 @@ public sealed partial class BenchmarkServicesTests
             "full",
             true);
 
-        Assert.Equal("newer.json", Assert.Single(catalog.Entries).ResultPath);
+        Assert.StartsWith("newer.", Assert.Single(catalog.Entries).ResultPath, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -1129,9 +1129,19 @@ public sealed partial class BenchmarkServicesTests
         var root = CreateTempRoot();
         string path = Path.Combine(root, "index.json");
         var service = new BenchmarkEvidenceCatalogService();
+        // Every writer records against the same declarations, as producers sharing one catalog do.
+        BenchmarkDeclarationDocument declarations = TestDeclarations();
+        BenchmarkJson.Write(path, new BenchmarkEvidenceCatalog
+        {
+            Libraries = declarations.Libraries,
+            Comparisons = Enumerable.Range(0, 12)
+                .Select(index => TestDeclarations($"comparison-{index:D2}").Comparisons.Single(value => value.ComparisonId == $"comparison-{index:D2}"))
+                .Concat(declarations.Comparisons)
+                .ToArray()
+        });
         Task[] updates = Enumerable.Range(0, 12)
             .Select(index => Task.Run(() =>
-                UpdateFileDeclared(service, 
+                UpdateFileDeclared(service,
                     path,
                     Result("Windows", "fixture-a", 10 + index),
                     $"comparison-{index:D2}",
@@ -1188,7 +1198,7 @@ public sealed partial class BenchmarkServicesTests
         result.Metadata["gitWorktreeClean"] = "false";
 
         InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
-            UpdateDeclared(new BenchmarkEvidenceCatalogService(), 
+            UpdateDeclared(new BenchmarkEvidenceCatalogService(),
                 null,
                 result,
                 "comparison-a",
@@ -1206,7 +1216,7 @@ public sealed partial class BenchmarkServicesTests
         result.Summary[0].Status = "Partial";
 
         InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
-            UpdateDeclared(new BenchmarkEvidenceCatalogService(), 
+            UpdateDeclared(new BenchmarkEvidenceCatalogService(),
                 null,
                 result,
                 "comparison-a",
@@ -1225,7 +1235,7 @@ public sealed partial class BenchmarkServicesTests
         result.Metadata["os"] = "Linux";
 
         InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
-            UpdateDeclared(new BenchmarkEvidenceCatalogService(), 
+            UpdateDeclared(new BenchmarkEvidenceCatalogService(),
                 null,
                 result,
                 "comparison-a",
@@ -1263,14 +1273,14 @@ public sealed partial class BenchmarkServicesTests
             0.05);
         var service = new BenchmarkEvidenceCatalogService();
 
-        BenchmarkEvidenceCatalog catalog = UpdateDeclared(service, 
+        BenchmarkEvidenceCatalog catalog = UpdateDeclared(service,
             null,
             windows,
             "comparison-a",
             "windows.json",
             "full",
             publish: true);
-        catalog = UpdateDeclared(service, 
+        catalog = UpdateDeclared(service,
             catalog,
             linux,
             "comparison-a",

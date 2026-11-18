@@ -11,7 +11,7 @@ Imports BenchmarkDotNet or normalized benchmark artifacts into the common benchm
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-Import-BenchmarkResult [-Path] <string> [-Suite <string>] [-Culture <string>] [-LibraryMap <hashtable>] [-ValidationPath <string>] [-AcceptLicense <string[]>] [-OutputPath <string>] [-WhatIf] [-Confirm] [<CommonParameters>]
+Import-BenchmarkResult [-Path] <string> [-Suite <string>] [-Culture <string>] [-LibraryMap <hashtable>] [-CaseMap <hashtable>] [-ValidationPath <string>] [-AcceptLicense <string[]>] [-OutputPath <string>] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -39,6 +39,25 @@ acceptance-required libraries can appear in evidence; it is never assumed.
 
 ```yaml
 Type: String[]
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -CaseMap
+Map from benchmark method name to the shared case name, for benchmarks with one method per library
+(ReadOfficeImo and ReadClosedXml both measure ReadTyped). The
+[BenchmarkCategory("case:<name>")] category does the same in code. The method name is kept
+as the Method variable.
+
+```yaml
+Type: Hashtable
 Parameter Sets: __AllParameterSets
 Aliases: None
 Possible values:

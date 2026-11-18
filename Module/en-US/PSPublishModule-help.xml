@@ -13026,6 +13026,21 @@ acceptance-required libraries can appear in evidence; it is never assumed.</maml
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="none">
+          <maml:name>CaseMap</maml:name>
+          <maml:description>
+            <maml:para>Map from benchmark method name to the shared case name, for benchmarks with one method per library&#xD;
+(ReadOfficeImo and ReadClosedXml both measure ReadTyped). The&#xD;
+[BenchmarkCategory("case:&lt;name&gt;")] category does the same in code. The method name is kept&#xD;
+as the Method variable.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Hashtable</command:parameterValue>
+          <dev:type>
+            <maml:name>Hashtable</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="none">
           <maml:name>Culture</maml:name>
           <maml:description>
             <maml:para>Optional numeric culture used by the producing CSV report, for example de-DE.&#xD;
@@ -13112,6 +13127,21 @@ acceptance-required libraries can appear in evidence; it is never assumed.</maml
         <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
         <dev:type>
           <maml:name>String[]</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="none">
+        <maml:name>CaseMap</maml:name>
+        <maml:description>
+          <maml:para>Map from benchmark method name to the shared case name, for benchmarks with one method per library&#xD;
+(ReadOfficeImo and ReadClosedXml both measure ReadTyped). The&#xD;
+[BenchmarkCategory("case:&lt;name&gt;")] category does the same in code. The method name is kept&#xD;
+as the Method variable.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">Hashtable</command:parameterValue>
+        <dev:type>
+          <maml:name>Hashtable</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>

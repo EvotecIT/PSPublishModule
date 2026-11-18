@@ -189,7 +189,9 @@ public sealed class BenchmarkDeclarationService
 
     /// <summary>
     /// Compares the cases, libraries and axis values in a result with the comparison declaration.
-    /// Any finding means the declaration drifted from the benchmark code.
+    /// Any finding means the declaration drifted from the benchmark code: a case, library or axis value that
+    /// ran without being declared, or a declared case or axis value with no cell at all. A case that ran and
+    /// failed is a failed cell, not a missing one, and is never reported here.
     /// </summary>
     /// <param name="comparison">Comparison declaration.</param>
     /// <param name="libraries">Library policy.</param>
@@ -236,14 +238,20 @@ public sealed class BenchmarkDeclarationService
 
         foreach (BenchmarkComparisonAxis axis in comparison.Axes ?? Array.Empty<BenchmarkComparisonAxis>())
         {
+            string[] declaredValues = axis.Values ?? Array.Empty<string>();
+            int withoutAxis = cells.Count(cell => !cell.Parameters.TryGetValue(axis.Name, out string? value) || value is null);
+            if (withoutAxis > 0)
+                Add(issues, subject, "missing-axis-parameter", $"{withoutAxis} cell(s) do not record axis '{axis.Name}'.");
             string[] measured = cells
                 .Select(cell => cell.Parameters.TryGetValue(axis.Name, out string? value) ? value : null)
                 .Where(value => value is not null)
                 .Select(value => value!)
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToArray();
-            foreach (string value in measured.Where(value => !(axis.Values ?? Array.Empty<string>()).Contains(value, StringComparer.OrdinalIgnoreCase)).OrderBy(value => value, StringComparer.Ordinal))
+            foreach (string value in measured.Where(value => !declaredValues.Contains(value, StringComparer.OrdinalIgnoreCase)).OrderBy(value => value, StringComparer.Ordinal))
                 Add(issues, subject, "unexpected-axis-value", $"Axis '{axis.Name}' value '{value}' ran but is not declared.");
+            foreach (string value in declaredValues.Where(value => !measured.Contains(value, StringComparer.OrdinalIgnoreCase)).OrderBy(value => value, StringComparer.Ordinal))
+                Add(issues, subject, "missing-axis-value", $"Declared axis '{axis.Name}' value '{value}' did not run.");
         }
 
         return issues.ToArray();

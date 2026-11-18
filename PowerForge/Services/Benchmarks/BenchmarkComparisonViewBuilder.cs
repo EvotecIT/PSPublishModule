@@ -164,7 +164,7 @@ public sealed class BenchmarkComparisonViewBuilder
 
     private static BenchmarkRunView BuildRun(BenchmarkEvidenceEntry entry, BenchmarkRunResult result, string[] libraries, string subject)
     {
-        var rows = NormalizeRows(result.Summary ?? Array.Empty<BenchmarkSummaryRow>(), libraries, subject);
+        var rows = NormalizeRows(PublishedRows(entry, result.Summary ?? Array.Empty<BenchmarkSummaryRow>()), libraries, subject);
         var statistic = rows.Any(row => row.Statistic == "mean") ? "mean" : "median";
 
         // A parameter present with the same value in every row describes the workload; one that differs or
@@ -397,6 +397,35 @@ public sealed class BenchmarkComparisonViewBuilder
 
     private static bool Completed(NormalizedRow row) => !row.Failed && row.TimeMs is > 0;
 
+    /// <summary>
+    /// A published lane shows only the cells its publish policy accepted; cells dropped for licence, validation
+    /// or sampling reasons never reach timings or rankings. Lanes without cells are shown as recorded.
+    /// </summary>
+    private static IEnumerable<BenchmarkSummaryRow> PublishedRows(BenchmarkEvidenceEntry entry, IEnumerable<BenchmarkSummaryRow> rows)
+    {
+        if (!entry.Publish || entry.Cells is not { Length: > 0 })
+            return rows;
+        var publishable = new HashSet<string>(
+            entry.Cells.Where(cell => cell.Publishable).Select(BenchmarkEvidenceCellBuilder.Identity),
+            StringComparer.OrdinalIgnoreCase);
+        return rows.Where(row => publishable.Contains(BenchmarkEvidenceCellBuilder.Identity(row)));
+    }
+
+    /// <summary>
+    /// The case of a row that records its library: the scenario, unless the scenario is only the library's name.
+    /// Keeping it apart stops two methods of one library from collapsing into one cell.
+    /// </summary>
+    private static string RecordedCase(BenchmarkSummaryRow row)
+    {
+        var scenario = (row.Scenario ?? string.Empty).Trim();
+        var library = row.Library ?? string.Empty;
+        if (Key(scenario) == Key(library))
+            return string.Empty;
+        // "OfficeIMOEncode" recorded for OfficeIMO is the Encode case; a shared case name is kept whole.
+        var (matched, rest) = MatchLibrary(scenario, new[] { (Name: library, Key: Key(library)) });
+        return string.Equals(matched, library, StringComparison.Ordinal) && rest.Length > 0 ? rest : scenario;
+    }
+
     private static List<NormalizedRow> NormalizeRows(IEnumerable<BenchmarkSummaryRow> summary, string[] libraries, string subject)
     {
         var declared = libraries
@@ -409,7 +438,7 @@ public sealed class BenchmarkComparisonViewBuilder
         {
             // Rows that carry their library identity are taken as recorded; name matching is only for rows without it.
             if (!string.IsNullOrWhiteSpace(row.Library))
-                return (Row: row, Library: row.Library, Suffix: string.Empty);
+                return (Row: row, Library: row.Library, Suffix: RecordedCase(row));
             var raw = string.IsNullOrWhiteSpace(row.Scenario) ? row.Engine ?? string.Empty : row.Scenario;
             var (library, suffix) = MatchLibrary(raw, declared);
             return (Row: row, Library: library, Suffix: suffix);

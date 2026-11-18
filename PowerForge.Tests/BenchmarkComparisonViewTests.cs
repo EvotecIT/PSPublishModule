@@ -253,6 +253,26 @@ public class BenchmarkComparisonViewTests
         Assert.Equal("Foo.Bar is 2.0× faster than Foo", Assert.Single(run.HeadToHead).Text);
     }
 
+    [Fact]
+    public void Build_KeepsMethodsApartWhenRowsRecordTheirLibrary()
+    {
+        static BenchmarkSummaryRow Recorded(string scenario, string library, double medianMs)
+        {
+            BenchmarkSummaryRow row = Row(scenario, medianMs);
+            row.Library = library;
+            return row;
+        }
+
+        var view = BuildSingle(
+            libraries: new[] { "OfficeIMO", "Sep" },
+            rows: new[] { Recorded("OfficeIMOEncode", "OfficeIMO", 1.0), Recorded("OfficeIMODecode", "OfficeIMO", 2.0), Recorded("SepEncode", "Sep", 3.0), Recorded("SepDecode", "Sep", 4.0) });
+
+        var run = Assert.Single(view.Runs);
+        Assert.Equal(new[] { "OfficeIMO", "Sep" }, run.Contenders.Select(c => c.Name).OrderBy(name => name));
+        Assert.Equal(2, run.Cases.Length);
+        Assert.All(run.Cases, c => Assert.DoesNotContain(c.Cells, cell => cell.Missing));
+    }
+
     private static BenchmarkComparisonView BuildSingle(string[] libraries, BenchmarkSummaryRow[] rows)
     {
         var root = CreateTempRoot();

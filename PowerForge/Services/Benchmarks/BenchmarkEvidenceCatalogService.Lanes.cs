@@ -143,6 +143,40 @@ public sealed partial class BenchmarkEvidenceCatalogService
         entry.Cells = evaluation.Cells;
         entry.PolicyIssues = evaluation.LaneIssues;
         entry.Completeness = evaluation.Completeness;
+        entry.AcceptedLibraries = evaluation.AcceptedLibraries;
+    }
+
+    // Declarations and the publish policy apply to the whole catalog, so lanes recorded earlier are evaluated
+    // again from their stored cells, runner block and provenance whenever a lane is added.
+    private static void ReevaluateRetainedLanes(BenchmarkEvidenceCatalog catalog, BenchmarkEvidenceEntry? skip)
+    {
+        BenchmarkPublishPolicy policy = catalog.Policy ?? BenchmarkPublishPolicy.CreateDefault();
+        foreach (BenchmarkEvidenceEntry entry in catalog.Entries.Where(entry => !ReferenceEquals(entry, skip)))
+        {
+            BenchmarkPolicyEvaluation evaluation = BenchmarkPublishPolicyEvaluator.Evaluate(new BenchmarkPolicyLane
+            {
+                Cells = entry.Cells,
+                Runner = entry.Runner,
+                Provenance = entry.Provenance,
+                AcceptedLibraries = entry.AcceptedLibraries,
+                ComparisonId = entry.ComparisonId,
+                Framework = entry.Framework,
+                Profile = entry.Profile,
+                Publish = entry.Publish,
+                Definition = catalog.Comparisons.FirstOrDefault(value =>
+                    string.Equals(value.ComparisonId, entry.ComparisonId, StringComparison.OrdinalIgnoreCase)),
+                Libraries = catalog.Libraries,
+                Policy = policy
+            });
+            if (entry.Publish && evaluation.LaneIssues.Length > 0)
+            {
+                throw new InvalidOperationException(
+                    $"Published benchmark lane '{entry.LaneKey}' does not meet the current declarations and publish policy: " +
+                    string.Join(" ", evaluation.LaneIssues) +
+                    " Record the lane again or rebuild the catalog with Merge-BenchmarkEvidenceCatalog.");
+            }
+            ApplyEvaluation(entry, evaluation);
+        }
     }
 
     private static BenchmarkSupersededLane CreateSuperseded(BenchmarkEvidenceEntry entry, DateTimeOffset supersededBy)

@@ -86,6 +86,7 @@ public sealed partial class BenchmarkServicesTests
     [InlineData("validation-missing", "Output validation was not recorded")]
     [InlineData("validation-failed", "Output validation failed: row count 99")]
     [InlineData("no-library", "no library identity")]
+    [InlineData("invalid-interval", "confidence interval is invalid")]
     public void EvidencePolicy_ExcludesCellsThatDoNotMeetThePolicy(string mutation, string expected)
     {
         BenchmarkRunResult result = MeasuredResult(
@@ -100,6 +101,13 @@ public sealed partial class BenchmarkServicesTests
                 result.Validations = result.Validations
                     .Select(value => value.Library == "Sep" ? new BenchmarkOutputValidation { Library = "Sep", Status = BenchmarkValidationStatus.Failed, Detail = "row count 99" } : value)
                     .ToArray();
+                break;
+            case "invalid-interval":
+                result.Runner!.Statistic = "mean";
+                foreach (BenchmarkSummaryRow row in result.Summary)
+                    row.ConfidenceInterval = row.Library == "Sep"
+                        ? new BenchmarkConfidenceInterval { Level = 0.95 }
+                        : new BenchmarkConfidenceInterval { Level = 0.95, LowerMs = row.MeanMs!.Value - 0.2, UpperMs = row.MeanMs.Value + 0.2 };
                 break;
             case "no-library":
                 foreach (BenchmarkSample sample in result.Samples.Where(sample => sample.Library == "Sep"))
@@ -176,6 +184,97 @@ public sealed partial class BenchmarkServicesTests
     }
 
     [Fact]
+    public void Declarations_ReportMissingAxisValuesButNotCrashedCases()
+    {
+        BenchmarkDeclarationDocument declarations = TestDeclarations();
+        BenchmarkComparisonDefinition comparison = declarations.Comparisons[0];
+        comparison.Cases = ["Read"];
+        comparison.Axes = [new BenchmarkComparisonAxis { Name = "Scale", Values = ["Easy", "Medium", "High"] }];
+        BenchmarkRunResult result = MeasuredResult(("OfficeIMO", "Read", Spread(10, 10)), ("Sep", "Read", null));
+        foreach (BenchmarkSample sample in result.Samples)
+            sample.Variables["Scale"] = "Easy";
+        result.Summary = new BenchmarkSummaryService().Summarize(result.Samples);
+
+        string[] findings = new BenchmarkDeclarationService().CheckDrift(comparison, declarations.Libraries, result)
+            .Select(issue => issue.Code + ":" + issue.Message).ToArray();
+
+        // Sep crashed in the declared case: that is a failed cell, not a missing case.
+        Assert.Equal(
+            new[] { "missing-axis-value:Declared axis 'Scale' value 'High' did not run.", "missing-axis-value:Declared axis 'Scale' value 'Medium' did not run." },
+            findings);
+    }
+
+    [Fact]
+    public void EvidenceCatalog_RevalidatesRecordedLanesAgainstReplacedRules()
+    {
+        var service = new BenchmarkEvidenceCatalogService();
+        BenchmarkEvidenceCatalog catalog = service.Update(null, PublishRequest(
+            MeasuredResult(("OfficeIMO", "Read", Spread(10, 10)), ("Sep", "Read", Spread(20, 10))), TestDeclarations()));
+        BenchmarkRunResult linux = MeasuredResult(("OfficeIMO", "Read", Spread(10, 10)));
+        linux.Environment.OsFamily = "Linux";
+        foreach (BenchmarkSample sample in linux.Samples) sample.Os = "Linux";
+        foreach (BenchmarkSummaryRow row in linux.Summary) row.Os = "Linux";
+        BenchmarkEvidenceUpdateRequest stricter = PublishRequest(linux, TestDeclarations());
+        stricter.Publish = false;
+        stricter.Profile = BenchmarkEvidenceProfile.Diagnostic;
+        stricter.ResultPath = "linux.json";
+        stricter.Policy = new BenchmarkPublishPolicy { MinimumMeasuredSamples = 20 };
+
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() => service.Update(catalog, stricter));
+
+        Assert.Contains("comparison-a/windows/net10.0/standard", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("at least 20 are required", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void EvidenceCatalog_UpdateFileKeepsSupersededArtifactsByContentAddress()
+    {
+        string root = CreateTempRoot();
+        string catalogPath = Path.Combine(root, "index.json");
+        var service = new BenchmarkEvidenceCatalogService();
+        BenchmarkRunResult first = MeasuredResult(("OfficeIMO", "Read", Spread(10, 10)), ("Sep", "Read", Spread(20, 10)));
+        first.StartedUtc = first.StartedUtc.AddMinutes(-10);
+        first.FinishedUtc = first.FinishedUtc.AddMinutes(-10);
+        BenchmarkRunResult second = MeasuredResult(("OfficeIMO", "Read", Spread(9, 10)), ("Sep", "Read", Spread(20, 10)));
+
+        string artifact = Path.Combine(root, "data", "windows.json");
+        BenchmarkEvidenceUpdateRequest firstRequest = PublishRequest(first, TestDeclarations());
+        firstRequest.ResultPath = "/data/windows.json";
+        firstRequest.ResultArtifactPath = artifact;
+        service.UpdateFile(catalogPath, firstRequest);
+        BenchmarkEvidenceUpdateRequest secondRequest = PublishRequest(second, TestDeclarations());
+        secondRequest.ResultPath = "/data/windows.json";
+        secondRequest.ResultArtifactPath = artifact;
+        BenchmarkEvidenceCatalog catalog = service.UpdateFile(catalogPath, secondRequest);
+
+        BenchmarkEvidenceEntry entry = Assert.Single(catalog.Entries);
+        BenchmarkSupersededLane superseded = Assert.Single(catalog.Superseded);
+        Assert.Equal($"/data/windows.{entry.ResultSha256}.json", entry.ResultPath);
+        Assert.Equal($"/data/windows.{superseded.ResultSha256}.json", superseded.ResultPath);
+        Assert.Equal(entry.ResultSha256, BenchmarkJson.ComputeFileSha256(Path.Combine(root, "data", $"windows.{entry.ResultSha256}.json")));
+        Assert.Equal(superseded.ResultSha256, BenchmarkJson.ComputeFileSha256(Path.Combine(root, "data", $"windows.{superseded.ResultSha256}.json")));
+    }
+
+    [Fact]
+    public void ComparisonView_ShowsOnlyCellsThePublishPolicyAccepted()
+    {
+        string root = CreateTempRoot();
+        string catalogPath = Path.Combine(root, "index.json");
+        BenchmarkDeclarationDocument declarations = ThreeLibraryDeclarations();
+        declarations.Libraries.Single(value => value.Id == "EPPlus").Restriction = BenchmarkLibraryRestriction.PublishRestricted;
+        declarations.Libraries.Single(value => value.Id == "EPPlus").Reason = "Publishing results needs permission.";
+        BenchmarkEvidenceUpdateRequest request = PublishRequest(MeasuredResult(
+            ("OfficeIMO", "Read", Spread(10, 10)), ("Sep", "Read", Spread(20, 10)), ("EPPlus", "Read", Spread(5, 10))), declarations);
+        new BenchmarkEvidenceCatalogService().UpdateFile(catalogPath, request);
+
+        BenchmarkComparisonView view = Assert.Single(new BenchmarkComparisonViewBuilder().Build(catalogPath).Comparisons,
+            comparison => comparison.Id == "comparison-a");
+
+        BenchmarkRunView run = Assert.Single(view.Runs);
+        Assert.Equal(new[] { "OfficeIMO", "Sep" }, run.Contenders.Select(contender => contender.Library).OrderBy(name => name));
+    }
+
+    [Fact]
     public void EvidenceCatalog_KeysLanesByFrameworkAndAffinityAndKeepsSupersededRuns()
     {
         var service = new BenchmarkEvidenceCatalogService();
@@ -206,7 +305,7 @@ public sealed partial class BenchmarkServicesTests
         BenchmarkSupersededLane superseded = Assert.Single(catalog.Superseded);
         Assert.Equal("comparison-a/windows/net8.0/standard", superseded.LaneKey);
         Assert.Equal(replacedHash, superseded.ResultSha256);
-        Assert.Equal("net8.0-rerun.json", catalog.Entries.Single(entry => entry.Framework == "net8.0").ResultPath);
+        Assert.StartsWith("net8.0-rerun.", catalog.Entries.Single(entry => entry.Framework == "net8.0").ResultPath, StringComparison.Ordinal);
 
         foreach (string encoded in new[] { "comparison-a-net10.0", "comparison-a-affinity-0xffff0000" })
         {
@@ -297,8 +396,19 @@ public sealed partial class BenchmarkServicesTests
         Assert.Equal(string.Empty, Assert.Single(unannotated.Summary, row => row.Scenario == "ReadSep").Library);
         Assert.Equal("benchmarkdotnet", mapped.Runner!.Kind);
         Assert.Equal("0.15.8", mapped.Runner.Version);
-        Assert.Equal(3, mapped.Runner.Warmups);
-        Assert.Equal(2, mapped.Runner.Iterations);
+        // ReadSep recorded no measurements, so the run's warmup count is unknown rather than ReadFast's three.
+        Assert.Null(mapped.Runner.Warmups);
+        Assert.Null(mapped.Runner.Iterations);
+
+        BenchmarkRunResult shared = importer.Import(report, new BenchmarkImportOptions
+        {
+            LibraryMap = new Dictionary<string, string> { ["ReadSep"] = "Sep" },
+            CaseMap = new Dictionary<string, string> { ["ReadFast"] = "Read", ["ReadSep"] = "Read" }
+        });
+        Assert.All(shared.Summary, row => Assert.Equal("Read", row.Scenario));
+        Assert.Equal(new[] { "ReadFast", "ReadSep" }, shared.Summary.Select(row => row.Variables["Method"]).OrderBy(name => name));
+        BenchmarkEvidenceCell[] cells = BenchmarkEvidenceCellBuilder.Build(shared, "comparison-a", BenchmarkPublishPolicy.CreateDefault());
+        Assert.Single(cells.Select(BenchmarkEvidenceCellBuilder.WorkloadIdentity).Distinct());
     }
 
     [Fact]

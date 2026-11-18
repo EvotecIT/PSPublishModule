@@ -52,6 +52,15 @@ public sealed class ImportBenchmarkResultCommand : PSCmdlet
     public Hashtable? LibraryMap { get; set; }
 
     /// <summary>
+    /// Map from benchmark method name to the shared case name, for benchmarks with one method per library
+    /// (<c>ReadOfficeImo</c> and <c>ReadClosedXml</c> both measure <c>ReadTyped</c>). The
+    /// <c>[BenchmarkCategory("case:&lt;name&gt;")]</c> category does the same in code. The method name is kept
+    /// as the <c>Method</c> variable.
+    /// </summary>
+    [Parameter]
+    public Hashtable? CaseMap { get; set; }
+
+    /// <summary>
     /// JSON array of output validations recorded before timing: objects with library, case (optional),
     /// status (passed or failed) and detail.
     /// </summary>
@@ -87,6 +96,8 @@ public sealed class ImportBenchmarkResultCommand : PSCmdlet
             Suite = Suite,
             Culture = culture,
             LibraryMap = LibraryMap?.Cast<DictionaryEntry>()
+                .ToDictionary(item => item.Key?.ToString() ?? string.Empty, item => item.Value?.ToString() ?? string.Empty, StringComparer.OrdinalIgnoreCase),
+            CaseMap = CaseMap?.Cast<DictionaryEntry>()
                 .ToDictionary(item => item.Key?.ToString() ?? string.Empty, item => item.Value?.ToString() ?? string.Empty, StringComparer.OrdinalIgnoreCase),
             Validations = string.IsNullOrWhiteSpace(ValidationPath)
                 ? null

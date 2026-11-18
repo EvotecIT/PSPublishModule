@@ -372,7 +372,10 @@ exported `Parameters` text exactly.
 Every row carries the library it measured. BenchmarkDotNet methods name it with a
 category, `[BenchmarkCategory("library:ClosedXML")]`, or the import declares a
 method-to-library map; the library is never guessed from method or job names.
-When a map is given, every method must resolve or the import fails:
+When a map is given, every method must resolve or the import fails. When each
+library has its own method for the same workload, `[BenchmarkCategory("case:ReadTyped")]`
+or `-CaseMap` names the shared case; the method name is kept as the `Method` variable
+and is not part of the measured cell:
 
 ```powershell
 Import-BenchmarkResult `
@@ -492,6 +495,12 @@ Merge-BenchmarkEvidenceCatalog `
     -DeclarationPath .\Benchmarks\benchmarks.json `
     -ExpectedPlatform windows,linux,macos
 ```
+
+`Update-BenchmarkEvidenceCatalog` writes each result under a content-addressed name
+(`windows-full.<sha256>.json`) and records that path, so a superseded run's file is
+never overwritten. Every update also re-evaluates the lanes already in the catalog
+against the current declarations and policy, and refuses the update if a published
+lane no longer meets them.
 
 The merge verifies every normalized result against the SHA-256 and lane metadata
 recorded by its source catalog, re-evaluates every lane against the declarations
@@ -698,7 +707,9 @@ $selection = Select-BenchmarkLibrary -Path ./Benchmarks/benchmarks.json -AcceptL
 
 The first lints the document. The second reports drift between a result and its
 declaration: cases, libraries or axis values that ran but are not declared, and
-declared cases that did not run. Both stop with an error unless `-PassThru` is used.
+declared cases or axis values with no cell at all. A case that ran and crashed is a
+failed cell, not drift; it is excluded from publication and the rest of the lane is
+published. Both stop with an error unless `-PassThru` is used.
 `Select-BenchmarkLibrary` returns the libraries a runner may execute; excluded
 libraries never run and acceptance-required libraries run only when named in
 `-AcceptLicense`.
