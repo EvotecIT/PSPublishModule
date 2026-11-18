@@ -107,9 +107,9 @@ public sealed class BenchmarkDeclarationService
     }
 
     /// <summary>
-    /// Derives a comparison's eligibility from its declaration and its libraries' restriction classes.
-    /// An author's own exclusion always wins; otherwise a comparison needs two libraries whose class the
-    /// policy publishes.
+    /// Derives a comparison's eligibility from its declaration. An author's own exclusion always wins, and a
+    /// single-library comparison is never publishable. Restricted libraries do not make a comparison
+    /// ineligible: the publish policy drops their cells and publishes the rest.
     /// </summary>
     /// <param name="comparison">Comparison declaration.</param>
     /// <param name="libraries">Library policy.</param>
@@ -121,34 +121,12 @@ public sealed class BenchmarkDeclarationService
         BenchmarkPublishPolicy policy)
     {
         if (comparison is null) throw new ArgumentNullException(nameof(comparison));
+        if (libraries is null) throw new ArgumentNullException(nameof(libraries));
+        if (policy is null) throw new ArgumentNullException(nameof(policy));
         if (comparison.Eligibility is { Publishable: false })
             return new BenchmarkEligibility { Publishable = false, Reason = comparison.Eligibility.Reason };
-        string[] declared = comparison.Libraries ?? Array.Empty<string>();
-        if (declared.Length < 2)
+        if ((comparison.Libraries ?? Array.Empty<string>()).Distinct(StringComparer.OrdinalIgnoreCase).Count() < 2)
             return new BenchmarkEligibility { Publishable = false, Reason = "Single-library comparison: there is nothing to compare against." };
-
-        var restricted = new List<string>();
-        var publishable = new List<string>();
-        foreach (string id in declared)
-        {
-            BenchmarkLibraryDeclaration? library = libraries.FirstOrDefault(value =>
-                string.Equals(value.Id, id, StringComparison.OrdinalIgnoreCase));
-            if (library is null)
-                restricted.Add($"{id} (not in the library policy)");
-            else if (!policy.PublishableRestrictions.Contains(library.Restriction))
-                restricted.Add($"{id} ({Format(library.Restriction)})");
-            else
-                publishable.Add(id);
-        }
-
-        if (publishable.Count < 2)
-        {
-            return new BenchmarkEligibility
-            {
-                Publishable = false,
-                Reason = "Fewer than two libraries can be published: " + string.Join(", ", restricted) + "."
-            };
-        }
         return new BenchmarkEligibility { Publishable = true };
     }
 

@@ -125,7 +125,7 @@ public sealed partial class BenchmarkServicesTests
     }
 
     [Fact]
-    public void EvidencePolicy_DropsRestrictedLibrariesAndDerivesEligibility()
+    public void EvidencePolicy_DropsRestrictedLibraryCellsWithoutBlockingTheComparison()
     {
         BenchmarkDeclarationDocument declarations = ThreeLibraryDeclarations();
         declarations.Libraries.Single(value => value.Id == "EPPlus").Restriction = BenchmarkLibraryRestriction.AcceptanceRequired;
@@ -142,14 +142,18 @@ public sealed partial class BenchmarkServicesTests
         Assert.Contains(epplus.Issues, issue => issue.Contains("acceptance-required", StringComparison.Ordinal));
         Assert.Equal("complete", entry.Completeness);
 
-        // With Sep publish-restricted too, only one library can be published, so the comparison is not eligible.
+        // A publish-restricted library never blocks the comparison: its cells are dropped and the rest is published.
         declarations.Libraries.Single(value => value.Id == "Sep").Restriction = BenchmarkLibraryRestriction.PublishRestricted;
-        declarations.Libraries.Single(value => value.Id == "Sep").Reason = "Licence forbids publishing benchmark results.";
-        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
-            new BenchmarkEvidenceCatalogService().Update(null, PublishRequest(MeasuredResult(
-                ("OfficeIMO", "Read", Spread(10, 10)), ("Sep", "Read", Spread(20, 10))), declarations)));
-        Assert.Contains("Fewer than two libraries can be published", exception.Message, StringComparison.Ordinal);
-        Assert.Contains("Sep (publish-restricted)", exception.Message, StringComparison.Ordinal);
+        declarations.Libraries.Single(value => value.Id == "Sep").Reason = "Publishing results needs the licensor's permission.";
+        BenchmarkEvidenceCatalog restricted = new BenchmarkEvidenceCatalogService().Update(null, PublishRequest(MeasuredResult(
+            ("OfficeIMO", "Read", Spread(10, 10)), ("Sep", "Read", Spread(20, 10))), declarations));
+        BenchmarkEvidenceEntry lane = Assert.Single(restricted.Entries);
+        Assert.True(lane.Publish);
+        Assert.True(Assert.Single(restricted.Eligibility, value => value.ComparisonId == "comparison-a").Publishable);
+        Assert.True(Assert.Single(lane.Cells, cell => cell.Library == "OfficeIMO").Publishable);
+        BenchmarkEvidenceCell sep = Assert.Single(lane.Cells, cell => cell.Library == "Sep");
+        Assert.False(sep.Publishable);
+        Assert.Contains(sep.Issues, issue => issue.StartsWith("Not published (licence): library 'Sep' is publish-restricted.", StringComparison.Ordinal));
     }
 
     [Fact]

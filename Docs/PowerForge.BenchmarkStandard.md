@@ -152,9 +152,46 @@ Every library in the library policy has a restriction class:
 | Class | Runs | Published |
 | --- | --- | --- |
 | `open` | Yes | Yes |
-| `publish-restricted` | Locally, for development | Never, unless the licensor gives permission (then change the class and record it in `reason`) |
-| `acceptance-required` | Only when the person running the benchmark explicitly accepts the licence for that run | Not by default; the cells are recorded but dropped from public claims |
+| `publish-restricted` | Locally, for development | No. Its cells are dropped from the published lane and shown as "not published (licence)"; the other libraries are still published. |
+| `acceptance-required` | Only when the person running the benchmark explicitly accepts the licence for that run | No by default; its cells are recorded and dropped the same way |
 | `excluded` | Never | Never |
+
+A restricted library never makes a comparison unpublishable. The published lane
+leaves out that library's cells and publishes the rest. Only a comparison declared
+with a single library, or one its author excludes, is not publishable.
+
+### Classifying a library
+
+The class follows what the licence says about **running benchmarks and publishing
+their results**, not whether the vendor charges for commercial use. Read the
+licence text of the exact pinned version and answer, in order:
+
+1. Does the licence or its terms forbid benchmarking or comparison use outright? Then
+   `excluded`.
+2. Does using the library at all require accepting a licence, a key or a licence
+   context (noncommercial-only terms, a mandatory licence-key call, a paid-licence
+   switch) that the person running the benchmark must decide on? Then
+   `acceptance-required`.
+3. May it run, but does publishing benchmark or performance results need the
+   licensor's permission? Then `publish-restricted`.
+4. Otherwise, including licences with fees for unrelated uses (redistributing
+   binaries in a revenue-generating product, support plans), it is `open`.
+
+Classify per version: when a newer release adds a restriction, the last release
+before it can stay `open` and the policy pins that version, or the library moves to
+the stricter class with the newer version. Record the reason and the licence URL
+for every class except `open`, and revisit the class whenever the pinned version
+changes.
+
+| Library and version | Licence terms that decide | Class |
+| --- | --- | --- |
+| NPOI | Apache-2.0; the OSMF fee applies only to binaries in revenue-generating use, not to benchmarking or publishing | `open` |
+| QuestPDF 2026.5.0 | Last release before the benchmarking restriction | `open` |
+| QuestPDF releases after 2026.5.0 | Publishing benchmark results is restricted | `publish-restricted` |
+| DocX (Xceed) | Publishing results needs Xceed's permission | `publish-restricted` |
+| EPPlus 8 | PolyForm Noncommercial or a commercial licence, chosen through a licence context | `acceptance-required` |
+
+### Selecting libraries for a run
 
 - Runners select libraries generically from the policy: include and exclude lists
   plus an explicit per-library acceptance (`Select-BenchmarkLibrary -Include … -Exclude … -AcceptLicense EPPlus`).
@@ -163,8 +200,6 @@ Every library in the library policy has a restriction class:
 - The accepted libraries are recorded with the run (`Import-BenchmarkResult -AcceptLicense`).
   A cell from an acceptance-required library without a recorded acceptance is a
   policy violation.
-- A comparison whose publishable libraries number fewer than two is not
-  publishable; the catalog records the derived reason.
 
 ## 8. Runs fail partially; evidence is written incrementally
 
@@ -209,7 +244,7 @@ standard thresholds are the floor for public claims.
 | Library identity from categories or an explicit map | `Import-BenchmarkResult`; unmapped methods fail the import |
 | Runner block, statistic, warmups, samples, confidence interval | publish policy |
 | Output validation per library and case | publish policy |
-| Licence classes and explicit acceptance | `Select-BenchmarkLibrary`, publish policy |
+| Licence classes and explicit acceptance; restricted cells dropped as "not published (licence)" | `Select-BenchmarkLibrary`, publish policy |
 | Clean provenance, no machine name, pinned packages with hashes | publish policy, provenance capture |
 | Failed cells kept, partial lanes marked | catalog cells and `completeness` |
 | Lane identity (framework and affinity as dimensions) | catalog lane keys; framework or affinity in an id is rejected |
@@ -235,7 +270,8 @@ Author and reviewer both go through it.
 5. Every competitor is pinned to an exact version that matches the library policy,
    configured per its own documentation for best performance, and recorded with its
    package hash.
-6. Every library's licence class is set, with a reason for anything other than
+6. Every library's licence class is set from its licence's terms on benchmarking and
+   publishing (section 7), with a reason and licence URL for anything other than
    `open`. Nothing is accepted on the runner's behalf.
 7. The product has no code paths keyed to benchmark inputs.
 8. The runner rotates or interleaves order, warms up every cell, applies isolation,

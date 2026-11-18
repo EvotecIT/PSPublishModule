@@ -182,7 +182,7 @@ internal static class BenchmarkPublishPolicyEvaluator
             else
             {
                 if (!policy.PublishableRestrictions.Contains(library.Restriction))
-                    yield return $"Library '{library.Id}' is {BenchmarkKebabCaseEnumConverter<BenchmarkLibraryRestriction>.Format(library.Restriction)}: {library.Reason}";
+                    yield return $"Not published (licence): library '{library.Id}' is {BenchmarkKebabCaseEnumConverter<BenchmarkLibraryRestriction>.Format(library.Restriction)}. {library.Reason}";
                 if (library.Restriction == BenchmarkLibraryRestriction.AcceptanceRequired &&
                     !lane.Result.AcceptedLibraries.Contains(library.Id, StringComparer.OrdinalIgnoreCase))
                     yield return $"Library '{library.Id}' ran without a recorded licence acceptance.";

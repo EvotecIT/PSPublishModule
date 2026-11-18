@@ -684,8 +684,9 @@ Schema 5 declaration documents hold the library policy and the comparisons
 `comparisonId`, `area`, `group`, `title`, `subject`, `libraries`, `axes`, `cases`,
 `expectedPlatforms` and `frameworks`, plus an optional `eligibility` that can only
 exclude it. Catalogs derive each comparison's eligibility: a single-library
-comparison, or one with fewer than two libraries whose class can be published, is
-declared but never publishable.
+comparison is declared but never publishable. Restricted libraries do not block a
+comparison; the published lane drops their cells, which carry the issue
+"Not published (licence)", and publishes the rest.
 
 Generate the document from the benchmark code and check it in CI:
 
