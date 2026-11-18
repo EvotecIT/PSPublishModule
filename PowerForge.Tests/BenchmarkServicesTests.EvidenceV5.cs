@@ -223,8 +223,11 @@ public sealed partial class BenchmarkServicesTests
         stricter.Profile = BenchmarkEvidenceProfile.Diagnostic;
         stricter.ResultPath = "linux.json";
         stricter.Policy = new BenchmarkPublishPolicy { MinimumMeasuredSamples = 20 };
+        string before = BenchmarkJson.Serialize(catalog);
 
         InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() => service.Update(catalog, stricter));
+
+        Assert.Equal(before, BenchmarkJson.Serialize(catalog));
 
         Assert.Contains("comparison-a/windows/net10.0/standard", exception.Message, StringComparison.Ordinal);
         Assert.Contains("at least 20 are required", exception.Message, StringComparison.Ordinal);
@@ -385,15 +388,15 @@ public sealed partial class BenchmarkServicesTests
         [
             new() { Id = "OfficeIMO", Package = "OfficeIMO.Excel", Version = "1.0.0", License = "MIT", Restriction = BenchmarkLibraryRestriction.Open },
             new() { Id = "EPPlus", Package = "EPPlus", Version = "8.0.0", License = "LicenseRef-PolyForm-Noncommercial", Restriction = BenchmarkLibraryRestriction.AcceptanceRequired, Reason = "Needs a licence context." },
-            new() { Id = "DocX", Package = "DocX", Version = "4.0.0", License = "LicenseRef-Xceed", Restriction = BenchmarkLibraryRestriction.PublishRestricted, Reason = "Results need permission to publish." },
+            new() { Id = "Restricted", Package = "Restricted", Version = "4.0.0", License = "LicenseRef-Restricted", Restriction = BenchmarkLibraryRestriction.PublishRestricted, Reason = "Results need permission to publish." },
             new() { Id = "Legacy", Package = "Legacy", Version = "1.0.0", License = "LicenseRef-Proprietary", Restriction = BenchmarkLibraryRestriction.Excluded, Reason = "Licence forbids benchmarking." }
         ];
         var service = new BenchmarkDeclarationService();
 
         BenchmarkLibrarySelection defaults = service.SelectLibraries(libraries);
-        BenchmarkLibrarySelection accepted = service.SelectLibraries(libraries, exclude: ["DocX"], accept: ["EPPlus"]);
+        BenchmarkLibrarySelection accepted = service.SelectLibraries(libraries, exclude: ["Restricted"], accept: ["EPPlus"]);
 
-        Assert.Equal(new[] { "DocX", "OfficeIMO" }, defaults.Selected);
+        Assert.Equal(new[] { "OfficeIMO", "Restricted" }, defaults.Selected);
         Assert.Empty(defaults.Accepted);
         Assert.Contains(defaults.Skipped, skip => skip.Id == "EPPlus" && skip.Reason.Contains("explicit licence acceptance", StringComparison.Ordinal));
         Assert.Contains(defaults.Skipped, skip => skip.Id == "Legacy");
@@ -440,6 +443,7 @@ public sealed partial class BenchmarkServicesTests
                     { "IterationMode": "Workload", "IterationStage": "Warmup", "LaunchIndex": 1 },
                     { "IterationMode": "Workload", "IterationStage": "Actual", "LaunchIndex": 1 },
                     { "IterationMode": "Workload", "IterationStage": "Actual", "LaunchIndex": 1 } ] },
+                { "Method": "ReadCrash", "Categories": ["library:EPPlus"] },
                 { "Method": "ReadSep", "Statistics": { "Median": 2000000, "OriginalValues": [2000000, 2000001] },
                   "Measurements": [
                     { "IterationMode": "Workload", "IterationStage": "Actual", "LaunchIndex": 1 },
@@ -465,19 +469,50 @@ public sealed partial class BenchmarkServicesTests
         Assert.Equal("benchmarkdotnet", mapped.Runner!.Kind);
         Assert.Equal("0.15.8", mapped.Runner.Version);
         // ReadSep's measurements show no warmup entries, so the run's warmup count is unknown rather than zero
-        // or ReadFast's three; both recorded two measured iterations.
+        // or ReadFast's three; both recorded two measured iterations, and the crashed ReadCrash counts for nothing.
         Assert.Null(mapped.Runner.Warmups);
         Assert.Equal(2, mapped.Runner.Iterations);
 
         BenchmarkRunResult shared = importer.Import(report, new BenchmarkImportOptions
         {
             LibraryMap = new Dictionary<string, string> { ["ReadSep"] = "Sep" },
-            CaseMap = new Dictionary<string, string> { ["ReadFast"] = "Read", ["ReadSep"] = "Read" }
+            CaseMap = new Dictionary<string, string> { ["ReadFast"] = "Read", ["ReadSep"] = "Read", ["ReadCrash"] = "Read" }
         });
         Assert.All(shared.Summary, row => Assert.Equal("Read", row.Scenario));
-        Assert.Equal(new[] { "ReadFast", "ReadSep" }, shared.Summary.Select(row => row.Variables["Method"]).OrderBy(name => name));
+        Assert.Equal(new[] { "ReadCrash", "ReadFast", "ReadSep" }, shared.Summary.Select(row => row.Variables["Method"]).OrderBy(name => name));
+        Assert.Equal("Failed", Assert.Single(shared.Summary, row => row.Library == "EPPlus").Status);
         BenchmarkEvidenceCell[] cells = BenchmarkEvidenceCellBuilder.Build(shared, "comparison-a", BenchmarkPublishPolicy.CreateDefault());
         Assert.Single(cells.Select(BenchmarkEvidenceCellBuilder.WorkloadIdentity).Distinct());
+    }
+
+    [Fact]
+    public void Importer_CaseMapRenamesStoredComparisonRowsWithTheirSummaries()
+    {
+        string root = CreateTempRoot();
+        BenchmarkRunResult result = MeasuredResult(("OfficeIMO", "ReadTyped", Spread(10, 10)), ("Sep", "ReadTyped", Spread(20, 10)));
+        result.Comparison = new BenchmarkSummaryService().Compare(result.Summary, "OfficeIMO");
+        string path = Path.Combine(root, "run.json");
+        BenchmarkJson.Write(path, result);
+
+        BenchmarkRunResult imported = new BenchmarkResultImporter().Import(path, new BenchmarkImportOptions
+        {
+            CaseMap = new Dictionary<string, string> { ["ReadTyped"] = "Read" }
+        });
+
+        Assert.NotEmpty(imported.Comparison);
+        Assert.All(imported.Comparison, row => Assert.Equal("Read", row.Scenario));
+        Assert.Equal(
+            BenchmarkJson.Serialize(new BenchmarkSummaryService().Compare(imported.Summary, "OfficeIMO")),
+            BenchmarkJson.Serialize(imported.Comparison));
+    }
+
+    [Fact]
+    public void CellIdentity_KeepsParameterValuesThatLookLikeSeparatorsApart()
+    {
+        var joined = new Dictionary<string, string?> { ["A"] = "x;b=y" };
+        var separate = new Dictionary<string, string?> { ["A"] = "x", ["B"] = "y" };
+
+        Assert.NotEqual(BenchmarkEvidenceCellBuilder.FormatParameters(joined), BenchmarkEvidenceCellBuilder.FormatParameters(separate));
     }
 
     [Fact]

@@ -273,6 +273,56 @@ public class BenchmarkComparisonViewTests
         Assert.All(run.Cases, c => Assert.DoesNotContain(c.Cells, cell => cell.Missing));
     }
 
+    [Fact]
+    public void Build_UsesTheStatisticTheRunnerRecorded()
+    {
+        static BenchmarkSummaryRow Both(string library, double median, double mean)
+        {
+            BenchmarkSummaryRow row = Row("Read", median);
+            row.Library = library;
+            row.MeanMs = mean;
+            return row;
+        }
+
+        var root = CreateTempRoot();
+        try
+        {
+            BenchmarkRunResult result = Result(Both("OfficeIMO", 1.0, 4.0), Both("Sep", 2.0, 3.0));
+            result.Runner = new BenchmarkRunnerInfo { Kind = "rotated", Statistic = "mean" };
+            var view = Assert.Single(new BenchmarkComparisonViewBuilder().Build(WriteCatalog(root, new[] { "OfficeIMO", "Sep" }, ("windows", "standard", true, result))).Comparisons);
+
+            var run = Assert.Single(view.Runs);
+            Assert.Equal("mean", run.Statistic);
+            Assert.Equal("Sep is 1.33× faster than OfficeIMO", Assert.Single(run.HeadToHead).Text);
+        }
+        finally { Directory.Delete(root, recursive: true); }
+    }
+
+    [Fact]
+    public void Build_KeepsRecordedCasesApartWhenAnOperationIsRecorded()
+    {
+        static BenchmarkSummaryRow Recorded(string scenario, string library, double medianMs, params (string Name, string Value)[] variables)
+        {
+            BenchmarkSummaryRow row = Row(scenario, medianMs, variables);
+            row.Library = library;
+            row.Operation = "Read";
+            return row;
+        }
+
+        var view = BuildSingle(
+            libraries: new[] { "A", "B" },
+            rows: new[]
+            {
+                Recorded("small", "A", 1.0, ("Method", "ASmall")), Recorded("large", "A", 2.0, ("Method", "ALarge")),
+                Recorded("small", "B", 3.0, ("Method", "BSmall")), Recorded("large", "B", 4.0, ("Method", "BLarge"))
+            });
+
+        var run = Assert.Single(view.Runs);
+        Assert.Equal(2, run.Cases.Length);
+        Assert.Equal(new[] { "A", "B" }, run.Contenders.Select(c => c.Name).OrderBy(name => name));
+        Assert.All(run.Cases, c => Assert.DoesNotContain(c.Cells, cell => cell.Missing));
+    }
+
     private static BenchmarkComparisonView BuildSingle(string[] libraries, BenchmarkSummaryRow[] rows)
     {
         var root = CreateTempRoot();

@@ -128,14 +128,18 @@ public sealed partial class BenchmarkResultImporter
             AddBenchmarkDotNetMemoryMetrics(TryGetObject(benchmark, "Memory"), metrics);
             double[] originalValues = GetBenchmarkDotNetOriginalValues(statistics);
             string? library = LibraryFromCategories(categories);
-            (int? Warmups, int? Iterations, int? Launches) counts = CountBenchmarkDotNetMeasurements(benchmark);
-            // One benchmark without recorded counts makes the aggregate unknown, never the other benchmarks' value.
-            warmupsMissing |= counts.Warmups is null;
-            iterationsMissing |= counts.Iterations is null;
-            launchesMissing |= counts.Launches is null;
-            warmups = Min(warmups, counts.Warmups);
-            iterations = Min(iterations, counts.Iterations);
-            launches = Min(launches, counts.Launches);
+            // A benchmark that produced no measurement crashed; it is a failed cell and says nothing about how the
+            // measured benchmarks were run. Among measured ones, a missing count makes the aggregate unknown.
+            if (originalValues.Length > 0 || mean.HasValue)
+            {
+                (int? Warmups, int? Iterations, int? Launches) counts = CountBenchmarkDotNetMeasurements(benchmark);
+                warmupsMissing |= counts.Warmups is null;
+                iterationsMissing |= counts.Iterations is null;
+                launchesMissing |= counts.Launches is null;
+                warmups = Min(warmups, counts.Warmups);
+                iterations = Min(iterations, counts.Iterations);
+                launches = Min(launches, counts.Launches);
+            }
             int firstSample = samples.Count;
             if (originalValues.Length > 0)
             {

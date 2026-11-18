@@ -58,6 +58,8 @@ public sealed partial class BenchmarkEvidenceCatalogService
         var comparisons = new List<BenchmarkComparisonDefinition>();
         var libraries = new List<BenchmarkLibraryDeclaration>();
         var superseded = new List<BenchmarkSupersededLane>();
+        // Every artifact the sources can supply, by hash, so superseded runs travel with the merged bundle.
+        var availableArtifacts = new Dictionary<string, byte[]>(StringComparer.OrdinalIgnoreCase);
         foreach (string sourceCatalogPath in sources)
         {
             if (!File.Exists(sourceCatalogPath))
@@ -68,6 +70,11 @@ public sealed partial class BenchmarkEvidenceCatalogService
             comparisons.AddRange(source.Comparisons);
             libraries.AddRange(source.Libraries);
             superseded.AddRange(source.Superseded);
+            foreach (BenchmarkSupersededLane history in source.Superseded)
+            {
+                if (TryReadSupersededArtifact(sourceCatalogPath, history, out byte[]? historyBytes))
+                    availableArtifacts[history.ResultSha256] = historyBytes!;
+            }
             foreach (BenchmarkEvidenceEntry entry in source.Entries)
                 candidates.Add(LoadBundleLane(sourceCatalogPath, entry));
         }
@@ -87,6 +94,8 @@ public sealed partial class BenchmarkEvidenceCatalogService
             merged.Comparisons = comparisons.ToArray();
         }
 
+        foreach (BundleLane candidate in candidates)
+            availableArtifacts[candidate.Entry.ResultSha256] = candidate.ArtifactBytes;
         BundleLane[] selected = SelectDistinctLanes(candidates, superseded);
         foreach (BundleLane lane in selected)
         {
@@ -147,6 +156,20 @@ public sealed partial class BenchmarkEvidenceCatalogService
         merged.ExpectedPlatforms = NormalizeExpectedPlatforms(expectedPlatforms ?? platformSets);
         merged.Entries = entries;
         merged.Superseded = NormalizeSuperseded(superseded, entries);
+        var supersededArtifacts = new List<(string Path, string Sha256, byte[] Bytes)>();
+        foreach (BenchmarkSupersededLane history in merged.Superseded)
+        {
+            if (!availableArtifacts.TryGetValue(history.ResultSha256, out byte[]? historyBytes))
+                continue;
+            history.ResultPath = CreateContentAddressedResultPath(
+                publicPrefix is null ? history.ResultPath :
+                    publicPrefix + "/" + Uri.EscapeDataString(ExtractBundleArtifactFileName(history.ResultPath)),
+                history.ResultSha256);
+            supersededArtifacts.Add((
+                ResolveBundleArtifactPath(outputCatalogPath, ExtractBundleArtifactRelativePath(history.ResultPath), history.ResultPath),
+                history.ResultSha256,
+                historyBytes));
+        }
         ApplyDefinitions(merged);
 
         Directory.CreateDirectory(outputDirectory);
@@ -170,8 +193,38 @@ public sealed partial class BenchmarkEvidenceCatalogService
             // independently committed publication.
             BenchmarkJson.WriteBytes(destinationPath, lane.ArtifactBytes);
         }
+        foreach ((string path, string sha256, byte[] bytes) in supersededArtifacts)
+        {
+            if (File.Exists(path))
+            {
+                if (!string.Equals(BenchmarkJson.ComputeFileSha256(path), sha256, StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidOperationException($"Immutable benchmark artifact '{Path.GetFileName(path)}' already exists with different content.");
+                continue;
+            }
+            BenchmarkJson.WriteBytes(path, bytes);
+        }
         BenchmarkJson.Write(outputCatalogPath, merged);
         return merged;
+    }
+
+    private static bool TryReadSupersededArtifact(string sourceCatalogPath, BenchmarkSupersededLane history, out byte[]? bytes)
+    {
+        bytes = null;
+        try
+        {
+            string path = ResolveBundleArtifactPath(sourceCatalogPath, ExtractBundleArtifactRelativePath(history.ResultPath), history.ResultPath);
+            if (!File.Exists(path))
+                return false;
+            byte[] candidate = File.ReadAllBytes(path);
+            if (!string.Equals(ComputeSha256(candidate), history.ResultSha256, StringComparison.OrdinalIgnoreCase))
+                return false;
+            bytes = candidate;
+            return true;
+        }
+        catch (InvalidOperationException)
+        {
+            return false;
+        }
     }
 
     private static BenchmarkLibraryDeclaration[] MergeLibraries(IEnumerable<BenchmarkLibraryDeclaration> libraries)

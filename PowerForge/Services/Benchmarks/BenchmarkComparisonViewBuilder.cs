@@ -164,7 +164,8 @@ public sealed class BenchmarkComparisonViewBuilder
 
     private static BenchmarkRunView BuildRun(BenchmarkEvidenceEntry entry, BenchmarkRunResult result, string[] libraries, string subject)
     {
-        var rows = NormalizeRows(PublishedRows(entry, result.Summary ?? Array.Empty<BenchmarkSummaryRow>()), libraries, subject);
+        var preferMean = string.Equals(result.Runner?.Statistic, "mean", StringComparison.OrdinalIgnoreCase);
+        var rows = NormalizeRows(PublishedRows(entry, result.Summary ?? Array.Empty<BenchmarkSummaryRow>()), libraries, subject, preferMean);
         var statistic = rows.Any(row => row.Statistic == "mean") ? "mean" : "median";
 
         // A parameter present with the same value in every row describes the workload; one that differs or
@@ -426,7 +427,7 @@ public sealed class BenchmarkComparisonViewBuilder
         return string.Equals(matched, library, StringComparison.Ordinal) && rest.Length > 0 ? rest : scenario;
     }
 
-    private static List<NormalizedRow> NormalizeRows(IEnumerable<BenchmarkSummaryRow> summary, string[] libraries, string subject)
+    private static List<NormalizedRow> NormalizeRows(IEnumerable<BenchmarkSummaryRow> summary, string[] libraries, string subject, bool preferMean = false)
     {
         var declared = libraries
             .Select(name => (Name: name, Key: Key(name)))
@@ -438,7 +439,7 @@ public sealed class BenchmarkComparisonViewBuilder
         {
             // Rows that carry their library identity are taken as recorded; name matching is only for rows without it.
             if (!string.IsNullOrWhiteSpace(row.Library))
-                return (Row: row, Library: row.Library, Suffix: RecordedCase(row));
+                return (Row: row, Library: row.Library, Suffix: string.Empty);
             var raw = string.IsNullOrWhiteSpace(row.Scenario) ? row.Engine ?? string.Empty : row.Scenario;
             var (library, suffix) = MatchLibrary(raw, declared);
             return (Row: row, Library: library, Suffix: suffix);
@@ -455,6 +456,12 @@ public sealed class BenchmarkComparisonViewBuilder
         return parsed.Select(item =>
         {
             var (parameters, identity) = CaseParameters(item.Row);
+            if (!string.IsNullOrWhiteSpace(item.Row.Library))
+            {
+                var recordedCase = RecordedCase(item.Row);
+                if (recordedCase.Length > 0)
+                    parameters["Case"] = recordedCase;
+            }
             var contender = item.Library;
             if (item.Suffix.Length > 0)
             {
@@ -469,7 +476,8 @@ public sealed class BenchmarkComparisonViewBuilder
                 if (variant.Length > 0) contender = item.Library + " " + variant;
             }
 
-            var time = item.Row.MedianMs ?? item.Row.MeanMs;
+            var useMean = preferMean ? item.Row.MeanMs.HasValue : !item.Row.MedianMs.HasValue;
+            var time = useMean ? item.Row.MeanMs : item.Row.MedianMs;
             return new NormalizedRow
             {
                 Contender = contender,
@@ -477,7 +485,7 @@ public sealed class BenchmarkComparisonViewBuilder
                 Parameters = parameters,
                 Identity = identity,
                 TimeMs = time,
-                Statistic = item.Row.MedianMs.HasValue ? "median" : "mean",
+                Statistic = useMean ? "mean" : "median",
                 AllocatedBytes = Metric(item.Row.Metrics, "BytesAllocatedPerOperation") ?? Metric(item.Row.Metrics, "Allocated"),
                 Failed = !string.IsNullOrWhiteSpace(item.Row.Status) && !string.Equals(item.Row.Status, "Succeeded", StringComparison.OrdinalIgnoreCase)
             };
@@ -542,6 +550,9 @@ public sealed class BenchmarkComparisonViewBuilder
         var fromReport = variables.ContainsKey("BenchmarkDotNetReport");
         foreach (var variable in variables)
         {
+            if (BenchmarkEvidenceCellBuilder.ProducerIdentityKeys.Contains(variable.Key, StringComparer.OrdinalIgnoreCase) &&
+                !BenchmarkDotNetColumns.IsJobCharacteristic(variable.Key))
+                continue;
             if (BenchmarkDotNetColumns.IsJobCharacteristic(variable.Key))
             {
                 if (!string.Equals(variable.Key, "FullName", StringComparison.OrdinalIgnoreCase) &&

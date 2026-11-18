@@ -50,6 +50,10 @@ public sealed partial class BenchmarkServicesTests
         Assert.NotEqual(retained.ResultSha256, windows.ResultSha256);
         BenchmarkSupersededLane superseded = Assert.Single(refreshed.Superseded);
         Assert.Equal(windows.LaneKey, superseded.LaneKey);
+        // The superseded run's file travels with the merged bundle under its own content-addressed name.
+        Assert.StartsWith("/data/benchmarks/library-comparisons/", superseded.ResultPath, StringComparison.Ordinal);
+        Assert.Equal(superseded.ResultSha256, BenchmarkJson.ComputeFileSha256(
+            Path.Combine(root, "merged", superseded.ResultPath.Substring(superseded.ResultPath.LastIndexOf('/') + 1))));
         Assert.Equal(retained.ResultSha256, superseded.ResultSha256);
         Assert.Equal(retained.GeneratedUtc, superseded.GeneratedUtc);
         Assert.Equal(windows.GeneratedUtc, superseded.SupersededByUtc);

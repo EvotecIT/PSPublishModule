@@ -68,9 +68,11 @@ nobody adds it to the list, and the comparison silently stops publishing. Instea
   `[BenchmarkCategory("library:ClosedXML", "case:ReadTyped")]`. The importer reads
   those categories, so no name matching is needed, and methods of different
   libraries that measure the same case line up as one workload. A project that
-  cannot use categories passes explicit maps (`Import-BenchmarkResult -LibraryMap … -CaseMap …`);
-  every method must have a library or the import fails. Two methods of one library
-  that resolve to the same cell fail the catalog update.
+  cannot use categories passes explicit maps (`Import-BenchmarkResult -LibraryMap … -CaseMap …`).
+  When a library map is given, an unmapped method fails the import. Without a map or
+  categories, rows without a library are imported as they are and then reported as
+  drift (`missing-library-identity`) by `Test-BenchmarkDeclaration` and at publication.
+  Two methods of one library that resolve to the same cell fail the catalog update.
 - Generate the `cases`, `axes` and `libraries` of each comparison from the benchmark
   code (for example a `--list-declarations` switch in the benchmark host, or a small
   generator over the benchmark attributes) and check the generated file in.
@@ -201,7 +203,7 @@ changes.
 | NPOI | Apache-2.0; the OSMF fee applies only to binaries in revenue-generating use, not to benchmarking or publishing | `open` |
 | QuestPDF 2026.5.0 | Last release before the benchmarking restriction | `open` |
 | A later QuestPDF release | Classify by that release's own licence: `publish-restricted` when it restricts publishing benchmark results, `open` when it does not | per release |
-| DocX (Xceed) | Publishing results needs Xceed's permission | `publish-restricted` |
+| DocX (Xceed Community licence) | Noncommercial use only and agreement to its terms is required | `acceptance-required` |
 | EPPlus 8 | PolyForm Noncommercial or a commercial licence, chosen through a licence context | `acceptance-required` |
 
 ### Selecting libraries for a run

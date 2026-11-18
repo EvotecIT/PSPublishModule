@@ -113,10 +113,17 @@ internal static class BenchmarkEvidenceCellBuilder
     internal static string WorkloadIdentity(BenchmarkEvidenceCell cell)
         => string.Join("\u001f", cell.Case, cell.Operation, FormatParameters(cell.Parameters));
 
+    // Length-prefixed so a value containing ';' or '=' can never read as another parameter.
     internal static string FormatParameters(IReadOnlyDictionary<string, string?> parameters)
-        => string.Join(";", parameters
+        => string.Concat(parameters
             .OrderBy(item => item.Key, StringComparer.OrdinalIgnoreCase)
-            .Select(item => item.Key.ToLowerInvariant() + "=" + (item.Value ?? string.Empty)));
+            .Select(item =>
+            {
+                string key = item.Key.ToLowerInvariant();
+                string value = item.Value ?? string.Empty;
+                return key.Length.ToString(System.Globalization.CultureInfo.InvariantCulture) + ":" + key + "=" +
+                       value.Length.ToString(System.Globalization.CultureInfo.InvariantCulture) + ":" + value + ";";
+            }));
 
     private static (string Status, string Detail) ResolveValidation(
         IEnumerable<BenchmarkOutputValidation> validations,

@@ -175,6 +175,14 @@ public sealed partial class BenchmarkResultImporter
             row.Variables["Method"] = row.Scenario;
             row.Scenario = name;
         }
+        foreach (BenchmarkComparisonRow row in result.Comparison)
+        {
+            string? name = Resolve(row.Scenario, row.Variables);
+            if (name is null || string.Equals(name, row.Scenario, StringComparison.Ordinal))
+                continue;
+            row.Variables["Method"] = row.Scenario;
+            row.Scenario = name;
+        }
     }
 
     internal static string? ReadBenchmarkDotNetCategories(JsonElement benchmark)

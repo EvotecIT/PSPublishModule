@@ -69,7 +69,10 @@ public sealed partial class BenchmarkEvidenceCatalogService
         string profileName = FormatProfile(request.Profile);
 
         ValidateCatalogSchema(catalog);
-        catalog ??= new BenchmarkEvidenceCatalog();
+        // Rules and lanes are staged on a copy; the caller's catalog changes only through the returned value.
+        catalog = catalog is null
+            ? new BenchmarkEvidenceCatalog()
+            : BenchmarkJson.ReadBytes<BenchmarkEvidenceCatalog>(BenchmarkJson.SerializeCanonicalBytes(catalog), "benchmark evidence catalog");
         if (request.Declarations is not null)
             ApplyDeclarationDocument(catalog, request.Declarations);
         if (request.Policy is not null)
