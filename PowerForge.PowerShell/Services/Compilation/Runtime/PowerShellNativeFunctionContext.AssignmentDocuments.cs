@@ -6,13 +6,16 @@ namespace PowerForge.Generated.Runtime
 
     public sealed partial class PowerShellNativeFunctionContext
     {
-        // Embedded source strings live with the generated assembly. Weak keys also
-        // permit callers supplying transient documents to release the parsed tree.
-        private static readonly ConditionalWeakTable<string, AssignmentDocument> AssignmentDocuments = new();
+        // PowerShell type-name metadata belongs to an execution context. Never
+        // share its parsed trees across runspaces, even for identical source.
+        // Weak context and source keys allow both owners to release their trees.
+        private static readonly ConditionalWeakTable<object, ConditionalWeakTable<string, AssignmentDocument>> AssignmentDocuments = new();
 
         private ScriptBlockAst ParseAssignmentDocument(string source, string file, out ParseError[] errors)
         {
-            var parsed = AssignmentDocuments.GetValue(source, text => ReadAssignmentDocument(text, file));
+            var documents = AssignmentDocuments.GetValue(_executionContext,
+                static _ => new ConditionalWeakTable<string, AssignmentDocument>());
+            var parsed = documents.GetValue(source, text => ReadAssignmentDocument(text, file));
             // The same source text can legitimately belong to another file. Keep
             // its extents independent instead of returning the first file's AST.
             if (!string.Equals(parsed.File, file, StringComparison.Ordinal))
