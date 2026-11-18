@@ -2,14 +2,16 @@
 {{~ r = $1 ~}}
 {{~ c = $2 ~}}
 <div class="pf-bench__run" role="tabpanel" id="benchmark-{{ c.id | html.escape }}-{{ r.id | html.escape }}" data-pf-bench-run="{{ r.id | html.escape }}">
-  <p class="pf-bench__facts">
-    <span>{{ r.platformLabel | html.escape }}</span>
-    {{~ if r.framework != "" ~}}
-    <span>{{ r.framework | html.escape }}</span>
-    {{~ end ~}}
-    <span>{{ r.profileText | html.escape }}</span>
-    <span><time datetime="{{ r.date | html.escape }}">{{ r.date | html.escape }}</time></span>
-  </p>
+  <div class="pf-bench__facts">
+    <ul>
+      <li>{{ r.platformLabel | html.escape }}</li>
+      {{~ if r.framework != "" ~}}
+      <li>{{ r.framework | html.escape }}</li>
+      {{~ end ~}}
+      <li>{{ r.profileText | html.escape }}</li>
+      <li><time datetime="{{ r.date | html.escape }}">{{ r.date | html.escape }}</time></li>
+    </ul>
+  </div>
   {{~ if r.environment.text != "" ~}}
   <p class="pf-bench__environment">{{ r.environment.text | html.escape }}</p>
   {{~ end ~}}

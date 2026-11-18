@@ -792,7 +792,9 @@ shows:
 - `group` and `frameworks` from the declaration;
 - `eligibility` (`publishable`, `reason`), for example a single-library comparison;
 - `availability`, one entry per expected platform and framework, with text such as
-  `Windows · net10.0 · standard · 2026-11-18` or `Linux · net10.0 · not measured`;
+  `Windows · net10.0 · standard · 2026-11-18`, `Linux · net10.0 · no published run`
+  (measured, but only in runs that are not published) or `macOS · net10.0 · not measured`.
+  It names only profiles the publish policy publishes;
 - `libraryStates`, each library's restriction class and whether its results are
   published, with the note `not published (licence)` when they are not.
 
@@ -844,7 +846,7 @@ benchmarks the same way. They need no files in the theme:
 | `powerforge/benchmarks/index` | the `BenchmarkEvidence` data | Areas with comparison headlines, and each area's results on demand |
 
 Only published runs are shown. A comparison without one shows "No published run
-yet.", platforms that were never measured are listed as "not measured", and a
+yet.", platforms are listed as "not measured" or "no published run", and a
 comparison that cannot be published shows the reason.
 
 To adopt them in a site:

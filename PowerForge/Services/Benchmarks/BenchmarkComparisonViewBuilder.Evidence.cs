@@ -127,18 +127,25 @@ public sealed partial class BenchmarkComparisonViewBuilder
             .ThenBy(value => value.Framework, StringComparer.Ordinal)
             .Select(value =>
             {
-                string[] profiles = value.Profiles.Select(profile => BenchmarkKebabCaseEnumConverter<BenchmarkEvidenceProfile>.Format(profile)).ToArray();
-                string date = value.LatestUtc?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) ?? string.Empty;
+                // Availability is public: it names only profiles the policy publishes, even when a catalog was
+                // written by hand, and says "no published run" rather than naming unpublished ones.
+                BenchmarkEvidenceProfile[] publishable = value.Profiles.Where(policy.PublishableProfiles.Contains).ToArray();
+                bool available = value.Available && publishable.Length > 0;
+                string[] profiles = publishable.Select(profile => BenchmarkKebabCaseEnumConverter<BenchmarkEvidenceProfile>.Format(profile)).ToArray();
+                string date = available ? value.LatestUtc?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) ?? string.Empty : string.Empty;
+                bool measured = view.Runs.Any(run =>
+                    string.Equals(run.Platform, value.Platform, StringComparison.OrdinalIgnoreCase) &&
+                    string.Equals(run.Framework, value.Framework, StringComparison.OrdinalIgnoreCase));
                 var parts = new List<string> { PlatformLabel(value.Platform) };
                 if (value.Framework.Length > 0)
                     parts.Add(value.Framework);
-                parts.Add(value.Available ? string.Join(", ", profiles) + " · " + date : "not measured");
+                parts.Add(available ? string.Join(", ", profiles) + " · " + date : measured ? "no published run" : "not measured");
                 return new BenchmarkAvailabilityView
                 {
                     Platform = value.Platform,
                     PlatformLabel = PlatformLabel(value.Platform),
                     Framework = value.Framework,
-                    Available = value.Available,
+                    Available = available,
                     Profiles = profiles,
                     LatestDate = date,
                     Text = string.Join(" · ", parts)

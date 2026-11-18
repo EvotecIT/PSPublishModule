@@ -3,12 +3,19 @@
 (function () {
   'use strict';
 
-  // Area file paths are relative to the site root: the URL of this script without assets/powerforge/....
-  var scriptPath = 'assets/powerforge/benchmarks.v1.js';
-  var source = document.currentScript && document.currentScript.src;
-  var siteRoot = source && source.lastIndexOf(scriptPath) >= 0
-    ? source.slice(0, source.lastIndexOf(scriptPath))
-    : document.baseURI;
+  // Area file paths are relative to the site root: the folder above this script's assets/powerforge/ folder.
+  // The file name is not matched, so a fingerprinted copy such as benchmarks.v1.<hash>.js resolves the same root.
+  function resolveSiteRoot(source) {
+    if (!source) return document.baseURI;
+    var url = new URL(source, document.baseURI);
+    var at = url.pathname.lastIndexOf('/assets/powerforge/');
+    if (at < 0) return document.baseURI;
+    url.pathname = url.pathname.slice(0, at + 1);
+    url.search = '';
+    url.hash = '';
+    return url.href;
+  }
+  var siteRoot = resolveSiteRoot(document.currentScript && document.currentScript.src);
 
   function initComparison(section) {
     if (section.hasAttribute('data-pf-bench-ready')) return;

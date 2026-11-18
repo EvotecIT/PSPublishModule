@@ -142,6 +142,37 @@ public sealed partial class BenchmarkServicesTests
         BenchmarkAreaIndexView csv = Assert.Single(view.Index.Areas, area => area.Id == "csv");
         Assert.Equal(new[] { "OfficeIMO is 1.96× faster than Sep" }, Assert.Single(csv.Comparisons, comparison => comparison.Id == "comparison-a").Headlines);
         Assert.Empty(Assert.Single(csv.Comparisons, comparison => comparison.Id == "comparison-b").Headlines);
+        BenchmarkAvailabilityView diagnosticOnly = Assert.Single(
+            Assert.Single(view.Comparisons, comparison => comparison.Id == "comparison-b").Availability, value => value.Platform == "windows");
+        Assert.False(diagnosticOnly.Available);
+        Assert.Equal("Windows · net10.0 · no published run", diagnosticOnly.Text);
+    }
+
+    [Fact]
+    public void ComparisonView_AvailabilityNeverNamesUnpublishedProfiles()
+    {
+        string root = CreateTempRoot();
+        string catalogPath = RecordViewCatalog(root);
+        // A hand-written catalog can claim profiles the policy never publishes.
+        BenchmarkEvidenceCatalog catalog = new BenchmarkEvidenceCatalogService().ReadCatalog(catalogPath);
+        BenchmarkPlatformAvailability windows = catalog.Availability.Single(value => value.ComparisonId == "comparison-a" && value.Platform == "windows");
+        windows.Profiles = [BenchmarkEvidenceProfile.Diagnostic, BenchmarkEvidenceProfile.Standard];
+        BenchmarkPlatformAvailability linux = catalog.Availability.Single(value => value.ComparisonId == "comparison-a" && value.Platform == "linux");
+        linux.Available = true;
+        linux.Profiles = [BenchmarkEvidenceProfile.Diagnostic];
+        linux.LatestUtc = DateTimeOffset.UtcNow;
+
+        BenchmarkComparisonView read = Assert.Single(
+            new BenchmarkComparisonViewBuilder().Build(catalog, entry => BenchmarkJson.Read<BenchmarkRunResult>(Path.Combine(root, entry.ArtifactRelativePath))).Comparisons,
+            comparison => comparison.Id == "comparison-a");
+
+        BenchmarkAvailabilityView windowsView = Assert.Single(read.Availability, value => value.Platform == "windows");
+        Assert.Equal(new[] { "standard" }, windowsView.Profiles);
+        Assert.DoesNotContain("diagnostic", windowsView.Text, StringComparison.Ordinal);
+        BenchmarkAvailabilityView linuxView = Assert.Single(read.Availability, value => value.Platform == "linux");
+        Assert.False(linuxView.Available);
+        Assert.Empty(linuxView.Profiles);
+        Assert.Equal("Linux · net10.0 · not measured", linuxView.Text);
     }
 
     [Fact]
