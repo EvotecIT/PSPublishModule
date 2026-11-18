@@ -35,21 +35,18 @@ public sealed class AuthenticodeParallelSigningTests
     }
 
     [Fact]
-    public void SignFiles_FailureStopsNewFilesAndReportsTheFailedFile()
+    public void SignFiles_WorkerFailureIsReportedWithTheFailedFile()
     {
+        // Which files start after the failure depends on worker timing; the scheduler test
+        // proves the stop contract. This proves a worker-runspace failure surfaces by file.
         if (!OperatingSystem.IsWindows()) return;
         using var fixture = new SigningModuleFixture(failFile: "Two.ps1");
-        var files = fixture.CreateFiles("One.ps1", "Two.ps1", "Three.ps1", "Four.ps1", "Five.ps1", "Six.ps1");
+        var files = fixture.CreateFiles("One.ps1", "Two.ps1", "Three.ps1");
 
         var result = fixture.Sign(files, parallelism: 2);
 
         Assert.True(result.HadErrors);
-        Assert.Contains("Two.ps1", result.Errors, StringComparison.Ordinal);
-        var started = fixture.ReadCalls().Select(call => Path.GetFileName(call.File)).ToArray();
-        Assert.Contains("One.ps1", started);
-        Assert.DoesNotContain("Four.ps1", started);
-        Assert.DoesNotContain("Five.ps1", started);
-        Assert.DoesNotContain("Six.ps1", started);
+        Assert.Contains("Signing denied for Two.ps1", result.Errors, StringComparison.Ordinal);
     }
 
     private sealed class SigningModuleFixture : IDisposable
