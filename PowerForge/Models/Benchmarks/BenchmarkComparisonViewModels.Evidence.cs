@@ -179,6 +179,12 @@ public sealed class BenchmarkComparisonSummaryView
     public BenchmarkEligibilityView Eligibility { get; set; } = new();
 
     /// <summary>
+    /// True when the comparison has a published run, even one whose competitors were all withheld and so has no
+    /// head-to-head result. Diagnostic and other unpublished runs do not count.
+    /// </summary>
+    public bool Published { get; set; }
+
+    /// <summary>
     /// Head-to-head text of the published run (full before standard, then newest), such as
     /// "OfficeIMO is 2.0× faster than Sep". Empty when the comparison has no published run.
     /// </summary>

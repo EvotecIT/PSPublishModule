@@ -27,6 +27,13 @@ public sealed class BenchmarkEvidenceDataSpec
     /// pages load full area data from <see cref="Output"/>. Requires <see cref="Output"/>.
     /// </summary>
     public bool IndexOnly { get; set; }
+
+    /// <summary>
+    /// When true, the build renders each area with the benchmark components to
+    /// <c>_powerforge/fragments/benchmarks/&lt;name&gt;/&lt;area&gt;.html</c>, and the index component loads it when
+    /// an area is opened. Off by default, so JSON-only publication renders nothing extra.
+    /// </summary>
+    public bool AreaFragments { get; set; }
 }
 
 /// <summary>Template engine limits.</summary>

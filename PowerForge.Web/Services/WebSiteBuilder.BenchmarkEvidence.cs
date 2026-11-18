@@ -7,12 +7,14 @@ namespace PowerForge.Web;
 /// <summary>Benchmark evidence files written into the site output.</summary>
 public static partial class WebSiteBuilder
 {
-    // Writes each evidence view with an Output directory as index.json plus one JSON file and one rendered HTML
-    // file per area under the site output.
+    // Writes each evidence view with an Output directory as index.json plus one JSON file per area, and with
+    // AreaFragments each area rendered by the components.
     private static void WriteBenchmarkEvidenceFiles(SiteSpec spec, string rootPath, string outputRoot)
     {
         foreach (var evidence in spec.BenchmarkEvidence ?? Array.Empty<BenchmarkEvidenceDataSpec>())
         {
+            if (evidence.AreaFragments)
+                WriteBenchmarkAreaFragments(spec, rootPath, outputRoot, evidence);
             if (string.IsNullOrWhiteSpace(evidence.Output))
                 continue;
 
@@ -37,7 +39,6 @@ public static partial class WebSiteBuilder
             foreach (var file in view.Index.Areas.Select(area => area.File).Prepend("index.json"))
                 Guard(Path.Combine(directory, file));
             PowerForge.BenchmarkComparisonViewBuilder.WriteAreaFiles(view, directory);
-            WriteBenchmarkAreaFragments(spec, rootPath, view, directory, Guard);
         }
     }
 }

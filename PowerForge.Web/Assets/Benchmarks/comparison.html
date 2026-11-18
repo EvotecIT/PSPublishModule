@@ -33,7 +33,7 @@
   </div>
   {{~ end ~}}
   {{~ for r in shown ~}}
-  {{ include "powerforge/benchmarks/run" r c }}
+  {{ include "powerforge/benchmarks/run" r c true }}
   {{~ end ~}}
   {{~ end ~}}
   {{~ withheld = [] ~}}

@@ -78,6 +78,41 @@ public class WebSiteBuilderBenchmarkEvidenceTests
     }
 
     [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void Build_DoesNotWriteBuiltInAssetsThroughALinkedAssetsFolder(bool benchmarks)
+    {
+        var root = CreateTempRoot();
+        var link = Path.Combine(root, "_site", "assets", "powerforge");
+        try
+        {
+            WriteMergeCatalog(root);
+            var external = Path.Combine(root, "external");
+            Directory.CreateDirectory(external);
+            WritePage(root, "---\ntitle: Home\nslug: index\n---\n\nHome\n");
+            WriteTheme(root, "<html><head></head><body>{{ content }}</body></html>");
+            Directory.CreateDirectory(Path.Combine(root, "_site", "assets"));
+            CreateDirectoryLink(link, external);
+            var spec = BuildSpec();
+            if (benchmarks)
+                spec.BenchmarkEvidence = new[] { new BenchmarkEvidenceDataSpec { Name = "benchmarks", Catalog = "evidence/index.json" } };
+            else
+                spec.MediaViewer = new MediaViewerSpec { Enabled = true };
+
+            var error = Assert.Throws<InvalidOperationException>(() => BuildAndRead(root, spec));
+
+            Assert.Contains("symbolic link or reparse point", error.Message, StringComparison.Ordinal);
+            Assert.Empty(Directory.GetFiles(external));
+        }
+        finally
+        {
+            if (Directory.Exists(link))
+                Directory.Delete(link);
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Theory]
     [InlineData(null, true, "needs Output")]
     [InlineData("../outside", false, "inside the site output")]
     [InlineData("../_SITE/benchmarks", false, "inside the site output")]
@@ -241,7 +276,7 @@ public class WebSiteBuilderBenchmarkEvidenceTests
     }
 
     // Windows symbolic links need a privilege; a junction is the link type any user can create there.
-    private static void CreateDirectoryLink(string link, string target)
+    internal static void CreateDirectoryLink(string link, string target)
     {
         if (!OperatingSystem.IsWindows())
         {

@@ -841,23 +841,35 @@ benchmarks the same way. They need no files in the theme:
 | Partial | Argument | Renders |
 | --- | --- | --- |
 | `powerforge/benchmarks/comparison` | one comparison | Title, group, platform availability, a platform and framework switcher, and the published runs, followed by licence notes |
-| `powerforge/benchmarks/run` | a run and its comparison | Run facts, environment, workload, the case table with times, confidence intervals and "fastest", "even" or the ratio, head-to-head lines, withheld libraries and runner settings |
+| `powerforge/benchmarks/run` | a run and its comparison | Run facts, environment, workload, the case table with times, confidence intervals and "fastest", "even" or the ratio, head-to-head lines, withheld libraries with their reason (never their times) and runner settings |
 | `powerforge/benchmarks/area` | an area file's content | Every comparison of one area |
 | `powerforge/benchmarks/index` | the `BenchmarkEvidence` data | Areas with comparison headlines, and each area's results on demand |
 
 Only published runs are shown. A comparison without one shows "No published run
 yet.", platforms are listed as "not measured" or "no published run", and a
-comparison that cannot be published shows the reason.
+comparison that cannot be published shows the reason. When cells have confidence
+intervals, only the fastest cell is "fastest" and a cell whose interval overlaps it
+is "even"; cells without intervals use the 0.5% tolerance. The index tells a
+comparison with no run, one measured only in unpublished runs and one whose
+published run has no head-to-head result apart, using each summary's `measured`
+and `published` flags.
 
 To adopt them in a site:
 
-1. Declare the evidence in `site.json`. Add `Output` (and `IndexOnly` for large
-   catalogs) to load areas on demand:
+1. Declare the evidence in `site.json`. For a large catalog, add `IndexOnly` (with
+   `Output`) so pages carry only the index, and `AreaFragments` so the index loads
+   each area's rendered results when it is opened:
 
    ```json
    {
      "BenchmarkEvidence": [
-       { "Name": "benchmarks", "Catalog": "static/data/benchmarks/index.json", "Output": "data/benchmarks", "IndexOnly": true }
+       {
+         "Name": "benchmarks",
+         "Catalog": "static/data/benchmarks/index.json",
+         "Output": "data/benchmarks",
+         "IndexOnly": true,
+         "AreaFragments": true
+       }
      ]
    }
    ```
@@ -879,16 +891,19 @@ To adopt them in a site:
 
 3. Build the site. A page that renders a component gets
    `assets/powerforge/benchmarks.v1.css` and `assets/powerforge/benchmarks.v1.js`
-   added to its head and body. With `Output`, the build also writes
-   `<area>.html` next to each `<area>.json`, rendered with the same partials, and
-   the index loads it when an area is opened. The script resolves these files
-   from the site root it was loaded from, so a site served from a sub-path works
-   unchanged.
+   added to its head and body; the build refuses to write them through a linked
+   `assets/powerforge` folder or file. With `AreaFragments`, the build also writes
+   each area to `_powerforge/fragments/benchmarks/<name>/<area>.html`, rendering
+   one comparison at a time so an area of any size stays within the template loop
+   limit. Site audits, sitemaps and search already skip `_powerforge/fragments`.
+   The script resolves these files from the site root it was loaded from, so a site
+   served from a sub-path works unchanged.
 
-Without the script, every published run is shown in turn and areas without
-`Output` render inline. Themes restyle the components through the `--pf-bench-*`
-CSS properties (accent, even, failed, border, radius), or replace one by adding
-`partials/powerforge/benchmarks/<name>.html`; the build then uses the theme's
-version, including for the area files. The partials HTML-escape every value from
-the evidence.
+Without the script, the platform switcher stays hidden and every published run is
+shown in turn; without `AreaFragments`, an index over the full view renders areas
+inline and an `IndexOnly` index lists the summaries. Themes restyle the components
+through the `--pf-bench-*` CSS properties (accent, even, failed, border, radius),
+or replace one by adding `partials/powerforge/benchmarks/<name>.html`; the build
+then uses the theme's version, including for the area files. The partials
+HTML-escape every value from the evidence.
 

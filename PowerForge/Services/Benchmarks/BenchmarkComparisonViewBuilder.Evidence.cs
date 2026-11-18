@@ -72,6 +72,7 @@ public sealed partial class BenchmarkComparisonViewBuilder
                         Subject = comparison.Subject,
                         Libraries = comparison.Libraries,
                         Measured = comparison.Measured,
+                        Published = comparison.Runs.Any(run => run.Published),
                         Eligibility = comparison.Eligibility,
                         Headlines = HeadlineRun(comparison)?.HeadToHead
                             .Select(item => item.Text)

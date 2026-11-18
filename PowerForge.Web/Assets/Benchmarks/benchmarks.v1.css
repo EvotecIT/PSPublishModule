@@ -78,7 +78,13 @@
   color: var(--pf-bench-muted);
 }
 
-.pf-bench__tabs {
+/* Elements the script reveals stay hidden without it, whatever display a rule gives them. */
+.pf-bench [hidden],
+.pf-bench-index [hidden] {
+  display: none;
+}
+
+.pf-bench__tabs:not([hidden]) {
   display: flex;
   flex-wrap: wrap;
   gap: 0.25rem;

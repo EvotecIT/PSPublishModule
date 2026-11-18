@@ -1,6 +1,8 @@
-{{~ # powerforge/benchmarks/run: one published run ($1) of a comparison ($2). ~}}
+{{~ # powerforge/benchmarks/run: one published run ($1) of a comparison ($2). The comparison component passes ~}}
+{{~ # true as $3 because it lists licence-restricted libraries itself. ~}}
 {{~ r = $1 ~}}
 {{~ c = $2 ~}}
+{{~ in_comparison = $3 ~}}
 <div class="pf-bench__run" role="tabpanel" id="benchmark-{{ c.id | html.escape }}-{{ r.id | html.escape }}" data-pf-bench-run="{{ r.id | html.escape }}">
   <div class="pf-bench__facts">
     <ul>
@@ -61,9 +63,13 @@
   {{~ end ~}}
   <ul class="pf-bench__notes">
     <li>Times are {{ r.statistic | html.escape }}s; results whose confidence intervals overlap are reported as even.</li>
-    {{~ for n in r.notPublished; if !n.licence ~}}
+    {{~ for n in r.notPublished ~}}
+    {{~ if !n.licence ~}}
     <li>{{ n.library | html.escape }}: not published. {{ n.text | html.escape }}</li>
-    {{~ end; end ~}}
+    {{~ else if !in_comparison ~}}
+    <li>{{ n.library | html.escape }}: not published (licence).</li>
+    {{~ end ~}}
+    {{~ end ~}}
     {{~ if r.runner.text != "" ~}}
     <li>Runner: {{ r.runner.text | html.escape }}</li>
     {{~ end ~}}

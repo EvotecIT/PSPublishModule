@@ -313,6 +313,10 @@ public sealed partial class BenchmarkComparisonViewBuilder
                         return new BenchmarkCellView { Contender = name, IsSubject = IsSubject(name), Missing = true };
                     var completed = Completed(row);
                     var relative = completed && !double.IsNaN(fastest) ? Ratio(row.TimeMs!.Value / fastest) : new BenchmarkRatioView();
+                    // With intervals, only the fastest row is fastest and overlap decides "even"; the ratio stays numeric.
+                    var intervalBacked = completed && row.Interval is not null && fastestRow?.Interval is not null;
+                    if (intervalBacked)
+                        relative.IsFastest = ReferenceEquals(row, fastestRow);
                     return new BenchmarkCellView
                     {
                         Contender = name,
@@ -324,7 +328,7 @@ public sealed partial class BenchmarkComparisonViewBuilder
                         AllocatedText = FormatBytes(row.AllocatedBytes),
                         Relative = relative,
                         Interval = completed ? DescribeInterval(row.Interval) : null,
-                        Even = completed && !relative.IsFastest && IsEven(row.Interval, fastestRow?.Interval),
+                        Even = intervalBacked && !relative.IsFastest && IsEven(row.Interval, fastestRow!.Interval),
                         BarPercent = completed && slowest > 0 ? Math.Round(Math.Max(1.5, row.TimeMs!.Value / slowest * 100), 1) : 0
                     };
                 }).ToArray()

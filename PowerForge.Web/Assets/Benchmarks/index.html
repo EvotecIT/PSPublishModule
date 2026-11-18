@@ -1,9 +1,12 @@
 {{~ # powerforge/benchmarks/index: areas with their comparison summaries ($1, the BenchmarkEvidence data). ~}}
-{{~ # With Output set, each area loads its rendered file when opened; otherwise the full view is rendered inline. ~}}
+{{~ # With AreaFragments, each area loads its rendered file when opened; otherwise the full view is rendered inline. ~}}
 {{~ v = $1 ~}}
-{{~ idx = v.index ~}}
-{{~ if v.areas && v.areas.size > 0 && v.areas[0].file; idx = v; end ~}}
+{{~ # The full view carries the index under "index"; IndexOnly data is the index itself. ~}}
+{{~ if v.index; idx = v.index; else; idx = v; end ~}}
 <div class="pf-bench-index" data-pf-bench-index>
+  {{~ if idx.areas.size == 0 ~}}
+  <p class="pf-bench__empty">No benchmark results yet.</p>
+  {{~ end ~}}
   {{~ for area in idx.areas ~}}
   <section class="pf-bench-index__area" id="benchmarks-{{ if area.id != "" }}{{ area.id | html.escape }}{{ else }}other{{ end }}">
     <header class="pf-bench-index__header">
@@ -18,16 +21,18 @@
         {{~ for line in s.headlines ~}}
         <span class="pf-bench-index__headline">{{ line | html.escape }}</span>
         {{~ end ~}}
-        {{~ else if !s.measured ~}}
-        <span class="pf-bench-index__state">Not measured yet.</span>
-        {{~ else ~}}
+        {{~ else if s.published ~}}
+        <span class="pf-bench-index__state">No head-to-head result in the published run.</span>
+        {{~ else if s.measured ~}}
         <span class="pf-bench-index__state">No published run yet.</span>
+        {{~ else ~}}
+        <span class="pf-bench-index__state">Not measured yet.</span>
         {{~ end ~}}
       </li>
       {{~ end ~}}
     </ul>
-    {{~ if v.areaFiles && v.areaFiles != "" ~}}
-    <details class="pf-bench-index__details" data-pf-bench-area-src="{{ v.areaFiles | html.escape }}{{ area.file | string.replace ".json" ".html" | html.escape }}">
+    {{~ if v.areaFragments && v.areaFragments != "" ~}}
+    <details class="pf-bench-index__details" data-pf-bench-area-src="{{ v.areaFragments | html.escape }}{{ area.file | string.replace ".json" ".html" | html.escape }}">
       <summary>Show results</summary>
       <div class="pf-bench-index__body" data-pf-bench-area-body></div>
     </details>

@@ -50,11 +50,18 @@ public static partial class WebSiteBuilder
     {
         if (!HasBenchmarkEvidence(spec)) return;
         foreach (var route in new[] { BenchmarkCssRoute, BenchmarkJsRoute })
-        {
-            var path = Path.Combine(outputRoot, route.Replace('/', Path.DirectorySeparatorChar));
-            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-            WriteAllTextIfChanged(path, ReadBenchmarkResource(Path.GetFileName(route)));
-        }
+            WriteBuiltInAsset(outputRoot, route, ReadBenchmarkResource(Path.GetFileName(route)));
+    }
+
+    // Built-in assets go under assets/powerforge. A linked folder or file there would send the write outside the
+    // site output, so the destination is checked before anything is written.
+    private static void WriteBuiltInAsset(string outputRoot, string route, string content)
+    {
+        var fullOutputRoot = Path.GetFullPath(outputRoot);
+        var path = Path.Combine(fullOutputRoot, route.Replace('/', Path.DirectorySeparatorChar));
+        VisualStoryPathGuard.EnsureContainedPath(fullOutputRoot, path, "asset " + route, subject: "Website");
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        WriteAllTextIfChanged(path, content);
     }
 
     // Pages that render a component get its stylesheet and script; other pages are left alone.
@@ -77,41 +84,60 @@ public static partial class WebSiteBuilder
         return html;
     }
 
-    // Path of an evidence entry's area files relative to the site root, such as "data/benchmarks/". The component
-    // script resolves it against the site root it was loaded from, so sites served from a sub-path work too.
-    private static string BenchmarkAreaFilesRoute(BenchmarkEvidenceDataSpec evidence)
-        => evidence.Output!.Trim().Replace('\\', '/').Trim('/') + "/";
+    // Folder of an evidence entry's rendered areas relative to the site root, such as
+    // "_powerforge/fragments/benchmarks/benchmarks/". Audits, sitemaps and search skip _powerforge/fragments, and the
+    // component script resolves the path against the site root, so sites served from a sub-path work too.
+    private static string BenchmarkAreaFragmentsRoute(BenchmarkEvidenceDataSpec evidence)
+        => "_powerforge/fragments/benchmarks/" + BenchmarkFragmentFolder(evidence.Name) + "/";
 
-    // Renders each area with the area component, honouring theme overrides, so a page can load it on demand.
-    private static void WriteBenchmarkAreaFragments(
-        SiteSpec spec,
-        string rootPath,
-        BenchmarkComparisonCatalogView view,
-        string directory,
-        Action<string> guard)
+    private static string BenchmarkFragmentFolder(string name)
     {
+        var builder = new System.Text.StringBuilder();
+        foreach (var character in (name ?? string.Empty).Trim().ToLowerInvariant())
+            builder.Append(char.IsLetterOrDigit(character) && character < 128 ? character : '-');
+        var folder = builder.ToString().Trim('-');
+        return folder.Length == 0 ? "benchmarks" : folder;
+    }
+
+    // Renders each area one comparison at a time with the comparison component, honouring theme overrides. Rendering
+    // per comparison keeps an area of any size clear of Scriban's loop limit; the site's LoopLimit still applies
+    // inside each comparison.
+    private static void WriteBenchmarkAreaFragments(SiteSpec spec, string rootPath, string outputRoot, BenchmarkEvidenceDataSpec evidence)
+    {
+        var catalogPath = Path.IsPathRooted(evidence.Catalog) ? evidence.Catalog : Path.Combine(rootPath, evidence.Catalog);
+        var view = new BenchmarkComparisonViewBuilder().Build(catalogPath);
+        var fullOutputRoot = Path.GetFullPath(outputRoot);
+        var directory = Path.Combine(fullOutputRoot, BenchmarkAreaFragmentsRoute(evidence).TrimEnd('/').Replace('/', Path.DirectorySeparatorChar));
+        var label = $"'{evidence.Name}' area fragments";
+        VisualStoryPathGuard.EnsureContainedPath(fullOutputRoot, directory, label, subject: "BenchmarkEvidence");
+
         var resolver = BuildBenchmarkPartialResolver(spec, rootPath);
-        var template = resolver(BenchmarkPartialPrefix + "area")
-            ?? throw new InvalidOperationException("The benchmark area component could not be resolved.");
         var engine = new ScribanTemplateEngine();
+        const string template = "{{ include \"" + BenchmarkPartialPrefix + "comparison\" data.comparison }}";
         foreach (var area in view.Index.Areas)
         {
             var path = Path.Combine(directory, Path.ChangeExtension(area.File, ".html"));
-            guard(path);
-            var areaView = new BenchmarkAreaView
+            VisualStoryPathGuard.EnsureContainedPath(fullOutputRoot, path, label, subject: "BenchmarkEvidence");
+            var html = new System.Text.StringBuilder();
+            html.Append("<div class=\"pf-bench-area\" data-pf-bench-area=\"")
+                .Append(System.Web.HttpUtility.HtmlAttributeEncode(area.Id))
+                .AppendLine("\">");
+            foreach (var comparison in view.Comparisons)
             {
-                Id = area.Id,
-                Comparisons = Array.FindAll(view.Comparisons, comparison => string.Equals(comparison.Area ?? string.Empty, area.Id, StringComparison.OrdinalIgnoreCase))
-            };
-            using var document = JsonDocument.Parse(BenchmarkJson.Serialize(areaView));
-            var context = new ThemeRenderContext
-            {
-                Site = spec,
-                RootPath = rootPath,
-                Data = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase) { ["area"] = ConvertJsonElement(document.RootElement) }
-            };
-            var html = engine.Render("{{ include \"" + BenchmarkPartialPrefix + "area\" data.area }}", context, resolver);
-            WriteAllTextIfChanged(path, html);
+                if (!string.Equals(comparison.Area ?? string.Empty, area.Id, StringComparison.OrdinalIgnoreCase))
+                    continue;
+                using var document = JsonDocument.Parse(BenchmarkJson.Serialize(comparison));
+                var context = new ThemeRenderContext
+                {
+                    Site = spec,
+                    RootPath = rootPath,
+                    Data = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase) { ["comparison"] = ConvertJsonElement(document.RootElement) }
+                };
+                html.AppendLine(engine.Render(template, context, resolver));
+            }
+            html.AppendLine("</div>");
+            Directory.CreateDirectory(directory);
+            WriteAllTextIfChanged(path, html.ToString());
         }
     }
 
