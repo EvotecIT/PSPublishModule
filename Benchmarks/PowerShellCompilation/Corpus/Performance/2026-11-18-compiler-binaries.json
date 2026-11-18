@@ -1,0 +1,52 @@
+{
+  "schemaVersion": 1,
+  "scope": "Observed binary metadata and SHA-256 for the two Gallery compiler revisions.",
+  "compilers": [
+    {
+      "sourceCommit": "1650b546c4eb14b7c5ef6ce68aed8137473dd8c9",
+      "files": [
+        {
+          "name": "PowerForge.Cli.dll",
+          "productVersion": "3.0.193+1650b546c4eb14b7c5ef6ce68aed8137473dd8c9",
+          "sourceCommit": "1650b546c4eb14b7c5ef6ce68aed8137473dd8c9",
+          "sha256": "9081d37ae2b1b2fd06f9487c457f220e64cb237a51c78fc6d6d6e2e185c3bb21"
+        },
+        {
+          "name": "PowerForge.dll",
+          "productVersion": "3.0.193+1650b546c4eb14b7c5ef6ce68aed8137473dd8c9",
+          "sourceCommit": "1650b546c4eb14b7c5ef6ce68aed8137473dd8c9",
+          "sha256": "f469aa08e1296f8a54f9b47e07449c6281db70305e274de7517fc551e095ebe5"
+        },
+        {
+          "name": "PowerForge.PowerShell.dll",
+          "productVersion": "3.0.193+1650b546c4eb14b7c5ef6ce68aed8137473dd8c9",
+          "sourceCommit": "1650b546c4eb14b7c5ef6ce68aed8137473dd8c9",
+          "sha256": "9d07d603e9cef585964dc8942b080164ce0cc5d9cad45028844439290a621732"
+        }
+      ]
+    },
+    {
+      "sourceCommit": "62aa73f9017cdb37eea8ad22738c7fc8d1e82379",
+      "files": [
+        {
+          "name": "PowerForge.Cli.dll",
+          "productVersion": "3.0.193+62aa73f9017cdb37eea8ad22738c7fc8d1e82379",
+          "sourceCommit": "62aa73f9017cdb37eea8ad22738c7fc8d1e82379",
+          "sha256": "262e2bd77fdc829de96f8ab25ed0ab8e41152c765e948d979e465bcc7c322f3d"
+        },
+        {
+          "name": "PowerForge.dll",
+          "productVersion": "3.0.193+62aa73f9017cdb37eea8ad22738c7fc8d1e82379",
+          "sourceCommit": "62aa73f9017cdb37eea8ad22738c7fc8d1e82379",
+          "sha256": "2b42e2f8aacdf79180395f3159c63e764d2273b05dfca2951a0e94ebe127c62c"
+        },
+        {
+          "name": "PowerForge.PowerShell.dll",
+          "productVersion": "3.0.193+62aa73f9017cdb37eea8ad22738c7fc8d1e82379",
+          "sourceCommit": "62aa73f9017cdb37eea8ad22738c7fc8d1e82379",
+          "sha256": "6749316cb37cc7970ea5a275c4aa883496289110e37311ce9640bb6e9c322281"
+        }
+      ]
+    }
+  ]
+}

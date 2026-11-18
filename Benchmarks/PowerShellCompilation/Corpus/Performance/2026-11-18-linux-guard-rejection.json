@@ -1,0 +1,4 @@
+{
+  "rejected": true,
+  "reason": "Runtime '/mnt/d/<historical-scratch>/tools/linux/dotnet/host/fxr/10.0.11/libhostfxr.so' is on 9p; move .NET to a native Linux filesystem before evaluating timing budgets."
+}

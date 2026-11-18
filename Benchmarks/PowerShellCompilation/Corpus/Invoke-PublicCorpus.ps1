@@ -19,6 +19,15 @@ $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 . (Join-Path $PSScriptRoot 'Corpus.Runner.Common.ps1')
 . (Join-Path $PSScriptRoot 'Corpus.PublicBaseline.ps1')
+. (Join-Path $PSScriptRoot 'Corpus.RuntimeStorage.ps1')
+. (Join-Path $PSScriptRoot 'Corpus.TimingIdentity.ps1')
+. (Join-Path $PSScriptRoot 'Corpus.CompilerSnapshot.ps1')
+. (Join-Path $PSScriptRoot 'Corpus.SourceHost.ps1')
+$PacketPath = Resolve-CorpusFileSystemPath -Path $PacketPath
+$BaselinePath = Resolve-CorpusFileSystemPath -Path $BaselinePath
+if ($CliAssemblyPath) { $CliAssemblyPath = Resolve-CorpusFileSystemPath -Path $CliAssemblyPath }
+if ($WorkspacePath) { $WorkspacePath = Resolve-CorpusFileSystemPath -Path $WorkspacePath }
+if ($EvidencePath) { $EvidencePath = Resolve-CorpusFileSystemPath -Path $EvidencePath }
 
 if ($RefreshBaseline -and ($SkipModules -or $ModuleId)) {
     throw 'Refreshing the public baseline requires the complete module packet.'
@@ -410,6 +419,20 @@ if ($RefreshBaseline -and $EvidencePath -eq $BaselinePath) {
 $moduleResults = [Collections.Generic.List[object]]::new()
 $strictResults = [Collections.Generic.List[object]]::new()
 try {
+    $compilerSnapshot = New-CorpusCompilerSnapshot -CliAssemblyPath $CliAssemblyPath -SnapshotPath (Join-Path $runRoot 'compiler')
+    $CliAssemblyPath = $compilerSnapshot.cliAssemblyPath
+    $compilerIdentity = Get-CorpusCompilerIdentity -CliAssemblyPath $CliAssemblyPath
+    $compilerIdentity.storage = 'RunPrivateSnapshot'
+    $compilerIdentity.snapshotFiles = $compilerSnapshot.files
+    $compilerIdentity.snapshotSha256 = $compilerSnapshot.sha256
+} catch {
+    if (-not $KeepRunArtifacts) {
+        try { Remove-Item -LiteralPath $runRoot -Recurse -Force -ErrorAction Stop }
+        catch { Write-Warning "Cannot remove incomplete corpus run '$runRoot': $($_.Exception.Message)" }
+    }
+    throw
+}
+try {
     if (-not $SkipModules) {
         $selectedModules = @($packet.modules)
         if ($ModuleId) { $selectedModules = @($selectedModules | Where-Object { $_.id -in $ModuleId }) }
@@ -454,6 +477,13 @@ try {
                     dependencyLockSha256 = $manifest.dependencyGraph.lockSha256
                     artifactSha256 = $manifest.artifactSha256
                     artifactBytes = $manifest.artifactSizeBytes
+                    artifactFiles = @($manifest.files | ForEach-Object {
+                        [ordered]@{
+                            relativePath = [IO.Path]::GetRelativePath($output, $_.path).Replace('\', '/')
+                            sha256 = $_.sha256
+                            role = $_.role
+                        }
+                    })
                     cleanImport = $true
                     importHost = [ordered]@{ runtimeIdentifier = $hostRid; powerShell = $probe.Json.powerShell; architecture = $probe.Json.architecture }
                     invocation = $probe.Json.probeSucceeded
@@ -537,12 +567,14 @@ try {
                         throw 'Strict application controlled failure did not preserve the bounded source/generated exit, output, and error-marker contract.'
                     }
 
+                    $runtimeStorage = Get-CorpusRuntimeStorage -ArtifactPath $build.Json.result.artifactPath -WorkingDirectory $runRoot
+                    $sourceHost = Get-CorpusSourceHost -WorkingDirectory $runRoot
                     $sampleCount = [int] $qualification.startupSamples
                     if ($sampleCount -lt 4 -or $sampleCount -gt 20 -or $sampleCount % 2 -ne 0) { throw 'Strict application startupSamples must be an even number between 4 and 20.' }
                     $sourceSamples = [Collections.Generic.List[double]]::new()
                     $artifactSamples = [Collections.Generic.List[double]]::new()
                     $sampleOrder = [Collections.Generic.List[string]]::new()
-                    $sourceWarmup = Invoke-OwnedProcess -FileName 'pwsh' -Arguments @('-NoLogo', '-NoProfile', '-NonInteractive', '-File', $entryPoint) -WorkingDirectory $runRoot -Environment @{} -TimeoutSeconds 120
+                    $sourceWarmup = Invoke-OwnedProcess -FileName $sourceHost.executablePath -Arguments @('-NoLogo', '-NoProfile', '-NonInteractive', '-File', $entryPoint) -WorkingDirectory $runRoot -Environment @{} -TimeoutSeconds 120
                     $artifactWarmup = Invoke-OwnedProcess -FileName $build.Json.result.artifactPath -Arguments @() -WorkingDirectory $runRoot -Environment @{} -TimeoutSeconds 120
                     if ($sourceWarmup.ExitCode -ne 0 -or $artifactWarmup.ExitCode -ne 0 -or
                         $sourceWarmup.StandardOutput -cne $artifactWarmup.StandardOutput -or
@@ -553,12 +585,12 @@ try {
                     for ($sample = 0; $sample -lt $sampleCount; $sample++) {
                         if ($sample % 2 -eq 0) {
                             $sampleOrder.Add('source-first')
-                            $sourceSample = Invoke-OwnedProcess -FileName 'pwsh' -Arguments @('-NoLogo', '-NoProfile', '-NonInteractive', '-File', $entryPoint) -WorkingDirectory $runRoot -Environment @{} -TimeoutSeconds 120
+                            $sourceSample = Invoke-OwnedProcess -FileName $sourceHost.executablePath -Arguments @('-NoLogo', '-NoProfile', '-NonInteractive', '-File', $entryPoint) -WorkingDirectory $runRoot -Environment @{} -TimeoutSeconds 120
                             $artifactSample = Invoke-OwnedProcess -FileName $build.Json.result.artifactPath -Arguments @() -WorkingDirectory $runRoot -Environment @{} -TimeoutSeconds 120
                         } else {
                             $sampleOrder.Add('artifact-first')
                             $artifactSample = Invoke-OwnedProcess -FileName $build.Json.result.artifactPath -Arguments @() -WorkingDirectory $runRoot -Environment @{} -TimeoutSeconds 120
-                            $sourceSample = Invoke-OwnedProcess -FileName 'pwsh' -Arguments @('-NoLogo', '-NoProfile', '-NonInteractive', '-File', $entryPoint) -WorkingDirectory $runRoot -Environment @{} -TimeoutSeconds 120
+                            $sourceSample = Invoke-OwnedProcess -FileName $sourceHost.executablePath -Arguments @('-NoLogo', '-NoProfile', '-NonInteractive', '-File', $entryPoint) -WorkingDirectory $runRoot -Environment @{} -TimeoutSeconds 120
                         }
                         if ($sourceSample.ExitCode -ne 0 -or $sourceSample.ExitCode -ne $artifactSample.ExitCode -or
                             $sourceSample.StandardOutput -cne $artifactSample.StandardOutput -or
@@ -569,6 +601,8 @@ try {
                         $sourceSamples.Add([double] $sourceSample.DurationMilliseconds)
                         $artifactSamples.Add([double] $artifactSample.DurationMilliseconds)
                     }
+                    Assert-CorpusSourceHostUnchanged -SourceHost $sourceHost
+                    Assert-CorpusRuntimeStorageUnchanged -Storage $runtimeStorage -ArtifactPath $build.Json.result.artifactPath -WorkingDirectory $runRoot
                     $sourceP50 = Get-PercentileMilliseconds -Values $sourceSamples.ToArray() -Percentile 0.50
                     $artifactP50 = Get-PercentileMilliseconds -Values $artifactSamples.ToArray() -Percentile 0.50
                     $qualificationEvidence = [ordered]@{
@@ -591,6 +625,8 @@ try {
                             failureMarkerObservedOnBoth = $true
                         }
                         startup = [ordered]@{
+                            runtimeStorage = $runtimeStorage
+                            sourceHost = $sourceHost.metadata
                             warmupsPerSurface = 1
                             samples = $sampleCount
                             orderPolicy = 'AlternatingPairs'
@@ -657,7 +693,11 @@ try {
         schemaVersion = 1
         packetId = $packet.packetId
         packetSha256 = $packetSha256
+        runId = $runId
         generatedAtUtc = [DateTimeOffset]::UtcNow.ToString('O')
+        sourceCommit = $compilerIdentity.sourceCommit
+        compiler = $compilerIdentity
+        harnessCommit = (git -C $repositoryRoot rev-parse HEAD).Trim()
         semanticProfile = $packet.semanticProfile
         host = [ordered]@{
             runtimeIdentifier = $hostRid

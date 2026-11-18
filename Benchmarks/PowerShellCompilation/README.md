@@ -10,9 +10,9 @@ This benchmark matrix separates three different claims:
 
 The representative workloads are a threshold calculation and an IPv4-to-PTR conversion helper. The triangular-number and indexed-array loops are intentionally synthetic and expose hot-loop and typed-indexing behavior without command, provider, or I/O noise. Every measured lane validates its result outside the timed operation. Artifact generation, assembly loading, module import, and workload setup are also outside the timed block.
 
-The adjacent `Corpus` directory is the compiler's product-neutral correctness and coverage gate, not a performance workload. It contains a portable Hybrid module, a multi-file Strict program, and a committed post-emission census baseline. External module workloads remain optional and replaceable scale evidence.
+The adjacent `Corpus` directory contains the compiler's correctness and coverage gate, a portable Hybrid module, a multi-file Strict program, and a committed post-emission census baseline. Its separate timing harness measures fixed Strict and public Gallery workloads; those measurements do not change the coverage baseline. External module workloads remain optional and replaceable scale evidence.
 
-See [PowerShell Compilation](../../Docs/PowerForge.PowerShellCompilation.md#measured-performance) for the unresolved Linux startup result and the limits on performance claims. Numeric speedup tables were removed because their raw samples were not committed. Quick runs are smoke evidence only and record `gitWorktreeClean: false` when the candidate is still changing.
+See the [compiler performance measurements](../../Docs/performance/powershell-compiler.md) for committed Strict startup samples, the superseded Linux runtime-mount result, and source/Hybrid Gallery module comparisons. The measurements describe their fixed workloads and hosts; they do not establish a general compiler speedup. Quick runs are smoke evidence only and record `gitWorktreeClean: false` when the candidate is still changing.
 
 Build or import the current PSPublishModule binary, then run:
 

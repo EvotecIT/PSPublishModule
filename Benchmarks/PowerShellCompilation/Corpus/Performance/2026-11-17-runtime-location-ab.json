@@ -1,0 +1,879 @@
+{
+  "originalReportSha256": "26e3d06ab47d6292c5ee272e4b9e8ac364ee1548c147bb65530aaf09e41db0ce",
+  "originalExecutableSha256": "fcafffb019df6d255bb4f814bd4d9f75f0f711c8cba02c8abf5ea672bb5d8525",
+  "originalStartup": {
+    "warmupsPerSurface": 1,
+    "samples": 6,
+    "orderPolicy": "AlternatingPairs",
+    "order": [
+      "source-first",
+      "artifact-first",
+      "source-first",
+      "artifact-first",
+      "source-first",
+      "artifact-first"
+    ],
+    "sourceMilliseconds": [
+      265.0,
+      311.0,
+      310.0,
+      402.0,
+      357.0,
+      335.0
+    ],
+    "artifactMilliseconds": [
+      278.0,
+      307.0,
+      346.0,
+      364.0,
+      1506.0,
+      558.0
+    ],
+    "sourceP50Milliseconds": 311.0,
+    "sourceP95Milliseconds": 402.0,
+    "artifactP50Milliseconds": 346.0,
+    "artifactP95Milliseconds": 1506.0,
+    "artifactToSourceP50Ratio": 1.113
+  },
+  "testedExeSha256": "d463d9270dd1d64958b2762d10ffd170ce416a6b0970ce75d2257ae5de369a3f",
+  "runtimeManifestSha256": "6fe3b64f5975c252d972056682e390d4f84d2be7a1ab9c63c850769368f56d50",
+  "runtimeFilesCompared": 190,
+  "timingIterations": 36,
+  "phaseIterations": 18,
+  "startLoad": "0.22 0.58 0.63 1/488 1042",
+  "endLoad": "0.37 0.59 0.64 1/484 2028",
+  "loadedLibraries": {
+    "runtime_on_windows_9p": {
+      "libhostfxr.so": [
+        "/mnt/d/<historical-scratch>/tools/linux/dotnet/host/fxr/10.0.11/libhostfxr.so"
+      ],
+      "libhostpolicy.so": [
+        "/mnt/d/<historical-scratch>/tools/linux/dotnet/shared/Microsoft.NETCore.App/10.0.11/libhostpolicy.so"
+      ],
+      "libcoreclr.so": [
+        "/mnt/d/<historical-scratch>/tools/linux/dotnet/shared/Microsoft.NETCore.App/10.0.11/libcoreclr.so"
+      ],
+      "libclrjit.so": [
+        "/mnt/d/<historical-scratch>/tools/linux/dotnet/shared/Microsoft.NETCore.App/10.0.11/libclrjit.so"
+      ]
+    },
+    "identical_runtime_on_wsl_ext4": {
+      "libhostfxr.so": [
+        "$HOME/.cache/powerforge-strict-linux-startup/archived-runtime-ext4/host/fxr/10.0.11/libhostfxr.so"
+      ],
+      "libhostpolicy.so": [
+        "$HOME/.cache/powerforge-strict-linux-startup/archived-runtime-ext4/shared/Microsoft.NETCore.App/10.0.11/libhostpolicy.so"
+      ],
+      "libcoreclr.so": [
+        "$HOME/.cache/powerforge-strict-linux-startup/archived-runtime-ext4/shared/Microsoft.NETCore.App/10.0.11/libcoreclr.so"
+      ],
+      "libclrjit.so": [
+        "$HOME/.cache/powerforge-strict-linux-startup/archived-runtime-ext4/shared/Microsoft.NETCore.App/10.0.11/libclrjit.so"
+      ]
+    }
+  },
+  "summary": {
+    "runtime_on_windows_9p": {
+      "p50": 273.444,
+      "p95": 298.953,
+      "min": 259.346,
+      "max": 337.076,
+      "over100": 36,
+      "medianChildCpuMs": 73.316,
+      "medianMajorFaults": 459
+    },
+    "identical_runtime_on_wsl_ext4": {
+      "p50": 24.571,
+      "p95": 29.073,
+      "min": 22.555,
+      "max": 31.571,
+      "over100": 0,
+      "medianChildCpuMs": 24.546,
+      "medianMajorFaults": 0
+    }
+  },
+  "phaseP50": {
+    "runtime_on_windows_9p": {
+      "launchToFirstStdoutMs": 316.359,
+      "firstStdoutToExitAndDrainMs": 11.243,
+      "launchToExitAndDrainMs": 327.105,
+      "launchToManagedHookMs": 252.893,
+      "managedHookToFirstStdoutMs": 60.705
+    },
+    "identical_runtime_on_wsl_ext4": {
+      "launchToFirstStdoutMs": 32.274,
+      "firstStdoutToExitAndDrainMs": 0.818,
+      "launchToExitAndDrainMs": 33.114,
+      "launchToManagedHookMs": 20.036,
+      "managedHookToFirstStdoutMs": 11.78
+    }
+  },
+  "timingSamples": {
+    "runtime_on_windows_9p": [
+      {
+        "wallMs": 271.074,
+        "userMs": 38.261,
+        "systemMs": 33.477,
+        "minorFaults": 1755,
+        "majorFaults": 459
+      },
+      {
+        "wallMs": 267.86,
+        "userMs": 27.494,
+        "systemMs": 45.822,
+        "minorFaults": 1757,
+        "majorFaults": 459
+      },
+      {
+        "wallMs": 266.344,
+        "userMs": 30.992,
+        "systemMs": 38.74,
+        "minorFaults": 1753,
+        "majorFaults": 459
+      },
+      {
+        "wallMs": 262.608,
+        "userMs": 26.705,
+        "systemMs": 41.964,
+        "minorFaults": 1754,
+        "majorFaults": 459
+      },
+      {
+        "wallMs": 265.243,
+        "userMs": 22.793,
+        "systemMs": 45.586,
+        "minorFaults": 1755,
+        "majorFaults": 459
+      },
+      {
+        "wallMs": 260.407,
+        "userMs": 16.888,
+        "systemMs": 50.666,
+        "minorFaults": 1758,
+        "majorFaults": 459
+      },
+      {
+        "wallMs": 273.444,
+        "userMs": 44.81,
+        "systemMs": 28.006,
+        "minorFaults": 1755,
+        "majorFaults": 459
+      },
+      {
+        "wallMs": 259.374,
+        "userMs": 15.617,
+        "systemMs": 54.658,
+        "minorFaults": 1756,
+        "majorFaults": 459
+      },
+      {
+        "wallMs": 263.032,
+        "userMs": 34.511,
+        "systemMs": 34.511,
+        "minorFaults": 1748,
+        "majorFaults": 459
+      },
+      {
+        "wallMs": 266.877,
+        "userMs": 9.214,
+        "systemMs": 64.491,
+        "minorFaults": 1754,
+        "majorFaults": 459
+      },
+      {
+        "wallMs": 279.138,
+        "userMs": 20.405,
+        "systemMs": 61.217,
+        "minorFaults": 1746,
+        "majorFaults": 459
+      },
+      {
+        "wallMs": 270.895,
+        "userMs": 21.971,
+        "systemMs": 51.265,
+        "minorFaults": 1756,
+        "majorFaults": 459
+      },
+      {
+        "wallMs": 273.718,
+        "userMs": 27.269,
+        "systemMs": 43.63,
+        "minorFaults": 1749,
+        "majorFaults": 459
+      },
+      {
+        "wallMs": 274.354,
+        "userMs": 24.489,
+        "systemMs": 48.977,
+        "minorFaults": 1756,
+        "majorFaults": 459
+      },
+      {
+        "wallMs": 298.953,
+        "userMs": 24.239,
+        "systemMs": 52.518,
+        "minorFaults": 1753,
+        "majorFaults": 459
+      },
+      {
+        "wallMs": 270.06,
+        "userMs": 21.818,
+        "systemMs": 49.092,
+        "minorFaults": 1752,
+        "majorFaults": 459
+      },
+      {
+        "wallMs": 270.292,
+        "userMs": 25.83,
+        "systemMs": 46.494,
+        "minorFaults": 1751,
+        "majorFaults": 459
+      },
+      {
+        "wallMs": 259.346,
+        "userMs": 21.542,
+        "systemMs": 46.163,
+        "minorFaults": 1752,
+        "majorFaults": 459
+      },
+      {
+        "wallMs": 278.963,
+        "userMs": 27.828,
+        "systemMs": 48.699,
+        "minorFaults": 1752,
+        "majorFaults": 459
+      },
+      {
+        "wallMs": 294.66,
+        "userMs": 20.374,
+        "systemMs": 61.119,
+        "minorFaults": 1747,
+        "majorFaults": 459
+      },
+      {
+        "wallMs": 279.04,
+        "userMs": 33.98,
+        "systemMs": 38.835,
+        "minorFaults": 1750,
+        "majorFaults": 459
+      },
+      {
+        "wallMs": 286.252,
+        "userMs": 30.927,
+        "systemMs": 50.257,
+        "minorFaults": 1755,
+        "majorFaults": 459
+      },
+      {
+        "wallMs": 282.042,
+        "userMs": 23.379,
+        "systemMs": 53.437,
+        "minorFaults": 1749,
+        "majorFaults": 459
+      },
+      {
+        "wallMs": 263.091,
+        "userMs": 32.811,
+        "systemMs": 36.913,
+        "minorFaults": 1747,
+        "majorFaults": 459
+      },
+      {
+        "wallMs": 270.12,
+        "userMs": 18.728,
+        "systemMs": 56.185,
+        "minorFaults": 1750,
+        "majorFaults": 459
+      },
+      {
+        "wallMs": 282.152,
+        "userMs": 29.193,
+        "systemMs": 45.875,
+        "minorFaults": 1753,
+        "majorFaults": 459
+      },
+      {
+        "wallMs": 273.445,
+        "userMs": 27.249,
+        "systemMs": 46.713,
+        "minorFaults": 1755,
+        "majorFaults": 459
+      },
+      {
+        "wallMs": 286.535,
+        "userMs": 25.893,
+        "systemMs": 47.47,
+        "minorFaults": 1754,
+        "majorFaults": 459
+      },
+      {
+        "wallMs": 294.762,
+        "userMs": 41.018,
+        "systemMs": 34.182,
+        "minorFaults": 1752,
+        "majorFaults": 459
+      },
+      {
+        "wallMs": 274.958,
+        "userMs": 29.165,
+        "systemMs": 43.746,
+        "minorFaults": 1749,
+        "majorFaults": 459
+      },
+      {
+        "wallMs": 289.204,
+        "userMs": 20.611,
+        "systemMs": 57.711,
+        "minorFaults": 1751,
+        "majorFaults": 459
+      },
+      {
+        "wallMs": 337.076,
+        "userMs": 21.55,
+        "systemMs": 58.492,
+        "minorFaults": 1751,
+        "majorFaults": 459
+      },
+      {
+        "wallMs": 296.814,
+        "userMs": 23.305,
+        "systemMs": 51.271,
+        "minorFaults": 1747,
+        "majorFaults": 459
+      },
+      {
+        "wallMs": 277.018,
+        "userMs": 44.854,
+        "systemMs": 28.543,
+        "minorFaults": 1756,
+        "majorFaults": 459
+      },
+      {
+        "wallMs": 261.129,
+        "userMs": 21.468,
+        "systemMs": 48.305,
+        "minorFaults": 1751,
+        "majorFaults": 459
+      },
+      {
+        "wallMs": 269.695,
+        "userMs": 21.64,
+        "systemMs": 52.555,
+        "minorFaults": 1755,
+        "majorFaults": 459
+      }
+    ],
+    "identical_runtime_on_wsl_ext4": [
+      {
+        "wallMs": 24.632,
+        "userMs": 12.273,
+        "systemMs": 12.273,
+        "minorFaults": 1708,
+        "majorFaults": 0
+      },
+      {
+        "wallMs": 23.508,
+        "userMs": 19.576,
+        "systemMs": 3.916,
+        "minorFaults": 1712,
+        "majorFaults": 0
+      },
+      {
+        "wallMs": 24.392,
+        "userMs": 16.198,
+        "systemMs": 8.099,
+        "minorFaults": 1711,
+        "majorFaults": 0
+      },
+      {
+        "wallMs": 23.704,
+        "userMs": 15.791,
+        "systemMs": 7.896,
+        "minorFaults": 1710,
+        "majorFaults": 0
+      },
+      {
+        "wallMs": 23.686,
+        "userMs": 15.795,
+        "systemMs": 7.898,
+        "minorFaults": 1709,
+        "majorFaults": 0
+      },
+      {
+        "wallMs": 23.206,
+        "userMs": 15.533,
+        "systemMs": 7.766,
+        "minorFaults": 1709,
+        "majorFaults": 0
+      },
+      {
+        "wallMs": 23.931,
+        "userMs": 23.907,
+        "systemMs": 0.0,
+        "minorFaults": 1707,
+        "majorFaults": 0
+      },
+      {
+        "wallMs": 22.727,
+        "userMs": 15.149,
+        "systemMs": 7.575,
+        "minorFaults": 1710,
+        "majorFaults": 0
+      },
+      {
+        "wallMs": 25.145,
+        "userMs": 14.376,
+        "systemMs": 10.782,
+        "minorFaults": 1706,
+        "majorFaults": 0
+      },
+      {
+        "wallMs": 23.023,
+        "userMs": 18.37,
+        "systemMs": 4.593,
+        "minorFaults": 1711,
+        "majorFaults": 0
+      },
+      {
+        "wallMs": 29.073,
+        "userMs": 24.916,
+        "systemMs": 4.153,
+        "minorFaults": 1706,
+        "majorFaults": 0
+      },
+      {
+        "wallMs": 25.797,
+        "userMs": 22.176,
+        "systemMs": 3.696,
+        "minorFaults": 1709,
+        "majorFaults": 0
+      },
+      {
+        "wallMs": 28.033,
+        "userMs": 16.01,
+        "systemMs": 12.008,
+        "minorFaults": 1712,
+        "majorFaults": 0
+      },
+      {
+        "wallMs": 24.942,
+        "userMs": 12.491,
+        "systemMs": 12.491,
+        "minorFaults": 1712,
+        "majorFaults": 0
+      },
+      {
+        "wallMs": 26.498,
+        "userMs": 22.72,
+        "systemMs": 3.787,
+        "minorFaults": 1710,
+        "majorFaults": 0
+      },
+      {
+        "wallMs": 22.96,
+        "userMs": 19.093,
+        "systemMs": 3.818,
+        "minorFaults": 1711,
+        "majorFaults": 0
+      },
+      {
+        "wallMs": 24.13,
+        "userMs": 12.026,
+        "systemMs": 12.026,
+        "minorFaults": 1712,
+        "majorFaults": 0
+      },
+      {
+        "wallMs": 22.555,
+        "userMs": 10.106,
+        "systemMs": 12.632,
+        "minorFaults": 1711,
+        "majorFaults": 0
+      },
+      {
+        "wallMs": 27.074,
+        "userMs": 19.33,
+        "systemMs": 7.732,
+        "minorFaults": 1706,
+        "majorFaults": 0
+      },
+      {
+        "wallMs": 25.977,
+        "userMs": 12.979,
+        "systemMs": 12.979,
+        "minorFaults": 1707,
+        "majorFaults": 0
+      },
+      {
+        "wallMs": 24.35,
+        "userMs": 12.161,
+        "systemMs": 12.162,
+        "minorFaults": 1708,
+        "majorFaults": 0
+      },
+      {
+        "wallMs": 24.004,
+        "userMs": 15.996,
+        "systemMs": 7.997,
+        "minorFaults": 1710,
+        "majorFaults": 0
+      },
+      {
+        "wallMs": 25.512,
+        "userMs": 16.989,
+        "systemMs": 8.494,
+        "minorFaults": 1707,
+        "majorFaults": 0
+      },
+      {
+        "wallMs": 23.161,
+        "userMs": 11.578,
+        "systemMs": 11.578,
+        "minorFaults": 1710,
+        "majorFaults": 0
+      },
+      {
+        "wallMs": 24.677,
+        "userMs": 8.236,
+        "systemMs": 16.472,
+        "minorFaults": 1711,
+        "majorFaults": 0
+      },
+      {
+        "wallMs": 22.637,
+        "userMs": 4.528,
+        "systemMs": 18.11,
+        "minorFaults": 1713,
+        "majorFaults": 0
+      },
+      {
+        "wallMs": 24.79,
+        "userMs": 20.704,
+        "systemMs": 4.141,
+        "minorFaults": 1708,
+        "majorFaults": 0
+      },
+      {
+        "wallMs": 22.985,
+        "userMs": 9.223,
+        "systemMs": 13.835,
+        "minorFaults": 1710,
+        "majorFaults": 0
+      },
+      {
+        "wallMs": 25.554,
+        "userMs": 12.823,
+        "systemMs": 12.823,
+        "minorFaults": 1706,
+        "majorFaults": 0
+      },
+      {
+        "wallMs": 24.571,
+        "userMs": 19.916,
+        "systemMs": 4.675,
+        "minorFaults": 1708,
+        "majorFaults": 0
+      },
+      {
+        "wallMs": 25.46,
+        "userMs": 18.253,
+        "systemMs": 7.301,
+        "minorFaults": 1706,
+        "majorFaults": 0
+      },
+      {
+        "wallMs": 31.571,
+        "userMs": 15.79,
+        "systemMs": 15.79,
+        "minorFaults": 1706,
+        "majorFaults": 0
+      },
+      {
+        "wallMs": 24.671,
+        "userMs": 20.543,
+        "systemMs": 4.109,
+        "minorFaults": 1708,
+        "majorFaults": 0
+      },
+      {
+        "wallMs": 26.566,
+        "userMs": 3.802,
+        "systemMs": 22.816,
+        "minorFaults": 1709,
+        "majorFaults": 0
+      },
+      {
+        "wallMs": 24.998,
+        "userMs": 14.314,
+        "systemMs": 10.736,
+        "minorFaults": 1709,
+        "majorFaults": 0
+      },
+      {
+        "wallMs": 23.078,
+        "userMs": 13.87,
+        "systemMs": 9.246,
+        "minorFaults": 1710,
+        "majorFaults": 0
+      }
+    ]
+  },
+  "phaseSamples": {
+    "runtime_on_windows_9p": [
+      {
+        "launchToFirstStdoutMs": 316.359,
+        "firstStdoutToExitAndDrainMs": 10.747,
+        "launchToExitAndDrainMs": 327.105,
+        "launchToManagedHookMs": 251.505,
+        "managedHookToFirstStdoutMs": 64.854
+      },
+      {
+        "launchToFirstStdoutMs": 320.499,
+        "firstStdoutToExitAndDrainMs": 11.243,
+        "launchToExitAndDrainMs": 331.742,
+        "launchToManagedHookMs": 257.279,
+        "managedHookToFirstStdoutMs": 63.219
+      },
+      {
+        "launchToFirstStdoutMs": 311.697,
+        "firstStdoutToExitAndDrainMs": 11.114,
+        "launchToExitAndDrainMs": 322.811,
+        "launchToManagedHookMs": 251.309,
+        "managedHookToFirstStdoutMs": 60.388
+      },
+      {
+        "launchToFirstStdoutMs": 360.314,
+        "firstStdoutToExitAndDrainMs": 10.947,
+        "launchToExitAndDrainMs": 371.26,
+        "launchToManagedHookMs": 291.709,
+        "managedHookToFirstStdoutMs": 68.604
+      },
+      {
+        "launchToFirstStdoutMs": 368.33,
+        "firstStdoutToExitAndDrainMs": 16.769,
+        "launchToExitAndDrainMs": 385.099,
+        "launchToManagedHookMs": 302.989,
+        "managedHookToFirstStdoutMs": 65.34
+      },
+      {
+        "launchToFirstStdoutMs": 352.212,
+        "firstStdoutToExitAndDrainMs": 16.423,
+        "launchToExitAndDrainMs": 368.635,
+        "launchToManagedHookMs": 279.669,
+        "managedHookToFirstStdoutMs": 72.543
+      },
+      {
+        "launchToFirstStdoutMs": 357.096,
+        "firstStdoutToExitAndDrainMs": 15.678,
+        "launchToExitAndDrainMs": 372.774,
+        "launchToManagedHookMs": 287.35,
+        "managedHookToFirstStdoutMs": 69.745
+      },
+      {
+        "launchToFirstStdoutMs": 328.372,
+        "firstStdoutToExitAndDrainMs": 17.994,
+        "launchToExitAndDrainMs": 346.366,
+        "launchToManagedHookMs": 267.667,
+        "managedHookToFirstStdoutMs": 60.705
+      },
+      {
+        "launchToFirstStdoutMs": 309.673,
+        "firstStdoutToExitAndDrainMs": 12.647,
+        "launchToExitAndDrainMs": 322.32,
+        "launchToManagedHookMs": 249.27,
+        "managedHookToFirstStdoutMs": 60.403
+      },
+      {
+        "launchToFirstStdoutMs": 330.077,
+        "firstStdoutToExitAndDrainMs": 15.565,
+        "launchToExitAndDrainMs": 345.643,
+        "launchToManagedHookMs": 263.587,
+        "managedHookToFirstStdoutMs": 66.49
+      },
+      {
+        "launchToFirstStdoutMs": 305.588,
+        "firstStdoutToExitAndDrainMs": 10.597,
+        "launchToExitAndDrainMs": 316.185,
+        "launchToManagedHookMs": 253.172,
+        "managedHookToFirstStdoutMs": 52.416
+      },
+      {
+        "launchToFirstStdoutMs": 289.198,
+        "firstStdoutToExitAndDrainMs": 11.242,
+        "launchToExitAndDrainMs": 300.44,
+        "launchToManagedHookMs": 235.938,
+        "managedHookToFirstStdoutMs": 53.26
+      },
+      {
+        "launchToFirstStdoutMs": 277.221,
+        "firstStdoutToExitAndDrainMs": 10.524,
+        "launchToExitAndDrainMs": 287.745,
+        "launchToManagedHookMs": 223.655,
+        "managedHookToFirstStdoutMs": 53.566
+      },
+      {
+        "launchToFirstStdoutMs": 294.679,
+        "firstStdoutToExitAndDrainMs": 12.125,
+        "launchToExitAndDrainMs": 306.804,
+        "launchToManagedHookMs": 238.173,
+        "managedHookToFirstStdoutMs": 56.506
+      },
+      {
+        "launchToFirstStdoutMs": 274.605,
+        "firstStdoutToExitAndDrainMs": 10.799,
+        "launchToExitAndDrainMs": 285.405,
+        "launchToManagedHookMs": 223.933,
+        "managedHookToFirstStdoutMs": 50.672
+      },
+      {
+        "launchToFirstStdoutMs": 294.403,
+        "firstStdoutToExitAndDrainMs": 10.403,
+        "launchToExitAndDrainMs": 304.805,
+        "launchToManagedHookMs": 238.101,
+        "managedHookToFirstStdoutMs": 56.302
+      },
+      {
+        "launchToFirstStdoutMs": 320.28,
+        "firstStdoutToExitAndDrainMs": 15.496,
+        "launchToExitAndDrainMs": 335.775,
+        "launchToManagedHookMs": 252.893,
+        "managedHookToFirstStdoutMs": 67.386
+      },
+      {
+        "launchToFirstStdoutMs": 357.147,
+        "firstStdoutToExitAndDrainMs": 11.593,
+        "launchToExitAndDrainMs": 368.74,
+        "launchToManagedHookMs": 293.194,
+        "managedHookToFirstStdoutMs": 63.953
+      }
+    ],
+    "identical_runtime_on_wsl_ext4": [
+      {
+        "launchToFirstStdoutMs": 28.318,
+        "firstStdoutToExitAndDrainMs": 0.84,
+        "launchToExitAndDrainMs": 29.158,
+        "launchToManagedHookMs": 17.569,
+        "managedHookToFirstStdoutMs": 10.749
+      },
+      {
+        "launchToFirstStdoutMs": 38.293,
+        "firstStdoutToExitAndDrainMs": 0.8,
+        "launchToExitAndDrainMs": 39.094,
+        "launchToManagedHookMs": 23.126,
+        "managedHookToFirstStdoutMs": 15.168
+      },
+      {
+        "launchToFirstStdoutMs": 36.11,
+        "firstStdoutToExitAndDrainMs": 0.865,
+        "launchToExitAndDrainMs": 36.974,
+        "launchToManagedHookMs": 19.894,
+        "managedHookToFirstStdoutMs": 16.215
+      },
+      {
+        "launchToFirstStdoutMs": 42.96,
+        "firstStdoutToExitAndDrainMs": 0.76,
+        "launchToExitAndDrainMs": 43.719,
+        "launchToManagedHookMs": 26.027,
+        "managedHookToFirstStdoutMs": 16.933
+      },
+      {
+        "launchToFirstStdoutMs": 69.507,
+        "firstStdoutToExitAndDrainMs": 1.729,
+        "launchToExitAndDrainMs": 71.235,
+        "launchToManagedHookMs": 42.467,
+        "managedHookToFirstStdoutMs": 27.04
+      },
+      {
+        "launchToFirstStdoutMs": 33.312,
+        "firstStdoutToExitAndDrainMs": 0.841,
+        "launchToExitAndDrainMs": 34.153,
+        "launchToManagedHookMs": 21.643,
+        "managedHookToFirstStdoutMs": 11.669
+      },
+      {
+        "launchToFirstStdoutMs": 33.358,
+        "firstStdoutToExitAndDrainMs": 0.839,
+        "launchToExitAndDrainMs": 34.197,
+        "launchToManagedHookMs": 21.578,
+        "managedHookToFirstStdoutMs": 11.78
+      },
+      {
+        "launchToFirstStdoutMs": 35.896,
+        "firstStdoutToExitAndDrainMs": 0.818,
+        "launchToExitAndDrainMs": 36.714,
+        "launchToManagedHookMs": 23.622,
+        "managedHookToFirstStdoutMs": 12.273
+      },
+      {
+        "launchToFirstStdoutMs": 31.757,
+        "firstStdoutToExitAndDrainMs": 0.851,
+        "launchToExitAndDrainMs": 32.607,
+        "launchToManagedHookMs": 19.899,
+        "managedHookToFirstStdoutMs": 11.858
+      },
+      {
+        "launchToFirstStdoutMs": 40.069,
+        "firstStdoutToExitAndDrainMs": 0.921,
+        "launchToExitAndDrainMs": 40.99,
+        "launchToManagedHookMs": 22.762,
+        "managedHookToFirstStdoutMs": 17.307
+      },
+      {
+        "launchToFirstStdoutMs": 33.074,
+        "firstStdoutToExitAndDrainMs": 0.813,
+        "launchToExitAndDrainMs": 33.886,
+        "launchToManagedHookMs": 21.258,
+        "managedHookToFirstStdoutMs": 11.815
+      },
+      {
+        "launchToFirstStdoutMs": 29.91,
+        "firstStdoutToExitAndDrainMs": 0.736,
+        "launchToExitAndDrainMs": 30.647,
+        "launchToManagedHookMs": 18.422,
+        "managedHookToFirstStdoutMs": 11.488
+      },
+      {
+        "launchToFirstStdoutMs": 30.16,
+        "firstStdoutToExitAndDrainMs": 0.732,
+        "launchToExitAndDrainMs": 30.892,
+        "launchToManagedHookMs": 19.005,
+        "managedHookToFirstStdoutMs": 11.155
+      },
+      {
+        "launchToFirstStdoutMs": 27.275,
+        "firstStdoutToExitAndDrainMs": 0.712,
+        "launchToExitAndDrainMs": 27.987,
+        "launchToManagedHookMs": 16.867,
+        "managedHookToFirstStdoutMs": 10.408
+      },
+      {
+        "launchToFirstStdoutMs": 29.666,
+        "firstStdoutToExitAndDrainMs": 0.682,
+        "launchToExitAndDrainMs": 30.348,
+        "launchToManagedHookMs": 18.852,
+        "managedHookToFirstStdoutMs": 10.814
+      },
+      {
+        "launchToFirstStdoutMs": 32.274,
+        "firstStdoutToExitAndDrainMs": 0.84,
+        "launchToExitAndDrainMs": 33.114,
+        "launchToManagedHookMs": 20.054,
+        "managedHookToFirstStdoutMs": 12.22
+      },
+      {
+        "launchToFirstStdoutMs": 31.597,
+        "firstStdoutToExitAndDrainMs": 0.749,
+        "launchToExitAndDrainMs": 32.346,
+        "launchToManagedHookMs": 20.036,
+        "managedHookToFirstStdoutMs": 11.561
+      },
+      {
+        "launchToFirstStdoutMs": 30.241,
+        "firstStdoutToExitAndDrainMs": 0.839,
+        "launchToExitAndDrainMs": 31.08,
+        "launchToManagedHookMs": 19.295,
+        "managedHookToFirstStdoutMs": 10.946
+      }
+    ]
+  }
+}

@@ -1,0 +1,88 @@
+{
+  "host": "7.6.6",
+  "executableSha256": "d463d9270dd1d64958b2762d10ffd170ce416a6b0970ce75d2257ae5de369a3f",
+  "samplesPerSurface": 6,
+  "warmupsPerSurface": 1,
+  "runtimeRoots": {
+    "Windows9p": "/mnt/d/<historical-scratch>/tools/linux/dotnet",
+    "NativeExt4": "$HOME/.cache/powerforge-strict-linux-startup/archived-runtime-ext4"
+  },
+  "summary": {
+    "Windows9p": {
+      "p50": 263,
+      "p95": 278,
+      "sourceP50": 290
+    },
+    "NativeExt4": {
+      "p50": 25,
+      "p95": 28,
+      "sourceP50": 276
+    }
+  },
+  "samples": {
+    "Windows9p": [
+      {
+        "sourceMilliseconds": 288,
+        "artifactMilliseconds": 278,
+        "order": "source-first"
+      },
+      {
+        "sourceMilliseconds": 292,
+        "artifactMilliseconds": 276,
+        "order": "artifact-first"
+      },
+      {
+        "sourceMilliseconds": 290,
+        "artifactMilliseconds": 275,
+        "order": "source-first"
+      },
+      {
+        "sourceMilliseconds": 297,
+        "artifactMilliseconds": 253,
+        "order": "artifact-first"
+      },
+      {
+        "sourceMilliseconds": 346,
+        "artifactMilliseconds": 263,
+        "order": "source-first"
+      },
+      {
+        "sourceMilliseconds": 259,
+        "artifactMilliseconds": 247,
+        "order": "artifact-first"
+      }
+    ],
+    "NativeExt4": [
+      {
+        "sourceMilliseconds": 305,
+        "artifactMilliseconds": 26,
+        "order": "source-first"
+      },
+      {
+        "sourceMilliseconds": 314,
+        "artifactMilliseconds": 25,
+        "order": "artifact-first"
+      },
+      {
+        "sourceMilliseconds": 286,
+        "artifactMilliseconds": 28,
+        "order": "source-first"
+      },
+      {
+        "sourceMilliseconds": 276,
+        "artifactMilliseconds": 26,
+        "order": "artifact-first"
+      },
+      {
+        "sourceMilliseconds": 265,
+        "artifactMilliseconds": 25,
+        "order": "source-first"
+      },
+      {
+        "sourceMilliseconds": 255,
+        "artifactMilliseconds": 24,
+        "order": "artifact-first"
+      }
+    ]
+  }
+}

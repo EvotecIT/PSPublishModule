@@ -1,0 +1,101 @@
+{
+  "schemaVersion": 1,
+  "module": "PSFramework",
+  "version": "1.14.457",
+  "scope": "Preparatory diagnostic only: one source/Hybrid pair before the cache and one Hybrid process after initial cache. Normal concurrent development activity; no statistical claim. Final measurements use the execution-context-scoped cache and a complete balanced packet.",
+  "baselineCompilerCommit": "671c8eca1adee81d4c95dad2ca4f7797562bfc0e",
+  "initialCacheCompilerCommit": "4de8da59af7e2b58242dee5303b429ea5b0c63e6",
+  "finalCacheCompilerCommit": "1650b546c4eb14b7c5ef6ce68aed8137473dd8c9",
+  "before": {
+    "schemaVersion": 1,
+    "sourceCommit": "671c8eca1adee81d4c95dad2ca4f7797562bfc0e",
+    "module": "PSFramework",
+    "version": "1.14.457",
+    "packageSha256": "0c8f6b5c2f72b5512f684bbd3c35cd6ded5a709588d57d9b68cd046d427da1c9",
+    "operatingSystem": "Microsoft Windows 10.0.26300",
+    "powerShell": "7.6.10",
+    "runtime": ".NET 10.0.15",
+    "childSha256": "f599190cb857dc1d85e899234c89eaa80f0d3e7dcb7db0fb0ed6f5771f5095c5",
+    "profileAttached": false,
+    "order": "source,hybrid",
+    "samples": [
+      {
+        "rows": [
+          {
+            "state": "cold-process",
+            "iteration": 0,
+            "importMilliseconds": 9035.0101,
+            "invocationMilliseconds": 135.1719,
+            "exportedCommands": 162,
+            "invocationSucceeded": true
+          },
+          {
+            "state": "warm-process",
+            "iteration": 1,
+            "importMilliseconds": 890.8154,
+            "invocationMilliseconds": 12.2564,
+            "exportedCommands": 162,
+            "invocationSucceeded": true
+          }
+        ],
+        "surface": "source",
+        "artifactSha256": "51b7775d5d1a96ef17efef1244298e9605e7d07a350ab4d8120346f98698e339"
+      },
+      {
+        "rows": [
+          {
+            "state": "cold-process",
+            "iteration": 0,
+            "importMilliseconds": 19789.353,
+            "invocationMilliseconds": 89.7816,
+            "exportedCommands": 162,
+            "invocationSucceeded": true
+          },
+          {
+            "state": "warm-process",
+            "iteration": 1,
+            "importMilliseconds": 94759.7297,
+            "invocationMilliseconds": 169.1756,
+            "exportedCommands": 162,
+            "invocationSucceeded": true
+          }
+        ],
+        "surface": "hybrid",
+        "artifactSha256": "806e8f3ca909223f2a62bf53c9361a102a4c9c3992b06be79dcbf9d36950add5"
+      }
+    ]
+  },
+  "initialCache": {
+    "artifactSha256": "806e8f3ca909223f2a62bf53c9361a102a4c9c3992b06be79dcbf9d36950add5",
+    "typedAssemblySha256": "5912f5155433d4d3b1af2d91f187c6025b56652f61def3e4ca59d1d7c18ffbfd",
+    "powerShell": "7.6.10",
+    "runtime": ".NET 10.0.15",
+    "profileAttached": false,
+    "rows": [
+      {
+        "state": "cold-process",
+        "iteration": 0,
+        "importMilliseconds": 14384.3646,
+        "invocationMilliseconds": 97.6321,
+        "exportedCommands": 162,
+        "invocationSucceeded": true
+      },
+      {
+        "state": "warm-process",
+        "iteration": 1,
+        "importMilliseconds": 4587.4992,
+        "invocationMilliseconds": 9.0867,
+        "exportedCommands": 162,
+        "invocationSucceeded": true
+      }
+    ]
+  },
+  "profile": {
+    "tool": "dotnet-trace",
+    "version": "10.0.750501",
+    "durationSeconds": 10,
+    "compilerCommit": "671c8eca1adee81d4c95dad2ca4f7797562bfc0e",
+    "record": "psframework-import-stack.txt",
+    "scope": "Separate six-import exploratory process; profile was not attached to the before/after processes recorded here."
+  }
+}
