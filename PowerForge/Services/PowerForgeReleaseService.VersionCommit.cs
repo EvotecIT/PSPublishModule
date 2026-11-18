@@ -34,21 +34,82 @@ internal sealed partial class PowerForgeReleaseService
 
         // The selected lanes are only known once the release has resolved them, which happens
         // before anything is stamped; a run whose selected lanes publish nothing never commits.
+        // The build half of a two-phase release records its stamps for the publish half.
         versionCommit.SetPublishing(result.PublishesFromSelectedLanes);
         result.VersionCommit = versionCommit.Complete(
             result.Success,
             ResolveVersionCommitName(spec),
-            request.ResolvedReleaseVersion ?? result.ModulePlan?.ModuleVersion);
+            request.ResolvedReleaseVersion ?? result.ModulePlan?.ModuleVersion,
+            CollectReleaseVersions(request, result),
+            deferUntilPublished: request.DeferAfterStagingValidation);
         return result;
     }
 
-    /// <summary>Plans, validation, Apple-only actions and the build half of a two-phase release never commit.</summary>
+    /// <summary>
+    /// Publishes the outputs of a two-phase release, then commits the version files its build half
+    /// recorded when <see cref="PowerForgeReleaseSpec.CommitVersionChanges"/> asks for it.
+    /// </summary>
+    internal PowerForgeReleaseResult PublishBuiltReleaseOutputs(
+        PowerForgeReleaseSpec spec,
+        PowerForgeReleaseRequest request,
+        PowerForgeReleaseResult builtResult)
+    {
+        if (spec is null)
+            throw new ArgumentNullException(nameof(spec));
+        if (request is null)
+            throw new ArgumentNullException(nameof(request));
+        if (builtResult is null)
+            throw new ArgumentNullException(nameof(builtResult));
+
+        // Nothing is stamped while publishing; only stamps the build half recorded for this
+        // release can be committed here.
+        using var versionCommit = ReleaseVersionCommitSession.Begin(
+            _logger,
+            ResolveVersionCommitDirectories(spec, request),
+            spec.CommitVersionChanges,
+            publishing: !request.PlanOnly && !request.ValidateOnly);
+        PowerForgeReleaseResult result;
+        try
+        {
+            result = PublishBuiltReleaseOutputsCore(spec, request, builtResult);
+        }
+        catch
+        {
+            versionCommit.Complete(releaseSucceeded: false, ResolveVersionCommitName(spec), request.ResolvedReleaseVersion);
+            throw;
+        }
+
+        result.VersionCommit = versionCommit.Complete(
+            result.Success,
+            ResolveVersionCommitName(spec),
+            request.ResolvedReleaseVersion ?? result.ModulePlan?.ModuleVersion,
+            CollectReleaseVersions(request, result));
+        return result;
+    }
+
+    /// <summary>Plans, validation and Apple-only actions never commit.</summary>
     private static bool MayPublishFromThisRun(PowerForgeReleaseRequest request)
         => !request.PlanOnly &&
            !request.ValidateOnly &&
-           !request.DeferAfterStagingValidation &&
            !request.AppleOnly &&
            request.AppleAction == PowerForgeAppleReleaseAction.Configured;
+
+    /// <summary>The versions this release wrote, so only those count as version stamps.</summary>
+    private static IEnumerable<string?> CollectReleaseVersions(PowerForgeReleaseRequest request, PowerForgeReleaseResult result)
+    {
+        var versions = new List<string?> { request.ResolvedReleaseVersion, result.ModulePlan?.ModuleVersion };
+        if (!string.IsNullOrWhiteSpace(result.ModulePlan?.ModuleVersion) && !string.IsNullOrWhiteSpace(result.ModulePlan?.PreReleaseTag))
+            versions.Add($"{result.ModulePlan!.ModuleVersion}-{result.ModulePlan.PreReleaseTag}");
+        var release = result.Packages?.Result?.Release;
+        if (release is not null)
+        {
+            versions.Add(release.ResolvedVersion);
+            versions.AddRange(release.ResolvedVersionsByProject.Values);
+            versions.AddRange(release.Projects.Select(static project => project.NewVersion));
+        }
+
+        return versions;
+    }
 
     /// <summary>
     /// True when the lanes this run selected publish something, using the same lane selection

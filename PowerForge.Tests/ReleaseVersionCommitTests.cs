@@ -189,6 +189,113 @@ public sealed class ReleaseVersionCommitTests
     }
 
     [Fact]
+    public void Session_OnBranchSharingATagName_KeepsAStagedModeChange()
+    {
+        using var repo = GitFixture.Create();
+        repo.Git("tag", "main");
+        // As on Linux: the working tree keeps its mode, so only the index holds the staged change.
+        repo.Git("config", "core.fileMode", "true");
+        repo.Git("update-index", "--chmod=+x", "--", "Lib/Lib.csproj");
+
+        using (var session = ReleaseVersionCommitSession.Begin(new RecordingLogger(), repo.Root, ReleaseVersionCommitMode.Commit, publishing: true))
+        {
+            repo.Write("Lib/Lib.csproj", Csproj("1.0.1"));
+            var commit = session.Complete(releaseSucceeded: true, "Sample", "1.0.1")!;
+            Assert.Equal(ReleaseVersionCommitStatus.Committed, commit.Status);
+        }
+
+        var committedBlob = repo.Git("rev-parse", "HEAD:Lib/Lib.csproj");
+        var index = repo.Git("ls-files", "-s", "--", "Lib/Lib.csproj").Split(' ', '\t');
+        Assert.Equal("100755", index[0]);
+        Assert.Equal(committedBlob, index[1]);
+        Assert.Equal("100644", repo.Git("ls-tree", "HEAD", "--", "Lib/Lib.csproj").Split(' ')[0]);
+    }
+
+    [Fact]
+    public void Session_LeavesDottedNumbersThatAreNotReleaseVersions()
+    {
+        using var repo = GitFixture.Create();
+        repo.Write("Docs/Guide.md", "# Guide\n\nMeasured with 2026.11.18 data.\n");
+        repo.Git("commit", "--quiet", "-am", "Add measurement");
+
+        using (var session = ReleaseVersionCommitSession.Begin(new RecordingLogger(), repo.Root, ReleaseVersionCommitMode.Commit, publishing: true))
+        {
+            repo.Write("Lib/Lib.csproj", Csproj("1.0.1"));
+            repo.Write("Docs/Guide.md", "# Guide\n\nMeasured with 2026.11.19 data.\n");
+            var commit = session.Complete(releaseSucceeded: true, "Sample", "1.0.1", new[] { "1.0.1" })!;
+            Assert.Equal(new[] { "Lib/Lib.csproj" }, commit.Files);
+        }
+
+        Assert.Contains(" M Docs/Guide.md", repo.Git("status", "--porcelain=v1").Split('\n'));
+    }
+
+    [Fact]
+    public void Session_IgnoresStampsRecordedByAnotherRelease()
+    {
+        using var repo = GitFixture.Create();
+        var head = repo.Git("rev-parse", "HEAD");
+        using (var failed = ReleaseVersionCommitSession.Begin(new RecordingLogger(), repo.Root, ReleaseVersionCommitMode.Commit, publishing: true))
+        {
+            repo.Write("Lib/Lib.csproj", Csproj("1.0.1"));
+            failed.Complete(releaseSucceeded: false, "Sample A", "1.0.1");
+        }
+
+        using (var other = ReleaseVersionCommitSession.Begin(new RecordingLogger(), repo.Root, ReleaseVersionCommitMode.Commit, publishing: true))
+        {
+            var commit = other.Complete(releaseSucceeded: true, "Sample B", "2.0.0")!;
+            Assert.Equal(ReleaseVersionCommitStatus.NothingToCommit, commit.Status);
+        }
+
+        Assert.Equal(head, repo.Git("rev-parse", "HEAD"));
+        Assert.Contains(" M Lib/Lib.csproj", repo.Git("status", "--porcelain=v1").Split('\n'));
+    }
+
+    [Fact]
+    public void Session_TwoPhaseRelease_CommitsRecordedStampsAfterPublication()
+    {
+        using var repo = GitFixture.Create();
+        var head = repo.Git("rev-parse", "HEAD");
+        using (var build = ReleaseVersionCommitSession.Begin(new RecordingLogger(), repo.Root, ReleaseVersionCommitMode.Push, publishing: true))
+        {
+            repo.Write("Lib/Lib.csproj", Csproj("1.0.1"));
+            var deferred = build.Complete(releaseSucceeded: true, "Sample", "1.0.1", deferUntilPublished: true)!;
+            Assert.Equal(ReleaseVersionCommitStatus.Deferred, deferred.Status);
+        }
+
+        Assert.Equal(head, repo.Git("rev-parse", "HEAD"));
+
+        using (var publish = ReleaseVersionCommitSession.Begin(new RecordingLogger(), repo.Root, ReleaseVersionCommitMode.Push, publishing: true))
+        {
+            var commit = publish.Complete(releaseSucceeded: true, "Sample", "1.0.1")!;
+            Assert.Equal(ReleaseVersionCommitStatus.Pushed, commit.Status);
+            Assert.Equal(new[] { "Lib/Lib.csproj" }, commit.Files);
+            Assert.Equal(commit.CommitSha, repo.RemoteHead());
+        }
+    }
+
+    [Fact]
+    public void Session_WithCommitSigningEnabled_RequestsASignature()
+    {
+        using var repo = GitFixture.Create();
+        var head = repo.Git("rev-parse", "HEAD");
+        // A signer that cannot start proves a signature was requested, without touching real keys.
+        repo.Git("config", "commit.gpgSign", "true");
+        repo.Git("config", "gpg.program", Path.Combine(repo.Root, "missing-signer.exe"));
+        var logger = new RecordingLogger();
+
+        using (var session = ReleaseVersionCommitSession.Begin(logger, repo.Root, ReleaseVersionCommitMode.Commit, publishing: true))
+        {
+            repo.Write("Lib/Lib.csproj", Csproj("1.0.1"));
+            var commit = session.Complete(releaseSucceeded: true, "Sample", "1.0.1")!;
+            Assert.Equal(ReleaseVersionCommitStatus.Incomplete, commit.Status);
+            Assert.Null(commit.CommitSha);
+        }
+
+        Assert.Equal(head, repo.Git("rev-parse", "HEAD"));
+        Assert.Contains("git --literal-pathspecs commit", Assert.Single(logger.Warnings), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Session_InsideAnotherRelease_LeavesTheCommitToTheOuterRelease()
     {
         using var repo = GitFixture.Create();

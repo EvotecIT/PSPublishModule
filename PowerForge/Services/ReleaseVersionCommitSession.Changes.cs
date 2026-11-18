@@ -6,9 +6,12 @@ internal sealed partial class ReleaseVersionCommitSession
 {
     private const string StampRecordFileName = "POWERFORGE_RELEASE_VERSION_STAMPS";
 
-    // Version-shaped tokens: 1.2, 1.2.3, 1.2.3.4, optional v prefix, prerelease and build metadata.
+    private const string ReleaseRecordPrefix = "release\t";
+
+    // Release version numbers: 1.2.3 or 1.2.3.4, optional v prefix, prerelease and build metadata.
+    // Two-part numbers such as timings or ratios never count as versions.
     private static readonly Regex VersionToken = new(
-        @"(?<![0-9A-Za-z.])v?\d+(?:\.\d+){1,3}(?:-[0-9A-Za-z][0-9A-Za-z.\-]*)?(?:\+[0-9A-Za-z][0-9A-Za-z.\-]*)?",
+        @"(?<![0-9A-Za-z.])v?\d+\.\d+\.\d+(?:\.\d+)?(?:-[0-9A-Za-z][0-9A-Za-z.\-]*)?(?:\+[0-9A-Za-z][0-9A-Za-z.\-]*)?(?!\.?[0-9A-Za-z])",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     private static Snapshot Capture(ReleaseGitRunner git, IReadOnlyList<string?> sourceDirectories)
@@ -48,27 +51,32 @@ internal sealed partial class ReleaseVersionCommitSession
             throw new InvalidOperationException("the repository has no commits yet");
 
         var headSha = head.StdOut.Trim();
-        var branch = git.RunAllowFailure(repositoryRoot, "symbolic-ref", "--quiet", "--short", "HEAD");
         var dirty = new Dictionary<string, string?>(StringComparer.Ordinal);
-        foreach (var path in ReadChanges(git, repositoryRoot, headSha).Keys)
+        foreach (var path in ReadChanges(git, repositoryRoot, headSha, static _ => true).Keys)
             dirty[path] = HashFile(repositoryRoot, path);
 
+        var record = ReadStampRecord(git, repositoryRoot, headSha);
         return new Snapshot
         {
             RepositoryRoot = repositoryRoot,
             Head = headSha,
-            Branch = branch.Succeeded && !string.IsNullOrWhiteSpace(branch.StdOut) ? branch.StdOut.Trim() : null,
+            Branch = ReadBranch(git, repositoryRoot),
             DirtyAtStart = dirty,
-            RecordedStamps = ReadStampRecord(git, repositoryRoot, headSha)
+            RecordedStamps = record.Stamps,
+            RecordedRelease = record.Release
         };
     }
 
-    private Classification Classify(Snapshot snapshot)
+    private Classification Classify(Snapshot snapshot, string releaseName, Func<string, bool> isReleaseVersion)
     {
         // Store the current content first; the commit is built from exactly these blobs.
         var changedPaths = ReadChangedPaths(snapshot);
         var stored = StoreBlobs(snapshot.RepositoryRoot, changedPaths, write: true);
-        var changes = ReadChanges(_git, snapshot.RepositoryRoot, snapshot.Head);
+        var changes = ReadChanges(_git, snapshot.RepositoryRoot, snapshot.Head, isReleaseVersion);
+        // Only stamps recorded by this same release count as its own.
+        var recordedStamps = string.Equals(snapshot.RecordedRelease, releaseName, StringComparison.Ordinal)
+            ? snapshot.RecordedStamps
+            : new Dictionary<string, string>(StringComparer.Ordinal);
 
         var candidates = new List<string>();
         var skipped = new List<string>();
@@ -88,7 +96,7 @@ internal sealed partial class ReleaseVersionCommitSession
             }
 
             if (startHash is not null &&
-                snapshot.RecordedStamps.TryGetValue(path, out var recorded) &&
+                recordedStamps.TryGetValue(path, out var recorded) &&
                 string.Equals(recorded, startHash, StringComparison.Ordinal))
             {
                 // Stamps an earlier, unfinished run of this release recorded as its own.
@@ -164,35 +172,41 @@ internal sealed partial class ReleaseVersionCommitSession
             yield return items.Skip(i).Take(size).ToArray();
     }
 
-    private static Dictionary<string, string> ReadStampRecord(ReleaseGitRunner git, string repositoryRoot, string head)
+    private static (Dictionary<string, string> Stamps, string? Release) ReadStampRecord(ReleaseGitRunner git, string repositoryRoot, string head)
     {
         var stamps = new Dictionary<string, string>(StringComparer.Ordinal);
         try
         {
             var file = ResolveGitPath(git, repositoryRoot, StampRecordFileName);
             if (file is null || !File.Exists(file))
-                return stamps;
+                return (stamps, null);
 
+            // Line 1: HEAD the stamps were made on. Line 2: the release that made them.
             var lines = File.ReadAllLines(file);
-            if (lines.Length == 0 || !string.Equals(lines[0].Trim(), head, StringComparison.OrdinalIgnoreCase))
-                return stamps;
+            if (lines.Length < 2 ||
+                !string.Equals(lines[0].Trim(), head, StringComparison.OrdinalIgnoreCase) ||
+                !lines[1].StartsWith(ReleaseRecordPrefix, StringComparison.Ordinal))
+            {
+                return (stamps, null);
+            }
 
-            foreach (var line in lines.Skip(1))
+            foreach (var line in lines.Skip(2))
             {
                 var tab = line.IndexOf('\t');
                 if (tab > 0)
                     stamps[line.Substring(tab + 1)] = line.Substring(0, tab);
             }
+
+            return (stamps, lines[1].Substring(ReleaseRecordPrefix.Length));
         }
         catch
         {
             // An unreadable record only means earlier stamps are treated as the maintainer's.
+            return (stamps, null);
         }
-
-        return stamps;
     }
 
-    private void WriteStampRecord(Snapshot snapshot, string[] stamped)
+    private void WriteStampRecord(Snapshot snapshot, string[] stamped, string releaseName)
     {
         try
         {
@@ -200,7 +214,7 @@ internal sealed partial class ReleaseVersionCommitSession
             if (file is null)
                 return;
 
-            var lines = new List<string> { snapshot.Head };
+            var lines = new List<string> { snapshot.Head, ReleaseRecordPrefix + releaseName };
             foreach (var path in stamped)
             {
                 var hash = HashFile(snapshot.RepositoryRoot, path);
@@ -243,7 +257,11 @@ internal sealed partial class ReleaseVersionCommitSession
     /// Reads tracked changes between <paramref name="baseCommit"/> and the working tree.
     /// The value is true when the file's change is limited to version numbers.
     /// </summary>
-    private static Dictionary<string, bool> ReadChanges(ReleaseGitRunner git, string repositoryRoot, string baseCommit)
+    private static Dictionary<string, bool> ReadChanges(
+        ReleaseGitRunner git,
+        string repositoryRoot,
+        string baseCommit,
+        Func<string, bool> isReleaseVersion)
     {
         var diff = git.Run(
             repositoryRoot,
@@ -251,11 +269,16 @@ internal sealed partial class ReleaseVersionCommitSession
             "diff", "-U0", "--no-color", "--no-ext-diff", "--no-textconv", "--no-renames",
             "--src-prefix=a/", "--dst-prefix=b/",
             baseCommit, "--");
-        return ParseDiff(diff.StdOut);
+        return ParseDiff(diff.StdOut, isReleaseVersion);
     }
 
-    internal static Dictionary<string, bool> ParseDiff(string diff)
+    /// <summary>
+    /// Parses a zero-context diff. A file is version-only when every changed line differs from its
+    /// counterpart only in version numbers, and every new version number is one the release wrote.
+    /// </summary>
+    internal static Dictionary<string, bool> ParseDiff(string diff, Func<string, bool>? isReleaseVersion = null)
     {
+        isReleaseVersion ??= static _ => true;
         var files = new Dictionary<string, bool>(StringComparer.Ordinal);
         string? path = null;
         var headerParsed = false;
@@ -277,7 +300,21 @@ internal sealed partial class ReleaseVersionCommitSession
                 for (var i = 0; i < removed.Count && versionOnly; i++)
                 {
                     if (!string.Equals(NormalizeVersions(removed[i]), NormalizeVersions(added[i]), StringComparison.Ordinal))
+                    {
                         versionOnly = false;
+                        break;
+                    }
+
+                    var before = VersionToken.Matches(removed[i]);
+                    var after = VersionToken.Matches(added[i]);
+                    for (var j = 0; j < after.Count && versionOnly; j++)
+                    {
+                        if (!string.Equals(before[j].Value, after[j].Value, StringComparison.Ordinal) &&
+                            !isReleaseVersion(after[j].Value))
+                        {
+                            versionOnly = false;
+                        }
+                    }
                 }
             }
 

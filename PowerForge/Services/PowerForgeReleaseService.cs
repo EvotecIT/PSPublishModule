@@ -1228,7 +1228,7 @@ internal sealed partial class PowerForgeReleaseService
         return BitConverter.ToString(algorithm.ComputeHash(bytes)).Replace("-", string.Empty).ToLowerInvariant();
     }
 
-    internal PowerForgeReleaseResult PublishBuiltReleaseOutputs(
+    private PowerForgeReleaseResult PublishBuiltReleaseOutputsCore(
         PowerForgeReleaseSpec spec,
         PowerForgeReleaseRequest request,
         PowerForgeReleaseResult builtResult)

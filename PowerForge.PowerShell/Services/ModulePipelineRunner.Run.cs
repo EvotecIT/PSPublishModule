@@ -44,8 +44,30 @@ public sealed partial class ModulePipelineRunner
             throw;
         }
 
-        versionCommit.Complete(releaseSucceeded: true, plan.ModuleName, FormatReleaseVersion(result.Plan ?? plan));
+        var finalPlan = result.Plan ?? plan;
+        versionCommit.Complete(
+            releaseSucceeded: true,
+            plan.ModuleName,
+            FormatReleaseVersion(finalPlan),
+            CollectReleaseVersions(finalPlan, result));
         return result;
+    }
+
+    /// <summary>The versions this run wrote, so only those count as version stamps.</summary>
+    private static IEnumerable<string?> CollectReleaseVersions(ModulePipelinePlan plan, ModulePipelineResult result)
+    {
+        var versions = new List<string?> { plan.ResolvedVersion, FormatReleaseVersion(plan) };
+        foreach (var lane in result.ProjectBuildResults ?? Array.Empty<ProjectBuildHostExecutionResult>())
+        {
+            var release = lane?.Result?.Release;
+            if (release is null)
+                continue;
+            versions.Add(release.ResolvedVersion);
+            versions.AddRange(release.ResolvedVersionsByProject.Values);
+            versions.AddRange(release.Projects.Select(static project => project.NewVersion));
+        }
+
+        return versions;
     }
 
     /// <summary>
@@ -63,10 +85,14 @@ public sealed partial class ModulePipelineRunner
         {
             foreach (var destination in new[] { PackageBuildPublishDestination.NuGet, PackageBuildPublishDestination.GitHub })
             {
+                // A lane that only plans never publishes, matching the project-build workflow.
                 if ((plan.ProjectBuilds ?? Array.Empty<ConfigurationProjectBuildSegment>())
-                        .Any(segment => segment?.Configuration is { Enabled: true } && ShouldExecuteProjectBuildPublish(plan, segment, destination)) ||
+                        .Any(segment => segment?.Configuration is { Enabled: true } &&
+                                        !IsPlanOnlyProjectBuild(plan, segment) &&
+                                        ShouldExecuteProjectBuildPublish(plan, segment, destination)) ||
                     (plan.PackageBuilds ?? Array.Empty<ConfigurationPackageBuildSegment>())
-                        .Any(segment => segment?.Configuration is { Enabled: true } && ShouldExecutePackageBuildPublish(plan, segment, destination)))
+                        .Any(segment => segment?.Configuration is { Enabled: true, PlanOnly: not true } &&
+                                        ShouldExecutePackageBuildPublish(plan, segment, destination)))
                 {
                     return true;
                 }
@@ -78,6 +104,13 @@ public sealed partial class ModulePipelineRunner
         }
 
         return false;
+    }
+
+    private bool IsPlanOnlyProjectBuild(ModulePipelinePlan plan, ConfigurationProjectBuildSegment segment)
+    {
+        var reference = segment.Configuration!;
+        return !string.IsNullOrWhiteSpace(reference.ConfigPath) &&
+               LoadProjectBuildConfiguration(ResolvePackageBuildPath(plan.ProjectRoot, reference.ConfigPath), reference).PlanOnly == true;
     }
 
     private static string? FormatReleaseVersion(ModulePipelinePlan plan)

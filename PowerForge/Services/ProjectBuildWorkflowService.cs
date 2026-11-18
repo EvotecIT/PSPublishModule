@@ -87,10 +87,16 @@ internal sealed class ProjectBuildWorkflowService
             throw;
         }
 
+        var release = workflow.Result.Release;
         workflow.VersionCommit = versionCommit.Complete(
             workflow.Result.Success,
             config.GitHubRepositoryName,
-            ResolveReleaseVersion(config, workflow.Result.Release));
+            ResolveReleaseVersion(config, release),
+            release is null
+                ? null
+                : release.Projects.Select(static project => project.NewVersion)
+                    .Concat(release.ResolvedVersionsByProject.Values)
+                    .Concat(new[] { release.ResolvedVersion }));
         return workflow;
     }
 

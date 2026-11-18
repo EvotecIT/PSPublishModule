@@ -49,8 +49,12 @@ internal sealed partial class ReleaseVersionCommitSession
             TryDelete(indexFile + ".lock");
         }
 
-        // commit-tree uses the configured identity and commit.gpgSign like an ordinary commit.
-        var commit = _git.RunAllowFailure(root, "commit-tree", tree, "-p", snapshot.Head, "-m", message);
+        // commit-tree uses the configured identity but, unlike git commit, ignores commit.gpgSign,
+        // so pass -S when it is set; -S still honours user.signingKey and gpg.format.
+        var commitArguments = new List<string> { "commit-tree", tree, "-p", snapshot.Head, "-m", message };
+        if (string.Equals(ReadConfig(root, "commit.gpgSign", boolean: true), "true", StringComparison.Ordinal))
+            commitArguments.Add("-S");
+        var commit = _git.RunAllowFailure(root, commitArguments.ToArray());
         if (!commit.Succeeded || string.IsNullOrWhiteSpace(commit.StdOut))
             return new CommitOutcome { Problem = "git commit failed (" + ReleaseGitRunner.Describe(commit) + ")" };
 
@@ -62,17 +66,19 @@ internal sealed partial class ReleaseVersionCommitSession
         if (!update.Succeeded)
             return new CommitOutcome { Problem = "the branch moved before it could be updated (" + ReleaseGitRunner.Describe(update) + ")" };
 
-        return new CommitOutcome { Sha = sha, IndexCommand = SyncIndex(snapshot, paths, modes) };
+        return new CommitOutcome { Sha = sha, IndexCommand = SyncIndex(snapshot, paths, modes, classification.Blobs) };
     }
 
     /// <summary>
-    /// Points the index entries of committed files at the new commit, except where the maintainer
-    /// staged something of their own. Returns a command when the index could not be updated.
+    /// Points the index entries of committed files at the new content, except where the maintainer
+    /// staged content of their own. A staged mode change is kept. Returns a command when the index
+    /// could not be updated.
     /// </summary>
-    private string? SyncIndex(Snapshot snapshot, string[] paths, Dictionary<string, TreeEntry> headEntries)
+    private string? SyncIndex(Snapshot snapshot, string[] paths, Dictionary<string, TreeEntry> headEntries, Dictionary<string, string> blobs)
     {
         var root = snapshot.RepositoryRoot;
         var unstaged = new List<string>();
+        var indexModes = new Dictionary<string, string>(StringComparer.Ordinal);
         try
         {
             foreach (var chunk in Chunk(paths, 100))
@@ -86,15 +92,28 @@ internal sealed partial class ReleaseVersionCommitSession
                     if (fields.Length < 3)
                         continue;
                     var path = record.Substring(tab + 1);
-                    if (headEntries.TryGetValue(path, out var head) && string.Equals(fields[1], head.Blob, StringComparison.OrdinalIgnoreCase))
+                    // "<mode> <object> <stage>": only an unmerged-free entry still holding the old content.
+                    if (fields[2] == "0" &&
+                        headEntries.TryGetValue(path, out var head) &&
+                        string.Equals(fields[1], head.Blob, StringComparison.OrdinalIgnoreCase))
+                    {
                         unstaged.Add(path);
+                        indexModes[path] = fields[0];
+                    }
                 }
             }
 
-            foreach (var chunk in Chunk(unstaged, 100))
+            foreach (var chunk in Chunk(unstaged, 50))
             {
-                var arguments = new List<string> { "reset", "-q", "--" };
-                arguments.AddRange(chunk);
+                var arguments = new List<string> { "update-index" };
+                foreach (var path in chunk)
+                {
+                    arguments.Add("--cacheinfo");
+                    arguments.Add(indexModes[path]);
+                    arguments.Add(blobs[path]);
+                    arguments.Add(path);
+                }
+
                 _git.Run(root, arguments.ToArray());
             }
 
@@ -185,15 +204,27 @@ internal sealed partial class ReleaseVersionCommitSession
         }
     }
 
-    private string? ReadBranch(string repositoryRoot)
+    /// <summary>
+    /// Reads the branch from its full ref: <c>--short</c> abbreviates to <c>heads/main</c> when a tag
+    /// shares the branch name.
+    /// </summary>
+    private static string? ReadBranch(ReleaseGitRunner git, string repositoryRoot)
     {
-        var result = _git.RunAllowFailure(repositoryRoot, "symbolic-ref", "--quiet", "--short", "HEAD");
-        return result.Succeeded && !string.IsNullOrWhiteSpace(result.StdOut) ? result.StdOut.Trim() : null;
+        const string prefix = "refs/heads/";
+        var result = git.RunAllowFailure(repositoryRoot, "symbolic-ref", "--quiet", "HEAD");
+        var reference = result.Succeeded ? result.StdOut.Trim() : string.Empty;
+        return reference.StartsWith(prefix, StringComparison.Ordinal) && reference.Length > prefix.Length
+            ? reference.Substring(prefix.Length)
+            : null;
     }
 
-    private string? ReadConfig(string repositoryRoot, string key)
+    private string? ReadBranch(string repositoryRoot) => ReadBranch(_git, repositoryRoot);
+
+    private string? ReadConfig(string repositoryRoot, string key, bool boolean = false)
     {
-        var result = _git.RunAllowFailure(repositoryRoot, "config", "--get", key);
+        var result = boolean
+            ? _git.RunAllowFailure(repositoryRoot, "config", "--bool", "--get", key)
+            : _git.RunAllowFailure(repositoryRoot, "config", "--get", key);
         return result.Succeeded && !string.IsNullOrWhiteSpace(result.StdOut) ? result.StdOut.Trim() : null;
     }
 

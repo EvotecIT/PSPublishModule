@@ -29,6 +29,9 @@ public enum ReleaseVersionCommitStatus
     /// <summary>The version files were committed and pushed.</summary>
     Pushed,
 
+    /// <summary>The build half of a two-phase release recorded its stamps; the publish half commits them.</summary>
+    Deferred,
+
     /// <summary>The version files were left uncommitted, or the commit was not pushed. The release itself is unaffected.</summary>
     Incomplete
 }

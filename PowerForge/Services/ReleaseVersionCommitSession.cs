@@ -140,10 +140,23 @@ internal sealed partial class ReleaseVersionCommitSession : IDisposable
     /// Commits (and optionally pushes) the stamped version files. Never throws.
     /// </summary>
     /// <param name="releaseSucceeded">True only when every publish step succeeded.</param>
-    /// <param name="name">Release name used in the commit message.</param>
+    /// <param name="name">Release name used in the commit message; it also identifies the release's recorded stamps.</param>
     /// <param name="version">Release version used in the commit message.</param>
+    /// <param name="releaseVersions">
+    /// Every version this release wrote. When given, a changed version number counts as stamping only
+    /// when its new value is one of these.
+    /// </param>
+    /// <param name="deferUntilPublished">
+    /// True for the build half of a two-phase release: the stamps are recorded and committed by the
+    /// publish half once it succeeds.
+    /// </param>
     /// <returns>The outcome, or <c>null</c> when the step is off for this run.</returns>
-    internal ReleaseVersionCommitResult? Complete(bool releaseSucceeded, string? name, string? version)
+    internal ReleaseVersionCommitResult? Complete(
+        bool releaseSucceeded,
+        string? name,
+        string? version,
+        IEnumerable<string?>? releaseVersions = null,
+        bool deferUntilPublished = false)
     {
         if (_completed || _mode == ReleaseVersionCommitMode.Off)
             return null;
@@ -156,7 +169,7 @@ internal sealed partial class ReleaseVersionCommitSession : IDisposable
 
         try
         {
-            return CompleteCore(releaseSucceeded, name, version);
+            return CompleteCore(releaseSucceeded, name, version, CreateVersionFilter(version, releaseVersions), deferUntilPublished);
         }
         catch (Exception ex)
         {
@@ -178,7 +191,12 @@ internal sealed partial class ReleaseVersionCommitSession : IDisposable
             ActiveInContext.Value = _previousScope;
     }
 
-    private ReleaseVersionCommitResult CompleteCore(bool releaseSucceeded, string? name, string? version)
+    private ReleaseVersionCommitResult CompleteCore(
+        bool releaseSucceeded,
+        string? name,
+        string? version,
+        Func<string, bool> isReleaseVersion,
+        bool deferUntilPublished)
     {
         if (_snapshot is null)
         {
@@ -190,17 +208,33 @@ internal sealed partial class ReleaseVersionCommitSession : IDisposable
         }
 
         var snapshot = _snapshot;
-        var classification = Classify(snapshot);
+        var releaseName = ResolveReleaseName(name, snapshot.RepositoryRoot);
+        var classification = Classify(snapshot, releaseName, isReleaseVersion);
         var stamped = classification.Stamped;
         var skipped = classification.Skipped;
-        var message = BuildMessage(name, version, snapshot.RepositoryRoot);
+        var message = BuildMessage(releaseName, version);
+
+        if (releaseSucceeded && deferUntilPublished)
+        {
+            if (stamped.Length == 0)
+                return Info(new ReleaseVersionCommitResult { Status = ReleaseVersionCommitStatus.NothingToCommit, SkippedFiles = skipped, Message = "No version changes to commit." });
+
+            WriteStampRecord(snapshot, stamped, releaseName);
+            return Info(new ReleaseVersionCommitResult
+            {
+                Status = ReleaseVersionCommitStatus.Deferred,
+                Files = stamped,
+                SkippedFiles = skipped,
+                Message = $"Recorded {Count(stamped.Length, "version file")}; they are committed when the release is published."
+            });
+        }
 
         if (!releaseSucceeded)
         {
             if (stamped.Length == 0)
                 return Info(new ReleaseVersionCommitResult { Status = ReleaseVersionCommitStatus.NothingToCommit, Message = "The release did not finish; no version files changed." });
 
-            WriteStampRecord(snapshot, stamped);
+            WriteStampRecord(snapshot, stamped, releaseName);
             return Warn(new ReleaseVersionCommitResult
             {
                 Status = ReleaseVersionCommitStatus.Incomplete,
@@ -233,12 +267,12 @@ internal sealed partial class ReleaseVersionCommitSession : IDisposable
             var reason = snapshot.Branch is null
                 ? "the checkout is not on a branch"
                 : "HEAD moved during the release";
-            return LeaveUncommitted(snapshot, stamped, skipped, message, reason);
+            return LeaveUncommitted(snapshot, stamped, skipped, message, releaseName, reason);
         }
 
         var commit = CommitClassified(snapshot, classification, message);
         if (commit.Sha is null)
-            return LeaveUncommitted(snapshot, stamped, skipped, message, commit.Problem ?? "git could not create the commit");
+            return LeaveUncommitted(snapshot, stamped, skipped, message, releaseName, commit.Problem ?? "git could not create the commit");
 
         DeleteStampRecord(snapshot);
         var sha = commit.Sha;
@@ -305,10 +339,11 @@ internal sealed partial class ReleaseVersionCommitSession : IDisposable
         string[] stamped,
         string[] skipped,
         string message,
+        string releaseName,
         string reason)
     {
         // The next successful run of this release may commit these, so record them as its own.
-        WriteStampRecord(snapshot, stamped);
+        WriteStampRecord(snapshot, stamped, releaseName);
         var command = BuildCommitCommand(snapshot, stamped, message);
         return Warn(new ReleaseVersionCommitResult
         {
@@ -357,14 +392,47 @@ internal sealed partial class ReleaseVersionCommitSession : IDisposable
         return result;
     }
 
-    private static string BuildMessage(string? name, string? version, string repositoryRoot)
-    {
-        var releaseName = string.IsNullOrWhiteSpace(name)
+    private static string ResolveReleaseName(string? name, string repositoryRoot)
+        => string.IsNullOrWhiteSpace(name)
             ? Path.GetFileName(repositoryRoot.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar))
             : name!.Trim();
-        return string.IsNullOrWhiteSpace(version)
+
+    private static string BuildMessage(string releaseName, string? version)
+        => string.IsNullOrWhiteSpace(version)
             ? $"Release {releaseName}"
             : $"Release {releaseName} {version!.Trim()}";
+
+    /// <summary>
+    /// Accepts a changed version number when it is one of the versions this release wrote, or any
+    /// three- or four-part version when the host could not say which versions it wrote.
+    /// </summary>
+    private static Func<string, bool> CreateVersionFilter(string? version, IEnumerable<string?>? releaseVersions)
+    {
+        var known = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var value in (releaseVersions ?? Array.Empty<string?>()).Concat(new[] { version }))
+        {
+            var normalized = NormalizeVersion(value);
+            if (normalized is null)
+                continue;
+            known.Add(normalized);
+            var cut = normalized.IndexOfAny(new[] { '-', '+' });
+            if (cut > 0)
+                known.Add(normalized.Substring(0, cut));
+        }
+
+        // A version alone (without the other versions the release wrote) is not enough to judge by.
+        if (releaseVersions is null || known.Count == 0)
+            return static _ => true;
+
+        return token => NormalizeVersion(token) is { } value && known.Contains(value);
+    }
+
+    private static string? NormalizeVersion(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return null;
+        var trimmed = value!.Trim();
+        return trimmed.StartsWith("v", StringComparison.OrdinalIgnoreCase) ? trimmed.Substring(1) : trimmed;
     }
 
     private static string SkippedSentence(string[] skipped)
@@ -419,6 +487,7 @@ internal sealed partial class ReleaseVersionCommitSession : IDisposable
         internal string? Branch { get; set; }
         internal Dictionary<string, string?> DirtyAtStart { get; set; } = new(StringComparer.Ordinal);
         internal Dictionary<string, string> RecordedStamps { get; set; } = new(StringComparer.Ordinal);
+        internal string? RecordedRelease { get; set; }
     }
 
     private sealed class Classification

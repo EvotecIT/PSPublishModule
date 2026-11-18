@@ -593,8 +593,8 @@ In `release.json` or `project.build.json`, add `"CommitVersionChanges": "Push"` 
 - `Push`: commit them and push that commit to the branch's configured upstream. It never forces, rebases, pulls,
   or pushes tags. A branch without an upstream keeps the commit local and says how to set one.
 
-Only files whose changes are limited to version numbers are committed, and the commit holds exactly the content
-that was checked, using your Git identity and signing settings (commit hooks do not run). Generated build output,
+Only files whose changes are limited to the version numbers this release wrote are committed, and the commit holds
+exactly the content that was checked, using your Git identity and signing settings (commit hooks do not run). Generated build output,
 other uncommitted or untracked work, and anything already staged are left as they were. Version edits you made
 yourself before the release are never committed, and a version file that already held your own edits is skipped
 with a warning.
@@ -604,7 +604,8 @@ warning into a failure. A failed publish, a moved `HEAD`, a detached checkout, a
 a newer remote commit), no network, or Git not being available each becomes a single warning that says what was
 left and, where there is one, the command that finishes it. The Git commands run as part of the release, so a slow
 push adds its time. When a release stops before committing, it records the files it stamped; the next successful
-run commits them once, and running it again finds nothing to commit. Plans, validation runs, and runs whose
+run of the same release commits them once, and running it again finds nothing to commit. A two-phase release (build
+now, publish later) records its stamps in the build phase and commits them after publishing. Plans, validation runs, and runs whose
 selected lanes publish nothing never commit. When a release runs another release host (for example
 `release.json` building a module or project packages), only the outermost one commits, and a release whose lanes
 stamp more than one checkout leaves the commits to you.
