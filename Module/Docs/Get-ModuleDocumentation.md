@@ -155,13 +155,13 @@ Accept wildcard characters: False
 ```
 
 ### -JsonRenderer
-Select JSON renderer for fenced JSON blocks: Auto, Highlighted (shown as written) or System (reformatted by System.Text.Json). Spectre is accepted as an older name for Highlighted.
+Select JSON renderer for fenced JSON blocks: Auto, Highlighted (shown as written) or System (reformatted by System.Text.Json).
 
 ```yaml
 Type: String
 Parameter Sets: ByName, ByModule, ByPath, ByBase
 Aliases: None
-Possible values: Auto, Highlighted, Spectre, System
+Possible values: Auto, Highlighted, System
 
 Required: False
 Position: named

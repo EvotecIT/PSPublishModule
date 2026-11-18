@@ -10400,13 +10400,12 @@ It is useful when building “portable” scripts/modules where you want to dete
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="none">
           <maml:name>JsonRenderer</maml:name>
           <maml:description>
-            <maml:para>Select JSON renderer for fenced JSON blocks: Auto, Highlighted (shown as written) or System (reformatted by System.Text.Json). Spectre is accepted as an older name for Highlighted.</maml:para>
+            <maml:para>Select JSON renderer for fenced JSON blocks: Auto, Highlighted (shown as written) or System (reformatted by System.Text.Json).</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <command:parameterValueGroup>
             <command:parameterValue required="false" variableLength="false">Auto</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">Highlighted</command:parameterValue>
-            <command:parameterValue required="false" variableLength="false">Spectre</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">System</command:parameterValue>
           </command:parameterValueGroup>
           <dev:type>
@@ -10665,13 +10664,12 @@ It is useful when building “portable” scripts/modules where you want to dete
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="none">
           <maml:name>JsonRenderer</maml:name>
           <maml:description>
-            <maml:para>Select JSON renderer for fenced JSON blocks: Auto, Highlighted (shown as written) or System (reformatted by System.Text.Json). Spectre is accepted as an older name for Highlighted.</maml:para>
+            <maml:para>Select JSON renderer for fenced JSON blocks: Auto, Highlighted (shown as written) or System (reformatted by System.Text.Json).</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <command:parameterValueGroup>
             <command:parameterValue required="false" variableLength="false">Auto</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">Highlighted</command:parameterValue>
-            <command:parameterValue required="false" variableLength="false">Spectre</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">System</command:parameterValue>
           </command:parameterValueGroup>
           <dev:type>
@@ -10942,13 +10940,12 @@ It is useful when building “portable” scripts/modules where you want to dete
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="none">
           <maml:name>JsonRenderer</maml:name>
           <maml:description>
-            <maml:para>Select JSON renderer for fenced JSON blocks: Auto, Highlighted (shown as written) or System (reformatted by System.Text.Json). Spectre is accepted as an older name for Highlighted.</maml:para>
+            <maml:para>Select JSON renderer for fenced JSON blocks: Auto, Highlighted (shown as written) or System (reformatted by System.Text.Json).</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <command:parameterValueGroup>
             <command:parameterValue required="false" variableLength="false">Auto</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">Highlighted</command:parameterValue>
-            <command:parameterValue required="false" variableLength="false">Spectre</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">System</command:parameterValue>
           </command:parameterValueGroup>
           <dev:type>
@@ -11183,13 +11180,12 @@ It is useful when building “portable” scripts/modules where you want to dete
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="none">
           <maml:name>JsonRenderer</maml:name>
           <maml:description>
-            <maml:para>Select JSON renderer for fenced JSON blocks: Auto, Highlighted (shown as written) or System (reformatted by System.Text.Json). Spectre is accepted as an older name for Highlighted.</maml:para>
+            <maml:para>Select JSON renderer for fenced JSON blocks: Auto, Highlighted (shown as written) or System (reformatted by System.Text.Json).</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <command:parameterValueGroup>
             <command:parameterValue required="false" variableLength="false">Auto</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">Highlighted</command:parameterValue>
-            <command:parameterValue required="false" variableLength="false">Spectre</command:parameterValue>
             <command:parameterValue required="false" variableLength="false">System</command:parameterValue>
           </command:parameterValueGroup>
           <dev:type>
@@ -11448,12 +11444,12 @@ It is useful when building “portable” scripts/modules where you want to dete
       <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="none">
         <maml:name>JsonRenderer</maml:name>
         <maml:description>
-          <maml:para>Select JSON renderer for fenced JSON blocks: Auto, Highlighted (shown as written) or System (reformatted by System.Text.Json). Spectre is accepted as an older name for Highlighted.</maml:para>
+          <maml:para>Select JSON renderer for fenced JSON blocks: Auto, Highlighted (shown as written) or System (reformatted by System.Text.Json).</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
         <command:parameterValueGroup>
           <command:parameterValue required="false" variableLength="false">Auto</command:parameterValue>
-          <command:parameterValue required="false" variableLength="false">Spectre</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Highlighted</command:parameterValue>
           <command:parameterValue required="false" variableLength="false">System</command:parameterValue>
         </command:parameterValueGroup>
         <dev:type>
