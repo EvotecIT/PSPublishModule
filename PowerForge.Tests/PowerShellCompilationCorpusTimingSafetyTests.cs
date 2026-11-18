@@ -6,25 +6,31 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
 {
     [Fact]
     [Trait("Category", "PowerShellCompilerGate")]
-    public void TimingEvidenceCreationPreservesExistingInputAndAcceptsANewLiteralPath()
+    public void TimingEvidenceCreationUsesPowerShellLocationAndPreservesExistingInput()
     {
         var root = Path.Combine(Path.GetTempPath(), "PowerForge timing [output]", Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(root);
+        var current = Path.Combine(root, "current");
+        Directory.CreateDirectory(current);
         try
         {
-            var input = Path.Combine(root, "input[before].json");
+            var input = Path.Combine(current, "input[before].json");
             const string original = "{\"sample\":\"original\"}";
             File.WriteAllText(input, original);
+            File.WriteAllText(Path.Combine(root, "input[before].json"), "{\"sample\":\"wrong directory\"}");
             var helper = Path.Combine(FindCorpusRepositoryRoot(), "Benchmarks", "PowerShellCompilation", "Corpus", "Corpus.TimingRecords.ps1");
             var command = $$"""
                 $ErrorActionPreference = 'Stop'
                 . '{{helper.Replace("'", "''", StringComparison.Ordinal)}}'
                 $root = '{{root.Replace("'", "''", StringComparison.Ordinal)}}'
+                [Environment]::CurrentDirectory = $root
+                Set-Location -LiteralPath (Join-Path $root 'current')
+                $inputRecord = Read-CorpusTimingRecord -Path './input[before].json'
+                if ($inputRecord.value.sample -cne 'original') { throw 'Read the process directory instead of the PowerShell location' }
                 try {
-                    $null = New-CorpusTimingEvidence -Path (Join-Path $root './input[before].json') -Value @{sample='replacement'}
+                    $null = New-CorpusTimingEvidence -Path './input[before].json' -Value @{sample='replacement'}
                     throw 'Overwrote existing evidence'
                 } catch [IO.IOException] { }
-                $output = New-CorpusTimingEvidence -Path (Join-Path $root 'new[after].json') -Value @{sample='new observation'}
+                $output = New-CorpusTimingEvidence -Path './new[after].json' -Value @{sample='new observation'}
                 $record = Read-CorpusTimingRecord -Path $output
                 if ($record.value.sample -cne 'new observation') { throw 'Wrong new observation' }
                 if ($record.sha256 -cne (Get-FileHash -LiteralPath $output -Algorithm SHA256).Hash.ToLowerInvariant()) { throw 'Wrong observation identity' }
@@ -34,6 +40,8 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             Assert.Equal(0, result.ExitCode);
             Assert.Equal("created new evidence", result.StandardOutput);
             Assert.Equal(original, File.ReadAllText(input));
+            Assert.True(File.Exists(Path.Combine(current, "new[after].json")));
+            Assert.False(File.Exists(Path.Combine(root, "new[after].json")));
             Assert.True(string.IsNullOrWhiteSpace(result.StandardError), result.StandardError);
         }
         finally { Directory.Delete(root, recursive: true); }
@@ -56,8 +64,10 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
                 $ErrorActionPreference = 'Stop'
                 . '{{Path.Combine(corpus, "Corpus.Runner.Common.ps1").Replace("'", "''", StringComparison.Ordinal)}}'
                 . '{{Path.Combine(corpus, "Corpus.CompilerSnapshot.ps1").Replace("'", "''", StringComparison.Ordinal)}}'
-                $snapshot = New-CorpusCompilerSnapshot -CliAssemblyPath '{{launcher.Replace("'", "''", StringComparison.Ordinal)}}' `
-                    -SnapshotPath '{{Path.Combine(root, "run", "compiler").Replace("'", "''", StringComparison.Ordinal)}}'
+                [IO.Directory]::CreateDirectory('{{Path.Combine(root, "launch").Replace("'", "''", StringComparison.Ordinal)}}') | Out-Null
+                [Environment]::CurrentDirectory = '{{Path.Combine(root, "launch").Replace("'", "''", StringComparison.Ordinal)}}'
+                Set-Location -LiteralPath '{{root.Replace("'", "''", StringComparison.Ordinal)}}'
+                $snapshot = New-CorpusCompilerSnapshot -CliAssemblyPath './build/compiler.ps1' -SnapshotPath './run/compiler'
                 [IO.File]::WriteAllText('{{launcher.Replace("'", "''", StringComparison.Ordinal)}}', "[Console]::Out.Write('revision-B')")
                 [IO.File]::WriteAllText('{{Path.Combine(source, "dependency.txt").Replace("'", "''", StringComparison.Ordinal)}}', 'dependency-B')
                 $hostPath = Join-Path $PSHOME $(if ($IsWindows) { 'pwsh.exe' } else { 'pwsh' })

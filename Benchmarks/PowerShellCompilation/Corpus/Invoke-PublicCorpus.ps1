@@ -23,6 +23,11 @@ $ProgressPreference = 'SilentlyContinue'
 . (Join-Path $PSScriptRoot 'Corpus.TimingIdentity.ps1')
 . (Join-Path $PSScriptRoot 'Corpus.CompilerSnapshot.ps1')
 . (Join-Path $PSScriptRoot 'Corpus.SourceHost.ps1')
+$PacketPath = Resolve-CorpusFileSystemPath -Path $PacketPath
+$BaselinePath = Resolve-CorpusFileSystemPath -Path $BaselinePath
+if ($CliAssemblyPath) { $CliAssemblyPath = Resolve-CorpusFileSystemPath -Path $CliAssemblyPath }
+if ($WorkspacePath) { $WorkspacePath = Resolve-CorpusFileSystemPath -Path $WorkspacePath }
+if ($EvidencePath) { $EvidencePath = Resolve-CorpusFileSystemPath -Path $EvidencePath }
 
 if ($RefreshBaseline -and ($SkipModules -or $ModuleId)) {
     throw 'Refreshing the public baseline requires the complete module packet.'

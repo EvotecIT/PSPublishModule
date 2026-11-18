@@ -28,8 +28,9 @@ $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'Corpus.Runner.Common.ps1')
 . (Join-Path $PSScriptRoot 'Corpus.TimingIdentity.ps1')
 . (Join-Path $PSScriptRoot 'Corpus.TimingRecords.ps1')
-$WorkspacePath = [IO.Path]::GetFullPath($WorkspacePath)
-$CorpusEvidencePath = [IO.Path]::GetFullPath($CorpusEvidencePath)
+$WorkspacePath = Resolve-CorpusFileSystemPath -Path $WorkspacePath
+$CorpusEvidencePath = Resolve-CorpusFileSystemPath -Path $CorpusEvidencePath
+$EvidencePath = Resolve-CorpusFileSystemPath -Path $EvidencePath
 $packetPath = Join-Path $PSScriptRoot 'public-corpus.net10.json'
 $packetRecord = Read-CorpusTimingRecord -Path $packetPath
 $packet = $packetRecord.value

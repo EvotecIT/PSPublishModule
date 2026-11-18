@@ -1,7 +1,17 @@
+function Resolve-CorpusFileSystemPath {
+    param([string] $Path)
+
+    $provider = $null
+    $drive = $null
+    $full = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Path, [ref]$provider, [ref]$drive)
+    if ($provider.Name -cne 'FileSystem') { throw 'Corpus paths must use the filesystem provider.' }
+    return $full
+}
+
 function Read-CorpusTimingRecord {
     param([string] $Path)
 
-    $bytes = [IO.File]::ReadAllBytes([IO.Path]::GetFullPath($Path))
+    $bytes = [IO.File]::ReadAllBytes((Resolve-CorpusFileSystemPath -Path $Path))
     $reader = [IO.StreamReader]::new([IO.MemoryStream]::new($bytes), [Text.Encoding]::UTF8, $true)
     try { $json = $reader.ReadToEnd() } finally { $reader.Dispose() }
     return [pscustomobject]@{
@@ -13,7 +23,7 @@ function Read-CorpusTimingRecord {
 function New-CorpusTimingEvidence {
     param([string] $Path, [object] $Value)
 
-    $full = [IO.Path]::GetFullPath($Path)
+    $full = Resolve-CorpusFileSystemPath -Path $Path
     $parent = Split-Path -Parent $full
     if ($parent) { [IO.Directory]::CreateDirectory($parent) | Out-Null }
     # Exclusive creation also rejects hard links, symbolic links and aliases to
@@ -28,7 +38,7 @@ function New-CorpusTimingEvidence {
 
 function Get-CorpusTimingPowerPlan {
     if (-not $IsWindows) { return $null }
-    $query = Invoke-OwnedProcess -FileName 'powercfg' -Arguments @('/getactivescheme') -WorkingDirectory (Get-Location).Path -TimeoutSeconds 30
+    $query = Invoke-OwnedProcess -FileName 'powercfg' -Arguments @('/getactivescheme') -WorkingDirectory $ExecutionContext.SessionState.Path.CurrentFileSystemLocation.Path -TimeoutSeconds 30
     if ($query.ExitCode -ne 0) { return "Unavailable (powercfg exit $($query.ExitCode))" }
     if ([string]::IsNullOrWhiteSpace($query.StandardOutput)) { return 'Unavailable (powercfg returned no description)' }
     return $query.StandardOutput.Trim()

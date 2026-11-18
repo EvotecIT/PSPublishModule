@@ -1,3 +1,5 @@
+. (Join-Path $PSScriptRoot 'Corpus.TimingRecords.ps1')
+
 function Get-CorpusCompilerFiles {
     param([string] $Root)
 
@@ -24,8 +26,9 @@ function Get-CorpusCompilerFilesSha256 {
 function New-CorpusCompilerSnapshot {
     param([string] $CliAssemblyPath, [string] $SnapshotPath)
 
-    $source = [IO.Path]::GetFullPath((Split-Path -Parent $CliAssemblyPath))
-    $target = [IO.Path]::GetFullPath($SnapshotPath)
+    $CliAssemblyPath = Resolve-CorpusFileSystemPath -Path $CliAssemblyPath
+    $source = Split-Path -Parent $CliAssemblyPath
+    $target = Resolve-CorpusFileSystemPath -Path $SnapshotPath
     if ($target.Equals($source, (Get-PathComparison)) -or
         $target.StartsWith($source.TrimEnd('\', '/') + [IO.Path]::DirectorySeparatorChar, (Get-PathComparison))) {
         throw 'The corpus workspace must be outside the compiler output directory.'
