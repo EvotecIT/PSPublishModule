@@ -139,21 +139,21 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
             $ErrorActionPreference = 'Stop'
             $root = '{{fixture.RootPath.Replace("'", "''", StringComparison.Ordinal)}}'
             $packet = Join-Path $root 'packet.json'
-            foreach ($unsafeId in '../escape', 'A.', 'CON', 'nul.txt', 'COM1', 'LPT9.log') {
-            [pscustomobject]@{schemaVersion=1;workloads=@([pscustomobject]@{id=$unsafeId})} |
-                ConvertTo-Json -Depth 4 | Set-Content $packet
-            foreach ($runner in 'Invoke-ExternalAssessment.ps1','Invoke-ExternalQualification.ps1') {
-                $workspace = Join-Path $root $runner
-                $arguments = @{PacketPath=$packet;WorkspacePath=$workspace}
-                if ($runner -eq 'Invoke-ExternalQualification.ps1') { $arguments.AllowExternalExecution=$true }
-                $rejected = $false
-                try { & (Join-Path '{{corpus}}' $runner) @arguments }
-                catch {
-                    if ($_.Exception.Message -cne 'Assessment workload id must be a portable filename component.') { throw }
-                    $rejected = $true
+            foreach ($unsafeId in '../escape', 'A.', 'CON', 'nul.txt', 'COM1', 'LPT9.log', "A`n") {
+                [pscustomobject]@{schemaVersion=1;workloads=@([pscustomobject]@{id=$unsafeId})} |
+                    ConvertTo-Json -Depth 4 | Set-Content $packet
+                foreach ($runner in 'Invoke-ExternalAssessment.ps1','Invoke-ExternalQualification.ps1') {
+                    $workspace = Join-Path $root $runner
+                    $arguments = @{PacketPath=$packet;WorkspacePath=$workspace}
+                    if ($runner -eq 'Invoke-ExternalQualification.ps1') { $arguments.AllowExternalExecution=$true }
+                    $rejected = $false
+                    try { & (Join-Path '{{corpus}}' $runner) @arguments }
+                    catch {
+                        if ($_.Exception.Message -cne 'Assessment workload id must be a portable filename component.') { throw }
+                        $rejected = $true
+                    }
+                    if (-not $rejected -or (Test-Path $workspace)) { throw 'An unsafe ID reached filesystem setup.' }
                 }
-                if (-not $rejected -or (Test-Path $workspace)) { throw 'An unsafe ID reached filesystem setup.' }
-            }
             }
             [Console]::Write('unsafe-ids-rejected-before-writes')
             """;

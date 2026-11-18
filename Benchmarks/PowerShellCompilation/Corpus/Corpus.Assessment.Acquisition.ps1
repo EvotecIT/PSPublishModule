@@ -11,7 +11,7 @@ function Read-AssessmentPacket {
 
 function Assert-AssessmentWorkloadId {
     param($Id)
-    if ($Id -isnot [string] -or $Id -notmatch '^[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9_-])?$' -or
+    if ($Id -isnot [string] -or $Id -notmatch '\A[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9_-])?\z' -or
         $Id -match '^(?:CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(?:\.|$)') {
         throw 'Assessment workload id must be a portable filename component.'
     }
