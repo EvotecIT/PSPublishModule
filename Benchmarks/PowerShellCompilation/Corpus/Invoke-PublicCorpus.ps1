@@ -19,6 +19,7 @@ $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 . (Join-Path $PSScriptRoot 'Corpus.Runner.Common.ps1')
 . (Join-Path $PSScriptRoot 'Corpus.PublicBaseline.ps1')
+. (Join-Path $PSScriptRoot 'Corpus.RuntimeStorage.ps1')
 
 if ($RefreshBaseline -and ($SkipModules -or $ModuleId)) {
     throw 'Refreshing the public baseline requires the complete module packet.'
@@ -454,6 +455,13 @@ try {
                     dependencyLockSha256 = $manifest.dependencyGraph.lockSha256
                     artifactSha256 = $manifest.artifactSha256
                     artifactBytes = $manifest.artifactSizeBytes
+                    artifactFiles = @($manifest.files | ForEach-Object {
+                        [ordered]@{
+                            relativePath = [IO.Path]::GetRelativePath($output, $_.path).Replace('\', '/')
+                            sha256 = $_.sha256
+                            role = $_.role
+                        }
+                    })
                     cleanImport = $true
                     importHost = [ordered]@{ runtimeIdentifier = $hostRid; powerShell = $probe.Json.powerShell; architecture = $probe.Json.architecture }
                     invocation = $probe.Json.probeSucceeded
@@ -537,6 +545,7 @@ try {
                         throw 'Strict application controlled failure did not preserve the bounded source/generated exit, output, and error-marker contract.'
                     }
 
+                    $runtimeStorage = Get-CorpusRuntimeStorage -ArtifactPath $build.Json.result.artifactPath -WorkingDirectory $runRoot
                     $sampleCount = [int] $qualification.startupSamples
                     if ($sampleCount -lt 4 -or $sampleCount -gt 20 -or $sampleCount % 2 -ne 0) { throw 'Strict application startupSamples must be an even number between 4 and 20.' }
                     $sourceSamples = [Collections.Generic.List[double]]::new()
@@ -591,6 +600,7 @@ try {
                             failureMarkerObservedOnBoth = $true
                         }
                         startup = [ordered]@{
+                            runtimeStorage = $runtimeStorage
                             warmupsPerSurface = 1
                             samples = $sampleCount
                             orderPolicy = 'AlternatingPairs'
