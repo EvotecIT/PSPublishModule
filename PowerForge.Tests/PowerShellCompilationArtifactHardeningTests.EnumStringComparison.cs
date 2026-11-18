@@ -125,7 +125,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
     }
 
     [PinnedSemanticHostFact]
-    public void Build_BinaryModuleLanguageModeMatchesConfiguredExactProfiles()
+    public void Build_BinaryModuleLanguageModeMatchesPinnedPowerShell76AndInstalledWindowsPowerShell()
     {
         var powerShell76Path = Environment.GetEnvironmentVariable("POWERFORGE_PWSH76_PATH");
         Assert.False(string.IsNullOrWhiteSpace(powerShell76Path));
@@ -152,7 +152,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
                 {
                     Culture = "en-US",
                     HostExecutablePath = host == "powershell.exe" ? null : host,
-                    ExpectedHostArtifactSha256 = pin.HostArtifactIdentitySha256
+                    ExpectedHostArtifactSha256 = PowerShellCompilationSemanticTestHost.GetIdentity(pin)
                 });
             Assert.Equal(
                 new[] { "FullLanguage", "True", "True", "True", "True", "False" },

@@ -44,7 +44,7 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
     }
 
     [PinnedSemanticHostFact]
-    public void RuntimeFreeConditionalPipelineLifecycleMatchesConfiguredExactPowerShellProfiles()
+    public void RuntimeFreeConditionalPipelineLifecycleMatchesPinnedPowerShell76AndInstalledWindowsPowerShell()
     {
         using var fixture = OracleFixture.Create(ConditionalLifecycleSource);
         var profiles = new[]
@@ -78,7 +78,7 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
             var interpreted = runner.Observe(new PowerShellCompilationSemanticOracleRequest(profile.Item1, fixture.ScriptPath)
             {
                 HostExecutablePath = profile.Item2,
-                ExpectedHostArtifactSha256 = pin.HostArtifactIdentitySha256
+                ExpectedHostArtifactSha256 = PowerShellCompilationSemanticTestHost.GetIdentity(pin)
             });
             Assert.Empty(PowerShellCompilationSemanticOracleComparer.Compare(
                 interpreted,

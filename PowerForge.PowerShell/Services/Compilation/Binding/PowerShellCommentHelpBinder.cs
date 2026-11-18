@@ -1,4 +1,5 @@
 using System.Management.Automation.Language;
+using System.Runtime.CompilerServices;
 
 namespace PowerForge;
 
@@ -7,9 +8,21 @@ namespace PowerForge;
 /// </summary>
 internal static class PowerShellCommentHelpBinder
 {
+    // PowerShell otherwise reparses the complete source for each function's help.
+    // Keep its native token cache with the immutable syntax tree, without retaining
+    // documents after their compilation has finished.
+    private static readonly ConditionalWeakTable<Ast, Dictionary<Ast, Token[]>> TokenCaches = new();
+
     internal static PowerShellBoundHelpMetadata? Bind(FunctionDefinitionAst function, PowerShellSymbolId? symbol = null)
+    {
         // Synthetic bodies have no authored function declaration for PowerShell's comment-help token search.
-        => symbol is { Kind: not PowerShellSymbolKind.Function } ? null : Bind(function?.GetHelpContent());
+        if (function is null || symbol is { Kind: not PowerShellSymbolKind.Function }) return null;
+        Ast root = function;
+        while (root.Parent is { } parent) root = parent;
+        var tokens = TokenCaches.GetValue(root, static _ => new Dictionary<Ast, Token[]>());
+        lock (tokens)
+            return Bind(function.GetHelpContent(tokens));
+    }
 
     internal static PowerShellBoundHelpMetadata? Bind(CommentHelpInfo? help)
     {

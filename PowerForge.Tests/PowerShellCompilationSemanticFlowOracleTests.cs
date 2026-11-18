@@ -264,7 +264,7 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
     }
 
     [PinnedSemanticHostFact]
-    public void RuntimeFreePipelineLifecycleProcessOutputMatchesConfiguredExactPowerShellProfiles()
+    public void RuntimeFreePipelineLifecycleProcessOutputMatchesPinnedPowerShell76AndInstalledWindowsPowerShell()
     {
         const string source = "function Select-Value { [CmdletBinding()] [OutputType([int])] " +
                               "param([Parameter(ValueFromPipeline)][int] $Value) " +
@@ -302,7 +302,7 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
             var interpreted = runner.Observe(new PowerShellCompilationSemanticOracleRequest(profile.Item1, fixture.ScriptPath)
             {
                 HostExecutablePath = profile.Item2,
-                ExpectedHostArtifactSha256 = pin.HostArtifactIdentitySha256
+                ExpectedHostArtifactSha256 = PowerShellCompilationSemanticTestHost.GetIdentity(pin)
             });
             Assert.Empty(PowerShellCompilationSemanticOracleComparer.Compare(
                 interpreted,
@@ -369,8 +369,50 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
         => QualifyRuntimeFreeFlowCase("PowerForge.Semantic/function-graph", "BoundedFunctionGraphOracle");
 
     [PinnedSemanticHostFact]
-    public void RuntimeFreeArtifactObserverQualifiesComparisonCaseAgainstPinnedHost()
-        => QualifyRuntimeFreeFlowCase("PowerForge.Semantic/operator-comparison", "BoundedComparisonOracle");
+    public void EnumStringComparisonMatchesPinnedHostAndRejectsRuntimeFreeCompilation()
+    {
+        var profile = PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId;
+        var pin = PowerShellCompilationSemanticHostArtifactPinCatalog.Get(profile);
+        var source = PowerShellCompilationSemanticOracleCaseCatalog.ReadSource("PowerForge.Semantic/operator-comparison");
+        using var fixture = OracleFixture.Create(source);
+        var runner = new PowerShellCompilationSemanticOracleRunner();
+        var interpreted = runner.Observe(new PowerShellCompilationSemanticOracleRequest(profile, fixture.ScriptPath)
+        {
+            HostExecutablePath = Environment.GetEnvironmentVariable("POWERFORGE_PWSH76_PATH"),
+            ExpectedHostArtifactSha256 = PowerShellCompilationSemanticTestHost.GetIdentity(pin)
+        });
+        var strict = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath, Path.Combine(fixture.RootPath, "strict"), "StrictComparison",
+            PowerShellCompilationArtifactKind.Executable, PowerShellCompilationMode.Strict,
+            allowUnreviewedDependencyResolution: true));
+        Assert.False(strict.Succeeded);
+        Assert.Contains("language-operator target capability", strict.Error, StringComparison.Ordinal);
+
+        var modulePath = Path.Combine(fixture.RootPath, "Comparison.psm1");
+        File.WriteAllText(modulePath, "function Test-Comparison { return (" + source + ") }");
+        var hybrid = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            modulePath, Path.Combine(fixture.RootPath, "hybrid"), "HostedComparison",
+            PowerShellCompilationArtifactKind.BinaryModule, PowerShellCompilationMode.Hybrid,
+            allowUnreviewedDependencyResolution: true));
+        Assert.True(hybrid.Succeeded, hybrid.Error + Environment.NewLine + hybrid.BuildOutput);
+        Assert.True(Assert.Single(hybrid.Manifest!.UnitDispositionLedger!.Entries,
+            static entry => entry.Kind == PowerShellCompilationUnitKind.Function).Emitted);
+        var probe = Path.Combine(fixture.RootPath, "Probe.ps1");
+        File.WriteAllText(probe, "Import-Module -ErrorAction Stop -Name '" +
+            hybrid.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal) + "'; Test-Comparison");
+        var compiled = runner.Observe(new PowerShellCompilationSemanticOracleRequest(profile, probe)
+        {
+            HostExecutablePath = Environment.GetEnvironmentVariable("POWERFORGE_PWSH76_PATH"),
+            ExpectedHostArtifactSha256 = PowerShellCompilationSemanticTestHost.GetIdentity(pin),
+            ExecutionSurface = "Hybrid"
+        });
+        var expected = Assert.Single(interpreted.Success);
+        var actual = Assert.Single(compiled.Success);
+        Assert.Equal(("True", "System.Boolean"), (expected.Value, expected.TypeName));
+        Assert.Equal((expected.Value, expected.TypeName), (actual.Value, actual.TypeName));
+        Assert.Empty(interpreted.ErrorRecords);
+        Assert.Empty(compiled.ErrorRecords);
+    }
 
     [PinnedSemanticHostFact]
     public void RuntimeFreeArtifactObserverQualifiesNullableRelationalOrderingCaseAgainstPinnedHost()
@@ -504,7 +546,7 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
             new PowerShellCompilationSemanticOracleRequest(pin.ProfileId, fixture.ScriptPath)
             {
                 HostExecutablePath = Environment.GetEnvironmentVariable("POWERFORGE_PWSH76_PATH"),
-                ExpectedHostArtifactSha256 = pin.HostArtifactIdentitySha256
+                ExpectedHostArtifactSha256 = PowerShellCompilationSemanticTestHost.GetIdentity(pin)
             });
         var build = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
             fixture.ScriptPath,
@@ -527,6 +569,7 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
         var differences = PowerShellCompilationSemanticOraclePromotionGate.EnsurePromotable(
             semanticCase.FeatureId,
             new[] { interpreted, strict },
+            PowerShellCompilationSemanticTestHost.ExpectedArtifacts,
             allowed,
             "The interpreted script has no enclosing process exit contract and host encoding differs from the Strict UTF-8 executable contract.");
         Assert.Equal(

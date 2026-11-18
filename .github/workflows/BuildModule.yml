@@ -529,6 +529,8 @@ jobs:
           $payload = Get-VerifiedCorpusPayload -Uri $pin[0].releaseAssetUri -Sha256 $pin[0].releaseAssetSha256 -CacheRoot (Join-Path $gateRoot 'payloads') -CacheExtension '.zip' -Label 'compiler semantic host'
           $hostRoot = Join-Path $gateRoot 'host'
           Expand-VerifiedCorpusArchive -PayloadPath $payload -Target $hostRoot -ContainmentRoot $gateRoot -Label 'compiler semantic host'
+          "POWERFORGE_PWSH76_PATH=$(Join-Path $hostRoot 'pwsh.exe')" >> $env:GITHUB_ENV
+          'POWERFORGE_REQUIRE_PINNED_SEMANTIC_HOSTS=true' >> $env:GITHUB_ENV
 
       - name: Run focused PowerShell compiler gate
         if: ${{ github.event_name != 'workflow_dispatch' || inputs.compilerFullGate != true }}

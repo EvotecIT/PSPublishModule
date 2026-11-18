@@ -18,7 +18,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
             var binding = child.NativeFunctionBinding ?? throw new InvalidOperationException("A compiled script block requires native binding.");
             var emitted = new PowerShellBoundCSharpBackend { _functions = _functions }.EmitFunction(child, capabilities);
             builder.AppendLine();
-            var lineOffset = PowerShellGeneratedSourcePosition.Get(builder).Line - 1;
+            var lineOffset = _sourcePositions.Get(builder).Line - 1;
             builder.AppendLine(emitted.Source);
             // The public source map remains flattened. Retain the same shifted entry
             // instances in each private body's sidecar so owner selection cannot credit

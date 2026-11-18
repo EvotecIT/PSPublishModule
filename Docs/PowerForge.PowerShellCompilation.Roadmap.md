@@ -2,6 +2,8 @@
 
 Last updated: 2026-10-16
 
+See the [2026-11-17 coverage report](PowerForge.PowerShellCompilation.Coverage.md) for current corpus measurements. The census numbers below belong to the dated implementation history.
+
 This roadmap is the execution plan for growing PowerForge PowerShell compilation without turning the analyzer, transpiler, command handling, or C# emitter into increasingly coupled catch-all components.
 
 The default branch contains a typed semantic compiler core with immutable bound IR, deterministic analysis and lowering, a lowered-only C# method backend, generated-project publication, help/module-contract flow, consumed dependency locks, typed command-family contracts, runtime-free provider injection, and canonical hosted lifecycle binding. Compiler-selected payloads remain authoritative through delivery, reusable checkpoints authenticate the compiler and normalized release plan, and artifacts carry decision and reproduction evidence. The integrated continuation includes assignment-constraint preservation, generated-artifact net8 target retirement, statement-count-independent multi-region selection, structured collection transfer, return/cardinality families, bounded local-call collection-factory closure, host-bound computed-member access, and complete Hybrid-native multi-stage pipelines. Their streams, lifecycle, and retained collection mutation remain owned by the active PowerShell invocation. Completed architecture checkpoints do not imply semantic completeness; current work first stabilizes admitted contracts, then expands useful complete workflows.

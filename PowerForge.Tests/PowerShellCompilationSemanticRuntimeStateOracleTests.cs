@@ -46,7 +46,7 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
                 new PowerShellCompilationSemanticOracleRequest(pin.ProfileId, fixture.ScriptPath)
                 {
                     HostExecutablePath = Environment.GetEnvironmentVariable("POWERFORGE_PWSH76_PATH"),
-                    ExpectedHostArtifactSha256 = pin.HostArtifactIdentitySha256
+                    ExpectedHostArtifactSha256 = PowerShellCompilationSemanticTestHost.GetIdentity(pin)
                 });
             var build = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
                 fixture.ScriptPath,
@@ -69,6 +69,7 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
             var differences = PowerShellCompilationSemanticOraclePromotionGate.EnsurePromotable(
                 semanticCase.FeatureId,
                 new[] { interpreted, strict },
+                PowerShellCompilationSemanticTestHost.ExpectedArtifacts,
                 allowed,
                 "The interpreted script has no enclosing process exit contract and host encoding differs from the Strict UTF-8 executable contract.");
             Assert.Equal(

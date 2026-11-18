@@ -1,5 +1,7 @@
 # Generic compiler corpus
 
+The [2026-11-17 coverage report](../../../Docs/PowerForge.PowerShellCompilation.Coverage.md) records the current public and external results and the commands used to refresh them. `Invoke-PublicCorpus.ps1 -RefreshBaseline` records measured module counts only after the complete module packet succeeds; partial selections cannot refresh it, and Strict timing budgets stay unchanged.
+
 This checked-in corpus is the portable, product-neutral acceptance surface for PowerForge PowerShell compilation. It does not encode module names, command names, paths, or special cases from an external repository.
 
 - `HybridModule` exercises parameter metadata and literal defaults, typed operators, direct self-recursion, safe runtime-state intrinsics, command-result capture, read-only environment access, known object shapes, and mutable list flows. Its current net10 baseline emits all 8 functions without fallback.

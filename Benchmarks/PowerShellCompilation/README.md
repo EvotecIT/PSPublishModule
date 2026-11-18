@@ -12,7 +12,7 @@ The representative workloads are a threshold calculation and an IPv4-to-PTR conv
 
 The adjacent `Corpus` directory is the compiler's product-neutral correctness and coverage gate, not a performance workload. It contains a portable Hybrid module, a multi-file Strict program, and a committed post-emission census baseline. External module workloads remain optional and replaceable scale evidence.
 
-See [PowerShell Compilation](../../Docs/PowerForge.PowerShellCompilation.md#measured-performance) for the clean-candidate tables, environment, run IDs, interpretation, and eligibility limits. Quick runs are smoke evidence only and record `gitWorktreeClean: false` when the candidate is still changing.
+See [PowerShell Compilation](../../Docs/PowerForge.PowerShellCompilation.md#measured-performance) for the unresolved Linux startup result and the limits on performance claims. Numeric speedup tables were removed because their raw samples were not committed. Quick runs are smoke evidence only and record `gitWorktreeClean: false` when the candidate is still changing.
 
 Build or import the current PSPublishModule binary, then run:
 

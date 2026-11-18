@@ -125,6 +125,7 @@ The same contracts are available from PowerShell cmdlets, JSON files, and CLI co
 
 | Area | What it does | Main entry points |
 | --- | --- | --- |
+| PowerShell typed-subset compiler | Compiles supported typed code into CLR methods. Strict executables run without PowerShell. Hybrid and Package use the PowerShell runtime. See the [supported-subset guide](Docs/PowerForge.PowerShellCompilation.Guide.md) for limits and measured coverage. | `powerforge powershell analyze`, `powerforge powershell build`, `Build-PowerShellArtifact` |
 | PowerShell module build | Builds script and binary modules, merges public/private functions, updates manifests, signs outputs, creates packed/unpacked artifacts, validates imports, runs tests, and generates help. | `Invoke-ModuleBuild`, `Build-Module`, `New-ConfigurationBuild`, `New-ConfigurationManifest`, `New-ConfigurationArtefact`, `New-ConfigurationValidation` |
 | Module dependencies and isolation | Resolves required/external/approved modules, supports online dependency install, packages required modules, detects missing helpers, and imports selected modules through AssemblyLoadContext isolation profiles. | `New-ConfigurationModule`, `Get-MissingFunctions`, `Import-IsolatedModule`, `Test-IsolatedModuleProfile` |
 | Documentation and delivery | Generates Markdown command docs, MAML external help, about topics, and bundled module documentation. It can also copy or render installed module docs from local files, GitHub, or Azure DevOps. | `New-ConfigurationDocumentation`, `New-ModuleAboutTopic`, `Show-ModuleDocumentation`, `Install-ModuleDocumentation`, `Install-ModuleScript` |
@@ -733,6 +734,7 @@ Build only the CLI tools:
 
 Start here:
 
+- [Compile a typed subset of PowerShell](Docs/PowerForge.PowerShellCompilation.Guide.md)
 - [Source-backed Markdown examples](Docs/PowerForge.DocsSync.md)
 - [Docs/PSPublishModule.DotNetPublish.Quickstart.md](Docs/PSPublishModule.DotNetPublish.Quickstart.md)
 - [Docs/PSPublishModule.ProjectBuild.md](Docs/PSPublishModule.ProjectBuild.md)

@@ -81,6 +81,23 @@ public sealed partial class PowerShellCompilationBoundPipelineTests
         Assert.Equal(help.Outputs, emittedHelp.Outputs);
     }
 
+    [Fact]
+    public void CommentHelpStaysWithEachFunctionWhenTheSameSourcePathIsReparsed()
+    {
+        foreach (var revision in new[] { "First revision", "Second revision" })
+        {
+            var source = $"<#\n.SYNOPSIS\n{revision} first.\n#>\nfunction Get-First {{ return 1 }}\n" +
+                         $"function Get-Second {{\n<#\n.SYNOPSIS\n{revision} second.\n#>\nreturn 2\n}}";
+            var document = PowerShellSourceParser.Parse(source, TestPath("reparsed-help.ps1"));
+            var result = new PowerShellSemanticCompilationPipeline().Compile(new[] { document });
+            Assert.Equal(2, result.Analyzed.Functions.Length);
+            var first = Assert.Single(result.Analyzed.Functions, static function => function.Symbol.Name == "Get-First");
+            var second = Assert.Single(result.Analyzed.Functions, static function => function.Symbol.Name == "Get-Second");
+            Assert.Equal(revision + " first.", first.Help!.Synopsis);
+            Assert.Equal(revision + " second.", second.Help!.Synopsis);
+        }
+    }
+
     [Theory]
     [InlineData("Get-Help Get-Documented")]
     [InlineData("Get-Help -Name Get-Documented")]

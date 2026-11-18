@@ -119,7 +119,7 @@ $process.Id
     }
 
     [PinnedSemanticHostFact]
-    public void DirectProcessEffectsExecuteOnConfiguredExactPowerShellProfiles()
+    public void DirectProcessEffectsExecuteOnPinnedPowerShell76AndInstalledWindowsPowerShell()
     {
         var powerShell76Path = Environment.GetEnvironmentVariable("POWERFORGE_PWSH76_PATH");
         Assert.False(string.IsNullOrWhiteSpace(powerShell76Path));
@@ -137,7 +137,7 @@ $process.Id
                 new PowerShellCompilationSemanticOracleRequest(profile.Item1, fixture.ScriptPath)
                 {
                     HostExecutablePath = profile.Item2,
-                    ExpectedHostArtifactSha256 = pin.HostArtifactIdentitySha256
+                    ExpectedHostArtifactSha256 = PowerShellCompilationSemanticTestHost.GetIdentity(pin)
                 });
 
             AssertDirectCommandEffects(observation, 7);
