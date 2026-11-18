@@ -39,13 +39,8 @@ namespace PowerForge.Generated.Runtime
                 "Remainder" => TokenKind.RemainderEquals,
                 _ => throw new ArgumentOutOfRangeException(nameof(operation))
             };
-            var parseArguments = new object[]
-            {
-                sourceDocument ?? new string('\n', line - 1) + new string(' ', column - 1) + target + " = $null",
-                file, null!, null!
-            };
-            var document = (ScriptBlockAst)PowerShellNativeFunctionHost.Invoke(_contract.ParseInputWithFile, null, parseArguments)!;
-            var errors = (ParseError[])parseArguments[3];
+            var parseText = sourceDocument ?? new string('\n', line - 1) + new string(' ', column - 1) + target + " = $null";
+            var document = ParseAssignmentDocument(parseText, file, out var errors);
             ValidateSelectedSyntax(errors, target + " = $null", nameof(target));
             var targetAst = document.FindAll(node => node is AssignmentStatementAst or ForEachStatementAst, searchNestedScriptBlocks: true)
                 .Select(node => node is AssignmentStatementAst assignment ? assignment.Left :
