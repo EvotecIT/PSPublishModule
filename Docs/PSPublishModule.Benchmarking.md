@@ -842,7 +842,7 @@ benchmarks the same way. They need no files in the theme:
 | --- | --- | --- |
 | `powerforge/benchmarks/comparison` | one comparison | Title, group, platform availability, a platform and framework switcher, and the published runs, followed by licence notes |
 | `powerforge/benchmarks/run` | a run and its comparison | Run facts, environment, workload, the case table with times, confidence intervals and "fastest", "even" or the ratio, head-to-head lines, withheld libraries with their reason (never their times) and runner settings |
-| `powerforge/benchmarks/area` | an area file's content | Every comparison of one area |
+| `powerforge/benchmarks/area` | an area file's content, or in area pages the area's index entry | Every comparison of one area; in area pages `summaries` lists them and `comparisonsHtml` holds them already rendered |
 | `powerforge/benchmarks/index` | the `BenchmarkEvidence` data | Areas with comparison headlines, and each area's results on demand |
 
 Only published runs are shown. A comparison without one shows "No published run
@@ -893,14 +893,21 @@ To adopt them in a site:
    `assets/powerforge/benchmarks.v1.css` and `assets/powerforge/benchmarks.v1.js`
    added to its head and body; the build refuses to write them through a linked
    `assets/powerforge` folder or file. With `AreaFragments`, the build also writes
-   each area to `_powerforge/fragments/benchmarks/<name>/<area>.html`, rendering
-   one comparison at a time so an area of any size stays within the template loop
-   limit. Site audits, sitemaps and search already skip `_powerforge/fragments`.
+   each area as a small page to
+   `_powerforge/fragments/benchmarks/<name>-<hash>/<area>.html`. The folder adds a
+   hash of the exact `Name`, so entries such as `benchmarks.csv` and `benchmarks-csv`
+   never share one, and two entries that would still share a folder fail the build
+   before anything is written. The `area` component, or the theme's replacement,
+   renders the page; the comparisons are rendered one at a time beforehand and
+   passed to it as `comparisonsHtml`, so an area of any size stays within the
+   template loop limit. Site audits, sitemaps and search already skip
+   `_powerforge/fragments`, and the page is marked `noindex`.
    The script resolves these files from the site root it was loaded from, so a site
    served from a sub-path works unchanged.
 
-Without the script, the platform switcher stays hidden and every published run is
-shown in turn; without `AreaFragments`, an index over the full view renders areas
+Without the script, the platform switcher stays hidden, every published run is
+shown in turn and "Show results" opens a link to the area page, which has its own
+styles; without `AreaFragments`, an index over the full view renders areas
 inline and an `IndexOnly` index lists the summaries. Themes restyle the components
 through the `--pf-bench-*` CSS properties (accent, even, failed, border, radius),
 or replace one by adding `partials/powerforge/benchmarks/<name>.html`; the build

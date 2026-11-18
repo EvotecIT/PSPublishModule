@@ -29,9 +29,9 @@ public sealed class BenchmarkEvidenceDataSpec
     public bool IndexOnly { get; set; }
 
     /// <summary>
-    /// When true, the build renders each area with the benchmark components to
-    /// <c>_powerforge/fragments/benchmarks/&lt;name&gt;/&lt;area&gt;.html</c>, and the index component loads it when
-    /// an area is opened. Off by default, so JSON-only publication renders nothing extra.
+    /// When true, the build renders each area with the benchmark components as a small page under
+    /// <c>_powerforge/fragments/benchmarks/&lt;name&gt;-&lt;hash&gt;/&lt;area&gt;.html</c>. The index component links to
+    /// it and loads it when an area is opened. Off by default, so JSON-only publication renders nothing extra.
     /// </summary>
     public bool AreaFragments { get; set; }
 }

@@ -53,16 +53,24 @@ public sealed partial class BenchmarkServicesTests
         string partials = Path.Combine(root, "themes", "t", "partials", "powerforge", "benchmarks");
         Directory.CreateDirectory(partials);
         File.WriteAllText(Path.Combine(partials, "run.html"), "<p class=\"custom-run\">{{ $1.platformLabel }}</p>");
+        File.WriteAllText(Path.Combine(partials, "area.html"), "<section class=\"custom-area\"><h2>Area {{ $1.id }}: {{ $1.summaries.size }} comparisons</h2>{{ $1.comparisonsHtml }}</section>");
         SiteSpec spec = WebSiteBuilderBenchmarkEvidenceTests.BuildSpec();
         spec.BenchmarkEvidence = [new BenchmarkEvidenceDataSpec { Name = "benchmarks", Catalog = "evidence/index.json", Output = "data/benchmarks", IndexOnly = true, AreaFragments = true }];
 
         string html = System.Net.WebUtility.HtmlDecode(WebSiteBuilderBenchmarkEvidenceTests.BuildAndRead(root, spec));
 
-        Assert.Contains("data-pf-bench-area-src=\"_powerforge/fragments/benchmarks/benchmarks/csv.html\"", html, StringComparison.Ordinal);
+        string folder = WebSiteBuilder.BenchmarkFragmentFolder("benchmarks");
+        Assert.Contains($"href=\"_powerforge/fragments/benchmarks/{folder}/csv.html\" data-pf-bench-site-relative>Open the csv results</a>", html, StringComparison.Ordinal);
         Assert.Contains("OfficeIMO is 1.40× faster than Sep", html, StringComparison.Ordinal);
         Assert.Contains("Not measured yet.", html, StringComparison.Ordinal);
-        string fragments = Path.Combine(root, "_site", "_powerforge", "fragments", "benchmarks", "benchmarks");
+        string fragments = Path.Combine(root, "_site", "_powerforge", "fragments", "benchmarks", folder);
         string area = System.Net.WebUtility.HtmlDecode(File.ReadAllText(Path.Combine(fragments, "csv.html")));
+        // The area page stands on its own when the link is followed without the script.
+        Assert.StartsWith("<!doctype html>", area, StringComparison.Ordinal);
+        Assert.Contains("<meta charset=\"utf-8\" />", area, StringComparison.Ordinal);
+        Assert.Contains("<title>csv benchmark results</title>", area, StringComparison.Ordinal);
+        Assert.Contains("href=\"../../../../assets/powerforge/benchmarks.v1.css\"", area, StringComparison.Ordinal);
+        Assert.Contains("<h2>Area csv: 1 comparisons</h2>", area, StringComparison.Ordinal);
         Assert.Contains("id=\"benchmark-comparison-a\"", area, StringComparison.Ordinal);
         Assert.Contains("<p class=\"custom-run\">Windows</p>", area, StringComparison.Ordinal);
         Assert.Contains("<p class=\"custom-run\">Linux</p>", area, StringComparison.Ordinal);
@@ -111,8 +119,66 @@ public sealed partial class BenchmarkServicesTests
 
         WebSiteBuilderBenchmarkEvidenceTests.BuildAndRead(root, spec);
 
-        string area = File.ReadAllText(Path.Combine(root, "_site", "_powerforge", "fragments", "benchmarks", "benchmarks", "csv.html"));
+        string area = File.ReadAllText(Path.Combine(root, "_site", "_powerforge", "fragments", "benchmarks", WebSiteBuilder.BenchmarkFragmentFolder("benchmarks"), "csv.html"));
         Assert.Equal(1001, System.Text.RegularExpressions.Regex.Matches(area, "<section class=\"pf-bench\"").Count);
+    }
+
+    [Fact]
+    public void WebComponents_EntriesWhoseNamesLookAlikeKeepSeparateAreaPages()
+    {
+        string root = CreateTempRoot();
+        RecordComponentCatalog(root);
+        BenchmarkJson.Write(Path.Combine(root, "other", "index.json"), new BenchmarkEvidenceCatalog
+        {
+            Areas = ["csv"],
+            Comparisons = [new BenchmarkComparisonDefinition { ComparisonId = "other-read", Area = "csv", Title = "Other catalog read", Libraries = ["OfficeIMO", "Sep"] }]
+        });
+        WebSiteBuilderBenchmarkEvidenceTests.WritePage(root, "---\ntitle: Home\nslug: index\n---\n\nHome\n");
+        File.WriteAllText(Path.Combine(root, "content", "pages", "results.md"), "---\ntitle: Results\nslug: results\n---\n\nResults\n");
+        WebSiteBuilderBenchmarkEvidenceTests.WriteTheme(root,
+            "<html><head></head><body>{{ include \"powerforge/benchmarks/index\" data.benchmarks.csv }}{{ include \"powerforge/benchmarks/index\" data[\"benchmarks-csv\"] }}</body></html>");
+        SiteSpec spec = WebSiteBuilderBenchmarkEvidenceTests.BuildSpec();
+        spec.BenchmarkEvidence =
+        [
+            new BenchmarkEvidenceDataSpec { Name = "benchmarks.csv", Catalog = "evidence/index.json", AreaFragments = true },
+            new BenchmarkEvidenceDataSpec { Name = "benchmarks-csv", Catalog = "other/index.json", AreaFragments = true }
+        ];
+
+        WebSiteBuilderBenchmarkEvidenceTests.BuildAndRead(root, spec);
+
+        string first = WebSiteBuilder.BenchmarkFragmentFolder("benchmarks.csv");
+        string second = WebSiteBuilder.BenchmarkFragmentFolder("benchmarks-csv");
+        Assert.NotEqual(first, second);
+        string fragments = Path.Combine(root, "_site", "_powerforge", "fragments", "benchmarks");
+        string firstArea = File.ReadAllText(Path.Combine(fragments, first, "csv.html"));
+        string secondArea = File.ReadAllText(Path.Combine(fragments, second, "csv.html"));
+        Assert.Contains("CSV typed read", firstArea, StringComparison.Ordinal);
+        Assert.DoesNotContain("Other catalog read", firstArea, StringComparison.Ordinal);
+        Assert.Contains("Other catalog read", secondArea, StringComparison.Ordinal);
+        // Links are made relative to each page, so a page below the site root reaches the same files.
+        string results = File.ReadAllText(Path.Combine(root, "_site", "results", "index.html"));
+        Assert.Contains($"href=\"../_powerforge/fragments/benchmarks/{first}/csv.html\"", results, StringComparison.Ordinal);
+        Assert.Contains($"href=\"../_powerforge/fragments/benchmarks/{second}/csv.html\"", results, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void WebComponents_EntriesSharingAnAreaPageFolderFailBeforeWriting()
+    {
+        string root = CreateTempRoot();
+        RecordComponentCatalog(root);
+        WebSiteBuilderBenchmarkEvidenceTests.WritePage(root, "---\ntitle: Home\nslug: index\n---\n\nHome\n");
+        WebSiteBuilderBenchmarkEvidenceTests.WriteTheme(root, "<html><head></head><body>{{ content }}</body></html>");
+        SiteSpec spec = WebSiteBuilderBenchmarkEvidenceTests.BuildSpec();
+        spec.BenchmarkEvidence =
+        [
+            new BenchmarkEvidenceDataSpec { Name = "benchmarks", Catalog = "evidence/index.json", AreaFragments = true },
+            new BenchmarkEvidenceDataSpec { Name = "benchmarks", Catalog = "evidence/index.json", AreaFragments = true }
+        ];
+
+        var error = Assert.Throws<InvalidOperationException>(() => WebSiteBuilderBenchmarkEvidenceTests.BuildAndRead(root, spec));
+
+        Assert.Contains("same folder", error.Message, StringComparison.Ordinal);
+        Assert.False(Directory.Exists(Path.Combine(root, "_site", "_powerforge", "fragments", "benchmarks")));
     }
 
     [Theory]

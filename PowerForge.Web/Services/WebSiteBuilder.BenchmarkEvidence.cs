@@ -11,6 +11,7 @@ public static partial class WebSiteBuilder
     // AreaFragments each area rendered by the components.
     private static void WriteBenchmarkEvidenceFiles(SiteSpec spec, string rootPath, string outputRoot)
     {
+        EnsureDistinctBenchmarkFragmentFolders(spec);
         foreach (var evidence in spec.BenchmarkEvidence ?? Array.Empty<BenchmarkEvidenceDataSpec>())
         {
             if (evidence.AreaFragments)

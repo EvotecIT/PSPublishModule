@@ -32,9 +32,11 @@
       {{~ end ~}}
     </ul>
     {{~ if v.areaFragments && v.areaFragments != "" ~}}
-    <details class="pf-bench-index__details" data-pf-bench-area-src="{{ v.areaFragments | html.escape }}{{ area.file | string.replace ".json" ".html" | html.escape }}">
+    <details class="pf-bench-index__details" data-pf-bench-area-page>
       <summary>Show results</summary>
-      <div class="pf-bench-index__body" data-pf-bench-area-body></div>
+      <div class="pf-bench-index__body" data-pf-bench-area-body>
+        <a class="pf-bench-index__open" href="{{ v.areaFragments | html.escape }}{{ area.file | string.replace ".json" ".html" | html.escape }}" data-pf-bench-site-relative>Open the {{ if area.id != "" }}{{ area.id | html.escape }}{{ else }}other{{ end }} results</a>
+      </div>
     </details>
     {{~ else if v.comparisons ~}}
     <details class="pf-bench-index__details">

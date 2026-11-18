@@ -1,21 +1,7 @@
-// PowerForge benchmark components: run switching per comparison and on-demand loading of area files.
-// Without this script every published run is shown in turn and areas render inline or stay closed.
+// PowerForge benchmark components: run switching per comparison and on-demand loading of area pages.
+// Without this script every published run is shown in turn and each area links to its own page.
 (function () {
   'use strict';
-
-  // Area file paths are relative to the site root: the folder above this script's assets/powerforge/ folder.
-  // The file name is not matched, so a fingerprinted copy such as benchmarks.v1.<hash>.js resolves the same root.
-  function resolveSiteRoot(source) {
-    if (!source) return document.baseURI;
-    var url = new URL(source, document.baseURI);
-    var at = url.pathname.lastIndexOf('/assets/powerforge/');
-    if (at < 0) return document.baseURI;
-    url.pathname = url.pathname.slice(0, at + 1);
-    url.search = '';
-    url.hash = '';
-    return url.href;
-  }
-  var siteRoot = resolveSiteRoot(document.currentScript && document.currentScript.src);
 
   function initComparison(section) {
     if (section.hasAttribute('data-pf-bench-ready')) return;
@@ -54,28 +40,36 @@
     select(section.getAttribute('data-pf-bench-default') || buttons[0].getAttribute('data-pf-bench-tab'), false);
   }
 
+  // The link to the area page is already relative to the current page, so its resolved href is the page to load.
   function initArea(details) {
     if (details.hasAttribute('data-pf-bench-ready')) return;
     details.setAttribute('data-pf-bench-ready', '');
     details.addEventListener('toggle', function () {
       if (!details.open || details.hasAttribute('data-pf-bench-loaded')) return;
       var body = details.querySelector('[data-pf-bench-area-body]');
-      if (!body) return;
+      var link = body && body.querySelector('a[href]');
+      if (!link) return;
+      var fallback = link.cloneNode(true);
       details.setAttribute('data-pf-bench-loaded', 'loading');
       body.textContent = 'Loading results...';
-      fetch(new URL(details.getAttribute('data-pf-bench-area-src'), siteRoot).href, { credentials: 'same-origin' })
+      fetch(link.href, { credentials: 'same-origin' })
         .then(function (response) {
           if (!response.ok) throw new Error('HTTP ' + response.status);
           return response.text();
         })
         .then(function (html) {
-          // The area file is rendered by this site's own build from the same templates as the page.
-          body.innerHTML = html;
+          // The area page is rendered by this site's own build from the same templates as this page; its body,
+          // without scripts, becomes the results.
+          var page = new DOMParser().parseFromString(html, 'text/html');
+          var scripts = page.body.querySelectorAll('script');
+          for (var i = 0; i < scripts.length; i++) scripts[i].remove();
+          body.replaceChildren.apply(body, Array.prototype.slice.call(page.body.childNodes));
           details.setAttribute('data-pf-bench-loaded', 'true');
           init(body);
         })
         .catch(function () {
-          body.textContent = 'The results could not be loaded.';
+          body.textContent = 'The results could not be loaded. ';
+          body.appendChild(fallback);
           details.removeAttribute('data-pf-bench-loaded');
         });
     });
@@ -84,7 +78,7 @@
   function init(root) {
     var sections = root.querySelectorAll('[data-pf-bench]');
     for (var i = 0; i < sections.length; i++) initComparison(sections[i]);
-    var areas = root.querySelectorAll('[data-pf-bench-area-src]');
+    var areas = root.querySelectorAll('[data-pf-bench-area-page]');
     for (var j = 0; j < areas.length; j++) initArea(areas[j]);
   }
 

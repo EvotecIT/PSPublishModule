@@ -81,65 +81,15 @@ public static partial class WebSiteBuilder
             var js = System.Web.HttpUtility.HtmlEncode(ResolveRouteRelativeAssetHref(BenchmarkJsRoute, route));
             html = InsertBefore(html, "</body>", $"<script src=\"{js}\" defer></script>");
         }
-        return html;
+        return SiteRelativeLinkPattern.Replace(html, match =>
+            "href=\"" + ResolveRouteRelativeAssetHref(match.Groups["href"].Value, route) + "\"" + match.Groups["marker"].Value);
     }
 
-    // Folder of an evidence entry's rendered areas relative to the site root, such as
-    // "_powerforge/fragments/benchmarks/benchmarks/". Audits, sitemaps and search skip _powerforge/fragments, and the
-    // component script resolves the path against the site root, so sites served from a sub-path work too.
-    private static string BenchmarkAreaFragmentsRoute(BenchmarkEvidenceDataSpec evidence)
-        => "_powerforge/fragments/benchmarks/" + BenchmarkFragmentFolder(evidence.Name) + "/";
-
-    private static string BenchmarkFragmentFolder(string name)
-    {
-        var builder = new System.Text.StringBuilder();
-        foreach (var character in (name ?? string.Empty).Trim().ToLowerInvariant())
-            builder.Append(char.IsLetterOrDigit(character) && character < 128 ? character : '-');
-        var folder = builder.ToString().Trim('-');
-        return folder.Length == 0 ? "benchmarks" : folder;
-    }
-
-    // Renders each area one comparison at a time with the comparison component, honouring theme overrides. Rendering
-    // per comparison keeps an area of any size clear of Scriban's loop limit; the site's LoopLimit still applies
-    // inside each comparison.
-    private static void WriteBenchmarkAreaFragments(SiteSpec spec, string rootPath, string outputRoot, BenchmarkEvidenceDataSpec evidence)
-    {
-        var catalogPath = Path.IsPathRooted(evidence.Catalog) ? evidence.Catalog : Path.Combine(rootPath, evidence.Catalog);
-        var view = new BenchmarkComparisonViewBuilder().Build(catalogPath);
-        var fullOutputRoot = Path.GetFullPath(outputRoot);
-        var directory = Path.Combine(fullOutputRoot, BenchmarkAreaFragmentsRoute(evidence).TrimEnd('/').Replace('/', Path.DirectorySeparatorChar));
-        var label = $"'{evidence.Name}' area fragments";
-        VisualStoryPathGuard.EnsureContainedPath(fullOutputRoot, directory, label, subject: "BenchmarkEvidence");
-
-        var resolver = BuildBenchmarkPartialResolver(spec, rootPath);
-        var engine = new ScribanTemplateEngine();
-        const string template = "{{ include \"" + BenchmarkPartialPrefix + "comparison\" data.comparison }}";
-        foreach (var area in view.Index.Areas)
-        {
-            var path = Path.Combine(directory, Path.ChangeExtension(area.File, ".html"));
-            VisualStoryPathGuard.EnsureContainedPath(fullOutputRoot, path, label, subject: "BenchmarkEvidence");
-            var html = new System.Text.StringBuilder();
-            html.Append("<div class=\"pf-bench-area\" data-pf-bench-area=\"")
-                .Append(System.Web.HttpUtility.HtmlAttributeEncode(area.Id))
-                .AppendLine("\">");
-            foreach (var comparison in view.Comparisons)
-            {
-                if (!string.Equals(comparison.Area ?? string.Empty, area.Id, StringComparison.OrdinalIgnoreCase))
-                    continue;
-                using var document = JsonDocument.Parse(BenchmarkJson.Serialize(comparison));
-                var context = new ThemeRenderContext
-                {
-                    Site = spec,
-                    RootPath = rootPath,
-                    Data = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase) { ["comparison"] = ConvertJsonElement(document.RootElement) }
-                };
-                html.AppendLine(engine.Render(template, context, resolver));
-            }
-            html.AppendLine("</div>");
-            Directory.CreateDirectory(directory);
-            WriteAllTextIfChanged(path, html.ToString());
-        }
-    }
+    // Component links whose href is relative to the site root, marked so they can be made relative to the page.
+    private static readonly System.Text.RegularExpressions.Regex SiteRelativeLinkPattern = new(
+        "href=\"(?<href>[^\"]*)\"(?<marker>\\s+data-pf-bench-site-relative)",
+        System.Text.RegularExpressions.RegexOptions.CultureInvariant,
+        TimeSpan.FromSeconds(1));
 
     private static Func<string, string?> BuildBenchmarkPartialResolver(SiteSpec spec, string rootPath)
     {
