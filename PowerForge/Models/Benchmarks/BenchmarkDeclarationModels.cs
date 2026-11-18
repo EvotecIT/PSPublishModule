@@ -54,8 +54,16 @@ public sealed class BenchmarkLibraryDeclaration
     /// <summary>URL of the licence text.</summary>
     public string LicenseUrl { get; set; } = string.Empty;
 
-    /// <summary>Restriction class.</summary>
-    public BenchmarkLibraryRestriction Restriction { get; set; } = BenchmarkLibraryRestriction.Open;
+    /// <summary>
+    /// Restriction class. It must be declared; a library without one is neither selected for runs nor published.
+    /// </summary>
+    public BenchmarkLibraryRestriction? Restriction { get; set; }
+
+    /// <summary>True when the library's class is one the policy publishes.</summary>
+    /// <param name="policy">Publish policy.</param>
+    /// <returns>True when its cells may be published.</returns>
+    public bool IsPublishableUnder(BenchmarkPublishPolicy policy)
+        => Restriction is { } restriction && (policy ?? throw new ArgumentNullException(nameof(policy))).PublishableRestrictions.Contains(restriction);
 
     /// <summary>Why the library has its restriction class; required for every class except open.</summary>
     public string Reason { get; set; } = string.Empty;

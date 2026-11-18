@@ -56,9 +56,9 @@ public sealed class UpdateBenchmarkEvidenceCatalogCommand : PSCmdlet
     public string ResultPath { get; set; } = string.Empty;
 
     /// <summary>
-    /// Optional local filesystem destination for the normalized result artifact.
-    /// Specify this when <see cref="ResultPath"/> is a website URL or another
-    /// portable consumer path rather than a local path.
+    /// Local filesystem destination for the normalized result artifact. Required when <see cref="ResultPath"/>
+    /// is root-relative (such as /data/benchmarks/x.json), absolute or a URL; the update fails without it rather
+    /// than writing to a drive root. The file name gets the result's SHA-256 so earlier runs are never overwritten.
     /// </summary>
     [Parameter]
     [ValidateNotNullOrEmpty]

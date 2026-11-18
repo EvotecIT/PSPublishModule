@@ -24,7 +24,7 @@ public sealed class BenchmarkEvidenceNet472SmokeTests
                 {
                     Libraries =
                     [
-                        new BenchmarkLibraryDeclaration { Id = "Managed", Package = "Managed", Version = "1.0.0", License = "MIT" },
+                        new BenchmarkLibraryDeclaration { Id = "Managed", Package = "Managed", Version = "1.0.0", License = "MIT", Restriction = BenchmarkLibraryRestriction.Open },
                         new BenchmarkLibraryDeclaration { Id = "Other", Package = "Other", Version = "2.0.0", License = "LicenseRef-Other", Restriction = BenchmarkLibraryRestriction.AcceptanceRequired, Reason = "Needs a licence key." }
                     ],
                     Comparisons =
@@ -33,7 +33,7 @@ public sealed class BenchmarkEvidenceNet472SmokeTests
                     ]
                 }
             };
-            request.Declarations.Libraries = [.. request.Declarations.Libraries, new BenchmarkLibraryDeclaration { Id = "Third", Package = "Third", Version = "3.0.0", License = "MIT" }];
+            request.Declarations.Libraries = [.. request.Declarations.Libraries, new BenchmarkLibraryDeclaration { Id = "Third", Package = "Third", Version = "3.0.0", License = "MIT", Restriction = BenchmarkLibraryRestriction.Open }];
 
             new BenchmarkEvidenceCatalogService().UpdateFile(catalogPath, request);
             string json = File.ReadAllText(catalogPath);

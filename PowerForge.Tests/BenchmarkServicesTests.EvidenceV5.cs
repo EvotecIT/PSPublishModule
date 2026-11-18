@@ -12,6 +12,8 @@ public sealed partial class BenchmarkServicesTests
             ("OfficeIMO", "Read", Spread(10, 10)),
             ("Sep", "Read", Spread(20, 10)),
             ("EPPlus", "Read", null));
+        // EPPlus is also the comparison baseline, so the other rows carry no baseline value or ratio.
+        result.Comparison = new BenchmarkSummaryService().Compare(result.Summary, "EPPlus");
 
         BenchmarkEvidenceCatalog catalog = new BenchmarkEvidenceCatalogService().Update(null, PublishRequest(result, ThreeLibraryDeclarations()));
 
@@ -55,6 +57,10 @@ public sealed partial class BenchmarkServicesTests
     [InlineData("machine-name", "machine or user name")]
     [InlineData("undeclared-comparison", "is not declared")]
     [InlineData("unpinned-package", "pins 0.10.0")]
+    [InlineData("weaker-policy", "weaker than the standard: minimum warmups 1 is below 3.")]
+    [InlineData("conflicting-framework", "conflicts with the framework the result records ('net10.0'")]
+    [InlineData("affinity-with-separator", "cannot contain '/' or '='")]
+    [InlineData("no-library", "Some cells have no library identity")]
     public void EvidencePolicy_RejectsLanesThatDoNotMeetThePolicy(string mutation, string expected)
     {
         BenchmarkRunResult result = MeasuredResult(("OfficeIMO", "Read", Spread(10, 10)), ("Sep", "Read", Spread(20, 10)));
@@ -73,6 +79,14 @@ public sealed partial class BenchmarkServicesTests
             case "machine-name": result.Environment.MachineName = "BUILD-01"; break;
             case "undeclared-comparison": request.ComparisonId = "comparison-z"; break;
             case "unpinned-package": result.Metadata["benchmark.package.sep"] = "0.9.0"; break;
+            case "weaker-policy": request.Policy = new BenchmarkPublishPolicy { MinimumWarmups = 1 }; break;
+            case "conflicting-framework": request.Framework = "net8.0"; break;
+            case "affinity-with-separator": result.Runner!.Affinity = "0xff/variant=fast"; break;
+            case "no-library":
+                foreach (BenchmarkSample sample in result.Samples.Where(sample => sample.Library == "Sep"))
+                    sample.Library = string.Empty;
+                result.Summary = new BenchmarkSummaryService().Summarize(result.Samples);
+                break;
         }
 
         InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
@@ -85,7 +99,6 @@ public sealed partial class BenchmarkServicesTests
     [InlineData("nine-samples", "9 measured samples")]
     [InlineData("validation-missing", "Output validation was not recorded")]
     [InlineData("validation-failed", "Output validation failed: row count 99")]
-    [InlineData("no-library", "no library identity")]
     [InlineData("invalid-interval", "confidence interval is invalid")]
     public void EvidencePolicy_ExcludesCellsThatDoNotMeetThePolicy(string mutation, string expected)
     {
@@ -109,19 +122,8 @@ public sealed partial class BenchmarkServicesTests
                         ? new BenchmarkConfidenceInterval { Level = 0.95 }
                         : new BenchmarkConfidenceInterval { Level = 0.95, LowerMs = row.MeanMs!.Value - 0.2, UpperMs = row.MeanMs.Value + 0.2 };
                 break;
-            case "no-library":
-                foreach (BenchmarkSample sample in result.Samples.Where(sample => sample.Library == "Sep"))
-                    sample.Library = string.Empty;
-                result.Summary = new BenchmarkSummaryService().Summarize(result.Samples);
-                break;
         }
         BenchmarkEvidenceUpdateRequest request = PublishRequest(result, TestDeclarations());
-        if (mutation == "no-library")
-        {
-            // With a declaration, a cell without library identity is drift and stops the lane; without one it is only excluded.
-            request.Declarations = null;
-            request.Policy = new BenchmarkPublishPolicy { RequireDeclaration = false };
-        }
 
         BenchmarkEvidenceEntry entry = Assert.Single(new BenchmarkEvidenceCatalogService().Update(null, request).Entries);
 
@@ -161,6 +163,8 @@ public sealed partial class BenchmarkServicesTests
         Assert.True(Assert.Single(lane.Cells, cell => cell.Library == "OfficeIMO").Publishable);
         BenchmarkEvidenceCell sep = Assert.Single(lane.Cells, cell => cell.Library == "Sep");
         Assert.False(sep.Publishable);
+        Assert.Null(sep.ValueMs);
+        Assert.Null(sep.ConfidenceInterval);
         Assert.Contains(sep.Issues, issue => issue.StartsWith("Not published (licence): library 'Sep' is publish-restricted.", StringComparison.Ordinal));
     }
 
@@ -255,6 +259,52 @@ public sealed partial class BenchmarkServicesTests
         Assert.Equal(superseded.ResultSha256, BenchmarkJson.ComputeFileSha256(Path.Combine(root, "data", $"windows.{superseded.ResultSha256}.json")));
     }
 
+    [Theory]
+    [InlineData("/data/windows.json")]
+    [InlineData("https://benchmarks.example/data/windows.json")]
+    [InlineData("ABSOLUTE")]
+    public void EvidenceCatalog_RequiresArtifactPathForRootedResultPaths(string resultPath)
+    {
+        string root = CreateTempRoot();
+        string catalogPath = Path.Combine(root, "index.json");
+        if (resultPath == "ABSOLUTE")
+            resultPath = Path.Combine(root, "elsewhere", "windows.json");
+        BenchmarkEvidenceUpdateRequest request = PublishRequest(
+            MeasuredResult(("OfficeIMO", "Read", Spread(10, 10)), ("Sep", "Read", Spread(20, 10))), TestDeclarations());
+        request.ResultPath = resultPath;
+
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
+            new BenchmarkEvidenceCatalogService().UpdateFile(catalogPath, request));
+
+        Assert.Contains("ResultArtifactPath", exception.Message, StringComparison.Ordinal);
+        Assert.False(File.Exists(catalogPath));
+        Assert.False(Directory.Exists(Path.Combine(root, "elsewhere")));
+
+        request.ResultArtifactPath = Path.Combine(root, "site", "windows.json");
+        BenchmarkEvidenceEntry entry = Assert.Single(new BenchmarkEvidenceCatalogService().UpdateFile(catalogPath, request).Entries);
+        Assert.True(File.Exists(Path.Combine(root, "site", $"windows.{entry.ResultSha256}.json")));
+    }
+
+    [Fact]
+    public void EvidenceCatalog_MergeRejectsLaneRelabelledToAnotherFramework()
+    {
+        string root = CreateTempRoot();
+        string catalogPath = Path.Combine(root, "index.json");
+        BenchmarkEvidenceUpdateRequest request = PublishRequest(
+            MeasuredResult(("OfficeIMO", "Read", Spread(10, 10)), ("Sep", "Read", Spread(20, 10))), TestDeclarations());
+        new BenchmarkEvidenceCatalogService().UpdateFile(catalogPath, request);
+        BenchmarkEvidenceCatalog tampered = new BenchmarkEvidenceCatalogService().ReadCatalog(catalogPath);
+        BenchmarkEvidenceEntry entry = Assert.Single(tampered.Entries);
+        entry.Framework = "net8.0";
+        entry.LaneKey = BenchmarkEvidenceIdentity.CreateLaneKey(entry.ComparisonId, entry.Platform, entry.Framework, entry.Profile, entry.Parameters);
+        BenchmarkJson.Write(catalogPath, tampered);
+
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
+            new BenchmarkEvidenceCatalogService().MergeFiles(Path.Combine(root, "merged", "index.json"), [catalogPath]));
+
+        Assert.Contains("claims framework 'net8.0' but its result records 'net10.0'", exception.Message, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void ComparisonView_ShowsOnlyCellsThePublishPolicyAccepted()
     {
@@ -265,13 +315,25 @@ public sealed partial class BenchmarkServicesTests
         declarations.Libraries.Single(value => value.Id == "EPPlus").Reason = "Publishing results needs permission.";
         BenchmarkEvidenceUpdateRequest request = PublishRequest(MeasuredResult(
             ("OfficeIMO", "Read", Spread(10, 10)), ("Sep", "Read", Spread(20, 10)), ("EPPlus", "Read", Spread(5, 10))), declarations);
-        new BenchmarkEvidenceCatalogService().UpdateFile(catalogPath, request);
+        BenchmarkEvidenceCatalog recorded = new BenchmarkEvidenceCatalogService().UpdateFile(catalogPath, request);
 
         BenchmarkComparisonView view = Assert.Single(new BenchmarkComparisonViewBuilder().Build(catalogPath).Comparisons,
             comparison => comparison.Id == "comparison-a");
 
         BenchmarkRunView run = Assert.Single(view.Runs);
         Assert.Equal(new[] { "OfficeIMO", "Sep" }, run.Contenders.Select(contender => contender.Library).OrderBy(name => name));
+        BenchmarkEvidenceEntry entry = Assert.Single(recorded.Entries);
+        BenchmarkRunResult stored = BenchmarkJson.Read<BenchmarkRunResult>(Path.Combine(root, entry.ArtifactRelativePath));
+        Assert.DoesNotContain(stored.Samples, sample => sample.Library == "EPPlus");
+        Assert.DoesNotContain(stored.Summary, row => row.Library == "EPPlus");
+        Assert.DoesNotContain(stored.Validations, validation => validation.Library == "EPPlus");
+        BenchmarkEvidenceCell marker = Assert.Single(entry.Cells, cell => cell.Library == "EPPlus");
+        Assert.Null(marker.ValueMs);
+        Assert.StartsWith("Not published (licence): ", Assert.Single(marker.Issues, issue => issue.StartsWith("Not published", StringComparison.Ordinal)), StringComparison.Ordinal);
+
+        // A merge keeps the marker although the stored result has no EPPlus rows.
+        BenchmarkEvidenceCatalog merged = new BenchmarkEvidenceCatalogService().MergeFiles(Path.Combine(root, "merged", "index.json"), [catalogPath]);
+        Assert.Contains(Assert.Single(merged.Entries).Cells, cell => cell.Library == "EPPlus" && !cell.Publishable && cell.ValueMs is null);
     }
 
     [Fact]
@@ -321,7 +383,7 @@ public sealed partial class BenchmarkServicesTests
     {
         BenchmarkLibraryDeclaration[] libraries =
         [
-            new() { Id = "OfficeIMO", Package = "OfficeIMO.Excel", Version = "1.0.0", License = "MIT" },
+            new() { Id = "OfficeIMO", Package = "OfficeIMO.Excel", Version = "1.0.0", License = "MIT", Restriction = BenchmarkLibraryRestriction.Open },
             new() { Id = "EPPlus", Package = "EPPlus", Version = "8.0.0", License = "LicenseRef-PolyForm-Noncommercial", Restriction = BenchmarkLibraryRestriction.AcceptanceRequired, Reason = "Needs a licence context." },
             new() { Id = "DocX", Package = "DocX", Version = "4.0.0", License = "LicenseRef-Xceed", Restriction = BenchmarkLibraryRestriction.PublishRestricted, Reason = "Results need permission to publish." },
             new() { Id = "Legacy", Package = "Legacy", Version = "1.0.0", License = "LicenseRef-Proprietary", Restriction = BenchmarkLibraryRestriction.Excluded, Reason = "Licence forbids benchmarking." }
@@ -352,13 +414,13 @@ public sealed partial class BenchmarkServicesTests
             ],
             Comparisons =
             [
-                new BenchmarkComparisonDefinition { ComparisonId = "pdf-merge-net10.0", Area = "pdf", Title = "Merge", Subject = "Aspose", Libraries = ["OfficeIMO", "PdfSharp"] }
+                new BenchmarkComparisonDefinition { ComparisonId = "pdf-merge-net10.0", Area = "pdf", Title = "Merge", Subject = "Aspose", Libraries = ["OfficeIMO", "PdfSharp", "officeimo"] }
             ]
         };
 
         string[] codes = new BenchmarkDeclarationService().Validate(document).Select(issue => issue.Code).OrderBy(code => code, StringComparer.Ordinal).ToArray();
 
-        Assert.Equal(new[] { "comparison-id", "comparison-subject", "library-reason", "library-version", "undeclared-library" }, codes);
+        Assert.Equal(new[] { "comparison-id", "comparison-subject", "duplicate-library-reference", "library-reason", "library-restriction", "library-version", "undeclared-library" }, codes);
     }
 
     [Fact]
@@ -378,7 +440,10 @@ public sealed partial class BenchmarkServicesTests
                     { "IterationMode": "Workload", "IterationStage": "Warmup", "LaunchIndex": 1 },
                     { "IterationMode": "Workload", "IterationStage": "Actual", "LaunchIndex": 1 },
                     { "IterationMode": "Workload", "IterationStage": "Actual", "LaunchIndex": 1 } ] },
-                { "Method": "ReadSep", "Statistics": { "Median": 2000000, "OriginalValues": [2000000, 2000001] } }
+                { "Method": "ReadSep", "Statistics": { "Median": 2000000, "OriginalValues": [2000000, 2000001] },
+                  "Measurements": [
+                    { "IterationMode": "Workload", "IterationStage": "Actual", "LaunchIndex": 1 },
+                    { "IterationMode": "Workload", "IterationStage": "Actual", "LaunchIndex": 1 } ] }
               ]
             }
             """);
@@ -388,6 +453,9 @@ public sealed partial class BenchmarkServicesTests
         InvalidOperationException unmapped = Assert.Throws<InvalidOperationException>(() =>
             importer.Import(report, new BenchmarkImportOptions { LibraryMap = new Dictionary<string, string> { ["Other"] = "Sep" } }));
         BenchmarkRunResult unannotated = importer.Import(report);
+        InvalidOperationException statusless = Assert.Throws<InvalidOperationException>(() =>
+            importer.Import(report, new BenchmarkImportOptions { Validations = [new BenchmarkOutputValidation { Library = "Sep" }] }));
+        Assert.Contains("needs a library and a status", statusless.Message, StringComparison.Ordinal);
 
         Assert.Equal("OfficeIMO", Assert.Single(mapped.Summary, row => row.Scenario == "ReadFast").Library);
         Assert.Equal("Sep", Assert.Single(mapped.Summary, row => row.Scenario == "ReadSep").Library);
@@ -396,9 +464,10 @@ public sealed partial class BenchmarkServicesTests
         Assert.Equal(string.Empty, Assert.Single(unannotated.Summary, row => row.Scenario == "ReadSep").Library);
         Assert.Equal("benchmarkdotnet", mapped.Runner!.Kind);
         Assert.Equal("0.15.8", mapped.Runner.Version);
-        // ReadSep recorded no measurements, so the run's warmup count is unknown rather than ReadFast's three.
+        // ReadSep's measurements show no warmup entries, so the run's warmup count is unknown rather than zero
+        // or ReadFast's three; both recorded two measured iterations.
         Assert.Null(mapped.Runner.Warmups);
-        Assert.Null(mapped.Runner.Iterations);
+        Assert.Equal(2, mapped.Runner.Iterations);
 
         BenchmarkRunResult shared = importer.Import(report, new BenchmarkImportOptions
         {
@@ -463,7 +532,7 @@ public sealed partial class BenchmarkServicesTests
     private static BenchmarkDeclarationDocument ThreeLibraryDeclarations()
     {
         BenchmarkDeclarationDocument declarations = TestDeclarations();
-        declarations.Libraries = [.. declarations.Libraries, new BenchmarkLibraryDeclaration { Id = "EPPlus", Package = "EPPlus", Version = "7.7.0", License = "LicenseRef-PolyForm-Noncommercial" }];
+        declarations.Libraries = [.. declarations.Libraries, new BenchmarkLibraryDeclaration { Id = "EPPlus", Package = "EPPlus", Version = "7.7.0", License = "LicenseRef-PolyForm-Noncommercial", Restriction = BenchmarkLibraryRestriction.Open }];
         declarations.Comparisons[0].Libraries = ["OfficeIMO", "Sep", "EPPlus"];
         return declarations;
     }

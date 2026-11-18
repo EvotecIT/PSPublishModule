@@ -105,6 +105,8 @@ public sealed partial class BenchmarkEvidenceCatalogService
         string affinity = result.Runner?.Affinity?.Trim() ?? string.Empty;
         if (affinity.Length > 0)
         {
+            if (affinity.IndexOf('/') >= 0 || affinity.IndexOf('=') >= 0)
+                throw new InvalidOperationException($"Recorded runner affinity '{affinity}' cannot contain '/' or '='.");
             if (resolved.TryGetValue("affinity", out string? declared) &&
                 !string.Equals(declared, affinity, StringComparison.OrdinalIgnoreCase))
             {
@@ -177,6 +179,48 @@ public sealed partial class BenchmarkEvidenceCatalogService
             }
             ApplyEvaluation(entry, evaluation);
         }
+    }
+
+    private static bool IsLicenceMarker(BenchmarkEvidenceCell cell)
+        => cell.Issues.Any(issue => issue.StartsWith(BenchmarkPublishPolicyEvaluator.NotPublishedLicence, StringComparison.Ordinal));
+
+    /// <summary>
+    /// Removes the rows of libraries whose licence class is not published, and clears the measurements on their
+    /// cells so only the "not published (licence)" marker remains. Comparisons against a removed library are
+    /// removed with it, so the stored result stays internally consistent.
+    /// </summary>
+    private static BenchmarkRunResult RedactLicenceRestricted(BenchmarkRunResult result, BenchmarkEvidenceCell[] cells)
+    {
+        var restricted = new HashSet<string>(
+            cells.Where(IsLicenceMarker).Select(cell => cell.Library),
+            StringComparer.OrdinalIgnoreCase);
+        if (restricted.Count == 0)
+            return result;
+
+        foreach (BenchmarkEvidenceCell cell in cells.Where(IsLicenceMarker))
+        {
+            cell.ValueMs = null;
+            cell.ConfidenceInterval = null;
+            cell.SampleCount = 0;
+            cell.FailureCount = 0;
+            cell.ValidationDetail = string.Empty;
+            cell.Outcome = string.Empty;
+        }
+
+        BenchmarkRunResult copy = BenchmarkJson.ReadBytes<BenchmarkRunResult>(BenchmarkJson.SerializeCanonicalBytes(result), "benchmark result");
+        bool Restricted(string? library) => !string.IsNullOrWhiteSpace(library) && restricted.Contains(library!);
+        var removedEngines = new HashSet<string>(
+            copy.Summary.Where(row => Restricted(row.Library)).Select(row => row.Engine)
+                .Concat(copy.Samples.Where(sample => Restricted(sample.Library)).Select(sample => sample.Engine)),
+            StringComparer.Ordinal);
+        copy.Samples = copy.Samples.Where(sample => !Restricted(sample.Library)).ToArray();
+        copy.Summary = copy.Summary.Where(row => !Restricted(row.Library)).ToArray();
+        removedEngines.ExceptWith(copy.Summary.Select(row => row.Engine));
+        copy.Comparison = copy.Comparison
+            .Where(row => !removedEngines.Contains(row.Engine) && !removedEngines.Contains(row.BaselineEngine))
+            .ToArray();
+        copy.Validations = copy.Validations.Where(validation => !Restricted(validation.Library)).ToArray();
+        return copy;
     }
 
     private static BenchmarkSupersededLane CreateSuperseded(BenchmarkEvidenceEntry entry, DateTimeOffset supersededBy)

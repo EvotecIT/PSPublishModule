@@ -164,8 +164,14 @@ The standard publish policy publishes only `open` libraries
 makes its results publishable.
 
 A restricted library never makes a comparison unpublishable. The published lane
-leaves out that library's cells and publishes the rest. Only a comparison declared
-with a single library, or one its author excludes, is not publishable.
+removes that library's measurements from the stored result and keeps only a cell
+marker reading "not published (licence)", then publishes the rest. A lane is
+published when at least one cell remains eligible and the other policy checks pass;
+if every library in a run is restricted, nothing is published. Only a comparison
+declared with a single library, or one its author excludes, is never publishable.
+
+Every library must declare its class. A library without one is neither selected
+for runs nor published.
 
 ### Classifying a library
 
@@ -194,7 +200,7 @@ changes.
 | --- | --- | --- |
 | NPOI | Apache-2.0; the OSMF fee applies only to binaries in revenue-generating use, not to benchmarking or publishing | `open` |
 | QuestPDF 2026.5.0 | Last release before the benchmarking restriction | `open` |
-| QuestPDF releases after 2026.5.0 | Publishing benchmark results is restricted | `publish-restricted` |
+| A later QuestPDF release | Classify by that release's own licence: `publish-restricted` when it restricts publishing benchmark results, `open` when it does not | per release |
 | DocX (Xceed) | Publishing results needs Xceed's permission | `publish-restricted` |
 | EPPlus 8 | PolyForm Noncommercial or a commercial licence, chosen through a licence context | `acceptance-required` |
 
@@ -234,6 +240,9 @@ behind is indistinguishable from one that was never run, so it is drift.
 
 ## 9. Profiles and the publish policy
 
+A project may make the policy stricter; a policy weaker than these defaults is
+rejected for published lanes.
+
 | Rule | Default | Checked for |
 | --- | --- | --- |
 | Profiles that may publish | `standard`, `full` | lane |
@@ -245,6 +254,7 @@ behind is indistinguishable from one that was never run, so it is drift.
 | Machine or user name | must be absent | lane |
 | Comparison declared, eligible, no drift, framework declared | required | lane |
 | Package version and hash for every non-subject library, matching the pinned version | required | lane |
+| Policy at least as strict as the standard | required | lane |
 | Measured samples per cell | at least 10 | cell |
 | Confidence interval of the statistic | 95% | cell |
 | Output validation | passed | cell |

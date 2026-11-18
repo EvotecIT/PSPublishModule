@@ -39,6 +39,9 @@ internal static class BenchmarkPublishPolicyEvaluator
 {
     private static readonly string[] MachineIdentityKeys = { "machine", "machineName", "user", "userName" };
 
+    /// <summary>Issue prefix of a cell left out because of its library's licence class.</summary>
+    internal const string NotPublishedLicence = "Not published (licence): ";
+
     internal static BenchmarkPolicyEvaluation Evaluate(BenchmarkPolicyLane lane)
     {
         BenchmarkPublishPolicy policy = lane.Policy;
@@ -98,6 +101,8 @@ internal static class BenchmarkPublishPolicyEvaluator
     private static void AddProfileIssues(BenchmarkPolicyLane lane, BenchmarkRunnerInfo runner, List<string> issues)
     {
         BenchmarkPublishPolicy policy = lane.Policy;
+        foreach (string weaker in policy.DescribeWeakerThanStandard())
+            issues.Add("The publish policy is weaker than the standard: " + weaker);
         string profile = BenchmarkKebabCaseEnumConverter<BenchmarkEvidenceProfile>.Format(lane.Profile);
         if (!policy.PublishableProfiles.Contains(lane.Profile))
             issues.Add($"The {profile} profile is never published.");
@@ -165,7 +170,7 @@ internal static class BenchmarkPublishPolicyEvaluator
                      .OrderBy(id => id, StringComparer.Ordinal))
         {
             BenchmarkLibraryDeclaration? library = lane.Libraries.FirstOrDefault(value => string.Equals(value.Id, libraryId, StringComparison.OrdinalIgnoreCase));
-            if (library is null || !lane.Policy.PublishableRestrictions.Contains(library.Restriction))
+            if (library is null || !library.IsPublishableUnder(lane.Policy))
                 continue;
             BenchmarkPackageReference? package = provenance.Packages.FirstOrDefault(value =>
                 string.Equals(value.Name, library.Package, StringComparison.OrdinalIgnoreCase));
@@ -196,8 +201,8 @@ internal static class BenchmarkPublishPolicyEvaluator
             }
             else
             {
-                if (!policy.PublishableRestrictions.Contains(library.Restriction))
-                    yield return $"Not published (licence): library '{library.Id}' is {BenchmarkKebabCaseEnumConverter<BenchmarkLibraryRestriction>.Format(library.Restriction)}. {library.Reason}";
+                if (!library.IsPublishableUnder(policy))
+                    yield return $"{NotPublishedLicence}library '{library.Id}' is {BenchmarkDeclarationService.Format(library.Restriction)}. {library.Reason}";
                 if (library.Restriction == BenchmarkLibraryRestriction.AcceptanceRequired &&
                     !(lane.AcceptedLibraries ?? Array.Empty<string>()).Contains(library.Id, StringComparer.OrdinalIgnoreCase))
                     yield return $"Library '{library.Id}' ran without a recorded licence acceptance.";
@@ -241,7 +246,7 @@ internal static class BenchmarkPublishPolicyEvaluator
             ? cells.Select(cell => cell.Library).Distinct(StringComparer.OrdinalIgnoreCase).ToArray()
             : lane.Definition.Libraries.Where(id => lane.Libraries.Any(library =>
                     string.Equals(library.Id, id, StringComparison.OrdinalIgnoreCase) &&
-                    lane.Policy.PublishableRestrictions.Contains(library.Restriction)))
+                    library.IsPublishableUnder(lane.Policy)))
                 .ToArray();
         bool complete = cells
             .GroupBy(BenchmarkEvidenceCellBuilder.WorkloadIdentity, StringComparer.OrdinalIgnoreCase)

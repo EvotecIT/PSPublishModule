@@ -124,6 +124,7 @@ internal static class BenchmarkEvidenceCellBuilder
         string scenario)
     {
         BenchmarkOutputValidation[] matches = (validations ?? Array.Empty<BenchmarkOutputValidation>())
+            .Where(validation => validation.Status is not null)
             .Where(validation =>
                 string.Equals(validation.Library, library, StringComparison.OrdinalIgnoreCase) &&
                 (string.IsNullOrWhiteSpace(validation.Case) ||

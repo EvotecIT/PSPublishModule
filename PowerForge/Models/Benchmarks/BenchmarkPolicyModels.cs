@@ -59,8 +59,8 @@ public sealed class BenchmarkOutputValidation
     /// <summary>Case the validation covers; empty when it covers every case of the library.</summary>
     public string Case { get; set; } = string.Empty;
 
-    /// <summary>Validation status.</summary>
-    public BenchmarkValidationStatus Status { get; set; }
+    /// <summary>Validation status. Required: a record without one is not a validation outcome.</summary>
+    public BenchmarkValidationStatus? Status { get; set; }
 
     /// <summary>What was checked, such as a checksum, or why it failed.</summary>
     public string Detail { get; set; } = string.Empty;
@@ -115,6 +115,36 @@ public sealed class BenchmarkPublishPolicy
 
     /// <summary>Creates the default policy.</summary>
     public static BenchmarkPublishPolicy CreateDefault() => new();
+
+    /// <summary>
+    /// Lists every way this policy is weaker than the standard policy. Projects may tighten the standard for
+    /// published evidence but never relax it.
+    /// </summary>
+    /// <returns>Descriptions of the weaker settings; empty when the policy is at least as strict.</returns>
+    public string[] DescribeWeakerThanStandard()
+    {
+        BenchmarkPublishPolicy standard = CreateDefault();
+        var issues = new List<string>();
+        if (MinimumWarmups < standard.MinimumWarmups)
+            issues.Add($"minimum warmups {MinimumWarmups} is below {standard.MinimumWarmups}.");
+        if (MinimumMeasuredSamples < standard.MinimumMeasuredSamples)
+            issues.Add($"minimum measured samples {MinimumMeasuredSamples} is below {standard.MinimumMeasuredSamples}.");
+        if (ConfidenceLevel < standard.ConfidenceLevel || ConfidenceLevel >= 1)
+            issues.Add($"confidence level {ConfidenceLevel.ToString(System.Globalization.CultureInfo.InvariantCulture)} must be at least {standard.ConfidenceLevel.ToString(System.Globalization.CultureInfo.InvariantCulture)} and below 1.");
+        if ((PublishableProfiles ?? Array.Empty<BenchmarkEvidenceProfile>()).Except(standard.PublishableProfiles).Any())
+            issues.Add("only the standard and full profiles may be published.");
+        if ((FullProfileRunnerKinds ?? Array.Empty<string>()).Except(standard.FullProfileRunnerKinds, StringComparer.OrdinalIgnoreCase).Any())
+            issues.Add("the full profile accepts only BenchmarkDotNet runners.");
+        if ((PublishableRestrictions ?? Array.Empty<BenchmarkLibraryRestriction>()).Except(standard.PublishableRestrictions).Any())
+            issues.Add("only open libraries may be published.");
+        if (!RequireOutputValidation)
+            issues.Add("output validation is required.");
+        if (!RequireDeclaration)
+            issues.Add("a comparison declaration is required.");
+        if (!RequirePackageHashes)
+            issues.Add("package versions and hashes are required.");
+        return issues.ToArray();
+    }
 }
 
 /// <summary>Serializes enums as kebab-case strings, such as publish-restricted.</summary>

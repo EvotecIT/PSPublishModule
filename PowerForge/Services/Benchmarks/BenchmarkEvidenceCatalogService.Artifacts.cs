@@ -13,17 +13,14 @@ public sealed partial class BenchmarkEvidenceCatalogService
     {
         if (!string.IsNullOrWhiteSpace(resultArtifactPath))
             return BenchmarkJson.ResolveWritePath(resultArtifactPath!);
-        if (Path.IsPathRooted(resultPath))
-            return BenchmarkJson.ResolveWritePath(resultPath);
-        if (Uri.TryCreate(resultPath, UriKind.Absolute, out Uri? uri))
+        // A root-relative website path such as /data/x.json, an absolute file path or a URL describes where
+        // readers find the result, not where to write it. Resolving it would write to a drive root or another
+        // unintended location, so the local destination must be given explicitly.
+        if (Path.IsPathRooted(resultPath) || Uri.TryCreate(resultPath, UriKind.Absolute, out _))
         {
-            if (!uri.IsFile)
-            {
-                throw new InvalidOperationException(
-                    "Benchmark evidence must use a local result artifact path so PowerForge can write and hash the normalized payload.");
-            }
-
-            return BenchmarkJson.ResolveWritePath(uri.LocalPath);
+            throw new InvalidOperationException(
+                $"Result path '{resultPath}' is absolute or root-relative. Supply ResultArtifactPath " +
+                "(-ResultArtifactPath) with the local file to write, or use a result path relative to the catalog.");
         }
 
         string catalogDirectory = Path.GetDirectoryName(catalogPath)
@@ -96,8 +93,10 @@ public sealed partial class BenchmarkEvidenceCatalogService
                 catalogDirectory,
                 artifactPath)
             .Replace(Path.DirectorySeparatorChar, '/')
-            .Replace(Path.AltDirectorySeparatorChar, '/')
-            .ToLowerInvariant();
+            .Replace(Path.AltDirectorySeparatorChar, '/');
+        // Case is folded only where the destination volume ignores it.
+        if (BenchmarkFileUpdateLock.IsCaseInsensitivePath(catalogPath))
+            normalizedDestination = normalizedDestination.ToLowerInvariant();
         using SHA256 sha256 = SHA256.Create();
         byte[] hash = sha256.ComputeHash(Encoding.UTF8.GetBytes(normalizedDestination));
         return BitConverter.ToString(hash).Replace("-", string.Empty).ToLowerInvariant();

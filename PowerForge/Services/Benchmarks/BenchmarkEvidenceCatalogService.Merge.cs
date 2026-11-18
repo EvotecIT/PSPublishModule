@@ -90,6 +90,8 @@ public sealed partial class BenchmarkEvidenceCatalogService
         BundleLane[] selected = SelectDistinctLanes(candidates, superseded);
         foreach (BundleLane lane in selected)
         {
+            // Licence markers have no rows in the stored result; they are carried over from the source lane.
+            BenchmarkEvidenceCell[] markers = lane.Entry.Cells.Where(IsLicenceMarker).ToArray();
             BenchmarkPolicyEvaluation evaluation = Evaluate(
                 merged,
                 lane.Result,
@@ -104,6 +106,10 @@ public sealed partial class BenchmarkEvidenceCatalogService
                     string.Join(" ", evaluation.LaneIssues));
             }
             ApplyEvaluation(lane.Entry, evaluation);
+            var present = new HashSet<string>(lane.Entry.Cells.Select(BenchmarkEvidenceCellBuilder.Identity), StringComparer.OrdinalIgnoreCase);
+            lane.Entry.Cells = lane.Entry.Cells
+                .Concat(markers.Where(marker => !present.Contains(BenchmarkEvidenceCellBuilder.Identity(marker))))
+                .ToArray();
         }
 
         BenchmarkEvidenceEntry[] entries = selected
@@ -260,6 +266,19 @@ public sealed partial class BenchmarkEvidenceCatalogService
         {
             throw new InvalidOperationException(
                 $"Benchmark lane '{entry.LaneKey}' does not match the normalized result metadata from which it claims to originate.");
+        }
+
+        string recordedFramework = BenchmarkEvidenceIdentity.RecordedFramework(result);
+        if (recordedFramework.Length > 0 && !string.Equals(recordedFramework, entry.Framework, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                $"Benchmark lane '{entry.LaneKey}' claims framework '{entry.Framework}' but its result records '{recordedFramework}'.");
+        }
+        Dictionary<string, string> recordedParameters = ResolveLaneParameters(result, entry.Parameters);
+        if (!DictionariesMatch(recordedParameters, entry.Parameters))
+        {
+            throw new InvalidOperationException(
+                $"Benchmark lane '{entry.LaneKey}' has lane parameters that do not match its result's runner block.");
         }
 
         if (entry.Publish)

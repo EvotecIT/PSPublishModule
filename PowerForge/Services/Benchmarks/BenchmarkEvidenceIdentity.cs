@@ -60,14 +60,35 @@ public static class BenchmarkEvidenceIdentity
     public static string ResolveFramework(BenchmarkRunResult result, string? explicitFramework)
     {
         if (result is null) throw new ArgumentNullException(nameof(result));
-        string declared = !string.IsNullOrWhiteSpace(explicitFramework)
-            ? explicitFramework!.Trim()
-            : result.Metadata.TryGetValue("benchmark.workload.framework", out string? metadataFramework) &&
-              !string.IsNullOrWhiteSpace(metadataFramework)
-                ? metadataFramework.Trim()
-                : string.Empty;
-        if (declared.Length > 0)
+        string recorded = RecordedFramework(result);
+        if (string.IsNullOrWhiteSpace(explicitFramework))
+            return recorded;
+
+        string requested = explicitFramework!.Trim();
+        if (!IsTargetFramework(requested))
+            throw new InvalidOperationException($"Framework '{requested}' is not a target framework moniker such as net10.0.");
+        requested = requested.ToLowerInvariant();
+        if (recorded.Length > 0 && !string.Equals(recorded, requested, StringComparison.OrdinalIgnoreCase))
         {
+            throw new InvalidOperationException(
+                $"Framework '{requested}' conflicts with the framework the result records ('{recorded}', from benchmark.workload.framework or the measured runtime).");
+        }
+        return requested;
+    }
+
+    /// <summary>
+    /// Framework the result itself records: the provenance-bound <c>benchmark.workload.framework</c> metadata, or a
+    /// modern .NET runtime description. Empty when the result records none.
+    /// </summary>
+    /// <param name="result">Benchmark result.</param>
+    /// <returns>Normalized framework, or empty.</returns>
+    public static string RecordedFramework(BenchmarkRunResult result)
+    {
+        if (result is null) throw new ArgumentNullException(nameof(result));
+        if (result.Metadata.TryGetValue("benchmark.workload.framework", out string? metadataFramework) &&
+            !string.IsNullOrWhiteSpace(metadataFramework))
+        {
+            string declared = metadataFramework.Trim();
             if (!IsTargetFramework(declared))
                 throw new InvalidOperationException($"Framework '{declared}' is not a target framework moniker such as net10.0.");
             return declared.ToLowerInvariant();

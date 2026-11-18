@@ -496,6 +496,11 @@ Merge-BenchmarkEvidenceCatalog `
     -ExpectedPlatform windows,linux,macos
 ```
 
+`-ResultPath` is what readers use to find the result. When it is root-relative
+(`/data/benchmarks/x.json`), absolute or a URL, also pass `-ResultArtifactPath` with
+the local file to write; without it the update fails rather than writing to a
+drive root. A relative `-ResultPath` is written beside the catalog.
+
 `Update-BenchmarkEvidenceCatalog` writes each result under a content-addressed name
 (`windows-full.<sha256>.json`) and records that path, so a superseded run's file is
 never overwritten. Every update also re-evaluates the lanes already in the catalog

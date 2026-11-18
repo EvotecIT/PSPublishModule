@@ -26,8 +26,8 @@ public sealed partial class BenchmarkServicesTests
     {
         Libraries =
         [
-            new BenchmarkLibraryDeclaration { Id = "OfficeIMO", Package = "OfficeIMO.CSV", Version = "3.0.3", License = "MIT" },
-            new BenchmarkLibraryDeclaration { Id = "Sep", Package = "Sep", Version = "0.10.0", License = "MIT" }
+            new BenchmarkLibraryDeclaration { Id = "OfficeIMO", Package = "OfficeIMO.CSV", Version = "3.0.3", License = "MIT", Restriction = BenchmarkLibraryRestriction.Open },
+            new BenchmarkLibraryDeclaration { Id = "Sep", Package = "Sep", Version = "0.10.0", License = "MIT", Restriction = BenchmarkLibraryRestriction.Open }
         ],
         Comparisons =
         [

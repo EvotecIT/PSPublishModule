@@ -58,7 +58,16 @@ public sealed partial class BenchmarkResultImporter
         ApplyCaseIdentity(result, options.CaseMap);
         ApplyBenchmarkDotNetRunner(result);
         if (options.Validations is { Length: > 0 })
+        {
+            BenchmarkOutputValidation? incomplete = options.Validations.FirstOrDefault(validation =>
+                validation is null || string.IsNullOrWhiteSpace(validation.Library) || validation.Status is null);
+            if (incomplete is not null || options.Validations.Any(validation => validation is null))
+            {
+                throw new InvalidOperationException(
+                    $"Every output validation needs a library and a status (passed or failed); '{incomplete?.Library}' has none.");
+            }
             result.Validations = result.Validations.Concat(options.Validations).ToArray();
+        }
         if (options.AcceptedLibraries is { Length: > 0 })
         {
             result.AcceptedLibraries = result.AcceptedLibraries
@@ -205,7 +214,8 @@ public sealed partial class BenchmarkResultImporter
             else if (string.Equals(stage, "Actual", StringComparison.OrdinalIgnoreCase))
                 iterations++;
         }
-        return launches.Count == 0 ? (null, null, null) : (warmups, iterations, launches.Count);
+        // No warmup entries means the stream does not show warmups, not that there were none; the job settings decide.
+        return launches.Count == 0 ? (null, null, null) : (warmups == 0 ? null : warmups, iterations == 0 ? null : iterations, launches.Count);
     }
 
     private static void ApplyBenchmarkDotNetRunner(BenchmarkRunResult result)

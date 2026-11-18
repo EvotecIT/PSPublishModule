@@ -56,7 +56,9 @@ public sealed class BenchmarkDeclarationService
                 Add(issues, id, "library-version", "The library needs one pinned package version, not a range or wildcard.");
             if (string.IsNullOrWhiteSpace(library.License) && string.IsNullOrWhiteSpace(library.LicenseUrl))
                 Add(issues, id, "library-license", "The library needs a licence (SPDX expression or LicenseRef) or a licence URL.");
-            if (library.Restriction != BenchmarkLibraryRestriction.Open && string.IsNullOrWhiteSpace(library.Reason))
+            if (library.Restriction is null)
+                Add(issues, id, "library-restriction", "The library needs an explicit restriction class: open, publish-restricted, acceptance-required or excluded.");
+            else if (library.Restriction != BenchmarkLibraryRestriction.Open && string.IsNullOrWhiteSpace(library.Reason))
                 Add(issues, id, "library-reason", $"A {Format(library.Restriction)} library needs a reason.");
         }
 
@@ -96,6 +98,9 @@ public sealed class BenchmarkDeclarationService
                 else if ((axis.Values ?? Array.Empty<string>()).Length == 0)
                     Add(issues, subject, "comparison-axis", $"Axis '{axis.Name}' needs at least one value.");
             }
+            if (comparisonLibraries.Where(value => !string.IsNullOrWhiteSpace(value)).Select(value => value.Trim())
+                    .Distinct(StringComparer.OrdinalIgnoreCase).Count() != comparisonLibraries.Length)
+                Add(issues, subject, "duplicate-library-reference", "The comparison lists a library more than once (library ids ignore case).");
             string[] cases = comparison.Cases ?? Array.Empty<string>();
             if (cases.Distinct(StringComparer.OrdinalIgnoreCase).Count() != cases.Length)
                 Add(issues, subject, "duplicate-case", "Declared cases must be unique.");
@@ -162,6 +167,7 @@ public sealed class BenchmarkDeclarationService
         foreach (BenchmarkLibraryDeclaration library in libraries.OrderBy(value => value.Id, StringComparer.OrdinalIgnoreCase))
         {
             string? reason =
+                library.Restriction is null ? "The library policy does not declare its restriction class." :
                 library.Restriction == BenchmarkLibraryRestriction.Excluded ? $"Excluded by the library policy: {library.Reason}" :
                 excludeIds.Contains(library.Id, StringComparer.OrdinalIgnoreCase) ? "Excluded for this run." :
                 includeIds.Length > 0 && !includeIds.Contains(library.Id, StringComparer.OrdinalIgnoreCase) ? "Not included in this run." :
@@ -274,8 +280,8 @@ public sealed class BenchmarkDeclarationService
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
-    private static string Format(BenchmarkLibraryRestriction restriction)
-        => BenchmarkKebabCaseEnumConverter<BenchmarkLibraryRestriction>.Format(restriction);
+    internal static string Format(BenchmarkLibraryRestriction? restriction)
+        => restriction is { } value ? BenchmarkKebabCaseEnumConverter<BenchmarkLibraryRestriction>.Format(value) : "unclassified";
 
     private static void Add(List<BenchmarkDeclarationIssue> issues, string subject, string code, string message)
         => issues.Add(new BenchmarkDeclarationIssue { Subject = subject, Code = code, Message = message });

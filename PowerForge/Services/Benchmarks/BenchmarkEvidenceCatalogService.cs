@@ -53,6 +53,12 @@ public sealed partial class BenchmarkEvidenceCatalogService
     /// <param name="request">Update request.</param>
     /// <returns>Updated catalog.</returns>
     public BenchmarkEvidenceCatalog Update(BenchmarkEvidenceCatalog? catalog, BenchmarkEvidenceUpdateRequest request)
+        => UpdateCore(catalog, request, out _);
+
+    private BenchmarkEvidenceCatalog UpdateCore(
+        BenchmarkEvidenceCatalog? catalog,
+        BenchmarkEvidenceUpdateRequest request,
+        out BenchmarkRunResult payload)
     {
         if (request is null) throw new ArgumentNullException(nameof(request));
         BenchmarkRunResult result = request.Result ?? throw new ArgumentException("Benchmark result is required.", nameof(request));
@@ -95,6 +101,9 @@ public sealed partial class BenchmarkEvidenceCatalogService
                 string.Join(" ", evaluation.LaneIssues));
         }
 
+        // A published lane carries no measurements of libraries whose licence class is not published: their rows
+        // are removed from the stored result and their cells stay only as "not published (licence)" markers.
+        payload = request.Publish ? RedactLicenceRestricted(result, evaluation.Cells) : result;
         var entry = new BenchmarkEvidenceEntry
         {
             ComparisonId = normalizedComparisonId,
@@ -105,10 +114,10 @@ public sealed partial class BenchmarkEvidenceCatalogService
             LaneKey = BenchmarkEvidenceIdentity.CreateLaneKey(normalizedComparisonId, resolvedPlatform, framework, request.Profile, parameters),
             GeneratedUtc = generatedUtc,
             Publish = request.Publish,
-            ResultSha256 = BenchmarkJson.ComputeSha256(result),
-            Suite = result.Suite,
-            Environment = CopyEnvironment(result.Environment),
-            Compatibility = BuildCompatibility(result)
+            ResultSha256 = BenchmarkJson.ComputeSha256(payload),
+            Suite = payload.Suite,
+            Environment = CopyEnvironment(payload.Environment),
+            Compatibility = BuildCompatibility(payload)
         };
         // Result paths are content-addressed so a newer run never overwrites the artifact of a superseded one.
         entry.ResultPath = CreateContentAddressedResultPath(request.ResultPath, entry.ResultSha256);
@@ -212,7 +221,7 @@ public sealed partial class BenchmarkEvidenceCatalogService
         var catalog = File.Exists(fullPath)
             ? ReadCatalog(fullPath)
             : null;
-        var updated = Update(catalog, request);
+        var updated = UpdateCore(catalog, request, out BenchmarkRunResult payload);
         string? artifactPath = null;
         byte[]? previousArtifact = null;
         bool artifactExisted = false;
@@ -225,7 +234,7 @@ public sealed partial class BenchmarkEvidenceCatalogService
             ResolveLaneParameters(result, request.Parameters));
         BenchmarkEvidenceEntry writtenEntry = updated.Entries.Single(entry =>
             string.Equals(entry.LaneKey, laneKey, StringComparison.OrdinalIgnoreCase));
-        string inputHash = BenchmarkJson.ComputeSha256(result);
+        string inputHash = BenchmarkJson.ComputeSha256(payload);
         string resultPath = CreateContentAddressedResultPath(request.ResultPath, inputHash);
         bool inputWasSelected = string.Equals(
                                     writtenEntry.ResultSha256,
@@ -269,7 +278,7 @@ public sealed partial class BenchmarkEvidenceCatalogService
         {
             if (artifactSelected)
             {
-                BenchmarkJson.Write(artifactPath!, result);
+                BenchmarkJson.Write(artifactPath!, payload);
                 string writtenHash = BenchmarkJson.ComputeFileSha256(artifactPath!);
                 if (!string.Equals(writtenEntry.ResultSha256, writtenHash, StringComparison.OrdinalIgnoreCase))
                 {
@@ -389,7 +398,10 @@ public sealed partial class BenchmarkEvidenceCatalogService
                  (!IsValidDuration(row.MedianMs) && !IsValidDuration(row.MeanMs)))) ||
             result.Comparison.Any(row =>
                 string.Equals(row.Status, "Succeeded", StringComparison.OrdinalIgnoreCase) &&
-                !IsValidComparison(row));
+                !IsValidComparison(row) &&
+                // A failed or skipped baseline leaves no baseline value or ratio; the rows are recomputed from the
+                // summaries below, so only that exact shape is accepted.
+                !(IsFinite(row.Actual) && row.Baseline is null && row.Ratio is null));
         bool hasSuccessfulMeasurement =
             result.Samples.Any(sample =>
                 sample.Status == BenchmarkSampleStatus.Succeeded &&

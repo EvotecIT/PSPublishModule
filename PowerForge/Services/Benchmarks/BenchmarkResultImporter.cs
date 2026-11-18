@@ -276,13 +276,17 @@ public sealed partial class BenchmarkResultImporter
                 ?? new BenchmarkEnvironmentInfo());
             // Counts are known only when every report recorded them; otherwise the aggregate stays unknown.
             BenchmarkRunnerInfo?[] runners = importedReports.Select(result => result.Runner).ToArray();
-            bool countsKnown = runners.All(runner => runner?.Warmups is not null && runner.Iterations is not null && runner.Launches is not null);
+            static int? KnownMin(IEnumerable<int?> values)
+            {
+                int?[] all = values.ToArray();
+                return all.Any(value => value is null) ? null : all.Min();
+            }
             combined.Runner = new BenchmarkRunnerInfo
             {
                 Kind = "benchmarkdotnet",
-                Warmups = countsKnown ? runners.Min(runner => runner!.Warmups) : null,
-                Iterations = countsKnown ? runners.Min(runner => runner!.Iterations) : null,
-                Launches = countsKnown ? runners.Min(runner => runner!.Launches) : null
+                Warmups = KnownMin(runners.Select(runner => runner?.Warmups)),
+                Iterations = KnownMin(runners.Select(runner => runner?.Iterations)),
+                Launches = KnownMin(runners.Select(runner => runner?.Launches))
             };
             return combined;
         }
