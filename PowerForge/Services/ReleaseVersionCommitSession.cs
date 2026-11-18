@@ -246,7 +246,7 @@ internal sealed partial class ReleaseVersionCommitSession : IDisposable
 
         if (stamped.Length == 0)
         {
-            DeleteStampRecord(snapshot);
+            DeleteStampRecord(snapshot, releaseName);
             var nothing = new ReleaseVersionCommitResult
             {
                 Status = ReleaseVersionCommitStatus.NothingToCommit,
@@ -274,7 +274,7 @@ internal sealed partial class ReleaseVersionCommitSession : IDisposable
         if (commit.Sha is null)
             return LeaveUncommitted(snapshot, stamped, skipped, message, releaseName, commit.Problem ?? "git could not create the commit");
 
-        DeleteStampRecord(snapshot);
+        DeleteStampRecord(snapshot, releaseName);
         var sha = commit.Sha;
         var shortSha = sha.Length > 9 ? sha.Substring(0, 9) : sha;
         var committed = $"Committed {Count(stamped.Length, "version file")} as {shortSha}";
@@ -486,8 +486,6 @@ internal sealed partial class ReleaseVersionCommitSession : IDisposable
         internal string Head { get; set; } = string.Empty;
         internal string? Branch { get; set; }
         internal Dictionary<string, string?> DirtyAtStart { get; set; } = new(StringComparer.Ordinal);
-        internal Dictionary<string, string> RecordedStamps { get; set; } = new(StringComparer.Ordinal);
-        internal string? RecordedRelease { get; set; }
     }
 
     private sealed class Classification

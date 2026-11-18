@@ -100,9 +100,13 @@ internal sealed partial class PowerForgeReleaseService
         var versions = new List<string?> { request.ResolvedReleaseVersion, result.ModulePlan?.ModuleVersion };
         if (!string.IsNullOrWhiteSpace(result.ModulePlan?.ModuleVersion) && !string.IsNullOrWhiteSpace(result.ModulePlan?.PreReleaseTag))
             versions.Add($"{result.ModulePlan!.ModuleVersion}-{result.ModulePlan.PreReleaseTag}");
-        var release = result.Packages?.Result?.Release;
-        if (release is not null)
+        // Module-owned package lanes report through their checkpoints instead of Packages.
+        var releases = new[] { result.Packages?.Result?.Release }
+            .Concat(result.ModulePackagePlans.Select(static checkpoint => checkpoint.Release));
+        foreach (var release in releases)
         {
+            if (release is null)
+                continue;
             versions.Add(release.ResolvedVersion);
             versions.AddRange(release.ResolvedVersionsByProject.Values);
             versions.AddRange(release.Projects.Select(static project => project.NewVersion));

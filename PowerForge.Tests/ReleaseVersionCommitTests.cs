@@ -251,6 +251,47 @@ public sealed class ReleaseVersionCommitTests
     }
 
     [Fact]
+    public void Session_CommitsAVersionPropertyTheReleaseInserted()
+    {
+        using var repo = GitFixture.Create();
+        repo.Write("Lib/Lib.csproj", "<Project Sdk=\"Microsoft.NET.Sdk\">\n  <PropertyGroup>\n    <VersionPrefix>1.0.0</VersionPrefix>\n  </PropertyGroup>\n</Project>\n");
+        repo.Git("commit", "--quiet", "-am", "Project without PackageVersion");
+
+        using var session = ReleaseVersionCommitSession.Begin(new RecordingLogger(), repo.Root, ReleaseVersionCommitMode.Commit, publishing: true);
+        // What the project version editor writes when it has to add PackageVersion.
+        repo.Write("Lib/Lib.csproj", "<Project Sdk=\"Microsoft.NET.Sdk\">\n  <PropertyGroup>\n    <PackageVersion>1.0.1</PackageVersion>\n    <VersionPrefix>1.0.1</VersionPrefix>\n  </PropertyGroup>\n</Project>\n");
+        var commit = session.Complete(releaseSucceeded: true, "Sample", "1.0.1", new[] { "1.0.1" })!;
+
+        Assert.Equal(ReleaseVersionCommitStatus.Committed, commit.Status);
+        Assert.Equal(new[] { "Lib/Lib.csproj" }, commit.Files);
+    }
+
+    [Fact]
+    public void Session_KeepsEachReleasesRecordedStampsApart()
+    {
+        using var repo = GitFixture.Create();
+        using (var releaseA = ReleaseVersionCommitSession.Begin(new RecordingLogger(), repo.Root, ReleaseVersionCommitMode.Commit, publishing: true))
+        {
+            repo.Write("Lib/Lib.csproj", Csproj("1.0.1"));
+            releaseA.Complete(releaseSucceeded: false, "Sample A", "1.0.1");
+        }
+
+        using (var releaseB = ReleaseVersionCommitSession.Begin(new RecordingLogger(), repo.Root, ReleaseVersionCommitMode.Commit, publishing: true))
+        {
+            repo.Write("My Lib/My Lib.csproj", Csproj("2.0.1"));
+            releaseB.Complete(releaseSucceeded: false, "Sample B", "2.0.1");
+        }
+
+        using (var rerunA = ReleaseVersionCommitSession.Begin(new RecordingLogger(), repo.Root, ReleaseVersionCommitMode.Commit, publishing: true))
+        {
+            var commit = rerunA.Complete(releaseSucceeded: true, "Sample A", "1.0.1")!;
+            Assert.Equal(new[] { "Lib/Lib.csproj" }, commit.Files);
+        }
+
+        Assert.Equal("My Lib/My Lib.csproj", repo.Git("-c", "core.quotePath=false", "diff", "--name-only"));
+    }
+
+    [Fact]
     public void Session_TwoPhaseRelease_CommitsRecordedStampsAfterPublication()
     {
         using var repo = GitFixture.Create();
@@ -279,6 +320,7 @@ public sealed class ReleaseVersionCommitTests
         using var repo = GitFixture.Create();
         var head = repo.Git("rev-parse", "HEAD");
         // A signer that cannot start proves a signature was requested, without touching real keys.
+        repo.Git("config", "gpg.format", "openpgp");
         repo.Git("config", "commit.gpgSign", "true");
         repo.Git("config", "gpg.program", Path.Combine(repo.Root, "missing-signer.exe"));
         var logger = new RecordingLogger();

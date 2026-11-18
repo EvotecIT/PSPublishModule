@@ -4,7 +4,17 @@ namespace PowerForge;
 
 internal sealed partial class ReleaseVersionCommitSession
 {
-    private const string StampRecordFileName = "POWERFORGE_RELEASE_VERSION_STAMPS";
+    private const string StampRecordFilePrefix = "POWERFORGE_RELEASE_VERSION_STAMPS-";
+
+    // A version property the project version editor inserts when a project lacks it, and the
+    // property group it creates when the project has none.
+    private static readonly Regex InsertedVersionProperty = new(
+        @"^\s*<(?<tag>PackageVersion|VersionPrefix|Version)>(?<value>[^<]+)</\k<tag>>\s*$",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+    private static readonly Regex InsertedPropertyGroup = new(
+        @"^\s*</?PropertyGroup>\s*$",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     private const string ReleaseRecordPrefix = "release\t";
 
@@ -55,15 +65,12 @@ internal sealed partial class ReleaseVersionCommitSession
         foreach (var path in ReadChanges(git, repositoryRoot, headSha, static _ => true).Keys)
             dirty[path] = HashFile(repositoryRoot, path);
 
-        var record = ReadStampRecord(git, repositoryRoot, headSha);
         return new Snapshot
         {
             RepositoryRoot = repositoryRoot,
             Head = headSha,
             Branch = ReadBranch(git, repositoryRoot),
-            DirtyAtStart = dirty,
-            RecordedStamps = record.Stamps,
-            RecordedRelease = record.Release
+            DirtyAtStart = dirty
         };
     }
 
@@ -73,10 +80,9 @@ internal sealed partial class ReleaseVersionCommitSession
         var changedPaths = ReadChangedPaths(snapshot);
         var stored = StoreBlobs(snapshot.RepositoryRoot, changedPaths, write: true);
         var changes = ReadChanges(_git, snapshot.RepositoryRoot, snapshot.Head, isReleaseVersion);
-        // Only stamps recorded by this same release count as its own.
-        var recordedStamps = string.Equals(snapshot.RecordedRelease, releaseName, StringComparison.Ordinal)
-            ? snapshot.RecordedStamps
-            : new Dictionary<string, string>(StringComparer.Ordinal);
+        // Only stamps recorded by this same release count as its own. This run writes its own
+        // record only when it finishes, so this is still the earlier run's record.
+        var recordedStamps = ReadStampRecord(_git, snapshot.RepositoryRoot, snapshot.Head, releaseName);
 
         var candidates = new List<string>();
         var skipped = new List<string>();
@@ -172,22 +178,30 @@ internal sealed partial class ReleaseVersionCommitSession
             yield return items.Skip(i).Take(size).ToArray();
     }
 
-    private static (Dictionary<string, string> Stamps, string? Release) ReadStampRecord(ReleaseGitRunner git, string repositoryRoot, string head)
+    /// <summary>Each release keeps its own record, so releases never overwrite or delete each other's.</summary>
+    private static string StampRecordName(string releaseName)
+    {
+        using var sha = System.Security.Cryptography.SHA256.Create();
+        var hash = sha.ComputeHash(System.Text.Encoding.UTF8.GetBytes(releaseName));
+        return StampRecordFilePrefix + BitConverter.ToString(hash, 0, 8).Replace("-", string.Empty).ToLowerInvariant();
+    }
+
+    private static Dictionary<string, string> ReadStampRecord(ReleaseGitRunner git, string repositoryRoot, string head, string releaseName)
     {
         var stamps = new Dictionary<string, string>(StringComparer.Ordinal);
         try
         {
-            var file = ResolveGitPath(git, repositoryRoot, StampRecordFileName);
+            var file = ResolveGitPath(git, repositoryRoot, StampRecordName(releaseName));
             if (file is null || !File.Exists(file))
-                return (stamps, null);
+                return stamps;
 
             // Line 1: HEAD the stamps were made on. Line 2: the release that made them.
             var lines = File.ReadAllLines(file);
             if (lines.Length < 2 ||
                 !string.Equals(lines[0].Trim(), head, StringComparison.OrdinalIgnoreCase) ||
-                !lines[1].StartsWith(ReleaseRecordPrefix, StringComparison.Ordinal))
+                !string.Equals(lines[1], ReleaseRecordPrefix + releaseName, StringComparison.Ordinal))
             {
-                return (stamps, null);
+                return stamps;
             }
 
             foreach (var line in lines.Skip(2))
@@ -196,21 +210,20 @@ internal sealed partial class ReleaseVersionCommitSession
                 if (tab > 0)
                     stamps[line.Substring(tab + 1)] = line.Substring(0, tab);
             }
-
-            return (stamps, lines[1].Substring(ReleaseRecordPrefix.Length));
         }
         catch
         {
             // An unreadable record only means earlier stamps are treated as the maintainer's.
-            return (stamps, null);
         }
+
+        return stamps;
     }
 
     private void WriteStampRecord(Snapshot snapshot, string[] stamped, string releaseName)
     {
         try
         {
-            var file = ResolveGitPath(_git, snapshot.RepositoryRoot, StampRecordFileName);
+            var file = ResolveGitPath(_git, snapshot.RepositoryRoot, StampRecordName(releaseName));
             if (file is null)
                 return;
 
@@ -230,11 +243,11 @@ internal sealed partial class ReleaseVersionCommitSession
         }
     }
 
-    private void DeleteStampRecord(Snapshot snapshot)
+    private void DeleteStampRecord(Snapshot snapshot, string releaseName)
     {
         try
         {
-            var file = ResolveGitPath(_git, snapshot.RepositoryRoot, StampRecordFileName);
+            var file = ResolveGitPath(_git, snapshot.RepositoryRoot, StampRecordName(releaseName));
             if (file is not null && File.Exists(file))
                 File.Delete(file);
         }
@@ -293,30 +306,8 @@ internal sealed partial class ReleaseVersionCommitSession
             if (!inHunk)
                 return;
             hunks++;
-            if (removed.Count != added.Count)
+            if (versionOnly && !IsVersionOnlyHunk(removed, added, isReleaseVersion))
                 versionOnly = false;
-            else
-            {
-                for (var i = 0; i < removed.Count && versionOnly; i++)
-                {
-                    if (!string.Equals(NormalizeVersions(removed[i]), NormalizeVersions(added[i]), StringComparison.Ordinal))
-                    {
-                        versionOnly = false;
-                        break;
-                    }
-
-                    var before = VersionToken.Matches(removed[i]);
-                    var after = VersionToken.Matches(added[i]);
-                    for (var j = 0; j < after.Count && versionOnly; j++)
-                    {
-                        if (!string.Equals(before[j].Value, after[j].Value, StringComparison.Ordinal) &&
-                            !isReleaseVersion(after[j].Value))
-                        {
-                            versionOnly = false;
-                        }
-                    }
-                }
-            }
 
             removed.Clear();
             added.Clear();
@@ -412,6 +403,52 @@ internal sealed partial class ReleaseVersionCommitSession
         var length = (header.Length - 5) / 2;
         var path = header.Substring(2, length);
         return string.Equals(header.Substring(2 + length), " b/" + path, StringComparison.Ordinal) ? path : null;
+    }
+
+    /// <summary>
+    /// True when each removed line has an added counterpart that differs only in release versions, and
+    /// every other added line is a version property (or its property group) the version editor inserted.
+    /// </summary>
+    private static bool IsVersionOnlyHunk(List<string> removed, List<string> added, Func<string, bool> isReleaseVersion)
+    {
+        var next = 0;
+        var changesVersion = false;
+        foreach (var line in added)
+        {
+            if (next < removed.Count &&
+                string.Equals(NormalizeVersions(removed[next]), NormalizeVersions(line), StringComparison.Ordinal))
+            {
+                var before = VersionToken.Matches(removed[next]);
+                var after = VersionToken.Matches(line);
+                for (var j = 0; j < after.Count; j++)
+                {
+                    if (string.Equals(before[j].Value, after[j].Value, StringComparison.Ordinal))
+                        continue;
+                    if (!isReleaseVersion(after[j].Value))
+                        return false;
+                    changesVersion = true;
+                }
+
+                next++;
+                continue;
+            }
+
+            var inserted = InsertedVersionProperty.Match(line);
+            if (inserted.Success)
+            {
+                var value = inserted.Groups["value"].Value.Trim();
+                var token = VersionToken.Match(value);
+                if (!token.Success || token.Length != value.Length || !isReleaseVersion(value))
+                    return false;
+                changesVersion = true;
+                continue;
+            }
+
+            if (!InsertedPropertyGroup.IsMatch(line))
+                return false;
+        }
+
+        return next == removed.Count && changesVersion;
     }
 
     private static string NormalizeVersions(string line)
