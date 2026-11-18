@@ -139,7 +139,7 @@ class Receiver:
             fcntl.flock(lock, fcntl.LOCK_EX if exclusive else fcntl.LOCK_SH)
             yield
 
-    def validate_header(self, header):
+    def validate_header(self, header, stored=False):
         if header.get('schemaVersion') != 2 or header.get('format') != 'native' or header.get('hostId') != self.config['hostId'] or not STAMP.fullmatch(header.get('stamp', '')):
             raise ValueError('Unexpected source/capture identity')
         if type(header.get('sizeBytes')) is not int or not 1 <= header['sizeBytes'] <= self.config['maxArchiveBytes']:
@@ -149,13 +149,28 @@ class Receiver:
         if abs((created - stamped).total_seconds()) >= 1 or (created - utc_now()).total_seconds() > 300:
             raise ValueError('Capture timestamp is inconsistent or future-dated')
         databases = header.get('databases', [])
-        expected = self.config['databases']
-        if len(databases) != len(expected) or {v.get('id'): v.get('provider') for v in databases} != expected:
-            raise ValueError('Required database set differs')
-        expected_entries = {identity + ('.sqlite' if provider == 'sqlite' else '.bak') for identity, provider in expected.items()}
-        expected_entries |= {'config/' + identity + '.json' for identity in self.config.get('configurationIds', [])}
-        expected_entries.add('manifest.json')
         files = header.get('files', [])
+        if (not isinstance(databases, list) or not all(isinstance(v, dict) for v in databases) or
+                not isinstance(files, list) or not all(isinstance(f, dict) for f in files)):
+            raise ValueError('Invalid native inventory')
+        if stored:
+            # A new upload must match the configured inventory exactly. A stored set was checked that way when it
+            # arrived and is bound by its own receipt, so adding or retiring a database keeps older points usable.
+            expected = {v.get('id'): v.get('provider') for v in databases}
+            configurations = [f.get('entry', '')[len('config/'):-len('.json')] for f in files
+                              if str(f.get('entry', '')).startswith('config/') and str(f.get('entry', '')).endswith('.json')]
+            if (not expected or len(expected) != len(databases) or
+                    any(not portable_file_id(identity) or provider not in ('sqlite', 'sqlserver') for identity, provider in expected.items()) or
+                    any(not portable_file_id(identity) for identity in configurations) or len(set(configurations)) != len(configurations)):
+                raise ValueError('Stored database set is invalid')
+        else:
+            expected = self.config['databases']
+            configurations = self.config.get('configurationIds', [])
+            if len(databases) != len(expected) or {v.get('id'): v.get('provider') for v in databases} != expected:
+                raise ValueError('Required database set differs')
+        expected_entries = {identity + ('.sqlite' if provider == 'sqlite' else '.bak') for identity, provider in expected.items()}
+        expected_entries |= {'config/' + identity + '.json' for identity in configurations}
+        expected_entries.add('manifest.json')
         if len(files) != len(expected_entries) or {f.get('entry') for f in files} != expected_entries:
             raise ValueError('Required native file set differs')
         for file in files:
@@ -268,7 +283,7 @@ class Receiver:
                 raise ValueError('Stored recovery metadata size exceeds its bound')
         if (folder / 'READY').read_text().strip() != MARKER:
             raise ValueError('Invalid completion marker')
-        header = self.validate_header(json.loads((folder / 'capture.json').read_text()))
+        header = self.validate_header(json.loads((folder / 'capture.json').read_text()), stored=True)
         self.validate_manifest(json.loads((folder / 'manifest.json').read_text()), header)
         receipt = json.loads((folder / 'VERIFIED').read_text())
         capture_hash = digest(folder / 'capture.json')
