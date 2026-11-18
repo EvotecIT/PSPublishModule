@@ -285,14 +285,24 @@ internal sealed class PowerShellBoundTryStatement : PowerShellBoundStatement
 
 internal sealed class PowerShellBoundBreakStatement : PowerShellBoundStatement
 {
-    internal PowerShellBoundBreakStatement(SourceSpan span, SourceSpan? targetLoop = null) : base(span, PowerShellSemanticEffect.None)
-        => TargetLoop = targetLoop;
+    internal PowerShellBoundBreakStatement(SourceSpan span, SourceSpan? targetLoop = null, bool transferToCaller = false)
+        : base(span, transferToCaller ? PowerShellSemanticEffect.Host : PowerShellSemanticEffect.None)
+    {
+        TargetLoop = targetLoop;
+        TransferToCaller = transferToCaller;
+    }
     internal SourceSpan? TargetLoop { get; }
+    internal bool TransferToCaller { get; }
 }
 
 internal sealed class PowerShellBoundContinueStatement : PowerShellBoundStatement
 {
-    internal PowerShellBoundContinueStatement(SourceSpan span, SourceSpan? targetLoop = null) : base(span, PowerShellSemanticEffect.None)
-        => TargetLoop = targetLoop;
+    internal PowerShellBoundContinueStatement(SourceSpan span, SourceSpan? targetLoop = null, bool transferToCaller = false)
+        : base(span, transferToCaller ? PowerShellSemanticEffect.Host : PowerShellSemanticEffect.None)
+    {
+        TargetLoop = targetLoop;
+        TransferToCaller = transferToCaller;
+    }
     internal SourceSpan? TargetLoop { get; }
+    internal bool TransferToCaller { get; }
 }

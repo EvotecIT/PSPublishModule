@@ -10,7 +10,7 @@ using MethodAttributes = System.Reflection.MethodAttributes;
 
 namespace PowerForge;
 
-/// <summary>Metadata-only identities from locked root manifest dependencies. Never loads dependency code.</summary>
+/// <summary>Metadata-only identities from locked module dependencies. Never loads dependency code.</summary>
 internal sealed class PowerShellNativeDependencyTypes
 {
     internal static readonly PowerShellNativeDependencyTypes Empty = new(new HashSet<string>(StringComparer.OrdinalIgnoreCase));
@@ -67,15 +67,14 @@ internal sealed class PowerShellNativeDependencyTypes
             graph.Conflicts.Length != 0 || graph.Cycles.Length != 0) return Empty;
         var root = Path.GetDirectoryName(Path.GetFullPath(manifestPath!))!;
         var graphRoot = Path.GetFullPath(moduleRoot ?? root);
-        var declared = (ModuleManifestValueReader.ReadTopLevelLiteralStringOrArrayOrThrow(manifestPath!, "RequiredAssemblies") ?? Array.Empty<string>())
-            .Where(static value => !Path.IsPathRooted(value) && value.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
-            .Select(value => Path.GetFullPath(Path.Combine(root, PowerShellCompiledModuleManifest.NormalizeManifestRelativePath(value))))
-            .ToHashSet(PowerShellCompilationPathSafety.PathComparer);
-        var candidates = dependencies.Where(dependency => dependency.Discovery == PowerShellCompilationDependencyDiscovery.RequiredAssemblies &&
+        var rootPrefix = root.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        var candidates = dependencies.Where(dependency =>
             dependency.Kind == PowerShellCompilationDependencyKind.ManagedAssembly && dependency.Exists &&
             (dependency.Disposition is PowerShellCompilationDependencyDisposition.CopiedAdjacent or PowerShellCompilationDependencyDisposition.EmbeddedAndExtracted) &&
-            dependency.SourcePath is not null && declared.Contains(Path.GetFullPath(dependency.SourcePath))).ToArray();
+            dependency.SourcePath is not null &&
+            PowerShellCompilationPathSafety.PathStartsWith(Path.GetFullPath(dependency.SourcePath), rootPrefix)).ToArray();
         var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var owners = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         var ambiguous = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var dependency in candidates)
         {
@@ -97,6 +96,10 @@ internal sealed class PowerShellNativeDependencyTypes
             var reader = pe.GetMetadataReader();
             if (!reader.IsAssembly || reader.MethodDefinitions.Any(handle =>
                     (reader.GetMethodDefinition(handle).Attributes & MethodAttributes.PinvokeImpl) != 0)) continue;
+            var assembly = reader.GetAssemblyDefinition();
+            var owner = reader.GetString(assembly.Name) + "|" + assembly.Version + "|" +
+                        BitConverter.ToString(reader.GetBlobBytes(assembly.PublicKey)).Replace("-", string.Empty).ToLowerInvariant() + "|" +
+                        (assembly.Culture.IsNil ? string.Empty : reader.GetString(assembly.Culture));
             foreach (var handle in reader.TypeDefinitions)
             {
                 var type = reader.GetTypeDefinition(handle);
@@ -104,7 +107,8 @@ internal sealed class PowerShellNativeDependencyTypes
                     type.GetGenericParameters().Count != 0 || !type.GetDeclaringType().IsNil) continue;
                 var typeNamespace = reader.GetString(type.Namespace);
                 var name = (typeNamespace.Length == 0 ? string.Empty : typeNamespace + ".") + reader.GetString(type.Name);
-                if (!names.Add(name)) ambiguous.Add(name);
+                if (!names.Add(name) && !owners[name].Equals(owner, StringComparison.OrdinalIgnoreCase)) ambiguous.Add(name);
+                else owners[name] = owner;
             }
         }
         var declaredScripts = (ModuleManifestValueReader.ReadTopLevelLiteralStringOrArrayOrThrow(manifestPath!, "ScriptsToProcess") ?? Array.Empty<string>())
@@ -141,4 +145,5 @@ internal sealed class PowerShellNativeDependencyTypes
         names.ExceptWith(ambiguous);
         return new PowerShellNativeDependencyTypes(names);
     }
+
 }

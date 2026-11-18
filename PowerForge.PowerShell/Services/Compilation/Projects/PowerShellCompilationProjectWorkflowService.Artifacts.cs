@@ -286,7 +286,8 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
                 RunExecutable(path, artifact.TestArguments, ResolveTestWorkingDirectory(context, artifact, path));
                 break;
             case PowerShellCompilationArtifactKind.BinaryModule:
-                ImportModule(path, artifact.Target.TargetFramework);
+                if (artifact.ModuleTest is null) ImportModule(path, artifact.Target.TargetFramework);
+                else RunModuleAcceptanceScript(context, artifact, path);
                 break;
             case PowerShellCompilationArtifactKind.Library:
                 _ = AssemblyName.GetAssemblyName(path);

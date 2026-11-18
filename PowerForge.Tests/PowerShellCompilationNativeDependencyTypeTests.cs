@@ -9,16 +9,19 @@ public sealed class PowerShellCompilationNativeDependencyTypeTests
     public PowerShellCompilationNativeDependencyTypeTests(Xunit.Abstractions.ITestOutputHelper output) => _output = output;
 
     [Theory]
-    [InlineData("net10.0")]
-    [InlineData("net472")]
-    public void DeclaredManagedTypes_UseNativeBindingOnlyAndSurviveFinalExplain(string framework)
+    [InlineData("net10.0", false)]
+    [InlineData("net472", false)]
+    [InlineData("net10.0", true)]
+    [InlineData("net472", true)]
+    public void DeclaredManagedTypes_UseNativeBindingOnlyAndSurviveFinalExplain(string framework, bool bodyLoad)
     {
-        using var fixture = new DependencyFixture();
+        using var fixture = new DependencyFixture(bodyLoad);
         var input = new PowerShellCompilationInputResolver().Resolve(fixture.Manifest,
             PowerShellCompilationArtifactKind.BinaryModule, PowerShellCompilationMode.Hybrid);
         var planner = new PowerShellCompilationDependencyPlanner();
-        var dependencies = planner.Analyze(input);
-        var graph = planner.AnalyzeGraph(input, targetFramework: framework);
+        var dependencies = planner.Analyze(input, resourceMode: PowerShellCompilationResourceMode.CompleteModule);
+        var graph = planner.AnalyzeGraph(input, resourceMode: PowerShellCompilationResourceMode.CompleteModule,
+            targetFramework: framework);
         var assemblies = AppDomain.CurrentDomain.GetAssemblies().Select(assembly => assembly.FullName).ToArray();
         var catalog = PowerShellNativeDependencyTypes.Create(fixture.Manifest, dependencies, graph, input.ModuleRoot);
         Assert.Equal(assemblies, AppDomain.CurrentDomain.GetAssemblies().Select(assembly => assembly.FullName));
@@ -35,7 +38,8 @@ public sealed class PowerShellCompilationNativeDependencyTypeTests
             PowerShellCompilationCapabilities.HybridModule, catalog);
         Assert.Single(qualified.Emitted.Methods);
         Assert.NotNull(Assert.Single(qualified.Analyzed.Functions).NativeFunctionBinding);
-        var plan = new PowerShellCompilationAnalyzer().Analyze(input, PowerShellCompilationMode.Hybrid, framework);
+        var plan = new PowerShellCompilationAnalyzer().Analyze(input, PowerShellCompilationMode.Hybrid, framework,
+            resourceMode: PowerShellCompilationResourceMode.CompleteModule);
         var shaped = PowerShellCompilationExplainShaper.Shape(input, plan, framework);
         Assert.Single(shaped!.Methods);
         var strict = new PowerShellCompilationAnalyzer().Analyze(input, PowerShellCompilationMode.Strict, framework);
@@ -134,6 +138,25 @@ public sealed class PowerShellCompilationNativeDependencyTypeTests
     }
 
     [Fact]
+    public void DeliveredManagedTypes_SupportIndirectInitializationWithoutLoadingDependencyCode()
+    {
+        using var fixture = new DependencyFixture();
+        File.WriteAllText(fixture.Manifest, "@{RootModule='Fixture.psm1';ModuleVersion='1.0.0';FunctionsToExport=@('Get-DependencyValue')}");
+        File.WriteAllText(fixture.Source, """
+            $loader = Get-Command Add-Type
+            $library = "$PSScriptRoot/Lib/Dependency.dll"
+            & $loader -Path $library
+            function Get-DependencyValue {param([Generic.External.Binary.Dependency.GenericValueSource]$Value) $Value}
+            """);
+        var input = new PowerShellCompilationInputResolver().Resolve(fixture.Manifest,
+            PowerShellCompilationArtifactKind.BinaryModule, PowerShellCompilationMode.Hybrid);
+        var plan = new PowerShellCompilationAnalyzer().Analyze(input, PowerShellCompilationMode.Hybrid, "net10.0",
+            resourceMode: PowerShellCompilationResourceMode.CompleteModule);
+        var shaped = PowerShellCompilationExplainShaper.Shape(input, plan, "net10.0");
+        Assert.Single(shaped!.Methods);
+    }
+
+    [Fact]
     public void DeclaredManagedTypes_RejectChangedBytesAndDoNotInferUndeclaredTypes()
     {
         using var fixture = new DependencyFixture();
@@ -202,13 +225,18 @@ public sealed class PowerShellCompilationNativeDependencyTypeTests
         internal string Manifest => Path.Combine(_root, "Fixture.psd1");
         internal string Source => Path.Combine(_root, "Fixture.psm1");
         internal string Assembly => Path.Combine(_root, "Lib", "Dependency.dll");
-        internal DependencyFixture()
+        internal DependencyFixture(bool bodyLoad = false)
         {
             Directory.CreateDirectory(_root);
             Directory.CreateDirectory(Path.GetDirectoryName(Assembly)!);
             File.Copy(Path.Combine(AppContext.BaseDirectory, "Generic.External.Binary.Dependency.dll"), Assembly);
-            File.WriteAllText(Manifest, "@{RootModule='Fixture.psm1';ModuleVersion='1.0.0';RequiredAssemblies=@('Lib/Dependency.dll');FunctionsToExport=@('Get-DependencyValue')}");
-            File.WriteAllText(Source, "function Get-DependencyValue {param([int]$Value) [Generic.External.Binary.Dependency.GenericValueSource]::Resolve($Value)}");
+            File.WriteAllText(Manifest, bodyLoad
+                ? "@{RootModule='Fixture.psm1';ModuleVersion='1.0.0';FunctionsToExport=@('Get-DependencyValue')}"
+                : "@{RootModule='Fixture.psm1';ModuleVersion='1.0.0';RequiredAssemblies=@('Lib/Dependency.dll');FunctionsToExport=@('Get-DependencyValue')}");
+            File.WriteAllText(Source, (bodyLoad
+                    ? "$script:ModuleRoot = $PSScriptRoot\nAdd-Type -Path \"$script:ModuleRoot/Lib/Dependency.dll\"\n"
+                    : string.Empty) +
+                "function Get-DependencyValue {param([int]$Value) [Generic.External.Binary.Dependency.GenericValueSource]::Resolve($Value)}");
         }
         public void Dispose() => Directory.Delete(_root, recursive: true);
     }

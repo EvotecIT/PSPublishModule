@@ -86,6 +86,10 @@ internal static class PowerShellNativeFunctionBindingPolicy
     private static bool RequiresNativeBinding(FunctionDefinitionAst function, string? targetFramework,
         PowerShellCompilationCapability capabilities)
         => RequiresNativeBasicCommandHost(function, capabilities) ||
+           function.Body.Find(static node =>
+               node is BreakStatementAst { Label: null } && !PowerShellControlFlowBindingPolicy.HasBreakableAncestor(node) ||
+               node is ContinueStatementAst { Label: null } && !PowerShellControlFlowBindingPolicy.HasContinuableAncestor(node),
+               searchNestedScriptBlocks: false) is not null ||
            SupportsDynamicParameters(function.Body, capabilities) ||
            function.Body.BeginBlock is not null || function.Body.ProcessBlock is not null ||
            PowerShellHostedEnumDeclarationPolicy.RequiresNativeParameterBinding(function) ||

@@ -181,6 +181,25 @@ public sealed partial class PowerShellCompilationProjectManifestService
             if (artifact.Target.ArtifactKind != PowerShellCompilationArtifactKind.Executable &&
                 (artifact.TestArguments.Length != 0 || artifact.TestWorkingDirectory is not null))
                 throw new InvalidDataException($"Project target '{artifact.Name}' test arguments and working directory require an executable target.");
+            if (artifact.ModuleTest is { } moduleTest)
+            {
+                if (artifact.Target.ArtifactKind != PowerShellCompilationArtifactKind.BinaryModule)
+                    throw new InvalidDataException("A module acceptance script requires a binary-module target.");
+                moduleTest.Script = NormalizeRelativePath(root, moduleTest.Script, requireInputs, "module acceptance script");
+                if (!moduleTest.Script.EndsWith(".ps1", StringComparison.OrdinalIgnoreCase) ||
+                    requireInputs && !File.Exists(Path.Combine(root, moduleTest.Script)))
+                    throw new InvalidDataException("A module acceptance script must identify a PowerShell script file.");
+                if (!IsSha256(moduleTest.Sha256 ?? string.Empty))
+                    throw new InvalidDataException("A module acceptance script requires its reviewed SHA-256.");
+                moduleTest.Sha256 = moduleTest.Sha256!.ToLowerInvariant();
+                if (moduleTest.Arguments is null || moduleTest.Arguments.Any(static argument => argument is null || argument.IndexOf('\0') >= 0))
+                    throw new InvalidDataException("Module acceptance script arguments cannot be null or contain NUL.");
+                moduleTest.WorkingDirectory = string.IsNullOrWhiteSpace(moduleTest.WorkingDirectory) ? null :
+                    NormalizeRelativePath(root, moduleTest.WorkingDirectory!, requireInputs, "module acceptance working directory", allowRoot: true);
+                if (requireInputs && moduleTest.WorkingDirectory is not null &&
+                    !Directory.Exists(Path.Combine(root, moduleTest.WorkingDirectory)))
+                    throw new DirectoryNotFoundException("Module acceptance working directory was not found.");
+            }
         }
         return manifest;
     }

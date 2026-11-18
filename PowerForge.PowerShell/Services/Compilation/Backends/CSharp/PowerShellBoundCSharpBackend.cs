@@ -258,10 +258,12 @@ internal sealed partial class PowerShellBoundCSharpBackend
                 }
                 return;
             case PowerShellLoweredBreakStatement transfer:
-                EmitLoopTransfer(builder, transfer.TargetLoop, prefix, isContinue: false);
+                if (transfer.TransferToCaller) builder.Append(prefix).AppendLine("__nativeFunction.TransferToCaller(true);");
+                else EmitLoopTransfer(builder, transfer.TargetLoop, prefix, isContinue: false);
                 return;
             case PowerShellLoweredContinueStatement transfer:
-                EmitLoopTransfer(builder, transfer.TargetLoop, prefix, isContinue: true);
+                if (transfer.TransferToCaller) builder.Append(prefix).AppendLine("__nativeFunction.TransferToCaller(false);");
+                else EmitLoopTransfer(builder, transfer.TargetLoop, prefix, isContinue: true);
                 return;
             default:
                 throw new InvalidOperationException($"Lowered statement '{statement.GetType().Name}' has no C# rendering owner.");

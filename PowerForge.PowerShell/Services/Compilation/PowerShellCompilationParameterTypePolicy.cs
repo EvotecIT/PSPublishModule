@@ -69,7 +69,11 @@ internal static class PowerShellCompilationParameterTypePolicy
         // Borrowed AD access rules retain native pipeline binding and the active Windows host's identity.
         typeof(System.DirectoryServices.ActiveDirectoryAccessRule),
         typeof(Parser),
-        typeof(HashtableAst)
+        typeof(HashtableAst),
+        // Borrowed syntax nodes and completion values retain active-host SDK identity.
+        typeof(Ast),
+        typeof(FunctionDefinitionAst),
+        typeof(CompletionResultType)
     };
 
     internal static bool IsQualifiedHostDataType(Type type, string? targetFramework = null)
@@ -151,6 +155,7 @@ internal static class PowerShellCompilationParameterTypePolicy
     // Qualified SDK identity and value-copy rules require native binding, including containers.
     private static bool RequiresNativeFunctionBinding(Type type)
         => type == typeof(PSReference) || type == typeof(PowerShell) ||
+           type == typeof(Ast) || type == typeof(FunctionDefinitionAst) || type == typeof(CompletionResultType) ||
            type == typeof(CommandMetadata) || type == typeof(ProxyCommand) ||
            type == typeof(InvocationInfo) ||
            type == typeof(Cmdlet) ||

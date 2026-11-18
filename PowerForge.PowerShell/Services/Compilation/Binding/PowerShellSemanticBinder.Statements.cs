@@ -53,10 +53,9 @@ internal sealed partial class PowerShellSemanticBinder
         if (bound is PowerShellBoundAssignmentStatement && assignedSymbol is not null &&
             !assignedSymbol.Type.ClrType.IsValueType && assignedSymbol.ValueState != priorValueState)
             assignedSymbol.ForgetValueState();
-        var sourceLines = document.Text.Replace("\r\n", "\n").Split('\n');
         var sourceText = capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding)
             ? PowerShellSourceParser.GetSourceLines(document, PowerShellSourceParser.GetSpan(document, statement.Extent))
-            : string.Join("\n", sourceLines.Skip(statement.Extent.StartLineNumber - 1)
+            : string.Join("\n", document.Text.Replace("\r\n", "\n").Split('\n').Skip(statement.Extent.StartLineNumber - 1)
                 .Take(statement.Extent.EndLineNumber - statement.Extent.StartLineNumber + 1));
         if (bound is PowerShellBoundThrowStatement thrown)
             bound = new PowerShellBoundThrowStatement(thrown.Span, thrown.Expression, true, document.Path, sourceText);
@@ -420,6 +419,8 @@ internal sealed partial class PowerShellSemanticBinder
         }
         if (statement is BreakStatementAst invalidBreak)
         {
+            if (capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding))
+                return new PowerShellBoundBreakStatement(PowerShellSourceParser.GetSpan(document, invalidBreak.Extent), transferToCaller: true);
             diagnostics.Add(new PowerShellSemanticDiagnostic(
                 "PSB2314",
                 "break must be inside a supported loop or scalar switch.",
@@ -440,6 +441,8 @@ internal sealed partial class PowerShellSemanticBinder
         }
         if (statement is ContinueStatementAst invalidContinue)
         {
+            if (capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding))
+                return new PowerShellBoundContinueStatement(PowerShellSourceParser.GetSpan(document, invalidContinue.Extent), transferToCaller: true);
             diagnostics.Add(new PowerShellSemanticDiagnostic(
                 "PSB2316",
                 "continue must be inside a supported loop.",

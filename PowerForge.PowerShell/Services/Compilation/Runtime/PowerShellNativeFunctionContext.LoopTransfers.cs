@@ -6,6 +6,15 @@ namespace PowerForge.Generated.Runtime
 
     public sealed partial class PowerShellNativeFunctionContext
     {
+        /// <summary>Leaves the current function through the active SDK's caller-loop transfer.</summary>
+        public void TransferToCaller(bool isBreak)
+        {
+            EnsureActive();
+            var type = typeof(PSObject).Assembly.GetType("System.Management.Automation." +
+                (isBreak ? "BreakException" : "ContinueException"), true)!;
+            throw (FlowControlException)Activator.CreateInstance(type, nonPublic: true)!;
+        }
+
         /// <summary>Lets the nearest matching authored loop consume SDK callback break or continue.</summary>
         public bool IsLoopTransfer(FlowControlException error, bool isBreak, string label)
         {

@@ -80,11 +80,31 @@ public sealed class PowerShellCompilationProjectArtifact
     /// <summary>Optional contained project-relative executable test directory; '.' selects the project root. Defaults to the artifact directory.</summary>
     public string? TestWorkingDirectory { get; set; }
 
+    /// <summary>Optional reviewed module acceptance script, replacing the default bare-import test.</summary>
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public PowerShellCompilationProjectModuleTest? ModuleTest { get; set; }
+
     /// <summary>Whether the independently buildable generated project is included.</summary>
     public bool EmitSource { get; set; }
 
     /// <summary>Whether redacted bound/lowered IR snapshots are included.</summary>
     public bool EmitIr { get; set; }
+}
+
+/// <summary>A contained, content-pinned acceptance script for a built or installed binary module.</summary>
+public sealed class PowerShellCompilationProjectModuleTest
+{
+    /// <summary>Project-relative PowerShell script receiving the actual module path through ArtifactPath.</summary>
+    public string Script { get; set; } = string.Empty;
+
+    /// <summary>Reviewed SHA-256 of the acceptance script; changed bytes cannot execute.</summary>
+    public string Sha256 { get; set; } = string.Empty;
+
+    /// <summary>Additional arguments passed directly to the script without a shell.</summary>
+    public string[] Arguments { get; set; } = Array.Empty<string>();
+
+    /// <summary>Optional contained project-relative working directory; '.' selects the project root.</summary>
+    public string? WorkingDirectory { get; set; }
 }
 
 /// <summary>Content-addressed isolated restore evidence for one project environment.</summary>
