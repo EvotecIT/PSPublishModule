@@ -6,34 +6,36 @@ schema: 2.0.0
 ---
 # Merge-BenchmarkEvidenceCatalog
 ## SYNOPSIS
-Consolidates independently produced platform benchmark evidence bundles.
+Consolidates independently produced platform benchmark evidence bundles into one schema 5 catalog.
 
 ## SYNTAX
 ### __AllParameterSets
 ```powershell
-Merge-BenchmarkEvidenceCatalog [-SourcePath] <string[]> [-Path] <string> [-ExpectedPlatform <string[]>] [-ComparisonPath <string>] [-ResultPathPrefix <string>] [-WhatIf] [-Confirm] [<CommonParameters>]
+Merge-BenchmarkEvidenceCatalog [-SourcePath] <string[]> [-Path] <string> [-ExpectedPlatform <string[]>] [-DeclarationPath <string>] [-Policy <BenchmarkPublishPolicy>] [-ResultPathPrefix <string>] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
-Consolidates independently produced platform benchmark evidence bundles.
+Every lane is verified against its result hash and re-evaluated against the declarations and publish policy.
+Older runs of the same lane are kept in the superseded history. Catalogs from earlier schemas are rejected.
 
 ## EXAMPLES
 
 ### EXAMPLE 1
 ```powershell
-Merge-BenchmarkEvidenceCatalog -SourcePath .\windows\index.json, .\linux\index.json -Path .\Website\data\index.json
+Merge-BenchmarkEvidenceCatalog -SourcePath .\windows\index.json, .\linux\index.json -Path .\Website\data\index.json -DeclarationPath .\Benchmarks\benchmarks.json
 ```
 
 
 ## PARAMETERS
 
-### -ComparisonPath
-Optional JSON array declaring every comparison, including workloads without results.
+### -DeclarationPath
+Schema 5 declaration document: the library policy and every comparison, including workloads without results.
+When omitted, declarations are merged from the source catalogs.
 
 ```yaml
 Type: String
 Parameter Sets: __AllParameterSets
-Aliases: None
+Aliases: ComparisonPath
 Possible values:
 
 Required: False
@@ -70,6 +72,22 @@ Possible values:
 
 Required: True
 Position: 1
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -Policy
+Publish policy every lane is re-evaluated against. Defaults to the standard policy.
+
+```yaml
+Type: BenchmarkPublishPolicy
+Parameter Sets: __AllParameterSets
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False

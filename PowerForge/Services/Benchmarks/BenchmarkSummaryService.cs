@@ -14,16 +14,19 @@ public sealed class BenchmarkSummaryService
     public BenchmarkSummaryRow[] Summarize(IEnumerable<BenchmarkSample> samples, PowerShellBenchmarkOutlierMode outlierMode = PowerShellBenchmarkOutlierMode.None)
     {
         return (samples ?? Array.Empty<BenchmarkSample>())
-            .GroupBy(s => MakeKey(s.Suite, s.Scenario, s.Operation, s.Engine, s.Host, s.Os, s.RunMode, s.Variables), StringComparer.Ordinal)
+            .GroupBy(s => MakeKey(s.Suite, s.Scenario, s.Operation, s.Engine, s.Host, s.Os, s.RunMode, s.Variables) + "" + (s.Library ?? string.Empty), StringComparer.Ordinal)
             .Select(group =>
             {
                 var first = group.First();
-                return BuildSummaryRow(first.Suite, first.Scenario, first.Operation, first.Engine, first.Host, first.Os, first.RunMode, first.Variables, group, outlierMode);
+                var row = BuildSummaryRow(first.Suite, first.Scenario, first.Operation, first.Engine, first.Host, first.Os, first.RunMode, first.Variables, group, outlierMode);
+                row.Library = first.Library ?? string.Empty;
+                return row;
             })
             .OrderBy(r => r.Suite, StringComparer.OrdinalIgnoreCase)
             .ThenBy(r => r.Scenario, StringComparer.OrdinalIgnoreCase)
             .ThenBy(r => r.Operation, StringComparer.OrdinalIgnoreCase)
             .ThenBy(r => r.Engine, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(r => r.Library, StringComparer.OrdinalIgnoreCase)
             .ThenBy(r => r.Host, StringComparer.OrdinalIgnoreCase)
             .ThenBy(r => r.Os, StringComparer.OrdinalIgnoreCase)
             .ThenBy(r => r.RunMode, StringComparer.OrdinalIgnoreCase)

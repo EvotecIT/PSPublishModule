@@ -27,7 +27,7 @@ public class WebSiteBuilderBenchmarkEvidenceTests
                 Comparisons = new[] { new BenchmarkComparisonDefinition { ComparisonId = "merge", Area = "pdf", Title = "PDF merging", Libraries = new[] { "OfficeIMO", "PDFsharp" } } },
                 Entries = new[]
                 {
-                    new BenchmarkEvidenceEntry { ComparisonId = "merge", Area = "pdf", Platform = "windows", RunMode = "full", Publish = true, ResultPath = "/data/merge-windows-full.json", ArtifactRelativePath = "merge-windows-full.json" }
+                    new BenchmarkEvidenceEntry { ComparisonId = "merge", Area = "pdf", Platform = "windows", Profile = BenchmarkEvidenceProfile.Full, Publish = true, ResultPath = "/data/merge-windows-full.json", ArtifactRelativePath = "merge-windows-full.json" }
                 }
             });
             WritePage(root, "---\ntitle: Benchmarks\nslug: index\n---\n\nBenchmarks\n");

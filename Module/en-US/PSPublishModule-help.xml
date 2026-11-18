@@ -13012,6 +13012,19 @@ across targets or configurations before uploading to App Store Connect.</maml:pa
     <command:syntax>
       <command:syntaxItem parameterSetName="__AllParameterSets">
         <maml:name>Import-BenchmarkResult</maml:name>
+        <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="none">
+          <maml:name>AcceptLicense</maml:name>
+          <maml:description>
+            <maml:para>Library ids whose licence acceptance you gave explicitly for this run. Required before&#xD;
+acceptance-required libraries can appear in evidence; it is never assumed.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+          <dev:type>
+            <maml:name>String[]</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="none">
           <maml:name>Culture</maml:name>
           <maml:description>
@@ -13021,6 +13034,19 @@ Supply it when punctuation such as 1,234 would otherwise be ambiguous.</maml:par
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
             <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="none">
+          <maml:name>LibraryMap</maml:name>
+          <maml:description>
+            <maml:para>Map from benchmark method (case) name to library id. Every row must resolve to a library through this map&#xD;
+or a [BenchmarkCategory("library:&lt;id&gt;")] category; library identity is never guessed from names.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Hashtable</command:parameterValue>
+          <dev:type>
+            <maml:name>Hashtable</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -13061,9 +13087,35 @@ Supply it when punctuation such as 1,234 would otherwise be ambiguous.</maml:par
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="none">
+          <maml:name>ValidationPath</maml:name>
+          <maml:description>
+            <maml:para>JSON array of output validations recorded before timing: objects with library, case (optional),&#xD;
+status (passed or failed) and detail.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
       </command:syntaxItem>
     </command:syntax>
     <command:parameters>
+      <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="none">
+        <maml:name>AcceptLicense</maml:name>
+        <maml:description>
+          <maml:para>Library ids whose licence acceptance you gave explicitly for this run. Required before&#xD;
+acceptance-required libraries can appear in evidence; it is never assumed.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+        <dev:type>
+          <maml:name>String[]</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
       <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="none">
         <maml:name>Culture</maml:name>
         <maml:description>
@@ -13073,6 +13125,19 @@ Supply it when punctuation such as 1,234 would otherwise be ambiguous.</maml:par
         <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
         <dev:type>
           <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="none">
+        <maml:name>LibraryMap</maml:name>
+        <maml:description>
+          <maml:para>Map from benchmark method (case) name to library id. Every row must resolve to a library through this map&#xD;
+or a [BenchmarkCategory("library:&lt;id&gt;")] category; library identity is never guessed from names.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">Hashtable</command:parameterValue>
+        <dev:type>
+          <maml:name>Hashtable</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
@@ -13113,6 +13178,19 @@ Supply it when punctuation such as 1,234 would otherwise be ambiguous.</maml:par
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
       </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="none">
+        <maml:name>ValidationPath</maml:name>
+        <maml:description>
+          <maml:para>JSON array of output validations recorded before timing: objects with library, case (optional),&#xD;
+status (passed or failed) and detail.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
     </command:parameters>
     <command:inputTypes>
       <command:inputType>
@@ -13137,6 +13215,13 @@ Supply it when punctuation such as 1,234 would otherwise be ambiguous.</maml:par
       <command:example>
         <maml:title>Import BenchmarkDotNet artifacts</maml:title>
         <dev:code>Import-BenchmarkResult -Path .\BenchmarkDotNet.Artifacts -OutputPath .\Build\Benchmarks\normalized.json</dev:code>
+        <dev:remarks>
+          <maml:para></maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>Import with explicit library identity and output validation</maml:title>
+        <dev:code>Import-BenchmarkResult -Path .\BenchmarkDotNet.Artifacts -LibraryMap @{ ReadOfficeImo = 'OfficeIMO'; ReadClosedXml = 'ClosedXML' } -ValidationPath .\Build\validation.json</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
         </dev:remarks>
@@ -32511,19 +32596,21 @@ the local date (yyyy.MM.dd) unless a primary project version is available.</maml
       <command:verb>Merge</command:verb>
       <command:noun>BenchmarkEvidenceCatalog</command:noun>
       <maml:description>
-        <maml:para>Consolidates independently produced platform benchmark evidence bundles.</maml:para>
+        <maml:para>Consolidates independently produced platform benchmark evidence bundles into one schema 5 catalog.</maml:para>
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>Consolidates independently produced platform benchmark evidence bundles.</maml:para>
+      <maml:para>Every lane is verified against its result hash and re-evaluated against the declarations and publish policy.&#xD;
+Older runs of the same lane are kept in the superseded history. Catalogs from earlier schemas are rejected.</maml:para>
     </maml:description>
     <command:syntax>
       <command:syntaxItem parameterSetName="__AllParameterSets">
         <maml:name>Merge-BenchmarkEvidenceCatalog</maml:name>
-        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="none">
-          <maml:name>ComparisonPath</maml:name>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="ComparisonPath">
+          <maml:name>DeclarationPath</maml:name>
           <maml:description>
-            <maml:para>Optional JSON array declaring every comparison, including workloads without results.</maml:para>
+            <maml:para>Schema 5 declaration document: the library policy and every comparison, including workloads without results.&#xD;
+When omitted, declarations are merged from the source catalogs.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
@@ -32557,6 +32644,18 @@ the local date (yyyy.MM.dd) unless a primary project version is available.</maml
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="none">
+          <maml:name>Policy</maml:name>
+          <maml:description>
+            <maml:para>Publish policy every lane is re-evaluated against. Defaults to the standard policy.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">BenchmarkPublishPolicy</command:parameterValue>
+          <dev:type>
+            <maml:name>BenchmarkPublishPolicy</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="none">
           <maml:name>ResultPathPrefix</maml:name>
           <maml:description>
             <maml:para>Root-relative public URL directory for result links, such as /data/benchmarks/library-comparisons.</maml:para>
@@ -32583,10 +32682,11 @@ the local date (yyyy.MM.dd) unless a primary project version is available.</maml
       </command:syntaxItem>
     </command:syntax>
     <command:parameters>
-      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="none">
-        <maml:name>ComparisonPath</maml:name>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="ComparisonPath">
+        <maml:name>DeclarationPath</maml:name>
         <maml:description>
-          <maml:para>Optional JSON array declaring every comparison, including workloads without results.</maml:para>
+          <maml:para>Schema 5 declaration document: the library policy and every comparison, including workloads without results.&#xD;
+When omitted, declarations are merged from the source catalogs.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
         <dev:type>
@@ -32615,6 +32715,18 @@ the local date (yyyy.MM.dd) unless a primary project version is available.</maml
         <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
         <dev:type>
           <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="none">
+        <maml:name>Policy</maml:name>
+        <maml:description>
+          <maml:para>Publish policy every lane is re-evaluated against. Defaults to the standard policy.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">BenchmarkPublishPolicy</command:parameterValue>
+        <dev:type>
+          <maml:name>BenchmarkPublishPolicy</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
@@ -32666,7 +32778,7 @@ the local date (yyyy.MM.dd) unless a primary project version is available.</maml
     <command:examples>
       <command:example>
         <maml:title>Merge Windows and Linux evidence bundles</maml:title>
-        <dev:code>Merge-BenchmarkEvidenceCatalog -SourcePath .\windows\index.json, .\linux\index.json -Path .\Website\data\index.json</dev:code>
+        <dev:code>Merge-BenchmarkEvidenceCatalog -SourcePath .\windows\index.json, .\linux\index.json -Path .\Website\data\index.json -DeclarationPath .\Benchmarks\benchmarks.json</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
         </dev:remarks>
@@ -70015,6 +70127,155 @@ location when Path is omitted.</maml:para>
   </command:command>
   <command:command xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10" xmlns:MSHelp="http://msdn.microsoft.com/mshelp" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10">
     <command:details>
+      <command:name>Select-BenchmarkLibrary</command:name>
+      <command:verb>Select</command:verb>
+      <command:noun>BenchmarkLibrary</command:noun>
+      <maml:description>
+        <maml:para>Selects the libraries a benchmark run may execute from the library policy.</maml:para>
+      </maml:description>
+    </command:details>
+    <maml:description>
+      <maml:para>Selection is generic: include and exclude lists plus explicit per-library licence acceptance. Excluded&#xD;
+libraries never run; acceptance-required libraries run only when you name them in -AcceptLicense.&#xD;
+Pass Accepted to Import-BenchmarkResult -AcceptLicense so the&#xD;
+evidence records the acceptance.</maml:para>
+    </maml:description>
+    <command:syntax>
+      <command:syntaxItem parameterSetName="__AllParameterSets">
+        <maml:name>Select-BenchmarkLibrary</maml:name>
+        <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="none">
+          <maml:name>AcceptLicense</maml:name>
+          <maml:description>
+            <maml:para>Library ids whose licence you accept for this run.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+          <dev:type>
+            <maml:name>String[]</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="none">
+          <maml:name>Exclude</maml:name>
+          <maml:description>
+            <maml:para>Library ids not to run.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+          <dev:type>
+            <maml:name>String[]</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="none">
+          <maml:name>Include</maml:name>
+          <maml:description>
+            <maml:para>Library ids to run; omit to run every selectable library.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+          <dev:type>
+            <maml:name>String[]</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="0" aliases="none">
+          <maml:name>Path</maml:name>
+          <maml:description>
+            <maml:para>Schema 5 declaration document path.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+      </command:syntaxItem>
+    </command:syntax>
+    <command:parameters>
+      <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="none">
+        <maml:name>AcceptLicense</maml:name>
+        <maml:description>
+          <maml:para>Library ids whose licence you accept for this run.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+        <dev:type>
+          <maml:name>String[]</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="none">
+        <maml:name>Exclude</maml:name>
+        <maml:description>
+          <maml:para>Library ids not to run.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+        <dev:type>
+          <maml:name>String[]</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="none">
+        <maml:name>Include</maml:name>
+        <maml:description>
+          <maml:para>Library ids to run; omit to run every selectable library.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
+        <dev:type>
+          <maml:name>String[]</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="0" aliases="none">
+        <maml:name>Path</maml:name>
+        <maml:description>
+          <maml:para>Schema 5 declaration document path.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+    </command:parameters>
+    <command:inputTypes>
+      <command:inputType>
+        <dev:type>
+          <maml:name>None</maml:name>
+        </dev:type>
+      </command:inputType>
+    </command:inputTypes>
+    <command:returnValues>
+      <command:returnValue>
+        <dev:type>
+          <maml:name>PowerForge.BenchmarkLibrarySelection</maml:name>
+        </dev:type>
+      </command:returnValue>
+    </command:returnValues>
+    <maml:alertSet>
+      <maml:alert>
+        <maml:para></maml:para>
+      </maml:alert>
+    </maml:alertSet>
+    <command:examples>
+      <command:example>
+        <maml:title>Select every open library and EPPlus after accepting its licence</maml:title>
+        <dev:code>$selection = Select-BenchmarkLibrary -Path .\Benchmarks\benchmarks.json -AcceptLicense EPPlus&#xD;
+            dotnet run -c Release --project .\Benchmarks -- --libraries ($selection.Selected -join ',')</dev:code>
+        <dev:remarks>
+          <maml:para></maml:para>
+        </dev:remarks>
+      </command:example>
+    </command:examples>
+    <command:relatedLinks />
+  </command:command>
+  <command:command xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10" xmlns:MSHelp="http://msdn.microsoft.com/mshelp" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10">
+    <command:details>
       <command:name>Send-GitHubRelease</command:name>
       <command:verb>Send</command:verb>
       <command:noun>GitHubRelease</command:noun>
@@ -78763,6 +79024,163 @@ the cmdlet resolves the next patch version. When an exact version is provided, i
   </command:command>
   <command:command xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10" xmlns:MSHelp="http://msdn.microsoft.com/mshelp" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10">
     <command:details>
+      <command:name>Test-BenchmarkDeclaration</command:name>
+      <command:verb>Test</command:verb>
+      <command:noun>BenchmarkDeclaration</command:noun>
+      <maml:description>
+        <maml:para>Validates a benchmark declaration document and, optionally, checks a result against it for drift.</maml:para>
+      </maml:description>
+    </command:details>
+    <maml:description>
+      <maml:para>The declaration document holds the library policy (id, package, pinned version, licence, restriction class,&#xD;
+reason) and the comparisons (area, group, title, subject, libraries, axes, cases, platforms, frameworks).&#xD;
+Without a result the command lints the document. With a result it also reports declaration drift: cases,&#xD;
+libraries or axis values that ran but are not declared, and declared cases that did not run.</maml:para>
+      <maml:para>The command stops with an error when it finds anything, so a build can run it before measuring.&#xD;
+Use -PassThru to receive the findings as objects instead.</maml:para>
+    </maml:description>
+    <command:syntax>
+      <command:syntaxItem parameterSetName="__AllParameterSets">
+        <maml:name>Test-BenchmarkDeclaration</maml:name>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="none">
+          <maml:name>ComparisonId</maml:name>
+          <maml:description>
+            <maml:para>Comparison the result belongs to. Required with a result.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="True (ByValue)" position="named" aliases="none">
+          <maml:name>InputObject</maml:name>
+          <maml:description>
+            <maml:para>Optional normalized result to check for drift.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">BenchmarkRunResult</command:parameterValue>
+          <dev:type>
+            <maml:name>BenchmarkRunResult</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="none">
+          <maml:name>PassThru</maml:name>
+          <maml:description>
+            <maml:para>Return findings as objects instead of stopping with an error.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+          <dev:type>
+            <maml:name>SwitchParameter</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="0" aliases="none">
+          <maml:name>Path</maml:name>
+          <maml:description>
+            <maml:para>Schema 5 declaration document path.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+      </command:syntaxItem>
+    </command:syntax>
+    <command:parameters>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="none">
+        <maml:name>ComparisonId</maml:name>
+        <maml:description>
+          <maml:para>Comparison the result belongs to. Required with a result.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="True (ByValue)" position="named" aliases="none">
+        <maml:name>InputObject</maml:name>
+        <maml:description>
+          <maml:para>Optional normalized result to check for drift.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">BenchmarkRunResult</command:parameterValue>
+        <dev:type>
+          <maml:name>BenchmarkRunResult</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="none">
+        <maml:name>PassThru</maml:name>
+        <maml:description>
+          <maml:para>Return findings as objects instead of stopping with an error.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
+        <dev:type>
+          <maml:name>SwitchParameter</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="0" aliases="none">
+        <maml:name>Path</maml:name>
+        <maml:description>
+          <maml:para>Schema 5 declaration document path.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+    </command:parameters>
+    <command:inputTypes>
+      <command:inputType>
+        <dev:type>
+          <maml:name>PowerForge.BenchmarkRunResult</maml:name>
+        </dev:type>
+      </command:inputType>
+    </command:inputTypes>
+    <command:returnValues>
+      <command:returnValue>
+        <dev:type>
+          <maml:name>PowerForge.BenchmarkDeclarationIssue</maml:name>
+        </dev:type>
+      </command:returnValue>
+    </command:returnValues>
+    <maml:alertSet>
+      <maml:alert>
+        <maml:para></maml:para>
+      </maml:alert>
+    </maml:alertSet>
+    <command:examples>
+      <command:example>
+        <maml:title>Lint the declarations in CI</maml:title>
+        <dev:code>Test-BenchmarkDeclaration -Path .\Benchmarks\benchmarks.json</dev:code>
+        <dev:remarks>
+          <maml:para></maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>Check a dry-run result for drift before a long run</maml:title>
+        <dev:code>Import-BenchmarkResult .\artifacts | Test-BenchmarkDeclaration -Path .\Benchmarks\benchmarks.json -ComparisonId pdf-merge</dev:code>
+        <dev:remarks>
+          <maml:para></maml:para>
+        </dev:remarks>
+      </command:example>
+    </command:examples>
+    <command:relatedLinks />
+  </command:command>
+  <command:command xmlns:maml="http://schemas.microsoft.com/maml/2004/10" xmlns:dev="http://schemas.microsoft.com/maml/dev/2004/10" xmlns:MSHelp="http://msdn.microsoft.com/mshelp" xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10">
+    <command:details>
       <command:name>Test-BenchmarkGate</command:name>
       <command:verb>Test</command:verb>
       <command:noun>BenchmarkGate</command:noun>
@@ -80341,11 +80759,17 @@ across physical roots and selected dependents are removed before their selected 
       <command:verb>Update</command:verb>
       <command:noun>BenchmarkEvidenceCatalog</command:noun>
       <maml:description>
-        <maml:para>Adds one normalized benchmark result to a platform-aware evidence catalog.</maml:para>
+        <maml:para>Adds one normalized benchmark result to a schema 5 evidence catalog.</maml:para>
       </maml:description>
     </command:details>
     <maml:description>
-      <maml:para>Adds one normalized benchmark result to a platform-aware evidence catalog.</maml:para>
+      <maml:para>Each lane is keyed by comparison, platform, framework, profile and lane parameters such as processor&#xD;
+affinity. The replaced lane is kept in the catalog's superseded history with its date and hash.</maml:para>
+      <maml:para>Publishing applies the catalog's publish policy: the diagnostic profile is never published; standard and&#xD;
+full lanes need clean source provenance, the runner block, at least the policy's warmups, a comparison&#xD;
+declaration with a library policy, and per-cell sample counts, confidence intervals and passed output&#xD;
+validation. Failed cells are recorded with their reason and left out of public claims instead of failing&#xD;
+the whole lane. Call it once per comparison as results arrive so a later failure never loses earlier evidence.</maml:para>
     </maml:description>
     <command:syntax>
       <command:syntaxItem parameterSetName="__AllParameterSets">
@@ -80353,9 +80777,21 @@ across physical roots and selected dependents are removed before their selected 
         <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="none">
           <maml:name>ComparisonId</maml:name>
           <maml:description>
-            <maml:para>Stable identifier shared only by equivalent workloads and fixture versions.</maml:para>
+            <maml:para>Stable identifier shared only by equivalent workloads. It must not encode framework or affinity.</maml:para>
           </maml:description>
           <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="none">
+          <maml:name>DeclarationPath</maml:name>
+          <maml:description>
+            <maml:para>Schema 5 declaration document (library policy and comparisons) that replaces the catalog's declarations.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
             <maml:name>String</maml:name>
             <maml:uri />
@@ -80374,6 +80810,18 @@ across physical roots and selected dependents are removed before their selected 
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="none">
+          <maml:name>Framework</maml:name>
+          <maml:description>
+            <maml:para>Target framework of the lane, such as net10.0. Resolved from metadata or the runtime when omitted.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
         <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="True (ByValue)" position="named" aliases="none">
           <maml:name>InputObject</maml:name>
           <maml:description>
@@ -80382,6 +80830,18 @@ across physical roots and selected dependents are removed before their selected 
           <command:parameterValue required="true" variableLength="false">BenchmarkRunResult</command:parameterValue>
           <dev:type>
             <maml:name>BenchmarkRunResult</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="none">
+          <maml:name>LaneParameter</maml:name>
+          <maml:description>
+            <maml:para>Additional lane parameters, such as @{ affinity = '0xffff0000' }.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">Hashtable</command:parameterValue>
+          <dev:type>
+            <maml:name>Hashtable</maml:name>
             <maml:uri />
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
@@ -80412,11 +80872,40 @@ carry OS metadata. Conflicting embedded labels are rejected.</maml:para>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="none">
+          <maml:name>Policy</maml:name>
+          <maml:description>
+            <maml:para>Publish policy that replaces the catalog's policy. Defaults to the catalog's current policy.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">BenchmarkPublishPolicy</command:parameterValue>
+          <dev:type>
+            <maml:name>BenchmarkPublishPolicy</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="RunMode">
+          <maml:name>Profile</maml:name>
+          <maml:description>
+            <maml:para>Evidence profile: diagnostic (never published), standard or full (complete BenchmarkDotNet).&#xD;
+The older run-mode name quick is accepted as diagnostic.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">diagnostic</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">standard</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">full</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">quick</command:parameterValue>
+          </command:parameterValueGroup>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="none">
           <maml:name>Publish</maml:name>
           <maml:description>
-            <maml:para>Marks this lane as suitable for public benchmark claims. Published evidence must contain&#xD;
-successful measurements without failures, runtime and runner identity, and exact clean-worktree&#xD;
-source provenance in metadata keys gitSha and gitWorktreeClean.</maml:para>
+            <maml:para>Marks this lane as suitable for public benchmark claims. The lane must meet the publish policy.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
           <dev:type>
@@ -80451,27 +80940,27 @@ portable consumer path rather than a local path.</maml:para>
           </dev:type>
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
-        <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="none">
-          <maml:name>RunMode</maml:name>
-          <maml:description>
-            <maml:para>Run mode such as quick or full.</maml:para>
-          </maml:description>
-          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
-          <dev:type>
-            <maml:name>String</maml:name>
-            <maml:uri />
-          </dev:type>
-          <dev:defaultValue>None</dev:defaultValue>
-        </command:parameter>
       </command:syntaxItem>
     </command:syntax>
     <command:parameters>
       <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="none">
         <maml:name>ComparisonId</maml:name>
         <maml:description>
-          <maml:para>Stable identifier shared only by equivalent workloads and fixture versions.</maml:para>
+          <maml:para>Stable identifier shared only by equivalent workloads. It must not encode framework or affinity.</maml:para>
         </maml:description>
         <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="none">
+        <maml:name>DeclarationPath</maml:name>
+        <maml:description>
+          <maml:para>Schema 5 declaration document (library policy and comparisons) that replaces the catalog's declarations.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
         <dev:type>
           <maml:name>String</maml:name>
           <maml:uri />
@@ -80490,6 +80979,18 @@ portable consumer path rather than a local path.</maml:para>
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
       </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="none">
+        <maml:name>Framework</maml:name>
+        <maml:description>
+          <maml:para>Target framework of the lane, such as net10.0. Resolved from metadata or the runtime when omitted.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
       <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="True (ByValue)" position="named" aliases="none">
         <maml:name>InputObject</maml:name>
         <maml:description>
@@ -80498,6 +80999,18 @@ portable consumer path rather than a local path.</maml:para>
         <command:parameterValue required="true" variableLength="false">BenchmarkRunResult</command:parameterValue>
         <dev:type>
           <maml:name>BenchmarkRunResult</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="none">
+        <maml:name>LaneParameter</maml:name>
+        <maml:description>
+          <maml:para>Additional lane parameters, such as @{ affinity = '0xffff0000' }.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">Hashtable</command:parameterValue>
+        <dev:type>
+          <maml:name>Hashtable</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
@@ -80528,11 +81041,40 @@ carry OS metadata. Conflicting embedded labels are rejected.</maml:para>
         <dev:defaultValue>None</dev:defaultValue>
       </command:parameter>
       <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="none">
+        <maml:name>Policy</maml:name>
+        <maml:description>
+          <maml:para>Publish policy that replaces the catalog's policy. Defaults to the catalog's current policy.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">BenchmarkPublishPolicy</command:parameterValue>
+        <dev:type>
+          <maml:name>BenchmarkPublishPolicy</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="RunMode">
+        <maml:name>Profile</maml:name>
+        <maml:description>
+          <maml:para>Evidence profile: diagnostic (never published), standard or full (complete BenchmarkDotNet).&#xD;
+The older run-mode name quick is accepted as diagnostic.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+        <command:parameterValueGroup>
+          <command:parameterValue required="false" variableLength="false">diagnostic</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">standard</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">full</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">quick</command:parameterValue>
+        </command:parameterValueGroup>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="none">
         <maml:name>Publish</maml:name>
         <maml:description>
-          <maml:para>Marks this lane as suitable for public benchmark claims. Published evidence must contain&#xD;
-successful measurements without failures, runtime and runner identity, and exact clean-worktree&#xD;
-source provenance in metadata keys gitSha and gitWorktreeClean.</maml:para>
+          <maml:para>Marks this lane as suitable for public benchmark claims. The lane must meet the publish policy.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">SwitchParameter</command:parameterValue>
         <dev:type>
@@ -80567,18 +81109,6 @@ portable consumer path rather than a local path.</maml:para>
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
       </command:parameter>
-      <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="none">
-        <maml:name>RunMode</maml:name>
-        <maml:description>
-          <maml:para>Run mode such as quick or full.</maml:para>
-        </maml:description>
-        <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
-        <dev:type>
-          <maml:name>String</maml:name>
-          <maml:uri />
-        </dev:type>
-        <dev:defaultValue>None</dev:defaultValue>
-      </command:parameter>
     </command:parameters>
     <command:inputTypes>
       <command:inputType>
@@ -80601,12 +81131,12 @@ portable consumer path rather than a local path.</maml:para>
     </maml:alertSet>
     <command:examples>
       <command:example>
-        <maml:title>Record a Windows publish lane</maml:title>
-        <dev:code>$capture = Start-BenchmarkProvenanceCapture -SourceRoot . -ArtifactRoot .\Build\BenchmarkDotNet.Artifacts -Metadata @{ 'benchmark.workload.id' = 'tabular-65k-v1' } -RunMode full&#xD;
+        <maml:title>Record a published Windows lane</maml:title>
+        <dev:code>$capture = Start-BenchmarkProvenanceCapture -SourceRoot . -ArtifactRoot .\Build\BenchmarkDotNet.Artifacts -Metadata @{ 'benchmark.workload.id' = 'tabular-65k' } -RunMode full&#xD;
             dotnet run -c Release --project .\Benchmarks -- --artifacts .\Build\BenchmarkDotNet.Artifacts&#xD;
             $capture | Complete-BenchmarkProvenanceCapture&#xD;
-            $result = Import-BenchmarkResult .\Build\BenchmarkDotNet.Artifacts&#xD;
-            $result | Update-BenchmarkEvidenceCatalog -Path .\Website\data\benchmark-index.json -ComparisonId tabular-65k-v1 -ResultPath windows-full.json -RunMode full -Publish</dev:code>
+            $result = Import-BenchmarkResult .\Build\BenchmarkDotNet.Artifacts -ValidationPath .\Build\validation.json&#xD;
+            $result | Update-BenchmarkEvidenceCatalog -Path .\Website\data\benchmark-index.json -ComparisonId tabular-65k -ResultPath windows-full.json -Profile full -Framework net10.0 -DeclarationPath .\Benchmarks\benchmarks.json -Publish</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
         </dev:remarks>

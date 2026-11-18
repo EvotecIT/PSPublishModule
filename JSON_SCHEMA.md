@@ -17,6 +17,8 @@ PowerForge CLI commands accept JSON configuration files (`--config <file.json>`)
 - Web pipeline: `Schemas/powerforge.web.pipelinespec.schema.json` (maps to `powerforge-web pipeline` JSON)
 - Web publish: `Schemas/powerforge.web.publishspec.schema.json` (maps to `powerforge-web publish` JSON)
 - Shared enums: `Schemas/powerforge.common.schema.json`
+- Benchmark declarations: `Schemas/powerforge.benchmark-declarations.schema.json` (maps to `PowerForge.BenchmarkDeclarationDocument`, the library policy and comparisons read by `Test-BenchmarkDeclaration`, `Select-BenchmarkLibrary` and the evidence catalog cmdlets)
+- Benchmark evidence catalog: `Schemas/powerforge.benchmark-evidence.schema.json` (maps to `PowerForge.BenchmarkEvidenceCatalog`, schema 5)
 
 ## Using with VSCode
 

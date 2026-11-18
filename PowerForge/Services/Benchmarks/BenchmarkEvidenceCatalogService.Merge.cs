@@ -19,21 +19,23 @@ public sealed partial class BenchmarkEvidenceCatalogService
         string catalogPath,
         IEnumerable<string> sourceCatalogPaths,
         IEnumerable<string>? expectedPlatforms = null)
-        => MergeFiles(catalogPath, sourceCatalogPaths, expectedPlatforms, null, null);
+        => MergeFiles(catalogPath, sourceCatalogPaths, expectedPlatforms, null, null, null);
 
     /// <summary>Merges portable evidence with declared coverage and optional public result URL rebasing.</summary>
     /// <param name="catalogPath">Destination catalog path.</param>
     /// <param name="sourceCatalogPaths">Source catalog paths, including the destination to preserve omitted lanes.</param>
     /// <param name="expectedPlatforms">Optional expected platform set.</param>
-    /// <param name="comparisons">Authoritative declarations, or null to merge source declarations.</param>
+    /// <param name="declarations">Authoritative library policy and comparison declarations, or null to merge source declarations.</param>
     /// <param name="resultPathPrefix">Optional root-relative public URL directory. Artifacts are published directly in the output catalog directory.</param>
+    /// <param name="policy">Publish policy every lane is re-evaluated against, or null for the default policy.</param>
     /// <returns>The consolidated catalog.</returns>
     public BenchmarkEvidenceCatalog MergeFiles(
         string catalogPath,
         IEnumerable<string> sourceCatalogPaths,
         IEnumerable<string>? expectedPlatforms,
-        IEnumerable<BenchmarkComparisonDefinition>? comparisons,
-        string? resultPathPrefix = null)
+        BenchmarkDeclarationDocument? declarations,
+        string? resultPathPrefix = null,
+        BenchmarkPublishPolicy? policy = null)
     {
         if (string.IsNullOrWhiteSpace(catalogPath))
             throw new ArgumentException("Output catalog path is required.", nameof(catalogPath));
@@ -53,33 +55,60 @@ public sealed partial class BenchmarkEvidenceCatalogService
         using var fileLease = BenchmarkFileUpdateLock.Acquire(outputCatalogPath);
         var candidates = new List<BundleLane>();
         var platformSets = new List<string>();
-        var declarations = new List<BenchmarkComparisonDefinition>();
+        var comparisons = new List<BenchmarkComparisonDefinition>();
+        var libraries = new List<BenchmarkLibraryDeclaration>();
+        var superseded = new List<BenchmarkSupersededLane>();
         foreach (string sourceCatalogPath in sources)
         {
             if (!File.Exists(sourceCatalogPath))
                 throw new FileNotFoundException("Benchmark evidence source catalog was not found.", sourceCatalogPath);
 
-            BenchmarkEvidenceCatalog source = BenchmarkJson.Read<BenchmarkEvidenceCatalog>(sourceCatalogPath);
-            ValidateCatalogSchema(source);
-            if (source.SchemaVersion == 1)
-            {
-                throw new InvalidOperationException(
-                    $"Benchmark evidence source catalog '{sourceCatalogPath}' uses schema 1. " +
-                    "Update it with the current PowerForge version before merging so legacy publish flags are demoted and revalidated.");
-            }
+            BenchmarkEvidenceCatalog source = ReadCatalog(sourceCatalogPath);
             platformSets.AddRange(source.ExpectedPlatforms);
-            declarations.AddRange(source.Comparisons);
+            comparisons.AddRange(source.Comparisons);
+            libraries.AddRange(source.Libraries);
+            superseded.AddRange(source.Superseded);
             foreach (BenchmarkEvidenceEntry entry in source.Entries)
                 candidates.Add(LoadBundleLane(sourceCatalogPath, entry));
         }
 
-        BundleLane[] selected = SelectDistinctLanes(candidates);
+        var merged = new BenchmarkEvidenceCatalog
+        {
+            SchemaVersion = CurrentSchemaVersion,
+            Policy = policy ?? BenchmarkPublishPolicy.CreateDefault()
+        };
+        if (declarations is not null)
+        {
+            ApplyDeclarationDocument(merged, declarations);
+        }
+        else
+        {
+            merged.Libraries = MergeLibraries(libraries);
+            merged.Comparisons = comparisons.ToArray();
+        }
+
+        BundleLane[] selected = SelectDistinctLanes(candidates, superseded);
+        foreach (BundleLane lane in selected)
+        {
+            BenchmarkPolicyEvaluation evaluation = Evaluate(
+                merged,
+                lane.Result,
+                lane.Entry.ComparisonId,
+                lane.Entry.Framework,
+                lane.Entry.Profile,
+                lane.Entry.Publish);
+            if (lane.Entry.Publish && evaluation.LaneIssues.Length > 0)
+            {
+                throw new InvalidOperationException(
+                    $"Published benchmark lane '{lane.Entry.LaneKey}' does not meet the publish policy: " +
+                    string.Join(" ", evaluation.LaneIssues));
+            }
+            ApplyEvaluation(lane.Entry, evaluation);
+        }
+
         BenchmarkEvidenceEntry[] entries = selected
             .Select(candidate => candidate.Entry)
-            .OrderBy(entry => entry.ComparisonId, StringComparer.OrdinalIgnoreCase)
-            .ThenBy(entry => entry.Platform, StringComparer.OrdinalIgnoreCase)
-            .ThenBy(entry => entry.RunMode, StringComparer.OrdinalIgnoreCase)
-            .ThenByDescending(entry => entry.GeneratedUtc)
+            .OrderBy(entry => entry.LaneKey, StringComparer.OrdinalIgnoreCase)
             .ToArray();
         ValidateDistinctPublishedResultPaths(entries);
 
@@ -109,16 +138,10 @@ public sealed partial class BenchmarkEvidenceCatalogService
         ValidateDistinctBundleDestinations(outputCatalogPath, selected);
 
         ApplyCompatibility(entries);
-        string[] platforms = NormalizeExpectedPlatforms(expectedPlatforms ?? platformSets);
-        var merged = new BenchmarkEvidenceCatalog
-        {
-            SchemaVersion = SupportedSchemaVersion,
-            ExpectedPlatforms = platforms,
-            Entries = entries,
-            Availability = BuildAvailability(entries, platforms)
-        };
-
-        ApplyDefinitions(merged, comparisons ?? declarations);
+        merged.ExpectedPlatforms = NormalizeExpectedPlatforms(expectedPlatforms ?? platformSets);
+        merged.Entries = entries;
+        merged.Superseded = NormalizeSuperseded(superseded, entries);
+        ApplyDefinitions(merged);
 
         Directory.CreateDirectory(outputDirectory);
         foreach (BundleLane lane in selected)
@@ -145,38 +168,35 @@ public sealed partial class BenchmarkEvidenceCatalogService
         return merged;
     }
 
+    private static BenchmarkLibraryDeclaration[] MergeLibraries(IEnumerable<BenchmarkLibraryDeclaration> libraries)
+    {
+        var merged = new Dictionary<string, BenchmarkLibraryDeclaration>(StringComparer.OrdinalIgnoreCase);
+        foreach (BenchmarkLibraryDeclaration library in libraries)
+        {
+            if (merged.TryGetValue(library.Id, out BenchmarkLibraryDeclaration? existing))
+            {
+                if (BenchmarkJson.ComputeSha256(existing) != BenchmarkJson.ComputeSha256(library))
+                    throw new InvalidOperationException($"Conflicting library policy entries for '{library.Id}'. Supply one authoritative declaration document.");
+                continue;
+            }
+            merged.Add(library.Id, library);
+        }
+        return merged.Values.OrderBy(value => value.Id, StringComparer.OrdinalIgnoreCase).ToArray();
+    }
+
     private static BundleLane LoadBundleLane(
         string sourceCatalogPath,
         BenchmarkEvidenceEntry sourceEntry)
     {
         ValidateBundleEntry(sourceEntry);
-        bool hasPersistedArtifactPath =
-            !string.IsNullOrWhiteSpace(sourceEntry.ArtifactRelativePath) ||
-            !string.IsNullOrWhiteSpace(sourceEntry.ArtifactFileName);
-        string sourceArtifactRelativePath =
-            !string.IsNullOrWhiteSpace(sourceEntry.ArtifactRelativePath)
-                ? sourceEntry.ArtifactRelativePath
-                : !string.IsNullOrWhiteSpace(sourceEntry.ArtifactFileName)
-                    ? sourceEntry.ArtifactFileName
-                    : ExtractBundleArtifactFileName(sourceEntry.ResultPath);
         string artifactPath = ResolveBundleArtifactPath(
             sourceCatalogPath,
-            sourceArtifactRelativePath,
+            EffectiveBundleArtifactRelativePath(sourceEntry),
             sourceEntry.ResultPath);
-        if (!File.Exists(artifactPath) &&
-            !hasPersistedArtifactPath &&
-            TryFindLegacySchemaThreeArtifact(
-                sourceCatalogPath,
-                sourceEntry,
-                out string? discoveredArtifactPath))
-        {
-            artifactPath = discoveredArtifactPath!;
-        }
         if (!File.Exists(artifactPath))
         {
             throw new FileNotFoundException(
-                $"Normalized result artifact for benchmark lane " +
-                $"'{sourceEntry.ComparisonId}/{sourceEntry.Platform}/{sourceEntry.RunMode}' was not found.",
+                $"Normalized result artifact for benchmark lane '{sourceEntry.LaneKey}' was not found.",
                 artifactPath);
         }
 
@@ -185,8 +205,7 @@ public sealed partial class BenchmarkEvidenceCatalogService
         if (!string.Equals(fileHash, sourceEntry.ResultSha256, StringComparison.OrdinalIgnoreCase))
         {
             throw new InvalidOperationException(
-                $"Normalized result artifact for benchmark lane " +
-                $"'{sourceEntry.ComparisonId}/{sourceEntry.Platform}/{sourceEntry.RunMode}' " +
+                $"Normalized result artifact for benchmark lane '{sourceEntry.LaneKey}' " +
                 "does not match the SHA-256 recorded by its source catalog.");
         }
 
@@ -194,26 +213,32 @@ public sealed partial class BenchmarkEvidenceCatalogService
             bytes,
             artifactPath);
         ValidateBundleEntryMatchesResult(sourceEntry, result);
-        return new BundleLane(CloneEntry(sourceEntry), bytes);
+        string expectedLaneKey = BenchmarkEvidenceIdentity.CreateLaneKey(
+            sourceEntry.ComparisonId, sourceEntry.Platform, sourceEntry.Framework, sourceEntry.Profile, sourceEntry.Parameters);
+        if (!string.Equals(sourceEntry.LaneKey, expectedLaneKey, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                $"Benchmark lane key '{sourceEntry.LaneKey}' does not match its dimensions ('{expectedLaneKey}').");
+        }
+        return new BundleLane(CloneEntry(sourceEntry), bytes, result);
     }
 
     private static void ValidateBundleEntry(BenchmarkEvidenceEntry entry)
     {
         if (string.IsNullOrWhiteSpace(entry.ComparisonId) ||
             string.IsNullOrWhiteSpace(entry.Platform) ||
-            string.IsNullOrWhiteSpace(entry.RunMode) ||
+            string.IsNullOrWhiteSpace(entry.LaneKey) ||
             string.IsNullOrWhiteSpace(entry.ResultPath) ||
             string.IsNullOrWhiteSpace(entry.Suite))
         {
             throw new InvalidOperationException(
-                "Benchmark evidence bundle entries require comparison, platform, run mode, result path, and suite identities.");
+                "Benchmark evidence bundle entries require comparison, platform, lane key, result path, and suite identities.");
         }
 
         if (entry.ResultSha256.Length != 64 || !entry.ResultSha256.All(Uri.IsHexDigit))
         {
             throw new InvalidOperationException(
-                $"Benchmark lane '{entry.ComparisonId}/{entry.Platform}/{entry.RunMode}' " +
-                "does not contain a valid result SHA-256.");
+                $"Benchmark lane '{entry.LaneKey}' does not contain a valid result SHA-256.");
         }
     }
 
@@ -230,42 +255,33 @@ public sealed partial class BenchmarkEvidenceCatalogService
             entry.GeneratedUtc != generatedUtc ||
             !DictionariesMatch(entry.Compatibility, compatibility) ||
             BenchmarkJson.ComputeSha256(entry.Environment) !=
-            BenchmarkJson.ComputeSha256(result.Environment);
+            BenchmarkJson.ComputeSha256(CopyEnvironment(result.Environment));
         if (mismatch)
         {
             throw new InvalidOperationException(
-                $"Benchmark lane '{entry.ComparisonId}/{entry.Platform}/{entry.RunMode}' " +
-                "does not match the normalized result metadata from which it claims to originate.");
+                $"Benchmark lane '{entry.LaneKey}' does not match the normalized result metadata from which it claims to originate.");
         }
 
-        string runMode = entry.RunMode.Trim().ToLowerInvariant();
         if (entry.Publish)
         {
-            ValidateEmbeddedRunModes(result, runMode);
-            if (!string.Equals(runMode, "full", StringComparison.Ordinal))
-            {
-                throw new InvalidOperationException(
-                    $"Published benchmark lane '{entry.ComparisonId}/{entry.Platform}/{entry.RunMode}' " +
-                    "must use Full run mode.");
-            }
+            string profile = FormatProfile(entry.Profile);
+            ValidateEmbeddedRunModes(result, profile);
 
             // The source catalog was written only after any imported sidecar was validated.
             // That transient sidecar state is intentionally not serialized into the normalized
             // artifact, so consolidation revalidates every durable publishability invariant.
             ValidatePublishableResult(result, requireValidatedImportProvenance: false);
-            ValidateBoundPublishIdentity(result, entry.ComparisonId, runMode);
+            ValidateBoundPublishIdentity(result, entry.ComparisonId, profile);
         }
     }
 
-    private static BundleLane[] SelectDistinctLanes(IEnumerable<BundleLane> candidates)
+    private static BundleLane[] SelectDistinctLanes(
+        IEnumerable<BundleLane> candidates,
+        List<BenchmarkSupersededLane> superseded)
     {
         var selected = new List<BundleLane>();
         foreach (IGrouping<string, BundleLane> group in candidates.GroupBy(
-                     lane => string.Join(
-                         "\u001f",
-                         lane.Entry.ComparisonId,
-                         lane.Entry.Platform,
-                         lane.Entry.RunMode),
+                     lane => lane.Entry.LaneKey,
                      StringComparer.OrdinalIgnoreCase))
         {
             BundleLane first = group.OrderByDescending(candidate => candidate.Entry.GeneratedUtc).First();
@@ -273,8 +289,13 @@ public sealed partial class BenchmarkEvidenceCatalogService
                 .Any(candidate => !EquivalentLane(first.Entry, candidate.Entry)))
             {
                 throw new InvalidOperationException(
-                    $"Benchmark evidence bundles contain conflicting copies of lane " +
-                    $"'{first.Entry.ComparisonId}/{first.Entry.Platform}/{first.Entry.RunMode}'.");
+                    $"Benchmark evidence bundles contain conflicting copies of lane '{first.Entry.LaneKey}'.");
+            }
+
+            foreach (BundleLane older in group.Where(candidate =>
+                         !string.Equals(candidate.Entry.ResultSha256, first.Entry.ResultSha256, StringComparison.OrdinalIgnoreCase)))
+            {
+                superseded.Add(CreateSuperseded(older.Entry, first.Entry.GeneratedUtc));
             }
 
             selected.Add(first);
@@ -516,59 +537,6 @@ public sealed partial class BenchmarkEvidenceCatalogService
         return Path.Combine(segments);
     }
 
-    private static bool TryFindLegacySchemaThreeArtifact(
-        string sourceCatalogPath,
-        BenchmarkEvidenceEntry sourceEntry,
-        out string? artifactPath)
-    {
-        artifactPath = null;
-        string directory = Path.GetDirectoryName(sourceCatalogPath)
-                           ?? throw new InvalidOperationException(
-                               $"Unable to determine the evidence catalog directory for '{sourceCatalogPath}'.");
-        string fullCatalogPath = BenchmarkJson.ResolveWritePath(sourceCatalogPath);
-        StringComparison pathComparison =
-            FrameworkCompatibility.GetPathStringComparison(fullCatalogPath);
-        var contentMatches = new List<string>();
-        foreach (string candidate in Directory
-                     .EnumerateFiles(directory, "*", SearchOption.TopDirectoryOnly)
-                     .OrderBy(path => path, StringComparer.OrdinalIgnoreCase))
-        {
-            string fullCandidate = BenchmarkJson.ResolveWritePath(candidate);
-            if (string.Equals(fullCandidate, fullCatalogPath, pathComparison))
-            {
-                continue;
-            }
-
-            if (!string.Equals(
-                    BenchmarkJson.ComputeFileSha256(fullCandidate),
-                    sourceEntry.ResultSha256,
-                    StringComparison.OrdinalIgnoreCase))
-                continue;
-
-            if (!string.IsNullOrWhiteSpace(sourceEntry.ArtifactDestinationSha256) &&
-                string.Equals(
-                    ComputeArtifactDestinationSha256(
-                        sourceCatalogPath,
-                        fullCandidate),
-                    sourceEntry.ArtifactDestinationSha256,
-                    StringComparison.OrdinalIgnoreCase))
-            {
-                artifactPath = fullCandidate;
-                return true;
-            }
-
-            contentMatches.Add(fullCandidate);
-        }
-
-        if (contentMatches.Count == 1)
-        {
-            artifactPath = contentMatches[0];
-            return true;
-        }
-
-        return false;
-    }
-
     private static bool IsPortableBundleFileName(string fileName)
     {
         if (string.IsNullOrWhiteSpace(fileName) ||
@@ -618,8 +586,8 @@ public sealed partial class BenchmarkEvidenceCatalogService
             if (owners.TryGetValue(destinationPath, out BundleLane? existing))
             {
                 throw new InvalidOperationException(
-                    $"Benchmark lanes '{existing.Entry.ComparisonId}/{existing.Entry.Platform}/{existing.Entry.RunMode}' " +
-                    $"and '{lane.Entry.ComparisonId}/{lane.Entry.Platform}/{lane.Entry.RunMode}' " +
+                    $"Benchmark lanes '{existing.Entry.LaneKey}' " +
+                    $"and '{lane.Entry.LaneKey}' " +
                     $"would overwrite the same bundle artifact '{Path.GetFileName(destinationPath)}'.");
             }
 
@@ -646,8 +614,8 @@ public sealed partial class BenchmarkEvidenceCatalogService
             if (owners.TryGetValue(relativePath, out BundleLane? existing))
             {
                 throw new InvalidOperationException(
-                    $"Benchmark lanes '{existing.Entry.ComparisonId}/{existing.Entry.Platform}/{existing.Entry.RunMode}' " +
-                    $"and '{lane.Entry.ComparisonId}/{lane.Entry.Platform}/{lane.Entry.RunMode}' " +
+                    $"Benchmark lanes '{existing.Entry.LaneKey}' " +
+                    $"and '{lane.Entry.LaneKey}' " +
                     $"would overwrite the same bundle artifact '{relativePath}'.");
             }
 
@@ -656,27 +624,7 @@ public sealed partial class BenchmarkEvidenceCatalogService
     }
 
     private static BenchmarkEvidenceEntry CloneEntry(BenchmarkEvidenceEntry entry)
-        => new()
-        {
-            ComparisonId = entry.ComparisonId,
-            Area = entry.Area,
-            Platform = entry.Platform,
-            RunMode = entry.RunMode,
-            GeneratedUtc = entry.GeneratedUtc,
-            Publish = entry.Publish,
-            ResultPath = entry.ResultPath,
-            ResultSha256 = entry.ResultSha256,
-            ArtifactDestinationSha256 = entry.ArtifactDestinationSha256,
-            ArtifactFileName = entry.ArtifactFileName,
-            ArtifactRelativePath = entry.ArtifactRelativePath,
-            Suite = entry.Suite,
-            Environment = CopyEnvironment(entry.Environment),
-            Compatibility = new Dictionary<string, string>(
-                entry.Compatibility,
-                StringComparer.OrdinalIgnoreCase),
-            Comparable = entry.Comparable,
-            CompatibilityIssues = entry.CompatibilityIssues.ToArray()
-        };
+        => BenchmarkJson.ReadBytes<BenchmarkEvidenceEntry>(BenchmarkJson.SerializeCanonicalBytes(entry), "catalog entry");
 
     private static string ComputeSha256(byte[] bytes)
     {
@@ -693,11 +641,14 @@ public sealed partial class BenchmarkEvidenceCatalogService
 
     private sealed class BundleLane
     {
-        internal BundleLane(BenchmarkEvidenceEntry entry, byte[] artifactBytes)
+        internal BundleLane(BenchmarkEvidenceEntry entry, byte[] artifactBytes, BenchmarkRunResult result)
         {
             Entry = entry;
             ArtifactBytes = artifactBytes;
+            Result = result;
         }
+
+        internal BenchmarkRunResult Result { get; }
 
         internal BenchmarkEvidenceEntry Entry { get; }
         internal byte[] ArtifactBytes { get; }

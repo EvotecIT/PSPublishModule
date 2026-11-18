@@ -98,6 +98,7 @@ public sealed partial class BenchmarkResultImporter
 
         var environment = GetBenchmarkDotNetEnvironment(root);
         var samples = new List<BenchmarkSample>();
+        int? warmups = null, iterations = null, launches = null;
         foreach (var benchmark in benchmarks.EnumerateArray())
         {
             if (benchmark.ValueKind != JsonValueKind.Object)
@@ -122,6 +123,12 @@ public sealed partial class BenchmarkResultImporter
             var metrics = ExtractBenchmarkDotNetMetrics(statistics);
             AddBenchmarkDotNetMemoryMetrics(TryGetObject(benchmark, "Memory"), metrics);
             double[] originalValues = GetBenchmarkDotNetOriginalValues(statistics);
+            string? library = LibraryFromCategories(ReadBenchmarkDotNetCategories(benchmark));
+            (int? Warmups, int? Iterations, int? Launches) counts = CountBenchmarkDotNetMeasurements(benchmark);
+            warmups = Min(warmups, counts.Warmups);
+            iterations = Min(iterations, counts.Iterations);
+            launches = Min(launches, counts.Launches);
+            int firstSample = samples.Count;
             if (originalValues.Length > 0)
             {
                 for (int index = 0; index < originalValues.Length; index++)
@@ -149,6 +156,12 @@ public sealed partial class BenchmarkResultImporter
                     variables,
                     metrics));
             }
+
+            if (library is not null)
+            {
+                for (int index = firstSample; index < samples.Count; index++)
+                    samples[index].Library = library;
+            }
         }
 
         if (samples.Count == 0)
@@ -156,6 +169,8 @@ public sealed partial class BenchmarkResultImporter
 
         result = BuildImportedResult(suite ?? GetString(root, "Title") ?? Path.GetFileNameWithoutExtension(path), samples);
         result.Environment = environment;
+        if (warmups.HasValue || iterations.HasValue || launches.HasValue)
+            result.Runner = new BenchmarkRunnerInfo { Kind = "benchmarkdotnet", Warmups = warmups, Iterations = iterations, Launches = launches };
         return true;
     }
 
@@ -318,4 +333,6 @@ public sealed partial class BenchmarkResultImporter
         };
     }
 
+    private static int? Min(int? current, int? value)
+        => value is null ? current : current is null ? value : Math.Min(current.Value, value.Value);
 }

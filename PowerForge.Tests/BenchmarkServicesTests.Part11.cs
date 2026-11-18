@@ -14,7 +14,7 @@ public sealed partial class BenchmarkServicesTests
         Directory.CreateDirectory(windowsRoot);
         Directory.CreateDirectory(linuxRoot);
         var service = new BenchmarkEvidenceCatalogService();
-        service.UpdateFile(
+        UpdateFileDeclared(service, 
             Path.Combine(windowsRoot, "index.json"),
             Result("Windows", "fixture-a", 10),
             "comparison-a",
@@ -22,7 +22,7 @@ public sealed partial class BenchmarkServicesTests
             "full",
             publish: true,
             resultArtifactPath: Path.Combine(windowsRoot, "windows-full.json"));
-        service.UpdateFile(
+        UpdateFileDeclared(service, 
             Path.Combine(linuxRoot, "index.json"),
             Result("Linux", "fixture-a", 11),
             "comparison-a",
@@ -51,13 +51,13 @@ public sealed partial class BenchmarkServicesTests
         });
         Assert.True(Assert.Single(
             merged.Availability,
-            item => item.Platform == "windows").Available);
+            item => item.ComparisonId == "comparison-a" && item.Platform == "windows").Available);
         Assert.True(Assert.Single(
             merged.Availability,
-            item => item.Platform == "linux").Available);
+            item => item.ComparisonId == "comparison-a" && item.Platform == "linux").Available);
         Assert.False(Assert.Single(
             merged.Availability,
-            item => item.Platform == "macos").Available);
+            item => item.ComparisonId == "comparison-a" && item.Platform == "macos").Available);
     }
 
     [Fact]
@@ -68,7 +68,7 @@ public sealed partial class BenchmarkServicesTests
         Directory.CreateDirectory(sourceRoot);
         var service = new BenchmarkEvidenceCatalogService();
         string sourceCatalogPath = Path.Combine(sourceRoot, "index.json");
-        service.UpdateFile(
+        UpdateFileDeclared(service, 
             sourceCatalogPath,
             Result("Windows", "fixture-a", 10),
             "comparison-a",
@@ -101,13 +101,13 @@ public sealed partial class BenchmarkServicesTests
         result.Environment.OsFamily = string.Empty;
         result.Environment.OsDescription = string.Empty;
         string sourceCatalogPath = Path.Combine(sourceRoot, "index.json");
-        service.UpdateFile(
+        UpdateFileDeclared(service, 
             sourceCatalogPath,
             result,
             "comparison-a",
             "/data/benchmarks/windows-full.json",
             "full",
-            publish: true,
+            publish: false,
             platform: "windows",
             resultArtifactPath: Path.Combine(sourceRoot, "windows-full.json"));
 
@@ -126,7 +126,7 @@ public sealed partial class BenchmarkServicesTests
         Directory.CreateDirectory(sourceRoot);
         var service = new BenchmarkEvidenceCatalogService();
         string sourceCatalogPath = Path.Combine(sourceRoot, "index.json");
-        service.UpdateFile(
+        UpdateFileDeclared(service, 
             sourceCatalogPath,
             Result("Windows", "fixture-a", 10),
             "comparison-a",
@@ -156,7 +156,7 @@ public sealed partial class BenchmarkServicesTests
         var service = new BenchmarkEvidenceCatalogService();
         string sourceCatalogPath = Path.Combine(sourceRoot, "index.json");
         string explicitArtifactPath = Path.Combine(sourceRoot, "run.json");
-        service.UpdateFile(
+        UpdateFileDeclared(service, 
             sourceCatalogPath,
             Result("Windows", "fixture-a", 10),
             "comparison-a",
@@ -183,7 +183,7 @@ public sealed partial class BenchmarkServicesTests
         Directory.CreateDirectory(sourceRoot);
         var service = new BenchmarkEvidenceCatalogService();
         string artifactPath = Path.Combine(sourceRoot, "windows-full.json");
-        service.UpdateFile(
+        UpdateFileDeclared(service, 
             Path.Combine(sourceRoot, "index.json"),
             Result("Windows", "fixture-a", 10),
             "comparison-a",
@@ -214,7 +214,7 @@ public sealed partial class BenchmarkServicesTests
         BenchmarkRunResult firstResult = Result("Windows", "fixture-a", 10);
         BenchmarkRunResult secondResult = Result("Windows", "fixture-a", 12);
         secondResult.FinishedUtc = firstResult.FinishedUtc;
-        service.UpdateFile(
+        UpdateFileDeclared(service, 
             Path.Combine(firstRoot, "index.json"),
             firstResult,
             "comparison-a",
@@ -222,7 +222,7 @@ public sealed partial class BenchmarkServicesTests
             "full",
             publish: true,
             resultArtifactPath: Path.Combine(firstRoot, "windows-full.json"));
-        service.UpdateFile(
+        UpdateFileDeclared(service, 
             Path.Combine(secondRoot, "index.json"),
             secondResult,
             "comparison-a",
@@ -251,7 +251,7 @@ public sealed partial class BenchmarkServicesTests
         var service = new BenchmarkEvidenceCatalogService();
         string catalogPath = Path.Combine(sourceRoot, "index.json");
         string artifactPath = Path.Combine(sourceRoot, "windows-full.json");
-        service.UpdateFile(
+        UpdateFileDeclared(service, 
             catalogPath,
             Result("Windows", "fixture-a", 10),
             "comparison-a",
@@ -284,7 +284,7 @@ public sealed partial class BenchmarkServicesTests
         Directory.CreateDirectory(windowsRoot);
         Directory.CreateDirectory(linuxRoot);
         var service = new BenchmarkEvidenceCatalogService();
-        service.UpdateFile(
+        UpdateFileDeclared(service, 
             Path.Combine(windowsRoot, "index.json"),
             Result("Windows", "fixture-a", 10),
             "comparison-a",
@@ -292,7 +292,7 @@ public sealed partial class BenchmarkServicesTests
             "full",
             publish: true,
             resultArtifactPath: Path.Combine(windowsRoot, "result.json"));
-        service.UpdateFile(
+        UpdateFileDeclared(service, 
             Path.Combine(linuxRoot, "index.json"),
             Result("Linux", "fixture-a", 11),
             "comparison-a",
@@ -321,7 +321,7 @@ public sealed partial class BenchmarkServicesTests
         Directory.CreateDirectory(firstRoot);
         Directory.CreateDirectory(secondRoot);
         var service = new BenchmarkEvidenceCatalogService();
-        service.UpdateFile(
+        UpdateFileDeclared(service, 
             Path.Combine(firstRoot, "index.json"),
             Result("Windows", "fixture-a", 10),
             "comparison-a",
@@ -329,7 +329,7 @@ public sealed partial class BenchmarkServicesTests
             "full",
             publish: true,
             resultArtifactPath: Path.Combine(firstRoot, "result.json"));
-        service.UpdateFile(
+        UpdateFileDeclared(service, 
             Path.Combine(secondRoot, "index.json"),
             Result("Linux", "fixture-a", 11),
             "comparison-a",
@@ -357,7 +357,7 @@ public sealed partial class BenchmarkServicesTests
         Directory.CreateDirectory(sourceRoot);
         var service = new BenchmarkEvidenceCatalogService();
         string sourceCatalogPath = Path.Combine(sourceRoot, "catalog.json");
-        service.UpdateFile(
+        UpdateFileDeclared(service, 
             sourceCatalogPath,
             Result("Windows", "fixture-a", 10),
             "comparison-a",
@@ -382,7 +382,7 @@ public sealed partial class BenchmarkServicesTests
         Directory.CreateDirectory(sourceRoot);
         var service = new BenchmarkEvidenceCatalogService();
         string sourceCatalogPath = Path.Combine(sourceRoot, "catalog.json");
-        service.UpdateFile(
+        UpdateFileDeclared(service, 
             sourceCatalogPath,
             Result("Windows", "fixture-a", 10),
             "comparison-a",
@@ -409,7 +409,7 @@ public sealed partial class BenchmarkServicesTests
         var service = new BenchmarkEvidenceCatalogService();
         string sourceCatalogPath = Path.Combine(sourceRoot, "index.json");
         string sourceArtifactPath = Path.Combine(sourceRoot, "run.json");
-        service.UpdateFile(
+        UpdateFileDeclared(service, 
             sourceCatalogPath,
             Result("Windows", "fixture-a", 10),
             "comparison-a",
@@ -426,7 +426,7 @@ public sealed partial class BenchmarkServicesTests
 
         BenchmarkRunResult replacement = Result("Windows", "fixture-a", 20);
         replacement.FinishedUtc = replacement.FinishedUtc.AddMinutes(1);
-        service.UpdateFile(
+        UpdateFileDeclared(service, 
             sourceCatalogPath,
             replacement,
             "comparison-a",
@@ -453,7 +453,7 @@ public sealed partial class BenchmarkServicesTests
         Directory.CreateDirectory(sourceRoot);
         var service = new BenchmarkEvidenceCatalogService();
         string sourceCatalogPath = Path.Combine(sourceRoot, "index.json");
-        service.UpdateFile(
+        UpdateFileDeclared(service, 
             sourceCatalogPath,
             Result("Windows", "fixture-a", 10),
             "comparison-a",
@@ -489,7 +489,7 @@ public sealed partial class BenchmarkServicesTests
         Directory.CreateDirectory(sourceRoot);
         var service = new BenchmarkEvidenceCatalogService();
         string sourceCatalogPath = Path.Combine(sourceRoot, "index.json");
-        BenchmarkEvidenceCatalog source = service.UpdateFile(
+        BenchmarkEvidenceCatalog source = UpdateFileDeclared(service, 
             sourceCatalogPath,
             Result("Windows", "fixture-a", 10),
             "comparison-a",
@@ -514,65 +514,6 @@ public sealed partial class BenchmarkServicesTests
     }
 
     [Fact]
-    public void EvidenceCatalog_MergeFilesFindsPreArtifactFileNameSchemaThreeBundlesByHash()
-    {
-        string root = CreateTempRoot();
-        string sourceRoot = Path.Combine(root, "source");
-        Directory.CreateDirectory(sourceRoot);
-        var service = new BenchmarkEvidenceCatalogService();
-        string sourceCatalogPath = Path.Combine(sourceRoot, "index.json");
-        service.UpdateFile(
-            sourceCatalogPath,
-            Result("Windows", "fixture-a", 10),
-            "comparison-a",
-            "/data/benchmarks/windows.json",
-            "full",
-            publish: true,
-            resultArtifactPath: Path.Combine(sourceRoot, "run.json"));
-        BenchmarkEvidenceCatalog source =
-            BenchmarkJson.Read<BenchmarkEvidenceCatalog>(sourceCatalogPath);
-        source.Entries[0].ArtifactFileName = string.Empty;
-        source.Entries[0].ArtifactRelativePath = string.Empty;
-        BenchmarkJson.Write(sourceCatalogPath, source);
-
-        BenchmarkEvidenceCatalog merged = service.MergeFiles(
-            Path.Combine(root, "merged", "index.json"),
-            [sourceCatalogPath]);
-
-        Assert.Single(merged.Entries);
-    }
-
-    [Fact]
-    public void EvidenceCatalog_MergeFilesFindsLegacyBundleByUniqueContentHashWhenDestinationIdentityDiffers()
-    {
-        string root = CreateTempRoot();
-        string sourceRoot = Path.Combine(root, "source");
-        Directory.CreateDirectory(sourceRoot);
-        var service = new BenchmarkEvidenceCatalogService();
-        string sourceCatalogPath = Path.Combine(sourceRoot, "index.json");
-        service.UpdateFile(
-            sourceCatalogPath,
-            Result("Windows", "fixture-a", 10),
-            "comparison-a",
-            "/data/benchmarks/windows.json",
-            "full",
-            publish: true,
-            resultArtifactPath: Path.Combine(sourceRoot, "Run.json"));
-        BenchmarkEvidenceCatalog source =
-            BenchmarkJson.Read<BenchmarkEvidenceCatalog>(sourceCatalogPath);
-        source.Entries[0].ArtifactFileName = string.Empty;
-        source.Entries[0].ArtifactRelativePath = string.Empty;
-        source.Entries[0].ArtifactDestinationSha256 = new string('a', 64);
-        BenchmarkJson.Write(sourceCatalogPath, source);
-
-        BenchmarkEvidenceCatalog merged = service.MergeFiles(
-            Path.Combine(root, "merged", "index.json"),
-            [sourceCatalogPath]);
-
-        Assert.Single(merged.Entries);
-    }
-
-    [Fact]
     public void EvidenceCatalog_MergeFilesRejectsAmbiguousLegacyContentHashMatches()
     {
         string root = CreateTempRoot();
@@ -581,7 +522,7 @@ public sealed partial class BenchmarkServicesTests
         var service = new BenchmarkEvidenceCatalogService();
         string sourceCatalogPath = Path.Combine(sourceRoot, "index.json");
         string sourceArtifactPath = Path.Combine(sourceRoot, "Run.json");
-        service.UpdateFile(
+        UpdateFileDeclared(service, 
             sourceCatalogPath,
             Result("Windows", "fixture-a", 10),
             "comparison-a",
@@ -615,7 +556,7 @@ public sealed partial class BenchmarkServicesTests
         var service = new BenchmarkEvidenceCatalogService();
         string sourceCatalogPath = Path.Combine(sourceRoot, "index.json");
         string outputCatalogPath = Path.Combine(outputRoot, "index.json");
-        service.UpdateFile(
+        UpdateFileDeclared(service, 
             sourceCatalogPath,
             Result("Windows", "fixture-a", 10),
             "comparison-a",
@@ -652,7 +593,7 @@ public sealed partial class BenchmarkServicesTests
         Directory.CreateDirectory(sourceRoot);
         var service = new BenchmarkEvidenceCatalogService();
         string sourceCatalogPath = Path.Combine(sourceRoot, "index.json");
-        service.UpdateFile(
+        UpdateFileDeclared(service, 
             sourceCatalogPath,
             Result("Windows", "fixture-a", 10),
             "comparison-a",
@@ -692,7 +633,7 @@ public sealed partial class BenchmarkServicesTests
         Directory.CreateDirectory(sourceRoot);
         var service = new BenchmarkEvidenceCatalogService();
         string catalogPath = Path.Combine(sourceRoot, "index.json");
-        service.UpdateFile(
+        UpdateFileDeclared(service, 
             catalogPath,
             Result("Windows", "fixture-a", 10),
             "comparison-a",
@@ -718,7 +659,7 @@ public sealed partial class BenchmarkServicesTests
         Directory.CreateDirectory(sourceRoot);
         var service = new BenchmarkEvidenceCatalogService();
         string sourceCatalogPath = Path.Combine(sourceRoot, "index.json");
-        BenchmarkEvidenceCatalog source = service.UpdateFile(
+        BenchmarkEvidenceCatalog source = UpdateFileDeclared(service, 
             sourceCatalogPath,
             Result("Windows", "fixture-a", 10),
             "comparison-a",
@@ -755,7 +696,7 @@ public sealed partial class BenchmarkServicesTests
         Directory.CreateDirectory(sourceRoot);
         var service = new BenchmarkEvidenceCatalogService();
         string catalogPath = Path.Combine(sourceRoot, "index.json");
-        service.UpdateFile(
+        UpdateFileDeclared(service, 
             catalogPath,
             Result("Windows", "fixture-a", 10),
             "comparison-a",
@@ -781,7 +722,7 @@ public sealed partial class BenchmarkServicesTests
         var service = new BenchmarkEvidenceCatalogService();
         string catalogPath = Path.Combine(sourceRoot, "index.json");
         string longName = new string('界', 70) + ".json";
-        service.UpdateFile(
+        UpdateFileDeclared(service, 
             catalogPath,
             Result("Windows", "fixture-a", 10),
             "comparison-a",
@@ -808,7 +749,7 @@ public sealed partial class BenchmarkServicesTests
         string catalogPath = Path.Combine(sourceRoot, "index.json");
         BenchmarkRunResult result = Result("Windows", "fixture-a", 10);
         result.FinishedUtc = default;
-        service.UpdateFile(
+        UpdateFileDeclared(service, 
             catalogPath,
             result,
             "comparison-a",
@@ -832,7 +773,7 @@ public sealed partial class BenchmarkServicesTests
         Directory.CreateDirectory(sourceRoot);
         var service = new BenchmarkEvidenceCatalogService();
         string catalogPath = Path.Combine(sourceRoot, "index.json");
-        service.UpdateFile(
+        UpdateFileDeclared(service, 
             catalogPath,
             Result("Windows", "fixture-a", 10),
             "comparison-a",
@@ -846,7 +787,7 @@ public sealed partial class BenchmarkServicesTests
 
         BenchmarkEvidenceEntry entry = Assert.Single(merged.Entries);
         Assert.False(entry.Publish);
-        Assert.Equal("quick", entry.RunMode);
+        Assert.Equal(BenchmarkEvidenceProfile.Diagnostic, entry.Profile);
     }
 
     [Fact]
@@ -861,7 +802,7 @@ public sealed partial class BenchmarkServicesTests
         result.Metadata["benchmark.provenance.source"] = "sidecar";
         result.Metadata["benchmark.provenance.runMode"] = "full";
         result.Metadata["benchmark.workload.id"] = "comparison-a";
-        service.UpdateFile(
+        UpdateFileDeclared(service, 
             catalogPath,
             result,
             "comparison-a",

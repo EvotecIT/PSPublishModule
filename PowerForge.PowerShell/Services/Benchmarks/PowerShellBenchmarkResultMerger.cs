@@ -27,7 +27,8 @@ internal static class PowerShellBenchmarkResultMerger
             Summary = summary,
             Comparison = PowerShellBenchmarkComparisonEvaluator.Build(suite, summary),
             Metadata = PowerShellBenchmarkEnvironmentMetadata.Build(suite, sourceProvenance),
-            Environment = MergeEnvironment(childResults)
+            Environment = MergeEnvironment(childResults),
+            Runner = PowerShellBenchmarkEnvironmentMetadata.BuildRunner(suite, inProcess: false)
         };
 
         foreach (var child in childResults)
@@ -138,6 +139,7 @@ internal static class PowerShellBenchmarkResultMerger
             Scenario = sample.Scenario,
             Operation = sample.Operation,
             Engine = sample.Engine,
+            Library = sample.Library,
             Host = sample.Host,
             Os = sample.Os,
             RunMode = sample.RunMode,

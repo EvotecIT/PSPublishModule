@@ -165,7 +165,7 @@ public class BenchmarkComparisonViewTests
             var comparison = Assert.Single(new BenchmarkComparisonViewBuilder().Build(catalogPath).Comparisons);
 
             Assert.Equal("linux-full", comparison.PreferredRunId);
-            Assert.Equal(new[] { "windows-quick", "linux-full" }, comparison.Runs.Select(r => r.Id));
+            Assert.Equal(new[] { "windows-diagnostic", "linux-full" }, comparison.Runs.Select(r => r.Id));
             Assert.Equal("Environment not recorded", comparison.Runs[0].Environment.Text);
             var subject = comparison.Overview.First();
             Assert.Equal("OfficeIMO", subject.Name);
@@ -275,7 +275,7 @@ public class BenchmarkComparisonViewTests
                 ComparisonId = "compare",
                 Area = "test",
                 Platform = run.Platform,
-                RunMode = run.Mode,
+                Profile = BenchmarkEvidenceCatalogService.ParseProfile(run.Mode == "quick" ? "diagnostic" : run.Mode),
                 Publish = run.Publish,
                 GeneratedUtc = new DateTimeOffset(2026, 11, 1 + index, 0, 0, 0, TimeSpan.Zero),
                 ResultPath = "/data/" + file,

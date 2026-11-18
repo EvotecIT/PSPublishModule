@@ -98,6 +98,12 @@ public sealed class BenchmarkSample
     /// <summary>Engine, implementation, or competitor lane name.</summary>
     public string Engine { get; set; } = string.Empty;
 
+    /// <summary>
+    /// Library identifier the measurement belongs to, matching a declared library id. Importers and runners
+    /// set it explicitly; it is never inferred from case or job names.
+    /// </summary>
+    public string Library { get; set; } = string.Empty;
+
     /// <summary>PowerShell host or runtime label.</summary>
     public string Host { get; set; } = string.Empty;
 
@@ -152,6 +158,12 @@ public sealed class BenchmarkSummaryRow
     /// <summary>Engine, implementation, or competitor lane name.</summary>
     public string Engine { get; set; } = string.Empty;
 
+    /// <summary>
+    /// Library identifier the measurement belongs to, matching a declared library id. Importers and runners
+    /// set it explicitly; it is never inferred from case or job names.
+    /// </summary>
+    public string Library { get; set; } = string.Empty;
+
     /// <summary>PowerShell host or runtime label.</summary>
     public string Host { get; set; } = string.Empty;
 
@@ -196,6 +208,9 @@ public sealed class BenchmarkSummaryRow
 
     /// <summary>Standard error in milliseconds.</summary>
     public double? StdErrMs { get; set; }
+
+    /// <summary>Confidence interval of the median, when the producer computed one from samples not included in the result.</summary>
+    public BenchmarkConfidenceInterval? ConfidenceInterval { get; set; }
 
     /// <summary>Number of successful samples excluded by the summary policy.</summary>
     public int OutlierCount { get; set; }
@@ -305,6 +320,18 @@ public sealed class BenchmarkRunResult
 
     /// <summary>Typed environment identity used to keep platform evidence separate and auditable.</summary>
     public BenchmarkEnvironmentInfo Environment { get; set; } = new();
+
+    /// <summary>How the runner measured this result, or null when the producer did not record it.</summary>
+    public BenchmarkRunnerInfo? Runner { get; set; }
+
+    /// <summary>Output validation performed per library (and optionally per case) before timing.</summary>
+    public BenchmarkOutputValidation[] Validations { get; set; } = Array.Empty<BenchmarkOutputValidation>();
+
+    /// <summary>
+    /// Libraries whose licence acceptance the person running the benchmark gave explicitly for this run.
+    /// Runners never fill this on the person's behalf.
+    /// </summary>
+    public string[] AcceptedLibraries { get; set; } = Array.Empty<string>();
 }
 
 /// <summary>

@@ -35,13 +35,13 @@ public sealed class BenchmarkComparisonViewBuilder
             throw new ArgumentException("Catalog path is required.", nameof(catalogPath));
 
         var fullPath = Path.GetFullPath(catalogPath);
-        var catalog = BenchmarkJson.Read<BenchmarkEvidenceCatalog>(fullPath);
+        var catalog = new BenchmarkEvidenceCatalogService().ReadCatalog(fullPath);
         var directory = Path.GetDirectoryName(fullPath) ?? ".";
         return Build(catalog, entry =>
         {
             var file = ResolveResultFile(directory, entry);
             if (!File.Exists(file))
-                throw new FileNotFoundException($"Benchmark result for '{entry.ComparisonId}' ({entry.Platform}, {entry.RunMode}) was not found.", file);
+                throw new FileNotFoundException($"Benchmark result for lane '{entry.LaneKey}' was not found.", file);
             return BenchmarkJson.Read<BenchmarkRunResult>(file);
         });
     }
@@ -89,10 +89,10 @@ public sealed class BenchmarkComparisonViewBuilder
         IReadOnlyList<(BenchmarkEvidenceEntry Entry, BenchmarkRunResult Result)> runs)
     {
         var libraries = definition.Libraries ?? Array.Empty<string>();
-        var subject = libraries.FirstOrDefault() ?? string.Empty;
+        var subject = !string.IsNullOrWhiteSpace(definition.Subject) ? definition.Subject : libraries.FirstOrDefault() ?? string.Empty;
         var runViews = runs
             .OrderBy(run => PlatformRank(run.Entry.Platform))
-            .ThenBy(run => string.Equals(run.Entry.RunMode, "full", StringComparison.OrdinalIgnoreCase) ? 0 : 1)
+            .ThenBy(run => run.Entry.Profile == BenchmarkEvidenceProfile.Full ? 0 : run.Entry.Profile == BenchmarkEvidenceProfile.Standard ? 1 : 2)
             .ThenByDescending(run => run.Entry.GeneratedUtc)
             .Select(run => BuildRun(run.Entry, run.Result, libraries, subject))
             .ToArray();
@@ -308,10 +308,11 @@ public sealed class BenchmarkComparisonViewBuilder
             .ToArray();
 
         var platform = (entry.Platform ?? string.Empty).ToLowerInvariant();
-        var runMode = (entry.RunMode ?? string.Empty).ToLowerInvariant();
+        var runMode = BenchmarkKebabCaseEnumConverter<BenchmarkEvidenceProfile>.Format(entry.Profile);
+        var framework = (entry.Framework ?? string.Empty).ToLowerInvariant();
         return new BenchmarkRunView
         {
-            Id = platform + "-" + runMode,
+            Id = platform + (framework.Length > 0 ? "-" + framework : string.Empty) + "-" + runMode,
             Platform = platform,
             PlatformLabel = PlatformLabel(platform),
             RunMode = runMode,
@@ -406,6 +407,9 @@ public sealed class BenchmarkComparisonViewBuilder
 
         var parsed = summary.Select(row =>
         {
+            // Rows that carry their library identity are taken as recorded; name matching is only for rows without it.
+            if (!string.IsNullOrWhiteSpace(row.Library))
+                return (Row: row, Library: row.Library, Suffix: string.Empty);
             var raw = string.IsNullOrWhiteSpace(row.Scenario) ? row.Engine ?? string.Empty : row.Scenario;
             var (library, suffix) = MatchLibrary(raw, declared);
             return (Row: row, Library: library, Suffix: suffix);

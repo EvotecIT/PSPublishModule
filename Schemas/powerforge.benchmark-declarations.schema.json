@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/EvotecIT/PSPublishModule/main/Schemas/powerforge.benchmark-declarations.schema.json",
+  "title": "PowerForge benchmark declarations (schema 5)",
+  "description": "Library policy and comparison declarations. Maps to PowerForge.BenchmarkDeclarationDocument. Generate it from the benchmark code and check it with Test-BenchmarkDeclaration.",
+  "type": "object",
+  "required": ["schemaVersion", "libraries", "comparisons"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "schemaVersion": { "const": 5 },
+    "libraries": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/library" }
+    },
+    "comparisons": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/comparison" }
+    }
+  },
+  "$defs": {
+    "restriction": {
+      "description": "Licence restriction class.",
+      "enum": ["open", "publish-restricted", "acceptance-required", "excluded"]
+    },
+    "library": {
+      "type": "object",
+      "required": ["id", "package", "version", "restriction"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "description": "Library id used by result cells and comparisons." },
+        "package": { "type": "string", "minLength": 1, "description": "Package the library is measured from." },
+        "version": { "type": "string", "minLength": 1, "pattern": "^[^\\[\\(\\*, ]+$", "description": "One pinned package version." },
+        "license": { "type": "string", "description": "SPDX expression or LicenseRef-*." },
+        "licenseUrl": { "type": "string" },
+        "restriction": { "$ref": "#/$defs/restriction" },
+        "reason": { "type": "string", "description": "Required for every class except open." }
+      },
+      "anyOf": [{ "required": ["license"] }, { "required": ["licenseUrl"] }],
+      "if": { "properties": { "restriction": { "not": { "const": "open" } } } },
+      "then": { "required": ["reason"], "properties": { "reason": { "minLength": 1 } } }
+    },
+    "axis": {
+      "type": "object",
+      "required": ["name", "values"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "values": { "type": "array", "minItems": 1, "items": { "type": "string" } }
+      }
+    },
+    "comparison": {
+      "type": "object",
+      "required": ["comparisonId", "area", "title", "subject", "libraries", "expectedPlatforms"],
+      "properties": {
+        "comparisonId": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Stable id. Framework and affinity are lane dimensions and never part of it.",
+          "not": { "pattern": "(-net\\d+(\\.\\d+)?|-netcoreapp\\d+\\.\\d+|-netstandard\\d+\\.\\d+)$|-affinity-" }
+        },
+        "area": { "type": "string", "minLength": 1 },
+        "group": { "type": "string" },
+        "title": { "type": "string", "minLength": 1 },
+        "subject": { "type": "string", "minLength": 1 },
+        "libraries": { "type": "array", "minItems": 1, "items": { "type": "string" } },
+        "axes": { "type": "array", "items": { "$ref": "#/$defs/axis" } },
+        "cases": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+        "expectedPlatforms": { "type": "array", "minItems": 1, "items": { "type": "string" } },
+        "frameworks": { "type": "array", "items": { "type": "string" } },
+        "eligibility": {
+          "type": "object",
+          "properties": {
+            "publishable": { "type": "boolean" },
+            "reason": { "type": "string" }
+          }
+        }
+      }
+    }
+  }
+}

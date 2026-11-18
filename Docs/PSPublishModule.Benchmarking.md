@@ -8,6 +8,11 @@ The benchmark commands are intended for contributor and CI evidence. Benchmark
 numbers are machine-specific; publish the command, host, input data, and run
 metadata with any table that is committed or shared.
 
+Comparisons against other libraries follow the
+[benchmark standard](PowerForge.BenchmarkStandard.md): equivalent work with
+validated output, a wide scenario matrix, fair runs, honest statistics and licence
+classes for every library.
+
 ## Commands
 
 | Command | Purpose |
@@ -16,7 +21,9 @@ metadata with any table that is committed or shared.
 | `Start-BenchmarkProvenanceCapture` / `Complete-BenchmarkProvenanceCapture` | Bind a fresh external benchmark artifact directory to clean, unchanged Git source state and per-file hashes. |
 | `Import-BenchmarkResult` | Imports BenchmarkDotNet CSV/JSON artifacts or normalized benchmark JSON/CSV into the common result schema. |
 | `Merge-BenchmarkEvidenceCatalog` | Verifies and consolidates portable evidence bundles produced by independent platform runners. |
-| `Update-BenchmarkEvidenceCatalog` | Records an independent Windows, Linux, or macOS result lane and exposes missing or incompatible platform evidence. |
+| `Update-BenchmarkEvidenceCatalog` | Records one lane (comparison, platform, framework, profile) and applies the publish policy per cell. |
+| `Test-BenchmarkDeclaration` | Lints the library policy and comparison declarations, and checks a result for declaration drift. |
+| `Select-BenchmarkLibrary` | Selects the libraries a run may execute from the library policy, with explicit licence acceptance. |
 | `Update-BenchmarkDocument` | Replaces one marker-delimited Markdown block from a normalized summary or comparison file. |
 | `Test-BenchmarkGate` | Verifies benchmark summary metrics against a JSON baseline with tolerance rules. |
 | `Test-BenchmarkHistory` | Calibrates and verifies duration limits from accepted independent runs on the same runner environment. |
@@ -362,6 +369,28 @@ fields while preserving punctuation and empty values in that format. When
 (`Bench.Merge(Scale: Easy, Producer: IText)`), but only when they reproduce the
 exported `Parameters` text exactly.
 
+Every row carries the library it measured. BenchmarkDotNet methods name it with a
+category, `[BenchmarkCategory("library:ClosedXML")]`, or the import declares a
+method-to-library map; the library is never guessed from method or job names.
+When a map is given, every method must resolve or the import fails:
+
+```powershell
+Import-BenchmarkResult `
+    -Path .\BenchmarkDotNet.Artifacts `
+    -LibraryMap @{ ReadOfficeImo = 'OfficeIMO'; ReadClosedXml = 'ClosedXML' } `
+    -ValidationPath .\Build\validation.json `
+    -AcceptLicense EPPlus
+```
+
+`-ValidationPath` reads the output validation the benchmark performed before
+timing: a JSON array of `{ "library": "...", "case": "...", "status": "passed", "detail": "..." }`
+(`case` is optional and `status` is `passed` or `failed`). `-AcceptLicense` records
+the libraries whose licence you accepted for this run. Normalized results and
+CSV files carry `library`, `validations` and `acceptedLibraries` directly. The
+importer also records the runner block from BenchmarkDotNet: warmup and measured
+iteration counts from the JSON measurements or the job settings, launches, and the
+runner version.
+
 BenchmarkDotNet job characteristics (`Runtime`, `IterationCount`, `Affinity`, ...)
 are never case variables. CSV imports record their shared values once as
 `benchmarkdotnet.job.<Name>` metadata. Statistic columns after `Mean`, such as
@@ -371,15 +400,16 @@ columns named like statistics before `Mean` stay parameters.
 ## Cross-Platform Evidence
 
 Do not merge benchmark measurements from different operating systems into one
-number. Import each run, attach exact workload provenance, and update the shared
-catalog:
+number. Import each run, attach exact workload provenance, and record it in the
+shared schema 5 catalog:
 
 ```powershell
 $metadata = @{
-    'benchmark.workload.id' = 'markpflug-65k-sales-v1'
-    'benchmark.fixture.csv' = 'AC959F43...'
-    'benchmark.package.officeimo' = '3.0.4'
-    'benchmark.package.sylvan' = '0.5.7'
+    'benchmark.workload.id' = 'xlsx-read-typed'
+    'benchmark.workload.framework' = 'net10.0'
+    'benchmark.fixture.xlsx' = 'AC959F43...'
+    'benchmark.package.closedxml' = '0.105.0'
+    'benchmark.package.closedxml.sha256' = '5D0A...'
 }
 $capture = Start-BenchmarkProvenanceCapture `
     -SourceRoot . `
@@ -394,17 +424,44 @@ $capture | Complete-BenchmarkProvenanceCapture
 
 $result = Import-BenchmarkResult `
     -Path .\Build\BenchmarkDotNet.Artifacts `
-    -Suite tabular-65k
+    -ValidationPath .\Build\validation.json
 
 Update-BenchmarkEvidenceCatalog `
     -InputObject $result `
-    -Path .\Website\static\data\benchmarks\tabular\index.json `
-    -ComparisonId markpflug-65k-sales-v1-net10.0 `
-    -ResultPath windows-full.json `
-    -RunMode full `
-    -ExpectedPlatform windows,linux,macos `
+    -Path .\Website\static\data\benchmarks\excel\index.json `
+    -ComparisonId xlsx-read-typed `
+    -ResultPath windows-net10.0-full.json `
+    -Profile full `
+    -DeclarationPath .\Benchmarks\benchmarks.json `
     -Publish
 ```
+
+A lane is keyed by comparison, platform, framework and profile, plus lane
+parameters such as `-LaneParameter @{ affinity = '0xffff0000' }` (or the affinity
+recorded in the runner block). Framework and affinity are never part of the
+comparison id; an id such as `xlsx-read-typed-net10.0` is rejected. The framework
+comes from `-Framework`, the `benchmark.workload.framework` metadata, or the
+measured .NET runtime.
+
+Profiles replace the older run modes. `diagnostic` (formerly `quick`, still
+accepted by `-Profile`/`-RunMode`) is never published. `standard` is publishable
+from any runner and `full` from a complete BenchmarkDotNet run; both are held to
+the catalog's publish policy:
+
+- lane: clean `gitSha`, OS, architecture, CPU, logical cores, runtime and SDK; the
+  runner block with at least 3 warmups; no machine or user name; a declared,
+  eligible comparison without declaration drift; pinned package versions and
+  hashes for every non-subject library.
+- cell: at least 10 measured samples, a 95% confidence interval of the median,
+  passed output validation, a library whose licence class may be published, and
+  no failed samples.
+
+A lane that fails a lane rule is rejected. A cell that fails a cell rule stays in
+the catalog with its reason and is left out of public claims; the lane records
+`completeness: partial`. Failed and skipped cells, such as a library that crashed,
+are kept the same way, so one crash never discards the rest of a run. Write each
+comparison as soon as it is measured. Cells whose confidence intervals overlap the
+fastest cell's interval are marked `even`.
 
 Declare workload identity, fixture hashes, package versions, and run mode when
 starting the capture. PowerForge stores those declarations in the sidecar and
@@ -412,8 +469,7 @@ applies them before sealing the imported result. Changing measurements or
 provenance-bound metadata after import is rejected for publishable evidence.
 Publishing also requires the sidecar-bound `benchmark.workload.id` to exactly
 match the catalog comparison ID and the sidecar-bound run mode to exactly match
-the requested lane. Diagnostic captures may omit those declarations, but they
-cannot later be relabeled as public Full evidence.
+the requested profile.
 
 Directory imports reject reports that identify more than one operating system.
 External imports are publishable only when their fresh artifact directory has a
@@ -432,26 +488,23 @@ Merge-BenchmarkEvidenceCatalog `
         .\artifacts\windows\index.json, `
         .\artifacts\linux\index.json, `
         .\artifacts\macos\index.json `
-    -Path .\Website\static\data\benchmarks\tabular\index.json `
+    -Path .\Website\static\data\benchmarks\excel\index.json `
+    -DeclarationPath .\Benchmarks\benchmarks.json `
     -ExpectedPlatform windows,linux,macos
 ```
 
 The merge verifies every normalized result against the SHA-256 and lane metadata
-recorded by its source catalog and rejects conflicting copies of the same lane.
-Verified results are written beside the destination catalog under immutable,
-content-addressed file names before the catalog is atomically switched. An older
-catalog therefore continues to reference unchanged bytes even if a process stops
-during publication. This is the cross-machine convergence step; the update lock
-only coordinates writers that actually share one filesystem. Schema 1 catalogs
-must first be updated by the current PowerForge version so legacy publish flags
-are demoted and revalidated.
+recorded by its source catalog, re-evaluates every lane against the declarations
+and publish policy, and rejects conflicting copies of the same lane. Verified
+results are written beside the destination catalog under immutable,
+content-addressed file names before the catalog is atomically switched. When two
+bundles carry different runs of the same lane, the newest becomes the lane and the
+older one is kept in `superseded` with its date and hash. Catalogs and declaration
+files from earlier schemas are rejected; record fresh runs instead.
 
-The catalog replaces only the matching comparison/platform/run-mode lane.
-Windows, Linux, and macOS remain separate entries. `availability` lists missing
-platforms explicitly. A publishable lane must contain successful measurements,
-no failures, measured runtime and runner identity, and an exact `gitSha` from a
-verified clean worktree; invalid evidence is rejected rather than appearing
-available. Publishable lanes with different `gitSha` values or
+Windows, Linux, and macOS remain separate entries. `availability` lists every
+declared comparison, framework and expected platform, and only published lanes
+make a platform available. Published lanes with different `gitSha` values or
 different `benchmark.fixture.*`, `benchmark.package.*`, or
 `benchmark.workload.*` metadata are marked non-comparable and carry the exact
 conflicting dimensions.
@@ -595,6 +648,7 @@ Raw samples include:
 - scenario
 - operation
 - engine
+- library
 - host
 - operating system
 - run mode
@@ -605,9 +659,16 @@ Raw samples include:
 - variables
 - custom metrics
 
-Summary rows aggregate samples by suite, scenario, operation, engine, host,
-operating system, run mode, status, and variables. They include sample counts,
-failure counts, median/mean/min/max duration, and custom metrics.
+Summary rows aggregate samples by suite, scenario, operation, engine, library,
+host, operating system, run mode, status, and variables. They include sample
+counts, failure counts, median/mean/min/max duration, and custom metrics.
+
+A result also carries its runner block (`kind`, `version`, `statistic`, `warmups`,
+`iterations`, `launches`, `ordering`, `inProcess`, `affinity`, `priority`), the output
+`validations` performed before timing, and the `acceptedLibraries` whose licence was
+accepted for the run. `Invoke-BenchmarkSuite` records each engine as the row's
+library and its own runner block (`powershell-suite`), and no longer writes the
+machine or user name into result metadata.
 
 Comparison rows compare one dimension against a baseline value for one or more
 metrics. They are used by README comparison tables and by reviewable benchmark
@@ -615,40 +676,52 @@ evidence.
 
 ### Declared comparison coverage
 
-Schema 4 catalogs carry `areas` and `comparisons` independently of measured
-`entries`. Each declaration contains `comparisonId`, `area`, `title`, `libraries`
-and `expectedPlatforms`. This lets a website show workloads that have never run;
-missing full-mode lanes appear in `availability` with `available: false`.
-Existing schema 3 bundles remain readable. Declarations do not grant publication
-or fill in missing historical environment metadata.
+Schema 5 declaration documents hold the library policy and the comparisons
+(`Schemas/powerforge.benchmark-declarations.schema.json`). Each library has `id`,
+`package`, a pinned `version`, `license` (SPDX or `LicenseRef-*`), optional
+`licenseUrl`, a `restriction` class (`open`, `publish-restricted`,
+`acceptance-required`, `excluded`) and a `reason`. Each comparison has
+`comparisonId`, `area`, `group`, `title`, `subject`, `libraries`, `axes`, `cases`,
+`expectedPlatforms` and `frameworks`, plus an optional `eligibility` that can only
+exclude it. Catalogs derive each comparison's eligibility: a single-library
+comparison, or one with fewer than two libraries whose class can be published, is
+declared but never publishable.
 
-Pass the JSON array of declarations when merging:
+Generate the document from the benchmark code and check it in CI:
 
 ```powershell
-Merge-BenchmarkEvidenceCatalog -SourcePath ./windows/index.json, ./linux/index.json, ./macos/index.json -Path ./published/index.json -ComparisonPath ./comparisons.json
+Test-BenchmarkDeclaration -Path ./Benchmarks/benchmarks.json
+Import-BenchmarkResult ./artifacts | Test-BenchmarkDeclaration -Path ./Benchmarks/benchmarks.json -ComparisonId xlsx-read-typed
+$selection = Select-BenchmarkLibrary -Path ./Benchmarks/benchmarks.json -AcceptLicense EPPlus
 ```
 
-To update a subset, include the existing destination catalog in `-SourcePath`
-alongside the incoming bundles. Unchanged comparison/platform/run-mode lanes and
-their immutable artifacts survive. The newest timestamp wins for a matching lane;
-conflicting same-time payloads fail. With `-ComparisonPath`, that declaration
-array is authoritative; otherwise declarations are merged from source catalogs
-and conflicting definitions fail before output replacement. Evidence entries
-receive their matching declaration's `area`. Result payloads and their hashes
-remain unchanged.
+The first lints the document. The second reports drift between a result and its
+declaration: cases, libraries or axis values that ran but are not declared, and
+declared cases that did not run. Both stop with an error unless `-PassThru` is used.
+`Select-BenchmarkLibrary` returns the libraries a runner may execute; excluded
+libraries never run and acceptance-required libraries run only when named in
+`-AcceptLicense`.
+
+Pass the declaration document when merging or updating. To update a subset,
+include the existing destination catalog in `-SourcePath` alongside the incoming
+bundles. Unchanged lanes and their immutable artifacts survive. With
+`-DeclarationPath`, that document is authoritative; otherwise declarations are
+merged from source catalogs and conflicting definitions fail before output
+replacement. Result payloads and their hashes remain unchanged.
 
 Use `-ResultPathPrefix /data/benchmarks/library-comparisons` when consolidating
 portable runner bundles into a website. Result links use that root-relative
 public directory, while content-addressed artifacts are written beside the output
-catalog. This rebases links without changing measured payloads or hashes.
+catalog.
 
 ### Comparison views for websites
 
-`BenchmarkComparisonViewBuilder` turns a schema 4 catalog and the results beside it
+`BenchmarkComparisonViewBuilder` turns a schema 5 catalog and the results beside it
 into a presentation view: for every declared comparison, every run with each
 contender and case side by side, the relative time to the fastest contender, wins,
-and the first declared library (the subject) against each competitor. Contenders
-are matched to the declared libraries ignoring case and punctuation, so
+and the declared subject against each competitor. Rows that carry a library are
+shown under that library. Rows without one are matched to the declared libraries
+ignoring case and punctuation, so
 `MagickNETEncode` belongs to `Magick.NET`; a suffix shared by two or more
 libraries (`Encode`) becomes the case's operation, and one used by a single
 library (`Parallel` in `OfficeIMOEncodeParallel`) names a variant. Results imported

@@ -16,7 +16,15 @@ public static class BenchmarkJson
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         PropertyNameCaseInsensitive = true,
         WriteIndented = true,
-        Converters = { new JsonStringEnumConverter() }
+        // Options converters take precedence over type attributes, so the kebab-case evidence
+        // enums are registered ahead of the general string enum converter.
+        Converters =
+        {
+            new BenchmarkKebabCaseEnumConverter<BenchmarkEvidenceProfile>(),
+            new BenchmarkKebabCaseEnumConverter<BenchmarkLibraryRestriction>(),
+            new BenchmarkKebabCaseEnumConverter<BenchmarkValidationStatus>(),
+            new JsonStringEnumConverter()
+        }
     };
 
     /// <summary>

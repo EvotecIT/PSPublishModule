@@ -268,7 +268,7 @@ Validates final artifacts and runs isolated product smoke tests without publishi
 Runs a bounded validation process and returns its captured output.
 
 ### [Merge-BenchmarkEvidenceCatalog](Merge-BenchmarkEvidenceCatalog.md)
-Consolidates independently produced platform benchmark evidence bundles.
+Consolidates independently produced platform benchmark evidence bundles into one schema 5 catalog.
 
 ### [New-AppleAppArchive](New-AppleAppArchive.md)
 Creates an Apple app .xcarchive using xcodebuild.
@@ -519,6 +519,9 @@ Saves modules from a managed repository to an explicit module root.
 ### [Save-ManagedScript](Save-ManagedScript.md)
 Saves script resources from a managed repository to an explicit script directory.
 
+### [Select-BenchmarkLibrary](Select-BenchmarkLibrary.md)
+Selects the libraries a benchmark run may execute from the library policy.
+
 ### [Send-GitHubRelease](Send-GitHubRelease.md)
 Creates a new release for the given GitHub repository and optionally uploads assets.
 
@@ -616,6 +619,9 @@ Validates an App Store Connect screenshot sync configuration against local files
 ### [Test-AppStoreConnectWebhook](Test-AppStoreConnectWebhook.md)
 Sends a test delivery to an App Store Connect webhook.
 
+### [Test-BenchmarkDeclaration](Test-BenchmarkDeclaration.md)
+Validates a benchmark declaration document and, optionally, checks a result against it for drift.
+
 ### [Test-BenchmarkGate](Test-BenchmarkGate.md)
 Tests normalized benchmark summaries against a JSON baseline.
 
@@ -638,7 +644,7 @@ Unregisters a saved managed module repository profile.
 Updates a marker-delimited benchmark block in a Markdown document.
 
 ### [Update-BenchmarkEvidenceCatalog](Update-BenchmarkEvidenceCatalog.md)
-Adds one normalized benchmark result to a platform-aware evidence catalog.
+Adds one normalized benchmark result to a schema 5 evidence catalog.
 
 ### [Update-ManagedModule](Update-ManagedModule.md)
 Updates installed PowerShell modules through the managed C# module engine.
