@@ -25,4 +25,10 @@ public sealed class DotNetReleaseBuildAssemblySigningRequest
 
     /// <summary>Explicitly replaces existing Authenticode signatures. Defaults to false.</summary>
     public bool OverwriteSigned { get; set; }
+
+    /// <summary>
+    /// Maximum number of files signed and timestamped at the same time after the first file.
+    /// 1 signs serially; 0 uses <c>POWERFORGE_SIGNING_PARALLELISM</c> or the built-in default.
+    /// </summary>
+    public int MaxDegreeOfParallelism { get; set; }
 }

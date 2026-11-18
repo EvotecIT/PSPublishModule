@@ -4,11 +4,37 @@ internal static class AppleDeploymentTestFixture
 {
     internal static void DeleteRepository(string root)
     {
-        var gitDirectory = Path.Combine(root, ".git");
-        if (Directory.Exists(gitDirectory))
-            foreach (var file in Directory.EnumerateFiles(gitDirectory, "*", SearchOption.AllDirectories))
-                File.SetAttributes(file, File.GetAttributes(file) & ~FileAttributes.ReadOnly);
-        Directory.Delete(root, recursive: true);
+        // Git can start background maintenance after a commit, which creates and removes lock files under
+        // .git while the test deletes the repository. Files that disappear are already gone; retry the rest.
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                if (!Directory.Exists(root))
+                    return;
+                var gitDirectory = Path.Combine(root, ".git");
+                if (Directory.Exists(gitDirectory))
+                    foreach (var file in Directory.EnumerateFiles(gitDirectory, "*", SearchOption.AllDirectories))
+                        ClearReadOnly(file);
+                Directory.Delete(root, recursive: true);
+                return;
+            }
+            catch (Exception error) when (attempt < 5 && error is IOException or UnauthorizedAccessException)
+            {
+                Thread.Sleep(200 * attempt);
+            }
+        }
+    }
+
+    private static void ClearReadOnly(string file)
+    {
+        try
+        {
+            File.SetAttributes(file, File.GetAttributes(file) & ~FileAttributes.ReadOnly);
+        }
+        catch (Exception error) when (error is FileNotFoundException or DirectoryNotFoundException)
+        {
+        }
     }
 
     internal static void MaterializeConfiguredBuildProduct(ProcessRunRequest request)

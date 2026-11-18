@@ -473,6 +473,116 @@ public sealed partial class DotNetNuGetClientTests
         }
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task SignPackagesIndividuallyAsync_SignsUntilTheKeyIsUsedThenRunsTheRestConcurrently(bool firstAlreadySigned)
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            string[] packages = Enumerable.Range(1, 5).Select(index => Path.Combine(root.FullName, $"Package{index}.1.0.0.nupkg")).ToArray();
+            if (firstAlreadySigned)
+            {
+                // A preserved package does not use the key, so it must not start parallel signing.
+                using var archive = ZipFile.Open(packages[0], ZipArchiveMode.Create);
+                archive.CreateEntry(".signature.p7s");
+            }
+            string unlockPackage = firstAlreadySigned ? packages[1] : packages[0];
+            var unlockFinished = false;
+            var startedBeforeUnlock = new List<string>();
+            var running = 0;
+            var maxRunning = 0;
+            var gated = 0;
+            using var gate = new CountdownEvent(3);
+            var callerThread = Environment.CurrentManagedThreadId;
+            var progressThreads = new HashSet<int>();
+            var progressEvents = new List<string>();
+            var processRunner = new StubProcessRunner(request =>
+            {
+                string package = request.Arguments[2];
+                lock (startedBeforeUnlock)
+                {
+                    if (!Volatile.Read(ref unlockFinished) && package != unlockPackage) startedBeforeUnlock.Add(package);
+                }
+                InterlockedMax(ref maxRunning, Interlocked.Increment(ref running));
+                if (package != unlockPackage && Interlocked.Increment(ref gated) <= 3)
+                {
+                    // Hold the first three packages after the unlock until all three are running.
+                    gate.Signal();
+                    if (!gate.Wait(TimeSpan.FromSeconds(30)))
+                        throw new TimeoutException("Fewer than three packages were signed concurrently.");
+                }
+                Interlocked.Decrement(ref running);
+                if (package == unlockPackage) Volatile.Write(ref unlockFinished, true);
+                return new ProcessRunResult(0, "Package(s) signed successfully.", string.Empty, request.FileName, TimeSpan.Zero, timedOut: false);
+            });
+            var client = new DotNetNuGetClient(processRunner);
+
+            var outcome = await client.SignPackagesIndividuallyAsync(new DotNetNuGetSignRequest(
+                packages,
+                certificateFingerprint: "ABC123",
+                certificateStoreLocation: "CurrentUser",
+                timeStampServer: "http://timestamp.digicert.com"),
+                progress: (package, _, result) =>
+                {
+                    progressThreads.Add(Environment.CurrentManagedThreadId);
+                    progressEvents.Add($"{Path.GetFileName(package)}:{(result is null ? "start" : "end")}");
+                },
+                maxParallelism: 3);
+
+            Assert.True(outcome.Result.Succeeded, outcome.Result.ErrorMessage);
+            Assert.Empty(startedBeforeUnlock);
+            Assert.Equal(3, maxRunning);
+            // Release progress handlers are not thread-safe; every callback stays on the caller's thread.
+            Assert.Equal(new[] { callerThread }, progressThreads);
+            Assert.All(packages, package =>
+            {
+                Assert.Single(progressEvents, item => item == $"{Path.GetFileName(package)}:start");
+                Assert.Single(progressEvents, item => item == $"{Path.GetFileName(package)}:end");
+            });
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
+    public async Task SignPackagesIndividuallyAsync_CanceledBeforeStartDoesNotSign()
+    {
+        var calls = 0;
+        var progressCalls = 0;
+        var client = new DotNetNuGetClient(new StubProcessRunner(request =>
+        {
+            calls++;
+            return new ProcessRunResult(0, string.Empty, string.Empty, request.FileName, TimeSpan.Zero, timedOut: false);
+        }));
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => client.SignPackagesIndividuallyAsync(
+            new DotNetNuGetSignRequest(
+                new[] { Path.GetFullPath("One.1.0.0.nupkg") },
+                certificateFingerprint: "ABC123",
+                certificateStoreLocation: "CurrentUser",
+                timeStampServer: "http://timestamp.digicert.com"),
+            cancellation.Token,
+            progress: (_, _, _) => progressCalls++));
+
+        Assert.Equal(0, calls);
+        Assert.Equal(0, progressCalls);
+    }
+
+    private static void InterlockedMax(ref int target, int value)
+    {
+        int current;
+        while (value > (current = Volatile.Read(ref target)) &&
+               Interlocked.CompareExchange(ref target, value, current) != current)
+        {
+        }
+    }
+
     [Fact]
     public async Task SignPackageAsync_DefaultPreservesAlreadySignedPackage()
     {

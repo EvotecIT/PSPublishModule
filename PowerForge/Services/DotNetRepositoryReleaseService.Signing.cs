@@ -74,7 +74,8 @@ public sealed partial class DotNetRepositoryReleaseService
                 certificateStoreLocation: store,
                 timeStampServer: timeStampServer,
                 overwrite: overwriteSignedPackages),
-                progress: progress)
+                progress: progress,
+                maxParallelism: SigningScheduler.ResolveParallelism(0))
             .GetAwaiter()
             .GetResult();
 

@@ -19,8 +19,13 @@ public sealed partial class BenchmarkResultImporter
     /// </param>
     /// <returns>Imported run result.</returns>
     public BenchmarkRunResult Import(string path, string? suite = null, CultureInfo? culture = null)
+        => ImportCore(path, new BenchmarkImportOptions { Suite = suite, Culture = culture });
+
+    private BenchmarkRunResult ImportCore(string path, BenchmarkImportOptions options)
     {
         if (string.IsNullOrWhiteSpace(path)) throw new ArgumentException("Input path is required.", nameof(path));
+        string? suite = options.Suite;
+        CultureInfo? culture = options.Culture;
         var fullPath = Path.GetFullPath(path);
         bool hasProductionProvenance =
             BenchmarkArtifactProvenanceService.TryLoadAndValidate(
@@ -63,6 +68,7 @@ public sealed partial class BenchmarkResultImporter
         }
 
         EnsureSingleOperatingSystem(new[] { result });
+        ApplyImportOptions(result, options);
         if (hasProductionProvenance)
         {
             ApplyProductionProvenance(result, provenance!, provenancePath);
@@ -201,6 +207,9 @@ public sealed partial class BenchmarkResultImporter
             result.Samples,
             result.Summary,
             result.Comparison,
+            result.Runner,
+            result.Validations,
+            result.AcceptedLibraries,
             Metadata = result.ValidatedProductionMetadata
                 .OrderBy(item => item.Key, StringComparer.OrdinalIgnoreCase)
                 .ThenBy(item => item.Key, StringComparer.Ordinal)
@@ -265,6 +274,20 @@ public sealed partial class BenchmarkResultImporter
             combined.Environment = CopyEnvironment(
                 importedReports.Select(result => result.Environment).FirstOrDefault(HasEnvironment)
                 ?? new BenchmarkEnvironmentInfo());
+            // Counts are known only when every report recorded them; otherwise the aggregate stays unknown.
+            BenchmarkRunnerInfo?[] runners = importedReports.Select(result => result.Runner).ToArray();
+            static int? KnownMin(IEnumerable<int?> values)
+            {
+                int?[] all = values.ToArray();
+                return all.Any(value => value is null) ? null : all.Min();
+            }
+            combined.Runner = new BenchmarkRunnerInfo
+            {
+                Kind = "benchmarkdotnet",
+                Warmups = KnownMin(runners.Select(runner => runner?.Warmups)),
+                Iterations = KnownMin(runners.Select(runner => runner?.Iterations)),
+                Launches = KnownMin(runners.Select(runner => runner?.Launches))
+            };
             return combined;
         }
 
@@ -610,6 +633,7 @@ public sealed partial class BenchmarkResultImporter
                 Scenario = method,
                 Operation = GetCsvOperation(map, isBenchmarkDotNetCsv),
                 Engine = GetCsvEngine(map, isBenchmarkDotNetCsv),
+                Library = Get(map, "Library") ?? string.Empty,
                 Host = GetCsvHost(map, isBenchmarkDotNetCsv),
                 Os = Get(map, "OS") ?? string.Empty,
                 RunMode = Get(map, "RunMode") ?? "import",
@@ -691,6 +715,7 @@ public sealed partial class BenchmarkResultImporter
                 Scenario = GetCsvScenarioName(map, isBenchmarkDotNetCsv) ?? Path.GetFileNameWithoutExtension(path),
                 Operation = GetCsvOperation(map, isBenchmarkDotNetCsv),
                 Engine = GetCsvEngine(map, isBenchmarkDotNetCsv),
+                Library = Get(map, "Library") ?? string.Empty,
                 Host = GetCsvHost(map, isBenchmarkDotNetCsv),
                 Os = Get(map, "OS") ?? string.Empty,
                 RunMode = Get(map, "RunMode") ?? string.Empty,
@@ -1660,14 +1685,14 @@ public sealed partial class BenchmarkResultImporter
 
     private static readonly HashSet<string> SampleMetadataColumns = new(StringComparer.OrdinalIgnoreCase)
     {
-        "RunId", "Suite", "Scenario", "Method", "Benchmark", "Operation", "Engine", "Job", "Host", "OS", "RunMode",
+        "RunId", "Suite", "Scenario", "Method", "Benchmark", "Operation", "Engine", "Library", "Job", "Host", "OS", "RunMode",
         "Iteration", "Status", "DurationMs", "MedianMs", "MeanMs",
         "Reason", "AllocatedBytes", "WorkingSetDeltaBytes", "OutputMetric"
     };
 
     private static readonly HashSet<string> SummaryMetadataColumns = new(StringComparer.OrdinalIgnoreCase)
     {
-        "Suite", "Scenario", "Method", "Benchmark", "Operation", "Engine", "Job", "Host", "OS", "RunMode", "SampleCount", "FailureCount",
+        "Suite", "Scenario", "Method", "Benchmark", "Operation", "Engine", "Library", "Job", "Host", "OS", "RunMode", "SampleCount", "FailureCount",
         "OutlierCount", "Status", "MedianMs", "MeanMs", "MinMs", "MaxMs", "P95Ms", "P99Ms", "StdDevMs", "StdErrMs", "FailureReasons"
     };
 

@@ -250,6 +250,7 @@ public sealed partial class BenchmarkEvidenceCatalogService
         AppendIdentityPart(builder, "scenario", row.Scenario);
         AppendIdentityPart(builder, "operation", row.Operation);
         AppendIdentityPart(builder, "engine", row.Engine);
+        AppendIdentityPart(builder, "library", row.Library);
         AppendIdentityPart(builder, "host", row.Host);
         AppendIdentityPart(builder, "os", row.Os);
         AppendIdentityPart(builder, "runMode", row.RunMode);

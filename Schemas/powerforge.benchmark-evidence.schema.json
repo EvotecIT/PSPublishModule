@@ -1,0 +1,185 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/EvotecIT/PSPublishModule/main/Schemas/powerforge.benchmark-evidence.schema.json",
+  "title": "PowerForge benchmark evidence catalog (schema 5)",
+  "description": "Written by Update-BenchmarkEvidenceCatalog and Merge-BenchmarkEvidenceCatalog. Maps to PowerForge.BenchmarkEvidenceCatalog. Earlier schemas are rejected.",
+  "type": "object",
+  "required": ["schemaVersion", "policy", "libraries", "comparisons", "entries", "superseded", "availability"],
+  "properties": {
+    "schemaVersion": { "const": 5 },
+    "expectedPlatforms": { "type": "array", "items": { "type": "string" } },
+    "areas": { "type": "array", "items": { "type": "string" } },
+    "policy": { "$ref": "#/$defs/policy" },
+    "libraries": {
+      "type": "array",
+      "items": { "$ref": "powerforge.benchmark-declarations.schema.json#/$defs/library" }
+    },
+    "comparisons": {
+      "type": "array",
+      "items": { "$ref": "powerforge.benchmark-declarations.schema.json#/$defs/comparison" }
+    },
+    "eligibility": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["comparisonId", "publishable"],
+        "properties": {
+          "comparisonId": { "type": "string" },
+          "publishable": { "type": "boolean" },
+          "reason": { "type": "string" }
+        }
+      }
+    },
+    "entries": { "type": "array", "items": { "$ref": "#/$defs/entry" } },
+    "superseded": { "type": "array", "items": { "$ref": "#/$defs/superseded" } },
+    "availability": { "type": "array", "items": { "$ref": "#/$defs/availability" } }
+  },
+  "$defs": {
+    "profile": { "enum": ["diagnostic", "standard", "full"] },
+    "policy": {
+      "type": "object",
+      "properties": {
+        "minimumWarmups": { "type": "integer", "minimum": 0 },
+        "minimumMeasuredSamples": { "type": "integer", "minimum": 1 },
+        "confidenceLevel": { "type": "number", "exclusiveMinimum": 0, "exclusiveMaximum": 1 },
+        "publishableProfiles": { "type": "array", "items": { "$ref": "#/$defs/profile" } },
+        "fullProfileRunnerKinds": { "type": "array", "items": { "type": "string" } },
+        "publishableRestrictions": { "type": "array", "items": { "$ref": "powerforge.benchmark-declarations.schema.json#/$defs/restriction" } },
+        "requireOutputValidation": { "type": "boolean" },
+        "requireDeclaration": { "type": "boolean" },
+        "requirePackageHashes": { "type": "boolean" }
+      }
+    },
+    "runner": {
+      "type": "object",
+      "properties": {
+        "kind": { "type": "string", "description": "benchmarkdotnet, rotated, powershell-suite or process." },
+        "version": { "type": "string" },
+        "statistic": { "enum": ["", "median", "mean"] },
+        "warmups": { "type": ["integer", "null"] },
+        "iterations": { "type": ["integer", "null"] },
+        "launches": { "type": ["integer", "null"] },
+        "ordering": { "type": "string" },
+        "inProcess": { "type": ["boolean", "null"] },
+        "affinity": { "type": "string" },
+        "priority": { "type": "string" }
+      }
+    },
+    "confidenceInterval": {
+      "type": ["object", "null"],
+      "required": ["level", "lowerMs", "upperMs"],
+      "properties": {
+        "level": { "type": "number" },
+        "lowerMs": { "type": "number" },
+        "upperMs": { "type": "number" }
+      }
+    },
+    "cell": {
+      "type": "object",
+      "required": ["comparisonId", "case", "library", "status", "publishable"],
+      "properties": {
+        "comparisonId": { "type": "string" },
+        "case": { "type": "string" },
+        "operation": { "type": "string" },
+        "library": { "type": "string" },
+        "parameters": { "type": "object", "additionalProperties": { "type": ["string", "null"] } },
+        "status": { "enum": ["Succeeded", "Failed", "Skipped"] },
+        "reason": { "type": "string" },
+        "statistic": { "type": "string" },
+        "valueMs": { "type": ["number", "null"] },
+        "confidenceInterval": { "$ref": "#/$defs/confidenceInterval" },
+        "sampleCount": { "type": "integer" },
+        "failureCount": { "type": "integer" },
+        "validation": { "enum": ["passed", "failed", "missing"] },
+        "validationDetail": { "type": "string" },
+        "publishable": { "type": "boolean" },
+        "issues": { "type": "array", "items": { "type": "string" } },
+        "outcome": { "enum": ["", "fastest", "even", "slower"] }
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "properties": {
+        "gitSha": { "type": "string" },
+        "gitWorktreeClean": { "type": "boolean" },
+        "os": { "type": "string" },
+        "architecture": { "type": "string" },
+        "cpu": { "type": "string" },
+        "cores": { "type": ["integer", "null"] },
+        "runtime": { "type": "string" },
+        "sdk": { "type": "string" },
+        "packages": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": { "type": "string" },
+              "version": { "type": "string" },
+              "sha256": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "entry": {
+      "type": "object",
+      "required": ["comparisonId", "platform", "framework", "profile", "laneKey", "generatedUtc", "publish", "resultPath", "resultSha256", "cells"],
+      "properties": {
+        "comparisonId": { "type": "string" },
+        "area": { "type": "string" },
+        "platform": { "type": "string" },
+        "framework": { "type": "string" },
+        "profile": { "$ref": "#/$defs/profile" },
+        "parameters": { "type": "object", "additionalProperties": { "type": "string" } },
+        "laneKey": { "type": "string", "description": "comparisonId/platform/framework/profile[/name=value...]" },
+        "generatedUtc": { "type": "string", "format": "date-time" },
+        "publish": { "type": "boolean" },
+        "completeness": { "enum": ["", "complete", "partial"] },
+        "resultPath": { "type": "string", "description": "Content-addressed: the file name ends with .<resultSha256>." },
+        "resultSha256": { "type": "string", "pattern": "^[0-9a-fA-F]{64}$" },
+        "artifactDestinationSha256": { "type": "string" },
+        "artifactFileName": { "type": "string" },
+        "artifactRelativePath": { "type": "string" },
+        "suite": { "type": "string" },
+        "environment": { "type": "object" },
+        "runner": { "$ref": "#/$defs/runner" },
+        "provenance": { "$ref": "#/$defs/provenance" },
+        "acceptedLibraries": { "type": "array", "items": { "type": "string" } },
+        "cells": { "type": "array", "items": { "$ref": "#/$defs/cell" } },
+        "policyIssues": { "type": "array", "items": { "type": "string" } },
+        "compatibility": { "type": "object", "additionalProperties": { "type": "string" } },
+        "comparable": { "type": "boolean" },
+        "compatibilityIssues": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "superseded": {
+      "type": "object",
+      "required": ["laneKey", "generatedUtc", "resultSha256"],
+      "properties": {
+        "laneKey": { "type": "string" },
+        "comparisonId": { "type": "string" },
+        "platform": { "type": "string" },
+        "framework": { "type": "string" },
+        "profile": { "$ref": "#/$defs/profile" },
+        "generatedUtc": { "type": "string", "format": "date-time" },
+        "supersededByUtc": { "type": "string", "format": "date-time" },
+        "publish": { "type": "boolean" },
+        "resultPath": { "type": "string" },
+        "resultSha256": { "type": "string" },
+        "libraries": { "type": "array", "items": { "type": "string" }, "description": "Libraries whose measurements the stored result contains." },
+        "artifactRelativePath": { "type": "string", "description": "Portable path of the stored result within the bundle." }
+      }
+    },
+    "availability": {
+      "type": "object",
+      "properties": {
+        "comparisonId": { "type": "string" },
+        "framework": { "type": "string" },
+        "platform": { "type": "string" },
+        "available": { "type": "boolean" },
+        "profiles": { "type": "array", "items": { "$ref": "#/$defs/profile" } },
+        "latestUtc": { "type": ["string", "null"], "format": "date-time" }
+      }
+    }
+  }
+}

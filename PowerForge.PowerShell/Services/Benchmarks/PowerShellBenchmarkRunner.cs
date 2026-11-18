@@ -188,7 +188,8 @@ public sealed partial class PowerShellBenchmarkRunner
             Summary = summary,
             Comparison = Array.Empty<BenchmarkComparisonRow>(),
             Metadata = PowerShellBenchmarkEnvironmentMetadata.Build(suite, sourceProvenance),
-            Environment = PowerShellBenchmarkEnvironmentMetadata.BuildEnvironment(suite.SourceRoot)
+            Environment = PowerShellBenchmarkEnvironmentMetadata.BuildEnvironment(suite.SourceRoot),
+            Runner = PowerShellBenchmarkEnvironmentMetadata.BuildRunner(suite, inProcess: true)
         };
 
         placement?.RecordMetadata(result.Metadata);
@@ -317,6 +318,8 @@ public sealed partial class PowerShellBenchmarkRunner
             Scenario = item.Scenario,
             Operation = item.Operation,
             Engine = item.Engine,
+            // Suite engines are the libraries being compared; the case name is never the contender.
+            Library = item.Engine,
             Host = item.Host,
             Os = GetOperatingSystemLabel(),
             RunMode = suite.RunMode,

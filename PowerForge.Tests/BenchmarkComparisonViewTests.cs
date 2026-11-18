@@ -165,7 +165,7 @@ public class BenchmarkComparisonViewTests
             var comparison = Assert.Single(new BenchmarkComparisonViewBuilder().Build(catalogPath).Comparisons);
 
             Assert.Equal("linux-full", comparison.PreferredRunId);
-            Assert.Equal(new[] { "windows-quick", "linux-full" }, comparison.Runs.Select(r => r.Id));
+            Assert.Equal(new[] { "windows-diagnostic", "linux-full" }, comparison.Runs.Select(r => r.Id));
             Assert.Equal("Environment not recorded", comparison.Runs[0].Environment.Text);
             var subject = comparison.Overview.First();
             Assert.Equal("OfficeIMO", subject.Name);
@@ -253,6 +253,113 @@ public class BenchmarkComparisonViewTests
         Assert.Equal("Foo.Bar is 2.0× faster than Foo", Assert.Single(run.HeadToHead).Text);
     }
 
+    [Fact]
+    public void Build_KeepsMethodsApartWhenRowsRecordTheirLibrary()
+    {
+        static BenchmarkSummaryRow Recorded(string scenario, string library, double medianMs)
+        {
+            BenchmarkSummaryRow row = Row(scenario, medianMs);
+            row.Library = library;
+            return row;
+        }
+
+        var view = BuildSingle(
+            libraries: new[] { "OfficeIMO", "Sep" },
+            rows: new[] { Recorded("OfficeIMOEncode", "OfficeIMO", 1.0), Recorded("OfficeIMODecode", "OfficeIMO", 2.0), Recorded("SepEncode", "Sep", 3.0), Recorded("SepDecode", "Sep", 4.0) });
+
+        var run = Assert.Single(view.Runs);
+        Assert.Equal(new[] { "OfficeIMO", "Sep" }, run.Contenders.Select(c => c.Name).OrderBy(name => name));
+        Assert.Equal(2, run.Cases.Length);
+        Assert.All(run.Cases, c => Assert.DoesNotContain(c.Cells, cell => cell.Missing));
+    }
+
+    [Fact]
+    public void Build_UsesTheStatisticTheRunnerRecorded()
+    {
+        static BenchmarkSummaryRow Both(string library, double median, double mean)
+        {
+            BenchmarkSummaryRow row = Row("Read", median);
+            row.Library = library;
+            row.MeanMs = mean;
+            return row;
+        }
+
+        var root = CreateTempRoot();
+        try
+        {
+            BenchmarkRunResult result = Result(Both("OfficeIMO", 1.0, 4.0), Both("Sep", 2.0, 3.0));
+            result.Runner = new BenchmarkRunnerInfo { Kind = "rotated", Statistic = "mean" };
+            var view = Assert.Single(new BenchmarkComparisonViewBuilder().Build(WriteCatalog(root, new[] { "OfficeIMO", "Sep" }, ("windows", "standard", true, result))).Comparisons);
+
+            var run = Assert.Single(view.Runs);
+            Assert.Equal("mean", run.Statistic);
+            Assert.Equal("Sep is 1.33× faster than OfficeIMO", Assert.Single(run.HeadToHead).Text);
+        }
+        finally { Directory.Delete(root, recursive: true); }
+    }
+
+    [Fact]
+    public void Build_KeepsRecordedCasesApartWhenAnOperationIsRecorded()
+    {
+        static BenchmarkSummaryRow Recorded(string scenario, string library, double medianMs, params (string Name, string Value)[] variables)
+        {
+            BenchmarkSummaryRow row = Row(scenario, medianMs, variables);
+            row.Library = library;
+            row.Operation = "Read";
+            return row;
+        }
+
+        var view = BuildSingle(
+            libraries: new[] { "A", "B" },
+            rows: new[]
+            {
+                Recorded("small", "A", 1.0, ("Method", "ASmall")), Recorded("large", "A", 2.0, ("Method", "ALarge")),
+                Recorded("small", "B", 3.0, ("Method", "BSmall")), Recorded("large", "B", 4.0, ("Method", "BLarge"))
+            });
+
+        var run = Assert.Single(view.Runs);
+        Assert.Equal(2, run.Cases.Length);
+        Assert.Equal(new[] { "A", "B" }, run.Contenders.Select(c => c.Name).OrderBy(name => name));
+        Assert.All(run.Cases, c => Assert.DoesNotContain(c.Cells, cell => cell.Missing));
+    }
+
+    [Fact]
+    public void Build_KeepsAWorkloadParameterNamedCase()
+    {
+        static BenchmarkSummaryRow Recorded(string library, string size, double medianMs)
+        {
+            BenchmarkSummaryRow row = Row("Read", medianMs, ("Case", size));
+            row.Library = library;
+            return row;
+        }
+
+        var view = BuildSingle(
+            libraries: new[] { "A", "B" },
+            rows: new[] { Recorded("A", "Small", 1.0), Recorded("A", "Large", 2.0), Recorded("B", "Small", 3.0), Recorded("B", "Large", 4.0) });
+
+        var run = Assert.Single(view.Runs);
+        Assert.Equal(2, run.Cases.Length);
+        Assert.All(run.Cases, c => Assert.DoesNotContain(c.Cells, cell => cell.Missing));
+    }
+
+    [Fact]
+    public void Build_KeepsASharedCaseNameThatStartsWithALibraryName()
+    {
+        static BenchmarkSummaryRow Recorded(string library, double medianMs)
+        {
+            BenchmarkSummaryRow row = Row("SepRead", medianMs);
+            row.Library = library;
+            return row;
+        }
+
+        var view = BuildSingle(libraries: new[] { "OfficeIMO", "Sep" }, rows: new[] { Recorded("OfficeIMO", 1.0), Recorded("Sep", 2.0) });
+
+        var run = Assert.Single(view.Runs);
+        var shared = Assert.Single(run.Cases);
+        Assert.DoesNotContain(shared.Cells, cell => cell.Missing);
+        Assert.Equal("OfficeIMO is 2.0× faster than Sep", Assert.Single(run.HeadToHead).Text);
+    }
+
     private static BenchmarkComparisonView BuildSingle(string[] libraries, BenchmarkSummaryRow[] rows)
     {
         var root = CreateTempRoot();
@@ -275,7 +382,7 @@ public class BenchmarkComparisonViewTests
                 ComparisonId = "compare",
                 Area = "test",
                 Platform = run.Platform,
-                RunMode = run.Mode,
+                Profile = BenchmarkEvidenceCatalogService.ParseProfile(run.Mode == "quick" ? "diagnostic" : run.Mode),
                 Publish = run.Publish,
                 GeneratedUtc = new DateTimeOffset(2026, 11, 1 + index, 0, 0, 0, TimeSpan.Zero),
                 ResultPath = "/data/" + file,

@@ -8,7 +8,8 @@ param(
   [string]$PfxBase64,
   [string]$PfxPassword,
   [string]$OverwriteSigned,
-  [string]$AllowedThumbprintsB64
+  [string]$AllowedThumbprintsB64,
+  [string]$Parallelism
 )
 
 $ErrorActionPreference = 'Stop'
@@ -249,6 +250,11 @@ try {
   $exclude = DecodeLines $ExcludeB64
   $packageFiles = @(Get-Content -LiteralPath $PackageFileListPath -ErrorAction Stop | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
   $overwrite = -not [string]::IsNullOrWhiteSpace($OverwriteSigned) -and $OverwriteSigned -eq '1'
+  $signingParallelism = 1
+  $parsedParallelism = 0
+  if ([int]::TryParse([string]$Parallelism, [ref]$parsedParallelism) -and $parsedParallelism -gt 1) {
+    $signingParallelism = [Math]::Min($parsedParallelism, 32)
+  }
 
   if (-not $include -or $include.Count -eq 0) {
     # Keep defaults aligned with the C# pipeline (PowerForge.Services.ModulePipelineRunner).
@@ -426,47 +432,150 @@ try {
 
     $targets = @($all | Where-Object { $preDisposition[$_] -eq 'Target' })
 
-    $processedTargets = 0
-    foreach ($f in $targets) {
-      if ($signingFailureMessage) {
-        $failed++
-        Add-FailedFile -List $failedFiles -FilePath $f -Message ("not attempted because signing stopped after a failure: " + $signingFailureMessage)
-        $failedFilePaths.Add($f) | Out-Null
-        continue
+    # The first file is always signed alone in this session so a hardware token asks for
+    # its PIN at most once. The remaining files are signed and timestamped concurrently
+    # when the signing command comes from a module that worker runspaces can load.
+    $parallel = 1
+    $signingModulePath = $null
+    if ($signingParallelism -gt 1 -and $targets.Count -gt 1) {
+      $signCommand = Get-Command Set-AuthenticodeSignature -ErrorAction SilentlyContinue
+      if ($signCommand -and $signCommand.Module -and -not [string]::IsNullOrWhiteSpace($signCommand.Module.Path) -and
+          [System.IO.File]::Exists($signCommand.Module.Path)) {
+        $signingModulePath = $signCommand.Module.Path
+        $parallel = $signingParallelism
       }
-      EmitSigningProgress $processedTargets $targets.Count ("Signing and timestamping {0}/{1}: {2}" -f ($processedTargets + 1), $targets.Count, $f.Substring($rootPrefix.Length))
-      $processedTargets++
-      $attempted++
-      $wasSigned = $preStatus[$f] -ne 'NotSigned'
-      try {
-        # A private-key operation may prompt for consent. Never retry it, including
-        # in another host, after a failed result, denial or cancellation.
-        Clear-SigningCloudPlacementAttributes -filePath $f
-        if ($overwrite) {
-          $r = Set-AuthenticodeSignature -FilePath $f -Certificate $cert -TimestampServer $ts -IncludeChain All -HashAlgorithm SHA256 -Force -ErrorAction Stop
-        } else {
-          $r = Set-AuthenticodeSignature -FilePath $f -Certificate $cert -TimestampServer $ts -IncludeChain All -HashAlgorithm SHA256 -ErrorAction Stop
-        }
+    }
 
+    $signTarget = {
+      param([string]$FilePath, $Certificate, [string]$TimestampServer, [bool]$Overwrite)
+      # A private-key operation may prompt for consent. Never retry it, including
+      # in another host, after a failed result, denial or cancellation.
+      if ($Overwrite) {
+        Set-AuthenticodeSignature -FilePath $FilePath -Certificate $Certificate -TimestampServer $TimestampServer -IncludeChain All -HashAlgorithm SHA256 -Force -ErrorAction Stop
+      } else {
+        Set-AuthenticodeSignature -FilePath $FilePath -Certificate $Certificate -TimestampServer $TimestampServer -IncludeChain All -HashAlgorithm SHA256 -ErrorAction Stop
+      }
+    }
+    # Dot-sourced after each file with $f, $r and $signError set by the caller.
+    $recordSigningResult = {
+      $wasSigned = $preStatus[$f] -ne 'NotSigned'
+      $fileFailure = $null
+      if ($signError) {
+        $signingException++
+        $fileFailure = 'signing failed: ' + $signError
+      } else {
         $status = if ($r) { [string]$r.Status } else { 'Unknown' }
         if ($status -eq 'UnknownError') { $unknownError++ }
-
         if ($status -eq 'Valid') {
           if ($wasSigned) { $resigned++ } else { $signedNew++ }
         } else {
-          $failed++
           $statusMessage = if ($r) { [string]$r.StatusMessage } else { '' }
-          $signingFailureMessage = "signing returned status " + $status + " " + $statusMessage
-          Add-FailedFile -List $failedFiles -FilePath $f -Message $signingFailureMessage
-          $failedFilePaths.Add($f) | Out-Null
+          $fileFailure = "signing returned status " + $status + " " + $statusMessage
         }
-      } catch {
+      }
+      if ($fileFailure) {
         $failed++
-        $signingException++
-        $signingFailureMessage = 'signing failed: ' + $_.Exception.Message
-        Add-FailedFile -List $failedFiles -FilePath $f -Message $signingFailureMessage
+        if (-not $signingFailureMessage) { $signingFailureMessage = $fileFailure }
+        Add-FailedFile -List $failedFiles -FilePath $f -Message $fileFailure
         $failedFilePaths.Add($f) | Out-Null
       }
+    }
+
+    # Dot-sourced with $job set to a finished worker.
+    $collectWorker = {
+      $f = $job.File
+      $r = $null
+      $signError = $null
+      try {
+        $output = $job.Worker.EndInvoke($job.Handle)
+        if ($job.Worker.Streams.Error.Count -gt 0) {
+          $signError = $job.Worker.Streams.Error[0].Exception.Message
+        } elseif ($output.Count -gt 0) {
+          $r = $output[$output.Count - 1]
+        }
+      } catch {
+        $inner = $_.Exception
+        while ($inner.InnerException) { $inner = $inner.InnerException }
+        $signError = $inner.Message
+      } finally {
+        $job.Worker.Dispose()
+      }
+      . $recordSigningResult
+    }
+
+    $processedTargets = 0
+    $nextTarget = 0
+    $pool = $null
+    $inFlight = New-Object 'System.Collections.Generic.List[object]'
+    try {
+      while ($true) {
+        # Collect every finished worker before refilling a slot, so a failure that has
+        # already completed always stops new signing work.
+        foreach ($job in @($inFlight | Where-Object { $_.Handle.IsCompleted })) {
+          [void]$inFlight.Remove($job)
+          . $collectWorker
+        }
+
+        $canStart = -not $signingFailureMessage -and $nextTarget -lt $targets.Count
+        $inline = $nextTarget -eq 0 -or $parallel -le 1
+        if ($canStart -and $inline -and $inFlight.Count -eq 0) {
+          $f = $targets[$nextTarget]
+          $nextTarget++
+          EmitSigningProgress $processedTargets $targets.Count ("Signing and timestamping {0}/{1}: {2}" -f ($processedTargets + 1), $targets.Count, $f.Substring($rootPrefix.Length))
+          $processedTargets++
+          $attempted++
+          $r = $null
+          $signError = $null
+          try {
+            Clear-SigningCloudPlacementAttributes -filePath $f
+            $r = & $signTarget $f $cert $ts $overwrite
+          } catch {
+            $signError = $_.Exception.Message
+          }
+          . $recordSigningResult
+          continue
+        }
+
+        if ($canStart -and -not $inline -and $inFlight.Count -lt $parallel) {
+          if ($null -eq $pool) {
+            $poolState = [System.Management.Automation.Runspaces.InitialSessionState]::CreateDefault2()
+            $poolState.ImportPSModule([string[]]@($signingModulePath))
+            $pool = [System.Management.Automation.Runspaces.RunspaceFactory]::CreateRunspacePool($poolState)
+            [void]$pool.SetMaxRunspaces($parallel)
+            $pool.Open()
+          }
+          $f = $targets[$nextTarget]
+          $nextTarget++
+          EmitSigningProgress $processedTargets $targets.Count ("Signing and timestamping {0}/{1}: {2}" -f ($processedTargets + 1), $targets.Count, $f.Substring($rootPrefix.Length))
+          $processedTargets++
+          $attempted++
+          try {
+            Clear-SigningCloudPlacementAttributes -filePath $f
+            $worker = [System.Management.Automation.PowerShell]::Create()
+            $worker.RunspacePool = $pool
+            [void]$worker.AddScript($signTarget.ToString()).AddArgument($f).AddArgument($cert).AddArgument($ts).AddArgument($overwrite)
+            $inFlight.Add([pscustomobject]@{ File = $f; Worker = $worker; Handle = $worker.BeginInvoke() }) | Out-Null
+          } catch {
+            $r = $null
+            $signError = $_.Exception.Message
+            . $recordSigningResult
+          }
+          continue
+        }
+
+        if ($inFlight.Count -eq 0) { break }
+        $handles = [System.Threading.WaitHandle[]]@($inFlight | ForEach-Object { $_.Handle.AsyncWaitHandle })
+        [void][System.Threading.WaitHandle]::WaitAny($handles)
+      }
+    } finally {
+      foreach ($job in $inFlight) { $job.Worker.Dispose() }
+      if ($pool) { $pool.Dispose() }
+    }
+
+    for ($i = $nextTarget; $i -lt $targets.Count; $i++) {
+      $failed++
+      Add-FailedFile -List $failedFiles -FilePath $targets[$i] -Message ("not attempted because signing stopped after a failure: " + $signingFailureMessage)
+      $failedFilePaths.Add($targets[$i]) | Out-Null
     }
 
     foreach ($entry in $precheckFailures.GetEnumerator()) {

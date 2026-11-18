@@ -35,13 +35,13 @@ public sealed class BenchmarkComparisonViewBuilder
             throw new ArgumentException("Catalog path is required.", nameof(catalogPath));
 
         var fullPath = Path.GetFullPath(catalogPath);
-        var catalog = BenchmarkJson.Read<BenchmarkEvidenceCatalog>(fullPath);
+        var catalog = new BenchmarkEvidenceCatalogService().ReadCatalog(fullPath);
         var directory = Path.GetDirectoryName(fullPath) ?? ".";
         return Build(catalog, entry =>
         {
             var file = ResolveResultFile(directory, entry);
             if (!File.Exists(file))
-                throw new FileNotFoundException($"Benchmark result for '{entry.ComparisonId}' ({entry.Platform}, {entry.RunMode}) was not found.", file);
+                throw new FileNotFoundException($"Benchmark result for lane '{entry.LaneKey}' was not found.", file);
             return BenchmarkJson.Read<BenchmarkRunResult>(file);
         });
     }
@@ -59,12 +59,16 @@ public sealed class BenchmarkComparisonViewBuilder
                 definitions.Add(new BenchmarkComparisonDefinition { ComparisonId = entry.ComparisonId, Area = entry.Area, Title = entry.ComparisonId });
         }
 
+        var policy = catalog.Policy ?? BenchmarkPublishPolicy.CreateDefault();
+        var unpublished = new HashSet<string>(
+            (catalog.Libraries ?? Array.Empty<BenchmarkLibraryDeclaration>()).Where(library => !library.IsPublishableUnder(policy)).Select(library => library.Id),
+            StringComparer.OrdinalIgnoreCase);
         var comparisons = definitions.Select(definition =>
         {
             var entries = catalog.Entries
                 .Where(entry => string.Equals(entry.ComparisonId, definition.ComparisonId, StringComparison.OrdinalIgnoreCase))
                 .ToArray();
-            return BuildComparison(definition, entries.Select(entry => (entry, loadResult(entry))).ToArray());
+            return BuildComparison(definition, entries.Select(entry => (entry, loadResult(entry))).ToArray(), unpublished);
         }).ToArray();
 
         return new BenchmarkComparisonCatalogView
@@ -86,15 +90,16 @@ public sealed class BenchmarkComparisonViewBuilder
 
     private static BenchmarkComparisonView BuildComparison(
         BenchmarkComparisonDefinition definition,
-        IReadOnlyList<(BenchmarkEvidenceEntry Entry, BenchmarkRunResult Result)> runs)
+        IReadOnlyList<(BenchmarkEvidenceEntry Entry, BenchmarkRunResult Result)> runs,
+        ISet<string> unpublished)
     {
         var libraries = definition.Libraries ?? Array.Empty<string>();
-        var subject = libraries.FirstOrDefault() ?? string.Empty;
+        var subject = !string.IsNullOrWhiteSpace(definition.Subject) ? definition.Subject : libraries.FirstOrDefault() ?? string.Empty;
         var runViews = runs
             .OrderBy(run => PlatformRank(run.Entry.Platform))
-            .ThenBy(run => string.Equals(run.Entry.RunMode, "full", StringComparison.OrdinalIgnoreCase) ? 0 : 1)
+            .ThenBy(run => run.Entry.Profile == BenchmarkEvidenceProfile.Full ? 0 : run.Entry.Profile == BenchmarkEvidenceProfile.Standard ? 1 : 2)
             .ThenByDescending(run => run.Entry.GeneratedUtc)
-            .Select(run => BuildRun(run.Entry, run.Result, libraries, subject))
+            .Select(run => BuildRun(run.Entry, run.Result, libraries, subject, unpublished))
             .ToArray();
         MakeRunIdsUnique(runViews);
 
@@ -162,9 +167,26 @@ public sealed class BenchmarkComparisonViewBuilder
             .ToArray();
     }
 
-    private static BenchmarkRunView BuildRun(BenchmarkEvidenceEntry entry, BenchmarkRunResult result, string[] libraries, string subject)
+    private static BenchmarkRunView BuildRun(BenchmarkEvidenceEntry entry, BenchmarkRunResult result, string[] libraries, string subject, ISet<string> unpublished)
     {
-        var rows = NormalizeRows(result.Summary ?? Array.Empty<BenchmarkSummaryRow>(), libraries, subject);
+        var preferMean = string.Equals(result.Runner?.Statistic, "mean", StringComparison.OrdinalIgnoreCase);
+        // Libraries whose licence class is not published never appear, in published or diagnostic runs.
+        var rows = NormalizeRows(PublishedRows(entry, result.Summary ?? Array.Empty<BenchmarkSummaryRow>()), libraries, subject, preferMean)
+            .Where(row => !unpublished.Contains(row.Library))
+            .ToList();
+        // Published cells carry the confidence interval the publish policy accepted; overlapping intervals are even.
+        if (entry.Publish && entry.Cells is { Length: > 0 })
+        {
+            var intervals = entry.Cells
+                .Where(cell => cell.Publishable && cell.ConfidenceInterval is not null)
+                .GroupBy(BenchmarkEvidenceCellBuilder.Identity, StringComparer.Ordinal)
+                .ToDictionary(group => group.Key, group => group.First().ConfidenceInterval!, StringComparer.Ordinal);
+            foreach (var row in rows)
+            {
+                if (row.Source is not null && intervals.TryGetValue(BenchmarkEvidenceCellBuilder.Identity(row.Source), out var interval))
+                    row.Interval = interval;
+            }
+        }
         var statistic = rows.Any(row => row.Statistic == "mean") ? "mean" : "median";
 
         // A parameter present with the same value in every row describes the workload; one that differs or
@@ -308,10 +330,11 @@ public sealed class BenchmarkComparisonViewBuilder
             .ToArray();
 
         var platform = (entry.Platform ?? string.Empty).ToLowerInvariant();
-        var runMode = (entry.RunMode ?? string.Empty).ToLowerInvariant();
+        var runMode = BenchmarkKebabCaseEnumConverter<BenchmarkEvidenceProfile>.Format(entry.Profile);
+        var framework = (entry.Framework ?? string.Empty).ToLowerInvariant();
         return new BenchmarkRunView
         {
-            Id = platform + "-" + runMode,
+            Id = platform + (framework.Length > 0 ? "-" + framework : string.Empty) + "-" + runMode,
             Platform = platform,
             PlatformLabel = PlatformLabel(platform),
             RunMode = runMode,
@@ -344,7 +367,9 @@ public sealed class BenchmarkComparisonViewBuilder
             var cells = cases[label].Cells;
             if (!cells.TryGetValue(a, out var x) || !cells.TryGetValue(b, out var y) || !Completed(x) || !Completed(y) || y.TimeMs <= 0)
                 continue;
-            time.Add(x.TimeMs!.Value / y.TimeMs!.Value);
+            // Cases whose accepted confidence intervals overlap are even, whatever their point estimates say.
+            bool even = x.Interval is not null && y.Interval is not null && BenchmarkEvidenceIdentity.Overlaps(x.Interval, y.Interval);
+            time.Add(even ? 1.0 : x.TimeMs!.Value / y.TimeMs!.Value);
             if (x.AllocatedBytes > 0 && y.AllocatedBytes > 0)
                 memory.Add(x.AllocatedBytes!.Value / y.AllocatedBytes!.Value);
         }
@@ -392,11 +417,46 @@ public sealed class BenchmarkComparisonViewBuilder
         public string Statistic = "median";
         public double? AllocatedBytes;
         public bool Failed;
+        public BenchmarkSummaryRow? Source;
+        public BenchmarkConfidenceInterval? Interval;
     }
 
     private static bool Completed(NormalizedRow row) => !row.Failed && row.TimeMs is > 0;
 
-    private static List<NormalizedRow> NormalizeRows(IEnumerable<BenchmarkSummaryRow> summary, string[] libraries, string subject)
+    /// <summary>
+    /// A published lane shows only the cells its publish policy accepted; cells dropped for licence, validation
+    /// or sampling reasons never reach timings or rankings. Lanes without cells are shown as recorded.
+    /// </summary>
+    private static IEnumerable<BenchmarkSummaryRow> PublishedRows(BenchmarkEvidenceEntry entry, IEnumerable<BenchmarkSummaryRow> rows)
+    {
+        if (!entry.Publish || entry.Cells is not { Length: > 0 })
+            return rows;
+        var publishable = new HashSet<string>(
+            entry.Cells.Where(cell => cell.Publishable).Select(BenchmarkEvidenceCellBuilder.Identity),
+            StringComparer.Ordinal);
+        return rows.Where(row => publishable.Contains(BenchmarkEvidenceCellBuilder.Identity(row)));
+    }
+
+    /// <summary>
+    /// The case of a row that records its library: the scenario, unless the scenario is only the library's name.
+    /// Keeping it apart stops two methods of one library from collapsing into one cell.
+    /// </summary>
+    private static string RecordedCase(BenchmarkSummaryRow row, ISet<string> sharedScenarios)
+    {
+        var scenario = (row.Scenario ?? string.Empty).Trim();
+        // A scenario recorded for two or more libraries is an authoritative shared case name; it is never trimmed
+        // by one library's name, even when it happens to start with it ("SepRead" for Sep and OfficeIMO).
+        if (sharedScenarios.Contains(scenario))
+            return scenario;
+        var library = row.Library ?? string.Empty;
+        if (Key(scenario) == Key(library))
+            return string.Empty;
+        // "OfficeIMOEncode" recorded for OfficeIMO is the Encode case; a shared case name is kept whole.
+        var (matched, rest) = MatchLibrary(scenario, new[] { (Name: library, Key: Key(library)) });
+        return string.Equals(matched, library, StringComparison.Ordinal) && rest.Length > 0 ? rest : scenario;
+    }
+
+    private static List<NormalizedRow> NormalizeRows(IEnumerable<BenchmarkSummaryRow> summary, string[] libraries, string subject, bool preferMean = false)
     {
         var declared = libraries
             .Select(name => (Name: name, Key: Key(name)))
@@ -404,8 +464,19 @@ public sealed class BenchmarkComparisonViewBuilder
             .OrderByDescending(library => library.Key.Length)
             .ToArray();
 
+        var rowsWithLibrary = summary.Where(row => !string.IsNullOrWhiteSpace(row.Library)).ToArray();
+        var sharedScenarios = new HashSet<string>(
+            rowsWithLibrary
+                .GroupBy(row => (row.Scenario ?? string.Empty).Trim(), StringComparer.Ordinal)
+                .Where(group => group.Select(row => row.Library).Distinct(StringComparer.OrdinalIgnoreCase).Count() > 1)
+                .Select(group => group.Key),
+            StringComparer.Ordinal);
+
         var parsed = summary.Select(row =>
         {
+            // Rows that carry their library identity are taken as recorded; name matching is only for rows without it.
+            if (!string.IsNullOrWhiteSpace(row.Library))
+                return (Row: row, Library: row.Library, Suffix: string.Empty);
             var raw = string.IsNullOrWhiteSpace(row.Scenario) ? row.Engine ?? string.Empty : row.Scenario;
             var (library, suffix) = MatchLibrary(raw, declared);
             return (Row: row, Library: library, Suffix: suffix);
@@ -422,6 +493,16 @@ public sealed class BenchmarkComparisonViewBuilder
         return parsed.Select(item =>
         {
             var (parameters, identity) = CaseParameters(item.Row);
+            if (!string.IsNullOrWhiteSpace(item.Row.Library))
+            {
+                var recordedCase = RecordedCase(item.Row, sharedScenarios);
+                if (recordedCase.Length > 0)
+                {
+                    // A workload parameter that is itself named Case keeps its value; the scenario gets another name.
+                    var name = new[] { "Case", "Scenario", "Benchmark case" }.First(candidate => !parameters.ContainsKey(candidate) && !identity.ContainsKey(candidate));
+                    parameters[name] = recordedCase;
+                }
+            }
             var contender = item.Library;
             if (item.Suffix.Length > 0)
             {
@@ -436,7 +517,8 @@ public sealed class BenchmarkComparisonViewBuilder
                 if (variant.Length > 0) contender = item.Library + " " + variant;
             }
 
-            var time = item.Row.MedianMs ?? item.Row.MeanMs;
+            var useMean = preferMean ? item.Row.MeanMs.HasValue : !item.Row.MedianMs.HasValue;
+            var time = useMean ? item.Row.MeanMs : item.Row.MedianMs;
             return new NormalizedRow
             {
                 Contender = contender,
@@ -444,9 +526,10 @@ public sealed class BenchmarkComparisonViewBuilder
                 Parameters = parameters,
                 Identity = identity,
                 TimeMs = time,
-                Statistic = item.Row.MedianMs.HasValue ? "median" : "mean",
+                Statistic = useMean ? "mean" : "median",
                 AllocatedBytes = Metric(item.Row.Metrics, "BytesAllocatedPerOperation") ?? Metric(item.Row.Metrics, "Allocated"),
-                Failed = !string.IsNullOrWhiteSpace(item.Row.Status) && !string.Equals(item.Row.Status, "Succeeded", StringComparison.OrdinalIgnoreCase)
+                Failed = !string.IsNullOrWhiteSpace(item.Row.Status) && !string.Equals(item.Row.Status, "Succeeded", StringComparison.OrdinalIgnoreCase),
+                Source = item.Row
             };
         }).ToList();
     }
@@ -509,6 +592,9 @@ public sealed class BenchmarkComparisonViewBuilder
         var fromReport = variables.ContainsKey("BenchmarkDotNetReport");
         foreach (var variable in variables)
         {
+            if (BenchmarkEvidenceCellBuilder.IsProducerIdentity(variable.Key, variables) &&
+                !BenchmarkDotNetColumns.IsJobCharacteristic(variable.Key))
+                continue;
             if (BenchmarkDotNetColumns.IsJobCharacteristic(variable.Key))
             {
                 if (!string.Equals(variable.Key, "FullName", StringComparison.OrdinalIgnoreCase) &&

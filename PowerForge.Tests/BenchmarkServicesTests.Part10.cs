@@ -43,11 +43,10 @@ public sealed partial class BenchmarkServicesTests
     {
         string root = CreateTempRoot();
         string catalogPath = Path.Combine(root, "index.json");
-        string resultPath = Path.Combine(root, "quick.json");
         BenchmarkRunResult result = Result("Windows", "fixture-a", 10);
 
         BenchmarkEvidenceCatalog catalog =
-            new BenchmarkEvidenceCatalogService().UpdateFile(
+            UpdateFileDeclared(new BenchmarkEvidenceCatalogService(),
                 catalogPath,
                 result,
                 "comparison-a",
@@ -55,101 +54,11 @@ public sealed partial class BenchmarkServicesTests
                 "quick",
                 publish: false);
 
+        string resultPath = Path.Combine(root, Assert.Single(catalog.Entries).ArtifactRelativePath);
         Assert.True(File.Exists(resultPath));
         Assert.Equal(
             BenchmarkJson.ComputeFileSha256(resultPath),
             Assert.Single(catalog.Entries).ResultSha256);
-    }
-
-    [Fact]
-    public void EvidenceCatalog_RejectsNormalizedArtifactDestinationCollision()
-    {
-        string root = CreateTempRoot();
-        string catalogPath = Path.Combine(root, "index.json");
-        var service = new BenchmarkEvidenceCatalogService();
-        service.UpdateFile(
-            catalogPath,
-            Result("Windows", "fixture-a", 10),
-            "comparison-a",
-            "results/windows.json",
-            "full",
-            publish: true);
-
-        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
-            service.UpdateFile(
-                catalogPath,
-                Result("Linux", "fixture-a", 11),
-                "comparison-a",
-                "results/../results/windows.json",
-                "full",
-                publish: true));
-
-        Assert.Contains("artifact destination", exception.Message, StringComparison.OrdinalIgnoreCase);
-    }
-
-    [Fact]
-    public void EvidenceCatalog_RejectsSharedExplicitArtifactDestination()
-    {
-        string root = CreateTempRoot();
-        string catalogPath = Path.Combine(root, "index.json");
-        string sharedArtifactPath = Path.Combine(root, "site", "result.json");
-        var service = new BenchmarkEvidenceCatalogService();
-        service.UpdateFile(
-            catalogPath,
-            Result("Windows", "fixture-a", 10),
-            "comparison-a",
-            "/data/windows.json",
-            "full",
-            publish: true,
-            resultArtifactPath: sharedArtifactPath);
-
-        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
-            service.UpdateFile(
-                catalogPath,
-                Result("Linux", "fixture-a", 11),
-                "comparison-a",
-                "/data/linux.json",
-                "full",
-                publish: true,
-                resultArtifactPath: sharedArtifactPath));
-
-        Assert.Contains("artifact destination", exception.Message, StringComparison.OrdinalIgnoreCase);
-    }
-
-    [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public void EvidenceCatalog_PreservesExplicitArtifactOwnershipWhenPriorFileIsUnavailable(
-        bool tamperPriorArtifact)
-    {
-        string root = CreateTempRoot();
-        string catalogPath = Path.Combine(root, "index.json");
-        string sharedArtifactPath = Path.Combine(root, "site", "result.json");
-        var service = new BenchmarkEvidenceCatalogService();
-        service.UpdateFile(
-            catalogPath,
-            Result("Windows", "fixture-a", 10),
-            "comparison-a",
-            "/data/windows.json",
-            "full",
-            publish: true,
-            resultArtifactPath: sharedArtifactPath);
-        if (tamperPriorArtifact)
-            File.WriteAllText(sharedArtifactPath, "tampered");
-        else
-            File.Delete(sharedArtifactPath);
-
-        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
-            service.UpdateFile(
-                catalogPath,
-                Result("Linux", "fixture-a", 11),
-                "comparison-a",
-                "/data/linux.json",
-                "full",
-                publish: true,
-                resultArtifactPath: sharedArtifactPath));
-
-        Assert.Contains("artifact destination", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -159,7 +68,7 @@ public sealed partial class BenchmarkServicesTests
         string catalogPath = Path.Combine(root, "index.json");
         var service = new BenchmarkEvidenceCatalogService();
         BenchmarkRunResult result = Result("Windows", "fixture-a", 10);
-        service.UpdateFile(
+        UpdateFileDeclared(service,
             catalogPath,
             result,
             "comparison-a",
@@ -168,7 +77,7 @@ public sealed partial class BenchmarkServicesTests
             publish: false,
             resultArtifactPath: Path.Combine(root, "site", "result-a.json"));
 
-        BenchmarkEvidenceCatalog catalog = service.UpdateFile(
+        BenchmarkEvidenceCatalog catalog = UpdateFileDeclared(service,
             catalogPath,
             result,
             "comparison-b",
@@ -181,62 +90,6 @@ public sealed partial class BenchmarkServicesTests
     }
 
     [Fact]
-    public void EvidenceCatalog_UsesDestinationVolumeCaseSensitivity()
-    {
-        string root = CreateTempRoot();
-        string catalogPath = Path.Combine(root, "index.json");
-        var service = new BenchmarkEvidenceCatalogService();
-        service.UpdateFile(
-            catalogPath,
-            Result("Linux", "fixture-a", 10),
-            "comparison-a",
-            "/data/result.json",
-            "quick",
-            publish: false,
-            resultArtifactPath: Path.Combine(root, "result.json"));
-
-        BenchmarkEvidenceCatalog UpdateSecond() => service.UpdateFile(
-            catalogPath,
-            Result("Linux", "fixture-a", 11),
-            "comparison-b",
-            "/data/RESULT.json",
-            "quick",
-            publish: false,
-            resultArtifactPath: Path.Combine(root, "RESULT.json"));
-
-        if (BenchmarkFileUpdateLock.IsCaseInsensitivePath(catalogPath))
-            Assert.Throws<InvalidOperationException>(() => UpdateSecond());
-        else
-            Assert.Equal(2, UpdateSecond().Entries.Length);
-    }
-
-    [Fact]
-    public void EvidenceCatalog_RejectsDiagnosticArtifactDestinationCollision()
-    {
-        string root = CreateTempRoot();
-        string catalogPath = Path.Combine(root, "index.json");
-        var service = new BenchmarkEvidenceCatalogService();
-        service.UpdateFile(
-            catalogPath,
-            Result("Windows", "fixture-a", 10),
-            "comparison-a",
-            "results/quick.json",
-            "quick",
-            publish: false);
-
-        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
-            service.UpdateFile(
-                catalogPath,
-                Result("Linux", "fixture-a", 11),
-                "comparison-a",
-                "results/../results/quick.json",
-                "quick",
-                publish: false));
-
-        Assert.Contains("artifact destination", exception.Message, StringComparison.OrdinalIgnoreCase);
-    }
-
-    [Fact]
     public void EvidenceCatalog_RejectsMeasurementsMutatedAfterProvenanceValidation()
     {
         BenchmarkRunResult result = Result("Windows", "fixture-a", 10);
@@ -245,7 +98,7 @@ public sealed partial class BenchmarkServicesTests
         result.Summary[0].MedianMs = 20;
 
         InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
-            new BenchmarkEvidenceCatalogService().Update(
+            UpdateDeclared(new BenchmarkEvidenceCatalogService(),
                 null,
                 result,
                 "comparison-a",
@@ -265,7 +118,7 @@ public sealed partial class BenchmarkServicesTests
         result.Metadata["benchmark.note"] = "enriched after import";
 
         BenchmarkEvidenceCatalog catalog =
-            new BenchmarkEvidenceCatalogService().Update(
+            UpdateDeclared(new BenchmarkEvidenceCatalogService(),
                 null,
                 result,
                 "comparison-a",
@@ -286,7 +139,7 @@ public sealed partial class BenchmarkServicesTests
         result.Metadata["benchmark.package.AdditionalEngine"] = "1.2.3";
         result.Metadata["benchmark.workload.projectedColumns"] = "8";
         InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
-            new BenchmarkEvidenceCatalogService().Update(
+            UpdateDeclared(new BenchmarkEvidenceCatalogService(),
                 null,
                 result,
                 "comparison-a",
@@ -317,7 +170,7 @@ public sealed partial class BenchmarkServicesTests
                 : new string('d', 64);
 
         InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
-            new BenchmarkEvidenceCatalogService().Update(
+            UpdateDeclared(new BenchmarkEvidenceCatalogService(),
                 null,
                 result,
                 "comparison-a",
@@ -337,7 +190,7 @@ public sealed partial class BenchmarkServicesTests
         result.FinishedUtc = result.FinishedUtc.AddMinutes(1);
 
         InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
-            new BenchmarkEvidenceCatalogService().Update(
+            UpdateDeclared(new BenchmarkEvidenceCatalogService(),
                 null,
                 result,
                 "comparison-a",
@@ -358,7 +211,7 @@ public sealed partial class BenchmarkServicesTests
         BenchmarkResultImporter.CaptureValidatedProductionState(result);
 
         InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
-            new BenchmarkEvidenceCatalogService().Update(
+            UpdateDeclared(new BenchmarkEvidenceCatalogService(),
                 null,
                 result,
                 "comparison-a",
@@ -379,7 +232,7 @@ public sealed partial class BenchmarkServicesTests
         BenchmarkResultImporter.CaptureValidatedProductionState(result);
 
         InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
-            new BenchmarkEvidenceCatalogService().Update(
+            UpdateDeclared(new BenchmarkEvidenceCatalogService(),
                 null,
                 result,
                 "comparison-a",
@@ -398,7 +251,7 @@ public sealed partial class BenchmarkServicesTests
         BenchmarkResultImporter.CaptureValidatedProductionState(result);
 
         InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
-            new BenchmarkEvidenceCatalogService().Update(
+            UpdateDeclared(new BenchmarkEvidenceCatalogService(),
                 null,
                 result,
                 "comparison-b",
@@ -430,7 +283,7 @@ public sealed partial class BenchmarkServicesTests
         invalidRange.Summary[0].MaxMs = 8;
 
         InvalidOperationException rangeException = Assert.Throws<InvalidOperationException>(() =>
-            new BenchmarkEvidenceCatalogService().Update(
+            UpdateDeclared(new BenchmarkEvidenceCatalogService(),
                 null,
                 invalidRange,
                 "comparison-a",
@@ -444,7 +297,7 @@ public sealed partial class BenchmarkServicesTests
         invalidPercentile.Summary[0].P95Ms = -1;
 
         InvalidOperationException percentileException = Assert.Throws<InvalidOperationException>(() =>
-            new BenchmarkEvidenceCatalogService().Update(
+            UpdateDeclared(new BenchmarkEvidenceCatalogService(),
                 null,
                 invalidPercentile,
                 "comparison-a",
@@ -458,7 +311,7 @@ public sealed partial class BenchmarkServicesTests
         invalidDeviation.Summary[0].StdDevMs = double.NaN;
 
         InvalidOperationException deviationException = Assert.Throws<InvalidOperationException>(() =>
-            new BenchmarkEvidenceCatalogService().Update(
+            UpdateDeclared(new BenchmarkEvidenceCatalogService(),
                 null,
                 invalidDeviation,
                 "comparison-a",
@@ -475,7 +328,7 @@ public sealed partial class BenchmarkServicesTests
         result.Environment.ProcessorName = "X64 processor";
 
         InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
-            new BenchmarkEvidenceCatalogService().Update(
+            UpdateDeclared(new BenchmarkEvidenceCatalogService(),
                 null,
                 result,
                 "comparison-a",
@@ -493,7 +346,7 @@ public sealed partial class BenchmarkServicesTests
         result.FinishedUtc = DateTimeOffset.UtcNow.AddHours(1);
 
         InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
-            new BenchmarkEvidenceCatalogService().Update(
+            UpdateDeclared(new BenchmarkEvidenceCatalogService(),
                 null,
                 result,
                 "comparison-a",

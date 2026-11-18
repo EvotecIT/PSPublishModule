@@ -122,7 +122,7 @@ internal static class PowerShellBenchmarkArtifactWriter
             .Where(header => !header.Equals("AllocatedBytes", StringComparison.OrdinalIgnoreCase)
                 && !header.Equals("WorkingSetDeltaBytes", StringComparison.OrdinalIgnoreCase)).ToArray();
         var builder = new StringBuilder();
-        builder.AppendLine(string.Join(",", new[] { "Suite", "Scenario", "Operation", "Engine", "Host", "OS", "RunMode" }.Concat(variableHeaders).Concat(new[] { "Iteration", "Status", "DurationMs", "AllocatedBytes", "WorkingSetDeltaBytes", "Reason" }).Concat(metricHeaders).Select(Cell)));
+        builder.AppendLine(string.Join(",", new[] { "Suite", "Scenario", "Operation", "Engine", "Library", "Host", "OS", "RunMode" }.Concat(variableHeaders).Concat(new[] { "Iteration", "Status", "DurationMs", "AllocatedBytes", "WorkingSetDeltaBytes", "Reason" }).Concat(metricHeaders).Select(Cell)));
         foreach (var sample in rows)
         {
             var cells = new List<string>
@@ -131,6 +131,7 @@ internal static class PowerShellBenchmarkArtifactWriter
                 Cell(sample.Scenario),
                 Cell(sample.Operation),
                 Cell(sample.Engine),
+                Cell(sample.Library),
                 Cell(sample.Host),
                 Cell(sample.Os),
                 Cell(sample.RunMode)
@@ -155,7 +156,7 @@ internal static class PowerShellBenchmarkArtifactWriter
         var variableHeaders = GetVariableHeaders(summaryRows.Select(row => row.Variables));
         var metricHeaders = GetMetricHeaders(summaryRows.Select(row => row.Metrics));
         var builder = new StringBuilder();
-        builder.AppendLine(string.Join(",", new[] { "Suite", "Scenario", "Operation", "Engine", "Host", "OS", "RunMode" }.Concat(variableHeaders).Concat(new[] { "SampleCount", "FailureCount", "OutlierCount", "Status", "MedianMs", "MeanMs", "MinMs", "MaxMs", "P95Ms", "P99Ms", "StdDevMs", "StdErrMs", "FailureReasons" }).Concat(metricHeaders).Select(Cell)));
+        builder.AppendLine(string.Join(",", new[] { "Suite", "Scenario", "Operation", "Engine", "Library", "Host", "OS", "RunMode" }.Concat(variableHeaders).Concat(new[] { "SampleCount", "FailureCount", "OutlierCount", "Status", "MedianMs", "MeanMs", "MinMs", "MaxMs", "P95Ms", "P99Ms", "StdDevMs", "StdErrMs", "FailureReasons" }).Concat(metricHeaders).Select(Cell)));
         foreach (var row in summaryRows)
         {
             var cells = new List<string>
@@ -164,6 +165,7 @@ internal static class PowerShellBenchmarkArtifactWriter
                 Cell(row.Scenario),
                 Cell(row.Operation),
                 Cell(row.Engine),
+                Cell(row.Library),
                 Cell(row.Host),
                 Cell(row.Os),
                 Cell(row.RunMode)
