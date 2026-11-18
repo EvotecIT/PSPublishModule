@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Management.Automation;
 using System.Management.Automation.Runspaces;
+using System.Runtime.ExceptionServices;
 using System.Security.Cryptography.X509Certificates;
 using System.Runtime.InteropServices;
 
@@ -178,6 +179,55 @@ public sealed class AuthenticodeSigningService
     }
 
     /// <summary>
+    /// Signs and timestamps one file with the certificate's private key, in the current process.
+    /// Used to unlock a hardware token before a long run so its PIN prompt comes first.
+    /// </summary>
+    /// <param name="certificate">Signing certificate with a private key.</param>
+    /// <param name="filePath">File to sign; existing signatures are replaced.</param>
+    /// <param name="timeStampServer">RFC3161 timestamp server URL.</param>
+    public void SignProofFile(X509Certificate2 certificate, string filePath, string timeStampServer)
+    {
+        if (certificate is null) throw new ArgumentNullException(nameof(certificate));
+        if (string.IsNullOrWhiteSpace(filePath)) throw new ArgumentException("File path is required.", nameof(filePath));
+        var signatures = SignFiles(new AuthenticodeSignRequest
+        {
+            Certificate = certificate,
+            FilePaths = new[] { filePath },
+            TimeStampServer = timeStampServer,
+            HashAlgorithm = "SHA256",
+            OverwriteSigned = true,
+            MaxDegreeOfParallelism = 1
+        });
+        if (signatures.Count != 1)
+            throw new InvalidOperationException($"Signing '{filePath}' did not return a signature.");
+    }
+
+    /// <summary>
+    /// Signs a throwaway file so the signing key is unlocked now, in this process. A hardware
+    /// token asks for its PIN here (once) instead of when release signing starts later.
+    /// </summary>
+    /// <param name="certificate">Signing certificate with a private key.</param>
+    /// <param name="timeStampServer">RFC3161 timestamp server URL.</param>
+    /// <returns>How long the unlock took, including any time spent at the PIN prompt.</returns>
+    public TimeSpan UnlockSigningKey(X509Certificate2 certificate, string timeStampServer)
+    {
+        var watch = Stopwatch.StartNew();
+        var directory = Path.Combine(Path.GetTempPath(), "PowerForge", "SigningUnlock", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try
+        {
+            var proof = Path.Combine(directory, "signing-unlock.ps1");
+            File.WriteAllText(proof, "# Signing key unlock proof; discarded after signing.\r\n$null = '" + Guid.NewGuid().ToString("D") + "'\r\n", new System.Text.UTF8Encoding(true));
+            SignProofFile(certificate, proof, timeStampServer);
+        }
+        finally
+        {
+            try { Directory.Delete(directory, recursive: true); } catch { /* best effort */ }
+        }
+        return watch.Elapsed;
+    }
+
+    /// <summary>
     /// Ensures that the platform-specific Authenticode signing commands are available.
     /// </summary>
     public void EnsureSigningCommandsAvailable()
@@ -201,26 +251,33 @@ public sealed class AuthenticodeSigningService
         if (filesToSign.Length == 0)
             return Array.Empty<PSObject>();
 
-        return SignIndividually("Set-AuthenticodeSignature", filesToSign, (ps, file) =>
+        return SignScheduled(filesToSign, request, new[] { "Set-AuthenticodeSignature" }, (createPowerShell, file) =>
         {
-            ps.AddParameter("FilePath", file);
-            ps.AddParameter("Certificate", request.Certificate);
-            ps.AddParameter("TimestampServer", request.TimeStampServer);
-            ps.AddParameter("IncludeChain", request.WindowsIncludeChain);
-            ps.AddParameter("HashAlgorithm", request.HashAlgorithm);
-            if (request.OverwriteSigned) ps.AddParameter("Force");
+            var result = InvokeMany("Set-AuthenticodeSignature", ps =>
+            {
+                ps.AddParameter("FilePath", file);
+                ps.AddParameter("Certificate", request.Certificate);
+                ps.AddParameter("TimestampServer", request.TimeStampServer);
+                ps.AddParameter("IncludeChain", request.WindowsIncludeChain);
+                ps.AddParameter("HashAlgorithm", request.HashAlgorithm);
+                if (request.OverwriteSigned) ps.AddParameter("Force");
+            }, createPowerShell);
+            if (result.Count != 1)
+                throw new InvalidOperationException($"Authenticode signing did not return exactly one signature for '{file}'.");
+            var signature = result[0];
+            var status = signature.Properties["Status"]?.Value?.ToString();
+            if (!string.Equals(status, "Valid", StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException($"Authenticode signing failed for '{file}': {status}. {signature.Properties["StatusMessage"]?.Value}");
+            return signature;
         });
     }
 
     private IReadOnlyList<PSObject> SignWithOpenAuthenticode(string[] files, AuthenticodeSignRequest request)
     {
-        var signatures = new List<PSObject>(files.Length);
-        var progress = new SigningProgress(_logger, files.Length);
-        foreach (var file in files)
+        return SignScheduled(files, request, new[] { "Set-OpenAuthenticodeSignature", "Get-OpenAuthenticodeSignature" }, (createPowerShell, file) =>
         {
-            progress.Next(file);
-            if (!request.OverwriteSigned && GetOpenSignatures(file, allowUnsigned: true).Count > 0)
-                continue;
+            if (!request.OverwriteSigned && GetOpenSignatures(file, allowUnsigned: true, createPowerShell).Count > 0)
+                return null;
 
             // The writer normally has no output; only a separate read validates the file.
             InvokeMany("Set-OpenAuthenticodeSignature", ps =>
@@ -230,22 +287,139 @@ public sealed class AuthenticodeSigningService
                 ps.AddParameter("TimeStampServer", request.TimeStampServer);
                 ps.AddParameter("IncludeOption", request.NonWindowsIncludeChain);
                 ps.AddParameter("HashAlgorithm", request.HashAlgorithm);
-            });
-            var result = GetOpenSignatures(file, allowUnsigned: false);
+            }, createPowerShell);
+            var result = GetOpenSignatures(file, allowUnsigned: false, createPowerShell);
             if (result.Count != 1)
                 throw new InvalidOperationException($"Authenticode signing did not return exactly one signature for '{file}'.");
             var certificate = (X509Certificate2)result[0].Properties["Certificate"].Value;
             if (NormalizeThumbprint(certificate.Thumbprint) != NormalizeThumbprint(request.Certificate.Thumbprint))
                 throw new InvalidOperationException($"Authenticode signing returned an unexpected signer for '{file}'.");
-            signatures.Add(result[0]);
+            return result[0];
+        });
+    }
+
+    /// <summary>
+    /// Signs the first file in the current runspace so any PIN or consent prompt happens once,
+    /// then signs the rest concurrently in a runspace pool. Signs serially when the request asks
+    /// for it or when the signing commands cannot be loaded into separate runspaces.
+    /// </summary>
+    private IReadOnlyList<PSObject> SignScheduled(
+        string[] files,
+        AuthenticodeSignRequest request,
+        string[] signingCommands,
+        Func<Func<PowerShell>, string, PSObject?> signOne)
+    {
+        var results = new PSObject?[files.Length];
+        var progress = new SigningProgress(_logger, files.Length);
+        var parallelism = files.Length > 1 ? SigningScheduler.ResolveParallelism(request.MaxDegreeOfParallelism) : 1;
+        var pool = parallelism > 1 ? TryCreateSigningRunspacePool(signingCommands, Math.Min(parallelism, files.Length - 1)) : null;
+        if (pool is null)
+            parallelism = 1;
+        else
+            _logger.Verbose($"Signing the first file alone, then up to {parallelism} file(s) at a time.");
+
+        try
+        {
+            Func<PowerShell> createPooled = () =>
+            {
+                var ps = PowerShell.Create();
+                ps.RunspacePool = pool;
+                return ps;
+            };
+            var outcome = SigningScheduler.Run(
+                files.Length,
+                parallelism,
+                index =>
+                {
+                    results[index] = signOne(index == 0 || pool is null ? CreatePowerShell : createPooled, files[index]);
+                    return true;
+                },
+                started: index => progress.Next(files[index]));
+
+            var failures = outcome.Failures;
+            if (failures.Count > 0)
+            {
+                foreach (var later in failures.Skip(1))
+                    _logger.Warn($"Signing also failed for '{files[later.Index]}': {later.Error?.Message}");
+                var first = failures[0];
+                ExceptionDispatchInfo.Capture(
+                    first.Error ?? new InvalidOperationException($"Authenticode signing failed for '{files[first.Index]}'.")).Throw();
+            }
         }
-        progress.Complete(signatures.Count);
+        finally
+        {
+            pool?.Dispose();
+        }
+
+        var signatures = results.Where(signature => signature is not null).Select(signature => signature!).ToArray();
+        progress.Complete(signatures.Length);
         return signatures;
     }
 
-    private IReadOnlyList<PSObject> GetOpenSignatures(string file, bool allowUnsigned)
+    /// <summary>
+    /// Opens a runspace pool that loads the modules providing the signing commands. Returns null
+    /// when a command is not a module command (for example a function defined in the session)
+    /// or the pool cannot run it, so the caller signs serially in the current runspace.
+    /// </summary>
+    private RunspacePool? TryCreateSigningRunspacePool(string[] commandNames, int size)
     {
-        using var ps = CreatePowerShell();
+        RunspacePool? pool = null;
+        try
+        {
+            var state = InitialSessionState.CreateDefault2();
+#if !NET472
+            // Worker runspaces load modules under the same policy as the calling runspace.
+            // Windows PowerShell's reference assemblies do not expose this; there the
+            // process-level policy applies to every runspace.
+            if (Runspace.DefaultRunspace?.InitialSessionState is { } callerState)
+                state.ExecutionPolicy = callerState.ExecutionPolicy;
+#endif
+            foreach (var name in commandNames)
+            {
+                using var ps = CreatePowerShell();
+                ps.AddCommand("Get-Command").AddParameter("Name", name).AddParameter("ErrorAction", ActionPreference.SilentlyContinue);
+                var command = ps.Invoke().Select(item => item.BaseObject).OfType<CommandInfo>().FirstOrDefault();
+                var module = command?.Module;
+                if (command is null || module is null ||
+                    (command.CommandType != CommandTypes.Cmdlet && command.CommandType != CommandTypes.Function))
+                {
+                    _logger.Verbose($"Signing serially: '{name}' is not provided by a module that worker runspaces can load.");
+                    return null;
+                }
+
+                state.ImportPSModule(new[] { !string.IsNullOrWhiteSpace(module.Path) && File.Exists(module.Path) ? module.Path : module.Name });
+            }
+
+            pool = RunspaceFactory.CreateRunspacePool(state);
+            pool.SetMaxRunspaces(size);
+            pool.SetMinRunspaces(1);
+            pool.Open();
+            foreach (var name in commandNames)
+            {
+                using var probe = PowerShell.Create();
+                probe.RunspacePool = pool;
+                probe.AddCommand("Get-Command").AddParameter("Name", name).AddParameter("ErrorAction", ActionPreference.SilentlyContinue);
+                if (probe.Invoke().Count == 0)
+                {
+                    _logger.Verbose($"Signing serially: '{name}' is not available in worker runspaces.");
+                    pool.Dispose();
+                    return null;
+                }
+            }
+
+            return pool;
+        }
+        catch (Exception ex)
+        {
+            _logger.Verbose($"Signing serially: worker runspaces could not be prepared ({ex.Message}).");
+            pool?.Dispose();
+            return null;
+        }
+    }
+
+    private IReadOnlyList<PSObject> GetOpenSignatures(string file, bool allowUnsigned, Func<PowerShell> createPowerShell)
+    {
+        using var ps = createPowerShell();
         ps.AddCommand("Get-OpenAuthenticodeSignature")
             .AddParameter("LiteralPath", file)
             .AddParameter("ErrorAction", ActionPreference.Continue);
@@ -264,26 +438,6 @@ public sealed class AuthenticodeSigningService
                 string.IsNullOrWhiteSpace(certificate.Thumbprint)))
             throw new InvalidOperationException($"Authenticode signature validation did not return a signer certificate for '{file}'.");
         return result.ToArray();
-    }
-
-    private IReadOnlyList<PSObject> SignIndividually(string command, string[] files, Action<PowerShell, string> configure)
-    {
-        var signatures = new List<PSObject>(files.Length);
-        var progress = new SigningProgress(_logger, files.Length);
-        foreach (var file in files)
-        {
-            progress.Next(file);
-            var result = InvokeMany(command, ps => configure(ps, file));
-            if (result.Count != 1)
-                throw new InvalidOperationException($"Authenticode signing did not return exactly one signature for '{file}'.");
-            var signature = result[0];
-            var status = signature.Properties["Status"]?.Value?.ToString();
-            if (!string.Equals(status, "Valid", StringComparison.OrdinalIgnoreCase))
-                throw new InvalidOperationException($"Authenticode signing failed for '{file}': {status}. {signature.Properties["StatusMessage"]?.Value}");
-            signatures.Add(signature);
-        }
-        progress.Complete(signatures.Count);
-        return signatures;
     }
 
     private string[] GetFilesRequiringSignature(string commandName, string[] files, AuthenticodeSignRequest request)
@@ -337,9 +491,9 @@ public sealed class AuthenticodeSigningService
         return result.FirstOrDefault();
     }
 
-    private IReadOnlyList<PSObject> InvokeMany(string commandName, Action<PowerShell> configure)
+    private IReadOnlyList<PSObject> InvokeMany(string commandName, Action<PowerShell> configure, Func<PowerShell>? createPowerShell = null)
     {
-        using var ps = CreatePowerShell();
+        using var ps = (createPowerShell ?? CreatePowerShell)();
         ps.AddCommand(commandName);
         configure(ps);
         var result = ps.Invoke();

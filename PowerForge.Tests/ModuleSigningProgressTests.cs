@@ -99,6 +99,71 @@ public sealed class ModuleSigningProgressTests
     }
 
     [Fact]
+    public void SigningScript_SignsFirstFileAloneThenTheRestConcurrently()
+    {
+        if (Path.DirectorySeparatorChar != '\\') return;
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
+        try
+        {
+            var files = new[] { "One.ps1", "Two.ps1", "Three.ps1", "Four.ps1" }.Select(name => Path.Combine(root.FullName, name)).ToArray();
+            foreach (var file in files) File.WriteAllText(file, "# parallel signing fixture");
+            var calls = Directory.CreateDirectory(Path.Combine(root.FullName, "calls")).FullName;
+            // The signing command comes from a module file, as the real cmdlet does, so worker
+            // runspaces load it too. Each call records its start and end; nothing is really signed.
+            var modulePath = Path.Combine(root.FullName, "FakeAuthenticode.psm1");
+            File.WriteAllText(modulePath, $$"""
+                function Set-AuthenticodeSignature {
+                  param([string]$FilePath,[object]$Certificate,[string]$TimestampServer,[object]$IncludeChain,[string]$HashAlgorithm,[switch]$Force)
+                  $log = Join-Path '{{calls}}' ([IO.Path]::GetFileName($FilePath))
+                  [IO.File]::WriteAllText($log + '.start', [DateTime]::UtcNow.Ticks.ToString())
+                  [Threading.Thread]::Sleep(300)
+                  [IO.File]::WriteAllText($log + '.end', [DateTime]::UtcNow.Ticks.ToString())
+                  [pscustomobject]@{ Status = 'Valid'; StatusMessage = 'fixture' }
+                }
+                Export-ModuleMember -Function Set-AuthenticodeSignature
+                """);
+            var runner = new CallbackRunner(request =>
+            {
+                var fixtures = $$"""
+                function Get-Item {
+                  [CmdletBinding()] param([string]$LiteralPath)
+                  if ($LiteralPath -notlike 'Cert:*') { throw 'Unexpected metadata lookup' }
+                  [pscustomobject]@{ HasPrivateKey=$true; Extensions=@(); Thumbprint='ABC'; NotBefore=[DateTime]::Now.AddDays(-1); NotAfter=[DateTime]::Now.AddDays(1) }
+                }
+                function Get-AuthenticodeSignature {
+                  [CmdletBinding()] param([string]$FilePath)
+                  [pscustomobject]@{ Status='NotSigned'; SignerCertificate=$null }
+                }
+                Import-Module '{{modulePath}}' -Force
+                """;
+                var script = File.ReadAllText(request.ScriptPath!);
+                script = script.Replace("$ErrorActionPreference = 'Stop'", fixtures + Environment.NewLine + "$ErrorActionPreference = 'Stop'");
+                File.WriteAllText(request.ScriptPath!, script, new UTF8Encoding(true));
+                return new PowerShellRunner().Run(request);
+            });
+            var operations = new PowerShellModulePipelineHostedOperations(runner, new NullLogger(), isWindows: true);
+
+            var result = operations.SignModuleOutput("Demo", root.FullName, files, ["*.ps1"], [],
+                new SigningOptionsConfiguration { CertificateThumbprint = "ABC" }, null);
+
+            Assert.Equal(4, result.SignedNew);
+            Assert.Equal(0, result.Failed);
+            var spans = files.ToDictionary(
+                file => Path.GetFileName(file),
+                file =>
+                {
+                    var log = Path.Combine(calls, Path.GetFileName(file));
+                    return (Start: long.Parse(File.ReadAllText(log + ".start")), End: long.Parse(File.ReadAllText(log + ".end")));
+                });
+            var first = spans["One.ps1"];
+            Assert.All(spans.Where(span => span.Key != "One.ps1"), span => Assert.True(span.Value.Start >= first.End, $"{span.Key} started before the first file finished."));
+            var rest = spans.Where(span => span.Key != "One.ps1").Select(span => span.Value).ToArray();
+            Assert.Contains(rest, span => rest.Any(other => other != span && other.Start < span.End && span.Start < other.End));
+        }
+        finally { root.Delete(true); }
+    }
+
+    [Fact]
     public void Signing_StreamsMilestonesBeforeTheRequiredHostReturns()
     {
         var updates = new List<(int Completed, int Total, string Detail)>();

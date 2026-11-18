@@ -278,7 +278,7 @@ internal sealed partial class PowerShellModulePipelineHostedOperations :
         progress?.Invoke(0, 0, "Starting signing host");
         var packageFileListPath = WriteTemporaryLineFile(normalizedPackageFilePaths);
         var temporaryPackageFileLists = new List<string> { packageFileListPath };
-        var args = new List<string>(9)
+        var args = new List<string>(11)
         {
             rootPath,
             packageFileListPath,
@@ -289,7 +289,8 @@ internal sealed partial class PowerShellModulePipelineHostedOperations :
             string.Empty,
             string.Empty,
             signing.OverwriteSigned == true ? "1" : "0",
-            Convert.ToBase64String(JsonSerializer.SerializeToUtf8Bytes(signingInput.ApprovedThumbprints))
+            Convert.ToBase64String(JsonSerializer.SerializeToUtf8Bytes(signingInput.ApprovedThumbprints)),
+            SigningScheduler.ResolveParallelism(0).ToString(System.Globalization.CultureInfo.InvariantCulture)
         };
 
         var script = EmbeddedScripts.Load("Scripts/Signing/Sign-Module.ps1");

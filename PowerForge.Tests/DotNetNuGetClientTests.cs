@@ -474,6 +474,67 @@ public sealed partial class DotNetNuGetClientTests
     }
 
     [Fact]
+    public async Task SignPackagesIndividuallyAsync_SignsFirstPackageAloneThenRunsTheRestConcurrently()
+    {
+        string[] packages = Enumerable.Range(1, 5).Select(index => Path.GetFullPath($"Package{index}.1.0.0.nupkg")).ToArray();
+        var running = 0;
+        var maxRunning = 0;
+        var firstFinished = false;
+        var startedBeforeFirstFinished = new List<string>();
+        var callerThread = Environment.CurrentManagedThreadId;
+        var progressThreads = new HashSet<int>();
+        var progressEvents = new List<string>();
+        var processRunner = new StubProcessRunner(request =>
+        {
+            string package = request.Arguments[2];
+            lock (startedBeforeFirstFinished)
+            {
+                if (!Volatile.Read(ref firstFinished) && package != packages[0]) startedBeforeFirstFinished.Add(package);
+            }
+            var now = Interlocked.Increment(ref running);
+            InterlockedMax(ref maxRunning, now);
+            Thread.Sleep(200);
+            Interlocked.Decrement(ref running);
+            if (package == packages[0]) Volatile.Write(ref firstFinished, true);
+            return new ProcessRunResult(0, "Package(s) signed successfully.", string.Empty, request.FileName, TimeSpan.Zero, timedOut: false);
+        });
+        var client = new DotNetNuGetClient(processRunner);
+
+        var outcome = await client.SignPackagesIndividuallyAsync(new DotNetNuGetSignRequest(
+            packages,
+            certificateFingerprint: "ABC123",
+            certificateStoreLocation: "CurrentUser",
+            timeStampServer: "http://timestamp.digicert.com"),
+            progress: (package, _, result) =>
+            {
+                progressThreads.Add(Environment.CurrentManagedThreadId);
+                progressEvents.Add($"{Path.GetFileName(package)}:{(result is null ? "start" : "end")}");
+            },
+            maxParallelism: 3);
+
+        Assert.True(outcome.Result.Succeeded, outcome.Result.ErrorMessage);
+        Assert.Empty(startedBeforeFirstFinished);
+        Assert.Equal(3, maxRunning);
+        // Release progress handlers are not thread-safe; every callback stays on the caller's thread.
+        Assert.Equal(new[] { callerThread }, progressThreads);
+        Assert.Equal(["Package1.1.0.0.nupkg:start", "Package1.1.0.0.nupkg:end"], progressEvents.Take(2));
+        Assert.All(packages, package =>
+        {
+            Assert.Single(progressEvents, item => item == $"{Path.GetFileName(package)}:start");
+            Assert.Single(progressEvents, item => item == $"{Path.GetFileName(package)}:end");
+        });
+    }
+
+    private static void InterlockedMax(ref int target, int value)
+    {
+        int current;
+        while (value > (current = Volatile.Read(ref target)) &&
+               Interlocked.CompareExchange(ref target, value, current) != current)
+        {
+        }
+    }
+
+    [Fact]
     public async Task SignPackageAsync_DefaultPreservesAlreadySignedPackage()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));

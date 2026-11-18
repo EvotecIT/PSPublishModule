@@ -13,4 +13,11 @@ public sealed class DotNetReleaseBuildAssemblySigningPreflightRequest
 
     /// <summary>RFC3161 timestamp server URL used during signing.</summary>
     public string TimeStampServer { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Signs a throwaway file during preflight so a hardware token asks for its PIN at the start
+    /// of the release rather than when signing begins. Handlers skip it in CI and non-interactive
+    /// sessions, and when <c>POWERFORGE_SIGNING_EARLY_UNLOCK</c> is <c>0</c>.
+    /// </summary>
+    public bool UnlockSigningKey { get; set; }
 }
