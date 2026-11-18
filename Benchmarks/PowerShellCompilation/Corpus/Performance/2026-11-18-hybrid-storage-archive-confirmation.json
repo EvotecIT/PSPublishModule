@@ -1,0 +1,1012 @@
+{
+  "schemaVersion": 1,
+  "completed": true,
+  "generatedAtUtc": "2026-11-18T18:36:30.0781341+00:00",
+  "harnessCommit": "4e3e6b9eed3cba0e83d39c0e2a674d37be2bd3c6",
+  "harnessSha256": "0e7f69bd115e4accbe9e639170a133e3b2d55d6f32a0804d74247acf00b40833",
+  "childSha256": "ad52c6574d3c2a08d9bb16be64f09ff4bd42d7e687a7bad99c9ab1f23102b222",
+  "packetSha256": "ef64781013a85a48701dd6334435facce8f8bec5c1ecc1a36817b8e4d300b00e",
+  "revisions": {
+    "baseline": {
+      "compilerSourceCommit": "c60b615af27806f9407f9faf9ef017e622bce237",
+      "corpusEvidenceSha256": "57bff38c06de452d538ae6409be8aebd38d1ebcecc13b60165462afd3e03fae1"
+    },
+    "candidate": {
+      "compilerSourceCommit": "4e3e6b9eed3cba0e83d39c0e2a674d37be2bd3c6",
+      "corpusEvidenceSha256": "7cbcbf4a77a9c56b778b7eaac9f379645a8e3d6a5d562bde112276df390a9813"
+    }
+  },
+  "host": {
+    "operatingSystem": "Microsoft Windows 10.0.26300",
+    "architecture": "X64",
+    "powerShell": "7.6.9",
+    "runtime": ".NET 10.0.14",
+    "runtimeLocation": "<PowerShellHostRoot>",
+    "runtimeLayout": "Installation prefix omitted; hashes identify the actual host and loaded runtime bytes.",
+    "runtimeFileSystem": "NTFS",
+    "executableSha256": "2a6769a3330dc1084d0154bfde7d164ab750ca7f700f313f9d417c1be78b2233",
+    "coreClrSha256": "1bc65b8d45474b19adf3ca85ce881087aff599ffc72b2c1a323e878227757b65",
+    "smaSha256": "e767f5c26347b254dd06fa0b65e18424cc4eb93fc3102c5a8fdd9dd88355db97",
+    "logicalProcessors": 32,
+    "priority": "Normal",
+    "affinity": "FFFFFFFF",
+    "cpu": "AMD Ryzen 9 9950X3D2 16-Core Processor",
+    "powerPlan": "Power Scheme GUID: 8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c  (High performance)"
+  },
+  "policy": {
+    "pairs": 8,
+    "order": "AlternatingPairs",
+    "percentile": "Nearest rank",
+    "cold": "One import and first packet invocation in a fresh process; OS caches are not evicted.",
+    "warm": "Five repeated packet invocations in the same loaded module."
+  },
+  "modules": [
+    {
+      "id": "Microsoft.PowerShell.Archive",
+      "version": "1.2.6",
+      "packageSha256": "fc7e304bffcc14ea95828eedf52c5992432c6233fef36416a6f5fb4628d13c47",
+      "artifactSha256": {
+        "candidate": "47915084fbecbb16d79035cd18da0cd0a3607cab1a45ee160359cf3d03a35018",
+        "baseline": "47915084fbecbb16d79035cd18da0cd0a3607cab1a45ee160359cf3d03a35018"
+      },
+      "typedAssemblySha256": {
+        "candidate": "29b8f637aa1163653f5489cc49e1565be73d8f6dcffe31e7e48b8fa10522903c",
+        "baseline": "f3a2c3a758faabc048fd1e462aacc7a483f025105a5066e86ec5a505a33d94e5"
+      },
+      "probeScript": "$root = Join-Path ([IO.Path]::GetTempPath()) ('pf-corpus-' + [guid]::NewGuid().ToString('N')); New-Item -ItemType Directory -Path $root | Out-Null; try { $source = Join-Path $root 'source.txt'; $zip = Join-Path $root 'archive.zip'; $expanded = Join-Path $root 'expanded'; [IO.File]::WriteAllText($source, 'ok', [Text.UTF8Encoding]::new($false)); Compress-Archive -LiteralPath $source -DestinationPath $zip; Expand-Archive -LiteralPath $zip -DestinationPath $expanded; if (-not (Test-Path -LiteralPath (Join-Path $expanded 'source.txt'))) { throw 'Archive roundtrip failed.' } } finally { Remove-Item -LiteralPath $root -Recurse -Force }; 'ok'",
+      "succeeded": true,
+      "samples": [
+        {
+          "pair": 0,
+          "order": "baseline,candidate",
+          "variant": "baseline",
+          "processMilliseconds": 4154,
+          "powerShell": "7.6.9",
+          "rows": [
+            {
+              "state": "cold-module",
+              "iteration": 0,
+              "importMilliseconds": 283.5074,
+              "invocationMilliseconds": 1575.2024,
+              "exportedCommands": 2,
+              "invocationSucceeded": true
+            },
+            {
+              "state": "warm-module",
+              "iteration": 1,
+              "importMilliseconds": null,
+              "invocationMilliseconds": 267.4978,
+              "exportedCommands": 2,
+              "invocationSucceeded": true
+            },
+            {
+              "state": "warm-module",
+              "iteration": 2,
+              "importMilliseconds": null,
+              "invocationMilliseconds": 379.0488,
+              "exportedCommands": 2,
+              "invocationSucceeded": true
+            },
+            {
+              "state": "warm-module",
+              "iteration": 3,
+              "importMilliseconds": null,
+              "invocationMilliseconds": 259.26,
+              "exportedCommands": 2,
+              "invocationSucceeded": true
+            },
+            {
+              "state": "warm-module",
+              "iteration": 4,
+              "importMilliseconds": null,
+              "invocationMilliseconds": 263.5317,
+              "exportedCommands": 2,
+              "invocationSucceeded": true
+            },
+            {
+              "state": "warm-module",
+              "iteration": 5,
+              "importMilliseconds": null,
+              "invocationMilliseconds": 421.6493,
+              "exportedCommands": 2,
+              "invocationSucceeded": true
+            }
+          ]
+        },
+        {
+          "pair": 0,
+          "order": "baseline,candidate",
+          "variant": "candidate",
+          "processMilliseconds": 4288,
+          "powerShell": "7.6.9",
+          "rows": [
+            {
+              "state": "cold-module",
+              "iteration": 0,
+              "importMilliseconds": 745.7062,
+              "invocationMilliseconds": 1532.3016,
+              "exportedCommands": 2,
+              "invocationSucceeded": true
+            },
+            {
+              "state": "warm-module",
+              "iteration": 1,
+              "importMilliseconds": null,
+              "invocationMilliseconds": 34.0859,
+              "exportedCommands": 2,
+              "invocationSucceeded": true
+            },
+            {
+              "state": "warm-module",
+              "iteration": 2,
+              "importMilliseconds": null,
+              "invocationMilliseconds": 41.407,
+              "exportedCommands": 2,
+              "invocationSucceeded": true
+            },
+            {
+              "state": "warm-module",
+              "iteration": 3,
+              "importMilliseconds": null,
+              "invocationMilliseconds": 105.846,
+              "exportedCommands": 2,
+              "invocationSucceeded": true
+            },
+            {
+              "state": "warm-module",
+              "iteration": 4,
+              "importMilliseconds": null,
+              "invocationMilliseconds": 35.5988,
+              "exportedCommands": 2,
+              "invocationSucceeded": true
+            },
+            {
+              "state": "warm-module",
+              "iteration": 5,
+              "importMilliseconds": null,
+              "invocationMilliseconds": 30.6218,
+              "exportedCommands": 2,
+              "invocationSucceeded": true
+            }
+          ]
+        },
+        {
+          "pair": 1,
+          "order": "candidate,baseline",
+          "variant": "candidate",
+          "processMilliseconds": 2594,
+          "powerShell": "7.6.9",
+          "rows": [
+            {
+              "state": "cold-module",
+              "iteration": 0,
+              "importMilliseconds": 387.6253,
+              "invocationMilliseconds": 1382.3786,
+              "exportedCommands": 2,
+              "invocationSucceeded": true
+            },
+            {
+              "state": "warm-module",
+              "iteration": 1,
+              "importMilliseconds": null,
+              "invocationMilliseconds": 37.1058,
+              "exportedCommands": 2,
+              "invocationSucceeded": true
+            },
+            {
+              "state": "warm-module",
+              "iteration": 2,
+              "importMilliseconds": null,
+              "invocationMilliseconds": 66.2586,
+              "exportedCommands": 2,
+              "invocationSucceeded": true
+            },
+            {
+              "state": "warm-module",
+              "iteration": 3,
+              "importMilliseconds": null,
+              "invocationMilliseconds": 24.6703,
+              "exportedCommands": 2,
+              "invocationSucceeded": true
+            },
+            {
+              "state": "warm-module",
+              "iteration": 4,
+              "importMilliseconds": null,
+              "invocationMilliseconds": 25.5316,
+              "exportedCommands": 2,
+              "invocationSucceeded": true
+            },
+            {
+              "state": "warm-module",
+              "iteration": 5,
+              "importMilliseconds": null,
+              "invocationMilliseconds": 27.5319,
+              "exportedCommands": 2,
+              "invocationSucceeded": true
+            }
+          ]
+        },
+        {
+          "pair": 1,
+          "order": "candidate,baseline",
+          "variant": "baseline",
+          "processMilliseconds": 3228,
+          "powerShell": "7.6.9",
+          "rows": [
+            {
+              "state": "cold-module",
+              "iteration": 0,
+              "importMilliseconds": 398.7499,
+              "invocationMilliseconds": 1268.2049,
+              "exportedCommands": 2,
+              "invocationSucceeded": true
+            },
+            {
+              "state": "warm-module",
+              "iteration": 1,
+              "importMilliseconds": null,
+              "invocationMilliseconds": 158.2566,
+              "exportedCommands": 2,
+              "invocationSucceeded": true
+            },
+            {
+              "state": "warm-module",
+              "iteration": 2,
+              "importMilliseconds": null,
+              "invocationMilliseconds": 174.8813,
+              "exportedCommands": 2,
+              "invocationSucceeded": true
+            },
+            {
+              "state": "warm-module",
+              "iteration": 3,
+              "importMilliseconds": null,
+              "invocationMilliseconds": 202.588,
+              "exportedCommands": 2,
+              "invocationSucceeded": true
+            },
+            {
+              "state": "warm-module",
+              "iteration": 4,
+              "importMilliseconds": null,
+              "invocationMilliseconds": 193.5992,
+              "exportedCommands": 2,
+              "invocationSucceeded": true
+            },
+            {
+              "state": "warm-module",
+              "iteration": 5,
+              "importMilliseconds": null,
+              "invocationMilliseconds": 178.5159,
+              "exportedCommands": 2,
+              "invocationSucceeded": true
+            }
+          ]
+        },
+        {
+          "pair": 2,
+          "order": "baseline,candidate",
+          "variant": "baseline",
+          "processMilliseconds": 2694,
+          "powerShell": "7.6.9",
+          "rows": [
+            {
+              "state": "cold-module",
+              "iteration": 0,
+              "importMilliseconds": 333.3658,
+              "invocationMilliseconds": 1044.0811,
+              "exportedCommands": 2,
+              "invocationSucceeded": true
+            },
+            {
+              "state": "warm-module",
+              "iteration": 1,
+              "importMilliseconds": null,
+              "invocationMilliseconds": 155.6867,
+              "exportedCommands": 2,
+              "invocationSucceeded": true
+            },
+            {
+              "state": "warm-module",
+              "iteration": 2,
+              "importMilliseconds": null,
+              "invocationMilliseconds": 149.3875,
+              "exportedCommands": 2,
+              "invocationSucceeded": true
+            },
+            {
+              "state": "warm-module",
+              "iteration": 3,
+              "importMilliseconds": null,
+              "invocationMilliseconds": 128.806,
+              "exportedCommands": 2,
+              "invocationSucceeded": true
+            },
+            {
+              "state": "warm-module",
+              "iteration": 4,
+              "importMilliseconds": null,
+              "invocationMilliseconds": 126.6997,
+              "exportedCommands": 2,
+              "invocationSucceeded": true
+            },
+            {
+              "state": "warm-module",
+              "iteration": 5,
+              "importMilliseconds": null,
+              "invocationMilliseconds": 290.7774,
+              "exportedCommands": 2,
+              "invocationSucceeded": true
+            }
+          ]
+        },
+        {
+          "pair": 2,
+          "order": "baseline,candidate",
+          "variant": "candidate",
+          "processMilliseconds": 2142,
+          "powerShell": "7.6.9",
+          "rows": [
+            {
+              "state": "cold-module",
+              "iteration": 0,
+              "importMilliseconds": 353.8793,
+              "invocationMilliseconds": 1204.8485,
+              "exportedCommands": 2,
+              "invocationSucceeded": true
+            },
+            {
+              "state": "warm-module",
+              "iteration": 1,
+              "importMilliseconds": null,
+              "invocationMilliseconds": 31.2754,
+              "exportedCommands": 2,
+              "invocationSucceeded": true
+            },
+            {
+              "state": "warm-module",
+              "iteration": 2,
+              "importMilliseconds": null,
+              "invocationMilliseconds": 35.8201,
+              "exportedCommands": 2,
+              "invocationSucceeded": true
+            },
+            {
+              "state": "warm-module",
+              "iteration": 3,
+              "importMilliseconds": null,
+              "invocationMilliseconds": 20.1158,
+              "exportedCommands": 2,
+              "invocationSucceeded": true
+            },
+            {
+              "state": "warm-module",
+              "iteration": 4,
+              "importMilliseconds": null,
+              "invocationMilliseconds": 14.9811,
+              "exportedCommands": 2,
+              "invocationSucceeded": true
+            },
+            {
+              "state": "warm-module",
+              "iteration": 5,
+              "importMilliseconds": null,
+              "invocationMilliseconds": 13.2632,
+              "exportedCommands": 2,
+              "invocationSucceeded": true
+            }
+          ]
+        },
+        {
+          "pair": 3,
+          "order": "candidate,baseline",
+          "variant": "candidate",
+          "processMilliseconds": 2353,
+          "powerShell": "7.6.9",
+          "rows": [
+            {
+              "state": "cold-module",
+              "iteration": 0,
+              "importMilliseconds": 419.3365,
+              "invocationMilliseconds": 1323.4361,
+              "exportedCommands": 2,
+              "invocationSucceeded": true
+            },
+            {
+              "state": "warm-module",
+              "iteration": 1,
+              "importMilliseconds": null,
+              "invocationMilliseconds": 27.2627,
+              "exportedCommands": 2,
+              "invocationSucceeded": true
+            },
+            {
+              "state": "warm-module",
+              "iteration": 2,
+              "importMilliseconds": null,
+              "invocationMilliseconds": 23.1748,
+              "exportedCommands": 2,
+              "invocationSucceeded": true
+            },
+            {
+              "state": "warm-module",
+              "iteration": 3,
+              "importMilliseconds": null,
+              "invocationMilliseconds": 19.3895,
+              "exportedCommands": 2,
+              "invocationSucceeded": true
+            },
+            {
+              "state": "warm-module",
+              "iteration": 4,
+              "importMilliseconds": null,
+              "invocationMilliseconds": 23.2986,
+              "exportedCommands": 2,
+              "invocationSucceeded": true
+            },
+            {
+              "state": "warm-module",
+              "iteration": 5,
+              "importMilliseconds": null,
+              "invocationMilliseconds": 23.1199,
+              "exportedCommands": 2,
+              "invocationSucceeded": true
+            }
+          ]
+        },
+        {
+          "pair": 3,
+          "order": "candidate,baseline",
+          "variant": "baseline",
+          "processMilliseconds": 2363,
+          "powerShell": "7.6.9",
+          "rows": [
+            {
+              "state": "cold-module",
+              "iteration": 0,
+              "importMilliseconds": 280.637,
+              "invocationMilliseconds": 875.4719,
+              "exportedCommands": 2,
+              "invocationSucceeded": true
+            },
+            {
+              "state": "warm-module",
+              "iteration": 1,
+              "importMilliseconds": null,
+              "invocationMilliseconds": 149.6775,
+              "exportedCommands": 2,
+              "invocationSucceeded": true
+            },
+            {
+              "state": "warm-module",
+              "iteration": 2,
+              "importMilliseconds": null,
+              "invocationMilliseconds": 125.5674,
+              "exportedCommands": 2,
+              "invocationSucceeded": true
+            },
+            {
+              "state": "warm-module",
+              "iteration": 3,
+              "importMilliseconds": null,
+              "invocationMilliseconds": 149.504,
+              "exportedCommands": 2,
+              "invocationSucceeded": true
+            },
+            {
+              "state": "warm-module",
+              "iteration": 4,
+              "importMilliseconds": null,
+              "invocationMilliseconds": 188.5845,
+              "exportedCommands": 2,
+              "invocationSucceeded": true
+            },
+            {
+              "state": "warm-module",
+              "iteration": 5,
+              "importMilliseconds": null,
+              "invocationMilliseconds": 188.809,
+              "exportedCommands": 2,
+              "invocationSucceeded": true
+            }
+          ]
+        },
+        {
+          "pair": 4,
+          "order": "baseline,candidate",
+          "variant": "baseline",
+          "processMilliseconds": 3643,
+          "powerShell": "7.6.9",
+          "rows": [
+            {
+              "state": "cold-module",
+              "iteration": 0,
+              "importMilliseconds": 276.792,
+              "invocationMilliseconds": 1632.6118,
+              "exportedCommands": 2,
+              "invocationSucceeded": true
+            },
+            {
+              "state": "warm-module",
+              "iteration": 1,
+              "importMilliseconds": null,
+              "invocationMilliseconds": 218.9986,
+              "exportedCommands": 2,
+              "invocationSucceeded": true
+            },
+            {
+              "state": "warm-module",
+              "iteration": 2,
+              "importMilliseconds": null,
+              "invocationMilliseconds": 236.6756,
+              "exportedCommands": 2,
+              "invocationSucceeded": true
+            },
+            {
+              "state": "warm-module",
+              "iteration": 3,
+              "importMilliseconds": null,
+              "invocationMilliseconds": 216.7248,
+              "exportedCommands": 2,
+              "invocationSucceeded": true
+            },
+            {
+              "state": "warm-module",
+              "iteration": 4,
+              "importMilliseconds": null,
+              "invocationMilliseconds": 279.6223,
+              "exportedCommands": 2,
+              "invocationSucceeded": true
+            },
+            {
+              "state": "warm-module",
+              "iteration": 5,
+              "importMilliseconds": null,
+              "invocationMilliseconds": 286.1397,
+              "exportedCommands": 2,
+              "invocationSucceeded": true
+            }
+          ]
+        },
+        {
+          "pair": 4,
+          "order": "baseline,candidate",
+          "variant": "candidate",
+          "processMilliseconds": 2515,
+          "powerShell": "7.6.9",
+          "rows": [
+            {
+              "state": "cold-module",
+              "iteration": 0,
+              "importMilliseconds": 308.0704,
+              "invocationMilliseconds": 1093.0463,
+              "exportedCommands": 2,
+              "invocationSucceeded": true
+            },
+            {
+              "state": "warm-module",
+              "iteration": 1,
+              "importMilliseconds": null,
+              "invocationMilliseconds": 76.184,
+              "exportedCommands": 2,
+              "invocationSucceeded": true
+            },
+            {
+              "state": "warm-module",
+              "iteration": 2,
+              "importMilliseconds": null,
+              "invocationMilliseconds": 24.4181,
+              "exportedCommands": 2,
+              "invocationSucceeded": true
+            },
+            {
+              "state": "warm-module",
+              "iteration": 3,
+              "importMilliseconds": null,
+              "invocationMilliseconds": 21.1095,
+              "exportedCommands": 2,
+              "invocationSucceeded": true
+            },
+            {
+              "state": "warm-module",
+              "iteration": 4,
+              "importMilliseconds": null,
+              "invocationMilliseconds": 20.0998,
+              "exportedCommands": 2,
+              "invocationSucceeded": true
+            },
+            {
+              "state": "warm-module",
+              "iteration": 5,
+              "importMilliseconds": null,
+              "invocationMilliseconds": 20.3133,
+              "exportedCommands": 2,
+              "invocationSucceeded": true
+            }
+          ]
+        },
+        {
+          "pair": 5,
+          "order": "candidate,baseline",
+          "variant": "candidate",
+          "processMilliseconds": 1599,
+          "powerShell": "7.6.9",
+          "rows": [
+            {
+              "state": "cold-module",
+              "iteration": 0,
+              "importMilliseconds": 255.2493,
+              "invocationMilliseconds": 866.9118,
+              "exportedCommands": 2,
+              "invocationSucceeded": true
+            },
+            {
+              "state": "warm-module",
+              "iteration": 1,
+              "importMilliseconds": null,
+              "invocationMilliseconds": 24.6059,
+              "exportedCommands": 2,
+              "invocationSucceeded": true
+            },
+            {
+              "state": "warm-module",
+              "iteration": 2,
+              "importMilliseconds": null,
+              "invocationMilliseconds": 18.2398,
+              "exportedCommands": 2,
+              "invocationSucceeded": true
+            },
+            {
+              "state": "warm-module",
+              "iteration": 3,
+              "importMilliseconds": null,
+              "invocationMilliseconds": 14.0226,
+              "exportedCommands": 2,
+              "invocationSucceeded": true
+            },
+            {
+              "state": "warm-module",
+              "iteration": 4,
+              "importMilliseconds": null,
+              "invocationMilliseconds": 17.77,
+              "exportedCommands": 2,
+              "invocationSucceeded": true
+            },
+            {
+              "state": "warm-module",
+              "iteration": 5,
+              "importMilliseconds": null,
+              "invocationMilliseconds": 21.111,
+              "exportedCommands": 2,
+              "invocationSucceeded": true
+            }
+          ]
+        },
+        {
+          "pair": 5,
+          "order": "candidate,baseline",
+          "variant": "baseline",
+          "processMilliseconds": 2271,
+          "powerShell": "7.6.9",
+          "rows": [
+            {
+              "state": "cold-module",
+              "iteration": 0,
+              "importMilliseconds": 295.8239,
+              "invocationMilliseconds": 896.7935,
+              "exportedCommands": 2,
+              "invocationSucceeded": true
+            },
+            {
+              "state": "warm-module",
+              "iteration": 1,
+              "importMilliseconds": null,
+              "invocationMilliseconds": 125.0271,
+              "exportedCommands": 2,
+              "invocationSucceeded": true
+            },
+            {
+              "state": "warm-module",
+              "iteration": 2,
+              "importMilliseconds": null,
+              "invocationMilliseconds": 120.4558,
+              "exportedCommands": 2,
+              "invocationSucceeded": true
+            },
+            {
+              "state": "warm-module",
+              "iteration": 3,
+              "importMilliseconds": null,
+              "invocationMilliseconds": 145.7068,
+              "exportedCommands": 2,
+              "invocationSucceeded": true
+            },
+            {
+              "state": "warm-module",
+              "iteration": 4,
+              "importMilliseconds": null,
+              "invocationMilliseconds": 156.715,
+              "exportedCommands": 2,
+              "invocationSucceeded": true
+            },
+            {
+              "state": "warm-module",
+              "iteration": 5,
+              "importMilliseconds": null,
+              "invocationMilliseconds": 140.4542,
+              "exportedCommands": 2,
+              "invocationSucceeded": true
+            }
+          ]
+        },
+        {
+          "pair": 6,
+          "order": "baseline,candidate",
+          "variant": "baseline",
+          "processMilliseconds": 2195,
+          "powerShell": "7.6.9",
+          "rows": [
+            {
+              "state": "cold-module",
+              "iteration": 0,
+              "importMilliseconds": 307.8678,
+              "invocationMilliseconds": 837.3673,
+              "exportedCommands": 2,
+              "invocationSucceeded": true
+            },
+            {
+              "state": "warm-module",
+              "iteration": 1,
+              "importMilliseconds": null,
+              "invocationMilliseconds": 118.6169,
+              "exportedCommands": 2,
+              "invocationSucceeded": true
+            },
+            {
+              "state": "warm-module",
+              "iteration": 2,
+              "importMilliseconds": null,
+              "invocationMilliseconds": 134.5234,
+              "exportedCommands": 2,
+              "invocationSucceeded": true
+            },
+            {
+              "state": "warm-module",
+              "iteration": 3,
+              "importMilliseconds": null,
+              "invocationMilliseconds": 137.0071,
+              "exportedCommands": 2,
+              "invocationSucceeded": true
+            },
+            {
+              "state": "warm-module",
+              "iteration": 4,
+              "importMilliseconds": null,
+              "invocationMilliseconds": 134.0045,
+              "exportedCommands": 2,
+              "invocationSucceeded": true
+            },
+            {
+              "state": "warm-module",
+              "iteration": 5,
+              "importMilliseconds": null,
+              "invocationMilliseconds": 125.3853,
+              "exportedCommands": 2,
+              "invocationSucceeded": true
+            }
+          ]
+        },
+        {
+          "pair": 6,
+          "order": "baseline,candidate",
+          "variant": "candidate",
+          "processMilliseconds": 1408,
+          "powerShell": "7.6.9",
+          "rows": [
+            {
+              "state": "cold-module",
+              "iteration": 0,
+              "importMilliseconds": 226.5938,
+              "invocationMilliseconds": 719.8185,
+              "exportedCommands": 2,
+              "invocationSucceeded": true
+            },
+            {
+              "state": "warm-module",
+              "iteration": 1,
+              "importMilliseconds": null,
+              "invocationMilliseconds": 19.4414,
+              "exportedCommands": 2,
+              "invocationSucceeded": true
+            },
+            {
+              "state": "warm-module",
+              "iteration": 2,
+              "importMilliseconds": null,
+              "invocationMilliseconds": 15.1729,
+              "exportedCommands": 2,
+              "invocationSucceeded": true
+            },
+            {
+              "state": "warm-module",
+              "iteration": 3,
+              "importMilliseconds": null,
+              "invocationMilliseconds": 12.6646,
+              "exportedCommands": 2,
+              "invocationSucceeded": true
+            },
+            {
+              "state": "warm-module",
+              "iteration": 4,
+              "importMilliseconds": null,
+              "invocationMilliseconds": 17.3663,
+              "exportedCommands": 2,
+              "invocationSucceeded": true
+            },
+            {
+              "state": "warm-module",
+              "iteration": 5,
+              "importMilliseconds": null,
+              "invocationMilliseconds": 18.3591,
+              "exportedCommands": 2,
+              "invocationSucceeded": true
+            }
+          ]
+        },
+        {
+          "pair": 7,
+          "order": "candidate,baseline",
+          "variant": "candidate",
+          "processMilliseconds": 1780,
+          "powerShell": "7.6.9",
+          "rows": [
+            {
+              "state": "cold-module",
+              "iteration": 0,
+              "importMilliseconds": 302.4188,
+              "invocationMilliseconds": 970.9801,
+              "exportedCommands": 2,
+              "invocationSucceeded": true
+            },
+            {
+              "state": "warm-module",
+              "iteration": 1,
+              "importMilliseconds": null,
+              "invocationMilliseconds": 26.8641,
+              "exportedCommands": 2,
+              "invocationSucceeded": true
+            },
+            {
+              "state": "warm-module",
+              "iteration": 2,
+              "importMilliseconds": null,
+              "invocationMilliseconds": 29.0162,
+              "exportedCommands": 2,
+              "invocationSucceeded": true
+            },
+            {
+              "state": "warm-module",
+              "iteration": 3,
+              "importMilliseconds": null,
+              "invocationMilliseconds": 20.7164,
+              "exportedCommands": 2,
+              "invocationSucceeded": true
+            },
+            {
+              "state": "warm-module",
+              "iteration": 4,
+              "importMilliseconds": null,
+              "invocationMilliseconds": 22.7181,
+              "exportedCommands": 2,
+              "invocationSucceeded": true
+            },
+            {
+              "state": "warm-module",
+              "iteration": 5,
+              "importMilliseconds": null,
+              "invocationMilliseconds": 16.8546,
+              "exportedCommands": 2,
+              "invocationSucceeded": true
+            }
+          ]
+        },
+        {
+          "pair": 7,
+          "order": "candidate,baseline",
+          "variant": "baseline",
+          "processMilliseconds": 2249,
+          "powerShell": "7.6.9",
+          "rows": [
+            {
+              "state": "cold-module",
+              "iteration": 0,
+              "importMilliseconds": 261.7714,
+              "invocationMilliseconds": 925.6865,
+              "exportedCommands": 2,
+              "invocationSucceeded": true
+            },
+            {
+              "state": "warm-module",
+              "iteration": 1,
+              "importMilliseconds": null,
+              "invocationMilliseconds": 115.3733,
+              "exportedCommands": 2,
+              "invocationSucceeded": true
+            },
+            {
+              "state": "warm-module",
+              "iteration": 2,
+              "importMilliseconds": null,
+              "invocationMilliseconds": 127.1073,
+              "exportedCommands": 2,
+              "invocationSucceeded": true
+            },
+            {
+              "state": "warm-module",
+              "iteration": 3,
+              "importMilliseconds": null,
+              "invocationMilliseconds": 139.6489,
+              "exportedCommands": 2,
+              "invocationSucceeded": true
+            },
+            {
+              "state": "warm-module",
+              "iteration": 4,
+              "importMilliseconds": null,
+              "invocationMilliseconds": 150.7629,
+              "exportedCommands": 2,
+              "invocationSucceeded": true
+            },
+            {
+              "state": "warm-module",
+              "iteration": 5,
+              "importMilliseconds": null,
+              "invocationMilliseconds": 140.7691,
+              "exportedCommands": 2,
+              "invocationSucceeded": true
+            }
+          ]
+        }
+      ],
+      "summary": {
+        "baseline/cold-module": {
+          "samples": 8,
+          "importMilliseconds": {
+            "p50": 283.5074,
+            "p95": 398.7499
+          },
+          "invocationMilliseconds": {
+            "p50": 925.6865,
+            "p95": 1632.6118
+          }
+        },
+        "baseline/warm-module": {
+          "samples": 40,
+          "invocationMilliseconds": {
+            "p50": 150.7629,
+            "p95": 290.7774
+          }
+        },
+        "candidate/cold-module": {
+          "samples": 8,
+          "importMilliseconds": {
+            "p50": 308.0704,
+            "p95": 745.7062
+          },
+          "invocationMilliseconds": {
+            "p50": 1093.0463,
+            "p95": 1532.3016
+          }
+        },
+        "candidate/warm-module": {
+          "samples": 40,
+          "invocationMilliseconds": {
+            "p50": 23.1199,
+            "p95": 66.2586
+          }
+        }
+      }
+    }
+  ]
+}

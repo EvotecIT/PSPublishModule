@@ -1,15 +1,12 @@
 namespace PowerForge.Generated.Runtime
 {
     using System;
-    using System.Collections.Generic;
     using System.Linq;
     using System.Linq.Expressions;
     using System.Management.Automation.Language;
 
     public sealed partial class PowerShellNativeFunctionContext
     {
-        private readonly Dictionary<string, NativeAstOperation> _assignments = new(StringComparer.Ordinal);
-
         /// <summary>Applies an authored storage or receiver assignment in the native invocation.</summary>
         /// <remarks>The value producer runs at the native assignment's evaluation point, after any compound target read.</remarks>
         public object? AssignTarget(string target, string operation, Func<object?> value,
@@ -17,16 +14,12 @@ namespace PowerForge.Generated.Runtime
         {
             EnsureActive();
             if (value is null) throw new ArgumentNullException(nameof(value));
-            var key = file + "\0" + line + "\0" + column + "\0" + startOffset + "\0" + endOffset +
-                "\0" + operation + "\0" + target + "\0" + sourceDocument;
-            if (!_assignments.TryGetValue(key, out var assignment))
-                _assignments.Add(key, assignment = CreateAssignmentTarget(target, operation, file, line, column,
-                    sourceDocument, startOffset, endOffset));
+            var assignment = GetAssignmentPlan(target, operation, file, line, column, sourceDocument, startOffset, endOffset, mutation: false);
             return assignment.Invoke(FunctionContext, value, rightHandSideFirst: operation == "Assign");
         }
 
         private NativeAstOperation CreateAssignmentTarget(string target, string operation, string file, int line, int column,
-            string? sourceDocument, int startOffset, int endOffset)
+            string? sourceDocument, int startOffset, int endOffset, out bool reusable)
         {
             if (line < 1 || column < 1) throw new ArgumentOutOfRangeException(nameof(line));
             var token = operation switch
@@ -55,6 +48,7 @@ namespace PowerForge.Generated.Runtime
             while (variable is AttributedExpressionAst attributed) variable = attributed.Child;
             if (!IsNativeAssignmentAccess(variable))
                 throw new ArgumentException("The native assignment requires a qualified variable, member, or index target.", nameof(target));
+            reusable = CanReuseAssignmentPlan(targetAst);
 
             // Only the target reaches native compilation. The authored RHS remains compiled IR;
             // a harmless placeholder supplies the analysis container and is never emitted.

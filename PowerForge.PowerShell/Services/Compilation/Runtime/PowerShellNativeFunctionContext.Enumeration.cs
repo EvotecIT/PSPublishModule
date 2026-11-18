@@ -2,7 +2,6 @@ namespace PowerForge.Generated.Runtime
 {
     using System;
     using System.Collections;
-    using System.Collections.Generic;
     using System.Linq.Expressions;
     using System.Management.Automation;
     using System.Management.Automation.Language;
@@ -31,7 +30,7 @@ namespace PowerForge.Generated.Runtime
             internal NativeForEachScope(PowerShellNativeFunctionContext owner)
             {
                 _owner = owner;
-                _storage = owner._foreachStorage ??= new NativeVariableStorage(owner);
+                _storage = owner._foreachStorage ??= owner.GetVariableStorage("foreach");
                 _previous = _storage.Read.Invoke(owner.FunctionContext);
             }
 
@@ -77,7 +76,7 @@ namespace PowerForge.Generated.Runtime
             internal readonly NativeAstOperation Read;
             internal readonly NativeAstOperation Write;
 
-            internal NativeVariableStorage(PowerShellNativeFunctionContext owner, string name = "foreach", int? automaticIndex = null)
+            internal NativeVariableStorage(PowerShellNativeFunctionContext owner, string name, int? automaticIndex)
             {
                 Read = Compile(owner, name, automaticIndex, false);
                 Write = Compile(owner, name, automaticIndex, true);
@@ -85,15 +84,13 @@ namespace PowerForge.Generated.Runtime
 
             private static NativeAstOperation Compile(PowerShellNativeFunctionContext owner, string name, int? automaticIndex, bool write)
             {
-                const BindingFlags instance = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance;
                 const BindingFlags statics = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static;
                 var extent = PowerShellSourceExtent.Create(string.Empty, 1, 1, 1, 2, "0");
                 var placeholder = new CommandExpressionAst(extent, new ConstantExpressionAst(extent, 0), null);
                 var ast = new ScriptBlockAst(extent, null, new StatementBlockAst(extent, new[] { placeholder }, null), isFilter: false);
                 var native = new NativeAstCompiler(owner, ast);
                 var tuple = owner._contract.LocalsTuple.GetValue(owner.FunctionContext)!;
-                var tupleBase = typeof(PSObject).Assembly.GetType("System.Management.Automation.MutableTuple", true)!;
-                var names = (Dictionary<string, int>)tupleBase.GetField("_nameToIndexMap", instance)!.GetValue(tuple)!;
+                var names = GetLocalNameMap(tuple);
                 Expression operation;
                 if (automaticIndex.HasValue || owner._optimized && names.ContainsKey(name))
                 {
