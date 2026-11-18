@@ -85,7 +85,7 @@ public sealed class BenchmarkRunView
     /// <summary>Platform display name.</summary>
     public string PlatformLabel { get; set; } = string.Empty;
 
-    /// <summary>Run mode such as full or quick.</summary>
+    /// <summary>Evidence profile of the lane: diagnostic, standard or full. Named RunMode for existing templates.</summary>
     public string RunMode { get; set; } = string.Empty;
 
     /// <summary>True for full runs.</summary>

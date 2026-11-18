@@ -3,78 +3,127 @@ namespace PowerForge;
 public sealed partial class BenchmarkEvidenceCatalogService
 {
     // Declarations describe the requested coverage; they never grant publication to a result.
-    private static void ApplyDefinitions(
-        BenchmarkEvidenceCatalog catalog,
-        IEnumerable<BenchmarkComparisonDefinition> comparisons)
+    private static void ApplyDefinitions(BenchmarkEvidenceCatalog catalog)
     {
         var definitions = new Dictionary<string, BenchmarkComparisonDefinition>(StringComparer.OrdinalIgnoreCase);
-        foreach (BenchmarkComparisonDefinition source in comparisons)
+        foreach (BenchmarkComparisonDefinition source in catalog.Comparisons ?? Array.Empty<BenchmarkComparisonDefinition>())
         {
-            if (source is null || string.IsNullOrWhiteSpace(source.ComparisonId) ||
-                string.IsNullOrWhiteSpace(source.Area) || string.IsNullOrWhiteSpace(source.Title) ||
-                source.Libraries is null || source.Libraries.Length == 0 ||
-                source.Libraries.Any(string.IsNullOrWhiteSpace) ||
-                source.ExpectedPlatforms is null || source.ExpectedPlatforms.Length == 0)
-                throw new InvalidOperationException("Comparison declarations require an identifier, area, title, libraries and expected platforms.");
-
-            var definition = new BenchmarkComparisonDefinition
-            {
-                ComparisonId = source.ComparisonId.Trim(),
-                Area = source.Area.Trim().ToLowerInvariant(),
-                Title = source.Title.Trim(),
-                Libraries = source.Libraries.Select(value => value.Trim())
-                    .Distinct(StringComparer.OrdinalIgnoreCase).ToArray(),
-                ExpectedPlatforms = NormalizeExpectedPlatforms(source.ExpectedPlatforms).OrderBy(value => value, StringComparer.Ordinal).ToArray()
-            };
+            BenchmarkComparisonDefinition definition = NormalizeDefinition(source);
             if (definitions.TryGetValue(definition.ComparisonId, out BenchmarkComparisonDefinition? existing))
             {
-                if (!string.Equals(existing.Area, definition.Area, StringComparison.Ordinal) ||
-                    !string.Equals(existing.Title, definition.Title, StringComparison.Ordinal) ||
-                    !existing.Libraries.OrderBy(value => value, StringComparer.OrdinalIgnoreCase)
-                        .SequenceEqual(definition.Libraries.OrderBy(value => value, StringComparer.OrdinalIgnoreCase), StringComparer.OrdinalIgnoreCase) ||
-                    !existing.ExpectedPlatforms.SequenceEqual(definition.ExpectedPlatforms, StringComparer.OrdinalIgnoreCase))
-                    throw new InvalidOperationException($"Conflicting declarations for comparison '{definition.ComparisonId}'. Supply one authoritative comparison catalog.");
+                if (BenchmarkJson.ComputeSha256(existing) != BenchmarkJson.ComputeSha256(definition))
+                    throw new InvalidOperationException($"Conflicting declarations for comparison '{definition.ComparisonId}'. Supply one authoritative declaration document.");
                 continue;
             }
             definitions.Add(definition.ComparisonId, definition);
         }
 
-        catalog.SchemaVersion = SupportedSchemaVersion;
+        BenchmarkPublishPolicy policy = catalog.Policy ??= BenchmarkPublishPolicy.CreateDefault();
+        var declarationService = new BenchmarkDeclarationService();
+        catalog.SchemaVersion = CurrentSchemaVersion;
         catalog.Comparisons = definitions.Values.OrderBy(value => value.ComparisonId, StringComparer.OrdinalIgnoreCase).ToArray();
         catalog.Areas = catalog.Comparisons.Select(value => value.Area).Distinct(StringComparer.Ordinal)
             .OrderBy(value => value, StringComparer.Ordinal).ToArray();
+        catalog.Eligibility = catalog.Comparisons.Select(definition =>
+        {
+            BenchmarkEligibility eligibility = declarationService.DeriveEligibility(definition, catalog.Libraries, policy);
+            return new BenchmarkComparisonEligibility
+            {
+                ComparisonId = definition.ComparisonId,
+                Publishable = eligibility.Publishable,
+                Reason = eligibility.Reason
+            };
+        }).ToArray();
         foreach (BenchmarkEvidenceEntry entry in catalog.Entries)
         {
             if (definitions.TryGetValue(entry.ComparisonId, out BenchmarkComparisonDefinition? definition))
                 entry.Area = definition.Area;
         }
 
-        // Preserve quick/full availability for measured lanes and add full-mode gaps for every declaration.
-        var availability = BuildAvailability(catalog.Entries, catalog.ExpectedPlatforms).ToList();
+        catalog.Availability = BuildAvailability(catalog);
+    }
+
+    private static BenchmarkComparisonDefinition NormalizeDefinition(BenchmarkComparisonDefinition source)
+    {
+        if (source is null || string.IsNullOrWhiteSpace(source.ComparisonId) ||
+            string.IsNullOrWhiteSpace(source.Area) || string.IsNullOrWhiteSpace(source.Title) ||
+            source.Libraries is null || source.Libraries.Length == 0 ||
+            source.Libraries.Any(string.IsNullOrWhiteSpace) ||
+            source.ExpectedPlatforms is null || source.ExpectedPlatforms.Length == 0)
+            throw new InvalidOperationException("Comparison declarations require an identifier, area, title, libraries and expected platforms.");
+
+        return new BenchmarkComparisonDefinition
+        {
+            ComparisonId = source.ComparisonId.Trim(),
+            Area = source.Area.Trim().ToLowerInvariant(),
+            Group = source.Group?.Trim() ?? string.Empty,
+            Title = source.Title.Trim(),
+            Subject = source.Subject?.Trim() ?? string.Empty,
+            Libraries = source.Libraries.Select(value => value.Trim()).Distinct(StringComparer.OrdinalIgnoreCase).ToArray(),
+            Axes = (source.Axes ?? Array.Empty<BenchmarkComparisonAxis>())
+                .Select(axis => new BenchmarkComparisonAxis { Name = axis.Name.Trim(), Values = (axis.Values ?? Array.Empty<string>()).Select(value => value.Trim()).ToArray() })
+                .ToArray(),
+            Cases = (source.Cases ?? Array.Empty<string>()).Select(value => value.Trim()).ToArray(),
+            ExpectedPlatforms = NormalizeExpectedPlatforms(source.ExpectedPlatforms).OrderBy(value => value, StringComparer.Ordinal).ToArray(),
+            Frameworks = (source.Frameworks ?? Array.Empty<string>()).Select(value => value.Trim().ToLowerInvariant())
+                .Distinct(StringComparer.Ordinal).OrderBy(value => value, StringComparer.Ordinal).ToArray(),
+            Eligibility = new BenchmarkEligibility
+            {
+                Publishable = source.Eligibility?.Publishable ?? true,
+                Reason = source.Eligibility?.Reason?.Trim() ?? string.Empty
+            }
+        };
+    }
+
+    private static BenchmarkPlatformAvailability[] BuildAvailability(BenchmarkEvidenceCatalog catalog)
+    {
+        var keys = new List<(string ComparisonId, string Framework, string Platform)>();
         foreach (BenchmarkComparisonDefinition definition in catalog.Comparisons)
         {
-            availability.RemoveAll(value => string.Equals(value.ComparisonId, definition.ComparisonId,
-                StringComparison.OrdinalIgnoreCase) && !definition.ExpectedPlatforms.Contains(value.Platform, StringComparer.OrdinalIgnoreCase));
-            foreach (string platform in definition.ExpectedPlatforms)
+            string[] measuredFrameworks = catalog.Entries
+                .Where(entry => string.Equals(entry.ComparisonId, definition.ComparisonId, StringComparison.OrdinalIgnoreCase))
+                .Select(entry => entry.Framework)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+            string[] frameworks = definition.Frameworks.Length > 0 ? definition.Frameworks
+                : measuredFrameworks.Length > 0 ? measuredFrameworks
+                : new[] { string.Empty };
+            foreach (string framework in frameworks)
+                foreach (string platform in definition.ExpectedPlatforms)
+                    keys.Add((definition.ComparisonId, framework, platform));
+        }
+        foreach (BenchmarkEvidenceEntry entry in catalog.Entries)
+        {
+            if (!catalog.Comparisons.Any(definition => string.Equals(definition.ComparisonId, entry.ComparisonId, StringComparison.OrdinalIgnoreCase)))
             {
-                if (availability.Any(value => string.Equals(value.ComparisonId, definition.ComparisonId,
-                        StringComparison.OrdinalIgnoreCase) && value.RunMode == "full" && value.Platform == platform))
-                    continue;
-                BenchmarkEvidenceEntry[] matches = catalog.Entries.Where(entry =>
-                    string.Equals(entry.ComparisonId, definition.ComparisonId, StringComparison.OrdinalIgnoreCase) &&
-                    entry.Platform == platform && entry.RunMode == "full" && entry.Publish).ToArray();
-                availability.Add(new BenchmarkPlatformAvailability
-                {
-                    ComparisonId = definition.ComparisonId,
-                    Platform = platform,
-                    RunMode = "full",
-                    Available = matches.Length > 0,
-                    RunModes = matches.Length > 0 ? new[] { "full" } : Array.Empty<string>(),
-                    LatestUtc = matches.Length > 0 ? matches.Max(value => value.GeneratedUtc) : null
-                });
+                foreach (string platform in catalog.ExpectedPlatforms)
+                    keys.Add((entry.ComparisonId, entry.Framework, platform));
             }
         }
-        catalog.Availability = availability.OrderBy(value => value.ComparisonId, StringComparer.OrdinalIgnoreCase)
-            .ThenBy(value => value.RunMode, StringComparer.Ordinal).ThenBy(value => value.Platform, StringComparer.Ordinal).ToArray();
+
+        return keys
+            .Distinct()
+            .Select(key =>
+            {
+                BenchmarkEvidenceEntry[] published = catalog.Entries.Where(entry =>
+                        entry.Publish &&
+                        string.Equals(entry.ComparisonId, key.ComparisonId, StringComparison.OrdinalIgnoreCase) &&
+                        string.Equals(entry.Framework, key.Framework, StringComparison.OrdinalIgnoreCase) &&
+                        string.Equals(entry.Platform, key.Platform, StringComparison.OrdinalIgnoreCase))
+                    .ToArray();
+                return new BenchmarkPlatformAvailability
+                {
+                    ComparisonId = key.ComparisonId,
+                    Framework = key.Framework,
+                    Platform = key.Platform,
+                    Available = published.Length > 0,
+                    Profiles = published.Select(entry => entry.Profile).Distinct().OrderBy(value => value).ToArray(),
+                    LatestUtc = published.Length > 0 ? published.Max(entry => entry.GeneratedUtc) : null
+                };
+            })
+            .OrderBy(value => value.ComparisonId, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(value => value.Framework, StringComparer.Ordinal)
+            .ThenBy(value => value.Platform, StringComparer.Ordinal)
+            .ToArray();
     }
 }

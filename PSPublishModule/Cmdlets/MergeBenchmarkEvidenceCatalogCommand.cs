@@ -7,11 +7,15 @@ using PowerForge;
 namespace PSPublishModule;
 
 /// <summary>
-/// Consolidates independently produced platform benchmark evidence bundles.
+/// Consolidates independently produced platform benchmark evidence bundles into one schema 5 catalog.
 /// </summary>
+/// <remarks>
+/// Every lane is verified against its result hash and re-evaluated against the declarations and publish policy.
+/// Older runs of the same lane are kept in the superseded history. Catalogs from earlier schemas are rejected.
+/// </remarks>
 /// <example>
 /// <summary>Merge Windows and Linux evidence bundles</summary>
-/// <code>Merge-BenchmarkEvidenceCatalog -SourcePath .\windows\index.json, .\linux\index.json -Path .\Website\data\index.json</code>
+/// <code>Merge-BenchmarkEvidenceCatalog -SourcePath .\windows\index.json, .\linux\index.json -Path .\Website\data\index.json -DeclarationPath .\Benchmarks\benchmarks.json</code>
 /// </example>
 [Cmdlet(VerbsData.Merge, "BenchmarkEvidenceCatalog", SupportsShouldProcess = true)]
 [OutputType(typeof(BenchmarkEvidenceCatalog))]
@@ -32,10 +36,18 @@ public sealed class MergeBenchmarkEvidenceCatalogCommand : PSCmdlet
     [ValidateNotNullOrEmpty]
     public string[]? ExpectedPlatform { get; set; }
 
-    /// <summary>Optional JSON array declaring every comparison, including workloads without results.</summary>
+    /// <summary>
+    /// Schema 5 declaration document: the library policy and every comparison, including workloads without results.
+    /// When omitted, declarations are merged from the source catalogs.
+    /// </summary>
     [Parameter]
+    [Alias("ComparisonPath")]
     [ValidateNotNullOrEmpty]
-    public string? ComparisonPath { get; set; }
+    public string? DeclarationPath { get; set; }
+
+    /// <summary>Publish policy every lane is re-evaluated against. Defaults to the standard policy.</summary>
+    [Parameter]
+    public BenchmarkPublishPolicy? Policy { get; set; }
 
     /// <summary>Root-relative public URL directory for result links, such as /data/benchmarks/library-comparisons.</summary>
     [Parameter]
@@ -56,10 +68,11 @@ public sealed class MergeBenchmarkEvidenceCatalogCommand : PSCmdlet
             outputPath,
             sourcePaths,
             ExpectedPlatform,
-            string.IsNullOrWhiteSpace(ComparisonPath) ? null :
-                BenchmarkJson.Read<BenchmarkComparisonDefinition[]>(
-                    SessionState.Path.GetUnresolvedProviderPathFromPSPath(ComparisonPath)),
-            ResultPathPrefix);
+            string.IsNullOrWhiteSpace(DeclarationPath) ? null :
+                new BenchmarkDeclarationService().Read(
+                    SessionState.Path.GetUnresolvedProviderPathFromPSPath(DeclarationPath)),
+            ResultPathPrefix,
+            Policy);
         WriteObject(result);
     }
 }

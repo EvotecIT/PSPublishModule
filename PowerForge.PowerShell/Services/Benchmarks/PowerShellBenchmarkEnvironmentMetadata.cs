@@ -47,8 +47,6 @@ internal static class PowerShellBenchmarkEnvironmentMetadata
             ["suite"] = suite.Name,
             ["pwsh"] = PSVersionInfo(),
             ["psEdition"] = Convert.ToString(PSVersionInfoValue("PSEdition"), CultureInfo.InvariantCulture) ?? string.Empty,
-            ["machine"] = Environment.MachineName,
-            ["user"] = Environment.UserName,
             ["os"] = Environment.OSVersion.ToString(),
             ["osLabel"] = GetOperatingSystemLabel(),
             ["processArchitecture"] = RuntimeInformation.ProcessArchitecture.ToString(),
@@ -126,12 +124,31 @@ internal static class PowerShellBenchmarkEnvironmentMetadata
             DotNetSdkVersion = NormalizeDotNetSdkVersion(ReadProcessValue(
                 "dotnet", new[] { "--version" }, timeoutMilliseconds: 3000, workingDirectory: sourceRoot)),
             Runner = $"PowerShell {PSVersionInfo()}",
-            MachineName = Environment.MachineName
+            // Results are evidence that may be published; the machine name is never recorded in them.
+            MachineName = string.Empty
         };
 
     // This is the CLI SDK selected by the benchmark source directory's global.json,
     // not inferred build provenance for an external assembly. PowerShell-only hosts
     // and unresolved SDK pins may have no usable SDK and retain an empty identity.
+    /// <summary>Builds the runner block recorded with every suite result.</summary>
+    internal static BenchmarkRunnerInfo BuildRunner(PowerShellBenchmarkSuite suite, bool inProcess)
+        => new()
+        {
+            Kind = "powershell-suite",
+            Version = typeof(BenchmarkRunResult).Assembly.GetName().Version?.ToString() ?? string.Empty,
+            Statistic = "median",
+            Warmups = Math.Max(0, suite.WarmupCount),
+            Iterations = Math.Max(1, suite.IterationCount),
+            Launches = 1,
+            Ordering = Regex.Replace(suite.RunOrder.ToString(), "(?<=[a-z])([A-Z])", "-$1").ToLowerInvariant(),
+            InProcess = inProcess,
+            Affinity = suite.ProcessorAffinityMask.HasValue
+                ? "0x" + suite.ProcessorAffinityMask.Value.ToString("x", CultureInfo.InvariantCulture)
+                : string.Empty,
+            Priority = suite.ProcessPriority?.ToString() ?? string.Empty
+        };
+
     internal static string NormalizeDotNetSdkVersion(string? output)
     {
         if (string.IsNullOrWhiteSpace(output))

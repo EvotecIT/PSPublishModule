@@ -98,6 +98,8 @@ public sealed partial class BenchmarkResultImporter
 
         var environment = GetBenchmarkDotNetEnvironment(root);
         var samples = new List<BenchmarkSample>();
+        int? warmups = null, iterations = null, launches = null;
+        bool warmupsMissing = false, iterationsMissing = false, launchesMissing = false;
         foreach (var benchmark in benchmarks.EnumerateArray())
         {
             if (benchmark.ValueKind != JsonValueKind.Object)
@@ -118,10 +120,27 @@ public sealed partial class BenchmarkResultImporter
             nativeParameters ??= GetBenchmarkDotNetFullNameParameters(benchmark, parameterText);
             var variables = ParseBenchmarkDotNetParameters(parameterText, nativeParameters);
             AddBenchmarkDotNetIdentityVariables(benchmark, variables, method);
+            string? categories = ReadBenchmarkDotNetCategories(benchmark);
+            if (!string.IsNullOrWhiteSpace(categories))
+                variables[variables.ContainsKey("Categories") ? "BenchmarkDotNetCategories" : "Categories"] = categories;
             var engine = GetBenchmarkDotNetEngine(benchmark, displayJob);
             var metrics = ExtractBenchmarkDotNetMetrics(statistics);
             AddBenchmarkDotNetMemoryMetrics(TryGetObject(benchmark, "Memory"), metrics);
             double[] originalValues = GetBenchmarkDotNetOriginalValues(statistics);
+            string? library = LibraryFromCategories(categories);
+            // A benchmark that produced no measurement crashed; it is a failed cell and says nothing about how the
+            // measured benchmarks were run. Among measured ones, a missing count makes the aggregate unknown.
+            if (originalValues.Length > 0 || mean.HasValue)
+            {
+                (int? Warmups, int? Iterations, int? Launches) counts = CountBenchmarkDotNetMeasurements(benchmark);
+                warmupsMissing |= counts.Warmups is null;
+                iterationsMissing |= counts.Iterations is null;
+                launchesMissing |= counts.Launches is null;
+                warmups = Min(warmups, counts.Warmups);
+                iterations = Min(iterations, counts.Iterations);
+                launches = Min(launches, counts.Launches);
+            }
+            int firstSample = samples.Count;
             if (originalValues.Length > 0)
             {
                 for (int index = 0; index < originalValues.Length; index++)
@@ -149,6 +168,12 @@ public sealed partial class BenchmarkResultImporter
                     variables,
                     metrics));
             }
+
+            if (library is not null)
+            {
+                for (int index = firstSample; index < samples.Count; index++)
+                    samples[index].Library = library;
+            }
         }
 
         if (samples.Count == 0)
@@ -156,6 +181,13 @@ public sealed partial class BenchmarkResultImporter
 
         result = BuildImportedResult(suite ?? GetString(root, "Title") ?? Path.GetFileNameWithoutExtension(path), samples);
         result.Environment = environment;
+        result.Runner = new BenchmarkRunnerInfo
+        {
+            Kind = "benchmarkdotnet",
+            Warmups = warmupsMissing ? null : warmups,
+            Iterations = iterationsMissing ? null : iterations,
+            Launches = launchesMissing ? null : launches
+        };
         return true;
     }
 
@@ -318,4 +350,6 @@ public sealed partial class BenchmarkResultImporter
         };
     }
 
+    private static int? Min(int? current, int? value)
+        => value is null ? current : current is null ? value : Math.Min(current.Value, value.Value);
 }
