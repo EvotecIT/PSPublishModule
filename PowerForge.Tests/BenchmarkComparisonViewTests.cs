@@ -153,19 +153,19 @@ public class BenchmarkComparisonViewTests
     }
 
     [Fact]
-    public void Build_PrefersFullPublishedRunsAndSaysWhenNoEnvironmentWasRecorded()
+    public void Build_PrefersPublishedRunsAndSaysWhenNoEnvironmentWasRecorded()
     {
         var root = CreateTempRoot();
         try
         {
             var catalogPath = WriteCatalog(root, new[] { "OfficeIMO", "Sylvan" },
-                ("windows", "quick", true, Result(Row("OfficeIMO", 1.0), Row("Sylvan", 2.0))),
+                ("windows", "standard", true, Result(Row("OfficeIMO", 1.0), Row("Sylvan", 2.0))),
                 ("linux", "full", false, Result(Row("OfficeIMO", 3.0), Row("Sylvan", 1.0))));
 
             var comparison = Assert.Single(new BenchmarkComparisonViewBuilder().Build(catalogPath).Comparisons);
 
-            Assert.Equal("linux-full", comparison.PreferredRunId);
-            Assert.Equal(new[] { "windows-diagnostic", "linux-full" }, comparison.Runs.Select(r => r.Id));
+            Assert.Equal("windows-standard", comparison.PreferredRunId);
+            Assert.Equal(new[] { "windows-standard", "linux-full" }, comparison.Runs.Select(r => r.Id));
             Assert.Equal("Environment not recorded", comparison.Runs[0].Environment.Text);
             var subject = comparison.Overview.First();
             Assert.Equal("OfficeIMO", subject.Name);

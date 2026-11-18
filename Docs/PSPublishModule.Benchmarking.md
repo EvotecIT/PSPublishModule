@@ -558,6 +558,26 @@ Update-BenchmarkDocument `
     -Renderer ComparisonTable
 ```
 
+Update a block from published evidence in a schema 5 catalog. `-Comparison` takes
+comparison ids or group names; each comparison gets a table of its published run on
+the platform (and framework, when given), with the workload parameters shared by
+every case, the head-to-head lines, the statistic, the runner settings and a note for
+each library whose results are not published, giving the licence or the policy reason:
+
+```powershell
+Update-BenchmarkDocument `
+    -Path .\README.MD `
+    -BlockId excel-read `
+    -Catalog .\Website\static\data\benchmarks\index.json `
+    -Comparison read `
+    -Platform windows `
+    -Framework net10.0
+```
+
+A full run is preferred over a standard one, then the newest. A comparison without
+a published run on that platform shows a "no published run yet" line instead of a
+table, so a README never quotes diagnostic or unpublished numbers.
+
 The updater fails when the target document or marker block is missing.
 
 ## Operation memory measurements
@@ -763,4 +783,47 @@ Templates then read `data.benchmarks.comparisons`, each with `runs`, `overview`,
 `preferredRunId`, and per run `contenders`, `cases[].cells`, `headToHead` and
 `environment.text`. Times, allocations and ratios come with display text
 (`timeText`, `allocatedText`, `relative.text`), so templates do no arithmetic.
+`preferredRunId` names the run to show by default: a published run before an
+unpublished one, then full before standard, then Windows, then the newest.
+
+Each comparison also carries the declared facts a page needs to explain what it
+shows:
+
+- `group` and `frameworks` from the declaration;
+- `eligibility` (`publishable`, `reason`), for example a single-library comparison;
+- `availability`, one entry per expected platform and framework, with text such as
+  `Windows · net10.0 · standard · 2026-11-18` or `Linux · net10.0 · not measured`;
+- `libraryStates`, each library's restriction class and whether its results are
+  published, with the note `not published (licence)` when they are not.
+
+Each run adds `profile` and `profileText`, `framework`, `laneParameters`,
+`runner.text` (kind, statistic, warmups, iterations, launches, ordering, process
+isolation, affinity and priority), `completeness`, `comparable`,
+`compatibilityIssues`, `policyIssues` and `notPublished`, which lists libraries
+measured in the lane whose cells were withheld and why.
+
+Large catalogs can be split so a page loads an area only when it is opened. With
+`Output`, the build writes `index.json` (areas, their groups and comparison
+summaries with headline results) and one `<area>.json` per area under that
+directory of the site output. `IndexOnly` gives templates just the index, which
+keeps every page's data small:
+
+```json
+{
+  "BenchmarkEvidence": [
+    {
+      "Name": "benchmarks",
+      "Catalog": "static/data/benchmarks/library-comparisons/index.json",
+      "Output": "data/benchmarks",
+      "IndexOnly": true
+    }
+  ]
+}
+```
+
+Templates then read `data.benchmarks.areas`, each with `id`, `file`, `groups`,
+`measured` and `comparisons[].headlines`, and fetch `/data/benchmarks/<file>` for
+the full comparisons. Headlines come only from a published run, so a comparison
+measured only in diagnostic or unpublished runs has none. `IndexOnly` requires `Output`, and `Output` must stay inside
+the site output.
 

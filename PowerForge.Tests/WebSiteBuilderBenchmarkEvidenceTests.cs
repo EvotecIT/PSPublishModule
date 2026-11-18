@@ -10,26 +10,7 @@ public class WebSiteBuilderBenchmarkEvidenceTests
         var root = CreateTempRoot();
         try
         {
-            var evidence = Path.Combine(root, "evidence");
-            Directory.CreateDirectory(evidence);
-            BenchmarkJson.Write(Path.Combine(evidence, "merge-windows-full.json"), new BenchmarkRunResult
-            {
-                Suite = "merge",
-                Summary = new[]
-                {
-                    new BenchmarkSummaryRow { Scenario = "OfficeIMO", Status = "Succeeded", MedianMs = 1 },
-                    new BenchmarkSummaryRow { Scenario = "PdfSharp", Status = "Succeeded", MedianMs = 2 }
-                }
-            });
-            BenchmarkJson.Write(Path.Combine(evidence, "index.json"), new BenchmarkEvidenceCatalog
-            {
-                Areas = new[] { "pdf" },
-                Comparisons = new[] { new BenchmarkComparisonDefinition { ComparisonId = "merge", Area = "pdf", Title = "PDF merging", Libraries = new[] { "OfficeIMO", "PDFsharp" } } },
-                Entries = new[]
-                {
-                    new BenchmarkEvidenceEntry { ComparisonId = "merge", Area = "pdf", Platform = "windows", Profile = BenchmarkEvidenceProfile.Full, Publish = true, ResultPath = "/data/merge-windows-full.json", ArtifactRelativePath = "merge-windows-full.json" }
-                }
-            });
+            WriteMergeCatalog(root);
             WritePage(root, "---\ntitle: Benchmarks\nslug: index\n---\n\nBenchmarks\n");
             WriteTheme(root, "<html><body>{{ for comparison in data.benchmarks.comparisons }}{{ comparison.title }}: {{ comparison.runs[0].headToHead[0].text }}{{ end }}</body></html>");
 
@@ -39,6 +20,81 @@ public class WebSiteBuilderBenchmarkEvidenceTests
             var html = BuildAndRead(root, spec);
 
             Assert.Contains("PDF merging: OfficeIMO is 2.0× faster than PDFsharp", html, StringComparison.Ordinal);
+        }
+        finally { Directory.Delete(root, recursive: true); }
+    }
+
+    [Fact]
+    public void Build_WritesBenchmarkAreaFilesAndGivesTemplatesTheIndex()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            WriteMergeCatalog(root);
+            WritePage(root, "---\ntitle: Benchmarks\nslug: index\n---\n\nBenchmarks\n");
+            WriteTheme(root, "<html><body>{{ for area in data.benchmarks.areas }}{{ area.file }}: {{ area.comparisons[0].headlines[0] }}{{ end }}</body></html>");
+
+            var spec = BuildSpec();
+            spec.BenchmarkEvidence = new[] { new BenchmarkEvidenceDataSpec { Name = "benchmarks", Catalog = "evidence/index.json", Output = "data/benchmarks", IndexOnly = true } };
+
+            var html = BuildAndRead(root, spec);
+
+            Assert.Contains("pdf.json: OfficeIMO is 2.0× faster than PDFsharp", html, StringComparison.Ordinal);
+            var output = Path.Combine(root, "_site", "data", "benchmarks");
+            Assert.Equal("pdf.json", Assert.Single(BenchmarkJson.Read<BenchmarkComparisonIndexView>(Path.Combine(output, "index.json")).Areas).File);
+            Assert.Equal("merge", Assert.Single(BenchmarkJson.Read<BenchmarkAreaView>(Path.Combine(output, "pdf.json")).Comparisons).Id);
+        }
+        finally { Directory.Delete(root, recursive: true); }
+    }
+
+    [Fact]
+    public void Build_DoesNotWriteBenchmarkFilesThroughALinkedOutputDirectory()
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            WriteMergeCatalog(root);
+            var catalog = Path.Combine(root, "evidence", "index.json");
+            var original = File.ReadAllText(catalog);
+            WritePage(root, "---\ntitle: Benchmarks\nslug: index\n---\n\nBenchmarks\n");
+            WriteTheme(root, "<html><body>{{ content }}</body></html>");
+            Directory.CreateDirectory(Path.Combine(root, "_site", "data"));
+            CreateDirectoryLink(Path.Combine(root, "_site", "data", "benchmarks"), Path.Combine(root, "evidence"));
+            var spec = BuildSpec();
+            spec.BenchmarkEvidence = new[] { new BenchmarkEvidenceDataSpec { Name = "benchmarks", Catalog = "evidence/index.json", Output = "data/benchmarks" } };
+
+            var error = Assert.Throws<InvalidOperationException>(() => BuildAndRead(root, spec));
+
+            Assert.Contains("symbolic link or reparse point", error.Message, StringComparison.Ordinal);
+            Assert.Equal(original, File.ReadAllText(catalog));
+        }
+        finally
+        {
+            var link = Path.Combine(root, "_site", "data", "benchmarks");
+            if (Directory.Exists(link))
+                Directory.Delete(link);
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Theory]
+    [InlineData(null, true, "needs Output")]
+    [InlineData("../outside", false, "inside the site output")]
+    [InlineData("../_SITE/benchmarks", false, "inside the site output")]
+    public void Build_RejectsBenchmarkOutputsThatCannotBeServed(string? output, bool indexOnly, string message)
+    {
+        var root = CreateTempRoot();
+        try
+        {
+            WriteMergeCatalog(root);
+            WritePage(root, "---\ntitle: Benchmarks\nslug: index\n---\n\nBenchmarks\n");
+            WriteTheme(root, "<html><body>{{ content }}</body></html>");
+            var spec = BuildSpec();
+            spec.BenchmarkEvidence = new[] { new BenchmarkEvidenceDataSpec { Name = "benchmarks", Catalog = "evidence/index.json", Output = output, IndexOnly = indexOnly } };
+
+            var error = Assert.Throws<InvalidOperationException>(() => BuildAndRead(root, spec));
+
+            Assert.Contains(message, error.Message, StringComparison.Ordinal);
         }
         finally { Directory.Delete(root, recursive: true); }
     }
@@ -142,6 +198,30 @@ public class WebSiteBuilderBenchmarkEvidenceTests
         return File.ReadAllText(Path.Combine(outPath, "index.html"));
     }
 
+    private static void WriteMergeCatalog(string root)
+    {
+        var evidence = Path.Combine(root, "evidence");
+        Directory.CreateDirectory(evidence);
+        BenchmarkJson.Write(Path.Combine(evidence, "merge-windows-full.json"), new BenchmarkRunResult
+        {
+            Suite = "merge",
+            Summary = new[]
+            {
+                new BenchmarkSummaryRow { Scenario = "OfficeIMO", Status = "Succeeded", MedianMs = 1 },
+                new BenchmarkSummaryRow { Scenario = "PdfSharp", Status = "Succeeded", MedianMs = 2 }
+            }
+        });
+        BenchmarkJson.Write(Path.Combine(evidence, "index.json"), new BenchmarkEvidenceCatalog
+        {
+            Areas = new[] { "pdf" },
+            Comparisons = new[] { new BenchmarkComparisonDefinition { ComparisonId = "merge", Area = "pdf", Title = "PDF merging", Libraries = new[] { "OfficeIMO", "PDFsharp" } } },
+            Entries = new[]
+            {
+                new BenchmarkEvidenceEntry { ComparisonId = "merge", Area = "pdf", Platform = "windows", Profile = BenchmarkEvidenceProfile.Full, Publish = true, ResultPath = "/data/merge-windows-full.json", ArtifactRelativePath = "merge-windows-full.json" }
+            }
+        });
+    }
+
     private static void WritePage(string root, string markdown)
     {
         var pages = Path.Combine(root, "content", "pages");
@@ -158,6 +238,24 @@ public class WebSiteBuilderBenchmarkEvidenceTests
             { "schemaVersion": 2, "contractVersion": 2, "name": "t", "engine": "scriban", "layoutsPath": "layouts", "defaultLayout": "base" }
             """);
         File.WriteAllText(Path.Combine(themeRoot, "layouts", "base.html"), layout);
+    }
+
+    // Windows symbolic links need a privilege; a junction is the link type any user can create there.
+    private static void CreateDirectoryLink(string link, string target)
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            Directory.CreateSymbolicLink(link, target);
+            return;
+        }
+        using var process = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("cmd.exe", $"/c mklink /J \"{link}\" \"{target}\"")
+        {
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true
+        })!;
+        process.WaitForExit();
+        Assert.True(Directory.Exists(link), "The junction was not created.");
     }
 
     private static string CreateTempRoot()
