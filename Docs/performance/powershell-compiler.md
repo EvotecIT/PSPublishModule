@@ -272,7 +272,7 @@ and [second](../../Benchmarks/PowerShellCompilation/Corpus/Performance/2026-11-1
 rounds. First-import p50 fell in one round and rose slightly in the other.
 First-call p50 fell in both, although the pooled first-use p95 values were
 higher. This follow-up did not reproduce the earlier median regression.
-Loaded-call p50 improved **8.00×** across 80 calls per revision.
+Loaded-call p50 improved **about 8×** across 80 calls per revision.
 
 The [phase profiles](../../Benchmarks/PowerShellCompilation/Corpus/Performance/2026-11-18-archive-phase-profiles.json)
 capture three additional alternating pairs. EventPipe samples are restricted
