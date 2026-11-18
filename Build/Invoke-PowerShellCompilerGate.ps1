@@ -55,6 +55,7 @@ $requiredFamilies = @{
     'corpus performance disposition' = 'PowerForge.Tests.PowerShellCompilationArtifactHardeningTests.PublicCorpusPerformancePolicyRecordsOnlyKnownTimingBudgets*'
     'Linux runtime storage' = 'PowerForge.Tests.PowerShellCompilationArtifactHardeningTests.CorpusTimingRejectsWindowsMountedOrUnknownLinuxRuntime*'
     'module timing identity' = 'PowerForge.Tests.PowerShellCompilationArtifactHardeningTests.ModuleTimingRejectsChangedSourceOrExecutablePayloadWithUnchangedManifest*'
+    'cached hosted invocation state' = 'PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.NativeCaptureAssignments_PreserveConstraintsStorageAndEvaluationOrder*'
     'final emitted unit ownership' = 'PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.FailureMap*'
     'bound semantics' = 'PowerForge.Tests.PowerShellCompilationBoundPipelineTests.*'
     'census disposition' = 'PowerForge.Tests.PowerShellCompilationCensusTests.*'
