@@ -18,9 +18,9 @@ internal sealed partial class PowerForgeReleaseService
 
         using var versionCommit = ReleaseVersionCommitSession.Begin(
             _logger,
-            ResolveVersionCommitDirectory(request),
+            ResolveVersionCommitDirectories(spec, request),
             spec.CommitVersionChanges,
-            PublishesFromThisRun(spec, request));
+            MayPublishFromThisRun(request));
         PowerForgeReleaseResult result;
         try
         {
@@ -32,6 +32,9 @@ internal sealed partial class PowerForgeReleaseService
             throw;
         }
 
+        // The selected lanes are only known once the release has resolved them, which happens
+        // before anything is stamped; a run whose selected lanes publish nothing never commits.
+        versionCommit.SetPublishing(result.PublishesFromSelectedLanes);
         result.VersionCommit = versionCommit.Complete(
             result.Success,
             ResolveVersionCommitName(spec),
@@ -39,44 +42,77 @@ internal sealed partial class PowerForgeReleaseService
         return result;
     }
 
+    /// <summary>Plans, validation, Apple-only actions and the build half of a two-phase release never commit.</summary>
+    private static bool MayPublishFromThisRun(PowerForgeReleaseRequest request)
+        => !request.PlanOnly &&
+           !request.ValidateOnly &&
+           !request.DeferAfterStagingValidation &&
+           !request.AppleOnly &&
+           request.AppleAction == PowerForgeAppleReleaseAction.Configured;
+
     /// <summary>
-    /// True when this run publishes something itself. Plans, validation, local builds and the
-    /// build half of a two-phase release never commit version changes.
+    /// True when the lanes this run selected publish something, using the same lane selection
+    /// the release itself runs with.
     /// </summary>
-    private static bool PublishesFromThisRun(PowerForgeReleaseSpec spec, PowerForgeReleaseRequest request)
+    private static bool PublishesFromSelectedLanes(
+        PowerForgeReleaseSpec spec,
+        PowerForgeReleaseRequest request,
+        bool runModule,
+        bool runPackages,
+        bool runTools,
+        bool publishUnifiedGitHub)
     {
-        if (request.PlanOnly || request.ValidateOnly || request.DeferAfterStagingValidation)
-            return false;
-        if (request.AppleOnly || request.AppleAction != PowerForgeAppleReleaseAction.Configured)
+        if (!MayPublishFromThisRun(request))
             return false;
 
-        var moduleSelected = spec.Module is not null && !request.PackagesOnly && !request.ToolsOnly && !request.AppleOnly;
-        var packagePublishing = !request.ModuleOnly && !request.ToolsOnly &&
-                                ((request.PublishNuget ?? spec.Packages?.PublishNuget) == true ||
-                                 (request.PublishProjectGitHub ?? spec.Packages?.PublishGitHub) == true);
-        if (moduleSelected && ResolveModuleRunMode(spec.Module!, request, packagePublishing) == ConfigurationGateMode.Publish)
+        var packagePublishing =
+            (request.PublishNuget ?? spec.Packages?.PublishNuget) == true ||
+            (request.PublishProjectGitHub ?? spec.Packages?.PublishGitHub) == true;
+        if (runModule && spec.Module is not null &&
+            ResolveModuleRunMode(spec.Module, request, !request.ModuleOnly && packagePublishing) == ConfigurationGateMode.Publish &&
+            (request.ModuleIncludePublishing != false || spec.Module.IncludesPackages && packagePublishing))
+        {
             return true;
-        if (spec.Packages is not null && packagePublishing)
+        }
+
+        if (runPackages && packagePublishing)
             return true;
-        if (spec.Tools is not null && !request.ModuleOnly && !request.PackagesOnly &&
-            (request.PublishToolGitHub ?? spec.Tools.GitHub?.Publish) == true)
+        if (runTools && (request.PublishToolGitHub ?? spec.Tools?.GitHub?.Publish) == true)
             return true;
 
-        return ShouldPublishUnifiedGitHub(spec, request, moduleSelected);
+        return publishUnifiedGitHub;
     }
 
-    private static string? ResolveVersionCommitDirectory(PowerForgeReleaseRequest request)
+    /// <summary>
+    /// The configuration directory and the source checkout of every lane that can stamp versions.
+    /// The session refuses to guess when they belong to different checkouts.
+    /// </summary>
+    private static string?[] ResolveVersionCommitDirectories(PowerForgeReleaseSpec spec, PowerForgeReleaseRequest request)
     {
         if (string.IsNullOrWhiteSpace(request.ConfigPath))
-            return null;
+            return Array.Empty<string?>();
 
         try
         {
-            return Path.GetDirectoryName(Path.GetFullPath(request.ConfigPath.Trim().Trim('"')));
+            var configDirectory = Path.GetDirectoryName(Path.GetFullPath(request.ConfigPath.Trim().Trim('"')));
+            if (string.IsNullOrWhiteSpace(configDirectory))
+                return Array.Empty<string?>();
+
+            string? Resolve(string? path)
+                => string.IsNullOrWhiteSpace(path) ? null : Path.GetFullPath(Path.Combine(configDirectory, path!.Trim().Trim('"')));
+
+            var directories = new List<string?> { configDirectory };
+            if (!request.PackagesOnly && !request.ToolsOnly)
+                directories.Add(Resolve(spec.Module?.RepositoryRoot));
+            if (!request.ModuleOnly && !request.ToolsOnly)
+                directories.Add(Resolve(spec.Packages?.RootPath));
+            if (!request.ModuleOnly && !request.PackagesOnly)
+                directories.Add(Resolve(spec.Tools?.ProjectRoot));
+            return directories.ToArray();
         }
         catch
         {
-            return null;
+            return Array.Empty<string?>();
         }
     }
 

@@ -484,7 +484,7 @@ public sealed class NewConfigurationReleaseCommand : PSCmdlet
     /// <summary>
     /// Saves the version numbers a publish run wrote into tracked files (module manifest, project files and other
     /// version metadata) to Git once every publish step succeeds. <c>Off</c> (default) leaves them uncommitted,
-    /// <c>Commit</c> commits them locally and <c>Push</c> also pushes the commit to the current branch.
+    /// <c>Commit</c> commits them locally and <c>Push</c> also pushes the commit to the branch's configured upstream.
     /// Only files whose changes are limited to version numbers are committed; other uncommitted work is left alone.
     /// Anything that goes wrong becomes a warning with the command to finish by hand, and never fails the release.
     /// </summary>

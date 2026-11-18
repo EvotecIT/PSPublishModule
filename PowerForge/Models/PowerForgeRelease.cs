@@ -320,6 +320,9 @@ internal sealed class PowerForgeReleaseResult
     /// <summary>Outcome of saving the release's version changes to Git, when that step ran.</summary>
     public ReleaseVersionCommitResult? VersionCommit { get; set; }
 
+    /// <summary>True when the lanes this run selected publish something (resolved before any version is stamped).</summary>
+    internal bool PublishesFromSelectedLanes { get; set; }
+
     public string? ErrorMessage { get; set; }
 
     public string ConfigPath { get; set; } = string.Empty;

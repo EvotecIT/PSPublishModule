@@ -57995,7 +57995,7 @@ Requires PSResourceGet or ManagedModule and cannot be combined with PublishRequi
           <maml:description>
             <maml:para>Saves the version numbers a publish run wrote into tracked files (module manifest, project files and other&#xD;
 version metadata) to Git once every publish step succeeds. Off (default) leaves them uncommitted,&#xD;
-Commit commits them locally and Push also pushes the commit to the current branch.&#xD;
+Commit commits them locally and Push also pushes the commit to the branch's configured upstream.&#xD;
 Only files whose changes are limited to version numbers are committed; other uncommitted work is left alone.&#xD;
 Anything that goes wrong becomes a warning with the command to finish by hand, and never fails the release.</maml:para>
           </maml:description>
@@ -58146,7 +58146,7 @@ and skip destinations that already completed.</maml:para>
         <maml:description>
           <maml:para>Saves the version numbers a publish run wrote into tracked files (module manifest, project files and other&#xD;
 version metadata) to Git once every publish step succeeds. Off (default) leaves them uncommitted,&#xD;
-Commit commits them locally and Push also pushes the commit to the current branch.&#xD;
+Commit commits them locally and Push also pushes the commit to the branch's configured upstream.&#xD;
 Only files whose changes are limited to version numbers are committed; other uncommitted work is left alone.&#xD;
 Anything that goes wrong becomes a warning with the command to finish by hand, and never fails the release.</maml:para>
         </maml:description>

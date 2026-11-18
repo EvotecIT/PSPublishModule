@@ -440,7 +440,7 @@ NuGet publishing
 - `SkipDuplicate`: pass `--skip-duplicate` to `dotnet nuget push`.
 
 Saving version changes
-- `CommitVersionChanges`: `Off` (default), `Commit` or `Push`. After every publish step succeeds, commits the project files whose changes are limited to the new version, and with `Push` pushes the commit to the current branch. Other uncommitted work is left alone, and any problem becomes a warning with the command to finish by hand; it never fails the build. See [Unified Module And Project Releases](PSPublishModule.UnifiedModuleProjectRelease.md#saving-version-changes-to-git).
+- `CommitVersionChanges`: `Off` (default), `Commit` or `Push`. After every publish step succeeds, commits the project files whose changes are limited to the new version, and with `Push` pushes the commit to the branch's configured upstream. Other uncommitted work is left alone, and any problem becomes a warning with the command to finish by hand; it never fails the build. See [Unified Module And Project Releases](PSPublishModule.UnifiedModuleProjectRelease.md#saving-version-changes-to-git).
 
 GitHub releases
 

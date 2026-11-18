@@ -8,13 +8,16 @@ namespace PowerForge;
 /// <remarks>
 /// <para>
 /// The session records the checkout before the release starts. When the release finishes it commits
-/// only files whose changes are limited to version numbers, so generated build output and the
-/// maintainer's own work are never included. Files the maintainer had already edited are skipped
-/// with a warning.
+/// the exact content it checked: only files whose changes are limited to version numbers, so generated
+/// build output and the maintainer's own work are never included. Version edits that were already in
+/// the checkout are only treated as the release's own when a failed run of the release recorded them.
+/// Files the maintainer had already edited are skipped with a warning.
 /// </para>
 /// <para>
-/// This step never fails, blocks or delays a release: every problem becomes one warning line with
-/// the command that finishes the step by hand, and the release result is left as it was.
+/// This step never fails or blocks a release and never changes its result. Problems become one warning
+/// line (with the command that finishes the step whenever one exists) that a warning preference cannot
+/// turn into a failure. The Git commands run in line with the release, so a slow commit or push adds
+/// its own time, up to the Git runner's timeout.
 /// </para>
 /// <para>
 /// Only the outermost release host commits. A session opened while another session is active in
@@ -26,7 +29,6 @@ internal sealed partial class ReleaseVersionCommitSession : IDisposable
     /// <summary>Set for child processes started while a release session owns the commit.</summary>
     internal const string OwnerEnvironmentVariable = "POWERFORGE_RELEASE_VERSION_COMMIT_OWNER";
 
-    private const string PathListFileName = "POWERFORGE_RELEASE_VERSION_FILES";
     private static readonly AsyncLocal<bool> ActiveInContext = new();
 
     private readonly ILogger _logger;
@@ -36,6 +38,7 @@ internal sealed partial class ReleaseVersionCommitSession : IDisposable
     private readonly bool _previousScope;
     private readonly Snapshot? _snapshot;
     private readonly string? _captureProblem;
+    private bool _publishing;
     private bool _completed;
     private bool _disposed;
 
@@ -43,6 +46,7 @@ internal sealed partial class ReleaseVersionCommitSession : IDisposable
         ILogger logger,
         ReleaseGitRunner git,
         ReleaseVersionCommitMode mode,
+        bool publishing,
         bool ownsScope,
         bool previousScope,
         Snapshot? snapshot,
@@ -51,6 +55,7 @@ internal sealed partial class ReleaseVersionCommitSession : IDisposable
         _logger = logger;
         _git = git;
         _mode = mode;
+        _publishing = publishing;
         _ownsScope = ownsScope;
         _previousScope = previousScope;
         _snapshot = snapshot;
@@ -79,14 +84,28 @@ internal sealed partial class ReleaseVersionCommitSession : IDisposable
     /// <summary>
     /// Opens a session for a release host. Call it before anything writes version numbers.
     /// </summary>
-    /// <param name="logger">Logger that receives the summary or warning line.</param>
-    /// <param name="startDirectory">Any directory inside the repository being released.</param>
-    /// <param name="mode">Configured commit mode.</param>
-    /// <param name="publishing">True only for a real run that publishes; local builds and plans never commit.</param>
-    /// <param name="git">Optional Git client (tests).</param>
     internal static ReleaseVersionCommitSession Begin(
         ILogger logger,
         string? startDirectory,
+        ReleaseVersionCommitMode mode,
+        bool publishing,
+        GitClient? git = null)
+        => Begin(logger, new[] { startDirectory }, mode, publishing, git);
+
+    /// <summary>
+    /// Opens a session for a release host. Call it before anything writes version numbers.
+    /// </summary>
+    /// <param name="logger">Logger that receives the summary or warning line.</param>
+    /// <param name="sourceDirectories">Directories of every lane that can stamp versions; they must share one checkout.</param>
+    /// <param name="mode">Configured commit mode.</param>
+    /// <param name="publishing">
+    /// False for plans, validation and local builds, which never commit. A host that only knows its
+    /// publish lanes later can refine this with <see cref="SetPublishing"/> before completing.
+    /// </param>
+    /// <param name="git">Optional Git client (tests).</param>
+    internal static ReleaseVersionCommitSession Begin(
+        ILogger logger,
+        IReadOnlyList<string?> sourceDirectories,
         ReleaseVersionCommitMode mode,
         bool publishing,
         GitClient? git = null)
@@ -96,23 +115,26 @@ internal sealed partial class ReleaseVersionCommitSession : IDisposable
 
         var runner = new ReleaseGitRunner(git ?? CreateGitClient());
         if (IsOwnedByActiveRelease)
-            return new ReleaseVersionCommitSession(logger, runner, ReleaseVersionCommitMode.Off, ownsScope: false, previousScope: false, null, null);
+            return new ReleaseVersionCommitSession(logger, runner, ReleaseVersionCommitMode.Off, false, ownsScope: false, previousScope: false, null, null);
 
         var previous = ActiveInContext.Value;
         ActiveInContext.Value = true;
         if (mode == ReleaseVersionCommitMode.Off || !publishing)
-            return new ReleaseVersionCommitSession(logger, runner, ReleaseVersionCommitMode.Off, ownsScope: true, previous, null, null);
+            return new ReleaseVersionCommitSession(logger, runner, ReleaseVersionCommitMode.Off, false, ownsScope: true, previous, null, null);
 
         try
         {
-            var snapshot = Capture(runner, startDirectory);
-            return new ReleaseVersionCommitSession(logger, runner, mode, ownsScope: true, previous, snapshot, null);
+            var snapshot = Capture(runner, sourceDirectories);
+            return new ReleaseVersionCommitSession(logger, runner, mode, true, ownsScope: true, previous, snapshot, null);
         }
         catch (Exception ex)
         {
-            return new ReleaseVersionCommitSession(logger, runner, mode, ownsScope: true, previous, null, ex.Message);
+            return new ReleaseVersionCommitSession(logger, runner, mode, true, ownsScope: true, previous, null, ex.Message);
         }
     }
+
+    /// <summary>Records whether the lanes this run selected publish anything.</summary>
+    internal void SetPublishing(bool publishing) => _publishing = _publishing && publishing;
 
     /// <summary>
     /// Commits (and optionally pushes) the stamped version files. Never throws.
@@ -126,6 +148,11 @@ internal sealed partial class ReleaseVersionCommitSession : IDisposable
         if (_completed || _mode == ReleaseVersionCommitMode.Off)
             return null;
         _completed = true;
+        if (!_publishing)
+        {
+            Log(() => _logger.Verbose("Version changes are not committed because this run did not publish."));
+            return null;
+        }
 
         try
         {
@@ -173,6 +200,7 @@ internal sealed partial class ReleaseVersionCommitSession : IDisposable
             if (stamped.Length == 0)
                 return Info(new ReleaseVersionCommitResult { Status = ReleaseVersionCommitStatus.NothingToCommit, Message = "The release did not finish; no version files changed." });
 
+            WriteStampRecord(snapshot, stamped);
             return Warn(new ReleaseVersionCommitResult
             {
                 Status = ReleaseVersionCommitStatus.Incomplete,
@@ -184,18 +212,18 @@ internal sealed partial class ReleaseVersionCommitSession : IDisposable
 
         if (stamped.Length == 0)
         {
+            DeleteStampRecord(snapshot);
             var nothing = new ReleaseVersionCommitResult
             {
                 Status = ReleaseVersionCommitStatus.NothingToCommit,
                 SkippedFiles = skipped,
                 Message = skipped.Length == 0
                     ? "No version changes to commit."
-                    : $"No version changes committed. {SkippedSentence(skipped)}"
+                    : $"No version changes committed. {SkippedSentence(skipped)}".TrimEnd()
             };
             return skipped.Length == 0 ? Info(nothing) : Warn(nothing);
         }
 
-        var commitCommand = BuildCommitCommand(snapshot, stamped, message);
         var currentHead = _git.RunAllowFailure(snapshot.RepositoryRoot, "rev-parse", "HEAD");
         var currentBranch = ReadBranch(snapshot.RepositoryRoot);
         if (snapshot.Branch is null || !currentHead.Succeeded ||
@@ -205,32 +233,20 @@ internal sealed partial class ReleaseVersionCommitSession : IDisposable
             var reason = snapshot.Branch is null
                 ? "the checkout is not on a branch"
                 : "HEAD moved during the release";
-            return Warn(new ReleaseVersionCommitResult
-            {
-                Status = ReleaseVersionCommitStatus.Incomplete,
-                Files = stamped,
-                SkippedFiles = skipped,
-                FollowUpCommand = commitCommand,
-                Message = $"Left {Count(stamped.Length, "version file")} uncommitted because {reason}. {SkippedSentence(skipped)}Commit them with: {commitCommand}"
-            });
+            return LeaveUncommitted(snapshot, stamped, skipped, message, reason);
         }
 
-        var commit = Commit(snapshot, stamped, message);
-        if (!commit.Succeeded)
-        {
-            return Warn(new ReleaseVersionCommitResult
-            {
-                Status = ReleaseVersionCommitStatus.Incomplete,
-                Files = stamped,
-                SkippedFiles = skipped,
-                FollowUpCommand = commitCommand,
-                Message = $"Left {Count(stamped.Length, "version file")} uncommitted because git commit failed ({ReleaseGitRunner.Describe(commit)}). {SkippedSentence(skipped)}Commit them with: {commitCommand}"
-            });
-        }
+        var commit = CommitClassified(snapshot, classification, message);
+        if (commit.Sha is null)
+            return LeaveUncommitted(snapshot, stamped, skipped, message, commit.Problem ?? "git could not create the commit");
 
-        var sha = _git.GetHeadSha(snapshot.RepositoryRoot);
+        DeleteStampRecord(snapshot);
+        var sha = commit.Sha;
         var shortSha = sha.Length > 9 ? sha.Substring(0, 9) : sha;
         var committed = $"Committed {Count(stamped.Length, "version file")} as {shortSha}";
+        var indexNote = commit.IndexCommand is null
+            ? string.Empty
+            : $"Refresh the index for them with: {commit.IndexCommand} ";
         if (_mode != ReleaseVersionCommitMode.Push)
         {
             var local = new ReleaseVersionCommitResult
@@ -239,12 +255,26 @@ internal sealed partial class ReleaseVersionCommitSession : IDisposable
                 CommitSha = sha,
                 Files = stamped,
                 SkippedFiles = skipped,
-                Message = skipped.Length == 0 ? $"{committed}." : $"{committed}. {SkippedSentence(skipped)}".TrimEnd()
+                FollowUpCommand = commit.IndexCommand,
+                Message = $"{committed}. {SkippedSentence(skipped)}{indexNote}".TrimEnd()
             };
-            return skipped.Length == 0 ? Success(local) : Warn(local);
+            return skipped.Length == 0 && commit.IndexCommand is null ? Success(local) : Warn(local);
         }
 
-        var push = Push(snapshot);
+        PushOutcome push;
+        try
+        {
+            push = Push(snapshot, sha);
+        }
+        catch (Exception ex)
+        {
+            push = new PushOutcome(
+                false,
+                $"the push outcome could not be confirmed: {ex.Message}",
+                $"git status -sb && git push --no-follow-tags <remote> {sha}:refs/heads/{snapshot.Branch}",
+                null);
+        }
+
         if (!push.Succeeded)
         {
             return Warn(new ReleaseVersionCommitResult
@@ -254,7 +284,7 @@ internal sealed partial class ReleaseVersionCommitSession : IDisposable
                 Files = stamped,
                 SkippedFiles = skipped,
                 FollowUpCommand = push.Command,
-                Message = $"{committed} but did not push it ({push.Problem}). {SkippedSentence(skipped)}Push it, or open a pull request from it, with: {push.Command}"
+                Message = $"{committed} but did not push it ({push.Problem}). {SkippedSentence(skipped)}{indexNote}Push it, or open a pull request from it, with: {push.Command}"
             });
         }
 
@@ -264,121 +294,66 @@ internal sealed partial class ReleaseVersionCommitSession : IDisposable
             CommitSha = sha,
             Files = stamped,
             SkippedFiles = skipped,
-            Message = $"{committed} and pushed to {push.Target}. {SkippedSentence(skipped)}".TrimEnd()
+            FollowUpCommand = commit.IndexCommand,
+            Message = $"{committed} and pushed to {push.Target}. {SkippedSentence(skipped)}{indexNote}".TrimEnd()
         };
-        return skipped.Length == 0 ? Success(pushed) : Warn(pushed);
+        return skipped.Length == 0 && commit.IndexCommand is null ? Success(pushed) : Warn(pushed);
     }
 
-    private ProcessRunResult Commit(Snapshot snapshot, string[] paths, string message)
+    private ReleaseVersionCommitResult LeaveUncommitted(
+        Snapshot snapshot,
+        string[] stamped,
+        string[] skipped,
+        string message,
+        string reason)
     {
-        var pathListFile = WritePathList(snapshot, paths);
-        if (pathListFile is null)
+        // The next successful run of this release may commit these, so record them as its own.
+        WriteStampRecord(snapshot, stamped);
+        var command = BuildCommitCommand(snapshot, stamped, message);
+        return Warn(new ReleaseVersionCommitResult
         {
-            var arguments = new List<string> { "commit", "--quiet", "-m", message, "--" };
-            arguments.AddRange(paths);
-            return _git.RunAllowFailure(snapshot.RepositoryRoot, arguments.ToArray());
-        }
-
-        // A commit with paths records exactly those paths from the working tree and leaves
-        // everything else, staged or not, where the maintainer put it.
-        return _git.RunAllowFailure(
-            snapshot.RepositoryRoot,
-            "commit", "--quiet", "-m", message, "--pathspec-from-file=" + pathListFile, "--pathspec-file-nul");
+            Status = ReleaseVersionCommitStatus.Incomplete,
+            Files = stamped,
+            SkippedFiles = skipped,
+            FollowUpCommand = command,
+            Message = $"Left {Count(stamped.Length, "version file")} uncommitted because {reason}. {SkippedSentence(skipped)}Commit them with: {command}"
+        });
     }
 
-    private PushOutcome Push(Snapshot snapshot)
-    {
-        var branch = snapshot.Branch!;
-        var configuredRemote = ReadConfig(snapshot.RepositoryRoot, $"branch.{branch}.remote");
-        var remote = string.IsNullOrWhiteSpace(configuredRemote) || configuredRemote == "."
-            ? null
-            : configuredRemote;
-        if (remote is null)
-        {
-            var remotes = _git.RunAllowFailure(snapshot.RepositoryRoot, "remote");
-            if (remotes.Succeeded &&
-                remotes.StdOut.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
-                    .Any(static value => string.Equals(value.Trim(), "origin", StringComparison.Ordinal)))
-            {
-                remote = "origin";
-            }
-        }
-
-        var mergeRef = ReadConfig(snapshot.RepositoryRoot, $"branch.{branch}.merge");
-        var remoteBranch = !string.IsNullOrWhiteSpace(mergeRef) && mergeRef!.StartsWith("refs/heads/", StringComparison.Ordinal)
-            ? mergeRef.Substring("refs/heads/".Length)
-            : branch;
-        if (remote is null)
-        {
-            return new PushOutcome(false, $"branch '{branch}' has no remote", $"git push <remote> HEAD:{remoteBranch}", null);
-        }
-
-        var command = $"git push {remote} HEAD:{remoteBranch}";
-        // A plain push: never forced, never rebased, never preceded by a pull.
-        var result = _git.RunAllowFailure(snapshot.RepositoryRoot, "push", "--quiet", remote, "HEAD:refs/heads/" + remoteBranch);
-        return result.Succeeded
-            ? new PushOutcome(true, null, command, $"{remote}/{remoteBranch}")
-            : new PushOutcome(false, "push rejected: " + ReleaseGitRunner.Describe(result), command, null);
-    }
-
-    private string BuildCommitCommand(Snapshot snapshot, string[] paths, string message)
-    {
-        const int inlineLimit = 5;
-        if (paths.Length <= inlineLimit)
-            return $"git commit -m {Quote(message)} -- {string.Join(" ", paths.Select(Quote))}";
-
-        var pathListFile = WritePathList(snapshot, paths);
-        if (pathListFile is null)
-            return $"git commit -m {Quote(message)} -- {string.Join(" ", paths.Select(Quote))}";
-
-        return $"git commit -m {Quote(message)} --pathspec-from-file={Quote(pathListFile)} --pathspec-file-nul";
-    }
-
-    private string? WritePathList(Snapshot snapshot, string[] paths)
+    private void Log(Action write)
     {
         try
         {
-            var gitPath = _git.RunAllowFailure(snapshot.RepositoryRoot, "rev-parse", "--git-path", PathListFileName);
-            if (!gitPath.Succeeded || string.IsNullOrWhiteSpace(gitPath.StdOut))
-                return null;
-
-            var file = Path.GetFullPath(Path.Combine(snapshot.RepositoryRoot, gitPath.StdOut.Trim()));
-            File.WriteAllText(file, string.Join("\0", paths) + "\0", new System.Text.UTF8Encoding(false));
-            return file;
+            write();
         }
         catch
         {
-            return null;
+            // Reporting this optional step must never affect the release.
         }
-    }
-
-    private string? ReadBranch(string repositoryRoot)
-    {
-        var result = _git.RunAllowFailure(repositoryRoot, "symbolic-ref", "--quiet", "--short", "HEAD");
-        return result.Succeeded && !string.IsNullOrWhiteSpace(result.StdOut) ? result.StdOut.Trim() : null;
-    }
-
-    private string? ReadConfig(string repositoryRoot, string key)
-    {
-        var result = _git.RunAllowFailure(repositoryRoot, "config", "--get", key);
-        return result.Succeeded && !string.IsNullOrWhiteSpace(result.StdOut) ? result.StdOut.Trim() : null;
     }
 
     private ReleaseVersionCommitResult Info(ReleaseVersionCommitResult result)
     {
-        _logger.Info(result.Message);
+        Log(() => _logger.Info(result.Message));
         return result;
     }
 
     private ReleaseVersionCommitResult Success(ReleaseVersionCommitResult result)
     {
-        _logger.Success(result.Message);
+        Log(() => _logger.Success(result.Message));
         return result;
     }
 
     private ReleaseVersionCommitResult Warn(ReleaseVersionCommitResult result)
     {
-        _logger.Warn(result.Message);
+        // The release has already published; its warning preference must not turn this into a failure.
+        Log(() =>
+        {
+            if (_logger is IAdvisoryWarningLogger advisory)
+                advisory.WarnAdvisory(result.Message);
+            else
+                _logger.Warn(result.Message);
+        });
         return result;
     }
 
@@ -409,19 +384,22 @@ internal sealed partial class ReleaseVersionCommitSession : IDisposable
         => count == 1 ? $"1 {noun}" : $"{count} {noun}s";
 
     private static string Quote(string value)
-        => value.IndexOfAny(new[] { ' ', '"', '\'', '\t' }) < 0 ? value : "\"" + value.Replace("\"", "\\\"") + "\"";
+        => value.IndexOfAny(new[] { ' ', '"', '\'', '\t', '[', ']', '*', '?' }) < 0 ? value : "\"" + value.Replace("\"", "\\\"") + "\"";
 
-    private static GitClient CreateGitClient()
-        => new(
-            defaultTimeout: TimeSpan.FromMinutes(2),
-            environmentVariables: new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
-            {
-                // Never wait for a credential prompt; a push that needs one becomes a warning.
-                ["GIT_TERMINAL_PROMPT"] = "0",
-                ["GCM_INTERACTIVE"] = "Never",
-                ["GIT_LITERAL_PATHSPECS"] = "1",
-                ["LC_ALL"] = "C"
-            });
+    private static GitClient CreateGitClient(string? indexFile = null)
+    {
+        var environment = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
+        {
+            // Never wait for a credential prompt; a push that needs one becomes a warning.
+            ["GIT_TERMINAL_PROMPT"] = "0",
+            ["GCM_INTERACTIVE"] = "Never",
+            ["GIT_LITERAL_PATHSPECS"] = "1",
+            ["LC_ALL"] = "C"
+        };
+        if (indexFile is not null)
+            environment["GIT_INDEX_FILE"] = indexFile;
+        return new GitClient(defaultTimeout: TimeSpan.FromMinutes(2), environmentVariables: environment);
+    }
 
     private static string? HashFile(string repositoryRoot, string relativePath)
     {
@@ -439,19 +417,22 @@ internal sealed partial class ReleaseVersionCommitSession : IDisposable
         internal string RepositoryRoot { get; set; } = string.Empty;
         internal string Head { get; set; } = string.Empty;
         internal string? Branch { get; set; }
-        internal Dictionary<string, DirtyFile> DirtyAtStart { get; set; } = new(StringComparer.Ordinal);
-    }
-
-    private sealed class DirtyFile
-    {
-        internal string? Hash { get; set; }
-        internal bool VersionOnly { get; set; }
+        internal Dictionary<string, string?> DirtyAtStart { get; set; } = new(StringComparer.Ordinal);
+        internal Dictionary<string, string> RecordedStamps { get; set; } = new(StringComparer.Ordinal);
     }
 
     private sealed class Classification
     {
         internal string[] Stamped { get; set; } = Array.Empty<string>();
+        internal Dictionary<string, string> Blobs { get; set; } = new(StringComparer.Ordinal);
         internal string[] Skipped { get; set; } = Array.Empty<string>();
+    }
+
+    private sealed class CommitOutcome
+    {
+        internal string? Sha { get; set; }
+        internal string? Problem { get; set; }
+        internal string? IndexCommand { get; set; }
     }
 
     private sealed class PushOutcome

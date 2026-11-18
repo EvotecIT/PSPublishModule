@@ -476,6 +476,9 @@ internal sealed partial class PowerForgeReleaseService
                 registryPublishingSkippedForVerifiedGitHubRecovery
         };
 
+        result.PublishesFromSelectedLanes = PublishesFromSelectedLanes(
+            spec, request, runModule, runPackages, willRunTools, publishUnifiedGitHub);
+
         // Resolve and validate HEAD before any version reservation or other remote side effect.
         // Planning below verifies that the selected DotNet project belongs to this same checkout.
         ValidateHeadSourceSelection(

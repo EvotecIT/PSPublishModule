@@ -1166,7 +1166,7 @@
           "type": "string",
           "enum": ["Off", "Commit", "Push"],
           "default": "Off",
-          "description": "Saves the version numbers a publish run wrote into tracked files to Git after every publish step succeeds. Off leaves them uncommitted, Commit commits them locally, Push also pushes to the current branch. Only version-only changes are committed; problems become a warning and never fail the release."
+          "description": "Saves the version numbers a publish run wrote into tracked files to Git after every publish step succeeds. Off leaves them uncommitted, Commit commits them locally, Push also pushes it to the branch's configured upstream. Only version-only changes are committed; problems become a warning and never fail the release."
         },
         "BuildOrder": { "type": ["array", "null"], "items": { "type": "string" } },
         "PublishOrder": { "type": ["array", "null"], "items": { "type": "string" } }

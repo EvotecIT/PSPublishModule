@@ -590,18 +590,24 @@ In `release.json` or `project.build.json`, add `"CommitVersionChanges": "Push"` 
 
 - `Off`: leave the version changes uncommitted.
 - `Commit`: commit them on the current branch with the message `Release <name> <version>`.
-- `Push`: commit them and push the commit to the branch's upstream. It never forces, rebases, or pulls.
+- `Push`: commit them and push that commit to the branch's configured upstream. It never forces, rebases, pulls,
+  or pushes tags. A branch without an upstream keeps the commit local and says how to set one.
 
-Only files whose changes are limited to version numbers are committed, using your usual Git identity and
-signing settings. Generated build output, other uncommitted or untracked work, and anything already staged are
-left as they were. A version file that already held your own edits before the release is skipped with a warning.
+Only files whose changes are limited to version numbers are committed, and the commit holds exactly the content
+that was checked, using your Git identity and signing settings (commit hooks do not run). Generated build output,
+other uncommitted or untracked work, and anything already staged are left as they were. Version edits you made
+yourself before the release are never committed, and a version file that already held your own edits is skipped
+with a warning.
 
-This step never fails or blocks a release. A failed publish, a moved `HEAD`, a detached checkout, a rejected push
-(protected branch or a newer remote commit), no network, or Git not being available each becomes a single warning
-that says what was left and the command that finishes it, such as `git push origin HEAD:main`. A resumed release
-commits stamped files left by the failed attempt once; rerunning it again finds nothing to commit. Plans,
-validation runs, and local builds that do not publish never commit. When a release runs another release host
-(for example `release.json` building a module or project packages), only the outermost one commits.
+This step never fails or blocks a release, and a warning preference such as `-WarningAction Stop` does not turn its
+warning into a failure. A failed publish, a moved `HEAD`, a detached checkout, a rejected push (protected branch or
+a newer remote commit), no network, or Git not being available each becomes a single warning that says what was
+left and, where there is one, the command that finishes it. The Git commands run as part of the release, so a slow
+push adds its time. When a release stops before committing, it records the files it stamped; the next successful
+run commits them once, and running it again finds nothing to commit. Plans, validation runs, and runs whose
+selected lanes publish nothing never commit. When a release runs another release host (for example
+`release.json` building a module or project packages), only the outermost one commits, and a release whose lanes
+stamp more than one checkout leaves the commits to you.
 
 ## Non-Goals
 

@@ -46,7 +46,7 @@ Accept wildcard characters: False
 ### -CommitVersionChanges
 Saves the version numbers a publish run wrote into tracked files (module manifest, project files and other
 version metadata) to Git once every publish step succeeds. Off (default) leaves them uncommitted,
-Commit commits them locally and Push also pushes the commit to the current branch.
+Commit commits them locally and Push also pushes the commit to the branch's configured upstream.
 Only files whose changes are limited to version numbers are committed; other uncommitted work is left alone.
 Anything that goes wrong becomes a warning with the command to finish by hand, and never fails the release.
 

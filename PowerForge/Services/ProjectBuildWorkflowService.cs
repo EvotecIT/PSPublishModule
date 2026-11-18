@@ -57,9 +57,14 @@ internal sealed class ProjectBuildWorkflowService
                         !deferPublishing &&
                         !preparation.StageNuget &&
                         (preparation.PublishNuget || preparation.PublishGitHub);
+        // A mutating run holds the workspace lease from before the snapshot until the commit is
+        // done, so another run cannot stamp the same files in between.
+        using var operationLock = executeBuild && !preparation.PlanOnly
+            ? ProjectBuildOperationLock.Acquire(preparation)
+            : null;
         using var versionCommit = ReleaseVersionCommitSession.Begin(
             _logger,
-            configDir,
+            string.IsNullOrWhiteSpace(preparation.RootPath) ? configDir : preparation.RootPath,
             config.CommitVersionChanges ?? ReleaseVersionCommitMode.Off,
             publishes);
         ProjectBuildWorkflowResult workflow;
@@ -123,10 +128,6 @@ internal sealed class ProjectBuildWorkflowService
         CancellationToken cancellationToken,
         bool deferPublishing)
     {
-
-        using var operationLock = executeBuild && !preparation.PlanOnly
-            ? ProjectBuildOperationLock.Acquire(preparation)
-            : null;
 
         var spec = preparation.Spec ?? throw new ArgumentException("Prepared spec is required.", nameof(preparation));
         spec.WhatIf = true;

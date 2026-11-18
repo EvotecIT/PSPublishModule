@@ -48,10 +48,37 @@ public sealed partial class ModulePipelineRunner
         return result;
     }
 
-    /// <summary>A publish run that has somewhere to publish; builds, plans and docs never commit.</summary>
-    private static bool PublishesFromThisRun(ModulePipelinePlan plan)
-        => plan.GateMode is null or ConfigurationGateMode.Publish &&
-           (plan.Publishes?.Length ?? 0) > 0;
+    /// <summary>
+    /// A publish run with somewhere to publish: module destinations or project/package lanes that
+    /// publish to NuGet or GitHub. Builds, plans and documentation runs never commit.
+    /// </summary>
+    private bool PublishesFromThisRun(ModulePipelinePlan plan)
+    {
+        if (plan.GateMode is not (null or ConfigurationGateMode.Publish))
+            return false;
+        if ((plan.Publishes?.Length ?? 0) > 0)
+            return true;
+
+        try
+        {
+            foreach (var destination in new[] { PackageBuildPublishDestination.NuGet, PackageBuildPublishDestination.GitHub })
+            {
+                if ((plan.ProjectBuilds ?? Array.Empty<ConfigurationProjectBuildSegment>())
+                        .Any(segment => segment?.Configuration is { Enabled: true } && ShouldExecuteProjectBuildPublish(plan, segment, destination)) ||
+                    (plan.PackageBuilds ?? Array.Empty<ConfigurationPackageBuildSegment>())
+                        .Any(segment => segment?.Configuration is { Enabled: true } && ShouldExecutePackageBuildPublish(plan, segment, destination)))
+                {
+                    return true;
+                }
+            }
+        }
+        catch
+        {
+            // The pipeline reports configuration problems itself; this check only decides eligibility.
+        }
+
+        return false;
+    }
 
     private static string? FormatReleaseVersion(ModulePipelinePlan plan)
         => string.IsNullOrWhiteSpace(plan.ResolvedVersion)

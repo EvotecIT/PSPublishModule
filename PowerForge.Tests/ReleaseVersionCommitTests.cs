@@ -14,20 +14,24 @@ public sealed class ReleaseVersionCommitTests
         repo.Write("notes.txt", "untracked notes\n");
         repo.Write("Docs/Guide.md", "# Guide\n\nStaged edit.\n");
         repo.Git("add", "--", "Docs/Guide.md");
+        // The maintainer's own version bump in a file the release does not touch.
+        repo.Write("Module/Sample.psd1", Manifest("2.0.0"));
 
         var result = RunPackageRelease(repo, publishSucceeds: true, stamp: () =>
         {
             repo.Write("Lib/Lib.csproj", Csproj("1.0.1"));
+            repo.Write("My Lib/My Lib.csproj", Csproj("1.0.1"));
             repo.Write("Module/Sample.psm1", "function Get-Sample { 'merged build output' }\n");
         });
 
         Assert.True(result.Success);
         var commit = Assert.IsType<ReleaseVersionCommitResult>(result.VersionCommit);
         Assert.Equal(ReleaseVersionCommitStatus.Pushed, commit.Status);
-        Assert.Equal(new[] { "Lib/Lib.csproj" }, commit.Files);
+        Assert.Equal(new[] { "Lib/Lib.csproj", "My Lib/My Lib.csproj" }, commit.Files);
+        Assert.Empty(commit.SkippedFiles);
         Assert.Equal(commit.CommitSha, repo.Git("rev-parse", "HEAD"));
         Assert.Equal(commit.CommitSha, repo.RemoteHead());
-        Assert.Equal(new[] { "Lib/Lib.csproj" }, repo.Git("show", "--name-only", "--format=", "HEAD").Split('\n'));
+        Assert.Equal(new[] { "Lib/Lib.csproj", "My Lib/My Lib.csproj" }, repo.Git("-c", "core.quotePath=false", "show", "--name-only", "--format=", "HEAD").Split('\n'));
         Assert.Equal("Release Sample", repo.Git("log", "-1", "--format=%s"));
 
         var status = repo.Git("status", "--porcelain=v1", "--untracked-files=all").Split('\n');
@@ -35,7 +39,8 @@ public sealed class ReleaseVersionCommitTests
         Assert.Contains(" M Module/Sample.psm1", status);
         Assert.Contains("M  Docs/Guide.md", status);
         Assert.Contains("?? notes.txt", status);
-        Assert.DoesNotContain(status, line => line.EndsWith("Lib/Lib.csproj", StringComparison.Ordinal));
+        Assert.Contains(" M Module/Sample.psd1", status);
+        Assert.DoesNotContain(status, line => line.Contains("Lib.csproj"));
     }
 
     [Fact]
@@ -81,7 +86,8 @@ public sealed class ReleaseVersionCommitTests
     {
         using var repo = GitFixture.Create();
         repo.PushUnrelatedRemoteCommit();
-        var logger = new RecordingLogger();
+        // Like -WarningAction Stop: an ordinary warning would throw.
+        var logger = new RecordingLogger { ThrowOnWarn = true };
 
         var result = RunPackageRelease(repo, publishSucceeds: true, stamp: () => repo.Write("Lib/Lib.csproj", Csproj("1.0.1")), logger: logger);
 
@@ -90,9 +96,30 @@ public sealed class ReleaseVersionCommitTests
         Assert.Equal(ReleaseVersionCommitStatus.Incomplete, commit.Status);
         Assert.Equal(commit.CommitSha, repo.Git("rev-parse", "HEAD"));
         Assert.NotEqual(commit.CommitSha, repo.RemoteHead());
-        Assert.Equal("git push origin HEAD:main", commit.FollowUpCommand);
+        Assert.Equal($"git push --no-follow-tags origin {commit.CommitSha}:refs/heads/main", commit.FollowUpCommand);
         var warning = Assert.Single(logger.Warnings);
-        Assert.Contains("git push origin HEAD:main", warning, StringComparison.Ordinal);
+        Assert.Contains(commit.FollowUpCommand!, warning, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Session_WithoutUpstream_KeepsCommitLocalAndCreatesNoRemoteBranch()
+    {
+        using var repo = GitFixture.Create();
+        repo.Git("switch", "--quiet", "-c", "feature/no-upstream");
+        var logger = new RecordingLogger();
+
+        using (var session = ReleaseVersionCommitSession.Begin(logger, repo.Root, ReleaseVersionCommitMode.Push, publishing: true))
+        {
+            repo.Write("Lib/Lib.csproj", Csproj("1.0.1"));
+            var commit = session.Complete(releaseSucceeded: true, "Sample", "1.0.1")!;
+
+            Assert.Equal(ReleaseVersionCommitStatus.Incomplete, commit.Status);
+            Assert.Equal(commit.CommitSha, repo.Git("rev-parse", "HEAD"));
+            Assert.Contains("--set-upstream", commit.FollowUpCommand, StringComparison.Ordinal);
+        }
+
+        Assert.Empty(repo.Git("ls-remote", "--heads", "origin", "feature/no-upstream"));
+        Assert.Contains("no upstream", Assert.Single(logger.Warnings), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -272,9 +299,11 @@ public sealed class ReleaseVersionCommitTests
             Directory.CreateDirectory(Path.Combine(root, "Build"));
             var fixture = new GitFixture(root, remote);
             RunGit(baseDirectory, "init", "--bare", "--initial-branch=main", remote);
+            RunGit(baseDirectory, "--git-dir", remote, "config", "core.hooksPath", Path.Combine(baseDirectory, "no-hooks"));
             fixture.Git("init", "--initial-branch=main");
             fixture.ConfigureIsolatedIdentity(root);
             fixture.Write("Lib/Lib.csproj", Csproj("1.0.0"));
+            fixture.Write("My Lib/My Lib.csproj", Csproj("1.0.0"));
             fixture.Write("Module/Sample.psd1", Manifest("1.0.0"));
             fixture.Write("Module/Sample.psm1", "function Get-Sample { 'source' }\n");
             fixture.Write("README.md", "# Sample\n");
@@ -347,9 +376,11 @@ public sealed class ReleaseVersionCommitTests
         }
     }
 
-    private sealed class RecordingLogger : ILogger
+    private sealed class RecordingLogger : ILogger, IAdvisoryWarningLogger
     {
         internal List<string> Warnings { get; } = new();
+
+        internal bool ThrowOnWarn { get; set; }
 
         public bool IsVerbose => false;
 
@@ -357,7 +388,14 @@ public sealed class ReleaseVersionCommitTests
 
         public void Success(string message) { }
 
-        public void Warn(string message) => Warnings.Add(message);
+        public void Warn(string message)
+        {
+            if (ThrowOnWarn)
+                throw new InvalidOperationException("Warnings stop this run.");
+            Warnings.Add(message);
+        }
+
+        public void WarnAdvisory(string message) => Warnings.Add(message);
 
         public void Error(string message) { }
 
