@@ -44,6 +44,25 @@ public sealed class ReleaseVersionCommitTests
     }
 
     [Fact]
+    public void Release_WithConfigurationOutsideTheCheckout_CommitsInTheLanesCheckout()
+    {
+        using var repo = GitFixture.Create();
+        var outside = Path.Combine(Path.GetDirectoryName(repo.Root)!, "release-config");
+        Directory.CreateDirectory(outside);
+
+        var result = RunPackageRelease(
+            repo,
+            publishSucceeds: true,
+            stamp: () => repo.Write("Lib/Lib.csproj", Csproj("1.0.1")),
+            configPath: Path.Combine(outside, "release.json"),
+            packagesRoot: repo.Root);
+
+        var commit = Assert.IsType<ReleaseVersionCommitResult>(result.VersionCommit);
+        Assert.Equal(ReleaseVersionCommitStatus.Pushed, commit.Status);
+        Assert.Equal(new[] { "Lib/Lib.csproj" }, commit.Files);
+    }
+
+    [Fact]
     public void Release_WithFailedPublish_CommitsNothingAndKeepsStampedFiles()
     {
         using var repo = GitFixture.Create();
@@ -412,7 +431,9 @@ public sealed class ReleaseVersionCommitTests
         Action stamp,
         bool planOnly = false,
         bool publishNuget = true,
-        RecordingLogger? logger = null)
+        RecordingLogger? logger = null,
+        string? configPath = null,
+        string packagesRoot = "..")
     {
         var service = new PowerForgeReleaseService(
             logger ?? new RecordingLogger(),
@@ -438,7 +459,7 @@ public sealed class ReleaseVersionCommitTests
                 CommitVersionChanges = ReleaseVersionCommitMode.Push,
                 Packages = new ProjectBuildConfiguration
                 {
-                    RootPath = "..",
+                    RootPath = packagesRoot,
                     Configuration = "Release",
                     PublishNuget = publishNuget,
                     GitHubRepositoryName = "Sample"
@@ -446,7 +467,7 @@ public sealed class ReleaseVersionCommitTests
             },
             new PowerForgeReleaseRequest
             {
-                ConfigPath = Path.Combine(repo.Root, "Build", "release.json"),
+                ConfigPath = configPath ?? Path.Combine(repo.Root, "Build", "release.json"),
                 PackagesOnly = true,
                 PlanOnly = planOnly
             });

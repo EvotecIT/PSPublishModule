@@ -163,16 +163,21 @@ internal sealed partial class PowerForgeReleaseService
             if (string.IsNullOrWhiteSpace(configDirectory))
                 return Array.Empty<string?>();
 
-            string? Resolve(string? path)
-                => string.IsNullOrWhiteSpace(path) ? null : Path.GetFullPath(Path.Combine(configDirectory, path!.Trim().Trim('"')));
+            // A configured lane without its own root works from the configuration directory;
+            // otherwise the configuration directory is not a source checkout and is left out,
+            // so release.json may live outside the checkout it releases.
+            string Resolve(string? path)
+                => string.IsNullOrWhiteSpace(path) ? configDirectory : Path.GetFullPath(Path.Combine(configDirectory, path!.Trim().Trim('"')));
 
-            var directories = new List<string?> { configDirectory };
-            if (!request.PackagesOnly && !request.ToolsOnly)
-                directories.Add(Resolve(spec.Module?.RepositoryRoot));
-            if (!request.ModuleOnly && !request.ToolsOnly)
-                directories.Add(Resolve(spec.Packages?.RootPath));
-            if (!request.ModuleOnly && !request.PackagesOnly)
-                directories.Add(Resolve(spec.Tools?.ProjectRoot));
+            var directories = new List<string?>();
+            if (spec.Module is not null && !request.PackagesOnly && !request.ToolsOnly)
+                directories.Add(Resolve(spec.Module.RepositoryRoot));
+            if (spec.Packages is not null && !request.ModuleOnly && !request.ToolsOnly)
+                directories.Add(Resolve(spec.Packages.RootPath));
+            if (spec.Tools is not null && !request.ModuleOnly && !request.PackagesOnly)
+                directories.Add(Resolve(spec.Tools.ProjectRoot));
+            if (directories.Count == 0)
+                directories.Add(configDirectory);
             return directories.ToArray();
         }
         catch
