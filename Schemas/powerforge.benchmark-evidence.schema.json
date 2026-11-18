@@ -165,7 +165,8 @@
         "supersededByUtc": { "type": "string", "format": "date-time" },
         "publish": { "type": "boolean" },
         "resultPath": { "type": "string" },
-        "resultSha256": { "type": "string" }
+        "resultSha256": { "type": "string" },
+        "libraries": { "type": "array", "items": { "type": "string" }, "description": "Libraries whose measurements the stored result contains." }
       }
     },
     "availability": {

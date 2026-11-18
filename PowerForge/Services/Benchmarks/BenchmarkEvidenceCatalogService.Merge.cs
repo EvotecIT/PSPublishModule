@@ -107,20 +107,16 @@ public sealed partial class BenchmarkEvidenceCatalogService
                 lane.Entry.ComparisonId,
                 lane.Entry.Framework,
                 lane.Entry.Profile,
-                lane.Entry.Publish);
+                lane.Entry.Publish,
+                markers);
             if (lane.Entry.Publish && evaluation.LaneIssues.Length > 0)
             {
                 throw new InvalidOperationException(
                     $"Published benchmark lane '{lane.Entry.LaneKey}' does not meet the publish policy: " +
                     string.Join(" ", evaluation.LaneIssues));
             }
-            if (lane.Entry.Publish)
-                RedactMergedLane(lane, evaluation.Cells);
+            RedactMergedLane(lane, evaluation.Cells);
             ApplyEvaluation(lane.Entry, evaluation);
-            var present = new HashSet<string>(lane.Entry.Cells.Select(BenchmarkEvidenceCellBuilder.Identity), StringComparer.Ordinal);
-            lane.Entry.Cells = lane.Entry.Cells
-                .Concat(markers.Where(marker => !present.Contains(BenchmarkEvidenceCellBuilder.Identity(marker))))
-                .ToArray();
         }
 
         BenchmarkEvidenceEntry[] entries = selected
@@ -171,6 +167,12 @@ public sealed partial class BenchmarkEvidenceCatalogService
                 continue;
             BenchmarkRunResult historyResult = BenchmarkJson.ReadBytes<BenchmarkRunResult>(historyBytes, history.ResultPath);
             BenchmarkRunResult redactedHistory = RedactLibraries(historyResult, unpublished);
+            history.Libraries = redactedHistory.Summary.Select(row => row.Library)
+                .Concat(redactedHistory.Samples.Select(sample => sample.Library))
+                .Where(value => !string.IsNullOrWhiteSpace(value))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(value => value, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
             if (!ReferenceEquals(redactedHistory, historyResult))
             {
                 string previousHash = history.ResultSha256.ToLowerInvariant();

@@ -124,10 +124,15 @@ public sealed partial class BenchmarkEvidenceCatalogService
         string comparisonId,
         string framework,
         BenchmarkEvidenceProfile profile,
-        bool publish)
+        bool publish,
+        IEnumerable<BenchmarkEvidenceCell>? storedMarkers = null)
         => BenchmarkPublishPolicyEvaluator.Evaluate(new BenchmarkPolicyLane
         {
             Result = result,
+            // Licence markers have no rows in a stored result; they still cover their declared cases.
+            Cells = storedMarkers is null ? null : WithMarkers(
+                BenchmarkEvidenceCellBuilder.Build(result, comparisonId, catalog.Policy ?? BenchmarkPublishPolicy.CreateDefault()),
+                storedMarkers),
             ComparisonId = comparisonId,
             Framework = framework,
             Profile = profile,
@@ -137,6 +142,43 @@ public sealed partial class BenchmarkEvidenceCatalogService
             Libraries = catalog.Libraries,
             Policy = catalog.Policy ?? BenchmarkPublishPolicy.CreateDefault()
         });
+
+    private static BenchmarkEvidenceCell[] WithMarkers(BenchmarkEvidenceCell[] cells, IEnumerable<BenchmarkEvidenceCell> markers)
+    {
+        var present = new HashSet<string>(cells.Select(BenchmarkEvidenceCellBuilder.Identity), StringComparer.Ordinal);
+        return cells.Concat(markers.Where(marker => !present.Contains(BenchmarkEvidenceCellBuilder.Identity(marker)))).ToArray();
+    }
+
+    /// <summary>Libraries a stored result still measures: every cell except licence markers.</summary>
+    private static string[] MeasuredLibraries(IEnumerable<BenchmarkEvidenceCell> cells)
+        => cells.Where(cell => !IsLicenceMarker(cell) && !string.IsNullOrWhiteSpace(cell.Library))
+            .Select(cell => cell.Library)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(value => value, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+    // A catalog never keeps measurements of a library the current declarations do not publish, in a current lane
+    // or a superseded run. An update cannot rewrite stored results, so it refuses; a merge redacts them.
+    private static void RejectStoredRestrictedMeasurements(BenchmarkEvidenceCatalog catalog)
+    {
+        BenchmarkPublishPolicy policy = catalog.Policy ?? BenchmarkPublishPolicy.CreateDefault();
+        var unpublished = new HashSet<string>(
+            catalog.Libraries.Where(library => !library.IsPublishableUnder(policy)).Select(library => library.Id),
+            StringComparer.OrdinalIgnoreCase);
+        if (unpublished.Count == 0)
+            return;
+        foreach (BenchmarkSupersededLane history in catalog.Superseded)
+        {
+            string[] exposed = history.Libraries.Where(unpublished.Contains).ToArray();
+            if (exposed.Length > 0)
+            {
+                throw new InvalidOperationException(
+                    $"Superseded run '{history.LaneKey}' ({history.GeneratedUtc:O}) stores measurements of {string.Join(", ", exposed)}, " +
+                    "which the current declarations do not publish. Rebuild the catalog with Merge-BenchmarkEvidenceCatalog " +
+                    "and the new declarations so its stored results are redacted.");
+            }
+        }
+    }
 
     private static void ApplyEvaluation(BenchmarkEvidenceEntry entry, BenchmarkPolicyEvaluation evaluation)
     {
@@ -179,10 +221,10 @@ public sealed partial class BenchmarkEvidenceCatalogService
             }
             // A library restricted after the lane was published still has measurements in its stored result, which
             // an update cannot rewrite; the merge path redacts stored results.
-            if (entry.Publish && evaluation.Cells.Any(cell => IsLicenceMarker(cell) && (cell.ValueMs is not null || cell.SampleCount > 0)))
+            if (evaluation.Cells.Any(cell => IsLicenceMarker(cell) && (cell.ValueMs is not null || cell.SampleCount > 0)))
             {
                 throw new InvalidOperationException(
-                    $"Published benchmark lane '{entry.LaneKey}' has measurements of a library the current declarations no longer publish. " +
+                    $"Benchmark lane '{entry.LaneKey}' has measurements of a library the current declarations no longer publish. " +
                     "Rebuild the catalog with Merge-BenchmarkEvidenceCatalog and the new declarations so its stored result is redacted.");
             }
             ApplyEvaluation(entry, evaluation);
@@ -249,7 +291,8 @@ public sealed partial class BenchmarkEvidenceCatalogService
             SupersededByUtc = supersededBy,
             Publish = entry.Publish,
             ResultPath = entry.ResultPath,
-            ResultSha256 = entry.ResultSha256
+            ResultSha256 = entry.ResultSha256,
+            Libraries = MeasuredLibraries(entry.Cells)
         };
 
     private static BenchmarkSupersededLane[] NormalizeSuperseded(

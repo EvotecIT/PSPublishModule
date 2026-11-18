@@ -59,12 +59,16 @@ public sealed class BenchmarkComparisonViewBuilder
                 definitions.Add(new BenchmarkComparisonDefinition { ComparisonId = entry.ComparisonId, Area = entry.Area, Title = entry.ComparisonId });
         }
 
+        var policy = catalog.Policy ?? BenchmarkPublishPolicy.CreateDefault();
+        var unpublished = new HashSet<string>(
+            (catalog.Libraries ?? Array.Empty<BenchmarkLibraryDeclaration>()).Where(library => !library.IsPublishableUnder(policy)).Select(library => library.Id),
+            StringComparer.OrdinalIgnoreCase);
         var comparisons = definitions.Select(definition =>
         {
             var entries = catalog.Entries
                 .Where(entry => string.Equals(entry.ComparisonId, definition.ComparisonId, StringComparison.OrdinalIgnoreCase))
                 .ToArray();
-            return BuildComparison(definition, entries.Select(entry => (entry, loadResult(entry))).ToArray());
+            return BuildComparison(definition, entries.Select(entry => (entry, loadResult(entry))).ToArray(), unpublished);
         }).ToArray();
 
         return new BenchmarkComparisonCatalogView
@@ -86,7 +90,8 @@ public sealed class BenchmarkComparisonViewBuilder
 
     private static BenchmarkComparisonView BuildComparison(
         BenchmarkComparisonDefinition definition,
-        IReadOnlyList<(BenchmarkEvidenceEntry Entry, BenchmarkRunResult Result)> runs)
+        IReadOnlyList<(BenchmarkEvidenceEntry Entry, BenchmarkRunResult Result)> runs,
+        ISet<string> unpublished)
     {
         var libraries = definition.Libraries ?? Array.Empty<string>();
         var subject = !string.IsNullOrWhiteSpace(definition.Subject) ? definition.Subject : libraries.FirstOrDefault() ?? string.Empty;
@@ -94,7 +99,7 @@ public sealed class BenchmarkComparisonViewBuilder
             .OrderBy(run => PlatformRank(run.Entry.Platform))
             .ThenBy(run => run.Entry.Profile == BenchmarkEvidenceProfile.Full ? 0 : run.Entry.Profile == BenchmarkEvidenceProfile.Standard ? 1 : 2)
             .ThenByDescending(run => run.Entry.GeneratedUtc)
-            .Select(run => BuildRun(run.Entry, run.Result, libraries, subject))
+            .Select(run => BuildRun(run.Entry, run.Result, libraries, subject, unpublished))
             .ToArray();
         MakeRunIdsUnique(runViews);
 
@@ -162,10 +167,13 @@ public sealed class BenchmarkComparisonViewBuilder
             .ToArray();
     }
 
-    private static BenchmarkRunView BuildRun(BenchmarkEvidenceEntry entry, BenchmarkRunResult result, string[] libraries, string subject)
+    private static BenchmarkRunView BuildRun(BenchmarkEvidenceEntry entry, BenchmarkRunResult result, string[] libraries, string subject, ISet<string> unpublished)
     {
         var preferMean = string.Equals(result.Runner?.Statistic, "mean", StringComparison.OrdinalIgnoreCase);
-        var rows = NormalizeRows(PublishedRows(entry, result.Summary ?? Array.Empty<BenchmarkSummaryRow>()), libraries, subject, preferMean);
+        // Libraries whose licence class is not published never appear, in published or diagnostic runs.
+        var rows = NormalizeRows(PublishedRows(entry, result.Summary ?? Array.Empty<BenchmarkSummaryRow>()), libraries, subject, preferMean)
+            .Where(row => !unpublished.Contains(row.Library))
+            .ToList();
         // Published cells carry the confidence interval the publish policy accepted; overlapping intervals are even.
         if (entry.Publish && entry.Cells is { Length: > 0 })
         {

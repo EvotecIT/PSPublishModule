@@ -326,6 +326,9 @@ public sealed class BenchmarkSupersededLane
 
     /// <summary>SHA-256 of the replaced result payload.</summary>
     public string ResultSha256 { get; set; } = string.Empty;
+
+    /// <summary>Libraries whose measurements the stored result contains.</summary>
+    public string[] Libraries { get; set; } = Array.Empty<string>();
 }
 
 /// <summary>

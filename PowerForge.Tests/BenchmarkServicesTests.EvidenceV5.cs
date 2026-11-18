@@ -365,15 +365,67 @@ public sealed partial class BenchmarkServicesTests
         InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() => service.UpdateFile(catalogPath, diagnostic));
         Assert.Contains("Merge-BenchmarkEvidenceCatalog", exception.Message, StringComparison.Ordinal);
 
+        // Replacing the lane itself with a redacted newer run is refused too: the run it supersedes still measures Sep.
+        BenchmarkEvidenceUpdateRequest replacement = PublishRequest(
+            MeasuredResult(("OfficeIMO", "Read", Spread(8, 10)), ("Sep", "Read", Spread(20, 10))), restricted);
+        InvalidOperationException historyError = Assert.Throws<InvalidOperationException>(() => service.UpdateFile(catalogPath, replacement));
+        Assert.Contains("Superseded run 'comparison-a/windows/net10.0/standard'", historyError.Message, StringComparison.Ordinal);
+        Assert.Contains("Merge-BenchmarkEvidenceCatalog", historyError.Message, StringComparison.Ordinal);
+
         // The merge redacts the current run and the superseded run it carries.
         string mergedRoot = Path.Combine(root, "merged");
         BenchmarkEvidenceCatalog merged = service.MergeFiles(Path.Combine(mergedRoot, "index.json"), [catalogPath], null, restricted);
-        BenchmarkSupersededLane history = Assert.Single(merged.Superseded);
+        BenchmarkSupersededLane historyRun = Assert.Single(merged.Superseded);
+        Assert.DoesNotContain("Sep", historyRun.Libraries);
+        BenchmarkSupersededLane history = historyRun;
         string historyPath = Path.Combine(mergedRoot, history.ResultPath.Substring(history.ResultPath.LastIndexOf('/') + 1));
         Assert.Equal(history.ResultSha256, BenchmarkJson.ComputeFileSha256(historyPath));
         Assert.DoesNotContain(BenchmarkJson.Read<BenchmarkRunResult>(historyPath).Summary, row => row.Library == "Sep");
         BenchmarkEvidenceEntry current = Assert.Single(merged.Entries);
         Assert.DoesNotContain(BenchmarkJson.Read<BenchmarkRunResult>(Path.Combine(mergedRoot, current.ArtifactRelativePath)).Summary, row => row.Library == "Sep");
+    }
+
+    [Fact]
+    public void EvidenceCatalog_MergeCountsLicenceMarkersAsCoveringDeclaredCases()
+    {
+        string root = CreateTempRoot();
+        string catalogPath = Path.Combine(root, "index.json");
+        BenchmarkDeclarationDocument declarations = ThreeLibraryDeclarations();
+        declarations.Comparisons[0].Cases = ["Read", "Write"];
+        declarations.Libraries.Single(value => value.Id == "EPPlus").Restriction = BenchmarkLibraryRestriction.PublishRestricted;
+        declarations.Libraries.Single(value => value.Id == "EPPlus").Reason = "Publishing results needs permission.";
+        // Only the restricted library measured Write, so after redaction that case exists only as a licence marker.
+        new BenchmarkEvidenceCatalogService().UpdateFile(catalogPath, PublishRequest(MeasuredResult(
+            ("OfficeIMO", "Read", Spread(10, 10)), ("Sep", "Read", Spread(20, 10)), ("EPPlus", "Write", Spread(5, 10))), declarations));
+
+        BenchmarkEvidenceCatalog merged = new BenchmarkEvidenceCatalogService().MergeFiles(Path.Combine(root, "merged", "index.json"), [catalogPath], null, declarations);
+
+        BenchmarkEvidenceEntry entry = Assert.Single(merged.Entries);
+        Assert.True(entry.Publish);
+        Assert.Contains(entry.Cells, cell => cell.Case == "Write" && cell.Library == "EPPlus" && !cell.Publishable && cell.ValueMs is null);
+    }
+
+    [Fact]
+    public void ComparisonView_NeverShowsRestrictedLibrariesInDiagnosticRuns()
+    {
+        string root = CreateTempRoot();
+        string catalogPath = Path.Combine(root, "index.json");
+        BenchmarkDeclarationDocument declarations = ThreeLibraryDeclarations();
+        declarations.Libraries.Single(value => value.Id == "EPPlus").Restriction = BenchmarkLibraryRestriction.PublishRestricted;
+        declarations.Libraries.Single(value => value.Id == "EPPlus").Reason = "Publishing results needs permission.";
+        BenchmarkEvidenceUpdateRequest request = PublishRequest(MeasuredResult(
+            ("OfficeIMO", "Read", Spread(10, 10)), ("Sep", "Read", Spread(20, 10)), ("EPPlus", "Read", Spread(5, 10))), declarations);
+        request.Publish = false;
+        request.Profile = BenchmarkEvidenceProfile.Diagnostic;
+        foreach (BenchmarkSample sample in request.Result.Samples) sample.RunMode = "diagnostic";
+        foreach (BenchmarkSummaryRow row in request.Result.Summary) row.RunMode = "diagnostic";
+
+        BenchmarkEvidenceEntry entry = Assert.Single(new BenchmarkEvidenceCatalogService().UpdateFile(catalogPath, request).Entries);
+
+        Assert.DoesNotContain(BenchmarkJson.Read<BenchmarkRunResult>(Path.Combine(root, entry.ArtifactRelativePath)).Summary, row => row.Library == "EPPlus");
+        BenchmarkRunView run = Assert.Single(Assert.Single(new BenchmarkComparisonViewBuilder().Build(catalogPath).Comparisons,
+            comparison => comparison.Id == "comparison-a").Runs);
+        Assert.DoesNotContain(run.Contenders, contender => contender.Library == "EPPlus");
     }
 
     [Fact]

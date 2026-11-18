@@ -104,9 +104,9 @@ public sealed partial class BenchmarkEvidenceCatalogService
                 string.Join(" ", evaluation.LaneIssues));
         }
 
-        // A published lane carries no measurements of libraries whose licence class is not published: their rows
-        // are removed from the stored result and their cells stay only as "not published (licence)" markers.
-        payload = request.Publish ? RedactLicenceRestricted(result, evaluation.Cells) : result;
+        // No stored result keeps measurements of a library whose licence class is not published, in a published or
+        // a diagnostic lane: their rows are removed and their cells stay only as "not published (licence)" markers.
+        payload = RedactLicenceRestricted(result, evaluation.Cells);
         var entry = new BenchmarkEvidenceEntry
         {
             ComparisonId = normalizedComparisonId,
@@ -152,7 +152,9 @@ public sealed partial class BenchmarkEvidenceCatalogService
         ValidateDistinctPublishedResultPaths(entries);
 
         catalog.Entries = entries;
+        catalog.Superseded = superseded.ToArray();
         ReevaluateRetainedLanes(catalog, ReferenceEquals(selectedEntry, entry) ? entry : null);
+        RejectStoredRestrictedMeasurements(catalog);
         ApplyCompatibility(entries);
         catalog.Superseded = NormalizeSuperseded(superseded, entries);
         ApplyDefinitions(catalog);

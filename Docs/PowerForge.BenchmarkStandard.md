@@ -175,6 +175,13 @@ declared with a single library, or one its author excludes, is never publishable
 Every library must declare its class. A library without one is neither selected
 for runs nor published.
 
+A catalog never stores measurements of a library whose class is not published: not
+in published lanes, not in diagnostic lanes and not in superseded runs. Recording a
+lane removes them from its stored result and the comparison view never shows them.
+When a library becomes restricted after runs that measured it were recorded, an
+update is refused; rebuild the catalog with `Merge-BenchmarkEvidenceCatalog` and the
+new declarations, which redacts the current and superseded results.
+
 ### Classifying a library
 
 The class follows what the licence says about **running benchmarks and publishing
