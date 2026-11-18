@@ -1,5 +1,27 @@
 # Timing must describe the downloaded source and the payload that actually built.
 # A module manifest hash alone cannot identify its executable dependencies.
+function Get-CorpusCompilerIdentity {
+    param([string] $CliAssemblyPath)
+
+    $directory = Split-Path -Parent $CliAssemblyPath
+    $files = @($CliAssemblyPath, (Join-Path $directory 'PowerForge.dll'), (Join-Path $directory 'PowerForge.PowerShell.dll'))
+    $records = @($files | ForEach-Object {
+        $version = [Diagnostics.FileVersionInfo]::GetVersionInfo($_).ProductVersion
+        $commit = if ($version -match '\+([0-9a-f]{40})(?:\.|$)') { $Matches[1] } else { 'NotRecorded' }
+        [ordered]@{
+            name = [IO.Path]::GetFileName($_)
+            productVersion = $version
+            sourceCommit = $commit
+            sha256 = (Get-FileHash -LiteralPath $_ -Algorithm SHA256).Hash.ToLowerInvariant()
+        }
+    })
+    $commits = @($records.sourceCommit | Sort-Object -Unique)
+    return [ordered]@{
+        sourceCommit = if ($commits.Count -eq 1) { $commits[0] } else { 'NotRecorded' }
+        files = $records
+    }
+}
+
 function Assert-CorpusTimingIdentity {
     param([object] $Entry, [object] $Build, [string] $WorkspacePath, [string] $ArtifactRoot)
 

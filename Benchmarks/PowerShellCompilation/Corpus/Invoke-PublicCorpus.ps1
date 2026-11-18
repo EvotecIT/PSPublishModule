@@ -20,6 +20,7 @@ $ProgressPreference = 'SilentlyContinue'
 . (Join-Path $PSScriptRoot 'Corpus.Runner.Common.ps1')
 . (Join-Path $PSScriptRoot 'Corpus.PublicBaseline.ps1')
 . (Join-Path $PSScriptRoot 'Corpus.RuntimeStorage.ps1')
+. (Join-Path $PSScriptRoot 'Corpus.TimingIdentity.ps1')
 
 if ($RefreshBaseline -and ($SkipModules -or $ModuleId)) {
     throw 'Refreshing the public baseline requires the complete module packet.'
@@ -391,6 +392,7 @@ $repositoryRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..\..'))
 if (-not $CliAssemblyPath) { $CliAssemblyPath = Join-Path $repositoryRoot 'PowerForge.Cli/bin/Release/net10.0/PowerForge.Cli.dll' }
 $CliAssemblyPath = [IO.Path]::GetFullPath($CliAssemblyPath)
 if (-not (Test-Path -LiteralPath $CliAssemblyPath -PathType Leaf)) { throw "Build the PowerForge CLI first: $CliAssemblyPath" }
+$compilerIdentity = Get-CorpusCompilerIdentity -CliAssemblyPath $CliAssemblyPath
 if (-not $WorkspacePath) { $WorkspacePath = Join-Path ([IO.Path]::GetTempPath()) 'PowerForge/PublicCorpus' }
 $WorkspacePath = [IO.Path]::GetFullPath($WorkspacePath)
 New-Item -ItemType Directory -Path $WorkspacePath -Force | Out-Null
@@ -668,6 +670,9 @@ try {
         packetId = $packet.packetId
         packetSha256 = $packetSha256
         generatedAtUtc = [DateTimeOffset]::UtcNow.ToString('O')
+        sourceCommit = $compilerIdentity.sourceCommit
+        compiler = $compilerIdentity
+        harnessCommit = (git -C $repositoryRoot rev-parse HEAD).Trim()
         semanticProfile = $packet.semanticProfile
         host = [ordered]@{
             runtimeIdentifier = $hostRid
