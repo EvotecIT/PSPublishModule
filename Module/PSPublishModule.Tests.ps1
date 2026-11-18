@@ -163,8 +163,13 @@ try {
         Where-Object { $_.FullName -ne $isolatedTestPath } |
         Sort-Object FullName
 
-    $result = Invoke-Pester -Script $sharedTests.FullName -Verbose -PassThru
+    # -Path works in Pester 3 through 6; Pester 6 removed -Script. A call that cannot run returns no result,
+    # which must fail the suite rather than count as zero failures.
+    $result = Invoke-Pester -Path $sharedTests.FullName -Verbose -PassThru
 
+    if ($null -eq $result) {
+        throw 'Pester did not return a result.'
+    }
     if ($result.FailedCount -gt 0) {
         throw "$($result.FailedCount) tests failed."
     }
@@ -179,7 +184,10 @@ param(
     [string] $TestPath
 )
 
-$result = Invoke-Pester -Script $TestPath -Verbose -PassThru
+$result = Invoke-Pester -Path $TestPath -Verbose -PassThru
+if ($null -eq $result) {
+    throw 'Pester did not return a result.'
+}
 if ($result.FailedCount -gt 0) {
     throw "$($result.FailedCount) tests failed."
 }
