@@ -53,7 +53,11 @@ public sealed partial class BenchmarkServicesTests
         string partials = Path.Combine(root, "themes", "t", "partials", "powerforge", "benchmarks");
         Directory.CreateDirectory(partials);
         File.WriteAllText(Path.Combine(partials, "run.html"), "<p class=\"custom-run\">{{ $1.platformLabel }}</p>");
-        File.WriteAllText(Path.Combine(partials, "area.html"), "<section class=\"custom-area\"><h2>Area {{ $1.id }}: {{ $1.summaries.size }} comparisons</h2>{{ $1.comparisonsHtml }}</section>");
+        // The override links the area's JSON relative to the area page; the index rebases it when loading the page.
+        File.WriteAllText(Path.Combine(partials, "area.html"),
+            "<section class=\"custom-area\"><h2>Area {{ $1.id }}: {{ $1.summaries.size }} comparisons</h2>" +
+            "<a class=\"area-json\" href=\"../../../../data/benchmarks/{{ $1.file }}\">JSON</a><a class=\"area-top\" href=\"#top\">Top</a>" +
+            "<a class=\"area-script\" href=\"javascript:void(0)\">Script</a>{{ $1.comparisonsHtml }}</section>");
         SiteSpec spec = WebSiteBuilderBenchmarkEvidenceTests.BuildSpec();
         spec.BenchmarkEvidence = [new BenchmarkEvidenceDataSpec { Name = "benchmarks", Catalog = "evidence/index.json", Output = "data/benchmarks", IndexOnly = true, AreaFragments = true }];
 
@@ -71,6 +75,8 @@ public sealed partial class BenchmarkServicesTests
         Assert.Contains("<title>csv benchmark results</title>", area, StringComparison.Ordinal);
         Assert.Contains("href=\"../../../../assets/powerforge/benchmarks.v1.css\"", area, StringComparison.Ordinal);
         Assert.Contains("<h2>Area csv: 1 comparisons</h2>", area, StringComparison.Ordinal);
+        string json = System.Text.RegularExpressions.Regex.Match(area, "class=\"area-json\" href=\"(?<href>[^\"]+)\"").Groups["href"].Value;
+        Assert.True(File.Exists(Path.GetFullPath(Path.Combine(fragments, json))), $"The area page links {json}, which does not exist.");
         Assert.Contains("id=\"benchmark-comparison-a\"", area, StringComparison.Ordinal);
         Assert.Contains("<p class=\"custom-run\">Windows</p>", area, StringComparison.Ordinal);
         Assert.Contains("<p class=\"custom-run\">Linux</p>", area, StringComparison.Ordinal);

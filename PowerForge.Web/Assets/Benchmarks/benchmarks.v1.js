@@ -41,6 +41,42 @@
   }
 
   // The link to the area page is already relative to the current page, so its resolved href is the page to load.
+  // Relative addresses in an area page are relative to that page, not to the page it is shown in. They are made
+  // absolute against the area page's address before its content moves; fragment links, absolute URLs and data: or
+  // mailto: addresses are left alone, and javascript: addresses are removed along with scripts.
+  var absolute = /^[a-z][a-z0-9+.-]*:/i;
+
+  function resolveUrl(value, base) {
+    var trimmed = value.trim();
+    if (trimmed === '' || trimmed.charAt(0) === '#' || absolute.test(trimmed) || trimmed.indexOf('//') === 0) return value;
+    return new URL(trimmed, base).href;
+  }
+
+  function resolveSrcset(value, base) {
+    return value.split(',').map(function (candidate) {
+      var parts = candidate.trim().split(/\s+/);
+      if (parts[0]) parts[0] = resolveUrl(parts[0], base);
+      return parts.join(' ');
+    }).join(', ');
+  }
+
+  function rebase(root, base) {
+    var scripts = root.querySelectorAll('script');
+    for (var i = 0; i < scripts.length; i++) scripts[i].remove();
+    var elements = root.querySelectorAll('[href], [src], [srcset]');
+    for (var j = 0; j < elements.length; j++) {
+      var element = elements[j];
+      ['href', 'src'].forEach(function (name) {
+        var value = element.getAttribute(name);
+        if (value === null) return;
+        if (/^\s*javascript:/i.test(value)) element.removeAttribute(name);
+        else element.setAttribute(name, resolveUrl(value, base));
+      });
+      var srcset = element.getAttribute('srcset');
+      if (srcset !== null) element.setAttribute('srcset', resolveSrcset(srcset, base));
+    }
+  }
+
   function initArea(details) {
     if (details.hasAttribute('data-pf-bench-ready')) return;
     details.setAttribute('data-pf-bench-ready', '');
@@ -55,14 +91,13 @@
       fetch(link.href, { credentials: 'same-origin' })
         .then(function (response) {
           if (!response.ok) throw new Error('HTTP ' + response.status);
-          return response.text();
+          return response.text().then(function (html) { return { html: html, url: response.url || link.href }; });
         })
-        .then(function (html) {
+        .then(function (loaded) {
           // The area page is rendered by this site's own build from the same templates as this page; its body,
-          // without scripts, becomes the results.
-          var page = new DOMParser().parseFromString(html, 'text/html');
-          var scripts = page.body.querySelectorAll('script');
-          for (var i = 0; i < scripts.length; i++) scripts[i].remove();
+          // without scripts and with its addresses rebased, becomes the results.
+          var page = new DOMParser().parseFromString(loaded.html, 'text/html');
+          rebase(page.body, loaded.url);
           body.replaceChildren.apply(body, Array.prototype.slice.call(page.body.childNodes));
           details.setAttribute('data-pf-bench-loaded', 'true');
           init(body);
