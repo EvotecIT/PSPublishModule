@@ -560,20 +560,19 @@ Diagnostics are local-only and are never uploaded automatically. Manifest, trace
 
 ## Measured performance
 
-No numeric speedup is currently published. The earlier typed-kernel, startup,
-allocation, and artifact-size tables had no committed raw samples and have been
-removed. The [benchmark harness](../Benchmarks/PowerShellCompilation/README.md)
-remains available to measure a named workload and verify its results outside the
-timed operation. A fast typed loop does not establish a speedup for a complete
-script, and generated cmdlets still pay for PowerShell binding and pipeline work.
+The [performance report](performance/powershell-compiler.md) links committed raw
+startup samples, runtime locations and the source/Hybrid module comparison.
+The historical Linux startup result remains in its original record, marked as
+superseded: its executable loaded .NET from a Windows-mounted 9p filesystem.
+The runtime-location comparison and subsequent ext4 runs establish that cause
+and measure the same small Strict application with a native filesystem runtime.
 
-The committed [Linux startup result](../Benchmarks/PowerShellCompilation/Corpus/m29a-whole-workflow-qualification.json)
-records **346 ms p50 against a 100 ms budget** on 2026-10-16, with
-`performanceQualified: false`. Its p95 also exceeded its budget. This remains an
-unresolved measured regression; functional execution success does not establish
-acceptable startup speed. There is no measured cause or verified startup fix in
-this change. The six-program rerun in the [2026-11-17 coverage report](PowerForge.PowerShellCompilation.Coverage.md)
-is a separate Windows measurement and does not replace that Linux result.
+The earlier typed-kernel, allocation and artifact-size tables remain removed
+because their raw samples were not committed. The
+[benchmark harness](../Benchmarks/PowerShellCompilation/README.md) remains
+available for named workloads. A fast typed loop does not establish a speedup
+for a complete script, and generated cmdlets still pay for PowerShell binding
+and pipeline work.
 
 To reproduce the Linux timing check on Linux x64 with PowerShell and .NET 10:
 
@@ -585,7 +584,8 @@ To reproduce the Linux timing check on Linux x64 with PowerShell and .NET 10:
 ```
 
 This runs the checked-in Strict programs and records alternating source/artifact
-startup samples. `RecordOnly` records timing failures without treating them as
+startup samples. The Linux check inspects resolved runtime libraries with
+`findmnt` and refuses 9p/drvfs or unresolved runtime locations. `RecordOnly` records timing failures without treating them as
 semantic failures; it does not change the committed budgets or mark performance
 as qualified. Build the current CLI first or pass `-CliAssemblyPath`.
 

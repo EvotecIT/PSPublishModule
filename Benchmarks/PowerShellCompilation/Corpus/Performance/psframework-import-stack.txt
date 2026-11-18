@@ -1,0 +1,36 @@
+Top 35 Functions (Inclusive)                                                  Inclusive           Exclusive
+1.  (Non-Activities)                                                          100%                0%
+2.  Threads                                                                   100%                0%
+3.  Thread.StartCallback()                                                    58.95%              0%
+4.  WaitHandle.WaitOneNoCheck(int32,bool,class System.Object,value class W    30.79%              30.79%
+5.  PortableThreadPool+IOCompletionPoller.Poll()                              30.79%              30.79%
+6.  Thread+StartHelper.Callback(class System.Object)                          30.76%              0%
+7.  ExecutionContext.RunInternal(class System.Threading.ExecutionContext,c    30.76%              0%
+8.  ImportModuleCommand.ImportModule_LocallyViaName(value class ImportModu    20.53%              0%
+9.  ImportModuleCommand.ImportModule_LocallyViaName_WithTelemetry(value cl    20.53%              0%
+10. PipelineOps.InvokePipeline(class System.Object,bool,class System.Manag    20.53%              0%
+11. __Canon].Run(class System.Management.Automation.Interpreter.Interprete    20.53%              0%
+12. ScriptBlock.InvokeWithPipeImpl(value class System.Management.Automatio    20.53%              0%
+13. ModuleIntrinsics.CreateModuleImplementation(class System.String,class     20.53%              0%
+14. ScriptBlock.InvokeWithPipe(bool,value class ErrorHandlingBehavior,clas    20.53%              0%
+15. Interpreter.Run(class System.Management.Automation.Interpreter.Interpr    20.53%              0%
+16. PSScriptCmdlet.RunClause(class System.Action`1<class System.Management    20.53%              0%
+17. EnterTryCatchFinallyInstruction.Run(class System.Management.Automation    20.53%              0%
+18. LightLambda.RunVoid1(!!0)                                                 20.53%              0%
+19. PowerShellNativeFunctionHost.Run(class System.Action`1<class PowerForg    20.52%              0%
+20. PSFrameworkMethodsNativeFunctions.<Create_Test_PSFParameterBinding>g__    20.52%              0%
+21. PSFrameworkMethods.Test_PSFParameterBinding(class PowerForge.Generated    20.52%              0%
+22. LocalPipeline.InvokeHelper()                                              20.51%              0%
+23. LocalPipeline.InvokeThreadProc()                                          20.51%              0%
+24. PowerShellNativeFunctionContext.CreateAssignmentTarget(class System.St    20.44%              0.23%
+25. RuntimeMethodInfo.Invoke(class System.Object,value class System.Reflec    17.2%               0%
+26. PowerShellNativeFunctionHost.Invoke(class System.Reflection.MethodInfo    17.2%               0%
+27. MethodBaseInvoker.InvokeWithFewArgs(class System.Object,value class Sy    17.19%              0.01%
+28. InvokeStub_Parser.ParseInput(class System.Object,class System.Object,i    17.16%              0%
+29. Parser.ParseInput(class System.String,class System.String,class System    17.16%              0%
+30. Parser.ParseTask(class System.String,class System.String,class System.    17.16%              0.05%
+31. Parser.StatementListRule(class System.Collections.Generic.List`1<class    13.14%              0%
+32. Parser.StatementRule()                                                    13.13%              0%
+33. PowerShellNativeFunctionContext.AssignTarget(class System.String,class    12.27%              0%
+34. TimerQueue.TimerThread()                                                  10.26%              0%
+35. PortableThreadPool+GateThread.GateThreadStart()                           10.26%              0%

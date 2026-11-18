@@ -1,0 +1,1163 @@
+{
+  "schemaVersion": 1,
+  "fixture": "../StrictApplication/Main.ps1",
+  "provenance": "2026-11-17-provenance.json",
+  "interpretation": "Fresh process launch through exit with warmed OS caches. These fixed-fixture measurements do not establish speedups for arbitrary PowerShell workloads. Historical source and current source generated identical Strict executable bytes in the runtime-location comparison.",
+  "supersedes": {
+    "record": "../m29a-whole-workflow-qualification.json",
+    "scope": "Linux startup measurement only; historical functional results and raw slow samples remain.",
+    "cause": ".NET host/runtime libraries loaded from the Windows-mounted 9p filesystem; the executable itself was on ext4. The controlled comparison did not reproduce the exact historical tail.",
+    "raw": "2026-11-17-runtime-location-ab.json"
+  },
+  "records": [
+    {
+      "record": "2026-11-17-current-enforced.json",
+      "generatedAtUtc": "2026-11-17T23:14:23.1604373+01:00",
+      "compilerSourceCommit": "4fa2c7321ab9d30e74eec9820f05e713c8736221",
+      "host": {
+        "runtimeIdentifier": "linux-x64",
+        "operatingSystem": "Ubuntu 24.04.3 LTS",
+        "architecture": "X64",
+        "powerShell": "7.6.5",
+        "dotnet": "10.0.303"
+      },
+      "deployment": "FrameworkDependent",
+      "runtime": "Microsoft.NETCore.App 10.0.11",
+      "runtimeLocation": "$HOME/.cache/powerforge-sdk-10.0.303",
+      "runtimeFileSystem": "ext4",
+      "executableFileSystem": "ext4",
+      "artifactSha256": "d463d9270dd1d64958b2762d10ffd170ce416a6b0970ce75d2257ae5de369a3f",
+      "startup": {
+        "warmupsPerSurface": 1,
+        "samples": 6,
+        "orderPolicy": "AlternatingPairs",
+        "order": [
+          "source-first",
+          "artifact-first",
+          "source-first",
+          "artifact-first",
+          "source-first",
+          "artifact-first"
+        ],
+        "sourceMilliseconds": [
+          187.0,
+          187.0,
+          185.0,
+          185.0,
+          189.0,
+          187.0
+        ],
+        "artifactMilliseconds": [
+          25.0,
+          25.0,
+          25.0,
+          24.0,
+          26.0,
+          25.0
+        ],
+        "sourceP50Milliseconds": 187.0,
+        "sourceP95Milliseconds": 189.0,
+        "artifactP50Milliseconds": 25.0,
+        "artifactP95Milliseconds": 26.0,
+        "artifactToSourceP50Ratio": 0.134
+      }
+    },
+    {
+      "record": "2026-11-18-linux-corpus.json",
+      "generatedAtUtc": "2026-11-18T09:20:43.915833+01:00",
+      "compilerSourceCommit": "671c8eca1adee81d4c95dad2ca4f7797562bfc0e",
+      "host": {
+        "runtimeIdentifier": "linux-x64",
+        "operatingSystem": "Ubuntu 24.04.3 LTS",
+        "architecture": "X64",
+        "powerShell": "7.6.5",
+        "dotnet": "10.0.403"
+      },
+      "deployment": "FrameworkDependent",
+      "runtime": "Microsoft.NETCore.App 10.0.14",
+      "runtimeLocation": "$HOME/.dotnet",
+      "runtimeFileSystem": "ext4",
+      "executableFileSystem": "ext4",
+      "artifactSha256": "1569898fd3a8faa495792fec8ae5ec0237c39cd7fac3725c241f7e1ed70300c4",
+      "startup": {
+        "runtimeStorage": {
+          "checked": true,
+          "libraries": [
+            {
+              "path": "$HOME/.dotnet/host/fxr/10.0.14/libhostfxr.so",
+              "fileSystem": "ext4"
+            },
+            {
+              "path": "$HOME/.dotnet/shared/Microsoft.NETCore.App/10.0.14/libclrjit.so",
+              "fileSystem": "ext4"
+            },
+            {
+              "path": "$HOME/.dotnet/shared/Microsoft.NETCore.App/10.0.14/libcoreclr.so",
+              "fileSystem": "ext4"
+            },
+            {
+              "path": "$HOME/.dotnet/shared/Microsoft.NETCore.App/10.0.14/libhostpolicy.so",
+              "fileSystem": "ext4"
+            }
+          ]
+        },
+        "warmupsPerSurface": 1,
+        "samples": 6,
+        "orderPolicy": "AlternatingPairs",
+        "order": [
+          "source-first",
+          "artifact-first",
+          "source-first",
+          "artifact-first",
+          "source-first",
+          "artifact-first"
+        ],
+        "sourceMilliseconds": [
+          244.0,
+          255.0,
+          242.0,
+          237.0,
+          232.0,
+          278.0
+        ],
+        "artifactMilliseconds": [
+          33.0,
+          35.0,
+          32.0,
+          30.0,
+          34.0,
+          31.0
+        ],
+        "sourceP50Milliseconds": 242.0,
+        "sourceP95Milliseconds": 278.0,
+        "artifactP50Milliseconds": 32.0,
+        "artifactP95Milliseconds": 35.0,
+        "artifactToSourceP50Ratio": 0.132
+      }
+    },
+    {
+      "record": "2026-11-17-startup-samples.json",
+      "compilerSourceCommit": "4fa2c7321ab9d30e74eec9820f05e713c8736221",
+      "host": {
+        "platform": "Linux-6.18.33.2-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+        "cpuAffinity": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20,
+          21,
+          22,
+          23,
+          24,
+          25,
+          26,
+          27,
+          28,
+          29,
+          30,
+          31
+        ],
+        "startLoad": "0.27 1.25 0.78 1/508 1016",
+        "python": "3.12.3",
+        "warmups": 3,
+        "repetitions": 48,
+        "fixtureSha256": "d463d9270dd1d64958b2762d10ffd170ce416a6b0970ce75d2257ae5de369a3f",
+        "nativeSha256": "ae401bcd759a22d37a1f0826bcc0d320f707c4451155227c44e1a3cc8db3c513",
+        "looseLaunchExeSha256": "5c52cb33b184288951136d67221f34dee5486eb561c7cf43ad71515cbff84e8a",
+        "workProof": {
+          "current_singlefile": {
+            "resourceSha256": "3658a4189f0d5c038f20d4c92e82dd1266fc5a0e802a52c08ed1811388ca7b4f",
+            "failureCode": 1,
+            "failureStderrSha256": "5f32197d90f2689d70ec86703ef81030e8b2594d764f27ead96e04d21675d487"
+          },
+          "current_multifile": {
+            "resourceSha256": "3658a4189f0d5c038f20d4c92e82dd1266fc5a0e802a52c08ed1811388ca7b4f",
+            "failureCode": 1,
+            "failureStderrSha256": "5f32197d90f2689d70ec86703ef81030e8b2594d764f27ead96e04d21675d487"
+          },
+          "current_native_aot": {
+            "resourceSha256": "3658a4189f0d5c038f20d4c92e82dd1266fc5a0e802a52c08ed1811388ca7b4f",
+            "failureCode": 1,
+            "failureStderrSha256": "5f32197d90f2689d70ec86703ef81030e8b2594d764f27ead96e04d21675d487"
+          }
+        },
+        "endLoad": "0.72 1.27 0.81 2/507 5198"
+      },
+      "deployment": "NativeAOT",
+      "sdk": "10.0.403",
+      "compiledRuntime": "10.0.14",
+      "runtimeLocation": "Embedded; no shared .NET runtime loaded",
+      "executableFileSystem": "ext4",
+      "artifactSha256": "ae401bcd759a22d37a1f0826bcc0d320f707c4451155227c44e1a3cc8db3c513",
+      "warmups": 3,
+      "order": [
+        [
+          "historical_ext4_runtime11",
+          "current_ext4_runtime11",
+          "current_ext4_runtime14",
+          "current_singlefile_eviction_requested",
+          "current_drvfs_runtime14",
+          "current_multifile_runtime14",
+          "current_native_aot",
+          "managed_print_only_control",
+          "pwsh_source"
+        ],
+        [
+          "historical_ext4_runtime11",
+          "pwsh_source",
+          "managed_print_only_control",
+          "current_native_aot",
+          "current_multifile_runtime14",
+          "current_drvfs_runtime14",
+          "current_singlefile_eviction_requested",
+          "current_ext4_runtime14",
+          "current_ext4_runtime11"
+        ],
+        [
+          "current_ext4_runtime14",
+          "current_singlefile_eviction_requested",
+          "current_drvfs_runtime14",
+          "current_multifile_runtime14",
+          "current_native_aot",
+          "managed_print_only_control",
+          "pwsh_source",
+          "historical_ext4_runtime11",
+          "current_ext4_runtime11"
+        ],
+        [
+          "current_ext4_runtime14",
+          "current_ext4_runtime11",
+          "historical_ext4_runtime11",
+          "pwsh_source",
+          "managed_print_only_control",
+          "current_native_aot",
+          "current_multifile_runtime14",
+          "current_drvfs_runtime14",
+          "current_singlefile_eviction_requested"
+        ],
+        [
+          "current_drvfs_runtime14",
+          "current_multifile_runtime14",
+          "current_native_aot",
+          "managed_print_only_control",
+          "pwsh_source",
+          "historical_ext4_runtime11",
+          "current_ext4_runtime11",
+          "current_ext4_runtime14",
+          "current_singlefile_eviction_requested"
+        ],
+        [
+          "current_drvfs_runtime14",
+          "current_singlefile_eviction_requested",
+          "current_ext4_runtime14",
+          "current_ext4_runtime11",
+          "historical_ext4_runtime11",
+          "pwsh_source",
+          "managed_print_only_control",
+          "current_native_aot",
+          "current_multifile_runtime14"
+        ],
+        [
+          "current_native_aot",
+          "managed_print_only_control",
+          "pwsh_source",
+          "historical_ext4_runtime11",
+          "current_ext4_runtime11",
+          "current_ext4_runtime14",
+          "current_singlefile_eviction_requested",
+          "current_drvfs_runtime14",
+          "current_multifile_runtime14"
+        ],
+        [
+          "current_native_aot",
+          "current_multifile_runtime14",
+          "current_drvfs_runtime14",
+          "current_singlefile_eviction_requested",
+          "current_ext4_runtime14",
+          "current_ext4_runtime11",
+          "historical_ext4_runtime11",
+          "pwsh_source",
+          "managed_print_only_control"
+        ],
+        [
+          "pwsh_source",
+          "historical_ext4_runtime11",
+          "current_ext4_runtime11",
+          "current_ext4_runtime14",
+          "current_singlefile_eviction_requested",
+          "current_drvfs_runtime14",
+          "current_multifile_runtime14",
+          "current_native_aot",
+          "managed_print_only_control"
+        ],
+        [
+          "pwsh_source",
+          "managed_print_only_control",
+          "current_native_aot",
+          "current_multifile_runtime14",
+          "current_drvfs_runtime14",
+          "current_singlefile_eviction_requested",
+          "current_ext4_runtime14",
+          "current_ext4_runtime11",
+          "historical_ext4_runtime11"
+        ],
+        [
+          "current_ext4_runtime11",
+          "current_ext4_runtime14",
+          "current_singlefile_eviction_requested",
+          "current_drvfs_runtime14",
+          "current_multifile_runtime14",
+          "current_native_aot",
+          "managed_print_only_control",
+          "pwsh_source",
+          "historical_ext4_runtime11"
+        ],
+        [
+          "current_ext4_runtime11",
+          "historical_ext4_runtime11",
+          "pwsh_source",
+          "managed_print_only_control",
+          "current_native_aot",
+          "current_multifile_runtime14",
+          "current_drvfs_runtime14",
+          "current_singlefile_eviction_requested",
+          "current_ext4_runtime14"
+        ],
+        [
+          "current_singlefile_eviction_requested",
+          "current_drvfs_runtime14",
+          "current_multifile_runtime14",
+          "current_native_aot",
+          "managed_print_only_control",
+          "pwsh_source",
+          "historical_ext4_runtime11",
+          "current_ext4_runtime11",
+          "current_ext4_runtime14"
+        ],
+        [
+          "current_singlefile_eviction_requested",
+          "current_ext4_runtime14",
+          "current_ext4_runtime11",
+          "historical_ext4_runtime11",
+          "pwsh_source",
+          "managed_print_only_control",
+          "current_native_aot",
+          "current_multifile_runtime14",
+          "current_drvfs_runtime14"
+        ],
+        [
+          "current_multifile_runtime14",
+          "current_native_aot",
+          "managed_print_only_control",
+          "pwsh_source",
+          "historical_ext4_runtime11",
+          "current_ext4_runtime11",
+          "current_ext4_runtime14",
+          "current_singlefile_eviction_requested",
+          "current_drvfs_runtime14"
+        ],
+        [
+          "current_multifile_runtime14",
+          "current_drvfs_runtime14",
+          "current_singlefile_eviction_requested",
+          "current_ext4_runtime14",
+          "current_ext4_runtime11",
+          "historical_ext4_runtime11",
+          "pwsh_source",
+          "managed_print_only_control",
+          "current_native_aot"
+        ],
+        [
+          "managed_print_only_control",
+          "pwsh_source",
+          "historical_ext4_runtime11",
+          "current_ext4_runtime11",
+          "current_ext4_runtime14",
+          "current_singlefile_eviction_requested",
+          "current_drvfs_runtime14",
+          "current_multifile_runtime14",
+          "current_native_aot"
+        ],
+        [
+          "managed_print_only_control",
+          "current_native_aot",
+          "current_multifile_runtime14",
+          "current_drvfs_runtime14",
+          "current_singlefile_eviction_requested",
+          "current_ext4_runtime14",
+          "current_ext4_runtime11",
+          "historical_ext4_runtime11",
+          "pwsh_source"
+        ],
+        [
+          "historical_ext4_runtime11",
+          "current_ext4_runtime11",
+          "current_ext4_runtime14",
+          "current_singlefile_eviction_requested",
+          "current_drvfs_runtime14",
+          "current_multifile_runtime14",
+          "current_native_aot",
+          "managed_print_only_control",
+          "pwsh_source"
+        ],
+        [
+          "historical_ext4_runtime11",
+          "pwsh_source",
+          "managed_print_only_control",
+          "current_native_aot",
+          "current_multifile_runtime14",
+          "current_drvfs_runtime14",
+          "current_singlefile_eviction_requested",
+          "current_ext4_runtime14",
+          "current_ext4_runtime11"
+        ],
+        [
+          "current_ext4_runtime14",
+          "current_singlefile_eviction_requested",
+          "current_drvfs_runtime14",
+          "current_multifile_runtime14",
+          "current_native_aot",
+          "managed_print_only_control",
+          "pwsh_source",
+          "historical_ext4_runtime11",
+          "current_ext4_runtime11"
+        ],
+        [
+          "current_ext4_runtime14",
+          "current_ext4_runtime11",
+          "historical_ext4_runtime11",
+          "pwsh_source",
+          "managed_print_only_control",
+          "current_native_aot",
+          "current_multifile_runtime14",
+          "current_drvfs_runtime14",
+          "current_singlefile_eviction_requested"
+        ],
+        [
+          "current_drvfs_runtime14",
+          "current_multifile_runtime14",
+          "current_native_aot",
+          "managed_print_only_control",
+          "pwsh_source",
+          "historical_ext4_runtime11",
+          "current_ext4_runtime11",
+          "current_ext4_runtime14",
+          "current_singlefile_eviction_requested"
+        ],
+        [
+          "current_drvfs_runtime14",
+          "current_singlefile_eviction_requested",
+          "current_ext4_runtime14",
+          "current_ext4_runtime11",
+          "historical_ext4_runtime11",
+          "pwsh_source",
+          "managed_print_only_control",
+          "current_native_aot",
+          "current_multifile_runtime14"
+        ],
+        [
+          "current_native_aot",
+          "managed_print_only_control",
+          "pwsh_source",
+          "historical_ext4_runtime11",
+          "current_ext4_runtime11",
+          "current_ext4_runtime14",
+          "current_singlefile_eviction_requested",
+          "current_drvfs_runtime14",
+          "current_multifile_runtime14"
+        ],
+        [
+          "current_native_aot",
+          "current_multifile_runtime14",
+          "current_drvfs_runtime14",
+          "current_singlefile_eviction_requested",
+          "current_ext4_runtime14",
+          "current_ext4_runtime11",
+          "historical_ext4_runtime11",
+          "pwsh_source",
+          "managed_print_only_control"
+        ],
+        [
+          "pwsh_source",
+          "historical_ext4_runtime11",
+          "current_ext4_runtime11",
+          "current_ext4_runtime14",
+          "current_singlefile_eviction_requested",
+          "current_drvfs_runtime14",
+          "current_multifile_runtime14",
+          "current_native_aot",
+          "managed_print_only_control"
+        ],
+        [
+          "pwsh_source",
+          "managed_print_only_control",
+          "current_native_aot",
+          "current_multifile_runtime14",
+          "current_drvfs_runtime14",
+          "current_singlefile_eviction_requested",
+          "current_ext4_runtime14",
+          "current_ext4_runtime11",
+          "historical_ext4_runtime11"
+        ],
+        [
+          "current_ext4_runtime11",
+          "current_ext4_runtime14",
+          "current_singlefile_eviction_requested",
+          "current_drvfs_runtime14",
+          "current_multifile_runtime14",
+          "current_native_aot",
+          "managed_print_only_control",
+          "pwsh_source",
+          "historical_ext4_runtime11"
+        ],
+        [
+          "current_ext4_runtime11",
+          "historical_ext4_runtime11",
+          "pwsh_source",
+          "managed_print_only_control",
+          "current_native_aot",
+          "current_multifile_runtime14",
+          "current_drvfs_runtime14",
+          "current_singlefile_eviction_requested",
+          "current_ext4_runtime14"
+        ],
+        [
+          "current_singlefile_eviction_requested",
+          "current_drvfs_runtime14",
+          "current_multifile_runtime14",
+          "current_native_aot",
+          "managed_print_only_control",
+          "pwsh_source",
+          "historical_ext4_runtime11",
+          "current_ext4_runtime11",
+          "current_ext4_runtime14"
+        ],
+        [
+          "current_singlefile_eviction_requested",
+          "current_ext4_runtime14",
+          "current_ext4_runtime11",
+          "historical_ext4_runtime11",
+          "pwsh_source",
+          "managed_print_only_control",
+          "current_native_aot",
+          "current_multifile_runtime14",
+          "current_drvfs_runtime14"
+        ],
+        [
+          "current_multifile_runtime14",
+          "current_native_aot",
+          "managed_print_only_control",
+          "pwsh_source",
+          "historical_ext4_runtime11",
+          "current_ext4_runtime11",
+          "current_ext4_runtime14",
+          "current_singlefile_eviction_requested",
+          "current_drvfs_runtime14"
+        ],
+        [
+          "current_multifile_runtime14",
+          "current_drvfs_runtime14",
+          "current_singlefile_eviction_requested",
+          "current_ext4_runtime14",
+          "current_ext4_runtime11",
+          "historical_ext4_runtime11",
+          "pwsh_source",
+          "managed_print_only_control",
+          "current_native_aot"
+        ],
+        [
+          "managed_print_only_control",
+          "pwsh_source",
+          "historical_ext4_runtime11",
+          "current_ext4_runtime11",
+          "current_ext4_runtime14",
+          "current_singlefile_eviction_requested",
+          "current_drvfs_runtime14",
+          "current_multifile_runtime14",
+          "current_native_aot"
+        ],
+        [
+          "managed_print_only_control",
+          "current_native_aot",
+          "current_multifile_runtime14",
+          "current_drvfs_runtime14",
+          "current_singlefile_eviction_requested",
+          "current_ext4_runtime14",
+          "current_ext4_runtime11",
+          "historical_ext4_runtime11",
+          "pwsh_source"
+        ],
+        [
+          "historical_ext4_runtime11",
+          "current_ext4_runtime11",
+          "current_ext4_runtime14",
+          "current_singlefile_eviction_requested",
+          "current_drvfs_runtime14",
+          "current_multifile_runtime14",
+          "current_native_aot",
+          "managed_print_only_control",
+          "pwsh_source"
+        ],
+        [
+          "historical_ext4_runtime11",
+          "pwsh_source",
+          "managed_print_only_control",
+          "current_native_aot",
+          "current_multifile_runtime14",
+          "current_drvfs_runtime14",
+          "current_singlefile_eviction_requested",
+          "current_ext4_runtime14",
+          "current_ext4_runtime11"
+        ],
+        [
+          "current_ext4_runtime14",
+          "current_singlefile_eviction_requested",
+          "current_drvfs_runtime14",
+          "current_multifile_runtime14",
+          "current_native_aot",
+          "managed_print_only_control",
+          "pwsh_source",
+          "historical_ext4_runtime11",
+          "current_ext4_runtime11"
+        ],
+        [
+          "current_ext4_runtime14",
+          "current_ext4_runtime11",
+          "historical_ext4_runtime11",
+          "pwsh_source",
+          "managed_print_only_control",
+          "current_native_aot",
+          "current_multifile_runtime14",
+          "current_drvfs_runtime14",
+          "current_singlefile_eviction_requested"
+        ],
+        [
+          "current_drvfs_runtime14",
+          "current_multifile_runtime14",
+          "current_native_aot",
+          "managed_print_only_control",
+          "pwsh_source",
+          "historical_ext4_runtime11",
+          "current_ext4_runtime11",
+          "current_ext4_runtime14",
+          "current_singlefile_eviction_requested"
+        ],
+        [
+          "current_drvfs_runtime14",
+          "current_singlefile_eviction_requested",
+          "current_ext4_runtime14",
+          "current_ext4_runtime11",
+          "historical_ext4_runtime11",
+          "pwsh_source",
+          "managed_print_only_control",
+          "current_native_aot",
+          "current_multifile_runtime14"
+        ],
+        [
+          "current_native_aot",
+          "managed_print_only_control",
+          "pwsh_source",
+          "historical_ext4_runtime11",
+          "current_ext4_runtime11",
+          "current_ext4_runtime14",
+          "current_singlefile_eviction_requested",
+          "current_drvfs_runtime14",
+          "current_multifile_runtime14"
+        ],
+        [
+          "current_native_aot",
+          "current_multifile_runtime14",
+          "current_drvfs_runtime14",
+          "current_singlefile_eviction_requested",
+          "current_ext4_runtime14",
+          "current_ext4_runtime11",
+          "historical_ext4_runtime11",
+          "pwsh_source",
+          "managed_print_only_control"
+        ],
+        [
+          "pwsh_source",
+          "historical_ext4_runtime11",
+          "current_ext4_runtime11",
+          "current_ext4_runtime14",
+          "current_singlefile_eviction_requested",
+          "current_drvfs_runtime14",
+          "current_multifile_runtime14",
+          "current_native_aot",
+          "managed_print_only_control"
+        ],
+        [
+          "pwsh_source",
+          "managed_print_only_control",
+          "current_native_aot",
+          "current_multifile_runtime14",
+          "current_drvfs_runtime14",
+          "current_singlefile_eviction_requested",
+          "current_ext4_runtime14",
+          "current_ext4_runtime11",
+          "historical_ext4_runtime11"
+        ],
+        [
+          "current_ext4_runtime11",
+          "current_ext4_runtime14",
+          "current_singlefile_eviction_requested",
+          "current_drvfs_runtime14",
+          "current_multifile_runtime14",
+          "current_native_aot",
+          "managed_print_only_control",
+          "pwsh_source",
+          "historical_ext4_runtime11"
+        ],
+        [
+          "current_ext4_runtime11",
+          "historical_ext4_runtime11",
+          "pwsh_source",
+          "managed_print_only_control",
+          "current_native_aot",
+          "current_multifile_runtime14",
+          "current_drvfs_runtime14",
+          "current_singlefile_eviction_requested",
+          "current_ext4_runtime14"
+        ]
+      ],
+      "samples": [
+        {
+          "wallMs": 5.167,
+          "userMs": 4.694,
+          "systemMs": 0.0,
+          "minorFaults": 499,
+          "majorFaults": 0
+        },
+        {
+          "wallMs": 3.75,
+          "userMs": 0.0,
+          "systemMs": 3.127,
+          "minorFaults": 497,
+          "majorFaults": 0
+        },
+        {
+          "wallMs": 4.306,
+          "userMs": 1.928,
+          "systemMs": 1.928,
+          "minorFaults": 498,
+          "majorFaults": 0
+        },
+        {
+          "wallMs": 3.856,
+          "userMs": 3.43,
+          "systemMs": 0.0,
+          "minorFaults": 499,
+          "majorFaults": 0
+        },
+        {
+          "wallMs": 3.835,
+          "userMs": 0.0,
+          "systemMs": 3.463,
+          "minorFaults": 499,
+          "majorFaults": 0
+        },
+        {
+          "wallMs": 3.83,
+          "userMs": 0.0,
+          "systemMs": 3.428,
+          "minorFaults": 497,
+          "majorFaults": 0
+        },
+        {
+          "wallMs": 3.692,
+          "userMs": 0.0,
+          "systemMs": 3.293,
+          "minorFaults": 499,
+          "majorFaults": 0
+        },
+        {
+          "wallMs": 3.894,
+          "userMs": 0.0,
+          "systemMs": 3.397,
+          "minorFaults": 495,
+          "majorFaults": 0
+        },
+        {
+          "wallMs": 3.797,
+          "userMs": 0.0,
+          "systemMs": 3.405,
+          "minorFaults": 499,
+          "majorFaults": 0
+        },
+        {
+          "wallMs": 3.801,
+          "userMs": 0.0,
+          "systemMs": 3.395,
+          "minorFaults": 498,
+          "majorFaults": 0
+        },
+        {
+          "wallMs": 4.006,
+          "userMs": 3.626,
+          "systemMs": 0.0,
+          "minorFaults": 497,
+          "majorFaults": 0
+        },
+        {
+          "wallMs": 4.037,
+          "userMs": 0.0,
+          "systemMs": 3.231,
+          "minorFaults": 497,
+          "majorFaults": 0
+        },
+        {
+          "wallMs": 3.64,
+          "userMs": 0.0,
+          "systemMs": 3.484,
+          "minorFaults": 496,
+          "majorFaults": 0
+        },
+        {
+          "wallMs": 3.899,
+          "userMs": 3.491,
+          "systemMs": 0.0,
+          "minorFaults": 498,
+          "majorFaults": 0
+        },
+        {
+          "wallMs": 3.934,
+          "userMs": 0.0,
+          "systemMs": 3.546,
+          "minorFaults": 499,
+          "majorFaults": 0
+        },
+        {
+          "wallMs": 3.736,
+          "userMs": 0.0,
+          "systemMs": 3.328,
+          "minorFaults": 497,
+          "majorFaults": 0
+        },
+        {
+          "wallMs": 3.879,
+          "userMs": 3.472,
+          "systemMs": 0.0,
+          "minorFaults": 498,
+          "majorFaults": 0
+        },
+        {
+          "wallMs": 3.848,
+          "userMs": 0.0,
+          "systemMs": 3.395,
+          "minorFaults": 497,
+          "majorFaults": 0
+        },
+        {
+          "wallMs": 3.591,
+          "userMs": 0.0,
+          "systemMs": 3.197,
+          "minorFaults": 497,
+          "majorFaults": 0
+        },
+        {
+          "wallMs": 4.078,
+          "userMs": 0.0,
+          "systemMs": 3.555,
+          "minorFaults": 496,
+          "majorFaults": 0
+        },
+        {
+          "wallMs": 3.771,
+          "userMs": 3.239,
+          "systemMs": 0.0,
+          "minorFaults": 498,
+          "majorFaults": 0
+        },
+        {
+          "wallMs": 3.946,
+          "userMs": 3.302,
+          "systemMs": 0.0,
+          "minorFaults": 498,
+          "majorFaults": 0
+        },
+        {
+          "wallMs": 4.004,
+          "userMs": 0.0,
+          "systemMs": 3.589,
+          "minorFaults": 499,
+          "majorFaults": 0
+        },
+        {
+          "wallMs": 3.82,
+          "userMs": 3.409,
+          "systemMs": 0.0,
+          "minorFaults": 499,
+          "majorFaults": 0
+        },
+        {
+          "wallMs": 3.986,
+          "userMs": 0.0,
+          "systemMs": 3.574,
+          "minorFaults": 499,
+          "majorFaults": 0
+        },
+        {
+          "wallMs": 3.649,
+          "userMs": 3.26,
+          "systemMs": 0.0,
+          "minorFaults": 497,
+          "majorFaults": 0
+        },
+        {
+          "wallMs": 4.177,
+          "userMs": 0.0,
+          "systemMs": 3.859,
+          "minorFaults": 496,
+          "majorFaults": 0
+        },
+        {
+          "wallMs": 3.86,
+          "userMs": 0.0,
+          "systemMs": 3.447,
+          "minorFaults": 498,
+          "majorFaults": 0
+        },
+        {
+          "wallMs": 4.679,
+          "userMs": 0.0,
+          "systemMs": 4.203,
+          "minorFaults": 498,
+          "majorFaults": 0
+        },
+        {
+          "wallMs": 4.198,
+          "userMs": 0.0,
+          "systemMs": 4.004,
+          "minorFaults": 499,
+          "majorFaults": 0
+        },
+        {
+          "wallMs": 3.73,
+          "userMs": 0.0,
+          "systemMs": 3.367,
+          "minorFaults": 497,
+          "majorFaults": 0
+        },
+        {
+          "wallMs": 3.767,
+          "userMs": 3.393,
+          "systemMs": 0.0,
+          "minorFaults": 497,
+          "majorFaults": 0
+        },
+        {
+          "wallMs": 3.98,
+          "userMs": 1.61,
+          "systemMs": 1.61,
+          "minorFaults": 497,
+          "majorFaults": 0
+        },
+        {
+          "wallMs": 4.37,
+          "userMs": 0.0,
+          "systemMs": 4.028,
+          "minorFaults": 497,
+          "majorFaults": 0
+        },
+        {
+          "wallMs": 4.049,
+          "userMs": 0.0,
+          "systemMs": 3.419,
+          "minorFaults": 499,
+          "majorFaults": 0
+        },
+        {
+          "wallMs": 3.882,
+          "userMs": 0.0,
+          "systemMs": 3.479,
+          "minorFaults": 496,
+          "majorFaults": 0
+        },
+        {
+          "wallMs": 3.874,
+          "userMs": 3.366,
+          "systemMs": 0.0,
+          "minorFaults": 499,
+          "majorFaults": 0
+        },
+        {
+          "wallMs": 4.049,
+          "userMs": 0.0,
+          "systemMs": 3.649,
+          "minorFaults": 499,
+          "majorFaults": 0
+        },
+        {
+          "wallMs": 3.95,
+          "userMs": 0.0,
+          "systemMs": 3.42,
+          "minorFaults": 500,
+          "majorFaults": 0
+        },
+        {
+          "wallMs": 3.971,
+          "userMs": 3.517,
+          "systemMs": 0.0,
+          "minorFaults": 498,
+          "majorFaults": 0
+        },
+        {
+          "wallMs": 3.962,
+          "userMs": 0.0,
+          "systemMs": 3.56,
+          "minorFaults": 497,
+          "majorFaults": 0
+        },
+        {
+          "wallMs": 3.926,
+          "userMs": 0.0,
+          "systemMs": 3.532,
+          "minorFaults": 498,
+          "majorFaults": 0
+        },
+        {
+          "wallMs": 3.811,
+          "userMs": 0.0,
+          "systemMs": 3.638,
+          "minorFaults": 497,
+          "majorFaults": 0
+        },
+        {
+          "wallMs": 3.66,
+          "userMs": 0.0,
+          "systemMs": 3.293,
+          "minorFaults": 497,
+          "majorFaults": 0
+        },
+        {
+          "wallMs": 3.712,
+          "userMs": 3.343,
+          "systemMs": 0.0,
+          "minorFaults": 498,
+          "majorFaults": 0
+        },
+        {
+          "wallMs": 3.699,
+          "userMs": 0.0,
+          "systemMs": 3.305,
+          "minorFaults": 499,
+          "majorFaults": 0
+        },
+        {
+          "wallMs": 3.878,
+          "userMs": 0.0,
+          "systemMs": 3.763,
+          "minorFaults": 497,
+          "majorFaults": 0
+        },
+        {
+          "wallMs": 3.716,
+          "userMs": 0.0,
+          "systemMs": 3.35,
+          "minorFaults": 498,
+          "majorFaults": 0
+        }
+      ],
+      "summary": {
+        "p50": 3.878,
+        "p95": 4.37,
+        "min": 3.591,
+        "max": 5.167,
+        "over100": 0,
+        "p50User": 0.0,
+        "p50System": 3.367
+      },
+      "sourceSummary": {
+        "p50": 273.658,
+        "p95": 309.541,
+        "min": 234.376,
+        "max": 337.011,
+        "over100": 48,
+        "p50User": 225.39,
+        "p50System": 110.364
+      }
+    },
+    {
+      "record": "2026-11-18-windows-corpus.json",
+      "compilerSourceCommit": "4de8da59af7e2b58242dee5303b429ea5b0c63e6",
+      "host": {
+        "runtimeIdentifier": "win-x64",
+        "operatingSystem": "Microsoft Windows 10.0.26300",
+        "architecture": "X64",
+        "powerShell": "7.6.9",
+        "dotnet": "10.0.404"
+      },
+      "deployment": "FrameworkDependent",
+      "runtime": "Microsoft.NETCore.App 10.0.15",
+      "runtimeLocation": "C:/Program Files/dotnet/shared/Microsoft.NETCore.App/10.0.15",
+      "runtimeFileSystem": "NTFS",
+      "executableFileSystem": "NTFS",
+      "artifactSha256": "9bdef115ce160f6aee5cb5efa3bee386a9c9ca91f65fa1dc77ff0019d58ec755",
+      "startup": {
+        "runtimeStorage": {
+          "checked": false,
+          "reason": "Linux mount check only"
+        },
+        "warmupsPerSurface": 1,
+        "samples": 6,
+        "orderPolicy": "AlternatingPairs",
+        "order": [
+          "source-first",
+          "artifact-first",
+          "source-first",
+          "artifact-first",
+          "source-first",
+          "artifact-first"
+        ],
+        "sourceMilliseconds": [
+          397.0,
+          454.0,
+          427.0,
+          406.0,
+          415.0,
+          579.0
+        ],
+        "artifactMilliseconds": [
+          85.0,
+          76.0,
+          75.0,
+          84.0,
+          79.0,
+          82.0
+        ],
+        "sourceP50Milliseconds": 415.0,
+        "sourceP95Milliseconds": 579.0,
+        "artifactP50Milliseconds": 79.0,
+        "artifactP95Milliseconds": 85.0,
+        "artifactToSourceP50Ratio": 0.19
+      },
+      "sourceHost": {
+        "powerShell": "7.6.9",
+        "runtime": ".NET 10.0.14",
+        "runtimeLocation": "<PowerShellHostRoot>",
+        "executablePath": "<PowerShellHostRoot>/pwsh.exe",
+        "executableSha256": "2a6769a3330dc1084d0154bfde7d164ab750ca7f700f313f9d417c1be78b2233",
+        "observedAfterMeasurementUtc": "2026-11-18T10:54:45.4317992+01:00",
+        "runtimeLayout": "Self-contained PowerShell host; installation prefix omitted."
+      },
+      "runtimeStorageRecord": "2026-11-18-windows-runtime-storage.json"
+    }
+  ]
+}

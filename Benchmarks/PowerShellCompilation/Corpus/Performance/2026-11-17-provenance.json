@@ -1,0 +1,79 @@
+{
+  "schemaVersion": 1,
+  "recordedOn": "2026-11-17",
+  "sourceCommit": "4fa2c7321ab9d30e74eec9820f05e713c8736221",
+  "historicalSourceCommit": "6a7046a7161bc5d1bdfacbf98bf769fadc019630",
+  "host": {
+    "operatingSystem": "Ubuntu 24.04.3 LTS on WSL2",
+    "architecture": "x86_64",
+    "kernel": "6.18.33.2-microsoft-standard-WSL2",
+    "processorPlacement": "All 32 logical processors available; no fixed CPU domain."
+  },
+  "pathRedaction": "Private home and Windows scratch prefixes use $HOME and /mnt/d/<historical-scratch>; timings and hashes are unchanged.",
+  "runtimeLocationComparison": {
+    "record": "2026-11-17-runtime-location-ab.json",
+    "runtime": "Microsoft.NETCore.App 10.0.11",
+    "windowsRuntimeFileSystem": "9p",
+    "nativeRuntimeFileSystem": "ext4",
+    "identicalRuntimeFiles": 190,
+    "exactOriginalTailReproduced": false
+  },
+  "enforcedStrict": {
+    "record": "2026-11-17-current-enforced.json",
+    "sdk": "10.0.303",
+    "runtime": "Microsoft.NETCore.App 10.0.11",
+    "runtimeRoot": "$HOME/.cache/powerforge-sdk-10.0.303",
+    "runtimeFileSystem": "ext4",
+    "executableFileSystem": "ext4"
+  },
+  "nativeAot": {
+    "record": "2026-11-17-startup-samples.json",
+    "samplesKey": "current_native_aot",
+    "sdk": "10.0.403",
+    "compiledRuntime": "10.0.14",
+    "runtimeLocation": "NativeAOT embeds the runtime; launched with DOTNET_ROOT pointing to a nonexistent directory.",
+    "executableFileSystem": "ext4",
+    "artifactSha256": "ae401bcd759a22d37a1f0826bcc0d320f707c4451155227c44e1a3cc8db3c513",
+    "artifactBytes": 3128296,
+    "requiresPowerShellRuntime": false,
+    "resourceSummary": {
+      "includedFiles": 1,
+      "includedBytes": 12,
+      "requiredFiles": 0,
+      "requiredBytes": 0,
+      "inferredFiles": 0,
+      "inferredBytes": 0,
+      "excludedFiles": 0,
+      "excludedBytes": 0,
+      "unclassifiedFiles": 0,
+      "unclassifiedBytes": 0
+    },
+    "generatedSourceSha256": "d7a1d86df17ac7dffbd776eb3bc69c19fe5c1debbe6138a029c78c8f050efb2b",
+    "sourceFiles": [
+      "StrictApplication/Main.ps1",
+      "StrictApplication/Model.ps1",
+      "StrictApplication/Aggregation.ps1",
+      "StrictApplication/Report.ps1"
+    ],
+    "buildOptions": "--kind exe --mode Strict --framework net10.0 --rid linux-x64 --optimization NativeAot --self-contained --include-resource report-label.txt --allow-unreviewed-dependencies",
+    "toolchainReason": "SDK 10.0.303 selected ILCompiler 10.0.11, rejected by NuGet vulnerability checking; the successful NativeAOT build used SDK 10.0.403 without disabling the check."
+  },
+  "originals": [
+    {
+      "file": "runtime-location-ab.json",
+      "sha256": "6542eec16729573d57c1b39889ccbe6da512a696938bd4c355b5278f6da1b2cb"
+    },
+    {
+      "file": "current-enforced.json",
+      "sha256": "743c9d5ed594351a7a681926558b81fa745a8b2028afbd119d029397d3c7297e"
+    },
+    {
+      "file": "startup-samples.json",
+      "sha256": "f34a6f3c065e124362bb1807570d088a621e0c256c514b6efdd2ab3c64809a7d"
+    },
+    {
+      "file": "historical-six-samples.json",
+      "sha256": "a5e4071f546020b1fef4c698e3138c71ee40b325808ff5e79625c4b2e5cb9389"
+    }
+  ]
+}

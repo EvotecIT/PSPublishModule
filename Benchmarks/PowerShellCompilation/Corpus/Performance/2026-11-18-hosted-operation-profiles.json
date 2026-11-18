@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 1,
+  "compilerSourceCommit": "1650b546c4eb14b7c5ef6ce68aed8137473dd8c9",
+  "host": {
+    "operatingSystem": "Microsoft Windows 10.0.26300",
+    "architecture": "X64",
+    "powerShell": "7.6.9",
+    "runtime": ".NET 10.0.14",
+    "runtimeLocation": "<PowerShellHostRoot>",
+    "logicalProcessors": 32,
+    "priority": "Normal",
+    "affinity": "FFFFFFFF",
+    "cpu": "AMD Ryzen 9 9950X3D2 16-Core Processor",
+    "powerPlan": "Power Scheme GUID: 8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c  (High performance)",
+    "runtimeLayout": "Self-contained PowerShell host; installation prefix omitted. Timing samples are unchanged.",
+    "executableSha256": "2a6769a3330dc1084d0154bfde7d164ab750ca7f700f313f9d417c1be78b2233",
+    "coreClrSha256": "1bc65b8d45474b19adf3ca85ce881087aff599ffc72b2c1a323e878227757b65",
+    "smaSha256": "e767f5c26347b254dd06fa0b65e18424cc4eb93fc3102c5a8fdd9dd88355db97",
+    "physicalCores": 16
+  },
+  "tool": "dotnet-trace",
+  "toolVersion": "10.0.750501",
+  "profile": "dotnet-sampled-thread-time",
+  "requestedDurationSeconds": 12,
+  "scope": "Separate diagnostic processes include startup, import and repeated exact packet probes. They are not the unprofiled timing samples. Percentages in text exports include waiting threads and are not latency speedups.",
+  "packetSha256": "ef64781013a85a48701dd6334435facce8f8bec5c1ecc1a36817b8e4d300b00e",
+  "workloads": [
+    {
+      "typedAssemblySha256": "5f61f51a25c10b14d16f8524bb2fe83bdc25746f2146f99289840afdec4094df",
+      "artifactSha256": "fe841eef6b910bf4bbe6c22bca6ca28fc518a4cb14719073de9ca77824512f76",
+      "id": "powershell-yaml",
+      "requestedProbeCalls": 100,
+      "record": "yaml-warm-stack.txt"
+    },
+    {
+      "typedAssemblySha256": "578eeb403985be0148c6271256a51b03011c3ccfffe9f6138e319f8534b5c3ca",
+      "artifactSha256": "47915084fbecbb16d79035cd18da0cd0a3607cab1a45ee160359cf3d03a35018",
+      "id": "Microsoft.PowerShell.Archive",
+      "requestedProbeCalls": 20,
+      "record": "archive-warm-stack.txt"
+    }
+  ],
+  "reproduction": "Import the indicated verified Hybrid manifest once in the recorded host; create the declared packet probe ScriptBlock once and invoke it repeatedly. Collect dotnet-trace with --profile dotnet-sampled-thread-time --duration 00:00:00:12, then report topN --number 160 --inclusive --verbose."
+}

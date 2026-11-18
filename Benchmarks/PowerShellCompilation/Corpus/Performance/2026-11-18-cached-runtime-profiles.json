@@ -1,0 +1,60 @@
+{
+  "schemaVersion": 1,
+  "compilerSourceCommit": "62aa73f9017cdb37eea8ad22738c7fc8d1e82379",
+  "host": {
+    "operatingSystem": "Microsoft Windows 10.0.26300",
+    "architecture": "X64",
+    "powerShell": "7.6.9",
+    "runtime": ".NET 10.0.14",
+    "runtimeLocation": "<PowerShellHostRoot>",
+    "logicalProcessors": 32,
+    "priority": "Normal",
+    "affinity": "FFFFFFFF",
+    "cpu": "AMD Ryzen 9 9950X3D2 16-Core Processor",
+    "powerPlan": "Power Scheme GUID: 8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c  (High performance)",
+    "runtimeLayout": "Self-contained PowerShell host; installation prefix omitted. Timing samples are unchanged.",
+    "executableSha256": "2a6769a3330dc1084d0154bfde7d164ab750ca7f700f313f9d417c1be78b2233",
+    "coreClrSha256": "1bc65b8d45474b19adf3ca85ce881087aff599ffc72b2c1a323e878227757b65",
+    "smaSha256": "e767f5c26347b254dd06fa0b65e18424cc4eb93fc3102c5a8fdd9dd88355db97",
+    "physicalCores": 16
+  },
+  "tool": "dotnet-trace",
+  "toolVersion": "10.0.750501",
+  "profile": "dotnet-sampled-thread-time",
+  "requestedDurationSeconds": 20,
+  "packetSha256": "ef64781013a85a48701dd6334435facce8f8bec5c1ecc1a36817b8e4d300b00e",
+  "scope": "Separate diagnostic processes include host initialization, import and exact packet probes. Percentages include waiting threads and are not latency speedups. PSFramework collection ended before its completion message; that trace is not a functional pass.",
+  "workloads": [
+    {
+      "id": "PSFramework",
+      "state": "Remove/import/probe repetitions",
+      "requestedProbeCalls": 6,
+      "completedRequestedCalls": false,
+      "artifactSha256": "806e8f3ca909223f2a62bf53c9361a102a4c9c3992b06be79dcbf9d36950add5",
+      "typedAssemblySha256": "36cfd9228a7d1c380517a1894080e6648631b87eef62dfa00e9cbcb96663ff6f",
+      "traceSha256": "4bb456fb89c4e8e5d499ee87839fcad6e30ae16a4fe2fc32f8814c0f17c688f4",
+      "record": "cached-psframework-import-stack.txt"
+    },
+    {
+      "id": "powershell-yaml",
+      "state": "One import then repeated probes",
+      "requestedProbeCalls": 400,
+      "completedRequestedCalls": true,
+      "artifactSha256": "fe841eef6b910bf4bbe6c22bca6ca28fc518a4cb14719073de9ca77824512f76",
+      "typedAssemblySha256": "bb281a4176e2bb1e6e97b50c80999f9079ede45a667cfc488bd52bec1155296b",
+      "traceSha256": "8fce186c65b83055282492cc4800c98052d610a4b5603cbfa2de54aa8802d2be",
+      "record": "cached-yaml-warm-stack.txt"
+    },
+    {
+      "id": "Microsoft.PowerShell.Archive",
+      "state": "One import then repeated probes",
+      "requestedProbeCalls": 50,
+      "completedRequestedCalls": true,
+      "artifactSha256": "47915084fbecbb16d79035cd18da0cd0a3607cab1a45ee160359cf3d03a35018",
+      "typedAssemblySha256": "06a7bfd6d834254570575973e3d7629d8908c70386e00f0cbf405d40b4ec095a",
+      "traceSha256": "5edc5f5b7557e9674b6ca085cdca7398afac9e655b91a52b07a216610768f40e",
+      "record": "cached-archive-warm-stack.txt"
+    }
+  ],
+  "reproduction": "Use the recorded host and verified artifacts from the updated compiler. For PSFramework remove/import and run its packet probe each time. For YAML/Archive import once and repeat the exact packet probe. Collect dotnet-trace --profile dotnet-sampled-thread-time --duration 00:00:00:20, then report topN --number 160 --inclusive --verbose."
+}

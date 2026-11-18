@@ -69,8 +69,38 @@ a provisionable package for current hosted runner images.
 All six small Strict programs built and passed on Windows x64 in this run. The [user guide](PowerForge.PowerShellCompilation.Guide.md)
 contains two additional small Strict examples built and executed for this change.
 
-Earlier speedup tables were removed because their raw samples were not committed.
+The Strict startup measurements now include committed raw samples and runtime
+locations. On Ubuntu 24.04 under WSL2, with both the executable and .NET on ext4,
+the 2026-11-17 framework-dependent run measured **25 ms p50 / 26 ms p95**. The
+2026-11-18 run measured **32/35 ms**, versus **242/278 ms** for source, using
+SDK 10.0.403 and .NET 10.0.14. Both passed the existing **100/250 ms** budgets.
+Windows x64 measured **79/85 ms**, versus **415/579 ms** for source, with
+.NET 10.0.15 on the same development host; its startup budgets also passed.
+The separate Linux NativeAOT comparison measured **3.878/4.370 ms** across 48
+launches. These are measurements of the small Strict application, with warmed OS
+caches, on one development host; they do not predict arbitrary module performance.
+See the [startup records](../Benchmarks/PowerShellCompilation/Corpus/Performance/startup-evidence.json)
+for exact commits, hosts, deployment details and every sample.
+
 The [2026-10-16 Linux result](../Benchmarks/PowerShellCompilation/Corpus/m29a-whole-workflow-qualification.json)
-still records **346 ms p50 / 1,506 ms p95** against **100 ms / 250 ms** budgets,
-and an artifact/source p50 ratio of **1.113** against **0.75**. Performance remains
-unqualified. The cause is unresolved; Windows results do not establish a Linux fix.
+is retained as a superseded startup measurement: its **346/1,506 ms** result
+loaded .NET from a Windows-mounted **9p** filesystem even though the executable
+was on ext4. A controlled comparison of identical runtime files measured
+**273.444 ms p50** on 9p and **24.571 ms** on ext4. It establishes the runtime
+location cost without reproducing the original tail exactly. The
+[raw comparison](../Benchmarks/PowerShellCompilation/Corpus/Performance/2026-11-17-runtime-location-ab.json)
+preserves both sets of samples. The timing runner now checks the resolved Linux
+runtime libraries with `findmnt` and refuses 9p/drvfs or unresolved locations
+before measuring startup, including with `-PerformancePolicy RecordOnly`.
+
+The [Gallery performance comparison](performance/powershell-compiler.md#hybrid-modules-versus-source)
+records separate first-import, reimport, first-invocation and loaded-module
+invocation measurements for all ten modules. Hybrid first-import p50 is slower
+in **10 of 10 modules**, and reimport p50 is slower in **8 of 10**. All declared
+probes pass and the export counts match, but these results do not establish a
+general Hybrid speedup. The runtime now reuses parsed assignment documents and
+command-region plans within their defining PowerShell context. A separate,
+alternating revision comparison measured **2.59x** and **4.45x** lower loaded-call
+p50 for YAML and Archive after command-plan reuse. Both still trail source;
+remaining assignment/storage preparation has samples and profiles recorded for
+the next performance milestone in the linked report.
