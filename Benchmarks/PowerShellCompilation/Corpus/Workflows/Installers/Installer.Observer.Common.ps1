@@ -49,7 +49,10 @@ function Initialize-InstallerObservation {
     Import-Module Microsoft.PowerShell.Management, Microsoft.PowerShell.Utility, Microsoft.PowerShell.Security, Microsoft.PowerShell.Archive -ErrorAction Stop
     # Initialize the Windows socket provider before replacing HKLM; its protocol
     # catalog is real host infrastructure, outside the installer's environment keys.
-    $metadata = Microsoft.PowerShell.Utility\Invoke-RestMethod -Uri ($identity.origin + '/metadata.json') -UseBasicParsing
+    $client = [Net.WebClient]::new()
+    $client.Proxy = $null
+    try { $metadata = $client.DownloadString($identity.origin + '/metadata.json') | ConvertFrom-Json }
+    finally { $client.Dispose() }
     if ($metadata.ReleaseTag -cne 'v7.6.6') { throw 'The pinned transport fixture did not respond.' }
     Add-Type -Path (Join-Path $PSScriptRoot 'InstallerRegistryScope.cs')
     $scope = [PowerForge.Corpus.InstallerRegistryScope]::new($PSHOME)

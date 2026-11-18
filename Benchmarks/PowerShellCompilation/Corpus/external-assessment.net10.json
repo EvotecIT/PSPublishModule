@@ -141,11 +141,11 @@
           ]
         },
         "observerScript": "Workflows/Installers/Observe-PowerShellInstaller.ps1",
-        "observerSha256": "34a9cc69cdae84ddae4d89521e07d221b02dabf2ac534b09bb174fb1558b1803",
+        "observerSha256": "5f2846458309f38a279e52ccc1db45105b0ecd1d232cf4d0cabecdc07f445089",
         "observerSupport": [
           {
             "path": "Workflows/Installers/Installer.Observer.Common.ps1",
-            "sha256": "db85f5429db0f3eac09832dcb200057743f45315200b5fd94f63eb1d75e4c259"
+            "sha256": "bc525206155d2c334f27893970cfeefe49348bf3073e111de0276cb4f77d5a23"
           },
           {
             "path": "Workflows/Installers/InstallerRegistryScope.cs",
@@ -161,11 +161,11 @@
         "fixtureSupport": [
           {
             "path": "Workflows/Installers/Invoke-InstallerFixture.ps1",
-            "sha256": "db032e8ec55854139733ac30f3754273a4993c51568d14c2ed2c76f64145b6f8"
+            "sha256": "61f65494c4e0db7779860082701923f750ed75c9f8f9c55df220b3df0f70b762"
           },
           {
             "path": "Workflows/Installers/Serve-InstallerPayloads.ps1",
-            "sha256": "b9e640b2c50820cf9bb517a912b91798a6aa9ddaec7ab8b499a69bc71aad57e1"
+            "sha256": "ab725874ea592c95a5137e8fcd8b927d67c69501681e3959f6af8c3c8d2638db"
           },
           {
             "path": "Workflows/Installers/Test-InstallerModule.ps1",
@@ -406,11 +406,11 @@
           ]
         },
         "observerScript": "Workflows/Installers/Observe-ScoopInstaller.ps1",
-        "observerSha256": "9ace0421832076a3a81dae658ac97294a9a1ba930c4a997d5fe521424ecad6c0",
+        "observerSha256": "840322a6fafb01ea168f8e02abe8b85c97df175f034d1729fc223731129018a1",
         "observerSupport": [
           {
             "path": "Workflows/Installers/Installer.Observer.Common.ps1",
-            "sha256": "db85f5429db0f3eac09832dcb200057743f45315200b5fd94f63eb1d75e4c259"
+            "sha256": "bc525206155d2c334f27893970cfeefe49348bf3073e111de0276cb4f77d5a23"
           },
           {
             "path": "Workflows/Installers/InstallerRegistryScope.cs",
@@ -426,11 +426,11 @@
         "fixtureSupport": [
           {
             "path": "Workflows/Installers/Invoke-InstallerFixture.ps1",
-            "sha256": "db032e8ec55854139733ac30f3754273a4993c51568d14c2ed2c76f64145b6f8"
+            "sha256": "61f65494c4e0db7779860082701923f750ed75c9f8f9c55df220b3df0f70b762"
           },
           {
             "path": "Workflows/Installers/Serve-InstallerPayloads.ps1",
-            "sha256": "b9e640b2c50820cf9bb517a912b91798a6aa9ddaec7ab8b499a69bc71aad57e1"
+            "sha256": "ab725874ea592c95a5137e8fcd8b927d67c69501681e3959f6af8c3c8d2638db"
           },
           {
             "path": "Workflows/Installers/Test-InstallerModule.ps1",

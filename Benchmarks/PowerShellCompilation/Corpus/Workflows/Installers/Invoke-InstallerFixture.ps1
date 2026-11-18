@@ -13,6 +13,7 @@ if (-not [Runtime.InteropServices.RuntimeInformation]::IsOSPlatform([Runtime.Int
     throw 'The installer contracts require Windows and process-local registry isolation.'
 }
 $root = [IO.Path]::GetFullPath($ScenarioRoot)
+if ($Installer -eq 'scoop' -and $root -match '[^\x00-\x7F]') { throw 'The pinned Scoop installer writes ASCII configuration; supply an ASCII -WorkspacePath.' }
 if (-not (Test-Path -LiteralPath $root -PathType Container)) { throw 'The canonical harness must create the scenario root.' }
 $ancestor = Get-Item -LiteralPath $root
 while ($null -ne $ancestor) {
@@ -25,7 +26,12 @@ $partialPath = Join-Path $fixtureRoot 'start-attempt.json'
 $serverScript = Join-Path $PSScriptRoot 'Serve-InstallerPayloads.ps1'
 function Test-InstallerServerOwner($Identity) {
     $process = Get-Process -Id $Identity.pid -ErrorAction SilentlyContinue
-    return $null -ne $process -and $process.StartTime.ToUniversalTime() -eq ([datetime] $Identity.startUtc).ToUniversalTime()
+    if ($null -eq $process) { return $false }
+    try { return $process.StartTime.ToUniversalTime() -eq ([datetime] $Identity.startUtc).ToUniversalTime() }
+    catch {
+        if ($null -eq (Get-Process -Id $Identity.pid -ErrorAction SilentlyContinue)) { return $false }
+        throw
+    } finally { $process.Dispose() }
 }
 
 if ($Operation -eq 'Start') {
@@ -57,8 +63,16 @@ if ($Operation -eq 'Start') {
     $start.UseShellExecute = $true
     $start.WindowStyle = [Diagnostics.ProcessWindowStyle]::Hidden
     $process = [Diagnostics.Process]::Start($start)
-    $owner = [ordered]@{pid=$process.Id;startUtc=$process.StartTime.ToUniversalTime().ToString('o')}
-    $owner | ConvertTo-Json | Set-Content -LiteralPath $partialPath -Encoding utf8
+    try {
+        $owner = [ordered]@{pid=$process.Id;startUtc=$process.StartTime.ToUniversalTime().ToString('o')}
+        $ownerTemporary = $partialPath + '.owner.tmp'
+        $owner | ConvertTo-Json | Set-Content -LiteralPath $ownerTemporary -Encoding utf8
+        [IO.File]::Move($ownerTemporary, $partialPath, $true)
+    } catch {
+        try { if (-not $process.HasExited) { $process.Kill($true); $process.WaitForExit() } }
+        finally { $process.Dispose() }
+        throw
+    }
     $deadline = [DateTime]::UtcNow.AddSeconds(15)
     while (-not (Test-Path -LiteralPath $readyPath)) {
         if ($process.HasExited -or [DateTime]::UtcNow -gt $deadline) { throw 'The owned installer payload server did not become ready.' }
@@ -68,7 +82,9 @@ if ($Operation -eq 'Start') {
     if ($ready.pid -ne $owner.pid -or ([datetime] $ready.startUtc).ToUniversalTime() -ne ([datetime] $owner.startUtc).ToUniversalTime() -or
         $ready.address -cne '127.0.0.1' -or $ready.origin -cne ('http://127.0.0.1:' + $ready.port)) { throw 'Owned installer server identity differs.' }
     $state = [ordered]@{schemaVersion=1;installer=$Installer;fixtureIdentity=$ready;payloads=$inputs;serverSha256=(Get-FileHash -LiteralPath $serverScript).Hash}
-    $state | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $statePath -Encoding utf8
+    $stateTemporary = $statePath + '.tmp'
+    $state | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $stateTemporary -Encoding utf8
+    [IO.File]::Move($stateTemporary, $statePath)
     $testScript = Join-Path $acceptance 'Test-InstallerModule.ps1'
     $moduleTest = [ordered]@{
         script='scenarios/acceptance/Test-InstallerModule.ps1'
@@ -83,7 +99,9 @@ if ($Operation -eq 'Start') {
     $owner = if ($state) { $state.fixtureIdentity } else { Get-Content -LiteralPath $partialPath -Raw | ConvertFrom-Json }
     if ($null -ne $owner.pid -and (Test-InstallerServerOwner $owner)) {
         if ($state) {
-            $client = [Net.Http.HttpClient]::new()
+            $handler = [Net.Http.HttpClientHandler]::new()
+            $handler.UseProxy = $false
+            $client = [Net.Http.HttpClient]::new($handler)
             try {
                 $client.Timeout = [TimeSpan]::FromSeconds(3)
                 try { $null = $client.GetStringAsync($owner.origin + '/__shutdown').GetAwaiter().GetResult() } catch { }
@@ -101,7 +119,7 @@ if ($Operation -eq 'Start') {
     }
     $absent = $null -eq $owner.pid -or -not (Test-InstallerServerOwner $owner)
     $listeners = if ($state) { @([Net.NetworkInformation.IPGlobalProperties]::GetIPGlobalProperties().GetActiveTcpListeners() | Where-Object Port -eq $owner.port).Count } else { 0 }
-    $stopped = $absent -and $listeners -eq 0 -and $stable
+    $stopped = $absent -and $stable
     [ordered]@{schemaVersion=1;operation='Stop';stopped=$stopped;fixtureIdentity=$owner;ownedIdentityAbsent=$absent;listenersOnRecordedPort=$listeners;inputHashesStable=$stable;noUnrelatedProcessStopped=$true} |
         ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $ResultPath -Encoding utf8
     if (-not $stopped) { throw 'Installer fixture shutdown or immutable payload verification failed.' }

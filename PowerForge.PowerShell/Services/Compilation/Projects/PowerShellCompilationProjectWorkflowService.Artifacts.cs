@@ -113,6 +113,8 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
         {
             try
             {
+                var evidencePath = context.Resolve($".powerforge/test/{artifact.Name}.json");
+                if (File.Exists(evidencePath)) File.Delete(evidencePath);
                 var validated = ValidateBuildReceipt(context, artifact);
                 EnsureArtifactPayloadPaths(artifact, validated.OutputRoot, validated.Files);
                 TestArtifact(context, artifact, validated.ArtifactPath);

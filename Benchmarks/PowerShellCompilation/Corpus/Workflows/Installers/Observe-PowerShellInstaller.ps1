@@ -24,7 +24,10 @@ try {
         [CmdletBinding()]
         param([Parameter(Position=0)][uri] $Uri)
         if ($Uri.AbsoluteUri -cne 'https://raw.githubusercontent.com/PowerShell/PowerShell/master/tools/metadata.json') { throw 'Unexpected installer metadata request.' }
-        Microsoft.PowerShell.Utility\Invoke-RestMethod -Uri ($global:PowerForgeInstallerFixture.origin + '/metadata.json')
+        $client = [Net.WebClient]::new()
+        $client.Proxy = $null
+        try { $client.DownloadString($global:PowerForgeInstallerFixture.origin + '/metadata.json') | ConvertFrom-Json }
+        finally { $client.Dispose() }
     }
     function global:Invoke-WebRequest {
         [CmdletBinding()]
@@ -33,7 +36,10 @@ try {
         $path = [IO.Path]::GetFullPath($OutFile)
         $root = $global:PowerForgeInstallerFixture.root.TrimEnd('\') + '\'
         if (-not $path.StartsWith($root, [StringComparison]::OrdinalIgnoreCase)) { throw 'Installer download escapes its owned directory.' }
-        Microsoft.PowerShell.Utility\Invoke-WebRequest -Uri ($global:PowerForgeInstallerFixture.origin + '/powershell.zip') -OutFile $path -UseBasicParsing
+        $client = [Net.WebClient]::new()
+        $client.Proxy = $null
+        try { $client.DownloadFile($global:PowerForgeInstallerFixture.origin + '/powershell.zip', $path) }
+        finally { $client.Dispose() }
         $pin = @($global:PowerForgeInstallerFixture.state.payloads | Where-Object id -eq powershell)[0]
         if ((Get-FileHash -LiteralPath $path).Hash -ine $pin.sha256) { throw 'Transport changed pinned PowerShell payload bytes.' }
     }
@@ -61,6 +67,8 @@ try {
     $scenarios = [Collections.Generic.List[object]]::new()
     $installed = [ordered]@{version=$version;installedExecutableSha256=(Get-FileHash -LiteralPath $installedHost).Hash.ToLowerInvariant()}
     $scenarios.Add((New-InstallerScenario 'portable-install' 'install-powershell.ps1' @('Expand-ArchiveInternal', 'Remove-Destination') $installed))
+    $initialUserPath = $fixture.registry.ReadPath($false)
+    $initialMachinePath = $fixture.registry.ReadPath($true)
     $paths = & $module {
         param($Path, $Root)
         if (-not (Test-PathNotInSettings $Path)) { throw 'Fresh portable destination was rejected.' }
@@ -72,8 +80,8 @@ try {
         if ($failure -notlike '*Already in PATH*') { throw 'Duplicate PATH validation did not reject the installed directory.' }
         'user-and-machine-paths;duplicate-rejected'
     } $destination $fixture.root
-    if (-not $fixture.registry.ReadPath($false).EndsWith(';' + $destination, [StringComparison]::OrdinalIgnoreCase) -or
-        -not $fixture.registry.ReadPath($true).EndsWith(';' + (Join-Path $fixture.root 'machine-path'), [StringComparison]::OrdinalIgnoreCase)) { throw 'The installer did not update both isolated PATH values.' }
+    if ($fixture.registry.ReadPath($false) -cne ($initialUserPath + ';' + $destination) -or
+        $fixture.registry.ReadPath($true) -cne ($initialMachinePath + ';' + (Join-Path $fixture.root 'machine-path'))) { throw 'The installer did not preserve and append both isolated PATH values.' }
     $scenarios.Add((New-InstallerScenario 'isolated-path-registration' 'install-powershell.ps1' @('Test-PathNotInSettings', 'Add-PathTToSettings') $paths))
     $overwrite = & $module {
         param($Root)
@@ -85,7 +93,7 @@ try {
         if ($failure -notlike '*already exist*' -or -not (Test-Path -LiteralPath $path)) { throw 'Protected overwrite changed the destination.' }
         $script:DoNotOverwrite = $false
         Remove-Destination $path
-        if ((Get-Content -LiteralPath (Join-Path ($path + '.old') 'previous.txt') -Raw) -cne 'previous') { throw 'The previous installation was not preserved.' }
+        if ((Test-Path -LiteralPath $path) -or (Get-Content -LiteralPath (Join-Path ($path + '.old') 'previous.txt') -Raw) -cne 'previous') { throw 'The previous installation was not moved and preserved.' }
         'protected-and-preserved'
     } $fixture.root
     $scenarios.Add((New-InstallerScenario 'overwrite-contract' 'install-powershell.ps1' @('Remove-Destination') $overwrite))

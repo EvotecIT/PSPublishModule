@@ -76,6 +76,10 @@ the original script path variables. Schema-2 test evidence authenticates the
 acceptance-script hash as well as the project, target and artifact set. Default
 bare-import tests retain schema 1. Installer acceptance explicitly selects the
 pinned 7.6.6 observer through `POWERFORGE_PWSH76_PATH`.
+The Scoop fixture requires an ASCII workspace because the unchanged installer
+writes ASCII configuration. Its command environment excludes Git and pre-existing
+Scoop, and every observed installation requires exactly one successful request
+for each pinned repository ZIP. Loopback requests bypass inherited proxies.
 
 ## Artifact-aware discovery and the bounded compiler gate
 

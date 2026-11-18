@@ -183,10 +183,13 @@ transfer cases cover native and compiled loops, begin/process/end partial output
 finally, calls outside a loop and subsequent invocation. Exit cases cover ten
 value/computed-operand forms through a real child script, preserving native
 conversion, output, catch bypass, cleanup, script termination and host recovery.
+An integer-output function also preserves its normal return and native exit path.
 Project acceptance cases additionally compare three source encodings with native
 file execution on both hosts and reject changed script bytes and schema-1
-acceptance declarations. These checks preserve the distinct retained boundary
-for switch predicates that transfer outside their own bodies.
+acceptance declarations. A failed acceptance attempt invalidates the prior pass,
+so packing and installation require a new successful test. These checks preserve
+the distinct retained boundary for switch predicates that transfer outside their
+own bodies.
 
 ## Semantic and performance limits
 

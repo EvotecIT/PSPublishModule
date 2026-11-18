@@ -8,10 +8,13 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+if ([IO.Path]::GetFullPath($ScenarioRoot) -match '[^\x00-\x7F]') { throw 'The pinned Scoop installer writes ASCII configuration; supply an ASCII -WorkspacePath.' }
 . (Join-Path $PSScriptRoot 'Installer.Observer.Common.ps1')
 $fixture = Initialize-InstallerObservation $ScenarioRoot $Instance
 $env:CI = 'true'; $env:SCOOP_NOINSTALL = 'true'
 try {
+    $env:PATH = $PSHOME + [IO.Path]::PathSeparator + [Environment]::SystemDirectory
+    if (Microsoft.PowerShell.Core\Get-Command git, scoop -ErrorAction SilentlyContinue) { throw 'The installer fixture must make Git and pre-existing Scoop unavailable to native command discovery.' }
     if ($Surface -eq 'Original') {
         $module = New-Module -Name ScoopInstaller -ScriptBlock { param($Path) . $Path } -ArgumentList $ImportPath
         Import-Module $module -Force -DisableNameChecking
@@ -25,6 +28,8 @@ try {
         Import-Module $module -Force -DisableNameChecking
     }
     $scenarios = [Collections.Generic.List[object]]::new()
+    $requestLog = Join-Path $ScenarioRoot 'installer-fixture/requests.jsonl'
+    $requestStart = @(Get-Content -LiteralPath $requestLog).Count
     $installation = & $module {
         param($Origin)
         # The source explicitly supports loading its functions first and calling
@@ -78,6 +83,12 @@ try {
         Remove-Item -LiteralPath Function:\script:Get-Command
         'installed-two-repositories;three-shims;owned-configuration;powershell-and-cmd-help;unknown-command-exit-1'
     } $fixture.origin
+    $requests = @(Get-Content -LiteralPath $requestLog | Select-Object -Skip $requestStart | ForEach-Object { $_ | ConvertFrom-Json })
+    foreach ($id in 'scoop', 'main') {
+        $pin = @($fixture.state.payloads | Where-Object id -eq $id)[0]
+        $served = @($requests | Where-Object { $_.path -ceq ('/' + $id + '.zip') -and $_.status -eq 200 -and $_.bytes -eq $pin.bytes })
+        if ($served.Count -ne 1) { throw 'Installation did not consume exactly one complete request for each pinned repository ZIP.' }
+    }
     if ('installed-two-repositories;three-shims;owned-configuration;powershell-and-cmd-help;unknown-command-exit-1' -notin $installation -or
         'Scoop was installed successfully!' -notin $installation) { throw 'The complete installer did not report success.' }
     $installedFunctions = @('Install-Scoop', 'Test-Prerequisite', 'Test-ValidateParameter', 'Optimize-SecurityProtocol',
@@ -86,6 +97,7 @@ try {
         'Add-Config', 'Use-Config', 'Write-InstallInfo', 'Test-LanguageMode', 'Write-DebugInfo', 'Test-ShouldRunInstall', 'Test-IsAdministrator')
     if (-not $fixture.registry.ReadPath($false).Contains((Join-Path $env:SCOOP 'shims'))) { throw 'Scoop did not update its isolated user PATH.' }
     $messages = @($installation | ForEach-Object { $_.ToString().Replace($fixture.root, '{ROOT}') })
+    $messages += 'pinned-zip-requests:scoop=1;main=1'
     $scenarios.Add((New-InstallerScenario 'install-from-pinned-repositories' 'install.ps1' $installedFunctions $messages))
     $locked = & $module {
         param($Root)

@@ -100,6 +100,9 @@ Test verifies and captures the script bytes before execution, preserves
 `$PSCommandPath` and `$PSScriptRoot`, and records the acceptance hash in schema-2
 test evidence. Changed bytes fail qualification. Older project readers reject
 schema 2, while projects using default tests can keep schema 1.
+A new Test attempt invalidates the selected target's previous passing evidence
+before execution. A failed attempt therefore requires a fresh passing Test before
+Pack or Install can qualify that target.
 
 Executable artifacts can declare the literal argument vector and a project-relative working directory used by both Test and Install:
 

@@ -33,8 +33,10 @@ $listener = [Net.Sockets.TcpListener]::new([Net.IPAddress]::Loopback, 0)
 $listener.Start()
 $port = $listener.LocalEndpoint.Port
 $origin = 'http://127.0.0.1:' + $port
+$readyTemporary = $ReadyPath + '.' + [guid]::NewGuid().ToString('N') + '.tmp'
 [ordered]@{pid=$PID;startUtc=(Get-Process -Id $PID).StartTime.ToUniversalTime().ToString('o');port=$port;address='127.0.0.1';origin=$origin} |
-    ConvertTo-Json | Set-Content -LiteralPath $ReadyPath -Encoding utf8
+    ConvertTo-Json | Set-Content -LiteralPath $readyTemporary -Encoding utf8
+[IO.File]::Move($readyTemporary, $ReadyPath)
 $deadline = [DateTime]::UtcNow.AddSeconds($LeaseSeconds)
 $pending = $null
 try {

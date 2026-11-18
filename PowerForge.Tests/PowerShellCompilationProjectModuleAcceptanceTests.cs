@@ -113,6 +113,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         File.WriteAllText(scriptPath, """
             param([Parameter(Mandatory)][string] $ArtifactPath, [Parameter(Mandatory)][string] $Expected)
             $ErrorActionPreference = 'Stop'
+            if (Test-Path -LiteralPath (Join-Path (Get-Location) 'reject.txt')) { throw 'Controlled acceptance failure.' }
             if ([IO.File]::ReadAllText((Join-Path (Get-Location) 'expected.txt')) -cne $Expected) { throw 'Working directory or argument differs.' }
             $env:POWERFORGE_ACCEPTANCE_PREPARED = 'owned'
             Import-Module -Name $ArtifactPath -Force -ErrorAction Stop
@@ -167,11 +168,25 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.NotEqual(Path.GetFullPath(built), installed);
         var receiptPath = Path.Combine(fixture.RootPath, ".powerforge", "build", artifact.Name + ".json");
         var before = File.ReadAllBytes(receiptPath);
+        var evidencePath = Path.Combine(fixture.RootPath, ".powerforge", "test", artifact.Name + ".json");
+        var rejection = Path.Combine(fixture.RootPath, directory, "reject.txt");
+        File.WriteAllText(rejection, "reject");
+        var rejected = workflow.Test(project);
+        Assert.False(rejected.Succeeded);
+        Assert.False(File.Exists(evidencePath));
+        Assert.False(workflow.Pack(project).Succeeded);
+        Assert.False(workflow.Install(project).Succeeded);
+        File.Delete(rejection);
+        AssertProjectSuccess(workflow.Test(project));
+        AssertProjectSuccess(workflow.Pack(project));
+        AssertProjectSuccess(workflow.Install(project));
         File.AppendAllText(scriptPath, "\nthrow 'Changed acceptance must not execute'\n");
         var changed = workflow.Test(project);
         Assert.False(changed.Succeeded);
         Assert.Contains("acceptance script", Assert.Single(changed.Targets).Message, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(installed, File.ReadAllText(observed));
         Assert.Equal(before, File.ReadAllBytes(receiptPath));
+        Assert.False(File.Exists(evidencePath));
+        Assert.False(workflow.Pack(project).Succeeded);
     }
 }
