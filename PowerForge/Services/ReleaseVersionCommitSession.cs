@@ -195,7 +195,7 @@ internal sealed partial class ReleaseVersionCommitSession : IDisposable
         bool releaseSucceeded,
         string? name,
         string? version,
-        Func<string, bool> isReleaseVersion,
+        ReleaseVersionFilter isReleaseVersion,
         bool deferUntilPublished)
     {
         if (_snapshot is null)
@@ -403,28 +403,44 @@ internal sealed partial class ReleaseVersionCommitSession : IDisposable
             : $"Release {releaseName} {version!.Trim()}";
 
     /// <summary>
-    /// Accepts a changed version number when it is one of the versions this release wrote, or any
-    /// three- or four-part version when the host could not say which versions it wrote.
+    /// Accepts a changed version number when it is one of the versions this release wrote, and a
+    /// prerelease label (such as a <c>VersionSuffix</c> or manifest <c>Prerelease</c>) when it is the
+    /// label of one of those versions, or empty because the release is stable. When the host could not
+    /// say which versions it wrote, any three- or four-part version and any label are accepted.
     /// </summary>
-    private static Func<string, bool> CreateVersionFilter(string? version, IEnumerable<string?>? releaseVersions)
+    private static ReleaseVersionFilter CreateVersionFilter(string? version, IEnumerable<string?>? releaseVersions)
     {
         var known = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var labels = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var hasStable = false;
         foreach (var value in (releaseVersions ?? Array.Empty<string?>()).Concat(new[] { version }))
         {
             var normalized = NormalizeVersion(value);
             if (normalized is null)
                 continue;
             known.Add(normalized);
-            var cut = normalized.IndexOfAny(new[] { '-', '+' });
-            if (cut > 0)
-                known.Add(normalized.Substring(0, cut));
+            var withoutMetadata = normalized.Split('+')[0];
+            var dash = withoutMetadata.IndexOf('-');
+            if (dash > 0)
+            {
+                known.Add(withoutMetadata.Substring(0, dash));
+                labels.Add(withoutMetadata.Substring(dash + 1));
+            }
+            else
+            {
+                hasStable = true;
+            }
+
+            var plus = normalized.IndexOf('+');
+            if (plus > 0)
+                known.Add(normalized.Substring(0, plus));
         }
 
         // A version alone (without the other versions the release wrote) is not enough to judge by.
         if (releaseVersions is null || known.Count == 0)
-            return static _ => true;
+            return ReleaseVersionFilter.Any;
 
-        return token => NormalizeVersion(token) is { } value && known.Contains(value);
+        return new ReleaseVersionFilter(known, labels, hasStable);
     }
 
     private static string? NormalizeVersion(string? value)
@@ -478,6 +494,31 @@ internal sealed partial class ReleaseVersionCommitSession : IDisposable
         using var stream = File.OpenRead(path);
         using var sha = SHA256.Create();
         return Convert.ToBase64String(sha.ComputeHash(stream));
+    }
+
+    /// <summary>Which version numbers and prerelease labels count as written by this release.</summary>
+    private sealed class ReleaseVersionFilter
+    {
+        internal static readonly ReleaseVersionFilter Any = new(null, null, true);
+
+        private readonly HashSet<string>? _versions;
+        private readonly HashSet<string>? _labels;
+        private readonly bool _hasStable;
+
+        internal ReleaseVersionFilter(HashSet<string>? versions, HashSet<string>? labels, bool hasStable)
+        {
+            _versions = versions;
+            _labels = labels;
+            _hasStable = hasStable;
+        }
+
+        internal bool IsVersion(string token)
+            => _versions is null || NormalizeVersion(token) is { } value && _versions.Contains(value);
+
+        internal bool IsPrereleaseLabel(string label)
+            => string.IsNullOrWhiteSpace(label)
+                ? _hasStable
+                : _labels is null || _labels.Contains(label.Trim());
     }
 
     private sealed class Snapshot

@@ -12,6 +12,16 @@ internal sealed partial class ReleaseVersionCommitSession
         @"^\s*<(?<tag>PackageVersion|VersionPrefix|Version)>(?<value>[^<]+)</\k<tag>>\s*$",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
+    // A prerelease label the version editor writes next to VersionPrefix (also self-closing when empty),
+    // and the Prerelease value in a module manifest.
+    private static readonly Regex VersionSuffixLine = new(
+        @"^(?<key>\s*<VersionSuffix\b[^>]*?)\s*(?:/>|>(?<value>[^<]*)</VersionSuffix>)\s*$",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+    private static readonly Regex ManifestPrereleaseLine = new(
+        @"^(?<key>\s*Prerelease\s*=\s*)(?<quote>['""])(?<value>[^'""]*)\k<quote>(?<tail>\s*[,;]?\s*)$",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
     private static readonly Regex InsertedPropertyGroup = new(
         @"^\s*</?PropertyGroup>\s*$",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
@@ -62,7 +72,7 @@ internal sealed partial class ReleaseVersionCommitSession
 
         var headSha = head.StdOut.Trim();
         var dirty = new Dictionary<string, string?>(StringComparer.Ordinal);
-        foreach (var path in ReadChanges(git, repositoryRoot, headSha, static _ => true).Keys)
+        foreach (var path in ReadChanges(git, repositoryRoot, headSha, ReleaseVersionFilter.Any).Keys)
             dirty[path] = HashFile(repositoryRoot, path);
 
         return new Snapshot
@@ -74,7 +84,7 @@ internal sealed partial class ReleaseVersionCommitSession
         };
     }
 
-    private Classification Classify(Snapshot snapshot, string releaseName, Func<string, bool> isReleaseVersion)
+    private Classification Classify(Snapshot snapshot, string releaseName, ReleaseVersionFilter isReleaseVersion)
     {
         // Store the current content first; the commit is built from exactly these blobs.
         var changedPaths = ReadChangedPaths(snapshot);
@@ -274,7 +284,7 @@ internal sealed partial class ReleaseVersionCommitSession
         ReleaseGitRunner git,
         string repositoryRoot,
         string baseCommit,
-        Func<string, bool> isReleaseVersion)
+        ReleaseVersionFilter isReleaseVersion)
     {
         var diff = git.Run(
             repositoryRoot,
@@ -289,9 +299,9 @@ internal sealed partial class ReleaseVersionCommitSession
     /// Parses a zero-context diff. A file is version-only when every changed line differs from its
     /// counterpart only in version numbers, and every new version number is one the release wrote.
     /// </summary>
-    internal static Dictionary<string, bool> ParseDiff(string diff, Func<string, bool>? isReleaseVersion = null)
+    private static Dictionary<string, bool> ParseDiff(string diff, ReleaseVersionFilter? isReleaseVersion = null)
     {
-        isReleaseVersion ??= static _ => true;
+        isReleaseVersion ??= ReleaseVersionFilter.Any;
         var files = new Dictionary<string, bool>(StringComparer.Ordinal);
         string? path = null;
         var headerParsed = false;
@@ -409,7 +419,7 @@ internal sealed partial class ReleaseVersionCommitSession
     /// True when each removed line has an added counterpart that differs only in release versions, and
     /// every other added line is a version property (or its property group) the version editor inserted.
     /// </summary>
-    private static bool IsVersionOnlyHunk(List<string> removed, List<string> added, Func<string, bool> isReleaseVersion)
+    private static bool IsVersionOnlyHunk(List<string> removed, List<string> added, ReleaseVersionFilter isReleaseVersion)
     {
         var next = 0;
         var changesVersion = false;
@@ -424,11 +434,18 @@ internal sealed partial class ReleaseVersionCommitSession
                 {
                     if (string.Equals(before[j].Value, after[j].Value, StringComparison.Ordinal))
                         continue;
-                    if (!isReleaseVersion(after[j].Value))
+                    if (!isReleaseVersion.IsVersion(after[j].Value))
                         return false;
                     changesVersion = true;
                 }
 
+                next++;
+                continue;
+            }
+
+            if (next < removed.Count && IsPrereleaseLabelChange(removed[next], line, isReleaseVersion))
+            {
+                changesVersion = true;
                 next++;
                 continue;
             }
@@ -438,7 +455,16 @@ internal sealed partial class ReleaseVersionCommitSession
             {
                 var value = inserted.Groups["value"].Value.Trim();
                 var token = VersionToken.Match(value);
-                if (!token.Success || token.Length != value.Length || !isReleaseVersion(value))
+                if (!token.Success || token.Length != value.Length || !isReleaseVersion.IsVersion(value))
+                    return false;
+                changesVersion = true;
+                continue;
+            }
+
+            var insertedSuffix = VersionSuffixLine.Match(line);
+            if (insertedSuffix.Success)
+            {
+                if (!isReleaseVersion.IsPrereleaseLabel(insertedSuffix.Groups["value"].Value))
                     return false;
                 changesVersion = true;
                 continue;
@@ -449,6 +475,28 @@ internal sealed partial class ReleaseVersionCommitSession
         }
 
         return next == removed.Count && changesVersion;
+    }
+
+    /// <summary>
+    /// True when a <c>VersionSuffix</c> or manifest <c>Prerelease</c> line only changed its label, and
+    /// the new label belongs to this release (empty for a stable release).
+    /// </summary>
+    private static bool IsPrereleaseLabelChange(string before, string after, ReleaseVersionFilter isReleaseVersion)
+    {
+        foreach (var pattern in new[] { VersionSuffixLine, ManifestPrereleaseLine })
+        {
+            var old = pattern.Match(before);
+            var current = pattern.Match(after);
+            if (!old.Success || !current.Success)
+                continue;
+
+            return string.Equals(old.Groups["key"].Value.TrimEnd(), current.Groups["key"].Value.TrimEnd(), StringComparison.Ordinal) &&
+                   string.Equals(old.Groups["tail"].Value, current.Groups["tail"].Value, StringComparison.Ordinal) &&
+                   !string.Equals(old.Groups["value"].Value, current.Groups["value"].Value, StringComparison.Ordinal) &&
+                   isReleaseVersion.IsPrereleaseLabel(current.Groups["value"].Value);
+        }
+
+        return false;
     }
 
     private static string NormalizeVersions(string line)

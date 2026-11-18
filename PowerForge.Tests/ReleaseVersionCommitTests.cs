@@ -266,6 +266,26 @@ public sealed class ReleaseVersionCommitTests
         Assert.Equal(new[] { "Lib/Lib.csproj" }, commit.Files);
     }
 
+    [Theory]
+    [InlineData("1.0.1-rc.2", "rc.2", "rc.2", true)]
+    [InlineData("1.0.1", "", "", true)]
+    [InlineData("1.0.1-rc.2", "beta", "rc.2", false)]
+    public void Session_TreatsTheReleasesPrereleaseLabelsAsStamps(string release, string suffix, string manifestLabel, bool committed)
+    {
+        using var repo = GitFixture.Create();
+        repo.Write("Lib/Lib.csproj", "<Project Sdk=\"Microsoft.NET.Sdk\">\n  <PropertyGroup>\n    <VersionPrefix>1.0.0</VersionPrefix>\n    <VersionSuffix>rc.1</VersionSuffix>\n  </PropertyGroup>\n</Project>\n");
+        repo.Write("Module/Sample.psd1", "@{\n    ModuleVersion = '1.0.0'\n    PrivateData = @{ PSData = @{\n        Prerelease = 'rc1'\n    } }\n}\n");
+        repo.Git("commit", "--quiet", "-am", "Prerelease projects");
+
+        using var session = ReleaseVersionCommitSession.Begin(new RecordingLogger(), repo.Root, ReleaseVersionCommitMode.Commit, publishing: true);
+        repo.Write("Lib/Lib.csproj", $"<Project Sdk=\"Microsoft.NET.Sdk\">\n  <PropertyGroup>\n    <VersionPrefix>1.0.1</VersionPrefix>\n    <VersionSuffix>{suffix}</VersionSuffix>\n  </PropertyGroup>\n</Project>\n");
+        repo.Write("Module/Sample.psd1", $"@{{\n    ModuleVersion = '1.0.1'\n    PrivateData = @{{ PSData = @{{\n        Prerelease = '{manifestLabel}'\n    }} }}\n}}\n");
+        var commit = session.Complete(releaseSucceeded: true, "Sample", release, new[] { release })!;
+
+        Assert.Contains("Module/Sample.psd1", commit.Files);
+        Assert.Equal(committed, commit.Files.Contains("Lib/Lib.csproj"));
+    }
+
     [Fact]
     public void Session_KeepsEachReleasesRecordedStampsApart()
     {
