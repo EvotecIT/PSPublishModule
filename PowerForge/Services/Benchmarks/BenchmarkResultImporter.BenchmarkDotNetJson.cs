@@ -122,7 +122,7 @@ public sealed partial class BenchmarkResultImporter
             AddBenchmarkDotNetIdentityVariables(benchmark, variables, method);
             string? categories = ReadBenchmarkDotNetCategories(benchmark);
             if (!string.IsNullOrWhiteSpace(categories))
-                variables["Categories"] = categories;
+                variables[variables.ContainsKey("Categories") ? "BenchmarkDotNetCategories" : "Categories"] = categories;
             var engine = GetBenchmarkDotNetEngine(benchmark, displayJob);
             var metrics = ExtractBenchmarkDotNetMetrics(statistics);
             AddBenchmarkDotNetMemoryMetrics(TryGetObject(benchmark, "Memory"), metrics);

@@ -114,7 +114,7 @@ public sealed partial class BenchmarkResultImporter
     {
         if (!string.IsNullOrWhiteSpace(current))
             return current!.Trim();
-        string? fromCategory = LibraryFromCategories(variables.TryGetValue("Categories", out string? categories) ? categories : null);
+        string? fromCategory = LibraryFromCategories(ProducerCategories(variables));
         if (fromCategory is not null)
             return fromCategory;
         if (map.TryGetValue(scenario ?? string.Empty, out string? mapped))
@@ -156,7 +156,7 @@ public sealed partial class BenchmarkResultImporter
         }
 
         string? Resolve(string scenario, IReadOnlyDictionary<string, string?> variables)
-            => CategoryValue(variables.TryGetValue("Categories", out string? categories) ? categories : null, CaseCategoryPrefix, "case")
+            => CategoryValue(ProducerCategories(variables), CaseCategoryPrefix, "case")
                ?? (normalizedMap.TryGetValue(scenario ?? string.Empty, out string? mapped) ? mapped : null);
 
         foreach (BenchmarkSample sample in result.Samples)
@@ -164,7 +164,7 @@ public sealed partial class BenchmarkResultImporter
             string? name = Resolve(sample.Scenario, sample.Variables);
             if (name is null || string.Equals(name, sample.Scenario, StringComparison.Ordinal))
                 continue;
-            sample.Variables["Method"] = sample.Scenario;
+            sample.Variables[ProducerKey(sample.Variables, "Method")] = sample.Scenario;
             sample.Scenario = name;
         }
         foreach (BenchmarkSummaryRow row in result.Summary)
@@ -172,7 +172,7 @@ public sealed partial class BenchmarkResultImporter
             string? name = Resolve(row.Scenario, row.Variables);
             if (name is null || string.Equals(name, row.Scenario, StringComparison.Ordinal))
                 continue;
-            row.Variables["Method"] = row.Scenario;
+            row.Variables[ProducerKey(row.Variables, "Method")] = row.Scenario;
             row.Scenario = name;
         }
         foreach (BenchmarkComparisonRow row in result.Comparison)
@@ -180,7 +180,7 @@ public sealed partial class BenchmarkResultImporter
             string? name = Resolve(row.Scenario, row.Variables);
             if (name is null || string.Equals(name, row.Scenario, StringComparison.Ordinal))
                 continue;
-            row.Variables["Method"] = row.Scenario;
+            row.Variables[ProducerKey(row.Variables, "Method")] = row.Scenario;
             row.Scenario = name;
         }
     }
@@ -261,4 +261,11 @@ public sealed partial class BenchmarkResultImporter
 
     private static int? JobInt(BenchmarkRunResult result, string name)
         => int.TryParse(JobValue(result, name), NumberStyles.Integer, CultureInfo.InvariantCulture, out int value) ? value : null;
+
+    private static string ProducerKey(IDictionary<string, string?> variables, string name)
+        => variables.ContainsKey(name) && !variables.ContainsKey("BenchmarkDotNet" + name) ? "BenchmarkDotNet" + name : name;
+
+    private static string? ProducerCategories(IReadOnlyDictionary<string, string?> variables)
+        => variables.TryGetValue("BenchmarkDotNetCategories", out string? prefixed) ? prefixed
+            : variables.TryGetValue("Categories", out string? categories) ? categories : null;
 }

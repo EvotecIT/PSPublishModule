@@ -117,7 +117,7 @@ public sealed partial class BenchmarkEvidenceCatalogService
             if (lane.Entry.Publish)
                 RedactMergedLane(lane, evaluation.Cells);
             ApplyEvaluation(lane.Entry, evaluation);
-            var present = new HashSet<string>(lane.Entry.Cells.Select(BenchmarkEvidenceCellBuilder.Identity), StringComparer.OrdinalIgnoreCase);
+            var present = new HashSet<string>(lane.Entry.Cells.Select(BenchmarkEvidenceCellBuilder.Identity), StringComparer.Ordinal);
             lane.Entry.Cells = lane.Entry.Cells
                 .Concat(markers.Where(marker => !present.Contains(BenchmarkEvidenceCellBuilder.Identity(marker))))
                 .ToArray();
@@ -344,7 +344,7 @@ public sealed partial class BenchmarkEvidenceCatalogService
         }
 
         string recordedFramework = BenchmarkEvidenceIdentity.RecordedFramework(result);
-        if (recordedFramework.Length > 0 && !string.Equals(recordedFramework, entry.Framework, StringComparison.OrdinalIgnoreCase))
+        if (BenchmarkEvidenceIdentity.ConflictsWithRecordedFramework(result, entry.Framework))
         {
             throw new InvalidOperationException(
                 $"Benchmark lane '{entry.LaneKey}' claims framework '{entry.Framework}' but its result records '{recordedFramework}'.");

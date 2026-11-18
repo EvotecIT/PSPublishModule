@@ -219,7 +219,8 @@ Accept wildcard characters: False
 ### -ResultArtifactPath
 Local filesystem destination for the normalized result artifact. Required when ResultPath
 is root-relative (such as /data/benchmarks/x.json), absolute or a URL; the update fails without it rather
-than writing to a drive root. The file name gets the result's SHA-256 so earlier runs are never overwritten.
+than writing to a drive root. The result is always written, as the lane's current run or, when a newer run
+already holds the lane, as a superseded run. The file name gets the result's SHA-256 so no run is overwritten.
 
 ```yaml
 Type: String

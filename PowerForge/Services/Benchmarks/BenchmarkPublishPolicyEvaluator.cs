@@ -228,7 +228,7 @@ internal static class BenchmarkPublishPolicyEvaluator
     {
         foreach (IGrouping<string, BenchmarkEvidenceCell> group in cells
                      .Where(cell => cell.Publishable && cell.ValueMs.HasValue && cell.ConfidenceInterval is not null)
-                     .GroupBy(BenchmarkEvidenceCellBuilder.WorkloadIdentity, StringComparer.OrdinalIgnoreCase))
+                     .GroupBy(BenchmarkEvidenceCellBuilder.WorkloadIdentity, StringComparer.Ordinal))
         {
             BenchmarkEvidenceCell fastest = group.OrderBy(cell => cell.ValueMs!.Value).First();
             foreach (BenchmarkEvidenceCell cell in group)
@@ -249,7 +249,7 @@ internal static class BenchmarkPublishPolicyEvaluator
                     library.IsPublishableUnder(lane.Policy)))
                 .ToArray();
         bool complete = cells
-            .GroupBy(BenchmarkEvidenceCellBuilder.WorkloadIdentity, StringComparer.OrdinalIgnoreCase)
+            .GroupBy(BenchmarkEvidenceCellBuilder.WorkloadIdentity, StringComparer.Ordinal)
             .All(group => expectedLibraries.All(library => group.Any(cell =>
                 cell.Publishable && string.Equals(cell.Library, library, StringComparison.OrdinalIgnoreCase))));
         return complete ? "complete" : "partial";

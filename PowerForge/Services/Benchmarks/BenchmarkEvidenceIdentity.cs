@@ -68,7 +68,7 @@ public static class BenchmarkEvidenceIdentity
         if (!IsTargetFramework(requested))
             throw new InvalidOperationException($"Framework '{requested}' is not a target framework moniker such as net10.0.");
         requested = requested.ToLowerInvariant();
-        if (recorded.Length > 0 && !string.Equals(recorded, requested, StringComparison.OrdinalIgnoreCase))
+        if (ConflictsWithRecordedFramework(result, requested))
         {
             throw new InvalidOperationException(
                 $"Framework '{requested}' conflicts with the framework the result records ('{recorded}', from benchmark.workload.framework or the measured runtime).");
@@ -82,7 +82,29 @@ public static class BenchmarkEvidenceIdentity
     /// </summary>
     /// <param name="result">Benchmark result.</param>
     /// <returns>Normalized framework, or empty.</returns>
-    public static string RecordedFramework(BenchmarkRunResult result)
+    public static string RecordedFramework(BenchmarkRunResult result) => Recorded(result).Framework;
+
+    /// <summary>
+    /// True when a framework contradicts what the result records. Bound workload metadata must match exactly; a
+    /// runtime only establishes netX.Y, so a platform suffix such as net8.0-windows does not contradict it.
+    /// </summary>
+    /// <param name="result">Benchmark result.</param>
+    /// <param name="framework">Framework claimed for the lane.</param>
+    /// <returns>True when the framework conflicts.</returns>
+    public static bool ConflictsWithRecordedFramework(BenchmarkRunResult result, string? framework)
+    {
+        (string recorded, bool fromMetadata) = Recorded(result);
+        if (recorded.Length == 0)
+            return false;
+        string claimed = (framework ?? string.Empty).Trim().ToLowerInvariant();
+        if (fromMetadata)
+            return !string.Equals(recorded, claimed, StringComparison.OrdinalIgnoreCase);
+        int suffix = claimed.IndexOf('-');
+        string claimedBase = suffix >= 0 ? claimed.Substring(0, suffix) : claimed;
+        return !string.Equals(recorded, claimedBase, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static (string Framework, bool FromMetadata) Recorded(BenchmarkRunResult result)
     {
         if (result is null) throw new ArgumentNullException(nameof(result));
         if (result.Metadata.TryGetValue("benchmark.workload.framework", out string? metadataFramework) &&
@@ -91,13 +113,13 @@ public static class BenchmarkEvidenceIdentity
             string declared = metadataFramework.Trim();
             if (!IsTargetFramework(declared))
                 throw new InvalidOperationException($"Framework '{declared}' is not a target framework moniker such as net10.0.");
-            return declared.ToLowerInvariant();
+            return (declared.ToLowerInvariant(), true);
         }
 
         Match match = DotNetRuntime.Match(result.Environment.RuntimeVersion ?? string.Empty);
         if (match.Success && int.Parse(match.Groups["major"].Value, CultureInfo.InvariantCulture) >= 5)
-            return $"net{match.Groups["major"].Value}.{match.Groups["minor"].Value}";
-        return string.Empty;
+            return ($"net{match.Groups["major"].Value}.{match.Groups["minor"].Value}", false);
+        return (string.Empty, false);
     }
 
     /// <summary>Builds the canonical lane key.</summary>

@@ -260,6 +260,18 @@ public sealed partial class BenchmarkServicesTests
         Assert.Equal($"/data/windows.{superseded.ResultSha256}.json", superseded.ResultPath);
         Assert.Equal(entry.ResultSha256, BenchmarkJson.ComputeFileSha256(Path.Combine(root, "data", $"windows.{entry.ResultSha256}.json")));
         Assert.Equal(superseded.ResultSha256, BenchmarkJson.ComputeFileSha256(Path.Combine(root, "data", $"windows.{superseded.ResultSha256}.json")));
+
+        // A late, older run does not replace the lane but is still written for its place in the history.
+        BenchmarkRunResult late = MeasuredResult(("OfficeIMO", "Read", Spread(11, 10)), ("Sep", "Read", Spread(20, 10)));
+        late.StartedUtc = first.StartedUtc.AddMinutes(-20);
+        late.FinishedUtc = first.FinishedUtc.AddMinutes(-20);
+        BenchmarkEvidenceUpdateRequest lateRequest = PublishRequest(late, TestDeclarations());
+        lateRequest.ResultPath = "/data/windows.json";
+        lateRequest.ResultArtifactPath = artifact;
+        catalog = service.UpdateFile(catalogPath, lateRequest);
+        Assert.Equal(entry.ResultSha256, Assert.Single(catalog.Entries).ResultSha256);
+        BenchmarkSupersededLane lateHistory = Assert.Single(catalog.Superseded, value => value.GeneratedUtc == late.FinishedUtc);
+        Assert.Equal(lateHistory.ResultSha256, BenchmarkJson.ComputeFileSha256(Path.Combine(root, "data", $"windows.{lateHistory.ResultSha256}.json")));
     }
 
     [Theory]
@@ -514,6 +526,42 @@ public sealed partial class BenchmarkServicesTests
         Assert.Equal(
             BenchmarkJson.Serialize(new BenchmarkSummaryService().Compare(imported.Summary, "OfficeIMO")),
             BenchmarkJson.Serialize(imported.Comparison));
+    }
+
+    [Fact]
+    public void CellIdentity_KeepsCaseDistinctValuesAndWorkloadParametersNamedLikeProducerFields()
+    {
+        BenchmarkRunResult result = MeasuredResult(("OfficeIMO", "Read", Spread(10, 10)), ("OfficeIMO", "Read", Spread(12, 10)));
+        BenchmarkSample[] first = result.Samples.Take(10).ToArray();
+        foreach (BenchmarkSample sample in first)
+        {
+            sample.Variables["Input"] = "a";
+            sample.Variables["Type"] = "Fast";
+            sample.Variables["BenchmarkDotNetType"] = "Bench.Read";
+        }
+        foreach (BenchmarkSample sample in result.Samples.Skip(10))
+        {
+            sample.Variables["Input"] = "A";
+            sample.Variables["Type"] = "Fast";
+            sample.Variables["BenchmarkDotNetType"] = "Bench.Read";
+        }
+        result.Summary = new BenchmarkSummaryService().Summarize(result.Samples);
+
+        BenchmarkEvidenceCell[] cells = BenchmarkEvidenceCellBuilder.Build(result, "comparison-a", BenchmarkPublishPolicy.CreateDefault());
+
+        Assert.Equal(new[] { "A", "a" }, cells.Select(cell => cell.Parameters["Input"]).OrderBy(value => value, StringComparer.Ordinal));
+        Assert.All(cells, cell => Assert.Equal("Fast", cell.Parameters["Type"]));
+        Assert.All(cells, cell => Assert.DoesNotContain("BenchmarkDotNetType", cell.Parameters.Keys));
+    }
+
+    [Fact]
+    public void Framework_AcceptsAPlatformSuffixTheRuntimeCannotContradict()
+    {
+        BenchmarkRunResult result = MeasuredResult(("OfficeIMO", "Read", Spread(10, 10)));
+
+        Assert.Equal("net10.0-windows", BenchmarkEvidenceIdentity.ResolveFramework(result, "net10.0-windows"));
+        result.Metadata["benchmark.workload.framework"] = "net10.0";
+        Assert.Throws<InvalidOperationException>(() => BenchmarkEvidenceIdentity.ResolveFramework(result, "net10.0-windows"));
     }
 
     [Fact]

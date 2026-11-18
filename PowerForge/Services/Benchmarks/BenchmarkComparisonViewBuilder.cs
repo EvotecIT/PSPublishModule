@@ -408,7 +408,7 @@ public sealed class BenchmarkComparisonViewBuilder
             return rows;
         var publishable = new HashSet<string>(
             entry.Cells.Where(cell => cell.Publishable).Select(BenchmarkEvidenceCellBuilder.Identity),
-            StringComparer.OrdinalIgnoreCase);
+            StringComparer.Ordinal);
         return rows.Where(row => publishable.Contains(BenchmarkEvidenceCellBuilder.Identity(row)));
     }
 
@@ -550,7 +550,7 @@ public sealed class BenchmarkComparisonViewBuilder
         var fromReport = variables.ContainsKey("BenchmarkDotNetReport");
         foreach (var variable in variables)
         {
-            if (BenchmarkEvidenceCellBuilder.ProducerIdentityKeys.Contains(variable.Key, StringComparer.OrdinalIgnoreCase) &&
+            if (BenchmarkEvidenceCellBuilder.IsProducerIdentity(variable.Key, variables) &&
                 !BenchmarkDotNetColumns.IsJobCharacteristic(variable.Key))
                 continue;
             if (BenchmarkDotNetColumns.IsJobCharacteristic(variable.Key))

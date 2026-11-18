@@ -80949,7 +80949,8 @@ The older run-mode name quick is accepted as diagnostic.</maml:para>
           <maml:description>
             <maml:para>Local filesystem destination for the normalized result artifact. Required when ResultPath&#xD;
 is root-relative (such as /data/benchmarks/x.json), absolute or a URL; the update fails without it rather&#xD;
-than writing to a drive root. The file name gets the result's SHA-256 so earlier runs are never overwritten.</maml:para>
+than writing to a drive root. The result is always written, as the lane's current run or, when a newer run&#xD;
+already holds the lane, as a superseded run. The file name gets the result's SHA-256 so no run is overwritten.</maml:para>
           </maml:description>
           <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
           <dev:type>
@@ -81118,7 +81119,8 @@ The older run-mode name quick is accepted as diagnostic.</maml:para>
         <maml:description>
           <maml:para>Local filesystem destination for the normalized result artifact. Required when ResultPath&#xD;
 is root-relative (such as /data/benchmarks/x.json), absolute or a URL; the update fails without it rather&#xD;
-than writing to a drive root. The file name gets the result's SHA-256 so earlier runs are never overwritten.</maml:para>
+than writing to a drive root. The result is always written, as the lane's current run or, when a newer run&#xD;
+already holds the lane, as a superseded run. The file name gets the result's SHA-256 so no run is overwritten.</maml:para>
         </maml:description>
         <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
         <dev:type>

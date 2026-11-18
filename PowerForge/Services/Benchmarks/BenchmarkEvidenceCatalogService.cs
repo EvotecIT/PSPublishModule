@@ -247,16 +247,22 @@ public sealed partial class BenchmarkEvidenceCatalogService
                                     writtenEntry.ResultPath,
                                     resultPath,
                                     StringComparison.Ordinal);
+        // The incoming result is always written: as the lane's current run, or as a dated superseded run when a
+        // newer run already holds the lane. Content addressing means it never replaces another run's file.
+        artifactPath = ContentAddressedFilePath(
+            ResolveResultArtifactPath(fullPath, resultPath, request.ResultArtifactPath),
+            inputHash);
+        if (string.Equals(artifactPath, fullPath, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                "The benchmark result artifact path must be different from the evidence catalog path.");
+        }
+        artifactSelected = true;
+        artifactExisted = File.Exists(artifactPath);
+        if (artifactExisted)
+            previousArtifact = File.ReadAllBytes(artifactPath);
         if (inputWasSelected)
         {
-            artifactPath = ContentAddressedFilePath(
-                ResolveResultArtifactPath(fullPath, resultPath, request.ResultArtifactPath),
-                inputHash);
-            if (string.Equals(artifactPath, fullPath, StringComparison.OrdinalIgnoreCase))
-            {
-                throw new InvalidOperationException(
-                    "The benchmark result artifact path must be different from the evidence catalog path.");
-            }
             string artifactDestinationSha256 =
                 ComputeArtifactDestinationSha256(fullPath, artifactPath);
             ValidateArtifactDestinationOwnership(
@@ -271,10 +277,6 @@ public sealed partial class BenchmarkEvidenceCatalogService
                 fullPath,
                 artifactPath,
                 resultPath);
-            artifactSelected = true;
-            artifactExisted = File.Exists(artifactPath);
-            if (artifactExisted)
-                previousArtifact = File.ReadAllBytes(artifactPath);
         }
 
         try
@@ -283,7 +285,7 @@ public sealed partial class BenchmarkEvidenceCatalogService
             {
                 BenchmarkJson.Write(artifactPath!, payload);
                 string writtenHash = BenchmarkJson.ComputeFileSha256(artifactPath!);
-                if (!string.Equals(writtenEntry.ResultSha256, writtenHash, StringComparison.OrdinalIgnoreCase))
+                if (!string.Equals(inputHash, writtenHash, StringComparison.OrdinalIgnoreCase))
                 {
                     throw new InvalidOperationException(
                         "The normalized benchmark result artifact does not match the validated catalog payload.");

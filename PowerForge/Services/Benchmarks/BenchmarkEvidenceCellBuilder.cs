@@ -61,7 +61,7 @@ internal static class BenchmarkEvidenceCellBuilder
         }
 
         string[] duplicates = cells
-            .GroupBy(Identity, StringComparer.OrdinalIgnoreCase)
+            .GroupBy(Identity, StringComparer.Ordinal)
             .Where(group => group.Count() > 1)
             .Select(group => $"{group.First().Library} / {group.First().Case} / {group.First().Operation}")
             .OrderBy(value => value, StringComparer.Ordinal)
@@ -82,21 +82,28 @@ internal static class BenchmarkEvidenceCellBuilder
     }
 
     /// <summary>
-    /// Keys that identify how a row was produced (BenchmarkDotNet method, type, report, categories) rather than
-    /// what was measured. They differ between libraries' methods, so they are not cell parameters.
+    /// Producer identity keys: how a row was produced (BenchmarkDotNet method, type, namespace, full name,
+    /// categories, report) rather than what was measured. A workload parameter with one of these names keeps
+    /// its name and the importer stores the producer value under <c>BenchmarkDotNet&lt;Name&gt;</c>, so the plain
+    /// name is producer identity only when that prefixed copy is absent.
     /// </summary>
-    internal static readonly string[] ProducerIdentityKeys =
+    private static readonly string[] ProducerIdentityNames = { "Method", "FullName", "Type", "Namespace", "Categories" };
+
+    internal static bool IsProducerIdentity(string key, IReadOnlyDictionary<string, string?> variables)
     {
-        "Method", "FullName", "Type", "Namespace", "Categories", "BenchmarkDotNetReport",
-        "BenchmarkDotNetFullName", "BenchmarkDotNetType", "BenchmarkDotNetNamespace"
-    };
+        if (key.StartsWith("BenchmarkDotNet", StringComparison.OrdinalIgnoreCase))
+            return true;
+        return ProducerIdentityNames.Contains(key, StringComparer.OrdinalIgnoreCase) &&
+               !variables.Keys.Any(other => string.Equals(other, "BenchmarkDotNet" + key, StringComparison.OrdinalIgnoreCase));
+    }
 
     internal static Dictionary<string, string?> CellParameters(IReadOnlyDictionary<string, string?> variables)
     {
+        var source = variables ?? new Dictionary<string, string?>();
         var parameters = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
-        foreach (KeyValuePair<string, string?> item in variables ?? new Dictionary<string, string?>())
+        foreach (KeyValuePair<string, string?> item in source)
         {
-            if (!ProducerIdentityKeys.Contains(item.Key, StringComparer.OrdinalIgnoreCase))
+            if (!IsProducerIdentity(item.Key, source))
                 parameters[item.Key] = item.Value;
         }
         return parameters;
@@ -104,14 +111,17 @@ internal static class BenchmarkEvidenceCellBuilder
 
     /// <summary>Identity of the cell a summary row produces: case, operation, library and parameters.</summary>
     internal static string Identity(BenchmarkSummaryRow row)
-        => string.Join("\u001f", row.Scenario, row.Operation, row.Library ?? string.Empty, FormatParameters(CellParameters(row.Variables)));
+        => string.Join("\u001f", Fold(row.Scenario), Fold(row.Operation), Fold(row.Library), FormatParameters(CellParameters(row.Variables)));
 
     internal static string Identity(BenchmarkEvidenceCell cell)
-        => string.Join("\u001f", cell.Case, cell.Operation, cell.Library, FormatParameters(cell.Parameters));
+        => string.Join("\u001f", Fold(cell.Case), Fold(cell.Operation), Fold(cell.Library), FormatParameters(cell.Parameters));
+
+    // Case, operation and library names ignore case; parameter values are compared exactly.
+    private static string Fold(string? value) => (value ?? string.Empty).ToLowerInvariant();
 
     /// <summary>Identity of the workload a cell measures, shared by every library in the comparison.</summary>
     internal static string WorkloadIdentity(BenchmarkEvidenceCell cell)
-        => string.Join("\u001f", cell.Case, cell.Operation, FormatParameters(cell.Parameters));
+        => string.Join("\u001f", Fold(cell.Case), Fold(cell.Operation), FormatParameters(cell.Parameters));
 
     // Length-prefixed so a value containing ';' or '=' can never read as another parameter.
     internal static string FormatParameters(IReadOnlyDictionary<string, string?> parameters)
