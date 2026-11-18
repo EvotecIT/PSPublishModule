@@ -323,6 +323,25 @@ public class BenchmarkComparisonViewTests
         Assert.All(run.Cases, c => Assert.DoesNotContain(c.Cells, cell => cell.Missing));
     }
 
+    [Fact]
+    public void Build_KeepsAWorkloadParameterNamedCase()
+    {
+        static BenchmarkSummaryRow Recorded(string library, string size, double medianMs)
+        {
+            BenchmarkSummaryRow row = Row("Read", medianMs, ("Case", size));
+            row.Library = library;
+            return row;
+        }
+
+        var view = BuildSingle(
+            libraries: new[] { "A", "B" },
+            rows: new[] { Recorded("A", "Small", 1.0), Recorded("A", "Large", 2.0), Recorded("B", "Small", 3.0), Recorded("B", "Large", 4.0) });
+
+        var run = Assert.Single(view.Runs);
+        Assert.Equal(2, run.Cases.Length);
+        Assert.All(run.Cases, c => Assert.DoesNotContain(c.Cells, cell => cell.Missing));
+    }
+
     private static BenchmarkComparisonView BuildSingle(string[] libraries, BenchmarkSummaryRow[] rows)
     {
         var root = CreateTempRoot();

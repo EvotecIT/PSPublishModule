@@ -477,7 +477,11 @@ public sealed class BenchmarkComparisonViewBuilder
             {
                 var recordedCase = RecordedCase(item.Row);
                 if (recordedCase.Length > 0)
-                    parameters["Case"] = recordedCase;
+                {
+                    // A workload parameter that is itself named Case keeps its value; the scenario gets another name.
+                    var name = new[] { "Case", "Scenario", "Benchmark case" }.First(candidate => !parameters.ContainsKey(candidate) && !identity.ContainsKey(candidate));
+                    parameters[name] = recordedCase;
+                }
             }
             var contender = item.Library;
             if (item.Suffix.Length > 0)
