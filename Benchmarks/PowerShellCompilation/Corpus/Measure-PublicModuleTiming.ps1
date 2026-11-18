@@ -11,6 +11,8 @@ The workspace used by Invoke-PublicCorpus with KeepRunArtifacts.
 The successful report identifying the exact package and artifact hashes.
 .PARAMETER EvidencePath
 Destination for raw samples, host metadata and nearest-rank summaries.
+.PARAMETER InvocationOnly
+Keeps each module loaded after its first import and measures repeated calls.
 .EXAMPLE
 ./Measure-PublicModuleTiming.ps1 -WorkspacePath /tmp/corpus -CorpusEvidencePath /tmp/corpus.json -EvidencePath /tmp/timing.json
 #>
@@ -18,7 +20,8 @@ Destination for raw samples, host metadata and nearest-rank summaries.
 param(
     [Parameter(Mandatory)] [string] $WorkspacePath,
     [Parameter(Mandatory)] [string] $CorpusEvidencePath,
-    [Parameter(Mandatory)] [string] $EvidencePath
+    [Parameter(Mandatory)] [string] $EvidencePath,
+    [switch] $InvocationOnly
 )
 
 $ErrorActionPreference = 'Stop'
@@ -35,6 +38,7 @@ $process = [Diagnostics.Process]::GetCurrentProcess()
 $report = [ordered]@{
     schemaVersion = 1
     completed = $false
+    mode = if ($InvocationOnly) { 'LoadedModuleInvocation' } else { 'ImportAndReimport' }
     generatedAtUtc = [DateTimeOffset]::UtcNow.ToString('o')
     harnessCommit = (git -C $repository rev-parse HEAD).Trim()
     compilerSourceCommit = Get-CorpusProperty $corpus 'sourceCommit' 'NotRecorded'
@@ -57,8 +61,8 @@ $report = [ordered]@{
     policy = [ordered]@{
         pairs = 8
         order = 'AlternatingPairs'
-        cold = 'First import and first packet invocation in a fresh process; OS caches are not evicted.'
-        warm = 'Five remove/import and invocation repetitions in the same process; assemblies remain loaded.'
+        cold = if ($InvocationOnly) { 'First invocation after one import in a fresh process.' } else { 'First import and first packet invocation in a fresh process; OS caches are not evicted.' }
+        warm = if ($InvocationOnly) { 'Five repeated invocations in the same loaded module; no reimport.' } else { 'Five remove/import and invocation repetitions in the same process; assemblies remain loaded.' }
         percentile = 'Nearest rank'
         invocation = 'Exact public packet probe, including assertions and any declared file I/O.'
     }
@@ -102,9 +106,11 @@ foreach ($entry in $packet.modules) {
                     POWERFORGE_TIMING_MODULE = $path
                     POWERFORGE_TIMING_PROBE = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($entry.probeScript))
                 }
-                $child = Invoke-OwnedProcess -FileName (Join-Path $PSHOME $(if ($IsWindows) { 'pwsh.exe' } else { 'pwsh' })) -Arguments @(
+                $childArguments = @(
                     '-NoLogo', '-NoProfile', '-NonInteractive', '-File', (Join-Path $PSScriptRoot 'Measure-ModuleChild.ps1')
-                ) -WorkingDirectory $WorkspacePath -Environment $environment -TimeoutSeconds 180
+                )
+                if ($InvocationOnly) { $childArguments += '-InvocationOnly' }
+                $child = Invoke-OwnedProcess -FileName (Join-Path $PSHOME $(if ($IsWindows) { 'pwsh.exe' } else { 'pwsh' })) -Arguments $childArguments -WorkingDirectory $WorkspacePath -Environment $environment -TimeoutSeconds 180
                 if ($child.ExitCode -ne 0) { throw "Timing probe failed: $($child.StandardError) $($child.StandardOutput)" }
                 $jsonLine = @($child.StandardOutput -split '\r?\n' | Where-Object { $_.StartsWith('{', [StringComparison]::Ordinal) })[-1]
                 $observed = $jsonLine | ConvertFrom-Json
@@ -116,14 +122,17 @@ foreach ($entry in $packet.modules) {
                     powerShell = $observed.powerShell
                     rows = @($observed.rows)
                 })
+                Write-Utf8Json -Path $EvidencePath -Value $report
             }
         }
         Assert-CorpusTimingIdentity -Entry $entry -Build $built[0] -WorkspacePath $WorkspacePath -ArtifactRoot $artifactRoot
         foreach ($surface in @('source', 'hybrid')) {
-            foreach ($state in @('cold-process', 'warm-process')) {
+            $states = if ($InvocationOnly) { @('cold-module', 'warm-module') } else { @('cold-process', 'warm-process') }
+            foreach ($state in $states) {
                 $values = @($samples | Where-Object surface -eq $surface | ForEach-Object rows | Where-Object state -eq $state)
                 $summary = [ordered]@{ samples = $values.Count }
                 foreach ($metric in @('importMilliseconds', 'invocationMilliseconds')) {
+                    if ($state -eq 'warm-module' -and $metric -eq 'importMilliseconds') { continue }
                     $sorted = @($values.$metric | Sort-Object)
                     $summary[$metric] = [ordered]@{
                         p50 = $sorted[[int][Math]::Ceiling($sorted.Count * 0.5) - 1]
