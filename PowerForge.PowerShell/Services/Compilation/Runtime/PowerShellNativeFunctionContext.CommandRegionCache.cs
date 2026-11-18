@@ -9,17 +9,24 @@ namespace PowerForge.Generated.Runtime
 
     public sealed partial class PowerShellNativeFunctionContext
     {
-        private static readonly ConditionalWeakTable<object, ConditionalWeakTable<ScriptBlock, CommandRegionOwnerCache>> CommandRegionOwners = new();
+        private static readonly ConditionalWeakTable<object, ConditionalWeakTable<ScriptBlock, NativeDefinitionPlans>> NativeDefinitionOwners = new();
         private static readonly ConditionalWeakTable<string, CommandRegionSourceIdentity> CommandRegionSources = new();
         private static long _nextCommandRegionSourceId;
+        private NativeDefinitionPlans? _definitionPlans;
+
+        private NativeDefinitionPlans GetNativeDefinitionPlans()
+        {
+            if (_definitionPlans is not null) return _definitionPlans;
+            var script = (ScriptBlock)FunctionContext.GetType().GetField("_scriptBlock",
+                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)!.GetValue(FunctionContext)!;
+            var definitions = NativeDefinitionOwners.GetValue(_executionContext,
+                static _ => new ConditionalWeakTable<ScriptBlock, NativeDefinitionPlans>());
+            return _definitionPlans = definitions.GetValue(script, static _ => new NativeDefinitionPlans());
+        }
 
         private ConcurrentDictionary<string, NativeAstOperation> GetCommandRegionPlans()
         {
-            var script = (ScriptBlock)FunctionContext.GetType().GetField("_scriptBlock",
-                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)!.GetValue(FunctionContext)!;
-            var definitions = CommandRegionOwners.GetValue(_executionContext,
-                static _ => new ConditionalWeakTable<ScriptBlock, CommandRegionOwnerCache>());
-            var owner = definitions.GetValue(script, static _ => new CommandRegionOwnerCache());
+            var owner = GetNativeDefinitionPlans();
             var tupleType = _contract.LocalsTuple.GetValue(FunctionContext)!.GetType();
             // Native compilation uses this function's binding metadata and local
             // tuple layout. Invocation values and output remain delegate arguments.
@@ -39,7 +46,7 @@ namespace PowerForge.Generated.Runtime
             internal long Value { get; } = Interlocked.Increment(ref _nextCommandRegionSourceId);
         }
 
-        private sealed class CommandRegionOwnerCache
+        private sealed partial class NativeDefinitionPlans
         {
             internal ConcurrentDictionary<Tuple<Type, PSLanguageMode>, ConcurrentDictionary<string, NativeAstOperation>> Plans { get; } = new();
         }

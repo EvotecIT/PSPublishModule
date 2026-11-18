@@ -61,8 +61,7 @@ namespace PowerForge.Generated.Runtime
                 if (assignmentVariables && owner._optimized)
                 {
                     var tuple = owner._contract.LocalsTuple.GetValue(owner.FunctionContext)!;
-                    var tupleBase = assembly.GetType("System.Management.Automation.MutableTuple", true)!;
-                    var names = (Dictionary<string, int>)tupleBase.GetField("_nameToIndexMap", Instance)!.GetValue(tuple)!;
+                    var names = GetLocalNameMap(tuple);
                     var tupleIndex = typeof(VariableExpressionAst).GetProperty("TupleIndex", Instance)!;
                     foreach (var variable in ast.FindAll(node => node is VariableExpressionAst, searchNestedScriptBlocks: false).Cast<VariableExpressionAst>())
                     {

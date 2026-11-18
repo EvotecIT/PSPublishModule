@@ -38,9 +38,9 @@ namespace PowerForge.Generated.Runtime
             internal NativeSwitchScope(PowerShellNativeFunctionContext owner)
             {
                 _owner = owner;
-                _iterator = owner._switchStorage ??= new NativeVariableStorage(owner, "switch");
+                _iterator = owner._switchStorage ??= owner.GetVariableStorage("switch");
                 var automatic = typeof(PSObject).Assembly.GetType("System.Management.Automation.AutomaticVariable", true)!;
-                _item = owner._switchItemStorage ??= new NativeVariableStorage(owner, "_",
+                _item = owner._switchItemStorage ??= owner.GetVariableStorage("_",
                     Convert.ToInt32(Enum.Parse(automatic, "Underbar"), CultureInfo.InvariantCulture));
                 _previousItem = _item.Read.Invoke(owner.FunctionContext);
                 _previousIterator = _iterator.Read.Invoke(owner.FunctionContext);
