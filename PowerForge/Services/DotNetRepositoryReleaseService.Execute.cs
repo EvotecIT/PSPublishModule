@@ -68,6 +68,52 @@ public sealed partial class DotNetRepositoryReleaseService
                 result.ErrorMessage = "Signing was requested, but CertificateThumbprint is missing. Configure a signing certificate or explicitly disable signing.";
                 return result;
             }
+            var signAssemblyOutputs = spec.Pack && spec.SignAssemblies;
+            var signNuGetPackages = spec.Pack && spec.SignPackages;
+            if (signAssemblyOutputs || signNuGetPackages)
+            {
+                var stamp = string.IsNullOrWhiteSpace(spec.TimeStampServer)
+                    ? "http://timestamp.digicert.com"
+                    : spec.TimeStampServer!.Trim();
+                spec.TimeStampServer = stamp;
+            }
+
+            if (!spec.WhatIf && signAssemblyOutputs && signAssemblies is null)
+            {
+                result.Success = false;
+                result.ErrorMessage = "Assembly signing was requested, but no assembly signing handler was provided.";
+                return result;
+            }
+
+            if (!spec.WhatIf && signAssemblyOutputs && validateAssemblySigning is null)
+            {
+                result.Success = false;
+                result.ErrorMessage = "Assembly signing was requested, but no assembly signing preflight handler was provided.";
+                return result;
+            }
+
+            // Runs before discovery and build so a hardware token asks for its PIN in the first
+            // minute of the release, not when signing starts after the build.
+            if (!spec.WhatIf && signAssemblyOutputs)
+            {
+                try
+                {
+                    validateAssemblySigning!(new DotNetReleaseBuildAssemblySigningPreflightRequest
+                    {
+                        LocalStore = spec.CertificateStore,
+                        CertificateThumbprint = spec.CertificateThumbprint!.Trim(),
+                        TimeStampServer = spec.TimeStampServer!,
+                        UnlockSigningKey = true
+                    });
+                }
+                catch (Exception ex)
+                {
+                    result.Success = false;
+                    result.ErrorMessage = $"Assembly signing preflight failed. {ex.Message}";
+                    return result;
+                }
+            }
+
             if (!string.IsNullOrWhiteSpace(spec.PublishSource))
                 spec.PublishSource = ResolvePublishSource(spec.PublishSource!, root);
 
@@ -135,50 +181,7 @@ public sealed partial class DotNetRepositoryReleaseService
 
             _logger.Info($"Discovered {projects.Count} project(s), {packable.Length} packable.");
 
-            var signAssemblyOutputs = spec.Pack && spec.SignAssemblies;
-            var signNuGetPackages = spec.Pack && spec.SignPackages;
             string? signingSha256 = null;
-            if (signAssemblyOutputs || signNuGetPackages)
-            {
-                var stamp = string.IsNullOrWhiteSpace(spec.TimeStampServer)
-                    ? "http://timestamp.digicert.com"
-                    : spec.TimeStampServer!.Trim();
-                spec.TimeStampServer = stamp;
-            }
-
-            if (!spec.WhatIf && signAssemblyOutputs && signAssemblies is null)
-            {
-                result.Success = false;
-                result.ErrorMessage = "Assembly signing was requested, but no assembly signing handler was provided.";
-                return result;
-            }
-
-            if (!spec.WhatIf && signAssemblyOutputs && validateAssemblySigning is null)
-            {
-                result.Success = false;
-                result.ErrorMessage = "Assembly signing was requested, but no assembly signing preflight handler was provided.";
-                return result;
-            }
-
-            if (!spec.WhatIf && signAssemblyOutputs)
-            {
-                try
-                {
-                    validateAssemblySigning!(new DotNetReleaseBuildAssemblySigningPreflightRequest
-                    {
-                        LocalStore = spec.CertificateStore,
-                        CertificateThumbprint = spec.CertificateThumbprint!.Trim(),
-                        TimeStampServer = spec.TimeStampServer!
-                    });
-                }
-                catch (Exception ex)
-                {
-                    result.Success = false;
-                    result.ErrorMessage = $"Assembly signing preflight failed. {ex.Message}";
-                    return result;
-                }
-            }
-
             if (!spec.WhatIf && signNuGetPackages)
             {
                 signingSha256 = _getCertificateSha256(spec.CertificateThumbprint!.Trim(), spec.CertificateStore);

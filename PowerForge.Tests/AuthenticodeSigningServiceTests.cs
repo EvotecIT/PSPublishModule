@@ -35,7 +35,7 @@ public sealed class AuthenticodeSigningServiceTests
             }
             """));
         state.Commands.Add(new SessionStateFunctionEntry("Set-AuthenticodeSignature", """
-            param([string]$FilePath, $Certificate, $TimestampServer, $IncludeChain, $HashAlgorithm, [switch]$Force)
+            param([Alias('LiteralPath')][string]$FilePath, $Certificate, $TimestampServer, $IncludeChain, $HashAlgorithm, [switch]$Force)
             if ($Force -or $Certificate.Thumbprint -ne $SigningCertificate.Thumbprint -or $TimestampServer -ne 'https://timestamp.example.test') {
                 throw 'Signing policy changed'
             }
@@ -96,7 +96,7 @@ public sealed class AuthenticodeSigningServiceTests
             }
             """));
             state.Commands.Add(new SessionStateFunctionEntry("Set-AuthenticodeSignature", """
-            param([string[]]$FilePath, $Certificate, $TimestampServer, $IncludeChain, $HashAlgorithm, [switch]$Force)
+            param([Alias('LiteralPath')][string[]]$FilePath, $Certificate, $TimestampServer, $IncludeChain, $HashAlgorithm, [switch]$Force)
             foreach ($file in $FilePath) {
                 $Calls.Add($file)
                 $status = 'Valid'

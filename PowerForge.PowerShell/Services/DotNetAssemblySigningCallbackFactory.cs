@@ -28,7 +28,52 @@ public static class DotNetAssemblySigningCallbackFactory
                 throw new InvalidOperationException($"Certificate '{req.CertificateThumbprint}' not found in {req.LocalStore}\\My store.");
 
             signingService.EnsureSigningCommandsAvailable();
+
+            if (!req.UnlockSigningKey)
+                return;
+            if (!ShouldUnlockEarly(out var skipReason))
+            {
+                logger.Verbose($"Skipping early signing-key unlock: {skipReason}.");
+                return;
+            }
+
+            logger.Info("Unlocking the signing key now; a hardware token may ask for its PIN once.");
+            var elapsed = signingService.UnlockSigningKey(lookup.Certificate, req.TimeStampServer);
+            logger.Info($"Signing key ready in {DotNetRepositoryReleaseService.FormatDuration(elapsed)}.");
         };
+    }
+
+    internal const string EarlyUnlockEnvironmentVariable = "POWERFORGE_SIGNING_EARLY_UNLOCK";
+
+    private static bool ShouldUnlockEarly(out string reason)
+    {
+        if (string.Equals(Environment.GetEnvironmentVariable(EarlyUnlockEnvironmentVariable)?.Trim(), "0", StringComparison.Ordinal))
+        {
+            reason = EarlyUnlockEnvironmentVariable + " is 0";
+            return false;
+        }
+        foreach (var name in new[] { "CI", "TF_BUILD", "GITHUB_ACTIONS" })
+        {
+            var value = Environment.GetEnvironmentVariable(name);
+            if (!string.IsNullOrWhiteSpace(value) && !string.Equals(value!.Trim(), "false", StringComparison.OrdinalIgnoreCase))
+            {
+                reason = $"running in CI ({name})";
+                return false;
+            }
+        }
+        if (!Environment.UserInteractive)
+        {
+            reason = "the session is not interactive";
+            return false;
+        }
+        // On Unix UserInteractive is always true, so require a terminal for any prompt.
+        if (Environment.OSVersion.Platform != PlatformID.Win32NT && (Console.IsInputRedirected || Console.IsOutputRedirected))
+        {
+            reason = "no terminal is attached";
+            return false;
+        }
+        reason = string.Empty;
+        return true;
     }
 
     /// <summary>
@@ -62,7 +107,8 @@ public static class DotNetAssemblySigningCallbackFactory
                 HashAlgorithm = "SHA256",
                 WindowsIncludeChain = "All",
                 NonWindowsIncludeChain = "WholeChain",
-                OverwriteSigned = req.OverwriteSigned
+                OverwriteSigned = req.OverwriteSigned,
+                MaxDegreeOfParallelism = req.MaxDegreeOfParallelism
             });
         };
     }

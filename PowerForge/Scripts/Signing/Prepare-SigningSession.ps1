@@ -23,12 +23,7 @@ $service = [PowerForge.AuthenticodeSigningService]::new([PowerForge.NullLogger]:
 $lookup = $service.SelectCertificateFromStore([PowerForge.CertificateStoreLocation]::CurrentUser, $Thumbprint)
 if ($null -eq $lookup.Certificate) { throw 'The exact configured signing certificate is unavailable.' }
 try {
-    $request = [PowerForge.AuthenticodeSignRequest]::new()
-    $request.Certificate = $lookup.Certificate
-    $request.FilePaths = [string[]]@($artifact)
-    $request.TimeStampServer = $TimestampUrl
-    $request.HashAlgorithm = 'SHA256'
-    $null = $service.SignFiles($request)
+    $service.SignProofFile($lookup.Certificate, $artifact, $TimestampUrl)
 } finally { $lookup.Certificate.Dispose() }
 $bytes = [IO.FileStream]::new($artifact, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)
 try {
