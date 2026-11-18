@@ -28,6 +28,7 @@ public sealed partial class DotNetRepositoryReleaseService
             progressTotalItems,
             "Evaluating package dependency graphs");
         var resolutions = ResolveProjectPlanningItems(
+            "Evaluating package dependency graphs",
             entries.Length,
             (index, logger) =>
             {

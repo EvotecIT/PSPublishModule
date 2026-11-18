@@ -227,10 +227,11 @@ public sealed partial class DotNetRepositoryReleaseService
                     spec.ExpectedVersionMapUseWildcards,
                     out var expectedSource);
 
+                // The resolved "old -> new" line follows for every project; where the expectation came from is detail.
                 if (!string.IsNullOrWhiteSpace(expectedVersion))
-                    _logger.Info($"{project.ProjectName}: expected version {expectedVersion} ({expectedSource}).");
+                    _logger.Verbose($"{project.ProjectName}: expected version {expectedVersion} ({expectedSource}).");
                 else
-                    _logger.Info($"{project.ProjectName}: no expected version; using csproj version.");
+                    _logger.Verbose($"{project.ProjectName}: no expected version; using csproj version.");
 
                 string resolvedVersion;
                 string? resolutionWarning;
@@ -518,10 +519,11 @@ public sealed partial class DotNetRepositoryReleaseService
 
                     var useBatchPackResult = batchPackResult is not null && batchCandidateSet?.Contains(project) == true;
 
+                    var position = $"({packageProgress}/{packable.Length})";
                     if (useBatchPackResult)
-                        _logger.Info($"Collecting {project.ProjectName} package(s) from MSBuild batch...");
+                        _logger.Info($"Collecting {project.ProjectName} package(s) from MSBuild batch {position}...");
                     else
-                        _logger.Info($"Packing {project.ProjectName}...");
+                        _logger.Info($"Packing {project.ProjectName} {position}...");
 
                     var packResult = useBatchPackResult ? batchPackResult! : PackProject(project, spec, _logger, signAssemblyOutputs ? signAssemblies : null);
                     if (!useBatchPackResult && !packResult.Success)
