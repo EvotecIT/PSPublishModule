@@ -268,15 +268,18 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
         {
             var escapedPath = modulePath.Replace("'", "''", StringComparison.Ordinal);
             var run = Run("pwsh", "-NoProfile", "-NonInteractive", "-Command",
-                $"$importOutput = @(& {{ Import-Module -Name '{escapedPath}' -Force }} 2>$null); " +
-                "$missing = @($Error | Where-Object { $_.FullyQualifiedErrorId -like 'CommandNotFoundException*' }).Count; " +
-                "\"import=$($importOutput.Count);missing=$missing;later=$([bool](Get-Command Get-Later -ErrorAction SilentlyContinue));value=$(Get-Later)\"");
+                "$env:PSModulePath = Join-Path $PSHOME 'Modules'; " +
+                $"$records = @(& {{ Import-Module -Name '{escapedPath}' -Force }} 2>&1); " +
+                "$errors = @($records | Where-Object { $_ -is [System.Management.Automation.ErrorRecord] }); " +
+                "$output = @($records | Where-Object { $_ -isnot [System.Management.Automation.ErrorRecord] }); " +
+                "if ($errors.Count -ne 1) { throw \"Unexpected import errors: $($errors.Count)\" }; " +
+                "\"import=$($output.Count);errors=$($errors.Count);id=$($errors[0].FullyQualifiedErrorId);target=$($errors[0].TargetObject);later=$([bool](Get-Command Get-Later -ListImported -ErrorAction SilentlyContinue));value=$(Get-Later)\"");
             Assert.Equal(0, run.ExitCode);
             Assert.True(string.IsNullOrWhiteSpace(run.StandardError), run.StandardError);
             return run.StandardOutput.Trim();
         }
         var original = Observe(fixture.ScriptPath);
-        Assert.Equal("import=0;missing=1;later=True;value=7", original);
+        Assert.Equal("import=0;errors=1;id=CommandNotFoundException;target=Get-Later;later=True;value=7", original);
         Assert.Equal(original, Observe(result.ArtifactPath!));
     }
 

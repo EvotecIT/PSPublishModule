@@ -99,13 +99,18 @@ $scratch = Join-Path ([IO.Path]::GetTempPath()) 'PowerForgeCoverage'
 ```
 
 Both commands acquire exact hashes from the checked-in packets. Public module
-probes execute acquired source in clean child processes. External assessment
+probes import generated Hybrid artifacts in clean child processes and invoke
+their checked-in probes. Those artifacts can execute retained PowerShell source;
+the ten probes do not separately compare original modules. External assessment
 with `-ExecuteWorkloads` runs the reviewed complete-workload contracts; without
 that option it performs acquisition and census only. `-RefreshBaseline` deliberately
 records new measured counts. Omit it for comparison against the committed counts.
 The public refresh requires the complete module packet on the baseline host.
 It keeps the comparison to the previous Hybrid results and saves the run report
 before replacing the Hybrid baseline. The Strict timing budgets remain in place.
+Execution mode creates fresh projects and requires online package restore;
+verified source payloads alone do not supply that environment. It cannot be
+combined with `-Offline`. Census-only assessment can use a verified offline cache.
 
 The complete external workload is the unchanged ten-function GitHub helper
 library. Its contract covers SHA512 hashing, logging, invocation redaction,

@@ -235,7 +235,7 @@
           ]
         },
         "observerScript": "Workflows/GitHubHelpers/Observe-GitHubHelpers.ps1",
-        "observerSha256": "0e3304f5739c6e4813258b0a756ed5f366b5e8a05dfa140d32e1907843d953a8"
+        "observerSha256": "5e76cc918f6e3c0f351f888607f5909c0bbe1b6a662c1d374b0ca5fd3fc927b9"
       },
       "sourceInputs": [
         {

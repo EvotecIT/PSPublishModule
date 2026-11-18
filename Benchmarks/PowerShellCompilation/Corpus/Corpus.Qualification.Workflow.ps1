@@ -190,10 +190,32 @@ function Assert-WorkflowTestInvocation {
     }
 }
 
+function Assert-WorkflowFunctionIdentity {
+    param($Value, [string] $Label)
+    foreach ($name in 'relativePath', 'name', 'unitId', 'startLine') {
+        if ($name -in @('unitId','startLine') -and -not (Test-WorkflowProperty $Value $name)) { continue }
+        $field = $null
+        if ($Value -is [Collections.IDictionary]) {
+            if ($Value.Contains($name)) { $field = $Value[$name] }
+        } elseif ($null -ne $Value) {
+            $property = $Value.PSObject.Properties[$name]
+            if ($null -ne $property) { $field = $property.Value }
+        }
+        if ($name -eq 'startLine') {
+            if (($field -isnot [int] -and $field -isnot [long]) -or $field -lt 1 -or $field -gt [int]::MaxValue) {
+                throw "$Label requires a positive scalar integer for 'startLine'."
+            }
+        } elseif ($field -isnot [string] -or [string]::IsNullOrWhiteSpace($field)) {
+            throw "$Label requires a nonempty scalar string for '$name'."
+        }
+    }
+}
+
 function Assert-WorkflowCompiledOwnership {
     param($Contract, $Ledger)
     $checked = [Collections.Generic.List[object]]::new()
     foreach ($required in $Contract.requiredCompiledOwnedFunctions) {
+        Assert-WorkflowFunctionIdentity $required 'Required function identity'
         $unitId = Get-WorkflowProperty $required 'unitId'
         $startLine = Get-WorkflowProperty $required 'startLine'
         $matches = @($Ledger.entries | Where-Object {
@@ -253,7 +275,13 @@ function Assert-WorkflowObservation {
         }
     }
     if ((Get-WorkflowProperty $Contract 'completeFunctionInventory' $false) -eq $true) {
+        foreach ($scenario in $Report.scenarios) {
+            foreach ($observed in @(Get-WorkflowProperty $scenario 'executedOwnedFunctions' @())) {
+                Assert-WorkflowFunctionIdentity $observed 'Executed function identity'
+            }
+        }
         foreach ($required in $Contract.requiredCompiledOwnedFunctions) {
+            Assert-WorkflowFunctionIdentity $required 'Required function identity'
             $unitId = Get-WorkflowProperty $required 'unitId'
             $startLine = Get-WorkflowProperty $required 'startLine'
             $executed = @($Report.scenarios | ForEach-Object {

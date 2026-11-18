@@ -37,8 +37,7 @@ internal sealed class PowerShellSourceTypeClosure
                 AddReferences(member, definition.Name, PowerShellSourceParser.GetSpan(document, member.Extent), member.Name);
         }
         foreach (var function in document.SyntaxRoot.FindAll(static node => node is FunctionDefinitionAst,
-                     searchNestedScriptBlocks: false).OfType<FunctionDefinitionAst>()
-                     .Where(function => function.Parent is NamedBlockAst && ReferenceEquals(function.Parent.Parent, document.SyntaxRoot)))
+                     searchNestedScriptBlocks: true).OfType<FunctionDefinitionAst>())
             AddReferences(function, function.Name, PowerShellSourceParser.GetSpan(document, function.Extent));
         return new PowerShellSourceTypeClosure(declarations, references.ToArray());
 

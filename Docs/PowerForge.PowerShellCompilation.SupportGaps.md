@@ -4,8 +4,10 @@ For measurements from both fixed external packets, see the [coverage report](Pow
 
 Hybrid modules can compile independent functions beside document-scope authored
 classes or enums while retaining their hosted initialization. The source type
-closure still rejects a function whose metadata or body consumes an unsupported
-authored type; nested type declarations and script initializers keep their
+closure still rejects unsupported direct authored-type annotations and type
+expressions, including inside conditional function declarations. Runtime type
+lookup and calls to retained helpers can occur in emitted bodies. Nested type
+declarations and script initializers keep their
 existing admission rules. This extends the existing native binding, cmdlet,
 pipeline, and `begin`/`process`/`end` paths into realistic mixed modules. It does
 not add general authored-class or pipeline support to Strict.

@@ -7,6 +7,8 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+[Globalization.CultureInfo]::CurrentCulture = [Globalization.CultureInfo]::InvariantCulture
+[Globalization.CultureInfo]::CurrentUICulture = [Globalization.CultureInfo]::InvariantCulture
 $sourcePath = 'Helpers.ps1'
 $ownedNames = @(
     'Get-SHA512Hash', 'Write-Log', 'Write-InvocationLog', 'DeepCopy-Object',
@@ -156,12 +158,15 @@ $observations = @(foreach ($case in $cases) {
         observation = $records
     }
 })
+if ($module.ExportedCmdlets.Count -ne 0) { throw 'The helper module must export functions only.' }
 [ordered]@{
     schemaVersion = 1
     surface = $Surface
     importPath = [IO.Path]::GetFullPath($ImportPath)
     actualExports = @($module.ExportedFunctions.Keys | Sort-Object)
-    actualAliases = @()
+    actualAliases = @($module.ExportedAliases.Values | Sort-Object Name | ForEach-Object {
+        [ordered]@{ name = $_.Name; definition = $_.Definition }
+    })
     scenarios = $observations
     limits = 'All ten helper functions execute. Configuration and time are fixed in the importing module; HTTP uses an owned loopback server. No GitHub service, exhaustive branch coverage or runtime-free execution is claimed.'
 } | ConvertTo-Json -Depth 30 | Set-Content -LiteralPath $ResultPath -Encoding utf8

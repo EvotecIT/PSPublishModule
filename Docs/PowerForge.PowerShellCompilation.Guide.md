@@ -16,7 +16,7 @@ manifest shows which methods compiled and where the artifact relies on PowerShel
 | Selected CLR members, typed exceptions, bounded `try`/`catch`/`finally` | Supported where analysis proves the contract | Runtime type lookup and unsupported exception behavior |
 | Cmdlet calls and multi-stage pipelines in admitted Hybrid functions | Generally unsupported in Strict | Complete emitted method bodies use PowerShell command resolution, binding, streams, and pipeline execution |
 | Advanced function parameters and `begin`/`process`/`end` | No general runtime-free binding support | Native-bound Hybrid functions preserve the host's parameter binder and lifecycle; admission still checks each body |
-| Independent functions beside authored classes | No general runtime-free authored-class support | Hybrid retains document-scope type initialization; independent function bodies can compile while type-dependent functions remain hosted |
+| Functions beside authored classes | No general runtime-free authored-class support | Hybrid retains type initialization; unsupported direct type annotations and expressions stay hosted, while runtime type lookup and calls to retained helpers can remain inside emitted bodies |
 | Providers, remoting, dynamic script blocks | No general Strict support | Hybrid or Package uses the supported hosted paths; provider or service behavior needs separate execution proof |
 | Dynamic commands, `Invoke-Expression`, authored classes, WPF | No general runtime-free support | Retained source or explicitly supported hosted paths |
 

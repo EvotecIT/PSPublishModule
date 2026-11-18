@@ -1,6 +1,6 @@
 # PowerShell compiler: next major milestones
 
-For measurements from both fixed external packets, see the [2026-11-17 coverage report](PowerForge.PowerShellCompilation.Coverage.md). The results below describe earlier compiler revisions.
+For measurements from both fixed external packets, see the [2026-11-18 coverage report](PowerForge.PowerShellCompilation.Coverage.md). The results below describe earlier compiler revisions.
 
 Updated: 2026-10-16. The compiler continuation merged through [PR #1009](https://github.com/EvotecIT/PSPublishModule/pull/1009) on October 4 at `3640ba9c20d17671a63716795a89527e68c5f006`. This contract audit began at main `f5398d8da` and incorporated main `04cd3209b` before local Full qualification. The readiness assessment records candidate validation separately from historical qualification.
 

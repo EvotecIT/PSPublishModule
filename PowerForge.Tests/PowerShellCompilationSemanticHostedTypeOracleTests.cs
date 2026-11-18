@@ -13,7 +13,7 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
                 [int] $Value
                 [int] Read() { return $this.Value }
             }
-            $script:BeforeRecords = @(Get-Command -Name Read-Records -ErrorAction Ignore).Count
+            $script:BeforeRecords = @(Get-Command -Name Read-Records -ListImported -ErrorAction Ignore).Count
             function New-RetainedRecord {
                 $record = [RetainedRecord]::new()
                 $record.Value = 7
@@ -41,6 +41,10 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
                 Get-Command -Name $Name | Select-Object -ExpandProperty Name
             }
             function ReadValues($Values) { $Values | ForEach-Object { $_ } }
+            if ($true) {
+                function Test-RetainedRecord { param($Value) $Value -is [RetainedRecord] }
+                function Read-ConditionalValues { 1, 2 | ForEach-Object { $_ } }
+            }
             function Read-RetainedRecord {
                 $record = New-RetainedRecord
                 $record.Read()
@@ -60,7 +64,7 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
                 }
                 end { [void] $Trace.Add('end') }
             }
-            Export-ModuleMember -Function New-RetainedRecord, Read-Records, Read-Commands, ReadValues, Read-RetainedRecord, Read-DynamicRecord, Read-StoppingRecords
+            Export-ModuleMember -Function New-RetainedRecord, Read-Records, Read-Commands, ReadValues, Test-RetainedRecord, Read-ConditionalValues, Read-RetainedRecord, Read-DynamicRecord, Read-StoppingRecords
             """;
         const string probe = """
             $rows = @(
@@ -72,6 +76,8 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
                 ,@(Read-Records -Val 6 -Verbose 4>&1 | ForEach-Object { $_.ToString() })
                 ,@(Read-Commands -Name Write-Output)
                 ,@(ReadValues -Values @(8, 9))
+                ,@(Read-ConditionalValues)
+                ,@(Test-RetainedRecord -Value (New-RetainedRecord))
                 ,@(Read-RetainedRecord)
                 ,@(Read-DynamicRecord)
             )
@@ -113,16 +119,18 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
                 EmitSource = true
             });
             Assert.True(built.Succeeded, built.Error + Environment.NewLine + built.BuildOutput);
-            foreach (var name in new[] { "Read-Records", "Read-Commands", "ReadValues", "Read-RetainedRecord", "Read-DynamicRecord", "Read-StoppingRecords" })
+            foreach (var name in new[] { "Read-Records", "Read-Commands", "ReadValues", "Read-ConditionalValues", "Read-RetainedRecord", "Read-DynamicRecord", "Read-StoppingRecords" })
             {
                 var unit = Assert.Single(built.Manifest!.UnitDispositionLedger!.Entries, unit => unit.Name == name);
                 Assert.True(unit.EmittedClrMethod, name + " must have a complete CLR body.");
                 Assert.False(unit.RetainedHostedSource, name + " must not use an authored source fallback.");
             }
-            var retained = Assert.Single(built.Manifest!.UnitDispositionLedger!.Entries,
-                static unit => unit.Name == "New-RetainedRecord");
-            Assert.False(retained.EmittedClrMethod);
-            Assert.True(retained.RetainedHostedSource);
+            foreach (var name in new[] { "New-RetainedRecord", "Test-RetainedRecord" })
+            {
+                var retained = Assert.Single(built.Manifest!.UnitDispositionLedger!.Entries, unit => unit.Name == name);
+                Assert.False(retained.EmittedClrMethod);
+                Assert.True(retained.RetainedHostedSource);
+            }
 
             var runner = new PowerShellCompilationSemanticOracleRunner();
             PowerShellCompilationSemanticOracleEnvelope Observe(string path)
