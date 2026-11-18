@@ -9,9 +9,14 @@ schema: 2.0.0
 Updates a marker-delimited benchmark block in a Markdown document.
 
 ## SYNTAX
-### __AllParameterSets
+### Summary (Default)
 ```powershell
 Update-BenchmarkDocument [-Path] <string> -BlockId <string> [-SummaryPath <string>] [-ComparisonPath <string>] [-Renderer <string>] [-WhatIf] [-Confirm] [<CommonParameters>]
+```
+
+### Catalog
+```powershell
+Update-BenchmarkDocument [-Path] <string> -BlockId <string> -Catalog <string> -Comparison <string[]> [-Platform <string>] [-Framework <string>] [-WhatIf] [-Confirm] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -25,6 +30,12 @@ Update-BenchmarkDocument -Path .\README.MD -BlockId managed-module-benchmark-tab
 ```
 
 
+### EXAMPLE 2
+```powershell
+Update-BenchmarkDocument -Path .\README.MD -BlockId excel-read -Catalog .\Website\static\data\benchmarks\index.json -Comparison read -Platform windows -Framework net10.0
+```
+
+
 ## PARAMETERS
 
 ### -BlockId
@@ -32,7 +43,39 @@ Marker block identifier.
 
 ```yaml
 Type: String
-Parameter Sets: __AllParameterSets
+Parameter Sets: Summary, Catalog
+Aliases: None
+Possible values:
+
+Required: True
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -Catalog
+Schema 5 evidence catalog (index.json). The block shows the published runs of the selected comparisons.
+
+```yaml
+Type: String
+Parameter Sets: Catalog
+Aliases: None
+Possible values:
+
+Required: True
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -Comparison
+Comparison identifiers or group names to show.
+
+```yaml
+Type: String[]
+Parameter Sets: Catalog
 Aliases: None
 Possible values:
 
@@ -48,7 +91,23 @@ Optional comparison JSON path.
 
 ```yaml
 Type: String
-Parameter Sets: __AllParameterSets
+Parameter Sets: Summary
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -Framework
+Target framework of the run to show, such as net10.0. The newest published run is used when omitted.
+
+```yaml
+Type: String
+Parameter Sets: Catalog
 Aliases: None
 Possible values:
 
@@ -64,7 +123,7 @@ Markdown document path.
 
 ```yaml
 Type: String
-Parameter Sets: __AllParameterSets
+Parameter Sets: Summary, Catalog
 Aliases: None
 Possible values:
 
@@ -75,12 +134,28 @@ Accept pipeline input: False
 Accept wildcard characters: False
 ```
 
+### -Platform
+Platform whose published run is shown: windows, linux or macos.
+
+```yaml
+Type: String
+Parameter Sets: Catalog
+Aliases: None
+Possible values:
+
+Required: False
+Position: named
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
 ### -Renderer
 Renderer name. Use SummaryTable or ComparisonTable.
 
 ```yaml
 Type: String
-Parameter Sets: __AllParameterSets
+Parameter Sets: Summary
 Aliases: None
 Possible values:
 
@@ -96,7 +171,7 @@ Summary JSON path.
 
 ```yaml
 Type: String
-Parameter Sets: __AllParameterSets
+Parameter Sets: Summary
 Aliases: None
 Possible values:
 

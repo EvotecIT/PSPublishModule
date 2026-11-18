@@ -15,6 +15,18 @@ public sealed class BenchmarkEvidenceDataSpec
 
     /// <summary>Path to the evidence catalog (index.json), relative to the site root.</summary>
     public string Catalog { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Optional site output directory, such as "data/benchmarks". When set, the build writes the view there as
+    /// <c>index.json</c> plus one file per area, so pages can load an area's comparisons on demand.
+    /// </summary>
+    public string? Output { get; set; }
+
+    /// <summary>
+    /// When true, templates receive only the index (areas and comparison summaries) under <c>data.&lt;Name&gt;</c>;
+    /// pages load full area data from <see cref="Output"/>. Requires <see cref="Output"/>.
+    /// </summary>
+    public bool IndexOnly { get; set; }
 }
 
 /// <summary>Template engine limits.</summary>
