@@ -31,7 +31,12 @@ internal static class BenchmarkEvidenceCellBuilder
             samplesByCell.TryGetValue(
                 CellKey(row.Scenario, row.Operation, row.Engine, row.Library, row.Host, row.Variables),
                 out double[]? durations);
-            double? value = statistic == "mean" ? row.MeanMs ?? row.MedianMs : row.MedianMs ?? row.MeanMs;
+            // The statistic the runner declared is required; a missing one is never replaced by the other.
+            // Without a declared statistic the result has no runner block and cannot be published anyway.
+            bool declared = !string.IsNullOrWhiteSpace(result.Runner?.Statistic);
+            double? value = statistic == "mean"
+                ? row.MeanMs ?? (declared ? null : row.MedianMs)
+                : row.MedianMs ?? (declared ? null : row.MeanMs);
             BenchmarkConfidenceInterval? interval = row.ConfidenceInterval;
             if (statistic == "median" && durations is { Length: > 0 })
                 interval = BenchmarkEvidenceIdentity.MedianConfidenceInterval(durations, policy.ConfidenceLevel) ?? interval;

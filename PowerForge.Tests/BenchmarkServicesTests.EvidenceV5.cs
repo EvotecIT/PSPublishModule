@@ -100,6 +100,7 @@ public sealed partial class BenchmarkServicesTests
     [InlineData("validation-missing", "Output validation was not recorded")]
     [InlineData("validation-failed", "Output validation failed: row count 99")]
     [InlineData("invalid-interval", "confidence interval is invalid")]
+    [InlineData("declared-statistic-missing", "does not report the runner's declared statistic (median)")]
     public void EvidencePolicy_ExcludesCellsThatDoNotMeetThePolicy(string mutation, string expected)
     {
         BenchmarkRunResult result = MeasuredResult(
@@ -114,6 +115,17 @@ public sealed partial class BenchmarkServicesTests
                 result.Validations = result.Validations
                     .Select(value => value.Library == "Sep" ? new BenchmarkOutputValidation { Library = "Sep", Status = BenchmarkValidationStatus.Failed, Detail = "row count 99" } : value)
                     .ToArray();
+                break;
+            case "declared-statistic-missing":
+                // A summary-only producer that declares median but supplies only a mean for Sep.
+                result.Samples = [];
+                foreach (BenchmarkSummaryRow row in result.Summary)
+                {
+                    double value = row.Library == "Sep" ? row.MeanMs!.Value : row.MedianMs!.Value;
+                    row.ConfidenceInterval = new BenchmarkConfidenceInterval { Level = 0.95, LowerMs = value - 0.2, UpperMs = value + 0.2 };
+                    if (row.Library == "Sep")
+                        row.MedianMs = null;
+                }
                 break;
             case "invalid-interval":
                 result.Runner!.Statistic = "mean";
@@ -745,6 +757,14 @@ public sealed partial class BenchmarkServicesTests
         Assert.True(result.Runner.InProcess);
         Assert.DoesNotContain("machine", result.Metadata.Keys);
         Assert.Equal(string.Empty, result.Environment.MachineName);
+
+        // The CSV artifacts keep the library, so a re-import from them keeps the engine's library identity.
+        suite.Artifacts = BenchmarkArtifactKind.Csv;
+        BenchmarkRunResult written = new PowerShellBenchmarkRunner().Run(suite);
+        BenchmarkRunResult fromSamples = new BenchmarkResultImporter().Import(written.Artifacts["samples.csv"]);
+        BenchmarkRunResult fromSummary = new BenchmarkResultImporter().Import(written.Artifacts["summary.csv"]);
+        Assert.All(fromSamples.Samples, sample => Assert.Equal("ImportExcel", sample.Library));
+        Assert.Equal("ImportExcel", Assert.Single(fromSummary.Summary).Library);
     }
 
     [Theory]

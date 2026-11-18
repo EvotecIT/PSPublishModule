@@ -212,6 +212,8 @@ internal static class BenchmarkPublishPolicyEvaluator
             yield return $"Cell had {cell.FailureCount} failed sample(s); an unstable cell is not published.";
         if (cell.SampleCount < policy.MinimumMeasuredSamples)
             yield return $"Cell has {cell.SampleCount} measured samples; at least {policy.MinimumMeasuredSamples} are required.";
+        if (string.Equals(cell.Status, "Succeeded", StringComparison.OrdinalIgnoreCase) && cell.ValueMs is null)
+            yield return $"Cell does not report the runner's declared statistic ({cell.Statistic}).";
         if (cell.ConfidenceInterval is null)
             yield return "Cell has no confidence interval for its statistic.";
         else if (!IsValidInterval(cell.ConfidenceInterval, cell.ValueMs))
