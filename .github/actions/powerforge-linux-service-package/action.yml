@@ -12,6 +12,10 @@ inputs:
   artifact-name:
     description: Workflow artifact name consumed by the protected deployment job.
     required: true
+  upload-artifact:
+    description: Upload the validated archive for deployment.
+    required: false
+    default: "true"
   artifact-retention-days:
     description: Number of days to retain the service artifact.
     required: false
@@ -24,7 +28,7 @@ inputs:
 outputs:
   artifact-name:
     description: Workflow artifact name published by this action.
-    value: ${{ inputs.artifact-name }}
+    value: ${{ inputs.upload-artifact == 'true' && inputs.artifact-name || '' }}
   artifact-sha256:
     description: SHA-256 of the packaged service artifact.
     value: ${{ steps.package.outputs.artifact-sha256 }}
@@ -51,6 +55,7 @@ runs:
       run: '& "$env:GITHUB_ACTION_PATH/Invoke-PowerForgeLinuxServicePackage.ps1"'
 
     - name: Upload validated service artifact
+      if: ${{ inputs.upload-artifact == 'true' }}
       uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
       with:
         name: ${{ inputs.artifact-name }}

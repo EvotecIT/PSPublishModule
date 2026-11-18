@@ -22,6 +22,10 @@ on:
       result_artifact_name:
         type: string
         default: dotnet-test-results
+      result_artifact_retention_days:
+        description: Days to retain the test-result artifacts.
+        type: number
+        default: 1
       timeout_minutes:
         type: number
         default: 30
@@ -84,7 +88,7 @@ jobs:
             ${{ runner.temp }}/powerforge-dotnet-test-results/**/*.trx
             ${{ runner.temp }}/powerforge-dotnet-test-results/summary.md
           if-no-files-found: warn
-          retention-days: 7
+          retention-days: ${{ inputs.result_artifact_retention_days }}
       - name: Remove staged SDK setup
         if: always()
         shell: pwsh

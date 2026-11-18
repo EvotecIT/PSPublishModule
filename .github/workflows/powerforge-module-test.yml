@@ -43,6 +43,10 @@ on:
         description: Artifact prefix; each matrix job appends its job index.
         type: string
         default: 'module-test-results'
+      result_artifact_retention_days:
+        description: Days to retain the test-result artifacts.
+        type: number
+        default: 1
       timeout_minutes:
         type: number
         default: 30
@@ -160,7 +164,7 @@ jobs:
           name: ${{ inputs.result_artifact_name }}-${{ strategy.job-index }}
           path: ${{ runner.temp }}/powerforge-module-test-results/
           if-no-files-found: warn
-          retention-days: 7
+          retention-days: ${{ inputs.result_artifact_retention_days }}
 
       - name: Remove staged SDK setup
         if: always()

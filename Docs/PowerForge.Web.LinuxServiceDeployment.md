@@ -193,6 +193,9 @@ the caller repository. Service artifacts are retained for seven days by default 
 manual protected-environment approval can outlive a short queue or weekend; override
 `artifact-retention-days` only when the repository has a different approval policy.
 
+Set `upload-artifact: 'false'` in a validation-only job. The action still
+tests, packages, and hashes the service. Deployment jobs keep the upload enabled.
+
 ## Host-Initiated Artifact Pull
 
 Use `Deployment/Linux/powerforge-service-artifact-pull.sh` when the host must initiate routine deployment and no GitHub runner should SSH into it. Keep the secret-free package job above, but omit its `deploy` job and remove the example `push.paths` filter: every branch-tip commit needs a package run for recovery or a fresh host. Use only one routine deployment lane per service. The host polls the configured workflow for a successful `push` or `workflow_dispatch` run at the current branch-tip commit, downloads its named artifact with size limits, checks the package's source repository, commit, run identity, and SHA-256, and hands the verified files to the same root-owned service promoter. It rechecks the branch immediately before promotion and stops on a detected change. A repeated run with unchanged root-owned configuration is skipped; changing pull or promoter configuration promotes the same package again. A successful rerun of failed jobs can retain a package made by an earlier run attempt, which is recorded separately in deployment metadata.
