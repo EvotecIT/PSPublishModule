@@ -1131,23 +1131,21 @@ public sealed partial class BenchmarkServicesTests
         var service = new BenchmarkEvidenceCatalogService();
         // Every writer records against the same declarations, as producers sharing one catalog do.
         BenchmarkDeclarationDocument declarations = TestDeclarations();
-        BenchmarkJson.Write(path, new BenchmarkEvidenceCatalog
-        {
-            Libraries = declarations.Libraries,
-            Comparisons = Enumerable.Range(0, 12)
-                .Select(index => TestDeclarations($"comparison-{index:D2}").Comparisons.Single(value => value.ComparisonId == $"comparison-{index:D2}"))
-                .Concat(declarations.Comparisons)
-                .ToArray()
-        });
+        declarations.Comparisons = Enumerable.Range(0, 12)
+            .Select(index => TestDeclarations($"comparison-{index:D2}").Comparisons.Single(value => value.ComparisonId == $"comparison-{index:D2}"))
+            .Concat(declarations.Comparisons)
+            .ToArray();
         Task[] updates = Enumerable.Range(0, 12)
             .Select(index => Task.Run(() =>
-                UpdateFileDeclared(service,
-                    path,
-                    Result("Windows", "fixture-a", 10 + index),
-                    $"comparison-{index:D2}",
-                    $"result-{index:D2}.json",
-                    "full",
-                    publish: true)))
+                service.UpdateFile(path, new BenchmarkEvidenceUpdateRequest
+                {
+                    Result = Result("Windows", "fixture-a", 10 + index),
+                    ComparisonId = $"comparison-{index:D2}",
+                    ResultPath = $"result-{index:D2}.json",
+                    Profile = BenchmarkEvidenceProfile.Full,
+                    Publish = true,
+                    Declarations = declarations
+                })))
             .ToArray();
 
         await Task.WhenAll(updates);

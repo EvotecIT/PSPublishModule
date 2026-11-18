@@ -124,7 +124,8 @@ internal static class PowerShellBenchmarkEnvironmentMetadata
             DotNetSdkVersion = NormalizeDotNetSdkVersion(ReadProcessValue(
                 "dotnet", new[] { "--version" }, timeoutMilliseconds: 3000, workingDirectory: sourceRoot)),
             Runner = $"PowerShell {PSVersionInfo()}",
-            MachineName = Environment.MachineName
+            // Results are evidence that may be published; the machine name is never recorded in them.
+            MachineName = string.Empty
         };
 
     // This is the CLI SDK selected by the benchmark source directory's global.json,

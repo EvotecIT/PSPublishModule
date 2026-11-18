@@ -114,6 +114,8 @@ public sealed partial class BenchmarkEvidenceCatalogService
                     $"Published benchmark lane '{lane.Entry.LaneKey}' does not meet the publish policy: " +
                     string.Join(" ", evaluation.LaneIssues));
             }
+            if (lane.Entry.Publish)
+                RedactMergedLane(lane, evaluation.Cells);
             ApplyEvaluation(lane.Entry, evaluation);
             var present = new HashSet<string>(lane.Entry.Cells.Select(BenchmarkEvidenceCellBuilder.Identity), StringComparer.OrdinalIgnoreCase);
             lane.Entry.Cells = lane.Entry.Cells
@@ -225,6 +227,26 @@ public sealed partial class BenchmarkEvidenceCatalogService
         {
             return false;
         }
+    }
+
+    // Declarations given to a merge can restrict a library that was open when the lane was recorded; its rows
+    // are then removed from the stored result like they are when a lane is recorded.
+    private static void RedactMergedLane(BundleLane lane, BenchmarkEvidenceCell[] cells)
+    {
+        BenchmarkRunResult redacted = RedactLicenceRestricted(lane.Result, cells);
+        if (ReferenceEquals(redacted, lane.Result))
+            return;
+        byte[] bytes = BenchmarkJson.SerializeCanonicalBytes(redacted);
+        string previousHash = lane.Entry.ResultSha256.ToLowerInvariant();
+        string hash = ComputeSha256(bytes);
+        lane.ArtifactBytes = bytes;
+        lane.Entry.ResultSha256 = hash;
+        lane.Entry.Compatibility = BuildCompatibility(redacted);
+        string resultPath = lane.Entry.ResultPath;
+        int marker = resultPath.LastIndexOf("." + previousHash, StringComparison.OrdinalIgnoreCase);
+        if (marker >= 0)
+            resultPath = resultPath.Remove(marker, previousHash.Length + 1);
+        lane.Entry.ResultPath = resultPath;
     }
 
     private static BenchmarkLibraryDeclaration[] MergeLibraries(IEnumerable<BenchmarkLibraryDeclaration> libraries)
@@ -723,7 +745,7 @@ public sealed partial class BenchmarkEvidenceCatalogService
         internal BenchmarkRunResult Result { get; }
 
         internal BenchmarkEvidenceEntry Entry { get; }
-        internal byte[] ArtifactBytes { get; }
+        internal byte[] ArtifactBytes { get; set; }
         internal string? DestinationPath { get; set; }
     }
 

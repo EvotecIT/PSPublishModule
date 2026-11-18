@@ -337,6 +337,16 @@ public sealed partial class BenchmarkServicesTests
         // A merge keeps the marker although the stored result has no EPPlus rows.
         BenchmarkEvidenceCatalog merged = new BenchmarkEvidenceCatalogService().MergeFiles(Path.Combine(root, "merged", "index.json"), [catalogPath]);
         Assert.Contains(Assert.Single(merged.Entries).Cells, cell => cell.Library == "EPPlus" && !cell.Publishable && cell.ValueMs is null);
+
+        // Declarations given to a merge that restrict another library remove its rows from the merged result too.
+        declarations.Libraries.Single(value => value.Id == "Sep").Restriction = BenchmarkLibraryRestriction.PublishRestricted;
+        declarations.Libraries.Single(value => value.Id == "Sep").Reason = "Publishing results needs permission.";
+        string remergedPath = Path.Combine(root, "remerged", "index.json");
+        BenchmarkEvidenceEntry remerged = Assert.Single(new BenchmarkEvidenceCatalogService().MergeFiles(remergedPath, [catalogPath], null, declarations).Entries);
+        BenchmarkRunResult remergedResult = BenchmarkJson.Read<BenchmarkRunResult>(Path.Combine(root, "remerged", remerged.ArtifactRelativePath));
+        Assert.DoesNotContain(remergedResult.Summary, row => row.Library == "Sep");
+        Assert.Equal(remerged.ResultSha256, BenchmarkJson.ComputeFileSha256(Path.Combine(root, "remerged", remerged.ArtifactRelativePath)));
+        Assert.Null(Assert.Single(remerged.Cells, cell => cell.Library == "Sep").ValueMs);
     }
 
     [Fact]
@@ -545,6 +555,7 @@ public sealed partial class BenchmarkServicesTests
         Assert.Equal(2, result.Runner.Iterations);
         Assert.True(result.Runner.InProcess);
         Assert.DoesNotContain("machine", result.Metadata.Keys);
+        Assert.Equal(string.Empty, result.Environment.MachineName);
     }
 
     [Theory]
