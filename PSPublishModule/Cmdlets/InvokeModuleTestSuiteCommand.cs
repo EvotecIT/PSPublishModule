@@ -202,16 +202,20 @@ public sealed partial class InvokeModuleTestSuiteCommand : PSCmdlet
         var moduleInfo = new ModuleInformationReader().Read(projectRoot);
         WriteHeader(projectRoot, psVersion, psEdition, moduleInfo);
 
-        // Pester output is shown while the tests run; Minimal keeps the console to the summary.
-        Action<string>? pesterOutput = preparation.Spec.OutputFormat == PowerForge.ModuleTestSuiteOutputFormat.Minimal
-            ? null
-            : line => ConsoleOutput.WriteLine(line);
+        // Minimal keeps the console to the summary. In a console host Pester output is shown while the tests run:
+        // the reader thread's writes reach the same console. Remoting, jobs and the ISE only accept host writes on the
+        // pipeline thread, so there the captured output is replayed after the run.
+        var showPesterOutput = preparation.Spec.OutputFormat != PowerForge.ModuleTestSuiteOutputFormat.Minimal;
+        var streamPesterOutput = showPesterOutput && string.Equals(Host?.Name, "ConsoleHost", StringComparison.Ordinal);
+        Action<string>? pesterOutput = streamPesterOutput ? line => ConsoleOutput.WriteLine(line) : null;
         var logger = new CmdletLogger(this, MyInvocation.BoundParameters.ContainsKey("Verbose"), warningsAsVerbose: false);
         var workflow = new ModuleTestSuiteWorkflowService(
                 logger,
                 runSuite: spec => new ModuleTestSuiteService(new PowerShellRunner(), logger).Run(spec, pesterOutput))
             .Execute(preparation);
         var result = workflow.Result;
+        if (showPesterOutput && !streamPesterOutput && !string.IsNullOrEmpty(result.StdOut))
+            ConsoleOutput.WriteLine(result.StdOut.TrimEnd());
 
         WriteSummary(result, workflow.Success, includeDependencies: !SkipDependencies.IsPresent);
 
