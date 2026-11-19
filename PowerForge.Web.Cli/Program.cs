@@ -13,7 +13,8 @@ if (argv.Length == 0 || argv[0].Equals("-h", StringComparison.OrdinalIgnoreCase)
 var subCommand = argv[0].ToLowerInvariant();
 var subArgs = argv.Skip(1).ToArray();
 var outputJson = IsJsonOutput(subArgs);
-EnsureUtf8ConsoleEncoding();
+// UTF-8 for the whole run (JSON readers expect it); the shell that started the tool gets its encoding back on exit.
+using var consoleEncoding = PowerForge.ConsoleEncoding.UseUtf8(switchEncoding: true);
 var logger = new WebConsoleLogger(writeToStandardError: outputJson);
 
 try

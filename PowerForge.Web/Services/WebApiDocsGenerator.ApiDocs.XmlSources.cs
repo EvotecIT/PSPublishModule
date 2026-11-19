@@ -69,9 +69,16 @@ public static partial class WebApiDocsGenerator
             var parsed = ParseXml(source.Document, assembly, options, members);
             combined.AssemblyName ??= parsed.AssemblyName;
             combined.AssemblyVersion ??= parsed.AssemblyVersion;
+            // The compiler documents internal types too, and source generators embed the same internal types (their
+            // attributes) in every assembly that uses them. Only exported types are part of the API, so the others are
+            // neither owned nor compared; the public surface step would remove them anyway. When the exported types
+            // cannot all be read, every type is kept and compared as before.
+            var exported = assembly is null ? null : TryGetCompleteExportedTypeNames(assembly);
 
             foreach (var pair in parsed.Types)
             {
+                if (exported is not null && !exported.Contains(pair.Key))
+                    continue;
                 if (typeOwners.TryGetValue(pair.Key, out var previousOwner) &&
                     !string.Equals(previousOwner, declaredAssembly, StringComparison.OrdinalIgnoreCase))
                     throw new InvalidDataException($"API type '{pair.Key}' is declared by multiple assemblies: {previousOwner}, {declaredAssembly}.");
