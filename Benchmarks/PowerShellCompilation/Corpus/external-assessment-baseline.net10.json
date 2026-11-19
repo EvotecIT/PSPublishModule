@@ -1,21 +1,28 @@
 {
   "schemaVersion": 2,
   "packetId": "powerforge-external-powershell-assessment-net10-v1",
-  "packetSha256": "19c320590be41edc3b0f982f13243e1bc68858869846200b9474274f75c6a859",
+  "packetSha256": "39da7e28b41372308e9e1ebe7e3577f327de818fd6e4170d710ede43c562324c",
   "recordedOn": "2026-11-19",
   "semanticProfile": "PowerForge.Oracle.PowerShell/7.6",
   "targetFramework": "net10.0",
   "execution": {
     "requested": true,
     "workloadsTotal": 7,
-    "workloadsAttempted": 6,
-    "workloadsPassed": 6,
+    "workloadsAttempted": 7,
+    "workloadsPassed": 7,
     "workloads": [
       {
         "id": "locksmith",
-        "attempted": false,
-        "succeeded": false,
-        "reason": "No complete owned-function and execution-scenario contract is declared."
+        "attempted": true,
+        "succeeded": true,
+        "completeWorkloadExecution": true,
+        "scenarioCount": 3,
+        "surfaces": [
+          "Original",
+          "Built",
+          "Installed"
+        ],
+        "functions": 44
       },
       {
         "id": "locksmith2",
@@ -106,15 +113,15 @@
       "sourceFingerprint": "7167e1560fb71d98f74030e3d5b6b6897d9195d304dc7d05d7704a3fd0c29131",
       "sourceFiles": 45,
       "totalUnits": 45,
-      "emittedUnits": 21,
+      "emittedUnits": 44,
       "runtimeFallbackUnits": 45,
       "parseErrorFiles": 0,
       "postEmissionEvaluated": true,
       "totalFunctions": 44,
-      "analyzerEligibleFunctions": 22,
-      "emittedFunctions": 21,
-      "promotedTypedRegions": 1,
-      "droppedEligibleFunctions": 1,
+      "analyzerEligibleFunctions": 44,
+      "emittedFunctions": 44,
+      "promotedTypedRegions": 0,
+      "droppedEligibleFunctions": 0,
       "fallbackFunctions": 44,
       "functionDispositions": [
         {
@@ -144,8 +151,8 @@
           "relativePath": "Private/Find-AuditingIssue.ps1",
           "name": "Find-AuditingIssue",
           "startLine": 1,
-          "semanticEligible": false,
-          "emitted": false,
+          "semanticEligible": true,
+          "emitted": true,
           "runtimeRouted": true,
           "shapingFallback": false,
           "promotedTypedRegions": 0
@@ -155,8 +162,8 @@
           "relativePath": "Private/Find-ESC1.ps1",
           "name": "Find-ESC1",
           "startLine": 1,
-          "semanticEligible": false,
-          "emitted": false,
+          "semanticEligible": true,
+          "emitted": true,
           "runtimeRouted": true,
           "shapingFallback": false,
           "promotedTypedRegions": 0
@@ -166,8 +173,8 @@
           "relativePath": "Private/Find-ESC11.ps1",
           "name": "Find-ESC11",
           "startLine": 1,
-          "semanticEligible": false,
-          "emitted": false,
+          "semanticEligible": true,
+          "emitted": true,
           "runtimeRouted": true,
           "shapingFallback": false,
           "promotedTypedRegions": 0
@@ -177,8 +184,8 @@
           "relativePath": "Private/Find-ESC13.ps1",
           "name": "Find-ESC13",
           "startLine": 1,
-          "semanticEligible": false,
-          "emitted": false,
+          "semanticEligible": true,
+          "emitted": true,
           "runtimeRouted": true,
           "shapingFallback": false,
           "promotedTypedRegions": 0
@@ -188,8 +195,8 @@
           "relativePath": "Private/Find-ESC15.ps1",
           "name": "Find-ESC15",
           "startLine": 1,
-          "semanticEligible": false,
-          "emitted": false,
+          "semanticEligible": true,
+          "emitted": true,
           "runtimeRouted": true,
           "shapingFallback": false,
           "promotedTypedRegions": 0
@@ -199,8 +206,8 @@
           "relativePath": "Private/Find-ESC16.ps1",
           "name": "Find-ESC16",
           "startLine": 1,
-          "semanticEligible": false,
-          "emitted": false,
+          "semanticEligible": true,
+          "emitted": true,
           "runtimeRouted": true,
           "shapingFallback": false,
           "promotedTypedRegions": 0
@@ -210,8 +217,8 @@
           "relativePath": "Private/Find-ESC17.ps1",
           "name": "Find-ESC17",
           "startLine": 1,
-          "semanticEligible": false,
-          "emitted": false,
+          "semanticEligible": true,
+          "emitted": true,
           "runtimeRouted": true,
           "shapingFallback": false,
           "promotedTypedRegions": 0
@@ -221,8 +228,8 @@
           "relativePath": "Private/Find-ESC2.ps1",
           "name": "Find-ESC2",
           "startLine": 1,
-          "semanticEligible": false,
-          "emitted": false,
+          "semanticEligible": true,
+          "emitted": true,
           "runtimeRouted": true,
           "shapingFallback": false,
           "promotedTypedRegions": 0
@@ -232,8 +239,8 @@
           "relativePath": "Private/Find-ESC3C1.ps1",
           "name": "Find-ESC3C1",
           "startLine": 1,
-          "semanticEligible": false,
-          "emitted": false,
+          "semanticEligible": true,
+          "emitted": true,
           "runtimeRouted": true,
           "shapingFallback": false,
           "promotedTypedRegions": 0
@@ -243,8 +250,8 @@
           "relativePath": "Private/Find-ESC3C2.ps1",
           "name": "Find-ESC3C2",
           "startLine": 1,
-          "semanticEligible": false,
-          "emitted": false,
+          "semanticEligible": true,
+          "emitted": true,
           "runtimeRouted": true,
           "shapingFallback": false,
           "promotedTypedRegions": 0
@@ -254,8 +261,8 @@
           "relativePath": "Private/Find-ESC4.ps1",
           "name": "Find-ESC4",
           "startLine": 1,
-          "semanticEligible": false,
-          "emitted": false,
+          "semanticEligible": true,
+          "emitted": true,
           "runtimeRouted": true,
           "shapingFallback": false,
           "promotedTypedRegions": 0
@@ -265,8 +272,8 @@
           "relativePath": "Private/Find-ESC5.ps1",
           "name": "Find-ESC5",
           "startLine": 1,
-          "semanticEligible": false,
-          "emitted": false,
+          "semanticEligible": true,
+          "emitted": true,
           "runtimeRouted": true,
           "shapingFallback": false,
           "promotedTypedRegions": 0
@@ -276,8 +283,8 @@
           "relativePath": "Private/Find-ESC6.ps1",
           "name": "Find-ESC6",
           "startLine": 1,
-          "semanticEligible": false,
-          "emitted": false,
+          "semanticEligible": true,
+          "emitted": true,
           "runtimeRouted": true,
           "shapingFallback": false,
           "promotedTypedRegions": 0
@@ -287,8 +294,8 @@
           "relativePath": "Private/Find-ESC7.ps1",
           "name": "Find-ESC7",
           "startLine": 1,
-          "semanticEligible": false,
-          "emitted": false,
+          "semanticEligible": true,
+          "emitted": true,
           "runtimeRouted": true,
           "shapingFallback": false,
           "promotedTypedRegions": 0
@@ -298,8 +305,8 @@
           "relativePath": "Private/Find-ESC8.ps1",
           "name": "Find-ESC8",
           "startLine": 1,
-          "semanticEligible": false,
-          "emitted": false,
+          "semanticEligible": true,
+          "emitted": true,
           "runtimeRouted": true,
           "shapingFallback": false,
           "promotedTypedRegions": 0
@@ -309,8 +316,8 @@
           "relativePath": "Private/Find-ESC9.ps1",
           "name": "Find-ESC9",
           "startLine": 1,
-          "semanticEligible": false,
-          "emitted": false,
+          "semanticEligible": true,
+          "emitted": true,
           "runtimeRouted": true,
           "shapingFallback": false,
           "promotedTypedRegions": 0
@@ -342,10 +349,10 @@
           "relativePath": "Private/Get-CAHostObject.ps1",
           "name": "Get-CAHostObject",
           "startLine": 1,
-          "semanticEligible": false,
-          "emitted": false,
+          "semanticEligible": true,
+          "emitted": true,
           "runtimeRouted": true,
-          "shapingFallback": true,
+          "shapingFallback": false,
           "promotedTypedRegions": 0
         },
         {
@@ -397,8 +404,8 @@
           "relativePath": "Private/Invoke-Scans.ps1",
           "name": "Invoke-Scans",
           "startLine": 1,
-          "semanticEligible": false,
-          "emitted": false,
+          "semanticEligible": true,
+          "emitted": true,
           "runtimeRouted": true,
           "shapingFallback": false,
           "promotedTypedRegions": 0
@@ -408,8 +415,8 @@
           "relativePath": "Private/New-Dictionary.ps1",
           "name": "New-Dictionary",
           "startLine": 22,
-          "semanticEligible": false,
-          "emitted": false,
+          "semanticEligible": true,
+          "emitted": true,
           "runtimeRouted": true,
           "shapingFallback": false,
           "promotedTypedRegions": 0
@@ -430,10 +437,10 @@
           "relativePath": "Private/Set-AdditionalCAProperty.ps1",
           "name": "Set-AdditionalCAProperty",
           "startLine": 1,
-          "semanticEligible": false,
-          "emitted": false,
+          "semanticEligible": true,
+          "emitted": true,
           "runtimeRouted": true,
-          "shapingFallback": true,
+          "shapingFallback": false,
           "promotedTypedRegions": 0
         },
         {
@@ -441,10 +448,10 @@
           "relativePath": "Private/Set-AdditionalTemplateProperty.ps1",
           "name": "Set-AdditionalTemplateProperty",
           "startLine": 1,
-          "semanticEligible": false,
-          "emitted": false,
+          "semanticEligible": true,
+          "emitted": true,
           "runtimeRouted": true,
-          "shapingFallback": true,
+          "shapingFallback": false,
           "promotedTypedRegions": 0
         },
         {
@@ -452,11 +459,11 @@
           "relativePath": "Private/Set-RiskRating.ps1",
           "name": "Set-RiskRating",
           "startLine": 1,
-          "semanticEligible": false,
-          "emitted": false,
+          "semanticEligible": true,
+          "emitted": true,
           "runtimeRouted": true,
           "shapingFallback": false,
-          "promotedTypedRegions": 1
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "e9dadd0e171f3376d2251d1b",
@@ -475,9 +482,9 @@
           "name": "Test-IsADAdmin",
           "startLine": 1,
           "semanticEligible": true,
-          "emitted": false,
+          "emitted": true,
           "runtimeRouted": true,
-          "shapingFallback": true,
+          "shapingFallback": false,
           "promotedTypedRegions": 0
         },
         {
