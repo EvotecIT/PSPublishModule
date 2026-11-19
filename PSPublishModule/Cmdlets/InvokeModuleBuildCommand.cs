@@ -484,7 +484,7 @@ public sealed partial class InvokeModuleBuildCommand : PSCmdlet
         var exitCodeMode = ExitCode.IsPresent ||
                            (boundParameters?.TryGetValue(nameof(ExitCode), out var exitCodeValue) == true && IsTrue(exitCodeValue));
 
-        ConsoleEncoding.EnsureUtf8();
+        using var consoleEncoding = ConsoleEncoding.UseUtf8();
         ILogger outputLogger = Quiet.IsPresent
             ? new NullLogger { IsVerbose = isVerbose }
             : new ConsoleOutputLogger { IsVerbose = isVerbose };
