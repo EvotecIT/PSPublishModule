@@ -122,9 +122,9 @@ namespace PowerForge.Generated.Runtime
             bool hasBegin, bool hasProcess, bool hasEnd, bool hasClean, string[]? localTypeDeclarations, string[]? functionTypeDeclarations,
             string? dynamicParameterDeclaration)
         {
-            var enums = FunctionEnumSource(functionTypeDeclarations);
-            if (enums.Length != 0 && (hasBegin || hasProcess || hasClean || !hasEnd))
-                throw new ArgumentException("Function-scoped enums require the qualified end-only native frame.", nameof(functionTypeDeclarations));
+            var functionTypes = FunctionTypeSource(functionTypeDeclarations);
+            if (functionTypes.Length != 0 && (hasBegin || hasProcess || hasClean || !hasEnd))
+                throw new ArgumentException("Function-scoped types require the qualified end-only native frame.", nameof(functionTypeDeclarations));
             var metadata = Parse(parameterDeclaration, sourcePath);
             if (metadata.ParamBlock == null || metadata.BeginBlock != null || metadata.ProcessBlock != null ||
                 metadata.DynamicParamBlock != null || HasUsingStatements(metadata) || metadata.ScriptRequirements != null ||
@@ -165,7 +165,7 @@ namespace PowerForge.Generated.Runtime
             if (hasProcess) source += "\nprocess { if ($false) { " + localDeclarations + " }; throw 'Compiled process callback was not installed.' }";
             if (hasEnd || !hasBegin && !hasProcess && !hasClean)
                 // These declarations allocate native tuple slots. The installed callback replaces the entire clause.
-                source += "\nend { " + enums + "if ($false) { " + localDeclarations + " }; throw 'Compiled end callback was not installed.' }";
+                source += "\nend { " + functionTypes + "if ($false) { " + localDeclarations + " }; throw 'Compiled end callback was not installed.' }";
             if (hasClean) source += "\nclean { if ($false) { " + localDeclarations + " }; throw 'Compiled clean callback was not installed.' }";
             return source;
         }

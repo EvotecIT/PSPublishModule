@@ -10,6 +10,7 @@ namespace PowerForge.Generated.Runtime
         private readonly SessionState _session;
         private readonly object _executionContext;
         private readonly PowerShellNativeFunctionHost.NativeContract _contract;
+        private readonly PowerShellNativeFunctionHost.FunctionTypeScope? _functionTypes;
         private readonly object _pipe;
         private readonly ICommandRuntime2 _runtime;
         private bool _disposed;
@@ -37,7 +38,7 @@ namespace PowerForge.Generated.Runtime
             var functionScript = (ScriptBlock)functionContext.GetType().GetField("_scriptBlock",
                 System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic)!
                 .GetValue(functionContext)!;
-            PowerShellNativeFunctionHost.InitializeFunctionEnums(functionScript, _executionContext);
+            _functionTypes = PowerShellNativeFunctionHost.InitializeFunctionTypes(functionScript, _executionContext);
         }
 
         /// <summary>Reads the actual variable value, including changes made by binding callbacks.</summary>

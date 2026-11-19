@@ -62,6 +62,8 @@ internal sealed partial class PowerShellCompilationDependencyGraphBuilder
                 AddEdge(manifestId, nodeId, PowerShellCompilationDependencyEdgeKind.RequiredModule, module.ModuleName);
                 if (localManifest is not null)
                     DiscoverManifestEdges(localManifest, nodeId, targetFramework, runtimeIdentifier, visited);
+                else if (_mode == PowerShellCompilationMode.Hybrid)
+                    AddWindowsModuleTypeMetadata(nodeId, module, targetFramework, runtimeIdentifier);
             }
         }
 
@@ -79,6 +81,32 @@ internal sealed partial class PowerShellCompilationDependencyGraphBuilder
                 : ModuleManifestValueReader.ReadTopLevelLiteralStringOrArrayOrThrow(manifestPath, key) ?? Array.Empty<string>();
             foreach (var value in values)
                 AddManifestTarget(manifestId, directory, value, edgeKind, targetFramework, runtimeIdentifier, visited);
+        }
+    }
+
+    private void AddWindowsModuleTypeMetadata(string moduleId, RequiredModuleReference module, string? framework, string? runtime)
+    {
+        var matchingManifests = PowerShellWindowsModuleMetadata.FindManifests(module.ModuleName)
+            .Select(path => new { Path = path, Version = GetMatchingModuleVersion(path, module) })
+            .Where(static item => item.Version is not null).OrderByDescending(static item => item.Version).Take(2).ToArray();
+        if (matchingManifests.Length == 0 ||
+            matchingManifests.Length == 2 && matchingManifests[0].Version == matchingManifests[1].Version) return;
+        var manifestPath = matchingManifests[0].Path;
+        var assemblies = PowerShellWindowsModuleMetadata.FindDeclaredAssemblies(manifestPath)
+            .Distinct(PowerShellCompilationPathSafety.PathComparer).ToArray();
+        if (assemblies.Length == 0) return;
+        var manifestId = AddLocalNode(manifestPath, PowerShellCompilationDependencyNodeKind.ModuleManifest,
+            PowerShellCompilationDependencyGraphRole.Dependency, PowerShellCompilationDependencyGraphDisposition.External,
+            "Windows owns the module manifest used to discover borrowed type metadata.", framework, runtime);
+        AddEdge(moduleId, manifestId, PowerShellCompilationDependencyEdgeKind.Metadata, "Windows module manifest");
+        foreach (var path in assemblies)
+        {
+            var assemblyId = AddLocalNode(path, PowerShellCompilationDependencyNodeKind.ManagedLibrary,
+                PowerShellCompilationDependencyGraphRole.Semantic | PowerShellCompilationDependencyGraphRole.Dependency,
+                PowerShellCompilationDependencyGraphDisposition.External,
+                "Windows owns the assembly. Compilation reads its type metadata and uses native type resolution at runtime.", framework, runtime);
+            _nodes[assemblyId].Identity.Provenance = PowerShellWindowsModuleMetadata.AssemblyProvenance;
+            AddEdge(manifestId, assemblyId, PowerShellCompilationDependencyEdgeKind.RequiredAssembly, Path.GetFileName(path));
         }
     }
 

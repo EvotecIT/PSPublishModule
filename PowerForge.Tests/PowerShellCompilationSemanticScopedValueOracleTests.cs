@@ -668,7 +668,7 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
     }
 
     private static void CompareScopedArtifacts(string source, string probe, string[] compiledNames, Action<string> assertValue,
-        string? importSetup = null)
+        string? importSetup = null, string? requiredModule = null, Action<PowerShellCompilationBuildResult>? assertArtifact = null)
     {
         var modernHost = Environment.GetEnvironmentVariable("POWERFORGE_PWSH76_PATH");
         Assert.False(string.IsNullOrWhiteSpace(modernHost), "The exact PowerShell 7.6.6 host is required.");
@@ -681,11 +681,19 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
             using var fixture = OracleFixture.Create(string.Empty);
             var module = Path.Combine(fixture.RootPath, "ScopedValues.psm1");
             File.WriteAllText(module, source);
+            string? manifest = null;
+            if (requiredModule is not null)
+            {
+                manifest = Path.ChangeExtension(module, ".psd1");
+                File.WriteAllText(manifest, "@{ RootModule='ScopedValues.psm1'; ModuleVersion='1.0.0'; " +
+                    "FunctionsToExport='*'; RequiredModules=@('" + requiredModule + "') }");
+            }
             var built = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
                 module, Path.Combine(fixture.RootPath, "built"), "ScopedValues", PowerShellCompilationArtifactKind.BinaryModule,
                 PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true)
-            { TargetFramework = framework, SemanticProfileId = profile });
+            { TargetFramework = framework, SemanticProfileId = profile, ModuleManifestPath = manifest });
             Assert.True(built.Succeeded, built.Error + Environment.NewLine + built.BuildOutput);
+            assertArtifact?.Invoke(built);
             foreach (var expected in compiledNames.GroupBy(static name => name, StringComparer.Ordinal))
             {
                 var units = built.Manifest!.UnitDispositionLedger!.Entries.Where(entry => entry.Name == expected.Key).ToArray();
@@ -709,7 +717,7 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
                         PowerShellCompilationSemanticHostArtifactPinCatalog.Get(profile))
                 });
             }
-            var original = Observe(module);
+            var original = Observe(manifest ?? module);
             var generated = Observe(built.ArtifactPath!);
             Assert.Empty(original.ErrorRecords);
             Assert.Empty(generated.ErrorRecords);

@@ -55,6 +55,7 @@ namespace PowerForge.Generated.Runtime
                     node.Extent.StartOffset == startOffset && node.Extent.EndOffset == endOffset));
             if (targetAst is null)
                 throw new ArgumentException("The native assignment does not match its authored target.", nameof(target));
+            _functionTypes?.AttachClassMetadata(targetAst);
             ExpressionAst variable = targetAst;
             while (variable is AttributedExpressionAst attributed) variable = attributed.Child;
             if (!IsNativeAssignmentAccess(variable) &&

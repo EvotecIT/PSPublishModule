@@ -58,7 +58,8 @@ internal sealed partial class PowerShellSemanticBinder
             (!nativeMember.Static || nativeMember.Member is not StringConstantExpressionAst ||
              PowerShellNativeTypeArgumentPolicy.RequiresNativeStaticValueRead(nativeMember) ||
              nativeMember.Expression is TypeExpressionAst enumReceiver &&
-             PowerShellHostedEnumDeclarationPolicy.IsQualifiedMemberReceiver(document, enumReceiver, targetFramework, capabilities) ||
+             (PowerShellHostedEnumDeclarationPolicy.IsQualifiedMemberReceiver(document, enumReceiver, targetFramework, capabilities) ||
+              PowerShellHostedLocalTypePolicy.IsQualifiedDestination(document, enumReceiver, targetFramework, capabilities)) ||
              nativeMember.Expression is VariableExpressionAst ||
              nativeMember.Expression is TypeExpressionAst hostDataType &&
              hostDataType.TypeName.GetReflectionType() is { } hostDataClrType &&
@@ -121,7 +122,7 @@ internal sealed partial class PowerShellSemanticBinder
                     (PowerShellCompilationParameterTypePolicy.IsHostProvidedConstructorReceiver(typeExpression, capabilities) ||
                      PowerShellHostedValueClassPolicy.IsQualifiedConstructorReceiver(document, typeExpression, targetFramework, capabilities) ||
                      PowerShellHostedEnumDeclarationPolicy.IsQualifiedMemberReceiver(document, typeExpression, targetFramework, capabilities) ||
-                     PowerShellHostedLocalEnumPolicy.IsQualifiedDestination(document, typeExpression, targetFramework, capabilities) ||
+                     PowerShellHostedLocalTypePolicy.IsQualifiedDestination(document, typeExpression, targetFramework, capabilities) ||
                      document.NativeDependencyTypes.Qualifies(typeExpression.TypeName, capabilities) ||
                      PowerShellHostedGuardedAddTypePolicy.IsQualified(typeExpression, capabilities)))
                     return new PowerShellBoundNativeTypeExpression(span, typeExpression.TypeName.FullName);

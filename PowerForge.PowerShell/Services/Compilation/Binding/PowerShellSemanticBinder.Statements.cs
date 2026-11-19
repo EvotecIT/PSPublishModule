@@ -21,8 +21,11 @@ internal sealed partial class PowerShellSemanticBinder
         Type? nonTerminalSuccessOutputType = null)
     {
         allowNonTerminalSuccessOutput |= capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding);
-        // The native function declaration compiles the enum in its lexical frame before invoking CLR clauses.
-        if (statement is TypeDefinitionAst && PowerShellHostedLocalEnumPolicy.IsQualified(document, targetFramework, capabilities))
+        // The native function declaration installs the type before invoking CLR clauses.
+        if (statement is TypeDefinitionAst definition &&
+            definition.Parent is NamedBlockAst { Parent: ScriptBlockAst { Parent: FunctionDefinitionAst owner } } &&
+            PowerShellHostedLocalTypePolicy.FindDeclarations(owner).Contains(definition) &&
+            PowerShellHostedLocalTypePolicy.IsQualified(document, targetFramework, capabilities))
             return new PowerShellBoundStatementErrorBoundary(
                 new PowerShellBoundBlock(PowerShellSourceParser.GetSpan(document, statement.Extent), Array.Empty<PowerShellBoundStatement>()),
                 document.Path, PowerShellNativeFunctionBindingPolicy.SourceLines(document, PowerShellSourceParser.GetSpan(document, statement.Extent)));
@@ -112,7 +115,7 @@ internal sealed partial class PowerShellSemanticBinder
             }
             if (capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding) &&
                 NativeStaticAssignmentReceiver(assignment.Left, targetFramework,
-                    document.NativeDependencyTypes, capabilities) is { } staticReceiver)
+                    document.NativeDependencyTypes, capabilities, assignment.Right) is { } staticReceiver)
                 return BindNativeStaticAssignment(document, assignment, staticReceiver, symbols, functions,
                     diagnostics, targetFramework, capabilities);
             if (capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding) &&

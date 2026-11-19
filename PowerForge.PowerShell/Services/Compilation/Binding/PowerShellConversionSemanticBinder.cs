@@ -29,7 +29,8 @@ internal static class PowerShellConversionSemanticBinder
                     "The authored PSCustomObject alias selects custom-object conversion rather than a PSObject wrapper."),
                 customObjectOperand, useNativeConversion: true, useNativeCustomObjectConversion: true);
         }
-        if (document.NativeDependencyTypes.Qualifies(syntax.Type.TypeName, capabilities))
+        if (document.NativeDependencyTypes.Qualifies(syntax.Type.TypeName, capabilities) ||
+            PowerShellHostedLocalTypePolicy.IsQualifiedClassConversion(document, syntax.Type, targetFramework, capabilities))
             return BindNativeRuntimeConversion(document, syntax, bindExpression);
         var targetType = syntax.Type.TypeName.GetReflectionType();
         if (targetType == typeof(System.Management.Automation.PSReference) &&

@@ -2,12 +2,12 @@ using System.Management.Automation.Language;
 
 namespace PowerForge;
 
-/// <summary>Qualifies direct function-local enums without changing their lexical owner or admitting arbitrary unresolved types.</summary>
-internal static class PowerShellHostedLocalEnumPolicy
+/// <summary>Qualifies direct function-local enums and data classes in their native lexical frame.</summary>
+internal static class PowerShellHostedLocalTypePolicy
 {
     internal static TypeDefinitionAst[] FindDeclarations(FunctionDefinitionAst function)
         => function.Body.EndBlock?.Statements.OfType<TypeDefinitionAst>()
-            .Where(global::PowerForge.Generated.Runtime.PowerShellNativeFunctionHost.IsSupportedFunctionEnum).ToArray()
+            .Where(global::PowerForge.Generated.Runtime.PowerShellNativeFunctionHost.IsSupportedFunctionType).ToArray()
            ?? Array.Empty<TypeDefinitionAst>();
 
     internal static bool IsQualified(ParsedSourceDocument document, string? framework, PowerShellCompilationCapability capabilities)
@@ -23,7 +23,7 @@ internal static class PowerShellHostedLocalEnumPolicy
             return false;
         foreach (var definition in definitions)
         {
-            if (!global::PowerForge.Generated.Runtime.PowerShellNativeFunctionHost.IsSupportedFunctionEnum(definition) ||
+            if (!global::PowerForge.Generated.Runtime.PowerShellNativeFunctionHost.IsSupportedFunctionType(definition) ||
                 definition.Parent is not NamedBlockAst { Parent: ScriptBlockAst { Parent: FunctionDefinitionAst owner } } block ||
                 !ReferenceEquals(block, owner.Body.EndBlock) || owner.Body.BeginBlock is not null || owner.Body.ProcessBlock is not null ||
                 owner.Body.DynamicParamBlock is not null || owner.Body.GetType().GetProperty("CleanBlock")?.GetValue(owner.Body) is not null ||
@@ -31,13 +31,15 @@ internal static class PowerShellHostedLocalEnumPolicy
                 PowerShellNativeFunctionBindingPolicy.Select(owner, capabilities, framework) is null)
                 return false;
             foreach (var reference in document.SyntaxRoot.FindAll(node =>
-                         node is TypeExpressionAst expression && expression.TypeName.FullName.Equals(definition.Name, StringComparison.OrdinalIgnoreCase) ||
-                         node is TypeConstraintAst constraint && constraint.TypeName.FullName.Equals(definition.Name, StringComparison.OrdinalIgnoreCase) ||
-                         node is AttributeAst attribute && attribute.TypeName.FullName.Equals(definition.Name, StringComparison.OrdinalIgnoreCase),
+                         node is TypeExpressionAst expression && RefersTo(expression.TypeName, definition.Name) ||
+                         node is TypeConstraintAst constraint && RefersTo(constraint.TypeName, definition.Name) ||
+                         node is AttributeAst attribute && RefersTo(attribute.TypeName, definition.Name),
                          searchNestedScriptBlocks: true))
             {
-                if (reference is not TypeExpressionAst expression || !IsAsDestination(expression) ||
-                    !ReferenceEquals(FindFunction(expression), owner)) return false;
+                if (!ReferenceEquals(FindFunction(reference), owner) ||
+                    (definition.IsEnum
+                        ? reference is not TypeExpressionAst expression || !IsAsDestination(expression)
+                        : !IsSupportedClassConsumer(reference))) return false;
             }
         }
         return true;
@@ -45,9 +47,34 @@ internal static class PowerShellHostedLocalEnumPolicy
 
     internal static bool IsQualifiedDestination(ParsedSourceDocument document, TypeExpressionAst expression,
         string? framework, PowerShellCompilationCapability capabilities)
-        => IsAsDestination(expression) && FindFunction(expression) is { } owner &&
-           FindDeclarations(owner).Count(definition => definition.Name.Equals(expression.TypeName.FullName, StringComparison.OrdinalIgnoreCase)) == 1 &&
+        => FindFunction(expression) is { } owner &&
+           FindDeclarations(owner).Count(definition => RefersTo(expression.TypeName, definition.Name) &&
+               (definition.IsEnum ? IsAsDestination(expression) : IsSupportedClassConsumer(expression))) == 1 &&
            IsQualified(document, framework, capabilities);
+
+    internal static bool IsQualifiedClassConversion(ParsedSourceDocument document, TypeConstraintAst constraint,
+        string? framework, PowerShellCompilationCapability capabilities)
+        => IsSupportedClassConsumer(constraint) && FindFunction(constraint) is { } owner &&
+           FindDeclarations(owner).Count(definition => definition.IsClass && RefersTo(constraint.TypeName, definition.Name)) == 1 &&
+           IsQualified(document, framework, capabilities);
+
+    private static bool RefersTo(ITypeName name, string declaration)
+        => name is ArrayTypeName array ? RefersTo(array.ElementType, declaration) :
+           name is GenericTypeName generic ? generic.GenericArguments.Any(argument => RefersTo(argument, declaration)) :
+           name.FullName.Equals(declaration, StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsSupportedClassConsumer(Ast reference)
+        => reference switch
+        {
+            TypeConstraintAst { Parent: ConvertExpressionAst } constraint => IsLexicalClassName(constraint.TypeName),
+            TypeExpressionAst expression => IsLexicalClassName(expression.TypeName),
+            _ => false
+        };
+
+    private static bool IsLexicalClassName(ITypeName name)
+        => string.IsNullOrEmpty(name.AssemblyName) &&
+           (name is TypeName || name is ArrayTypeName { Rank: 1, ElementType: TypeName element } &&
+            string.IsNullOrEmpty(element.AssemblyName));
 
     private static bool IsAsDestination(TypeExpressionAst expression)
         => expression.TypeName is TypeName && string.IsNullOrEmpty(expression.TypeName.AssemblyName) &&
