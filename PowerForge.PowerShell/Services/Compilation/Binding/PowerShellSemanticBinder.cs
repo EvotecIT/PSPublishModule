@@ -51,7 +51,8 @@ internal sealed partial class PowerShellSemanticBinder
         ClearFunctionRegionEvidence(regionCandidates, regionOpportunities, document.Path, functionSymbol.Name);
         var nativeFunctionBinding = PowerShellNativeFunctionBindingPolicy.Select(
             function, capabilities, targetFramework,
-            requiresNativeInvocation || string.Equals(document.NativeScriptRootName, function.Name, StringComparison.Ordinal) ||
+            requiresNativeInvocation || PowerShellScriptRequirementPolicy.UsesNativeModuleRequirements(document, capabilities) ||
+                string.Equals(document.NativeScriptRootName, function.Name, StringComparison.Ordinal) ||
                 document.GuardPackagedPathReads && PowerShellPackagedPathOperandPolicy.RequiresGuardIn(function.Body),
             document.NativeDependencyTypes);
         if (nativeFunctionBinding?.UsesDeferredTypeBinding == true &&

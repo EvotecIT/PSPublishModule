@@ -99,14 +99,14 @@
       "sourceFingerprint": "7167e1560fb71d98f74030e3d5b6b6897d9195d304dc7d05d7704a3fd0c29131",
       "sourceFiles": 45,
       "totalUnits": 45,
-      "emittedUnits": 18,
+      "emittedUnits": 21,
       "runtimeFallbackUnits": 45,
       "parseErrorFiles": 0,
       "postEmissionEvaluated": true,
       "totalFunctions": 44,
-      "analyzerEligibleFunctions": 19,
-      "emittedFunctions": 18,
-      "promotedTypedRegions": 3,
+      "analyzerEligibleFunctions": 22,
+      "emittedFunctions": 21,
+      "promotedTypedRegions": 1,
       "droppedEligibleFunctions": 1,
       "fallbackFunctions": 44,
       "functionDispositions": [
@@ -544,11 +544,11 @@
           "relativePath": "Private/Update-ESC4Remediation.ps1",
           "name": "Update-ESC4Remediation",
           "startLine": 1,
-          "semanticEligible": false,
-          "emitted": false,
+          "semanticEligible": true,
+          "emitted": true,
           "runtimeRouted": true,
           "shapingFallback": false,
-          "promotedTypedRegions": 1
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "642ef80de98b3c4fd7fa1421",
@@ -577,10 +577,10 @@
           "relativePath": "Private/Write-HostColorized.ps1",
           "name": "Write-HostColorized",
           "startLine": 17,
-          "semanticEligible": false,
-          "emitted": false,
+          "semanticEligible": true,
+          "emitted": true,
           "runtimeRouted": true,
-          "shapingFallback": true,
+          "shapingFallback": false,
           "promotedTypedRegions": 0
         },
         {
@@ -588,11 +588,11 @@
           "relativePath": "Public/Invoke-Locksmith.ps1",
           "name": "Invoke-Locksmith",
           "startLine": 1,
-          "semanticEligible": false,
-          "emitted": false,
+          "semanticEligible": true,
+          "emitted": true,
           "runtimeRouted": true,
           "shapingFallback": false,
-          "promotedTypedRegions": 1
+          "promotedTypedRegions": 0
         }
       ]
     },
@@ -604,15 +604,15 @@
       "sourceFingerprint": "b1e65521a013471cfc80589f0edd062a714f4b498a347685a06d7dce97b1b4ef",
       "sourceFiles": 105,
       "totalUnits": 108,
-      "emittedUnits": 79,
+      "emittedUnits": 100,
       "runtimeFallbackUnits": 107,
       "parseErrorFiles": 0,
       "postEmissionEvaluated": true,
       "totalFunctions": 100,
-      "analyzerEligibleFunctions": 82,
-      "emittedFunctions": 79,
-      "promotedTypedRegions": 1,
-      "droppedEligibleFunctions": 3,
+      "analyzerEligibleFunctions": 100,
+      "emittedFunctions": 100,
+      "promotedTypedRegions": 0,
+      "droppedEligibleFunctions": 0,
       "fallbackFunctions": 99,
       "functionDispositions": [
         {
@@ -620,10 +620,10 @@
           "relativePath": "Private/Convert/Convert-IdentityReferenceToNTAccount.ps1",
           "name": "Convert-IdentityReferenceToNTAccount",
           "startLine": 1,
-          "semanticEligible": false,
-          "emitted": false,
+          "semanticEligible": true,
+          "emitted": true,
           "runtimeRouted": true,
-          "shapingFallback": true,
+          "shapingFallback": false,
           "promotedTypedRegions": 0
         },
         {
@@ -653,10 +653,10 @@
           "relativePath": "Private/Convert/Resolve-Principal.ps1",
           "name": "Resolve-Principal",
           "startLine": 1,
-          "semanticEligible": false,
-          "emitted": false,
+          "semanticEligible": true,
+          "emitted": true,
           "runtimeRouted": true,
-          "shapingFallback": true,
+          "shapingFallback": false,
           "promotedTypedRegions": 0
         },
         {
@@ -664,10 +664,10 @@
           "relativePath": "Private/Get/Get-AdcsObject.ps1",
           "name": "Get-AdcsObject",
           "startLine": 1,
-          "semanticEligible": false,
-          "emitted": false,
+          "semanticEligible": true,
+          "emitted": true,
           "runtimeRouted": true,
-          "shapingFallback": true,
+          "shapingFallback": false,
           "promotedTypedRegions": 0
         },
         {
@@ -730,8 +730,8 @@
           "relativePath": "Private/Initialize/Initialize-DirectoryConnections.ps1",
           "name": "Initialize-DirectoryConnections",
           "startLine": 1,
-          "semanticEligible": false,
-          "emitted": false,
+          "semanticEligible": true,
+          "emitted": true,
           "runtimeRouted": true,
           "shapingFallback": false,
           "promotedTypedRegions": 0
@@ -741,10 +741,10 @@
           "relativePath": "Private/Initialize/Initialize-DomainStore.ps1",
           "name": "Initialize-DomainStore",
           "startLine": 1,
-          "semanticEligible": false,
-          "emitted": false,
+          "semanticEligible": true,
+          "emitted": true,
           "runtimeRouted": true,
-          "shapingFallback": true,
+          "shapingFallback": false,
           "promotedTypedRegions": 0
         },
         {
@@ -785,8 +785,8 @@
           "relativePath": "Private/New/New-GCSearcher.ps1",
           "name": "New-GCSearcher",
           "startLine": 1,
-          "semanticEligible": false,
-          "emitted": false,
+          "semanticEligible": true,
+          "emitted": true,
           "runtimeRouted": true,
           "shapingFallback": false,
           "promotedTypedRegions": 0
@@ -796,8 +796,8 @@
           "relativePath": "Private/New/New-LDAPSearcher.ps1",
           "name": "New-LDAPSearcher",
           "startLine": 1,
-          "semanticEligible": false,
-          "emitted": false,
+          "semanticEligible": true,
+          "emitted": true,
           "runtimeRouted": true,
           "shapingFallback": false,
           "promotedTypedRegions": 0
@@ -1148,10 +1148,10 @@
           "relativePath": "Private/Test/Test-IsBA.ps1",
           "name": "Test-IsBA",
           "startLine": 1,
-          "semanticEligible": false,
-          "emitted": false,
+          "semanticEligible": true,
+          "emitted": true,
           "runtimeRouted": true,
-          "shapingFallback": true,
+          "shapingFallback": false,
           "promotedTypedRegions": 0
         },
         {
@@ -1159,8 +1159,8 @@
           "relativePath": "Private/Test/Test-IsDA.ps1",
           "name": "Test-IsDA",
           "startLine": 1,
-          "semanticEligible": false,
-          "emitted": false,
+          "semanticEligible": true,
+          "emitted": true,
           "runtimeRouted": true,
           "shapingFallback": false,
           "promotedTypedRegions": 0
@@ -1203,8 +1203,8 @@
           "relativePath": "Private/Test/Test-IsDomainUser.ps1",
           "name": "Test-IsDomainUser",
           "startLine": 1,
-          "semanticEligible": false,
-          "emitted": false,
+          "semanticEligible": true,
+          "emitted": true,
           "runtimeRouted": true,
           "shapingFallback": false,
           "promotedTypedRegions": 0
@@ -1214,8 +1214,8 @@
           "relativePath": "Private/Test/Test-IsEA.ps1",
           "name": "Test-IsEA",
           "startLine": 1,
-          "semanticEligible": false,
-          "emitted": false,
+          "semanticEligible": true,
+          "emitted": true,
           "runtimeRouted": true,
           "shapingFallback": false,
           "promotedTypedRegions": 0
@@ -1368,8 +1368,8 @@
           "relativePath": "Private/Test/Test-IsWindowsTerminal.ps1",
           "name": "Test-IsWindowsTerminal",
           "startLine": 1,
-          "semanticEligible": false,
-          "emitted": false,
+          "semanticEligible": true,
+          "emitted": true,
           "runtimeRouted": true,
           "shapingFallback": false,
           "promotedTypedRegions": 0
@@ -1423,8 +1423,8 @@
           "relativePath": "Private/UI/Show-ConnectionDiagnostics.ps1",
           "name": "Show-ConnectionDiagnostics",
           "startLine": 1,
-          "semanticEligible": false,
-          "emitted": false,
+          "semanticEligible": true,
+          "emitted": true,
           "runtimeRouted": true,
           "shapingFallback": false,
           "promotedTypedRegions": 0
@@ -1434,8 +1434,8 @@
           "relativePath": "Private/UI/Show-IssueReport.ps1",
           "name": "Show-IssueReport",
           "startLine": 1,
-          "semanticEligible": false,
-          "emitted": false,
+          "semanticEligible": true,
+          "emitted": true,
           "runtimeRouted": true,
           "shapingFallback": false,
           "promotedTypedRegions": 0
@@ -1446,9 +1446,9 @@
           "name": "ConvertTo-ConsoleColor",
           "startLine": 37,
           "semanticEligible": true,
-          "emitted": false,
+          "emitted": true,
           "runtimeRouted": true,
-          "shapingFallback": true,
+          "shapingFallback": false,
           "promotedTypedRegions": 0
         },
         {
@@ -1457,9 +1457,9 @@
           "name": "Get-TrueColorFg",
           "startLine": 97,
           "semanticEligible": true,
-          "emitted": false,
+          "emitted": true,
           "runtimeRouted": true,
-          "shapingFallback": true,
+          "shapingFallback": false,
           "promotedTypedRegions": 0
         },
         {
@@ -1468,9 +1468,9 @@
           "name": "Get-TrueColorBg",
           "startLine": 127,
           "semanticEligible": true,
-          "emitted": false,
+          "emitted": true,
           "runtimeRouted": true,
-          "shapingFallback": true,
+          "shapingFallback": false,
           "promotedTypedRegions": 0
         },
         {
@@ -1478,8 +1478,8 @@
           "relativePath": "Private/UI/Show-PrivilegeContext.ps1",
           "name": "Show-PrivilegeContext",
           "startLine": 1,
-          "semanticEligible": false,
-          "emitted": false,
+          "semanticEligible": true,
+          "emitted": true,
           "runtimeRouted": true,
           "shapingFallback": false,
           "promotedTypedRegions": 0
@@ -1489,8 +1489,8 @@
           "relativePath": "Private/Utility/Add-ToIssueStore.ps1",
           "name": "Add-ToIssueStore",
           "startLine": 1,
-          "semanticEligible": false,
-          "emitted": false,
+          "semanticEligible": true,
+          "emitted": true,
           "runtimeRouted": true,
           "shapingFallback": false,
           "promotedTypedRegions": 0
@@ -1588,11 +1588,11 @@
           "relativePath": "Private/Utility/Resolve-LS2ConnectionContext.ps1",
           "name": "Resolve-LS2ConnectionContext",
           "startLine": 1,
-          "semanticEligible": false,
-          "emitted": false,
+          "semanticEligible": true,
+          "emitted": true,
           "runtimeRouted": true,
           "shapingFallback": false,
-          "promotedTypedRegions": 1
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "95a32e7b3b795e61e59baa07",
@@ -1610,8 +1610,8 @@
           "relativePath": "Private/Utility/Update-OutputEncoding.ps1",
           "name": "Update-OutputEncoding",
           "startLine": 1,
-          "semanticEligible": false,
-          "emitted": false,
+          "semanticEligible": true,
+          "emitted": true,
           "runtimeRouted": true,
           "shapingFallback": false,
           "promotedTypedRegions": 0

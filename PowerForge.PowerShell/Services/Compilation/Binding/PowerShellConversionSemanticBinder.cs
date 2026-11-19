@@ -41,7 +41,9 @@ internal static class PowerShellConversionSemanticBinder
         }
         if (targetType == typeof(System.Management.Automation.PSReference) &&
             capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding) &&
-            syntax.Child is VariableExpressionAst referenceVariable)
+            syntax.Child is VariableExpressionAst referenceVariable &&
+            !(referenceVariable.VariablePath.IsUnqualified &&
+              referenceVariable.VariablePath.UserPath.Equals("null", StringComparison.OrdinalIgnoreCase)))
         {
             // A variable reference denotes its cell, not a conversion of its current value.
             // Reuse the same native cell operation as CLR reference arguments.
@@ -82,7 +84,12 @@ internal static class PowerShellConversionSemanticBinder
             PowerShellCompilationLiteralPolicy.CanEmitBoundValue(value, targetType))
             return BindResolvedLiteral(span, targetType, value);
 
-        var operand = bindExpression(syntax.Child, targetType);
+        // A native cast acts on the authored collection result. Supplying its
+        // destination element type to the literal would convert before collection.
+        var preservesNativeCollection = capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding) &&
+                                        targetType.IsArray &&
+                                        PowerShellSemanticBinder.UnwrapExpression(syntax.Child) is ArrayLiteralAst or ArrayExpressionAst;
+        var operand = bindExpression(syntax.Child, preservesNativeCollection ? null : targetType);
         if (operand is null) return null;
         if (capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding))
             return new PowerShellBoundConversionExpression(span,

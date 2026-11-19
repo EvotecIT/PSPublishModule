@@ -161,7 +161,8 @@ internal sealed class PowerShellBoundSwitchClause
 internal enum PowerShellBoundSwitchMatchMode
 {
     Exact,
-    Regex
+    Regex,
+    Wildcard
 }
 
 internal enum PowerShellBoundSwitchInputKind

@@ -94,6 +94,23 @@ internal static class PowerShellCompilationParameterTypePolicy
         typeof(CodeGeneration)
     };
 
+    // These objects use the active SDK or Windows directory assembly. The
+    // native binder owns their identity and the caller keeps their lifetime.
+    private static readonly HashSet<Type> NativeInteropTypes = new()
+    {
+        typeof(PSModuleInfo),
+        typeof(PSLanguageMode),
+        typeof(Token),
+        typeof(CommandCompletion),
+        typeof(System.Management.Automation.Internal.CommonParameters),
+        typeof(System.Management.Automation.Internal.ShouldProcessParameters),
+        typeof(System.DirectoryServices.ActiveDirectory.Domain),
+        typeof(System.DirectoryServices.DirectoryEntry),
+        typeof(System.DirectoryServices.DirectorySearcher),
+        typeof(System.DirectoryServices.SearchScope),
+        typeof(System.DirectoryServices.AuthenticationTypes)
+    };
+
     internal static bool IsQualifiedHostDataType(Type type, string? targetFramework = null)
         => type.IsArray && type.GetArrayRank() == 1
             ? IsQualifiedHostDataType(type.GetElementType()!, targetFramework)
@@ -175,7 +192,7 @@ internal static class PowerShellCompilationParameterTypePolicy
 
     // Qualified SDK identity and value-copy rules require native binding, including containers.
     private static bool IsHostDataType(Type type)
-        => PowerShellHostDataTypes.Contains(type) ||
+        => PowerShellHostDataTypes.Contains(type) || NativeInteropTypes.Contains(type) ||
            IsHostUtilityDataType(type) ||
            type.IsVisible && type.Assembly == typeof(Ast).Assembly && typeof(Ast).IsAssignableFrom(type);
 
@@ -184,7 +201,7 @@ internal static class PowerShellCompilationParameterTypePolicy
            type.Assembly.GetName().Name == "Microsoft.PowerShell.Commands.Utility";
 
     private static bool RequiresNativeFunctionBinding(Type type)
-        => type == typeof(PSReference) || type == typeof(PowerShell) ||
+        => NativeInteropTypes.Contains(type) || type == typeof(PSReference) || type == typeof(PowerShell) ||
            IsHostUtilityDataType(type) ||
            type == typeof(Ast) || type == typeof(FunctionDefinitionAst) || type == typeof(CompletionResultType) ||
            type == typeof(SessionState) || type == typeof(PSCmdlet) || type == typeof(PSVariable) ||

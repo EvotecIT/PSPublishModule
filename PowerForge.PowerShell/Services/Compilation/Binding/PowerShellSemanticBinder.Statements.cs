@@ -95,7 +95,24 @@ internal sealed partial class PowerShellSemanticBinder
             if (capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding) && assignment.Right is SwitchStatementAst or TryStatementAst)
                 return BindOutputCapture(document, assignment, symbols, functions, diagnostics, targetFramework, capabilities);
             if (capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding) &&
-                NativeStaticAssignmentReceiver(assignment.Left, targetFramework) is { } staticReceiver)
+                assignment.Operator == TokenKind.Equals && NativeTupleVariables(assignment.Left) is { } tuple)
+            {
+                if (assignment.Right is PipelineAst tuplePipeline && tuplePipeline.GetPureExpression() is null)
+                    return BindOutputCapture(document, assignment, symbols, functions, diagnostics, targetFramework, capabilities);
+                var value = BindExpression(document, assignment.Right, symbols, functions, diagnostics,
+                    targetFramework: targetFramework, capabilities: capabilities);
+                if (value is null || value.Type.ClrType == typeof(void)) return null;
+                return new PowerShellBoundNativeAssignmentStatement(
+                    PowerShellSourceParser.GetSpan(document, assignment.Extent), tuple[0], value,
+                    PowerShellBoundMutationOperator.Assign,
+                    new PowerShellNativeAssignmentTarget(assignment.Left.Extent.Text, document.Path, document.Text,
+                        PowerShellSourceParser.GetSpan(document, assignment.Left.Extent),
+                        assignment.Left.Extent.StartOffset, assignment.Left.Extent.EndOffset,
+                        WrittenVariables: tuple));
+            }
+            if (capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding) &&
+                NativeStaticAssignmentReceiver(assignment.Left, targetFramework,
+                    document.NativeDependencyTypes, capabilities) is { } staticReceiver)
                 return BindNativeStaticAssignment(document, assignment, staticReceiver, symbols, functions,
                     diagnostics, targetFramework, capabilities);
             if (capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding) &&

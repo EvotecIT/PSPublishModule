@@ -13,12 +13,12 @@ runtime-free execution.
 
 | Packet | Complete emitted units | Complete emitted functions | Execution proof |
 | --- | ---: | ---: | --- |
-| Ten public Gallery modules | 682/753 (90.57%) | Not measured separately | 10/10 Hybrid artifacts built, imported, and passed an invocation probe |
-| Seven external workloads | 136/196 (69.39%) | 136/183 (74.32%) | 5/7 complete workloads passed; 39 owned functions, one script root and four nested helpers in 26 scenarios on original, built, and installed surfaces |
+| Ten public Gallery modules | 720/753 (95.62%) | Not measured separately | 10/10 Hybrid artifacts built, imported, and passed an invocation probe |
+| Seven external workloads | 160/196 (81.63%) | 160/183 (87.43%) | 5/7 complete workloads passed; 39 owned functions, one script root and four nested helpers in 26 scenarios on original, built, and installed surfaces |
 
 The external assessment discovers 155 source files, with zero parser errors and
-zero acquisition/analysis failures. It records four promoted regions in retained
-functions. The public packet records 71 retained source units, 576 runtime-routed
+zero acquisition/analysis failures. It records one promoted region in retained
+functions. Three previously promoted regions now belong to complete emitted functions. The public packet records 33 retained source units, 564 runtime-routed
 units, and zero promoted regions. Those probes exercise Hybrid artifacts in
 PowerShell. The ratios describe the measured packets and their discovered units.
 
@@ -30,8 +30,8 @@ denominator. Earlier documents and `m29a-*` files preserve development results. 
 result from 2026-10-03 is a separate targeted maintainer packet and has not been
 rerun here. It must not replace either external measurement above.
 
-The same 753-unit packet rises from **114/753 (15.14%)** to **682/753 (90.57%)**:
-568 additional complete methods, with no loss in another module. All ten artifact
+The same 753-unit packet rises from **114/753 (15.14%)** to **720/753 (95.62%)**.
+The latest 38 complete methods build on the 682/753 measurement. All ten artifact
 probes pass. The complete-method counts by module are:
 
 | Module | Before | After |
@@ -39,14 +39,14 @@ probes pass. The complete-method counts by module are:
 | ImportExcel | 0/2 | 0/2 |
 | InvokeBuild | 0/1 | 0/1 |
 | Microsoft.PowerShell.Archive | 19/21 | 19/21 |
-| Pester | 0/491 | 460/491 |
+| Pester | 0/491 | 478/491 |
 | platyPS | 42/43 | 42/43 |
 | Pode | 0/1 | 0/1 |
 | powershell-yaml | 14/15 | 14/15 |
-| PSFramework | 38/176 | 146/176 |
+| PSFramework | 38/176 | 166/176 |
 | PSScriptAnalyzer | 1/2 | 1/2 |
 | ThreadJob | 0/1 | 0/1 |
-| **Total** | **114/753** | **682/753** |
+| **Total** | **114/753** | **720/753** |
 
 A separate three-test Pester run also passes on the pinned PowerShell 7.6.6 host
 against both the original and generated modules: three passed, zero failed, and
@@ -101,6 +101,15 @@ probes passing. The remaining 71 units comprise 31 Pester, 30 PSFramework and te
 in the other eight modules. The rules use syntax, SDK identity and locked
 dependency metadata; module names are never compiler eligibility inputs.
 
+At 682/753, Pester and PSFramework accounted for 61 of the 71 retained units.
+The first interop measurement reached 707/753, including 17 complete
+PSFramework methods admitted by closed generic dependency types and native
+static storage. The full refresh reached **720/753**, with 18 more Pester
+methods and 20 more PSFramework methods than at 682/753. All ten invocation
+probes passed. The largest remaining groups at this measurement were 13 units
+in Pester and ten in PSFramework. The refreshed artifact ledger records 2,719
+hosted command regions, up from 2,536. Complete methods can contain these regions.
+
 The Gallery runner builds with CompleteModule resources. At the type-admission
 checkpoint, Pester's default Declared-resource census emits 333/491; its complete
 artifact delivers both managed compatibility variants and emits 402/491. The
@@ -126,9 +135,8 @@ classes remain unsupported.
 The external execution choices follow the complete-function census: the GitHub
 helpers already emit 10/10 functions and the PowerShell installer 4/4; Scoop
 emits 23/24 before its exit helper becomes complete. Their contracts qualify
-actual entries and delivered artifacts rather than treating those emission
-counts as execution proof. The current packet emits all 38 owned functions in
-these three workloads, while the other four receive no complete-workload credit.
+actual entries and delivered artifacts. Those first three workflows exercise
+all 38 of their owned functions.
 
 ## Reproduce the measurements
 
@@ -210,29 +218,44 @@ delivered assembly and withdrawing the compiler input. Console execution proves
 startup and native help; the CIM scenarios run through that delivered factory.
 Controlled sessions and device records bound the application proof. Live Graph
 registration, group assignment, remote inventory and reboot remain unqualified.
-Locksmith and Locksmith2 still have no complete workload contract.
+Neither directory module counts as a complete workload. Locksmith2 emits
+100/100 functions, up from 79/100. Locksmith emits 21/44, up from 18/44.
 
-The default external census remains distinct from targeted application
-qualification: it emits 136/196 units, including 79/108 for Locksmith2.
+A read-only lab run of Locksmith2's Auditing mode matched on the original,
+built and installed modules in pinned PowerShell 7.6.6. Each loaded directory
+objects and produced the same stream counts. The installed manifest matched the
+built hash. A separate selection of 258 upstream store and object-projection
+tests passed on both original and generated modules with zero skips. The lab
+run bypassed environment repair. The complete workload still needs observations
+for the full owned function inventory.
+
+The default external census emits 160/196 units, including 100/108 for Locksmith2.
 Autopilot remains 0/1 in that census because it has no explicit executable
 runtime contract. Its qualified Windows x64 executable instead requires the
 complete script-root method in the actual artifact ledger. That application
 result does not increase the default census numerator. All five complete
 workloads pass, with zero failed attempts and zero census regressions.
 
-New pinned oracle cases cover returned/collected callback scope and closures;
+Earlier pinned oracle cases cover returned/collected callback scope and closures;
 borrowed SDK identity, mutation and dynamic binding; native local-call closure;
 delivered alias registration, missing-alias failure, restoration, typed
 reassignment, lifecycle, stopping and recovery; script-root lifecycle; and legacy
 manifest-key import. Applicable forms run against both PowerShell 7.6.6 and
 Windows PowerShell 5.1. A separate public executable check preserves retained
 ownership for returned or collected blocks that require a defining module.
-The focused suite passes **266/266 cases, with zero failures and zero
+That focused suite passed **266/266 cases, with zero failures and zero
 skips**, including the seven new semantic/artifact cases and the binder
 regressions. The shared engine builds for `net472`, `net8.0` and `net10.0` with
 zero warnings and errors. Three artifact oracle cases rerun against the preceding compiler all fail at
 their complete-emission assertions, with zero skips, establishing that the new
 proof detects the previously unsupported forms.
+
+The current interop oracles compare both pinned hosts for closed delivered
+generic metadata, borrowed directory and SDK objects, array-record boundaries
+in multiple assignment, wildcard and exact switch labels, nested scoped writes,
+reference conversions, repeated declarations and module loading requirements.
+The class constructor case compares results, error identity and source position
+when a locked class is also loaded by the module's contained source loader.
 
 The canonical Fast compiler contract gate passes **567/567 tests**. Its pinned
 semantic oracle report records **155 passed, zero failed and zero skipped**;

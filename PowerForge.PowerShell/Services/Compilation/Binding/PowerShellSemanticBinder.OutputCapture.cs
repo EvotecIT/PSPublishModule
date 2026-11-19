@@ -130,6 +130,8 @@ internal sealed partial class PowerShellSemanticBinder
         }
         var variable = PowerShellAssignmentTargetPolicy.FindDirectVariable(assignment.Left, usesNativeInvocation);
         var operation = PowerShellMutationSemanticBinder.GetAssignmentOperator(assignment.Operator);
+        var tuple = usesNativeInvocation && assignment.Operator == TokenKind.Equals
+            ? NativeTupleVariables(assignment.Left) : null;
         var accessReceiver = usesNativeInvocation && assignment.Operator == TokenKind.Equals
             ? NativeCaptureAccessReceiver(assignment.Left) : null;
         if (accessReceiver is not null && !CaptureAccessTypesAreAvailable(assignment.Left, targetFramework, capabilities))
@@ -142,7 +144,7 @@ internal sealed partial class PowerShellSemanticBinder
         if (variable is not null) symbols.TryGetValue(variable.VariablePath.UserPath, out target);
         if (!capabilities.HasFlag(PowerShellCompilationCapability.PowerShellStreams) ||
             !capabilities.HasFlag(PowerShellCompilationCapability.PipelineParameterBinding) ||
-            variable is null && accessReceiver is null || operation is null ||
+            variable is null && accessReceiver is null && tuple is null || operation is null ||
             !usesNativeInvocation && (variable is null || assignment.Operator != TokenKind.Equals || assignment.Left is not VariableExpressionAst ||
                 IsRuntimeOwnedScope(variable.VariablePath.UserPath) || target is null ||
                 target.Type.Provenance != PowerShellTypeFactProvenance.Unknown && target.Type.ClrType != typeof(object) ||
@@ -206,8 +208,9 @@ internal sealed partial class PowerShellSemanticBinder
                     ReadVariables: accessReceiver is null ? null : assignment.Left.FindAll(static node => node is VariableExpressionAst, false)
                         .Cast<VariableExpressionAst>().Select(static node => node.VariablePath.UserPath)
                         .Distinct(StringComparer.OrdinalIgnoreCase).ToArray(),
-                    ReceiverVariableName: accessReceiver?.VariablePath.UserPath), operation.Value,
-                collectedArray is null ? PowerShellOutputCaptureKind.CollapsedPowerShellValue : PowerShellOutputCaptureKind.NativeObjectArray,
+                    ReceiverVariableName: accessReceiver?.VariablePath.UserPath, WrittenVariables: tuple), operation.Value,
+                collectedArray is not null ? PowerShellOutputCaptureKind.NativeObjectArray :
+                tuple is not null ? PowerShellOutputCaptureKind.NativeAssignmentRecords : PowerShellOutputCaptureKind.CollapsedPowerShellValue,
                 shareEmptyArray: collectedArray is not null &&
                                  _semanticProfile.Family == PowerShellCompilationSemanticHostFamily.PowerShell7,
                 transfersEnclosingLoop: transfersLoop);

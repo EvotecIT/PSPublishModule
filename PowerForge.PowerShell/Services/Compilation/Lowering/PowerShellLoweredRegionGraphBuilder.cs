@@ -218,6 +218,8 @@ internal static class PowerShellLoweredRegionGraphBuilder
                         ? "ClrStaticReceiver:" + staticType : "PowerShellSessionVariable:" + assignment.Name.ToUpperInvariant();
                     RecordFirst(writeOffsets, assignmentRoot +
                         (assignment.Target.MutatesReceiver ? ".*" : ""), statement.Span.EndOffset);
+                    foreach (var name in assignment.Target.WrittenVariables ?? Array.Empty<string>())
+                        RecordFirst(writeOffsets, "PowerShellSessionVariable:" + name.ToUpperInvariant(), statement.Span.EndOffset);
                     if (assignment.Target.MutatesReceiver || assignment.Operation != PowerShellBoundMutationOperator.Assign)
                         RecordFirst(readOffsets, assignmentRoot, statement.Span.StartOffset);
                     foreach (var name in assignment.Target.ReadVariables ?? Array.Empty<string>())
@@ -244,6 +246,8 @@ internal static class PowerShellLoweredRegionGraphBuilder
                         RecordFirst(writeOffsets, "PowerShellSessionState:*", statement.Span.EndOffset);
                         if (nativeCapture.ReceiverVariableName is { } receiver)
                             RecordFirst(writeOffsets, "PowerShellSessionVariable:" + receiver.ToUpperInvariant() + ".*", statement.Span.EndOffset);
+                        foreach (var name in nativeCapture.WrittenVariables ?? Array.Empty<string>())
+                            RecordFirst(writeOffsets, "PowerShellSessionVariable:" + name.ToUpperInvariant(), statement.Span.EndOffset);
                         foreach (var name in nativeCapture.ReadVariables ?? Array.Empty<string>())
                             RecordFirst(readOffsets, "PowerShellSessionVariable:" + name.ToUpperInvariant(), statement.Span.StartOffset);
                     }

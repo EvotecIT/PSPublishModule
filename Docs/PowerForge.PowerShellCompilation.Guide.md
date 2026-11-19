@@ -14,14 +14,19 @@ manifest shows which methods compiled and where the artifact relies on PowerShel
 | `if`, `for`, `while`, `do`, array `foreach`, `return` | Supported within the typed rules | Dynamic enumeration and labeled loop control |
 | Local function calls | Supported when the complete reachable code compiles | An unsupported reachable function prevents a Strict build |
 | Selected CLR members, typed exceptions, bounded `try`/`catch`/`finally` | Supported where analysis proves the contract | Runtime type lookup and unsupported exception behavior |
-| Cmdlet calls and multi-stage pipelines in admitted Hybrid functions | Generally unsupported in Strict | Complete emitted method bodies use PowerShell command resolution, binding, streams, and pipeline execution |
+| Cmdlet calls and multi-stage pipelines in admitted Hybrid functions | Generally unsupported in Strict | PowerShell runs stages such as `ForEach-Object`, `Where-Object` and `Select-Object` inside compiled function bodies. Parameter binding, streams and downstream stopping use the active host |
 | Advanced parameters and `begin`/`process`/`end` | No general runtime-free binding support | Native-bound Hybrid functions preserve binding and lifecycle; native executable script roots also support these clauses on the explicit `net10.0` Windows x64 target, with every clause checked |
 | Functions beside authored classes | No general runtime-free authored-class support | Hybrid retains type initialization; unsupported direct type annotations and expressions stay hosted, while runtime type lookup and calls to retained helpers can remain inside emitted bodies |
-| Delivered managed dependency types in parameters, casts and metadata | No general dependency-type binding support | Hybrid reads authenticated delivered DLL metadata; PowerShell owns actual loading, type identity, conversion, attributes and validation |
+| Delivered managed dependency types in parameters, casts and metadata | No general dependency-type binding support | Hybrid reads authenticated delivered DLL metadata, including supported closed public generics. PowerShell handles loading, type identity, conversion, attributes and validation |
 | Borrowed SDK objects, syntax-tree nodes, parameter metadata and completion enums | No general runtime-free host-type support | Native Hybrid binding preserves identity for admitted session, variable, cmdlet, dynamic-parameter and AST types; the host owns conversion and mutation |
 | Returned script-block literals and literals in arrays or dictionaries | Unsupported in Strict | Admitted Hybrid module-function bodies compile completely and retain native dynamic scope, module state, closure capture, failures and later invocation; executable roots and functions needing that module owner remain hosted |
 | Literal type aliases registered for delivered managed types | Unsupported in Strict | Authenticated delivered registration scripts identify aliases without executing them during compilation; native invocation resolves parameter aliases after initialization. Nested alias callbacks, local type declarations and `clean` remain guarded |
 | Local callers of native-bound functions | No general native binding in Strict | The call graph selects native invocation storage for callers and callees, preserving basic extra arguments and advanced parameter binding |
+| Multiple assignment to local variables | Unsupported in Strict | Hybrid preserves the number of pipeline records and the assignment order. A single array record stays together |
+| Same-file repeated root function declarations | Unsupported in Strict | Hybrid registers each supported body at its declaration, preserving calls made during module import |
+| Literal wildcard and bounded exact `switch` clauses | Within the typed scalar rules | Hybrid preserves host matching and enumeration for supported wildcard literals, numeric literals and exact variable labels |
+| Scoped storage and borrowed host values | Within the typed local and module-state rules | Hybrid handles supported nested script-scope index updates, direct environment reads under a conversion and access to selected SDK or directory objects with native identity |
+| Simple installed-module names in `#requires -Modules` | Unsupported in Strict | Hybrid keeps the directive in the module script. PowerShell loads required modules before its function declarations run |
 | Legacy `ModuleToProcess` module manifests | Subject to the same body checks | Generated modules preserve the legacy root key and its referenced artifact; declaring both root keys is rejected |
 | Unlabeled `break` and `continue` targeting a caller's loop | No general runtime-free caller transfer | Native Hybrid functions use PowerShell flow control, including finally and caller-loop behavior |
 | `exit` in admitted Hybrid functions | Unsupported in Strict | The active PowerShell SDK owns exit conversion and script termination; caller-transfer predicates remain hosted |
@@ -71,7 +76,7 @@ for repeatable dependency review and delivery.
 The [coverage report](PowerForge.PowerShellCompilation.Coverage.md) records the
 2026-11-19 reruns of both fixed packets. It distinguishes complete emitted units
 from retained source and smaller compiled regions. The seven-workload external
-assessment emits **136/196 units (69.39%)** and **136/183 functions (74.32%)**,
+assessment emits **160/196 units (81.63%)** and **160/183 functions (87.43%)**,
 with zero parser errors. **Five of seven complete workloads pass**: the ten-function
 GitHub helper library and the four-function PowerShell and twenty-four-function
 Scoop installers, GetBIOS and Autopilot execute 26 scenarios on original, built, and installed surfaces.
@@ -83,12 +88,15 @@ factory with owned CIM sessions and actual CSV files; console execution covers
 startup/help. Its explicit executable target is `net10.0` Windows x64. The default
 external census still reports Autopilot 0/1 because it has no explicit runtime
 contract; that number is separate from the qualified artifact's complete root.
-Live services, hardware, Graph registration, global installations, exhaustive branches and the other two
-workloads remain unqualified.
-The public Gallery packet emits **682/753 (90.57%)** of its units as complete CLR
-methods, up from 114/753 (15.14%) and the preceding 601/753 checkpoint. Pester emits 460/491 and PSFramework emits
-146/176; the other modules lose none. All ten Hybrid artifacts pass the checked-in
-invocation probes.
+Locksmith2 emits all 100 owned functions and its read-only lab audit matched on
+the original, built and installed modules. Full workload execution still needs
+observations for every owned function. The packet counts five complete workloads.
+Live hardware, Graph registration and global installations are outside the
+measured scenarios.
+The public Gallery packet emits **720/753 (95.62%)** of its units as complete CLR
+methods, up from 114/753 (15.14%) and the preceding 682/753 measurement. Pester
+emits 478/491 and PSFramework emits 166/176. The other eight modules keep their
+complete-method counts. All ten Hybrid artifacts pass the invocation probes.
 Neither packet measures the percentage of the PowerShell language supported.
 The maintainer's five-module packet is separate, targeted historical evidence.
 

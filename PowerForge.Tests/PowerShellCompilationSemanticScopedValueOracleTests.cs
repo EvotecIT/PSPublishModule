@@ -175,6 +175,437 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
 
     [PinnedSemanticHostFact]
     [Trait("Category", "PowerShellCompilerGate")]
+    public void NativeMultipleAssignmentPreservesStorageAndCapturedOutputOnBothHosts()
+    {
+        const string source = """
+            function Read-AssignedValues {
+                [CmdletBinding()]
+                param([string[]] $Values, [switch] $Captured)
+                [int] $first = 9
+                $rest = 'sentinel'
+                if ($Captured) {
+                    $first, $rest = if ($Values.Count -gt 0) { $Values }
+                } else {
+                    $first, $rest = $Values | Write-Output
+                }
+                [ordered]@{first=$first;rest=$rest}
+            }
+            function Read-WholeArrayRecord {
+                [CmdletBinding()]
+                param([string[]] $Values, [switch] $Captured, [switch] $Direct)
+                if ($Direct) {
+                    $first, $rest = $Values
+                } elseif ($Captured) {
+                    $first, $rest = if ($true) { ,$Values }
+                } else {
+                    $first, $rest = Write-Output -NoEnumerate $Values
+                }
+                [ordered]@{first=$first;rest=$rest}
+            }
+            function Read-UnwoundAssignment {
+                [CmdletBinding()]
+                param([switch] $ReturnEarly)
+                if ($ReturnEarly) {
+                    $first, $rest = if ($true) { 'discard'; return 'also discarded' }
+                } else {
+                    $list = [Collections.ArrayList]::new()
+                    [void]$list.Add(1)
+                    [void]$list.Add(2)
+                    $first, $rest = foreach ($item in $list) { $item; [void]$list.Add(3) }
+                }
+            }
+            Export-ModuleMember -Function Read-AssignedValues, Read-WholeArrayRecord, Read-UnwoundAssignment
+            """;
+        const string probe = """
+            $unwind = @(Read-UnwoundAssignment -ErrorAction Continue 2>&1 | ForEach-Object {
+                if ($_ -is [Management.Automation.ErrorRecord]) { 'error=' + $_.FullyQualifiedErrorId }
+                else { $_ }
+            })
+            $failure = try {
+                Read-AssignedValues -Values 'invalid','discard' -ErrorAction Stop
+            } catch { $_.FullyQualifiedErrorId }
+            [ordered]@{
+                failure=$failure
+                empty=(Read-AssignedValues -Values @() -Captured)
+                singleton=(Read-AssignedValues -Values '4' -Captured)
+                captured=(Read-AssignedValues -Values '7','keep','tail' -Captured)
+                streamed=(Read-AssignedValues -Values '8','one','two')
+                oneRecord=(Read-WholeArrayRecord -Values 'a','b')
+                statementRecord=(Read-WholeArrayRecord -Values 'a','b' -Captured)
+                direct=(Read-WholeArrayRecord -Values 'a','b' -Direct)
+                early=@(Read-UnwoundAssignment -ReturnEarly)
+                unwind=$unwind
+            } | ConvertTo-Json -Depth 6 -Compress
+            """;
+        CompareScopedArtifacts(source, probe,
+            new[] { "Read-AssignedValues", "Read-WholeArrayRecord", "Read-UnwoundAssignment" }, value =>
+        {
+            Assert.Contains("\"empty\":{\"first\":0,\"rest\":null}", value, StringComparison.Ordinal);
+            Assert.Contains("\"singleton\":{\"first\":4,\"rest\":null}", value, StringComparison.Ordinal);
+            Assert.Contains("\"captured\":{\"first\":7,\"rest\":[\"keep\",\"tail\"]}", value, StringComparison.Ordinal);
+            Assert.Contains("\"streamed\":{\"first\":8,\"rest\":[\"one\",\"two\"]}", value, StringComparison.Ordinal);
+            Assert.True(
+                value.Contains("\"oneRecord\":{\"first\":[\"a\",\"b\"],\"rest\":null}", StringComparison.Ordinal) ||
+                value.Contains("\"oneRecord\":{\"first\":{\"value\":[\"a\",\"b\"],\"Count\":2},\"rest\":null}", StringComparison.Ordinal),
+                "The command produced one array record in the first target: " + value);
+            Assert.Contains("\"statementRecord\":{\"first\":[\"a\",\"b\"],\"rest\":null}", value, StringComparison.Ordinal);
+            Assert.Contains("\"direct\":{\"first\":\"a\",\"rest\":\"b\"}", value, StringComparison.Ordinal);
+            Assert.Contains("\"early\":[]", value, StringComparison.Ordinal);
+            Assert.Contains("\"unwind\":[\"error=", value, StringComparison.Ordinal);
+            Assert.Contains("\"failure\":\"", value, StringComparison.Ordinal);
+        });
+    }
+
+    [PinnedSemanticHostFact]
+    [Trait("Category", "PowerShellCompilerGate")]
+    public void NativeWildcardSwitchAndCapturedStorageMatchBothHosts()
+    {
+        const string source = """
+            function Read-WildcardRecords {
+                [CmdletBinding()]
+                param([string[]] $Values)
+                switch -Wildcard ($Values) {
+                    'a*' { "prefix=$PSItem" }
+                    '*Z' { "suffix=$PSItem" }
+                    default { "other=$PSItem" }
+                }
+                switch -Wildcard -CaseSensitive ($Values) {
+                    'a*' { "case=$PSItem" }
+                }
+            }
+            function Set-CapturedParameter {
+                [CmdletBinding()]
+                param([string] $Text)
+                $buffer = [Text.StringBuilder]::new()
+                $PSBoundParameters.Text = if ($Text) {
+                    [void]$buffer.Append($Text)
+                    $buffer.ToString()
+                } else { 'default' }
+                $PSBoundParameters.Text
+            }
+            Export-ModuleMember -Function Read-WildcardRecords, Set-CapturedParameter
+            """;
+        const string probe = """
+            [ordered]@{
+                matches=@(Read-WildcardRecords -Values 'AZ','apple','pear')
+                empty=@(Read-WildcardRecords -Values @())
+                captured=@((Set-CapturedParameter -Text 'value'),(Set-CapturedParameter -Text ''))
+            } | ConvertTo-Json -Depth 5 -Compress
+            """;
+        CompareScopedArtifacts(source, probe, new[] { "Read-WildcardRecords", "Set-CapturedParameter" }, value =>
+        {
+            Assert.Contains("\"matches\":[\"prefix=AZ\",\"suffix=AZ\",\"prefix=apple\",\"other=pear\",\"case=apple\"]", value, StringComparison.Ordinal);
+            Assert.Contains("\"empty\":[]", value, StringComparison.Ordinal);
+            Assert.Contains("\"captured\":[\"value\",\"default\"]", value, StringComparison.Ordinal);
+        });
+    }
+
+    [PinnedSemanticHostFact]
+    [Trait("Category", "PowerShellCompilerGate")]
+    public void BorrowedDirectoryAndCompletionTypesKeepNativeIdentityOnBothHosts()
+    {
+        const string source = """
+            function Set-BorrowedSearchScope {
+                [CmdletBinding()]
+                param(
+                    [System.DirectoryServices.DirectoryEntry] $Entry,
+                    [System.DirectoryServices.DirectorySearcher] $Searcher,
+                    [System.DirectoryServices.SearchScope] $Scope
+                )
+                $Searcher.SearchScope = $Scope
+                [ordered]@{entry=$Entry;searcher=$Searcher;scope=$Searcher.SearchScope.ToString()}
+            }
+            function Read-CompletionMetadata {
+                param([Management.Automation.PSModuleInfo] $Module,
+                      [Management.Automation.Language.Token[]] $Tokens,
+                      [Management.Automation.CommandCompletion] $Completion,
+                      [Management.Automation.PSLanguageMode] $Mode)
+                [ordered]@{module=$Module;token=$Tokens[0];completion=$Completion;mode=$Mode.ToString()}
+            }
+            function Read-CommonParameterType {
+                [Management.Automation.Internal.CommonParameters].GetProperty('ErrorAction').PropertyType.FullName
+                [Management.Automation.Internal.ShouldProcessParameters].GetProperty('WhatIf').PropertyType.FullName
+                [DirectoryServices.ActiveDirectory.Domain].GetProperty('Name').PropertyType.FullName
+            }
+            function Read-InlineModule([Management.Automation.PSModuleInfo] $Module) { $Module }
+            Export-ModuleMember -Function Set-BorrowedSearchScope, Read-CompletionMetadata, Read-CommonParameterType, Read-InlineModule
+            """;
+        const string probe = """
+            Add-Type -AssemblyName System.DirectoryServices
+            $entry = [System.DirectoryServices.DirectoryEntry]::new()
+            $searcher = [System.DirectoryServices.DirectorySearcher]::new($entry)
+            try {
+                $updated = Set-BorrowedSearchScope -Entry $entry -Searcher $searcher -Scope OneLevel
+                $invalid = try { Set-BorrowedSearchScope -Entry $entry -Searcher $searcher -Scope invalid -ErrorAction Stop } catch { $_.FullyQualifiedErrorId }
+                $module = (Get-Command Read-CompletionMetadata).Module
+                $tokens = $null; $errors = $null
+                $null = [Management.Automation.Language.Parser]::ParseInput('Get-ChildItem', [ref]$tokens, [ref]$errors)
+                $completion = TabExpansion2 'Get-ChildIte' 12
+                $returned = Read-CompletionMetadata $module $tokens $completion FullLanguage
+                [ordered]@{
+                    entry=[object]::ReferenceEquals($entry,$updated.entry)
+                    searcher=[object]::ReferenceEquals($searcher,$updated.searcher)
+                    scope=$updated.scope
+                    invalid=$invalid
+                    module=[object]::ReferenceEquals($module,$returned.module)
+                    inline=[object]::ReferenceEquals($module,(Read-InlineModule $module))
+                    token=[object]::ReferenceEquals($tokens[0],$returned.token)
+                    completion=[object]::ReferenceEquals($completion,$returned.completion)
+                    mode=$returned.mode
+                    common=(Read-CommonParameterType)
+                } | ConvertTo-Json -Compress
+            } finally { $searcher.Dispose(); $entry.Dispose() }
+            """;
+        CompareScopedArtifacts(source, probe,
+            new[] { "Set-BorrowedSearchScope", "Read-CompletionMetadata", "Read-CommonParameterType", "Read-InlineModule" }, value =>
+            {
+                foreach (var name in new[] { "entry", "searcher", "module", "inline", "token", "completion" })
+                    Assert.Contains("\"" + name + "\":true", value, StringComparison.Ordinal);
+                Assert.Contains("\"scope\":\"OneLevel\"", value, StringComparison.Ordinal);
+                Assert.Contains("\"mode\":\"FullLanguage\"", value, StringComparison.Ordinal);
+                Assert.Contains("ParameterArgumentTransformationError", value, StringComparison.Ordinal);
+                Assert.Contains("\"common\":[\"System.Management.Automation.ActionPreference\",\"System.Management.Automation.SwitchParameter\",\"System.String\"]", value, StringComparison.Ordinal);
+            });
+    }
+
+    [PinnedSemanticHostFact]
+    [Trait("Category", "PowerShellCompilerGate")]
+    public void NativeReferencesArrayCastsAndChainedAssignmentsMatchBothHosts()
+    {
+        const string source = """
+            function Read-ParsedText {
+                [CmdletBinding()]
+                param([string] $Text)
+                $tokens = $null
+                $tree = [Management.Automation.Language.Parser]::ParseInput($Text, [ref]$tokens, [ref]$null)
+                [ordered]@{text=$tree.Extent.Text;kind=$tokens[0].Kind.ToString()}
+            }
+            function Convert-InputVector {
+                [CmdletBinding()]
+                param($Value)
+                $result = [string[]]($Value, 'tail')
+                [ordered]@{type=$result.GetType().FullName;values=$result}
+            }
+            function Set-ChainedValues {
+                [CmdletBinding()]
+                param($Value, $Outer, $Inner)
+                $Outer.Value = $Inner.Value = $Value
+                [ordered]@{outer=$Outer.Value;inner=$Inner.Value}
+            }
+            function Set-FailingChain {
+                [CmdletBinding()]
+                param($Inner, $Key)
+                $Outer = 'text'
+                $Outer.Length = $Inner[$($Key + 0)] = 'new'
+            }
+            Export-ModuleMember -Function Read-ParsedText, Convert-InputVector, Set-ChainedValues, Set-FailingChain
+            """;
+        const string probe = """
+            $outer = @{Value='outer'}
+            $inner = @{Value='inner'}
+            $indexed = @{1='old'}
+            $failure = try { Set-FailingChain $indexed 1 -ErrorAction Stop } catch {
+                [ordered]@{id=$_.FullyQualifiedErrorId;column=$_.InvocationInfo.OffsetInLine;line=$_.InvocationInfo.Line.Trim()}
+            }
+            [ordered]@{
+                failure=$failure
+                indexed=$indexed[1]
+                valid=(Read-ParsedText -Text 'Get-Item')
+                incomplete=(Read-ParsedText -Text 'if (')
+                vector=(Convert-InputVector -Value 17)
+                chained=(Set-ChainedValues -Value 'updated' -Outer $outer -Inner $inner)
+                callers=@($outer.Value,$inner.Value)
+            } | ConvertTo-Json -Depth 5 -Compress
+            """;
+        CompareScopedArtifacts(source, probe,
+            new[] { "Read-ParsedText", "Convert-InputVector", "Set-ChainedValues", "Set-FailingChain" }, value =>
+            {
+                Assert.Contains("PropertyAssignmentException", value, StringComparison.Ordinal);
+                Assert.Contains("\"indexed\":\"new\"", value, StringComparison.Ordinal);
+                Assert.Contains("\"valid\":{\"text\":\"Get-Item\",\"kind\":\"Generic\"}", value, StringComparison.Ordinal);
+                Assert.Contains("\"incomplete\":{\"text\":\"if (\",\"kind\":\"If\"}", value, StringComparison.Ordinal);
+                Assert.Contains("\"vector\":{\"type\":\"System.String[]\",\"values\":[\"17\",\"tail\"]}", value, StringComparison.Ordinal);
+                Assert.Contains("\"chained\":{\"outer\":\"updated\",\"inner\":\"updated\"}", value, StringComparison.Ordinal);
+                Assert.Contains("\"callers\":[\"updated\",\"updated\"]", value, StringComparison.Ordinal);
+            });
+    }
+
+    [PinnedSemanticHostFact]
+    [Trait("Category", "PowerShellCompilerGate")]
+    public void NativeSwitchVariablesAndNestedStorageUseAuthoredSemanticsOnBothHosts()
+    {
+        const string source = """
+            function Read-VariableSwitch {
+                [CmdletBinding()]
+                param($Value, $Label)
+                process {
+                    switch ($Value) {
+                        $Label { 'match' }
+                        7 { 'seven' }
+                        default { 'default' }
+                    }
+                }
+            }
+            function Set-IndexedMember {
+                param($Target, $Key, $Value)
+                $Target.Map[$Key.Inner.Name] = $Value
+                $Target.Map[$Key.Inner.Name]
+            }
+            function Set-LocalOutputEncoding {
+                param([int] $CodePage)
+                [Console]::OutputEncoding = [Text.Encoding]::GetEncoding($CodePage)
+                [Console]::OutputEncoding.CodePage
+            }
+            Export-ModuleMember -Function Read-VariableSwitch, Set-IndexedMember, Set-LocalOutputEncoding
+            """;
+        const string probe = """
+            $target = @{Map=@{}}
+            $key = @{Inner=@{Name='chosen'}}
+            $previous = [Console]::OutputEncoding
+            try { $codePage = Set-LocalOutputEncoding 65001 }
+            finally { [Console]::OutputEncoding = $previous }
+            [ordered]@{
+                nullMatch=(Read-VariableSwitch -Value $null -Label $null)
+                noMatch=(Read-VariableSwitch -Value 'other' -Label 'prefix')
+                numberMatch=@(Read-VariableSwitch -Value @('7','07',7) -Label 'never')
+                wildcard=(Read-VariableSwitch -Value 'prefix' -Label ([WildcardPattern]::new('pre*')))
+                indexed=(Set-IndexedMember -Target $target -Key $key -Value 'written')
+                caller=$target.Map['chosen']
+                codepage=$codePage
+            } | ConvertTo-Json -Depth 5 -Compress
+            """;
+        CompareScopedArtifacts(source, probe,
+            new[] { "Read-VariableSwitch", "Set-IndexedMember", "Set-LocalOutputEncoding" }, value =>
+            {
+                Assert.Contains("\"nullMatch\":\"match\"", value, StringComparison.Ordinal);
+                Assert.Contains("\"noMatch\":\"default\"", value, StringComparison.Ordinal);
+            Assert.Contains("\"numberMatch\":[\"seven\",\"default\",\"seven\"]", value, StringComparison.Ordinal);
+                Assert.Contains("\"wildcard\":\"match\"", value, StringComparison.Ordinal);
+                Assert.Contains("\"indexed\":\"written\"", value, StringComparison.Ordinal);
+                Assert.Contains("\"caller\":\"written\"", value, StringComparison.Ordinal);
+                Assert.Contains("\"codepage\":65001", value, StringComparison.Ordinal);
+            });
+    }
+
+    [PinnedSemanticHostFact]
+    [Trait("Category", "PowerShellCompilerGate")]
+    public void NativeScopedAssignmentsAndEnvironmentReadsPreserveOwnershipOnBothHosts()
+    {
+        const string source = """
+            $script:Values = @{row=@{cell=@()}}
+            $prefix = [char]35
+            function Read-RootPrefix { param([string] $Value) "$prefix$Value" }
+            function Read-RecordArray {
+                $rows = @(
+                    @{Name='one';Size=2}
+                    @{Name='two';Size=5}
+                )
+                foreach ($row in $rows) {
+                    if ($row.Size -gt 2) { $row.Name }
+                }
+            }
+            function Add-ScopedValue {
+                param($Key, $Value)
+                $script:Values[$Key]['cell'] += $Value
+                [ordered]@{values=$script:Values[$Key]['cell']}
+            }
+            function Read-EnvironmentFlag {
+                [CmdletBinding()]
+                param()
+                $present = [bool]$env:PowerForgeScopedValueProof
+                Write-Verbose "present=$present"
+                $present
+            }
+            Export-ModuleMember -Function Add-ScopedValue, Read-EnvironmentFlag, Read-RootPrefix, Read-RecordArray
+            """;
+        const string probe = """
+            $Values = @{row=@{cell=@('caller')}}
+            $prefix = 'caller'
+            $saved = $env:PowerForgeScopedValueProof
+            try {
+                $env:PowerForgeScopedValueProof = $null
+                $missing = @(Read-EnvironmentFlag -Verbose 4>&1 | ForEach-Object ToString)
+                $env:PowerForgeScopedValueProof = 'value'
+                $present = @(Read-EnvironmentFlag -Verbose 4>&1 | ForEach-Object ToString)
+                [ordered]@{
+                    missing=$missing;present=$present
+                    prefix=(Read-RootPrefix 'value')
+                    row=(Read-RecordArray)
+                    first=(Add-ScopedValue row 'one')
+                    second=(Add-ScopedValue row 'two')
+                    caller=$Values.row.cell
+                } | ConvertTo-Json -Depth 6 -Compress
+            } finally { $env:PowerForgeScopedValueProof = $saved }
+            """;
+        CompareScopedArtifacts(source, probe, new[] { "Add-ScopedValue", "Read-EnvironmentFlag", "Read-RootPrefix", "Read-RecordArray" }, value =>
+        {
+            Assert.Contains("\"missing\":[\"present=False\",\"False\"]", value, StringComparison.Ordinal);
+            Assert.Contains("\"present\":[\"present=True\",\"True\"]", value, StringComparison.Ordinal);
+            Assert.Contains("\"first\":{\"values\":[\"one\"]}", value, StringComparison.Ordinal);
+            Assert.Contains("\"second\":{\"values\":[\"one\",\"two\"]}", value, StringComparison.Ordinal);
+            Assert.Contains("\"caller\":[\"caller\"]", value, StringComparison.Ordinal);
+            Assert.Contains("\"prefix\":\"#value\"", value, StringComparison.Ordinal);
+            Assert.Contains("\"row\":\"two\"", value, StringComparison.Ordinal);
+        });
+    }
+
+    [PinnedSemanticHostFact]
+    [Trait("Category", "PowerShellCompilerGate")]
+    public void NativeModuleRequirementsPreserveLoadBeforeInvocationOnBothHosts()
+    {
+        const string source = """
+            #requires -Modules Generic.Compiler.Requirement
+            $script:RequiredModuleAtImport = [bool]$global:PowerForgeRequiredModuleFixtureLoaded
+            function Read-RequiredModule {
+                param([int]$Value)
+                [ordered]@{loaded=$script:RequiredModuleAtImport;value=$Value}
+            }
+            Export-ModuleMember -Function Read-RequiredModule
+            """;
+        const string probe = """
+            Read-RequiredModule -Value '7' | ConvertTo-Json -Compress
+            """;
+        using var dependency = OracleFixture.Create(string.Empty);
+        var moduleDirectory = Directory.CreateDirectory(Path.Combine(dependency.RootPath, "Generic.Compiler.Requirement"));
+        File.WriteAllText(Path.Combine(moduleDirectory.FullName, "Generic.Compiler.Requirement.psm1"),
+            "$global:PowerForgeRequiredModuleFixtureLoaded = $true");
+        var importSetup = "$env:PSModulePath = '" + dependency.RootPath.Replace("'", "''", StringComparison.Ordinal) +
+            "' + [IO.Path]::PathSeparator + $env:PSModulePath";
+        CompareScopedArtifacts(source, probe, new[] { "Read-RequiredModule" }, value =>
+            Assert.Equal("{\"loaded\":true,\"value\":7}", value), importSetup);
+    }
+
+    [PinnedSemanticHostFact]
+    [Trait("Category", "PowerShellCompilerGate")]
+    public void RepeatedRootDeclarationsPreserveImportOrderAndNativeBindingOnBothHosts()
+    {
+        const string source = """
+            function Read-Revision { param([int] $Count = 1) $Count + 10 }
+            $script:Before = Read-Revision
+            function Read-Revision { param([int] $Count = 2) $Count + 20 }
+            $script:After = Read-Revision
+            function Read-RevisionOrder {
+                [ordered]@{before=$script:Before;after=$script:After;caller=(Read-Revision 3)}
+            }
+            Export-ModuleMember -Function Read-Revision, Read-RevisionOrder
+            """;
+        const string probe = """
+            [ordered]@{
+                current=(Read-Revision)
+                order=(Read-RevisionOrder)
+                commandType=(Get-Command Read-Revision).CommandType.ToString()
+            } | ConvertTo-Json -Compress
+            """;
+        CompareScopedArtifacts(source, probe, new[] { "Read-Revision", "Read-Revision", "Read-RevisionOrder" }, value =>
+        {
+            Assert.Contains("\"current\":22", value, StringComparison.Ordinal);
+            Assert.Contains("\"order\":{\"before\":11,\"after\":22,\"caller\":23}", value, StringComparison.Ordinal);
+            Assert.Contains("\"commandType\":\"Function\"", value, StringComparison.Ordinal);
+        });
+    }
+
+    [PinnedSemanticHostFact]
+    [Trait("Category", "PowerShellCompilerGate")]
     public void NativeCalleesPreserveBasicExtraArgumentsAndAdvancedCallerBindingOnBothHosts()
     {
         const string source = """
@@ -232,7 +663,8 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
         }
     }
 
-    private static void CompareScopedArtifacts(string source, string probe, string[] compiledNames, Action<string> assertValue)
+    private static void CompareScopedArtifacts(string source, string probe, string[] compiledNames, Action<string> assertValue,
+        string? importSetup = null)
     {
         var modernHost = Environment.GetEnvironmentVariable("POWERFORGE_PWSH76_PATH");
         Assert.False(string.IsNullOrWhiteSpace(modernHost), "The exact PowerShell 7.6.6 host is required.");
@@ -250,15 +682,21 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
                 PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true)
             { TargetFramework = framework, SemanticProfileId = profile });
             Assert.True(built.Succeeded, built.Error + Environment.NewLine + built.BuildOutput);
-            foreach (var name in compiledNames)
+            foreach (var expected in compiledNames.GroupBy(static name => name, StringComparer.Ordinal))
             {
-                var unit = Assert.Single(built.Manifest!.UnitDispositionLedger!.Entries, entry => entry.Name == name);
-                Assert.True(unit.EmittedClrMethod, name + " requires a complete emitted body: " + System.Text.Json.JsonSerializer.Serialize(unit));
-                Assert.False(unit.RetainedHostedSource);
+                var units = built.Manifest!.UnitDispositionLedger!.Entries.Where(entry => entry.Name == expected.Key).ToArray();
+                Assert.Equal(expected.Count(), units.Length);
+                Assert.Equal(units.Length, units.Select(static unit => unit.UnitId).Distinct(StringComparer.Ordinal).Count());
+                foreach (var unit in units)
+                {
+                    Assert.True(unit.EmittedClrMethod, unit.Name + " requires a complete emitted body: " + System.Text.Json.JsonSerializer.Serialize(unit));
+                    Assert.False(unit.RetainedHostedSource);
+                }
             }
             PowerShellCompilationSemanticOracleEnvelope Observe(string path)
             {
-                File.WriteAllText(fixture.ScriptPath, "$global:VerbosePreference='SilentlyContinue'\nImport-Module '" +
+                File.WriteAllText(fixture.ScriptPath, "$global:VerbosePreference='SilentlyContinue'\n" +
+                    (importSetup is null ? string.Empty : importSetup + "\n") + "Import-Module '" +
                     path.Replace("'", "''", StringComparison.Ordinal) + "' -Force -ErrorAction Stop\n" + probe);
                 return new PowerShellCompilationSemanticOracleRunner().Observe(new PowerShellCompilationSemanticOracleRequest(profile, fixture.ScriptPath)
                 {

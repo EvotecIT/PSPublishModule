@@ -12,15 +12,14 @@ existing admission rules. This extends the existing native binding, cmdlet,
 pipeline, and `begin`/`process`/`end` paths into realistic mixed modules. It does
 not add general authored-class or pipeline support to Strict.
 
-The fixed Gallery packet emits **682/753 complete units (90.57%)**, up from
-114/753 (15.14%) and the preceding 601/753 checkpoint. Pester rises from 0/491 to 460/491 and PSFramework from 38/176
-to 146/176; the other eight modules keep their previous complete-method counts.
-All ten Hybrid artifacts build, import,
-and pass their invocation probes. The packet still retains 71 source units;
-these results do not establish complete execution of the ten modules.
+The fixed Gallery packet emits **720/753 complete units (95.62%)**, up from
+114/753 (15.14%) and the preceding 682/753 measurement. Pester emits 478/491 and
+PSFramework emits 166/176. The other eight modules keep their previous counts.
+All ten Hybrid artifacts build, import, and pass their invocation probes. The
+packet retains 33 source units.
 
-Native-bound Hybrid functions can use public, non-nested, non-generic types
-from authenticated delivered managed DLLs, including supported one-dimensional
+Native-bound Hybrid functions can use public, non-nested types from authenticated
+delivered managed DLLs, including supported closed generic types, one-dimensional
 arrays and closed containers. Actual loading, conversion, attributes and type
 identity remain with PowerShell. Same-assembly-identity compatibility variants
 can share a type name within a non-conflicting dependency graph; distinct assembly owners remain ambiguous. Assemblies
@@ -48,13 +47,22 @@ These are reusable syntax and type rules, with no module-name eligibility tests.
 Nested alias callbacks, alias functions with local types or `clean`, arbitrary
 registration code and unsupported callback bodies retain their guards.
 
+Hybrid module functions can split direct arrays across local assignment targets
+and preserve single array records from a captured command or statement. The
+host owns the assignment order, typed storage conversions and wildcard switch
+matching. Multiple assignment discards pending records if its right-hand side
+exits before assignment. Supported inline SDK and delivered generic parameters retain their
+native types, and two ordinary same-name declarations in one source file take
+effect at their authored positions. Cross-file name collisions and unsupported
+declaration metadata keep their existing guards.
+
 Advanced native executable roots support `begin`/`process`/`end` on the explicit
 `net10.0` Windows x64 target. Both host profiles prove the underlying lifecycle
 semantics; this does not establish Windows PowerShell executable packaging.
 Generated module manifests also preserve the legacy `ModuleToProcess` key
 without adding a contradictory `RootModule` entry.
 
-The seven-workload packet emits 136/196 units and 136/183 functions and executes
+The seven-workload packet emits 160/196 units and 160/183 functions and executes
 five complete workloads: ten GitHub helper functions in ten scenarios, four
 PowerShell installer functions in three scenarios and 24 Scoop installer functions
 in three scenarios, GetBIOS in six scenarios and Autopilot in four scenarios. Original, built and installed surfaces pass with compiler
@@ -68,7 +76,10 @@ advanced script root in the explicit Windows x64 artifact and executes the
 delivered public native-entry factory with controlled CIM sessions and actual
 CSV files. Console execution covers startup/help. Its default census remains
 0/1 without an explicit runtime target; application qualification is separate.
-Locksmith and Locksmith2 remain unattempted. Live hardware or Graph behavior,
+Locksmith2 emits all 100 authored functions and matches the original module
+on a separate read-only lab audit using its built and installed artifacts. The
+packet still requires observations for all owned functions before counting it
+as complete. Locksmith remains unattempted. Live hardware or Graph behavior,
 live GitHub behavior, exhaustive
 branches, MSI/global installation and direct installer executable packaging are
 not qualified.

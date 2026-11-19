@@ -83,16 +83,18 @@ Independent native-bound functions can also compile beside retained
 document-scope types, and early module-scope discovery preserves authored native
 declaration timing. The [current packet measurements](PowerForge.PowerShellCompilation.Coverage.md)
 separate this emitted-method growth from hosted type initialization and dynamic
-command execution: the fixed Gallery packet grows **114/753 → 682/753 complete
-units (15.14% → 90.57%)**, with all ten artifact import/invocation probes passing.
-The latest slice adds 81 methods from the 601/753 checkpoint: Pester reaches
-460/491 and PSFramework 146/176. Borrowed SDK objects, returned/collected module
-callbacks, authenticated literal type aliases and native local-call closure use
-shared syntax/type rules. The seven-workload assessment emits **136/196 units** and **136/183 functions**
+command execution. The fixed Gallery packet grows **114/753 → 720/753 complete
+units (15.14% → 95.62%)**. All ten artifacts pass import and invocation probes.
+The preceding result was 682/753. Pester emits 478/491 and PSFramework emits
+166/176. Supported closed generics, native assignment and storage, and repeated
+same-file declarations account for gains under shared binding and type rules. The seven-workload assessment emits **160/196 units** and **160/183 functions**
 and executes five complete workloads through original, built and installed
 surfaces: the GitHub helper library, PowerShell/Scoop installer module adapters,
 GetBIOS and Autopilot. Their 39 owned functions, one advanced script root and four
-nested vendor helpers pass 26 scenarios; Locksmith and Locksmith2 remain unattempted.
+nested vendor helpers pass 26 scenarios. Locksmith2 now emits 100/100 owned
+functions and matches a read-only lab audit on the original, built and installed
+modules. Its complete workload still requires observation of every owned
+function. Locksmith remains at 21/44 emitted functions.
 The pinned PowerShell 7.6.6 and installed Windows PowerShell 5.1 oracle covers
 binding, multi-stage command pipelines, lifecycle, failure/continuation, stop,
 reuse, discovery, and retained type identity for the admitted mixed-module form.

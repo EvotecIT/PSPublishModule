@@ -12,7 +12,7 @@ internal sealed partial class PowerShellSemanticAnalyzer
             .ToHashSet(StringComparer.Ordinal);
         var nativeDictionaryLocals = statements
             .OfType<PowerShellBoundNativeAssignmentStatement>()
-            .Where(static assignment => assignment.Target.StaticReceiverTypeName is null)
+            .Where(static assignment => assignment.Target.StaticReceiverTypeName is null && assignment.Target.WrittenVariables is null)
             .Where(static assignment => assignment.Value is PowerShellBoundDictionaryExpression)
             .Select(static assignment => assignment.Name)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -33,7 +33,8 @@ internal sealed partial class PowerShellSemanticAnalyzer
         var statements = EnumerateStatements(function.Body).ToArray();
         var assignments = statements.OfType<PowerShellBoundAssignmentStatement>().ToArray();
         var nativeAssignments = statements.OfType<PowerShellBoundNativeAssignmentStatement>()
-            .Where(static assignment => assignment.Target.StaticReceiverTypeName is null).ToArray();
+            .Where(static assignment => assignment.Target.StaticReceiverTypeName is null &&
+                                        assignment.Target.WrittenVariables is null).ToArray();
         var dictionaryLocals = assignments
             .Where(static assignment => assignment.Value is PowerShellBoundDictionaryExpression)
             .Select(static assignment => assignment.Target.StableKey)
@@ -53,6 +54,12 @@ internal sealed partial class PowerShellSemanticAnalyzer
                                        .All(static assignment => IsHostLiteralMapTree((PowerShellBoundDictionaryExpression)assignment.Value)))
             .Select(static group => group.Key)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        qualifiedNativeLocals.ExceptWith(statements.SelectMany(static statement => statement switch
+        {
+            PowerShellBoundNativeAssignmentStatement assignment => assignment.Target.WrittenVariables ?? Array.Empty<string>(),
+            PowerShellBoundOutputCaptureStatement capture => capture.NativeTarget?.WrittenVariables ?? Array.Empty<string>(),
+            _ => Array.Empty<string>()
+        }));
         var regionDictionaryInputs = function.Parameters
             .Where(static parameter => parameter.Symbol.Kind == PowerShellSymbolKind.Local &&
                                        PowerShellRegionTransferTypePolicy.IsAtomicDictionaryReference(parameter.Type.ClrType))

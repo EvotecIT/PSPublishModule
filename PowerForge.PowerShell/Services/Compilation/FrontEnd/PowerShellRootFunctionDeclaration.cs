@@ -5,19 +5,22 @@ namespace PowerForge;
 /// <summary>Identifies an authored declaration owned by a source root rather than a callback or enclosing function.</summary>
 internal sealed class PowerShellRootFunctionDeclaration
 {
-    internal PowerShellRootFunctionDeclaration(FunctionDefinitionAst syntax, ScriptBlockAst root)
+    internal PowerShellRootFunctionDeclaration(FunctionDefinitionAst syntax, ScriptBlockAst root, bool replacesRootDeclaration)
     {
         Syntax = syntax;
         IsConditional = syntax.Parent is not NamedBlockAst || !ReferenceEquals(syntax.Parent.Parent, root);
+        ReplacesRootDeclaration = replacesRootDeclaration;
     }
 
     internal FunctionDefinitionAst Syntax { get; }
     internal bool IsConditional { get; }
+    internal bool ReplacesRootDeclaration { get; }
 
     // Module initialization keeps control flow in PowerShell. The native body is registered
     // only when the original declaration executes; executable-root rewriting has a separate owner.
     internal bool UsesConditionalNativeBinding(PowerShellCompilationCapability capabilities)
-        => IsConditional && !Syntax.IsWorkflow && capabilities == PowerShellCompilationCapabilities.HybridModule;
+        => (IsConditional || ReplacesRootDeclaration) && !Syntax.IsWorkflow &&
+           capabilities == PowerShellCompilationCapabilities.HybridModule;
 
     internal string GetBindingName(ParsedSourceDocument document, PowerShellCompilationCapability capabilities)
     {

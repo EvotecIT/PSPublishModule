@@ -237,19 +237,23 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             var disposition = Assert.Single(manifest.UnitDispositionLedger!.Entries, entry => entry.UnitId == unitIds[index]);
             var entries = manifest.FailureMap!.Entries.Where(entry => entry.UnitId == unitIds[index]).ToArray();
             Assert.NotEmpty(entries);
-            if (conditionalDeclaration && index == 1)
+            if (!conditionalDeclaration || index == 1)
             {
                 Assert.True(disposition.EmittedClrMethod);
                 Assert.False(disposition.RetainedHostedSource);
+                Assert.Contains(entries, entry => entry.GeneratedMemberName == disposition.GeneratedMemberName);
                 Assert.All(entries, entry =>
                 {
-                    Assert.Equal(disposition.GeneratedMemberName, entry.GeneratedMemberName);
+                    if (conditionalDeclaration || index != 0)
+                        Assert.Equal(disposition.GeneratedMemberName, entry.GeneratedMemberName);
                     Assert.True(entry.GeneratedStartLine > 0);
                     Assert.Equal("TypedClr+PowerShellRuntime", entry.BoundaryContract);
-                    Assert.Equal(1, entry.SourceStartLine);
-                    Assert.Equal(1, entry.SourceEndLine);
-                    Assert.InRange(entry.SourceStartColumn, declaration.Body.Extent.StartColumnNumber, declaration.Body.Extent.EndColumnNumber);
-                    Assert.InRange(entry.SourceEndColumn, entry.SourceStartColumn, declaration.Body.Extent.EndColumnNumber);
+                    var body = declaration.Body.Extent;
+                    Assert.InRange(entry.SourceStartLine, body.StartLineNumber, body.EndLineNumber);
+                    Assert.InRange(entry.SourceEndLine, entry.SourceStartLine, body.EndLineNumber);
+                    Assert.True(entry.SourceStartLine > body.StartLineNumber || entry.SourceStartColumn >= body.StartColumnNumber);
+                    Assert.True(entry.SourceEndLine < body.EndLineNumber || entry.SourceEndColumn <= body.EndColumnNumber);
+                    Assert.True(entry.SourceEndLine > entry.SourceStartLine || entry.SourceEndColumn >= entry.SourceStartColumn);
                 });
                 continue;
             }

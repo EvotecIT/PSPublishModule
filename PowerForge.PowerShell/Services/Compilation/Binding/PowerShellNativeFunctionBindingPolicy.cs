@@ -109,6 +109,11 @@ internal static class PowerShellNativeFunctionBindingPolicy
            function.Body.Find(node => node is TypeExpressionAst hostConstructor &&
                PowerShellCompilationParameterTypePolicy.IsHostProvidedConstructorReceiver(hostConstructor, capabilities),
                searchNestedScriptBlocks: false) is not null ||
+           PowerShellParameterSyntax.GetParameters(function.Body).Any(parameter =>
+               parameter.Attributes.OfType<TypeConstraintAst>().Any(constraint =>
+                   PowerShellCompilationParameterTypePolicy.IsHostProvidedParameterType(constraint.TypeName.FullName) ||
+                   constraint.TypeName.GetReflectionType() is { } type &&
+                   PowerShellCompilationParameterTypePolicy.IsQualifiedHostDataType(type, targetFramework))) ||
            function.Body.Find(node => node is TypeConstraintAst constraint &&
                PowerShellCompilationParameterTypePolicy.IsHostProvidedParameterType(constraint.TypeName.FullName),
                searchNestedScriptBlocks: false) is not null ||
@@ -131,6 +136,11 @@ internal static class PowerShellNativeFunctionBindingPolicy
            function.Body.Find(static node => node is BinaryExpressionAst { Operator: TokenKind.Format } format &&
                (format.Left.StaticType == typeof(object) || format.Right is ArrayLiteralAst),
                searchNestedScriptBlocks: false) is not null ||
+           function.Body.Find(static node => node is ConvertExpressionAst conversion && conversion.StaticType.IsArray &&
+               PowerShellSemanticBinder.UnwrapExpression(conversion.Child) is ArrayLiteralAst or ArrayExpressionAst &&
+               conversion.Child.Find(static operand => operand is VariableExpressionAst or MemberExpressionAst or CommandAst,
+                   searchNestedScriptBlocks: false) is not null,
+               searchNestedScriptBlocks: false) is not null ||
            function.Body.Find(static node =>
                node is ConvertExpressionAst conversion && conversion.Parent is CommandExpressionAst { Parent: PipelineAst discardPipeline } &&
                    PowerShellCompilationConversionPolicy.IsStatementDiscard(conversion) && IsCapturedPipeline(discardPipeline) ||
@@ -150,6 +160,8 @@ internal static class PowerShellNativeFunctionBindingPolicy
                _ => false
            }, searchNestedScriptBlocks: false) is not null ||
            RequiresNativeDictionaryKeyForEach(function) ||
+           RequiresNativeRecordArrayForEach(function) ||
+           RequiresNativeRootScalarRead(function, capabilities) ||
            RequiresNativeTypeTest(function, targetFramework, capabilities) ||
            function.Body.Find(static node => node is HashtableAst literal && PowerShellDictionarySemanticBinder.HasComputedKeys(literal),
                searchNestedScriptBlocks: false) is not null ||
@@ -162,9 +174,18 @@ internal static class PowerShellNativeFunctionBindingPolicy
                searchNestedScriptBlocks: false) is not null ||
            RequiresNativeCommandCondition(function, capabilities) ||
            RequiresNativeObjectParameterSwitch(function, capabilities) ||
+           function.Body.Find(node => node is SwitchStatementAst selection &&
+               PowerShellSemanticBinder.CanBindNativeWildcardSwitch(selection, capabilities),
+               searchNestedScriptBlocks: false) is not null ||
            RequiresNativeAccessOutputCapture(function) ||
            function.Body.Find(node => node is AssignmentStatementAst assignment &&
-               PowerShellSemanticBinder.NativeStaticAssignmentReceiver(assignment.Left, targetFramework) is not null,
+               (PowerShellSemanticBinder.NativeStaticAssignmentReceiver(assignment.Left, targetFramework) is not null ||
+                assignment.Operator == TokenKind.Equals && assignment.Parent is AssignmentStatementAst &&
+                PowerShellSemanticBinder.NativeAccessMutationReceiver(assignment.Left) is not null ||
+                capabilities.HasFlag(PowerShellCompilationCapability.PowerShellModuleState) &&
+                assignment.Left is IndexExpressionAst { Target: MemberExpressionAst or IndexExpressionAst } &&
+                PowerShellSemanticBinder.NativeAccessMutationReceiver(assignment.Left) is not null ||
+                assignment.Operator == TokenKind.Equals && PowerShellSemanticBinder.NativeTupleVariables(assignment.Left) is not null),
                searchNestedScriptBlocks: false) is not null ||
            function.Body.Find(static node => node is UnaryExpressionAst
                { TokenKind: TokenKind.PlusPlus or TokenKind.MinusMinus or TokenKind.PostfixPlusPlus or TokenKind.PostfixMinusMinus } increment &&
@@ -172,6 +193,7 @@ internal static class PowerShellNativeFunctionBindingPolicy
                searchNestedScriptBlocks: false) is not null ||
            RequiresNativeVariableIndex(function) ||
            RequiresNativeModuleStateStringConversion(function) ||
+           RequiresNativeScopedStorage(function, capabilities) ||
            RequiresNativeStaticNumericArgumentConversion(function) ||
            RequiresNativeStaticStringArgumentConversion(function) ||
            RequiresNativeObjectParameterValueOperation(function) ||
@@ -298,6 +320,18 @@ internal static class PowerShellNativeFunctionBindingPolicy
         return value is HashtableAst || value is ConvertExpressionAst conversion &&
             PowerShellDictionarySemanticBinder.IsOrderedHashtableConversion(conversion);
     }
+
+    private static bool RequiresNativeScopedStorage(FunctionDefinitionAst function,
+        PowerShellCompilationCapability capabilities)
+        => capabilities.HasFlag(PowerShellCompilationCapability.PowerShellModuleState) &&
+           function.Body.Find(static node =>
+               node is ConvertExpressionAst { Child: VariableExpressionAst variable } &&
+               variable.VariablePath.IsDriveQualified &&
+               variable.VariablePath.DriveName.Equals("env", StringComparison.OrdinalIgnoreCase) ||
+               node is AssignmentStatementAst { Left: IndexExpressionAst { Target: IndexExpressionAst } target } assignment &&
+               PowerShellMutationSemanticBinder.GetAssignmentOperator(assignment.Operator) is not null &&
+               PowerShellSemanticBinder.NativeAssignmentReceiver(target) is { VariablePath.IsScript: true },
+               searchNestedScriptBlocks: false) is not null;
 
     // A direct typed module-state read needs invocation-owned conversion, but
     // derived values that escape into locals, calls, or loops stay guarded.
@@ -492,6 +526,46 @@ internal static class PowerShellNativeFunctionBindingPolicy
             node is ForEachStatementAst loop &&
             loop.Condition.GetPureExpression() is VariableExpressionAst source &&
             untypedParameters.Contains(source.VariablePath.UserPath), searchNestedScriptBlocks: false) is not null;
+    }
+
+    private static bool RequiresNativeRecordArrayForEach(FunctionDefinitionAst function)
+    {
+        var recordArrays = function.Body.FindAll(static node =>
+                node is AssignmentStatementAst { Operator: TokenKind.Equals, Left: VariableExpressionAst } assignment &&
+                PowerShellSemanticBinder.UnwrapExpression(assignment.Right) is ArrayExpressionAst array &&
+                array.SubExpression.Statements.Count > 0 &&
+                array.SubExpression.Statements.All(static statement => IsDictionaryLiteral(statement)),
+                searchNestedScriptBlocks: false)
+            .Cast<AssignmentStatementAst>().Select(static assignment => ((VariableExpressionAst)assignment.Left).VariablePath.UserPath)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        return recordArrays.Count > 0 && function.Body.Find(node =>
+            node is ForEachStatementAst loop && loop.Condition.GetPureExpression() is VariableExpressionAst source &&
+            recordArrays.Contains(source.VariablePath.UserPath), searchNestedScriptBlocks: false) is not null;
+    }
+
+    private static bool RequiresNativeRootScalarRead(FunctionDefinitionAst function, PowerShellCompilationCapability capabilities)
+    {
+        if (capabilities != PowerShellCompilationCapabilities.HybridModule ||
+            function.Parent is not NamedBlockAst { Parent: ScriptBlockAst { Parent: null } root } rootBlock ||
+            !ReferenceEquals(rootBlock, root.EndBlock)) return false;
+        var names = rootBlock.Statements.OfType<AssignmentStatementAst>()
+            .Where(static assignment => assignment is { Operator: TokenKind.Equals, Left: VariableExpressionAst { VariablePath.IsUnqualified: true } } &&
+                PowerShellSemanticBinder.UnwrapExpression(assignment.Right) is ConvertExpressionAst { Child: ConstantExpressionAst } conversion &&
+                conversion.Type.TypeName.GetReflectionType() is { } type && PowerShellStableScalarTypePolicy.IsSupported(type))
+            .Select(static assignment => ((VariableExpressionAst)assignment.Left).VariablePath.UserPath)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        if (names.Count == 0) return false;
+        names.ExceptWith(PowerShellParameterSyntax.GetParameters(function.Body).Select(static parameter => parameter.Name.VariablePath.UserPath));
+        foreach (var statement in function.Body.FindAll(static node => node is AssignmentStatementAst or ForEachStatementAst,
+                     searchNestedScriptBlocks: false))
+        {
+            var target = statement is AssignmentStatementAst assignment ? PowerShellAssignmentTargetPolicy.FindDirectVariable(assignment.Left, true)
+                : ((ForEachStatementAst)statement).Variable;
+            if (target is { VariablePath.IsUnqualified: true })
+                names.Remove(target.VariablePath.UserPath);
+        }
+        return names.Count > 0 && function.Body.Find(node => node is VariableExpressionAst { VariablePath.IsUnqualified: true } reference &&
+            names.Contains(reference.VariablePath.UserPath), searchNestedScriptBlocks: false) is not null;
     }
 
     private static bool RequiresNativeDictionaryKeyForEach(FunctionDefinitionAst function)

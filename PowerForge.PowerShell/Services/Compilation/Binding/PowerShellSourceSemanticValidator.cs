@@ -38,7 +38,7 @@ internal static class PowerShellSourceSemanticValidator
                 $"Source '{statement.Extent.Text}' has runtime-bearing using semantics that cannot be omitted from a typed artifact; this file must remain on the PowerShell runtime path.",
                 PowerShellSourceParser.GetSpan(document, statement.Extent)))
             .ToList();
-        var requirementFailure = PowerShellScriptRequirementPolicy.GetFailure(document, semanticProfileId);
+        var requirementFailure = PowerShellScriptRequirementPolicy.GetFailure(document, semanticProfileId, capabilities);
         if (requirementFailure is not null)
         {
             diagnostics.Add(new PowerShellSemanticDiagnostic(

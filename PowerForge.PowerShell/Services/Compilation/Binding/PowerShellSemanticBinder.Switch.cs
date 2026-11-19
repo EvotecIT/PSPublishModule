@@ -13,7 +13,9 @@ internal sealed partial class PowerShellSemanticBinder
         string? targetFramework,
         PowerShellCompilationCapability capabilities)
     {
-        if ((statement.Flags & (SwitchFlags.File | SwitchFlags.Wildcard | SwitchFlags.Parallel)) != 0)
+        var wildcard = (statement.Flags & SwitchFlags.Wildcard) != 0;
+        if ((statement.Flags & (SwitchFlags.File | SwitchFlags.Parallel)) != 0 ||
+            wildcard && !CanBindNativeWildcardSwitch(statement, capabilities))
         {
             diagnostics.Add(new PowerShellSemanticDiagnostic(
                 "PSB2304",
@@ -22,7 +24,7 @@ internal sealed partial class PowerShellSemanticBinder
             return null;
         }
 
-        var matchMode = (statement.Flags & SwitchFlags.Regex) != 0
+        var matchMode = wildcard ? PowerShellBoundSwitchMatchMode.Wildcard : (statement.Flags & SwitchFlags.Regex) != 0
             ? PowerShellBoundSwitchMatchMode.Regex
             : PowerShellBoundSwitchMatchMode.Exact;
         var observesSwitch = PowerShellAutomaticVariableObservationPolicy.ObservesSwitchState(statement);
@@ -86,14 +88,17 @@ internal sealed partial class PowerShellSemanticBinder
         // collapse: one array record must remain one switch item. Only the
         // separately qualified nativeCommandResults path owns that contract.
         var hasPredicates = statement.Clauses.Any(clause => clause.Item1 is ScriptBlockExpressionAst);
+        var hasDynamicClauses = statement.Clauses.Any(clause => clause.Item1 is VariableExpressionAst);
         var nativeRuntimeValues = value is not PowerShellBoundNativeCommandExpression &&
-            (value.Type.ClrType == typeof(object) || hasPredicates || matchMode == PowerShellBoundSwitchMatchMode.Regex) &&
+            (value.Type.ClrType == typeof(object) || hasPredicates || hasDynamicClauses ||
+             matchMode != PowerShellBoundSwitchMatchMode.Exact) &&
             string.IsNullOrEmpty(statement.Label) &&
             capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding) &&
             PowerShellLoopInterruptContract.IsAvailable(capabilities) &&
             statement.Clauses.All(clause => clause.Item1 is StringConstantExpressionAst ||
-                matchMode == PowerShellBoundSwitchMatchMode.Exact && clause.Item1 is ScriptBlockExpressionAst);
-        if (observesSwitch && !nativeRuntimeValues)
+                matchMode == PowerShellBoundSwitchMatchMode.Exact &&
+                (clause.Item1 is ScriptBlockExpressionAst or VariableExpressionAst || IsNativeExactSwitchLiteral(clause.Item1)));
+        if ((observesSwitch || wildcard) && !nativeRuntimeValues)
         {
             diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2304",
                 "Scalar switch whose $_, $PSItem, or $switch automatic-variable state is observed requires PowerShell runtime semantics.",
@@ -138,6 +143,8 @@ internal sealed partial class PowerShellSemanticBinder
                     PowerShellSourceParser.GetSpan(document, clause.Item1.Extent)));
                 return null;
             }
+            var nativeLiteral = nativeRuntimeValues && matchMode == PowerShellBoundSwitchMatchMode.Exact &&
+                IsNativeExactSwitchLiteral(clause.Item1);
             var clauseSymbols = CloneSymbols(baselineSymbols);
             var clauseValue = BindExpression(
                 document,
@@ -145,11 +152,13 @@ internal sealed partial class PowerShellSemanticBinder
                 clauseSymbols,
                 functions,
                 diagnostics,
-                nativePredicate ? typeof(System.Management.Automation.ScriptBlock) : valueType,
+                nativePredicate ? typeof(System.Management.Automation.ScriptBlock) : nativeLiteral ? null : valueType,
                 targetFramework,
                 capabilities);
             if (clauseValue is null) return null;
-            if (clauseValue.Type.ClrType != (nativePredicate ? typeof(System.Management.Automation.ScriptBlock) : valueType))
+            if (!nativeLiteral && !(nativeRuntimeValues && matchMode == PowerShellBoundSwitchMatchMode.Exact &&
+                  clauseValue is PowerShellBoundNativeVariableExpression) &&
+                clauseValue.Type.ClrType != (nativePredicate ? typeof(System.Management.Automation.ScriptBlock) : valueType))
             {
                 diagnostics.Add(new PowerShellSemanticDiagnostic(
                     "PSB2306",
@@ -195,6 +204,15 @@ internal sealed partial class PowerShellSemanticBinder
             nativeCommandResults ? PowerShellBoundSwitchInputKind.NativeCommandResults : PowerShellBoundSwitchInputKind.Scalar,
             document.Path, PowerShellSourceParser.GetSourceLines(document, value.Span));
     }
+
+    private static bool IsNativeExactSwitchLiteral(ExpressionAst syntax)
+        => syntax is ConstantExpressionAst { Value: { } value } && PowerShellClrTypeSemantics.IsNumeric(value.GetType());
+
+    internal static bool CanBindNativeWildcardSwitch(SwitchStatementAst selection, PowerShellCompilationCapability capabilities)
+        => (selection.Flags & SwitchFlags.Wildcard) != 0 &&
+           (selection.Flags & (SwitchFlags.File | SwitchFlags.Parallel | SwitchFlags.Regex)) == 0 &&
+           string.IsNullOrEmpty(selection.Label) && PowerShellLoopInterruptContract.IsAvailable(capabilities) &&
+           selection.Clauses.All(static clause => clause.Item1 is StringConstantExpressionAst);
 
     private static bool IsClosedNativeCommandSwitchClause(StatementBlockAst body)
         => body.Traps is null or { Count: 0 } && body.Statements.All(statement =>

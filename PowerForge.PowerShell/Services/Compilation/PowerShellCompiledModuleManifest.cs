@@ -8,7 +8,7 @@ namespace PowerForge;
 /// </summary>
 internal static class PowerShellCompiledModuleManifest
 {
-    private static string? ReadRootModule(string path)
+    internal static string? ReadRootModule(string path)
     {
         var root = ModuleManifestValueReader.ReadTopLevelLiteralStringOrThrow(path, "RootModule");
         var legacy = ModuleManifestValueReader.ReadTopLevelLiteralStringOrThrow(path, "ModuleToProcess");

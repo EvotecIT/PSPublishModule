@@ -63,9 +63,9 @@ internal static class PowerShellCompilationUnitDispositionLedgerBuilder
                 var promotedRegions = shapedCompilation?.PromotedRegions
                     .Where(candidate => RegionMatches(candidate, file.FullPath, unit, declaration))
                     .ToArray() ?? Array.Empty<PowerShellCompiledRegion>();
-                var unitKey = declaration is null
-                    ? PowerShellHybridModuleComposer.GetCompiledMethodKey(file.FullPath, unit.Name, unit.StartLine)
-                    : PowerShellHybridModuleComposer.GetCompiledMethodKey(file.FullPath, declaration);
+                var wrapped = declaration is null
+                    ? wrappedMethodKeys.Contains(PowerShellHybridModuleComposer.GetCompiledMethodKey(file.FullPath, unit.Name, unit.StartLine))
+                    : PowerShellHybridModuleComposer.ContainsWrappedDeclaration(wrappedMethodKeys, file.FullPath, declaration);
                 var emitted = method is not null || ownedBodies.Length > 0 ||
                               plan.Mode == PowerShellCompilationMode.Strict &&
                               artifactKind == PowerShellCompilationArtifactKind.Executable &&
@@ -74,13 +74,13 @@ internal static class PowerShellCompilationUnitDispositionLedgerBuilder
                               unit.IsCompilable;
                 var emittedBinaryCmdlet = artifactKind == PowerShellCompilationArtifactKind.BinaryModule &&
                                           dispositionMethod?.NativeFunctionBinding is null &&
-                                          (wrappedMethodKeys.Contains(unitKey) || lifecycleMethod is not null);
+                                          (wrapped || lifecycleMethod is not null);
                 var retainedHostedSource = IsRetainedHostedSource(
                     plan.Mode,
                     artifactKind,
                     unit,
                     emitted,
-                    wrappedMethodKeys.Contains(unitKey),
+                    wrapped,
                     lifecycleMethod is not null);
                 var runtimeCommandRegions = Math.Max(dispositionMethod?.RequiresPowerShellCommandRegions == true
                     ? Math.Max(1, dispositionMethod.HostedRegionSiteCount)
