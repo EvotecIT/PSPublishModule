@@ -78,7 +78,7 @@ public sealed class MarkdownLinkMapperTests
     public void Rewrite_MapsDecodedPrefixesPreservingDestinationSemantics(string markdown)
     {
         var mapped = MarkdownLinkMapper.Rewrite(markdown, Mappings);
-        var parsed = MarkdownReader.ParseWithSyntaxTree(mapped);
+        var parsed = MarkdownDocument.Parse(mapped, new MarkdownLoadOptions { CaptureSyntaxTree = true }).ParseInfo!;
         var link = Assert.IsType<LinkInline>(Assert.IsType<ParagraphBlock>(parsed.Document.Blocks[0]).Inlines.Nodes[0]);
         Assert.Equal("/projects/alpha/docs/start/?x=1&amp;y=2#part", link.Url);
     }

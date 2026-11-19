@@ -29,11 +29,12 @@ public static class MarkdownLinkMapper
         var prefixes = mappings.OrderByDescending(static mapping => mapping.Key.Length).ToArray();
         // The reader removes a leading BOM when normalizing; retain it outside the parsed source.
         var sourceOffset = markdown[0] == '\uFEFF' ? 1 : 0;
-        var parsed = MarkdownReader.ParseWithSyntaxTree(markdown[sourceOffset..], new MarkdownReaderOptions
+        var parsed = MarkdownDocument.Parse(markdown[sourceOffset..], new MarkdownLoadOptions
         {
             PreserveTrivia = true,
-            DefinitionLists = false
-        });
+            DefinitionLists = false,
+            CaptureSyntaxTree = true
+        }).ParseInfo ?? throw new InvalidOperationException("The Markdown reader did not keep the source map links are mapped with.");
         var visitor = new LinkVisitor(parsed, prefixes);
         visitor.Visit(parsed.Document);
         if (visitor.Replacements.Count == 0)
@@ -56,7 +57,7 @@ public static class MarkdownLinkMapper
             throw new ArgumentException("Markdown link mappings require root-relative directory prefixes starting and ending with '/', without query or fragment components.");
     }
 
-    private sealed class LinkVisitor(MarkdownParseResult parsed, KeyValuePair<string, string>[] prefixes) : MarkdownVisitor
+    private sealed class LinkVisitor(MarkdownParseInfo parsed, KeyValuePair<string, string>[] prefixes) : MarkdownVisitor
     {
         internal Dictionary<int, Replacement> Replacements { get; } = new();
 
@@ -103,7 +104,20 @@ public static class MarkdownLinkMapper
         }
 
         private static string EscapeDestination(string destination) =>
-            MarkdownEscaper.EscapeLinkUrl(WebUtility.HtmlEncode(destination).Replace(" ", "&#32;", StringComparison.Ordinal));
+            EscapeLinkDestination(WebUtility.HtmlEncode(destination).Replace(" ", "&#32;", StringComparison.Ordinal));
+
+        // The characters OfficeIMO's Markdown writer escapes in a link destination (its escaper is internal since 3.6).
+        private static string EscapeLinkDestination(string destination)
+        {
+            var escaped = new StringBuilder(destination.Length);
+            foreach (var ch in destination)
+            {
+                if (ch is '\\' or '(' or ')' or '[' or ']' or '|')
+                    escaped.Append('\\');
+                escaped.Append(ch);
+            }
+            return escaped.ToString();
+        }
     }
 
     private sealed record Replacement(int Start, int Length, string Text);
