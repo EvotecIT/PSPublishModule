@@ -14,7 +14,7 @@ internal static class BenchmarkEvidenceCellBuilder
         BenchmarkPublishPolicy policy)
     {
         BenchmarkSummaryRow[] rows = result.Summary.Length > 0
-            ? result.Summary
+            ? WithUnsummarizedFailures(result)
             : new BenchmarkSummaryService().Summarize(result.Samples);
         var samplesByCell = result.Samples
             .Where(sample => sample.Status == BenchmarkSampleStatus.Succeeded)
@@ -142,6 +142,24 @@ internal static class BenchmarkEvidenceCellBuilder
     }
 
     /// <summary>Identity of the cell a summary row produces: case, operation, library and parameters.</summary>
+    // A producer's summary can leave out a combination whose every sample failed. It still ran, so it becomes a failed
+    // cell rather than looking as if it was never run; combinations with any successful sample keep the summary's word.
+    private static BenchmarkSummaryRow[] WithUnsummarizedFailures(BenchmarkRunResult result)
+    {
+        BenchmarkSample[] failedOnly = result.Samples
+            .GroupBy(sample => CellKey(sample.Scenario, sample.Operation, sample.Engine, sample.Library, sample.Host, sample.Variables), StringComparer.Ordinal)
+            .Where(group => group.All(sample => sample.Status == BenchmarkSampleStatus.Failed))
+            .SelectMany(group => group)
+            .ToArray();
+        if (failedOnly.Length == 0)
+            return result.Summary;
+        var summarized = new HashSet<string>(result.Summary.Select(Identity), StringComparer.Ordinal);
+        BenchmarkSummaryRow[] missing = new BenchmarkSummaryService().Summarize(failedOnly)
+            .Where(row => !summarized.Contains(Identity(row)))
+            .ToArray();
+        return missing.Length == 0 ? result.Summary : result.Summary.Concat(missing).ToArray();
+    }
+
     internal static string Identity(BenchmarkSummaryRow row)
         => string.Join("\u001f", Fold(row.Scenario), Fold(row.Operation), Fold(row.Library), FormatParameters(CellParameters(row)));
 

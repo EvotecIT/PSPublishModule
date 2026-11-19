@@ -743,20 +743,19 @@ public sealed partial class BenchmarkServicesTests
             "windows.json",
             "full",
             publish: true);
+        // A different scenario is drift against the declared cases, so that lane can only be recorded unpublished;
+        // its workload shape is still compared with the published lane.
         catalog = UpdateDeclared(service,
             catalog,
             linux,
             "comparison-a",
             "linux.json",
             "full",
-            publish: true);
+            publish: false);
 
-        Assert.All(catalog.Entries, entry => Assert.False(entry.Comparable));
-        Assert.All(
-            catalog.Entries,
-            entry => Assert.Contains(
-                entry.CompatibilityIssues,
-                    issue => issue.Contains("benchmark.workload.shape.sha256", StringComparison.OrdinalIgnoreCase)));
+        BenchmarkEvidenceEntry different = Assert.Single(catalog.Entries, entry => entry.Platform == "linux");
+        Assert.False(different.Comparable);
+        Assert.Contains(different.CompatibilityIssues, issue => issue.Contains("benchmark.workload.shape.sha256", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]
@@ -1135,6 +1134,8 @@ public sealed partial class BenchmarkServicesTests
             .Select(index => TestDeclarations($"comparison-{index:D2}").Comparisons.Single(value => value.ComparisonId == $"comparison-{index:D2}"))
             .Concat(declarations.Comparisons)
             .ToArray();
+        for (int index = 0; index < 12; index++)
+            DeclareCases(declarations, $"comparison-{index:D2}", Result("Windows", "fixture-a", 10 + index));
         Task[] updates = Enumerable.Range(0, 12)
             .Select(index => Task.Run(() =>
                 service.UpdateFile(path, new BenchmarkEvidenceUpdateRequest

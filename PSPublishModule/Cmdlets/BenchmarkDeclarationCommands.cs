@@ -13,8 +13,11 @@ namespace PSPublishModule;
 /// The declaration document holds the library policy (id, package, pinned version, licence, restriction class,
 /// reason) and the comparisons (area, group, title, subject, libraries, axes, cases, optional cells, platforms,
 /// frameworks). Without a result the command lints the document. With a result it also reports declaration drift:
-/// cases, libraries, axis values or case x library x axis-value combinations that ran but are not declared, and
-/// declared ones that did not run. A cell that ran and failed counts as present.
+/// cases, libraries or axis values that ran but are not declared, and declared ones that did not run. For a
+/// comparison that declares its cases or cells, it also checks each case x library x axis-value combination of the
+/// libraries that ran: declared libraries that did not run at all are not counted, and a cell that ran and failed
+/// counts as present. A comparison without declared cases or cells is not checked for combinations; it can be
+/// recorded but is not published.
 /// </para>
 /// <para>
 /// The command stops with an error when it finds anything, so a build can run it before measuring.

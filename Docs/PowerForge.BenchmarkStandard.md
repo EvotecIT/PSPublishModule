@@ -243,8 +243,12 @@ behind is indistinguishable from one that was never run, so it is drift.
 
 Each dimension being covered is not enough. With libraries A and B and
 `Scale=Easy|Normal`, three rows can cover both libraries, both scales and the case
-while `B, Scale=Normal` never ran. When a comparison declares its `cases`, PowerForge
-expects every combination of the declared cases and axis values for each library
+while `B, Scale=Normal` never ran. A comparison must therefore declare its `cases`
+(or `cells`) to be published. Without them a run can't be checked for missing
+combinations, so the comparison is held back with the reason "Declare the
+comparison's cases (or cells) to publish it": its lanes are still recorded and
+shown, but never published, and this is not reported as drift. When a comparison
+declares its `cases`, PowerForge expects every combination of the declared cases and axis values for each library
 that ran, and reports each absent one as `missing-combination`. Libraries that did
 not run at all are not counted, because the run selects them from the library
 policy. When not every combination is valid (a library that has no `Scale=Huge`
@@ -278,7 +282,7 @@ rejected for published lanes.
 | Clean source commit (`gitSha`, `gitWorktreeClean`) | required | lane |
 | OS, architecture, CPU, logical cores, runtime, SDK (for .NET frameworks) | required | lane |
 | Machine or user name | must be absent | lane |
-| Comparison declared, eligible, no drift, framework declared | required | lane |
+| Comparison declared with its cases or cells, eligible, no drift, framework declared | required | lane |
 | Package version and hash for every non-subject library, matching the pinned version | required | lane |
 | Policy at least as strict as the standard | required | lane |
 | Measured samples per cell | at least 10 | cell |

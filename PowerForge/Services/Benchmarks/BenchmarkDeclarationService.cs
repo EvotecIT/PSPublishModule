@@ -112,9 +112,12 @@ public sealed partial class BenchmarkDeclarationService
         return issues.ToArray();
     }
 
+    /// <summary>Why a comparison without declared cases or cells is not published.</summary>
+    public const string NoCasesReason = "Declare the comparison's cases (or cells) to publish it: without them a run can't be checked for missing combinations.";
+
     /// <summary>
-    /// Derives a comparison's eligibility from its declaration. An author's own exclusion always wins, and a
-    /// single-library comparison is never publishable. Restricted libraries do not make a comparison
+    /// Derives a comparison's eligibility from its declaration. An author's own exclusion always wins, a
+    /// single-library comparison is never publishable, and neither is one without declared cases or cells. Restricted libraries do not make a comparison
     /// ineligible: the publish policy drops their cells and publishes the rest.
     /// </summary>
     /// <param name="comparison">Comparison declaration.</param>
@@ -133,6 +136,10 @@ public sealed partial class BenchmarkDeclarationService
             return new BenchmarkEligibility { Publishable = false, Reason = comparison.Eligibility.Reason };
         if ((comparison.Libraries ?? Array.Empty<string>()).Distinct(StringComparer.OrdinalIgnoreCase).Count() < 2)
             return new BenchmarkEligibility { Publishable = false, Reason = "Single-library comparison: there is nothing to compare against." };
+        // Without declared cases or cells, a lane can't be checked for completeness, so it is held back rather than
+        // published as if it were complete. It is still recorded and shown.
+        if ((comparison.Cases ?? Array.Empty<string>()).Length == 0 && (comparison.Cells ?? Array.Empty<BenchmarkExpectedCell>()).Length == 0)
+            return new BenchmarkEligibility { Publishable = false, Reason = NoCasesReason };
         return new BenchmarkEligibility { Publishable = true };
     }
 
@@ -245,14 +252,14 @@ public sealed partial class BenchmarkDeclarationService
 
         foreach (BenchmarkComparisonAxis axis in comparison.Axes ?? Array.Empty<BenchmarkComparisonAxis>())
         {
-            string[] declaredValues = axis.Values ?? Array.Empty<string>();
+            string[] declaredValues = (axis.Values ?? Array.Empty<string>()).Select(value => (value ?? string.Empty).Trim()).ToArray();
             int withoutAxis = cells.Count(cell => !cell.Parameters.TryGetValue(axis.Name, out string? value) || value is null);
             if (withoutAxis > 0)
                 Add(issues, subject, "missing-axis-parameter", $"{withoutAxis} cell(s) do not record axis '{axis.Name}'.");
             string[] measured = cells
                 .Select(cell => cell.Parameters.TryGetValue(axis.Name, out string? value) ? value : null)
                 .Where(value => value is not null)
-                .Select(value => value!)
+                .Select(value => value!.Trim())
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToArray();
             foreach (string value in measured.Where(value => !declaredValues.Contains(value, StringComparer.OrdinalIgnoreCase)).OrderBy(value => value, StringComparer.Ordinal))

@@ -64,6 +64,17 @@ public sealed partial class BenchmarkEvidenceCatalogService
                 .Select(axis => new BenchmarkComparisonAxis { Name = axis.Name.Trim(), Values = (axis.Values ?? Array.Empty<string>()).Select(value => value.Trim()).ToArray() })
                 .ToArray(),
             Cases = (source.Cases ?? Array.Empty<string>()).Select(value => value.Trim()).ToArray(),
+            Cells = (source.Cells ?? Array.Empty<BenchmarkExpectedCell>())
+                .Where(cell => cell is not null)
+                .Select(cell => new BenchmarkExpectedCell
+                {
+                    Case = cell.Case?.Trim() ?? string.Empty,
+                    Library = cell.Library?.Trim() ?? string.Empty,
+                    Parameters = (cell.Parameters ?? new Dictionary<string, string>())
+                        .Where(pair => !string.IsNullOrWhiteSpace(pair.Key) && pair.Value is not null)
+                        .ToDictionary(pair => pair.Key.Trim(), pair => pair.Value.Trim(), StringComparer.OrdinalIgnoreCase)
+                })
+                .ToArray(),
             ExpectedPlatforms = NormalizeExpectedPlatforms(source.ExpectedPlatforms).OrderBy(value => value, StringComparer.Ordinal).ToArray(),
             Frameworks = (source.Frameworks ?? Array.Empty<string>()).Select(value => value.Trim().ToLowerInvariant())
                 .Distinct(StringComparer.Ordinal).OrderBy(value => value, StringComparer.Ordinal).ToArray(),

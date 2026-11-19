@@ -729,10 +729,14 @@ axis-value combination is valid:
   { "case": "Create", "parameters": { "Scale": "Normal" } },
   { "case": "Create", "library": "OfficeIMO", "parameters": { "Scale": "Huge" } }
 ]
-``` Catalogs derive each comparison's eligibility: a single-library
-comparison is declared but never publishable. Restricted libraries do not block a
-comparison; the published lane drops their cells, which carry the issue
-"Not published (licence)", and publishes the rest.
+```
+
+Catalogs derive each comparison's eligibility: a single-library comparison is
+declared but never publishable, and so is a comparison without declared `cases` or
+`cells`, because its runs can't be checked for missing combinations. Its lanes are
+recorded and shown with that reason, and publishing them is refused. Restricted
+libraries do not block a comparison; the published lane drops their cells, which
+carry the issue "Not published (licence)", and publishes the rest.
 
 Generate the document from the benchmark code and check it in CI:
 
@@ -801,7 +805,8 @@ Each comparison also carries the declared facts a page needs to explain what it
 shows:
 
 - `group` and `frameworks` from the declaration;
-- `eligibility` (`publishable`, `reason`), for example a single-library comparison;
+- `eligibility` (`publishable`, `reason`), for example a single-library comparison
+  or one without declared cases;
 - `availability`, one entry per expected platform and framework, with text such as
   `Windows · net10.0 · standard · 2026-11-18`, `Linux · net10.0 · no published run`
   (measured, but only in runs that are not published) or `macOS · net10.0 · not measured`.

@@ -78,6 +78,87 @@ public sealed partial class BenchmarkServicesTests
         }, messages);
     }
 
+    [Fact]
+    public void Declarations_HoldBackComparisonsWithoutCasesWithoutCallingItDrift()
+    {
+        string root = CreateTempRoot();
+        string catalogPath = Path.Combine(root, "index.json");
+        BenchmarkDeclarationDocument declarations = TestDeclarations();
+        BenchmarkRunResult result = MeasuredResult(("OfficeIMO", "Read", Spread(10, 10)), ("Sep", "Read", Spread(20, 10)));
+        var request = new BenchmarkEvidenceUpdateRequest
+        {
+            Result = result,
+            ComparisonId = "comparison-a",
+            ResultPath = "windows.json",
+            Profile = BenchmarkEvidenceProfile.Standard,
+            Publish = true,
+            Declarations = declarations
+        };
+
+        Assert.Empty(new BenchmarkDeclarationService().CheckDrift(declarations.Comparisons[0], declarations.Libraries, result));
+        InvalidOperationException refused = Assert.Throws<InvalidOperationException>(() => new BenchmarkEvidenceCatalogService().UpdateFile(catalogPath, request));
+        request.Publish = false;
+        BenchmarkEvidenceCatalog catalog = new BenchmarkEvidenceCatalogService().UpdateFile(catalogPath, request);
+        BenchmarkComparisonView view = Assert.Single(new BenchmarkComparisonViewBuilder().Build(catalogPath).Comparisons, comparison => comparison.Id == "comparison-a");
+
+        Assert.Contains(BenchmarkDeclarationService.NoCasesReason, refused.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("Declaration drift", refused.Message, StringComparison.Ordinal);
+        Assert.False(Assert.Single(catalog.Entries).Publish);
+        Assert.False(view.Eligibility.Publishable);
+        Assert.Equal(BenchmarkDeclarationService.NoCasesReason, view.Eligibility.Reason);
+        Assert.Single(view.Runs);
+    }
+
+    [Fact]
+    public void Declarations_KeepExplicitCellsThroughCatalogUpdatesAndMerges()
+    {
+        string root = CreateTempRoot();
+        string source = Path.Combine(root, "source", "index.json");
+        BenchmarkDeclarationDocument declarations = SparseCombinationDeclarations();
+        BenchmarkEvidenceUpdateRequest request = PublishRequest(
+            ScaledResult(("OfficeIMO", "Easy", Spread(10, 10)), ("OfficeIMO", "Normal", Spread(20, 10)), ("Sep", "Easy", Spread(12, 10))), declarations);
+        request.ResultArtifactPath = Path.Combine(root, "source", "windows.json");
+        new BenchmarkEvidenceCatalogService().UpdateFile(source, request);
+
+        BenchmarkComparisonDefinition stored = new BenchmarkEvidenceCatalogService().ReadCatalog(source).Comparisons.Single(value => value.ComparisonId == "comparison-a");
+        // Merging without the declaration document re-checks the lane against the catalog's own copy.
+        BenchmarkEvidenceCatalog merged = new BenchmarkEvidenceCatalogService().MergeFiles(Path.Combine(root, "merged", "index.json"), [source]);
+
+        Assert.Equal(2, stored.Cells.Length);
+        Assert.Equal("Normal", stored.Cells.Single(cell => cell.Library == "OfficeIMO").Parameters["Scale"]);
+        Assert.True(Assert.Single(merged.Entries).Publish);
+    }
+
+    [Fact]
+    public void Declarations_CompareAxisValuesWithoutSurroundingWhitespace()
+    {
+        BenchmarkDeclarationDocument declarations = SparseCombinationDeclarations();
+        declarations.Comparisons[0].Axes = [new BenchmarkComparisonAxis { Name = "Scale", Values = [" Easy ", "Normal "] }];
+        declarations.Comparisons[0].Cells[1].Parameters["Scale"] = " Normal";
+        BenchmarkRunResult result = ScaledResult(("OfficeIMO", "Easy", Spread(10, 10)), ("OfficeIMO", "Normal", Spread(20, 10)), ("Sep", "Easy", Spread(12, 10)));
+
+        Assert.Empty(new BenchmarkDeclarationService().Validate(declarations));
+        Assert.Empty(new BenchmarkDeclarationService().CheckDrift(declarations.Comparisons[0], declarations.Libraries, result));
+    }
+
+    [Fact]
+    public void Declarations_CountAFailedSampleTheSummaryLeftOutAsPresent()
+    {
+        BenchmarkDeclarationDocument declarations = CombinationDeclarations();
+        BenchmarkRunResult result = ScaledResult(
+            ("OfficeIMO", "Easy", Spread(10, 10)), ("OfficeIMO", "Normal", Spread(20, 10)), ("Sep", "Easy", Spread(12, 10)), ("Sep", "Normal", null));
+        // A producer that summarizes only successful cases leaves Sep at Normal out of the summary.
+        result.Summary = new BenchmarkSummaryService().Summarize(result.Samples.Where(sample => sample.Status == BenchmarkSampleStatus.Succeeded));
+        // Publishing requires a summary that matches the raw samples, so such a result is recorded unpublished.
+        BenchmarkEvidenceUpdateRequest request = PublishRequest(result, declarations);
+        request.Publish = false;
+
+        Assert.Empty(new BenchmarkDeclarationService().CheckDrift(declarations.Comparisons[0], declarations.Libraries, result));
+        BenchmarkEvidenceEntry entry = Assert.Single(new BenchmarkEvidenceCatalogService().Update(null, request).Entries);
+        BenchmarkEvidenceCell failed = Assert.Single(entry.Cells, cell => cell.Library == "Sep" && cell.Parameters["Scale"] == "Normal");
+        Assert.Equal("Failed", failed.Status);
+    }
+
     private static BenchmarkDeclarationDocument CombinationDeclarations()
     {
         BenchmarkDeclarationDocument declarations = TestDeclarations();

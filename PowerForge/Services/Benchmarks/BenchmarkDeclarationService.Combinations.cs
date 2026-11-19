@@ -42,9 +42,9 @@ public sealed partial class BenchmarkDeclarationService
         bool Ran(string caseName) => !withCase || measuredCases.Contains(caseName);
         bool AxisValueRan(BenchmarkComparisonAxis axis, string value)
             => cells.Any(cell => cell.Parameters.TryGetValue(axis.Name, out string? measured) &&
-                                 string.Equals(measured, value, StringComparison.OrdinalIgnoreCase));
+                                 string.Equals(Normalize(measured), value, StringComparison.OrdinalIgnoreCase));
         bool AxisValueDeclared(BenchmarkComparisonAxis axis, string value)
-            => (axis.Values ?? Array.Empty<string>()).Contains(value, StringComparer.OrdinalIgnoreCase);
+            => DeclaredValues(axis).Contains(value, StringComparer.OrdinalIgnoreCase);
 
         // Expected combinations, as display text keyed by a case-insensitive identity.
         var expected = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -74,7 +74,7 @@ public sealed partial class BenchmarkDeclarationService
             IEnumerable<string[]> combinations = new[] { Array.Empty<string>() };
             foreach (BenchmarkComparisonAxis axis in axes)
             {
-                string[] axisValues = axis.Values ?? Array.Empty<string>();
+                string[] axisValues = DeclaredValues(axis);
                 combinations = combinations.SelectMany(prefix => axisValues.Select(value => prefix.Concat(new[] { value }).ToArray())).ToArray();
             }
             foreach (string caseName in cases)
@@ -94,8 +94,8 @@ public sealed partial class BenchmarkDeclarationService
             bool complete = true;
             for (int index = 0; index < axes.Length && complete; index++)
             {
-                complete = cell.Parameters.TryGetValue(axes[index].Name, out string? value) && value is not null && AxisValueDeclared(axes[index], value);
-                values[index] = complete ? value! : string.Empty;
+                complete = cell.Parameters.TryGetValue(axes[index].Name, out string? value) && value is not null && AxisValueDeclared(axes[index], Normalize(value));
+                values[index] = complete ? Normalize(value) : string.Empty;
             }
             if (!complete)
                 continue;
@@ -137,7 +137,7 @@ public sealed partial class BenchmarkDeclarationService
             {
                 if (!TryGetIgnoreCase(parameters, axis.Name, out string value))
                     Add(issues, subject, "comparison-cell", $"A cell for case '{caseName}' needs a value for axis '{axis.Name}'.");
-                else if (!(axis.Values ?? Array.Empty<string>()).Contains(value, StringComparer.OrdinalIgnoreCase))
+                else if (!DeclaredValues(axis).Contains(value, StringComparer.OrdinalIgnoreCase))
                     Add(issues, subject, "comparison-cell", $"Cell value '{value}' is not declared for axis '{axis.Name}'.");
                 values.Add(value);
             }
@@ -145,6 +145,12 @@ public sealed partial class BenchmarkDeclarationService
                 Add(issues, subject, "comparison-cell", $"Cell {Describe(cases.Length > 0 ? caseName : null, cell.Library, axes, values)} is declared more than once.");
         }
     }
+
+    // Declared axis values, explicit cell values and measured values are compared trimmed, as catalogs store them.
+    private static string Normalize(string? value) => (value ?? string.Empty).Trim();
+
+    private static string[] DeclaredValues(BenchmarkComparisonAxis axis)
+        => (axis.Values ?? Array.Empty<string>()).Select(Normalize).ToArray();
 
     private static bool TryGetIgnoreCase(IReadOnlyDictionary<string, string> values, string name, out string value)
     {
