@@ -255,7 +255,8 @@ policy. When not every combination is valid (a library that has no `Scale=Huge`
 mode, a case that exists only for one library), list the valid cells explicitly in
 the comparison's `cells`; each names its `case` (always: a cell never stands for
 every case), optionally a `library` (absent means every library), and one value per
-axis in `parameters`. Case names can't be blank. With `cells`, a combination
+axis in `parameters`. Case names and axis values can't be blank, so a missing
+value is never mistaken for an empty one. With `cells`, a combination
 that ran but is not listed is `unexpected-combination`. Only the cases and axis
 values of cells that apply to the libraries that ran are required, so a value only
 an absent library supports is not reported missing. A comparison that lists `cells`

@@ -182,6 +182,8 @@ public sealed partial class BenchmarkDeclarationService
             {
                 if (!TryGetIgnoreCase(parameters, axis.Name, out string value))
                     Add(issues, subject, "comparison-cell", $"A cell for case '{caseName}' needs a value for axis '{axis.Name}'.");
+                else if (value.Length == 0)
+                    Add(issues, subject, "comparison-cell", $"A cell for case '{caseName}' has a blank value for axis '{axis.Name}'.");
                 else if (!DeclaredValues(axis).Contains(value, StringComparer.OrdinalIgnoreCase))
                     Add(issues, subject, "comparison-cell", $"Cell value '{value}' is not declared for axis '{axis.Name}'.");
                 values.Add(value);

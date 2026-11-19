@@ -270,6 +270,42 @@ public sealed partial class BenchmarkServicesTests
             Assert.Equal(BenchmarkDeclarationService.NoCasesReason, eligibility.Reason);
     }
 
+    [Fact]
+    public void Declarations_RejectBlankAxisValues()
+    {
+        string root = CreateTempRoot();
+        string source = Path.Combine(root, "source", "index.json");
+        BenchmarkDeclarationDocument declarations = SparseCombinationDeclarations();
+        BenchmarkEvidenceUpdateRequest request = PublishRequest(
+            ScaledResult(("OfficeIMO", "Easy", Spread(10, 10)), ("OfficeIMO", "Normal", Spread(20, 10)), ("Sep", "Easy", Spread(12, 10))), declarations);
+        request.ResultArtifactPath = Path.Combine(root, "source", "windows.json");
+        new BenchmarkEvidenceCatalogService().UpdateFile(source, request);
+        BenchmarkDeclarationDocument blank = SparseCombinationDeclarations();
+        blank.Comparisons[0].Axes = [new BenchmarkComparisonAxis { Name = "Scale", Values = ["Easy", "Normal", ""] }];
+        blank.Comparisons[0].Cells = [.. blank.Comparisons[0].Cells, new BenchmarkExpectedCell { Case = "Create", Parameters = new() { ["Scale"] = " " } }];
+        // A catalog edited or produced elsewhere can carry a blank value without its declaration document.
+        var catalog = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(source))!;
+        catalog["comparisons"]![0]!["axes"]![0]!["values"]!.AsArray().Add("");
+        File.WriteAllText(source, catalog.ToJsonString());
+
+        string[] messages = new BenchmarkDeclarationService().Validate(blank)
+            .Where(issue => issue.Code is "comparison-axis" or "comparison-cell").Select(issue => issue.Message).ToArray();
+        InvalidOperationException merge = Assert.Throws<InvalidOperationException>(() =>
+            new BenchmarkEvidenceCatalogService().MergeFiles(Path.Combine(root, "merged", "index.json"), [source]));
+
+        Assert.Equal(new[]
+        {
+            "Axis 'Scale' values can't be blank.",
+            "A cell for case 'Create' has a blank value for axis 'Scale'."
+        }, messages);
+        Assert.Contains("axis 'Scale' has a blank value", merge.Message, StringComparison.Ordinal);
+
+        // An empty value a runner records is never declared, so it surfaces instead of hiding.
+        BenchmarkRunResult emptyScale = ScaledResult(("OfficeIMO", "Easy", Spread(10, 10)), ("OfficeIMO", "Normal", Spread(20, 10)), ("Sep", "", Spread(12, 10)));
+        Assert.Contains(new BenchmarkDeclarationService().CheckDrift(declarations.Comparisons[0], declarations.Libraries, emptyScale),
+            issue => issue.Code == "unexpected-axis-value" && issue.Message == "Axis 'Scale' value '' ran but is not declared.");
+    }
+
     private static BenchmarkDeclarationDocument CombinationDeclarations()
     {
         BenchmarkDeclarationDocument declarations = TestDeclarations();

@@ -97,6 +97,8 @@ public sealed partial class BenchmarkDeclarationService
                     Add(issues, subject, "comparison-axis", "Axes need unique names.");
                 else if ((axis.Values ?? Array.Empty<string>()).Length == 0)
                     Add(issues, subject, "comparison-axis", $"Axis '{axis.Name}' needs at least one value.");
+                else if (axis.Values!.Any(string.IsNullOrWhiteSpace))
+                    Add(issues, subject, "comparison-axis", $"Axis '{axis.Name}' values can't be blank.");
             }
             if (comparisonLibraries.Where(value => !string.IsNullOrWhiteSpace(value)).Select(value => value.Trim())
                     .Distinct(StringComparer.OrdinalIgnoreCase).Count() != comparisonLibraries.Length)

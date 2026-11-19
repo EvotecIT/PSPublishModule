@@ -61,7 +61,7 @@ public sealed partial class BenchmarkEvidenceCatalogService
             Subject = source.Subject?.Trim() ?? string.Empty,
             Libraries = source.Libraries.Select(value => value.Trim()).Distinct(StringComparer.OrdinalIgnoreCase).ToArray(),
             Axes = (source.Axes ?? Array.Empty<BenchmarkComparisonAxis>())
-                .Select(axis => new BenchmarkComparisonAxis { Name = axis.Name.Trim(), Values = (axis.Values ?? Array.Empty<string>()).Select(value => value.Trim()).ToArray() })
+                .Select(axis => new BenchmarkComparisonAxis { Name = axis.Name.Trim(), Values = NormalizeAxisValues(source.ComparisonId, axis) })
                 .ToArray(),
             Cases = (source.Cases ?? Array.Empty<string>()).Select(value => value.Trim()).ToArray(),
             Cells = (source.Cells ?? Array.Empty<BenchmarkExpectedCell>())
@@ -96,9 +96,21 @@ public sealed partial class BenchmarkEvidenceCatalogService
             string name = pair.Key.Trim();
             if (normalized.ContainsKey(name))
                 throw new InvalidOperationException($"Comparison '{comparisonId.Trim()}' has a cell that gives parameter '{name}' more than once; parameter names ignore case.");
+            if (string.IsNullOrWhiteSpace(pair.Value))
+                throw new InvalidOperationException($"Comparison '{comparisonId.Trim()}' has a cell with a blank value for parameter '{name}'.");
             normalized[name] = pair.Value.Trim();
         }
         return normalized;
+    }
+
+    // A blank axis value can't be told apart from a missing parameter, so it is rejected on every path, including
+    // catalogs merged without their declaration document.
+    private static string[] NormalizeAxisValues(string comparisonId, BenchmarkComparisonAxis axis)
+    {
+        string[] values = (axis.Values ?? Array.Empty<string>()).Select(value => value?.Trim() ?? string.Empty).ToArray();
+        if (values.Any(value => value.Length == 0))
+            throw new InvalidOperationException($"Comparison '{comparisonId.Trim()}' axis '{axis.Name.Trim()}' has a blank value.");
+        return values;
     }
 
     private static BenchmarkPlatformAvailability[] BuildAvailability(BenchmarkEvidenceCatalog catalog)
