@@ -1,3 +1,5 @@
+using System.Reflection.PortableExecutable;
+using System.Runtime.InteropServices;
 using PowerForge;
 
 namespace PowerForge.Tests;
@@ -191,17 +193,35 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
             Assert.Contains("ParameterArgumentTransformationError", value, StringComparison.Ordinal);
         }, requiredModule: "Microsoft.PowerShell.LocalAccounts", assertArtifact: built =>
         {
-            var nodes = built.Manifest!.DependencyGraph!.Nodes;
-            var metadata = Assert.Single(nodes, node =>
+            var graph = built.Manifest!.DependencyGraph!;
+            var metadata = Assert.Single(graph.Nodes, node =>
                 node.Identity.Provenance == "WindowsHostModuleAssembly" &&
                 Path.GetFileName(node.Identity.Source).Equals("Microsoft.PowerShell.LocalAccounts.dll", StringComparison.OrdinalIgnoreCase));
             Assert.Equal(PowerShellCompilationDependencyGraphDisposition.External, metadata.Disposition);
             Assert.StartsWith("windows-module/", metadata.Identity.Source, StringComparison.Ordinal);
             Assert.False(Path.IsPathRooted(metadata.Identity.Source));
             Assert.Matches("^[a-f0-9]{64}$", metadata.Identity.Sha256);
+            Assert.DoesNotContain(graph.Edges, edge => edge.FromId == metadata.Id);
             Assert.DoesNotContain(Directory.EnumerateFiles(Path.GetDirectoryName(built.ArtifactPath!)!, "*.dll",
                 SearchOption.AllDirectories), path =>
                 Path.GetFileName(path).Equals("Microsoft.PowerShell.LocalAccounts.dll", StringComparison.OrdinalIgnoreCase));
         });
+    }
+
+    [Fact]
+    [Trait("Category", "PowerShellCompilerGate")]
+    public void BorrowedWindowsModuleImagesRequireCompatibleArchitecture()
+    {
+        Assert.True(PowerShellWindowsModuleMetadata.HasCompatibleArchitecture(Machine.I386, CorFlags.ILOnly, Architecture.X64));
+        Assert.True(PowerShellWindowsModuleMetadata.HasCompatibleArchitecture(Machine.I386,
+            CorFlags.ILOnly | CorFlags.Requires32Bit, Architecture.X86));
+        Assert.False(PowerShellWindowsModuleMetadata.HasCompatibleArchitecture(Machine.I386,
+            CorFlags.ILOnly | CorFlags.Requires32Bit, Architecture.X64));
+        Assert.False(PowerShellWindowsModuleMetadata.HasCompatibleArchitecture(Machine.I386,
+            CorFlags.ILOnly | CorFlags.Prefers32Bit, Architecture.X64));
+        Assert.False(PowerShellWindowsModuleMetadata.HasCompatibleArchitecture(Machine.I386, 0, Architecture.X64));
+        Assert.True(PowerShellWindowsModuleMetadata.HasCompatibleArchitecture(Machine.Amd64, CorFlags.ILOnly, Architecture.X64));
+        Assert.False(PowerShellWindowsModuleMetadata.HasCompatibleArchitecture(Machine.Amd64, CorFlags.ILOnly, Architecture.Arm64));
+        Assert.True(PowerShellWindowsModuleMetadata.HasCompatibleArchitecture(Machine.Arm64, CorFlags.ILOnly, Architecture.Arm64));
     }
 }

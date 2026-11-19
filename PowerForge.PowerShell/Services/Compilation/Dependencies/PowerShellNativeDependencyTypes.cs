@@ -135,7 +135,7 @@ internal sealed class PowerShellNativeDependencyTypes
                 throw new InvalidOperationException("Native type dependency changed after dependency locking.");
             stream.Position = 0;
             using var pe = new PEReader(stream);
-            if (!pe.HasMetadata) continue;
+            if (!pe.HasMetadata || isBorrowed && !PowerShellWindowsModuleMetadata.HasCompatibleArchitecture(pe)) continue;
             var reader = pe.GetMetadataReader();
             if (!reader.IsAssembly || !isBorrowed && reader.MethodDefinitions.Any(handle =>
                     (reader.GetMethodDefinition(handle).Attributes & MethodAttributes.PinvokeImpl) != 0)) continue;

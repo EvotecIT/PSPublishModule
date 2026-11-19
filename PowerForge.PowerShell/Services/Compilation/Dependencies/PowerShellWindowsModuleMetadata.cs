@@ -1,3 +1,5 @@
+using System.Reflection.Metadata;
+using System.Reflection.PortableExecutable;
 using System.Runtime.InteropServices;
 
 namespace PowerForge;
@@ -62,8 +64,41 @@ internal static class PowerShellWindowsModuleMetadata
             var path = File.Exists(candidate) ? candidate : explicitAssembly ? FindGacAssembly(reference) : null;
             if (path is null) continue;
             RequireTrustedAssemblyPath(path);
-            yield return path;
+            if (IsManagedHostAssembly(path)) yield return path;
         }
+    }
+
+    private static bool IsManagedHostAssembly(string path)
+    {
+        try
+        {
+            using var stream = File.OpenRead(path);
+            using var pe = new PEReader(stream);
+            return HasCompatibleArchitecture(pe) && pe.HasMetadata && pe.GetMetadataReader().IsAssembly;
+        }
+        catch (BadImageFormatException)
+        {
+            return false;
+        }
+    }
+
+    internal static bool HasCompatibleArchitecture(PEReader image)
+        => image.PEHeaders.CorHeader is { } header &&
+           HasCompatibleArchitecture(image.PEHeaders.CoffHeader.Machine, header.Flags, RuntimeInformation.ProcessArchitecture);
+
+    internal static bool HasCompatibleArchitecture(Machine machine, CorFlags flags, Architecture architecture)
+    {
+        const CorFlags restrictedTo32Bit = CorFlags.Requires32Bit | CorFlags.Prefers32Bit;
+        if (machine == Machine.I386 && (flags & (restrictedTo32Bit | CorFlags.ILOnly)) == CorFlags.ILOnly)
+            return true;
+        return machine switch
+        {
+            Machine.I386 => architecture == Architecture.X86,
+            Machine.Amd64 => architecture == Architecture.X64 && (flags & restrictedTo32Bit) == 0,
+            Machine.Arm or Machine.ArmThumb2 => architecture == Architecture.Arm,
+            Machine.Arm64 => architecture == Architecture.Arm64 && (flags & restrictedTo32Bit) == 0,
+            _ => false
+        };
     }
 
     internal static void RequireTrustedAssemblyPath(string path)
