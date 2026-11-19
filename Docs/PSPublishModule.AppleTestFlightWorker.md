@@ -51,7 +51,7 @@ jobs:
 ```
 
 The workflow runs on GitHub-hosted Linux without checking out application code or
-receiving Apple credentials. It retains a small request artifact for 90 days.
+receiving Apple credentials. It retains a small request artifact for seven days.
 The worker accepts only successful default-branch dispatches using the enrolled
 shared workflow pin and verifies the request and rerun actors have repository
 write permission. Invalid or failed attempts are recorded with a diagnostic and do
@@ -59,7 +59,9 @@ not block later requests. An incomplete attempt holds request ordering for at mo
 ten minutes. A successful rerun of a rejected attempt remains eligible; an accepted
 run is applied only once across reruns. Transient observation failures retain the
 request for retry and close the active mutation gate. Keep the Mac polling within
-the artifact retention period.
+the artifact retention period. If a request expires before the worker accepts
+it, check the worker history before submitting it again. Accepted requests and
+release recovery receipts are retained in the Mac worker's durable state.
 
 ## Enroll the trusted Mac
 

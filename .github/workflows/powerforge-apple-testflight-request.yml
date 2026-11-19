@@ -59,4 +59,4 @@ jobs:
           name: powerforge-testflight-request
           path: request.json
           if-no-files-found: error
-          retention-days: 90
+          retention-days: 7
