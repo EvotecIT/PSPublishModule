@@ -285,6 +285,15 @@ public sealed class BenchmarkCellView
     /// <summary>Time relative to the fastest contender in this case.</summary>
     public BenchmarkRatioView Relative { get; set; } = new();
 
+    /// <summary>Accepted confidence interval of the time, when the evidence records one.</summary>
+    public BenchmarkIntervalView? Interval { get; set; }
+
+    /// <summary>
+    /// True when this cell is not the fastest but its confidence interval overlaps the fastest cell's, so the two
+    /// are even rather than ranked.
+    /// </summary>
+    public bool Even { get; set; }
+
     /// <summary>Bar width as a percentage of the slowest contender in this case.</summary>
     public double BarPercent { get; set; }
 }

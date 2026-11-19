@@ -78,6 +78,41 @@ public class WebSiteBuilderBenchmarkEvidenceTests
     }
 
     [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void Build_DoesNotWriteBuiltInAssetsThroughALinkedAssetsFolder(bool benchmarks)
+    {
+        var root = CreateTempRoot();
+        var link = Path.Combine(root, "_site", "assets", "powerforge");
+        try
+        {
+            WriteMergeCatalog(root);
+            var external = Path.Combine(root, "external");
+            Directory.CreateDirectory(external);
+            WritePage(root, "---\ntitle: Home\nslug: index\n---\n\nHome\n");
+            WriteTheme(root, "<html><head></head><body>{{ content }}</body></html>");
+            Directory.CreateDirectory(Path.Combine(root, "_site", "assets"));
+            CreateDirectoryLink(link, external);
+            var spec = BuildSpec();
+            if (benchmarks)
+                spec.BenchmarkEvidence = new[] { new BenchmarkEvidenceDataSpec { Name = "benchmarks", Catalog = "evidence/index.json" } };
+            else
+                spec.MediaViewer = new MediaViewerSpec { Enabled = true };
+
+            var error = Assert.Throws<InvalidOperationException>(() => BuildAndRead(root, spec));
+
+            Assert.Contains("symbolic link or reparse point", error.Message, StringComparison.Ordinal);
+            Assert.Empty(Directory.GetFiles(external));
+        }
+        finally
+        {
+            if (Directory.Exists(link))
+                Directory.Delete(link);
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Theory]
     [InlineData(null, true, "needs Output")]
     [InlineData("../outside", false, "inside the site output")]
     [InlineData("../_SITE/benchmarks", false, "inside the site output")]
@@ -177,7 +212,7 @@ public class WebSiteBuilderBenchmarkEvidenceTests
         Assert.Equal(1500, new ScribanTemplateEngine().Render(template, context, _ => null).Length);
     }
 
-    private static SiteSpec BuildSpec() => new()
+    internal static SiteSpec BuildSpec() => new()
     {
         Name = "Benchmark evidence test",
         BaseUrl = "https://example.test",
@@ -188,7 +223,7 @@ public class WebSiteBuilderBenchmarkEvidenceTests
         Collections = new[] { new CollectionSpec { Name = "pages", Input = "content/pages", Output = "/" } }
     };
 
-    private static string BuildAndRead(string root, SiteSpec spec)
+    internal static string BuildAndRead(string root, SiteSpec spec)
     {
         var configPath = Path.Combine(root, "site.json");
         File.WriteAllText(configPath, "{}");
@@ -222,14 +257,14 @@ public class WebSiteBuilderBenchmarkEvidenceTests
         });
     }
 
-    private static void WritePage(string root, string markdown)
+    internal static void WritePage(string root, string markdown)
     {
         var pages = Path.Combine(root, "content", "pages");
         Directory.CreateDirectory(pages);
         File.WriteAllText(Path.Combine(pages, "index.md"), markdown);
     }
 
-    private static void WriteTheme(string root, string layout)
+    internal static void WriteTheme(string root, string layout)
     {
         var themeRoot = Path.Combine(root, "themes", "t");
         Directory.CreateDirectory(Path.Combine(themeRoot, "layouts"));
@@ -241,7 +276,7 @@ public class WebSiteBuilderBenchmarkEvidenceTests
     }
 
     // Windows symbolic links need a privilege; a junction is the link type any user can create there.
-    private static void CreateDirectoryLink(string link, string target)
+    internal static void CreateDirectoryLink(string link, string target)
     {
         if (!OperatingSystem.IsWindows())
         {

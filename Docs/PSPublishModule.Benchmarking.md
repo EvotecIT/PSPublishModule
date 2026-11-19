@@ -792,7 +792,9 @@ shows:
 - `group` and `frameworks` from the declaration;
 - `eligibility` (`publishable`, `reason`), for example a single-library comparison;
 - `availability`, one entry per expected platform and framework, with text such as
-  `Windows · net10.0 · standard · 2026-11-18` or `Linux · net10.0 · not measured`;
+  `Windows · net10.0 · standard · 2026-11-18`, `Linux · net10.0 · no published run`
+  (measured, but only in runs that are not published) or `macOS · net10.0 · not measured`.
+  It names only profiles the publish policy publishes;
 - `libraryStates`, each library's restriction class and whether its results are
   published, with the note `not published (licence)` when they are not.
 
@@ -826,4 +828,89 @@ Templates then read `data.benchmarks.areas`, each with `id`, `file`, `groups`,
 the full comparisons. Headlines come only from a published run, so a comparison
 measured only in diagnostic or unpublished runs has none. `IndexOnly` requires `Output`, and `Output` must stay inside
 the site output.
+
+Each cell also carries `interval` (`level`, `lowerMs`, `upperMs` and `text`, such as
+`95% CI 10.1 ms – 10.8 ms`) when the evidence records one, and `even`, which is true
+when its interval overlaps the fastest cell's interval in that case.
+
+### Website components
+
+PowerForge.Web ships Scriban partials that render the view, so every site presents
+benchmarks the same way. They need no files in the theme:
+
+| Partial | Argument | Renders |
+| --- | --- | --- |
+| `powerforge/benchmarks/comparison` | one comparison | Title, group, platform availability, a platform and framework switcher, and the published runs, followed by licence notes |
+| `powerforge/benchmarks/run` | a run and its comparison | Run facts, environment, workload, the case table with times, confidence intervals and "fastest", "even" or the ratio, head-to-head lines, withheld libraries with their reason (never their times) and runner settings |
+| `powerforge/benchmarks/area` | an area file's content, or in area pages the area's index entry | Every comparison of one area; in area pages `summaries` lists them and `comparisonsHtml` holds them already rendered |
+| `powerforge/benchmarks/index` | the `BenchmarkEvidence` data | Areas with comparison headlines, and each area's results on demand |
+
+Only published runs are shown. A comparison without one shows "No published run
+yet.", platforms are listed as "not measured" or "no published run", and a
+comparison that cannot be published shows the reason. When cells have confidence
+intervals, only the fastest cell is "fastest" and a cell whose interval overlaps it
+is "even"; cells without intervals use the 0.5% tolerance. The index tells a
+comparison with no run, one measured only in unpublished runs and one whose
+published run has no head-to-head result apart, using each summary's `measured`
+and `published` flags.
+
+To adopt them in a site:
+
+1. Declare the evidence in `site.json`. For a large catalog, add `IndexOnly` (with
+   `Output`) so pages carry only the index, and `AreaFragments` so the index loads
+   each area's rendered results when it is opened:
+
+   ```json
+   {
+     "BenchmarkEvidence": [
+       {
+         "Name": "benchmarks",
+         "Catalog": "static/data/benchmarks/index.json",
+         "Output": "data/benchmarks",
+         "IndexOnly": true,
+         "AreaFragments": true
+       }
+     ]
+   }
+   ```
+
+2. Include a component in a Scriban layout or partial. A summary page with every
+   area:
+
+   ```html
+   {{ include "powerforge/benchmarks/index" data.benchmarks }}
+   ```
+
+   or one comparison, when the full view is loaded (no `IndexOnly`):
+
+   ```html
+   {{ for c in data.benchmarks.comparisons }}
+     {{ if c.id == "excel-read" }}{{ include "powerforge/benchmarks/comparison" c }}{{ end }}
+   {{ end }}
+   ```
+
+3. Build the site. A page that renders a component gets
+   `assets/powerforge/benchmarks.v1.css` and `assets/powerforge/benchmarks.v1.js`
+   added to its head and body; the build refuses to write them through a linked
+   `assets/powerforge` folder or file. With `AreaFragments`, the build also writes
+   each area as a small page to
+   `_powerforge/fragments/benchmarks/<name>-<hash>/<area>.html`. The folder adds a
+   hash of the exact `Name`, so entries such as `benchmarks.csv` and `benchmarks-csv`
+   never share one, and two entries that would still share a folder fail the build
+   before anything is written. The `area` component, or the theme's replacement,
+   renders the page; the comparisons are rendered one at a time beforehand and
+   passed to it as `comparisonsHtml`, so an area of any size stays within the
+   template loop limit. Site audits, sitemaps and search already skip
+   `_powerforge/fragments`, and the page is marked `noindex`.
+   The script resolves these files from the site root it was loaded from, so a site
+   served from a sub-path works unchanged.
+
+Without the script, the platform switcher stays hidden, every published run is
+shown in turn and "Show results" opens a link to the area page, which has its own
+styles; without `AreaFragments`, an index over the full view renders areas
+inline and an `IndexOnly` index lists the summaries. Themes restyle the components
+through the `--pf-bench-*` CSS properties (accent, even, failed, border, radius),
+or replace one by adding `partials/powerforge/benchmarks/<name>.html`; the build
+then uses the theme's version, including for the area files. The partials
+HTML-escape every value from the evidence.
 

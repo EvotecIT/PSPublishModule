@@ -56,6 +56,9 @@
     <EmbeddedResource Include="Assets\Audit\layout.js" />
     <EmbeddedResource Include="Assets/StoreArt/**/*" />
     <EmbeddedResource Include="Assets\Media\media-viewer.v1.js" />
+    <EmbeddedResource Include="Assets\Benchmarks\*.html" />
+    <EmbeddedResource Include="Assets\Benchmarks\benchmarks.v1.css" />
+    <EmbeddedResource Include="Assets\Benchmarks\benchmarks.v1.js" />
     <EmbeddedResource Include="Assets\Media\media-viewer.v1.css" />
   </ItemGroup>
 

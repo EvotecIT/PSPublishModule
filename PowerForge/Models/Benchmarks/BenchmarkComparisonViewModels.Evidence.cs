@@ -3,6 +3,22 @@ using System.Collections.Generic;
 
 namespace PowerForge;
 
+/// <summary>A confidence interval of a measured time.</summary>
+public sealed class BenchmarkIntervalView
+{
+    /// <summary>Confidence level, such as 0.95.</summary>
+    public double Level { get; set; }
+
+    /// <summary>Lower bound in milliseconds.</summary>
+    public double LowerMs { get; set; }
+
+    /// <summary>Upper bound in milliseconds.</summary>
+    public double UpperMs { get; set; }
+
+    /// <summary>Display text such as "95% CI 9.80 ms – 10.2 ms".</summary>
+    public string Text { get; set; } = string.Empty;
+}
+
 /// <summary>Whether a comparison can be published, and why not.</summary>
 public sealed class BenchmarkEligibilityView
 {
@@ -28,13 +44,16 @@ public sealed class BenchmarkAvailabilityView
     /// <summary>True when a published run exists.</summary>
     public bool Available { get; set; }
 
-    /// <summary>Published profiles, such as full or standard.</summary>
+    /// <summary>Published profiles, such as full or standard. Profiles the publish policy excludes are never listed.</summary>
     public string[] Profiles { get; set; } = Array.Empty<string>();
 
     /// <summary>Date of the newest published run as yyyy-MM-dd, or empty.</summary>
     public string LatestDate { get; set; } = string.Empty;
 
-    /// <summary>Display text such as "Windows · net10.0 · full · 2026-11-18" or "Windows · net10.0 · not measured".</summary>
+    /// <summary>
+    /// Display text such as "Windows · net10.0 · full · 2026-11-18", "Windows · net10.0 · no published run" when only
+    /// unpublished runs exist, or "Windows · net10.0 · not measured".
+    /// </summary>
     public string Text { get; set; } = string.Empty;
 }
 
@@ -158,6 +177,12 @@ public sealed class BenchmarkComparisonSummaryView
 
     /// <summary>Eligibility.</summary>
     public BenchmarkEligibilityView Eligibility { get; set; } = new();
+
+    /// <summary>
+    /// True when the comparison has a published run, even one whose competitors were all withheld and so has no
+    /// head-to-head result. Diagnostic and other unpublished runs do not count.
+    /// </summary>
+    public bool Published { get; set; }
 
     /// <summary>
     /// Head-to-head text of the published run (full before standard, then newest), such as

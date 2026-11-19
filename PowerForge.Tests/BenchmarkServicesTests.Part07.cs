@@ -4,7 +4,7 @@ using PowerForge;
 
 namespace PowerForge.Tests;
 
-public sealed partial class BenchmarkServicesTests
+public sealed partial class BenchmarkServicesTests : IDisposable
 {
     [Fact]
     public void Runner_RejectsSkippedComparisonBaselineBeforeMeasurement()
@@ -340,10 +340,36 @@ public sealed partial class BenchmarkServicesTests
         return suite;
     }
 
+    // Tests in one class run one at a time, so the folders a test creates are the ones Dispose finds here.
+    private static readonly System.Collections.Concurrent.ConcurrentQueue<string> TempRoots = new();
+
     private static string CreateTempRoot()
     {
         var path = Path.Combine(Path.GetTempPath(), "pf-benchmark-tests-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(path);
+        TempRoots.Enqueue(path);
         return path;
+    }
+
+    /// <summary>Removes the temporary folders this test created.</summary>
+    public void Dispose()
+    {
+        while (TempRoots.TryDequeue(out var path))
+        {
+            try
+            {
+                if (!Directory.Exists(path))
+                    continue;
+                // Git marks object files read-only, which Windows refuses to delete. Links are not followed.
+                var files = new EnumerationOptions { RecurseSubdirectories = true, AttributesToSkip = FileAttributes.ReparsePoint };
+                foreach (var file in Directory.EnumerateFiles(path, "*", files))
+                    File.SetAttributes(file, File.GetAttributes(file) & ~FileAttributes.ReadOnly);
+                Directory.Delete(path, recursive: true);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                // A file still held by the test host must not fail the test; the folder stays in temp.
+            }
+        }
     }
 }

@@ -142,6 +142,62 @@ public sealed partial class BenchmarkServicesTests
         BenchmarkAreaIndexView csv = Assert.Single(view.Index.Areas, area => area.Id == "csv");
         Assert.Equal(new[] { "OfficeIMO is 1.96× faster than Sep" }, Assert.Single(csv.Comparisons, comparison => comparison.Id == "comparison-a").Headlines);
         Assert.Empty(Assert.Single(csv.Comparisons, comparison => comparison.Id == "comparison-b").Headlines);
+        BenchmarkAvailabilityView diagnosticOnly = Assert.Single(
+            Assert.Single(view.Comparisons, comparison => comparison.Id == "comparison-b").Availability, value => value.Platform == "windows");
+        Assert.False(diagnosticOnly.Available);
+        Assert.Equal("Windows · net10.0 · no published run", diagnosticOnly.Text);
+    }
+
+    [Fact]
+    public void ComparisonView_CallsCellsWithOverlappingIntervalsEvenRatherThanFastest()
+    {
+        string root = CreateTempRoot();
+        string catalogPath = Path.Combine(root, "index.json");
+        // A centres on 100 ms and B on 100.4 ms with overlapping intervals: within the 0.5% tolerance, but B is
+        // not the fastest row, so it is even rather than also fastest.
+        double[] a = [99.0, 99.5, 99.8, 100.0, 100.0, 100.0, 100.0, 100.2, 100.5, 101.0];
+        double[] b = [100.0, 100.1, 100.2, 100.4, 100.4, 100.4, 100.4, 100.6, 101.0, 102.0];
+        BenchmarkEvidenceUpdateRequest request = PublishRequest(MeasuredResult(("OfficeIMO", "Read", a), ("Sep", "Read", b)), TestDeclarations());
+        new BenchmarkEvidenceCatalogService().UpdateFile(catalogPath, request);
+
+        BenchmarkCaseView row = Assert.Single(Assert.Single(Assert.Single(
+            new BenchmarkComparisonViewBuilder().Build(catalogPath).Comparisons, comparison => comparison.Id == "comparison-a").Runs).Cases);
+
+        BenchmarkCellView fastest = Assert.Single(row.Cells, cell => cell.Contender == "OfficeIMO");
+        BenchmarkCellView close = Assert.Single(row.Cells, cell => cell.Contender == "Sep");
+        Assert.NotNull(close.Interval);
+        Assert.True(fastest.Relative.IsFastest);
+        Assert.False(fastest.Even);
+        Assert.False(close.Relative.IsFastest);
+        Assert.True(close.Even);
+        Assert.Equal(1.004, close.Relative.Ratio!.Value, 3);
+    }
+
+    [Fact]
+    public void ComparisonView_AvailabilityNeverNamesUnpublishedProfiles()
+    {
+        string root = CreateTempRoot();
+        string catalogPath = RecordViewCatalog(root);
+        // A hand-written catalog can claim profiles the policy never publishes.
+        BenchmarkEvidenceCatalog catalog = new BenchmarkEvidenceCatalogService().ReadCatalog(catalogPath);
+        BenchmarkPlatformAvailability windows = catalog.Availability.Single(value => value.ComparisonId == "comparison-a" && value.Platform == "windows");
+        windows.Profiles = [BenchmarkEvidenceProfile.Diagnostic, BenchmarkEvidenceProfile.Standard];
+        BenchmarkPlatformAvailability linux = catalog.Availability.Single(value => value.ComparisonId == "comparison-a" && value.Platform == "linux");
+        linux.Available = true;
+        linux.Profiles = [BenchmarkEvidenceProfile.Diagnostic];
+        linux.LatestUtc = DateTimeOffset.UtcNow;
+
+        BenchmarkComparisonView read = Assert.Single(
+            new BenchmarkComparisonViewBuilder().Build(catalog, entry => BenchmarkJson.Read<BenchmarkRunResult>(Path.Combine(root, entry.ArtifactRelativePath))).Comparisons,
+            comparison => comparison.Id == "comparison-a");
+
+        BenchmarkAvailabilityView windowsView = Assert.Single(read.Availability, value => value.Platform == "windows");
+        Assert.Equal(new[] { "standard" }, windowsView.Profiles);
+        Assert.DoesNotContain("diagnostic", windowsView.Text, StringComparison.Ordinal);
+        BenchmarkAvailabilityView linuxView = Assert.Single(read.Availability, value => value.Platform == "linux");
+        Assert.False(linuxView.Available);
+        Assert.Empty(linuxView.Profiles);
+        Assert.Equal("Linux · net10.0 · not measured", linuxView.Text);
     }
 
     [Fact]

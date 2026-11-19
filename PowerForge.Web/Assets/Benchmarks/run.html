@@ -1,0 +1,77 @@
+{{~ # powerforge/benchmarks/run: one published run ($1) of a comparison ($2). The comparison component passes ~}}
+{{~ # true as $3 because it lists licence-restricted libraries itself. ~}}
+{{~ r = $1 ~}}
+{{~ c = $2 ~}}
+{{~ in_comparison = $3 ~}}
+<div class="pf-bench__run" role="tabpanel" id="benchmark-{{ c.id | html.escape }}-{{ r.id | html.escape }}" data-pf-bench-run="{{ r.id | html.escape }}">
+  <div class="pf-bench__facts">
+    <ul>
+      <li>{{ r.platformLabel | html.escape }}</li>
+      {{~ if r.framework != "" ~}}
+      <li>{{ r.framework | html.escape }}</li>
+      {{~ end ~}}
+      <li>{{ r.profileText | html.escape }}</li>
+      <li><time datetime="{{ r.date | html.escape }}">{{ r.date | html.escape }}</time></li>
+    </ul>
+  </div>
+  {{~ if r.environment.text != "" ~}}
+  <p class="pf-bench__environment">{{ r.environment.text | html.escape }}</p>
+  {{~ end ~}}
+  {{~ if r.workload.size > 0 ~}}
+  <p class="pf-bench__workload"><span class="pf-bench__label">Workload</span>{{ for w in r.workload }} <code>{{ w.name | html.escape }}={{ w.value | html.escape }}</code>{{ end }}</p>
+  {{~ end ~}}
+  <div class="pf-bench__table-wrap">
+    <table class="pf-bench__table">
+      <thead>
+        <tr>
+          <th scope="col">Case</th>
+          {{~ for k in r.contenders ~}}
+          <th scope="col"{{ if k.isSubject }} class="is-subject"{{ end }}>{{ k.name | html.escape }}{{ if k.version != "" }} <span class="pf-bench__version">{{ k.version | html.escape }}</span>{{ end }}</th>
+          {{~ end ~}}
+        </tr>
+      </thead>
+      <tbody>
+        {{~ for row in r.cases ~}}
+        <tr>
+          <th scope="row">{{ if row.label != "" }}{{ row.label | html.escape }}{{ else }}{{ c.title | html.escape }}{{ end }}</th>
+          {{~ for cell in row.cells ~}}
+          {{~ if cell.missing ~}}
+          <td class="pf-bench__cell is-missing">&mdash;</td>
+          {{~ else if cell.failed ~}}
+          <td class="pf-bench__cell is-failed">Failed</td>
+          {{~ else ~}}
+          <td class="pf-bench__cell{{ if cell.relative.isFastest }} is-fastest{{ else if cell.even }} is-even{{ end }}">
+            <span class="pf-bench__time">{{ cell.timeText | html.escape }}</span>
+            <span class="pf-bench__relative">{{ if cell.relative.isFastest }}fastest{{ else if cell.even }}even{{ else }}{{ cell.relative.text | html.escape }}{{ end }}</span>
+            {{~ if cell.interval ~}}
+            <span class="pf-bench__ci">{{ cell.interval.text | html.escape }}</span>
+            {{~ end ~}}
+          </td>
+          {{~ end ~}}
+          {{~ end ~}}
+        </tr>
+        {{~ end ~}}
+      </tbody>
+    </table>
+  </div>
+  {{~ if r.headToHead.size > 0 ~}}
+  <ul class="pf-bench__headlines">
+    {{~ for h in r.headToHead; if h.text != "" ~}}
+    <li class="is-{{ h.outcome | html.escape }}"><strong>{{ h.text | html.escape }}</strong>{{ if h.detail != "" }} <span>{{ h.detail | html.escape }}</span>{{ end }}</li>
+    {{~ end; end ~}}
+  </ul>
+  {{~ end ~}}
+  <ul class="pf-bench__notes">
+    <li>Times are {{ r.statistic | html.escape }}s; results whose confidence intervals overlap are reported as even.</li>
+    {{~ for n in r.notPublished ~}}
+    {{~ if !n.licence ~}}
+    <li>{{ n.library | html.escape }}: not published. {{ n.text | html.escape }}</li>
+    {{~ else if !in_comparison ~}}
+    <li>{{ n.library | html.escape }}: not published (licence).</li>
+    {{~ end ~}}
+    {{~ end ~}}
+    {{~ if r.runner.text != "" ~}}
+    <li>Runner: {{ r.runner.text | html.escape }}</li>
+    {{~ end ~}}
+  </ul>
+</div>

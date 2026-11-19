@@ -81,7 +81,7 @@ public static partial class WebSiteBuilder
                 partialResolver = name =>
                 {
                     var path = loader.ResolvePartialPath(themeRoot, manifest, name);
-                    return path is null ? null : File.ReadAllText(path);
+                    return path is null ? ResolveBuiltInPartial(name) : File.ReadAllText(path);
                 };
             }
 

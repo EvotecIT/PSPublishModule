@@ -49,7 +49,11 @@ public static partial class WebSiteBuilder
                 ? PowerForge.BenchmarkJson.Serialize(view.Index)
                 : PowerForge.BenchmarkJson.Serialize(view));
             var segments = evidence.Name.Split(new[] { '.', '/' }, StringSplitOptions.RemoveEmptyEntries);
-            AddNestedData(data, segments, ConvertJsonElement(document.RootElement), overwrite: true);
+            var value = ConvertJsonElement(document.RootElement);
+            // The index component loads an area's rendered file from here when the entry writes them.
+            if (value is Dictionary<string, object?> map && evidence.AreaFragments)
+                map["areaFragments"] = BenchmarkAreaFragmentsRoute(evidence);
+            AddNestedData(data, segments, value, overwrite: true);
         }
     }
 
