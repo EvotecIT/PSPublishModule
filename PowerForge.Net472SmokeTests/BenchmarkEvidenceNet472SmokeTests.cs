@@ -29,7 +29,7 @@ public sealed class BenchmarkEvidenceNet472SmokeTests
                     ],
                     Comparisons =
                     [
-                        new BenchmarkComparisonDefinition { ComparisonId = "smoke-read", Area = "smoke", Title = "Smoke read", Subject = "Managed", Libraries = ["Managed", "Other", "Third"] }
+                        new BenchmarkComparisonDefinition { ComparisonId = "smoke-read", Area = "smoke", Title = "Smoke read", Subject = "Managed", Libraries = ["Managed", "Other", "Third"], Cases = ["Read"] }
                     ]
                 }
             };
