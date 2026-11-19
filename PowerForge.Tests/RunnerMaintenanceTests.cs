@@ -600,7 +600,7 @@ public sealed class RunnerMaintenanceTests
         AddOldToolVersion(runtime, "81.0.0", "unrecognized.txt");
         var recent = AddOldToolVersion(runtime, "81.0.7", "Microsoft.NETCore.App.deps.json");
         Directory.SetCreationTimeUtc(recent, DateTime.UtcNow);
-        foreach (var version in new[] { "3.0.100", "3.0.101", "3.0.102", "3.0.103", "3.0.104" })
+        foreach (var version in new[] { "3.0.99", "3.0.100", "3.0.101", "3.0.102", "3.0.103", "3.0.104" })
         {
             var root = AddOldToolVersion(module, version, "PSPublishModule.psd1", $"@{{\n    ModuleVersion = '{version}'\n}}");
             var metadata = Path.Combine(root, "PSGetModuleInfo.xml");
@@ -609,7 +609,20 @@ public sealed class RunnerMaintenanceTests
             Directory.SetCreationTimeUtc(root, DateTime.UtcNow.AddDays(-40));
             Directory.SetLastWriteTimeUtc(root, DateTime.UtcNow.AddDays(-40));
         }
-        // The installed manifest has the exact version on its own line.
+        var workspace = Path.Combine(fixture.Runner.WorkRootPath, "Example", "Example");
+        var build = Path.Combine(workspace, "Build");
+        Directory.CreateDirectory(build);
+        File.WriteAllText(Path.Combine(build, "build-pins.json"),
+            "{\"inventory\":\"" + new string('x', 4 * 1024 * 1024) + "\",\"module\":\"3.0.99\",\"runtime\":\"81.0.5\"}");
+        var state = new RunnerMaintenanceState();
+        state.Jobs.Add(new RunnerMaintenanceJob
+        {
+            RunnerRoot = fixture.Runner.RootPath, Workspace = workspace, CompletedUtc = DateTime.UtcNow.AddMinutes(-1)
+        });
+        Directory.CreateDirectory(fixture.Spec.StateRootPath);
+        File.WriteAllText(Path.Combine(fixture.Spec.StateRootPath, "state.json"),
+            JsonSerializer.Serialize(state, RunnerMaintenanceJsonContext.Default.RunnerMaintenanceState));
+
         fixture.Spec.WindowsToolRetention = new RunnerWindowsToolRetention
         {
             DotNetRoot = dotnet, PSPublishModuleRoots = new[] { module }, MinimumAgeDays = 14,
@@ -627,9 +640,10 @@ public sealed class RunnerMaintenanceTests
         Assert.False(Directory.Exists(Path.Combine(runtime, "81.0.1")));
         Assert.False(Directory.Exists(Path.Combine(packs, "81.0.1")));
         Assert.False(Directory.Exists(Path.Combine(module, "3.0.101")));
-        foreach (var version in new[] { "81.0.0", "81.0.0-preview.1", "81.0.2", "81.0.3", "81.0.4", "81.0.6", "81.0.7" })
+        foreach (var version in new[] { "81.0.0", "81.0.0-preview.1", "81.0.2", "81.0.3", "81.0.4", "81.0.5", "81.0.6", "81.0.7" })
             Assert.True(Directory.Exists(Path.Combine(runtime, version)), version);
         Assert.True(Directory.Exists(Path.Combine(packs, "81.0.3")));
+        Assert.True(Directory.Exists(Path.Combine(module, "3.0.99")));
         Assert.True(Directory.Exists(Path.Combine(module, "3.0.100")));
         Assert.True(Directory.Exists(Path.Combine(module, "3.0.102")));
         Assert.True(Directory.Exists(sdk));

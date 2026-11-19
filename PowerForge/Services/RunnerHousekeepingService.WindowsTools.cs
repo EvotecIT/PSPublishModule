@@ -13,6 +13,8 @@ namespace PowerForge;
 
 public sealed partial class RunnerHousekeepingService
 {
+    private const int MaximumWorkspacePinFileBytes = 16 * 1024 * 1024;
+
     private static readonly string[] WindowsRuntimeFamilies =
     {
         "Microsoft.NETCore.App", "Microsoft.AspNetCore.App", "Microsoft.WindowsDesktop.App"
@@ -120,7 +122,8 @@ public sealed partial class RunnerHousekeepingService
             {
                 if (run.Expired) throw new IOException("Unable to finish checking enrolled workspace version pins.");
                 MaintenancePhysicalPath(file);
-                if (new FileInfo(file).Length > 1024 * 1024) throw new IOException("A version-pinning file exceeded the scan limit.");
+                if (new FileInfo(file).Length > MaximumWorkspacePinFileBytes)
+                    throw new IOException("A version-pinning file exceeded the scan limit: " + Path.GetFileName(file));
                 AddToolVersionMatches(result, File.ReadAllText(file));
             }
         }
