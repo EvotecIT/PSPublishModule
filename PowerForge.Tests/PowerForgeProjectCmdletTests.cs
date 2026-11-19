@@ -265,8 +265,9 @@ public sealed class PowerForgeProjectCmdletTests
 
         Assert.Equal(schemaProperties, projectBuildProperties);
         // Draft NuGet staging is standalone and is rejected in deferred module lanes.
+        // Version commits belong to the outermost release host, so a module lane never owns them.
         Assert.Empty(projectBuildProperties
-            .Except(new[] { nameof(ProjectBuildConfiguration.StageNuget) }, StringComparer.Ordinal)
+            .Except(new[] { nameof(ProjectBuildConfiguration.StageNuget), nameof(ProjectBuildConfiguration.CommitVersionChanges) }, StringComparer.Ordinal)
             .Except(packageBuildProperties, StringComparer.Ordinal));
         Assert.Empty(packageBuildProperties.Except(cmdletProperties, StringComparer.Ordinal));
     }

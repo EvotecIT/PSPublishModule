@@ -28,6 +28,104 @@ public sealed partial class ModulePipelineRunner
         if (spec is null) throw new ArgumentNullException(nameof(spec));
         if (plan is null) throw new ArgumentNullException(nameof(plan));
 
+        using var versionCommit = ReleaseVersionCommitSession.Begin(
+            _logger,
+            plan.ProjectRoot,
+            plan.Release?.Configuration?.CommitVersionChanges ?? ReleaseVersionCommitMode.Off,
+            PublishesFromThisRun(plan));
+        ModulePipelineResult result;
+        try
+        {
+            result = RunPipeline(spec, plan, progress, preflightPrecomputedPlan);
+        }
+        catch
+        {
+            versionCommit.Complete(releaseSucceeded: false, plan.ModuleName, FormatReleaseVersion(plan));
+            throw;
+        }
+
+        var finalPlan = result.Plan ?? plan;
+        versionCommit.Complete(
+            releaseSucceeded: true,
+            plan.ModuleName,
+            FormatReleaseVersion(finalPlan),
+            CollectReleaseVersions(finalPlan, result));
+        return result;
+    }
+
+    /// <summary>The versions this run wrote, so only those count as version stamps.</summary>
+    private static IEnumerable<string?> CollectReleaseVersions(ModulePipelinePlan plan, ModulePipelineResult result)
+    {
+        var versions = new List<string?> { plan.ResolvedVersion, FormatReleaseVersion(plan) };
+        foreach (var lane in result.ProjectBuildResults ?? Array.Empty<ProjectBuildHostExecutionResult>())
+        {
+            var release = lane?.Result?.Release;
+            if (release is null)
+                continue;
+            versions.Add(release.ResolvedVersion);
+            versions.AddRange(release.ResolvedVersionsByProject.Values);
+            versions.AddRange(release.Projects.Select(static project => project.NewVersion));
+        }
+
+        return versions;
+    }
+
+    /// <summary>
+    /// A publish run with somewhere to publish: module destinations or project/package lanes that
+    /// publish to NuGet or GitHub. Builds, plans and documentation runs never commit.
+    /// </summary>
+    private bool PublishesFromThisRun(ModulePipelinePlan plan)
+    {
+        if (plan.GateMode is not (null or ConfigurationGateMode.Publish))
+            return false;
+        if ((plan.Publishes?.Length ?? 0) > 0)
+            return true;
+
+        try
+        {
+            foreach (var destination in new[] { PackageBuildPublishDestination.NuGet, PackageBuildPublishDestination.GitHub })
+            {
+                // A lane that only plans never publishes, matching the project-build workflow.
+                if ((plan.ProjectBuilds ?? Array.Empty<ConfigurationProjectBuildSegment>())
+                        .Any(segment => segment?.Configuration is { Enabled: true } &&
+                                        !IsPlanOnlyProjectBuild(plan, segment) &&
+                                        ShouldExecuteProjectBuildPublish(plan, segment, destination)) ||
+                    (plan.PackageBuilds ?? Array.Empty<ConfigurationPackageBuildSegment>())
+                        .Any(segment => segment?.Configuration is { Enabled: true, PlanOnly: not true } &&
+                                        ShouldExecutePackageBuildPublish(plan, segment, destination)))
+                {
+                    return true;
+                }
+            }
+        }
+        catch
+        {
+            // The pipeline reports configuration problems itself; this check only decides eligibility.
+        }
+
+        return false;
+    }
+
+    private bool IsPlanOnlyProjectBuild(ModulePipelinePlan plan, ConfigurationProjectBuildSegment segment)
+    {
+        var reference = segment.Configuration!;
+        return !string.IsNullOrWhiteSpace(reference.ConfigPath) &&
+               LoadProjectBuildConfiguration(ResolvePackageBuildPath(plan.ProjectRoot, reference.ConfigPath), reference).PlanOnly == true;
+    }
+
+    private static string? FormatReleaseVersion(ModulePipelinePlan plan)
+        => string.IsNullOrWhiteSpace(plan.ResolvedVersion)
+            ? null
+            : string.IsNullOrWhiteSpace(plan.PreRelease)
+                ? plan.ResolvedVersion
+                : $"{plan.ResolvedVersion}-{plan.PreRelease}";
+
+    private ModulePipelineResult RunPipeline(
+        ModulePipelineSpec spec,
+        ModulePipelinePlan plan,
+        IModulePipelineProgressReporter? progress,
+        bool preflightPrecomputedPlan)
+    {
         if (plan.GateMode == ConfigurationGateMode.Documentation)
             EnsureDocumentationGateConfigured(plan);
 

@@ -58133,6 +58133,27 @@ Requires PSResourceGet or ManagedModule and cannot be combined with PublishRequi
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="none">
+          <maml:name>CommitVersionChanges</maml:name>
+          <maml:description>
+            <maml:para>Saves the version numbers a publish run wrote into tracked files (module manifest, project files and other&#xD;
+version metadata) to Git once every publish step succeeds. Off (default) leaves them uncommitted,&#xD;
+Commit commits them locally and Push also pushes the commit to the branch's configured upstream.&#xD;
+Only files whose changes are limited to version numbers are committed; other uncommitted work is left alone.&#xD;
+Anything that goes wrong becomes a warning with the command to finish by hand, and never fails the release.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">ReleaseVersionCommitMode</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">Off</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Commit</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Push</command:parameterValue>
+          </command:parameterValueGroup>
+          <dev:type>
+            <maml:name>ReleaseVersionCommitMode</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="none">
           <maml:name>PrimaryProject</maml:name>
           <maml:description>
             <maml:para>Primary package/project used when the version source is a package/project build.&#xD;
@@ -58258,6 +58279,27 @@ and skip destinations that already completed.</maml:para>
         <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
         <dev:type>
           <maml:name>String[]</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="none">
+        <maml:name>CommitVersionChanges</maml:name>
+        <maml:description>
+          <maml:para>Saves the version numbers a publish run wrote into tracked files (module manifest, project files and other&#xD;
+version metadata) to Git once every publish step succeeds. Off (default) leaves them uncommitted,&#xD;
+Commit commits them locally and Push also pushes the commit to the branch's configured upstream.&#xD;
+Only files whose changes are limited to version numbers are committed; other uncommitted work is left alone.&#xD;
+Anything that goes wrong becomes a warning with the command to finish by hand, and never fails the release.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">ReleaseVersionCommitMode</command:parameterValue>
+        <command:parameterValueGroup>
+          <command:parameterValue required="false" variableLength="false">Off</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Commit</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Push</command:parameterValue>
+        </command:parameterValueGroup>
+        <dev:type>
+          <maml:name>ReleaseVersionCommitMode</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>

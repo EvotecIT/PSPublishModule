@@ -576,6 +576,40 @@ The equivalent JSON segment is:
 }
 ```
 
+## Saving Version Changes To Git
+
+A release writes the new version into tracked files: the module manifest, project files, and other version
+metadata. `CommitVersionChanges` saves those changes to Git once every publish step has succeeded, so the
+repository shows the version that shipped. It is off by default and takes one line to turn on:
+
+```powershell
+New-ConfigurationRelease -VersionSource ProjectBuild -PrimaryProject 'Contoso.Core' -CommitVersionChanges Push
+```
+
+In `release.json` or `project.build.json`, add `"CommitVersionChanges": "Push"` at the top level.
+
+- `Off`: leave the version changes uncommitted.
+- `Commit`: commit them on the current branch with the message `Release <name> <version>`.
+- `Push`: commit them and push that commit to the branch's configured upstream. It never forces, rebases, pulls,
+  or pushes tags. A branch without an upstream keeps the commit local and says how to set one.
+
+Only files whose changes are limited to the version numbers this release wrote are committed, and the commit holds
+exactly the content that was checked, using your Git identity and signing settings (commit hooks do not run). Generated build output,
+other uncommitted or untracked work, and anything already staged are left as they were. Version edits you made
+yourself before the release are never committed, and a version file that already held your own edits is skipped
+with a warning.
+
+This step never fails or blocks a release, and a warning preference such as `-WarningAction Stop` does not turn its
+warning into a failure. A failed publish, a moved `HEAD`, a detached checkout, a rejected push (protected branch or
+a newer remote commit), no network, or Git not being available each becomes a single warning that says what was
+left and, where there is one, the command that finishes it. The Git commands run as part of the release, so a slow
+push adds its time. When a release stops before committing, it records the files it stamped; the next successful
+run of the same release commits them once, and running it again finds nothing to commit. A two-phase release (build
+now, publish later) records its stamps in the build phase and commits them after publishing. Plans, validation runs, and runs whose
+selected lanes publish nothing never commit. When a release runs another release host (for example
+`release.json` building a module or project packages), only the outermost one commits, and a release whose lanes
+stamp more than one checkout leaves the commits to you.
+
 ## Non-Goals
 
 - Do not make `Build-Module.ps1` responsible for NuGet package publishing mechanics.

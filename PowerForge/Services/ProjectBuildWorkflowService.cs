@@ -50,9 +50,90 @@ internal sealed class ProjectBuildWorkflowService
         if (preparation is null)
             throw new ArgumentNullException(nameof(preparation));
 
+        // Only a run that publishes itself saves its version changes; plans, local builds,
+        // staging and deferred publication leave them to whoever publishes.
+        var publishes = executeBuild &&
+                        !preparation.PlanOnly &&
+                        !deferPublishing &&
+                        !preparation.StageNuget &&
+                        (preparation.PublishNuget || preparation.PublishGitHub);
+        // A mutating run holds the workspace lease from before the snapshot until the commit is
+        // done, so another run cannot stamp the same files in between.
         using var operationLock = executeBuild && !preparation.PlanOnly
             ? ProjectBuildOperationLock.Acquire(preparation)
             : null;
+        using var versionCommit = ReleaseVersionCommitSession.Begin(
+            _logger,
+            string.IsNullOrWhiteSpace(preparation.RootPath) ? configDir : preparation.RootPath,
+            config.CommitVersionChanges ?? ReleaseVersionCommitMode.Off,
+            publishes);
+        ProjectBuildWorkflowResult workflow;
+        try
+        {
+            workflow = ExecuteWorkflow(
+                config,
+                configDir,
+                preparation,
+                executeBuild,
+                remotePublishAttempted,
+                coordinatedReleaseCheckpointActive,
+                progress,
+                cancellationToken,
+                deferPublishing);
+        }
+        catch
+        {
+            versionCommit.Complete(releaseSucceeded: false, config.GitHubRepositoryName, version: null);
+            throw;
+        }
+
+        var release = workflow.Result.Release;
+        workflow.VersionCommit = versionCommit.Complete(
+            workflow.Result.Success,
+            config.GitHubRepositoryName,
+            ResolveReleaseVersion(config, release),
+            release is null
+                ? null
+                : release.Projects.Select(static project => project.NewVersion)
+                    .Concat(release.ResolvedVersionsByProject.Values)
+                    .Concat(new[] { release.ResolvedVersion }));
+        return workflow;
+    }
+
+    private static string? ResolveReleaseVersion(ProjectBuildConfiguration config, DotNetRepositoryReleaseResult? release)
+    {
+        if (release is null)
+            return null;
+
+        var primary = config.GitHubPrimaryProject;
+        if (!string.IsNullOrWhiteSpace(primary))
+        {
+            var project = release.Projects.FirstOrDefault(candidate =>
+                string.Equals(candidate.ProjectName, primary, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(candidate.PackageId, primary, StringComparison.OrdinalIgnoreCase));
+            if (!string.IsNullOrWhiteSpace(project?.NewVersion))
+                return project!.NewVersion;
+        }
+
+        var versions = release.Projects
+            .Where(static project => project.IsPackable && !string.IsNullOrWhiteSpace(project.NewVersion))
+            .Select(static project => project.NewVersion!)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        return versions.Length == 1 ? versions[0] : null;
+    }
+
+    private ProjectBuildWorkflowResult ExecuteWorkflow(
+        ProjectBuildConfiguration config,
+        string configDir,
+        ProjectBuildPreparedContext preparation,
+        bool executeBuild,
+        Action? remotePublishAttempted,
+        bool coordinatedReleaseCheckpointActive,
+        IProjectBuildProgressReporter? progress,
+        CancellationToken cancellationToken,
+        bool deferPublishing)
+    {
 
         var spec = preparation.Spec ?? throw new ArgumentException("Prepared spec is required.", nameof(preparation));
         spec.WhatIf = true;

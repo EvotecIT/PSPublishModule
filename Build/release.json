@@ -1,6 +1,7 @@
 {
   "$schema": "https://raw.githubusercontent.com/EvotecIT/PSPublishModule/main/Schemas/powerforge.release.schema.json",
   "SchemaVersion": 1,
+  "CommitVersionChanges": "Push",
   "Module": {
     "RepositoryRoot": "..",
     "ModuleName": "PSPublishModule",

@@ -503,6 +503,13 @@ public sealed class ReleaseConfiguration
     /// </summary>
     public bool ReusePreparedPackages { get; set; }
 
+    /// <summary>
+    /// Saves the version numbers a publish run wrote into tracked files to Git once every publish step succeeds:
+    /// <see cref="ReleaseVersionCommitMode.Off"/> (default), <see cref="ReleaseVersionCommitMode.Commit"/> or
+    /// <see cref="ReleaseVersionCommitMode.Push"/>. Problems become a warning and never fail the release.
+    /// </summary>
+    public ReleaseVersionCommitMode CommitVersionChanges { get; set; }
+
     /// <summary>Explicit release version used when <see cref="VersionSource"/> is <see cref="ReleaseVersionSource.Manual"/>.</summary>
     public string? Version { get; set; }
 
