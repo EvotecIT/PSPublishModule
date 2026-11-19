@@ -721,10 +721,22 @@ Schema 5 declaration documents hold the library policy and the comparisons
 `acceptance-required`, `excluded`) and a `reason`. Each comparison has
 `comparisonId`, `area`, `group`, `title`, `subject`, `libraries`, `axes`, `cases`,
 `expectedPlatforms` and `frameworks`, plus an optional `eligibility` that can only
-exclude it. Catalogs derive each comparison's eligibility: a single-library
-comparison is declared but never publishable. Restricted libraries do not block a
-comparison; the published lane drops their cells, which carry the issue
-"Not published (licence)", and publishes the rest.
+exclude it and optional `cells` for comparisons where not every case × library ×
+axis-value combination is valid:
+
+```json
+"cells": [
+  { "case": "Create", "parameters": { "Scale": "Normal" } },
+  { "case": "Create", "library": "OfficeIMO", "parameters": { "Scale": "Huge" } }
+]
+```
+
+Catalogs derive each comparison's eligibility: a single-library comparison is
+declared but never publishable, and so is a comparison without declared `cases` or
+`cells`, because its runs can't be checked for missing combinations. Its lanes are
+recorded and shown with that reason, and publishing them is refused. Restricted
+libraries do not block a comparison; the published lane drops their cells, which
+carry the issue "Not published (licence)", and publishes the rest.
 
 Generate the document from the benchmark code and check it in CI:
 
@@ -736,7 +748,12 @@ $selection = Select-BenchmarkLibrary -Path ./Benchmarks/benchmarks.json -AcceptL
 
 The first lints the document. The second reports drift between a result and its
 declaration: cases, libraries or axis values that ran but are not declared, and
-declared cases or axis values with no cell at all. A case that ran and crashed is a
+declared cases or axis values with no cell at all. When the comparison declares its
+cases, it also checks every case × library × axis-value combination for each library
+that ran (`missing-combination`). When the comparison lists explicit `cells`, those
+cells define the expected combinations (`missing-combination`,
+`unexpected-combination`) and, without `cases`, the case names; only the cases and
+axis values of cells for the libraries that ran are required. A case that ran and crashed is a
 failed cell, not drift; it is excluded from publication and the rest of the lane is
 published. Both stop with an error unless `-PassThru` is used.
 `Select-BenchmarkLibrary` returns the libraries a runner may execute; excluded
@@ -790,7 +807,8 @@ Each comparison also carries the declared facts a page needs to explain what it
 shows:
 
 - `group` and `frameworks` from the declaration;
-- `eligibility` (`publishable`, `reason`), for example a single-library comparison;
+- `eligibility` (`publishable`, `reason`), for example a single-library comparison
+  or one without declared cases;
 - `availability`, one entry per expected platform and framework, with text such as
   `Windows · net10.0 · standard · 2026-11-18`, `Linux · net10.0 · no published run`
   (measured, but only in runs that are not published) or `macOS · net10.0 · not measured`.

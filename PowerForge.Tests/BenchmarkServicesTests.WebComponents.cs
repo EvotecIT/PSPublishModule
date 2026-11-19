@@ -279,6 +279,14 @@ public sealed partial class BenchmarkServicesTests
         BenchmarkDeclarationDocument declarations = ViewDeclarations();
         declarations.Libraries = [.. declarations.Libraries, new BenchmarkLibraryDeclaration { Id = "ClosedXML", Package = "ClosedXML", Version = "0.105.0", License = "MIT", Restriction = BenchmarkLibraryRestriction.Open }];
         declarations.Comparisons[0].Libraries = ["OfficeIMO", "Sep", "EPPlus", "ClosedXML"];
+        // Write is measured only by OfficeIMO and Sep, so the valid cells are listed explicitly.
+        declarations.Comparisons[0].Cases = ["Read", "Write"];
+        declarations.Comparisons[0].Cells =
+        [
+            new BenchmarkExpectedCell { Case = "Read" },
+            new BenchmarkExpectedCell { Case = "Write", Library = "OfficeIMO" },
+            new BenchmarkExpectedCell { Case = "Write", Library = "Sep" }
+        ];
         var service = new BenchmarkEvidenceCatalogService();
         foreach (string platform in new[] { "windows", "linux" })
         {

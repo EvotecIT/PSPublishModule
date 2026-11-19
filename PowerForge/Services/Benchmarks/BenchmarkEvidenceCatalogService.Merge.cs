@@ -93,7 +93,9 @@ public sealed partial class BenchmarkEvidenceCatalogService
         else
         {
             merged.Libraries = MergeLibraries(libraries);
-            merged.Comparisons = comparisons.ToArray();
+            // Source catalogs may have been edited elsewhere, so their declarations are checked before any lane is
+            // evaluated against them.
+            merged.Comparisons = comparisons.Select(NormalizeDefinition).ToArray();
         }
 
         // Libraries the merged declarations do not publish are removed from every candidate before lanes are
