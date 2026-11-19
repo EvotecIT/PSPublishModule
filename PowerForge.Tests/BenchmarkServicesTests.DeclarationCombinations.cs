@@ -232,6 +232,44 @@ public sealed partial class BenchmarkServicesTests
         Assert.Contains("gives parameter 'Scale' more than once", update.Message, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void Declarations_DoNotCountBlankCaseNamesAsDeclaredCases()
+    {
+        BenchmarkDeclarationDocument declarations = TestDeclarations();
+        declarations.Comparisons[0].Cases = [" "];
+        var service = new BenchmarkDeclarationService();
+
+        BenchmarkDeclarationIssue blank = Assert.Single(service.Validate(declarations), issue => issue.Code == "comparison-case");
+        BenchmarkEligibility eligibility = service.DeriveEligibility(declarations.Comparisons[0], declarations.Libraries, BenchmarkPublishPolicy.CreateDefault());
+
+        Assert.Equal("Case names can't be blank.", blank.Message);
+        Assert.False(eligibility.Publishable);
+        Assert.Equal(BenchmarkDeclarationService.NoCasesReason, eligibility.Reason);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Declarations_RequireEveryExplicitCellToNameItsCase(bool withCases)
+    {
+        BenchmarkDeclarationDocument declarations = SparseCombinationDeclarations();
+        if (!withCases)
+            declarations.Comparisons[0].Cases = [];
+        foreach (BenchmarkExpectedCell cell in declarations.Comparisons[0].Cells)
+            cell.Case = string.Empty;
+        var service = new BenchmarkDeclarationService();
+
+        string[] messages = service.Validate(declarations).Where(issue => issue.Code == "comparison-cell").Select(issue => issue.Message).Distinct().ToArray();
+        BenchmarkEligibility eligibility = service.DeriveEligibility(declarations.Comparisons[0], declarations.Libraries, BenchmarkPublishPolicy.CreateDefault());
+
+        Assert.Equal(new[] { "Every cell needs a case." }, messages);
+        // Without named cases a cells-only declaration can't be checked, so it is held back; with declared cases the
+        // validation error alone stops the document from being used.
+        Assert.Equal(withCases, eligibility.Publishable);
+        if (!withCases)
+            Assert.Equal(BenchmarkDeclarationService.NoCasesReason, eligibility.Reason);
+    }
+
     private static BenchmarkDeclarationDocument CombinationDeclarations()
     {
         BenchmarkDeclarationDocument declarations = TestDeclarations();

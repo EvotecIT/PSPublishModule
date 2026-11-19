@@ -122,7 +122,7 @@ public sealed class BenchmarkComparisonDefinition
 /// <summary>One cell a comparison's benchmark code defines.</summary>
 public sealed class BenchmarkExpectedCell
 {
-    /// <summary>Case name; one of the comparison's declared cases.</summary>
+    /// <summary>Case name; required, and one of the comparison's declared cases when it declares them.</summary>
     public string Case { get; set; } = string.Empty;
 
     /// <summary>Library id, or empty when the cell applies to every library of the comparison.</summary>

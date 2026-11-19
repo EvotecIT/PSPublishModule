@@ -102,7 +102,10 @@ public sealed partial class BenchmarkDeclarationService
                     .Distinct(StringComparer.OrdinalIgnoreCase).Count() != comparisonLibraries.Length)
                 Add(issues, subject, "duplicate-library-reference", "The comparison lists a library more than once (library ids ignore case).");
             string[] cases = comparison.Cases ?? Array.Empty<string>();
-            if (cases.Distinct(StringComparer.OrdinalIgnoreCase).Count() != cases.Length)
+            if (cases.Any(string.IsNullOrWhiteSpace))
+                Add(issues, subject, "comparison-case", "Case names can't be blank.");
+            if (cases.Where(value => !string.IsNullOrWhiteSpace(value)).Select(value => value.Trim())
+                    .Distinct(StringComparer.OrdinalIgnoreCase).Count() != cases.Count(value => !string.IsNullOrWhiteSpace(value)))
                 Add(issues, subject, "duplicate-case", "Declared cases must be unique.");
             ValidateExplicitCells(issues, subject, comparison);
             if (comparison.Eligibility is { Publishable: false } && string.IsNullOrWhiteSpace(comparison.Eligibility.Reason))
@@ -138,7 +141,7 @@ public sealed partial class BenchmarkDeclarationService
             return new BenchmarkEligibility { Publishable = false, Reason = "Single-library comparison: there is nothing to compare against." };
         // Without declared cases or cells, a lane can't be checked for completeness, so it is held back rather than
         // published as if it were complete. It is still recorded and shown.
-        if ((comparison.Cases ?? Array.Empty<string>()).Length == 0 && (comparison.Cells ?? Array.Empty<BenchmarkExpectedCell>()).Length == 0)
+        if (DeclaredCaseNames(comparison).Length == 0)
             return new BenchmarkEligibility { Publishable = false, Reason = NoCasesReason };
         return new BenchmarkEligibility { Publishable = true };
     }
