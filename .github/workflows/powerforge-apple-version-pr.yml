@@ -215,7 +215,7 @@ jobs:
           name: powerforge-apple-version-${{ steps.plan.outputs.marketing-version || inputs.version || 'configured' }}-plan
           path: ${{ steps.plan.outputs.receipt-path }}
           if-no-files-found: error
-          retention-days: 30
+          retention-days: 7
 
       - name: Upload compact version action receipt
         if: always()
@@ -224,4 +224,4 @@ jobs:
           name: powerforge-apple-version-${{ steps.version.outputs.marketing-version || steps.plan.outputs.marketing-version || inputs.version || 'configured' }}-actual
           path: ${{ steps.version.outputs.receipt-path }}
           if-no-files-found: error
-          retention-days: 30
+          retention-days: 7

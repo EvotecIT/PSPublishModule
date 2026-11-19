@@ -30,4 +30,4 @@ jobs:
           name: powershell-semantic-upstream-review
           path: artifacts/powershell-semantic-upstream-review.json
           if-no-files-found: error
-          retention-days: 30
+          retention-days: 7

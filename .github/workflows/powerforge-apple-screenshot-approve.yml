@@ -455,4 +455,4 @@ jobs:
             ${{ steps.capture-path.outputs.path }}
             source/**/*.approval.json
           if-no-files-found: error
-          retention-days: 90
+          retention-days: 7
