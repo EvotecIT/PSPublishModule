@@ -234,7 +234,7 @@ zero warnings and errors. Three artifact oracle cases rerun against the precedin
 their complete-emission assertions, with zero skips, establishing that the new
 proof detects the previously unsupported forms.
 
-The canonical Fast compiler contract gate passes **564/564 tests**. Its pinned
+The canonical Fast compiler contract gate passes **567/567 tests**. Its pinned
 semantic oracle report records **155 passed, zero failed and zero skipped**;
 all seven new semantic/artifact families are required by that gate.
 
@@ -244,6 +244,11 @@ delegate installation, invocation and restoration. The legacy compiler's full
 `net472` smoke suite passes **28/28 tests with zero skips**.
 The same conversion admits Locksmith2's `Get-WebEnrollmentEndpointStatus` as a
 complete method, superseding its earlier partial typed region.
+Other supported delegate callbacks retain native conversion. The existing
+Action/Predicate/Func artifact oracle fails all three complete-emission checks
+against an unconditional constant-delegate preference and passes after that
+preference is restricted to successful constant conversions. This three-case
+family is required by the normal Windows compiler check.
 
 Explicit target contracts previously admitted executable roots whose compiled
 callbacks require a defining module. A pre-correction artifact reports a complete root
