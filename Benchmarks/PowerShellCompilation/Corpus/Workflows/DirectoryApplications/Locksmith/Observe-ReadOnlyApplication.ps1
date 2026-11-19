@@ -67,7 +67,7 @@ function Invoke-ClassicReadOnlyApplication {
 
     Initialize-ClassicDirectoryFixture -Module $Module
     $formatError = $null
-    $output = @()
+    $output = [Collections.Generic.List[psobject]]::new()
     $pipeline = [Management.Automation.PowerShell]::Create([Management.Automation.RunspaceMode]::CurrentRunspace)
     try {
         # The no-findings branch uses a bare break. Let the nested pipeline own that exit.
@@ -79,7 +79,7 @@ function Invoke-ClassicReadOnlyApplication {
             } $Path $Selected
         }.ToString()).AddArgument($Module).AddArgument($Directory).AddArgument($Scans)
         try {
-            $output = @($pipeline.Invoke())
+            $pipeline.Invoke[psobject]($null, $output)
         } catch {
             $native = $_.Exception.InnerException
             if ($Scans -ne 'All' -or $native -isnot [Management.Automation.RuntimeException] -or

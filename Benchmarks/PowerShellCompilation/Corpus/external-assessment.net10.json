@@ -315,7 +315,7 @@
           },
           {
             "path": "Workflows/DirectoryApplications/Locksmith/Observe-ReadOnlyApplication.ps1",
-            "sha256": "97c1bc82c2bcca2c41b4d8f51434fadd9cec0e7e18d36978ed2eb7e075055862"
+            "sha256": "1c047e1da3e04e1bf2b872a0d12084c593b9c108e02996f36964b24879d4d57d"
           },
           {
             "path": "Workflows/DirectoryApplications/Locksmith/Observe-LocalContracts.ps1",

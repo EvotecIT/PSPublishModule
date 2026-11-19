@@ -161,6 +161,45 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
 
     [PinnedSemanticHostFact]
     [Trait("Category", "PowerShellCompilerGate")]
+    public void FunctionLocalClassReferencesAcrossCallbackBoundaryRetainNativeScopeOnBothHosts()
+    {
+        const string source = """
+            function New-LexicalCallback {
+                [CmdletBinding()]
+                param()
+                class EscapingProofRecord {
+                    [string] $Name
+                }
+                $record = [EscapingProofRecord]@{ Name = 'retained' }
+                return [ordered]@{
+                    Record = $record
+                    Callback = { param($Value) $Value -is [EscapingProofRecord] }
+                }
+            }
+            Export-ModuleMember -Function New-LexicalCallback
+            """;
+        const string probe = """
+            $pair = New-LexicalCallback
+            $callback = $pair.Callback
+            [ordered]@{
+                typed = & $callback $pair.Record
+                rejectsWrongType = !(& $callback ([object]::new()))
+                name = $pair.Record.Name
+            } | ConvertTo-Json -Compress
+            """;
+        CompareScopedArtifacts(source, probe, Array.Empty<string>(), value =>
+            Assert.Equal("{\"typed\":true,\"rejectsWrongType\":true,\"name\":\"retained\"}", value),
+            assertArtifact: built =>
+            {
+                var unit = Assert.Single(built.Manifest!.UnitDispositionLedger!.Entries,
+                    entry => entry.Name == "New-LexicalCallback");
+                Assert.True(unit.RetainedHostedSource);
+                Assert.False(unit.EmittedClrMethod);
+            });
+    }
+
+    [PinnedSemanticHostFact]
+    [Trait("Category", "PowerShellCompilerGate")]
     public void DeclaredWindowsModuleSuppliesBorrowedTypeMetadataOnBothHosts()
     {
         const string source = """

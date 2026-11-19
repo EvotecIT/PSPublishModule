@@ -323,7 +323,10 @@ Windows module types, lexical class identity and initialization, validation
 failures and recovery, arrays, overload selection, and static access after an
 admitted same-block `Add-Type` load. They also cover converted delegate
 assignment and the native error for a missing member on an executed branch.
-Five two-host oracle cases and one assembly architecture check passed with
+The returned-callback case invokes the block after the declaring call exits
+and checks that its lexical type still accepts the matching record and rejects
+an unrelated object.
+Six two-host oracle cases and one assembly architecture check passed with
 zero skips. The Windows PowerShell compiler build passed for `net472`. The
 semantic and performance measurements below retain their earlier revision and
 scope.

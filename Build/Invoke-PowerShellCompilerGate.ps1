@@ -126,6 +126,7 @@ if ($requirePinnedOracle) {
     $requiredFamilies['script root callback ownership'] = 'PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.Build_HybridNativeScriptRootRetainsModuleOwnedBlockValues*'
     $requiredFamilies['native CLR interop'] = 'PowerForge.Tests.PowerShellCompilationSemanticOracleTests.BorrowedDirectoryAndCompletionTypesKeepNativeIdentityOnBothHosts*'
     $requiredFamilies['function-local data classes'] = 'PowerForge.Tests.PowerShellCompilationSemanticOracleTests.FunctionLocalDataClassPreservesIdentityAndValidationOnBothHosts*'
+    $requiredFamilies['function-local class scope across callbacks'] = 'PowerForge.Tests.PowerShellCompilationSemanticOracleTests.FunctionLocalClassReferencesAcrossCallbackBoundaryRetainNativeScopeOnBothHosts*'
     $requiredFamilies['Windows module type metadata'] = 'PowerForge.Tests.PowerShellCompilationSemanticOracleTests.DeclaredWindowsModuleSuppliesBorrowedTypeMetadataOnBothHosts*'
     $requiredFamilies['native static member absence and cast receivers'] = 'PowerForge.Tests.PowerShellCompilationSemanticOracleTests.LiteralClrReceiversPreserveNativeBindingAndMissingMemberErrorsOnBothHosts*'
     $requiredFamilies['same-block runtime type loads and delegates'] = 'PowerForge.Tests.PowerShellCompilationSemanticOracleTests.RuntimeLoadedTypePreservesScopeAndDelegateAssignmentOnBothHosts*'

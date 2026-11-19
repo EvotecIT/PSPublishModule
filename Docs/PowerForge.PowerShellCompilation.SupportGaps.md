@@ -10,6 +10,8 @@ lookup and calls to retained helpers can occur in emitted bodies. Native-bound
 function-local data classes support constant initializers, selected scalar
 types and one-dimensional arrays, and literal `ValidateSet` validation. Classes
 with methods, constructor declarations or inheritance retain their guards.
+References to a function-local class from a separate script block stay in
+hosted source so PowerShell can preserve the class's lexical identity.
 General authored-class and pipeline support remains outside the Strict subset.
 
 The fixed Gallery packet emits **720/753 complete units (95.62%)**, up from

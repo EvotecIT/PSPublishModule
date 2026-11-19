@@ -64,12 +64,13 @@ internal static class PowerShellHostedLocalTypePolicy
            name.FullName.Equals(declaration, StringComparison.OrdinalIgnoreCase);
 
     private static bool IsSupportedClassConsumer(Ast reference)
-        => reference switch
+        // A separately invoked script block cannot use the declaring function's active type scope.
+        => FindFunction(reference, allowNestedScriptBlocks: false) is not null && (reference switch
         {
             TypeConstraintAst { Parent: ConvertExpressionAst } constraint => IsLexicalClassName(constraint.TypeName),
             TypeExpressionAst expression => IsLexicalClassName(expression.TypeName),
             _ => false
-        };
+        });
 
     private static bool IsLexicalClassName(ITypeName name)
         => string.IsNullOrEmpty(name.AssemblyName) &&
@@ -80,10 +81,13 @@ internal static class PowerShellHostedLocalTypePolicy
         => expression.TypeName is TypeName && string.IsNullOrEmpty(expression.TypeName.AssemblyName) &&
            expression.Parent is BinaryExpressionAst { Operator: TokenKind.As } binary && ReferenceEquals(binary.Right, expression);
 
-    private static FunctionDefinitionAst? FindFunction(Ast ast)
+    private static FunctionDefinitionAst? FindFunction(Ast ast, bool allowNestedScriptBlocks = true)
     {
         for (var parent = ast.Parent; parent is not null; parent = parent.Parent)
+        {
             if (parent is FunctionDefinitionAst function) return function;
+            if (!allowNestedScriptBlocks && parent is ScriptBlockAst { Parent: not FunctionDefinitionAst }) return null;
+        }
         return null;
     }
 }
