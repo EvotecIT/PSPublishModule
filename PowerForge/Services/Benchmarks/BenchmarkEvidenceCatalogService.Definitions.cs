@@ -51,6 +51,12 @@ public sealed partial class BenchmarkEvidenceCatalogService
             source.Libraries.Any(string.IsNullOrWhiteSpace) ||
             source.ExpectedPlatforms is null || source.ExpectedPlatforms.Length == 0)
             throw new InvalidOperationException("Comparison declarations require an identifier, area, title, libraries and expected platforms.");
+        // Catalog updates and merges don't run declaration validation, so malformed axes and cases stop here with a clear
+        // message instead of a null reference.
+        if (source.Axes is not null && source.Axes.Any(axis => axis is null || string.IsNullOrWhiteSpace(axis.Name)))
+            throw new InvalidOperationException($"Comparison '{source.ComparisonId.Trim()}' has an axis without a name.");
+        if (source.Cases is not null && source.Cases.Any(string.IsNullOrWhiteSpace))
+            throw new InvalidOperationException($"Comparison '{source.ComparisonId.Trim()}' has a blank case name.");
 
         return new BenchmarkComparisonDefinition
         {

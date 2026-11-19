@@ -306,6 +306,36 @@ public sealed partial class BenchmarkServicesTests
             issue => issue.Code == "unexpected-axis-value" && issue.Message == "Axis 'Scale' value '' ran but is not declared.");
     }
 
+    [Theory]
+    [InlineData("null-axis")]
+    [InlineData("nameless-axis")]
+    [InlineData("blank-case")]
+    public void Merge_RejectsMalformedAxesAndCasesWithAClearMessage(string defect)
+    {
+        string root = CreateTempRoot();
+        string source = Path.Combine(root, "source", "index.json");
+        BenchmarkEvidenceUpdateRequest request = PublishRequest(
+            ScaledResult(("OfficeIMO", "Easy", Spread(10, 10)), ("OfficeIMO", "Normal", Spread(20, 10)), ("Sep", "Easy", Spread(12, 10))),
+            SparseCombinationDeclarations());
+        request.ResultArtifactPath = Path.Combine(root, "source", "windows.json");
+        new BenchmarkEvidenceCatalogService().UpdateFile(source, request);
+        // Merges don't run declaration validation, so a catalog edited elsewhere must still fail with a clear message.
+        var catalog = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(source))!;
+        var comparison = catalog["comparisons"]![0]!;
+        switch (defect)
+        {
+            case "null-axis": comparison["axes"]!.AsArray().Add(null); break;
+            case "nameless-axis": comparison["axes"]![0]!["name"] = null; break;
+            default: comparison["cases"]!.AsArray().Add(" "); break;
+        }
+        File.WriteAllText(source, catalog.ToJsonString());
+
+        InvalidOperationException merge = Assert.Throws<InvalidOperationException>(() =>
+            new BenchmarkEvidenceCatalogService().MergeFiles(Path.Combine(root, "merged", "index.json"), [source]));
+
+        Assert.Contains(defect == "blank-case" ? "has a blank case name" : "has an axis without a name", merge.Message, StringComparison.Ordinal);
+    }
+
     private static BenchmarkDeclarationDocument CombinationDeclarations()
     {
         BenchmarkDeclarationDocument declarations = TestDeclarations();
