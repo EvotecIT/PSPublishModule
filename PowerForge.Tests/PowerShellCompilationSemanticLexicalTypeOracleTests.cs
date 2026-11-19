@@ -103,7 +103,22 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
                 )
                 [ordered]@{rows=$rows; schema=[LexicalProofRecord]::Schema; typed=$rows -is [LexicalProofRecord[]]}
             }
-            Export-ModuleMember -Function New-LexicalRecord
+            function Read-LexicalCastOverload {
+                [CmdletBinding()]
+                param()
+                class LexicalProofOverloadArgument {
+                    [string] $Name
+                }
+                Add-Type @'
+            public static class LexicalProofOverloads
+            {
+                public static string Pick(object[] values) { return "objects"; }
+                public static string Pick(string[] values) { return "strings"; }
+            }
+            '@
+                [LexicalProofOverloads]::Pick([LexicalProofOverloadArgument[]] $null)
+            }
+            Export-ModuleMember -Function New-LexicalRecord, Read-LexicalCastOverload
             """;
         const string probe = """
             $first = New-LexicalRecord apple Fruit
@@ -118,6 +133,7 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
                 link = $first.rows[0].Links[0].Host
                 same = [object]::ReferenceEquals($first.rows[0].GetType(), $second.rows[0].GetType())
                 outside = $null -ne ('LexicalProofRecord' -as [type])
+                overload = Read-LexicalCastOverload
                 invalid = $invalid
             } | ConvertTo-Json -Compress
             """;
@@ -129,7 +145,15 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
             Assert.Contains("\"link\":\"example.invalid\"", value, StringComparison.Ordinal);
             Assert.Contains("\"same\":true", value, StringComparison.Ordinal);
             Assert.Contains("\"outside\":false", value, StringComparison.Ordinal);
+            Assert.Contains("\"overload\":\"objects\"", value, StringComparison.Ordinal);
             Assert.Contains("\"invalid\":\"", value, StringComparison.Ordinal);
+        }, assertArtifact: built =>
+        {
+            var overload = Assert.Single(built.Manifest!.UnitDispositionLedger!.Entries,
+                entry => entry.Name == "Read-LexicalCastOverload");
+            Assert.True(overload.RetainedHostedSource);
+            Assert.Contains(overload.DiagnosticChain, diagnostic =>
+                diagnostic.Message.Contains("Runtime-owned cast constraints", StringComparison.Ordinal));
         });
     }
 
@@ -172,6 +196,8 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
                 node.Identity.Provenance == "WindowsHostModuleAssembly" &&
                 Path.GetFileName(node.Identity.Source).Equals("Microsoft.PowerShell.LocalAccounts.dll", StringComparison.OrdinalIgnoreCase));
             Assert.Equal(PowerShellCompilationDependencyGraphDisposition.External, metadata.Disposition);
+            Assert.StartsWith("windows-module/", metadata.Identity.Source, StringComparison.Ordinal);
+            Assert.False(Path.IsPathRooted(metadata.Identity.Source));
             Assert.Matches("^[a-f0-9]{64}$", metadata.Identity.Sha256);
             Assert.DoesNotContain(Directory.EnumerateFiles(Path.GetDirectoryName(built.ArtifactPath!)!, "*.dll",
                 SearchOption.AllDirectories), path =>

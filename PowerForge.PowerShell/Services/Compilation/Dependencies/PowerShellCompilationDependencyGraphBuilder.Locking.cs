@@ -62,7 +62,7 @@ internal sealed partial class PowerShellCompilationDependencyGraphBuilder
                 AddEdge(manifestId, nodeId, PowerShellCompilationDependencyEdgeKind.RequiredModule, module.ModuleName);
                 if (localManifest is not null)
                     DiscoverManifestEdges(localManifest, nodeId, targetFramework, runtimeIdentifier, visited);
-                else if (_mode == PowerShellCompilationMode.Hybrid)
+                else if (_mode == PowerShellCompilationMode.Hybrid && PowerShellWindowsModuleMetadata.SupportsTarget(runtimeIdentifier))
                     AddWindowsModuleTypeMetadata(nodeId, module, targetFramework, runtimeIdentifier);
             }
         }
@@ -97,14 +97,17 @@ internal sealed partial class PowerShellCompilationDependencyGraphBuilder
         if (assemblies.Length == 0) return;
         var manifestId = AddLocalNode(manifestPath, PowerShellCompilationDependencyNodeKind.ModuleManifest,
             PowerShellCompilationDependencyGraphRole.Dependency, PowerShellCompilationDependencyGraphDisposition.External,
-            "Windows owns the module manifest used to discover borrowed type metadata.", framework, runtime);
+            "Windows owns the module manifest used to discover borrowed type metadata.", framework, runtime,
+            PowerShellWindowsModuleMetadata.DescribePath(manifestPath));
+        _nodes[manifestId].Identity.Provenance = PowerShellWindowsModuleMetadata.ManifestProvenance;
         AddEdge(moduleId, manifestId, PowerShellCompilationDependencyEdgeKind.Metadata, "Windows module manifest");
         foreach (var path in assemblies)
         {
             var assemblyId = AddLocalNode(path, PowerShellCompilationDependencyNodeKind.ManagedLibrary,
                 PowerShellCompilationDependencyGraphRole.Semantic | PowerShellCompilationDependencyGraphRole.Dependency,
                 PowerShellCompilationDependencyGraphDisposition.External,
-                "Windows owns the assembly. Compilation reads its type metadata and uses native type resolution at runtime.", framework, runtime);
+                "Windows owns the assembly. Compilation reads its type metadata and uses native type resolution at runtime.", framework, runtime,
+                PowerShellWindowsModuleMetadata.DescribePath(path));
             _nodes[assemblyId].Identity.Provenance = PowerShellWindowsModuleMetadata.AssemblyProvenance;
             AddEdge(manifestId, assemblyId, PowerShellCompilationDependencyEdgeKind.RequiredAssembly, Path.GetFileName(path));
         }

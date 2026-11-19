@@ -325,6 +325,7 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
             function Read-CommonParameterType {
                 [Management.Automation.Internal.CommonParameters].GetProperty('ErrorAction').PropertyType.FullName
                 [Management.Automation.Internal.ShouldProcessParameters].GetProperty('WhatIf').PropertyType.FullName
+                [Management.Automation.PagingParameters].GetProperty('IncludeTotalCount').PropertyType.FullName
                 [DirectoryServices.ActiveDirectory.Domain].GetProperty('Name').PropertyType.FullName
             }
             function Read-InlineModule([Management.Automation.PSModuleInfo] $Module) { $Module }
@@ -368,7 +369,7 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
                 Assert.Contains("\"scope\":\"OneLevel\"", value, StringComparison.Ordinal);
                 Assert.Contains("\"mode\":\"FullLanguage\"", value, StringComparison.Ordinal);
                 Assert.Contains("ParameterArgumentTransformationError", value, StringComparison.Ordinal);
-                Assert.Contains("\"common\":[\"System.Management.Automation.ActionPreference\",\"System.Management.Automation.SwitchParameter\",\"System.String\"]", value, StringComparison.Ordinal);
+                Assert.Contains("\"common\":[\"System.Management.Automation.ActionPreference\",\"System.Management.Automation.SwitchParameter\",\"System.Management.Automation.SwitchParameter\",\"System.String\"]", value, StringComparison.Ordinal);
             });
     }
 

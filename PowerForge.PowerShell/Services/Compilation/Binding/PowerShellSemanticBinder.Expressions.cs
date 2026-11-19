@@ -32,7 +32,8 @@ internal sealed partial class PowerShellSemanticBinder
                 _commandResolver, functions.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase), capabilities);
         if (capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding) && syntax is IndexExpressionAst nativeIndex)
             return PowerShellNativeAccessSemanticBinder.BindIndex(document, nativeIndex,
-                (item, itemType) => BindExpression(document, item, symbols, functions, diagnostics, itemType, targetFramework, capabilities), capabilities, diagnostics);
+                (item, itemType) => BindExpression(document, item, symbols, functions, diagnostics, itemType, targetFramework, capabilities),
+                targetFramework, capabilities, diagnostics);
         if (capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding) && syntax is InvokeMemberExpressionAst nativeInvocation &&
             HasObservedCatchAncestor(nativeInvocation) &&
             (InvocationConsumesAuthoredTypeLiteral(nativeInvocation) || InvocationConsumesBoundTypeVariable(nativeInvocation, symbols)) &&

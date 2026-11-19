@@ -6,6 +6,15 @@ namespace PowerForge;
 internal static class PowerShellWindowsModuleMetadata
 {
     internal const string AssemblyProvenance = "WindowsHostModuleAssembly";
+    internal const string ManifestProvenance = "WindowsHostModuleManifest";
+    private const string ModulePrefix = "windows-module/";
+    private const string GacPrefix = "windows-gac/";
+
+    internal static bool SupportsTarget(string? runtimeIdentifier)
+        => RuntimeInformation.IsOSPlatform(OSPlatform.Windows) &&
+           (string.IsNullOrEmpty(runtimeIdentifier) ||
+            runtimeIdentifier!.Equals("win-" + RuntimeInformation.ProcessArchitecture.ToString().ToLowerInvariant(),
+                StringComparison.OrdinalIgnoreCase));
 
     internal static IEnumerable<string> FindManifests(string moduleName)
     {
@@ -62,6 +71,27 @@ internal static class PowerShellWindowsModuleMetadata
         if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows) || !(IsUnder(path, ModuleRoot) || IsUnder(path, GacRoot)))
             throw new InvalidOperationException("Windows module metadata escaped the host module and assembly roots.");
         PowerShellCompilationPathSafety.EnsureNoLinksFromFileSystemRoot(path, "Windows module metadata must not traverse links.");
+    }
+
+    internal static string DescribePath(string path)
+    {
+        RequireTrustedAssemblyPath(path);
+        var modulePath = IsUnder(path, ModuleRoot);
+        var root = modulePath ? ModuleRoot : GacRoot;
+        return (modulePath ? ModulePrefix : GacPrefix) + FrameworkCompatibility.GetRelativePath(root, path).Replace('\\', '/');
+    }
+
+    internal static string ResolvePath(string source)
+    {
+        var modulePath = source.StartsWith(ModulePrefix, StringComparison.Ordinal);
+        if (!modulePath && !source.StartsWith(GacPrefix, StringComparison.Ordinal))
+            throw new InvalidOperationException("The Windows host metadata identity is malformed.");
+        var root = modulePath ? ModuleRoot : GacRoot;
+        var relative = source.Substring((modulePath ? ModulePrefix : GacPrefix).Length).Replace('/', Path.DirectorySeparatorChar);
+        var path = Path.GetFullPath(Path.Combine(root, relative));
+        if (!IsUnder(path, root)) throw new InvalidOperationException("Windows host metadata escaped its declared root.");
+        RequireTrustedAssemblyPath(path);
+        return path;
     }
 
     private static string? FindGacAssembly(string reference)

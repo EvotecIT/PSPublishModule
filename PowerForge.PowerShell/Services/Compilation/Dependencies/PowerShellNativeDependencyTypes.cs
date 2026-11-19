@@ -109,13 +109,14 @@ internal sealed class PowerShellNativeDependencyTypes
         var borrowed = graph.Nodes.Where(static node => node.Exists &&
                 node.Disposition == PowerShellCompilationDependencyGraphDisposition.External &&
                 node.Identity.Provenance.Equals(PowerShellWindowsModuleMetadata.AssemblyProvenance, StringComparison.Ordinal))
-            .Select(node => Path.GetFullPath(node.Identity.Source)).ToHashSet(PowerShellCompilationPathSafety.PathComparer);
+            .ToDictionary(node => PowerShellWindowsModuleMetadata.ResolvePath(node.Identity.Source),
+                PowerShellCompilationPathSafety.PathComparer);
         var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var owners = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         var ambiguous = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var path in candidates.Concat(borrowed).Distinct(PowerShellCompilationPathSafety.PathComparer))
+        foreach (var path in candidates.Concat(borrowed.Keys).Distinct(PowerShellCompilationPathSafety.PathComparer))
         {
-            var isBorrowed = borrowed.Contains(path);
+            var isBorrowed = borrowed.TryGetValue(path, out var hostAssembly);
             if (isBorrowed)
                 PowerShellWindowsModuleMetadata.RequireTrustedAssemblyPath(path);
             else
@@ -123,7 +124,7 @@ internal sealed class PowerShellNativeDependencyTypes
                 PowerShellCompilationPathSafety.EnsureContained(root, path, "Native type dependency must stay inside the root module.");
                 PowerShellCompilationPathSafety.EnsureNoLinksFromFileSystemRoot(path, "Native type dependency must not traverse links.");
             }
-            var nodes = graph.Nodes.Where(node => node.Exists &&
+            var nodes = isBorrowed ? new[] { hostAssembly! } : graph.Nodes.Where(node => node.Exists &&
                 node.Disposition != PowerShellCompilationDependencyGraphDisposition.Rejected &&
                 PowerShellCompilationPathSafety.PathEquals(Path.GetFullPath(Path.Combine(graphRoot, node.Identity.Source)), path)).ToArray();
             if (nodes.Length != 1 || string.IsNullOrWhiteSpace(nodes[0].Identity.Sha256)) continue;
