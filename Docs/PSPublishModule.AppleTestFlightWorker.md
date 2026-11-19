@@ -60,8 +60,11 @@ ten minutes. A successful rerun of a rejected attempt remains eligible; an accep
 run is applied only once across reruns. Transient observation failures retain the
 request for retry and close the active mutation gate. Keep the Mac polling within
 the artifact retention period. If a request expires before the worker accepts
-it, check the worker history before submitting it again. Accepted requests and
-release recovery receipts are retained in the Mac worker's durable state.
+it, check the worker history before submitting it again. The worker retains
+accepted requests in its local queue. Active plan and release receipts stay in
+the application checkout at `PlanReceiptPath` and `ReceiptPath`. When replanning
+a descendant source, the worker verifies ancestry before moving the superseded
+preview plan to the queue's `previous-plans` directory.
 
 ## Enroll the trusted Mac
 
