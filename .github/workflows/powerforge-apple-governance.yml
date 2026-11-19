@@ -74,6 +74,8 @@ jobs:
     environment: ${{ inputs.environment_name }}
     permissions:
       contents: read
+    outputs:
+      review_expires_at: ${{ steps.review-window.outputs.expires_at }}
     steps:
       - name: Validate immutable inputs and authorization
         shell: pwsh
@@ -192,6 +194,13 @@ jobs:
           key-id: ${{ secrets.APP_STORE_CONNECT_KEY_ID || secrets.caller_app_store_connect_key_id }}
           private-key: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY || secrets.caller_app_store_connect_private_key }}
 
+      - name: Start the seven-day review window
+        id: review-window
+        shell: pwsh
+        run: |
+          $expiresAt = [DateTimeOffset]::UtcNow.AddDays(7).ToUnixTimeSeconds()
+          "expires_at=$expiresAt" >> $env:GITHUB_OUTPUT
+
       - name: Upload governance plan for review
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -199,7 +208,7 @@ jobs:
           name: powerforge-apple-governance-${{ inputs.source_ref }}-plan
           path: ${{ steps.governance_plan.outputs.receipt-path }}
           if-no-files-found: error
-          retention-days: 90
+          retention-days: 7
 
   apply:
     if: inputs.operation == 'Apply'
@@ -299,6 +308,18 @@ jobs:
           source-root: ${{ github.workspace }}/powerforge-shared
           runtime: ${{ inputs.tool_runtime }}
 
+      - name: Require fresh review evidence
+        id: review-freshness
+        shell: pwsh
+        env:
+          REVIEW_EXPIRES_AT: ${{ needs.plan.outputs.review_expires_at }}
+        run: |
+          $expiresAt = 0L
+          if (-not [long]::TryParse($env:REVIEW_EXPIRES_AT, [ref] $expiresAt) -or
+              $expiresAt -le [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()) {
+            throw 'The seven-day Apple plan review window expired. Start a new run and approve the fresh plan.'
+          }
+
       - name: Apply only the reviewed Apple governance plan
         id: governance_apply
         uses: ./powerforge-shared/.github/actions/apple-governance
@@ -316,7 +337,7 @@ jobs:
           private-key: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY || secrets.caller_app_store_connect_private_key }}
 
       - name: Upload compact governance apply receipt
-        if: always()
+        if: ${{ always() && steps.review-freshness.outcome == 'success' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: powerforge-apple-governance-${{ inputs.source_ref }}-actual
