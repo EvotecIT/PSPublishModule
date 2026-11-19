@@ -59,7 +59,8 @@ public sealed class RestoreDrill
             Safety.DemandPhysical(selectedFolder);
             report.Plan("capture", "Check the capture record", 0, RestoreDrillUnit.None);
             // capture.json is small and names every database, so it is read before any step starts: the whole plan is
-            // reported first, as IRestoreDrillProgress promises.
+            // reported first, as IRestoreDrillProgress promises. A failure while reading it still ends the capture step.
+            steps.OwnBeforeStart("capture");
             var capturePath = Path.Combine(selectedFolder, "capture.json");
             if (!Regex.IsMatch(expectedCaptureSha256, "\\A[a-f0-9]{64}\\z") || await Safety.HashAsync(capturePath, token) != expectedCaptureSha256)
                 throw new InvalidDataException("Selected native NAS capture digest differs.");

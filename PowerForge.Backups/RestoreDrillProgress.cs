@@ -53,6 +53,9 @@ internal sealed class RestoreDrillSteps(IRestoreDrillProgress progress)
         Progress.Start(key, detail);
     }
 
+    /// <summary>Work done while the plan is still being built belongs to this planned step: a failure ends it, unstarted.</summary>
+    internal void OwnBeforeStart(string key) => _running = key;
+
     internal void Finish(string key, string? detail = null)
     {
         if (_running == key) _running = null;

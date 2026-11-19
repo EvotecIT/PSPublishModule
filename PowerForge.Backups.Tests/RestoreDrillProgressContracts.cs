@@ -52,6 +52,19 @@ public sealed partial class DatabaseBackupContracts
     }
 
     [Fact]
+    public async Task ACaptureRecordThatFailsItsDigestEndsTheCaptureStepAsFailed()
+    {
+        var (options, selected, _) = await SelectedSqliteSetAsync();
+        var progress = new RecordingProgress();
+
+        await Assert.ThrowsAsync<InvalidDataException>(() => new RestoreDrill().VerifyAsync(options, selected, new string('0', 64), progress));
+
+        // The record is read before any step starts, so the planned capture step itself carries the failure.
+        Assert.DoesNotContain(progress.Events, e => e.Kind == "start");
+        Assert.Contains(progress.Events, e => e.Kind == "finish" && e.Key == "capture" && !e.Succeeded && e.Detail == nameof(InvalidDataException));
+    }
+
+    [Fact]
     public async Task CancellingAsTheLastCheckFinishesIsNotReportedAsSuccess()
     {
         var (options, selected, captureHash) = await SelectedSqliteSetAsync();
