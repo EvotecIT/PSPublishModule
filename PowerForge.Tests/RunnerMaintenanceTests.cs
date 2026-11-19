@@ -602,9 +602,10 @@ public sealed class RunnerMaintenanceTests
         Directory.SetCreationTimeUtc(recent, DateTime.UtcNow);
         foreach (var version in new[] { "81.1.1", "81.1.2", "81.1.3" })
             AddOldToolVersion(runtime, version, "Microsoft.NETCore.App.deps.json");
-        foreach (var version in new[] { "3.0.99", "3.0.100", "3.0.101", "3.0.102", "3.0.103", "3.0.104" })
+        foreach (var version in new[] { "3.0.94", "3.0.95", "3.0.96", "3.0.97", "3.0.98", "3.0.99", "3.0.100", "3.0.101", "3.0.102", "3.0.103", "3.0.104" })
         {
-            var root = AddOldToolVersion(module, version, "PSPublishModule.psd1", $"@{{\n    ModuleVersion = '{version}'\n}}");
+            var contents = version == "3.0.95" ? new string('\n', 128 * 1024) : $"@{{\n    ModuleVersion = '{version}'\n}}";
+            var root = AddOldToolVersion(module, version, "PSPublishModule.psd1", contents);
             var metadata = Path.Combine(root, "PSGetModuleInfo.xml");
             File.WriteAllText(metadata, "<fixture>PSPublishModule https://www.powershellgallery.com/api/v2</fixture>");
             File.SetLastWriteTimeUtc(metadata, DateTime.UtcNow.AddDays(-40));
@@ -621,6 +622,19 @@ public sealed class RunnerMaintenanceTests
         File.WriteAllText(Path.Combine(project, "App.csproj"),
             "<Project><PropertyGroup><RuntimeFrameworkVersion>81.1.1</RuntimeFrameworkVersion></PropertyGroup></Project>");
         File.WriteAllText(Path.Combine(project, "obj", "Generated.props"), "<Project><PackageVersion>81.0.1</PackageVersion></Project>");
+        File.WriteAllText(Path.Combine(workspace, "Build.ps1"), "Import-Module PSPublishModule -RequiredVersion '3.0.98'");
+        File.WriteAllText(Path.Combine(project, "App.psm1"), "Import-Module PSPublishModule -RequiredVersion '3.0.97'");
+        File.WriteAllText(Path.Combine(project, "App.psd1"),
+            "@{ RequiredModules = @(@{ ModuleName = 'PSPublishModule'; RequiredVersion = '3.0.96' }) }");
+        var packSource = Path.Combine(workspace, "packages", "legacy");
+        Directory.CreateDirectory(packSource);
+        File.WriteAllText(Path.Combine(packSource, "Build.ps1"), "Import-Module PSPublishModule -RequiredVersion '3.0.94'");
+        var output = Path.Combine(workspace, "Artefacts", "PSPublishModule");
+        Directory.CreateDirectory(output);
+        File.WriteAllText(Path.Combine(output, "PSPublishModule.psd1"), "@{ ModuleVersion = '3.0.101' }");
+        RunnerMaintenanceProcesses.Run("git", workspace, "init", "--quiet");
+        RunnerMaintenanceProcesses.Run("git", workspace, "add", "--", "Build/build-pins.json", "Build.ps1",
+            "src/App/App.csproj", "src/App/App.psm1", "src/App/App.psd1", "packages/legacy/Build.ps1");
         var state = new RunnerMaintenanceState();
         state.Jobs.Add(new RunnerMaintenanceJob
         {
@@ -652,7 +666,8 @@ public sealed class RunnerMaintenanceTests
             Assert.True(Directory.Exists(Path.Combine(runtime, version)), version);
         Assert.True(Directory.Exists(Path.Combine(packs, "81.0.3")));
         Assert.True(Directory.Exists(Path.Combine(runtime, "81.1.1")));
-        Assert.True(Directory.Exists(Path.Combine(module, "3.0.99")));
+        foreach (var version in new[] { "3.0.94", "3.0.95", "3.0.96", "3.0.97", "3.0.98", "3.0.99" })
+            Assert.True(Directory.Exists(Path.Combine(module, version)), version);
         Assert.True(Directory.Exists(Path.Combine(module, "3.0.100")));
         Assert.True(Directory.Exists(Path.Combine(module, "3.0.102")));
         Assert.True(Directory.Exists(sdk));

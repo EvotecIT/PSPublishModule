@@ -33,17 +33,12 @@ public sealed partial class RunnerHousekeepingService
 
     private static readonly HashSet<string> WindowsGeneratedWorkspaceDirectories = new(StringComparer.OrdinalIgnoreCase)
     {
-        ".git", ".vs", "bin", "obj", "node_modules", "packages", "TestResults", "artifacts", ".powerforge-quarantine"
+        ".git", ".vs", "obj", "node_modules", "TestResults", "Artefacts", MaintenanceQuarantine
     };
 
-    private static readonly HashSet<string> WindowsProjectPinExtensions = new(StringComparer.OrdinalIgnoreCase)
+    private static readonly HashSet<string> WindowsWorkspacePinExtensions = new(StringComparer.OrdinalIgnoreCase)
     {
-        ".csproj", ".fsproj", ".vbproj", ".proj", ".props", ".targets"
-    };
-
-    private static readonly HashSet<string> WindowsBuildPinExtensions = new(StringComparer.OrdinalIgnoreCase)
-    {
-        ".yml", ".yaml", ".ps1", ".json"
+        ".csproj", ".fsproj", ".vbproj", ".proj", ".props", ".targets", ".ps1", ".psd1", ".psm1", ".yml", ".yaml"
     };
 
     private static readonly Regex ToolVersionPattern = new(
@@ -82,6 +77,35 @@ public sealed partial class RunnerHousekeepingService
            path[1] == ':' && (path[2] == '\\' || path[2] == '/') &&
            string.Equals(Path.GetFullPath(path), path.Replace('/', '\\'), StringComparison.OrdinalIgnoreCase);
 
+    private void MaintenanceWindowsToolPhase(MaintenanceRun run, RunnerWindowsToolRetention tools)
+    {
+        var elapsed = run.Clock.Elapsed;
+        var remaining = TimeSpan.FromSeconds(run.Spec.MaximumRunSeconds) - elapsed;
+        if (remaining <= TimeSpan.Zero) return;
+        // Reserve the other half of the remaining time for existing runner and cache maintenance.
+        run.PhaseDeadline = elapsed + TimeSpan.FromTicks(remaining.Ticks / 2);
+        try
+        {
+            MaintenanceRecover(run, recoverWindowsTools: true);
+            MaintenanceDeleteIsolated(run);
+            run.State.Due |= MaintenanceHasPendingJournals(run);
+            run.Isolated.Clear();
+            MaintenanceRetainOnIo(run, "Windows build tooling", () => MaintenanceWindowsTools(run, tools));
+            MaintenanceDeleteIsolated(run);
+        }
+        finally
+        {
+            if (run.Expired)
+            {
+                run.Result.Deferred = true;
+                run.Retained.Add("Windows tool retention deferred by its execution budget.");
+            }
+            run.State.Due |= run.Result.Deferred || MaintenanceHasPendingJournals(run);
+            run.Isolated.Clear();
+            run.PhaseDeadline = null;
+        }
+    }
+
     private static void MaintenanceWindowsTools(MaintenanceRun run, RunnerWindowsToolRetention tools)
     {
         var cutoff = DateTime.UtcNow.AddDays(-tools.MinimumAgeDays);
@@ -97,13 +121,14 @@ public sealed partial class RunnerHousekeepingService
         {
             try
             {
-                dotNetPins.UnionWith(WindowsRegisteredDotNetVersions());
-                dotNetPins.UnionWith(WindowsSdkVersionReferences(tools.DotNetRoot));
+                dotNetPins.UnionWith(WindowsRegisteredDotNetVersions(run));
+                dotNetPins.UnionWith(WindowsSdkVersionReferences(run, tools.DotNetRoot));
                 foreach (var root in WindowsToolRetentionRoots(tools).Take(WindowsRuntimeFamilies.Length + WindowsPackFamilies.Length))
                     RetireWindowsToolFamily(run, root, dotNetPins, cutoff, keep: 2, perChannel: true, WindowsDotNetLayout);
             }
             catch (Exception error) when (error is IOException || error is UnauthorizedAccessException ||
-                error is JsonException || error is XmlException || error is System.Security.SecurityException)
+                error is JsonException || error is XmlException || error is RegexMatchTimeoutException ||
+                error is System.Security.SecurityException)
             {
                 run.Retained.Add(".NET tools retained because installation ownership or SDK requirements could not be read — " + error.GetType().Name);
             }
@@ -121,29 +146,55 @@ public sealed partial class RunnerHousekeepingService
             if (!Directory.Exists(workspace) || !run.Spec.Runners.Any(r => MaintenanceContains(r.WorkRootPath, workspace))) continue;
             var buildRoots = new[] { Path.Combine(workspace, ".github", "workflows"), Path.Combine(workspace, ".github", "actions"),
                 Path.Combine(workspace, "Build") };
-            foreach (var directory in MaintenanceDirectories(workspace, run, excludeDirectory: WindowsGeneratedWorkspaceDirectories.Contains))
+            foreach (var file in WindowsWorkspaceFiles(run, workspace))
             {
-                var buildDirectory = buildRoots.Any(root => PathsEqual(root, directory) || MaintenanceContains(root, directory));
-                foreach (var file in Directory.EnumerateFiles(directory))
-                {
-                    if (run.Expired) throw new IOException("Unable to finish checking enrolled workspace version pins.");
-                    var extension = Path.GetExtension(file);
-                    var name = Path.GetFileName(file);
-                    if (!WindowsProjectPinExtensions.Contains(extension) &&
-                        !name.Equals("global.json", StringComparison.OrdinalIgnoreCase) &&
-                        !name.Equals("runtimeconfig.template.json", StringComparison.OrdinalIgnoreCase) &&
-                        !name.EndsWith(".runtimeconfig.json", StringComparison.OrdinalIgnoreCase) &&
-                        !(buildDirectory && WindowsBuildPinExtensions.Contains(extension))) continue;
-                    MaintenancePhysicalPath(file);
-                    if (new FileInfo(file).Length > MaximumWorkspacePinFileBytes)
-                        throw new IOException("A version-pinning file exceeded the scan limit: " + name);
-                    try { AddToolVersionMatches(result, File.ReadAllText(file)); }
-                    catch (RegexMatchTimeoutException error) { throw new IOException("Version pin scanning timed out: " + name, error); }
-                }
+                if (run.Expired) throw new MaintenanceBudgetExpiredException();
+                var extension = Path.GetExtension(file);
+                var name = Path.GetFileName(file);
+                if (!WindowsWorkspacePinExtensions.Contains(extension) &&
+                    !name.Equals("global.json", StringComparison.OrdinalIgnoreCase) &&
+                    !name.Equals("runtimeconfig.template.json", StringComparison.OrdinalIgnoreCase) &&
+                    !name.EndsWith(".runtimeconfig.json", StringComparison.OrdinalIgnoreCase) &&
+                    !(extension.Equals(".json", StringComparison.OrdinalIgnoreCase) &&
+                        buildRoots.Any(root => MaintenanceContains(root, file)))) continue;
+                if (!File.Exists(file)) continue;
+                MaintenancePhysicalPath(file);
+                if (new FileInfo(file).Length > MaximumWorkspacePinFileBytes)
+                    throw new IOException("A version-pinning file exceeded the scan limit: " + name);
+                try { AddToolVersionMatches(result, File.ReadAllText(file)); }
+                catch (RegexMatchTimeoutException error) { throw new IOException("Version pin scanning timed out: " + name, error); }
             }
-            if (run.Expired) throw new IOException("Unable to finish checking enrolled workspace version pins.");
+            if (run.Expired) throw new MaintenanceBudgetExpiredException();
         }
         return result;
+    }
+
+    private static IEnumerable<string> WindowsWorkspaceFiles(MaintenanceRun run, string workspace)
+    {
+        MaintenancePhysicalPath(workspace);
+        var gitMetadata = Path.Combine(workspace, ".git");
+        if (!Directory.Exists(gitMetadata) && !File.Exists(gitMetadata))
+            return MaintenanceDirectories(workspace, run, includeGenerated: true,
+                excludeDirectory: WindowsGeneratedWorkspaceDirectories.Contains).SelectMany(Directory.EnumerateFiles);
+
+        MaintenancePhysicalPath(gitMetadata);
+        var git = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Git", "cmd", "git.exe");
+        if (!File.Exists(git)) throw new IOException("Git for Windows is unavailable for checkout pin discovery.");
+        MaintenancePhysicalPath(git);
+        var deadline = run.PhaseDeadline ?? TimeSpan.FromSeconds(run.Spec.MaximumRunSeconds);
+        var remaining = deadline - run.Clock.Elapsed;
+        if (remaining <= TimeSpan.Zero) throw new MaintenanceBudgetExpiredException();
+        var arguments = new[] { "-c", "core.fsmonitor=false", "-c", "core.hooksPath=NUL", "-c",
+            "safe.directory=" + workspace.Replace('\\', '/'), "--no-optional-locks", "ls-files", "-z", "--cached", "--recurse-submodules" };
+        var request = new ProcessRunRequest(git, workspace, arguments, remaining)
+        {
+            MaxCapturedOutputCharacters = 8 * 1024 * 1024
+        };
+        var listing = new ProcessRunner(ownProcessTree: true).RunAsync(request).GetAwaiter().GetResult();
+        if (!listing.Succeeded) throw new IOException("Unable to read the enrolled Git checkout's tracked files.");
+        return listing.StdOut.Split(new[] { '\0' }, StringSplitOptions.RemoveEmptyEntries)
+            .Select(relative => Path.GetFullPath(Path.Combine(workspace, relative)))
+            .Select(path => MaintenanceContains(workspace, path) ? path : throw new IOException("A tracked pin path escaped its workspace."));
     }
 
     private static void RetireWindowsToolFamily(MaintenanceRun run, string root, ISet<string> pins, DateTime cutoff,
@@ -175,7 +226,7 @@ public sealed partial class RunnerHousekeepingService
         }
     }
 
-    private static IEnumerable<string> WindowsSdkVersionReferences(string root)
+    private static IEnumerable<string> WindowsSdkVersionReferences(MaintenanceRun run, string root)
     {
         MaintenancePhysicalPath(root);
         if (!File.Exists(Path.Combine(root, "dotnet.exe"))) throw new IOException("The .NET muxer is missing.");
@@ -186,6 +237,7 @@ public sealed partial class RunnerHousekeepingService
         var versions = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var sdk in sdkDirectories)
         {
+            if (run.Expired) throw new MaintenanceBudgetExpiredException();
             if (Path.GetFileName(sdk).Equals(".powerforge-quarantine", StringComparison.OrdinalIgnoreCase)) continue;
             MaintenancePhysicalPath(sdk);
             var runtime = Path.Combine(sdk, "dotnet.runtimeconfig.json");
@@ -195,6 +247,8 @@ public sealed partial class RunnerHousekeepingService
                 continue;
             MaintenancePhysicalPath(runtime);
             MaintenancePhysicalPath(bundled);
+            if (new FileInfo(runtime).Length > 1024 * 1024 || new FileInfo(bundled).Length > 1024 * 1024)
+                throw new IOException("Installed SDK version metadata exceeded the scan limit.");
             using var json = JsonDocument.Parse(File.ReadAllText(runtime));
             var document = json.RootElement;
             if (document.ValueKind != JsonValueKind.Object ||
@@ -216,7 +270,7 @@ public sealed partial class RunnerHousekeepingService
 #if NET8_0_OR_GREATER
     [System.Runtime.Versioning.SupportedOSPlatform("windows")]
 #endif
-    private static IEnumerable<string> WindowsRegisteredDotNetVersions()
+    private static IEnumerable<string> WindowsRegisteredDotNetVersions(MaintenanceRun run)
     {
         var result = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var view in new[] { RegistryView.Registry64, RegistryView.Registry32 })
@@ -226,6 +280,7 @@ public sealed partial class RunnerHousekeepingService
             if (uninstall is null) throw new IOException("Windows Installer registrations could not be read.");
             foreach (var name in uninstall.GetSubKeyNames())
             {
+                if (run.Expired) throw new MaintenanceBudgetExpiredException();
                 using var key = uninstall.OpenSubKey(name);
                 if (key?.GetValue("DisplayName") is not string display) continue;
                 if (display.StartsWith("Microsoft ", StringComparison.OrdinalIgnoreCase) &&
@@ -235,6 +290,7 @@ public sealed partial class RunnerHousekeepingService
             }
             foreach (var architecture in new[] { "x64", "x86", "arm64" })
             {
+                if (run.Expired) throw new MaintenanceBudgetExpiredException();
                 using var shared = machine.OpenSubKey(@"SOFTWARE\dotnet\Setup\InstalledVersions\" + architecture + @"\sharedfx");
                 if (shared is null) continue;
                 foreach (var family in shared.GetSubKeyNames())
@@ -272,8 +328,17 @@ public sealed partial class RunnerHousekeepingService
         var metadata = File.ReadAllText(info);
         return metadata.IndexOf("https://www.powershellgallery.com/api/v2", StringComparison.OrdinalIgnoreCase) >= 0 &&
             metadata.IndexOf("PSPublishModule", StringComparison.OrdinalIgnoreCase) >= 0 &&
-            Regex.IsMatch(File.ReadAllText(manifest), @"(?im)^\s*ModuleVersion\s*=\s*['""]" + Regex.Escape(version) +
-                @"['""]", RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
+            File.ReadLines(manifest).Any(line => WindowsModuleVersionLineMatches(line, version));
+    }
+
+    private static bool WindowsModuleVersionLineMatches(string line, string version)
+    {
+        var separator = line.IndexOf('=');
+        if (separator < 0 || !line.Substring(0, separator).Trim().Equals("ModuleVersion", StringComparison.OrdinalIgnoreCase))
+            return false;
+        var value = line.Substring(separator + 1).TrimStart();
+        return value.StartsWith("'" + version + "'", StringComparison.Ordinal) ||
+            value.StartsWith("\"" + version + "\"", StringComparison.Ordinal);
     }
 
     private static void AddToolVersionMatches(ISet<string> result, string text)

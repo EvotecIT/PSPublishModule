@@ -21,6 +21,7 @@ public sealed partial class RunnerHousekeepingService
         internal RunnerMaintenanceResult Result = new();
         internal RunnerMaintenanceState State = new();
         internal Stopwatch Clock = Stopwatch.StartNew();
+        internal TimeSpan? PhaseDeadline;
         internal readonly List<string> Removed = new();
         internal readonly List<string> Planned = new();
         internal readonly List<string> Retained = new();
@@ -36,7 +37,12 @@ public sealed partial class RunnerHousekeepingService
         internal bool Deep;
         internal long SimulatedFree;
         internal RunnerMaintenanceJob? Job;
-        internal bool Expired => Clock.Elapsed.TotalSeconds >= Spec.MaximumRunSeconds;
+        internal bool Expired => Clock.Elapsed >= (PhaseDeadline ?? TimeSpan.FromSeconds(Spec.MaximumRunSeconds));
+    }
+
+    private sealed class MaintenanceBudgetExpiredException : IOException
+    {
+        internal MaintenanceBudgetExpiredException() : base("Maintenance execution budget reached.") { }
     }
 
     private static bool MaintenanceContains(string root, string path) =>
@@ -104,7 +110,7 @@ public sealed partial class RunnerHousekeepingService
         else InspectFile(path);
         while (pending.Count > 0)
         {
-            if (run.Expired) throw new IOException("Maintenance execution budget reached.");
+            if (run.Expired) throw new MaintenanceBudgetExpiredException();
             var current = pending.Pop();
             MaintenancePhysicalPath(current);
             foreach (var entry in Directory.EnumerateFileSystemEntries(current))
@@ -121,7 +127,7 @@ public sealed partial class RunnerHousekeepingService
 
         void InspectFile(string file)
         {
-            if (run.Expired) throw new IOException("Maintenance execution budget reached.");
+            if (run.Expired) throw new MaintenanceBudgetExpiredException();
             MaintenancePhysicalPath(file);
             if (olderThan.HasValue && File.GetLastWriteTimeUtc(file) >= olderThan.Value) throw new IOException("Recent temporary entry retained.");
             if (sensitive && MaintenanceSensitive(file)) throw new IOException("Package, key or database payload retained.");
@@ -138,6 +144,9 @@ public sealed partial class RunnerHousekeepingService
     }
 
     private static string MaintenanceStage(RunnerMaintenanceJournal journal) => Path.Combine(journal.Root, MaintenanceQuarantine, journal.Id);
+
+    private static bool MaintenanceHasPendingJournals(MaintenanceRun run)
+        => run.Isolated.Any(journal => File.Exists(Path.Combine(run.Spec.StateRootPath, "journal", journal.Id + ".json")));
 
     private static bool MaintenanceExcludedInstallation(MaintenanceRun run, string path)
         => run.Spec.Runners.Where(r => !r.CleanupEnabled)
@@ -204,6 +213,11 @@ public sealed partial class RunnerHousekeepingService
                 File.Delete(Path.Combine(run.Spec.StateRootPath, "journal", journal.Id + ".json"));
                 var parent = Path.GetDirectoryName(stage)!;
                 if (Directory.Exists(parent) && !Directory.EnumerateFileSystemEntries(parent).Any()) Directory.Delete(parent);
+            }
+            catch (MaintenanceBudgetExpiredException)
+            {
+                run.Retained.Add("Quarantine cleanup deferred by the execution budget.");
+                break;
             }
             catch (Exception error) when (error is IOException || error is UnauthorizedAccessException)
             {

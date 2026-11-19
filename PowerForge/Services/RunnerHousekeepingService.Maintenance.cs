@@ -138,12 +138,7 @@ public sealed partial class RunnerHousekeepingService
                 if (runner.CleanupEnabled) idleRegistrations.Add(runner);
             }
             if (toolRetentionIdle && run.SharedIdle)
-            {
-                MaintenanceRecover(run, recoverWindowsTools: true);
-                MaintenanceDeleteIsolated(run);
-                run.Isolated.Clear();
-                MaintenanceRetainOnIo(run, "Windows build tooling", () => MaintenanceWindowsTools(run, windowsTools!));
-            }
+                MaintenanceWindowsToolPhase(run, windowsTools!);
             foreach (var runner in idleRegistrations) MaintenanceRunnerOutput(run, runner);
             if (run.SharedIdle && !run.Expired)
             {
@@ -159,7 +154,7 @@ public sealed partial class RunnerHousekeepingService
             {
                 if (!run.Expired && run.SharedIdle && MaintenanceFreeBytes(spec.StateRootPath) >= run.State.PressureTargetBytes)
                     run.State.PressureTargetBytes = 0;
-                run.State.Due |= run.Expired || run.State.PressureTargetBytes > 0 || run.Isolated.Any(j => File.Exists(Path.Combine(spec.StateRootPath, "journal", j.Id + ".json")));
+                run.State.Due |= run.Expired || run.State.PressureTargetBytes > 0 || MaintenanceHasPendingJournals(run);
                 MaintenanceWrite(Path.Combine(spec.StateRootPath, "state.json"), run.State, RunnerMaintenanceJsonContext.Default.RunnerMaintenanceState);
             }
         }
