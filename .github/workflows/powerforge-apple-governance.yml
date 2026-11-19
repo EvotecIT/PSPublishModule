@@ -199,7 +199,7 @@ jobs:
           name: powerforge-apple-governance-${{ inputs.source_ref }}-plan
           path: ${{ steps.governance_plan.outputs.receipt-path }}
           if-no-files-found: error
-          retention-days: 7
+          retention-days: 90
 
   apply:
     if: inputs.operation == 'Apply'
@@ -322,4 +322,4 @@ jobs:
           name: powerforge-apple-governance-${{ inputs.source_ref }}-actual
           path: ${{ steps.governance_apply.outputs.receipt-path }}
           if-no-files-found: error
-          retention-days: 7
+          retention-days: 90
