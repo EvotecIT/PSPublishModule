@@ -176,7 +176,7 @@ jobs:
           name: powerforge-apple-doctor-${{ inputs.source_ref }}
           path: ${{ steps.doctor.outputs.receipt-path }}
           if-no-files-found: error
-          retention-days: 30
+          retention-days: 7
 
       - name: Open or close the proactive Apple incident
         id: incident
