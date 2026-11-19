@@ -558,6 +558,26 @@ Update-BenchmarkDocument `
     -Renderer ComparisonTable
 ```
 
+Update a block from published evidence in a schema 5 catalog. `-Comparison` takes
+comparison ids or group names; each comparison gets a table of its published run on
+the platform (and framework, when given), with the workload parameters shared by
+every case, the head-to-head lines, the statistic, the runner settings and a note for
+each library whose results are not published, giving the licence or the policy reason:
+
+```powershell
+Update-BenchmarkDocument `
+    -Path .\README.MD `
+    -BlockId excel-read `
+    -Catalog .\Website\static\data\benchmarks\index.json `
+    -Comparison read `
+    -Platform windows `
+    -Framework net10.0
+```
+
+A full run is preferred over a standard one, then the newest. A comparison without
+a published run on that platform shows a "no published run yet" line instead of a
+table, so a README never quotes diagnostic or unpublished numbers.
+
 The updater fails when the target document or marker block is missing.
 
 ## Operation memory measurements
@@ -701,10 +721,22 @@ Schema 5 declaration documents hold the library policy and the comparisons
 `acceptance-required`, `excluded`) and a `reason`. Each comparison has
 `comparisonId`, `area`, `group`, `title`, `subject`, `libraries`, `axes`, `cases`,
 `expectedPlatforms` and `frameworks`, plus an optional `eligibility` that can only
-exclude it. Catalogs derive each comparison's eligibility: a single-library
-comparison is declared but never publishable. Restricted libraries do not block a
-comparison; the published lane drops their cells, which carry the issue
-"Not published (licence)", and publishes the rest.
+exclude it and optional `cells` for comparisons where not every case × library ×
+axis-value combination is valid:
+
+```json
+"cells": [
+  { "case": "Create", "parameters": { "Scale": "Normal" } },
+  { "case": "Create", "library": "OfficeIMO", "parameters": { "Scale": "Huge" } }
+]
+```
+
+Catalogs derive each comparison's eligibility: a single-library comparison is
+declared but never publishable, and so is a comparison without declared `cases` or
+`cells`, because its runs can't be checked for missing combinations. Its lanes are
+recorded and shown with that reason, and publishing them is refused. Restricted
+libraries do not block a comparison; the published lane drops their cells, which
+carry the issue "Not published (licence)", and publishes the rest.
 
 Generate the document from the benchmark code and check it in CI:
 
@@ -716,7 +748,12 @@ $selection = Select-BenchmarkLibrary -Path ./Benchmarks/benchmarks.json -AcceptL
 
 The first lints the document. The second reports drift between a result and its
 declaration: cases, libraries or axis values that ran but are not declared, and
-declared cases or axis values with no cell at all. A case that ran and crashed is a
+declared cases or axis values with no cell at all. When the comparison declares its
+cases, it also checks every case × library × axis-value combination for each library
+that ran (`missing-combination`). When the comparison lists explicit `cells`, those
+cells define the expected combinations (`missing-combination`,
+`unexpected-combination`) and, without `cases`, the case names; only the cases and
+axis values of cells for the libraries that ran are required. A case that ran and crashed is a
 failed cell, not drift; it is excluded from publication and the rest of the lane is
 published. Both stop with an error unless `-PassThru` is used.
 `Select-BenchmarkLibrary` returns the libraries a runner may execute; excluded
@@ -763,4 +800,135 @@ Templates then read `data.benchmarks.comparisons`, each with `runs`, `overview`,
 `preferredRunId`, and per run `contenders`, `cases[].cells`, `headToHead` and
 `environment.text`. Times, allocations and ratios come with display text
 (`timeText`, `allocatedText`, `relative.text`), so templates do no arithmetic.
+`preferredRunId` names the run to show by default: a published run before an
+unpublished one, then full before standard, then Windows, then the newest.
+
+Each comparison also carries the declared facts a page needs to explain what it
+shows:
+
+- `group` and `frameworks` from the declaration;
+- `eligibility` (`publishable`, `reason`), for example a single-library comparison
+  or one without declared cases;
+- `availability`, one entry per expected platform and framework, with text such as
+  `Windows · net10.0 · standard · 2026-11-18`, `Linux · net10.0 · no published run`
+  (measured, but only in runs that are not published) or `macOS · net10.0 · not measured`.
+  It names only profiles the publish policy publishes;
+- `libraryStates`, each library's restriction class and whether its results are
+  published, with the note `not published (licence)` when they are not.
+
+Each run adds `profile` and `profileText`, `framework`, `laneParameters`,
+`runner.text` (kind, statistic, warmups, iterations, launches, ordering, process
+isolation, affinity and priority), `completeness`, `comparable`,
+`compatibilityIssues`, `policyIssues` and `notPublished`, which lists libraries
+measured in the lane whose cells were withheld and why.
+
+Large catalogs can be split so a page loads an area only when it is opened. With
+`Output`, the build writes `index.json` (areas, their groups and comparison
+summaries with headline results) and one `<area>.json` per area under that
+directory of the site output. `IndexOnly` gives templates just the index, which
+keeps every page's data small:
+
+```json
+{
+  "BenchmarkEvidence": [
+    {
+      "Name": "benchmarks",
+      "Catalog": "static/data/benchmarks/library-comparisons/index.json",
+      "Output": "data/benchmarks",
+      "IndexOnly": true
+    }
+  ]
+}
+```
+
+Templates then read `data.benchmarks.areas`, each with `id`, `file`, `groups`,
+`measured` and `comparisons[].headlines`, and fetch `/data/benchmarks/<file>` for
+the full comparisons. Headlines come only from a published run, so a comparison
+measured only in diagnostic or unpublished runs has none. `IndexOnly` requires `Output`, and `Output` must stay inside
+the site output.
+
+Each cell also carries `interval` (`level`, `lowerMs`, `upperMs` and `text`, such as
+`95% CI 10.1 ms – 10.8 ms`) when the evidence records one, and `even`, which is true
+when its interval overlaps the fastest cell's interval in that case.
+
+### Website components
+
+PowerForge.Web ships Scriban partials that render the view, so every site presents
+benchmarks the same way. They need no files in the theme:
+
+| Partial | Argument | Renders |
+| --- | --- | --- |
+| `powerforge/benchmarks/comparison` | one comparison | Title, group, platform availability, a platform and framework switcher, and the published runs, followed by licence notes |
+| `powerforge/benchmarks/run` | a run and its comparison | Run facts, environment, workload, the case table with times, confidence intervals and "fastest", "even" or the ratio, head-to-head lines, withheld libraries with their reason (never their times) and runner settings |
+| `powerforge/benchmarks/area` | an area file's content, or in area pages the area's index entry | Every comparison of one area; in area pages `summaries` lists them and `comparisonsHtml` holds them already rendered |
+| `powerforge/benchmarks/index` | the `BenchmarkEvidence` data | Areas with comparison headlines, and each area's results on demand |
+
+Only published runs are shown. A comparison without one shows "No published run
+yet.", platforms are listed as "not measured" or "no published run", and a
+comparison that cannot be published shows the reason. When cells have confidence
+intervals, only the fastest cell is "fastest" and a cell whose interval overlaps it
+is "even"; cells without intervals use the 0.5% tolerance. The index tells a
+comparison with no run, one measured only in unpublished runs and one whose
+published run has no head-to-head result apart, using each summary's `measured`
+and `published` flags.
+
+To adopt them in a site:
+
+1. Declare the evidence in `site.json`. For a large catalog, add `IndexOnly` (with
+   `Output`) so pages carry only the index, and `AreaFragments` so the index loads
+   each area's rendered results when it is opened:
+
+   ```json
+   {
+     "BenchmarkEvidence": [
+       {
+         "Name": "benchmarks",
+         "Catalog": "static/data/benchmarks/index.json",
+         "Output": "data/benchmarks",
+         "IndexOnly": true,
+         "AreaFragments": true
+       }
+     ]
+   }
+   ```
+
+2. Include a component in a Scriban layout or partial. A summary page with every
+   area:
+
+   ```html
+   {{ include "powerforge/benchmarks/index" data.benchmarks }}
+   ```
+
+   or one comparison, when the full view is loaded (no `IndexOnly`):
+
+   ```html
+   {{ for c in data.benchmarks.comparisons }}
+     {{ if c.id == "excel-read" }}{{ include "powerforge/benchmarks/comparison" c }}{{ end }}
+   {{ end }}
+   ```
+
+3. Build the site. A page that renders a component gets
+   `assets/powerforge/benchmarks.v1.css` and `assets/powerforge/benchmarks.v1.js`
+   added to its head and body; the build refuses to write them through a linked
+   `assets/powerforge` folder or file. With `AreaFragments`, the build also writes
+   each area as a small page to
+   `_powerforge/fragments/benchmarks/<name>-<hash>/<area>.html`. The folder adds a
+   hash of the exact `Name`, so entries such as `benchmarks.csv` and `benchmarks-csv`
+   never share one, and two entries that would still share a folder fail the build
+   before anything is written. The `area` component, or the theme's replacement,
+   renders the page; the comparisons are rendered one at a time beforehand and
+   passed to it as `comparisonsHtml`, so an area of any size stays within the
+   template loop limit. Site audits, sitemaps and search already skip
+   `_powerforge/fragments`, and the page is marked `noindex`.
+   The script resolves these files from the site root it was loaded from, so a site
+   served from a sub-path works unchanged.
+
+Without the script, the platform switcher stays hidden, every published run is
+shown in turn and "Show results" opens a link to the area page, which has its own
+styles; without `AreaFragments`, an index over the full view renders areas
+inline and an `IndexOnly` index lists the summaries. Themes restyle the components
+through the `--pf-bench-*` CSS properties (accent, even, failed, border, radius),
+or replace one by adding `partials/powerforge/benchmarks/<name>.html`; the build
+then uses the theme's version, including for the area files. The partials
+HTML-escape every value from the evidence.
 

@@ -58133,6 +58133,27 @@ Requires PSResourceGet or ManagedModule and cannot be combined with PublishRequi
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
         <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="none">
+          <maml:name>CommitVersionChanges</maml:name>
+          <maml:description>
+            <maml:para>Saves the version numbers a publish run wrote into tracked files (module manifest, project files and other&#xD;
+version metadata) to Git once every publish step succeeds. Off (default) leaves them uncommitted,&#xD;
+Commit commits them locally and Push also pushes the commit to the branch's configured upstream.&#xD;
+Only files whose changes are limited to version numbers are committed; other uncommitted work is left alone.&#xD;
+Anything that goes wrong becomes a warning with the command to finish by hand, and never fails the release.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">ReleaseVersionCommitMode</command:parameterValue>
+          <command:parameterValueGroup>
+            <command:parameterValue required="false" variableLength="false">Off</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Commit</command:parameterValue>
+            <command:parameterValue required="false" variableLength="false">Push</command:parameterValue>
+          </command:parameterValueGroup>
+          <dev:type>
+            <maml:name>ReleaseVersionCommitMode</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="none">
           <maml:name>PrimaryProject</maml:name>
           <maml:description>
             <maml:para>Primary package/project used when the version source is a package/project build.&#xD;
@@ -58258,6 +58279,27 @@ and skip destinations that already completed.</maml:para>
         <command:parameterValue required="false" variableLength="false">String[]</command:parameterValue>
         <dev:type>
           <maml:name>String[]</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="none">
+        <maml:name>CommitVersionChanges</maml:name>
+        <maml:description>
+          <maml:para>Saves the version numbers a publish run wrote into tracked files (module manifest, project files and other&#xD;
+version metadata) to Git once every publish step succeeds. Off (default) leaves them uncommitted,&#xD;
+Commit commits them locally and Push also pushes the commit to the branch's configured upstream.&#xD;
+Only files whose changes are limited to version numbers are committed; other uncommitted work is left alone.&#xD;
+Anything that goes wrong becomes a warning with the command to finish by hand, and never fails the release.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">ReleaseVersionCommitMode</command:parameterValue>
+        <command:parameterValueGroup>
+          <command:parameterValue required="false" variableLength="false">Off</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Commit</command:parameterValue>
+          <command:parameterValue required="false" variableLength="false">Push</command:parameterValue>
+        </command:parameterValueGroup>
+        <dev:type>
+          <maml:name>ReleaseVersionCommitMode</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
@@ -79063,9 +79105,15 @@ the cmdlet resolves the next patch version. When an exact version is provided, i
     </command:details>
     <maml:description>
       <maml:para>The declaration document holds the library policy (id, package, pinned version, licence, restriction class,&#xD;
-reason) and the comparisons (area, group, title, subject, libraries, axes, cases, platforms, frameworks).&#xD;
-Without a result the command lints the document. With a result it also reports declaration drift: cases,&#xD;
-libraries or axis values that ran but are not declared, and declared cases that did not run.</maml:para>
+reason) and the comparisons (area, group, title, subject, libraries, axes, cases, optional cells, platforms,&#xD;
+frameworks). Without a result the command lints the document. With a result it also reports declaration drift:&#xD;
+cases, libraries or axis values that ran but are not declared, and declared ones that did not run. For a&#xD;
+comparison that declares its cases, every case x library x axis-value combination is expected for each library&#xD;
+that ran. When the comparison lists explicit cells instead, those cells define the expected combinations (and,&#xD;
+without declared cases, the case names); a combination that ran but is not listed is unexpected-combination, and&#xD;
+only the cases and axis values of cells for the libraries that ran are required. Declared libraries that did not&#xD;
+run at all are not counted, and a cell that ran and failed counts as present. A comparison without declared cases&#xD;
+or cells is not checked for combinations; it can be recorded but is not published.</maml:para>
       <maml:para>The command stops with an error when it finds anything, so a build can run it before measuring.&#xD;
 Use -PassThru to receive the findings as objects instead.</maml:para>
     </maml:description>
@@ -80627,7 +80675,7 @@ across physical roots and selected dependents are removed before their selected 
       <maml:para>Updates a marker-delimited benchmark block in a Markdown document.</maml:para>
     </maml:description>
     <command:syntax>
-      <command:syntaxItem parameterSetName="__AllParameterSets">
+      <command:syntaxItem parameterSetName="Summary">
         <maml:name>Update-BenchmarkDocument</maml:name>
         <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="none">
           <maml:name>BlockId</maml:name>
@@ -80690,6 +80738,82 @@ across physical roots and selected dependents are removed before their selected 
           <dev:defaultValue>None</dev:defaultValue>
         </command:parameter>
       </command:syntaxItem>
+      <command:syntaxItem parameterSetName="Catalog">
+        <maml:name>Update-BenchmarkDocument</maml:name>
+        <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="none">
+          <maml:name>BlockId</maml:name>
+          <maml:description>
+            <maml:para>Marker block identifier.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="none">
+          <maml:name>Catalog</maml:name>
+          <maml:description>
+            <maml:para>Schema 5 evidence catalog (index.json). The block shows the published runs of the selected comparisons.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="true" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="none">
+          <maml:name>Comparison</maml:name>
+          <maml:description>
+            <maml:para>Comparison identifiers or group names to show.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">String[]</command:parameterValue>
+          <dev:type>
+            <maml:name>String[]</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="none">
+          <maml:name>Framework</maml:name>
+          <maml:description>
+            <maml:para>Target framework of the run to show, such as net10.0. A published full run is shown before a standard one,&#xD;
+then the newest; when omitted, runs of every framework on the platform are considered.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="0" aliases="none">
+          <maml:name>Path</maml:name>
+          <maml:description>
+            <maml:para>Markdown document path.</maml:para>
+          </maml:description>
+          <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+        <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="none">
+          <maml:name>Platform</maml:name>
+          <maml:description>
+            <maml:para>Platform whose published run is shown: windows, linux or macos.</maml:para>
+          </maml:description>
+          <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+          <dev:type>
+            <maml:name>String</maml:name>
+            <maml:uri />
+          </dev:type>
+          <dev:defaultValue>None</dev:defaultValue>
+        </command:parameter>
+      </command:syntaxItem>
     </command:syntax>
     <command:parameters>
       <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="none">
@@ -80700,6 +80824,30 @@ across physical roots and selected dependents are removed before their selected 
         <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
         <dev:type>
           <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="none">
+        <maml:name>Catalog</maml:name>
+        <maml:description>
+          <maml:para>Schema 5 evidence catalog (index.json). The block shows the published runs of the selected comparisons.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="true" variableLength="true" globbing="false" pipelineInput="False" position="named" aliases="none">
+        <maml:name>Comparison</maml:name>
+        <maml:description>
+          <maml:para>Comparison identifiers or group names to show.</maml:para>
+        </maml:description>
+        <command:parameterValue required="true" variableLength="false">String[]</command:parameterValue>
+        <dev:type>
+          <maml:name>String[]</maml:name>
           <maml:uri />
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
@@ -80716,12 +80864,37 @@ across physical roots and selected dependents are removed before their selected 
         </dev:type>
         <dev:defaultValue>None</dev:defaultValue>
       </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="none">
+        <maml:name>Framework</maml:name>
+        <maml:description>
+          <maml:para>Target framework of the run to show, such as net10.0. A published full run is shown before a standard one,&#xD;
+then the newest; when omitted, runs of every framework on the platform are considered.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
       <command:parameter required="true" variableLength="false" globbing="false" pipelineInput="False" position="0" aliases="none">
         <maml:name>Path</maml:name>
         <maml:description>
           <maml:para>Markdown document path.</maml:para>
         </maml:description>
         <command:parameterValue required="true" variableLength="false">String</command:parameterValue>
+        <dev:type>
+          <maml:name>String</maml:name>
+          <maml:uri />
+        </dev:type>
+        <dev:defaultValue>None</dev:defaultValue>
+      </command:parameter>
+      <command:parameter required="false" variableLength="false" globbing="false" pipelineInput="False" position="named" aliases="none">
+        <maml:name>Platform</maml:name>
+        <maml:description>
+          <maml:para>Platform whose published run is shown: windows, linux or macos.</maml:para>
+        </maml:description>
+        <command:parameterValue required="false" variableLength="false">String</command:parameterValue>
         <dev:type>
           <maml:name>String</maml:name>
           <maml:uri />
@@ -80776,6 +80949,13 @@ across physical roots and selected dependents are removed before their selected 
       <command:example>
         <maml:title>Update README benchmark block from a summary file</maml:title>
         <dev:code>Update-BenchmarkDocument -Path .\README.MD -BlockId managed-module-benchmark-table -SummaryPath .\Build\Benchmarks\summary.json</dev:code>
+        <dev:remarks>
+          <maml:para></maml:para>
+        </dev:remarks>
+      </command:example>
+      <command:example>
+        <maml:title>Update a README block from published evidence in a catalog</maml:title>
+        <dev:code>Update-BenchmarkDocument -Path .\README.MD -BlockId excel-read -Catalog .\Website\static\data\benchmarks\index.json -Comparison read -Platform windows -Framework net10.0</dev:code>
         <dev:remarks>
           <maml:para></maml:para>
         </dev:remarks>

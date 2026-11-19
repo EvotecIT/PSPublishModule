@@ -40,11 +40,20 @@ public static partial class WebSiteBuilder
             if (!File.Exists(catalogPath))
                 throw new FileNotFoundException($"Benchmark evidence catalog '{evidence.Name}' was not found.", catalogPath);
 
+            if (evidence.IndexOnly && string.IsNullOrWhiteSpace(evidence.Output))
+                throw new InvalidOperationException($"BenchmarkEvidence '{evidence.Name}' uses IndexOnly, which needs Output for the area files.");
+
             // Serialize through the same camelCase JSON contract as data files, so templates see one shape.
             var view = new PowerForge.BenchmarkComparisonViewBuilder().Build(catalogPath);
-            using var document = JsonDocument.Parse(PowerForge.BenchmarkJson.Serialize(view));
+            using var document = JsonDocument.Parse(evidence.IndexOnly
+                ? PowerForge.BenchmarkJson.Serialize(view.Index)
+                : PowerForge.BenchmarkJson.Serialize(view));
             var segments = evidence.Name.Split(new[] { '.', '/' }, StringSplitOptions.RemoveEmptyEntries);
-            AddNestedData(data, segments, ConvertJsonElement(document.RootElement), overwrite: true);
+            var value = ConvertJsonElement(document.RootElement);
+            // The index component loads an area's rendered file from here when the entry writes them.
+            if (value is Dictionary<string, object?> map && evidence.AreaFragments)
+                map["areaFragments"] = BenchmarkAreaFragmentsRoute(evidence);
+            AddNestedData(data, segments, value, overwrite: true);
         }
     }
 

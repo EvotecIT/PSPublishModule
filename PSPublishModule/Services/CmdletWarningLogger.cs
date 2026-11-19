@@ -10,7 +10,7 @@ namespace PSPublishModule;
 // Warnings raised on the pipeline thread go through WriteWarning, so -WarningAction and $WarningPreference apply.
 // A synchronous cmdlet cannot write from another thread (process output readers, timers), so those warnings go to
 // the wrapped logger instead of throwing.
-internal sealed class CmdletWarningLogger(PSCmdlet cmdlet, ILogger output) : ILogger
+internal sealed class CmdletWarningLogger(PSCmdlet cmdlet, ILogger output) : ILogger, IAdvisoryWarningLogger
 {
     private readonly int _pipelineThread = Thread.CurrentThread.ManagedThreadId;
     private ExceptionDispatchInfo? _warningStop;
@@ -38,6 +38,20 @@ internal sealed class CmdletWarningLogger(PSCmdlet cmdlet, ILogger output) : ILo
         }
     }
     public void RethrowWarningStop() => _warningStop?.Throw();
+
+    // Optional steps that run after publication (such as committing version files) report here.
+    // Writing to the host keeps the line visible without -WarningAction or $WarningPreference
+    // turning a finished release into a failure.
+    public void WarnAdvisory(string message)
+    {
+        if (output is not CmdletLogger || (cmdlet is not AsyncPSCmdlet && Thread.CurrentThread.ManagedThreadId != _pipelineThread))
+        {
+            output.Warn(message);
+            return;
+        }
+
+        PowerForge.ConsoleUi.ConsoleOutput.WriteOutside(() => cmdlet.Host.UI.WriteWarningLine(message));
+    }
 
     private void WriteWarning(string message)
     {

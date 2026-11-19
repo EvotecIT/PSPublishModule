@@ -15,6 +15,25 @@ public sealed class BenchmarkEvidenceDataSpec
 
     /// <summary>Path to the evidence catalog (index.json), relative to the site root.</summary>
     public string Catalog { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Optional site output directory, such as "data/benchmarks". When set, the build writes the view there as
+    /// <c>index.json</c> plus one file per area, so pages can load an area's comparisons on demand.
+    /// </summary>
+    public string? Output { get; set; }
+
+    /// <summary>
+    /// When true, templates receive only the index (areas and comparison summaries) under <c>data.&lt;Name&gt;</c>;
+    /// pages load full area data from <see cref="Output"/>. Requires <see cref="Output"/>.
+    /// </summary>
+    public bool IndexOnly { get; set; }
+
+    /// <summary>
+    /// When true, the build renders each area with the benchmark components as a small page under
+    /// <c>_powerforge/fragments/benchmarks/&lt;name&gt;-&lt;hash&gt;/&lt;area&gt;.html</c>. The index component links to
+    /// it and loads it when an area is opened. Off by default, so JSON-only publication renders nothing extra.
+    /// </summary>
+    public bool AreaFragments { get; set; }
 }
 
 /// <summary>Template engine limits.</summary>

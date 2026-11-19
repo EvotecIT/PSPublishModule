@@ -51,6 +51,12 @@ public sealed partial class BenchmarkEvidenceCatalogService
             source.Libraries.Any(string.IsNullOrWhiteSpace) ||
             source.ExpectedPlatforms is null || source.ExpectedPlatforms.Length == 0)
             throw new InvalidOperationException("Comparison declarations require an identifier, area, title, libraries and expected platforms.");
+        // Catalog updates and merges don't run declaration validation, so malformed axes and cases stop here with a clear
+        // message instead of a null reference.
+        if (source.Axes is not null && source.Axes.Any(axis => axis is null || string.IsNullOrWhiteSpace(axis.Name)))
+            throw new InvalidOperationException($"Comparison '{source.ComparisonId.Trim()}' has an axis without a name.");
+        if (source.Cases is not null && source.Cases.Any(string.IsNullOrWhiteSpace))
+            throw new InvalidOperationException($"Comparison '{source.ComparisonId.Trim()}' has a blank case name.");
 
         return new BenchmarkComparisonDefinition
         {
@@ -61,9 +67,18 @@ public sealed partial class BenchmarkEvidenceCatalogService
             Subject = source.Subject?.Trim() ?? string.Empty,
             Libraries = source.Libraries.Select(value => value.Trim()).Distinct(StringComparer.OrdinalIgnoreCase).ToArray(),
             Axes = (source.Axes ?? Array.Empty<BenchmarkComparisonAxis>())
-                .Select(axis => new BenchmarkComparisonAxis { Name = axis.Name.Trim(), Values = (axis.Values ?? Array.Empty<string>()).Select(value => value.Trim()).ToArray() })
+                .Select(axis => new BenchmarkComparisonAxis { Name = axis.Name.Trim(), Values = NormalizeAxisValues(source.ComparisonId, axis) })
                 .ToArray(),
             Cases = (source.Cases ?? Array.Empty<string>()).Select(value => value.Trim()).ToArray(),
+            Cells = (source.Cells ?? Array.Empty<BenchmarkExpectedCell>())
+                .Where(cell => cell is not null)
+                .Select(cell => new BenchmarkExpectedCell
+                {
+                    Case = cell.Case?.Trim() ?? string.Empty,
+                    Library = cell.Library?.Trim() ?? string.Empty,
+                    Parameters = NormalizeCellParameters(source.ComparisonId, cell.Parameters)
+                })
+                .ToArray(),
             ExpectedPlatforms = NormalizeExpectedPlatforms(source.ExpectedPlatforms).OrderBy(value => value, StringComparer.Ordinal).ToArray(),
             Frameworks = (source.Frameworks ?? Array.Empty<string>()).Select(value => value.Trim().ToLowerInvariant())
                 .Distinct(StringComparer.Ordinal).OrderBy(value => value, StringComparer.Ordinal).ToArray(),
@@ -73,6 +88,35 @@ public sealed partial class BenchmarkEvidenceCatalogService
                 Reason = source.Eligibility?.Reason?.Trim() ?? string.Empty
             }
         };
+    }
+
+    // Parameter names ignore case, so a cell that gives one twice (Scale and scale) is rejected with a clear message on
+    // every path, including catalogs merged without their declaration document.
+    private static Dictionary<string, string> NormalizeCellParameters(string comparisonId, IDictionary<string, string>? parameters)
+    {
+        var normalized = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (KeyValuePair<string, string> pair in parameters ?? new Dictionary<string, string>())
+        {
+            if (string.IsNullOrWhiteSpace(pair.Key) || pair.Value is null)
+                continue;
+            string name = pair.Key.Trim();
+            if (normalized.ContainsKey(name))
+                throw new InvalidOperationException($"Comparison '{comparisonId.Trim()}' has a cell that gives parameter '{name}' more than once; parameter names ignore case.");
+            if (string.IsNullOrWhiteSpace(pair.Value))
+                throw new InvalidOperationException($"Comparison '{comparisonId.Trim()}' has a cell with a blank value for parameter '{name}'.");
+            normalized[name] = pair.Value.Trim();
+        }
+        return normalized;
+    }
+
+    // A blank axis value can't be told apart from a missing parameter, so it is rejected on every path, including
+    // catalogs merged without their declaration document.
+    private static string[] NormalizeAxisValues(string comparisonId, BenchmarkComparisonAxis axis)
+    {
+        string[] values = (axis.Values ?? Array.Empty<string>()).Select(value => value?.Trim() ?? string.Empty).ToArray();
+        if (values.Any(value => value.Length == 0))
+            throw new InvalidOperationException($"Comparison '{comparisonId.Trim()}' axis '{axis.Name.Trim()}' has a blank value.");
+        return values;
     }
 
     private static BenchmarkPlatformAvailability[] BuildAvailability(BenchmarkEvidenceCatalog catalog)

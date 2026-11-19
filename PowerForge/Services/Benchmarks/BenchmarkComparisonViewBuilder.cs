@@ -23,7 +23,7 @@ namespace PowerForge;
 /// published evidence does not need to be re-measured.
 /// </para>
 /// </remarks>
-public sealed class BenchmarkComparisonViewBuilder
+public sealed partial class BenchmarkComparisonViewBuilder
 {
     private const double EvenTolerance = 0.03;
     private static readonly string[] PlatformOrder = { "windows", "linux", "macos" };
@@ -68,15 +68,19 @@ public sealed class BenchmarkComparisonViewBuilder
             var entries = catalog.Entries
                 .Where(entry => string.Equals(entry.ComparisonId, definition.ComparisonId, StringComparison.OrdinalIgnoreCase))
                 .ToArray();
-            return BuildComparison(definition, entries.Select(entry => (entry, loadResult(entry))).ToArray(), unpublished);
+            var view = BuildComparison(definition, entries.Select(entry => (entry, loadResult(entry))).ToArray(), unpublished);
+            AnnotateComparison(view, definition, catalog);
+            return view;
         }).ToArray();
 
+        var areas = catalog.Areas.Length > 0
+            ? catalog.Areas.ToArray()
+            : comparisons.Select(comparison => comparison.Area).Where(area => area.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
         return new BenchmarkComparisonCatalogView
         {
-            Areas = catalog.Areas.Length > 0
-                ? catalog.Areas.ToArray()
-                : comparisons.Select(comparison => comparison.Area).Where(area => area.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase).ToArray(),
-            Comparisons = comparisons
+            Areas = areas,
+            Comparisons = comparisons,
+            Index = BuildIndex(areas, comparisons)
         };
     }
 
@@ -103,8 +107,9 @@ public sealed class BenchmarkComparisonViewBuilder
             .ToArray();
         MakeRunIdsUnique(runViews);
 
+        // Published evidence is shown by default; an unpublished full run never outranks a published standard one.
         var preferred = runViews
-            .OrderByDescending(run => (run.IsFull ? 4 : 0) + (run.Published ? 2 : 0) + (run.Platform == "windows" ? 1 : 0))
+            .OrderByDescending(run => (run.Published ? 4 : 0) + (run.IsFull ? 2 : 0) + (run.Platform == "windows" ? 1 : 0))
             .ThenByDescending(run => run.GeneratedUtc)
             .FirstOrDefault();
 
@@ -296,6 +301,7 @@ public sealed class BenchmarkComparisonViewBuilder
         {
             var (caseLabel, parameters, cells) = cases[label];
             var fastest = fastestByCase[label];
+            var fastestRow = cells.Values.Where(Completed).OrderBy(row => row.TimeMs!.Value).FirstOrDefault();
             var slowest = cells.Values.Where(Completed).Select(row => row.TimeMs!.Value).DefaultIfEmpty(0).Max();
             return new BenchmarkCaseView
             {
@@ -306,6 +312,11 @@ public sealed class BenchmarkComparisonViewBuilder
                     if (!cells.TryGetValue(name, out var row))
                         return new BenchmarkCellView { Contender = name, IsSubject = IsSubject(name), Missing = true };
                     var completed = Completed(row);
+                    var relative = completed && !double.IsNaN(fastest) ? Ratio(row.TimeMs!.Value / fastest) : new BenchmarkRatioView();
+                    // With intervals, only the fastest row is fastest and overlap decides "even"; the ratio stays numeric.
+                    var intervalBacked = completed && row.Interval is not null && fastestRow?.Interval is not null;
+                    if (intervalBacked)
+                        relative.IsFastest = ReferenceEquals(row, fastestRow);
                     return new BenchmarkCellView
                     {
                         Contender = name,
@@ -315,7 +326,9 @@ public sealed class BenchmarkComparisonViewBuilder
                         TimeText = row.Failed ? "Failed" : FormatTime(row.TimeMs),
                         AllocatedBytes = row.AllocatedBytes,
                         AllocatedText = FormatBytes(row.AllocatedBytes),
-                        Relative = completed && !double.IsNaN(fastest) ? Ratio(row.TimeMs!.Value / fastest) : new BenchmarkRatioView(),
+                        Relative = relative,
+                        Interval = completed ? DescribeInterval(row.Interval) : null,
+                        Even = intervalBacked && !relative.IsFastest && IsEven(row.Interval, fastestRow!.Interval),
                         BarPercent = completed && slowest > 0 ? Math.Round(Math.Max(1.5, row.TimeMs!.Value / slowest * 100), 1) : 0
                     };
                 }).ToArray()
@@ -351,7 +364,7 @@ public sealed class BenchmarkComparisonViewBuilder
             Contenders = contenders,
             Cases = caseViews,
             HeadToHead = headToHead
-        };
+        }.WithEvidence(entry, result);
     }
 
     private static BenchmarkHeadToHeadView HeadToHead(

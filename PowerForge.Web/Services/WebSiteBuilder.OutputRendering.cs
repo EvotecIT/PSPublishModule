@@ -92,7 +92,7 @@ public static partial class WebSiteBuilder
             partialResolver = name =>
             {
                 var partialPath = loader.ResolvePartialPath(themeRoot, manifest, name);
-                return partialPath is null ? null : ReadCachedText(renderCache.PartialTemplateCache, partialPath);
+                return partialPath is null ? ResolveBuiltInPartial(name) : ReadCachedText(renderCache.PartialTemplateCache, partialPath);
             };
         }
 
@@ -200,6 +200,7 @@ public static partial class WebSiteBuilder
             var html = themeEngine.Render(themeTemplate, renderContext, partialResolver ?? (_ => null));
             html = RebaseSelectedLanguageRootHtml(spec, html);
             html = EnsureLayoutPrismAssets(html, item.Meta, spec, rootPath);
+            html = EnsureBenchmarkComponentReferences(html, spec, assetBaseRoute);
             if (spec.MediaViewer?.Enabled == true) html = WebMediaContentRenderer.Render(html);
             ReportSlowRenderTiming(item, pageTimer.ElapsedMilliseconds, assetMs, navMs, listMs, headMs, taxonomyMs, localizationMs);
             return html;

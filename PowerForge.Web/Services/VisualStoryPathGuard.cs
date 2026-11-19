@@ -36,27 +36,28 @@ internal static class VisualStoryPathGuard
         string root,
         string path,
         string label,
-        bool allowRoot = false)
+        bool allowRoot = false,
+        string subject = "Visual-story")
     {
         var fullRoot = Path.GetFullPath(root);
         var fullPath = Path.GetFullPath(path);
-        EnsureExistingPathIsNotLink(fullRoot, label);
+        EnsureExistingPathIsNotLink(fullRoot, label, subject);
         if (string.Equals(fullRoot, fullPath, PathComparison))
         {
             if (!allowRoot)
-                throw new InvalidOperationException($"Visual-story {label} must be inside its allowed root.");
+                throw new InvalidOperationException($"{subject} {label} must be inside its allowed root.");
             return;
         }
 
         var prefix = fullRoot.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
                      + Path.DirectorySeparatorChar;
         if (!fullPath.StartsWith(prefix, PathComparison))
-            throw new InvalidOperationException($"Visual-story {label} path escapes its allowed root.");
+            throw new InvalidOperationException($"{subject} {label} path escapes its allowed root.");
 
-        EnsureNoLinkTraversal(fullRoot, fullPath, label);
+        EnsureNoLinkTraversal(fullRoot, fullPath, label, subject);
     }
 
-    private static void EnsureExistingPathIsNotLink(string path, string label)
+    private static void EnsureExistingPathIsNotLink(string path, string label, string subject)
     {
         FileAttributes attributes;
         try
@@ -75,11 +76,11 @@ internal static class VisualStoryPathGuard
         if ((attributes & FileAttributes.ReparsePoint) != 0)
         {
             throw new InvalidOperationException(
-                $"Visual-story {label} path cannot be a symbolic link or reparse point.");
+                $"{subject} {label} path cannot be a symbolic link or reparse point.");
         }
     }
 
-    private static void EnsureNoLinkTraversal(string root, string path, string label)
+    private static void EnsureNoLinkTraversal(string root, string path, string label, string subject)
     {
         var relative = Path.GetRelativePath(root, path);
         var current = root;
@@ -105,7 +106,7 @@ internal static class VisualStoryPathGuard
             if ((attributes & FileAttributes.ReparsePoint) != 0)
             {
                 throw new InvalidOperationException(
-                    $"Visual-story {label} path cannot traverse a symbolic link or reparse point.");
+                    $"{subject} {label} path cannot traverse a symbolic link or reparse point.");
             }
         }
     }

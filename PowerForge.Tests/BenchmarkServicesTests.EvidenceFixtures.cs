@@ -12,8 +12,8 @@ public sealed partial class BenchmarkServicesTests
         var comparisons = document.Comparisons.ToList();
         foreach (BenchmarkComparisonDefinition definition in existing ?? [])
         {
-            if (!comparisons.Any(value => value.ComparisonId == definition.ComparisonId))
-                comparisons.Add(definition);
+            comparisons.RemoveAll(value => value.ComparisonId == definition.ComparisonId);
+            comparisons.Add(definition);
         }
         if (comparisonId is not null && BenchmarkEvidenceIdentity.DescribeComparisonIdProblem(comparisonId) is null &&
             !comparisons.Any(value => value.ComparisonId == comparisonId))
@@ -58,7 +58,7 @@ public sealed partial class BenchmarkServicesTests
             Publish = publish,
             ExpectedPlatforms = expectedPlatforms?.ToArray(),
             Platform = platform,
-            Declarations = TestDeclarations(comparisonId, catalog?.Comparisons)
+            Declarations = DeclareCases(TestDeclarations(comparisonId, catalog?.Comparisons), comparisonId, result)
         });
 
     private static BenchmarkEvidenceCatalog UpdateFileDeclared(
@@ -82,8 +82,26 @@ public sealed partial class BenchmarkServicesTests
             ExpectedPlatforms = expectedPlatforms?.ToArray(),
             Platform = platform,
             ResultArtifactPath = resultArtifactPath,
-            Declarations = TestDeclarations(comparisonId, ExistingComparisons(catalogPath))
+            Declarations = DeclareCases(TestDeclarations(comparisonId, ExistingComparisons(catalogPath)), comparisonId, result)
         });
+
+    /// <summary>
+    /// Declares a comparison's cases from the result being recorded when the fixture declares none, as a declaration
+    /// generated from the benchmark code would. Comparisons without cases are not publishable.
+    /// </summary>
+    private static BenchmarkDeclarationDocument DeclareCases(BenchmarkDeclarationDocument declarations, string comparisonId, BenchmarkRunResult result)
+    {
+        BenchmarkComparisonDefinition? comparison = declarations.Comparisons
+            .FirstOrDefault(value => string.Equals(value.ComparisonId, comparisonId, StringComparison.OrdinalIgnoreCase));
+        if (comparison is null || comparison.Cases.Length > 0 || comparison.Cells.Length > 0 || result is null)
+            return declarations;
+        comparison.Cases = BenchmarkEvidenceCellBuilder.Build(result, comparisonId, BenchmarkPublishPolicy.CreateDefault())
+            .Select(cell => cell.Case)
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        return declarations;
+    }
 
     private static BenchmarkComparisonDefinition[] ExistingComparisons(string catalogPath)
     {

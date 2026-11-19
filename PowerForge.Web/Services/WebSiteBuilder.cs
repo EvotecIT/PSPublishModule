@@ -171,6 +171,7 @@ public static partial class WebSiteBuilder
             ReportProgress("copying static assets");
             CopyStaticAssets(spec, plan.RootPath, outDir);
             EnsureMediaViewerAssets(spec, outDir);
+            EnsureBenchmarkComponentAssets(spec, outDir);
             ReportProgress("rendering content");
             foreach (var item in renderItems)
             {
@@ -211,6 +212,7 @@ public static partial class WebSiteBuilder
             WriteTemplateExports(outDir, spec, plan.RootPath, renderItems, data, projectMap, menuSpecs);
             ReportProgress("writing navigation/search/diagnostic outputs");
             WriteSiteNavData(spec, outDir, menuSpecs);
+            WriteBenchmarkEvidenceFiles(spec, plan.RootPath, outDir);
             WriteSearchIndex(spec, outDir, renderItems);
             WriteLinkCheckReport(spec, renderItems, metaDir);
             WriteSeoPreviewReport(spec, renderItems, metaDir);

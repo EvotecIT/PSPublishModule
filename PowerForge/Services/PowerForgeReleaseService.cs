@@ -263,9 +263,9 @@ internal sealed partial class PowerForgeReleaseService
     }
 
     /// <summary>
-    /// Executes the unified release workflow.
+    /// Executes the unified release workflow without the version commit step.
     /// </summary>
-    public PowerForgeReleaseResult Execute(PowerForgeReleaseSpec spec, PowerForgeReleaseRequest request)
+    private PowerForgeReleaseResult ExecuteRelease(PowerForgeReleaseSpec spec, PowerForgeReleaseRequest request)
     {
         if (spec is null)
             throw new ArgumentNullException(nameof(spec));
@@ -475,6 +475,9 @@ internal sealed partial class PowerForgeReleaseService
             RegistryPublishingSkippedForVerifiedGitHubRecovery =
                 registryPublishingSkippedForVerifiedGitHubRecovery
         };
+
+        result.PublishesFromSelectedLanes = PublishesFromSelectedLanes(
+            spec, request, runModule, runPackages, willRunTools, publishUnifiedGitHub);
 
         // Resolve and validate HEAD before any version reservation or other remote side effect.
         // Planning below verifies that the selected DotNet project belongs to this same checkout.
@@ -1225,7 +1228,7 @@ internal sealed partial class PowerForgeReleaseService
         return BitConverter.ToString(algorithm.ComputeHash(bytes)).Replace("-", string.Empty).ToLowerInvariant();
     }
 
-    internal PowerForgeReleaseResult PublishBuiltReleaseOutputs(
+    private PowerForgeReleaseResult PublishBuiltReleaseOutputsCore(
         PowerForgeReleaseSpec spec,
         PowerForgeReleaseRequest request,
         PowerForgeReleaseResult builtResult)

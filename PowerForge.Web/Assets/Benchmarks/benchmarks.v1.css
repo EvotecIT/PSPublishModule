@@ -1,0 +1,319 @@
+/* PowerForge benchmark components. Themes restyle them through the --pf-bench-* properties. */
+.pf-bench,
+.pf-bench-index {
+  --pf-bench-border: color-mix(in srgb, currentColor 16%, transparent);
+  --pf-bench-muted: color-mix(in srgb, currentColor 62%, transparent);
+  --pf-bench-surface: color-mix(in srgb, currentColor 4%, transparent);
+  --pf-bench-accent: #1f7a4d;
+  --pf-bench-accent-surface: color-mix(in srgb, var(--pf-bench-accent) 12%, transparent);
+  --pf-bench-even: #8a6d1f;
+  --pf-bench-failed: #b42318;
+  --pf-bench-radius: 8px;
+  --pf-bench-font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  .pf-bench,
+  .pf-bench-index {
+    --pf-bench-accent: #4cc38a;
+    --pf-bench-even: #e2b84a;
+    --pf-bench-failed: #f97066;
+  }
+}
+
+.pf-bench {
+  margin: 0 0 2.5rem;
+  min-width: 0;
+}
+
+.pf-bench__header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.25rem 0.75rem;
+  margin-bottom: 0.5rem;
+}
+
+.pf-bench__title {
+  margin: 0;
+}
+
+.pf-bench__group {
+  margin: 0;
+  color: var(--pf-bench-muted);
+  font-size: 0.875rem;
+}
+
+.pf-bench__availability {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+  margin: 0 0 0.75rem;
+  padding: 0;
+  list-style: none;
+}
+
+.pf-bench__platform {
+  padding: 0.125rem 0.5rem;
+  border: 1px solid var(--pf-bench-border);
+  border-radius: 999px;
+  font-size: 0.8125rem;
+}
+
+.pf-bench__platform.is-measured {
+  border-color: color-mix(in srgb, var(--pf-bench-accent) 45%, transparent);
+}
+
+.pf-bench__platform.is-missing {
+  color: var(--pf-bench-muted);
+  border-style: dashed;
+}
+
+.pf-bench__empty,
+.pf-bench__note {
+  margin: 0.5rem 0;
+  padding: 0.625rem 0.875rem;
+  border: 1px dashed var(--pf-bench-border);
+  border-radius: var(--pf-bench-radius);
+  color: var(--pf-bench-muted);
+}
+
+/* Elements the script reveals stay hidden without it, whatever display a rule gives them. */
+.pf-bench [hidden],
+.pf-bench-index [hidden] {
+  display: none;
+}
+
+.pf-bench__tabs:not([hidden]) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  margin: 0 0 0.75rem;
+}
+
+.pf-bench__tab {
+  padding: 0.375rem 0.75rem;
+  border: 1px solid var(--pf-bench-border);
+  border-radius: var(--pf-bench-radius);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+
+.pf-bench__tab[aria-selected="true"] {
+  border-color: var(--pf-bench-accent);
+  background: var(--pf-bench-accent-surface);
+}
+
+.pf-bench__tab:focus-visible {
+  outline: 2px solid var(--pf-bench-accent);
+  outline-offset: 2px;
+}
+
+.pf-bench__run + .pf-bench__run {
+  margin-top: 1.5rem;
+}
+
+/* Each fact carries its separator in a gutter left of the list; the gutter is clipped, so the separator of the
+   first fact on every line is hidden and a wrapped line never starts with one. */
+.pf-bench__facts {
+  overflow: hidden;
+  margin: 0 0 0.25rem;
+  font-weight: 600;
+}
+
+.pf-bench__facts > ul {
+  display: flex;
+  flex-wrap: wrap;
+  margin: 0 0 0 -1.25em;
+  padding: 0;
+  list-style: none;
+}
+
+.pf-bench__facts li::before {
+  content: "\00b7";
+  display: inline-block;
+  width: 1.25em;
+  text-align: center;
+  color: var(--pf-bench-muted);
+}
+
+.pf-bench__environment,
+.pf-bench__workload {
+  margin: 0 0 0.5rem;
+  color: var(--pf-bench-muted);
+  font-size: 0.875rem;
+}
+
+.pf-bench__workload code {
+  margin-left: 0.375rem;
+  font-family: var(--pf-bench-font-mono);
+  font-size: 0.8125rem;
+}
+
+.pf-bench__label {
+  font-weight: 600;
+}
+
+.pf-bench__table-wrap {
+  overflow-x: auto;
+  margin: 0.5rem 0;
+  border: 1px solid var(--pf-bench-border);
+  border-radius: var(--pf-bench-radius);
+}
+
+.pf-bench__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+
+.pf-bench__table th,
+.pf-bench__table td {
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--pf-bench-border);
+  text-align: right;
+  vertical-align: top;
+  white-space: nowrap;
+}
+
+.pf-bench__table tbody tr:last-child > * {
+  border-bottom: 0;
+}
+
+.pf-bench__table th:first-child {
+  text-align: left;
+  white-space: normal;
+}
+
+.pf-bench__table thead th {
+  background: var(--pf-bench-surface);
+  font-size: 0.875rem;
+}
+
+.pf-bench__table thead th.is-subject {
+  color: var(--pf-bench-accent);
+}
+
+.pf-bench__version {
+  display: block;
+  color: var(--pf-bench-muted);
+  font-weight: 400;
+  font-size: 0.75rem;
+}
+
+.pf-bench__time,
+.pf-bench__relative,
+.pf-bench__ci {
+  display: block;
+}
+
+.pf-bench__time {
+  font-weight: 600;
+}
+
+.pf-bench__relative {
+  font-size: 0.8125rem;
+  color: var(--pf-bench-muted);
+}
+
+.pf-bench__ci {
+  font-size: 0.75rem;
+  color: var(--pf-bench-muted);
+}
+
+.pf-bench__cell.is-fastest {
+  background: var(--pf-bench-accent-surface);
+}
+
+.pf-bench__cell.is-fastest .pf-bench__relative {
+  color: var(--pf-bench-accent);
+  font-weight: 600;
+}
+
+.pf-bench__cell.is-even .pf-bench__relative {
+  color: var(--pf-bench-even);
+  font-weight: 600;
+}
+
+.pf-bench__cell.is-failed {
+  color: var(--pf-bench-failed);
+  font-weight: 600;
+}
+
+.pf-bench__cell.is-missing {
+  color: var(--pf-bench-muted);
+}
+
+.pf-bench__headlines,
+.pf-bench__notes {
+  margin: 0.5rem 0;
+  padding-left: 1.25rem;
+}
+
+.pf-bench__headlines span {
+  color: var(--pf-bench-muted);
+}
+
+.pf-bench__notes {
+  color: var(--pf-bench-muted);
+  font-size: 0.875rem;
+}
+
+.pf-bench-index__area {
+  margin: 0 0 2rem;
+}
+
+.pf-bench-index__header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.25rem 1rem;
+}
+
+.pf-bench-index__title {
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.pf-bench-index__meta,
+.pf-bench-index__state {
+  color: var(--pf-bench-muted);
+  font-size: 0.875rem;
+}
+
+.pf-bench-index__list {
+  margin: 0.5rem 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pf-bench-index__list > li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.125rem 0.75rem;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--pf-bench-border);
+}
+
+.pf-bench-index__name {
+  font-weight: 600;
+  flex: 1 1 14rem;
+}
+
+.pf-bench-index__headline {
+  flex: 1 1 16rem;
+}
+
+.pf-bench-index__details > summary {
+  cursor: pointer;
+  padding: 0.5rem 0;
+  font-weight: 600;
+}
+
+.pf-bench-index__body {
+  padding-top: 0.5rem;
+}

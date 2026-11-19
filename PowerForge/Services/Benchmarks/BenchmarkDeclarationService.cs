@@ -3,7 +3,7 @@ namespace PowerForge;
 /// <summary>
 /// Reads, validates and applies benchmark declarations: the library policy and comparison matrix.
 /// </summary>
-public sealed class BenchmarkDeclarationService
+public sealed partial class BenchmarkDeclarationService
 {
     /// <summary>Reads a schema 5 declaration document.</summary>
     /// <param name="path">Declaration JSON path.</param>
@@ -97,13 +97,19 @@ public sealed class BenchmarkDeclarationService
                     Add(issues, subject, "comparison-axis", "Axes need unique names.");
                 else if ((axis.Values ?? Array.Empty<string>()).Length == 0)
                     Add(issues, subject, "comparison-axis", $"Axis '{axis.Name}' needs at least one value.");
+                else if (axis.Values!.Any(string.IsNullOrWhiteSpace))
+                    Add(issues, subject, "comparison-axis", $"Axis '{axis.Name}' values can't be blank.");
             }
             if (comparisonLibraries.Where(value => !string.IsNullOrWhiteSpace(value)).Select(value => value.Trim())
                     .Distinct(StringComparer.OrdinalIgnoreCase).Count() != comparisonLibraries.Length)
                 Add(issues, subject, "duplicate-library-reference", "The comparison lists a library more than once (library ids ignore case).");
             string[] cases = comparison.Cases ?? Array.Empty<string>();
-            if (cases.Distinct(StringComparer.OrdinalIgnoreCase).Count() != cases.Length)
+            if (cases.Any(string.IsNullOrWhiteSpace))
+                Add(issues, subject, "comparison-case", "Case names can't be blank.");
+            if (cases.Where(value => !string.IsNullOrWhiteSpace(value)).Select(value => value.Trim())
+                    .Distinct(StringComparer.OrdinalIgnoreCase).Count() != cases.Count(value => !string.IsNullOrWhiteSpace(value)))
                 Add(issues, subject, "duplicate-case", "Declared cases must be unique.");
+            ValidateExplicitCells(issues, subject, comparison);
             if (comparison.Eligibility is { Publishable: false } && string.IsNullOrWhiteSpace(comparison.Eligibility.Reason))
                 Add(issues, subject, "eligibility-reason", "A comparison declared not publishable needs a reason.");
         }
@@ -111,9 +117,12 @@ public sealed class BenchmarkDeclarationService
         return issues.ToArray();
     }
 
+    /// <summary>Why a comparison without declared cases or cells is not published.</summary>
+    public const string NoCasesReason = "Declare the comparison's cases (or cells) to publish it: without them a run can't be checked for missing combinations.";
+
     /// <summary>
-    /// Derives a comparison's eligibility from its declaration. An author's own exclusion always wins, and a
-    /// single-library comparison is never publishable. Restricted libraries do not make a comparison
+    /// Derives a comparison's eligibility from its declaration. An author's own exclusion always wins, a
+    /// single-library comparison is never publishable, and neither is one without declared cases or cells. Restricted libraries do not make a comparison
     /// ineligible: the publish policy drops their cells and publishes the rest.
     /// </summary>
     /// <param name="comparison">Comparison declaration.</param>
@@ -132,6 +141,10 @@ public sealed class BenchmarkDeclarationService
             return new BenchmarkEligibility { Publishable = false, Reason = comparison.Eligibility.Reason };
         if ((comparison.Libraries ?? Array.Empty<string>()).Distinct(StringComparer.OrdinalIgnoreCase).Count() < 2)
             return new BenchmarkEligibility { Publishable = false, Reason = "Single-library comparison: there is nothing to compare against." };
+        // Without declared cases or cells, a lane can't be checked for completeness, so it is held back rather than
+        // published as if it were complete. It is still recorded and shown.
+        if (DeclaredCaseNames(comparison).Length == 0)
+            return new BenchmarkEligibility { Publishable = false, Reason = NoCasesReason };
         return new BenchmarkEligibility { Publishable = true };
     }
 
@@ -194,9 +207,9 @@ public sealed class BenchmarkDeclarationService
     }
 
     /// <summary>
-    /// Compares the cases, libraries and axis values in a result with the comparison declaration.
-    /// Any finding means the declaration drifted from the benchmark code: a case, library or axis value that
-    /// ran without being declared, or a declared case or axis value with no cell at all. A case that ran and
+    /// Compares the cases, libraries, axis values and their combinations in a result with the comparison
+    /// declaration. Any finding means the declaration drifted from the benchmark code: a case, library, axis value
+    /// or combination that ran without being declared, or a declared one with no cell at all. A case that ran and
     /// failed is a failed cell, not a missing one, and is never reported here.
     /// </summary>
     /// <param name="comparison">Comparison declaration.</param>
@@ -221,13 +234,15 @@ public sealed class BenchmarkDeclarationService
     {
         var issues = new List<BenchmarkDeclarationIssue>();
         string subject = comparison.ComparisonId;
-        string[] declaredCases = comparison.Cases ?? Array.Empty<string>();
+        // With explicit cells, the cases and axis values that must have run come from the cells that apply to the
+        // libraries that ran; values only another library supports are not missing when that library did not run.
+        string[] declaredCases = DeclaredCaseNames(comparison);
         if (declaredCases.Length > 0)
         {
             string[] measuredCases = cells.Select(cell => cell.Case).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
             foreach (string unexpected in measuredCases.Where(value => !declaredCases.Contains(value, StringComparer.OrdinalIgnoreCase)).OrderBy(value => value, StringComparer.Ordinal))
                 Add(issues, subject, "unexpected-case", $"Case '{unexpected}' ran but is not declared.");
-            foreach (string missing in declaredCases.Where(value => !measuredCases.Contains(value, StringComparer.OrdinalIgnoreCase)).OrderBy(value => value, StringComparer.Ordinal))
+            foreach (string missing in RequiredCaseNames(comparison, cells, declaredCases).Where(value => !measuredCases.Contains(value, StringComparer.OrdinalIgnoreCase)).OrderBy(value => value, StringComparer.Ordinal))
                 Add(issues, subject, "missing-case", $"Declared case '{missing}' did not run.");
         }
 
@@ -244,22 +259,23 @@ public sealed class BenchmarkDeclarationService
 
         foreach (BenchmarkComparisonAxis axis in comparison.Axes ?? Array.Empty<BenchmarkComparisonAxis>())
         {
-            string[] declaredValues = axis.Values ?? Array.Empty<string>();
+            string[] declaredValues = (axis.Values ?? Array.Empty<string>()).Select(value => (value ?? string.Empty).Trim()).ToArray();
             int withoutAxis = cells.Count(cell => !cell.Parameters.TryGetValue(axis.Name, out string? value) || value is null);
             if (withoutAxis > 0)
                 Add(issues, subject, "missing-axis-parameter", $"{withoutAxis} cell(s) do not record axis '{axis.Name}'.");
             string[] measured = cells
                 .Select(cell => cell.Parameters.TryGetValue(axis.Name, out string? value) ? value : null)
                 .Where(value => value is not null)
-                .Select(value => value!)
+                .Select(value => value!.Trim())
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToArray();
             foreach (string value in measured.Where(value => !declaredValues.Contains(value, StringComparer.OrdinalIgnoreCase)).OrderBy(value => value, StringComparer.Ordinal))
                 Add(issues, subject, "unexpected-axis-value", $"Axis '{axis.Name}' value '{value}' ran but is not declared.");
-            foreach (string value in declaredValues.Where(value => !measured.Contains(value, StringComparer.OrdinalIgnoreCase)).OrderBy(value => value, StringComparer.Ordinal))
+            foreach (string value in RequiredAxisValues(comparison, axis, cells, declaredValues).Where(value => !measured.Contains(value, StringComparer.OrdinalIgnoreCase)).OrderBy(value => value, StringComparer.Ordinal))
                 Add(issues, subject, "missing-axis-value", $"Declared axis '{axis.Name}' value '{value}' did not run.");
         }
 
+        CheckCombinations(issues, subject, comparison, cells);
         return issues.ToArray();
     }
 

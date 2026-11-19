@@ -1,0 +1,13 @@
+{{~ # powerforge/benchmarks/area: every comparison of one area ($1). On a page, $1 is an area file's content and ~}}
+{{~ # its comparisons are rendered here. In area pages, $1 is the area's index entry (id, groups, measured, ~}}
+{{~ # summaries) and comparisonsHtml holds the comparisons already rendered one at a time. ~}}
+{{~ a = $1 ~}}
+<div class="pf-bench-area" data-pf-bench-area="{{ a.id | html.escape }}">
+  {{~ if a.comparisonsHtml ~}}
+  {{ a.comparisonsHtml }}
+  {{~ else ~}}
+  {{~ for c in a.comparisons ~}}
+  {{ include "powerforge/benchmarks/comparison" c }}
+  {{~ end ~}}
+  {{~ end ~}}
+</div>

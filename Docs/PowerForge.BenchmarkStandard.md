@@ -73,8 +73,8 @@ nobody adds it to the list, and the comparison silently stops publishing. Instea
   categories, rows without a library are imported as they are and then reported as
   drift (`missing-library-identity`) by `Test-BenchmarkDeclaration` and at publication.
   Two methods of one library that resolve to the same cell fail the catalog update.
-- Generate the `cases`, `axes` and `libraries` of each comparison from the benchmark
-  code (for example a `--list-declarations` switch in the benchmark host, or a small
+- Generate the `cases`, `axes`, `libraries` and, where not every combination is
+  valid, `cells` of each comparison from the benchmark code (for example a `--list-declarations` switch in the benchmark host, or a small
   generator over the benchmark attributes) and check the generated file in.
 - In CI, regenerate and compare, then run `Test-BenchmarkDeclaration` on the
   document. Run it again with a short diagnostic result
@@ -235,9 +235,33 @@ treats them differently:
 | A declared case ran and crashed, timed out or failed validation | A cell with status `Failed` (or failed validation) and its reason | The cell is left out; the rest of the lane is published and marked `partial` |
 | A case, library or axis value ran but is not declared | Drift: `unexpected-case`, `unexpected-library`, `unexpected-axis-value` | The lane is not published until the declaration is regenerated |
 | A declared case or axis value has no cell at all | Drift: `missing-case`, `missing-axis-value`, `missing-axis-parameter` | The lane is not published |
+| A declared case × library × axis-value combination has no cell, although each of its parts ran elsewhere | Drift: `missing-combination` | The lane is not published |
+| A combination ran that the comparison's explicit `cells` do not list | Drift: `unexpected-combination` | The lane is not published |
 
 A runner that crashes must still write the failed cell. A case that leaves no cell
 behind is indistinguishable from one that was never run, so it is drift.
+
+Each dimension being covered is not enough. With libraries A and B and
+`Scale=Easy|Normal`, three rows can cover both libraries, both scales and the case
+while `B, Scale=Normal` never ran. A comparison must therefore declare its `cases`
+(or `cells`) to be published. Without them a run can't be checked for missing
+combinations, so the comparison is held back with the reason "Declare the
+comparison's cases (or cells) to publish it": its lanes are still recorded and
+shown, but never published, and this is not reported as drift. When a comparison
+declares its `cases`, PowerForge expects every combination of the declared cases and axis values for each library
+that ran, and reports each absent one as `missing-combination`. Libraries that did
+not run at all are not counted, because the run selects them from the library
+policy. When not every combination is valid (a library that has no `Scale=Huge`
+mode, a case that exists only for one library), list the valid cells explicitly in
+the comparison's `cells`; each names its `case` (always: a cell never stands for
+every case), optionally a `library` (absent means every library), and one value per
+axis in `parameters`. Case names and axis values can't be blank, so a missing
+value is never mistaken for an empty one. With `cells`, a combination
+that ran but is not listed is `unexpected-combination`. Only the cases and axis
+values of cells that apply to the libraries that ran are required, so a value only
+an absent library supports is not reported missing. A comparison that lists `cells`
+can leave out `cases`; the cells' case names are then its declared cases. Generate
+`cells` from the benchmark code like the rest of the declaration.
 
 
 - A crash, timeout or non-zero exit of one library's case is recorded as a failed
@@ -263,7 +287,7 @@ rejected for published lanes.
 | Clean source commit (`gitSha`, `gitWorktreeClean`) | required | lane |
 | OS, architecture, CPU, logical cores, runtime, SDK (for .NET frameworks) | required | lane |
 | Machine or user name | must be absent | lane |
-| Comparison declared, eligible, no drift, framework declared | required | lane |
+| Comparison declared with its cases or cells, eligible, no drift, framework declared | required | lane |
 | Package version and hash for every non-subject library, matching the pinned version | required | lane |
 | Policy at least as strict as the standard | required | lane |
 | Measured samples per cell | at least 10 | cell |
@@ -281,7 +305,7 @@ standard thresholds are the floor for public claims.
 | Requirement | Enforced by |
 | --- | --- |
 | Declaration fields, pinned versions, licence and reason, clean comparison ids | `Test-BenchmarkDeclaration` (lint), and every catalog update |
-| Declaration drift (unexpected or missing cases, libraries, axis values; failed cells are not drift) | `Test-BenchmarkDeclaration` with a result; publishing fails on drift |
+| Declaration drift (unexpected or missing cases, libraries, axis values and combinations; failed cells are not drift) | `Test-BenchmarkDeclaration` with a result; publishing fails on drift |
 | Library identity from categories or an explicit map | `Import-BenchmarkResult`; unmapped methods fail the import |
 | Runner block, statistic, warmups, samples, confidence interval | publish policy |
 | Output validation per library and case | publish policy |

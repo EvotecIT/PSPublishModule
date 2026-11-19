@@ -36,6 +36,13 @@ internal sealed class ProjectBuildConfiguration
     /// <summary>Build and sign NuGet packages, verify them, and upload packages and a manifest to a draft GitHub release without a NuGet key.</summary>
     public bool? StageNuget { get; set; }
     public bool? PublishGitHub { get; set; }
+
+    /// <summary>
+    /// Saves the version numbers this build wrote into tracked files to Git after every publish step succeeds:
+    /// <c>Off</c> (default), <c>Commit</c> or <c>Push</c>. Problems become a warning and never fail the build.
+    /// Ignored when the project build runs inside a release that already owns this step.
+    /// </summary>
+    public ReleaseVersionCommitMode? CommitVersionChanges { get; set; }
     public bool? CreateReleaseZip { get; set; }
     public bool UseGitHubPackages { get; set; }
     public string? GitHubPackagesOwner { get; set; }

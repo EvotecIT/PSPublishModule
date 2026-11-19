@@ -14,6 +14,9 @@ public sealed class BenchmarkComparisonCatalogView
 
     /// <summary>Every declared comparison, measured or not.</summary>
     public BenchmarkComparisonView[] Comparisons { get; set; } = Array.Empty<BenchmarkComparisonView>();
+
+    /// <summary>Areas with their comparison summaries, for pages that load an area's full data on demand.</summary>
+    public BenchmarkComparisonIndexView Index { get; set; } = new();
 }
 
 /// <summary>One declared comparison and its measured runs.</summary>
@@ -28,6 +31,21 @@ public sealed class BenchmarkComparisonView
     /// <summary>Human-readable title.</summary>
     public string Title { get; set; } = string.Empty;
 
+    /// <summary>Group within the area, such as read or write.</summary>
+    public string Group { get; set; } = string.Empty;
+
+    /// <summary>Declared target frameworks.</summary>
+    public string[] Frameworks { get; set; } = Array.Empty<string>();
+
+    /// <summary>Whether the comparison can be published.</summary>
+    public BenchmarkEligibilityView Eligibility { get; set; } = new();
+
+    /// <summary>Published coverage for every expected platform and framework.</summary>
+    public BenchmarkAvailabilityView[] Availability { get; set; } = Array.Empty<BenchmarkAvailabilityView>();
+
+    /// <summary>Declared libraries with their licence class and whether their results are shown.</summary>
+    public BenchmarkLibraryStateView[] LibraryStates { get; set; } = Array.Empty<BenchmarkLibraryStateView>();
+
     /// <summary>Declared libraries. The first is the subject the comparison is written for.</summary>
     public string[] Libraries { get; set; } = Array.Empty<string>();
 
@@ -37,7 +55,10 @@ public sealed class BenchmarkComparisonView
     /// <summary>True when at least one run has been published.</summary>
     public bool Measured { get; set; }
 
-    /// <summary>Identifier of the run to show first: full before quick, published before unpublished, newest first.</summary>
+    /// <summary>
+    /// Identifier of the run to show first: published before unpublished, then full before standard and diagnostic,
+    /// then Windows, then newest.
+    /// </summary>
     public string PreferredRunId { get; set; } = string.Empty;
 
     /// <summary>Measured runs, ordered by platform and run mode.</summary>
@@ -90,6 +111,36 @@ public sealed class BenchmarkRunView
 
     /// <summary>True for full runs.</summary>
     public bool IsFull { get; set; }
+
+    /// <summary>Evidence profile: diagnostic, standard or full.</summary>
+    public string Profile { get; set; } = string.Empty;
+
+    /// <summary>Profile display text, such as "Full BenchmarkDotNet run" or "Diagnostic run (not published)".</summary>
+    public string ProfileText { get; set; } = string.Empty;
+
+    /// <summary>Target framework of the run, or empty.</summary>
+    public string Framework { get; set; } = string.Empty;
+
+    /// <summary>Lane parameters such as affinity.</summary>
+    public Dictionary<string, string> LaneParameters { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>How the runner measured the run.</summary>
+    public BenchmarkRunnerView Runner { get; set; } = new();
+
+    /// <summary><c>complete</c> or <c>partial</c> for published runs; empty otherwise.</summary>
+    public string Completeness { get; set; } = string.Empty;
+
+    /// <summary>False when the run differs from the other published runs of the comparison in workload, fixture or environment.</summary>
+    public bool Comparable { get; set; } = true;
+
+    /// <summary>Why the run is not comparable with the other runs.</summary>
+    public string[] CompatibilityIssues { get; set; } = Array.Empty<string>();
+
+    /// <summary>Why an unpublished run could not be published.</summary>
+    public string[] PolicyIssues { get; set; } = Array.Empty<string>();
+
+    /// <summary>Libraries whose cells the run leaves out, such as those not published for licence reasons.</summary>
+    public BenchmarkNotPublishedView[] NotPublished { get; set; } = Array.Empty<BenchmarkNotPublishedView>();
 
     /// <summary>True when the run is published for public claims.</summary>
     public bool Published { get; set; }
@@ -233,6 +284,15 @@ public sealed class BenchmarkCellView
 
     /// <summary>Time relative to the fastest contender in this case.</summary>
     public BenchmarkRatioView Relative { get; set; } = new();
+
+    /// <summary>Accepted confidence interval of the time, when the evidence records one.</summary>
+    public BenchmarkIntervalView? Interval { get; set; }
+
+    /// <summary>
+    /// True when this cell is not the fastest but its confidence interval overlaps the fastest cell's, so the two
+    /// are even rather than ranked.
+    /// </summary>
+    public bool Even { get; set; }
 
     /// <summary>Bar width as a percentage of the slowest contender in this case.</summary>
     public double BarPercent { get; set; }

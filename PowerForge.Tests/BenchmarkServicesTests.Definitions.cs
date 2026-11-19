@@ -21,6 +21,7 @@ public sealed partial class BenchmarkServicesTests
             .. declarations.Comparisons,
             new BenchmarkComparisonDefinition { ComparisonId = "never-run", Area = "word", Title = "Word create", Subject = "OfficeIMO", Libraries = ["OfficeIMO", "Sep"], ExpectedPlatforms = ["windows", "macos"], Frameworks = ["net8.0", "net10.0"] }
         ];
+        DeclareCases(declarations, "comparison-a", initialResult);
         string destination = Path.Combine(root, "merged", "index.json");
         BenchmarkEvidenceCatalog merged = service.MergeFiles(destination, [source], expectedPlatforms: null, declarations: declarations);
         Assert.Equal(5, merged.SchemaVersion);

@@ -541,7 +541,10 @@
         "required": ["Name", "Catalog"],
         "properties": {
           "Name": { "type": "string", "description": "Data key the view is published under, such as benchmarks." },
-          "Catalog": { "type": "string", "description": "Path to the evidence catalog (index.json), relative to the site root." }
+          "Catalog": { "type": "string", "description": "Path to the evidence catalog (index.json), relative to the site root." },
+          "Output": { "type": "string", "description": "Optional directory inside the site output, such as data/benchmarks. The build writes index.json there plus one file per area for on-demand loading." },
+          "IndexOnly": { "type": "boolean", "description": "Give templates only the index (areas and comparison summaries); pages load full area data from Output. Requires Output." },
+          "AreaFragments": { "type": "boolean", "description": "Render each area with the benchmark components as a small page under _powerforge/fragments/benchmarks/<name>-<hash>/<area>.html, which the index component links to and loads when an area is opened." }
         }
       },
       "TemplateLimitsSpec": {

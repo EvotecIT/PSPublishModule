@@ -246,11 +246,68 @@ Its first-import p50 moved from **283.507 to 308.070 ms** and first-call p50
 from **925.687 to 1093.046 ms**. Its loaded-call p50 fell from **150.763 to
 23.120 ms**, a **6.52×** improvement. Archive's first-use medians rose in
 both runs, with a variable import gap. First use still compiles and stores
-the plans. The samples establish a repeated-call improvement and leave the
-cause of the cold timing differences open.
+the plans. The [first-use follow-up](#archive-first-use-follow-up) checks
+whether the cold differences repeat and where each phase spends time.
 
 These comparisons measure two Hybrid revisions on one host. The source
 comparison above describes the earlier revision.
+
+### Archive first-use follow-up
+
+Two fresh rounds of eight alternating pairs rebuilt Archive 1.2.6 from the
+same package and dependency lock. The [before inventory](../../Benchmarks/PowerShellCompilation/Corpus/Performance/2026-11-18-archive-before-artifacts.json)
+pins compiler `c60b615af`. The [after inventory](../../Benchmarks/PowerShellCompilation/Corpus/Performance/2026-11-18-archive-after-artifacts.json)
+pins `4befcda99`, which includes assignment and storage-plan reuse. The
+exports and emitted-unit counts match. All 192 calls passed the same packet
+probe on Windows x64, PowerShell 7.6.9 and .NET 10.0.14.
+
+| Untraced phase | Before p50 / p95 (ms) | After p50 / p95 (ms) |
+| --- | ---: | ---: |
+| First import | 253.592 / 346.660 | 239.134 / 375.919 |
+| First call | 888.439 / 1035.806 | 822.612 / 1158.126 |
+| Loaded call | 139.134 / 196.280 | 17.403 / 33.789 |
+
+The table pools the same-host [first](../../Benchmarks/PowerShellCompilation/Corpus/Performance/2026-11-18-archive-round-1.json)
+and [second](../../Benchmarks/PowerShellCompilation/Corpus/Performance/2026-11-18-archive-round-2.json)
+rounds. First-import p50 fell in one round and rose slightly in the other.
+First-call p50 fell in both, although the pooled first-use p95 values were
+higher. This follow-up did not reproduce the earlier median regression.
+Loaded-call p50 improved **about 8×** across 80 calls per revision.
+
+The [phase profiles](../../Benchmarks/PowerShellCompilation/Corpus/Performance/2026-11-18-archive-phase-profiles.json)
+capture three additional alternating pairs. EventPipe samples are restricted
+to the thread that marked each import, first call and warm call. Frame counts
+are inclusive and can overlap.
+
+- **Import:** Manifest or assembly loading appeared in 374 of 377 samples
+  before reuse and 579 of 588 after. No import sample included storage-plan
+  lookup or preparation.
+- **First call:** Hosted command creation and native plan compilation appeared
+  on both revisions. After reuse, 24 of 1302 samples included a storage lookup
+  without a plan preparation frame. An additional pair with verbose CLR JIT
+  events recorded nine storage-cache methods starting JIT compilation in the
+  first call and none during import.
+- **Loaded calls:** Assignment preparation appeared in 485 of 726 samples
+  before reuse and 8 of 137 after. These profiles and the untraced warm
+  timings agree on the reduction in repeated preparation.
+
+Cache setup adds first-call work. The profiles do not attribute the earlier
+cold latency increase to it, and the untraced medians do not establish a
+repeatable regression to fix. The timing records keep both first-use tails.
+
+To capture the phases, set `POWERFORGE_TIMING_MODULE` to the verified manifest,
+set `POWERFORGE_TIMING_PROBE` to the packet probe encoded as UTF-8 base64 and
+restrict `PSModulePath` to the host's built-in modules. Run the timing child from
+the same working directory for both artifacts.
+
+```powershell
+$child = (Resolve-Path ./Benchmarks/PowerShellCompilation/Corpus/Measure-ModuleChild.ps1).Path
+$pwsh = Join-Path $PSHOME $(if ($IsWindows) { 'pwsh.exe' } else { 'pwsh' })
+dotnet-trace collect --profile dotnet-common,dotnet-sampled-thread-time --providers PowerForge-ModuleTiming:0:4 -- $pwsh -NoProfile -NonInteractive -File $child -InvocationOnly -TracePhases
+```
+
+Filter the trace to the thread and interval between each `/Start` and `/Stop`
+event from `PowerForge-ModuleTiming`. Use the untraced runner for wall timings.
 
 ## Reproduce
 
