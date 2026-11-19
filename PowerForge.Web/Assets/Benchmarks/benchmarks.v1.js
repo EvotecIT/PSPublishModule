@@ -40,24 +40,66 @@
     select(section.getAttribute('data-pf-bench-default') || buttons[0].getAttribute('data-pf-bench-tab'), false);
   }
 
-  // The link to the area page is already relative to the current page, so its resolved href is the page to load.
   // Relative addresses in an area page are relative to that page, not to the page it is shown in. They are made
-  // absolute against the area page's address before its content moves; fragment links, absolute URLs and data: or
-  // mailto: addresses are left alone, and javascript: addresses are removed along with scripts.
-  var absolute = /^[a-z][a-z0-9+.-]*:/i;
+  // absolute against the area page's address before its content moves. Fragment links, absolute URLs and data: or
+  // mailto: addresses are kept as written; javascript: and vbscript: addresses are removed along with scripts.
+  var scheme = /^[a-z][a-z0-9+.-]*:/i;
+  var blocked = { 'javascript:': true, 'vbscript:': true };
 
+  // What the URL parser sees: tabs and line breaks removed, and C0 controls and spaces trimmed from both ends.
+  function clean(value) {
+    return value.replace(/[\t\n\r]/g, '').replace(/^[\u0000- ]+|[\u0000- ]+$/g, '');
+  }
+
+  // Returns the address to keep, or null when it must be removed.
   function resolveUrl(value, base) {
-    var trimmed = value.trim();
-    if (trimmed === '' || trimmed.charAt(0) === '#' || absolute.test(trimmed) || trimmed.indexOf('//') === 0) return value;
-    return new URL(trimmed, base).href;
+    var url = clean(value);
+    if (url === '' || url.charAt(0) === '#') return value;
+    var parsed;
+    try { parsed = new URL(url, base); } catch (error) { return value; }
+    if (blocked[parsed.protocol.toLowerCase()]) return null;
+    return scheme.test(url) || url.indexOf('//') === 0 ? value : parsed.href;
+  }
+
+  // Splits a srcset the way the HTML parser does: a URL runs to the next whitespace (a trailing comma ends the
+  // candidate), and its descriptors run to the next comma outside parentheses. URLs may therefore contain commas.
+  function parseSrcset(value) {
+    var candidates = [];
+    var i = 0;
+    while (i < value.length) {
+      while (i < value.length && /[\s,]/.test(value.charAt(i))) i++;
+      if (i >= value.length) break;
+      var start = i;
+      while (i < value.length && !/\s/.test(value.charAt(i))) i++;
+      var url = value.slice(start, i);
+      var descriptors = '';
+      if (/,$/.test(url)) {
+        url = url.replace(/,+$/, '');
+      } else {
+        var from = i;
+        var depth = 0;
+        while (i < value.length) {
+          var character = value.charAt(i);
+          if (character === '(') depth++;
+          else if (character === ')' && depth > 0) depth--;
+          else if (character === ',' && depth === 0) break;
+          i++;
+        }
+        descriptors = value.slice(from, i).trim();
+        i++;
+      }
+      if (url) candidates.push({ url: url, descriptors: descriptors });
+    }
+    return candidates;
   }
 
   function resolveSrcset(value, base) {
-    return value.split(',').map(function (candidate) {
-      var parts = candidate.trim().split(/\s+/);
-      if (parts[0]) parts[0] = resolveUrl(parts[0], base);
-      return parts.join(' ');
-    }).join(', ');
+    var kept = [];
+    parseSrcset(value).forEach(function (candidate) {
+      var url = resolveUrl(candidate.url, base);
+      if (url !== null) kept.push(candidate.descriptors ? url + ' ' + candidate.descriptors : url);
+    });
+    return kept.join(', ');
   }
 
   function rebase(root, base) {
@@ -69,14 +111,16 @@
       ['href', 'src'].forEach(function (name) {
         var value = element.getAttribute(name);
         if (value === null) return;
-        if (/^\s*javascript:/i.test(value)) element.removeAttribute(name);
-        else element.setAttribute(name, resolveUrl(value, base));
+        var url = resolveUrl(value, base);
+        if (url === null) element.removeAttribute(name);
+        else element.setAttribute(name, url);
       });
       var srcset = element.getAttribute('srcset');
       if (srcset !== null) element.setAttribute('srcset', resolveSrcset(srcset, base));
     }
   }
 
+  // The link to the area page is already relative to the current page, so its resolved href is the page to load.
   function initArea(details) {
     if (details.hasAttribute('data-pf-bench-ready')) return;
     details.setAttribute('data-pf-bench-ready', '');
