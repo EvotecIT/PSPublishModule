@@ -98,6 +98,7 @@ jobs:
       actions: read
     outputs:
       source_ref: ${{ steps.resolve.outputs.source_ref }}
+      review_expires_at: ${{ steps.resolve.outputs.review_expires_at }}
       capture_workflow_ref: ${{ steps.resolve.outputs.capture_workflow_ref }}
     steps:
       - name: Resolve exact source from reviewed capture
@@ -148,24 +149,27 @@ jobs:
 
           artifact_prefix='powerforge-apple-screenshots-'
           provenance_prefix='powerforge-apple-screenshot-provenance-'
-          artifact_names=()
-          while IFS= read -r artifact_name; do
-            artifact_names+=("$artifact_name")
-          done < <(
-            gh api --paginate \
-              "repos/${GITHUB_REPOSITORY}/actions/runs/${CAPTURE_RUN_ID}/artifacts" \
-              --jq '.artifacts[] | select(.expired == false) | .name'
-          )
+          artifact_rows="$(gh api --paginate \
+            "repos/${GITHUB_REPOSITORY}/actions/runs/${CAPTURE_RUN_ID}/artifacts" \
+            --jq '.artifacts[] | select(.expired == false)
+              | select(.name | test("^powerforge-apple-(screenshots|screenshot-provenance)-[0-9A-Fa-f]{40}$"))
+              | [.name, (.created_at | fromdateiso8601)] | @tsv')"
           source_refs=()
           provenance_refs=()
-          for artifact_name in "${artifact_names[@]}"; do
+          review_expires_at=0
+          while IFS=$'\t' read -r artifact_name created_at; do
+            [[ -n "$artifact_name" ]] || continue
+            expires_at=$((created_at + 7 * 24 * 60 * 60))
+            if (( review_expires_at == 0 || expires_at < review_expires_at )); then
+              review_expires_at="$expires_at"
+            fi
             if [[ "$artifact_name" =~ ^${artifact_prefix}([0-9A-Fa-f]{40})$ ]]; then
               source_refs+=("$(printf '%s' "${BASH_REMATCH[1]}" | tr '[:upper:]' '[:lower:]')")
             fi
             if [[ "$artifact_name" =~ ^${provenance_prefix}([0-9A-Fa-f]{40})$ ]]; then
               provenance_refs+=("$(printf '%s' "${BASH_REMATCH[1]}" | tr '[:upper:]' '[:lower:]')")
             fi
-          done
+          done <<< "$artifact_rows"
           [[ ${#source_refs[@]} -eq 1 ]] || {
             echo "Capture run ${CAPTURE_RUN_ID} must contain exactly one unexpired ${artifact_prefix}<sha> artifact; found ${#source_refs[@]}." >&2
             exit 1
@@ -174,6 +178,11 @@ jobs:
             echo "Capture run ${CAPTURE_RUN_ID} must contain exactly one matching ${provenance_prefix}<sha> artifact." >&2
             exit 1
           }
+
+          if (( review_expires_at <= $(date +%s) )); then
+            echo 'The seven-day screenshot review window expired. Create fresh captures and approve them again.' >&2
+            exit 1
+          fi
 
           resolved_source_ref="${source_refs[0]}"
           provenance_root="$RUNNER_TEMP/powerforge-apple-screenshot-provenance"
@@ -215,6 +224,7 @@ jobs:
           fi
 
           echo "source_ref=$resolved_source_ref" >> "$GITHUB_OUTPUT"
+          echo "review_expires_at=$review_expires_at" >> "$GITHUB_OUTPUT"
 
   approve-and-sync:
     needs: resolve-source
@@ -432,6 +442,18 @@ jobs:
             if ($LASTEXITCODE -ne 0) { throw "Screenshot approval manifest failed for $config." }
           }
 
+      - name: Require fresh review evidence
+        id: review-freshness
+        shell: pwsh
+        env:
+          REVIEW_EXPIRES_AT: ${{ needs.resolve-source.outputs.review_expires_at }}
+        run: |
+          $expiresAt = 0L
+          if (-not [long]::TryParse($env:REVIEW_EXPIRES_AT, [ref] $expiresAt) -or
+              $expiresAt -le [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()) {
+            throw 'The seven-day screenshot review window expired. Create fresh captures and approve them again.'
+          }
+
       - name: Sync manually approved screenshots to App Store Connect
         uses: ./powerforge-shared/.github/actions/apple-release
         with:
@@ -447,7 +469,7 @@ jobs:
           private-key: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY || secrets.caller_app_store_connect_private_key }}
 
       - name: Retain approved captures and manifests
-        if: always()
+        if: ${{ always() && steps.review-freshness.outcome == 'success' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: powerforge-apple-screenshots-approved-${{ needs.resolve-source.outputs.source_ref }}

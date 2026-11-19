@@ -71,6 +71,7 @@ jobs:
       contents: read
     outputs:
       plan_sha256: ${{ steps.plan.outputs.plan-sha256 }}
+      review_expires_at: ${{ steps.review-window.outputs.expires_at }}
     steps:
       - name: Validate the protected action
         shell: pwsh
@@ -143,6 +144,13 @@ jobs:
           key-id: ${{ secrets.APP_STORE_CONNECT_KEY_ID || secrets.caller_app_store_connect_key_id }}
           private-key: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY || secrets.caller_app_store_connect_private_key }}
 
+      - name: Start the seven-day review window
+        id: review-window
+        shell: pwsh
+        run: |
+          $expiresAt = [DateTimeOffset]::UtcNow.AddDays(7).ToUnixTimeSeconds()
+          "expires_at=$expiresAt" >> $env:GITHUB_OUTPUT
+
       - name: Upload compact approval plan receipt
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -150,7 +158,7 @@ jobs:
           name: powerforge-apple-${{ inputs.action }}-${{ inputs.source_ref }}-plan
           path: ${{ steps.plan.outputs.receipt-path }}
           if-no-files-found: error
-          retention-days: 90
+          retention-days: 7
 
   approve:
     needs: plan
@@ -244,6 +252,18 @@ jobs:
             throw 'Apple state or release inputs changed after review. Inspect the new plan and request a new environment approval.'
           }
 
+      - name: Require fresh review evidence
+        id: review-freshness
+        shell: pwsh
+        env:
+          REVIEW_EXPIRES_AT: ${{ needs.plan.outputs.review_expires_at }}
+        run: |
+          $expiresAt = 0L
+          if (-not [long]::TryParse($env:REVIEW_EXPIRES_AT, [ref] $expiresAt) -or
+              $expiresAt -le [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()) {
+            throw 'The seven-day Apple plan review window expired. Start a new run and approve the fresh plan.'
+          }
+
       - name: Execute the approved transition
         id: approval
         uses: ./powerforge-shared/.github/actions/apple-release
@@ -261,7 +281,7 @@ jobs:
           private-key: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY || secrets.caller_app_store_connect_private_key }}
 
       - name: Upload compact approved replan receipt
-        if: always()
+        if: ${{ always() && steps.review-freshness.outcome == 'success' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: powerforge-apple-${{ inputs.action }}-${{ inputs.source_ref }}-approved-replan
@@ -270,7 +290,7 @@ jobs:
           retention-days: 90
 
       - name: Upload compact approval action receipt
-        if: always()
+        if: ${{ always() && steps.review-freshness.outcome == 'success' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: powerforge-apple-${{ inputs.action }}-${{ inputs.source_ref }}-actual
