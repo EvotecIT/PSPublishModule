@@ -52,6 +52,22 @@ public sealed partial class DatabaseBackupContracts
     }
 
     [Fact]
+    public async Task CancellingAsTheLastCheckFinishesIsNotReportedAsSuccess()
+    {
+        var (options, selected, captureHash) = await SelectedSqliteSetAsync();
+        using var cancellation = new CancellationTokenSource();
+        // After the last check's own cancellation checks and before the drill records its result.
+        var progress = new RecordingProgress { OnFinish = key => { if (key == "check:sample") cancellation.Cancel(); } };
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => new RestoreDrill().VerifyAsync(options, selected, captureHash, progress, null, cancellation.Token));
+
+        using var state = JsonDocument.Parse(File.ReadAllText(Path.Combine(_root, "restore-drill.json")));
+        Assert.Equal("cancelled", state.RootElement.GetProperty("status").GetString());
+        Assert.False(state.RootElement.GetProperty("healthy").GetBoolean());
+        Assert.False(File.Exists(Path.Combine(_root, "restore-drill-success.json")));
+    }
+
+    [Fact]
     public void TextProgressShowsAmountTimeLeftAndKeepsQuietStepsVisible()
     {
         var now = TimeSpan.Zero;
@@ -121,10 +137,11 @@ public sealed partial class DatabaseBackupContracts
     {
         private readonly ConcurrentQueue<(string Kind, string Key, long Done, bool Succeeded, string? Detail)> _events = new();
         internal Action<string>? OnStart { get; init; }
+        internal Action<string>? OnFinish { get; init; }
         internal List<(string Kind, string Key, long Done, bool Succeeded, string? Detail)> Events => _events.ToList();
         public void Plan(string key, string label, long total, RestoreDrillUnit unit) => _events.Enqueue(("plan", key, total, false, label));
         public void Start(string key, string? detail = null) { _events.Enqueue(("start", key, 0, false, detail)); OnStart?.Invoke(key); }
         public void Report(string key, long done, string? detail = null) => _events.Enqueue(("report", key, done, false, detail));
-        public void Finish(string key, bool succeeded, string? detail = null) => _events.Enqueue(("finish", key, 0, succeeded, detail));
+        public void Finish(string key, bool succeeded, string? detail = null) { _events.Enqueue(("finish", key, 0, succeeded, detail)); OnFinish?.Invoke(key); }
     }
 }

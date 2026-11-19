@@ -136,6 +136,9 @@ public sealed class RestoreDrill
             }
             lock (stateGate)
             {
+                // A cancellation recorded after the last check (during its cleanup, for example) wins over success; the
+                // cancellation callback holds this lock, so one of the two outcomes is recorded, never both.
+                cancellationToken.ThrowIfCancellationRequested();
                 state.Stamp = manifest.Stamp;
                 state.DatabaseIds = manifest.Databases.Select(d => d.Id).ToArray();
                 state.Status = "success";
