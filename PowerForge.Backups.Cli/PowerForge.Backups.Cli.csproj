@@ -8,5 +8,6 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../PowerForge.Backups/PowerForge.Backups.csproj" />
+    <PackageReference Include="ConsoleMonster" Version="3.0.0" />
   </ItemGroup>
 </Project>
