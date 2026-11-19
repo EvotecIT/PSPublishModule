@@ -27,8 +27,8 @@
     <PackageReference Include="System.Reflection.MetadataLoadContext" Version="10.0.15" />
     <PackageReference Include="ConsoleMonster.Markdown" Version="3.0.0" />
     <PackageReference Include="ConsoleMonster.PowerShell.Display" Version="3.0.0" />
-    <PackageReference Include="HtmlForgeX" Version="2.3.0" />
-    <PackageReference Include="HtmlForgeX.Markdown" Version="2.3.0" />
+    <PackageReference Include="HtmlForgeX" Version="2.10.0" />
+    <PackageReference Include="HtmlForgeX.Markdown" Version="2.10.0" />
     <PackageReference Include="OfficeIMO.Markdown" Version="3.6.2" />
   </ItemGroup>
 
