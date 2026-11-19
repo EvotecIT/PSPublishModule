@@ -18,12 +18,14 @@ internal static class Safety
         }
     }
 
+    /// <summary>How paths compare on this platform: Windows ignores case, Linux and macOS work roots may differ only by case.</summary>
+    internal static StringComparison PathComparison => OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+
     internal static bool Overlaps(string left, string right)
     {
         var a = Path.GetFullPath(left).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
         var b = Path.GetFullPath(right).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
-        var comparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
-        return a.StartsWith(b, comparison) || b.StartsWith(a, comparison);
+        return a.StartsWith(b, PathComparison) || b.StartsWith(a, PathComparison);
     }
 
     internal static void DemandPhysical(string path)
@@ -100,8 +102,7 @@ internal static class Safety
     {
         DemandPhysical(root);
         DemandPhysical(run);
-        if (!string.Equals(Path.GetDirectoryName(run), Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar),
-                OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal) ||
+        if (!string.Equals(Path.GetDirectoryName(run), Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar), PathComparison) ||
             !File.Exists(Path.Combine(run, ".powerforge-backup-run")) ||
             File.ReadAllText(Path.Combine(run, ".powerforge-backup-run")).Trim() != "powerforge-database-backup-v1")
             throw new IOException("Refusing to remove an unmarked backup run.");

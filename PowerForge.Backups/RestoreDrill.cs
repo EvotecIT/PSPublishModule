@@ -58,7 +58,8 @@ public sealed class RestoreDrill
             runLock = new FileStream(Path.Combine(options.WorkRoot, ".run.lock"), FileMode.OpenOrCreate, FileAccess.Write, FileShare.None);
             Safety.DemandPhysical(selectedFolder);
             report.Plan("capture", "Check the capture record", 0, RestoreDrillUnit.None);
-            steps.Start("capture", "capture.json and its pinned SHA-256");
+            // capture.json is small and names every database, so it is read before any step starts: the whole plan is
+            // reported first, as IRestoreDrillProgress promises.
             var capturePath = Path.Combine(selectedFolder, "capture.json");
             if (!Regex.IsMatch(expectedCaptureSha256, "\\A[a-f0-9]{64}\\z") || await Safety.HashAsync(capturePath, token) != expectedCaptureSha256)
                 throw new InvalidDataException("Selected native NAS capture digest differs.");
@@ -83,6 +84,7 @@ public sealed class RestoreDrill
                 }
                 else report.Plan("check:" + id, "Check " + id + " (SQLite integrity)", 0, RestoreDrillUnit.None);
             }
+            steps.Start("capture", "the recovery files capture.json lists");
             foreach (var file in header.Files.Where(f => !IsDatabaseEntry(f)))
                 await DemandFileAsync(selectedFolder, file, null, token);
             steps.Finish("capture");
@@ -125,7 +127,7 @@ public sealed class RestoreDrill
                 }
                 else
                 {
-                    Safety.DemandFreeSpace(options.WorkRoot, options.MinimumFreeBytes, captured.SizeBytes);
+                    await DemandCopySpaceAsync(options, source, captured.SizeBytes, log, token);
                     var copy = Path.Combine(run, expectedEntry);
                     var copyKey = "copy:" + captured.Id;
                     steps.Start(copyKey);
@@ -147,9 +149,11 @@ public sealed class RestoreDrill
         }
         catch (Exception error)
         {
-            var cancelled = cancellationToken.IsCancellationRequested;
+            bool cancelled;
             lock (stateGate)
             {
+                // Read under the lock the cancellation callback takes, so a cancellation it recorded is never overwritten.
+                cancelled = cancellationToken.IsCancellationRequested || state.Status == "cancelled";
                 state.Status = cancelled ? "cancelled" : "failed";
                 state.ErrorType = cancelled ? "CancelledByUser" : error.GetType().Name;
                 state.CompletedAtUtc = DateTimeOffset.UtcNow;
@@ -201,6 +205,27 @@ public sealed class RestoreDrill
         return builder.ConnectionString;
     }
 
+    // Space for the backup copy is checked before SQL Server is contacted. When it is short, a database left by a stopped drill may
+    // hold it: remove those (only this drill's own) and check once more. When SQL Server cannot be reached, the shortage stands.
+    private static async Task DemandCopySpaceAsync(BackupOptions options, DatabaseSource source, long requiredBytes, Action<string> log, CancellationToken token)
+    {
+        try
+        {
+            Safety.DemandFreeSpace(options.WorkRoot, options.MinimumFreeBytes, requiredBytes);
+            return;
+        }
+        catch (IOException shortage)
+        {
+            try { await RemoveLeftoverRestoresAsync(MasterConnection(source.ConnectionString), options.WorkRoot, log, token); }
+            catch (Exception error) when (error is not OperationCanceledException)
+            {
+                log("Leftover restores could not be checked: " + error.GetType().Name);
+                System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(shortage).Throw();
+            }
+        }
+        Safety.DemandFreeSpace(options.WorkRoot, options.MinimumFreeBytes, requiredBytes);
+    }
+
     // A drill stopped while SQL Server held its disposable database (a closed console allows only seconds) leaves that
     // database behind. Remove only databases with the drill's generated name whose every file is in one of its run folders.
     private static async Task RemoveLeftoverRestoresAsync(string master, string workRoot, Action<string> log, CancellationToken token)
@@ -215,7 +240,7 @@ public sealed class RestoreDrill
             var owned = Regex.IsMatch(database.Key, "\\APowerForgeRestore_[0-9a-f]{32}\\z") && database.All(f =>
             {
                 var full = Path.GetFullPath(f.Path);
-                if (!full.StartsWith(root, StringComparison.OrdinalIgnoreCase)) return false;
+                if (!full.StartsWith(root, Safety.PathComparison)) return false;
                 var folder = full.Substring(root.Length).Split(Path.DirectorySeparatorChar)[0];
                 return folder.StartsWith("restore-", StringComparison.Ordinal) && Path.GetFileName(full).StartsWith(database.Key + "-", StringComparison.Ordinal);
             });
@@ -262,13 +287,14 @@ public sealed class RestoreDrill
         var expected = captured.SqlIdentity ?? throw new InvalidDataException("SQL backup identity absent.");
         using var client = new SqlServer();
         var files = await client.ReadDiskBackupFileListAsync(source.ConnectionString, path, 7200, token);
+        var master = MasterConnection(source.ConnectionString);
+        // SQL Server is in use by now: remove databases left by a stopped drill before they count against this restore.
+        await RemoveLeftoverRestoresAsync(master, Path.GetDirectoryName(run)!, log, token);
         Safety.DemandFreeSpace(run, minimumFreeBytes, files.Aggregate(0L, (total, file) => checked(total + file.SizeBytes)));
         var target = "PowerForgeRestore_" + Guid.NewGuid().ToString("N");
         var moves = files.Select((f, index) => (f.LogicalName, Path: Path.Combine(run, target + "-" + index + (f.FileType == "L" ? ".ldf" : ".mdf"))))
             .ToDictionary(f => f.LogicalName, f => f.Path);
-        var master = MasterConnection(source.ConnectionString);
         var builder = new DbConnectionStringBuilder { ConnectionString = master };
-        await RemoveLeftoverRestoresAsync(master, Path.GetDirectoryName(run)!, log, token);
         try
         {
             var restoreKey = "restore:" + captured.Id;
@@ -296,7 +322,7 @@ public sealed class RestoreDrill
                 new Dictionary<string, object?> { ["@name"] = target }, cancellationToken: CancellationToken.None);
             if (paths.Count > 0)
             {
-                if (paths.Any(p => !moves.Values.Contains(p, StringComparer.OrdinalIgnoreCase)))
+                if (paths.Any(p => !moves.Values.Any(owned => string.Equals(owned, p, Safety.PathComparison))))
                     throw new IOException("Disposable SQL database ownership could not be established; cleanup held.");
                 await client.ExecuteNonQueryAsync(master, "DROP DATABASE [" + target + "]", cancellationToken: CancellationToken.None);
             }

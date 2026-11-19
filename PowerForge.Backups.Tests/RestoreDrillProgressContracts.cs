@@ -16,8 +16,8 @@ public sealed partial class DatabaseBackupContracts
 
         var planned = progress.Events.Where(e => e.Kind == "plan").Select(e => e.Key).ToArray();
         Assert.Equal(["capture", "checksum:sample.sqlite", "check:sample"], planned);
-        var firstDatabaseStart = progress.Events.FindIndex(e => e.Kind == "start" && e.Key != "capture");
-        Assert.True(progress.Events.FindLastIndex(e => e.Kind == "plan") < firstDatabaseStart, "Database steps were planned after their work began.");
+        var firstStart = progress.Events.FindIndex(e => e.Kind == "start");
+        Assert.True(progress.Events.FindLastIndex(e => e.Kind == "plan") < firstStart, "Steps were planned after the first step began.");
         Assert.All(planned, key => Assert.Contains(progress.Events, e => e.Kind == "finish" && e.Key == key && e.Succeeded));
         var checksum = progress.Events.Last(e => e.Kind == "report" && e.Key == "checksum:sample.sqlite");
         Assert.Equal(new FileInfo(Path.Combine(selected, "sample.sqlite")).Length, checksum.Done);
