@@ -541,7 +541,7 @@ public sealed partial class AppleReleaseWorkflowTests
         Assert.Contains("source-commit: ${{ inputs.source_ref }}", workflow, StringComparison.Ordinal);
         Assert.Contains("target: ${{ inputs.target }}", workflow, StringComparison.Ordinal);
         Assert.Contains("confirm: \"true\"", workflow, StringComparison.Ordinal);
-        Assert.Contains("retention-days: 90", workflow, StringComparison.Ordinal);
+        Assert.Matches(@"(?m)^[ \t]+retention-days: 7[ \t]*\r?$", workflow);
     }
 
     [Fact]
