@@ -28,9 +28,20 @@ public sealed partial class DatabaseBackupContracts
     {
         var (options, selected, captureHash) = await SelectedSqliteSetAsync();
         using var cancellation = new CancellationTokenSource();
-        var progress = new RecordingProgress { OnStart = key => { if (key.StartsWith("check:", StringComparison.Ordinal)) cancellation.Cancel(); } };
+        string? recordedOnCancel = null;
+        var progress = new RecordingProgress
+        {
+            OnStart = key =>
+            {
+                if (!key.StartsWith("check:", StringComparison.Ordinal)) return;
+                cancellation.Cancel();
+                // A closing console allows only seconds: the record must already say cancelled before any cleanup runs.
+                recordedOnCancel = JsonDocument.Parse(File.ReadAllText(Path.Combine(_root, "restore-drill.json"))).RootElement.GetProperty("status").GetString();
+            }
+        };
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => new RestoreDrill().VerifyAsync(options, selected, captureHash, progress, null, cancellation.Token));
 
+        Assert.Equal("cancelled", recordedOnCancel);
         using var state = JsonDocument.Parse(File.ReadAllText(Path.Combine(_root, "restore-drill.json")));
         Assert.Equal("cancelled", state.RootElement.GetProperty("status").GetString());
         Assert.Equal("CancelledByUser", state.RootElement.GetProperty("errorType").GetString());
@@ -69,6 +80,21 @@ public sealed partial class DatabaseBackupContracts
             "Working  Check big (SQLite integrity): 15s elapsed",
             "Failed   Check big (SQLite integrity) in 15s (cancelled by the user)"
         ], lines);
+    }
+
+    [Fact]
+    public void TextProgressStopsWritingWhenItsOutputFails()
+    {
+        var text = new RestoreDrillTextProgress(new FailingWriter(), () => TimeSpan.Zero);
+        text.Plan("check:big", "Check big", 0, RestoreDrillUnit.None);
+        text.Start("check:big");
+        text.Heartbeat();
+        text.Finish("check:big", true);
+    }
+
+    private sealed class FailingWriter : StringWriter
+    {
+        public override void WriteLine(string? value) => throw new IOException("There is not enough space on the disk.");
     }
 
     private async Task<(BackupOptions Options, string Selected, string CaptureHash)> SelectedSqliteSetAsync()

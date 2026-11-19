@@ -14,6 +14,7 @@ public sealed class RestoreDrillTextProgress : IRestoreDrillProgress
     private readonly TextWriter _writer;
     private readonly Func<TimeSpan> _clock;
     private readonly Dictionary<string, Step> _steps = new(StringComparer.Ordinal);
+    private bool _broken;
 
     /// <param name="writer">Where lines go.</param>
     /// <param name="clock">The elapsed-time source, or null for real time.</param>
@@ -117,10 +118,17 @@ public sealed class RestoreDrillTextProgress : IRestoreDrillProgress
 
     private static string Suffix(string? detail) => string.IsNullOrWhiteSpace(detail) ? string.Empty : " (" + detail + ")";
 
+    // Progress output never decides the drill's outcome: once the log can't be written (a full disk, a closed pipe),
+    // further lines are dropped and the drill carries on to record its result.
     private void Write(string line)
     {
-        _writer.WriteLine(DateTime.Now.ToString("HH:mm:ss", CultureInfo.InvariantCulture) + "  " + line);
-        _writer.Flush();
+        if (_broken) return;
+        try
+        {
+            _writer.WriteLine(DateTime.Now.ToString("HH:mm:ss", CultureInfo.InvariantCulture) + "  " + line);
+            _writer.Flush();
+        }
+        catch (Exception error) when (error is IOException or ObjectDisposedException or UnauthorizedAccessException) { _broken = true; }
     }
 
     private sealed class Step(string label, long total, RestoreDrillUnit unit)

@@ -40,7 +40,7 @@ internal static class RestoreDrillCommand
 
         string outcome;
         string reason = string.Empty;
-        using var heartbeat = text is null ? null : new Timer(_ => text.Heartbeat(), null, TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5));
+        using var heartbeat = text is null ? null : new Timer(_ => { try { text.Heartbeat(); } catch (Exception) { /* output never stops the drill */ } }, null, TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5));
         try
         {
             Task Drill() => new RestoreDrill().VerifyAsync(options, folder, captureSha256, progress, null, cancellation.Token);

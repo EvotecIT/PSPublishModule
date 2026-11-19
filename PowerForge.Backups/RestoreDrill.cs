@@ -32,10 +32,29 @@ public sealed class RestoreDrill
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(TimeSpan.FromMinutes(options.TimeoutMinutes));
         var token = timeout.Token;
+        var stateGate = new object();
+        void Record()
+        {
+            lock (stateGate)
+                try { Safety.WriteJson(statusPath, state); } catch (IOException) { } catch (UnauthorizedAccessException) { }
+        }
+        // A closing console allows only a few seconds, and SQL Server cleanup can take longer: record the cancellation
+        // the moment it is requested, on the cancelling thread, before any cleanup starts.
+        using var recordCancellation = cancellationToken.Register(() =>
+        {
+            lock (stateGate)
+            {
+                if (state.Status != "running") return;
+                state.Status = "cancelled";
+                state.ErrorType = "CancelledByUser";
+                state.CompletedAtUtc = DateTimeOffset.UtcNow;
+            }
+            Record();
+        });
         try
         {
             Directory.CreateDirectory(options.WorkRoot);
-            Safety.WriteJson(statusPath, state);
+            lock (stateGate) Safety.WriteJson(statusPath, state);
             runLock = new FileStream(Path.Combine(options.WorkRoot, ".run.lock"), FileMode.OpenOrCreate, FileAccess.Write, FileShare.None);
             Safety.DemandPhysical(selectedFolder);
             report.Plan("capture", "Check the capture record", 0, RestoreDrillUnit.None);
@@ -112,22 +131,28 @@ public sealed class RestoreDrill
                     steps.Start(copyKey);
                     await Safety.CopyAsync(path, copy, done => report.Report(copyKey, done), token);
                     steps.Finish(copyKey);
-                    await VerifySqlServerAsync(source, captured, copy, run, options.MinimumFreeBytes, steps, token);
+                    await VerifySqlServerAsync(source, captured, copy, run, options.MinimumFreeBytes, steps, log, token);
                 }
             }
-            state.Stamp = manifest.Stamp;
-            state.DatabaseIds = manifest.Databases.Select(d => d.Id).ToArray();
-            state.Status = "success";
+            lock (stateGate)
+            {
+                state.Stamp = manifest.Stamp;
+                state.DatabaseIds = manifest.Databases.Select(d => d.Id).ToArray();
+                state.Status = "success";
+                state.ErrorType = null;
+            }
         }
         catch (Exception error)
         {
             var cancelled = cancellationToken.IsCancellationRequested;
-            state.Status = cancelled ? "cancelled" : "failed";
-            state.ErrorType = cancelled ? "CancelledByUser" : error.GetType().Name;
+            lock (stateGate)
+            {
+                state.Status = cancelled ? "cancelled" : "failed";
+                state.ErrorType = cancelled ? "CancelledByUser" : error.GetType().Name;
+                state.CompletedAtUtc = DateTimeOffset.UtcNow;
+            }
             steps.FailRunning(cancelled ? "cancelled by the user" : error.GetType().Name);
-            // Record the outcome before cleanup: a console being closed allows only a few seconds.
-            state.CompletedAtUtc = DateTimeOffset.UtcNow;
-            try { Safety.WriteJson(statusPath, state); } catch (IOException) { } catch (UnauthorizedAccessException) { }
+            Record();
             throw;
         }
         finally
@@ -139,9 +164,12 @@ public sealed class RestoreDrill
                     try { state.CleanupLogicalBytes = Safety.RemoveOwnedRun(options.WorkRoot, run); }
                     catch (Exception error) { state.CleanupErrorType = error.GetType().Name; if (state.Status != "cancelled") state.Status = "failed"; }
                 }
-                state.Healthy = state.Status == "success";
-                state.CompletedAtUtc = DateTimeOffset.UtcNow;
-                Safety.WriteJson(statusPath, state);
+                lock (stateGate)
+                {
+                    state.Healthy = state.Status == "success";
+                    state.CompletedAtUtc = DateTimeOffset.UtcNow;
+                    Safety.WriteJson(statusPath, state);
+                }
                 if (state.Healthy) Safety.WriteJson(Path.Combine(Path.GetDirectoryName(statusPath)!, "restore-drill-success.json"), state);
             }
             finally { runLock?.Dispose(); }
@@ -161,9 +189,43 @@ public sealed class RestoreDrill
             throw new InvalidDataException("Selected native backup file digest differs.");
     }
 
-    // SQL Server reports RESTORE and DBCC CHECKDB progress in sys.dm_exec_requests; polled on its own connection. Without
-    // VIEW SERVER STATE the step still shows its running time.
-    private static async Task TrackServerPercentAsync(string master, string command, string key, IRestoreDrillProgress progress,
+    private static string MasterConnection(string connectionString)
+    {
+        var builder = new DbConnectionStringBuilder { ConnectionString = connectionString };
+        builder.Remove("Database"); builder.Remove("Initial Catalog");
+        builder["Initial Catalog"] = "master";
+        builder["Pooling"] = false;
+        return builder.ConnectionString;
+    }
+
+    // A drill stopped while SQL Server held its disposable database (a closed console allows only seconds) leaves that
+    // database behind. Remove only databases with the drill's generated name whose every file is in one of its run folders.
+    private static async Task RemoveLeftoverRestoresAsync(string master, string workRoot, Action<string> log, CancellationToken token)
+    {
+        using var client = new SqlServer();
+        var files = await client.QueryAsListAsync(master,
+            "SELECT d.name, f.physical_name FROM sys.databases d JOIN sys.master_files f ON f.database_id = d.database_id WHERE d.name LIKE 'PowerForgeRestore[_]%'",
+            row => (Name: row.GetString(0), Path: row.GetString(1)), cancellationToken: token);
+        var root = Path.GetFullPath(workRoot).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        foreach (var database in files.GroupBy(f => f.Name, StringComparer.OrdinalIgnoreCase))
+        {
+            var owned = Regex.IsMatch(database.Key, "\\APowerForgeRestore_[0-9a-f]{32}\\z") && database.All(f =>
+            {
+                var full = Path.GetFullPath(f.Path);
+                if (!full.StartsWith(root, StringComparison.OrdinalIgnoreCase)) return false;
+                var folder = full.Substring(root.Length).Split(Path.DirectorySeparatorChar)[0];
+                return folder.StartsWith("restore-", StringComparison.Ordinal) && Path.GetFileName(full).StartsWith(database.Key + "-", StringComparison.Ordinal);
+            });
+            if (!owned) { log("Leaving " + database.Key + ": its files are not all in a drill run folder."); continue; }
+            await client.ExecuteNonQueryAsync(master, "DROP DATABASE [" + database.Key + "]", cancellationToken: token);
+            log("Removed " + database.Key + ", left by an earlier drill that was stopped.");
+        }
+    }
+
+    // SQL Server reports RESTORE and DBCC CHECKDB progress in sys.dm_exec_requests; polled on its own connection and
+    // matched to this drill's statement by its generated database name. Without VIEW SERVER STATE the step still shows
+    // its running time.
+    private static async Task TrackServerPercentAsync(string master, string command, string target, string key, IRestoreDrillProgress progress,
         Func<Task> work, CancellationToken token)
     {
         using var stop = CancellationTokenSource.CreateLinkedTokenSource(token);
@@ -174,9 +236,11 @@ public sealed class RestoreDrill
             {
                 await Task.Delay(TimeSpan.FromSeconds(2), stop.Token);
                 var values = await watcher.QueryAsListAsync(master,
-                    "SELECT MAX(percent_complete) FROM sys.dm_exec_requests WHERE command LIKE @command",
+                    "SELECT MAX(r.percent_complete) FROM sys.dm_exec_requests r CROSS APPLY sys.dm_exec_sql_text(r.sql_handle) t " +
+                    "WHERE r.command LIKE @command AND t.text LIKE @target",
                     row => row.IsDBNull(0) ? (double?)null : Convert.ToDouble(row.GetValue(0)),
-                    new Dictionary<string, object?> { ["@command"] = command }, cancellationToken: stop.Token);
+                    new Dictionary<string, object?> { ["@command"] = command, ["@target"] = "%" + target.Replace("_", "[_]") + "%" },
+                    cancellationToken: stop.Token);
                 if (values.FirstOrDefault() is { } percent)
                     progress.Report(key, (long)Math.Floor(percent), "SQL Server reports " + percent.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture) + "%");
             }
@@ -190,7 +254,7 @@ public sealed class RestoreDrill
     }
 
     private static async Task VerifySqlServerAsync(DatabaseSource source, CapturedDatabase captured,
-        string path, string run, long minimumFreeBytes, RestoreDrillSteps steps, CancellationToken token)
+        string path, string run, long minimumFreeBytes, RestoreDrillSteps steps, Action<string> log, CancellationToken token)
     {
         var expected = captured.SqlIdentity ?? throw new InvalidDataException("SQL backup identity absent.");
         using var client = new SqlServer();
@@ -199,23 +263,21 @@ public sealed class RestoreDrill
         var target = "PowerForgeRestore_" + Guid.NewGuid().ToString("N");
         var moves = files.Select((f, index) => (f.LogicalName, Path: Path.Combine(run, target + "-" + index + (f.FileType == "L" ? ".ldf" : ".mdf"))))
             .ToDictionary(f => f.LogicalName, f => f.Path);
-        var builder = new DbConnectionStringBuilder { ConnectionString = source.ConnectionString };
-        builder.Remove("Database"); builder.Remove("Initial Catalog");
-        builder["Initial Catalog"] = "master";
-        builder["Pooling"] = false;
-        var master = builder.ConnectionString;
+        var master = MasterConnection(source.ConnectionString);
+        var builder = new DbConnectionStringBuilder { ConnectionString = master };
+        await RemoveLeftoverRestoresAsync(master, Path.GetDirectoryName(run)!, log, token);
         try
         {
             var restoreKey = "restore:" + captured.Id;
             var checkKey = "check:" + captured.Id;
             steps.Start(restoreKey, "as disposable database " + target);
-            await TrackServerPercentAsync(master, "RESTORE%", restoreKey, steps.Progress, async () =>
+            await TrackServerPercentAsync(master, "RESTORE%", target, restoreKey, steps.Progress, async () =>
                 await client.RestoreDatabaseAsNewAsync(master, path, target,
                     new SqlServerBackupIdentity(expected.Database, expected.BackupSetGuid, expected.MediaName, expected.MediaSetId), moves, 7200, token), token);
             steps.Finish(restoreKey);
             steps.Start(checkKey);
             var errorCount = 0;
-            await TrackServerPercentAsync(master, "DBCC%", checkKey, steps.Progress, async () =>
+            await TrackServerPercentAsync(master, "DBCC%", target, checkKey, steps.Progress, async () =>
                 errorCount = (await client.QueryAsListAsync(master,
                     "DBCC CHECKDB ([" + target + "]) WITH TABLERESULTS, NO_INFOMSGS", _ => true, cancellationToken: token)).Count, token);
             if (errorCount != 0) throw new InvalidDataException("Restored SQL Server integrity check failed.");
