@@ -600,6 +600,8 @@ public sealed class RunnerMaintenanceTests
         AddOldToolVersion(runtime, "81.0.0", "unrecognized.txt");
         var recent = AddOldToolVersion(runtime, "81.0.7", "Microsoft.NETCore.App.deps.json");
         Directory.SetCreationTimeUtc(recent, DateTime.UtcNow);
+        foreach (var version in new[] { "81.1.1", "81.1.2", "81.1.3" })
+            AddOldToolVersion(runtime, version, "Microsoft.NETCore.App.deps.json");
         foreach (var version in new[] { "3.0.99", "3.0.100", "3.0.101", "3.0.102", "3.0.103", "3.0.104" })
         {
             var root = AddOldToolVersion(module, version, "PSPublishModule.psd1", $"@{{\n    ModuleVersion = '{version}'\n}}");
@@ -614,6 +616,11 @@ public sealed class RunnerMaintenanceTests
         Directory.CreateDirectory(build);
         File.WriteAllText(Path.Combine(build, "build-pins.json"),
             "{\"inventory\":\"" + new string('x', 4 * 1024 * 1024) + "\",\"module\":\"3.0.99\",\"runtime\":\"81.0.5\"}");
+        var project = Path.Combine(workspace, "src", "App");
+        Directory.CreateDirectory(Path.Combine(project, "obj"));
+        File.WriteAllText(Path.Combine(project, "App.csproj"),
+            "<Project><PropertyGroup><RuntimeFrameworkVersion>81.1.1</RuntimeFrameworkVersion></PropertyGroup></Project>");
+        File.WriteAllText(Path.Combine(project, "obj", "Generated.props"), "<Project><PackageVersion>81.0.1</PackageVersion></Project>");
         var state = new RunnerMaintenanceState();
         state.Jobs.Add(new RunnerMaintenanceJob
         {
@@ -634,6 +641,7 @@ public sealed class RunnerMaintenanceTests
         Assert.Contains(Path.Combine(runtime, "81.0.1"), plan.PlannedPaths);
         Assert.Contains(Path.Combine(packs, "81.0.1"), plan.PlannedPaths);
         Assert.True(Directory.Exists(Path.Combine(runtime, "81.0.1")));
+        Assert.DoesNotContain(Path.Combine(runtime, "81.1.1"), plan.PlannedPaths);
 
         var result = fixture.Service.Maintain(fixture.Spec, dryRun: false);
         Assert.True(result.Success, string.Join("\n", result.Errors));
@@ -643,6 +651,7 @@ public sealed class RunnerMaintenanceTests
         foreach (var version in new[] { "81.0.0", "81.0.0-preview.1", "81.0.2", "81.0.3", "81.0.4", "81.0.5", "81.0.6", "81.0.7" })
             Assert.True(Directory.Exists(Path.Combine(runtime, version)), version);
         Assert.True(Directory.Exists(Path.Combine(packs, "81.0.3")));
+        Assert.True(Directory.Exists(Path.Combine(runtime, "81.1.1")));
         Assert.True(Directory.Exists(Path.Combine(module, "3.0.99")));
         Assert.True(Directory.Exists(Path.Combine(module, "3.0.100")));
         Assert.True(Directory.Exists(Path.Combine(module, "3.0.102")));
@@ -660,6 +669,33 @@ public sealed class RunnerMaintenanceTests
         Directory.SetCreationTimeUtc(path, DateTime.UtcNow.AddDays(-40));
         Directory.SetLastWriteTimeUtc(path, DateTime.UtcNow.AddDays(-40));
         return path;
+    }
+
+    [Fact]
+    public void Maintain_MalformedSdkRuntimeMetadataRetainsDotNetAndContinuesOrdinaryCleanup()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        using var fixture = new Installation();
+        var dotnet = Path.Combine(fixture.Root, "dotnet");
+        var sdk = Path.Combine(dotnet, "sdk", "81.0.200");
+        Directory.CreateDirectory(sdk);
+        File.WriteAllText(Path.Combine(dotnet, "dotnet.exe"), "fixture muxer");
+        File.WriteAllText(Path.Combine(sdk, "dotnet.runtimeconfig.json"), "{\"runtimeOptions\":[]}");
+        File.WriteAllText(Path.Combine(sdk, "Microsoft.NETCoreSdk.BundledVersions.props"), "<Project />");
+        var family = Path.Combine(dotnet, "shared", "Microsoft.NETCore.App");
+        var old = AddOldToolVersion(family, "81.0.1", "Microsoft.NETCore.App.deps.json");
+        AddOldToolVersion(family, "81.0.2", "Microsoft.NETCore.App.deps.json");
+        AddOldToolVersion(family, "81.0.3", "Microsoft.NETCore.App.deps.json");
+        fixture.Spec.WindowsToolRetention = new RunnerWindowsToolRetention { DotNetRoot = dotnet };
+        var temporary = Path.Combine(fixture.Runner.TempPath, "completed-job.txt");
+        File.WriteAllText(temporary, "finished");
+
+        var result = fixture.Service.Maintain(fixture.Spec, dryRun: false);
+
+        Assert.True(result.Success, string.Join("\n", result.Errors));
+        Assert.Contains(result.Retained, item => item.StartsWith(".NET tools retained", StringComparison.Ordinal));
+        Assert.True(Directory.Exists(old));
+        Assert.False(File.Exists(temporary));
     }
 
     [Fact]

@@ -98,7 +98,7 @@ Set `windowsToolRetention` in the machine-local policy to enable scheduled reten
 
 The scheduled pass uses the host admission lock and waits for idle runners. It keeps the two newest recognized versions in each .NET runtime and pack channel and the three newest PSPublishModule versions per major. It also keeps exact pins from the policy and recorded workspaces, versions registered by Windows Installer, and versions named by any installed SDK's metadata. Prerelease versions, unknown layouts and SDK directories remain outside this policy.
 
-Run a dry run and review the selected paths before enabling this policy. Include workflow pins that live outside recorded checkouts and pins used by applications sharing the host. The same task handles interrupted quarantine cleanup.
+Run a dry run and review the selected paths before enabling this policy. Include workflow pins that live outside recorded checkouts and pins used by applications sharing the host. Keep the original authorized roots configured until quarantine cleanup finishes. If a policy change interrupted recovery, restore those roots and allow an idle scheduled pass to finish it.
 
 The GitHub runner refreshes action downloads at job preparation and retires old runner binaries through its updater. PowerForge preserves those installation lifecycles. The lifecycle hooks use GitHub's `ACTIONS_RUNNER_HOOK_JOB_STARTED` and `ACTIONS_RUNNER_HOOK_JOB_COMPLETED` settings. [GitHub job hooks](https://docs.github.com/en/actions/how-tos/manage-runners/self-hosted-runners/run-scripts), [action download lifecycle](https://github.com/actions/runner/blob/main/src/Runner.Worker/ActionManager.cs), [runner updater](https://github.com/actions/runner/blob/main/src/Runner.Listener/SelfUpdater.cs)
 

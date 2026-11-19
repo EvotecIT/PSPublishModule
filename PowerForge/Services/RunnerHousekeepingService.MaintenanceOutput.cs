@@ -160,7 +160,8 @@ public sealed partial class RunnerHousekeepingService
         }
     }
 
-    private static IEnumerable<string> MaintenanceDirectories(string root, MaintenanceRun run, bool includeGenerated = false)
+    private static IEnumerable<string> MaintenanceDirectories(string root, MaintenanceRun run, bool includeGenerated = false,
+        Func<string, bool>? excludeDirectory = null)
     {
         if (!Directory.Exists(root)) yield break;
         var pending = new Stack<string>();
@@ -173,7 +174,8 @@ public sealed partial class RunnerHousekeepingService
             foreach (var child in Directory.EnumerateDirectories(current))
             {
                 var name = Path.GetFileName(child);
-                if (name == ".git" || name == MaintenanceQuarantine || !includeGenerated && (name == "node_modules" || name == "bin" || name == "packages")) continue;
+                if (name == ".git" || name == MaintenanceQuarantine || !includeGenerated && (name == "node_modules" || name == "bin" || name == "packages") ||
+                    excludeDirectory?.Invoke(name) == true) continue;
                 if ((File.GetAttributes(child) & FileAttributes.ReparsePoint) == 0) pending.Push(child);
             }
         }

@@ -31,6 +31,21 @@ public sealed partial class RunnerHousekeepingService
         "DefaultRuntimeFrameworkVersion", "LatestRuntimeFrameworkVersion", "TargetingPackVersion", "AppHostPackVersion"
     };
 
+    private static readonly HashSet<string> WindowsGeneratedWorkspaceDirectories = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ".git", ".vs", "bin", "obj", "node_modules", "packages", "TestResults", "artifacts", ".powerforge-quarantine"
+    };
+
+    private static readonly HashSet<string> WindowsProjectPinExtensions = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ".csproj", ".fsproj", ".vbproj", ".proj", ".props", ".targets"
+    };
+
+    private static readonly HashSet<string> WindowsBuildPinExtensions = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ".yml", ".yaml", ".ps1", ".json"
+    };
+
     private static readonly Regex ToolVersionPattern = new(
         @"(?<![0-9A-Za-z.])\d+\.\d+\.\d+(?![0-9A-Za-z.-])", RegexOptions.CultureInvariant,
         TimeSpan.FromSeconds(1));
@@ -104,28 +119,29 @@ public sealed partial class RunnerHousekeepingService
                      .Distinct(GetPathStringComparer()))
         {
             if (!Directory.Exists(workspace) || !run.Spec.Runners.Any(r => MaintenanceContains(r.WorkRootPath, workspace))) continue;
-            MaintenancePhysicalPath(workspace);
-            var files = new List<string> { Path.Combine(workspace, "global.json"), Path.Combine(workspace, "Directory.Build.props"),
-                Path.Combine(workspace, "Directory.Build.targets") };
-            foreach (var relative in new[] { Path.Combine(".github", "workflows"), Path.Combine(".github", "actions"), "Build" })
+            var buildRoots = new[] { Path.Combine(workspace, ".github", "workflows"), Path.Combine(workspace, ".github", "actions"),
+                Path.Combine(workspace, "Build") };
+            foreach (var directory in MaintenanceDirectories(workspace, run, excludeDirectory: WindowsGeneratedWorkspaceDirectories.Contains))
             {
-                var root = Path.Combine(workspace, relative);
-                if (!Directory.Exists(root)) continue;
-                foreach (var directory in MaintenanceDirectories(root, run))
+                var buildDirectory = buildRoots.Any(root => PathsEqual(root, directory) || MaintenanceContains(root, directory));
+                foreach (var file in Directory.EnumerateFiles(directory))
                 {
-                    files.AddRange(Directory.EnumerateFiles(directory).Where(path =>
-                        new[] { ".yml", ".yaml", ".ps1", ".json", ".props", ".targets", ".csproj" }
-                            .Contains(Path.GetExtension(path), StringComparer.OrdinalIgnoreCase)));
+                    if (run.Expired) throw new IOException("Unable to finish checking enrolled workspace version pins.");
+                    var extension = Path.GetExtension(file);
+                    var name = Path.GetFileName(file);
+                    if (!WindowsProjectPinExtensions.Contains(extension) &&
+                        !name.Equals("global.json", StringComparison.OrdinalIgnoreCase) &&
+                        !name.Equals("runtimeconfig.template.json", StringComparison.OrdinalIgnoreCase) &&
+                        !name.EndsWith(".runtimeconfig.json", StringComparison.OrdinalIgnoreCase) &&
+                        !(buildDirectory && WindowsBuildPinExtensions.Contains(extension))) continue;
+                    MaintenancePhysicalPath(file);
+                    if (new FileInfo(file).Length > MaximumWorkspacePinFileBytes)
+                        throw new IOException("A version-pinning file exceeded the scan limit: " + name);
+                    try { AddToolVersionMatches(result, File.ReadAllText(file)); }
+                    catch (RegexMatchTimeoutException error) { throw new IOException("Version pin scanning timed out: " + name, error); }
                 }
             }
-            foreach (var file in files.Where(File.Exists))
-            {
-                if (run.Expired) throw new IOException("Unable to finish checking enrolled workspace version pins.");
-                MaintenancePhysicalPath(file);
-                if (new FileInfo(file).Length > MaximumWorkspacePinFileBytes)
-                    throw new IOException("A version-pinning file exceeded the scan limit: " + Path.GetFileName(file));
-                AddToolVersionMatches(result, File.ReadAllText(file));
-            }
+            if (run.Expired) throw new IOException("Unable to finish checking enrolled workspace version pins.");
         }
         return result;
     }
@@ -180,9 +196,12 @@ public sealed partial class RunnerHousekeepingService
             MaintenancePhysicalPath(runtime);
             MaintenancePhysicalPath(bundled);
             using var json = JsonDocument.Parse(File.ReadAllText(runtime));
-            if (!json.RootElement.TryGetProperty("runtimeOptions", out var options) ||
-                !options.TryGetProperty("framework", out var framework) ||
-                !framework.TryGetProperty("version", out var sdkRuntime) || sdkRuntime.GetString() is not { Length: > 0 } version)
+            var document = json.RootElement;
+            if (document.ValueKind != JsonValueKind.Object ||
+                !document.TryGetProperty("runtimeOptions", out var options) || options.ValueKind != JsonValueKind.Object ||
+                !options.TryGetProperty("framework", out var framework) || framework.ValueKind != JsonValueKind.Object ||
+                !framework.TryGetProperty("version", out var sdkRuntime) || sdkRuntime.ValueKind != JsonValueKind.String ||
+                sdkRuntime.GetString() is not { Length: > 0 } version)
                 throw new IOException("An installed SDK's runtime requirement could not be read.");
             versions.Add(version);
             using var reader = XmlReader.Create(bundled, new XmlReaderSettings { DtdProcessing = DtdProcessing.Prohibit, XmlResolver = null });
