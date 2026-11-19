@@ -8,9 +8,19 @@ namespace PowerForge.Backups;
 /// <summary>Verifies selected native NAS files and restores SQL Server into an owned disposable database.</summary>
 public sealed class RestoreDrill
 {
-    public async Task VerifyAsync(BackupOptions options, string selectedFolder, string expectedCaptureSha256,
+    public Task VerifyAsync(BackupOptions options, string selectedFolder, string expectedCaptureSha256,
         Action<string>? log = null, CancellationToken cancellationToken = default)
+        => VerifyAsync(options, selectedFolder, expectedCaptureSha256, null, log, cancellationToken);
+
+    /// <summary>
+    /// Runs the drill, reporting each step to <paramref name="progress"/>. Cancelling
+    /// <paramref name="cancellationToken"/> records the attempt as cancelled by the user, not as a failure.
+    /// </summary>
+    public async Task VerifyAsync(BackupOptions options, string selectedFolder, string expectedCaptureSha256,
+        IRestoreDrillProgress? progress, Action<string>? log = null, CancellationToken cancellationToken = default)
     {
+        var steps = new RestoreDrillSteps(progress ?? NoRestoreDrillProgress.Instance);
+        var report = steps.Progress;
         options.Validate();
         options.DemandSeparatedStorage([Path.GetFullPath(selectedFolder)]);
         log ??= _ => { };
@@ -28,6 +38,8 @@ public sealed class RestoreDrill
             Safety.WriteJson(statusPath, state);
             runLock = new FileStream(Path.Combine(options.WorkRoot, ".run.lock"), FileMode.OpenOrCreate, FileAccess.Write, FileShare.None);
             Safety.DemandPhysical(selectedFolder);
+            report.Plan("capture", "Check the capture record", 0, RestoreDrillUnit.None);
+            steps.Start("capture", "capture.json and its pinned SHA-256");
             var capturePath = Path.Combine(selectedFolder, "capture.json");
             if (!Regex.IsMatch(expectedCaptureSha256, "\\A[a-f0-9]{64}\\z") || await Safety.HashAsync(capturePath, token) != expectedCaptureSha256)
                 throw new InvalidDataException("Selected native NAS capture digest differs.");
@@ -36,13 +48,31 @@ public sealed class RestoreDrill
             if (header.SchemaVersion != 2 || header.Format != "native" || header.HostId != options.HostId)
                 throw new InvalidDataException("Native capture format or source differs.");
             foreach (var file in header.Files)
-            {
                 if (!Regex.IsMatch(file.Entry, "\\A([a-z][a-z0-9-]{0,31}\\.(sqlite|bak)|config/[a-z][a-z0-9-]{0,31}\\.json|manifest\\.json)\\z"))
                     throw new InvalidDataException("Unsafe native file entry.");
-                var path = Path.Combine(selectedFolder, file.Entry.Replace('/', Path.DirectorySeparatorChar));
-                Safety.DemandPhysical(path);
-                if (new FileInfo(path).Length != file.SizeBytes || await Safety.HashAsync(path, token) != file.Sha256)
-                    throw new InvalidDataException("Selected native backup file digest differs.");
+            var databaseFiles = header.Files.Where(IsDatabaseEntry).ToArray();
+            foreach (var file in databaseFiles)
+                report.Plan("checksum:" + file.Entry, "Checksum " + file.Entry, file.SizeBytes, RestoreDrillUnit.Bytes);
+            foreach (var file in databaseFiles)
+            {
+                var id = Path.GetFileNameWithoutExtension(file.Entry);
+                if (file.Entry.EndsWith(".bak", StringComparison.Ordinal))
+                {
+                    report.Plan("copy:" + id, "Copy " + file.Entry + " for SQL Server", file.SizeBytes, RestoreDrillUnit.Bytes);
+                    report.Plan("restore:" + id, "Restore " + id + " into SQL Server", 100, RestoreDrillUnit.Percent);
+                    report.Plan("check:" + id, "Check " + id + " (DBCC CHECKDB)", 100, RestoreDrillUnit.Percent);
+                }
+                else report.Plan("check:" + id, "Check " + id + " (SQLite integrity)", 0, RestoreDrillUnit.None);
+            }
+            foreach (var file in header.Files.Where(f => !IsDatabaseEntry(f)))
+                await DemandFileAsync(selectedFolder, file, null, token);
+            steps.Finish("capture");
+            foreach (var file in databaseFiles)
+            {
+                var key = "checksum:" + file.Entry;
+                steps.Start(key);
+                await DemandFileAsync(selectedFolder, file, done => report.Report(key, done), token);
+                steps.Finish(key);
             }
             var manifest = JsonSerializer.Deserialize<CaptureManifest>(File.ReadAllText(Path.Combine(selectedFolder, "manifest.json")), BackupOptions.Json)
                 ?? throw new InvalidDataException("Native recovery manifest is empty.");
@@ -59,6 +89,7 @@ public sealed class RestoreDrill
             foreach (var captured in manifest.Databases)
             {
                 log("Restore verification " + captured.Id);
+                var checkKey = "check:" + captured.Id;
                 var source = options.Databases.Single(d => d.Id == captured.Id);
                 var expectedEntry = source.Id + (source.Provider == "sqlite" ? ".sqlite" : ".bak");
                 if (captured.Provider != source.Provider || captured.Entry != expectedEntry || !captured.Verified)
@@ -68,20 +99,37 @@ public sealed class RestoreDrill
                     throw new InvalidDataException("Database recovery inventory differs.");
                 var path = Path.Combine(selectedFolder, expectedEntry);
                 if (source.Provider == "sqlite")
+                {
+                    steps.Start(checkKey, "working; SQLite gives no percentage");
                     await DatabaseCapture.VerifySqliteAsync(path, source.ValidationQueries, captured, true, token);
+                    steps.Finish(checkKey);
+                }
                 else
                 {
                     Safety.DemandFreeSpace(options.WorkRoot, options.MinimumFreeBytes, captured.SizeBytes);
                     var copy = Path.Combine(run, expectedEntry);
-                    File.Copy(path, copy);
-                    await VerifySqlServerAsync(source, captured, copy, run, options.MinimumFreeBytes, token);
+                    var copyKey = "copy:" + captured.Id;
+                    steps.Start(copyKey);
+                    await Safety.CopyAsync(path, copy, done => report.Report(copyKey, done), token);
+                    steps.Finish(copyKey);
+                    await VerifySqlServerAsync(source, captured, copy, run, options.MinimumFreeBytes, steps, token);
                 }
             }
             state.Stamp = manifest.Stamp;
             state.DatabaseIds = manifest.Databases.Select(d => d.Id).ToArray();
             state.Status = "success";
         }
-        catch (Exception error) { state.Status = "failed"; state.ErrorType = error.GetType().Name; throw; }
+        catch (Exception error)
+        {
+            var cancelled = cancellationToken.IsCancellationRequested;
+            state.Status = cancelled ? "cancelled" : "failed";
+            state.ErrorType = cancelled ? "CancelledByUser" : error.GetType().Name;
+            steps.FailRunning(cancelled ? "cancelled by the user" : error.GetType().Name);
+            // Record the outcome before cleanup: a console being closed allows only a few seconds.
+            state.CompletedAtUtc = DateTimeOffset.UtcNow;
+            try { Safety.WriteJson(statusPath, state); } catch (IOException) { } catch (UnauthorizedAccessException) { }
+            throw;
+        }
         finally
         {
             try
@@ -89,7 +137,7 @@ public sealed class RestoreDrill
                 if (Directory.Exists(run))
                 {
                     try { state.CleanupLogicalBytes = Safety.RemoveOwnedRun(options.WorkRoot, run); }
-                    catch (Exception error) { state.CleanupErrorType = error.GetType().Name; state.Status = "failed"; }
+                    catch (Exception error) { state.CleanupErrorType = error.GetType().Name; if (state.Status != "cancelled") state.Status = "failed"; }
                 }
                 state.Healthy = state.Status == "success";
                 state.CompletedAtUtc = DateTimeOffset.UtcNow;
@@ -101,8 +149,48 @@ public sealed class RestoreDrill
         if (!state.Healthy) throw new IOException("Restore drill cleanup failed.");
     }
 
+    private static bool IsDatabaseEntry(CapturedFile file)
+        => file.Entry.EndsWith(".sqlite", StringComparison.Ordinal) || file.Entry.EndsWith(".bak", StringComparison.Ordinal);
+
+    private static async Task DemandFileAsync(string folder, CapturedFile file, Action<long>? progress, CancellationToken token)
+    {
+        var path = Path.Combine(folder, file.Entry.Replace('/', Path.DirectorySeparatorChar));
+        Safety.DemandPhysical(path);
+        if (new FileInfo(path).Length != file.SizeBytes ||
+            (progress is null ? await Safety.HashAsync(path, token) : await Safety.HashAsync(path, progress, token)) != file.Sha256)
+            throw new InvalidDataException("Selected native backup file digest differs.");
+    }
+
+    // SQL Server reports RESTORE and DBCC CHECKDB progress in sys.dm_exec_requests; polled on its own connection. Without
+    // VIEW SERVER STATE the step still shows its running time.
+    private static async Task TrackServerPercentAsync(string master, string command, string key, IRestoreDrillProgress progress,
+        Func<Task> work, CancellationToken token)
+    {
+        using var stop = CancellationTokenSource.CreateLinkedTokenSource(token);
+        var poll = Task.Run(async () =>
+        {
+            using var watcher = new SqlServer();
+            while (!stop.IsCancellationRequested)
+            {
+                await Task.Delay(TimeSpan.FromSeconds(2), stop.Token);
+                var values = await watcher.QueryAsListAsync(master,
+                    "SELECT MAX(percent_complete) FROM sys.dm_exec_requests WHERE command LIKE @command",
+                    row => row.IsDBNull(0) ? (double?)null : Convert.ToDouble(row.GetValue(0)),
+                    new Dictionary<string, object?> { ["@command"] = command }, cancellationToken: stop.Token);
+                if (values.FirstOrDefault() is { } percent)
+                    progress.Report(key, (long)Math.Floor(percent), "SQL Server reports " + percent.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture) + "%");
+            }
+        }, CancellationToken.None);
+        try { await work(); }
+        finally
+        {
+            stop.Cancel();
+            try { await poll; } catch { /* progress polling never decides the drill's outcome */ }
+        }
+    }
+
     private static async Task VerifySqlServerAsync(DatabaseSource source, CapturedDatabase captured,
-        string path, string run, long minimumFreeBytes, CancellationToken token)
+        string path, string run, long minimumFreeBytes, RestoreDrillSteps steps, CancellationToken token)
     {
         var expected = captured.SqlIdentity ?? throw new InvalidDataException("SQL backup identity absent.");
         using var client = new SqlServer();
@@ -118,14 +206,23 @@ public sealed class RestoreDrill
         var master = builder.ConnectionString;
         try
         {
-            await client.RestoreDatabaseAsNewAsync(master, path, target,
-                new SqlServerBackupIdentity(expected.Database, expected.BackupSetGuid, expected.MediaName, expected.MediaSetId), moves, 7200, token);
-            var errors = await client.QueryAsListAsync(master,
-                "DBCC CHECKDB ([" + target + "]) WITH TABLERESULTS, NO_INFOMSGS", _ => true, cancellationToken: token);
-            if (errors.Count != 0) throw new InvalidDataException("Restored SQL Server integrity check failed.");
+            var restoreKey = "restore:" + captured.Id;
+            var checkKey = "check:" + captured.Id;
+            steps.Start(restoreKey, "as disposable database " + target);
+            await TrackServerPercentAsync(master, "RESTORE%", restoreKey, steps.Progress, async () =>
+                await client.RestoreDatabaseAsNewAsync(master, path, target,
+                    new SqlServerBackupIdentity(expected.Database, expected.BackupSetGuid, expected.MediaName, expected.MediaSetId), moves, 7200, token), token);
+            steps.Finish(restoreKey);
+            steps.Start(checkKey);
+            var errorCount = 0;
+            await TrackServerPercentAsync(master, "DBCC%", checkKey, steps.Progress, async () =>
+                errorCount = (await client.QueryAsListAsync(master,
+                    "DBCC CHECKDB ([" + target + "]) WITH TABLERESULTS, NO_INFOMSGS", _ => true, cancellationToken: token)).Count, token);
+            if (errorCount != 0) throw new InvalidDataException("Restored SQL Server integrity check failed.");
             builder["Initial Catalog"] = target;
             foreach (var query in source.ValidationQueries)
                 await client.ExecuteScalarAsync(builder.ConnectionString, query, cancellationToken: token);
+            steps.Finish(checkKey, "integrity check and validation queries passed");
         }
         finally
         {

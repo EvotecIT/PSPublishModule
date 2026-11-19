@@ -67,6 +67,8 @@ Retrieve the selected native folder from the NAS through the operator access pat
 
 A drill rejected because a backup or another drill owns the worker lock records a failed current attempt. The separately retained successful drill receipt remains available as historical recovery evidence.
 
+In a console, the drill shows what it is checking and that live data is not touched, then one progress row per step: the checksum of each database file in gigabytes, the SQL Server copy, restore and `DBCC CHECKDB` with SQL Server's own percentage, and each SQLite integrity check with its running time, since SQLite reports no percentage. It ends with a passed, failed or cancelled panel naming the record. Redirected output gets the same steps as plain lines, with a progress line at least every ten seconds. The drill runs at background CPU and disk priority on Windows; SQL Server's own restore work keeps the service's priority. Closing the window or pressing Ctrl+C records the attempt as `cancelled` with `errorType` `CancelledByUser` before cleanup, and the CLI exits with code 130.
+
 The drill verifies recoverability without replacing live service files. During an actual recovery, provision the service identity and connection, rebind protected configuration secrets from the secure recovery store, then validate service readiness and ingestion before starting normal operation. SQL Server backups require a compatible server version. A successful transfer or `RESTORE VERIFYONLY` alone is not an application restore proof.
 
 ## Monitoring

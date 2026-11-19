@@ -1,4 +1,5 @@
 using PowerForge.Backups;
+using PowerForge.Backups.Cli;
 using System.Text.Json;
 
 if (!((args.Length == 2 && args[0] is "run" or "validate" or "validate-config") || (args.Length == 4 && args[0] == "restore-drill")))
@@ -18,12 +19,7 @@ try
         return 0;
     }
     if (args[0] == "restore-drill")
-    {
-        await new RestoreDrill().VerifyAsync(options, args[2], args[3],
-            message => Console.Error.WriteLine(message), cancellation.Token);
-        Console.WriteLine("Restore drill completed successfully.");
-        return 0;
-    }
+        return await RestoreDrillCommand.RunAsync(options, args[2], args[3], cancellation);
     var result = await new DatabaseBackupRunner().RunAsync(options,
         message => Console.Error.WriteLine(DateTimeOffset.UtcNow.ToString("O") + " " + message), cancellation.Token);
     Console.WriteLine(JsonSerializer.Serialize(result, BackupOptions.Json));

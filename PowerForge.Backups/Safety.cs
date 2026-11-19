@@ -41,6 +41,41 @@ internal static class Safety
         return Convert.ToHexStringLower(await SHA256.HashDataAsync(stream, token));
     }
 
+    // How often a long read or copy reports the bytes done, so a view never looks frozen.
+    internal static readonly TimeSpan ProgressInterval = TimeSpan.FromMilliseconds(500);
+
+    internal static async Task<string> HashAsync(string path, Action<long> progress, CancellationToken token)
+    {
+        await using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 1, FileOptions.Asynchronous | FileOptions.SequentialScan);
+        using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+        await PumpAsync(stream, hash.AppendData, progress, token);
+        return Convert.ToHexStringLower(hash.GetHashAndReset());
+    }
+
+    internal static async Task CopyAsync(string source, string destination, Action<long> progress, CancellationToken token)
+    {
+        await using var input = new FileStream(source, FileMode.Open, FileAccess.Read, FileShare.Read, 1, FileOptions.Asynchronous | FileOptions.SequentialScan);
+        await using var output = new FileStream(destination, FileMode.CreateNew, FileAccess.Write, FileShare.None, 1, FileOptions.Asynchronous);
+        await PumpAsync(input, chunk => output.Write(chunk), progress, token);
+    }
+
+    private static async Task PumpAsync(Stream input, Action<ReadOnlySpan<byte>> consume, Action<long> progress, CancellationToken token)
+    {
+        var buffer = new byte[4 << 20];
+        long done = 0;
+        var reported = System.Diagnostics.Stopwatch.StartNew();
+        int read;
+        while ((read = await input.ReadAsync(buffer, token)) > 0)
+        {
+            consume(buffer.AsSpan(0, read));
+            done += read;
+            if (reported.Elapsed < ProgressInterval) continue;
+            progress(done);
+            reported.Restart();
+        }
+        progress(done);
+    }
+
     internal static void DemandFreeSpace(string path, long reserve, long requiredBytes = 0)
     {
         if (reserve < 0 || requiredBytes < 0 || requiredBytes > long.MaxValue - reserve ||
