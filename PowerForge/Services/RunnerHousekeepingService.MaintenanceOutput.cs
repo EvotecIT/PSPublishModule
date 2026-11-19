@@ -9,21 +9,25 @@ namespace PowerForge;
 
 public sealed partial class RunnerHousekeepingService
 {
-    private static void MaintenanceRecover(MaintenanceRun run)
+    private static void MaintenanceRecover(MaintenanceRun run, bool recoverWindowsTools)
     {
         var directory = Path.Combine(run.Spec.StateRootPath, "journal");
         if (!Directory.Exists(directory)) return;
         var roots = run.Spec.Runners.SelectMany(r => new[] { r.WorkRootPath, r.TempPath, Path.Combine(r.RootPath, "_diag") })
             .Concat(run.Spec.LegacyTemporaryRoots.Select(r => r.RootPath))
             .Concat(new[] { run.Spec.NuGetPackagesPath, run.Spec.NuGetHttpCachePath }).Where(p => !string.IsNullOrEmpty(p)).ToArray();
+        var toolRoots = recoverWindowsTools && run.Spec.WindowsToolRetention is { } tools
+            ? WindowsToolRetentionRoots(tools).ToArray() : Array.Empty<string>();
         foreach (var record in Directory.EnumerateFiles(directory, "*.json"))
         {
             if (run.Expired) break;
             try
             {
                 var journal = MaintenanceRead(record, RunnerMaintenanceJsonContext.Default.RunnerMaintenanceJournal);
+                if (journal?.WindowsTool == true && !recoverWindowsTools) continue;
                 if (journal is null || journal.SchemaVersion != 1 || !Guid.TryParseExact(journal.Id, "N", out _) ||
-                    Path.GetFileNameWithoutExtension(record) != journal.Id || !roots.Any(r => PathsEqual(r!, journal.Root)) ||
+                    Path.GetFileNameWithoutExtension(record) != journal.Id ||
+                    !(journal.WindowsTool ? toolRoots : roots).Any(r => PathsEqual(r!, journal.Root)) ||
                     !MaintenanceContains(journal.Root, journal.Source) || MaintenanceContains(Path.Combine(journal.Root, MaintenanceQuarantine), journal.Source))
                 {
                     run.Errors.Add("Quarantine record " + Path.GetFileName(record) + " failed its enrolled-root check and was retained.");

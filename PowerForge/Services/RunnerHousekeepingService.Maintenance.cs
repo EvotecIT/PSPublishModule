@@ -100,11 +100,24 @@ public sealed partial class RunnerHousekeepingService
             run.Result.Deferred = !run.SharedIdle;
             run.State.Due = !run.SharedIdle;
 
-            MaintenanceRecover(run);
+            var windowsTools = spec.WindowsToolRetention;
+            var toolRetentionIdle = windowsTools is not null && phase == RunnerMaintenancePhase.Scheduled &&
+                run.SharedIdle && run.ActiveRunnerRoots.Count == 0;
+            if (toolRetentionIdle)
+            {
+                try { ValidateWindowsToolRetention(spec, windowsTools!); }
+                catch (Exception error) when (error is ArgumentException || error is IOException || error is UnauthorizedAccessException)
+                {
+                    toolRetentionIdle = false;
+                    run.Retained.Add("Windows tool retention deferred because its installation roots could not be qualified — " + error.GetType().Name);
+                }
+            }
+            MaintenanceRecover(run, toolRetentionIdle);
             MaintenanceDeleteIsolated(run);
             run.Isolated.Clear();
             MaintenanceRecordJob(run, phase);
             MaintenanceRefreshJobProcesses(run, fresh);
+            var idleRegistrations = new List<RunnerMaintenanceRegistration>();
             foreach (var runner in spec.Runners)
             {
                 var active = busyWorkers.Any(p => MaintenanceProcessBelongs(runner, p));
@@ -122,8 +135,11 @@ public sealed partial class RunnerHousekeepingService
                     foreach (var process in orphanProcesses) run.Retained.Add(runner.Name + " retains output for recorded " + process.Name + " PID " + process.Id + ".");
                 }
                 if (snapshotIncomplete || active || unknown || orphanActivity) continue;
-                if (runner.CleanupEnabled) MaintenanceRunnerOutput(run, runner);
+                if (runner.CleanupEnabled) idleRegistrations.Add(runner);
             }
+            if (toolRetentionIdle && run.SharedIdle)
+                MaintenanceRetainOnIo(run, "Windows build tooling", () => MaintenanceWindowsTools(run, windowsTools!));
+            foreach (var runner in idleRegistrations) MaintenanceRunnerOutput(run, runner);
             if (run.SharedIdle && !run.Expired)
             {
                 MaintenanceLegacyTemp(run);

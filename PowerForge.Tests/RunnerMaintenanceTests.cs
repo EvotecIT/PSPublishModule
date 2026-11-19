@@ -574,6 +574,96 @@ public sealed class RunnerMaintenanceTests
         Assert.Equal("keep", File.ReadAllText(path));
     }
 
+    [Fact]
+    public void Maintain_WindowsToolRetentionRemovesSupersededVersionsAndPreservesPins()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        using var fixture = new Installation();
+        var dotnet = Path.Combine(fixture.Root, "dotnet");
+        var module = Path.Combine(fixture.Root, "PSPublishModule");
+        var runtime = Path.Combine(dotnet, "shared", "Microsoft.NETCore.App");
+        var packs = Path.Combine(dotnet, "packs", "Microsoft.NETCore.App.Ref");
+        var sdk = Path.Combine(dotnet, "sdk", "81.0.200");
+        Directory.CreateDirectory(sdk);
+        Directory.CreateDirectory(Path.Combine(dotnet, "sdk", "81.0.199", "Roslyn"));
+        File.WriteAllText(Path.Combine(dotnet, "dotnet.exe"), "fixture muxer");
+        File.WriteAllText(Path.Combine(sdk, "dotnet.runtimeconfig.json"),
+            "{\"runtimeOptions\":{\"framework\":{\"name\":\"Microsoft.NETCore.App\",\"version\":\"81.0.2\"}}}");
+        File.WriteAllText(Path.Combine(sdk, "Microsoft.NETCoreSdk.BundledVersions.props"),
+            "<Project><ItemGroup><KnownFrameworkReference TargetingPackVersion=\"81.0.3\" /></ItemGroup></Project>");
+        foreach (var version in new[] { "81.0.1", "81.0.2", "81.0.3", "81.0.4", "81.0.5", "81.0.6" })
+        {
+            AddOldToolVersion(runtime, version, "Microsoft.NETCore.App.deps.json");
+            AddOldToolVersion(packs, version, Path.Combine("data", "FrameworkList.xml"));
+        }
+        AddOldToolVersion(runtime, "81.0.0-preview.1", "Microsoft.NETCore.App.deps.json");
+        AddOldToolVersion(runtime, "81.0.0", "unrecognized.txt");
+        var recent = AddOldToolVersion(runtime, "81.0.7", "Microsoft.NETCore.App.deps.json");
+        Directory.SetCreationTimeUtc(recent, DateTime.UtcNow);
+        foreach (var version in new[] { "3.0.100", "3.0.101", "3.0.102", "3.0.103", "3.0.104" })
+        {
+            var root = AddOldToolVersion(module, version, "PSPublishModule.psd1", $"@{{\n    ModuleVersion = '{version}'\n}}");
+            var metadata = Path.Combine(root, "PSGetModuleInfo.xml");
+            File.WriteAllText(metadata, "<fixture>PSPublishModule https://www.powershellgallery.com/api/v2</fixture>");
+            File.SetLastWriteTimeUtc(metadata, DateTime.UtcNow.AddDays(-40));
+            Directory.SetCreationTimeUtc(root, DateTime.UtcNow.AddDays(-40));
+            Directory.SetLastWriteTimeUtc(root, DateTime.UtcNow.AddDays(-40));
+        }
+        // The installed manifest has the exact version on its own line.
+        fixture.Spec.WindowsToolRetention = new RunnerWindowsToolRetention
+        {
+            DotNetRoot = dotnet, PSPublishModuleRoots = new[] { module }, MinimumAgeDays = 14,
+            ProtectedDotNetVersions = new[] { "81.0.4" }, ProtectedPSPublishModuleVersions = new[] { "3.0.100" }
+        };
+
+        var plan = fixture.Service.Maintain(fixture.Spec);
+        Assert.True(plan.Success, string.Join("\n", plan.Errors));
+        Assert.Contains(Path.Combine(runtime, "81.0.1"), plan.PlannedPaths);
+        Assert.Contains(Path.Combine(packs, "81.0.1"), plan.PlannedPaths);
+        Assert.True(Directory.Exists(Path.Combine(runtime, "81.0.1")));
+
+        var result = fixture.Service.Maintain(fixture.Spec, dryRun: false);
+        Assert.True(result.Success, string.Join("\n", result.Errors));
+        Assert.False(Directory.Exists(Path.Combine(runtime, "81.0.1")));
+        Assert.False(Directory.Exists(Path.Combine(packs, "81.0.1")));
+        Assert.False(Directory.Exists(Path.Combine(module, "3.0.101")));
+        foreach (var version in new[] { "81.0.0", "81.0.0-preview.1", "81.0.2", "81.0.3", "81.0.4", "81.0.6", "81.0.7" })
+            Assert.True(Directory.Exists(Path.Combine(runtime, version)), version);
+        Assert.True(Directory.Exists(Path.Combine(packs, "81.0.3")));
+        Assert.True(Directory.Exists(Path.Combine(module, "3.0.100")));
+        Assert.True(Directory.Exists(Path.Combine(module, "3.0.102")));
+        Assert.True(Directory.Exists(sdk));
+    }
+
+    private static string AddOldToolVersion(string family, string version, string marker, string contents = "fixture")
+    {
+        var path = Path.Combine(family, version);
+        var file = Path.Combine(path, marker);
+        Directory.CreateDirectory(Path.GetDirectoryName(file)!);
+        File.WriteAllText(file, contents);
+        File.SetLastWriteTimeUtc(file, DateTime.UtcNow.AddDays(-40));
+        Directory.SetLastWriteTimeUtc(Path.GetDirectoryName(file)!, DateTime.UtcNow.AddDays(-40));
+        Directory.SetCreationTimeUtc(path, DateTime.UtcNow.AddDays(-40));
+        Directory.SetLastWriteTimeUtc(path, DateTime.UtcNow.AddDays(-40));
+        return path;
+    }
+
+    [Fact]
+    public void Maintain_InvalidWindowsToolRootDoesNotBlockOrdinaryMaintenance()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        using var fixture = new Installation();
+        fixture.Spec.WindowsToolRetention = new RunnerWindowsToolRetention { DotNetRoot = @"C:relative" };
+        var generated = Path.Combine(fixture.Runner.TempPath, "old-job.txt");
+        File.WriteAllText(generated, "completed");
+
+        var result = fixture.Service.Maintain(fixture.Spec, dryRun: false);
+
+        Assert.True(result.Success, string.Join("\n", result.Errors));
+        Assert.Contains(result.Retained, item => item.StartsWith("Windows tool retention deferred", StringComparison.Ordinal));
+        Assert.False(File.Exists(generated));
+    }
+
     private sealed class Installation : IDisposable
     {
         internal readonly string Root = Path.Combine(Path.GetTempPath(), "powerforge-maintenance-" + Guid.NewGuid().ToString("N"));

@@ -69,6 +69,8 @@ internal sealed class RunnerMaintenanceJournal
     public bool Moved { get; set; }
     public bool Repository { get; set; }
     public bool RuntimeIpc { get; set; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool WindowsTool { get; set; }
 }
 
 internal sealed class RunnerMaintenanceHook

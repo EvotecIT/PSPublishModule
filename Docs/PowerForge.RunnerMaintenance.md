@@ -92,6 +92,14 @@ Source-qualified fixture roots inside a runner's private temp directory follow t
 
 Browser revisions continue through HtmlTinkerX's installation and repair lifecycle. Installed SDKs, Windows servicing, Docker images, containers and volumes keep their separate maintenance procedures.
 
+### Windows build tooling
+
+Set `windowsToolRetention` in the machine-local policy to enable scheduled retention of stable .NET runtimes and packs alongside versioned PSGallery installs of PSPublishModule. Supply the physical `dotNetRoot`, the runner identity's `psPublishModuleRoots`, and the `protectedDotNetVersions` and `protectedPSPublishModuleVersions` required by your workflows and other applications. The default `minimumAgeDays` is 14.
+
+The scheduled pass uses the host admission lock and waits for idle runners. It keeps the two newest recognized versions in each .NET runtime and pack channel and the three newest PSPublishModule versions per major. It also keeps exact pins from the policy and recorded workspaces, versions registered by Windows Installer, and versions named by any installed SDK's metadata. Prerelease versions, unknown layouts and SDK directories remain outside this policy.
+
+Run a dry run and review the selected paths before enabling this policy. Include workflow pins that live outside recorded checkouts and pins used by applications sharing the host. The same task handles interrupted quarantine cleanup.
+
 The GitHub runner refreshes action downloads at job preparation and retires old runner binaries through its updater. PowerForge preserves those installation lifecycles. The lifecycle hooks use GitHub's `ACTIONS_RUNNER_HOOK_JOB_STARTED` and `ACTIONS_RUNNER_HOOK_JOB_COMPLETED` settings. [GitHub job hooks](https://docs.github.com/en/actions/how-tos/manage-runners/self-hosted-runners/run-scripts), [action download lifecycle](https://github.com/actions/runner/blob/main/src/Runner.Worker/ActionManager.cs), [runner updater](https://github.com/actions/runner/blob/main/src/Runner.Listener/SelfUpdater.cs)
 
 ## Recovery

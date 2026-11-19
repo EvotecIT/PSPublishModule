@@ -144,7 +144,8 @@ public sealed partial class RunnerHousekeepingService
             .SelectMany(r => new[] { r.RootPath, r.WorkRootPath, r.TempPath })
             .Any(root => PathsEqual(root, path) || MaintenanceContains(root, path) || MaintenanceContains(path, root));
 
-    private static void MaintenanceIsolate(MaintenanceRun run, string path, string root, bool directory, bool sensitive = true, bool repository = false, bool runtimeIpc = false, DateTime? olderThan = null)
+    private static void MaintenanceIsolate(MaintenanceRun run, string path, string root, bool directory,
+        bool sensitive = true, bool repository = false, bool runtimeIpc = false, DateTime? olderThan = null, bool windowsTool = false)
     {
         if (run.Expired || !MaintenanceContains(root, path) || Path.GetFileName(path) == MaintenanceQuarantine) return;
         if (MaintenanceExcludedInstallation(run, path))
@@ -164,7 +165,8 @@ public sealed partial class RunnerHousekeepingService
                 run.SimulatedFree += bytes;
                 return;
             }
-            var journal = new RunnerMaintenanceJournal { Id = Guid.NewGuid().ToString("N"), Root = root, Source = path, Directory = directory, Bytes = bytes, Repository = repository, RuntimeIpc = runtimeIpc };
+            var journal = new RunnerMaintenanceJournal { Id = Guid.NewGuid().ToString("N"), Root = root, Source = path,
+                Directory = directory, Bytes = bytes, Repository = repository, RuntimeIpc = runtimeIpc, WindowsTool = windowsTool };
             var stage = MaintenanceStage(journal);
             MaintenancePhysicalPath(stage);
             Directory.CreateDirectory(Path.GetDirectoryName(stage)!);
