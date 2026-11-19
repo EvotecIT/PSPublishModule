@@ -34,6 +34,11 @@ internal static class PowerShellNativeFunctionBindingPolicy
         var declarations = functions.GroupBy(static function => function.Name, StringComparer.OrdinalIgnoreCase)
             .Where(static group => group.Count() == 1)
             .ToDictionary(static group => group.Key, static group => group.Single(), StringComparer.OrdinalIgnoreCase);
+        var callers = declarations.Values.SelectMany(caller => caller.Body
+                .FindAll(static node => node is CommandAst, searchNestedScriptBlocks: true).OfType<CommandAst>()
+                .Select(static command => command.GetCommandName()).Where(static name => name is not null)
+                .Distinct(StringComparer.OrdinalIgnoreCase).Select(name => (Name: name!, Caller: caller)))
+            .ToLookup(static edge => edge.Name, static edge => edge.Caller, StringComparer.OrdinalIgnoreCase);
         var pending = new Queue<FunctionDefinitionAst>(declarations.Values.Where(function =>
             RequiresNativeBinding(function, targetFramework, capabilities) ||
             dependencyTypes?.IsUsedBy(function, capabilities) == true));
@@ -44,6 +49,10 @@ internal static class PowerShellNativeFunctionBindingPolicy
             foreach (var command in function.Body.FindAll(static node => node is CommandAst, searchNestedScriptBlocks: true).OfType<CommandAst>())
                 if (command.GetCommandName() is { } name && declarations.TryGetValue(name, out var target) && !result.Contains(name))
                     pending.Enqueue(target);
+            // A caller must use native command binding when its target owns a native
+            // invocation frame; the direct CLR argument ABI cannot call that target.
+            foreach (var caller in callers[function.Name])
+                if (!result.Contains(caller.Name)) pending.Enqueue(caller);
         }
         return result;
     }
@@ -68,7 +77,8 @@ internal static class PowerShellNativeFunctionBindingPolicy
             function.Body.BeginBlock is not null, function.Body.ProcessBlock is not null,
             function.Body.EndBlock is not null, function.Body.GetType().GetProperty("CleanBlock")?.GetValue(function.Body) is not null,
             PowerShellHostedLocalEnumPolicy.FindDeclarations(function).Select(static definition => definition.Extent.Text),
-            function.Body.DynamicParamBlock?.Extent.Text);
+            function.Body.DynamicParamBlock?.Extent.Text,
+            dependencyTypes?.RequiresDeferredBinding(function) == true);
     }
 
     internal static bool SupportsDynamicParameters(ScriptBlockAst body, PowerShellCompilationCapability capabilities)
@@ -98,6 +108,9 @@ internal static class PowerShellNativeFunctionBindingPolicy
            PowerShellHostedValueClassPolicy.RequiresNativeConstruction(function) ||
            function.Body.Find(node => node is TypeExpressionAst hostConstructor &&
                PowerShellCompilationParameterTypePolicy.IsHostProvidedConstructorReceiver(hostConstructor, capabilities),
+               searchNestedScriptBlocks: false) is not null ||
+           function.Body.Find(node => node is TypeConstraintAst constraint &&
+               PowerShellCompilationParameterTypePolicy.IsHostProvidedParameterType(constraint.TypeName.FullName),
                searchNestedScriptBlocks: false) is not null ||
            function.Body.Find(static node => node is ThrowStatementAst { Pipeline: null } thrown &&
                !PowerShellControlFlowBindingPolicy.HasAncestor<CatchClauseAst>(thrown), searchNestedScriptBlocks: false) is not null ||

@@ -83,12 +83,16 @@ Independent native-bound functions can also compile beside retained
 document-scope types, and early module-scope discovery preserves authored native
 declaration timing. The [current packet measurements](PowerForge.PowerShellCompilation.Coverage.md)
 separate this emitted-method growth from hosted type initialization and dynamic
-command execution: the fixed Gallery packet grows **114/753 → 601/753 complete
-units (15.14% → 79.81%)**, with all ten artifact import/invocation probes passing.
-The seven-workload assessment emits **134/196 units** and **134/183 functions**
-and executes three complete workloads through original, built and installed
-surfaces: the GitHub helper library and PowerShell/Scoop installer module adapters.
-Their 38 owned functions pass 16 scenarios; four workloads remain unattempted.
+command execution: the fixed Gallery packet grows **114/753 → 682/753 complete
+units (15.14% → 90.57%)**, with all ten artifact import/invocation probes passing.
+The latest slice adds 81 methods from the 601/753 checkpoint: Pester reaches
+460/491 and PSFramework 146/176. Borrowed SDK objects, returned/collected module
+callbacks, authenticated literal type aliases and native local-call closure use
+shared syntax/type rules. The seven-workload assessment emits **135/196 units** and **135/183 functions**
+and executes five complete workloads through original, built and installed
+surfaces: the GitHub helper library, PowerShell/Scoop installer module adapters,
+GetBIOS and Autopilot. Their 39 owned functions, one advanced script root and four
+nested vendor helpers pass 26 scenarios; Locksmith and Locksmith2 remain unattempted.
 The pinned PowerShell 7.6.6 and installed Windows PowerShell 5.1 oracle covers
 binding, multi-stage command pipelines, lifecycle, failure/continuation, stop,
 reuse, discovery, and retained type identity for the admitted mixed-module form.
@@ -201,17 +205,31 @@ An M29 standalone probe exposed a separate Windows long-path robustness gap: pro
 
 **Status: Partial; complete ordinary workflows are the active slice.** The earlier Windows launcher/diagnostic and Unix packaging corrections are integrated, with their Full and affected-case evidence kept at the recorded candidates. The current portfolio still requires one stable candidate and the remaining whole-artifact qualification. M29 proved bounded real-workload gains, but that does not mean a familiar cmdlet name works in every form. The recorded one-function Hybrid build showed that the module quickstart's `Get-Date -Format yyyy` sits inside an emitted CLR method with a hosted command region. Literal-format binding makes a qualified call, or an unqualified host-free Strict call, runtime-free. In a Hybrid PowerShell host, an unqualified command still respects aliases, functions, imports, and session command precedence; its name alone cannot authorize a direct CLR rewrite.
 
-The November 18 external packet qualifies three of seven complete workloads:
+The November 19 external packet qualifies five of seven complete workloads:
 the ten-function GitHub helper library, four-function PowerShell installer and
-24-function Scoop installer. All owned functions emit complete CLR bodies, with
-16 scenarios across Original/Built/Installed and compiler input withdrawn during
+24-function Scoop installer, GetBIOS and Autopilot. All required owned bodies emit complete CLR methods, with
+26 scenarios across Original/Built/Installed and compiler input withdrawn during
 artifact observation. The installer adapters preserve native advanced-script or
 documented downstream entry binding. Exact payloads use loopback transport;
 real extraction, installed PowerShell execution, Windows shim dispatch, file
 locks, controlled failure and process-local registry replacements bound the
-qualified application paths. Four workloads have no complete contract. This
+qualified application paths. GetBIOS adds all four compiled vendor helpers,
+report files, remote dispatch and provider-failure handling with owned provider
+boundaries. Autopilot executes its delivered public native-entry factory with
+owned CIM sessions, pipeline input, CSV append, partner fallback and failure
+recovery; console execution covers startup/help. Its explicit `net10.0` Windows
+x64 artifact has a complete advanced root even though the default census,
+without an explicit runtime contract, remains 0/1. Two workloads have no complete contract. This
 does not qualify global installations, MSI branches, Unix shim execution,
 arbitrary application entry forms or runtime-free Hybrid behavior.
+
+The next frontier contains 71 retained Gallery units: 31 Pester, 30 PSFramework
+and ten in the other modules. Keep module-dependent executable callback owners,
+unsupported child bodies, nested alias callbacks, alias functions with local
+types or `clean`, and broader type-registration programs guarded until their
+native ownership and failure semantics have pinned proof. Locksmith and
+Locksmith2 still need complete owned-function and execution-scenario contracts;
+their current 18/45 and 78/108 emitted-unit censuses do not qualify AD workloads.
 
 The [observed support-gap inventory](PowerForge.PowerShellCompilation.SupportGaps.md) separates the final pinned module census, concrete blocked forms, and deliberate hosted boundaries. It is the starting evidence for this milestone; its affected-unit totals are not promised unlock counts.
 

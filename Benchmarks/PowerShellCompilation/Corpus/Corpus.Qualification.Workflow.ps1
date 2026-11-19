@@ -233,7 +233,7 @@ function Assert-WorkflowCompiledOwnership {
     }
     if ((Get-WorkflowProperty $Contract 'completeFunctionInventory' $false) -eq $true) {
         $functions = @($Ledger.entries | Where-Object { $_.kind -eq 'Function' })
-        Assert-WorkflowNameSet @($functions.unitId) @($checked | ForEach-Object unitId) 'Complete owned function inventory'
+        Assert-WorkflowNameSet @($functions | ForEach-Object unitId) @($checked | Where-Object kind -EQ 'Function' | ForEach-Object unitId) 'Complete owned function inventory'
     }
     return @($checked)
 }
@@ -494,6 +494,11 @@ function Invoke-WholeWorkflowQualification {
         '--semantic-profile', $Packet.semanticProfile, '--output', 'json')
     $rid = Get-WorkflowProperty $Entry.qualification 'runtimeIdentifier'
     if ($rid) { $initArgs += @('--rid', $rid) }
+    $singleFile = Get-WorkflowProperty $Entry.qualification 'singleFile'
+    if ($null -ne $singleFile) {
+        if ($singleFile -isnot [bool] -or $kind -ne 'exe') { throw 'singleFile requires a Boolean executable setting.' }
+        if (-not $singleFile) { $initArgs += '--no-single-file' }
+    }
     $initial = Invoke-WorkflowCliOperation -Arguments $initArgs -WorkingDirectory $root -EvidencePath (Join-Path $evidenceRoot 'init.json')
     $project = Get-Content -LiteralPath $projectPath -Raw | ConvertFrom-Json
     $project.resources.mode = if ($kind -eq 'dll') { 'CompleteModule' } else { 'Declared' }

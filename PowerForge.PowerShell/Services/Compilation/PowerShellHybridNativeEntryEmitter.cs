@@ -21,17 +21,25 @@ internal static class PowerShellHybridNativeEntryEmitter
                 .Replace("-", string.Empty).ToLowerInvariant();
         var builder = new StringBuilder("#nullable enable\nnamespace " + NamespaceName + ";\npublic static class " + TypeName + "\n{\n")
             .AppendLine(string.Join(Environment.NewLine, PowerShellCSharpSourceDocumentPool.Declarations(new[] { method })))
-            .AppendLine(method.Source)
-            .AppendLine("    public static global::System.Management.Automation.ExternalScriptInfo Create(global::System.Management.Automation.Runspaces.Runspace runspace, string path)")
+            .AppendLine(method.Source);
+        foreach (var owner in new[] { "global::System.Management.Automation.Runspaces.Runspace", "global::System.Management.Automation.SessionState" })
+        {
+            builder.Append("    public static global::System.Management.Automation.ExternalScriptInfo Create(")
+            .Append(owner).AppendLine(" owner, string path)")
             .AppendLine("    {")
-            .Append("        return global::PowerForge.Generated.Runtime.PowerShellNativeFunctionHost.CreateScriptEntry(runspace, path, ")
-            .Append(PowerShellCSharpLiteral.QuoteString(sourceHash)).AppendLine(", context =>")
-            .AppendLine("        {")
-            .AppendLine("            var clause = 2;");
+            .Append("        return global::PowerForge.Generated.Runtime.PowerShellNativeFunctionHost.CreateScriptEntry(owner, path, ")
+            .Append(PowerShellCSharpLiteral.QuoteString(sourceHash)).AppendLine(",")
+            .Append("            ").Append(method.NativeFunctionBinding.HasBegin ? "context => InvokeClause(context, 0)" : "null").AppendLine(",")
+            .Append("            ").Append(method.NativeFunctionBinding.HasProcess ? "context => InvokeClause(context, 1)" : "null").AppendLine(",")
+            .Append("            ").Append(method.NativeFunctionBinding.HasEnd ? "context => InvokeClause(context, 2)" : "null").AppendLine(");")
+            .AppendLine("        static void InvokeClause(global::PowerForge.Generated.Runtime.PowerShellNativeFunctionContext context, int clause)")
+            .AppendLine("        {");
         PowerShellNativeCallbackSource.AppendBody(builder, "            ", method.GeneratedName, "<script>",
             method.RequiresPowerShellStatementErrors, method.RequiresPowerShellStopping,
             method.RequiresPowerShellStreams, method.ReturnType == typeof(void), method.ReturnType.IsArray);
-        return builder.AppendLine("        });\n    }\n}").ToString();
+            builder.AppendLine("        }\n    }");
+        }
+        return builder.AppendLine("}").ToString();
     }
 
     internal static string LauncherInvocation()

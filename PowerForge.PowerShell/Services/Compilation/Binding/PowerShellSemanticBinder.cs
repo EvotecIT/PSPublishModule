@@ -54,6 +54,15 @@ internal sealed partial class PowerShellSemanticBinder
             requiresNativeInvocation || string.Equals(document.NativeScriptRootName, function.Name, StringComparison.Ordinal) ||
                 document.GuardPackagedPathReads && PowerShellPackagedPathOperandPolicy.RequiresGuardIn(function.Body),
             document.NativeDependencyTypes);
+        if (nativeFunctionBinding?.UsesDeferredTypeBinding == true &&
+            (functionSymbol.Kind == PowerShellSymbolKind.NativeScriptBlock || nativeFunctionBinding.HasClean ||
+             nativeFunctionBinding.FunctionTypeDeclarations.Count != 0))
+        {
+            diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2962",
+                "Runtime type aliases in nested callbacks, clean clauses or lexical type declarations require a deferred native owner.",
+                PowerShellSourceParser.GetSpan(document, function.Extent)));
+            return null;
+        }
         // Native invocation re-evaluates the authored parameter declaration at import.
         // Keep an unresolved type out of the emitted method, but let the ordinary
         // binder discover independent regions inside the retained function first.

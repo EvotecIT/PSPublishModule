@@ -634,16 +634,7 @@ Write-Error 'error-five' -ErrorId 'PowerForge.Semantic.Test' -Category InvalidDa
         };
 
     private static string FindRepositoryRoot()
-    {
-        var directory = new DirectoryInfo(AppContext.BaseDirectory);
-        while (directory is not null)
-        {
-            if (File.Exists(Path.Combine(directory.FullName, "PSPublishModule.sln")))
-                return directory.FullName;
-            directory = directory.Parent;
-        }
-        throw new InvalidOperationException("Unable to locate repository root.");
-    }
+        => PowerForgeCliTestHost.FindRepositoryRoot();
 
     private static PowerShellCompilationBuildResult BuildStrictOracleExecutable(OracleFixture fixture, string name)
         => new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(

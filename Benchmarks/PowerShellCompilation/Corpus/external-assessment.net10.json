@@ -58,7 +58,47 @@
         "url": "https://www.powershellgallery.com/api/v2/package/Get-WindowsAutoPilotInfo/3.9",
         "sha256": "c93baac868b20d93df1da81ebe6f35166feb4b62e25d56200522259d6599398a"
       },
-      "entryPoint": "Get-WindowsAutopilotInfo.ps1"
+      "entryPoint": "Get-WindowsAutopilotInfo.ps1",
+      "qualification": {
+        "kind": "HybridScriptApplication",
+        "artifactName": "AutopilotApplication",
+        "completeFunctionInventory": true,
+        "requiredExports": [],
+        "requiredAliases": [],
+        "requiredCompiledOwnedFunctions": [
+          {
+            "relativePath": "Get-WindowsAutopilotInfo.ps1",
+            "name": "<script>"
+          }
+        ],
+        "requiredScenarioIds": [
+          "pipeline-records",
+          "csv-append",
+          "partner-fallback",
+          "failure-and-recovery"
+        ],
+        "publicExportScenarios": {},
+        "observerScript": "Workflows/HardwareApplications/Observe-Autopilot.ps1",
+        "observerSha256": "5a5f49adc26eed8332d9b800e298e4ee9b564fe53fa46d351f20a255253501b3",
+        "observerSupport": [
+          {
+            "path": "Workflows/HardwareApplications/Hardware.Observer.Common.ps1",
+            "sha256": "755e67b10371d990d78eb4c81eeb6a4e706fc0928989e41c6aeb5dc3a1c2ca85"
+          }
+        ],
+        "runtimeIdentifier": "win-x64",
+        "singleFile": false,
+        "testArguments": [
+          "-?"
+        ],
+        "testWorkingDirectory": "."
+      },
+      "sourceInputs": [
+        {
+          "path": "Get-WindowsAutopilotInfo.ps1",
+          "sha256": "60c13cf3a63e0e38d41d075c85e95c7eb4a8ef301e0c605de6de29e5a552170d"
+        }
+      ]
     },
     {
       "id": "getbios",
@@ -74,7 +114,98 @@
         "url": "https://www.powershellgallery.com/api/v2/package/GetBIOS/1.3.3",
         "sha256": "83625804e898c62516a3a37384d6f197d9ccb1b2bec1de7f8999d3d303ec4e44"
       },
-      "entryPoint": "GetBIOS.psd1"
+      "entryPoint": "GetBIOS.psd1",
+      "qualification": {
+        "kind": "HybridModuleWorkflow",
+        "artifactName": "GetBIOS",
+        "completeFunctionInventory": true,
+        "requiredExports": "Get-Bios",
+        "requiredAliases": [],
+        "requiredCompiledOwnedFunctions": [
+          {
+            "relativePath": "GetBIOS.psm1",
+            "name": "Get-Bios"
+          }
+        ],
+        "requiredScenarioIds": [
+          "vendor-dell",
+          "vendor-hp",
+          "vendor-lenovo",
+          "vendor-toshiba",
+          "remote-provider",
+          "provider-failure"
+        ],
+        "publicExportScenarios": {
+          "Get-Bios": [
+            "vendor-dell",
+            "vendor-hp",
+            "vendor-lenovo",
+            "vendor-toshiba",
+            "remote-provider",
+            "provider-failure"
+          ]
+        },
+        "observerScript": "Workflows/HardwareApplications/Observe-GetBIOS.ps1",
+        "observerSha256": "d7c7851dd8dc6eb6c43a37f3275e5b89b729e651f1f607c5a6ccb352177a0637",
+        "observerSupport": [
+          {
+            "path": "Workflows/HardwareApplications/Hardware.Observer.Common.ps1",
+            "sha256": "755e67b10371d990d78eb4c81eeb6a4e706fc0928989e41c6aeb5dc3a1c2ca85"
+          }
+        ],
+        "fixtureScript": "Workflows/HardwareApplications/Invoke-HardwareFixture.ps1",
+        "fixtureSha256": "da954b1fe184cc9e1760f562e895b8aa3a25e4be4dcbacfc4460c308fb4a9c4f",
+        "fixtureSupport": [
+          {
+            "path": "Workflows/HardwareApplications/Observe-GetBIOS.ps1",
+            "sha256": "d7c7851dd8dc6eb6c43a37f3275e5b89b729e651f1f607c5a6ccb352177a0637"
+          }
+        ],
+        "requiredCompiledNestedFunctions": [
+          {
+            "startOffset": 2362,
+            "parentStartLine": 43,
+            "relativePath": "GetBIOS.psm1",
+            "endOffset": 3408,
+            "parentName": "Get-Bios",
+            "sourceBodyName": "Get_Dell_BIOS_Settings"
+          },
+          {
+            "startOffset": 3420,
+            "parentStartLine": 43,
+            "relativePath": "GetBIOS.psm1",
+            "endOffset": 3850,
+            "parentName": "Get-Bios",
+            "sourceBodyName": "Get_HP_BIOS_Settings"
+          },
+          {
+            "startOffset": 3856,
+            "parentStartLine": 43,
+            "relativePath": "GetBIOS.psm1",
+            "endOffset": 4533,
+            "parentName": "Get-Bios",
+            "sourceBodyName": "Get_Lenovo_BIOS_Settings"
+          },
+          {
+            "startOffset": 4544,
+            "parentStartLine": 43,
+            "relativePath": "GetBIOS.psm1",
+            "endOffset": 4932,
+            "parentName": "Get-Bios",
+            "sourceBodyName": "Get_Toshiba_BIOS_Settings"
+          }
+        ]
+      },
+      "sourceInputs": [
+        {
+          "path": "GetBIOS.psd1",
+          "sha256": "74367d575806b3e5812901fd682feec555b906fc9d4ceae4627ca81300ab28fd"
+        },
+        {
+          "path": "GetBIOS.psm1",
+          "sha256": "3fd60f977ee9f4dadeb41e2297baa446556ccc8fdb8fe891e9b6ccc5129de59b"
+        }
+      ]
     },
     {
       "id": "powershell-install-script",

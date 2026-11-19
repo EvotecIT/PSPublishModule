@@ -66,6 +66,23 @@ Archive-backed workflows acquire and verify their pinned inputs when `-SourceRoo
 
 Packets with `HybridModuleWorkflow` or `HybridScriptApplication` qualification use fresh disposable project roots and the full Analyze/Lock/Restore/Build/Test/Pack/Install lifecycle. These whole-workflow lanes reject `-Offline` before CLI bootstrap, source execution or acquisition; a cached source archive cannot supply a fresh project's authenticated package environment. Run whole-workflow qualification without `-Offline` to acquire and verify that environment. For disconnected use of an existing retained project, complete a normal `powerforge powershell project restore <project>` first, then use `powerforge powershell project restore <project> --offline` to authenticate the saved environment and exact closure locks. Discovery and assessment retain their verified-cache `-Offline` behavior. In command-only qualification, `-Offline` controls source-payload acquisition; it does not promise a disconnected artifact build.
 
+An executable contract can declare `runtimeIdentifier` and `singleFile: false`
+when its reviewed observer must load the delivered framework-dependent assembly.
+Required owned bodies may include the `<script>` root; the complete function
+inventory still compares only function units, including a genuinely empty
+function set. Root ownership must independently pass the same complete-emission
+and absence-of-retained-source checks. `requiredCompiledNestedFunctions` binds
+exact authored extents to generated members and verifies their IL bodies through
+authenticated PE metadata without loading the assembly.
+
+The `Workflows/HardwareApplications` observers qualify GetBIOS through its public
+module command and Autopilot through its delivered public native-entry factory.
+They use pinned external source bytes, controlled WMI/CIM/remoting boundaries,
+actual report/CSV files, and original/built/installed parity. Autopilot console
+execution covers startup/help. Their receipts state the excluded live-device and
+Graph operations. These are application contracts; workload names do not enter
+compiler eligibility.
+
 A module workflow may declare a content-pinned `moduleTest` acceptance script.
 Such projects require schema 2 so an older reader rejects the required contract.
 The script receives the actual built or installed path as `ArtifactPath`, with

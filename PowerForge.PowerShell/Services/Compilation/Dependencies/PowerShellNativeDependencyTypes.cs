@@ -15,8 +15,21 @@ internal sealed class PowerShellNativeDependencyTypes
 {
     internal static readonly PowerShellNativeDependencyTypes Empty = new(new HashSet<string>(StringComparer.OrdinalIgnoreCase));
     private readonly HashSet<string> _names;
+    private readonly HashSet<string> _aliases;
 
-    private PowerShellNativeDependencyTypes(HashSet<string> names) => _names = names;
+    private PowerShellNativeDependencyTypes(HashSet<string> names, HashSet<string>? aliases = null)
+    {
+        _names = names;
+        _aliases = aliases ?? new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+    }
+
+    internal bool RequiresDeferredBinding(FunctionDefinitionAst function)
+        => function.Body.Find(node => node is TypeConstraintAst constraint && ContainsAlias(constraint.TypeName),
+            searchNestedScriptBlocks: false) is not null;
+
+    private bool ContainsAlias(ITypeName name)
+        => _aliases.Contains(name.FullName) || name is ArrayTypeName array && ContainsAlias(array.ElementType) ||
+           name is GenericTypeName generic && generic.GenericArguments.Any(ContainsAlias);
 
     /// <summary>Only the active native binder may resolve these authored names; no CLR reference is inferred.</summary>
     internal bool Qualifies(ITypeName name, PowerShellCompilationCapability capabilities)
@@ -143,7 +156,10 @@ internal sealed class PowerShellNativeDependencyTypes
                 if (!names.Add(definition.Name)) ambiguous.Add(definition.Name);
         }
         names.ExceptWith(ambiguous);
-        return new PowerShellNativeDependencyTypes(names);
+        var originalNames = new HashSet<string>(names, StringComparer.OrdinalIgnoreCase);
+        PowerShellNativeTypeAliases.Add(root, graphRoot, dependencies, graph, names);
+        return new PowerShellNativeDependencyTypes(names,
+            new HashSet<string>(names.Where(name => !originalNames.Contains(name)), StringComparer.OrdinalIgnoreCase));
     }
 
 }

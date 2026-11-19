@@ -8,12 +8,21 @@ namespace PowerForge;
 /// </summary>
 internal static class PowerShellCompiledModuleManifest
 {
+    private static string? ReadRootModule(string path)
+    {
+        var root = ModuleManifestValueReader.ReadTopLevelLiteralStringOrThrow(path, "RootModule");
+        var legacy = ModuleManifestValueReader.ReadTopLevelLiteralStringOrThrow(path, "ModuleToProcess");
+        if (root is not null && legacy is not null)
+            throw new InvalidOperationException($"Module manifest '{path}' cannot declare both RootModule and ModuleToProcess.");
+        return root ?? legacy;
+    }
+
     internal static void EnsureManifestOwnsSource(string sourcePath, string manifestPath)
     {
         var source = Path.GetFullPath(sourcePath);
         var manifest = Path.GetFullPath(manifestPath);
         var moduleRoot = Path.GetDirectoryName(manifest) ?? Directory.GetCurrentDirectory();
-        var rootModule = ModuleManifestValueReader.ReadTopLevelLiteralStringOrThrow(manifest, "RootModule");
+        var rootModule = ReadRootModule(manifest);
         string expectedSource;
         if (!string.IsNullOrWhiteSpace(rootModule))
         {
@@ -169,9 +178,11 @@ internal static class PowerShellCompiledModuleManifest
         var hasRuntimeControlledExports = explicitExports is { Commands.Length: 0 };
 
         var mutator = new AstModuleManifestMutator();
-        if (!mutator.TrySetTopLevelString(targetManifest, "RootModule", rootModuleFileName) &&
+        var rootKey = ModuleManifestValueReader.ReadTopLevelString(sourceManifest, "ModuleToProcess") is not null
+            ? "ModuleToProcess" : "RootModule";
+        if (!mutator.TrySetTopLevelString(targetManifest, rootKey, rootModuleFileName) &&
             !string.Equals(
-                ModuleManifestValueReader.ReadTopLevelString(targetManifest, "RootModule"),
+                ReadRootModule(targetManifest),
                 rootModuleFileName,
                 PowerShellCompilationPathSafety.GetPathComparison(targetManifest)))
             throw new InvalidOperationException($"Module manifest '{sourceManifest}' does not contain a literal RootModule entry that can be updated.");
@@ -429,7 +440,7 @@ internal static class PowerShellCompiledModuleManifest
         var manifestDirectory = Path.GetDirectoryName(manifestPath) ?? rootDirectory;
         if (includeRootModule)
         {
-            var rootModule = ModuleManifestValueReader.ReadTopLevelString(manifestPath, "RootModule");
+            var rootModule = ReadRootModule(manifestPath);
             if (string.IsNullOrWhiteSpace(rootModule))
             {
                 scripts.Add(NormalizeManifestRelativePath(FrameworkCompatibility.GetRelativePath(rootDirectory, manifestPath)));
@@ -480,7 +491,7 @@ internal static class PowerShellCompiledModuleManifest
     {
         if (includeRootModule)
         {
-            var rootModule = ModuleManifestValueReader.ReadTopLevelString(manifestPath, "RootModule");
+            var rootModule = ReadRootModule(manifestPath);
             if (!string.IsNullOrWhiteSpace(rootModule))
                 yield return new ManifestFileReference(rootModule!, required: true);
         }
@@ -518,7 +529,7 @@ internal static class PowerShellCompiledModuleManifest
             scripts.Add(FrameworkCompatibility.GetRelativePath(moduleRoot, referencedPath));
             if (!extension.Equals(".psd1", StringComparison.OrdinalIgnoreCase) || !File.Exists(referencedPath))
                 continue;
-            var nestedRoot = ModuleManifestValueReader.ReadTopLevelString(referencedPath, "RootModule");
+            var nestedRoot = ReadRootModule(referencedPath);
             if (!string.IsNullOrWhiteSpace(nestedRoot))
             {
                 var nestedRootPath = ResolveContainedPath(Path.GetDirectoryName(referencedPath)!, nestedRoot!);

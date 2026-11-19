@@ -1,4 +1,4 @@
-# PowerShell compiler measurements: 2026-11-18
+# PowerShell compiler measurements: 2026-11-19
 
 These results describe two fixed external packets on Windows x64 with SDK
 10.0.404. The public module probes use PowerShell 7.6.9. The external assessment
@@ -13,12 +13,12 @@ runtime-free execution.
 
 | Packet | Complete emitted units | Complete emitted functions | Execution proof |
 | --- | ---: | ---: | --- |
-| Ten public Gallery modules | 601/753 (79.81%) | Not measured separately | 10/10 Hybrid artifacts built, imported, and passed an invocation probe |
-| Seven external workloads | 134/196 (68.37%) | 134/183 (73.22%) | 3/7 complete workloads passed; 38 owned functions in 16 scenarios on original, built, and installed surfaces |
+| Ten public Gallery modules | 682/753 (90.57%) | Not measured separately | 10/10 Hybrid artifacts built, imported, and passed an invocation probe |
+| Seven external workloads | 135/196 (68.88%) | 135/183 (73.77%) | 5/7 complete workloads passed; 39 owned functions, one script root and four nested helpers in 26 scenarios on original, built, and installed surfaces |
 
 The external assessment discovers 155 source files, with zero parser errors and
 zero acquisition/analysis failures. It records five promoted regions in retained
-functions. The public packet records 152 retained source units, 586 runtime-routed
+functions. The public packet records 71 retained source units, 576 runtime-routed
 units, and zero promoted regions. Those probes exercise Hybrid artifacts in
 PowerShell. The ratios describe the measured packets and their discovered units.
 
@@ -30,8 +30,8 @@ denominator. Earlier documents and `m29a-*` files preserve development results. 
 result from 2026-10-03 is a separate targeted maintainer packet and has not been
 rerun here. It must not replace either external measurement above.
 
-The same 753-unit packet rises from **114/753 (15.14%)** to **601/753 (79.81%)**:
-487 additional complete methods, with no loss in another module. All ten artifact
+The same 753-unit packet rises from **114/753 (15.14%)** to **682/753 (90.57%)**:
+568 additional complete methods, with no loss in another module. All ten artifact
 probes pass. The complete-method counts by module are:
 
 | Module | Before | After |
@@ -39,14 +39,14 @@ probes pass. The complete-method counts by module are:
 | ImportExcel | 0/2 | 0/2 |
 | InvokeBuild | 0/1 | 0/1 |
 | Microsoft.PowerShell.Archive | 19/21 | 19/21 |
-| Pester | 0/491 | 403/491 |
+| Pester | 0/491 | 460/491 |
 | platyPS | 42/43 | 42/43 |
 | Pode | 0/1 | 0/1 |
 | powershell-yaml | 14/15 | 14/15 |
-| PSFramework | 38/176 | 122/176 |
+| PSFramework | 38/176 | 146/176 |
 | PSScriptAnalyzer | 1/2 | 1/2 |
 | ThreadJob | 0/1 | 0/1 |
-| **Total** | **114/753** | **601/753** |
+| **Total** | **114/753** | **682/753** |
 
 A separate three-test Pester run also passes on the pinned PowerShell 7.6.6 host
 against both the original and generated modules: three passed, zero failed, and
@@ -81,12 +81,30 @@ The next slice therefore admits types from delivered, authenticated managed
 dependencies and the selected PowerShell syntax-tree and completion types.
 Those changes add 80 Pester methods and 84 PSFramework methods, reaching
 600/753. Native caller transfer and exit admission add one further Pester
-method, bringing the current packet to 601/753.
+method, reaching the 601/753 checkpoint.
+
+At that checkpoint, Pester's 88 retained units and PSFramework's 54 accounted for
+142 of the packet's 152 retained units. Same-input explanations identified 40
+Pester units with the selected SDK-object, parameter-metadata or syntax-helper
+diagnostics and 19 with script-block placement diagnostics. PSFramework had 24
+units with unresolved delivered type aliases, ten with the selected SDK forms
+and two with callback placement diagnostics. These affected-unit groups overlap;
+they are not additive predictions of complete-method gains. Pester also had five
+eligible units lost during shaping.
+
+The next slice therefore admits borrowed invocation objects, additional SDK AST
+nodes and parameter metadata, returned and collected script-block values, and
+literal aliases registered for authenticated delivered types. Native binding
+requirements propagate to local callers as well as callees. The complete packet
+adds 57 Pester and 24 PSFramework methods: **601/753 → 682/753**, with all ten
+probes passing. The remaining 71 units comprise 31 Pester, 30 PSFramework and ten
+in the other eight modules. The rules use syntax, SDK identity and locked
+dependency metadata; module names are never compiler eligibility inputs.
 
 The Gallery runner builds with CompleteModule resources. At the type-admission
 checkpoint, Pester's default Declared-resource census emits 333/491; its complete
 artifact delivers both managed compatibility variants and emits 402/491. The
-current complete artifact emits 403/491 after caller transfer and exit admission.
+complete artifact at that checkpoint emits 403/491 after caller transfer and exit admission.
 Same-identity variants leave
 type selection to the authored loader and native binder within a non-conflicting
 dependency graph. Distinct assembly owners
@@ -169,12 +187,70 @@ The installer contracts use exact content-pinned ZIP payloads over an owned
 loopback server, real filesystem/process behavior and process-local replacement
 registry hives. Their three scenarios each run on Original/Built/Installed with
 compiler input withdrawn for artifact observation, through the same canonical
-project lifecycle. The four workloads without complete contracts remain
-unattempted. These results do not qualify live GitHub operations, arbitrary
+project lifecycle. These results do not qualify live GitHub operations, arbitrary
 installer branches, MSI/global installations, direct executable packaging of
 the installers, or runtime-free execution.
 
-The integrated focused suite passes 29 cases with zero failures and zero skips.
+GetBIOS adds six scenarios across all four vendor branches, remote-provider
+dispatch and a controlled provider failure. Its unchanged public command writes
+actual CSV and HTML reports. The artifact ledger and PE metadata require all
+four exact nested vendor-function extents to map to complete generated methods.
+The fixture preserves the pinned source's missing HP/Lenovo values and duplicate
+remote output. WMI, Dell provider paths, privilege membership, credentials,
+remoting and UI are process-local test boundaries; no real BIOS, elevated token
+or remote machine is qualified. Preserving its legacy `ModuleToProcess` manifest
+key fixes a generated-import failure without rewriting the external source.
+
+Autopilot adds four scenarios for two-record pipeline input, actual CSV creation
+and append, partner fallback, and missing-data failure followed by recovery.
+The explicit `net10.0` Windows x64 executable delivers a completely compiled
+advanced script root with native `begin`/`process`/`end`. Observers call its public
+native-entry factory in the pinned host, using the source bytes embedded in the
+delivered assembly and withdrawing the compiler input. Console execution proves
+startup and native help; the CIM scenarios run through that delivered factory.
+Controlled sessions and device records bound the application proof. Live Graph
+registration, group assignment, remote inventory and reboot remain unqualified.
+Locksmith and Locksmith2 still have no complete workload contract.
+
+The default external census remains distinct from targeted application
+qualification: it emits 135/196 units, including 78/108 for Locksmith2.
+Autopilot remains 0/1 in that census because it has no explicit executable
+runtime contract. Its qualified Windows x64 executable instead requires the
+complete script-root method in the actual artifact ledger. That application
+result does not increase the default census numerator. All five complete
+workloads pass, with zero failed attempts and zero census regressions.
+
+New pinned oracle cases cover returned/collected callback scope and closures;
+borrowed SDK identity, mutation and dynamic binding; native local-call closure;
+delivered alias registration, missing-alias failure, restoration, typed
+reassignment, lifecycle, stopping and recovery; script-root lifecycle; and legacy
+manifest-key import. Applicable forms run against both PowerShell 7.6.6 and
+Windows PowerShell 5.1. A separate public executable check preserves retained
+ownership for returned or collected blocks that require a defining module.
+The focused suite passes **266/266 cases, with zero failures and zero
+skips**, including the seven new semantic/artifact cases and the binder
+regressions. The shared engine builds for `net472`, `net8.0` and `net10.0` with
+zero warnings and errors. Three artifact oracle cases rerun against the preceding compiler all fail at
+their complete-emission assertions, with zero skips, establishing that the new
+proof detects the previously unsupported forms.
+
+The canonical Fast compiler contract gate passes **564/564 tests**. Its pinned
+semantic oracle report records **155 passed, zero failed and zero skipped**;
+all seven new semantic/artifact families are required by that gate.
+
+Explicit target contracts previously admitted executable roots whose compiled
+callbacks require a defining module. A pre-correction artifact reports a complete root
+but emits a new module-ownership error while creating a collected callback.
+The public-build regression requires retained ownership and native output
+parity for returned and dictionary-held blocks, named callback functions, switch
+predicates and nested declarations in an executable. An independent scalar
+lifecycle function and nested declarations still emit and execute. The binder
+admits compiled script-block values and switch predicates only when the host
+capability contract supplies a defining module.
+This preserves the supported module-function callback forms. The semantic and performance
+measurements below retain their own earlier revision and scope.
+
+The preceding type/application checkpoint's focused suite passed 29 cases with zero failures and zero skips.
 Its semantic cases compare original and generated artifacts on the pinned
 7.6.6 and installed 5.1 profiles for delivered type identity, native conversion
 and validation, lazy attributes, shared state, borrowed syntax trees, completion

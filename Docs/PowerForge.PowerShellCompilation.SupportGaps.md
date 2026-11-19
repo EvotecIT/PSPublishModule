@@ -12,11 +12,11 @@ existing admission rules. This extends the existing native binding, cmdlet,
 pipeline, and `begin`/`process`/`end` paths into realistic mixed modules. It does
 not add general authored-class or pipeline support to Strict.
 
-The fixed Gallery packet emits **601/753 complete units (79.81%)**, up from
-114/753 (15.14%). Pester rises from 0/491 to 403/491 and PSFramework from 38/176
-to 122/176; the other eight modules keep their previous complete-method counts.
+The fixed Gallery packet emits **682/753 complete units (90.57%)**, up from
+114/753 (15.14%) and the preceding 601/753 checkpoint. Pester rises from 0/491 to 460/491 and PSFramework from 38/176
+to 146/176; the other eight modules keep their previous complete-method counts.
 All ten Hybrid artifacts build, import,
-and pass their invocation probes. The packet still retains 152 source units;
+and pass their invocation probes. The packet still retains 71 source units;
 these results do not establish complete execution of the ten modules.
 
 Native-bound Hybrid functions can use public, non-nested, non-generic types
@@ -24,7 +24,7 @@ from authenticated delivered managed DLLs, including supported one-dimensional
 arrays and closed containers. Actual loading, conversion, attributes and type
 identity remain with PowerShell. Same-assembly-identity compatibility variants
 can share a type name within a non-conflicting dependency graph; distinct assembly owners remain ambiguous. Assemblies
-with native imports, unresolved type accelerators, nested/open generic types and
+with native imports, accelerators outside the authenticated literal maps, nested/open generic types and
 unsupported constrained accesses keep their existing guards. Borrowed `Ast` and
 `FunctionDefinitionAst` parameters and `CompletionResultType` use native binding.
 Unlabeled caller-directed break/continue also use the host's flow-control owner.
@@ -33,15 +33,43 @@ script termination. Switch predicates that transfer outside their own body stay
 hosted. None of these forms adds general dependency-type or caller-transfer
 support to Strict.
 
-The seven-workload packet emits 134/196 units and 134/183 functions and executes
-three complete workloads: ten GitHub helper functions in ten scenarios, four
+Literal type aliases can now be identified from authenticated delivered
+registration scripts whose native `TypeAccelerators.Add` helper consumes a
+literal type map. Their targets must already belong to the qualified dependency
+metadata. Compilation reads those scripts without executing them or loading the
+DLL. The native parameter binder resolves the alias at invocation time; removing
+an alias before the first call still fails, and restoring it permits recovery.
+Returned script-block literals and array/dictionary-held literals in module
+functions can use the compiled callback owner when every child body qualifies.
+Executable roots and functions that require a defining module remain hosted. Borrowed session,
+variable, cmdlet, dynamic-parameter, syntax-tree and parameter-metadata objects
+retain SDK identity. Local callers of native functions also use native binding.
+These are reusable syntax and type rules, with no module-name eligibility tests.
+Nested alias callbacks, alias functions with local types or `clean`, arbitrary
+registration code and unsupported callback bodies retain their guards.
+
+Advanced native executable roots support `begin`/`process`/`end` on the explicit
+`net10.0` Windows x64 target. Both host profiles prove the underlying lifecycle
+semantics; this does not establish Windows PowerShell executable packaging.
+Generated module manifests also preserve the legacy `ModuleToProcess` key
+without adding a contradictory `RootModule` entry.
+
+The seven-workload packet emits 135/196 units and 135/183 functions and executes
+five complete workloads: ten GitHub helper functions in ten scenarios, four
 PowerShell installer functions in three scenarios and 24 Scoop installer functions
-in three scenarios. Original, built and installed surfaces pass with compiler
+in three scenarios, GetBIOS in six scenarios and Autopilot in four scenarios. Original, built and installed surfaces pass with compiler
 input withdrawn for artifact observation. The installers use native module
 adapters, verified payloads over loopback HTTP, actual extraction/process behavior
 and process-local registry replacements. The PowerShell and CMD shims execute
-offline help; the Unix shim is only created and target-checked. The four workloads
-without complete contracts remain unattempted. Live GitHub behavior, exhaustive
+offline help; the Unix shim is only created and target-checked. GetBIOS requires
+all four compiled nested vendor helpers and actual report files, with controlled
+WMI, Dell, remoting, privilege and UI boundaries. Autopilot requires its complete
+advanced script root in the explicit Windows x64 artifact and executes the
+delivered public native-entry factory with controlled CIM sessions and actual
+CSV files. Console execution covers startup/help. Its default census remains
+0/1 without an explicit runtime target; application qualification is separate.
+Locksmith and Locksmith2 remain unattempted. Live hardware or Graph behavior,
+live GitHub behavior, exhaustive
 branches, MSI/global installation and direct installer executable packaging are
 not qualified.
 

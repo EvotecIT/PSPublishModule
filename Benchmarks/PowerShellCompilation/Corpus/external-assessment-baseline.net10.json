@@ -1,15 +1,15 @@
 {
   "schemaVersion": 2,
   "packetId": "powerforge-external-powershell-assessment-net10-v1",
-  "packetSha256": "d7d975621ee8b4f5a81b89bbb0d8d546c1ce6d0133f3a69ed82ab52f0f551bb4",
-  "recordedOn": "2026-11-18",
+  "packetSha256": "b64e12d7816605ef61fa01d1eb6dedb8b1564ba75bb43c6fdf6178050ba3bd8c",
+  "recordedOn": "2026-11-19",
   "semanticProfile": "PowerForge.Oracle.PowerShell/7.6",
   "targetFramework": "net10.0",
   "execution": {
     "requested": true,
     "workloadsTotal": 7,
-    "workloadsAttempted": 3,
-    "workloadsPassed": 3,
+    "workloadsAttempted": 5,
+    "workloadsPassed": 5,
     "workloads": [
       {
         "id": "locksmith",
@@ -25,15 +25,29 @@
       },
       {
         "id": "get-windows-autopilot-info",
-        "attempted": false,
-        "succeeded": false,
-        "reason": "No complete owned-function and execution-scenario contract is declared."
+        "attempted": true,
+        "succeeded": true,
+        "completeWorkloadExecution": true,
+        "scenarioCount": 4,
+        "surfaces": [
+          "Original",
+          "Built",
+          "Installed"
+        ],
+        "functions": 1
       },
       {
         "id": "getbios",
-        "attempted": false,
-        "succeeded": false,
-        "reason": "No complete owned-function and execution-scenario contract is declared."
+        "attempted": true,
+        "succeeded": true,
+        "completeWorkloadExecution": true,
+        "scenarioCount": 6,
+        "surfaces": [
+          "Original",
+          "Built",
+          "Installed"
+        ],
+        "functions": 1
       },
       {
         "id": "powershell-install-script",
@@ -590,13 +604,13 @@
       "sourceFingerprint": "b1e65521a013471cfc80589f0edd062a714f4b498a347685a06d7dce97b1b4ef",
       "sourceFiles": 105,
       "totalUnits": 108,
-      "emittedUnits": 77,
+      "emittedUnits": 78,
       "runtimeFallbackUnits": 107,
       "parseErrorFiles": 0,
       "postEmissionEvaluated": true,
       "totalFunctions": 100,
-      "analyzerEligibleFunctions": 80,
-      "emittedFunctions": 77,
+      "analyzerEligibleFunctions": 81,
+      "emittedFunctions": 78,
       "promotedTypedRegions": 2,
       "droppedEligibleFunctions": 3,
       "fallbackFunctions": 99,
@@ -1673,8 +1687,8 @@
           "relativePath": "Public/New-LS2Dashboard.ps1",
           "name": "New-LS2Dashboard",
           "startLine": 1,
-          "semanticEligible": false,
-          "emitted": false,
+          "semanticEligible": true,
+          "emitted": true,
           "runtimeRouted": true,
           "shapingFallback": false,
           "promotedTypedRegions": 0

@@ -115,6 +115,13 @@ $oracleTestPatterns = @(
     'PowerForge.Tests.PowerShellCompilationArtifactHardeningTests.Build_BinaryModuleLanguageModeMatchesPinnedPowerShell76AndInstalledWindowsPowerShell'
 )
 if ($requirePinnedOracle) {
+    $requiredFamilies['returned and collected native callbacks'] = 'PowerForge.Tests.PowerShellCompilationSemanticOracleTests.ReturnedAndCollectedCallbacksPreserveNativeScopeClosureAndFailureOnBothHosts*'
+    $requiredFamilies['borrowed invocation objects'] = 'PowerForge.Tests.PowerShellCompilationSemanticOracleTests.BorrowedInvocationObjectsPreserveIdentityMutationAndDynamicBindingOnBothHosts*'
+    $requiredFamilies['native call closure'] = 'PowerForge.Tests.PowerShellCompilationSemanticOracleTests.NativeCalleesPreserveBasicExtraArgumentsAndAdvancedCallerBindingOnBothHosts*'
+    $requiredFamilies['delivered native type aliases'] = 'PowerForge.Tests.PowerShellCompilationSemanticOracleTests.DeliveredTypeAliasesPreserveNativeRegistrationIdentityAndRecoveryOnBothHosts*'
+    $requiredFamilies['native script lifecycle'] = 'PowerForge.Tests.PowerShellCompilationSemanticOracleTests.NativeScriptLifecyclePreservesPipelineBindingPartialFailureAndRecoveryOnBothHosts*'
+    $requiredFamilies['legacy module root spelling'] = 'PowerForge.Tests.PowerShellCompilationSemanticOracleTests.LegacyModuleToProcessManifestPreservesCompiledImportOnBothHosts*'
+    $requiredFamilies['script root callback ownership'] = 'PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.Build_HybridNativeScriptRootRetainsModuleOwnedBlockValues*'
     $requiredFamilies['pinned semantic oracle'] = 'PowerForge.Tests.PowerShellCompilationSemanticOracleTests.MinimizedCasesExecuteOnPinnedPowerShell76AndInstalledWindowsPowerShell*'
     $requiredFamilies['pinned binary module language mode'] = $oracleTestPatterns[1] + '*'
 }
