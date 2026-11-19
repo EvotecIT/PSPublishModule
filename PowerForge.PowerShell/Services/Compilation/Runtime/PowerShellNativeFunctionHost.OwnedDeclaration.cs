@@ -18,7 +18,7 @@ namespace PowerForge.Generated.Runtime
             return CreateOwnedDeclaration(module.SessionState, name, parameterDeclaration, localNames, localTypeDeclarations, begin, process, end);
         }
 
-        /// <summary>Prepares a compiler-owned function frame with bounded lexical enum declarations.</summary>
+        /// <summary>Prepares a compiler-owned function frame with qualified lexical type declarations.</summary>
         public static ScriptBlock CreateOwnedDeclaration(PSModuleInfo module, string name, string parameterDeclaration,
             string[] localNames, string[] localTypeDeclarations,
             Action<PowerShellNativeFunctionContext>? begin, Action<PowerShellNativeFunctionContext>? process,
@@ -44,7 +44,7 @@ namespace PowerForge.Generated.Runtime
             Action<PowerShellNativeFunctionContext>? end)
             => CreateOwnedDeclaration(sessionState, name, parameterDeclaration, localNames, localTypeDeclarations, begin, process, end, Array.Empty<string>());
 
-        /// <summary>Retains bounded enum identities in the executable function's exact declaration stub.</summary>
+        /// <summary>Retains lexical type identities in the executable function's exact declaration stub.</summary>
         public static ScriptBlock CreateOwnedDeclaration(SessionState sessionState, string name, string parameterDeclaration,
             string[] localNames, string[] localTypeDeclarations,
             Action<PowerShellNativeFunctionContext>? begin, Action<PowerShellNativeFunctionContext>? process,

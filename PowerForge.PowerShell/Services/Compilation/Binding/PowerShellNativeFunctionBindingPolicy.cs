@@ -76,7 +76,7 @@ internal static class PowerShellNativeFunctionBindingPolicy
             PowerShellNativeVariableAnalysis.FindLocalTypeDeclarations(function, locals),
             function.Body.BeginBlock is not null, function.Body.ProcessBlock is not null,
             function.Body.EndBlock is not null, function.Body.GetType().GetProperty("CleanBlock")?.GetValue(function.Body) is not null,
-            PowerShellHostedLocalEnumPolicy.FindDeclarations(function).Select(static definition => definition.Extent.Text),
+            PowerShellHostedLocalTypePolicy.FindDeclarations(function).Select(static definition => definition.Extent.Text),
             function.Body.DynamicParamBlock?.Extent.Text,
             dependencyTypes?.RequiresDeferredBinding(function) == true);
     }
@@ -104,7 +104,7 @@ internal static class PowerShellNativeFunctionBindingPolicy
            SupportsDynamicParameters(function.Body, capabilities) ||
            function.Body.BeginBlock is not null || function.Body.ProcessBlock is not null ||
            PowerShellHostedEnumDeclarationPolicy.RequiresNativeParameterBinding(function) ||
-           PowerShellHostedLocalEnumPolicy.FindDeclarations(function).Length != 0 ||
+           PowerShellHostedLocalTypePolicy.FindDeclarations(function).Length != 0 ||
            PowerShellHostedValueClassPolicy.RequiresNativeConstruction(function) ||
            function.Body.Find(node => node is TypeExpressionAst hostConstructor &&
                PowerShellCompilationParameterTypePolicy.IsHostProvidedConstructorReceiver(hostConstructor, capabilities),
@@ -179,7 +179,8 @@ internal static class PowerShellNativeFunctionBindingPolicy
                searchNestedScriptBlocks: false) is not null ||
            RequiresNativeAccessOutputCapture(function) ||
            function.Body.Find(node => node is AssignmentStatementAst assignment &&
-               (PowerShellSemanticBinder.NativeStaticAssignmentReceiver(assignment.Left, targetFramework) is not null ||
+               (PowerShellSemanticBinder.NativeStaticAssignmentReceiver(assignment.Left, targetFramework,
+                    capabilities: capabilities, value: assignment.Right) is not null ||
                 assignment.Operator == TokenKind.Equals && assignment.Parent is AssignmentStatementAst &&
                 PowerShellSemanticBinder.NativeAccessMutationReceiver(assignment.Left) is not null ||
                 capabilities.HasFlag(PowerShellCompilationCapability.PowerShellModuleState) &&
@@ -196,6 +197,12 @@ internal static class PowerShellNativeFunctionBindingPolicy
            RequiresNativeScopedStorage(function, capabilities) ||
            RequiresNativeStaticNumericArgumentConversion(function) ||
            RequiresNativeStaticStringArgumentConversion(function) ||
+           function.Body.Find(node => node is InvokeMemberExpressionAst { Static: false } invocation &&
+               PowerShellSemanticBinder.UnwrapExpression(invocation.Expression) is ConvertExpressionAst cast &&
+               PowerShellSemanticBinder.UnwrapExpression(cast.Child) is InvokeMemberExpressionAst { Static: true } &&
+               cast.Type.TypeName.GetReflectionType() is { IsClass: true } type && type != typeof(string) && type != typeof(object) &&
+               PowerShellCompilationParameterTypePolicy.CanUseInMethod(type, targetFramework, capabilities),
+               searchNestedScriptBlocks: false) is not null ||
            RequiresNativeObjectParameterValueOperation(function) ||
            PowerShellAutomaticVariableObservationPolicy.ObservesCatchState(function) ||
            function.Body.Find(static node => node is ConvertExpressionAst conversion &&

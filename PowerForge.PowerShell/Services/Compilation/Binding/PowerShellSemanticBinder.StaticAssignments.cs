@@ -6,22 +6,31 @@ namespace PowerForge;
 internal sealed partial class PowerShellSemanticBinder
 {
     // Mutable static property values may require PowerShell conversion and adapter
-    // dispatch. Keep delegate destinations on their typed conversion path.
+    // dispatch. A literal scriptblock can still use the typed delegate conversion path.
     internal static TypeExpressionAst? NativeStaticAssignmentReceiver(ExpressionAst target, string? targetFramework,
         PowerShellNativeDependencyTypes? dependencyTypes = null,
-        PowerShellCompilationCapability capabilities = PowerShellCompilationCapability.None)
+        PowerShellCompilationCapability capabilities = PowerShellCompilationCapability.None,
+        StatementAst? value = null)
     {
         var staticRoot = Generated.Runtime.PowerShellNativeFunctionContext.FindNativeStaticAccessReceiver(target);
-        if (staticRoot is not null && dependencyTypes?.Qualifies(staticRoot.TypeName, capabilities) == true)
+        if (staticRoot is not null && (dependencyTypes?.Qualifies(staticRoot.TypeName, capabilities) == true ||
+            PowerShellHostedGuardedAddTypePolicy.IsQualified(staticRoot, capabilities)))
             return staticRoot;
         if (target is MemberExpressionAst { Static: true, Expression: TypeExpressionAst type,
                 Member: StringConstantExpressionAst name } && type.TypeName.GetReflectionType() is { } receiver)
         {
             var members = receiver.GetMember(name.Value, MemberTypes.Field | MemberTypes.Property,
                 BindingFlags.Public | BindingFlags.Static | BindingFlags.FlattenHierarchy | BindingFlags.IgnoreCase);
+            // Bind edition-dependent member absence in the active host so skipped branches stay skipped
+            // and reached branches report the native assignment error at the authored statement.
+            if (members.Length == 0 && staticRoot is not null &&
+                PowerShellCompilationParameterTypePolicy.CanUseInMethod(receiver, targetFramework, capabilities))
+                return staticRoot;
             if (members.Length == 1 && members[0] is PropertyInfo property &&
                 (property.PropertyType.IsEnum || property.PropertyType.IsClass &&
-                    property.PropertyType != typeof(string) && !typeof(MulticastDelegate).IsAssignableFrom(property.PropertyType)) &&
+                    property.PropertyType != typeof(string) &&
+                    (!typeof(MulticastDelegate).IsAssignableFrom(property.PropertyType) ||
+                     value is not null && UnwrapExpression(value) is not ScriptBlockExpressionAst)) &&
                 property.GetMethod is { IsPublic: true } && property.SetMethod is { IsPublic: true } &&
                 property.GetIndexParameters().Length == 0 &&
                 (string.IsNullOrWhiteSpace(targetFramework) ||
@@ -39,7 +48,8 @@ internal sealed partial class PowerShellSemanticBinder
         PowerShellCompilationCapability capabilities)
     {
         var span = PowerShellSourceParser.GetSpan(document, assignment.Extent);
-        var dependencyReceiver = document.NativeDependencyTypes.Qualifies(receiver.TypeName, capabilities);
+        var dependencyReceiver = document.NativeDependencyTypes.Qualifies(receiver.TypeName, capabilities) ||
+            PowerShellHostedGuardedAddTypePolicy.IsQualified(receiver, capabilities);
         var type = dependencyReceiver ? null : receiver.TypeName.GetReflectionType();
         if (!dependencyReceiver &&
             (type is null || !PowerShellCompilationParameterTypePolicy.CanUseInMethod(type, targetFramework, capabilities)))

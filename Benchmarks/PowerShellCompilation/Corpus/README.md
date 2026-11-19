@@ -84,10 +84,18 @@ local scenarios use disposable state. The observers verify all 100 owned
 functions through active PowerShell source or CLR method frames and direct
 value and state checks.
 
-With the lab configured, the seven-workload packet passed six contracts and
-31 declared scenarios. Without the lab target, the assessment reports Locksmith2 as unattempted.
-Explicitly selecting it for execution requires the target. Locksmith remains
-in the census without a complete-workload contract.
+Classic Locksmith adds three offline scenarios on pinned PowerShell 7.6.6 for
+Windows. Install the Windows ActiveDirectory module so PowerShell can bind its
+actual object types. The scenarios use in-memory records and fixture directory
+responses. They cover the public read-only audit, incomplete input, local
+utilities and proposal text, and observe all 44 owned functions across the
+original, built and installed modules. On Windows clients the fixture supplies
+an empty ServerManager module for the declared import.
+
+With the lab configured, the pinned packet passes seven complete workloads
+across 34 scenarios. The census emits 183/196 units and 183/183 functions.
+Without the lab target, the assessment reports Locksmith2 as unattempted.
+Explicitly selecting Locksmith2 for execution requires that target.
 `-ExecuteWorkloads -RefreshBaseline` records these results alongside the census, requires at
 least one attempted workload, and rejects failed attempts. This mode requires
 online project restore. Run it without `-Offline`.

@@ -104,16 +104,27 @@ internal sealed class PowerShellNativeDependencyTypes
             dependency.Kind == PowerShellCompilationDependencyKind.ManagedAssembly && dependency.Exists &&
             (dependency.Disposition is PowerShellCompilationDependencyDisposition.CopiedAdjacent or PowerShellCompilationDependencyDisposition.EmbeddedAndExtracted) &&
             dependency.SourcePath is not null &&
-            PowerShellCompilationPathSafety.PathStartsWith(Path.GetFullPath(dependency.SourcePath), rootPrefix)).ToArray();
+            PowerShellCompilationPathSafety.PathStartsWith(Path.GetFullPath(dependency.SourcePath), rootPrefix))
+            .Select(dependency => Path.GetFullPath(dependency.SourcePath!)).ToArray();
+        var borrowed = graph.Nodes.Where(static node => node.Exists &&
+                node.Disposition == PowerShellCompilationDependencyGraphDisposition.External &&
+                node.Identity.Provenance.Equals(PowerShellWindowsModuleMetadata.AssemblyProvenance, StringComparison.Ordinal))
+            .ToDictionary(node => PowerShellWindowsModuleMetadata.ResolvePath(node.Identity.Source),
+                PowerShellCompilationPathSafety.PathComparer);
         var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var owners = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         var ambiguous = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var dependency in candidates)
+        foreach (var path in candidates.Concat(borrowed.Keys).Distinct(PowerShellCompilationPathSafety.PathComparer))
         {
-            var path = Path.GetFullPath(dependency.SourcePath!);
-            PowerShellCompilationPathSafety.EnsureContained(root, path, "Native type dependency must stay inside the root module.");
-            PowerShellCompilationPathSafety.EnsureNoLinksFromFileSystemRoot(path, "Native type dependency must not traverse links.");
-            var nodes = graph.Nodes.Where(node => node.Exists &&
+            var isBorrowed = borrowed.TryGetValue(path, out var hostAssembly);
+            if (isBorrowed)
+                PowerShellWindowsModuleMetadata.RequireTrustedAssemblyPath(path);
+            else
+            {
+                PowerShellCompilationPathSafety.EnsureContained(root, path, "Native type dependency must stay inside the root module.");
+                PowerShellCompilationPathSafety.EnsureNoLinksFromFileSystemRoot(path, "Native type dependency must not traverse links.");
+            }
+            var nodes = isBorrowed ? new[] { hostAssembly! } : graph.Nodes.Where(node => node.Exists &&
                 node.Disposition != PowerShellCompilationDependencyGraphDisposition.Rejected &&
                 PowerShellCompilationPathSafety.PathEquals(Path.GetFullPath(Path.Combine(graphRoot, node.Identity.Source)), path)).ToArray();
             if (nodes.Length != 1 || string.IsNullOrWhiteSpace(nodes[0].Identity.Sha256)) continue;
@@ -124,9 +135,9 @@ internal sealed class PowerShellNativeDependencyTypes
                 throw new InvalidOperationException("Native type dependency changed after dependency locking.");
             stream.Position = 0;
             using var pe = new PEReader(stream);
-            if (!pe.HasMetadata) continue;
+            if (!pe.HasMetadata || isBorrowed && !PowerShellWindowsModuleMetadata.HasCompatibleArchitecture(pe)) continue;
             var reader = pe.GetMetadataReader();
-            if (!reader.IsAssembly || reader.MethodDefinitions.Any(handle =>
+            if (!reader.IsAssembly || !isBorrowed && reader.MethodDefinitions.Any(handle =>
                     (reader.GetMethodDefinition(handle).Attributes & MethodAttributes.PinvokeImpl) != 0)) continue;
             var assembly = reader.GetAssemblyDefinition();
             var owner = reader.GetString(assembly.Name) + "|" + assembly.Version + "|" +

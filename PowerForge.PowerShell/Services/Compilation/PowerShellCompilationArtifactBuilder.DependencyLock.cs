@@ -60,6 +60,8 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             var source = node.Identity.Source.Replace('/', Path.DirectorySeparatorChar);
             var path = node.Identity.Provenance.Equals("DotNetRuntimePack", StringComparison.Ordinal)
                 ? ResolveRuntimePackAssetPath(node.Identity, spec.NuGetPackageRoot)
+                : node.Identity.Provenance is PowerShellWindowsModuleMetadata.AssemblyProvenance or PowerShellWindowsModuleMetadata.ManifestProvenance
+                    ? PowerShellWindowsModuleMetadata.ResolvePath(node.Identity.Source)
                 : Path.IsPathRooted(source) ? Path.GetFullPath(source) : Path.GetFullPath(Path.Combine(moduleRoot, source));
             if (!File.Exists(path))
                 throw new InvalidOperationException($"Locked PowerShell compilation input '{node.Identity.Source}' disappeared after analysis.");

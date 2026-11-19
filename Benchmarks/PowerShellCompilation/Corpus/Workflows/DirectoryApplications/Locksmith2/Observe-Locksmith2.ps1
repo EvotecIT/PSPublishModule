@@ -9,6 +9,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+. (Join-Path (Split-Path -LiteralPath $PSScriptRoot) 'DirectoryObserver.Common.ps1')
 if ($PSVersionTable.PSVersion.ToString() -cne '7.6.6' -or -not $IsWindows) {
     throw 'Locksmith2 qualification requires PowerShell 7.6.6 on Windows.'
 }
@@ -31,35 +32,9 @@ if ($Case) {
     $arguments = @{ Manifest = $ImportPath; Evidence = $ResultPath }
     if ($Case -eq 'console') { $arguments.ScratchRoot = Join-Path $ScenarioRoot 'profile' }
     $ownership = Get-Content -LiteralPath $OwnershipPath -Raw | ConvertFrom-Json -AsHashtable
-    $owners = $ownership.frames
-    $assemblyPath = $ownership.assembly
     $entered = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
-    $debugger = [Management.Automation.Runspaces.Runspace]::DefaultRunspace.Debugger
     $previousLookup = $ExecutionContext.InvokeCommand.PostCommandLookupAction
-    $observeScript = {
-        param($name, $lookup)
-        foreach ($frame in $debugger.GetCallStack()) {
-            $command = $frame.InvocationInfo.MyCommand
-            if ($command -is [Management.Automation.FunctionInfo] -and $command.Module.ModuleBase -ieq $moduleBase -and
-                $owners.Contains($command.Name) -and $command.ScriptBlock.File -ieq $owners[$command.Name] -and
-                $frame.FunctionName -ne '<ScriptBlock>') {
-                [void] $entered.Add($command.Name)
-            }
-        }
-    }
-    $observeClr = {
-        param($name, $lookup)
-        foreach ($frame in [Diagnostics.StackTrace]::new().GetFrames()) {
-            $method = $frame.GetMethod()
-            $type = $method.DeclaringType
-            if ($type -and $type.Assembly.Location -ieq $assemblyPath) {
-                $identity = $type.FullName + '::' + $method.Name
-                if ($owners.Contains($identity)) { [void] $entered.Add($owners[$identity]) }
-            }
-        }
-    }
-    $action = if ($Surface -eq 'Original') { $observeScript } else { $observeClr }
-    $ExecutionContext.InvokeCommand.PostCommandLookupAction = $action.GetNewClosure()
+    $ExecutionContext.InvokeCommand.PostCommandLookupAction = New-DirectoryFunctionObserver -Surface $Surface -ModuleBase $moduleBase -Ownership $ownership -Entered $entered
     try {
         $Error.Clear()
         & $observer @arguments
@@ -74,52 +49,8 @@ if ($Case) {
     return
 }
 
-function Get-FrameOwnership([object[]] $OwnedFunctions) {
-    $frames = [ordered]@{}
-    if ($Surface -eq 'Original') {
-        foreach ($function in $OwnedFunctions) {
-            $frames[$function.name] = [IO.Path]::GetFullPath((Join-Path $moduleBase $function.relativePath))
-        }
-        return @{ frames = $frames; assembly = $null }
-    }
-
-    $receipt = Join-Path (Split-Path -LiteralPath $ResultPath) 'build-receipt.json'
-    $manifest = (Get-Content -LiteralPath $receipt -Raw | ConvertFrom-Json).manifest
-    $assemblyName = [IO.Path]::GetFileNameWithoutExtension($ImportPath) + '.dll'
-    $assembly = Join-Path $moduleBase $assemblyName
-    $files = @($manifest.files | Where-Object { [IO.Path]::GetFileName($_.path) -ceq $assemblyName })
-    if ($files.Count -ne 1 -or (Get-FileHash -LiteralPath $assembly).Hash -ine $files[0].sha256) {
-        throw 'The observed CLR assembly did not match the canonical build receipt.'
-    }
-
-    $ledger = @{}
-    foreach ($entry in $manifest.unitDispositionLedger.entries) {
-        if ($entry.kind -eq 'Function' -and $entry.emittedClrMethod -and !$entry.retainedHostedSource) {
-            $ledger[$entry.unitId] = $entry
-        }
-    }
-    foreach ($location in $manifest.failureMap.entries) {
-        $unit = $ledger[$location.unitId]
-        if ($unit -and $unit.generatedMemberName -ceq $location.generatedMemberName -and
-            $unit.name -ceq $location.unitName -and $unit.relativePath -ceq $location.relativePath) {
-            $identity = $location.generatedDeclaringTypeName + '::' + $location.generatedMemberName.TrimStart('@')
-            if ($frames.Contains($identity) -and $frames[$identity] -cne $unit.name) {
-                throw 'The build receipt identifies multiple authored functions for one CLR frame.'
-            }
-            $frames[$identity] = $unit.name
-        }
-    }
-    if (@($frames.Values | Sort-Object -Unique).Count -ne $OwnedFunctions.Count) {
-        throw 'The build receipt does not bind every owned function to an emitted CLR method.'
-    }
-    return @{ frames = $frames; assembly = $assembly }
-}
-
 $owned = @((Get-Content -LiteralPath (Join-Path $ScenarioRoot 'owned-functions.json') -Raw | ConvertFrom-Json))
-if (@($owned.name | Sort-Object -Unique).Count -ne $owned.Count) {
-    throw 'The Locksmith2 observer requires a single owned declaration per command name.'
-}
-$ownership = Get-FrameOwnership $owned
+$ownership = Get-DirectoryFunctionOwnership -Surface $Surface -ImportPath $ImportPath -ResultPath $ResultPath -OwnedFunctions $owned
 $module = Import-Module $ImportPath -PassThru 6>$null |
     Where-Object { $_ -is [Management.Automation.PSModuleInfo] -and $_.Name -eq 'Locksmith2' } |
     Select-Object -Last 1

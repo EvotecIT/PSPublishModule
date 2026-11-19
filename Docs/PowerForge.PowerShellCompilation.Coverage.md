@@ -14,13 +14,15 @@ runtime-free execution.
 | Packet | Complete emitted units | Complete emitted functions | Execution proof |
 | --- | ---: | ---: | --- |
 | Ten public Gallery modules | 720/753 (95.62%) | Not measured separately | 10/10 Hybrid artifacts built, imported, and passed an invocation probe |
-| Seven external workloads | 160/196 (81.63%) | 160/183 (87.43%) | 6/7 complete workloads passed. The packet covers 139 owned functions, one script root and four nested helpers in 31 scenarios on original, built, and installed surfaces. |
+| Seven external workloads | 183/196 (93.37%) | 183/183 (100%) | 7/7 complete workloads passed. The packet covers 183 owned functions, one script root and four nested helpers in 34 scenarios on original, built, and installed surfaces. |
 
 The external assessment discovers 155 source files, with zero parser errors and
-zero acquisition/analysis failures. It records one promoted region in retained
-functions. Three previously promoted regions now belong to complete emitted functions. The public packet records 33 retained source units, 564 runtime-routed
-units, and zero promoted regions. Those probes exercise Hybrid artifacts in
-PowerShell. The ratios describe the measured packets and their discovered units.
+zero acquisition or analysis failures. All 23 newly emitted methods are in
+Classic Locksmith. Its previous typed region is now part of the complete
+`Set-RiskRating` method. The public packet records 33 retained source units,
+564 runtime-routed units, and zero promoted regions. Those probes exercise
+Hybrid artifacts in PowerShell. The ratios describe the measured packets and
+their discovered units.
 
 The generated [public baseline](../Benchmarks/PowerShellCompilation/Corpus/public-corpus-baseline.net10.json)
 and [external baseline](../Benchmarks/PowerShellCompilation/Corpus/external-assessment-baseline.net10.json)
@@ -31,8 +33,9 @@ result from 2026-10-03 is a separate targeted maintainer packet and has not been
 rerun here. It must not replace either external measurement above.
 
 The same 753-unit packet rises from **114/753 (15.14%)** to **720/753 (95.62%)**.
-The latest 38 complete methods build on the 682/753 measurement. All ten artifact
-probes pass. The complete-method counts by module are:
+The interop changes that followed the 682/753 measurement added 38 complete
+methods. The Gallery refresh with Windows module and lexical type support
+again emits 720/753, and all ten artifact probes pass.
 
 | Module | Before | After |
 | --- | ---: | ---: |
@@ -55,6 +58,17 @@ assertions, and an expected throwing script block. It does not execute every
 emitted Pester method or replace the fixed packet's invocation probes.
 
 ## Why these forms were selected
+
+At 720/753, the remaining Gallery units comprised 13 in Pester, ten in
+PSFramework, two each in ImportExcel and Microsoft.PowerShell.Archive, and
+one in each of the other six modules. The Pester explanations centered on
+command availability across load boundaries, a diagnostic on 12 units.
+PSFramework had unsupported member invocation diagnostics on eight units,
+including command-tree code that uses types created during module
+initialization. Classic Locksmith retained 23 of 44 owned functions, with
+repeated uses of declared ActiveDirectory types and local data classes.
+Those type sources were the first targets for closing the last
+complete-workload gap.
 
 The starting census reproduced 114/753 complete methods. Pester accounted for
 491 units and emitted none. Its document-wide `source.type-definition`
@@ -155,6 +169,9 @@ $scratch = Join-Path ([IO.Path]::GetTempPath()) 'PowerForgeCoverage'
     -EvidencePath "$scratch/external.json" -ExecuteWorkloads -RefreshBaseline
 ```
 
+Run external execution in PowerShell 7.6.6 with the Windows module and lab
+prerequisites in the [corpus README](../Benchmarks/PowerShellCompilation/Corpus/README.md).
+
 Both commands acquire exact hashes from the checked-in packets. Public module
 probes import generated Hybrid artifacts in clean child processes and invoke
 their checked-in probes. Those artifacts can execute retained PowerShell source;
@@ -228,16 +245,30 @@ handling, and in-memory issue and searcher behavior. Together they observe all
 100 owned functions through active PowerShell source or CLR method frames and
 direct value and state checks. Artifact observation withdraws the compiler input and
 verifies the installed manifest against the build receipt. The audit bypasses
-environment repair and Gallery version checks. Locksmith emits 21/44 functions,
-up from 18/44, and remains unattempted.
+environment repair and Gallery version checks.
 
-The default external census emits 160/196 units, including 100/108 for Locksmith2.
-Autopilot remains 0/1 in that census because it has no explicit executable
-runtime contract. Its qualified Windows x64 executable instead requires the
-complete script-root method in the actual artifact ledger. That application
-result does not increase the default census numerator. All six attempted
-workloads pass, with zero census regressions. The live audit requires an explicit
-approved Windows lab target.
+Classic Locksmith emits **44/44 functions**, up from 21/44. Native Hybrid
+binding now supports the local data classes and declared Windows module
+types used by these functions. The selected scenarios use the installed
+ActiveDirectory module for native in-memory objects, fixture responses for
+directory queries, and disposable local state. The public read-only audit and
+the incomplete-directory-input case compare command order, output, and errors.
+Local checks cover record construction, reporting, and proposal text in memory.
+Across three scenarios on each of the original, built, and installed surfaces,
+the observer verifies 42 active function frames and checks direct calls to the
+other two functions. The compiled and installed observations require complete
+method bodies and withdraw the compiler input. The scenarios run on PowerShell
+7.6.6. A separate probe verifies the identity of in-memory ActiveDirectory
+objects and the locked assembly on both PowerShell 7.6.6 and Windows
+PowerShell 5.1.
+
+The default external census emits 183/196 units, including 44/45 for Classic
+Locksmith and 100/108 for Locksmith2. Autopilot remains 0/1 in that census
+because it has no explicit executable runtime contract. The qualified Windows
+x64 executable requires the complete script-root method in its artifact ledger.
+All seven attempted workloads pass. Every previously emitted function retains
+its complete method on the same inputs. The Locksmith2 audit requires an
+explicit approved Windows lab target.
 
 Earlier pinned oracle cases cover returned/collected callback scope and closures;
 borrowed SDK identity, mutation and dynamic binding; native local-call closure;
@@ -253,16 +284,16 @@ zero warnings and errors. Three artifact oracle cases rerun against the precedin
 their complete-emission assertions, with zero skips, establishing that the new
 proof detects the previously unsupported forms.
 
-The current interop oracles compare both pinned hosts for closed delivered
+The earlier interop oracles compare both pinned hosts for closed delivered
 generic metadata, borrowed directory and SDK objects, array-record boundaries
 in multiple assignment, wildcard and exact switch labels, nested scoped writes,
 reference conversions, repeated declarations and module loading requirements.
 The class constructor case compares results, error identity and source position
 when a locked class is also loaded by the module's contained source loader.
 
-The canonical Fast compiler contract gate passes **567/567 tests**. Its pinned
-semantic oracle report records **155 passed, zero failed and zero skipped**;
-all seven new semantic/artifact families are required by that gate.
+That Fast compiler contract gate passed **567/567 tests**. Its pinned semantic
+oracle report recorded **155 passed, zero failed and zero skipped**, including
+the seven required semantic and artifact families at that checkpoint.
 
 Closed constant Boolean delegate values retain their typed conversion before
 general module callback-value binding. The two-host SDK-object oracle verifies
@@ -285,8 +316,20 @@ predicates and nested declarations in an executable. An independent scalar
 lifecycle function and nested declarations still emit and execute. The binder
 admits compiled script-block values and switch predicates only when the host
 capability contract supplies a defining module.
-This preserves the supported module-function callback forms. The semantic and performance
-measurements below retain their own earlier revision and scope.
+This preserves the supported module-function callback forms.
+
+The two-host type oracles compare original and emitted functions for borrowed
+Windows module types, lexical class identity and initialization, validation
+failures and recovery, arrays, overload selection, and static access after an
+admitted same-block `Add-Type` load. They also cover converted delegate
+assignment and the native error for a missing member on an executed branch.
+The returned-callback case invokes the block after the declaring call exits
+and checks that its lexical type still accepts the matching record and rejects
+an unrelated object.
+Six two-host oracle cases and one assembly architecture check passed with
+zero skips. The Windows PowerShell compiler build passed for `net472`. The
+semantic and performance measurements below retain their earlier revision and
+scope.
 
 The preceding type/application checkpoint's focused suite passed 29 cases with zero failures and zero skips.
 Its semantic cases compare original and generated artifacts on the pinned

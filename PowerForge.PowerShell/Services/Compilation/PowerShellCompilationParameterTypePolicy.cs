@@ -102,6 +102,7 @@ internal static class PowerShellCompilationParameterTypePolicy
         typeof(PSLanguageMode),
         typeof(Token),
         typeof(CommandCompletion),
+        typeof(PagingParameters),
         typeof(System.Management.Automation.Internal.CommonParameters),
         typeof(System.Management.Automation.Internal.ShouldProcessParameters),
         typeof(System.DirectoryServices.ActiveDirectory.Domain),

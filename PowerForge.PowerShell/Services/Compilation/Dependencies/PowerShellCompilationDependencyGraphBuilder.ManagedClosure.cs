@@ -20,6 +20,8 @@ internal sealed partial class PowerShellCompilationDependencyGraphBuilder
         {
             var path = pending.Dequeue();
             if (!inspected.Add(path) || !File.Exists(path) || !_pathNodes.TryGetValue(path, out var parentId)) continue;
+            // Keep assemblies borrowed from Windows out of the product's deployment closure.
+            if (_nodes[parentId].Identity.Provenance == PowerShellWindowsModuleMetadata.AssemblyProvenance) continue;
             using var stream = File.OpenRead(path);
             using var pe = new PEReader(stream);
             if (!pe.HasMetadata) continue;

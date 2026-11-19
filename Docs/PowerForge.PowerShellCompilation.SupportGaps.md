@@ -6,11 +6,13 @@ Hybrid modules can compile independent functions beside document-scope authored
 classes or enums while retaining their hosted initialization. The source type
 closure still rejects unsupported direct authored-type annotations and type
 expressions, including inside conditional function declarations. Runtime type
-lookup and calls to retained helpers can occur in emitted bodies. Nested type
-declarations and script initializers keep their
-existing admission rules. This extends the existing native binding, cmdlet,
-pipeline, and `begin`/`process`/`end` paths into realistic mixed modules. It does
-not add general authored-class or pipeline support to Strict.
+lookup and calls to retained helpers can occur in emitted bodies. Native-bound
+function-local data classes support constant initializers, selected scalar
+types and one-dimensional arrays, and literal `ValidateSet` validation. Classes
+with methods, constructor declarations or inheritance retain their guards.
+References to a function-local class from a separate script block stay in
+hosted source so PowerShell can preserve the class's lexical identity.
+General authored-class and pipeline support remains outside the Strict subset.
 
 The fixed Gallery packet emits **720/753 complete units (95.62%)**, up from
 114/753 (15.14%) and the preceding 682/753 measurement. Pester emits 478/491 and
@@ -56,17 +58,27 @@ native types, and two ordinary same-name declarations in one source file take
 effect at their authored positions. Cross-file name collisions and unsupported
 declaration metadata keep their existing guards.
 
+Native Hybrid binding can also borrow public types from a Windows system module
+declared in `RequiredModules`. The compiler reads and locks metadata from the
+system module directory or a DLL resolved from its explicit declaration in the
+GAC, after checking the host and image architectures. Windows owns the DLL and
+its dependencies. PowerShell imports the module through the authored manifest
+and binds its runtime objects.
+Static access and supported assignment can follow an earlier admitted literal
+`Add-Type` invocation in the same execution block. Types introduced during
+arbitrary module startup and unsupported class shapes remain open.
+
 Advanced native executable roots support `begin`/`process`/`end` on the explicit
 `net10.0` Windows x64 target. Both host profiles prove the underlying lifecycle
 semantics; this does not establish Windows PowerShell executable packaging.
 Generated module manifests also preserve the legacy `ModuleToProcess` key
 without adding a contradictory `RootModule` entry.
 
-The seven-workload packet emits 160/196 units and 160/183 functions and executes
-six complete workloads across 31 scenarios. The GitHub helper library,
-PowerShell installer, Scoop installer, GetBIOS, Autopilot and Locksmith2 pass
-on original, built and installed surfaces with compiler input withdrawn for
-artifact observation. The installers use native module
+The seven-workload packet emits 183/196 units and 183/183 functions. All seven
+workloads pass across 34 scenarios. The GitHub helper library, PowerShell
+installer, Scoop installer, GetBIOS, Autopilot, Locksmith2, and Classic
+Locksmith pass on original, built and installed surfaces with compiler input
+withdrawn for artifact observation. The installers use native module
 adapters, verified payloads over loopback HTTP, actual extraction/process behavior
 and process-local registry replacements. The PowerShell and CMD shims execute
 offline help; the Unix shim is only created and target-checked. GetBIOS requires
@@ -79,10 +91,13 @@ CSV files. Console execution covers startup/help. Its default census remains
 Locksmith2 emits and exercises all 100 owned functions on PowerShell 7.6.6.
 Its five scenarios use read-only Auditing in an approved lab and local
 fixtures for console, environment, reports, issues and searcher behavior.
-Locksmith remains unattempted, with 21/44 emitted functions. Live hardware,
-Graph and GitHub services, directory changes, production CA changes, exhaustive
-branches, MSI/global installation and direct installer executable packaging
-remain outside the qualified scenarios.
+Classic Locksmith emits and observes all 44 owned functions across three
+scenarios with in-memory ActiveDirectory objects and controlled directory
+responses. The public read-only audit, incomplete-input behavior, and local
+record and proposal checks match across the same three surfaces. Live hardware,
+Graph and GitHub services, live classic Locksmith execution, directory or CA
+changes, exhaustive branches, MSI/global installation and direct installer
+executable packaging remain outside the qualified scenarios.
 
 Historical inventory: 2026-10-11. This section preserves the October 3 retained-function snapshot and earlier M29/M29a discovery and qualification checkpoints. The compiler continuation is integrated in main; the five-module historical census has not been rerun; the external and public packets use the dated report above. The [next milestones](PowerForge.PowerShellCompilation.NextMilestones.md#current-continuation-october-11-audit) own current work and exit gates; the [assessment](PowerForge.PowerShellCompilation.Assessment.md) owns execution evidence.
 
