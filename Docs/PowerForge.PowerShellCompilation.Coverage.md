@@ -14,7 +14,7 @@ runtime-free execution.
 | Packet | Complete emitted units | Complete emitted functions | Execution proof |
 | --- | ---: | ---: | --- |
 | Ten public Gallery modules | 720/753 (95.62%) | Not measured separately | 10/10 Hybrid artifacts built, imported, and passed an invocation probe |
-| Seven external workloads | 160/196 (81.63%) | 160/183 (87.43%) | 5/7 complete workloads passed; 39 owned functions, one script root and four nested helpers in 26 scenarios on original, built, and installed surfaces |
+| Seven external workloads | 160/196 (81.63%) | 160/183 (87.43%) | 6/7 complete workloads passed. The packet covers 139 owned functions, one script root and four nested helpers in 31 scenarios on original, built, and installed surfaces. |
 
 The external assessment discovers 155 source files, with zero parser errors and
 zero acquisition/analysis failures. It records one promoted region in retained
@@ -218,23 +218,26 @@ delivered assembly and withdrawing the compiler input. Console execution proves
 startup and native help; the CIM scenarios run through that delivered factory.
 Controlled sessions and device records bound the application proof. Live Graph
 registration, group assignment, remote inventory and reboot remain unqualified.
-Neither directory module counts as a complete workload. Locksmith2 emits
-100/100 functions, up from 79/100. Locksmith emits 21/44, up from 18/44.
 
-A read-only lab run of Locksmith2's Auditing mode matched on the original,
-built and installed modules in pinned PowerShell 7.6.6. Each loaded directory
-objects and produced the same stream counts. The installed manifest matched the
-built hash. A separate selection of 258 upstream store and object-projection
-tests passed on both original and generated modules with zero skips. The lab
-run bypassed environment repair. The complete workload still needs observations
-for the full owned function inventory.
+Locksmith2 emits **100/100 functions**, up from 79/100, and is the sixth
+complete workload. Five scenarios match across the original, built and
+installed modules on pinned PowerShell 7.6.6. The read-only Auditing scenario
+loads directory objects and reaches 59 owned functions. Local scenarios cover
+console and disposable profile behavior, environment and binding, report
+handling, and in-memory issue and searcher behavior. Together they observe all
+100 owned functions through active PowerShell source or CLR method frames and
+direct value and state checks. Artifact observation withdraws the compiler input and
+verifies the installed manifest against the build receipt. The audit bypasses
+environment repair and Gallery version checks. Locksmith emits 21/44 functions,
+up from 18/44, and remains unattempted.
 
 The default external census emits 160/196 units, including 100/108 for Locksmith2.
 Autopilot remains 0/1 in that census because it has no explicit executable
 runtime contract. Its qualified Windows x64 executable instead requires the
 complete script-root method in the actual artifact ledger. That application
-result does not increase the default census numerator. All five complete
-workloads pass, with zero failed attempts and zero census regressions.
+result does not increase the default census numerator. All six attempted
+workloads pass, with zero census regressions. The live audit requires an explicit
+approved Windows lab target.
 
 Earlier pinned oracle cases cover returned/collected callback scope and closures;
 borrowed SDK identity, mutation and dynamic binding; native local-call closure;

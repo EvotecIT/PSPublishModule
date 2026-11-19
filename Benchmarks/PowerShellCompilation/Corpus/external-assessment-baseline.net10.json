@@ -1,15 +1,15 @@
 {
   "schemaVersion": 2,
   "packetId": "powerforge-external-powershell-assessment-net10-v1",
-  "packetSha256": "b64e12d7816605ef61fa01d1eb6dedb8b1564ba75bb43c6fdf6178050ba3bd8c",
+  "packetSha256": "19c320590be41edc3b0f982f13243e1bc68858869846200b9474274f75c6a859",
   "recordedOn": "2026-11-19",
   "semanticProfile": "PowerForge.Oracle.PowerShell/7.6",
   "targetFramework": "net10.0",
   "execution": {
     "requested": true,
     "workloadsTotal": 7,
-    "workloadsAttempted": 5,
-    "workloadsPassed": 5,
+    "workloadsAttempted": 6,
+    "workloadsPassed": 6,
     "workloads": [
       {
         "id": "locksmith",
@@ -19,9 +19,16 @@
       },
       {
         "id": "locksmith2",
-        "attempted": false,
-        "succeeded": false,
-        "reason": "No complete owned-function and execution-scenario contract is declared."
+        "attempted": true,
+        "succeeded": true,
+        "completeWorkloadExecution": true,
+        "scenarioCount": 5,
+        "surfaces": [
+          "Original",
+          "Built",
+          "Installed"
+        ],
+        "functions": 100
       },
       {
         "id": "get-windows-autopilot-info",

@@ -323,6 +323,19 @@ try {
                     reason = 'No complete owned-function and execution-scenario contract is declared.' })
                 continue
             }
+            $requiredEnvironment = Get-CorpusProperty $entry.qualification 'requiredEnvironmentVariable'
+            if ($null -ne $requiredEnvironment -and
+                ($requiredEnvironment -isnot [string] -or $requiredEnvironment -cnotmatch '^[A-Z][A-Z0-9_]*$')) {
+                throw 'The required workload environment variable must be a literal uppercase variable name.'
+            }
+            if ($requiredEnvironment -and [string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($requiredEnvironment))) {
+                if ($WorkloadId -contains $entry.id) {
+                    throw "Workload '$($entry.id)' requires the explicitly configured $requiredEnvironment environment variable."
+                }
+                $executions.Add([ordered]@{ id = $entry.id; attempted = $false; succeeded = $false;
+                    reason = "This workload requires the explicitly configured $requiredEnvironment environment variable." })
+                continue
+            }
             $executionPath = Assert-ContainedPath -Root $executionRoot -Path (Join-Path $executionRoot ($entry.id + '.json')) -Label 'Workload execution evidence'
             try {
                 $LASTEXITCODE = 0

@@ -87,14 +87,13 @@ command execution. The fixed Gallery packet grows **114/753 → 720/753 complete
 units (15.14% → 95.62%)**. All ten artifacts pass import and invocation probes.
 The preceding result was 682/753. Pester emits 478/491 and PSFramework emits
 166/176. Supported closed generics, native assignment and storage, and repeated
-same-file declarations account for gains under shared binding and type rules. The seven-workload assessment emits **160/196 units** and **160/183 functions**
-and executes five complete workloads through original, built and installed
-surfaces: the GitHub helper library, PowerShell/Scoop installer module adapters,
-GetBIOS and Autopilot. Their 39 owned functions, one advanced script root and four
-nested vendor helpers pass 26 scenarios. Locksmith2 now emits 100/100 owned
-functions and matches a read-only lab audit on the original, built and installed
-modules. Its complete workload still requires observation of every owned
-function. Locksmith remains at 21/44 emitted functions.
+same-file declarations account for gains under shared binding and type rules.
+The seven-workload assessment emits **160/196 units** and **160/183 functions**.
+Six complete workloads pass 31 scenarios on original, built and installed
+surfaces. Locksmith2 contributes 100/100 owned functions observed across a
+read-only lab audit and four local scenarios on pinned PowerShell 7.6.6.
+Locksmith remains at 21/44 emitted functions and still needs full emission
+and workload qualification.
 The pinned PowerShell 7.6.6 and installed Windows PowerShell 5.1 oracle covers
 binding, multi-stage command pipelines, lifecycle, failure/continuation, stop,
 reuse, discovery, and retained type identity for the admitted mixed-module form.

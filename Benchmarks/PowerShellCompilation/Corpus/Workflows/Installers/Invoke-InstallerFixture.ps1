@@ -92,6 +92,7 @@ if ($Operation -eq 'Start') {
         parameters=[ordered]@{ ObserverName=$observerName; ScenarioRoot=$root; ResultPath=(Join-Path $fixtureRoot 'project-test.json') }
         workingDirectory='scenarios'
     }
+    if ($Installer -eq 'Scoop') { $moduleTest['timeoutSeconds'] = 300 }
     [ordered]@{schemaVersion=1;operation='Start';testArguments=@();moduleTest=$moduleTest;fixtureIdentity=$ready} |
         ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $ResultPath -Encoding utf8
 } else {

@@ -55,10 +55,10 @@ function Initialize-WorkflowEvidenceRoot {
 }
 
 function Invoke-WorkflowCliOperation {
-    param([string[]] $Arguments, [string] $WorkingDirectory, [string] $EvidencePath)
+    param([string[]] $Arguments, [string] $WorkingDirectory, [string] $EvidencePath, [hashtable] $Environment = @{})
     try {
         $processPath = [IO.Path]::ChangeExtension($EvidencePath, '.cli.process.json')
-        $result = Invoke-CliJson -Arguments $Arguments -WorkingDirectory $WorkingDirectory -ProcessEvidencePath $processPath
+        $result = Invoke-CliJson -Arguments $Arguments -WorkingDirectory $WorkingDirectory -ProcessEvidencePath $processPath -Environment $Environment
         Write-Utf8Json -Path $EvidencePath -Value $result
         return $result
     } catch {
@@ -461,6 +461,7 @@ function Invoke-WholeWorkflowQualification {
     }
     $scenarioRoot = Join-Path $root 'scenarios'
     New-Item -ItemType Directory -Path $scenarioRoot -Force | Out-Null
+    Write-Utf8Json -Path (Join-Path $scenarioRoot 'owned-functions.json') -Value @($Entry.qualification.requiredCompiledOwnedFunctions)
     $fixturePath = $null
     if (Test-WorkflowProperty $Entry.qualification 'fixtureScript') {
         $fixturePath = Assert-ContainedPath -Root (Split-Path $PacketPath) -Path (Join-Path (Split-Path $PacketPath) $Entry.qualification.fixtureScript) -Label 'Reviewed fixture script'
@@ -536,7 +537,11 @@ function Invoke-WholeWorkflowQualification {
     $builtReport = Invoke-WorkflowArtifactObserver $Entry $observer $builtPath 'Built' $scenarioRoot $evidenceRoot $hostExecutable $root $inputRoot
     Assert-WorkflowObservationParity $Entry.qualification $original $builtReport
     foreach ($operation in @('test', 'pack', 'install')) {
-        $steps[$operation] = Invoke-WorkflowCliOperation -Arguments @('powershell', 'project', $operation, $projectPath, '--output', 'json') -WorkingDirectory $root -EvidencePath (Join-Path $evidenceRoot ($operation + '.json'))
+        $environment = @{}
+        if ($operation -eq 'test' -and [IO.Path]::IsPathRooted($hostExecutable)) {
+            $environment['PATH'] = (Split-Path -LiteralPath $hostExecutable) + [IO.Path]::PathSeparator + $env:PATH
+        }
+        $steps[$operation] = Invoke-WorkflowCliOperation -Arguments @('powershell', 'project', $operation, $projectPath, '--output', 'json') -WorkingDirectory $root -EvidencePath (Join-Path $evidenceRoot ($operation + '.json')) -Environment $environment
     }
     $installRoot = [string] @($steps.install.targets)[0].path
     $relativePrimary = [IO.Path]::GetRelativePath($outputRoot, $builtPath)

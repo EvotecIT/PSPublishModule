@@ -52,7 +52,43 @@ Add `-ExecuteWorkloads` to execute the packet's reviewed complete-workload contr
 ./Benchmarks/PowerShellCompilation/Corpus/Invoke-ExternalAssessment.ps1 -ExecuteWorkloads
 ```
 
-This mode reports passed, attempted, and unattempted workloads separately. A complete-workload contract must declare every authored function in the final artifact ledger, require a complete CLR method for each, and observe every function in at least one scenario on the original, built, and installed surfaces. Same-name declarations require `unitId` or `startLine` in both the required-function entry and its execution observation; a name-only observation cannot stand in for several conditional bodies. The GitHub helper-library contract executes all ten functions across ten scenarios. It fixes configuration and time at the importing module boundary, uses an owned loopback HTTP response, and withdraws compiler input before observing delivered artifacts. It does not exercise the GitHub service or every branch. The PowerShell and Scoop installer contracts add four and twenty-four owned functions respectively, each across three scenarios. They invoke the delivered root through a native script-block module adapter: advanced-script binding for PowerShell and the documented downstream loading mode for Scoop. They use verified PowerShell/Scoop/Main ZIP payloads over an owned loopback server, real extraction and file/process behavior, and process-local registry replacements with owned environment paths. The PowerShell contract executes the installed portable host; the Scoop contract creates the actual repositories, shims and configuration and checks locked-file and failure behavior. These are selected Windows installer paths, with no live package-account or global installation qualification. All compiler input is withdrawn during Built/Installed observation. The remaining four workloads have no complete-workload contract and receive no execution credit. `-ExecuteWorkloads -RefreshBaseline` records these results alongside the census and rejects failed attempts or zero attempts. It requires online project restore and cannot be combined with `-Offline`.
+This mode reports passed, attempted, and unattempted workloads separately. A
+complete-workload contract declares every authored function in the final
+artifact ledger, requires a complete CLR method for each, and observes each
+function on the original, built, and installed surfaces. Same-name declarations
+require an authored unit ID or start line in both the contract and the
+observation. Artifact observers run with the compiler input withdrawn.
+
+The GitHub helper library executes all ten functions across ten scenarios
+with a scoped loopback HTTP response and fixed configuration and time. The
+PowerShell and Scoop installer contracts exercise four and twenty-four owned
+functions respectively, each across three scenarios. They use native module
+adapters, verified ZIP payloads over loopback HTTP, actual extraction and
+process behavior, and process-local registry replacements with owned paths.
+The PowerShell contract executes the installed portable host. The Scoop
+contract verifies repositories, shims, configuration, locked-file handling
+and failure behavior. Each installer acceptance invocation uses a separate
+scratch directory. Scoop declares a five-minute acceptance deadline. GetBIOS
+and Autopilot add ten scenarios with scoped
+firmware, device, remoting and registration fixtures.
+
+Locksmith2 adds five scenarios on pinned PowerShell 7.6.6 for Windows. Set
+`POWERFORGE_PWSH76_PATH` to the pinned executable and
+`POWERFORGE_EXTERNAL_AD_AUDIT_TARGET` to the DNS name of an approved AD and
+AD CS lab to opt in. Use a lab-scoped identity with read-only access. The audit
+passes that forest
+explicitly and bypasses environment repair and Gallery version checks. The four
+local scenarios use disposable state. The observers verify all 100 owned
+functions through active PowerShell source or CLR method frames and direct
+value and state checks.
+
+With the lab configured, the seven-workload packet passed six contracts and
+31 declared scenarios. Without the lab target, the assessment reports Locksmith2 as unattempted.
+Explicitly selecting it for execution requires the target. Locksmith remains
+in the census without a complete-workload contract.
+`-ExecuteWorkloads -RefreshBaseline` records these results alongside the census, requires at
+least one attempted workload, and rejects failed attempts. This mode requires
+online project restore. Run it without `-Offline`.
 
 Run the external command and artifact checks only when local execution of the reviewed third-party packet is acceptable:
 

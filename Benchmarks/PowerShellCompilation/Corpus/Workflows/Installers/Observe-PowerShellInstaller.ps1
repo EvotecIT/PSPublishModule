@@ -4,7 +4,7 @@ param(
     [Parameter(Mandatory)][ValidateSet('Original', 'Built', 'Installed')][string] $Surface,
     [Parameter(Mandatory)][string] $ScenarioRoot,
     [Parameter(Mandatory)][string] $ResultPath,
-    [ValidateSet('Original', 'Built', 'Installed', 'ProjectTest')][string] $Instance = $Surface
+    [ValidatePattern('^(Original|Built|Installed|ProjectTest|Test-[0-9a-f]{8})$')][string] $Instance = $Surface
 )
 
 $ErrorActionPreference = 'Stop'

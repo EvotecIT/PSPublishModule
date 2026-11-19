@@ -77,9 +77,10 @@ The [coverage report](PowerForge.PowerShellCompilation.Coverage.md) records the
 2026-11-19 reruns of both fixed packets. It distinguishes complete emitted units
 from retained source and smaller compiled regions. The seven-workload external
 assessment emits **160/196 units (81.63%)** and **160/183 functions (87.43%)**,
-with zero parser errors. **Five of seven complete workloads pass**: the ten-function
-GitHub helper library and the four-function PowerShell and twenty-four-function
-Scoop installers, GetBIOS and Autopilot execute 26 scenarios on original, built, and installed surfaces.
+with zero parser errors. **Six of seven complete workloads pass** across 31
+scenarios on original, built and installed surfaces. They cover the GitHub
+helper library, the PowerShell and Scoop installers, GetBIOS, Autopilot and
+Locksmith2.
 The installers use native module adapters, pinned payloads, owned directories and
 process-local registry replacements; PowerShell and CMD shim dispatch are checked.
 GetBIOS exercises all four nested vendor helpers and actual reports with owned
@@ -88,10 +89,9 @@ factory with owned CIM sessions and actual CSV files; console execution covers
 startup/help. Its explicit executable target is `net10.0` Windows x64. The default
 external census still reports Autopilot 0/1 because it has no explicit runtime
 contract; that number is separate from the qualified artifact's complete root.
-Locksmith2 emits all 100 owned functions and its read-only lab audit matched on
-the original, built and installed modules. Full workload execution still needs
-observations for every owned function. The packet counts five complete workloads.
-Live hardware, Graph registration and global installations are outside the
+Locksmith2 emits and exercises all 100 owned functions across a read-only lab
+audit and four local scenarios on PowerShell 7.6.6. Live hardware, Graph
+registration, directory changes and global installations are outside the
 measured scenarios.
 The public Gallery packet emits **720/753 (95.62%)** of its units as complete CLR
 methods, up from 114/753 (15.14%) and the preceding 682/753 measurement. Pester

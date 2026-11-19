@@ -63,10 +63,10 @@ Generated module manifests also preserve the legacy `ModuleToProcess` key
 without adding a contradictory `RootModule` entry.
 
 The seven-workload packet emits 160/196 units and 160/183 functions and executes
-five complete workloads: ten GitHub helper functions in ten scenarios, four
-PowerShell installer functions in three scenarios and 24 Scoop installer functions
-in three scenarios, GetBIOS in six scenarios and Autopilot in four scenarios. Original, built and installed surfaces pass with compiler
-input withdrawn for artifact observation. The installers use native module
+six complete workloads across 31 scenarios. The GitHub helper library,
+PowerShell installer, Scoop installer, GetBIOS, Autopilot and Locksmith2 pass
+on original, built and installed surfaces with compiler input withdrawn for
+artifact observation. The installers use native module
 adapters, verified payloads over loopback HTTP, actual extraction/process behavior
 and process-local registry replacements. The PowerShell and CMD shims execute
 offline help; the Unix shim is only created and target-checked. GetBIOS requires
@@ -76,13 +76,13 @@ advanced script root in the explicit Windows x64 artifact and executes the
 delivered public native-entry factory with controlled CIM sessions and actual
 CSV files. Console execution covers startup/help. Its default census remains
 0/1 without an explicit runtime target; application qualification is separate.
-Locksmith2 emits all 100 authored functions and matches the original module
-on a separate read-only lab audit using its built and installed artifacts. The
-packet still requires observations for all owned functions before counting it
-as complete. Locksmith remains unattempted. Live hardware or Graph behavior,
-live GitHub behavior, exhaustive
-branches, MSI/global installation and direct installer executable packaging are
-not qualified.
+Locksmith2 emits and exercises all 100 owned functions on PowerShell 7.6.6.
+Its five scenarios use read-only Auditing in an approved lab and local
+fixtures for console, environment, reports, issues and searcher behavior.
+Locksmith remains unattempted, with 21/44 emitted functions. Live hardware,
+Graph and GitHub services, directory changes, production CA changes, exhaustive
+branches, MSI/global installation and direct installer executable packaging
+remain outside the qualified scenarios.
 
 Historical inventory: 2026-10-11. This section preserves the October 3 retained-function snapshot and earlier M29/M29a discovery and qualification checkpoints. The compiler continuation is integrated in main; the five-module historical census has not been rerun; the external and public packets use the dated report above. The [next milestones](PowerForge.PowerShellCompilation.NextMilestones.md#current-continuation-october-11-audit) own current work and exit gates; the [assessment](PowerForge.PowerShellCompilation.Assessment.md) owns execution evidence.
 

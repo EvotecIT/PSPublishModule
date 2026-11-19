@@ -23,9 +23,9 @@ if (-not $AllowExternalExecution) {
 }
 
 function Invoke-CliJson {
-    param([string[]] $Arguments, [string] $WorkingDirectory, [string] $ProcessEvidencePath)
+    param([string[]] $Arguments, [string] $WorkingDirectory, [string] $ProcessEvidencePath, [hashtable] $Environment = @{})
 
-    $run = Invoke-OwnedProcess -FileName 'dotnet' -Arguments (@($CliAssemblyPath) + $Arguments) -WorkingDirectory $WorkingDirectory
+    $run = Invoke-OwnedProcess -FileName 'dotnet' -Arguments (@($CliAssemblyPath) + $Arguments) -WorkingDirectory $WorkingDirectory -Environment $Environment
     $json = ConvertFrom-CorpusCliProcess $run -ProcessEvidencePath $ProcessEvidencePath
     return $json.result
 }
