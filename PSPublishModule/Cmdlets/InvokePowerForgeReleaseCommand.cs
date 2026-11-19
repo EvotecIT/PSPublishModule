@@ -615,7 +615,7 @@ public sealed partial class InvokePowerForgeReleaseCommand : PSCmdlet
             }
 
             var request = BuildRequest(configFullPath, requestDefaults, boundParameters);
-            ConsoleEncoding.EnsureUtf8();
+            using var consoleEncoding = ConsoleEncoding.UseUtf8();
             var interactive = !NoInteractive.IsPresent && ModulePipelineConsoleUi.ShouldUseInteractiveView(isVerbose);
             ILogger outputLogger = interactive
                 ? new ConsoleOutputLogger { IsVerbose = isVerbose }

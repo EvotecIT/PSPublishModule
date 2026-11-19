@@ -101,7 +101,7 @@ public sealed partial class InvokeProjectBuildCommand : PSCmdlet
         var bound = MyInvocation?.BoundParameters;
         var isVerbose = bound?.ContainsKey("Verbose") == true;
 
-        ConsoleEncoding.EnsureUtf8();
+        using var consoleEncoding = ConsoleEncoding.UseUtf8();
 
         var interactive = !Quiet.IsPresent && !NoInteractive.IsPresent &&
                           ModulePipelineConsoleUi.ShouldUseInteractiveView(isVerbose);
