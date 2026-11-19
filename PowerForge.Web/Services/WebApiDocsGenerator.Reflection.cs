@@ -285,10 +285,9 @@ public static partial class WebApiDocsGenerator
 
     private static void RestrictToPublicAssemblySurface(ApiDocModel doc, IReadOnlyList<Assembly> assemblies)
     {
-        var exportedTypes = assemblies.SelectMany(GetExportedTypesSafe)
-            .Where(static type => type is not null)
-            .Select(static type => (type!.FullName ?? type.Name).Replace('+', '.'))
-            .ToHashSet(StringComparer.Ordinal);
+        var exportedTypes = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var assembly in assemblies)
+            exportedTypes.UnionWith(GetExportedTypeNames(assembly));
 
         foreach (var typeName in doc.Types.Keys.Where(typeName => !exportedTypes.Contains(typeName)).ToArray())
             doc.Types.Remove(typeName);
@@ -303,6 +302,13 @@ public static partial class WebApiDocsGenerator
             type.ExtensionMethods.RemoveAll(static member => !IsPublicAssemblyMember(member));
         }
     }
+
+    /// <summary>The documentation names (nested types joined with dots) of the types an assembly exports.</summary>
+    private static HashSet<string> GetExportedTypeNames(Assembly assembly) =>
+        GetExportedTypesSafe(assembly)
+            .Where(static type => type is not null)
+            .Select(static type => (type!.FullName ?? type.Name).Replace('+', '.'))
+            .ToHashSet(StringComparer.Ordinal);
 
     private static bool IsPublicAssemblyMember(ApiMemberModel member) =>
         string.Equals(member.Access, "public", StringComparison.Ordinal);
