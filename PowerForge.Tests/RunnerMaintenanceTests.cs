@@ -664,6 +664,54 @@ public sealed class RunnerMaintenanceTests
         Assert.False(File.Exists(generated));
     }
 
+    [Fact]
+    public void Maintain_WindowsToolRecoveryWaitsForRecordedJobProcessToExit()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        using var fixture = new Installation();
+        var dotnet = Path.Combine(fixture.Root, "dotnet");
+        var family = Path.Combine(dotnet, "shared", "Microsoft.NETCore.App");
+        var id = Guid.NewGuid().ToString("N");
+        var stage = Path.Combine(family, ".powerforge-quarantine", id);
+        Directory.CreateDirectory(stage);
+        File.WriteAllText(Path.Combine(stage, "runtime.dll"), "quarantined");
+        fixture.Spec.WindowsToolRetention = new RunnerWindowsToolRetention { DotNetRoot = dotnet };
+        var journal = Path.Combine(fixture.Spec.StateRootPath, "journal");
+        Directory.CreateDirectory(journal);
+        var record = Path.Combine(journal, id + ".json");
+        File.WriteAllText(record, JsonSerializer.Serialize(new RunnerMaintenanceJournal
+        {
+            Id = id, Root = family, Source = Path.Combine(family, "81.0.1"),
+            Directory = true, Moved = true, WindowsTool = true
+        }, RunnerMaintenanceJsonContext.Default.RunnerMaintenanceJournal));
+        var child = new RunnerMaintenanceProcess { Id = 47100, StartTicks = 18000, Name = "fixture-helper" };
+        var state = new RunnerMaintenanceState();
+        var job = new RunnerMaintenanceJob { RunnerRoot = fixture.Runner.RootPath, WorkerId = 47101,
+            WorkerStartTicks = 17000, Workspace = Path.Combine(fixture.Runner.WorkRootPath, "Example"),
+            CompletedUtc = DateTime.UtcNow.AddHours(-1) };
+        job.Processes.Add(new RunnerMaintenanceProcessIdentity { Id = child.Id, StartTicks = child.StartTicks });
+        state.Jobs.Add(job);
+        File.WriteAllText(Path.Combine(fixture.Spec.StateRootPath, "state.json"),
+            JsonSerializer.Serialize(state, RunnerMaintenanceJsonContext.Default.RunnerMaintenanceState));
+        var snapshot = new Dictionary<int, RunnerMaintenanceProcess> { [child.Id] = child };
+        var service = new RunnerHousekeepingService(new NullLogger(), (out bool incomplete) =>
+        {
+            incomplete = false;
+            return snapshot;
+        });
+
+        var busy = service.Maintain(fixture.Spec, dryRun: false);
+        Assert.True(busy.Deferred);
+        Assert.True(Directory.Exists(stage));
+        Assert.True(File.Exists(record));
+
+        snapshot.Clear();
+        var idle = service.Maintain(fixture.Spec, dryRun: false);
+        Assert.True(idle.Success, string.Join("\n", idle.Errors));
+        Assert.False(Directory.Exists(stage));
+        Assert.False(File.Exists(record));
+    }
+
     private sealed class Installation : IDisposable
     {
         internal readonly string Root = Path.Combine(Path.GetTempPath(), "powerforge-maintenance-" + Guid.NewGuid().ToString("N"));

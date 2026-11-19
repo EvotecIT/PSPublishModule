@@ -24,7 +24,7 @@ public sealed partial class RunnerHousekeepingService
             try
             {
                 var journal = MaintenanceRead(record, RunnerMaintenanceJsonContext.Default.RunnerMaintenanceJournal);
-                if (journal?.WindowsTool == true && !recoverWindowsTools) continue;
+                if ((journal?.WindowsTool == true) != recoverWindowsTools) continue;
                 if (journal is null || journal.SchemaVersion != 1 || !Guid.TryParseExact(journal.Id, "N", out _) ||
                     Path.GetFileNameWithoutExtension(record) != journal.Id ||
                     !(journal.WindowsTool ? toolRoots : roots).Any(r => PathsEqual(r!, journal.Root)) ||
