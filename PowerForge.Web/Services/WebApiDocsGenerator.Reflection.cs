@@ -305,8 +305,24 @@ public static partial class WebApiDocsGenerator
 
     /// <summary>The documentation names (nested types joined with dots) of the types an assembly exports.</summary>
     private static HashSet<string> GetExportedTypeNames(Assembly assembly) =>
-        GetExportedTypesSafe(assembly)
-            .Where(static type => type is not null)
+        ToDocumentationNames(GetExportedTypesSafe(assembly));
+
+    /// <summary>The exported type names, or null when they cannot all be read (a partial list would hide public types).</summary>
+    private static HashSet<string>? TryGetCompleteExportedTypeNames(Assembly assembly)
+    {
+        try
+        {
+            return ToDocumentationNames(assembly.GetExportedTypes());
+        }
+        catch (Exception ex)
+        {
+            Trace.TraceWarning($"Exported types of {assembly.GetName().Name} could not all be read: {ex.GetType().Name}: {ex.Message}");
+            return null;
+        }
+    }
+
+    private static HashSet<string> ToDocumentationNames(IEnumerable<Type?> types) =>
+        types.Where(static type => type is not null)
             .Select(static type => (type!.FullName ?? type.Name).Replace('+', '.'))
             .ToHashSet(StringComparer.Ordinal);
 
