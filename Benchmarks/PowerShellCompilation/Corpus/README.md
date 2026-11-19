@@ -58,6 +58,8 @@ artifact ledger, requires a complete CLR method for each, and observes each
 function on the original, built, and installed surfaces. Same-name declarations
 require an authored unit ID or start line in both the contract and the
 observation. Artifact observers run with the compiler input withdrawn.
+Complete-workload observers receive their declared function inventory in
+`owned-functions.json` in the scenario directory.
 
 The GitHub helper library executes all ten functions across ten scenarios
 with a scoped loopback HTTP response and fixed configuration and time. The

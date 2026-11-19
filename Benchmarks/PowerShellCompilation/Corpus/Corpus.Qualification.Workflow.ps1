@@ -461,7 +461,9 @@ function Invoke-WholeWorkflowQualification {
     }
     $scenarioRoot = Join-Path $root 'scenarios'
     New-Item -ItemType Directory -Path $scenarioRoot -Force | Out-Null
-    Write-Utf8Json -Path (Join-Path $scenarioRoot 'owned-functions.json') -Value @($Entry.qualification.requiredCompiledOwnedFunctions)
+    if ((Get-WorkflowProperty $Entry.qualification 'completeFunctionInventory' $false) -eq $true) {
+        Write-Utf8Json -Path (Join-Path $scenarioRoot 'owned-functions.json') -Value @($Entry.qualification.requiredCompiledOwnedFunctions)
+    }
     $fixturePath = $null
     if (Test-WorkflowProperty $Entry.qualification 'fixtureScript') {
         $fixturePath = Assert-ContainedPath -Root (Split-Path $PacketPath) -Path (Join-Path (Split-Path $PacketPath) $Entry.qualification.fixtureScript) -Label 'Reviewed fixture script'
