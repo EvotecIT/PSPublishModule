@@ -105,6 +105,10 @@ public sealed class PowerShellCompilationProjectModuleTest
 
     /// <summary>Optional contained project-relative working directory; '.' selects the project root.</summary>
     public string? WorkingDirectory { get; set; }
+
+    /// <summary>Optional time limit in seconds for each acceptance invocation. Defaults to 120 seconds.</summary>
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public int? TimeoutSeconds { get; set; }
 }
 
 /// <summary>Content-addressed isolated restore evidence for one project environment.</summary>

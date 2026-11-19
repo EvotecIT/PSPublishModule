@@ -34,7 +34,8 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
                 PowerShellCompilationProjectManifestService.Open(project), artifact, fixture.ScriptPath);
             var invocation = new PowerShellCompilationProjectWorkflowService.ModuleAcceptanceInvocation(
                 framework == "net472" ? captured.Host : Environment.GetEnvironmentVariable("POWERFORGE_PWSH76_PATH") ?? captured.Host,
-                captured.WorkingDirectory, captured.Payload);
+                captured.WorkingDirectory, captured.Payload, captured.Timeout);
+            Assert.Equal(TimeSpan.FromMinutes(2), invocation.Timeout);
             var native = await new ProcessRunner().RunAsync(new ProcessRunRequest(invocation.Host, fixture.RootPath,
                 new[] { "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", script,
                     "-ArtifactPath", fixture.ScriptPath, "-Receipt", receipt }, TimeSpan.FromMinutes(1)));
@@ -93,6 +94,39 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         yield return new object[] { "net10.0" };
         if (System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Windows))
             yield return new object[] { "net472" };
+    }
+
+    [Theory]
+    [MemberData(nameof(ModuleAcceptanceTargets))]
+    [Trait("Category", "PowerShellCompilerGate")]
+    public void ModuleAcceptanceEnforcesTheTimeoutDeclaredInTheProject(string framework)
+    {
+        using var fixture = ArtifactFixture.Create("function Get-Value { 1 }", compactPath: true);
+        var script = Path.Combine(fixture.RootPath, "accept.ps1");
+        File.WriteAllText(script, "param([string] $ArtifactPath)\nStart-Sleep -Seconds 10\n");
+        var project = Path.Combine(fixture.RootPath, "timeout-project.json");
+        var service = new PowerShellCompilationProjectManifestService();
+        var target = PowerShellCompilationTargetContractService.Create(PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Hybrid, framework, null, false, false,
+            PowerShellCompilationExecutableOptimization.None, explicitContract: true);
+        var manifest = service.Create(project, fixture.ScriptPath, "Timeout", target);
+        var declaration = new PowerShellCompilationProjectModuleTest
+        {
+            Script = Path.GetFileName(script),
+            Sha256 = PowerShellCompilationProjectManifestService.ComputeSha256(script),
+            TimeoutSeconds = 0
+        };
+        Assert.Single(manifest.Artifacts).ModuleTest = declaration;
+        Assert.Throws<InvalidDataException>(() => service.Save(project, manifest));
+        declaration.TimeoutSeconds = 1;
+        service.Save(project, manifest);
+        var context = PowerShellCompilationProjectManifestService.Open(project);
+        var invocation = PowerShellCompilationProjectWorkflowService.CaptureModuleAcceptance(
+            context, Assert.Single(context.Manifest.Artifacts), fixture.ScriptPath);
+
+        var error = Assert.Throws<InvalidOperationException>(() =>
+            PowerShellCompilationProjectWorkflowService.RunModuleAcceptance(invocation));
+        Assert.Contains("failed with exit 124", error.Message, StringComparison.Ordinal);
     }
 
     [Theory]

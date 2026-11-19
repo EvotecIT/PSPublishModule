@@ -80,6 +80,7 @@ $requiredFamilies = @{
     'project module acceptance' = 'PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.Project_ModuleAcceptanceScriptQualifiesBuiltAndInstalledArtifactsAndRejectsChangedBytes*'
     'module acceptance source encoding' = 'PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.ModuleAcceptanceSourceEncodingMatchesNativeFileOnBothHosts*'
     'module acceptance snapshot' = 'PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.ModuleAcceptanceExecutesVerifiedSnapshotWithNativePathsAndIsolatedAutoload*'
+    'module acceptance timeout' = 'PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.ModuleAcceptanceEnforcesTheTimeoutDeclaredInTheProject*'
     'project executable installation' = 'PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.Project_ExecutablePackagePreservesQualifiedPermissionsAndRunsAfterInstall*'
     'hosted lifecycle metadata admission' = 'PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.Plan_HostedLifecyclePromotesOnlyRepresentableValidationMetadata*'
     'hosted lifecycle validation compatibility' = 'PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.Build_HybridLifecyclePreservesUnrepresentedValidationMetadata*'
@@ -207,7 +208,8 @@ try {
     $moduleWorkflow = 'PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.CompleteWorkflow_PinnedBinaryToStringPreservesBindingAndOutput*'
     if ($IsWindows) {
         foreach ($pattern in @($moduleWorkflow, $requiredFamilies['conditional declaration execution'], $requiredFamilies['project module lifecycle'],
-                $requiredFamilies['project module acceptance'], $requiredFamilies['module acceptance source encoding'], $requiredFamilies['module acceptance snapshot'])) {
+                $requiredFamilies['project module acceptance'], $requiredFamilies['module acceptance source encoding'],
+                $requiredFamilies['module acceptance snapshot'], $requiredFamilies['module acceptance timeout'])) {
             foreach ($framework in @('net10.0', 'net472')) {
                 $hostCases = @($passedNames | Where-Object { $_ -like $pattern -and $_ -like "*framework: `"$framework`"*" })
                 if ($hostCases.Count -eq 0) { throw "The compiler gate is missing a passing $framework generated workflow: $pattern" }

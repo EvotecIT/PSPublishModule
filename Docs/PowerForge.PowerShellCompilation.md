@@ -93,8 +93,10 @@ Binary-module artifacts can declare a `moduleTest` acceptance script instead of
 the default bare-import test. Set project `schemaVersion` to `2`, then declare
 the contained project-relative `script`, its reviewed `sha256`, optional literal
 named string `parameters`, and optional contained `workingDirectory` (`.` selects
-the project root). The native script binder receives the actual built or installed
-module path as `ArtifactPath`; that name is reserved. The child host starts with
+the project root). Set optional `timeoutSeconds` between 1 and 900 to give each
+acceptance invocation a different deadline. The default is 120 seconds.
+The native script binder receives the actual built or installed module path as
+`ArtifactPath`, which is reserved. The child host starts with
 its built-in module path, and the script can explicitly add required dependencies.
 Test verifies and captures the script bytes before execution, preserves
 `$PSCommandPath` and `$PSScriptRoot`, and records the acceptance hash in schema-2

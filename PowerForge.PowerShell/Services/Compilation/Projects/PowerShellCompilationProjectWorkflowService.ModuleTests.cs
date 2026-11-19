@@ -38,7 +38,8 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
             artifactPath,
             parameters
         });
-        return new ModuleAcceptanceInvocation(GetModuleTestHost(artifact.Target.TargetFramework), directory, payload);
+        return new ModuleAcceptanceInvocation(GetModuleTestHost(artifact.Target.TargetFramework), directory, payload,
+            TimeSpan.FromSeconds(declaration.TimeoutSeconds ?? 120));
     }
 
     internal static void RunModuleAcceptance(ModuleAcceptanceInvocation invocation)
@@ -83,7 +84,7 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
                 """;
             var run = new ProcessRunner().RunAsync(new ProcessRunRequest(invocation.Host, invocation.WorkingDirectory,
                 new[] { "-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-EncodedCommand",
-                    Convert.ToBase64String(Encoding.Unicode.GetBytes(bootstrap)) }, TimeSpan.FromMinutes(2),
+                    Convert.ToBase64String(Encoding.Unicode.GetBytes(bootstrap)) }, invocation.Timeout,
                 new Dictionary<string, string?>
                 {
                     ["POWERSHELL_TELEMETRY_OPTOUT"] = "1",
@@ -104,10 +105,11 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
 
     internal sealed class ModuleAcceptanceInvocation
     {
-        internal ModuleAcceptanceInvocation(string host, string workingDirectory, string payload)
-        { Host = host; WorkingDirectory = workingDirectory; Payload = payload; }
+        internal ModuleAcceptanceInvocation(string host, string workingDirectory, string payload, TimeSpan timeout)
+        { Host = host; WorkingDirectory = workingDirectory; Payload = payload; Timeout = timeout; }
         internal string Host { get; }
         internal string WorkingDirectory { get; }
         internal string Payload { get; }
+        internal TimeSpan Timeout { get; }
     }
 }

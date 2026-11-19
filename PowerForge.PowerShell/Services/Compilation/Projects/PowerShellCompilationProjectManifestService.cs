@@ -196,6 +196,8 @@ public sealed partial class PowerShellCompilationProjectManifestService
                 if (!IsSha256(moduleTest.Sha256 ?? string.Empty))
                     throw new InvalidDataException("A module acceptance script requires its reviewed SHA-256.");
                 moduleTest.Sha256 = moduleTest.Sha256!.ToLowerInvariant();
+                if (moduleTest.TimeoutSeconds is < 1 or > 900)
+                    throw new InvalidDataException("Module acceptance timeoutSeconds must be between 1 and 900.");
                 if (moduleTest.Parameters is null || moduleTest.Parameters.Any(static parameter =>
                         string.IsNullOrWhiteSpace(parameter.Key) || parameter.Key.IndexOf('\0') >= 0 ||
                         parameter.Key.Equals("ArtifactPath", StringComparison.OrdinalIgnoreCase) ||
