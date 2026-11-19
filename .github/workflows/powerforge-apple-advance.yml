@@ -232,7 +232,7 @@ jobs:
           name: powerforge-apple-advance-${{ inputs.source_ref }}-plan
           path: ${{ steps.plan.outputs.receipt-path }}
           if-no-files-found: error
-          retention-days: 30
+          retention-days: 7
 
       - name: Upload compact release action receipt
         if: always()
@@ -241,4 +241,4 @@ jobs:
           name: powerforge-apple-advance-${{ inputs.source_ref }}-actual
           path: ${{ steps.advance.outputs.receipt-path }}
           if-no-files-found: error
-          retention-days: 30
+          retention-days: 7
