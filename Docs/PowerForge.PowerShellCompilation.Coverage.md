@@ -14,10 +14,10 @@ runtime-free execution.
 | Packet | Complete emitted units | Complete emitted functions | Execution proof |
 | --- | ---: | ---: | --- |
 | Ten public Gallery modules | 682/753 (90.57%) | Not measured separately | 10/10 Hybrid artifacts built, imported, and passed an invocation probe |
-| Seven external workloads | 135/196 (68.88%) | 135/183 (73.77%) | 5/7 complete workloads passed; 39 owned functions, one script root and four nested helpers in 26 scenarios on original, built, and installed surfaces |
+| Seven external workloads | 136/196 (69.39%) | 136/183 (74.32%) | 5/7 complete workloads passed; 39 owned functions, one script root and four nested helpers in 26 scenarios on original, built, and installed surfaces |
 
 The external assessment discovers 155 source files, with zero parser errors and
-zero acquisition/analysis failures. It records five promoted regions in retained
+zero acquisition/analysis failures. It records four promoted regions in retained
 functions. The public packet records 71 retained source units, 576 runtime-routed
 units, and zero promoted regions. Those probes exercise Hybrid artifacts in
 PowerShell. The ratios describe the measured packets and their discovered units.
@@ -213,7 +213,7 @@ registration, group assignment, remote inventory and reboot remain unqualified.
 Locksmith and Locksmith2 still have no complete workload contract.
 
 The default external census remains distinct from targeted application
-qualification: it emits 135/196 units, including 78/108 for Locksmith2.
+qualification: it emits 136/196 units, including 79/108 for Locksmith2.
 Autopilot remains 0/1 in that census because it has no explicit executable
 runtime contract. Its qualified Windows x64 executable instead requires the
 complete script-root method in the actual artifact ledger. That application
@@ -237,6 +237,13 @@ proof detects the previously unsupported forms.
 The canonical Fast compiler contract gate passes **564/564 tests**. Its pinned
 semantic oracle report records **155 passed, zero failed and zero skipped**;
 all seven new semantic/artifact families are required by that gate.
+
+Closed constant Boolean delegate values retain their typed conversion before
+general module callback-value binding. The two-host SDK-object oracle verifies
+delegate installation, invocation and restoration. The legacy compiler's full
+`net472` smoke suite passes **28/28 tests with zero skips**.
+The same conversion admits Locksmith2's `Get-WebEnrollmentEndpointStatus` as a
+complete method, superseding its earlier partial typed region.
 
 Explicit target contracts previously admitted executable roots whose compiled
 callbacks require a defining module. A pre-correction artifact reports a complete root

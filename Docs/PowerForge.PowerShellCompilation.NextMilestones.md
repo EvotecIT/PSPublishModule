@@ -88,7 +88,7 @@ units (15.14% → 90.57%)**, with all ten artifact import/invocation probes pass
 The latest slice adds 81 methods from the 601/753 checkpoint: Pester reaches
 460/491 and PSFramework 146/176. Borrowed SDK objects, returned/collected module
 callbacks, authenticated literal type aliases and native local-call closure use
-shared syntax/type rules. The seven-workload assessment emits **135/196 units** and **135/183 functions**
+shared syntax/type rules. The seven-workload assessment emits **136/196 units** and **136/183 functions**
 and executes five complete workloads through original, built and installed
 surfaces: the GitHub helper library, PowerShell/Scoop installer module adapters,
 GetBIOS and Autopilot. Their 39 owned functions, one advanced script root and four
@@ -229,7 +229,7 @@ unsupported child bodies, nested alias callbacks, alias functions with local
 types or `clean`, and broader type-registration programs guarded until their
 native ownership and failure semantics have pinned proof. Locksmith and
 Locksmith2 still need complete owned-function and execution-scenario contracts;
-their current 18/45 and 78/108 emitted-unit censuses do not qualify AD workloads.
+their current 18/45 and 79/108 emitted-unit censuses do not qualify AD workloads.
 
 The [observed support-gap inventory](PowerForge.PowerShellCompilation.SupportGaps.md) separates the final pinned module census, concrete blocked forms, and deliberate hosted boundaries. It is the starting evidence for this milestone; its affected-unit totals are not promised unlock counts.
 

@@ -75,6 +75,10 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
             function Return-CallerCmdlet { param([Management.Automation.PSCmdlet] $Value) $Value }
             function Return-ParameterDefinition { param([Management.Automation.RuntimeDefinedParameter] $Value) $Value }
             function Return-GroupedData { param([Microsoft.PowerShell.Commands.GroupInfo] $Value) $Value }
+            function Set-DelegateValue {
+                [Net.ServicePointManager]::ServerCertificateValidationCallback = { $true }
+                42
+            }
             function New-ParameterMetadata {
                 [CmdletBinding()] param()
                 $parameter = [Management.Automation.ParameterAttribute]::new()
@@ -102,7 +106,7 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
                 dynamicparam { $Definition }
                 process { $PSBoundParameters.Extra }
             }
-            Export-ModuleMember -Function Return-*, Read-PatternKind, Read-DynamicValue, New-ParameterMetadata, Read-SyntaxHelpers
+            Export-ModuleMember -Function Return-*, Read-PatternKind, Read-DynamicValue, New-ParameterMetadata, Read-SyntaxHelpers, Set-DelegateValue
             """;
         const string probe = """
             function Invoke-InvocationProbe {
@@ -122,6 +126,12 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
                 $position = $command.Extent.StartScriptPosition
                 $group = @('a', 'a' | Group-Object)[0]
                 $metadata = New-ParameterMetadata
+                $previousDelegate = [Net.ServicePointManager]::ServerCertificateValidationCallback
+                try {
+                    $delegateResult = Set-DelegateValue
+                    $delegateAccepted = [Net.ServicePointManager]::ServerCertificateValidationCallback.Invoke(
+                        $null, $null, $null, [Net.Security.SslPolicyErrors]::None)
+                } finally { [Net.ServicePointManager]::ServerCertificateValidationCallback = $previousDelegate }
                 $invalid = try { Return-CallerCmdlet 'invalid' -ErrorAction Stop; 'unexpected' } catch { $_.FullyQualifiedErrorId }
                 [ordered]@{
                     session = [object]::ReferenceEquals($state, (Return-SessionOwner $state))
@@ -135,6 +145,7 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
                     parameter = [object]::ReferenceEquals($metadata, (Return-ParameterDefinition $metadata))
                     grouped = [object]::ReferenceEquals($group, (Return-GroupedData $group))
                     metadata = @($metadata.Attributes[0].Mandatory, $metadata.Attributes[1].AliasNames[0])
+                    delegate = @($delegateResult, $delegateAccepted)
                     helpers = Read-SyntaxHelpers
                     pattern = Read-PatternKind ([Management.Automation.WildcardPattern]::new('a*')) 'Function'
                     dynamic = Read-DynamicValue -Definition $definition -Extra 'bound'
@@ -147,7 +158,7 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
         CompareScopedArtifacts(source, probe,
             new[] { "Return-SessionOwner", "Return-VariableCell", "Return-ParameterMap", "Return-InitialState",
                 "Return-CommandNode", "Return-ScriptPosition", "Return-CallerCmdlet", "Read-PatternKind", "Read-DynamicValue",
-                "Return-ParameterDefinition", "Return-GroupedData", "New-ParameterMetadata", "Read-SyntaxHelpers" },
+                "Return-ParameterDefinition", "Return-GroupedData", "New-ParameterMetadata", "Read-SyntaxHelpers", "Set-DelegateValue" },
             value =>
             {
                 foreach (var name in new[] { "session", "cell", "dictionary", "initial", "command", "position", "cmdlet", "parameter", "grouped" })
@@ -155,6 +166,7 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
                 Assert.Contains("\"mutation\":8", value, StringComparison.Ordinal);
                 Assert.Contains("\"dynamic\":\"bound\"", value, StringComparison.Ordinal);
                 Assert.Contains("\"metadata\":[true,\"Text\"]", value, StringComparison.Ordinal);
+                Assert.Contains("\"delegate\":[42,true]", value, StringComparison.Ordinal);
                 Assert.Contains("\"converted\":7", value, StringComparison.Ordinal);
                 Assert.Contains("ParameterArgumentTransformationError", value, StringComparison.Ordinal);
                 Assert.Contains("\"recovered\":8", value, StringComparison.Ordinal);

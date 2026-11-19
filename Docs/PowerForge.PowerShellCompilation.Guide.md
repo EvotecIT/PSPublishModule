@@ -71,7 +71,7 @@ for repeatable dependency review and delivery.
 The [coverage report](PowerForge.PowerShellCompilation.Coverage.md) records the
 2026-11-19 reruns of both fixed packets. It distinguishes complete emitted units
 from retained source and smaller compiled regions. The seven-workload external
-assessment emits **135/196 units (68.88%)** and **135/183 functions (73.77%)**,
+assessment emits **136/196 units (69.39%)** and **136/183 functions (74.32%)**,
 with zero parser errors. **Five of seven complete workloads pass**: the ten-function
 GitHub helper library and the four-function PowerShell and twenty-four-function
 Scoop installers, GetBIOS and Autopilot execute 26 scenarios on original, built, and installed surfaces.

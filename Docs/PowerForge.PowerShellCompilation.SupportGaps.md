@@ -54,7 +54,7 @@ semantics; this does not establish Windows PowerShell executable packaging.
 Generated module manifests also preserve the legacy `ModuleToProcess` key
 without adding a contradictory `RootModule` entry.
 
-The seven-workload packet emits 135/196 units and 135/183 functions and executes
+The seven-workload packet emits 136/196 units and 136/183 functions and executes
 five complete workloads: ten GitHub helper functions in ten scenarios, four
 PowerShell installer functions in three scenarios and 24 Scoop installer functions
 in three scenarios, GetBIOS in six scenarios and Autopilot in four scenarios. Original, built and installed surfaces pass with compiler

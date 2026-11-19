@@ -604,14 +604,14 @@
       "sourceFingerprint": "b1e65521a013471cfc80589f0edd062a714f4b498a347685a06d7dce97b1b4ef",
       "sourceFiles": 105,
       "totalUnits": 108,
-      "emittedUnits": 78,
+      "emittedUnits": 79,
       "runtimeFallbackUnits": 107,
       "parseErrorFiles": 0,
       "postEmissionEvaluated": true,
       "totalFunctions": 100,
-      "analyzerEligibleFunctions": 81,
-      "emittedFunctions": 78,
-      "promotedTypedRegions": 2,
+      "analyzerEligibleFunctions": 82,
+      "emittedFunctions": 79,
+      "promotedTypedRegions": 1,
       "droppedEligibleFunctions": 3,
       "fallbackFunctions": 99,
       "functionDispositions": [
@@ -708,11 +708,11 @@
           "relativePath": "Private/Get/Get-WebEnrollmentEndpointStatus.ps1",
           "name": "Get-WebEnrollmentEndpointStatus",
           "startLine": 1,
-          "semanticEligible": false,
-          "emitted": false,
+          "semanticEligible": true,
+          "emitted": true,
           "runtimeRouted": true,
           "shapingFallback": false,
-          "promotedTypedRegions": 1
+          "promotedTypedRegions": 0
         },
         {
           "unitId": "192db9eaa35bccb6460339c6",
