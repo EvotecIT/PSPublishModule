@@ -18,7 +18,7 @@ public sealed partial class BenchmarkDeclarationService
         BenchmarkComparisonDefinition comparison,
         IReadOnlyCollection<BenchmarkEvidenceCell> cells)
     {
-        string[] cases = comparison.Cases ?? Array.Empty<string>();
+        string[] cases = DeclaredCaseNames(comparison);
         BenchmarkExpectedCell[] explicitCells = comparison.Cells ?? Array.Empty<BenchmarkExpectedCell>();
         if (cases.Length == 0 && explicitCells.Length == 0)
             return;
@@ -109,10 +109,55 @@ public sealed partial class BenchmarkDeclarationService
             Add(issues, subject, "unexpected-combination", $"Combination {unexpected.Value} ran but is not declared.");
     }
 
-    // Checks that explicit cells name declared cases, libraries and axis values, with a value for every axis.
+    // Declared case names: the comparison's cases, or, when it lists only cells, the cases those cells name.
+    internal static string[] DeclaredCaseNames(BenchmarkComparisonDefinition comparison)
+    {
+        string[] cases = (comparison.Cases ?? Array.Empty<string>()).Select(Normalize).Where(value => value.Length > 0).ToArray();
+        return cases.Length > 0
+            ? cases
+            : (comparison.Cells ?? Array.Empty<BenchmarkExpectedCell>())
+                .Where(cell => cell is not null)
+                .Select(cell => Normalize(cell.Case))
+                .Where(value => value.Length > 0)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+    }
+
+    // Explicit cells that apply to a library that ran: cells for every library, or for a declared library that ran.
+    private static BenchmarkExpectedCell[] ApplicableCells(BenchmarkComparisonDefinition comparison, IReadOnlyCollection<BenchmarkEvidenceCell> cells)
+    {
+        string[] declaredLibraries = comparison.Libraries ?? Array.Empty<string>();
+        var ran = new HashSet<string>(
+            cells.Select(cell => cell.Library).Where(library => !string.IsNullOrWhiteSpace(library) && declaredLibraries.Contains(library, StringComparer.OrdinalIgnoreCase)),
+            StringComparer.OrdinalIgnoreCase);
+        return (comparison.Cells ?? Array.Empty<BenchmarkExpectedCell>())
+            .Where(cell => cell is not null && (string.IsNullOrWhiteSpace(cell.Library) ? ran.Count > 0 : ran.Contains(Normalize(cell.Library))))
+            .ToArray();
+    }
+
+    // Cases that must have run: every declared case, or with explicit cells the cases of the cells that apply.
+    private static string[] RequiredCaseNames(BenchmarkComparisonDefinition comparison, IReadOnlyCollection<BenchmarkEvidenceCell> cells, string[] declaredCases)
+        => (comparison.Cells ?? Array.Empty<BenchmarkExpectedCell>()).Length == 0
+            ? declaredCases
+            : ApplicableCells(comparison, cells).Select(cell => Normalize(cell.Case)).Where(value => value.Length > 0)
+                .Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+
+    // Axis values that must have run: every declared value, or with explicit cells the values of the cells that apply.
+    private static string[] RequiredAxisValues(BenchmarkComparisonDefinition comparison, BenchmarkComparisonAxis axis, IReadOnlyCollection<BenchmarkEvidenceCell> cells, string[] declaredValues)
+        => (comparison.Cells ?? Array.Empty<BenchmarkExpectedCell>()).Length == 0
+            ? declaredValues
+            : ApplicableCells(comparison, cells)
+                .Select(cell => cell.Parameters is not null && TryGetIgnoreCase(cell.Parameters, axis.Name, out string value) ? value : string.Empty)
+                .Where(value => value.Length > 0)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+
+    // Checks that explicit cells name declared cases, libraries and axis values, with one value for every axis.
     private static void ValidateExplicitCells(List<BenchmarkDeclarationIssue> issues, string subject, BenchmarkComparisonDefinition comparison)
     {
         string[] cases = comparison.Cases ?? Array.Empty<string>();
+        BenchmarkExpectedCell[] listed = (comparison.Cells ?? Array.Empty<BenchmarkExpectedCell>()).Where(cell => cell is not null).ToArray();
+        bool namedCases = cases.Length > 0 || listed.Any(cell => !string.IsNullOrWhiteSpace(cell.Case));
         string[] libraries = comparison.Libraries ?? Array.Empty<string>();
         BenchmarkComparisonAxis[] axes = (comparison.Axes ?? Array.Empty<BenchmarkComparisonAxis>())
             .Where(axis => axis is not null && !string.IsNullOrWhiteSpace(axis.Name))
@@ -125,11 +170,13 @@ public sealed partial class BenchmarkDeclarationService
             string caseName = (cell.Case ?? string.Empty).Trim();
             if (cases.Length > 0 && !cases.Contains(caseName, StringComparer.OrdinalIgnoreCase))
                 Add(issues, subject, "comparison-cell", $"Cell case '{caseName}' is not one of the declared cases.");
-            if (cases.Length == 0 && caseName.Length > 0)
-                Add(issues, subject, "comparison-cell", $"Cell case '{caseName}' needs the comparison to declare its cases.");
+            if (cases.Length == 0 && namedCases && caseName.Length == 0)
+                Add(issues, subject, "comparison-cell", "Every cell needs a case when other cells name one.");
             if (!string.IsNullOrWhiteSpace(cell.Library) && !libraries.Contains((cell.Library ?? string.Empty).Trim(), StringComparer.OrdinalIgnoreCase))
                 Add(issues, subject, "comparison-cell", $"Cell library '{cell.Library}' is not one of the comparison's libraries.");
             var parameters = cell.Parameters ?? new Dictionary<string, string>();
+            foreach (string name in parameters.Keys.GroupBy(name => name.Trim(), StringComparer.OrdinalIgnoreCase).Where(group => group.Count() > 1).Select(group => group.Key))
+                Add(issues, subject, "comparison-cell", $"A cell for case '{caseName}' gives parameter '{name}' more than once; parameter names ignore case.");
             foreach (string name in parameters.Keys.Where(name => !axes.Any(axis => string.Equals(axis.Name, name, StringComparison.OrdinalIgnoreCase))))
                 Add(issues, subject, "comparison-cell", $"Cell parameter '{name}' is not a declared axis.");
             var values = new List<string>();
@@ -142,7 +189,7 @@ public sealed partial class BenchmarkDeclarationService
                 values.Add(value);
             }
             if (!seen.Add(Key(caseName, (cell.Library ?? string.Empty).Trim(), values)))
-                Add(issues, subject, "comparison-cell", $"Cell {Describe(cases.Length > 0 ? caseName : null, cell.Library, axes, values)} is declared more than once.");
+                Add(issues, subject, "comparison-cell", $"Cell {Describe(namedCases ? caseName : null, cell.Library, axes, values)} is declared more than once.");
         }
     }
 

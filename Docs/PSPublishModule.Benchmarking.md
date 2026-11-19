@@ -750,8 +750,10 @@ The first lints the document. The second reports drift between a result and its
 declaration: cases, libraries or axis values that ran but are not declared, and
 declared cases or axis values with no cell at all. When the comparison declares its
 cases, it also checks every case × library × axis-value combination for each library
-that ran (`missing-combination`), or the explicit `cells` when given
-(`missing-combination`, `unexpected-combination`). A case that ran and crashed is a
+that ran (`missing-combination`). When the comparison lists explicit `cells`, those
+cells define the expected combinations (`missing-combination`,
+`unexpected-combination`) and, without `cases`, the case names; only the cases and
+axis values of cells for the libraries that ran are required. A case that ran and crashed is a
 failed cell, not drift; it is excluded from publication and the rest of the lane is
 published. Both stop with an error unless `-PassThru` is used.
 `Select-BenchmarkLibrary` returns the libraries a runner may execute; excluded

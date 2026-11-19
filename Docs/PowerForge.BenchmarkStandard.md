@@ -255,8 +255,11 @@ policy. When not every combination is valid (a library that has no `Scale=Huge`
 mode, a case that exists only for one library), list the valid cells explicitly in
 the comparison's `cells`; each names a `case`, optionally a `library` (absent means
 every library), and one value per axis in `parameters`. With `cells`, a combination
-that ran but is not listed is `unexpected-combination`. Generate `cells` from the
-benchmark code like the rest of the declaration.
+that ran but is not listed is `unexpected-combination`. Only the cases and axis
+values of cells that apply to the libraries that ran are required, so a value only
+an absent library supports is not reported missing. A comparison that lists `cells`
+can leave out `cases`; the cells' case names are then its declared cases. Generate
+`cells` from the benchmark code like the rest of the declaration.
 
 
 - A crash, timeout or non-zero exit of one library's case is recorded as a failed

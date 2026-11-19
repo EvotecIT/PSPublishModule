@@ -14,10 +14,12 @@ namespace PSPublishModule;
 /// reason) and the comparisons (area, group, title, subject, libraries, axes, cases, optional cells, platforms,
 /// frameworks). Without a result the command lints the document. With a result it also reports declaration drift:
 /// cases, libraries or axis values that ran but are not declared, and declared ones that did not run. For a
-/// comparison that declares its cases or cells, it also checks each case x library x axis-value combination of the
-/// libraries that ran: declared libraries that did not run at all are not counted, and a cell that ran and failed
-/// counts as present. A comparison without declared cases or cells is not checked for combinations; it can be
-/// recorded but is not published.
+/// comparison that declares its cases, every case x library x axis-value combination is expected for each library
+/// that ran. When the comparison lists explicit cells instead, those cells define the expected combinations (and,
+/// without declared cases, the case names); a combination that ran but is not listed is unexpected-combination, and
+/// only the cases and axis values of cells for the libraries that ran are required. Declared libraries that did not
+/// run at all are not counted, and a cell that ran and failed counts as present. A comparison without declared cases
+/// or cells is not checked for combinations; it can be recorded but is not published.
 /// </para>
 /// <para>
 /// The command stops with an error when it finds anything, so a build can run it before measuring.

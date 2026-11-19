@@ -159,6 +159,79 @@ public sealed partial class BenchmarkServicesTests
         Assert.Equal("Failed", failed.Status);
     }
 
+    [Fact]
+    public void Declarations_RequireOnlyTheCellsOfLibrariesThatRan()
+    {
+        BenchmarkDeclarationDocument declarations = ThreeLibraryDeclarations();
+        BenchmarkComparisonDefinition comparison = declarations.Comparisons[0];
+        comparison.Cases = ["Create"];
+        comparison.Axes = [new BenchmarkComparisonAxis { Name = "Scale", Values = ["Easy", "Normal"] }];
+        // Only EPPlus has a Normal scale.
+        comparison.Cells =
+        [
+            new BenchmarkExpectedCell { Case = "Create", Parameters = new() { ["Scale"] = "Easy" } },
+            new BenchmarkExpectedCell { Case = "Create", Library = "EPPlus", Parameters = new() { ["Scale"] = "Normal" } }
+        ];
+        BenchmarkRunResult withoutEpplus = ScaledResult(("OfficeIMO", "Easy", Spread(10, 10)), ("Sep", "Easy", Spread(12, 10)));
+        BenchmarkRunResult epplusWithoutNormal = ScaledResult(("OfficeIMO", "Easy", Spread(10, 10)), ("Sep", "Easy", Spread(12, 10)), ("EPPlus", "Easy", Spread(14, 10)));
+
+        Assert.Empty(new BenchmarkDeclarationService().CheckDrift(comparison, declarations.Libraries, withoutEpplus));
+        BenchmarkDeclarationIssue missing = Assert.Single(new BenchmarkDeclarationService().CheckDrift(comparison, declarations.Libraries, epplusWithoutNormal));
+        Assert.Equal("missing-axis-value", missing.Code);
+    }
+
+    [Fact]
+    public void Declarations_TakeCaseNamesFromCellsWhenNoCasesAreDeclared()
+    {
+        string root = CreateTempRoot();
+        string source = Path.Combine(root, "source", "index.json");
+        BenchmarkDeclarationDocument declarations = SparseCombinationDeclarations();
+        declarations.Comparisons[0].Cases = [];
+        BenchmarkRunResult result = ScaledResult(("OfficeIMO", "Easy", Spread(10, 10)), ("OfficeIMO", "Normal", Spread(20, 10)), ("Sep", "Easy", Spread(12, 10)));
+        BenchmarkRunResult otherCase = ScaledResult(("OfficeIMO", "Easy", Spread(10, 10)), ("OfficeIMO", "Normal", Spread(20, 10)), ("Sep", "Easy", Spread(12, 10)));
+        foreach (BenchmarkSample sample in otherCase.Samples.Where(sample => sample.Library == "Sep"))
+            sample.Scenario = "Append";
+        otherCase.Summary = new BenchmarkSummaryService().Summarize(otherCase.Samples);
+        BenchmarkEvidenceUpdateRequest request = PublishRequest(result, declarations);
+        request.ResultArtifactPath = Path.Combine(root, "source", "windows.json");
+
+        Assert.Empty(new BenchmarkDeclarationService().Validate(declarations));
+        Assert.Empty(new BenchmarkDeclarationService().CheckDrift(declarations.Comparisons[0], declarations.Libraries, result));
+        Assert.Contains(new BenchmarkDeclarationService().CheckDrift(declarations.Comparisons[0], declarations.Libraries, otherCase),
+            issue => issue.Code == "unexpected-case" && issue.Message == "Case 'Append' ran but is not declared.");
+        Assert.True(Assert.Single(new BenchmarkEvidenceCatalogService().UpdateFile(source, request).Entries).Publish);
+        BenchmarkEvidenceCatalog merged = new BenchmarkEvidenceCatalogService().MergeFiles(Path.Combine(root, "merged", "index.json"), [source]);
+        Assert.True(Assert.Single(merged.Entries).Publish);
+    }
+
+    [Fact]
+    public void Declarations_RejectCellParametersRepeatedInAnotherCase()
+    {
+        string root = CreateTempRoot();
+        string source = Path.Combine(root, "source", "index.json");
+        BenchmarkDeclarationDocument declarations = SparseCombinationDeclarations();
+        BenchmarkEvidenceUpdateRequest request = PublishRequest(
+            ScaledResult(("OfficeIMO", "Easy", Spread(10, 10)), ("OfficeIMO", "Normal", Spread(20, 10)), ("Sep", "Easy", Spread(12, 10))), declarations);
+        request.ResultArtifactPath = Path.Combine(root, "source", "windows.json");
+        new BenchmarkEvidenceCatalogService().UpdateFile(source, request);
+        BenchmarkDeclarationDocument repeated = SparseCombinationDeclarations();
+        repeated.Comparisons[0].Cells[0].Parameters = new Dictionary<string, string>(StringComparer.Ordinal) { ["Scale"] = "Easy", ["scale"] = "Easy" };
+        // A catalog edited or produced elsewhere can carry the repeated name without its declaration document.
+        var catalog = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(source))!;
+        catalog["comparisons"]![0]!["cells"]![0]!["parameters"]!["scale"] = "Easy";
+        File.WriteAllText(source, catalog.ToJsonString());
+
+        string message = Assert.Single(new BenchmarkDeclarationService().Validate(repeated), issue => issue.Code == "comparison-cell").Message;
+        InvalidOperationException merge = Assert.Throws<InvalidOperationException>(() =>
+            new BenchmarkEvidenceCatalogService().MergeFiles(Path.Combine(root, "merged", "index.json"), [source]));
+        InvalidOperationException update = Assert.Throws<InvalidOperationException>(() =>
+            new BenchmarkEvidenceCatalogService().Update(null, PublishRequest(request.Result, repeated)));
+
+        Assert.Equal("A cell for case 'Create' gives parameter 'Scale' more than once; parameter names ignore case.", message);
+        Assert.Contains("gives parameter 'scale' more than once; parameter names ignore case", merge.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("gives parameter 'Scale' more than once", update.Message, StringComparison.Ordinal);
+    }
+
     private static BenchmarkDeclarationDocument CombinationDeclarations()
     {
         BenchmarkDeclarationDocument declarations = TestDeclarations();

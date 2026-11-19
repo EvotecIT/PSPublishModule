@@ -79108,10 +79108,12 @@ the cmdlet resolves the next patch version. When an exact version is provided, i
 reason) and the comparisons (area, group, title, subject, libraries, axes, cases, optional cells, platforms,&#xD;
 frameworks). Without a result the command lints the document. With a result it also reports declaration drift:&#xD;
 cases, libraries or axis values that ran but are not declared, and declared ones that did not run. For a&#xD;
-comparison that declares its cases or cells, it also checks each case x library x axis-value combination of the&#xD;
-libraries that ran: declared libraries that did not run at all are not counted, and a cell that ran and failed&#xD;
-counts as present. A comparison without declared cases or cells is not checked for combinations; it can be&#xD;
-recorded but is not published.</maml:para>
+comparison that declares its cases, every case x library x axis-value combination is expected for each library&#xD;
+that ran. When the comparison lists explicit cells instead, those cells define the expected combinations (and,&#xD;
+without declared cases, the case names); a combination that ran but is not listed is unexpected-combination, and&#xD;
+only the cases and axis values of cells for the libraries that ran are required. Declared libraries that did not&#xD;
+run at all are not counted, and a cell that ran and failed counts as present. A comparison without declared cases&#xD;
+or cells is not checked for combinations; it can be recorded but is not published.</maml:para>
       <maml:para>The command stops with an error when it finds anything, so a build can run it before measuring.&#xD;
 Use -PassThru to receive the findings as objects instead.</maml:para>
     </maml:description>
