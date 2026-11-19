@@ -534,6 +534,8 @@ internal sealed partial class PowerShellTypedLowerer
                 switchStatement.MatchMode,
                 switchStatement.CaseSensitive,
                 switchStatement.InputKind, switchStatement.NativeSourcePath, switchStatement.NativeInputSourceText),
+            PowerShellBoundExitStatement exited => new PowerShellLoweredExitStatement(exited.Span,
+                exited.Expression is null ? null : LowerExpression(exited.Expression, functions, names, targetCapabilities)),
             PowerShellBoundThrowStatement thrown => new PowerShellLoweredThrowStatement(
                 thrown.Span,
                 thrown.Expression is null ? null : LowerExpression(thrown.Expression, functions, names, targetCapabilities),
@@ -550,8 +552,8 @@ internal sealed partial class PowerShellTypedLowerer
                 tryStatement.FinallyBlock is null ? null : LowerStatements(tryStatement.FinallyBlock, functions, symbolTypes, localTypes, declared, names, targetCapabilities),
                 RequiresHostExceptionHandling(tryStatement, functions),
                 names.Allocate("pf_handler_exception"), names.Allocate("pf_handler_clause"), names.Allocate("pf_handler_record")),
-            PowerShellBoundBreakStatement transfer => new PowerShellLoweredBreakStatement(statement.Span, transfer.TargetLoop),
-            PowerShellBoundContinueStatement transfer => new PowerShellLoweredContinueStatement(statement.Span, transfer.TargetLoop),
+            PowerShellBoundBreakStatement transfer => new PowerShellLoweredBreakStatement(statement.Span, transfer.TargetLoop, transfer.TransferToCaller),
+            PowerShellBoundContinueStatement transfer => new PowerShellLoweredContinueStatement(statement.Span, transfer.TargetLoop, transfer.TransferToCaller),
             _ => throw new InvalidOperationException($"Bound statement '{statement.GetType().Name}' reached typed lowering without an owner.")
         };
 

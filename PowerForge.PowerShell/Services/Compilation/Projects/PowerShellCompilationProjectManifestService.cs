@@ -63,6 +63,8 @@ public sealed partial class PowerShellCompilationProjectManifestService
     /// <summary>Writes a normalized project manifest with portable relative paths.</summary>
     public void Save(string projectPath, PowerShellCompilationProjectManifest manifest)
     {
+        if (manifest.SchemaVersion == 1 && manifest.Artifacts.Any(static artifact => artifact.ModuleTest is not null))
+            manifest.SchemaVersion = 2;
         var fullPath = Path.GetFullPath(projectPath.Trim().Trim('"'));
         PowerShellCompilationPathSafety.EnsureNoLinksInExistingAncestors(fullPath, "Project manifest path traverses a symbolic link or junction.");
         var normalized = Normalize(fullPath, manifest, requireInputs: true);
@@ -91,8 +93,10 @@ public sealed partial class PowerShellCompilationProjectManifestService
         bool requireInputs,
         Action<PowerShellCompilationDiagnosticStage, string>? onStage = null)
     {
-        if (manifest.SchemaVersion != 1)
+        if (manifest.SchemaVersion is not 1 and not 2)
             throw new InvalidDataException($"Unsupported PowerShell compilation project schema {manifest.SchemaVersion}.");
+        if (manifest.SchemaVersion == 1 && manifest.Artifacts.Any(static artifact => artifact.ModuleTest is not null))
+            throw new InvalidDataException("Module acceptance scripts require project schema 2; older readers must reject the required test contract.");
         manifest.Name = NormalizeName(manifest.Name, "project name");
         onStage?.Invoke(PowerShellCompilationDiagnosticStage.Target, string.Empty);
         manifest.SemanticProfileId = manifest.SemanticProfileId?.Trim() ?? string.Empty;
@@ -181,6 +185,31 @@ public sealed partial class PowerShellCompilationProjectManifestService
             if (artifact.Target.ArtifactKind != PowerShellCompilationArtifactKind.Executable &&
                 (artifact.TestArguments.Length != 0 || artifact.TestWorkingDirectory is not null))
                 throw new InvalidDataException($"Project target '{artifact.Name}' test arguments and working directory require an executable target.");
+            if (artifact.ModuleTest is { } moduleTest)
+            {
+                if (artifact.Target.ArtifactKind != PowerShellCompilationArtifactKind.BinaryModule)
+                    throw new InvalidDataException("A module acceptance script requires a binary-module target.");
+                moduleTest.Script = NormalizeRelativePath(root, moduleTest.Script, requireInputs, "module acceptance script");
+                if (!moduleTest.Script.EndsWith(".ps1", StringComparison.OrdinalIgnoreCase) ||
+                    requireInputs && !File.Exists(Path.Combine(root, moduleTest.Script)))
+                    throw new InvalidDataException("A module acceptance script must identify a PowerShell script file.");
+                if (!IsSha256(moduleTest.Sha256 ?? string.Empty))
+                    throw new InvalidDataException("A module acceptance script requires its reviewed SHA-256.");
+                moduleTest.Sha256 = moduleTest.Sha256!.ToLowerInvariant();
+                if (moduleTest.TimeoutSeconds is < 1 or > 900)
+                    throw new InvalidDataException("Module acceptance timeoutSeconds must be between 1 and 900.");
+                if (moduleTest.Parameters is null || moduleTest.Parameters.Any(static parameter =>
+                        string.IsNullOrWhiteSpace(parameter.Key) || parameter.Key.IndexOf('\0') >= 0 ||
+                        parameter.Key.Equals("ArtifactPath", StringComparison.OrdinalIgnoreCase) ||
+                        parameter.Value is null || parameter.Value.IndexOf('\0') >= 0) ||
+                    moduleTest.Parameters.Keys.Distinct(StringComparer.OrdinalIgnoreCase).Count() != moduleTest.Parameters.Count)
+                    throw new InvalidDataException("Module acceptance parameters require unique names and literal strings without NUL; ArtifactPath is supplied by the workflow.");
+                moduleTest.WorkingDirectory = string.IsNullOrWhiteSpace(moduleTest.WorkingDirectory) ? null :
+                    NormalizeRelativePath(root, moduleTest.WorkingDirectory!, requireInputs, "module acceptance working directory", allowRoot: true);
+                if (requireInputs && moduleTest.WorkingDirectory is not null &&
+                    !Directory.Exists(Path.Combine(root, moduleTest.WorkingDirectory)))
+                    throw new DirectoryNotFoundException("Module acceptance working directory was not found.");
+            }
         }
         return manifest;
     }

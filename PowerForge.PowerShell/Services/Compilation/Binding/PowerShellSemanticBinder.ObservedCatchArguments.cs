@@ -26,6 +26,18 @@ internal sealed partial class PowerShellSemanticBinder
                    new HashSet<string>(StringComparer.OrdinalIgnoreCase)));
     }
 
+    // Direct storage reads use the active invocation. The same SDK resolves the
+    // module-local class, converts its arguments and constructs the caught error.
+    private static bool HasAuthoredConstructorVariableArguments(ParsedSourceDocument document,
+        InvokeMemberExpressionAst invocation, PowerShellCompilationCapability capabilities)
+        => invocation is { Static: true, Expression: TypeExpressionAst receiver,
+               Member: StringConstantExpressionAst member, Arguments.Count: > 0 } &&
+           member.Value.Equals("new", StringComparison.OrdinalIgnoreCase) &&
+           document.NativeDependencyTypes.IsModuleLocalClass(receiver.TypeName, capabilities) &&
+           invocation.Arguments.All(static argument => argument is VariableExpressionAst variable &&
+               (variable.VariablePath.IsUnqualified || variable.VariablePath.IsScript)) &&
+           HasCatchAllObservation(invocation);
+
     private static MethodBase[] ObservedCallCandidates(Type receiver, string name, bool isStatic, int count)
     {
         IEnumerable<MethodBase> candidates = isStatic && name.Equals("new", StringComparison.OrdinalIgnoreCase)

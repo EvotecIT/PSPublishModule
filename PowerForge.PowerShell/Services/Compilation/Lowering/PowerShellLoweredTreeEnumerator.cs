@@ -124,6 +124,9 @@ internal static class PowerShellLoweredTreeEnumerator
             case PowerShellLoweredThrowStatement { Expression: not null } thrown:
                 yield return thrown.Expression;
                 break;
+            case PowerShellLoweredExitStatement { Expression: not null } exited:
+                yield return exited.Expression;
+                break;
         }
     }
 

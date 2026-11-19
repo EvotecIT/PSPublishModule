@@ -3,7 +3,7 @@ namespace PowerForge;
 /// <summary>Portable project manifest for a reproducible PowerShell compilation artifact matrix.</summary>
 public sealed class PowerShellCompilationProjectManifest
 {
-    /// <summary>Project-manifest schema version.</summary>
+    /// <summary>Project-manifest schema version: 1 for default tests, 2 when a module acceptance script is required.</summary>
     public int SchemaVersion { get; set; } = 1;
 
     /// <summary>Portable project name used for default artifact and package identities.</summary>
@@ -80,11 +80,35 @@ public sealed class PowerShellCompilationProjectArtifact
     /// <summary>Optional contained project-relative executable test directory; '.' selects the project root. Defaults to the artifact directory.</summary>
     public string? TestWorkingDirectory { get; set; }
 
+    /// <summary>Optional reviewed module acceptance script, replacing the default bare-import test; requires project schema 2.</summary>
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public PowerShellCompilationProjectModuleTest? ModuleTest { get; set; }
+
     /// <summary>Whether the independently buildable generated project is included.</summary>
     public bool EmitSource { get; set; }
 
     /// <summary>Whether redacted bound/lowered IR snapshots are included.</summary>
     public bool EmitIr { get; set; }
+}
+
+/// <summary>A contained, content-pinned acceptance script for a built or installed binary module.</summary>
+public sealed class PowerShellCompilationProjectModuleTest
+{
+    /// <summary>Project-relative PowerShell script receiving the actual module path through ArtifactPath.</summary>
+    public string Script { get; set; } = string.Empty;
+
+    /// <summary>Reviewed SHA-256 of the acceptance script; changed bytes cannot execute.</summary>
+    public string Sha256 { get; set; } = string.Empty;
+
+    /// <summary>Named literal string parameters supplied through the native script binder.</summary>
+    public Dictionary<string, string> Parameters { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Optional contained project-relative working directory; '.' selects the project root.</summary>
+    public string? WorkingDirectory { get; set; }
+
+    /// <summary>Optional time limit in seconds for each acceptance invocation. Defaults to 120 seconds.</summary>
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public int? TimeoutSeconds { get; set; }
 }
 
 /// <summary>Content-addressed isolated restore evidence for one project environment.</summary>

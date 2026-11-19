@@ -13,7 +13,8 @@ internal static class PowerShellCompilationParameterTypePolicy
     internal static bool IsHostProvidedParameterType(string name)
         // Microsoft.PowerShell.Commands.Utility supplies this public type on both
         // supported PowerShell hosts even when the compiler process has not loaded it.
-        => name.Equals("Microsoft.PowerShell.Commands.WebRequestSession", StringComparison.OrdinalIgnoreCase);
+        => name.Equals("Microsoft.PowerShell.Commands.WebRequestSession", StringComparison.OrdinalIgnoreCase) ||
+           name.Equals("Microsoft.PowerShell.Commands.GroupInfo", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>Qualifies construction of host-provided data without adding a generated assembly reference.</summary>
     internal static bool IsHostProvidedConstructorReceiver(TypeExpressionAst expression,
@@ -69,18 +70,59 @@ internal static class PowerShellCompilationParameterTypePolicy
         // Borrowed AD access rules retain native pipeline binding and the active Windows host's identity.
         typeof(System.DirectoryServices.ActiveDirectoryAccessRule),
         typeof(Parser),
-        typeof(HashtableAst)
+        typeof(HashtableAst),
+        // Borrowed syntax nodes and completion values retain active-host SDK identity.
+        typeof(Ast),
+        typeof(FunctionDefinitionAst),
+        typeof(CompletionResultType),
+        // Invocation objects retain the active host's identity and native storage.
+        typeof(SessionState),
+        typeof(PSCmdlet),
+        typeof(PSVariable),
+        typeof(RuntimeDefinedParameter),
+        typeof(RuntimeDefinedParameterDictionary),
+        typeof(CommandTypes),
+        typeof(WildcardPattern),
+        typeof(System.Management.Automation.Runspaces.InitialSessionState),
+        typeof(CommandAst),
+        typeof(IScriptPosition),
+        typeof(ParameterAttribute),
+        typeof(AliasAttribute),
+        typeof(System.Collections.ObjectModel.Collection<Attribute>),
+        typeof(LanguagePrimitives),
+        typeof(TokenKind),
+        typeof(CodeGeneration)
+    };
+
+    // These objects use the active SDK or Windows directory assembly. The
+    // native binder owns their identity and the caller keeps their lifetime.
+    private static readonly HashSet<Type> NativeInteropTypes = new()
+    {
+        typeof(PSModuleInfo),
+        typeof(PSLanguageMode),
+        typeof(Token),
+        typeof(CommandCompletion),
+        typeof(System.Management.Automation.Internal.CommonParameters),
+        typeof(System.Management.Automation.Internal.ShouldProcessParameters),
+        typeof(System.DirectoryServices.ActiveDirectory.Domain),
+        typeof(System.DirectoryServices.DirectoryEntry),
+        typeof(System.DirectoryServices.DirectorySearcher),
+        typeof(System.DirectoryServices.SearchScope),
+        typeof(System.DirectoryServices.AuthenticationTypes)
     };
 
     internal static bool IsQualifiedHostDataType(Type type, string? targetFramework = null)
         => type.IsArray && type.GetArrayRank() == 1
             ? IsQualifiedHostDataType(type.GetElementType()!, targetFramework)
-            : PowerShellHostDataTypes.Contains(type) ||
+            : IsHostDataType(type) ||
               type.IsConstructedGenericType && Classify(type, targetFramework)
                   .HasFlag(PowerShellCompilationParameterTypeCapability.PowerShellHost);
 
     internal static PowerShellCompilationParameterTypeCapability Classify(Type type, string? targetFramework)
     {
+        if (IsHostDataType(type))
+            return PowerShellCompilationParameterTypeCapability.ClrMethod |
+                   PowerShellCompilationParameterTypeCapability.PowerShellHost;
         if (type.IsArray)
         {
             if (type.GetArrayRank() != 1 || !PowerShellGeneratedElementTypePolicy.IsRepresentable(type.GetElementType()!, targetFramework))
@@ -149,8 +191,28 @@ internal static class PowerShellCompilationParameterTypePolicy
     }
 
     // Qualified SDK identity and value-copy rules require native binding, including containers.
+    private static bool IsHostDataType(Type type)
+        => PowerShellHostDataTypes.Contains(type) || NativeInteropTypes.Contains(type) ||
+           IsHostUtilityDataType(type) ||
+           type.IsVisible && type.Assembly == typeof(Ast).Assembly && typeof(Ast).IsAssignableFrom(type);
+
+    private static bool IsHostUtilityDataType(Type type)
+        => type.FullName == "Microsoft.PowerShell.Commands.GroupInfo" &&
+           type.Assembly.GetName().Name == "Microsoft.PowerShell.Commands.Utility";
+
     private static bool RequiresNativeFunctionBinding(Type type)
-        => type == typeof(PSReference) || type == typeof(PowerShell) ||
+        => NativeInteropTypes.Contains(type) || type == typeof(PSReference) || type == typeof(PowerShell) ||
+           IsHostUtilityDataType(type) ||
+           type == typeof(Ast) || type == typeof(FunctionDefinitionAst) || type == typeof(CompletionResultType) ||
+           type == typeof(SessionState) || type == typeof(PSCmdlet) || type == typeof(PSVariable) ||
+           type == typeof(RuntimeDefinedParameter) || type == typeof(RuntimeDefinedParameterDictionary) ||
+           type == typeof(CommandTypes) || type == typeof(WildcardPattern) ||
+           type == typeof(System.Management.Automation.Runspaces.InitialSessionState) ||
+           type == typeof(CommandAst) || type == typeof(IScriptPosition) ||
+           type == typeof(ParameterAttribute) || type == typeof(AliasAttribute) ||
+           type == typeof(System.Collections.ObjectModel.Collection<Attribute>) ||
+           type == typeof(LanguagePrimitives) || type == typeof(TokenKind) || type == typeof(CodeGeneration) ||
+           type.IsVisible && type.Assembly == typeof(Ast).Assembly && typeof(Ast).IsAssignableFrom(type) ||
            type == typeof(CommandMetadata) || type == typeof(ProxyCommand) ||
            type == typeof(InvocationInfo) ||
            type == typeof(Cmdlet) ||

@@ -157,7 +157,7 @@ internal static partial class PowerShellBoundRegionCandidateSelector
                 return false;
             var nested = PowerShellSemanticAnalyzer.EnumerateStatements(
                 new PowerShellBoundBlock(statement.Span, new[] { statement })).ToArray();
-            if (nested.Any(item => item is PowerShellBoundThrowStatement ||
+            if (nested.Any(item => item is PowerShellBoundThrowStatement or PowerShellBoundExitStatement ||
                     item is PowerShellBoundReturnStatement && !(terminalOutput && ReferenceEquals(item, statement))) ||
                 nested.SelectMany(PowerShellSemanticAnalyzer.EnumerateDirectExpressions)
                     .SelectMany(PowerShellSemanticAnalyzer.EnumerateExpressions)

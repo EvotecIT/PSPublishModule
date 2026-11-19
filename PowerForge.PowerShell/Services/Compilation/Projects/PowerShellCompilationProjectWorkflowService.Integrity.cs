@@ -190,6 +190,8 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
     {
         var evidence = new PowerShellCompilationProjectTestEvidence
         {
+            SchemaVersion = artifact.ModuleTest is null ? 1 : 2,
+            ModuleTestSha256 = artifact.ModuleTest?.Sha256,
             ProjectSha256 = PowerShellCompilationProjectManifestService.ComputeSha256(context.ProjectPath),
             TargetName = artifact.Name,
             TargetContractSha256 = artifact.Target.ContractSha256,
@@ -212,7 +214,8 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
         if (!File.Exists(path)) throw new FileNotFoundException("Run project test before packing or installing.", path);
         var evidence = ReadJson<PowerShellCompilationProjectTestEvidence>(path);
         var projectSha = PowerShellCompilationProjectManifestService.ComputeSha256(context.ProjectPath);
-        if (evidence.SchemaVersion != 1 || evidence.Outcome != "Passed" ||
+        if (evidence.SchemaVersion != (artifact.ModuleTest is null ? 1 : 2) || evidence.Outcome != "Passed" ||
+            !string.Equals(evidence.ModuleTestSha256, artifact.ModuleTest?.Sha256, StringComparison.OrdinalIgnoreCase) ||
             !evidence.ProjectSha256.Equals(projectSha, StringComparison.OrdinalIgnoreCase) ||
             !evidence.TargetName.Equals(artifact.Name, StringComparison.Ordinal) ||
             !evidence.TargetContractSha256.Equals(artifact.Target.ContractSha256, StringComparison.OrdinalIgnoreCase) ||
@@ -226,7 +229,19 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
     }
 
     private static string ComputeTestEvidenceSha256(PowerShellCompilationProjectTestEvidence evidence)
-        => CanonicalJsonSha256(new
+        => evidence.SchemaVersion == 2 ? CanonicalJsonSha256(new
+        {
+            evidence.SchemaVersion,
+            evidence.ProjectSha256,
+            evidence.TargetName,
+            evidence.TargetContractSha256,
+            evidence.ArtifactSetSha256,
+            evidence.ArtifactSha256,
+            evidence.DependencyLockSha256,
+            evidence.ProviderLockSha256,
+            evidence.ModuleTestSha256,
+            evidence.Outcome
+        }) : CanonicalJsonSha256(new
         {
             evidence.SchemaVersion,
             evidence.ProjectSha256,
@@ -379,6 +394,8 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
     private sealed class PowerShellCompilationProjectTestEvidence
     {
         public int SchemaVersion { get; set; } = 1;
+        [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+        public string? ModuleTestSha256 { get; set; }
         public string ProjectSha256 { get; set; } = string.Empty;
         public string TargetName { get; set; } = string.Empty;
         public string TargetContractSha256 { get; set; } = string.Empty;

@@ -4,6 +4,9 @@ namespace PowerForge;
 /// <remarks>This is a PowerShell-hosted contract and is unavailable to runtime-free targets.</remarks>
 public sealed class PowerShellNativeFunctionBinding
 {
+    /// <summary>Defers native storage compilation until invocation when runtime type aliases can affect binding.</summary>
+    public bool UsesDeferredTypeBinding { get; }
+
     /// <summary>Creates the immutable parameter declaration consumed by the native function host.</summary>
     public PowerShellNativeFunctionBinding(string parameterDeclaration)
         : this(parameterDeclaration, System.Array.Empty<string>()) { }
@@ -33,6 +36,14 @@ public sealed class PowerShellNativeFunctionBinding
     public PowerShellNativeFunctionBinding(string parameterDeclaration, System.Collections.Generic.IEnumerable<string> localNames,
         System.Collections.Generic.IEnumerable<string> localTypeDeclarations, bool hasBegin, bool hasProcess, bool hasEnd, bool hasClean,
         System.Collections.Generic.IEnumerable<string> functionTypeDeclarations, string? dynamicParameterDeclaration)
+        : this(parameterDeclaration, localNames, localTypeDeclarations, hasBegin, hasProcess, hasEnd, hasClean,
+            functionTypeDeclarations, dynamicParameterDeclaration, false) { }
+
+    /// <summary>Creates native metadata with invocation-time compilation for runtime type-alias binding.</summary>
+    public PowerShellNativeFunctionBinding(string parameterDeclaration, System.Collections.Generic.IEnumerable<string> localNames,
+        System.Collections.Generic.IEnumerable<string> localTypeDeclarations, bool hasBegin, bool hasProcess, bool hasEnd, bool hasClean,
+        System.Collections.Generic.IEnumerable<string> functionTypeDeclarations, string? dynamicParameterDeclaration,
+        bool usesDeferredTypeBinding)
     {
         ParameterDeclaration = parameterDeclaration ?? throw new System.ArgumentNullException(nameof(parameterDeclaration));
         LocalNames = System.Array.AsReadOnly(System.Linq.Enumerable.ToArray(localNames));
@@ -43,6 +54,7 @@ public sealed class PowerShellNativeFunctionBinding
         HasEnd = hasEnd;
         HasClean = hasClean;
         DynamicParameterDeclaration = dynamicParameterDeclaration;
+        UsesDeferredTypeBinding = usesDeferredTypeBinding;
     }
 
     /// <summary>Whether the native invocation has a compiled begin block.</summary>

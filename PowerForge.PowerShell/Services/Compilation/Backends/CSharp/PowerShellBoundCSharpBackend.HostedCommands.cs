@@ -16,7 +16,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
                 .Append(PowerShellCSharpLiteral.QuoteString(region.HostedFallbackSource)).Append(", ")
                 .Append(QuotePortableSourcePath(region.NativeSourcePath)).Append(", ")
                 .Append(region.Span.StartLine).Append(", ").Append(region.Span.StartColumn).Append(", ")
-                .Append(PowerShellCSharpLiteral.QuoteString(region.NativeSourceDocument!)).Append(", ")
+                .Append(_nativeSourceDocuments.Reference(region.NativeSourceDocument!)).Append(", ")
                 .Append(region.Span.StartOffset).Append(", ").Append(region.Span.EndOffset)
                 .Append(", __statementErrors.AdoptNativeSequencePoint")
                 .Append(EmitPathOperands(region.GuardedPathOperands)).AppendLine(");");
@@ -36,14 +36,14 @@ internal sealed partial class PowerShellBoundCSharpBackend
     private string EmitNativeCommandRecords(PowerShellLoweredNativeCommandExpression command, string sink)
         => $"__nativeFunction.InvokeCommandRegion({PowerShellCSharpLiteral.QuoteString(command.Source)}, " +
            $"{QuotePortableSourcePath(command.SourcePath)}, {command.Span.StartLine}, {command.Span.StartColumn}, " +
-           $"{sink}, {PowerShellCSharpLiteral.QuoteString(command.SourceDocument)}, {command.Span.StartOffset}, {command.Span.EndOffset}, __statementErrors.AdoptNativeSequencePoint{EmitPathOperands(command.GuardedPathOperands)})";
+           $"{sink}, {_nativeSourceDocuments.Reference(command.SourceDocument)}, {command.Span.StartOffset}, {command.Span.EndOffset}, __statementErrors.AdoptNativeSequencePoint{EmitPathOperands(command.GuardedPathOperands)})";
 
     private string EmitNativeCommandCapture(PowerShellLoweredNativeCommandExpression command)
         => $"__nativeFunction.CaptureCommandRegion({PowerShellCSharpLiteral.QuoteString(command.Source)}, " +
            $"{QuotePortableSourcePath(command.SourcePath)}, {command.Span.StartLine}, {command.Span.StartColumn}, " +
            $"{(command.PreservePartialOutput ? "true" : "false")}" +
            (_nativeRegionPartialOutputSink is null ? "" : ", " + _nativeRegionPartialOutputSink) +
-           $", {PowerShellCSharpLiteral.QuoteString(command.SourceDocument)}, {command.Span.StartOffset}, {command.Span.EndOffset}{EmitPathOperands(command.GuardedPathOperands)})";
+           $", {_nativeSourceDocuments.Reference(command.SourceDocument)}, {command.Span.StartOffset}, {command.Span.EndOffset}{EmitPathOperands(command.GuardedPathOperands)})";
 
     private static string EmitPathOperands(PowerShellImmutableArray<int> operands)
         => operands.Length == 0 ? string.Empty : ", new int[] { " + string.Join(", ", operands) + " }";

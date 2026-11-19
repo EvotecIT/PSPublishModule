@@ -112,11 +112,29 @@ public sealed partial class PowerShellCompilationAnalyzer
                 targets,
                 semantic,
                 sourceDiagnosticsByPath.TryGetValue(Path.GetFullPath(file.FullPath), out var sourceDiagnostics)
-                    ? sourceDiagnostics
+                    ? FilterUnitSourceDiagnostics(file.FullPath, unit, targets, documentsByPath, sourceDiagnostics, capabilities)
                     : Array.Empty<PowerShellSemanticDiagnostic>())).ToArray(),
             file.Diagnostics)).ToArray();
         AttachLocalCallEvidence(structural, result, targets, semantic);
         return result;
+    }
+
+    private static PowerShellSemanticDiagnostic[] FilterUnitSourceDiagnostics(string filePath,
+        PowerShellCompilationUnitPlan unit, IReadOnlyList<SemanticUnitTarget> targets,
+        IReadOnlyDictionary<string, ParsedSourceDocument> documents,
+        PowerShellSemanticDiagnostic[] diagnostics, PowerShellCompilationCapability capabilities)
+    {
+        if (unit.Kind != PowerShellCompilationUnitKind.Function ||
+            !diagnostics.Any(static diagnostic => diagnostic.Code == PowerShellCompilationFeatureIds.TypeDefinition) ||
+            !documents.TryGetValue(Path.GetFullPath(filePath), out var document))
+            return diagnostics;
+        var target = targets.FirstOrDefault(candidate => ReferenceEquals(candidate.Unit, unit) &&
+            PowerShellCompilationPathSafety.PathEquals(candidate.FilePath, filePath));
+        if (target is null || target.Synthetic ||
+            !PowerShellSourceSemanticValidator.CanRetainTypesBesideFunction(document,
+                target.DeclarationOffset, target.EndOffset, capabilities))
+            return diagnostics;
+        return diagnostics.Where(static diagnostic => diagnostic.Code != PowerShellCompilationFeatureIds.TypeDefinition).ToArray();
     }
 
     private static PowerShellCompilationUnitPlan ApplySemanticUnitEvidence(

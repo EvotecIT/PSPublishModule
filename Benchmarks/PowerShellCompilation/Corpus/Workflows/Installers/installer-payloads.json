@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "payloads": [
+    {
+      "id": "powershell",
+      "uri": "https://github.com/PowerShell/PowerShell/releases/download/v7.6.6/PowerShell-7.6.6-win-x64.zip",
+      "sha256": "02fe458be20493fbdf43f61ea20610b811ee6c738ab1676c61b9cfcd1a33c860",
+      "bytes": 106328873,
+      "license": "MIT",
+      "revision": "v7.6.6"
+    },
+    {
+      "id": "scoop",
+      "uri": "https://github.com/ScoopInstaller/Scoop/archive/e6aa3b366bdee8ed138c1e0f7b85192ebdd35d0f.zip",
+      "sha256": "fa96b15950f3726d2c9a35493e192eefe56d2eddba718e8121c32f7a19257a0a",
+      "bytes": 1289426,
+      "license": "Unlicense",
+      "revision": "e6aa3b366bdee8ed138c1e0f7b85192ebdd35d0f"
+    },
+    {
+      "id": "main",
+      "uri": "https://github.com/ScoopInstaller/Main/archive/8264d9aa95850f8b6cf525bb7a1b3244dc51698d.zip",
+      "sha256": "eee791496995f288af26cf84b627a522ead061b47dbdac4e8a103416147d1b92",
+      "bytes": 1275414,
+      "license": "Unlicense",
+      "revision": "8264d9aa95850f8b6cf525bb7a1b3244dc51698d"
+    }
+  ]
+}

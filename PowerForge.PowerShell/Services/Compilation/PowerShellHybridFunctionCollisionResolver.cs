@@ -36,7 +36,8 @@ internal static partial class PowerShellHybridFunctionCollisionResolver
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
         var loadBoundPaths = typed.NativeDeclarationTimingSourcePaths.ToHashSet(PowerShellCompilationPathSafety.PathComparer);
         var loadBoundNames = typed.Methods.Where(method => method.NativeFunctionBinding is not null &&
-                loadBoundPaths.Contains(Path.GetFullPath(string.IsNullOrWhiteSpace(method.SourcePath) ? typed.SourcePath : method.SourcePath)))
+                (capabilities == PowerShellCompilationCapabilities.HybridModule ||
+                 loadBoundPaths.Contains(Path.GetFullPath(string.IsNullOrWhiteSpace(method.SourcePath) ? typed.SourcePath : method.SourcePath))))
             .Select(static method => method.SourceName).ToHashSet(StringComparer.OrdinalIgnoreCase);
         var earlyAvailabilityNames = definitions
             .Where(definition => !loadBoundNames.Contains(definition.Function.Name) && sources.Any(source => source.Root.FindAll(

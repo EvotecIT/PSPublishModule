@@ -216,7 +216,7 @@ internal sealed class PowerShellDefiniteAssignmentPass : IPowerShellSemanticPass
     private static bool HasFlowTransfer(PowerShellBoundBlock block)
         => PowerShellSemanticAnalyzer.EnumerateStatements(block).Any(static statement =>
             statement is PowerShellBoundBreakStatement or PowerShellBoundContinueStatement or
-                PowerShellBoundReturnStatement or PowerShellBoundThrowStatement);
+                PowerShellBoundReturnStatement or PowerShellBoundThrowStatement or PowerShellBoundExitStatement);
 
     private static void ReportReads(
         PowerShellBoundExpression expression,

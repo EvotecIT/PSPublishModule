@@ -45,7 +45,7 @@ internal sealed partial class PowerShellSemanticBinder
                 _semanticProfile.Family == PowerShellCompilationSemanticHostFamily.WindowsPowerShell51)
             : null;
         var nativeSequencePoint = capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding) &&
-            statement is AssignmentStatementAst or PipelineAst or BreakStatementAst or ContinueStatementAst or ReturnStatementAst or ThrowStatementAst;
+            statement is AssignmentStatementAst or PipelineAst or BreakStatementAst or ContinueStatementAst or ReturnStatementAst or ThrowStatementAst or ExitStatementAst;
         if (!nativeSequencePoint && !nativeSuccessStatus.HasValue && !bound.Capabilities.HasFlag(PowerShellRequiredCapability.PowerShellStatementErrors) &&
             !(bound is PowerShellBoundThrowStatement && capabilities.HasFlag(PowerShellCompilationCapability.PowerShellStatementErrors))) return bound;
         // A failed RHS leaves the previous slot intact. A successful constructor's
@@ -53,10 +53,9 @@ internal sealed partial class PowerShellSemanticBinder
         if (bound is PowerShellBoundAssignmentStatement && assignedSymbol is not null &&
             !assignedSymbol.Type.ClrType.IsValueType && assignedSymbol.ValueState != priorValueState)
             assignedSymbol.ForgetValueState();
-        var sourceLines = document.Text.Replace("\r\n", "\n").Split('\n');
         var sourceText = capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding)
             ? PowerShellSourceParser.GetSourceLines(document, PowerShellSourceParser.GetSpan(document, statement.Extent))
-            : string.Join("\n", sourceLines.Skip(statement.Extent.StartLineNumber - 1)
+            : string.Join("\n", document.Text.Replace("\r\n", "\n").Split('\n').Skip(statement.Extent.StartLineNumber - 1)
                 .Take(statement.Extent.EndLineNumber - statement.Extent.StartLineNumber + 1));
         if (bound is PowerShellBoundThrowStatement thrown)
             bound = new PowerShellBoundThrowStatement(thrown.Span, thrown.Expression, true, document.Path, sourceText);
@@ -96,7 +95,24 @@ internal sealed partial class PowerShellSemanticBinder
             if (capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding) && assignment.Right is SwitchStatementAst or TryStatementAst)
                 return BindOutputCapture(document, assignment, symbols, functions, diagnostics, targetFramework, capabilities);
             if (capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding) &&
-                NativeStaticAssignmentReceiver(assignment.Left, targetFramework) is { } staticReceiver)
+                assignment.Operator == TokenKind.Equals && NativeTupleVariables(assignment.Left) is { } tuple)
+            {
+                if (assignment.Right is PipelineAst tuplePipeline && tuplePipeline.GetPureExpression() is null)
+                    return BindOutputCapture(document, assignment, symbols, functions, diagnostics, targetFramework, capabilities);
+                var value = BindExpression(document, assignment.Right, symbols, functions, diagnostics,
+                    targetFramework: targetFramework, capabilities: capabilities);
+                if (value is null || value.Type.ClrType == typeof(void)) return null;
+                return new PowerShellBoundNativeAssignmentStatement(
+                    PowerShellSourceParser.GetSpan(document, assignment.Extent), tuple[0], value,
+                    PowerShellBoundMutationOperator.Assign,
+                    new PowerShellNativeAssignmentTarget(assignment.Left.Extent.Text, document.Path, document.Text,
+                        PowerShellSourceParser.GetSpan(document, assignment.Left.Extent),
+                        assignment.Left.Extent.StartOffset, assignment.Left.Extent.EndOffset,
+                        WrittenVariables: tuple));
+            }
+            if (capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding) &&
+                NativeStaticAssignmentReceiver(assignment.Left, targetFramework,
+                    document.NativeDependencyTypes, capabilities) is { } staticReceiver)
                 return BindNativeStaticAssignment(document, assignment, staticReceiver, symbols, functions,
                     diagnostics, targetFramework, capabilities);
             if (capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding) &&
@@ -275,6 +291,14 @@ internal sealed partial class PowerShellSemanticBinder
                     mutation.NormalizeNullString,
                     mutation.IntegralSemantics, mutation.PreserveStatementErrors);
         }
+        if (statement is ExitStatementAst exitStatement && capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding))
+        {
+            var expression = exitStatement.Pipeline is null ? null : BindExpression(document, exitStatement.Pipeline,
+                symbols, functions, diagnostics, targetFramework: targetFramework, capabilities: capabilities);
+            return exitStatement.Pipeline is null || expression is not null
+                ? new PowerShellBoundExitStatement(PowerShellSourceParser.GetSpan(document, exitStatement.Extent), expression)
+                : null;
+        }
         if (statement is ReturnStatementAst returnStatement)
         {
             var expression = returnStatement.Pipeline is null
@@ -420,6 +444,8 @@ internal sealed partial class PowerShellSemanticBinder
         }
         if (statement is BreakStatementAst invalidBreak)
         {
+            if (capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding))
+                return new PowerShellBoundBreakStatement(PowerShellSourceParser.GetSpan(document, invalidBreak.Extent), transferToCaller: true);
             diagnostics.Add(new PowerShellSemanticDiagnostic(
                 "PSB2314",
                 "break must be inside a supported loop or scalar switch.",
@@ -440,6 +466,8 @@ internal sealed partial class PowerShellSemanticBinder
         }
         if (statement is ContinueStatementAst invalidContinue)
         {
+            if (capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding))
+                return new PowerShellBoundContinueStatement(PowerShellSourceParser.GetSpan(document, invalidContinue.Extent), transferToCaller: true);
             diagnostics.Add(new PowerShellSemanticDiagnostic(
                 "PSB2316",
                 "continue must be inside a supported loop.",

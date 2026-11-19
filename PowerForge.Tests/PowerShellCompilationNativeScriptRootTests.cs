@@ -27,6 +27,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         var method = compiled.EntryPointMethod;
         Assert.NotNull(method.NativeFunctionBinding);
         var generated = new System.Text.StringBuilder("#nullable enable\nnamespace Generic.Compiler.StatementErrors;\npublic static class CompiledRoot {\n")
+            .AppendLine(string.Join(System.Environment.NewLine, PowerShellCSharpSourceDocumentPool.Declarations(new[] { method })))
             .AppendLine(method.Source)
             .AppendLine("public static global::System.Management.Automation.ExternalScriptInfo Create(global::System.Management.Automation.SessionState session, string path) {")
             .AppendLine("NativeScriptEntryFixture.CallbackInvocations = 0;")

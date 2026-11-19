@@ -4,6 +4,14 @@ namespace PowerForge;
 
 internal sealed partial class PowerShellSemanticBinder
 {
+    internal static string[]? NativeTupleVariables(ExpressionAst target)
+    {
+        if (!Generated.Runtime.PowerShellNativeFunctionContext.IsNativeVariableTuple(target)) return null;
+        var names = ((ArrayLiteralAst)target).Elements.Cast<VariableExpressionAst>()
+            .Select(static variable => variable.VariablePath.UserPath).ToArray();
+        return names.Any(PowerShellAssignmentTargetPolicy.IsAutomaticVariable) ? null : names;
+    }
+
     internal static VariableExpressionAst? NativeAccessMutationReceiver(ExpressionAst target)
     {
         if (target is not MemberExpressionAst and not IndexExpressionAst) return null;
@@ -14,7 +22,7 @@ internal sealed partial class PowerShellSemanticBinder
 
     // These targets use native storage semantics without introducing another command or body.
     // More complex receiver/index expressions require a separately bound evaluation contract.
-    private static VariableExpressionAst? NativeAssignmentReceiver(ExpressionAst target)
+    internal static VariableExpressionAst? NativeAssignmentReceiver(ExpressionAst target)
         => target switch
         {
             MemberExpressionAst { Static: false } member => NativeReceiverRoot(member.Expression),

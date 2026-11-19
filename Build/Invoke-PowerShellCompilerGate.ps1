@@ -77,6 +77,10 @@ $requiredFamilies = @{
     'project grouped diagnostics' = 'PowerForge.Tests.PowerShellCompilationProjectDiagnosticsTests.*'
     'project diagnostics CLI' = 'PowerForge.Tests.PowerForgeCliPowerShellCompilationTests.ProjectDiagnosticsCli_ShowsGroupedShapingCallsAndCorrectFailureStatus*'
     'project module lifecycle' = 'PowerForge.Tests.PowerShellCompilationProjectWorkflowTests.ProjectWorkflow_UsesReviewedLocksOfflineEnvironmentAndQualifiedPackage*'
+    'project module acceptance' = 'PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.Project_ModuleAcceptanceScriptQualifiesBuiltAndInstalledArtifactsAndRejectsChangedBytes*'
+    'module acceptance source encoding' = 'PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.ModuleAcceptanceSourceEncodingMatchesNativeFileOnBothHosts*'
+    'module acceptance snapshot' = 'PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.ModuleAcceptanceExecutesVerifiedSnapshotWithNativePathsAndIsolatedAutoload*'
+    'module acceptance timeout' = 'PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.ModuleAcceptanceEnforcesTheTimeoutDeclaredInTheProject*'
     'project executable installation' = 'PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.Project_ExecutablePackagePreservesQualifiedPermissionsAndRunsAfterInstall*'
     'hosted lifecycle metadata admission' = 'PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.Plan_HostedLifecyclePromotesOnlyRepresentableValidationMetadata*'
     'hosted lifecycle validation compatibility' = 'PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.Build_HybridLifecyclePreservesUnrepresentedValidationMetadata*'
@@ -86,6 +90,7 @@ $requiredFamilies = @{
     'basic-function Test-Path command lookup' = 'PowerForge.Tests.PowerShellCompilationArtifactHardeningTests.Build_HybridBasicFunctionKeepsTestPathOnPowerShellCommandLookup*'
 }
 $windowsRequiredFamilies = @{
+    'native delegate conversion' = 'PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.NativeDelegateCasts_PreserveArgumentsDynamicScopeOutputAndEscape*'
     'native launcher argument order' = 'PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.Build_HybridNativeScriptRootPreservesOrderedUnboundArguments*'
     'native Hybrid executable console presentation' = 'PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.Build_NativeHybridConsolePreservesFormattingStreamsAndAuthoredErrors*'
     'project Windows launch path' = 'PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.Project_ExecutableInstallRejectsUnlaunchablePathBeforeCreatingInstallation*'
@@ -112,6 +117,22 @@ $oracleTestPatterns = @(
     'PowerForge.Tests.PowerShellCompilationArtifactHardeningTests.Build_BinaryModuleLanguageModeMatchesPinnedPowerShell76AndInstalledWindowsPowerShell'
 )
 if ($requirePinnedOracle) {
+    $requiredFamilies['returned and collected native callbacks'] = 'PowerForge.Tests.PowerShellCompilationSemanticOracleTests.ReturnedAndCollectedCallbacksPreserveNativeScopeClosureAndFailureOnBothHosts*'
+    $requiredFamilies['borrowed invocation objects'] = 'PowerForge.Tests.PowerShellCompilationSemanticOracleTests.BorrowedInvocationObjectsPreserveIdentityMutationAndDynamicBindingOnBothHosts*'
+    $requiredFamilies['native call closure'] = 'PowerForge.Tests.PowerShellCompilationSemanticOracleTests.NativeCalleesPreserveBasicExtraArgumentsAndAdvancedCallerBindingOnBothHosts*'
+    $requiredFamilies['delivered native type aliases'] = 'PowerForge.Tests.PowerShellCompilationSemanticOracleTests.DeliveredTypeAliasesPreserveNativeRegistrationIdentityAndRecoveryOnBothHosts*'
+    $requiredFamilies['native script lifecycle'] = 'PowerForge.Tests.PowerShellCompilationSemanticOracleTests.NativeScriptLifecyclePreservesPipelineBindingPartialFailureAndRecoveryOnBothHosts*'
+    $requiredFamilies['legacy module root spelling'] = 'PowerForge.Tests.PowerShellCompilationSemanticOracleTests.LegacyModuleToProcessManifestPreservesCompiledImportOnBothHosts*'
+    $requiredFamilies['script root callback ownership'] = 'PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.Build_HybridNativeScriptRootRetainsModuleOwnedBlockValues*'
+    $requiredFamilies['native CLR interop'] = 'PowerForge.Tests.PowerShellCompilationSemanticOracleTests.BorrowedDirectoryAndCompletionTypesKeepNativeIdentityOnBothHosts*'
+    $requiredFamilies['locked generic metadata'] = 'PowerForge.Tests.PowerShellCompilationSemanticOracleTests.BodyLoadedTypesPreserveNativeMetadataIdentityStateAndBindingOnBothHosts*'
+    $requiredFamilies['native multiple assignment'] = 'PowerForge.Tests.PowerShellCompilationSemanticOracleTests.NativeMultipleAssignmentPreservesStorageAndCapturedOutputOnBothHosts*'
+    $requiredFamilies['native wildcard and capture'] = 'PowerForge.Tests.PowerShellCompilationSemanticOracleTests.NativeWildcardSwitchAndCapturedStorageMatchBothHosts*'
+    $requiredFamilies['native reference and chained assignment'] = 'PowerForge.Tests.PowerShellCompilationSemanticOracleTests.NativeReferencesArrayCastsAndChainedAssignmentsMatchBothHosts*'
+    $requiredFamilies['native switch clauses and nested storage'] = 'PowerForge.Tests.PowerShellCompilationSemanticOracleTests.NativeSwitchVariablesAndNestedStorageUseAuthoredSemanticsOnBothHosts*'
+    $requiredFamilies['native replacement declarations'] = 'PowerForge.Tests.PowerShellCompilationSemanticOracleTests.RepeatedRootDeclarationsPreserveImportOrderAndNativeBindingOnBothHosts*'
+    $requiredFamilies['native scoped storage'] = 'PowerForge.Tests.PowerShellCompilationSemanticOracleTests.NativeScopedAssignmentsAndEnvironmentReadsPreserveOwnershipOnBothHosts*'
+    $requiredFamilies['native module requirements'] = 'PowerForge.Tests.PowerShellCompilationSemanticOracleTests.NativeModuleRequirementsPreserveLoadBeforeInvocationOnBothHosts*'
     $requiredFamilies['pinned semantic oracle'] = 'PowerForge.Tests.PowerShellCompilationSemanticOracleTests.MinimizedCasesExecuteOnPinnedPowerShell76AndInstalledWindowsPowerShell*'
     $requiredFamilies['pinned binary module language mode'] = $oracleTestPatterns[1] + '*'
 }
@@ -186,7 +207,9 @@ try {
     }
     $moduleWorkflow = 'PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.CompleteWorkflow_PinnedBinaryToStringPreservesBindingAndOutput*'
     if ($IsWindows) {
-        foreach ($pattern in @($moduleWorkflow, $requiredFamilies['conditional declaration execution'], $requiredFamilies['project module lifecycle'])) {
+        foreach ($pattern in @($moduleWorkflow, $requiredFamilies['conditional declaration execution'], $requiredFamilies['project module lifecycle'],
+                $requiredFamilies['project module acceptance'], $requiredFamilies['module acceptance source encoding'],
+                $requiredFamilies['module acceptance snapshot'], $requiredFamilies['module acceptance timeout'])) {
             foreach ($framework in @('net10.0', 'net472')) {
                 $hostCases = @($passedNames | Where-Object { $_ -like $pattern -and $_ -like "*framework: `"$framework`"*" })
                 if ($hostCases.Count -eq 0) { throw "The compiler gate is missing a passing $framework generated workflow: $pattern" }

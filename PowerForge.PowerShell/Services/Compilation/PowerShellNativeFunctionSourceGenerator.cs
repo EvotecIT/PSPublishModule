@@ -33,10 +33,43 @@ internal static class PowerShellNativeFunctionSourceGenerator
         foreach (var method in functions)
         {
             Validate(method);
+            if (method.NativeFunctionBinding!.UsesDeferredTypeBinding)
+            {
+                AppendDeferredBridge(builder, typed, method);
+                continue;
+            }
             AppendFactory(builder, typed, method, executable: false);
             AppendFactory(builder, typed, method, executable: true);
         }
         builder.AppendLine("}");
+    }
+
+    private static string DeferredMethod(PowerShellCompiledMethod method)
+        => PowerShellCSharpSymbolRenderer.Identifier("InvokeDeferred_" + method.GeneratedName.TrimStart('@'));
+
+    private static void AppendDeferredBridge(StringBuilder builder, PowerShellTypedCompilationResult typed, PowerShellCompiledMethod method)
+    {
+        builder.Append("    public static global::System.Management.Automation.ErrorRecord? ").Append(DeferredMethod(method))
+            .AppendLine("(global::System.Management.Automation.EngineIntrinsics engine, int clause)")
+            .AppendLine("    {")
+            .AppendLine("        try")
+            .AppendLine("        {")
+            .Append("        global::PowerForge.Generated.Runtime.PowerShellNativeFunctionHost.InvokeDeferredTypeClause(engine, ")
+            .Append(PowerShellCSharpLiteral.QuoteString(method.SourceName)).Append(", ")
+            .Append(PowerShellCSharpLiteral.QuoteString(DeferredDeclarationBody(typed, method))).AppendLine(", context =>")
+            .AppendLine("        {");
+        PowerShellNativeCallbackSource.AppendBody(builder, "            ",
+            PowerShellCSharpSymbolRenderer.Identifier(typed.TypeName) + "." + method.GeneratedName, method.SourceName,
+            method.RequiresPowerShellStatementErrors, method.RequiresPowerShellStopping, method.RequiresPowerShellStreams,
+            method.ReturnType == typeof(void).FullName, method.OutputScalarization == "EnumerateCollection");
+        builder.AppendLine("        });")
+            .AppendLine("            return null;")
+            .AppendLine("        }")
+            .AppendLine("        catch (global::System.Management.Automation.RuntimeException failure) when (failure is not global::System.Management.Automation.PipelineStoppedException)")
+            .AppendLine("        {")
+            .AppendLine("            return failure.ErrorRecord;")
+            .AppendLine("        }")
+            .AppendLine("    }");
     }
 
     private static void AppendFactory(StringBuilder builder, PowerShellTypedCompilationResult typed,
@@ -98,6 +131,17 @@ internal static class PowerShellNativeFunctionSourceGenerator
                 binding.HasBegin, binding.HasProcess, binding.HasEnd, false, binding.LocalTypeDeclarations.ToArray(), binding.FunctionTypeDeclarations.ToArray(),
                 binding.DynamicParameterDeclaration);
 
+    private static string DeferredDeclarationBody(PowerShellTypedCompilationResult typed, PowerShellCompiledMethod method)
+    {
+        var body = DeclarationBody(method.NativeFunctionBinding!);
+        var bridge = "[" + typed.NamespaceName + "." + FactoryType(typed) + "]::" + DeferredMethod(method);
+        var failure = "$private:__PowerForgeDeferredFailure_" + method.GeneratedName.TrimStart('@');
+        foreach (var clause in new[] { ("begin", 0), ("process", 1), ("end", 2) })
+            body = body.Replace("throw 'Compiled " + clause.Item1 + " callback was not installed.'",
+                failure + " = " + bridge + "($ExecutionContext, " + clause.Item2 + "); if ($null -ne " + failure + ") { throw " + failure + " }");
+        return body;
+    }
+
     private static string Callback(bool present, int clause)
         => PowerShellNativeCallbackSource.Callback(present, clause);
 
@@ -107,6 +151,11 @@ internal static class PowerShellNativeFunctionSourceGenerator
     internal static string Registration(PowerShellTypedCompilationResult typed, PowerShellCompiledMethod method,
         string declaration, bool executable, bool executableDependency = false)
     {
+        if (method.NativeFunctionBinding!.UsesDeferredTypeBinding)
+        {
+            var body = DeferredDeclarationBody(typed, method);
+            return "\n" + declaration + " {\n" + body + "\n}\n";
+        }
         // A function declaration can share its line with another declaration or command.
         // Its replacement must provide statement separators on both sides, including aliases.
         var builder = new StringBuilder().AppendLine().Append(declaration).AppendLine(" {")

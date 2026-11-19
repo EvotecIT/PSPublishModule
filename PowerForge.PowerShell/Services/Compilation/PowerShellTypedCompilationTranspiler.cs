@@ -299,7 +299,8 @@ public sealed partial class PowerShellTypedCompilationTranspiler
             boundResult.RegionOpportunities,
             boundResult.RuntimeFreeModule,
             boundResult.Initializer,
-            capabilities == PowerShellCompilationCapabilities.HybridExecutable ? guardedExecutableEntryPath : null);
+            capabilities == PowerShellCompilationCapabilities.HybridExecutable ? guardedExecutableEntryPath : null,
+            boundResult.NativeSourceDocuments);
     }
 
     private static void EmitFunctionGraph(
@@ -418,6 +419,8 @@ public sealed partial class PowerShellTypedCompilationTranspiler
             .ToArray();
         return new BoundEmissionIndex(
             emissions,
+            result.Emitted.Methods.Select(static emission => emission.NativeSourceDocuments)
+                .Concat(result.PromotedRegions.Select(static region => region.Emission.NativeSourceDocuments)).ToArray(),
             result.Optimization.ToPublicModel(),
             PowerShellCompilationIrSnapshotBuilder.Create(result),
             promotedRegions,
@@ -558,8 +561,12 @@ public sealed partial class PowerShellTypedCompilationTranspiler
         PowerShellCompilationRegionOpportunity[]? regionOpportunities = null,
         PowerShellRuntimeFreeModuleDefinition? runtimeFreeModule = null,
         PowerShellLoweredFunction? initializer = null,
-        string? guardedExecutableEntryPath = null)
+        string? guardedExecutableEntryPath = null,
+        IEnumerable<IReadOnlyDictionary<string, string>>? nativeSourceDocuments = null)
     {
+        if (nativeSourceDocuments is not null)
+            methodSources = PowerShellCSharpSourceDocumentPool.Declarations(methodSources, nativeSourceDocuments)
+                .Concat(methodSources).ToArray();
         var template = ReadTemplate();
         var source = template
             .Replace("{{NAMESPACE}}", SanitizeQualifiedName(namespaceName))
@@ -627,6 +634,7 @@ public sealed partial class PowerShellTypedCompilationTranspiler
     {
         internal BoundEmissionIndex(
             IReadOnlyDictionary<string, PowerShellCSharpMethodEmission> emissions,
+            IReadOnlyDictionary<string, string>[] nativeSourceDocuments,
             PowerShellCompilationOptimizationEvidence optimization,
             PowerShellCompilationIrSnapshotBundle irSnapshots,
             PowerShellCompiledRegion[] promotedRegions,
@@ -636,6 +644,7 @@ public sealed partial class PowerShellTypedCompilationTranspiler
             PowerShellLoweredFunction? initializer)
         {
             Emissions = emissions;
+            NativeSourceDocuments = nativeSourceDocuments;
             Optimization = optimization;
             IrSnapshots = irSnapshots;
             PromotedRegions = promotedRegions ?? Array.Empty<PowerShellCompiledRegion>();
@@ -646,6 +655,7 @@ public sealed partial class PowerShellTypedCompilationTranspiler
         }
 
         internal IReadOnlyDictionary<string, PowerShellCSharpMethodEmission> Emissions { get; }
+        internal IReadOnlyDictionary<string, string>[] NativeSourceDocuments { get; }
         internal PowerShellCompilationOptimizationEvidence Optimization { get; }
         internal PowerShellCompilationIrSnapshotBundle IrSnapshots { get; }
         internal PowerShellCompiledRegion[] PromotedRegions { get; }
@@ -775,6 +785,7 @@ internal sealed class PowerShellCSharpMethodEmission
     internal PowerShellCompilationCommandBinding CommandBinding { get; }
     internal PowerShellCompilationSourceMapEntry[] SourceMap { get; set; }
     internal PowerShellCompiledBodyIdentity[] NestedBodies { get; set; } = Array.Empty<PowerShellCompiledBodyIdentity>();
+    internal IReadOnlyDictionary<string, string> NativeSourceDocuments { get; set; } = new Dictionary<string, string>();
     internal PowerShellCompilationCommandProviderContract[] CommandProviders { get; }
     internal string OutputCardinality { get; }
     internal string[] OutputValueStates { get; }

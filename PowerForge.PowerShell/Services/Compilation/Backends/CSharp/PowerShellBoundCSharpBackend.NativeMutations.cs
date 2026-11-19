@@ -44,15 +44,16 @@ internal sealed partial class PowerShellBoundCSharpBackend
     private string EmitNativeAssignmentTarget(PowerShellNativeAssignmentTarget target,
         PowerShellBoundMutationOperator operation, PowerShellLoweredExpression value)
         => EmitNativeAssignmentStart(target, operation) + "() => (object?)(" + EmitExpression(value) + ")" +
-            EmitNativeAssignmentLocation(target);
+            EmitNativeAssignmentLocation(target, adoptSequencePoint: true);
 
     private static string EmitNativeAssignmentStart(PowerShellNativeAssignmentTarget target, PowerShellBoundMutationOperator operation)
         => "__nativeFunction.AssignTarget(" + PowerShellCSharpLiteral.QuoteString(target.Text) + ", " +
             PowerShellCSharpLiteral.QuoteString(operation.ToString()) + ", ";
 
-    private string EmitNativeAssignmentLocation(PowerShellNativeAssignmentTarget target)
+    private string EmitNativeAssignmentLocation(PowerShellNativeAssignmentTarget target, bool adoptSequencePoint = false)
         => ", " +
             QuotePortableSourcePath(target.SourcePath) + ", " + target.Span.StartLine + ", " +
-            target.Span.StartColumn + ", " + PowerShellCSharpLiteral.QuoteString(target.SourceDocument) + ", " +
-            target.StartOffset + ", " + target.EndOffset + ")";
+            target.Span.StartColumn + ", " + _nativeSourceDocuments.Reference(target.SourceDocument) + ", " +
+            target.StartOffset + ", " + target.EndOffset +
+            (adoptSequencePoint ? ", __statementErrors.AdoptNativeSequencePoint)" : ")");
 }

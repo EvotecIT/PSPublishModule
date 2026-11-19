@@ -287,6 +287,11 @@ internal sealed partial class PowerShellBoundCSharpBackend
                     QuotePortableSourcePath(statement.NativeSourcePath) + ", " + clause.Value.Span.StartLine + ", " +
                     clause.Value.Span.StartColumn + ", " + clause.Value.Span.EndLine + ", " + clause.Value.Span.EndColumn +
                     ", " + PowerShellCSharpLiteral.QuoteString(clause.NativeSourceText) + ")",
+                PowerShellBoundSwitchMatchMode.Wildcard when nativeSwitchScope is not null =>
+                    $"{nativeSwitchScope}.MatchesWildcard({clauseSource}, {(statement.CaseSensitive ? "true" : "false")})",
+                PowerShellBoundSwitchMatchMode.Exact when nativeSwitchScope is not null &&
+                    clause.Value is PowerShellLoweredNativeVariableExpression =>
+                    $"{nativeSwitchScope}.MatchesDynamicClause({clauseSource}, {(statement.CaseSensitive ? "true" : "false")})",
                 _ when nativeSwitchScope is not null => $"{nativeSwitchScope}.Matches({clauseSource}, {(statement.CaseSensitive ? "true" : "false")})",
                 PowerShellBoundSwitchMatchMode.Regex =>
                     $"global::System.Text.RegularExpressions.Regex.IsMatch(({valueIdentifier} ?? string.Empty), ({clauseSource} ?? string.Empty), global::System.Text.RegularExpressions.RegexOptions.{(statement.CaseSensitive ? "None" : "IgnoreCase")})",
@@ -295,7 +300,8 @@ internal sealed partial class PowerShellBoundCSharpBackend
                     $"global::System.String.Equals({valueIdentifier}, {clauseSource}, global::System.StringComparison.{(statement.CaseSensitive ? "InvariantCulture" : "InvariantCultureIgnoreCase")})",
                 _ => $"{valueIdentifier} == {clauseSource}"
             };
-            if (nativeSwitchScope is not null && statement.MatchMode == PowerShellBoundSwitchMatchMode.Regex)
+            if (nativeSwitchScope is not null && (statement.MatchMode != PowerShellBoundSwitchMatchMode.Exact ||
+                clause.Value is PowerShellLoweredNativeVariableExpression))
                 comparison = EmitNativeExpressionPosition(comparison, clause.Value.Span,
                     statement.NativeSourcePath, clause.NativeSourceText);
             builder.Append(prefix).Append("    if (").Append(comparison).AppendLine(")");

@@ -89,6 +89,23 @@ The manifest maps source/resource policy, one named semantic profile, provider p
 
 An artifact can set `artifactName` to select its public module or assembly basename, such as `"artifactName": "Sample"`. The manifest and builder use the same filename rules: spaces and unsupported punctuation become underscores, so `"My Module"` is saved and built as `My_Module`. Omitting it applies those rules to the project-and-variant default. Variant archives keep their separate project-and-target names, so two module targets can both expose `Sample` without sharing a package filename. Module-pipeline compilation preserves the published module identity and requires its manifest/root filename to use an already canonical basename; planning reports the required rename before staging when that constraint is not met.
 
+Binary-module artifacts can declare a `moduleTest` acceptance script instead of
+the default bare-import test. Set project `schemaVersion` to `2`, then declare
+the contained project-relative `script`, its reviewed `sha256`, optional literal
+named string `parameters`, and optional contained `workingDirectory` (`.` selects
+the project root). Set optional `timeoutSeconds` between 1 and 900 to give each
+acceptance invocation a different deadline. The default is 120 seconds.
+The native script binder receives the actual built or installed module path as
+`ArtifactPath`, which is reserved. The child host starts with
+its built-in module path, and the script can explicitly add required dependencies.
+Test verifies and captures the script bytes before execution, preserves
+`$PSCommandPath` and `$PSScriptRoot`, and records the acceptance hash in schema-2
+test evidence. Changed bytes fail qualification. Older project readers reject
+schema 2, while projects using default tests can keep schema 1.
+A new Test attempt invalidates the selected target's previous passing evidence
+before execution. A failed attempt therefore requires a fresh passing Test before
+Pack or Install can qualify that target.
+
 Executable artifacts can declare the literal argument vector and a project-relative working directory used by both Test and Install:
 
 ```json

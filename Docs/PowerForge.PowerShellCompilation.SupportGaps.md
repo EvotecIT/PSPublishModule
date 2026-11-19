@@ -1,6 +1,88 @@
 # PowerShell compiler: observed support gaps
 
-For measurements from both fixed external packets, see the [2026-11-17 coverage report](PowerForge.PowerShellCompilation.Coverage.md). The results below describe earlier compiler revisions.
+For measurements from both fixed external packets, see the [coverage report](PowerForge.PowerShellCompilation.Coverage.md). The historical results below describe earlier compiler revisions.
+
+Hybrid modules can compile independent functions beside document-scope authored
+classes or enums while retaining their hosted initialization. The source type
+closure still rejects unsupported direct authored-type annotations and type
+expressions, including inside conditional function declarations. Runtime type
+lookup and calls to retained helpers can occur in emitted bodies. Nested type
+declarations and script initializers keep their
+existing admission rules. This extends the existing native binding, cmdlet,
+pipeline, and `begin`/`process`/`end` paths into realistic mixed modules. It does
+not add general authored-class or pipeline support to Strict.
+
+The fixed Gallery packet emits **720/753 complete units (95.62%)**, up from
+114/753 (15.14%) and the preceding 682/753 measurement. Pester emits 478/491 and
+PSFramework emits 166/176. The other eight modules keep their previous counts.
+All ten Hybrid artifacts build, import, and pass their invocation probes. The
+packet retains 33 source units.
+
+Native-bound Hybrid functions can use public, non-nested types from authenticated
+delivered managed DLLs, including supported closed generic types, one-dimensional
+arrays and closed containers. Actual loading, conversion, attributes and type
+identity remain with PowerShell. Same-assembly-identity compatibility variants
+can share a type name within a non-conflicting dependency graph; distinct assembly owners remain ambiguous. Assemblies
+with native imports, accelerators outside the authenticated literal maps, nested/open generic types and
+unsupported constrained accesses keep their existing guards. Borrowed `Ast` and
+`FunctionDefinitionAst` parameters and `CompletionResultType` use native binding.
+Unlabeled caller-directed break/continue also use the host's flow-control owner.
+Admitted function `exit` statements use the active SDK's exit conversion and
+script termination. Switch predicates that transfer outside their own body stay
+hosted. None of these forms adds general dependency-type or caller-transfer
+support to Strict.
+
+Literal type aliases can now be identified from authenticated delivered
+registration scripts whose native `TypeAccelerators.Add` helper consumes a
+literal type map. Their targets must already belong to the qualified dependency
+metadata. Compilation reads those scripts without executing them or loading the
+DLL. The native parameter binder resolves the alias at invocation time; removing
+an alias before the first call still fails, and restoring it permits recovery.
+Returned script-block literals and array/dictionary-held literals in module
+functions can use the compiled callback owner when every child body qualifies.
+Executable roots and functions that require a defining module remain hosted. Borrowed session,
+variable, cmdlet, dynamic-parameter, syntax-tree and parameter-metadata objects
+retain SDK identity. Local callers of native functions also use native binding.
+These are reusable syntax and type rules, with no module-name eligibility tests.
+Nested alias callbacks, alias functions with local types or `clean`, arbitrary
+registration code and unsupported callback bodies retain their guards.
+
+Hybrid module functions can split direct arrays across local assignment targets
+and preserve single array records from a captured command or statement. The
+host owns the assignment order, typed storage conversions and wildcard switch
+matching. Multiple assignment discards pending records if its right-hand side
+exits before assignment. Supported inline SDK and delivered generic parameters retain their
+native types, and two ordinary same-name declarations in one source file take
+effect at their authored positions. Cross-file name collisions and unsupported
+declaration metadata keep their existing guards.
+
+Advanced native executable roots support `begin`/`process`/`end` on the explicit
+`net10.0` Windows x64 target. Both host profiles prove the underlying lifecycle
+semantics; this does not establish Windows PowerShell executable packaging.
+Generated module manifests also preserve the legacy `ModuleToProcess` key
+without adding a contradictory `RootModule` entry.
+
+The seven-workload packet emits 160/196 units and 160/183 functions and executes
+six complete workloads across 31 scenarios. The GitHub helper library,
+PowerShell installer, Scoop installer, GetBIOS, Autopilot and Locksmith2 pass
+on original, built and installed surfaces with compiler input withdrawn for
+artifact observation. The installers use native module
+adapters, verified payloads over loopback HTTP, actual extraction/process behavior
+and process-local registry replacements. The PowerShell and CMD shims execute
+offline help; the Unix shim is only created and target-checked. GetBIOS requires
+all four compiled nested vendor helpers and actual report files, with controlled
+WMI, Dell, remoting, privilege and UI boundaries. Autopilot requires its complete
+advanced script root in the explicit Windows x64 artifact and executes the
+delivered public native-entry factory with controlled CIM sessions and actual
+CSV files. Console execution covers startup/help. Its default census remains
+0/1 without an explicit runtime target; application qualification is separate.
+Locksmith2 emits and exercises all 100 owned functions on PowerShell 7.6.6.
+Its five scenarios use read-only Auditing in an approved lab and local
+fixtures for console, environment, reports, issues and searcher behavior.
+Locksmith remains unattempted, with 21/44 emitted functions. Live hardware,
+Graph and GitHub services, directory changes, production CA changes, exhaustive
+branches, MSI/global installation and direct installer executable packaging
+remain outside the qualified scenarios.
 
 Historical inventory: 2026-10-11. This section preserves the October 3 retained-function snapshot and earlier M29/M29a discovery and qualification checkpoints. The compiler continuation is integrated in main; the five-module historical census has not been rerun; the external and public packets use the dated report above. The [next milestones](PowerForge.PowerShellCompilation.NextMilestones.md#current-continuation-october-11-audit) own current work and exit gates; the [assessment](PowerForge.PowerShellCompilation.Assessment.md) owns execution evidence.
 

@@ -4,10 +4,11 @@ internal enum PowerShellOutputCaptureKind
 {
     CollapsedPowerShellValue,
     StableScalarVector,
-    NativeObjectArray
+    NativeObjectArray,
+    NativeAssignmentRecords
 }
 
-/// <summary>Collects an authored statement's success records before assigning its collapsed result.</summary>
+/// <summary>Collects an authored statement's success records before assigning its result.</summary>
 internal sealed class PowerShellBoundOutputCaptureStatement : PowerShellBoundStatement
 {
     internal PowerShellBoundOutputCaptureStatement(SourceSpan span, PowerShellSymbolId? target, PowerShellBoundBlock body,
@@ -30,8 +31,9 @@ internal sealed class PowerShellBoundOutputCaptureStatement : PowerShellBoundSta
             throw new ArgumentException("A stable scalar vector capture requires one local target and a stable scalar element type.");
         if (kind == PowerShellOutputCaptureKind.CollapsedPowerShellValue && capturedElementType is not null)
             throw new ArgumentException("A collapsed PowerShell capture cannot declare a vector element type.");
-        if (kind == PowerShellOutputCaptureKind.NativeObjectArray && (nativeTarget is null || capturedElementType is not null))
-            throw new ArgumentException("A native object-array capture requires one native assignment target.");
+        if (kind is PowerShellOutputCaptureKind.NativeObjectArray or PowerShellOutputCaptureKind.NativeAssignmentRecords &&
+            (nativeTarget is null || capturedElementType is not null))
+            throw new ArgumentException("A native record capture requires one native assignment target.");
         Target = target;
         Body = body;
         NativeTarget = nativeTarget;

@@ -2,9 +2,11 @@ namespace PowerForge.Generated.Runtime
 {
     using System;
     using System.Collections;
+    using System.Dynamic;
     using System.Globalization;
     using System.Linq.Expressions;
     using System.Management.Automation;
+    using System.Management.Automation.Language;
     using System.Reflection;
 
     public sealed partial class PowerShellNativeFunctionContext
@@ -13,12 +15,20 @@ namespace PowerForge.Generated.Runtime
         private NativeVariableStorage? _switchItemStorage;
         private static readonly Lazy<Func<object?, object, string>> SwitchString = new(CreateSwitchString);
         private static readonly Lazy<Func<ScriptBlock, object?, object?>> SwitchPredicate = new(CreateSwitchPredicateInvocation);
+        private static readonly Lazy<Func<object?, object?, object, bool>> ExactSwitchClause = new(() => CreateSwitchClause(false));
+        private static readonly Lazy<Func<object?, object?, object, bool>> CaseSensitiveSwitchClause = new(() => CreateSwitchClause(true));
         private static readonly Lazy<MethodInfo> SwitchRegex = new(() => typeof(PSObject).Assembly
             .GetType("System.Management.Automation.SwitchOps", true)!
             .GetMethod("ConditionSatisfiedRegex", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic,
                 null, new[] { typeof(bool), typeof(object), typeof(System.Management.Automation.Language.IScriptExtent),
                     typeof(string), PowerShellNativeFunctionHost.NativeContract.Shared.ExecutionContext.FieldType }, null)
             ?? throw new NotSupportedException("PowerShell's regex switch operation is unavailable."));
+        private static readonly Lazy<MethodInfo> SwitchWildcard = new(() => typeof(PSObject).Assembly
+            .GetType("System.Management.Automation.SwitchOps", true)!
+            .GetMethod("ConditionSatisfiedWildcard", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic,
+                null, new[] { typeof(bool), typeof(object), typeof(string),
+                    PowerShellNativeFunctionHost.NativeContract.Shared.ExecutionContext.FieldType }, null)
+            ?? throw new NotSupportedException("PowerShell's wildcard switch operation is unavailable."));
 
         /// <summary>Saves switch automatic variables before evaluating its input in the current invocation.</summary>
         public NativeSwitchScope EnterSwitch()
@@ -66,12 +76,21 @@ namespace PowerForge.Generated.Runtime
             }
 
             /// <summary>Stringifies the current automatic item separately for each literal clause, as the host does.</summary>
-            public bool Matches(string label, bool caseSensitive)
+            public bool Matches(object label, bool caseSensitive)
             {
                 CheckActive();
                 var current = _item.Read.Invoke(_owner.FunctionContext);
-                return string.Equals(label, SwitchString.Value(current, _owner._executionContext),
+                var text = label as string ?? SwitchString.Value(label, _owner._executionContext);
+                return string.Equals(text, SwitchString.Value(current, _owner._executionContext),
                     caseSensitive ? StringComparison.InvariantCulture : StringComparison.InvariantCultureIgnoreCase);
+            }
+
+            /// <summary>Uses the host's dynamic switch binder for an evaluated clause variable.</summary>
+            public bool MatchesDynamicClause(object? label, bool caseSensitive)
+            {
+                CheckActive();
+                var current = _item.Read.Invoke(_owner.FunctionContext);
+                return (caseSensitive ? CaseSensitiveSwitchClause : ExactSwitchClause).Value(label, current, _owner._executionContext);
             }
 
             /// <summary>Uses the host's regex-switch operation, including its persistent $Matches captures.</summary>
@@ -84,6 +103,16 @@ namespace PowerForge.Generated.Runtime
                 var extent = PowerShellSourceExtent.Create(file, line, column, endLine, endColumn, sourceText);
                 return (bool)PowerShellNativeFunctionHost.Invoke(SwitchRegex.Value, null,
                     new object[] { caseSensitive, label, extent, text, _owner._executionContext })!;
+            }
+
+            /// <summary>Uses the host's wildcard matcher with the current switch item and language context.</summary>
+            public bool MatchesWildcard(string label, bool caseSensitive)
+            {
+                CheckActive();
+                var current = _item.Read.Invoke(_owner.FunctionContext);
+                var text = SwitchString.Value(current, _owner._executionContext);
+                return (bool)PowerShellNativeFunctionHost.Invoke(SwitchWildcard.Value, null,
+                    new object[] { caseSensitive, label, text, _owner._executionContext })!;
             }
 
             /// <summary>Invokes a compiled predicate in the engine's local scope and converts its captured records as Boolean.</summary>
@@ -119,6 +148,22 @@ namespace PowerForge.Generated.Runtime
             return Expression.Lambda<Func<object?, object, string>>(
                 Expression.Dynamic(PowerShellNativeLanguageOperations.GetSingletonBinder("PSToStringBinder"),
                 typeof(string), value, Expression.Convert(context, contextType)), value, context).Compile();
+        }
+
+        private static Func<object?, object?, object, bool> CreateSwitchClause(bool caseSensitive)
+        {
+            var type = typeof(PSObject).Assembly.GetType("System.Management.Automation.Language.PSSwitchClauseEvalBinder", true)!;
+            var get = type.GetMethod("Get", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic,
+                null, new[] { typeof(SwitchFlags) }, null)
+                ?? throw new NotSupportedException("PowerShell's dynamic switch operation is unavailable.");
+            var flags = caseSensitive ? SwitchFlags.CaseSensitive : SwitchFlags.None;
+            var binder = (DynamicMetaObjectBinder)PowerShellNativeFunctionHost.Invoke(get, null, new object[] { flags })!;
+            var label = Expression.Parameter(typeof(object), "label");
+            var value = Expression.Parameter(typeof(object), "value");
+            var context = Expression.Parameter(typeof(object), "context");
+            return Expression.Lambda<Func<object?, object?, object, bool>>(
+                Expression.Dynamic(binder, typeof(bool), label, value, Expression.Convert(context,
+                    PowerShellNativeFunctionHost.NativeContract.Shared.ExecutionContext.FieldType)), label, value, context).Compile();
         }
 
         private static Func<ScriptBlock, object?, object?> CreateSwitchPredicateInvocation()

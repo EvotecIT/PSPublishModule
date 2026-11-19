@@ -40,8 +40,7 @@ internal static class PowerShellHybridRegionRewriter
                 function.Body.Extent.StartOffset <= region.StartOffset && function.Body.Extent.EndOffset >= region.EndOffset);
             if (owner is null)
                 throw new InvalidOperationException($"Promoted region '{region.RegionId}' no longer has its retained function owner.");
-            var ownerKey = PowerShellHybridModuleComposer.GetCompiledMethodKey(fullPath, owner);
-            if (removedFunctionKeys.Contains(ownerKey))
+            if (PowerShellHybridModuleComposer.ContainsWrappedDeclaration(removedFunctionKeys, fullPath, owner))
                 throw new InvalidOperationException($"Promoted region '{region.RegionId}' overlaps a function selected for whole-method emission.");
             if (!region.DocumentId.Equals(expectedDocumentId, StringComparison.Ordinal) ||
                 !region.SourceDocumentSha256.Equals(sourceDocumentSha256, StringComparison.Ordinal) ||
