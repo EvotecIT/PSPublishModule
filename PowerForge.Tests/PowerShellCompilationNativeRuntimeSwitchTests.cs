@@ -146,7 +146,14 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             PowerShellCompilationArtifactKind.BinaryModule, PowerShellCompilationMode.Hybrid,
             allowUnreviewedDependencyResolution: true) { TargetFramework = framework });
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
-        Assert.Equal(2, result.Manifest!.CompiledMethods);
+        Assert.Equal(4, result.Manifest!.CompiledMethods);
+        foreach (var name in new[] { "Stop-FromSwitch", "Skip-FromSwitch" })
+        {
+            var unit = Assert.Single(result.Manifest.UnitDispositionLedger!.Entries, entry => entry.Name == name);
+            Assert.True(unit.EmittedClrMethod);
+            Assert.True(unit.UsesNativeFunctionBinding);
+            Assert.False(unit.RetainedHostedSource);
+        }
         const string probe = """
             class SwitchText {
                 static [int] $Count

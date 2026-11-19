@@ -76,7 +76,7 @@ internal static class PowerShellHybridModuleComposer
         var edits = new List<PowerShellHybridSourceEdit>();
         foreach (var function in functions)
         {
-            if (!wrapped.Contains(GetCompiledMethodKey(sourcePath, function)))
+            if (!ContainsWrappedDeclaration(wrapped, sourcePath, function))
                 continue;
             if (function.Extent.StartOffset < prologueEndOffset)
                 throw new InvalidOperationException($"Compiled function '{function.Name}' overlaps the module prologue and cannot be composed safely.");
@@ -99,9 +99,7 @@ internal static class PowerShellHybridModuleComposer
             source.Insert(edit.Start, edit.Replacement);
         }
 
-        var fallbackFunctions = ReadModuleScopeFunctions(typed.SourcePaths.Concat(retainedSourcePaths ?? Array.Empty<string>()))
-            .Where(function => !wrapped.Contains(GetCompiledMethodKey(function.Path, function.Name, function.Line)))
-            .Select(static function => function.Name)
+        var fallbackFunctions = ReadRetainedFunctionNames(typed.SourcePaths.Concat(retainedSourcePaths ?? Array.Empty<string>()), wrapped)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
         var compiledCmdlets = typed.Methods
@@ -293,7 +291,7 @@ internal static class PowerShellHybridModuleComposer
         var edits = new List<PowerShellHybridSourceEdit>();
         foreach (var function in ast.FindAll(static node => node is FunctionDefinitionAst, searchNestedScriptBlocks: false)
                      .Cast<FunctionDefinitionAst>()
-                     .Where(function => compiled.Contains(GetCompiledMethodKey(sourcePath, function)))
+                     .Where(function => ContainsWrappedDeclaration(compiled, sourcePath, function))
                      .OrderByDescending(static function => function.Extent.StartOffset))
         {
             edits.Add(new PowerShellHybridSourceEdit(
@@ -368,7 +366,7 @@ internal static class PowerShellHybridModuleComposer
                 method.SourceLine, method.ConditionalDeclarationOffset))
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-    private static IEnumerable<ModuleScopeFunction> ReadModuleScopeFunctions(IEnumerable<string> sourcePaths)
+    private static IEnumerable<string> ReadRetainedFunctionNames(IEnumerable<string> sourcePaths, ISet<string> wrapped)
     {
         foreach (var sourcePath in sourcePaths.Distinct(PowerShellCompilationPathSafety.PathComparer))
         {
@@ -378,7 +376,8 @@ internal static class PowerShellHybridModuleComposer
             if (errors.Length > 0)
                 throw new InvalidOperationException($"Module source '{sourcePath}' could not be parsed while composing fallback exports.");
             foreach (var function in ast.FindAll(static node => node is FunctionDefinitionAst, searchNestedScriptBlocks: false).Cast<FunctionDefinitionAst>())
-                yield return new ModuleScopeFunction(sourcePath, function.Name, function.Body.Extent.StartLineNumber);
+                if (!ContainsWrappedDeclaration(wrapped, sourcePath, function))
+                    yield return function.Name;
         }
     }
 
@@ -386,9 +385,10 @@ internal static class PowerShellHybridModuleComposer
         => Path.GetFullPath(sourcePath) + "\0" + name + "\0" + line +
            (conditionalDeclarationOffset is { } offset ? "\0" + offset.ToString(System.Globalization.CultureInfo.InvariantCulture) : string.Empty);
 
-    internal static string GetCompiledMethodKey(string sourcePath, FunctionDefinitionAst function)
-        => GetCompiledMethodKey(sourcePath, function.Name, function.Body.Extent.StartLineNumber,
-            function.Parent is NamedBlockAst ? null : function.Extent.StartOffset);
+    internal static bool ContainsWrappedDeclaration(ISet<string> keys, string sourcePath, FunctionDefinitionAst function)
+        => keys.Contains(GetCompiledMethodKey(sourcePath, function.Name, function.Body.Extent.StartLineNumber, function.Extent.StartOffset)) ||
+           function.Parent is NamedBlockAst &&
+           keys.Contains(GetCompiledMethodKey(sourcePath, function.Name, function.Body.Extent.StartLineNumber));
 
     private static string GetNativeFunctionRegistration(PowerShellTypedCompilationResult typed, string sourcePath,
         FunctionDefinitionAst function, Token[] tokens, bool executable = false, bool executableDependency = false)
@@ -415,20 +415,6 @@ internal static class PowerShellHybridModuleComposer
 
     private static string EscapePowerShellSingleQuotedString(string value)
         => value.Replace("'", "''");
-
-    private sealed class ModuleScopeFunction
-    {
-        internal ModuleScopeFunction(string path, string name, int line)
-        {
-            Path = path;
-            Name = name;
-            Line = line;
-        }
-
-        internal string Path { get; }
-        internal string Name { get; }
-        internal int Line { get; }
-    }
 
     private sealed class RuntimeRegionVariableNames
     {

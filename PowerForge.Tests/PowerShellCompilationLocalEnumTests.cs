@@ -157,10 +157,10 @@ public sealed class PowerShellLocalEnumAdmissionTests
     public void DirectLocalEnumUsesNativeFrameAndKeepsStrictClosed(string framework)
     {
         var document = Parse("function Read-Choice {param($Value) enum LocalChoice { One=1 }; $Value -as [LocalChoice]}");
-        Assert.True(PowerShellHostedLocalEnumPolicy.IsQualified(document, framework, PowerShellCompilationCapabilities.HybridModule));
+        Assert.True(PowerShellHostedLocalTypePolicy.IsQualified(document, framework, PowerShellCompilationCapabilities.HybridModule));
         var compiled = new PowerShellSemanticCompilationPipeline().Compile(new[] { document }, framework, PowerShellCompilationCapabilities.HybridModule);
         Assert.Single(compiled.Lowered.Functions);
-        Assert.False(PowerShellHostedLocalEnumPolicy.IsQualified(document, framework, PowerShellCompilationCapability.None));
+        Assert.False(PowerShellHostedLocalTypePolicy.IsQualified(document, framework, PowerShellCompilationCapability.None));
         Assert.Empty(new PowerShellSemanticCompilationPipeline().Compile(new[] { document }, framework, PowerShellCompilationCapability.None).Lowered.Functions);
     }
 
@@ -172,7 +172,7 @@ public sealed class PowerShellLocalEnumAdmissionTests
     [InlineData("function Read-Choice {enum LocalChoice : long {One=1}; 1 -as [LocalChoice]}")]
     [InlineData("function Read-Choice {process{enum LocalChoice {One=1}; 1 -as [LocalChoice]}}")]
     public void UnsupportedDeclarationOrConsumerKeepsHostedBoundary(string source)
-        => Assert.False(PowerShellHostedLocalEnumPolicy.IsQualified(Parse(source), "net10.0", PowerShellCompilationCapabilities.HybridModule));
+        => Assert.False(PowerShellHostedLocalTypePolicy.IsQualified(Parse(source), "net10.0", PowerShellCompilationCapabilities.HybridModule));
 
     private static ParsedSourceDocument Parse(string source)
         => PowerShellSourceParser.Parse(source, Path.Combine(Path.GetTempPath(), "local-enum.psm1"));

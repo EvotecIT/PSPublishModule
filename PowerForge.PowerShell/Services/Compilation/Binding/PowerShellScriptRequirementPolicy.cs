@@ -18,23 +18,33 @@ internal static class PowerShellScriptRequirementPolicy
         @"(?<![\w-])-PSEdition(?:\s+|:\s*)(?<edition>""[^""]*""|'[^']*'|[^\s#]+)",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
 
-    internal static string? GetFailure(ParsedSourceDocument document, string semanticProfileId)
+    /// <summary>Qualifies simple installed module names checked by the authored Hybrid script load.</summary>
+    internal static bool UsesNativeModuleRequirements(ParsedSourceDocument document, PowerShellCompilationCapability capabilities)
+        => capabilities == PowerShellCompilationCapabilities.HybridModule &&
+           document.SyntaxRoot.ScriptRequirements is { RequiredModules.Count: > 0 } requirements &&
+           requirements.RequiredModules.All(static module => !string.IsNullOrWhiteSpace(module.Name) &&
+               module.Name.All(static character => char.IsLetterOrDigit(character) || character is '.' or '_'));
+
+    internal static string? GetFailure(ParsedSourceDocument document, string semanticProfileId,
+        PowerShellCompilationCapability capabilities = PowerShellCompilationCapability.None)
     {
         if (document.SyntaxRoot.ScriptRequirements is not { } requirements)
             return null;
 
+        var nativeModules = UsesNativeModuleRequirements(document, capabilities);
         var profile = PowerShellCompilationSemanticOracleCatalog.Get(semanticProfileId);
         var unsupportedSwitch = DirectivePattern.Matches(document.SyntaxRoot.Extent.Text)
             .Cast<Match>()
             .SelectMany(static directive => SwitchPattern.Matches(directive.Groups["body"].Value).Cast<Match>())
             .Select(static option => option.Groups["name"].Value)
-            .FirstOrDefault(static option =>
+            .FirstOrDefault(option =>
                 !option.Equals("Version", StringComparison.OrdinalIgnoreCase) &&
-                !option.Equals("PSEdition", StringComparison.OrdinalIgnoreCase));
+                !option.Equals("PSEdition", StringComparison.OrdinalIgnoreCase) &&
+                !(nativeModules && option.Equals("Modules", StringComparison.OrdinalIgnoreCase)));
         if (unsupportedSwitch is not null)
             return $"Source #requires -{unsupportedSwitch} cannot be satisfied by a runtime-free typed artifact.";
 
-        if (requirements.RequiredModules.Count > 0 || requirements.RequiredAssemblies.Count > 0 ||
+        if (requirements.RequiredModules.Count > 0 && !nativeModules || requirements.RequiredAssemblies.Count > 0 ||
             !string.IsNullOrWhiteSpace(requirements.RequiredApplicationId) || requirements.IsElevationRequired)
             return "Source #requires declares a module, assembly, host, or elevation dependency that cannot be satisfied by a runtime-free typed artifact.";
 
@@ -50,7 +60,7 @@ internal static class PowerShellScriptRequirementPolicy
             !requiredEditions.Any(edition => edition.Equals(profile.PowerShellEdition, StringComparison.OrdinalIgnoreCase)))
             return $"Source #requires accepts PowerShell edition '{string.Join("' or '", requiredEditions)}', but semantic profile '{profile.ProfileId}' represents '{profile.PowerShellEdition}'.";
 
-        if (requirements.RequiredPSVersion is null && requiredEditions.Length == 0)
+        if (!nativeModules && requirements.RequiredPSVersion is null && requiredEditions.Length == 0)
             return "Source #requires does not contain a compile-time requirement supported by the selected semantic profile.";
 
         return null;

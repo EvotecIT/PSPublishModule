@@ -14,30 +14,63 @@ namespace PowerForge.Generated.Runtime
         public static ExternalScriptInfo CreateScriptEntry(SessionState sessionState,
             string sourcePath, string expectedSourceSha256, Action<PowerShellNativeFunctionContext> body)
         {
+            if (body == null) throw new ArgumentNullException(nameof(body));
             if (sessionState == null) throw new ArgumentNullException(nameof(sessionState));
             if (sessionState.LanguageMode != PSLanguageMode.FullLanguage)
                 throw new NotSupportedException("Compiled script callbacks require a FullLanguage invocation.");
             var fullPath = System.IO.Path.GetFullPath(sourcePath);
             return PrepareScriptEntry(sessionState.InvokeCommand.GetCommand(fullPath, CommandTypes.ExternalScript) as ExternalScriptInfo,
-                fullPath, expectedSourceSha256, body);
+                fullPath, expectedSourceSha256, null, null, body);
         }
 
         /// <summary>Prepares a root command directly in its runspace without creating a caller script frame.</summary>
         public static ExternalScriptInfo CreateScriptEntry(Runspace runspace,
             string sourcePath, string expectedSourceSha256, Action<PowerShellNativeFunctionContext> body)
         {
+            if (body == null) throw new ArgumentNullException(nameof(body));
             if (runspace == null) throw new ArgumentNullException(nameof(runspace));
             if (runspace.SessionStateProxy.LanguageMode != PSLanguageMode.FullLanguage)
                 throw new NotSupportedException("Compiled script callbacks require a FullLanguage invocation.");
             var fullPath = System.IO.Path.GetFullPath(sourcePath);
             return PrepareScriptEntry(runspace.SessionStateProxy.InvokeCommand.GetCommand(fullPath, CommandTypes.ExternalScript) as ExternalScriptInfo,
-                fullPath, expectedSourceSha256, body);
+                fullPath, expectedSourceSha256, null, null, body);
+        }
+
+        /// <summary>Prepares compiled lifecycle clauses while native script dispatch owns binding and pipeline input.</summary>
+        public static ExternalScriptInfo CreateScriptEntry(SessionState sessionState,
+            string sourcePath, string expectedSourceSha256,
+            Action<PowerShellNativeFunctionContext>? begin, Action<PowerShellNativeFunctionContext>? process,
+            Action<PowerShellNativeFunctionContext>? end)
+        {
+            if (sessionState == null) throw new ArgumentNullException(nameof(sessionState));
+            if (sessionState.LanguageMode != PSLanguageMode.FullLanguage)
+                throw new NotSupportedException("Compiled script callbacks require a FullLanguage invocation.");
+            var fullPath = System.IO.Path.GetFullPath(sourcePath);
+            return PrepareScriptEntry(sessionState.InvokeCommand.GetCommand(fullPath, CommandTypes.ExternalScript) as ExternalScriptInfo,
+                fullPath, expectedSourceSha256, begin, process, end);
+        }
+
+        /// <summary>Prepares lifecycle clauses from outside a running pipeline in the target runspace.</summary>
+        public static ExternalScriptInfo CreateScriptEntry(Runspace runspace,
+            string sourcePath, string expectedSourceSha256,
+            Action<PowerShellNativeFunctionContext>? begin, Action<PowerShellNativeFunctionContext>? process,
+            Action<PowerShellNativeFunctionContext>? end)
+        {
+            if (runspace == null) throw new ArgumentNullException(nameof(runspace));
+            if (runspace.SessionStateProxy.LanguageMode != PSLanguageMode.FullLanguage)
+                throw new NotSupportedException("Compiled script callbacks require a FullLanguage invocation.");
+            var fullPath = System.IO.Path.GetFullPath(sourcePath);
+            return PrepareScriptEntry(runspace.SessionStateProxy.InvokeCommand.GetCommand(fullPath, CommandTypes.ExternalScript) as ExternalScriptInfo,
+                fullPath, expectedSourceSha256, begin, process, end);
         }
 
         private static ExternalScriptInfo PrepareScriptEntry(ExternalScriptInfo? info,
-            string fullPath, string expectedSourceSha256, Action<PowerShellNativeFunctionContext> body)
+            string fullPath, string expectedSourceSha256,
+            Action<PowerShellNativeFunctionContext>? begin, Action<PowerShellNativeFunctionContext>? process,
+            Action<PowerShellNativeFunctionContext>? end)
         {
-            if (body == null) throw new ArgumentNullException(nameof(body));
+            if (begin == null && process == null && end == null)
+                throw new ArgumentException("A compiled script entry requires at least one lifecycle clause.");
             if (expectedSourceSha256 == null || expectedSourceSha256.Length != 64 ||
                 !System.Linq.Enumerable.All(expectedSourceSha256, static character =>
                     character >= '0' && character <= '9' || character >= 'a' && character <= 'f'))
@@ -75,7 +108,7 @@ namespace PowerForge.Generated.Runtime
             var mode = modeProperty.GetValue(script, null);
             if (mode != null && (PSLanguageMode)mode != PSLanguageMode.FullLanguage)
                 throw new NotSupportedException("Compiled script callbacks do not qualify a restricted file language mode.");
-            InstallLazyCompiledClauses(script, null, null, body, Array.Empty<string>());
+            InstallLazyCompiledClauses(script, begin, process, end, Array.Empty<string>());
             return info;
         }
     }

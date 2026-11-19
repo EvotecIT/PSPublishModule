@@ -16,7 +16,8 @@ internal sealed partial class PowerShellBoundCSharpBackend
         {
             var child = _functions[block.Target.StableKey];
             var binding = child.NativeFunctionBinding ?? throw new InvalidOperationException("A compiled script block requires native binding.");
-            var emitted = new PowerShellBoundCSharpBackend { _functions = _functions }.EmitFunction(child, capabilities);
+            var emitted = new PowerShellBoundCSharpBackend { _functions = _functions, _nativeSourceDocuments = _nativeSourceDocuments }
+                .EmitFunction(child, capabilities);
             builder.AppendLine();
             var lineOffset = _sourcePositions.Get(builder).Line - 1;
             builder.AppendLine(emitted.Source);
@@ -54,7 +55,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
                 .AppendLine("    {")
                 .Append(block.DeclarationName is not null ? "        return creationContext.CreateFunctionBody(" :
                     block.IsSwitchPredicate ? "        return creationContext.CreateSwitchPredicate(" : "        return creationContext.CreateScriptBlock(")
-                .Append(PowerShellCSharpLiteral.QuoteString(block.SourceDocument))
+                .Append(_nativeSourceDocuments.Reference(block.SourceDocument))
                 .Append(", ").Append(block.Span.StartOffset).Append(", ").Append(block.Span.EndOffset).AppendLine(",")
                 .Append("            ").Append(Callback(binding.HasBegin, 0)).AppendLine(",")
                 .Append("            ").Append(Callback(binding.HasProcess, 1)).AppendLine(",")
@@ -72,10 +73,10 @@ internal sealed partial class PowerShellBoundCSharpBackend
     private static string Callback(bool present, int clause)
         => PowerShellNativeCallbackSource.Callback(present, clause);
 
-    private static string EmitNativeBlockValue(PowerShellLoweredNativeScriptBlockExpression block)
+    private string EmitNativeBlockValue(PowerShellLoweredNativeScriptBlockExpression block)
     {
         var value = NativeScriptBlockFactoryName(block.Target) + "(__nativeFunction)";
         return block.DeclarationName is null ? value : "__nativeFunction.DeclareFunction(" +
-            PowerShellCSharpLiteral.QuoteString(block.SourceDocument) + ", " + block.Span.StartOffset + ", " + block.Span.EndOffset + ", " + value + ")";
+            _nativeSourceDocuments.Reference(block.SourceDocument) + ", " + block.Span.StartOffset + ", " + block.Span.EndOffset + ", " + value + ")";
     }
 }

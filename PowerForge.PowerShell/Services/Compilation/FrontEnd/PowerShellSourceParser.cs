@@ -49,11 +49,19 @@ internal static class PowerShellSourceParser
             .Select(static declaration => declaration.Syntax);
 
     internal static PowerShellRootFunctionDeclaration[] GetRootFunctionDeclarations(ScriptBlockAst syntax)
-        => syntax.FindAll(static node => node is FunctionDefinitionAst, searchNestedScriptBlocks: false)
+    {
+        var functions = syntax.FindAll(static node => node is FunctionDefinitionAst, searchNestedScriptBlocks: false)
             .OfType<FunctionDefinitionAst>()
             .Where(function => IsOwnedByRoot(function, syntax))
             .OrderBy(static function => function.Extent.StartOffset)
-            .Select(function => new PowerShellRootFunctionDeclaration(function, syntax)).ToArray();
+            .ToArray();
+        var replacements = functions.GroupBy(static function => function.Name, StringComparer.OrdinalIgnoreCase)
+            .Where(group => group.Count() > 1 && group.All(function => !function.IsWorkflow &&
+                ReferenceEquals(function.Parent, syntax.EndBlock)))
+            .Select(static group => group.Key).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        return functions.Select(function => new PowerShellRootFunctionDeclaration(function, syntax,
+            replacements.Contains(function.Name))).ToArray();
+    }
 
     private static bool IsOwnedByRoot(FunctionDefinitionAst function, ScriptBlockAst root)
     {

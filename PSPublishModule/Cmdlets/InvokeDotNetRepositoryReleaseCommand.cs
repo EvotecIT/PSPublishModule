@@ -178,7 +178,7 @@ public sealed class InvokeDotNetRepositoryReleaseCommand : PSCmdlet
     {
         var boundParameters = MyInvocation?.BoundParameters;
         var isVerbose = boundParameters?.ContainsKey("Verbose") == true;
-        ConsoleEncoding.EnsureUtf8();
+        using var consoleEncoding = ConsoleEncoding.UseUtf8();
 
         var interactive = ModulePipelineConsoleUi.ShouldUseInteractiveView(isVerbose);
         ILogger outputLogger = interactive

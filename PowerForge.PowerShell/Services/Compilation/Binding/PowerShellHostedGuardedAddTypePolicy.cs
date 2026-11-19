@@ -2,7 +2,7 @@ using System.Management.Automation.Language;
 
 namespace PowerForge;
 
-/// <summary>Allows a later type use to keep the authored, invocation-local Add-Type guard in Hybrid.</summary>
+/// <summary>Allows a later type use to keep its authored Add-Type load in Hybrid.</summary>
 /// <remarks>The C# declaration and its native imports stay with PowerShell; no generated CLR reference is inferred.</remarks>
 internal static class PowerShellHostedGuardedAddTypePolicy
 {
@@ -20,7 +20,10 @@ internal static class PowerShellHostedGuardedAddTypePolicy
         if (typeExpression.TypeName is not TypeName ||
             !string.IsNullOrEmpty(typeExpression.TypeName.AssemblyName)) return false;
         var name = typeExpression.TypeName.FullName;
-        if (string.IsNullOrWhiteSpace(name) || !name.Contains('.')) return false;
+        if (string.IsNullOrWhiteSpace(name)) return false;
+        if (typeExpression.TypeName.GetReflectionType() is null && HasEarlierLiteralLoadInSameBlock(typeExpression))
+            return true;
+        if (!name.Contains('.')) return false;
         var function = FindOwningFunction(typeExpression);
         var statements = function?.Body?.EndBlock?.Statements;
         if (statements is null) return false;
@@ -33,6 +36,24 @@ internal static class PowerShellHostedGuardedAddTypePolicy
                 continue;
             var body = guarded.Clauses[0].Item2.Statements;
             if (body.Count == 1 && IsLiteralAddType(body[0])) return true;
+        }
+        return false;
+    }
+
+    private static bool HasEarlierLiteralLoadInSameBlock(TypeExpressionAst expression)
+    {
+        for (var ancestor = expression.Parent; ancestor is not null; ancestor = ancestor.Parent)
+        {
+            var statements = ancestor switch
+            {
+                StatementBlockAst block => block.Statements,
+                NamedBlockAst block => block.Statements,
+                _ => null
+            };
+            if (statements is not null)
+                return statements.TakeWhile(statement => statement.Extent.EndOffset < expression.Extent.StartOffset)
+                    .Any(IsLiteralAddType);
+            if (ancestor is ScriptBlockExpressionAst or FunctionMemberAst) return false;
         }
         return false;
     }
@@ -65,8 +86,11 @@ internal static class PowerShellHostedGuardedAddTypePolicy
         if (statement is not PipelineAst { PipelineElements.Count: 1 } pipeline ||
             pipeline.PipelineElements[0] is not CommandAst command ||
             command.InvocationOperator != TokenKind.Unknown || command.Redirections.Count != 0 ||
-            !string.Equals(command.GetCommandName(), "Add-Type", StringComparison.OrdinalIgnoreCase) ||
-            command.CommandElements.Count != 3 ||
+            !string.Equals(command.GetCommandName(), "Add-Type", StringComparison.OrdinalIgnoreCase))
+            return false;
+        if (command.CommandElements.Count == 2)
+            return command.CommandElements[1] is StringConstantExpressionAst { Value.Length: > 0 };
+        if (command.CommandElements.Count != 3 ||
             command.CommandElements[1] is not CommandParameterAst parameter ||
             !parameter.ParameterName.Equals("TypeDefinition", StringComparison.OrdinalIgnoreCase) ||
             parameter.Argument is not null ||

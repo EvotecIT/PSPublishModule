@@ -61,7 +61,7 @@ public sealed partial class InvokeModuleTestSuiteCommand
 
     private static Table DependencyTable(IEnumerable<ModuleDependencyInstallResult> dependencies)
     {
-        var table = new Table().AddColumn("Module").AddColumn("Status").AddColumn("Version").AddColumn("Details");
+        var table = new Table().Column("Module").Column("Status").Column("Version").Column("Details");
         foreach (var dependency in dependencies)
         {
             var (role, version) = dependency.Status switch
@@ -74,7 +74,7 @@ public sealed partial class InvokeModuleTestSuiteCommand
             var details = dependency.Status is ModuleDependencyInstallStatus.Installed or ModuleDependencyInstallStatus.Updated
                 ? $"via {dependency.Installer ?? "installer"}"
                 : dependency.Message;
-            table.AddRow(
+            table.Row(
                 Markup.Escape(dependency.Name),
                 $"[{role}]{Markup.Escape(dependency.Status.ToString())}[/]",
                 Markup.Escape(version ?? string.Empty),

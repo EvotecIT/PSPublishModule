@@ -13,14 +13,17 @@ internal sealed partial class PowerShellBoundCSharpBackend
     private PowerShellCompilationSemanticHostFamily _semanticHostFamily;
     private PowerShellCompilationCapability _targetCapabilities;
     private IReadOnlyDictionary<string, PowerShellLoweredFunction> _functions = new Dictionary<string, PowerShellLoweredFunction>();
+    private PowerShellCSharpSourceDocumentPool _nativeSourceDocuments = new();
     internal PowerShellBoundCSharpResult Emit(PowerShellLoweredProgram program)
     {
         if (program is null) throw new ArgumentNullException(nameof(program));
         // Each function owns its temporary names and generated helper registry.
         var functions = program.Functions.ToDictionary(static function => function.Symbol.StableKey, StringComparer.Ordinal);
+        var sourceDocuments = new PowerShellCSharpSourceDocumentPool();
         var methods = program.Functions.Select(function => new PowerShellBoundCSharpBackend
         {
             _functions = functions,
+            _nativeSourceDocuments = sourceDocuments,
             _semanticHostFamily = program.SemanticHostFamily,
             _targetCapabilities = program.TargetCapabilities
         }.EmitFunction(function, program.TargetCapabilities)).ToArray();
@@ -254,11 +257,17 @@ internal sealed partial class PowerShellBoundCSharpBackend
                         successOutputSink: successOutputSink);
                 }
                 return;
+            case PowerShellLoweredExitStatement exited:
+                builder.Append(prefix).Append("__nativeFunction.Exit(")
+                    .Append(exited.Expression is null ? "null" : EmitExpression(exited.Expression)).AppendLine(");");
+                return;
             case PowerShellLoweredBreakStatement transfer:
-                EmitLoopTransfer(builder, transfer.TargetLoop, prefix, isContinue: false);
+                if (transfer.TransferToCaller) builder.Append(prefix).AppendLine("__nativeFunction.TransferToCaller(true);");
+                else EmitLoopTransfer(builder, transfer.TargetLoop, prefix, isContinue: false);
                 return;
             case PowerShellLoweredContinueStatement transfer:
-                EmitLoopTransfer(builder, transfer.TargetLoop, prefix, isContinue: true);
+                if (transfer.TransferToCaller) builder.Append(prefix).AppendLine("__nativeFunction.TransferToCaller(false);");
+                else EmitLoopTransfer(builder, transfer.TargetLoop, prefix, isContinue: true);
                 return;
             default:
                 throw new InvalidOperationException($"Lowered statement '{statement.GetType().Name}' has no C# rendering owner.");

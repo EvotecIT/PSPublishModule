@@ -12,6 +12,11 @@ internal sealed partial class PowerShellSemanticBinder
             if (attributed.Attribute is not TypeConstraintAst) return null;
             target = attributed.Child;
         }
+        if (target is MemberExpressionAst or IndexExpressionAst &&
+            Generated.Runtime.PowerShellNativeFunctionContext.FindNativeAccessMutationReceiver(target) is { } receiver &&
+            receiver.VariablePath.IsUnqualified &&
+            receiver.VariablePath.UserPath.Equals("PSBoundParameters", StringComparison.OrdinalIgnoreCase))
+            return receiver;
         return NativeAccessMutationReceiver(target);
     }
 

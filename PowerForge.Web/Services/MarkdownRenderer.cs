@@ -70,7 +70,7 @@ internal static class MarkdownRenderer
         "\\s+",
         System.Text.RegularExpressions.RegexOptions.Compiled | System.Text.RegularExpressions.RegexOptions.CultureInvariant);
 
-    private static readonly MarkdownReaderOptions GitHubLikeReaderOptions = new()
+    private static readonly MarkdownLoadOptions GitHubLikeReaderOptions = new()
     {
         // GitHub-flavored markdown does not support definition lists by default.
         // Disabling this avoids accidental dt/dd rendering from "Q:"/"A:" prose.
@@ -85,20 +85,21 @@ internal static class MarkdownRenderer
         {
             content = MarkdownMediaTagNormalizer.NormalizeMultilineMediaTagsOutsideFences(content);
             var authoredImageAttributes = CaptureAuthoredImageAttributes(content);
-            var doc = MarkdownReader.Parse(content, GitHubLikeReaderOptions);
-            var options = new HtmlOptions
+            var doc = MarkdownDocument.Parse(content, GitHubLikeReaderOptions);
+            var options = new MarkdownHtmlExportOptions
             {
-                Kind = HtmlKind.Fragment,
-                Prism = new PrismOptions
+                Kind = MarkdownHtmlKind.Fragment,
+                IncludeCssInFragment = false,
+                Prism = new MarkdownPrismOptions
                 {
                     Enabled = true,
-                    Theme = PrismTheme.GithubAuto
+                    Theme = MarkdownPrismTheme.GithubAuto
                 }
             };
             // Preserve the engine's symbolic links until the site-wide xref map
             // resolves them. Other nonstandard schemes retain the renderer's policy.
             options.AdditionalAllowedLinkSchemes.Add("xref");
-            var html = doc.ToHtmlFragment(options);
+            var html = doc.ToHtml(options);
             html = ApplyAuthoredImageAttributes(html, authoredImageAttributes);
             html = ApplyImageHints(html, markdown, sourcePath, siteRoot);
             html = ApplyLinkAriaLabels(html);

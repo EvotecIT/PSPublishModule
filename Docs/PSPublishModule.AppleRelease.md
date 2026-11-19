@@ -967,6 +967,15 @@ The reusable workflow boundary mirrors the human approval boundary:
   assertion, verifies an allow-listed GitHub actor, and binds both run IDs into the
   manifest before sync.
 
+Apple approval plans and pending screenshot captures expire after seven days.
+If the review window has expired, start a new plan or capture and obtain a new
+approval before applying it. Screenshot approval uses the original capture
+window even when approval is a separate run. The combined screenshot workflow
+keeps its compact provenance for 30 days so the pinned recovery helper can
+verify completed captures. The approval deadline still applies to pending
+captures. Keep the completed release receipts and approved screenshot manifests
+for recovery.
+
 Callers must pass 40-character commit SHAs for `powerforge_ref` and release
 `source_ref`; the workflows reject branches and tags and verify both checked-out
 commits. Mutating reusable jobs select protected environments and require explicitly

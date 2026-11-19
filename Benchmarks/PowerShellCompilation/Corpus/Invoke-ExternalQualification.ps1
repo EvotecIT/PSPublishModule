@@ -6,6 +6,7 @@ param(
     [string] $WorkspacePath,
     [string] $EvidencePath,
     [string] $DurableEvidencePath,
+    [ValidatePattern('^[0-9a-fA-F]{64}$')][string] $ExpectedPacketSha256,
     [string[]] $WorkloadId,
     [switch] $Offline,
     [switch] $AllowExternalExecution
@@ -14,6 +15,7 @@ param(
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 . (Join-Path $PSScriptRoot 'Corpus.Runner.Common.ps1')
+. (Join-Path $PSScriptRoot 'Corpus.Assessment.Acquisition.ps1')
 . (Join-Path $PSScriptRoot 'Corpus.Qualification.Workflow.ps1')
 
 if (-not $AllowExternalExecution) {
@@ -21,9 +23,9 @@ if (-not $AllowExternalExecution) {
 }
 
 function Invoke-CliJson {
-    param([string[]] $Arguments, [string] $WorkingDirectory, [string] $ProcessEvidencePath)
+    param([string[]] $Arguments, [string] $WorkingDirectory, [string] $ProcessEvidencePath, [hashtable] $Environment = @{})
 
-    $run = Invoke-OwnedProcess -FileName 'dotnet' -Arguments (@($CliAssemblyPath) + $Arguments) -WorkingDirectory $WorkingDirectory
+    $run = Invoke-OwnedProcess -FileName 'dotnet' -Arguments (@($CliAssemblyPath) + $Arguments) -WorkingDirectory $WorkingDirectory -Environment $Environment
     $json = ConvertFrom-CorpusCliProcess $run -ProcessEvidencePath $ProcessEvidencePath
     return $json.result
 }
@@ -51,8 +53,13 @@ function New-QualificationInvocation {
 }
 
 $PacketPath = [IO.Path]::GetFullPath($PacketPath)
-$packet = Get-Content -LiteralPath $PacketPath -Raw | ConvertFrom-Json
+$packetSnapshot = Read-AssessmentPacket $PacketPath
+$packet = $packetSnapshot.Packet
+if ($ExpectedPacketSha256 -and $packetSnapshot.Sha256 -cne $ExpectedPacketSha256.ToLowerInvariant()) {
+    throw 'Qualification packet differs from the assessment packet identity.'
+}
 if ($packet.schemaVersion -ne 1) { throw "Unsupported external-assessment schema $($packet.schemaVersion)." }
+foreach ($entry in $packet.workloads) { Assert-AssessmentWorkloadId $entry.id }
 $qualified = @($packet.workloads | Where-Object { $null -ne $_.PSObject.Properties['qualification'] })
 if ($WorkloadId) { $qualified = @($qualified | Where-Object { $_.id -in $WorkloadId }) }
 $unknown = @($WorkloadId | Where-Object { $_ -notin @($packet.workloads.id) } | Sort-Object -Unique)
@@ -116,8 +123,14 @@ try {
             if ($entry.qualification.kind -in @('HybridModuleWorkflow', 'HybridScriptApplication')) {
                 if ($entry.id -notmatch '^[A-Za-z0-9][A-Za-z0-9._-]*$') { throw 'Workflow id must be a portable filename component.' }
                 $entryEvidenceRoot = Assert-ContainedPath -Root $DurableEvidencePath -Path (Join-Path $DurableEvidencePath $entry.id) -Label 'Durable workflow evidence'
+                $workflowSourceRoot = $SourceRoot
+                if ([string]::IsNullOrWhiteSpace($workflowSourceRoot)) {
+                    if ($null -eq $entry.PSObject.Properties['acquisition']) { throw 'This workflow requires -SourceRoot or pinned acquisition metadata.' }
+                    $payload = Get-VerifiedPayload -Entry $entry -PayloadCache (Join-Path $WorkspacePath 'payloads') -OfflineMode:$Offline
+                    $workflowSourceRoot = Get-AssessmentSourceRoot -Entry $entry -PayloadPath $payload -ExtractCache (Join-Path $runRoot 'acquired')
+                }
                 $results.Add((Invoke-WholeWorkflowQualification -Entry $entry -Packet $packet -PacketPath $PacketPath `
-                    -SourceRoot $SourceRoot -RunRoot $runRoot -EvidenceRoot $entryEvidenceRoot -Offline:$Offline))
+                    -SourceRoot $workflowSourceRoot -RunRoot $runRoot -EvidenceRoot $entryEvidenceRoot -Offline:$Offline))
                 continue
             }
             if ($entry.qualification.kind -ne 'HybridModuleCommand') { throw "Unsupported qualification kind '$($entry.qualification.kind)'." }
@@ -151,7 +164,8 @@ try {
             } else {
                 ''
             }
-            $selectedSourceRoot = Join-Path $WorkspacePath ('extract/' + $entry.acquisition.sha256)
+            $payload = Get-VerifiedPayload -Entry $entry -PayloadCache (Join-Path $WorkspacePath 'payloads') -OfflineMode:$Offline
+            $selectedSourceRoot = Get-AssessmentSourceRoot -Entry $entry -PayloadPath $payload -ExtractCache (Join-Path $runRoot 'acquired')
             $qualificationEntryPoint = if ($null -ne $entry.qualification.PSObject.Properties['entryPoint']) {
                 [string] $entry.qualification.entryPoint
             } else {
@@ -221,7 +235,7 @@ try {
     $evidence = [ordered]@{
         schemaVersion = 1
         packetId = $packet.packetId
-        packetSha256 = (Get-FileHash -LiteralPath $PacketPath -Algorithm SHA256).Hash.ToLowerInvariant()
+        packetSha256 = $packetSnapshot.Sha256
         generatedAtUtc = [DateTimeOffset]::UtcNow.ToString('O')
         semanticProfile = $packet.semanticProfile
         targetFramework = $packet.targetFramework
@@ -231,7 +245,7 @@ try {
             passed = @($results | Where-Object succeeded).Count
             total = $results.Count
             emittedCommandsInvoked = @($results | Where-Object { $_.succeeded -and $_.emittedClrMethod }).Count
-            completeWorkloadExecutions = 0
+            completeWorkloadExecutions = @($results | Where-Object { $_.succeeded -and $_.completeWorkloadExecution }).Count
             wholeArtifactWorkflowsQualified = @($results | Where-Object { $_.succeeded -and $_.wholeArtifactWorkflowQualified }).Count
             declaredWorkflowScenarios = [int] (($results | Where-Object { $_.succeeded -and $_.wholeArtifactWorkflowQualified } |
                 ForEach-Object { $_.scenarioCount } | Measure-Object -Sum).Sum)

@@ -55,8 +55,9 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.Empty(compiled.StandardError);
         Assert.Equal(original.StandardOutput, compiled.StandardOutput);
         var nativeInterpolation = expression == "\"value=$Value\"";
-        Assert.Equal(nativeInterpolation || expression.StartsWith("Expand-Leaf", StringComparison.Ordinal) ? 2 : 1, result.Manifest.CompiledMethods);
-        if (nativeInterpolation)
+        var nativeLocalCall = expression.StartsWith("Expand-Leaf", StringComparison.Ordinal);
+        Assert.Equal(nativeLocalCall ? 3 : nativeInterpolation ? 2 : 1, result.Manifest.CompiledMethods);
+        if (nativeInterpolation || nativeLocalCall)
         {
             var observer = Assert.Single(result.Manifest.UnitDispositionLedger!.Entries, unit => unit.Name == "Expand-Observer");
             Assert.True(observer.EmittedClrMethod);

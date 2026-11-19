@@ -5,6 +5,21 @@ namespace PowerForge;
 /// <summary>Owns file-wide source contracts that must be preserved before bound-function analysis.</summary>
 internal static class PowerShellSourceSemanticValidator
 {
+    /// <summary>
+    /// Keeps an unqualified authored type on the module's hosted initialization path without
+    /// preventing independent functions from using their ordinary binding and lowering rules.
+    /// </summary>
+    internal static bool CanRetainTypesBesideFunction(ParsedSourceDocument document,
+        int functionStartOffset, int functionEndOffset, PowerShellCompilationCapability capabilities)
+        => capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding) &&
+           capabilities.HasFlag(PowerShellCompilationCapability.PowerShellModuleState) &&
+           document.TypeClosure.Declarations.Length > 0 &&
+           document.TypeClosure.Declarations.All(static declaration => declaration.IsDocumentScope) &&
+           !document.TypeClosure.References.Any(reference =>
+               reference.DeclarationCandidates.Length > 0 &&
+               reference.ConsumerSpan.StartOffset >= functionStartOffset &&
+               reference.ConsumerSpan.EndOffset <= functionEndOffset);
+
     /// <summary>Whether a function's metadata can be detached without recreating hosted type identities or imports.</summary>
     internal static bool SupportsDetachedFunctionMetadata(ParsedSourceDocument document)
         => document.TypeClosure.Declarations.Length == 0 &&
@@ -23,7 +38,7 @@ internal static class PowerShellSourceSemanticValidator
                 $"Source '{statement.Extent.Text}' has runtime-bearing using semantics that cannot be omitted from a typed artifact; this file must remain on the PowerShell runtime path.",
                 PowerShellSourceParser.GetSpan(document, statement.Extent)))
             .ToList();
-        var requirementFailure = PowerShellScriptRequirementPolicy.GetFailure(document, semanticProfileId);
+        var requirementFailure = PowerShellScriptRequirementPolicy.GetFailure(document, semanticProfileId, capabilities);
         if (requirementFailure is not null)
         {
             diagnostics.Add(new PowerShellSemanticDiagnostic(

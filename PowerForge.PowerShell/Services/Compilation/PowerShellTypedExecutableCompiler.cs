@@ -41,7 +41,7 @@ internal static class PowerShellTypedExecutableCompiler
             commandProviders, entryCapabilities, parametersAlreadyBound: true);
     }
 
-    /// <summary>Compiles an end-only authored script body for the native script invocation owner.</summary>
+    /// <summary>Compiles authored script lifecycle clauses for the native script invocation owner.</summary>
     /// <remarks>This internal lowering route does not admit or package an executable root.</remarks>
     internal static PowerShellTypedExecutableCompilation CompileHybridNativeEntry(
         string entryPointPath, PowerShellCompilationPlan plan, string targetFramework, string semanticProfileId)
@@ -94,10 +94,12 @@ internal static class PowerShellTypedExecutableCompiler
         ValidateEntryPointDeclarationOrder(entrySource, preserveNativeDeclarationTiming: nativeScriptEntry);
         if (nativeScriptEntry && (PowerShellSourceParser.HasUsingStatements(entrySource.Ast) || entrySource.Ast.ScriptRequirements is not null ||
             entrySource.Ast.EndBlock?.Statements.Any(static statement => statement is TypeDefinitionAst) == true ||
-            entrySource.Ast.BeginBlock is not null || entrySource.Ast.ProcessBlock is not null ||
             entrySource.Ast.DynamicParamBlock is not null ||
             entrySource.Ast.GetType().GetProperty("CleanBlock")?.GetValue(entrySource.Ast) is not null))
-            throw new InvalidOperationException("Native script-root lowering requires an end-only source without types or requirements and declaration-only dependencies.");
+            throw new InvalidOperationException("Native script-root lowering requires source without types or requirements; dynamic parameters and clean blocks are also unsupported, and dependencies must contain declarations only.");
+        if (nativeScriptEntry && entrySource.Ast.Find(node => node is ScriptBlockExpressionAst block &&
+                PowerShellSemanticBinder.IsCompiledValueScriptBlock(block, targetFramework), searchNestedScriptBlocks: true) is not null)
+            throw new InvalidOperationException("Native script roots cannot create compiled script-block values that require a defining PowerShell module.");
 
         var statements = entrySource.Ast.EndBlock?.Statements
             .Where(static statement => statement is not FunctionDefinitionAst && !IsTopLevelDotSource(statement))

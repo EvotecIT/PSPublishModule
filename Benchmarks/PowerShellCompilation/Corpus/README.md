@@ -1,6 +1,6 @@
 # Generic compiler corpus
 
-The [2026-11-17 coverage report](../../../Docs/PowerForge.PowerShellCompilation.Coverage.md) records the current public and external results and the commands used to refresh them. `Invoke-PublicCorpus.ps1 -RefreshBaseline` records measured module counts only after the complete module packet succeeds; partial selections cannot refresh it, and Strict timing budgets stay unchanged.
+The [coverage report](../../../Docs/PowerForge.PowerShellCompilation.Coverage.md) records the current public and external results and the commands used to refresh them. `Invoke-PublicCorpus.ps1 -RefreshBaseline` records measured module counts only after the complete module packet succeeds; partial selections cannot refresh it, and Strict timing budgets stay unchanged.
 
 This checked-in corpus is the portable, product-neutral acceptance surface for PowerForge PowerShell compilation. It does not encode module names, command names, paths, or special cases from an external repository.
 
@@ -42,17 +42,107 @@ Run the external frontier assessment after building the CLI:
 ./Benchmarks/PowerShellCompilation/Corpus/Invoke-ExternalAssessment.ps1
 ```
 
-The assessment runner accepts any packet that follows the checked-in schema. It supports exact-hash HTTPS files and ZIP archives, validates archive containment and portable path collisions, bounds entry count, per-entry bytes, total expansion, and compression ratio, never imports or executes the external source, and can rerun from its verified cache with `-Offline`. Use `-RefreshBaseline` only when intentionally changing the pinned packet or accepting a reviewed compiler-coverage change. Assessment success means acquisition and post-emission census completed without regression; it is not a complete-program pass.
+The assessment runner accepts any packet that follows the checked-in schema. It supports exact-hash HTTPS files and ZIP archives, validates archive containment and portable path collisions, and bounds entry count, per-entry bytes, total expansion, and compression ratio. By default it performs acquisition and post-emission census without executing the source; that mode can rerun from its verified cache with `-Offline`. Use `-RefreshBaseline` only when intentionally changing the pinned packet or accepting a reviewed compiler-coverage change.
 
-Run the separate opt-in qualification lane only when local execution of the reviewed third-party packet is acceptable:
+A refresh records only the current run. `-RefreshBaseline` without `-ExecuteWorkloads` replaces the baseline's execution section with census-only results, including zero attempted or passed workloads. Use both switches when recording complete execution evidence. Failed execution refreshes leave the baseline unchanged and write the requested assessment report with each attempt's outcome.
+
+Add `-ExecuteWorkloads` to execute the packet's reviewed complete-workload contracts through the existing project qualification lane:
+
+```powershell
+./Benchmarks/PowerShellCompilation/Corpus/Invoke-ExternalAssessment.ps1 -ExecuteWorkloads
+```
+
+This mode reports passed, attempted, and unattempted workloads separately. A
+complete-workload contract declares every authored function in the final
+artifact ledger, requires a complete CLR method for each, and observes each
+function on the original, built, and installed surfaces. Same-name declarations
+require an authored unit ID or start line in both the contract and the
+observation. Artifact observers run with the compiler input withdrawn.
+Complete-workload observers receive their declared function inventory in
+`owned-functions.json` in the scenario directory.
+
+The GitHub helper library executes all ten functions across ten scenarios
+with a scoped loopback HTTP response and fixed configuration and time. The
+PowerShell and Scoop installer contracts exercise four and twenty-four owned
+functions respectively, each across three scenarios. They use native module
+adapters, verified ZIP payloads over loopback HTTP, actual extraction and
+process behavior, and process-local registry replacements with owned paths.
+The PowerShell contract executes the installed portable host. The Scoop
+contract verifies repositories, shims, configuration, locked-file handling
+and failure behavior. Each installer acceptance invocation uses a separate
+scratch directory. Scoop declares a five-minute acceptance deadline. GetBIOS
+and Autopilot add ten scenarios with scoped
+firmware, device, remoting and registration fixtures.
+
+Locksmith2 adds five scenarios on pinned PowerShell 7.6.6 for Windows. Set
+`POWERFORGE_PWSH76_PATH` to the pinned executable and
+`POWERFORGE_EXTERNAL_AD_AUDIT_TARGET` to the DNS name of an approved AD and
+AD CS lab to opt in. Use a lab-scoped identity with read-only access. The audit
+passes that forest
+explicitly and bypasses environment repair and Gallery version checks. The four
+local scenarios use disposable state. The observers verify all 100 owned
+functions through active PowerShell source or CLR method frames and direct
+value and state checks.
+
+Classic Locksmith adds three offline scenarios on pinned PowerShell 7.6.6 for
+Windows. Install the Windows ActiveDirectory module so PowerShell can bind its
+actual object types. The scenarios use in-memory records and fixture directory
+responses. They cover the public read-only audit, incomplete input, local
+utilities and proposal text, and observe all 44 owned functions across the
+original, built and installed modules. On Windows clients the fixture supplies
+an empty ServerManager module for the declared import.
+
+With the lab configured, the pinned packet passes seven complete workloads
+across 34 scenarios. The census emits 183/196 units and 183/183 functions.
+Without the lab target, the assessment reports Locksmith2 as unattempted.
+Explicitly selecting Locksmith2 for execution requires that target.
+`-ExecuteWorkloads -RefreshBaseline` records these results alongside the census, requires at
+least one attempted workload, and rejects failed attempts. This mode requires
+online project restore. Run it without `-Offline`.
+
+Run the external command and artifact checks only when local execution of the reviewed third-party packet is acceptable:
 
 ```powershell
 ./Benchmarks/PowerShellCompilation/Corpus/Invoke-ExternalQualification.ps1 -AllowExternalExecution
 ```
 
-This lane builds a Hybrid artifact, verifies that the packet's named unit was emitted as CLR, loads the original and generated surfaces in separate clean child processes, and compares the selected command invocation. The reviewed metadata can select manifest import, direct root-module import, safe dot-sourcing, or the generated typed assembly independently; these are harness choices and never compiler eligibility inputs. The fixed packet currently proves four commands across three scenario families. A passing qualification proves only the selected command, not the complete workload.
+Command checks build a Hybrid artifact, verify that the packet's named unit was emitted as CLR, load the original and generated surfaces in separate clean child processes, and compare the selected command invocation. The reviewed metadata can select manifest import, direct root-module import, safe dot-sourcing, or the generated typed assembly independently; these are test choices and never compiler eligibility inputs. A passing command check proves only the selected command. Complete artifact checks use the lifecycle and inventory rules below; a complete-workload result additionally requires `completeFunctionInventory: true` and execution observations for every owned function.
+
+Archive-backed workflows acquire and verify their pinned inputs when `-SourceRoot` is omitted. A supplied root is used directly and still checked against every source-input hash. Payload bytes can be cached across workloads, but each workload's extracted source stays separate until its execution finishes. Assessment and execution use the same parsed packet identity; execution rejects a changed packet before running its scenarios.
 
 Packets with `HybridModuleWorkflow` or `HybridScriptApplication` qualification use fresh disposable project roots and the full Analyze/Lock/Restore/Build/Test/Pack/Install lifecycle. These whole-workflow lanes reject `-Offline` before CLI bootstrap, source execution or acquisition; a cached source archive cannot supply a fresh project's authenticated package environment. Run whole-workflow qualification without `-Offline` to acquire and verify that environment. For disconnected use of an existing retained project, complete a normal `powerforge powershell project restore <project>` first, then use `powerforge powershell project restore <project> --offline` to authenticate the saved environment and exact closure locks. Discovery and assessment retain their verified-cache `-Offline` behavior. In command-only qualification, `-Offline` controls source-payload acquisition; it does not promise a disconnected artifact build.
+
+An executable contract can declare `runtimeIdentifier` and `singleFile: false`
+when its reviewed observer must load the delivered framework-dependent assembly.
+Required owned bodies may include the `<script>` root; the complete function
+inventory still compares only function units, including a genuinely empty
+function set. Root ownership must independently pass the same complete-emission
+and absence-of-retained-source checks. `requiredCompiledNestedFunctions` binds
+exact authored extents to generated members and verifies their IL bodies through
+authenticated PE metadata without loading the assembly.
+
+The `Workflows/HardwareApplications` observers qualify GetBIOS through its public
+module command and Autopilot through its delivered public native-entry factory.
+They use pinned external source bytes, controlled WMI/CIM/remoting boundaries,
+actual report/CSV files, and original/built/installed parity. Autopilot console
+execution covers startup/help. Their receipts state the excluded live-device and
+Graph operations. These are application contracts; workload names do not enter
+compiler eligibility.
+
+A module workflow may declare a content-pinned `moduleTest` acceptance script.
+Such projects require schema 2 so an older reader rejects the required contract.
+The script receives the actual built or installed path as `ArtifactPath`, with
+literal named string `parameters` and an optional contained `workingDirectory`.
+The child host starts with its own built-in module path. The workflow captures
+and verifies script bytes before dispatch through the native binder, preserving
+the original script path variables. Schema-2 test evidence authenticates the
+acceptance-script hash as well as the project, target and artifact set. Default
+bare-import tests retain schema 1. Installer acceptance explicitly selects the
+pinned 7.6.6 observer through `POWERFORGE_PWSH76_PATH`.
+The Scoop fixture requires an ASCII workspace because the unchanged installer
+writes ASCII configuration. Its command environment excludes Git and pre-existing
+Scoop, and every observed installation requires exactly one successful request
+for each pinned repository ZIP. Loopback requests bypass inherited proxies.
 
 ## Artifact-aware discovery and the bounded compiler gate
 

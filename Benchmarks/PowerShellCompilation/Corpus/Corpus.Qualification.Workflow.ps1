@@ -55,10 +55,10 @@ function Initialize-WorkflowEvidenceRoot {
 }
 
 function Invoke-WorkflowCliOperation {
-    param([string[]] $Arguments, [string] $WorkingDirectory, [string] $EvidencePath)
+    param([string[]] $Arguments, [string] $WorkingDirectory, [string] $EvidencePath, [hashtable] $Environment = @{})
     try {
         $processPath = [IO.Path]::ChangeExtension($EvidencePath, '.cli.process.json')
-        $result = Invoke-CliJson -Arguments $Arguments -WorkingDirectory $WorkingDirectory -ProcessEvidencePath $processPath
+        $result = Invoke-CliJson -Arguments $Arguments -WorkingDirectory $WorkingDirectory -ProcessEvidencePath $processPath -Environment $Environment
         Write-Utf8Json -Path $EvidencePath -Value $result
         return $result
     } catch {
@@ -190,10 +190,32 @@ function Assert-WorkflowTestInvocation {
     }
 }
 
+function Assert-WorkflowFunctionIdentity {
+    param($Value, [string] $Label)
+    foreach ($name in 'relativePath', 'name', 'unitId', 'startLine') {
+        if ($name -in @('unitId','startLine') -and -not (Test-WorkflowProperty $Value $name)) { continue }
+        $field = $null
+        if ($Value -is [Collections.IDictionary]) {
+            if ($Value.Contains($name)) { $field = $Value[$name] }
+        } elseif ($null -ne $Value) {
+            $property = $Value.PSObject.Properties[$name]
+            if ($null -ne $property) { $field = $property.Value }
+        }
+        if ($name -eq 'startLine') {
+            if (($field -isnot [int] -and $field -isnot [long]) -or $field -lt 1 -or $field -gt [int]::MaxValue) {
+                throw "$Label requires a positive scalar integer for 'startLine'."
+            }
+        } elseif ($field -isnot [string] -or [string]::IsNullOrWhiteSpace($field)) {
+            throw "$Label requires a nonempty scalar string for '$name'."
+        }
+    }
+}
+
 function Assert-WorkflowCompiledOwnership {
     param($Contract, $Ledger)
     $checked = [Collections.Generic.List[object]]::new()
     foreach ($required in $Contract.requiredCompiledOwnedFunctions) {
+        Assert-WorkflowFunctionIdentity $required 'Required function identity'
         $unitId = Get-WorkflowProperty $required 'unitId'
         $startLine = Get-WorkflowProperty $required 'startLine'
         $matches = @($Ledger.entries | Where-Object {
@@ -208,6 +230,10 @@ function Assert-WorkflowCompiledOwnership {
             throw "Required owned function '$($required.name)' lacks a complete CLR body without retained source or fallback."
         }
         $checked.Add($unit)
+    }
+    if ((Get-WorkflowProperty $Contract 'completeFunctionInventory' $false) -eq $true) {
+        $functions = @($Ledger.entries | Where-Object { $_.kind -eq 'Function' })
+        Assert-WorkflowNameSet @($functions | ForEach-Object unitId) @($checked | Where-Object kind -EQ 'Function' | ForEach-Object unitId) 'Complete owned function inventory'
     }
     return @($checked)
 }
@@ -246,6 +272,27 @@ function Assert-WorkflowObservation {
             if ($name -notin $scenario.executedExports) {
                 throw "$Surface scenario '$id' did not report executing required public export '$name'."
             }
+        }
+    }
+    if ((Get-WorkflowProperty $Contract 'completeFunctionInventory' $false) -eq $true) {
+        foreach ($scenario in $Report.scenarios) {
+            foreach ($observed in @(Get-WorkflowProperty $scenario 'executedOwnedFunctions' @())) {
+                Assert-WorkflowFunctionIdentity $observed 'Executed function identity'
+            }
+        }
+        foreach ($required in $Contract.requiredCompiledOwnedFunctions) {
+            Assert-WorkflowFunctionIdentity $required 'Required function identity'
+            $unitId = Get-WorkflowProperty $required 'unitId'
+            $startLine = Get-WorkflowProperty $required 'startLine'
+            $executed = @($Report.scenarios | ForEach-Object {
+                @(Get-WorkflowProperty $_ 'executedOwnedFunctions' @()) | Where-Object {
+                    $_.relativePath.Replace('\', '/') -ceq $required.relativePath.Replace('\', '/') -and
+                    $_.name -ceq $required.name -and
+                    (-not $unitId -or (Get-WorkflowProperty $_ 'unitId') -ceq $unitId) -and
+                    ($null -eq $startLine -or (Get-WorkflowProperty $_ 'startLine') -eq $startLine)
+                }
+            })
+            if ($executed.Count -eq 0) { throw "$Surface did not execute owned function '$($required.name)'." }
         }
     }
 }
@@ -414,6 +461,9 @@ function Invoke-WholeWorkflowQualification {
     }
     $scenarioRoot = Join-Path $root 'scenarios'
     New-Item -ItemType Directory -Path $scenarioRoot -Force | Out-Null
+    if ((Get-WorkflowProperty $Entry.qualification 'completeFunctionInventory' $false) -eq $true) {
+        Write-Utf8Json -Path (Join-Path $scenarioRoot 'owned-functions.json') -Value @($Entry.qualification.requiredCompiledOwnedFunctions)
+    }
     $fixturePath = $null
     if (Test-WorkflowProperty $Entry.qualification 'fixtureScript') {
         $fixturePath = Assert-ContainedPath -Root (Split-Path $PacketPath) -Path (Join-Path (Split-Path $PacketPath) $Entry.qualification.fixtureScript) -Label 'Reviewed fixture script'
@@ -433,6 +483,10 @@ function Invoke-WholeWorkflowQualification {
             throw 'net472 workflow observation requires Windows PowerShell on Windows.'
         }
         'powershell.exe'
+    } elseif ($Packet.semanticProfile -eq 'PowerForge.Oracle.PowerShell/7.6' -and $env:POWERFORGE_PWSH76_PATH) {
+        $pinnedHost = [IO.Path]::GetFullPath($env:POWERFORGE_PWSH76_PATH)
+        if (-not (Test-Path -LiteralPath $pinnedHost -PathType Leaf)) { throw 'The configured pinned semantic host was not found.' }
+        $pinnedHost
     } else { 'pwsh' }
     $original = Invoke-WorkflowObserver $Entry $observer $sourcePath 'Original' $scenarioRoot $evidenceRoot $hostExecutable
     Assert-WorkflowSourceIdentities $Entry $inputRoot
@@ -443,6 +497,11 @@ function Invoke-WholeWorkflowQualification {
         '--semantic-profile', $Packet.semanticProfile, '--output', 'json')
     $rid = Get-WorkflowProperty $Entry.qualification 'runtimeIdentifier'
     if ($rid) { $initArgs += @('--rid', $rid) }
+    $singleFile = Get-WorkflowProperty $Entry.qualification 'singleFile'
+    if ($null -ne $singleFile) {
+        if ($singleFile -isnot [bool] -or $kind -ne 'exe') { throw 'singleFile requires a Boolean executable setting.' }
+        if (-not $singleFile) { $initArgs += '--no-single-file' }
+    }
     $initial = Invoke-WorkflowCliOperation -Arguments $initArgs -WorkingDirectory $root -EvidencePath (Join-Path $evidenceRoot 'init.json')
     $project = Get-Content -LiteralPath $projectPath -Raw | ConvertFrom-Json
     $project.resources.mode = if ($kind -eq 'dll') { 'CompleteModule' } else { 'Declared' }
@@ -453,6 +512,12 @@ function Invoke-WholeWorkflowQualification {
         }
         $artifact | Add-Member -NotePropertyName testArguments -NotePropertyValue @(Get-WorkflowProperty $testInvocation 'testArguments' @()) -Force
         $artifact | Add-Member -NotePropertyName testWorkingDirectory -NotePropertyValue (Get-WorkflowProperty $testInvocation 'testWorkingDirectory') -Force
+        $moduleTest = Get-WorkflowProperty $testInvocation 'moduleTest'
+        if ($null -ne $moduleTest) {
+            if ($kind -ne 'dll') { throw 'A module acceptance script requires a module workflow.' }
+            $project.schemaVersion = 2
+            $artifact | Add-Member -NotePropertyName moduleTest -NotePropertyValue $moduleTest -Force
+        }
     }
     Write-Utf8Json -Path $projectPath -Value $project
     $steps = [ordered]@{}
@@ -474,7 +539,11 @@ function Invoke-WholeWorkflowQualification {
     $builtReport = Invoke-WorkflowArtifactObserver $Entry $observer $builtPath 'Built' $scenarioRoot $evidenceRoot $hostExecutable $root $inputRoot
     Assert-WorkflowObservationParity $Entry.qualification $original $builtReport
     foreach ($operation in @('test', 'pack', 'install')) {
-        $steps[$operation] = Invoke-WorkflowCliOperation -Arguments @('powershell', 'project', $operation, $projectPath, '--output', 'json') -WorkingDirectory $root -EvidencePath (Join-Path $evidenceRoot ($operation + '.json'))
+        $environment = @{}
+        if ($operation -eq 'test' -and [IO.Path]::IsPathRooted($hostExecutable)) {
+            $environment['PATH'] = (Split-Path -LiteralPath $hostExecutable) + [IO.Path]::PathSeparator + $env:PATH
+        }
+        $steps[$operation] = Invoke-WorkflowCliOperation -Arguments @('powershell', 'project', $operation, $projectPath, '--output', 'json') -WorkingDirectory $root -EvidencePath (Join-Path $evidenceRoot ($operation + '.json')) -Environment $environment
     }
     $installRoot = [string] @($steps.install.targets)[0].path
     $relativePrimary = [IO.Path]::GetRelativePath($outputRoot, $builtPath)
@@ -490,7 +559,8 @@ function Invoke-WholeWorkflowQualification {
     Assert-WorkflowObservationParity $Entry.qualification $original $installedReport
     $qualificationResult = [ordered]@{
         id = $Entry.id; kind = $Entry.qualification.kind; succeeded = $true; emittedClrMethod = $null
-        completeWorkloadExecution = $false; wholeArtifactWorkflowQualified = $true
+        completeWorkloadExecution = ((Get-WorkflowProperty $Entry.qualification 'completeFunctionInventory' $false) -eq $true)
+        wholeArtifactWorkflowQualified = $true
         scenarioCount = @($Entry.qualification.requiredScenarioIds).Count; scenarioSurfaces = @('Original', 'Built', 'Installed')
         requiredExports = @($Entry.qualification.requiredExports); requiredAliases = @($Entry.qualification.requiredAliases)
         compiledOwnedFunctions = $owned; unitDispositionLedger = $buildReceipt.manifest.unitDispositionLedger

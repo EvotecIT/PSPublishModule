@@ -23,6 +23,7 @@ internal static class PowerShellHybridExecutableEntryEmitter
             .AppendLine("namespace " + NamespaceName + ";")
             .AppendLine("internal static class " + TypeName)
             .AppendLine("{")
+            .AppendLine(string.Join(Environment.NewLine, PowerShellCSharpSourceDocumentPool.Declarations(new[] { method })))
             .AppendLine(method.Source)
             .AppendLine("}")
             .AppendLine("[Cmdlet(\"Invoke\", \"PowerForgeCompiledEntry\")]")

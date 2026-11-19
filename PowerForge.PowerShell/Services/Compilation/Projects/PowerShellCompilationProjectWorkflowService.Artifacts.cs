@@ -113,6 +113,8 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
         {
             try
             {
+                var evidencePath = context.Resolve($".powerforge/test/{artifact.Name}.json");
+                if (File.Exists(evidencePath)) File.Delete(evidencePath);
                 var validated = ValidateBuildReceipt(context, artifact);
                 EnsureArtifactPayloadPaths(artifact, validated.OutputRoot, validated.Files);
                 TestArtifact(context, artifact, validated.ArtifactPath);
@@ -286,7 +288,8 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
                 RunExecutable(path, artifact.TestArguments, ResolveTestWorkingDirectory(context, artifact, path));
                 break;
             case PowerShellCompilationArtifactKind.BinaryModule:
-                ImportModule(path, artifact.Target.TargetFramework);
+                if (artifact.ModuleTest is null) ImportModule(path, artifact.Target.TargetFramework);
+                else RunModuleAcceptanceScript(context, artifact, path);
                 break;
             case PowerShellCompilationArtifactKind.Library:
                 _ = AssemblyName.GetAssemblyName(path);
@@ -343,7 +346,7 @@ public sealed partial class PowerShellCompilationProjectWorkflowService
         PowerShellCompilationPathSafety.EnsureProcessLaunchPaths(host, Path.GetDirectoryName(manifestPath)!);
         const string script = "$ErrorActionPreference = 'Stop'; $ProgressPreference = 'SilentlyContinue'; " +
                               "$env:PSModulePath = [IO.Path]::Combine($PSHOME, 'Modules'); " +
-                              "Import-Module -Name $env:POWERFORGE_MODULE_TEST_PATH -Force -ErrorAction Stop; 'ok'";
+                              "Import-Module -Name $env:POWERFORGE_MODULE_TEST_PATH -Force -DisableNameChecking -ErrorAction Stop; 'ok'";
         var encodedCommand = Convert.ToBase64String(Encoding.Unicode.GetBytes(script));
         var run = new ProcessRunner().RunAsync(new ProcessRunRequest(
             host,

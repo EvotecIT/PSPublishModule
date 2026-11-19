@@ -43,6 +43,7 @@ internal sealed partial class PowerShellCompilationDependencyGraphBuilder
         bool includeRuntimePack = false,
         string? nuGetPackageRoot = null)
     {
+        runtimeIdentifier = string.IsNullOrWhiteSpace(runtimeIdentifier) ? null : runtimeIdentifier;
         var builder = new PowerShellCompilationDependencyGraphBuilder(moduleRoot, mode, artifactKind, nuGetPackageRoot);
         return builder.BuildCore(
             sourcePath,
@@ -224,7 +225,8 @@ internal sealed partial class PowerShellCompilationDependencyGraphBuilder
         PowerShellCompilationDependencyGraphDisposition disposition,
         string note,
         string? targetFramework,
-        string? runtimeIdentifier)
+        string? runtimeIdentifier,
+        string? hostRelativeSource = null)
     {
         path = Path.GetFullPath(path);
         if (_pathNodes.TryGetValue(path, out var existingId))
@@ -243,7 +245,7 @@ internal sealed partial class PowerShellCompilationDependencyGraphBuilder
 
         var exists = File.Exists(path);
         var sha = exists ? ComputeFileHash(path) : string.Empty;
-        var relative = Relative(path);
+        var relative = hostRelativeSource ?? Relative(path);
         var id = StableId("local", kind.ToString(), relative.ToUpperInvariant(), sha);
         var identity = new PowerShellCompilationDependencyIdentity
         {

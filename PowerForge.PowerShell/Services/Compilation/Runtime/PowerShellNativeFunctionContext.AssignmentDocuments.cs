@@ -13,6 +13,14 @@ namespace PowerForge.Generated.Runtime
 
         private ScriptBlockAst ParseAssignmentDocument(string source, string file, out ParseError[] errors)
         {
+            if (_functionTypes is { Classes.Length: > 0 })
+            {
+                // A detached target may contain lexical class references tied to this parse's declarations.
+                // Its native Type metadata belongs only to the active compiled function instance.
+                var owned = ReadAssignmentDocument(source, file);
+                errors = owned.Errors;
+                return owned.Ast;
+            }
             var documents = AssignmentDocuments.GetValue(_executionContext,
                 static _ => new ConditionalWeakTable<string, AssignmentDocument>());
             var parsed = documents.GetValue(source, text => ReadAssignmentDocument(text, file));

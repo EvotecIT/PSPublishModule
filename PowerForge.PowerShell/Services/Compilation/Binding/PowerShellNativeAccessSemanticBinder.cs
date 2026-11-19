@@ -26,6 +26,7 @@ internal static class PowerShellNativeAccessSemanticBinder
         PowerShellBoundExpression? receiver = null;
         if (syntax.Expression is TypeExpressionAst authoredEnum &&
             (PowerShellHostedEnumDeclarationPolicy.IsQualifiedMemberReceiver(document, authoredEnum, targetFramework, capabilities) ||
+             PowerShellHostedLocalTypePolicy.IsQualifiedDestination(document, authoredEnum, targetFramework, capabilities) ||
              document.NativeDependencyTypes.Qualifies(authoredEnum.TypeName, capabilities) ||
              PowerShellHostedGuardedAddTypePolicy.IsQualified(authoredEnum, capabilities)))
         {
@@ -70,6 +71,7 @@ internal static class PowerShellNativeAccessSemanticBinder
         if (syntax.Expression is TypeExpressionAst authoredType &&
             (PowerShellCompilationParameterTypePolicy.IsHostProvidedConstructorReceiver(authoredType, capabilities) ||
              PowerShellHostedValueClassPolicy.IsQualifiedConstructorReceiver(document, authoredType, targetFramework, capabilities) ||
+             PowerShellHostedLocalTypePolicy.IsQualifiedDestination(document, authoredType, targetFramework, capabilities) ||
              document.NativeDependencyTypes.Qualifies(authoredType.TypeName, capabilities) ||
              PowerShellHostedGuardedAddTypePolicy.IsQualified(authoredType, capabilities)))
         {
@@ -92,15 +94,16 @@ internal static class PowerShellNativeAccessSemanticBinder
             if (receiver is null) return null;
         }
         var argumentSyntax = syntax.Arguments?.ToArray() ?? Array.Empty<ExpressionAst>();
-        if (HasDependencyConstraint(document, syntax.Expression, capabilities) ||
-            argumentSyntax.Any(argument => HasDependencyConstraint(document, argument, capabilities)))
+        if (HasRuntimeTypeConstraint(document, syntax.Expression, targetFramework, capabilities) ||
+            argumentSyntax.Any(argument => HasRuntimeTypeConstraint(document, argument, targetFramework, capabilities)))
         {
             diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2632",
-                "Dependency-valued cast constraints retain their PowerShell overload-selection boundary.", span));
+                "Runtime-owned cast constraints retain their PowerShell overload-selection boundary.", span));
             return null;
         }
         var arguments = new List<PowerShellBoundExpression>();
         var references = new List<PowerShellNativeReferenceArgument>();
+        var referencePositions = new List<int>();
         var referenceNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         for (var index = 0; index < argumentSyntax.Length; index++)
         {
@@ -110,6 +113,16 @@ internal static class PowerShellNativeAccessSemanticBinder
                 searchNestedScriptBlocks: false).OfType<ConvertExpressionAst>().ToArray();
             if (referenceConversions.Length > 0)
             {
+                if (referenceConversions.Length == 1 && ReferenceEquals(referenceConversions[0], argument) &&
+                    referenceConversions[0].Child is VariableExpressionAst { VariablePath.IsUnqualified: true } constant &&
+                    constant.VariablePath.UserPath.Equals("null", StringComparison.OrdinalIgnoreCase))
+                {
+                    var discard = bindExpression(argument, null);
+                    if (discard is null) return null;
+                    arguments.Add(discard);
+                    referencePositions.Add(index);
+                    continue;
+                }
                 if (referenceConversions.Length != 1 ||
                     !ReferenceEquals(referenceConversions[0], argument) ||
                     referenceConversions[0].Child is not VariableExpressionAst variable ||
@@ -122,6 +135,7 @@ internal static class PowerShellNativeAccessSemanticBinder
                     return null;
                 }
                 references.Add(new PowerShellNativeReferenceArgument(index, variable.VariablePath.UserPath));
+                referencePositions.Add(index);
                 arguments.Add(new PowerShellBoundNativeReferenceExpression(
                     PowerShellSourceParser.GetSpan(document, argument.Extent), variable.VariablePath.UserPath,
                     PowerShellNativeVariableAnalysis.IsDirectLocal(variable)));
@@ -131,10 +145,10 @@ internal static class PowerShellNativeAccessSemanticBinder
             if (value is null) return null;
             arguments.Add(value);
         }
-        if (references.Count > 0 &&
-            (references.Where((reference, index) => reference.Index != argumentSyntax.Length - references.Count + index).Any() ||
+        if (referencePositions.Count > 0 &&
+            (referencePositions.Where((position, index) => position != argumentSyntax.Length - referencePositions.Count + index).Any() ||
              literalTargetType is not null && syntax.Static &&
-             !HasUnambiguousTrailingByReferenceOverload(literalTargetType, name.Value, argumentSyntax.Length, references.Count)))
+             !HasUnambiguousTrailingByReferenceOverload(literalTargetType, name.Value, argumentSyntax.Length, referencePositions.Count)))
         {
             diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2633",
                 "Native reference arguments require distinct trailing locals; literal static targets require qualified by-reference overloads.", span));
@@ -165,15 +179,15 @@ internal static class PowerShellNativeAccessSemanticBinder
     }
 
     internal static PowerShellBoundExpression? BindIndex(ParsedSourceDocument document, IndexExpressionAst syntax,
-        Func<Ast, Type?, PowerShellBoundExpression?> bindExpression, PowerShellCompilationCapability capabilities,
+        Func<Ast, Type?, PowerShellBoundExpression?> bindExpression, string? targetFramework, PowerShellCompilationCapability capabilities,
         ICollection<PowerShellSemanticDiagnostic> diagnostics)
     {
         var span = PowerShellSourceParser.GetSpan(document, syntax.Extent);
-        if (HasDependencyConstraint(document, syntax.Target, capabilities) ||
-            HasDependencyConstraint(document, syntax.Index, capabilities))
+        if (HasRuntimeTypeConstraint(document, syntax.Target, targetFramework, capabilities) ||
+            HasRuntimeTypeConstraint(document, syntax.Index, targetFramework, capabilities))
         {
             diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2631",
-                "Dependency-valued cast constraints retain their PowerShell index-selection boundary.", span));
+                "Runtime-owned cast constraints retain their PowerShell index-selection boundary.", span));
             return null;
         }
         if (syntax.GetType().GetProperty("NullConditional")?.GetValue(syntax) is true)
@@ -196,9 +210,9 @@ internal static class PowerShellNativeAccessSemanticBinder
             GetConstraint(syntax.Target), GetConstraint(syntax.Index));
     }
 
-    // A dependency identity is runtime-owned, never a generated CLR typeof reference.
+    // Borrowed dependency and lexical class identities never become generated CLR typeof references.
     // Retain constrained accesses until that exact identity can be passed to the native binder.
-    private static bool HasDependencyConstraint(ParsedSourceDocument document, ExpressionAst? syntax,
+    private static bool HasRuntimeTypeConstraint(ParsedSourceDocument document, ExpressionAst? syntax, string? targetFramework,
         PowerShellCompilationCapability capabilities)
     {
         while (syntax is ParenExpressionAst parenthesized)
@@ -206,7 +220,9 @@ internal static class PowerShellNativeAccessSemanticBinder
         while (syntax is AttributedExpressionAst attributed)
         {
             if (attributed is ConvertExpressionAst conversion &&
-                document.NativeDependencyTypes.Qualifies(conversion.Type.TypeName, capabilities)) return true;
+                (document.NativeDependencyTypes.Qualifies(conversion.Type.TypeName, capabilities) ||
+                 PowerShellHostedLocalTypePolicy.IsQualifiedClassConversion(document, conversion.Type, targetFramework, capabilities)))
+                return true;
             if (attributed is ConvertExpressionAst closedConversion &&
                 closedConversion.Type.TypeName.GetReflectionType() is { } type &&
                 type != typeof(System.Management.Automation.PSReference)) return false;

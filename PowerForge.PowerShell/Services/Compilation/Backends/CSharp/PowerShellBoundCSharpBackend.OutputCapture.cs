@@ -104,14 +104,23 @@ internal sealed partial class PowerShellBoundCSharpBackend
             builder.Append(records).Append(".Count == 0 ? ")
                 .Append(shareEmptyArray ? "global::System.Array.Empty<object>()" : "new object?[0]")
                 .Append(" : ").Append(records).AppendLine(".ToArray();");
+        else if (kind == PowerShellOutputCaptureKind.NativeAssignmentRecords)
+            builder.Append(records).AppendLine(";");
         else
             builder.Append(records).Append(".Count == 0 ? global::System.Management.Automation.Internal.AutomationNull.Value : ").Append(records).Append(".Count == 1 ? ")
                 .Append(records).Append("[0] : ").Append(records).Append(".ToArray()")
                 .AppendLine(";");
-        builder.Append(prefix).Append("    ").Append(records).AppendLine(".Clear();");
+        if (kind != PowerShellOutputCaptureKind.NativeAssignmentRecords)
+            builder.Append(prefix).Append("    ").Append(records).AppendLine(".Clear();");
         if (value is not null && completedCapture is null)
             builder.Append(prefix).Append("    return ").Append(value).AppendLine(";");
         builder.Append(prefix).AppendLine("}");
+        // Tuple assignment owns an enumerable capture. Never flush its records on unwind.
+        if (kind == PowerShellOutputCaptureKind.NativeAssignmentRecords)
+        {
+            builder.Append(prefix).Append("finally { __writeOutput = ").Append(previous).AppendLine("; }");
+            return;
+        }
         // PowerShell discards assignment output for RuntimeException, but flushes
         // pending records when a raw CLR exception escapes (for example MoveNext).
         builder.Append(prefix).Append("catch (global::System.Management.Automation.RuntimeException) { ")

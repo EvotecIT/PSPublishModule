@@ -56,7 +56,7 @@ try {
                 $PowerForgeModuleName,
                 $PowerForgeModuleRoot,
                 $BinaryModuleDirectories,
-                [string[]]@('HtmlForgeX.dll', 'HtmlForgeX.Markdown.dll', 'OfficeIMO.Core.dll', 'OfficeIMO.Markdown.dll'))
+                [string[]]@('HtmlForgeX.dll', 'HtmlForgeX.Markdown.dll', 'OfficeIMO.Core.dll', 'OfficeIMO.Markdown.dll', 'OfficeIMO.Toml.dll', 'OfficeIMO.Yaml.dll'))
             foreach ($DependencyWarning in $PowerForgeDependencyCheck.Warnings) {
                 Write-Warning -Message $DependencyWarning
             }
@@ -245,7 +245,7 @@ try {
                         'AllowList',
                         [string[]]@('PowerForge.ModuleTestFailureAnalysis', 'PowerForge.ModuleTestSuiteResult', 'PowerForge.ModuleRepositoryProfileScope', 'PowerForge.PrivateGalleryBootstrapMode', 'PowerForge.PrivateGalleryCredentialSource', 'PowerForge.PublishTool', 'PowerForge.RepositoryRegistrationTool'),
                         [string[]]@(),
-                        [string[]]@('HtmlForgeX.dll', 'HtmlForgeX.Markdown.dll', 'OfficeIMO.Core.dll', 'OfficeIMO.Markdown.dll'),
+                        [string[]]@('HtmlForgeX.dll', 'HtmlForgeX.Markdown.dll', 'OfficeIMO.Core.dll', 'OfficeIMO.Markdown.dll', 'OfficeIMO.Toml.dll', 'OfficeIMO.Yaml.dll'),
                         $PowerForgeModuleName,
                         $PSScriptRoot)
                     # Track the registration before writing messages: a warning that stops ($WarningPreference = Stop) must not

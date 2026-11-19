@@ -27,14 +27,13 @@ internal static class PowerShellHybridNativeEntryPlanner
                 .OfType<ParamBlockAst>().Any(static block => block.FindAll(static node => node is CommandAst, true).Any()) ||
             ast.FindAll(static node => node is VariableExpressionAst variable &&
                 (variable.VariablePath.UserPath.Equals("MyInvocation", StringComparison.OrdinalIgnoreCase) ||
-                 variable.VariablePath.UserPath.Equals("PSCmdlet", StringComparison.OrdinalIgnoreCase) ||
                  variable.VariablePath.UserPath.Equals("input", StringComparison.OrdinalIgnoreCase) ||
                  variable.VariablePath.IsDriveQualified &&
                  (variable.VariablePath.DriveName.Equals("function", StringComparison.OrdinalIgnoreCase) ||
                   variable.VariablePath.DriveName.Equals("alias", StringComparison.OrdinalIgnoreCase))), true).Any())
             return null;
-        var hostedCommands = ast.EndBlock?.FindAll(static node => node is CommandAst, true)
-            .OfType<CommandAst>().ToArray() ?? Array.Empty<CommandAst>();
+        var hostedCommands = ast.FindAll(static node => node is CommandAst, true)
+            .OfType<CommandAst>().ToArray();
         if (PowerShellSourceParser.GetRootFunctionDeclarations(ast).Any(static declaration => declaration.IsConditional) ||
             hostedCommands.Any(command => !IsQualifiedNativeRootCommand(ast, command)))
             return null;

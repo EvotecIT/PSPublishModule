@@ -377,7 +377,7 @@ public static partial class WebSiteBuilder
         var timestamp = mode.Equals("mtime", StringComparison.OrdinalIgnoreCase)
             ? File.GetLastWriteTimeUtc(sourcePath).Ticks.ToString(System.Globalization.CultureInfo.InvariantCulture)
             : string.Empty;
-        var input = $"{typeof(MarkdownRenderer).Module.ModuleVersionId}|{typeof(OfficeIMO.Markdown.MarkdownReader).Module.ModuleVersionId}|" +
+        var input = $"{typeof(MarkdownRenderer).Module.ModuleVersionId}|{typeof(OfficeIMO.Markdown.MarkdownDocument).Module.ModuleVersionId}|" +
             $"{sourcePath}|{timestamp}|{System.Text.Json.JsonSerializer.Serialize(markdown, WebJson.Options)}|{content}";
 
         using var sha = SHA256.Create();

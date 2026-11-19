@@ -170,7 +170,8 @@ internal sealed partial class PowerShellBoundCSharpBackend
             successOutputType: function.SuccessOutputType,
             outputTypeDeclarations: function.OutputTypeDeclarations)
         {
-            NestedBodies = nestedBodies.ToArray()
+            NestedBodies = nestedBodies.ToArray(),
+            NativeSourceDocuments = _nativeSourceDocuments.Documents
         };
     }
 

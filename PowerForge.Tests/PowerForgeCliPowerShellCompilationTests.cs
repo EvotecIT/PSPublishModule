@@ -203,7 +203,7 @@ public sealed partial class PowerForgeCliPowerShellCompilationTests
     [Theory]
     [InlineData("\n")]
     [InlineData("; ")]
-    public async Task Explain_HybridModuleReportsDuplicateFunctionsAfterFinalCollisionRouting(string separator)
+    public async Task Explain_HybridModuleReportsSeparateEmittedReplacementDeclarations(string separator)
     {
         var root = Path.Combine(Path.GetTempPath(), "PowerForge CLI Final Explain Tests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
@@ -219,15 +219,13 @@ public sealed partial class PowerForgeCliPowerShellCompilationTests
             Assert.True(string.IsNullOrWhiteSpace(result.StdErr), result.StdErr);
             using var document = JsonDocument.Parse(result.StdOut);
             var explanation = document.RootElement.GetProperty("result");
-            Assert.Equal(0, explanation.GetProperty("typedUnits").GetInt32());
+            Assert.Equal(2, explanation.GetProperty("typedUnits").GetInt32());
             Assert.Equal(2, explanation.GetProperty("runtimeFallbackUnits").GetInt32());
             var units = Assert.Single(explanation.GetProperty("files").EnumerateArray())
                 .GetProperty("units").EnumerateArray().ToArray();
             Assert.Equal(2, units.Select(static unit => unit.GetProperty("unitId").GetString()).Distinct().Count());
             Assert.All(units, static unit => Assert.Equal("RuntimeFallback", unit.GetProperty("decision").GetString()));
-            Assert.All(units, static unit => Assert.NotEmpty(unit.GetProperty("causes").EnumerateArray()));
-            Assert.Contains(units.SelectMany(static unit => unit.GetProperty("causes").EnumerateArray()), static cause =>
-                cause.GetProperty("message").GetString()!.Contains("multiple retained definitions", StringComparison.OrdinalIgnoreCase));
+            Assert.All(units, static unit => Assert.Empty(unit.GetProperty("causes").EnumerateArray()));
         }
         finally
         {

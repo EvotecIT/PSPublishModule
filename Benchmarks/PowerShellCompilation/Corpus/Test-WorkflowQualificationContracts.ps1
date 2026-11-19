@@ -143,10 +143,15 @@ if ($Scope -in @('All', 'OfflineMode')) {
             -CliAssemblyPath $missingCli -WorkspacePath $offlineRoot -Offline -AllowExternalExecution
     } 'For an existing retained project, run normal project restore first'
     if (Test-Path -LiteralPath $offlineRoot) { throw 'Public Offline refusal created a workspace.' }
-    Assert-RejectedContract 'command-only qualification preserves Offline admission' {
-        & (Join-Path $PSScriptRoot 'Invoke-ExternalQualification.ps1') -PacketPath (Join-Path $PSScriptRoot 'external-assessment.net10.json') `
+    $commandPacket = Copy-ContractValue $workflowPacket
+    $commandPacket.workloads[0].qualification.kind = 'HybridModuleCommand'
+    $commandPacketPath = Join-Path ([IO.Path]::GetFullPath($WorkspacePath)) ('command-packet-' + [guid]::NewGuid().ToString('N') + '.json')
+    Write-Utf8Json -Path $commandPacketPath -Value $commandPacket
+    try { Assert-RejectedContract 'command-only qualification preserves Offline admission' {
+        & (Join-Path $PSScriptRoot 'Invoke-ExternalQualification.ps1') -PacketPath $commandPacketPath `
             -CliAssemblyPath $missingCli -WorkspacePath $offlineRoot -Offline -AllowExternalExecution
-    } 'Build the PowerForge CLI first'
+    } 'Build the PowerForge CLI first' }
+    finally { Remove-Item -LiteralPath $commandPacketPath -Force }
     if ($Scope -eq 'OfflineMode') {
         $result=[ordered]@{schemaVersion=1;passed=$true;checks=@($checked);checkCount=$checked.Count;scope='Offline mode admission and early refusal only; no CLI, SDK, source execution, acquisition or network';cliInvocations=$script:offlineCliInvocations}
         if($EvidencePath) {Write-Utf8Json -Path $EvidencePath -Value $result}
@@ -230,6 +235,17 @@ if ($Scope -in @('All', 'DurableEvidence')) {
         }
         function Invoke-WorkflowFixture {
             param($Contract,$FixturePath,$Operation,$ScenarioRoot,$EvidenceRoot)
+            if ($Operation -eq 'Start') {
+                if ((Get-WorkflowProperty $Contract 'completeFunctionInventory' $false) -eq $true) {
+                    $inventory = @(Get-Content -LiteralPath (Join-Path $ScenarioRoot 'owned-functions.json') -Raw | ConvertFrom-Json)
+                    if ($inventory.Count -ne 1 -or $inventory[0].name -cne 'Get-Value' -or
+                        $inventory[0].relativePath -cne 'Input.ps1') {
+                        throw 'The complete workflow fixture did not receive its declared function inventory.'
+                    }
+                } elseif (@(Get-ChildItem -LiteralPath $ScenarioRoot -Force).Count) {
+                    throw 'The fixture must receive a clean scenario root when the contract omits the complete function inventory.'
+                }
+            }
             $receipt=[pscustomobject]@{schemaVersion=1;operation=$Operation;stopped=$true;testArguments=@()
                 fixtureIdentity=[pscustomobject]@{id='owned-synthetic-fixture'}}
             Write-Utf8Json -Path (Join-Path $EvidenceRoot ('fixture.'+$Operation+'.json')) -Value $receipt
@@ -264,6 +280,7 @@ if ($Scope -in @('All', 'DurableEvidence')) {
         Assert-RejectedContract 'durable evidence overwrite' {
             Initialize-WorkflowEvidenceRoot $result.evidenceRoot $runRoot
         } 'will not be overwritten'
+        $entry.qualification | Add-Member -NotePropertyName completeFunctionInventory -NotePropertyValue $true
         $script:durableFailures=$true
         $runRoot=Join-Path $proofRoot 'runs/failure'
         New-Item -ItemType Directory -Path $runRoot | Out-Null
@@ -275,6 +292,7 @@ if ($Scope -in @('All', 'DurableEvidence')) {
             Get-Content -LiteralPath (Join-Path $durable ('failure/'+$file)) -Raw | ConvertFrom-Json | Out-Null
         }
         $checked.Add('failed build diagnostics and mandatory fixture Stop remain readable after disposable workspace cleanup')
+        $checked.Add('only contracts that declare a complete function inventory receive the owned function file')
     } finally {
         Set-Item -LiteralPath Function:\Invoke-WorkflowObserver -Value $savedObserver
         Set-Item -LiteralPath Function:\Invoke-WorkflowFixture -Value $savedFixture

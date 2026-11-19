@@ -833,28 +833,4 @@ internal static partial class WebCliHelpers
         var output = TryGetOptionValue(argv, "--output");
         return string.Equals(output, "json", StringComparison.OrdinalIgnoreCase);
     }
-
-    internal static void EnsureUtf8ConsoleEncoding()
-    {
-        var utf8NoBom = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
-        try
-        {
-            if (Console.OutputEncoding.CodePage != Encoding.UTF8.CodePage)
-                Console.OutputEncoding = utf8NoBom;
-        }
-        catch
-        {
-            // Best effort only.
-        }
-
-        try
-        {
-            if (Console.InputEncoding.CodePage != Encoding.UTF8.CodePage)
-                Console.InputEncoding = utf8NoBom;
-        }
-        catch
-        {
-            // Best effort only.
-        }
-    }
 }

@@ -1,21 +1,32 @@
 namespace PowerForge.Generated.Runtime
 {
     using System;
+    using System.Collections;
+    using System.Dynamic;
     using System.Linq;
     using System.Linq.Expressions;
     using System.Management.Automation.Language;
+    using System.Reflection;
 
     public sealed partial class PowerShellNativeFunctionContext
     {
+        private static readonly Lazy<MethodInfo> ArrayAssignmentBinder = new(() => typeof(Ast).Assembly
+            .GetType("System.Management.Automation.Language.PSArrayAssignmentRHSBinder", true)!
+            .GetMethod("Get", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic,
+                null, new[] { typeof(int) }, null)
+            ?? throw new NotSupportedException("PowerShell's multiple assignment binder is unavailable."));
+
         /// <summary>Applies an authored storage or receiver assignment in the native invocation.</summary>
         /// <remarks>The value producer runs at the native assignment's evaluation point, after any compound target read.</remarks>
         public object? AssignTarget(string target, string operation, Func<object?> value,
-            string file, int line, int column, string? sourceDocument = null, int startOffset = -1, int endOffset = -1)
+            string file, int line, int column, string? sourceDocument = null, int startOffset = -1, int endOffset = -1,
+            Action<IScriptExtent>? completedPosition = null)
         {
             EnsureActive();
             if (value is null) throw new ArgumentNullException(nameof(value));
             var assignment = GetAssignmentPlan(target, operation, file, line, column, sourceDocument, startOffset, endOffset, mutation: false);
-            return assignment.Invoke(FunctionContext, value, rightHandSideFirst: operation == "Assign");
+            return assignment.Invoke(FunctionContext, value, rightHandSideFirst: operation == "Assign",
+                completedPosition: completedPosition);
         }
 
         private NativeAstOperation CreateAssignmentTarget(string target, string operation, string file, int line, int column,
@@ -44,9 +55,11 @@ namespace PowerForge.Generated.Runtime
                     node.Extent.StartOffset == startOffset && node.Extent.EndOffset == endOffset));
             if (targetAst is null)
                 throw new ArgumentException("The native assignment does not match its authored target.", nameof(target));
+            _functionTypes?.AttachClassMetadata(targetAst);
             ExpressionAst variable = targetAst;
             while (variable is AttributedExpressionAst attributed) variable = attributed.Child;
-            if (!IsNativeAssignmentAccess(variable))
+            if (!IsNativeAssignmentAccess(variable) &&
+                !(token == TokenKind.Equals && IsNativeVariableTuple(variable)))
                 throw new ArgumentException("The native assignment requires a qualified variable, member, or index target.", nameof(target));
             reusable = CanReuseAssignmentPlan(targetAst);
 
@@ -59,7 +72,14 @@ namespace PowerForge.Generated.Runtime
             var native = new NativeAstCompiler(this, ast, assignmentVariables: true,
                 preserveSelectedSequencePoints: targetAst.Find(static node => node is SubExpressionAst,
                     searchNestedScriptBlocks: false) is not null);
-            var result = (Expression)native.Invoke("ReduceAssignment", detached.Left, token, Expression.Invoke(native.RightHandSide))!;
+            Expression right = Expression.Invoke(native.RightHandSide);
+            if (variable is ArrayLiteralAst tuple)
+            {
+                var binder = (DynamicMetaObjectBinder)PowerShellNativeFunctionHost.Invoke(
+                    ArrayAssignmentBinder.Value, null, new object[] { tuple.Elements.Count })!;
+                right = Expression.Dynamic(binder, typeof(IList), right);
+            }
+            var result = (Expression)native.Invoke("ReduceAssignment", detached.Left, token, right)!;
             native.Expressions.Add(Expression.Convert(result, typeof(object)));
             return native.Compile();
         }
@@ -72,6 +92,11 @@ namespace PowerForge.Generated.Runtime
                 IndexExpressionAst index when IsNativeAssignmentIndex(index.Index) => IsNativeAssignmentAccess(index.Target),
                 _ => false
             };
+
+        internal static bool IsNativeVariableTuple(ExpressionAst expression)
+            => expression is ArrayLiteralAst { Elements.Count: > 1 } tuple &&
+               tuple.Elements.All(static element => element is VariableExpressionAst variable &&
+                   (variable.VariablePath.IsUnqualified || variable.VariablePath.IsLocal));
 
         /// <summary>Finds a literal static CLR root below a bounded member/index assignment target.</summary>
         internal static TypeExpressionAst? FindNativeStaticAccessReceiver(ExpressionAst target)
@@ -101,10 +126,14 @@ namespace PowerForge.Generated.Runtime
                subexpression.SubExpression.Statements[0] is PipelineAst subPipeline && IsNativeAssignmentIndexPipeline(subPipeline) ||
                index is ExpandableStringExpressionAst expanded &&
                expanded.NestedExpressions.All(IsNativeAssignmentInterpolation) ||
-               index is MemberExpressionAst { Static: false, Expression: VariableExpressionAst receiver, Member: StringConstantExpressionAst } member &&
+               IsNativeAssignmentKeyMember(index);
+
+        private static bool IsNativeAssignmentKeyMember(ExpressionAst expression)
+            => expression is MemberExpressionAst { Static: false, Member: StringConstantExpressionAst } member &&
                member is not InvokeMemberExpressionAst &&
                member.GetType().GetProperty("NullConditional")?.GetValue(member) is not true &&
-               receiver.VariablePath.IsUnqualified;
+               (member.Expression is VariableExpressionAst { VariablePath.IsUnqualified: true } ||
+                IsNativeAssignmentKeyMember(member.Expression));
 
         private static bool IsNativeAssignmentIndexPipeline(PipelineAst pipeline, bool allowCommand = false)
             => pipeline.PipelineElements.Count == 1 && !IsBackgroundAssignmentPipeline(pipeline) &&

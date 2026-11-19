@@ -24,7 +24,7 @@ namespace PowerForge.Generated.Runtime
             {
                 Invoke(unoptimized, data, Array.Empty<object>());
                 Invoke(optimized, data, Array.Empty<object>());
-                if (functionTypeDeclarations.Length != 0) RegisterFunctionEnumScope(script, data);
+                if (functionTypeDeclarations.Length != 0) RegisterFunctionTypeScope(script, data);
                 if (begin != null) contract.Install(data, "BeginBlock", begin);
                 if (process != null) contract.Install(data, "ProcessBlock", process);
                 if (end != null || begin == null && process == null)

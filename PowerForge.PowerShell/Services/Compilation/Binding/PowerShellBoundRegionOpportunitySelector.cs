@@ -113,7 +113,7 @@ internal static class PowerShellBoundRegionOpportunitySelector
     internal static bool CanFallThrough(PowerShellBoundStatement statement)
         => statement switch
         {
-            PowerShellBoundReturnStatement or PowerShellBoundThrowStatement => false,
+            PowerShellBoundReturnStatement or PowerShellBoundThrowStatement or PowerShellBoundExitStatement => false,
             PowerShellBoundIfStatement conditional => conditional.ElseBlock is null ||
                 conditional.Clauses.Any(static clause => BlockCanFallThrough(clause.Body)) ||
                 BlockCanFallThrough(conditional.ElseBlock),

@@ -32,7 +32,8 @@ internal sealed partial class PowerShellSemanticBinder
                 _commandResolver, functions.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase), capabilities);
         if (capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding) && syntax is IndexExpressionAst nativeIndex)
             return PowerShellNativeAccessSemanticBinder.BindIndex(document, nativeIndex,
-                (item, itemType) => BindExpression(document, item, symbols, functions, diagnostics, itemType, targetFramework, capabilities), capabilities, diagnostics);
+                (item, itemType) => BindExpression(document, item, symbols, functions, diagnostics, itemType, targetFramework, capabilities),
+                targetFramework, capabilities, diagnostics);
         if (capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding) && syntax is InvokeMemberExpressionAst nativeInvocation &&
             HasObservedCatchAncestor(nativeInvocation) &&
             (InvocationConsumesAuthoredTypeLiteral(nativeInvocation) || InvocationConsumesBoundTypeVariable(nativeInvocation, symbols)) &&
@@ -40,7 +41,8 @@ internal sealed partial class PowerShellSemanticBinder
             !HasClosedBoundTypeVariableCatchAll(nativeInvocation, symbols) &&
             !HasClosedStaticValueArgumentCatchAll(nativeInvocation) &&
             !HasClosedEncodingVectorArgumentCatchAll(nativeInvocation) &&
-            !HasClosedReferenceValueArgumentCatchAll(nativeInvocation))
+            !HasClosedReferenceValueArgumentCatchAll(nativeInvocation) &&
+            !HasAuthoredConstructorVariableArguments(document, nativeInvocation, capabilities))
         {
             diagnostics.Add(new PowerShellSemanticDiagnostic(
                 PowerShellCompilationFeatureIds.ForSyntax(nameof(InvokeMemberExpressionAst)),
@@ -57,7 +59,8 @@ internal sealed partial class PowerShellSemanticBinder
             (!nativeMember.Static || nativeMember.Member is not StringConstantExpressionAst ||
              PowerShellNativeTypeArgumentPolicy.RequiresNativeStaticValueRead(nativeMember) ||
              nativeMember.Expression is TypeExpressionAst enumReceiver &&
-             PowerShellHostedEnumDeclarationPolicy.IsQualifiedMemberReceiver(document, enumReceiver, targetFramework, capabilities) ||
+             (PowerShellHostedEnumDeclarationPolicy.IsQualifiedMemberReceiver(document, enumReceiver, targetFramework, capabilities) ||
+              PowerShellHostedLocalTypePolicy.IsQualifiedDestination(document, enumReceiver, targetFramework, capabilities)) ||
              nativeMember.Expression is VariableExpressionAst ||
              nativeMember.Expression is TypeExpressionAst hostDataType &&
              hostDataType.TypeName.GetReflectionType() is { } hostDataClrType &&
@@ -120,7 +123,7 @@ internal sealed partial class PowerShellSemanticBinder
                     (PowerShellCompilationParameterTypePolicy.IsHostProvidedConstructorReceiver(typeExpression, capabilities) ||
                      PowerShellHostedValueClassPolicy.IsQualifiedConstructorReceiver(document, typeExpression, targetFramework, capabilities) ||
                      PowerShellHostedEnumDeclarationPolicy.IsQualifiedMemberReceiver(document, typeExpression, targetFramework, capabilities) ||
-                     PowerShellHostedLocalEnumPolicy.IsQualifiedDestination(document, typeExpression, targetFramework, capabilities) ||
+                     PowerShellHostedLocalTypePolicy.IsQualifiedDestination(document, typeExpression, targetFramework, capabilities) ||
                      document.NativeDependencyTypes.Qualifies(typeExpression.TypeName, capabilities) ||
                      PowerShellHostedGuardedAddTypePolicy.IsQualified(typeExpression, capabilities)))
                     return new PowerShellBoundNativeTypeExpression(span, typeExpression.TypeName.FullName);
@@ -238,6 +241,14 @@ internal sealed partial class PowerShellSemanticBinder
                     span));
                 return null;
             case ScriptBlockExpressionAst scriptBlock:
+                if (contextualType is not null && typeof(MulticastDelegate).IsAssignableFrom(contextualType))
+                {
+                    var constantDelegate = PowerShellConstantBooleanDelegateSemanticBinder.Bind(
+                        document, scriptBlock, contextualType, targetFramework,
+                        new List<PowerShellSemanticDiagnostic>());
+                    if (constantDelegate is not null)
+                        return constantDelegate;
+                }
                 if (capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding) &&
                     _nativeScriptBlocks.ContainsKey(ScriptBlockKey(document.DocumentId, scriptBlock.Extent.StartOffset)))
                     return BindNativeScriptBlock(document, scriptBlock, functions, diagnostics);
@@ -298,6 +309,25 @@ internal sealed partial class PowerShellSemanticBinder
                     operand => BindExpression(document, operand, symbols, functions, diagnostics, targetFramework: targetFramework, capabilities: capabilities),
                     diagnostics,
                     capabilities);
+            case AssignmentStatementAst { Operator: TokenKind.Equals } assignment when
+                capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding) &&
+                NativeAccessMutationReceiver(assignment.Left) is { } receiver &&
+                symbols.TryGetValue(receiver.VariablePath.UserPath, out var receiverBinding):
+                var assignedValue = BindExpression(document, assignment.Right, symbols, functions, diagnostics,
+                    targetFramework: targetFramework, capabilities: capabilities);
+                if (assignedValue is null || assignedValue.Type.ClrType == typeof(void)) return null;
+                return new PowerShellBoundMutationExpression(span, receiverBinding.Symbol, typeof(object),
+                    PowerShellBoundMutationOperator.Assign, assignedValue, PowerShellTypeFact.Unknown,
+                    false, PowerShellIntegralMutationSemantics.None,
+                    nativeTargetRead: PowerShellNativeFunctionBindingPolicy.BindVariable(document, receiver),
+                    nativeSourceText: PowerShellNativeFunctionBindingPolicy.SourceLines(document, span),
+                    nativeAssignmentTarget: new PowerShellNativeAssignmentTarget(
+                        assignment.Left.Extent.Text, document.Path, document.Text,
+                        PowerShellSourceParser.GetSpan(document, assignment.Left.Extent),
+                        assignment.Left.Extent.StartOffset, assignment.Left.Extent.EndOffset,
+                        MutatesReceiver: true, ReadVariables: assignment.Left.FindAll(static node => node is VariableExpressionAst, false)
+                            .Cast<VariableExpressionAst>().Select(static item => item.VariablePath.UserPath)
+                            .Distinct(StringComparer.OrdinalIgnoreCase).ToArray()));
             case AssignmentStatementAst assignment:
                 return PowerShellMutationSemanticBinder.BindAssignment(
                     document,

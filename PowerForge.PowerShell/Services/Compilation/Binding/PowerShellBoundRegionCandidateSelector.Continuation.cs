@@ -189,7 +189,7 @@ internal static partial class PowerShellBoundRegionCandidateSelector
                     !hasClosedAlternativeTransfer &&
                     (newTransfers.Count == 0 || !ReferenceEquals(node, authoredStatements[binding.AuthoredStatementIndex]))))
                 break;
-            if (nested.Any(static statement => statement is PowerShellBoundReturnStatement or PowerShellBoundThrowStatement) ||
+            if (nested.Any(static statement => statement is PowerShellBoundReturnStatement or PowerShellBoundThrowStatement or PowerShellBoundExitStatement) ||
                 PowerShellBoundRegionOpportunitySelector.EnumerateWrittenSymbols(new[] { statement })
                     .Any(symbol => !candidateLocals.Any(local => local.Symbol.StableKey == symbol.StableKey)))
                 break;

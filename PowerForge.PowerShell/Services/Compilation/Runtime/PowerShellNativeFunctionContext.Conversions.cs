@@ -1,7 +1,6 @@
 namespace PowerForge.Generated.Runtime
 {
     using System;
-    using System.Collections.Concurrent;
     using System.Linq.Expressions;
     using System.Management.Automation;
     using System.Management.Automation.Language;
@@ -10,7 +9,7 @@ namespace PowerForge.Generated.Runtime
 
     public sealed partial class PowerShellNativeFunctionContext
     {
-        private static readonly ConcurrentDictionary<Type, Func<object?, object?>> ConversionSites = new();
+        private static readonly ConditionalWeakTable<Type, Func<object?, object?>> ConversionSites = new();
         private static readonly Lazy<Func<object?, Type, object?>> AsOperation = new(CreateAsOperation);
         private static readonly Lazy<Func<object?, object?>> CustomObjectConversionSite = new(CreateCustomObjectConversionSite);
         private static readonly Lazy<MethodInfo> ResolveRuntimeTypeName = new(() => typeof(PSObject).Assembly
@@ -73,7 +72,7 @@ namespace PowerForge.Generated.Runtime
             // A CLR Object cast is identity, including the native no-output sentinel.
             // Sending that sentinel through PSConvertBinder would create a null record.
             if (type == typeof(object)) return value;
-            return ConversionSites.GetOrAdd(type, CreateConversionSite)(value);
+            return ConversionSites.GetValue(type, CreateConversionSite)(value);
         }
 
         /// <summary>Resolves the authored type name in the loaded PowerShell host before its operand is evaluated.</summary>

@@ -16,7 +16,9 @@ internal sealed partial class PowerShellSemanticBinder
         foreach (var declaration in declarations)
         {
             foreach (var expression in declaration.Syntax.Body.FindAll(static node => node is ScriptBlockExpressionAst,
-                         searchNestedScriptBlocks: true).OfType<ScriptBlockExpressionAst>().Where(expression => IsCompiledValueScriptBlock(expression, targetFramework)))
+                         searchNestedScriptBlocks: true).OfType<ScriptBlockExpressionAst>().Where(expression =>
+                         capabilities.HasFlag(PowerShellCompilationCapability.PowerShellModuleState) &&
+                         IsCompiledValueScriptBlock(expression, targetFramework)))
             {
                 var document = declaration.Document;
                 var key = ScriptBlockKey(document.DocumentId, expression.Extent.StartOffset);
@@ -62,14 +64,16 @@ internal sealed partial class PowerShellSemanticBinder
     }
 
     /// <summary>Identifies literal block values whose creation can use the native compiled callback owner.</summary>
-    /// <remarks>Direct method arguments and closed delegate casts preserve native conversion and dynamic invocation scope.
-    /// Parameter metadata and hosted command pipelines do not enter this value-binding route.</remarks>
+    /// <remarks>Values use native conversion and dynamic invocation scope, including returned and collection values.
+    /// Parameter metadata and hosted command pipelines retain their native source owner.</remarks>
     internal static bool IsCompiledValueScriptBlock(ScriptBlockExpressionAst expression, string? targetFramework = null)
-        => IsAssignedScriptBlock(expression) || expression.Parent is InvokeMemberExpressionAst invocation &&
-           invocation.Arguments?.Any(argument => ReferenceEquals(argument, expression)) == true || IsSwitchPredicate(expression) ||
-           expression.Parent is ConvertExpressionAst conversion && ReferenceEquals(conversion.Child, expression) &&
-           conversion.Type.TypeName.GetReflectionType() is { } delegateType &&
-           PowerShellGeneratedTypePolicy.IsSupportedDelegateSignature(delegateType, targetFramework);
+    {
+        if (IsSwitchPredicate(expression)) return true;
+        if (expression.Parent is MemberExpressionAst member && ReferenceEquals(member.Member, expression)) return false;
+        for (var parent = expression.Parent; parent is not null && parent is not NamedBlockAst; parent = parent.Parent)
+            if (parent is AttributeAst or ParameterAst or CommandAst) return false;
+        return true;
+    }
 
     internal static bool IsSwitchPredicate(ScriptBlockExpressionAst expression)
         => expression.Parent is SwitchStatementAst statement &&

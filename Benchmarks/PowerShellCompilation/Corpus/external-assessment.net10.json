@@ -20,7 +20,501 @@
         "url": "https://codeload.github.com/jakehildreth/locksmith/zip/a58905638fe819c8cc11ee7fd4f0a8513b5c873a",
         "sha256": "fb117dbbd39cf32f3d7db347380174ea5e1576078f81536365a6c987712bb070"
       },
-      "entryPoint": "Locksmith-a58905638fe819c8cc11ee7fd4f0a8513b5c873a/Locksmith.psd1"
+      "entryPoint": "Locksmith-a58905638fe819c8cc11ee7fd4f0a8513b5c873a/Locksmith.psd1",
+      "qualification": {
+        "kind": "HybridModuleWorkflow",
+        "artifactName": "Locksmith",
+        "completeFunctionInventory": true,
+        "requiredExports": [
+          "Invoke-Locksmith"
+        ],
+        "requiredAliases": [],
+        "requiredCompiledOwnedFunctions": [
+          {
+            "relativePath": "Private/Convert-IdentityReferenceToSid.ps1",
+            "name": "Convert-IdentityReferenceToSid",
+            "startLine": 1,
+            "unitId": "be3561bffd2c22fdb11d6f18"
+          },
+          {
+            "relativePath": "Private/Export-RevertScript.ps1",
+            "name": "Export-RevertScript",
+            "startLine": 1,
+            "unitId": "ccc8375d1a86eff9089240dd"
+          },
+          {
+            "relativePath": "Private/Find-AuditingIssue.ps1",
+            "name": "Find-AuditingIssue",
+            "startLine": 1,
+            "unitId": "7bab6c84b52611d07593a3b0"
+          },
+          {
+            "relativePath": "Private/Find-ESC1.ps1",
+            "name": "Find-ESC1",
+            "startLine": 1,
+            "unitId": "7f03461fa8a9f1506c66df09"
+          },
+          {
+            "relativePath": "Private/Find-ESC11.ps1",
+            "name": "Find-ESC11",
+            "startLine": 1,
+            "unitId": "6cf85291ff0500cb4f6a6956"
+          },
+          {
+            "relativePath": "Private/Find-ESC13.ps1",
+            "name": "Find-ESC13",
+            "startLine": 1,
+            "unitId": "8e12149d1ddd4e58088eb005"
+          },
+          {
+            "relativePath": "Private/Find-ESC15.ps1",
+            "name": "Find-ESC15",
+            "startLine": 1,
+            "unitId": "ccc66721434c55cffe3d2ca7"
+          },
+          {
+            "relativePath": "Private/Find-ESC16.ps1",
+            "name": "Find-ESC16",
+            "startLine": 1,
+            "unitId": "b1251ca7c56e8c28a54309d1"
+          },
+          {
+            "relativePath": "Private/Find-ESC17.ps1",
+            "name": "Find-ESC17",
+            "startLine": 1,
+            "unitId": "0b736a5d81cc1d688a80bb41"
+          },
+          {
+            "relativePath": "Private/Find-ESC2.ps1",
+            "name": "Find-ESC2",
+            "startLine": 1,
+            "unitId": "0d96e2c8db3b82a64cbbb2cf"
+          },
+          {
+            "relativePath": "Private/Find-ESC3C1.ps1",
+            "name": "Find-ESC3C1",
+            "startLine": 1,
+            "unitId": "d347b76254462c326470cc7b"
+          },
+          {
+            "relativePath": "Private/Find-ESC3C2.ps1",
+            "name": "Find-ESC3C2",
+            "startLine": 1,
+            "unitId": "20d8b14f8ea0402f0aa6985f"
+          },
+          {
+            "relativePath": "Private/Find-ESC4.ps1",
+            "name": "Find-ESC4",
+            "startLine": 1,
+            "unitId": "b70fe41be61de09d2f247c6f"
+          },
+          {
+            "relativePath": "Private/Find-ESC5.ps1",
+            "name": "Find-ESC5",
+            "startLine": 1,
+            "unitId": "63e8e95ce1320c3097ce8532"
+          },
+          {
+            "relativePath": "Private/Find-ESC6.ps1",
+            "name": "Find-ESC6",
+            "startLine": 1,
+            "unitId": "ddc6f8539f7f34712130d5d9"
+          },
+          {
+            "relativePath": "Private/Find-ESC7.ps1",
+            "name": "Find-ESC7",
+            "startLine": 1,
+            "unitId": "79e04ed7c3fd3e2835a17fdf"
+          },
+          {
+            "relativePath": "Private/Find-ESC8.ps1",
+            "name": "Find-ESC8",
+            "startLine": 1,
+            "unitId": "3fc6a795eb21c0e730772835"
+          },
+          {
+            "relativePath": "Private/Find-ESC9.ps1",
+            "name": "Find-ESC9",
+            "startLine": 1,
+            "unitId": "df98829eaeca8a41458df62a"
+          },
+          {
+            "relativePath": "Private/Format-Result.ps1",
+            "name": "Format-Result",
+            "startLine": 1,
+            "unitId": "6432f5fa58162a55a0c2b87f"
+          },
+          {
+            "relativePath": "Private/Get-ADCSObject.ps1",
+            "name": "Get-ADCSObject",
+            "startLine": 1,
+            "unitId": "02b3efc96d1de803c5572e9f"
+          },
+          {
+            "relativePath": "Private/Get-CAHostObject.ps1",
+            "name": "Get-CAHostObject",
+            "startLine": 1,
+            "unitId": "7925c13fd378e46ef550612b"
+          },
+          {
+            "relativePath": "Private/Get-RestrictedAdminModeSetting.ps1",
+            "name": "Get-RestrictedAdminModeSetting",
+            "startLine": 1,
+            "unitId": "92b857f23cb76d15845ccda6"
+          },
+          {
+            "relativePath": "Private/Get-Target.ps1",
+            "name": "Get-Target",
+            "startLine": 1,
+            "unitId": "6af1f817973c7faeda405256"
+          },
+          {
+            "relativePath": "Private/Install-RSATADPowerShell.ps1",
+            "name": "Install-RSATADPowerShell",
+            "startLine": 1,
+            "unitId": "a08de43e1ac2a49f13d88bef"
+          },
+          {
+            "relativePath": "Private/Invoke-Remediation.ps1",
+            "name": "Invoke-Remediation",
+            "startLine": 1,
+            "unitId": "acac771bd2da0085fe7043c5"
+          },
+          {
+            "relativePath": "Private/Invoke-Scans.ps1",
+            "name": "Invoke-Scans",
+            "startLine": 1,
+            "unitId": "d1f501d7255e6582e861a4b6"
+          },
+          {
+            "relativePath": "Private/New-Dictionary.ps1",
+            "name": "New-Dictionary",
+            "startLine": 22,
+            "unitId": "80bf7e1854578e232f746a75"
+          },
+          {
+            "relativePath": "Private/New-OutputPath.ps1",
+            "name": "New-OutputPath",
+            "startLine": 1,
+            "unitId": "332fcc38d1379801be1343c8"
+          },
+          {
+            "relativePath": "Private/Set-AdditionalCAProperty.ps1",
+            "name": "Set-AdditionalCAProperty",
+            "startLine": 1,
+            "unitId": "2cf8561779c2dd8c5306e117"
+          },
+          {
+            "relativePath": "Private/Set-AdditionalTemplateProperty.ps1",
+            "name": "Set-AdditionalTemplateProperty",
+            "startLine": 1,
+            "unitId": "56a4aeaaa0f6740088bb3aeb"
+          },
+          {
+            "relativePath": "Private/Set-RiskRating.ps1",
+            "name": "Set-RiskRating",
+            "startLine": 1,
+            "unitId": "69e04db58d4ce8028571bb2f"
+          },
+          {
+            "relativePath": "Private/Show-LocksmithLogo.ps1",
+            "name": "Show-LocksmithLogo",
+            "startLine": 1,
+            "unitId": "e9dadd0e171f3376d2251d1b"
+          },
+          {
+            "relativePath": "Private/Test-IsADAdmin.ps1",
+            "name": "Test-IsADAdmin",
+            "startLine": 1,
+            "unitId": "cb143792eba9023701b45ef2"
+          },
+          {
+            "relativePath": "Private/Test-IsElevated.ps1",
+            "name": "Test-IsElevated",
+            "startLine": 1,
+            "unitId": "d2ee5a01f5d7b8638807b6ca"
+          },
+          {
+            "relativePath": "Private/Test-IsLocalAccountSession.ps1",
+            "name": "Test-IsLocalAccountSession",
+            "startLine": 1,
+            "unitId": "763ab2b0c3a316079dcb1aa6"
+          },
+          {
+            "relativePath": "Private/Test-IsMemberOfProtectedUsers.ps1",
+            "name": "Test-IsMemberOfProtectedUsers",
+            "startLine": 1,
+            "unitId": "136c061aaca36f297e962037"
+          },
+          {
+            "relativePath": "Private/Test-IsRSATInstalled.ps1",
+            "name": "Test-IsRSATInstalled",
+            "startLine": 1,
+            "unitId": "897a4afdbe94fc04ca8e58da"
+          },
+          {
+            "relativePath": "Private/Test-IsRecentVersion.ps1",
+            "name": "Test-IsRecentVersion",
+            "startLine": 1,
+            "unitId": "d1f8f3b0ca50742834acf790"
+          },
+          {
+            "relativePath": "Private/Update-ESC1Remediation.ps1",
+            "name": "Update-ESC1Remediation",
+            "startLine": 1,
+            "unitId": "ac0b25086ba0274aef51f8a0"
+          },
+          {
+            "relativePath": "Private/Update-ESC4Remediation.ps1",
+            "name": "Update-ESC4Remediation",
+            "startLine": 1,
+            "unitId": "edc72e8add171ce4e70dbc91"
+          },
+          {
+            "relativePath": "Private/Update-ESC7Remediation.ps1",
+            "name": "Update-ESC7Remediation",
+            "startLine": 1,
+            "unitId": "642ef80de98b3c4fd7fa1421"
+          },
+          {
+            "relativePath": "Private/Update-ESC9Remediation.ps1",
+            "name": "Update-ESC9Remediation",
+            "startLine": 1,
+            "unitId": "0a74e631366c138a15127821"
+          },
+          {
+            "relativePath": "Private/Write-HostColorized.ps1",
+            "name": "Write-HostColorized",
+            "startLine": 17,
+            "unitId": "321d8e0585b7251bf9836d65"
+          },
+          {
+            "relativePath": "Public/Invoke-Locksmith.ps1",
+            "name": "Invoke-Locksmith",
+            "startLine": 1,
+            "unitId": "d6394c142d02d0ba6170e5b9"
+          }
+        ],
+        "requiredScenarioIds": [
+          "read-only-application",
+          "incomplete-directory-record",
+          "local-contracts"
+        ],
+        "publicExportScenarios": {
+          "Invoke-Locksmith": [
+            "read-only-application",
+            "incomplete-directory-record"
+          ]
+        },
+        "observerScript": "Workflows/DirectoryApplications/Locksmith/Observe-Locksmith.ps1",
+        "observerSha256": "4987b5b8ab7c17c4eb302a1e8d05dbdd801db9ebb585d32c2a982d9ff3695297",
+        "observerSupport": [
+          {
+            "path": "Workflows/DirectoryApplications/DirectoryObserver.Common.ps1",
+            "sha256": "26901a3b075bfa7af630345bb69fa2c99bc1918957ab91718d8467a95c0a56c4"
+          },
+          {
+            "path": "Workflows/DirectoryApplications/Locksmith/Observe-ReadOnlyApplication.ps1",
+            "sha256": "1c047e1da3e04e1bf2b872a0d12084c593b9c108e02996f36964b24879d4d57d"
+          },
+          {
+            "path": "Workflows/DirectoryApplications/Locksmith/Observe-LocalContracts.ps1",
+            "sha256": "e612401ca9fe26ea855f57a3e9cc18ee1b00666b2426078df492193f6bbf3461"
+          },
+          {
+            "path": "Workflows/DirectoryApplications/Locksmith/Test-Module.ps1",
+            "sha256": "d6ac8c893de54974ea3332ab8675b69f8355ad13bb1b0d94de9b2900e6e741fc"
+          }
+        ],
+        "fixtureScript": "Workflows/DirectoryApplications/Locksmith/Initialize-Fixture.ps1",
+        "fixtureSha256": "494ef2eaadc9f8181e5217a670e64186350331a175944cb3a4d8196c266193ec"
+      },
+      "sourceInputs": [
+        {
+          "path": "Locksmith-a58905638fe819c8cc11ee7fd4f0a8513b5c873a/Locksmith.psd1",
+          "sha256": "b898787bb17e3599b90b3e6720fd2a7a70c2d7321bd1ee5908800148f9ee0af0"
+        },
+        {
+          "path": "Locksmith-a58905638fe819c8cc11ee7fd4f0a8513b5c873a/Locksmith.psm1",
+          "sha256": "9069d20c1684ccf50fa1116ebf4455d0fb42f47d5ce10cf8c89b013f72702e72"
+        },
+        {
+          "path": "Locksmith-a58905638fe819c8cc11ee7fd4f0a8513b5c873a/Private/Convert-IdentityReferenceToSid.ps1",
+          "sha256": "ec7e1d1f1de8982787f82db137a88ed528286b609870865c083efed8722da133"
+        },
+        {
+          "path": "Locksmith-a58905638fe819c8cc11ee7fd4f0a8513b5c873a/Private/Export-RevertScript.ps1",
+          "sha256": "27ec0625de996fdf6d81f9432f6a783edf289b12c836bee04950613e9a783dc9"
+        },
+        {
+          "path": "Locksmith-a58905638fe819c8cc11ee7fd4f0a8513b5c873a/Private/Find-AuditingIssue.ps1",
+          "sha256": "2aaa48fbd830499b5f6f6c1be580be97afefdad934353bcd8f7919b9a70fb06b"
+        },
+        {
+          "path": "Locksmith-a58905638fe819c8cc11ee7fd4f0a8513b5c873a/Private/Find-ESC1.ps1",
+          "sha256": "bc7a971f3fd03a3671d4666f507356031f482fb2724ea2d64db6dc55febe3cb6"
+        },
+        {
+          "path": "Locksmith-a58905638fe819c8cc11ee7fd4f0a8513b5c873a/Private/Find-ESC11.ps1",
+          "sha256": "92570ab95461217a52c8863de04f4623d899c78b1d2020a01bdf52feda4842da"
+        },
+        {
+          "path": "Locksmith-a58905638fe819c8cc11ee7fd4f0a8513b5c873a/Private/Find-ESC13.ps1",
+          "sha256": "10082b56156eadbbb6acdfe9a22826f38a479e086bfd7113d963adc9dc02100b"
+        },
+        {
+          "path": "Locksmith-a58905638fe819c8cc11ee7fd4f0a8513b5c873a/Private/Find-ESC15.ps1",
+          "sha256": "7c29a454736e67a7a73eb76a065e202ac065e92a59bd49f11f8991795ae008b3"
+        },
+        {
+          "path": "Locksmith-a58905638fe819c8cc11ee7fd4f0a8513b5c873a/Private/Find-ESC16.ps1",
+          "sha256": "6b75506eb470020772a423377fddd8b45849d485e60bc9b804e553794aca7e89"
+        },
+        {
+          "path": "Locksmith-a58905638fe819c8cc11ee7fd4f0a8513b5c873a/Private/Find-ESC17.ps1",
+          "sha256": "d1e6f42731fd4bbd6c6f103ee86d9c44e2da6480c499da7c56fe0a96a1f033c2"
+        },
+        {
+          "path": "Locksmith-a58905638fe819c8cc11ee7fd4f0a8513b5c873a/Private/Find-ESC2.ps1",
+          "sha256": "37130a0cdacbae3308384a1f641adc5ede2bd9365ea62004867141d2dacce603"
+        },
+        {
+          "path": "Locksmith-a58905638fe819c8cc11ee7fd4f0a8513b5c873a/Private/Find-ESC3C1.ps1",
+          "sha256": "4be4b9e97d627fd9daea118529c41a4d14b94110ff278312a2d659da4761c9b2"
+        },
+        {
+          "path": "Locksmith-a58905638fe819c8cc11ee7fd4f0a8513b5c873a/Private/Find-ESC3C2.ps1",
+          "sha256": "c9ef6b8c5151f74286729f909088736f9e31c750d4b7c2f5867448a3838e455d"
+        },
+        {
+          "path": "Locksmith-a58905638fe819c8cc11ee7fd4f0a8513b5c873a/Private/Find-ESC4.ps1",
+          "sha256": "a8041dfbfeaf0c7476f1a94284b9e18b1fc5d8174a5829a320c7a2ea1ffdba2d"
+        },
+        {
+          "path": "Locksmith-a58905638fe819c8cc11ee7fd4f0a8513b5c873a/Private/Find-ESC5.ps1",
+          "sha256": "db90e18f954346c3e9d2dcd18dbbd85d4145e3b7dbe265c3a725e0106121a034"
+        },
+        {
+          "path": "Locksmith-a58905638fe819c8cc11ee7fd4f0a8513b5c873a/Private/Find-ESC6.ps1",
+          "sha256": "044108524f26d69ef98f792d9f9383f8fddaa7d8cd8d65ce1f7bfd497a77c08e"
+        },
+        {
+          "path": "Locksmith-a58905638fe819c8cc11ee7fd4f0a8513b5c873a/Private/Find-ESC7.ps1",
+          "sha256": "9e108d44c40f39ad9a6eb69efc350dcaf480d703db2593549eeeb92844942477"
+        },
+        {
+          "path": "Locksmith-a58905638fe819c8cc11ee7fd4f0a8513b5c873a/Private/Find-ESC8.ps1",
+          "sha256": "c7ebc3eac2637ffe9a6bfffb15c5f5cf3b6d7371d05587e7ed0935bbb4b5f993"
+        },
+        {
+          "path": "Locksmith-a58905638fe819c8cc11ee7fd4f0a8513b5c873a/Private/Find-ESC9.ps1",
+          "sha256": "c1836c6577cfaa64020fef831d3343c754f812bc3a0ff352d9bad0341e1e9b54"
+        },
+        {
+          "path": "Locksmith-a58905638fe819c8cc11ee7fd4f0a8513b5c873a/Private/Format-Result.ps1",
+          "sha256": "176e61b849f2e30845426e92ed3ef0dbb89563f8e18df4aeddc54b07f323f058"
+        },
+        {
+          "path": "Locksmith-a58905638fe819c8cc11ee7fd4f0a8513b5c873a/Private/Get-ADCSObject.ps1",
+          "sha256": "4bb729655df897b8821efbf74ef005c4bf261318a5339ac5fb7afe64873c7992"
+        },
+        {
+          "path": "Locksmith-a58905638fe819c8cc11ee7fd4f0a8513b5c873a/Private/Get-CAHostObject.ps1",
+          "sha256": "4893412557ee27107014f993ea999b030479423f74579f2bf36eefe4acf7f6ca"
+        },
+        {
+          "path": "Locksmith-a58905638fe819c8cc11ee7fd4f0a8513b5c873a/Private/Get-RestrictedAdminModeSetting.ps1",
+          "sha256": "bc795902779711da5c4b8ab2bcf04f785fb694d6f36dcde294819a936e25a25d"
+        },
+        {
+          "path": "Locksmith-a58905638fe819c8cc11ee7fd4f0a8513b5c873a/Private/Get-Target.ps1",
+          "sha256": "2d0945958e6560a16fcff5e67d66a111a42b59b130cdd8dc20b1a9fffddc7a58"
+        },
+        {
+          "path": "Locksmith-a58905638fe819c8cc11ee7fd4f0a8513b5c873a/Private/Install-RSATADPowerShell.ps1",
+          "sha256": "8657d51b2bf2a012ff5b52294f86181cc68a925f06ca504e6ba490f48996c8e6"
+        },
+        {
+          "path": "Locksmith-a58905638fe819c8cc11ee7fd4f0a8513b5c873a/Private/Invoke-Remediation.ps1",
+          "sha256": "4ecb47d0011aadee47557e8f126d97b91347f3c75ccb22788debb617726f6648"
+        },
+        {
+          "path": "Locksmith-a58905638fe819c8cc11ee7fd4f0a8513b5c873a/Private/Invoke-Scans.ps1",
+          "sha256": "6f931e17d78e69ace40f8d36828416d3357280cc6efbb5ea6cc4eb695de8df95"
+        },
+        {
+          "path": "Locksmith-a58905638fe819c8cc11ee7fd4f0a8513b5c873a/Private/New-Dictionary.ps1",
+          "sha256": "c32cda05bbf74bdea26f71361f5a99e69b4e5ef115eacbf3993fd34cba54e8d0"
+        },
+        {
+          "path": "Locksmith-a58905638fe819c8cc11ee7fd4f0a8513b5c873a/Private/New-OutputPath.ps1",
+          "sha256": "169f1a83a05639844a30c6b6c1019de0b9a51be18c83f15775a66861edb0be5d"
+        },
+        {
+          "path": "Locksmith-a58905638fe819c8cc11ee7fd4f0a8513b5c873a/Private/Set-AdditionalCAProperty.ps1",
+          "sha256": "d61fe79cda094f430c3a4a9daa0fcae3186b8ff5aecacb8283287179d81d0d45"
+        },
+        {
+          "path": "Locksmith-a58905638fe819c8cc11ee7fd4f0a8513b5c873a/Private/Set-AdditionalTemplateProperty.ps1",
+          "sha256": "2ccb9cdc678fdd167ea2be5e238e3935ea9e3c97ee58ff794c154b5ac0d091de"
+        },
+        {
+          "path": "Locksmith-a58905638fe819c8cc11ee7fd4f0a8513b5c873a/Private/Set-RiskRating.ps1",
+          "sha256": "0b61e787bca1b109a614753a346ba1f8b97f439e1d22cee196ab3262b6be3cb7"
+        },
+        {
+          "path": "Locksmith-a58905638fe819c8cc11ee7fd4f0a8513b5c873a/Private/Show-LocksmithLogo.ps1",
+          "sha256": "7676e6449d9bfdf1df59a23502c4da6bf6572bd0eba16d891065d34b7bd803d4"
+        },
+        {
+          "path": "Locksmith-a58905638fe819c8cc11ee7fd4f0a8513b5c873a/Private/Test-IsADAdmin.ps1",
+          "sha256": "8dfb6ad9152ffd649f061c9e5dcd456b726104f1369e83e0c1c6dc8c315194a8"
+        },
+        {
+          "path": "Locksmith-a58905638fe819c8cc11ee7fd4f0a8513b5c873a/Private/Test-IsElevated.ps1",
+          "sha256": "e52666407696d5b3f0a41f6cc38bf4d0c080367147f256344ca04bb28a949d18"
+        },
+        {
+          "path": "Locksmith-a58905638fe819c8cc11ee7fd4f0a8513b5c873a/Private/Test-IsLocalAccountSession.ps1",
+          "sha256": "58d216ccffa9a28e33ecd4e1422da85b8224f3733e71768ab1ba3d5c5adc7342"
+        },
+        {
+          "path": "Locksmith-a58905638fe819c8cc11ee7fd4f0a8513b5c873a/Private/Test-IsMemberOfProtectedUsers.ps1",
+          "sha256": "effa064489a8acc20712e23847cde52119cf6e35d8138dfb197aa332916d2b57"
+        },
+        {
+          "path": "Locksmith-a58905638fe819c8cc11ee7fd4f0a8513b5c873a/Private/Test-IsRecentVersion.ps1",
+          "sha256": "8518c72a7ee647899843a1434090f1b1c1608a5f52a50a51a4bb8c936653c3f1"
+        },
+        {
+          "path": "Locksmith-a58905638fe819c8cc11ee7fd4f0a8513b5c873a/Private/Test-IsRSATInstalled.ps1",
+          "sha256": "87c0f9d310d7ee88157c7b3d88b7dd9b5300d1c2b1feedf1b2f38df160b29db9"
+        },
+        {
+          "path": "Locksmith-a58905638fe819c8cc11ee7fd4f0a8513b5c873a/Private/Update-ESC1Remediation.ps1",
+          "sha256": "b6506e82e7cb484ac8840a4bcce38f785b2cc651ca0e786aafdf69c5d8ed3c12"
+        },
+        {
+          "path": "Locksmith-a58905638fe819c8cc11ee7fd4f0a8513b5c873a/Private/Update-ESC4Remediation.ps1",
+          "sha256": "208c803e57df2e24ad1d43078c3ee1402b08bf1fe09291ae8b9042ccea7d5f08"
+        },
+        {
+          "path": "Locksmith-a58905638fe819c8cc11ee7fd4f0a8513b5c873a/Private/Update-ESC7Remediation.ps1",
+          "sha256": "bf3e3eadfa09e06b43ce2e7e60b68718d87fc90f714a131615284f6a477e0156"
+        },
+        {
+          "path": "Locksmith-a58905638fe819c8cc11ee7fd4f0a8513b5c873a/Private/Update-ESC9Remediation.ps1",
+          "sha256": "3166a9287c47b3dbbd862d8765e25a27a13c059e6317658e3d68f73db00be6fc"
+        },
+        {
+          "path": "Locksmith-a58905638fe819c8cc11ee7fd4f0a8513b5c873a/Private/Write-HostColorized.ps1",
+          "sha256": "1e142e0809e77d6b59b5e321ea7b5de67d43556df86914fdb121d7a9a20d8a3e"
+        },
+        {
+          "path": "Locksmith-a58905638fe819c8cc11ee7fd4f0a8513b5c873a/Public/Invoke-Locksmith.ps1",
+          "sha256": "05f9a6e4898638ad5e398cd24edd5dd7a8e5f61891fdcb107317cda005c95f6c"
+        }
+      ]
     },
     {
       "id": "locksmith2",
@@ -38,11 +532,1312 @@
       },
       "entryPoint": "Locksmith2-f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639/Locksmith2.psd1",
       "qualification": {
-        "kind": "HybridModuleCommand",
-        "importSurface": "Manifest",
-        "unitName": "Test-IsPowerShellCore",
-        "probeScript": "(Test-IsPowerShellCore).ToString()"
-      }
+        "kind": "HybridModuleWorkflow",
+        "artifactName": "Locksmith2",
+        "completeFunctionInventory": true,
+        "requiredEnvironmentVariable": "POWERFORGE_EXTERNAL_AD_AUDIT_TARGET",
+        "requiredExports": [
+          "Add-ToIssueStore",
+          "Convert-IdentityReferenceToNTAccount",
+          "Convert-IdentityReferenceToSid",
+          "ConvertTo-ConsoleColor",
+          "Expand-GroupMembership",
+          "Expand-IssueByGroup",
+          "Expand-IssueTemplate",
+          "Find-LS2RiskyPrincipal",
+          "Find-LS2VulnerableCA",
+          "Find-LS2VulnerableObject",
+          "Find-LS2VulnerableTemplate",
+          "Get-AdcsObject",
+          "Get-AdcsObjectName",
+          "Get-FlattenedIssues",
+          "Get-ForestNameFromDN",
+          "Get-IssueCount",
+          "Get-IssueTextOverride",
+          "Get-LS2Stores",
+          "Get-ModuleThatLoadedThisFunction",
+          "Get-PrincipalRiskBonus",
+          "Get-RootDSE",
+          "Get-TrueColorBg",
+          "Get-TrueColorFg",
+          "Get-WebEnrollmentEndpointStatus",
+          "Initialize-AdcsObjectStore",
+          "Initialize-DirectoryConnections",
+          "Initialize-DomainStore",
+          "Initialize-LS2Scan",
+          "Initialize-PrincipalDefinitions",
+          "Install-NeededModule",
+          "Invoke-Locksmith2",
+          "New-AuthenticatedDirectoryEntry",
+          "New-GCSearcher",
+          "New-LDAPSearcher",
+          "New-LS2Dashboard",
+          "Read-Choice",
+          "Repair-PowerShellEnvironment",
+          "Resolve-LS2ConnectionContext",
+          "Resolve-Principal",
+          "Set-AnyPurposeEKUExist",
+          "Set-AuthenticationEKUExist",
+          "Set-AuthorizedSignatureNotRequired",
+          "Set-CAAdministrator",
+          "Set-CAAuditFilter",
+          "Set-CACertificateManager",
+          "Set-CAComputerPrincipal",
+          "Set-CADisableExtensionList",
+          "Set-CAEditFlags",
+          "Set-CAInterfaceFlags",
+          "Set-CAWebEnrollmentEndpoints",
+          "Set-DangerousCAAdministrator",
+          "Set-DangerousCACertificateManager",
+          "Set-DangerousEditor",
+          "Set-DangerousEnrollee",
+          "Set-EnrollmentAgentEKUExist",
+          "Set-HasNonStandardOwner",
+          "Set-IsCATemplate",
+          "Set-LinkedGroupOIDPolicy",
+          "Set-LowPrivilegeCAAdministrator",
+          "Set-LowPrivilegeCACertificateManager",
+          "Set-LowPrivilegeEditor",
+          "Set-LowPrivilegeEnrollee",
+          "Set-LS2Credential",
+          "Set-LS2Forest",
+          "Set-LS2RiskRating",
+          "Set-ManagerApprovalNotRequired",
+          "Set-NoSecurityExtension",
+          "Set-Owner",
+          "Set-RequiresEnrollmentAgentSignature",
+          "Set-SANAllowed",
+          "Set-TemplateEnabled",
+          "Show-ConnectionContext",
+          "Show-ConnectionDiagnostics",
+          "Show-IssueReport",
+          "Show-PrivilegeContext",
+          "Test-IsBA",
+          "Test-IsDA",
+          "Test-IsDangerousAce",
+          "Test-IsDangerousPrincipal",
+          "Test-IsDomainComputer",
+          "Test-IsDomainUser",
+          "Test-IsEA",
+          "Test-IsEnrollmentAce",
+          "Test-IsInteractiveSession",
+          "Test-IsLatestVersion",
+          "Test-IsLocalAdmin",
+          "Test-IsLowPrivilegePrincipal",
+          "Test-IsModuleAvailable",
+          "Test-IsModuleLoaded",
+          "Test-IsPowerShellCore",
+          "Test-IsStandardOwner",
+          "Test-IssueExists",
+          "Test-IsSupportedOS",
+          "Test-IsSupportedPS",
+          "Test-IsUtf8",
+          "Test-IsWindows",
+          "Test-IsWindowsTerminal",
+          "Test-PowerShellEnvironment",
+          "Update-DollarSignProfile",
+          "Update-OutputEncoding"
+        ],
+        "requiredAliases": [
+          {
+            "name": "Invoke-LS2",
+            "definition": "Invoke-Locksmith2"
+          },
+          {
+            "name": "Locksmith2",
+            "definition": "Invoke-Locksmith2"
+          },
+          {
+            "name": "Start-Locksmith2",
+            "definition": "Invoke-Locksmith2"
+          },
+          {
+            "name": "Start-LS2",
+            "definition": "Invoke-Locksmith2"
+          }
+        ],
+        "requiredCompiledOwnedFunctions": [
+          {
+            "relativePath": "Private/Convert/Convert-IdentityReferenceToNTAccount.ps1",
+            "name": "Convert-IdentityReferenceToNTAccount"
+          },
+          {
+            "relativePath": "Private/Convert/Convert-IdentityReferenceToSid.ps1",
+            "name": "Convert-IdentityReferenceToSid"
+          },
+          {
+            "relativePath": "Private/Convert/Expand-GroupMembership.ps1",
+            "name": "Expand-GroupMembership"
+          },
+          {
+            "relativePath": "Private/Convert/Resolve-Principal.ps1",
+            "name": "Resolve-Principal"
+          },
+          {
+            "relativePath": "Private/Get/Get-AdcsObject.ps1",
+            "name": "Get-AdcsObject"
+          },
+          {
+            "relativePath": "Private/Get/Get-FlattenedIssues.ps1",
+            "name": "Get-FlattenedIssues"
+          },
+          {
+            "relativePath": "Private/Get/Get-ModuleThatLoadedThisFunction.ps1",
+            "name": "Get-ModuleThatLoadedThisFunction"
+          },
+          {
+            "relativePath": "Private/Get/Get-RootDSE.ps1",
+            "name": "Get-RootDSE"
+          },
+          {
+            "relativePath": "Private/Get/Get-WebEnrollmentEndpointStatus.ps1",
+            "name": "Get-WebEnrollmentEndpointStatus"
+          },
+          {
+            "relativePath": "Private/Initialize/Initialize-AdcsObjectStore.ps1",
+            "name": "Initialize-AdcsObjectStore"
+          },
+          {
+            "relativePath": "Private/Initialize/Initialize-DirectoryConnections.ps1",
+            "name": "Initialize-DirectoryConnections"
+          },
+          {
+            "relativePath": "Private/Initialize/Initialize-DomainStore.ps1",
+            "name": "Initialize-DomainStore"
+          },
+          {
+            "relativePath": "Private/Initialize/Initialize-LS2Scan.ps1",
+            "name": "Initialize-LS2Scan"
+          },
+          {
+            "relativePath": "Private/Initialize/Initialize-PrincipalDefinitions.ps1",
+            "name": "Initialize-PrincipalDefinitions"
+          },
+          {
+            "relativePath": "Private/New/New-AuthenticatedDirectoryEntry.ps1",
+            "name": "New-AuthenticatedDirectoryEntry"
+          },
+          {
+            "relativePath": "Private/New/New-GCSearcher.ps1",
+            "name": "New-GCSearcher"
+          },
+          {
+            "relativePath": "Private/New/New-LDAPSearcher.ps1",
+            "name": "New-LDAPSearcher"
+          },
+          {
+            "relativePath": "Private/Set/Get-PrincipalRiskBonus.ps1",
+            "name": "Get-PrincipalRiskBonus"
+          },
+          {
+            "relativePath": "Private/Set/Set-AnyPurposeEKUExist.ps1",
+            "name": "Set-AnyPurposeEKUExist"
+          },
+          {
+            "relativePath": "Private/Set/Set-AuthenticationEKUExist.ps1",
+            "name": "Set-AuthenticationEKUExist"
+          },
+          {
+            "relativePath": "Private/Set/Set-AuthorizedSignatureNotRequired.ps1",
+            "name": "Set-AuthorizedSignatureNotRequired"
+          },
+          {
+            "relativePath": "Private/Set/Set-CAAdministrator.ps1",
+            "name": "Set-CAAdministrator"
+          },
+          {
+            "relativePath": "Private/Set/Set-CAAuditFilter.ps1",
+            "name": "Set-CAAuditFilter"
+          },
+          {
+            "relativePath": "Private/Set/Set-CACertificateManager.ps1",
+            "name": "Set-CACertificateManager"
+          },
+          {
+            "relativePath": "Private/Set/Set-CAComputerPrincipal.ps1",
+            "name": "Set-CAComputerPrincipal"
+          },
+          {
+            "relativePath": "Private/Set/Set-CADisableExtensionList.ps1",
+            "name": "Set-CADisableExtensionList"
+          },
+          {
+            "relativePath": "Private/Set/Set-CAEditFlags.ps1",
+            "name": "Set-CAEditFlags"
+          },
+          {
+            "relativePath": "Private/Set/Set-CAInterfaceFlags.ps1",
+            "name": "Set-CAInterfaceFlags"
+          },
+          {
+            "relativePath": "Private/Set/Set-CAWebEnrollmentEndpoints.ps1",
+            "name": "Set-CAWebEnrollmentEndpoints"
+          },
+          {
+            "relativePath": "Private/Set/Set-DangerousCAAdministrator.ps1",
+            "name": "Set-DangerousCAAdministrator"
+          },
+          {
+            "relativePath": "Private/Set/Set-DangerousCACertificateManager.ps1",
+            "name": "Set-DangerousCACertificateManager"
+          },
+          {
+            "relativePath": "Private/Set/Set-DangerousEditor.ps1",
+            "name": "Set-DangerousEditor"
+          },
+          {
+            "relativePath": "Private/Set/Set-DangerousEnrollee.ps1",
+            "name": "Set-DangerousEnrollee"
+          },
+          {
+            "relativePath": "Private/Set/Set-EnrollmentAgentEKUExist.ps1",
+            "name": "Set-EnrollmentAgentEKUExist"
+          },
+          {
+            "relativePath": "Private/Set/Set-HasNonStandardOwner.ps1",
+            "name": "Set-HasNonStandardOwner"
+          },
+          {
+            "relativePath": "Private/Set/Set-IsCATemplate.ps1",
+            "name": "Set-IsCATemplate"
+          },
+          {
+            "relativePath": "Private/Set/Set-LinkedGroupOIDPolicy.ps1",
+            "name": "Set-LinkedGroupOIDPolicy"
+          },
+          {
+            "relativePath": "Private/Set/Set-LowPrivilegeCAAdministrator.ps1",
+            "name": "Set-LowPrivilegeCAAdministrator"
+          },
+          {
+            "relativePath": "Private/Set/Set-LowPrivilegeCACertificateManager.ps1",
+            "name": "Set-LowPrivilegeCACertificateManager"
+          },
+          {
+            "relativePath": "Private/Set/Set-LowPrivilegeEditor.ps1",
+            "name": "Set-LowPrivilegeEditor"
+          },
+          {
+            "relativePath": "Private/Set/Set-LowPrivilegeEnrollee.ps1",
+            "name": "Set-LowPrivilegeEnrollee"
+          },
+          {
+            "relativePath": "Private/Set/Set-LS2RiskRating.ps1",
+            "name": "Set-LS2RiskRating"
+          },
+          {
+            "relativePath": "Private/Set/Set-ManagerApprovalNotRequired.ps1",
+            "name": "Set-ManagerApprovalNotRequired"
+          },
+          {
+            "relativePath": "Private/Set/Set-NoSecurityExtension.ps1",
+            "name": "Set-NoSecurityExtension"
+          },
+          {
+            "relativePath": "Private/Set/Set-Owner.ps1",
+            "name": "Set-Owner"
+          },
+          {
+            "relativePath": "Private/Set/Set-RequiresEnrollmentAgentSignature.ps1",
+            "name": "Set-RequiresEnrollmentAgentSignature"
+          },
+          {
+            "relativePath": "Private/Set/Set-SANAllowed.ps1",
+            "name": "Set-SANAllowed"
+          },
+          {
+            "relativePath": "Private/Set/Set-TemplateEnabled.ps1",
+            "name": "Set-TemplateEnabled"
+          },
+          {
+            "relativePath": "Private/Test/Test-IsBA.ps1",
+            "name": "Test-IsBA"
+          },
+          {
+            "relativePath": "Private/Test/Test-IsDA.ps1",
+            "name": "Test-IsDA"
+          },
+          {
+            "relativePath": "Private/Test/Test-IsDangerousAce.ps1",
+            "name": "Test-IsDangerousAce"
+          },
+          {
+            "relativePath": "Private/Test/Test-IsDangerousPrincipal.ps1",
+            "name": "Test-IsDangerousPrincipal"
+          },
+          {
+            "relativePath": "Private/Test/Test-IsDomainComputer.ps1",
+            "name": "Test-IsDomainComputer"
+          },
+          {
+            "relativePath": "Private/Test/Test-IsDomainUser.ps1",
+            "name": "Test-IsDomainUser"
+          },
+          {
+            "relativePath": "Private/Test/Test-IsEA.ps1",
+            "name": "Test-IsEA"
+          },
+          {
+            "relativePath": "Private/Test/Test-IsEnrollmentAce.ps1",
+            "name": "Test-IsEnrollmentAce"
+          },
+          {
+            "relativePath": "Private/Test/Test-IsInteractiveSession.ps1",
+            "name": "Test-IsInteractiveSession"
+          },
+          {
+            "relativePath": "Private/Test/Test-IsLatestVersion.ps1",
+            "name": "Test-IsLatestVersion"
+          },
+          {
+            "relativePath": "Private/Test/Test-IsLocalAdmin.ps1",
+            "name": "Test-IsLocalAdmin"
+          },
+          {
+            "relativePath": "Private/Test/Test-IsLowPrivilegePrincipal.ps1",
+            "name": "Test-IsLowPrivilegePrincipal"
+          },
+          {
+            "relativePath": "Private/Test/Test-IsModuleAvailable.ps1",
+            "name": "Test-IsModuleAvailable"
+          },
+          {
+            "relativePath": "Private/Test/Test-IsModuleLoaded.ps1",
+            "name": "Test-IsModuleLoaded"
+          },
+          {
+            "relativePath": "Private/Test/Test-IsPowerShellCore.ps1",
+            "name": "Test-IsPowerShellCore"
+          },
+          {
+            "relativePath": "Private/Test/Test-IsStandardOwner.ps1",
+            "name": "Test-IsStandardOwner"
+          },
+          {
+            "relativePath": "Private/Test/Test-IssueExists.ps1",
+            "name": "Test-IssueExists"
+          },
+          {
+            "relativePath": "Private/Test/Test-IsSupportedOS.ps1",
+            "name": "Test-IsSupportedOS"
+          },
+          {
+            "relativePath": "Private/Test/Test-IsSupportedPS.ps1",
+            "name": "Test-IsSupportedPS"
+          },
+          {
+            "relativePath": "Private/Test/Test-IsUtf8.ps1",
+            "name": "Test-IsUtf8"
+          },
+          {
+            "relativePath": "Private/Test/Test-IsWindows.ps1",
+            "name": "Test-IsWindows"
+          },
+          {
+            "relativePath": "Private/Test/Test-IsWindowsTerminal.ps1",
+            "name": "Test-IsWindowsTerminal"
+          },
+          {
+            "relativePath": "Private/Test/Test-PowerShellEnvironment.ps1",
+            "name": "Test-PowerShellEnvironment"
+          },
+          {
+            "relativePath": "Private/UI/Read-Choice.ps1",
+            "name": "Read-Choice"
+          },
+          {
+            "relativePath": "Private/UI/Show-ConnectionContext.ps1",
+            "name": "Show-ConnectionContext"
+          },
+          {
+            "relativePath": "Private/UI/Show-ConnectionDiagnostics.ps1",
+            "name": "Show-ConnectionDiagnostics"
+          },
+          {
+            "relativePath": "Private/UI/Show-IssueReport.ps1",
+            "name": "Show-IssueReport"
+          },
+          {
+            "relativePath": "Private/UI/Show-Logo.ps1",
+            "name": "ConvertTo-ConsoleColor"
+          },
+          {
+            "relativePath": "Private/UI/Show-Logo.ps1",
+            "name": "Get-TrueColorFg"
+          },
+          {
+            "relativePath": "Private/UI/Show-Logo.ps1",
+            "name": "Get-TrueColorBg"
+          },
+          {
+            "relativePath": "Private/UI/Show-PrivilegeContext.ps1",
+            "name": "Show-PrivilegeContext"
+          },
+          {
+            "relativePath": "Private/Utility/Add-ToIssueStore.ps1",
+            "name": "Add-ToIssueStore"
+          },
+          {
+            "relativePath": "Private/Utility/Expand-IssueByGroup.ps1",
+            "name": "Expand-IssueByGroup"
+          },
+          {
+            "relativePath": "Private/Utility/Expand-IssueTemplate.ps1",
+            "name": "Expand-IssueTemplate"
+          },
+          {
+            "relativePath": "Private/Utility/Get-AdcsObjectName.ps1",
+            "name": "Get-AdcsObjectName"
+          },
+          {
+            "relativePath": "Private/Utility/Get-ForestNameFromDN.ps1",
+            "name": "Get-ForestNameFromDN"
+          },
+          {
+            "relativePath": "Private/Utility/Get-IssueCount.ps1",
+            "name": "Get-IssueCount"
+          },
+          {
+            "relativePath": "Private/Utility/Get-IssueTextOverride.ps1",
+            "name": "Get-IssueTextOverride"
+          },
+          {
+            "relativePath": "Private/Utility/Install-NeededModule.ps1",
+            "name": "Install-NeededModule"
+          },
+          {
+            "relativePath": "Private/Utility/Repair-PowerShellEnvironment.ps1",
+            "name": "Repair-PowerShellEnvironment"
+          },
+          {
+            "relativePath": "Private/Utility/Resolve-LS2ConnectionContext.ps1",
+            "name": "Resolve-LS2ConnectionContext"
+          },
+          {
+            "relativePath": "Private/Utility/Update-DollarSignProfile.ps1",
+            "name": "Update-DollarSignProfile"
+          },
+          {
+            "relativePath": "Private/Utility/Update-OutputEncoding.ps1",
+            "name": "Update-OutputEncoding"
+          },
+          {
+            "relativePath": "Public/Find-LS2RiskyPrincipal.ps1",
+            "name": "Find-LS2RiskyPrincipal"
+          },
+          {
+            "relativePath": "Public/Find-LS2VulnerableCA.ps1",
+            "name": "Find-LS2VulnerableCA"
+          },
+          {
+            "relativePath": "Public/Find-LS2VulnerableObject.ps1",
+            "name": "Find-LS2VulnerableObject"
+          },
+          {
+            "relativePath": "Public/Find-LS2VulnerableTemplate.ps1",
+            "name": "Find-LS2VulnerableTemplate"
+          },
+          {
+            "relativePath": "Public/Get-LS2Stores.ps1",
+            "name": "Get-LS2Stores"
+          },
+          {
+            "relativePath": "Public/Invoke-Locksmith2.ps1",
+            "name": "Invoke-Locksmith2"
+          },
+          {
+            "relativePath": "Public/New-LS2Dashboard.ps1",
+            "name": "New-LS2Dashboard"
+          },
+          {
+            "relativePath": "Public/Set-LS2Credential.ps1",
+            "name": "Set-LS2Credential"
+          },
+          {
+            "relativePath": "Public/Set-LS2Forest.ps1",
+            "name": "Set-LS2Forest"
+          }
+        ],
+        "requiredScenarioIds": [
+          "audit",
+          "console",
+          "environment",
+          "reporting",
+          "issue-store"
+        ],
+        "publicExportScenarios": {
+          "Add-ToIssueStore": [
+            "issue-store"
+          ],
+          "Convert-IdentityReferenceToNTAccount": [
+            "issue-store"
+          ],
+          "Convert-IdentityReferenceToSid": [
+            "audit"
+          ],
+          "ConvertTo-ConsoleColor": [
+            "console"
+          ],
+          "Expand-GroupMembership": [
+            "audit"
+          ],
+          "Expand-IssueByGroup": [
+            "issue-store"
+          ],
+          "Expand-IssueTemplate": [
+            "environment"
+          ],
+          "Find-LS2RiskyPrincipal": [
+            "reporting"
+          ],
+          "Find-LS2VulnerableCA": [
+            "audit"
+          ],
+          "Find-LS2VulnerableObject": [
+            "issue-store"
+          ],
+          "Find-LS2VulnerableTemplate": [
+            "issue-store"
+          ],
+          "Get-AdcsObject": [
+            "audit"
+          ],
+          "Get-AdcsObjectName": [
+            "issue-store"
+          ],
+          "Get-FlattenedIssues": [
+            "audit"
+          ],
+          "Get-ForestNameFromDN": [
+            "environment"
+          ],
+          "Get-IssueCount": [
+            "issue-store"
+          ],
+          "Get-IssueTextOverride": [
+            "issue-store"
+          ],
+          "Get-LS2Stores": [
+            "issue-store"
+          ],
+          "Get-ModuleThatLoadedThisFunction": [
+            "issue-store"
+          ],
+          "Get-PrincipalRiskBonus": [
+            "issue-store"
+          ],
+          "Get-RootDSE": [
+            "audit"
+          ],
+          "Get-TrueColorBg": [
+            "console"
+          ],
+          "Get-TrueColorFg": [
+            "console"
+          ],
+          "Get-WebEnrollmentEndpointStatus": [
+            "audit"
+          ],
+          "Initialize-AdcsObjectStore": [
+            "audit"
+          ],
+          "Initialize-DirectoryConnections": [
+            "reporting"
+          ],
+          "Initialize-DomainStore": [
+            "audit"
+          ],
+          "Initialize-LS2Scan": [
+            "audit"
+          ],
+          "Initialize-PrincipalDefinitions": [
+            "audit"
+          ],
+          "Install-NeededModule": [
+            "environment"
+          ],
+          "Invoke-Locksmith2": [
+            "audit"
+          ],
+          "New-AuthenticatedDirectoryEntry": [
+            "audit"
+          ],
+          "New-GCSearcher": [
+            "audit"
+          ],
+          "New-LDAPSearcher": [
+            "issue-store"
+          ],
+          "New-LS2Dashboard": [
+            "reporting"
+          ],
+          "Read-Choice": [
+            "environment"
+          ],
+          "Repair-PowerShellEnvironment": [
+            "environment"
+          ],
+          "Resolve-LS2ConnectionContext": [
+            "audit"
+          ],
+          "Resolve-Principal": [
+            "audit"
+          ],
+          "Set-AnyPurposeEKUExist": [
+            "audit"
+          ],
+          "Set-AuthenticationEKUExist": [
+            "audit"
+          ],
+          "Set-AuthorizedSignatureNotRequired": [
+            "audit"
+          ],
+          "Set-CAAdministrator": [
+            "audit"
+          ],
+          "Set-CAAuditFilter": [
+            "audit"
+          ],
+          "Set-CACertificateManager": [
+            "audit"
+          ],
+          "Set-CAComputerPrincipal": [
+            "audit"
+          ],
+          "Set-CADisableExtensionList": [
+            "audit"
+          ],
+          "Set-CAEditFlags": [
+            "audit"
+          ],
+          "Set-CAInterfaceFlags": [
+            "audit"
+          ],
+          "Set-CAWebEnrollmentEndpoints": [
+            "audit"
+          ],
+          "Set-DangerousCAAdministrator": [
+            "audit"
+          ],
+          "Set-DangerousCACertificateManager": [
+            "audit"
+          ],
+          "Set-DangerousEditor": [
+            "audit"
+          ],
+          "Set-DangerousEnrollee": [
+            "audit"
+          ],
+          "Set-EnrollmentAgentEKUExist": [
+            "audit"
+          ],
+          "Set-HasNonStandardOwner": [
+            "audit"
+          ],
+          "Set-IsCATemplate": [
+            "audit"
+          ],
+          "Set-LinkedGroupOIDPolicy": [
+            "audit"
+          ],
+          "Set-LowPrivilegeCAAdministrator": [
+            "audit"
+          ],
+          "Set-LowPrivilegeCACertificateManager": [
+            "audit"
+          ],
+          "Set-LowPrivilegeEditor": [
+            "audit"
+          ],
+          "Set-LowPrivilegeEnrollee": [
+            "audit"
+          ],
+          "Set-LS2Credential": [
+            "environment"
+          ],
+          "Set-LS2Forest": [
+            "audit"
+          ],
+          "Set-LS2RiskRating": [
+            "issue-store"
+          ],
+          "Set-ManagerApprovalNotRequired": [
+            "audit"
+          ],
+          "Set-NoSecurityExtension": [
+            "audit"
+          ],
+          "Set-Owner": [
+            "audit"
+          ],
+          "Set-RequiresEnrollmentAgentSignature": [
+            "audit"
+          ],
+          "Set-SANAllowed": [
+            "audit"
+          ],
+          "Set-TemplateEnabled": [
+            "audit"
+          ],
+          "Show-ConnectionContext": [
+            "audit"
+          ],
+          "Show-ConnectionDiagnostics": [
+            "console"
+          ],
+          "Show-IssueReport": [
+            "issue-store"
+          ],
+          "Show-PrivilegeContext": [
+            "audit"
+          ],
+          "Test-IsBA": [
+            "audit"
+          ],
+          "Test-IsDA": [
+            "audit"
+          ],
+          "Test-IsDangerousAce": [
+            "audit"
+          ],
+          "Test-IsDangerousPrincipal": [
+            "audit"
+          ],
+          "Test-IsDomainComputer": [
+            "reporting"
+          ],
+          "Test-IsDomainUser": [
+            "audit"
+          ],
+          "Test-IsEA": [
+            "audit"
+          ],
+          "Test-IsEnrollmentAce": [
+            "audit"
+          ],
+          "Test-IsInteractiveSession": [
+            "audit"
+          ],
+          "Test-IsLatestVersion": [
+            "environment"
+          ],
+          "Test-IsLocalAdmin": [
+            "audit"
+          ],
+          "Test-IsLowPrivilegePrincipal": [
+            "audit"
+          ],
+          "Test-IsModuleAvailable": [
+            "environment"
+          ],
+          "Test-IsModuleLoaded": [
+            "environment"
+          ],
+          "Test-IsPowerShellCore": [
+            "environment"
+          ],
+          "Test-IsStandardOwner": [
+            "audit"
+          ],
+          "Test-IssueExists": [
+            "issue-store"
+          ],
+          "Test-IsSupportedOS": [
+            "environment"
+          ],
+          "Test-IsSupportedPS": [
+            "environment"
+          ],
+          "Test-IsUtf8": [
+            "environment"
+          ],
+          "Test-IsWindows": [
+            "environment"
+          ],
+          "Test-IsWindowsTerminal": [
+            "console"
+          ],
+          "Test-PowerShellEnvironment": [
+            "issue-store"
+          ],
+          "Update-DollarSignProfile": [
+            "console"
+          ],
+          "Update-OutputEncoding": [
+            "console"
+          ]
+        },
+        "observerScript": "Workflows/DirectoryApplications/Locksmith2/Observe-Locksmith2.ps1",
+        "observerSha256": "1bcd6abbeecfdec5baa04875ff1c32f03b5c8851e2f8187673b63b5a2e230d53",
+        "observerSupport": [
+          {
+            "path": "Workflows/DirectoryApplications/DirectoryObserver.Common.ps1",
+            "sha256": "26901a3b075bfa7af630345bb69fa2c99bc1918957ab91718d8467a95c0a56c4"
+          },
+          {
+            "path": "Workflows/DirectoryApplications/Locksmith2/Observe-ReadOnlyAudit.ps1",
+            "sha256": "2697fce84f42642f1c5fec29bcf829ab11239e94dc3c35508865d56a9b7d53b3"
+          },
+          {
+            "path": "Workflows/DirectoryApplications/Locksmith2/Observe-Console.ps1",
+            "sha256": "4953abce38693f218a0bbb5d4dbddce9601fb5fb3efd67f02fcde04aa83997a5"
+          },
+          {
+            "path": "Workflows/DirectoryApplications/Locksmith2/Observe-Environment.ps1",
+            "sha256": "c4f3491649b7e0811e4203446017c53619b78041a0992b6edb722fbfd74678c3"
+          },
+          {
+            "path": "Workflows/DirectoryApplications/Locksmith2/Observe-Reporting.ps1",
+            "sha256": "7fbbd0a5bd620be220792d67fe9156fe6a3932ddad7e5876ea543cd2bd8be41f"
+          },
+          {
+            "path": "Workflows/DirectoryApplications/Locksmith2/Observe-IssueStore.ps1",
+            "sha256": "e471112dbd03734074e1717e902db403a7daea1a6e3af8fd0bab58e406384ff9"
+          }
+        ],
+        "fixtureScript": "Workflows/DirectoryApplications/Locksmith2/Initialize-Fixture.ps1",
+        "fixtureSha256": "75f1175bd6de089302400dc10a27a2e18bda4a7185572c5eb97f55701a67d84d",
+        "fixtureSupport": [
+          {
+            "path": "Workflows/DirectoryApplications/Locksmith2/Test-Module.ps1",
+            "sha256": "c1aab577562be947aa3e082aa5e8a7eaae4d5058efebe7b9de04fe18a134bff2"
+          }
+        ]
+      },
+      "sourceInputs": [
+        {
+          "path": "Locksmith2-f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639/Classes/LS2AdcsObject.ps1",
+          "sha256": "abb27b68cdfe94c111013009ab453aa96a7f67748e2b33abd1e703640a9c93a5"
+        },
+        {
+          "path": "Locksmith2-f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639/Classes/LS2Issue.ps1",
+          "sha256": "736d4440eace31299822b2d8e20863b1c26a7cb9186da235c478910226202e38"
+        },
+        {
+          "path": "Locksmith2-f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639/Classes/LS2Principal.ps1",
+          "sha256": "5b8542654843f25be0218a346780cdd40ec6f236bc73004e228eb960cb49fca1"
+        },
+        {
+          "path": "Locksmith2-f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639/LICENSE",
+          "sha256": "fff60b173b7d0aa5dd8b651afc183d967a388b95f8dda1e3572aeb6c15af2cf2"
+        },
+        {
+          "path": "Locksmith2-f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639/Locksmith2.psd1",
+          "sha256": "cce42165b3e46d4dae3f090855c4970bb34820448308e6c5cfcf511a5fc48068"
+        },
+        {
+          "path": "Locksmith2-f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639/Locksmith2.psm1",
+          "sha256": "a717536373ca4e0f3f6abb644ac8bf619c01cef51fb0db4d6ac0fabec516f45e"
+        },
+        {
+          "path": "Locksmith2-f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639/LS2Issue.format.ps1xml",
+          "sha256": "874b31f2d4517b970c19e2af534a41353d6ec76e178c892ceb5e6debd1e59c94"
+        },
+        {
+          "path": "Locksmith2-f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639/Private/Convert/Convert-IdentityReferenceToNTAccount.ps1",
+          "sha256": "b1584b5953515d75bdd81246351dedb864b75053949c4897fafda63aeef4876b"
+        },
+        {
+          "path": "Locksmith2-f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639/Private/Convert/Convert-IdentityReferenceToSid.ps1",
+          "sha256": "0a301e6bb1b026b50aa975aa1471896d7ab94c581f2c98f8d2e9fd4b23305a24"
+        },
+        {
+          "path": "Locksmith2-f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639/Private/Convert/Expand-GroupMembership.ps1",
+          "sha256": "a0cc1f4b31aa481ebe25861727a829dafa89f65779b59bab8028dd9676013722"
+        },
+        {
+          "path": "Locksmith2-f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639/Private/Convert/Resolve-Principal.ps1",
+          "sha256": "1e8e86352252687cd8c96a9009235e69cb2bf8d5e55a79daaa15dbf5ff2b754f"
+        },
+        {
+          "path": "Locksmith2-f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639/Private/Data/AceDefinitions.ps1",
+          "sha256": "2f9922a6646a950cba5fa18f314b64476ccb5b6f98c13d490b6b72d33ef6f8e8"
+        },
+        {
+          "path": "Locksmith2-f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639/Private/Data/ESCDefinitions.ps1",
+          "sha256": "04e3bc65c7b5056d70b62eb77544df844c86fceea01da108c878a3c626ade625"
+        },
+        {
+          "path": "Locksmith2-f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639/Private/Data/PrincipalDefinitions.ps1",
+          "sha256": "d91e0ea54f81c56c79026f45d615ffcfa94a012f68cf41afc8a62e8a667d9986"
+        },
+        {
+          "path": "Locksmith2-f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639/Private/Get/Get-AdcsObject.ps1",
+          "sha256": "2468224aa61bbe885bc87451828afb5ad5d4eea38a015ffd385a9361b5987d4a"
+        },
+        {
+          "path": "Locksmith2-f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639/Private/Get/Get-FlattenedIssues.ps1",
+          "sha256": "3002b20ecd637d83cbcce2841f844dc6d8624aa8dfc207746e0c0e3aa24e6c32"
+        },
+        {
+          "path": "Locksmith2-f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639/Private/Get/Get-ModuleThatLoadedThisFunction.ps1",
+          "sha256": "0e4ec7201bfee0a7b2b755bb4619c7df83ede0d80131c8448a2e5453ca75b4d5"
+        },
+        {
+          "path": "Locksmith2-f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639/Private/Get/Get-RootDSE.ps1",
+          "sha256": "f9b286fb7356f22c74a2b9d06d6699f590bbd7b1088300fca0b60d19b5622ee4"
+        },
+        {
+          "path": "Locksmith2-f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639/Private/Get/Get-WebEnrollmentEndpointStatus.ps1",
+          "sha256": "5e067f0155df73d4c4121fe4244863e7e6f4e73dada4c5a84e216ea54337daba"
+        },
+        {
+          "path": "Locksmith2-f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639/Private/Initialize/Initialize-AdcsObjectStore.ps1",
+          "sha256": "b085be8e0061ac332c4e02b2a5ed3f0091847e8fa5116c41e8d1ff0a78920cbf"
+        },
+        {
+          "path": "Locksmith2-f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639/Private/Initialize/Initialize-DirectoryConnections.ps1",
+          "sha256": "1bbce5ac453fde158e462bbc133c6c0f3cbcbcf1eb4d5c89cb36ab986efc19e4"
+        },
+        {
+          "path": "Locksmith2-f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639/Private/Initialize/Initialize-DomainStore.ps1",
+          "sha256": "a071eb6be8d6105c0b3769f3cb2830374533d14205fed46a22a47cdd4abbafd4"
+        },
+        {
+          "path": "Locksmith2-f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639/Private/Initialize/Initialize-LS2Scan.ps1",
+          "sha256": "5f156b5a65a4d32e2fd477782c4a2b9f3cfd8b4f58d6c26735649ddbe8d73f57"
+        },
+        {
+          "path": "Locksmith2-f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639/Private/Initialize/Initialize-PrincipalDefinitions.ps1",
+          "sha256": "6cd1d819b52e05ef94bf95d13883adf5c771e9963afaa8f141c9495ba0229c0e"
+        },
+        {
+          "path": "Locksmith2-f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639/Private/New/New-AuthenticatedDirectoryEntry.ps1",
+          "sha256": "2094e61a96c8fa736bf4b7c4b10ee8f5db4acd21e5da82239968089dbccccf9b"
+        },
+        {
+          "path": "Locksmith2-f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639/Private/New/New-GCSearcher.ps1",
+          "sha256": "11ed1bf351b2c6fbfc54b5fae0f57c3e184547b08ad2e4949c6f35033aea595f"
+        },
+        {
+          "path": "Locksmith2-f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639/Private/New/New-LDAPSearcher.ps1",
+          "sha256": "5a6c243ecdcd05d2383ca775a7c47d017b33ec382c8887ab19ee5a6005a8d3d2"
+        },
+        {
+          "path": "Locksmith2-f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639/Private/Set/Get-PrincipalRiskBonus.ps1",
+          "sha256": "597d3055d0b2ea1afaf72e3847d33596ee185296fb615ab7ecdb942509f165a8"
+        },
+        {
+          "path": "Locksmith2-f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639/Private/Set/Set-AnyPurposeEKUExist.ps1",
+          "sha256": "ffafacb1c43e7b50daf8a49a9074fd49e1b7f85e0fc39d5a34b8f1dee73b7d46"
+        },
+        {
+          "path": "Locksmith2-f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639/Private/Set/Set-AuthenticationEKUExist.ps1",
+          "sha256": "c2e0e57bb180c4a25ead19d3d676e3493fae8aaaaab06f0706bc494083127f42"
+        },
+        {
+          "path": "Locksmith2-f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639/Private/Set/Set-AuthorizedSignatureNotRequired.ps1",
+          "sha256": "fb0b59b78536ec5e6fafd2fab99d56a9e704abdd7125f89c79eed98740d91002"
+        },
+        {
+          "path": "Locksmith2-f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639/Private/Set/Set-CAAdministrator.ps1",
+          "sha256": "b492d306fd3ebfc7f16f6614cc95b145349343b70bec869daf429d15a8d7f0a2"
+        },
+        {
+          "path": "Locksmith2-f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639/Private/Set/Set-CAAuditFilter.ps1",
+          "sha256": "a189a31d8c40462e376380d97599aaea479db4c4d72f6e00008f7b3a73e26ccf"
+        },
+        {
+          "path": "Locksmith2-f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639/Private/Set/Set-CACertificateManager.ps1",
+          "sha256": "b91dc245d208b65ec8f6703285c203e4212d824aac30d2d6eb5f399acdad6051"
+        },
+        {
+          "path": "Locksmith2-f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639/Private/Set/Set-CAComputerPrincipal.ps1",
+          "sha256": "b254899d02e3d5fcc139a79af3cbc3907b17fff4a69d68b3d1ed90aa2f4bcc10"
+        },
+        {
+          "path": "Locksmith2-f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639/Private/Set/Set-CADisableExtensionList.ps1",
+          "sha256": "7e9314d4f5cae0f3c498df7583d7d6cfeb692b2ddabce8c46d6a4447d087511c"
+        },
+        {
+          "path": "Locksmith2-f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639/Private/Set/Set-CAEditFlags.ps1",
+          "sha256": "16503bcddf6ae64fd44814d669cc7f9ce49a1fcf459b8404a2bf833abacd6c55"
+        },
+        {
+          "path": "Locksmith2-f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639/Private/Set/Set-CAInterfaceFlags.ps1",
+          "sha256": "78a11a0caf0d62545418779984cf2ff3cf33d9e00d05151e3dbab79028402db0"
+        },
+        {
+          "path": "Locksmith2-f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639/Private/Set/Set-CAWebEnrollmentEndpoints.ps1",
+          "sha256": "eb1bc10e2c78cdd0968311acd65fa071089485219a119e94eae0b902d6bdfae8"
+        },
+        {
+          "path": "Locksmith2-f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639/Private/Set/Set-DangerousCAAdministrator.ps1",
+          "sha256": "e6194e01148da7de2a930337513063f6dc4ce2d599682029ec131bca1f994926"
+        },
+        {
+          "path": "Locksmith2-f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639/Private/Set/Set-DangerousCACertificateManager.ps1",
+          "sha256": "6376d4e0919c9c7d47e6f58b0b2a84e3d9afd9d3c9d8cc832d4915b504908ee2"
+        },
+        {
+          "path": "Locksmith2-f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639/Private/Set/Set-DangerousEditor.ps1",
+          "sha256": "2256f28459c2827d8359f5a4eb7b5da87b32fd07f37f0013399d307c106645c6"
+        },
+        {
+          "path": "Locksmith2-f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639/Private/Set/Set-DangerousEnrollee.ps1",
+          "sha256": "acea9e288843fad42ed0c18891fae771fe21e78855aff8fe75c659b89fc0e343"
+        },
+        {
+          "path": "Locksmith2-f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639/Private/Set/Set-EnrollmentAgentEKUExist.ps1",
+          "sha256": "5a2659785d817aad72a8ea9ec12abe863f7a6350e13b4a978e2c2f753fb482f9"
+        },
+        {
+          "path": "Locksmith2-f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639/Private/Set/Set-HasNonStandardOwner.ps1",
+          "sha256": "0e5ea3d113c61c3525656946b72530c105f5ca8b6620d296ae0c011f16f07fb1"
+        },
+        {
+          "path": "Locksmith2-f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639/Private/Set/Set-IsCATemplate.ps1",
+          "sha256": "f72dda110a96a6f450134c3132b8eca53eb03b0949cb8008be918606ed8a4945"
+        },
+        {
+          "path": "Locksmith2-f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639/Private/Set/Set-LinkedGroupOIDPolicy.ps1",
+          "sha256": "e5eaf93d6bbff4d9dd54741d8ad4f9fe2e1e4963f2fcdc4238178d6aadd59687"
+        },
+        {
+          "path": "Locksmith2-f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639/Private/Set/Set-LowPrivilegeCAAdministrator.ps1",
+          "sha256": "0b07835823001d6b519b7c5e36ca7a9fea038e38dc39c80ebaac6a5629268b0b"
+        },
+        {
+          "path": "Locksmith2-f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639/Private/Set/Set-LowPrivilegeCACertificateManager.ps1",
+          "sha256": "15351f8f22049a05519f23c4258dc928e6b92fa319476f39c0f7e41171f09e75"
+        },
+        {
+          "path": "Locksmith2-f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639/Private/Set/Set-LowPrivilegeEditor.ps1",
+          "sha256": "181e748c6c00d904e428afb6002960b50d40448bc7c34fa5ae3613b008c2028c"
+        },
+        {
+          "path": "Locksmith2-f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639/Private/Set/Set-LowPrivilegeEnrollee.ps1",
+          "sha256": "273baa3785565d1ded9586b7df7ebba6c35c54d818975f9b106b804fe4be9cf3"
+        },
+        {
+          "path": "Locksmith2-f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639/Private/Set/Set-LS2RiskRating.ps1",
+          "sha256": "788c80f196dbab23768e9edad3effc0f51748589dadcf240ebe13f9f4759de0e"
+        },
+        {
+          "path": "Locksmith2-f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639/Private/Set/Set-ManagerApprovalNotRequired.ps1",
+          "sha256": "c1eb628df0bde5f8be6b405b75ce2c6677f2066bdbf1dcb4f35c37b4564286ab"
+        },
+        {
+          "path": "Locksmith2-f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639/Private/Set/Set-NoSecurityExtension.ps1",
+          "sha256": "949467566bffcb0b14df8b7a4d32c92394b21ea30a77164428c1bc8c71ceef74"
+        },
+        {
+          "path": "Locksmith2-f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639/Private/Set/Set-Owner.ps1",
+          "sha256": "c2ec3368d5ede9d5f6b48b9dd76fcdadf0bb65cc830033cd6e2cea3f9dc6efdd"
+        },
+        {
+          "path": "Locksmith2-f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639/Private/Set/Set-RequiresEnrollmentAgentSignature.ps1",
+          "sha256": "e49d887ed9ad2a08f0d18aa042ed334f4ee7f1dccac9457187701b0cb696cd78"
+        },
+        {
+          "path": "Locksmith2-f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639/Private/Set/Set-SANAllowed.ps1",
+          "sha256": "46c2c0e198d88b388970181ddf4f295b98400db06f79b5c82a0e0945e8793187"
+        },
+        {
+          "path": "Locksmith2-f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639/Private/Set/Set-TemplateEnabled.ps1",
+          "sha256": "49ca0bb31db72d9ae66f9d9b079ed50d5ff91a4cd2cbf7b50c2af4b9f147f465"
+        },
+        {
+          "path": "Locksmith2-f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639/Private/Test/Test-IsBA.ps1",
+          "sha256": "4452ebdb6fef070ddd19f3bfd7607ff5eea540ff9fda972e7ad2acadfeb3d926"
+        },
+        {
+          "path": "Locksmith2-f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639/Private/Test/Test-IsDA.ps1",
+          "sha256": "4261924c419e9a7fbd5026d173ae02fdd07ae401095634f4bc34eec78a59d887"
+        },
+        {
+          "path": "Locksmith2-f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639/Private/Test/Test-IsDangerousAce.ps1",
+          "sha256": "03b10d5011f4c7a16bd0922cbe115f9a3f1a5ce45b1344aa603949d65e38001a"
+        },
+        {
+          "path": "Locksmith2-f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639/Private/Test/Test-IsDangerousPrincipal.ps1",
+          "sha256": "3894d7be6f350fbc962627e655b938d44a06dcc302380bea593fa66814ee2e12"
+        },
+        {
+          "path": "Locksmith2-f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639/Private/Test/Test-IsDomainComputer.ps1",
+          "sha256": "114d4d36d0049c483eff3d9fbdc5f5e4d59a6d26bb5409a39f735cb542237e2a"
+        },
+        {
+          "path": "Locksmith2-f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639/Private/Test/Test-IsDomainUser.ps1",
+          "sha256": "1f21d5a6b50477ce745cea1d730b079884bae9987307a525d0db4e37c8b2a66c"
+        },
+        {
+          "path": "Locksmith2-f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639/Private/Test/Test-IsEA.ps1",
+          "sha256": "9286bc4a4dd9d831af5492112cdce91b237a90ff22b041b7250202b244834ec1"
+        },
+        {
+          "path": "Locksmith2-f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639/Private/Test/Test-IsEnrollmentAce.ps1",
+          "sha256": "c4fb8a049fb70ad421e64c5653a2c9261132ede6769194aa0dfa6c4467633dde"
+        },
+        {
+          "path": "Locksmith2-f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639/Private/Test/Test-IsInteractiveSession.ps1",
+          "sha256": "facbd368349f783ec9774ceded5f799564ad716374b77d950a4d3e7218ea9f63"
+        },
+        {
+          "path": "Locksmith2-f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639/Private/Test/Test-IsLatestVersion.ps1",
+          "sha256": "34d2dad19515022ff6e479e330a56d60715e59a239af79dd4a6a33a03ef7b886"
+        },
+        {
+          "path": "Locksmith2-f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639/Private/Test/Test-IsLocalAdmin.ps1",
+          "sha256": "56084b79836b4d425ec5b41fbb9ead1252c06ee6f8227089c7f460615124d476"
+        },
+        {
+          "path": "Locksmith2-f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639/Private/Test/Test-IsLowPrivilegePrincipal.ps1",
+          "sha256": "173efd6b5a5e5bcf6eb574531d5005156bcc08378f8e8f3d9e24b646ce99cb43"
+        },
+        {
+          "path": "Locksmith2-f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639/Private/Test/Test-IsModuleAvailable.ps1",
+          "sha256": "24efe82fe92b20353781d387a6bdb984d69a1897e69f679bbe1ac7257764802a"
+        },
+        {
+          "path": "Locksmith2-f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639/Private/Test/Test-IsModuleLoaded.ps1",
+          "sha256": "979e233fe27013d61c2c1761f39d0a0fc6bd5499c1a8a9dcce3450da4beb0f9c"
+        },
+        {
+          "path": "Locksmith2-f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639/Private/Test/Test-IsPowerShellCore.ps1",
+          "sha256": "a6054ffa271fa8e3b5b89ffb3f8125742d9e10488292a016edb868e14057ef7e"
+        },
+        {
+          "path": "Locksmith2-f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639/Private/Test/Test-IsStandardOwner.ps1",
+          "sha256": "4efb889f6f2d769c578c1a650fc871361fbecfecb322461895c5d9d119506f94"
+        },
+        {
+          "path": "Locksmith2-f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639/Private/Test/Test-IssueExists.ps1",
+          "sha256": "88242f6cc6d52632a167da36fc4daecc4fd4a7e6f0ea8d96a137245f452f0e64"
+        },
+        {
+          "path": "Locksmith2-f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639/Private/Test/Test-IsSupportedOS.ps1",
+          "sha256": "99d57919b32c6669d3a9efa2bfbfed1eb2f0da644cd3fee216c552cb37afcb9b"
+        },
+        {
+          "path": "Locksmith2-f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639/Private/Test/Test-IsSupportedPS.ps1",
+          "sha256": "9e97589bac8050906a1a73c2d92a9341823d31e1887fe7480973b88d00f2d99f"
+        },
+        {
+          "path": "Locksmith2-f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639/Private/Test/Test-IsUtf8.ps1",
+          "sha256": "e47cf42eb171711c0f6b128c2b749f981ab5a698d2317a4caf10df1ec53e7417"
+        },
+        {
+          "path": "Locksmith2-f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639/Private/Test/Test-IsWindows.ps1",
+          "sha256": "0f78ce1076dae6ddad50d8de064e72f4a00ad9a2093230ed39101f149279edfc"
+        },
+        {
+          "path": "Locksmith2-f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639/Private/Test/Test-IsWindowsTerminal.ps1",
+          "sha256": "95e60b8226bbfb021b0df4400f874ccfe0413d370d1c78db7c4696c2c939bcee"
+        },
+        {
+          "path": "Locksmith2-f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639/Private/Test/Test-PowerShellEnvironment.ps1",
+          "sha256": "efc81737d0e52fd3f31ba57a3848abfe67579b74b1b491652ec6ef19e7c6732a"
+        },
+        {
+          "path": "Locksmith2-f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639/Private/UI/Read-Choice.ps1",
+          "sha256": "76e340379052b3045a899f10ea006818406c9a0138300dcf23537923b64b2a36"
+        },
+        {
+          "path": "Locksmith2-f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639/Private/UI/Show-ConnectionContext.ps1",
+          "sha256": "74b78fb451e76b858c5fd9c10b4f5d48467273b9cc66aa58112e846683ea5bed"
+        },
+        {
+          "path": "Locksmith2-f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639/Private/UI/Show-ConnectionDiagnostics.ps1",
+          "sha256": "288faa2be5367adc375b3e420f58bdf3d056ef6926ac8c1a91b3c109331d9258"
+        },
+        {
+          "path": "Locksmith2-f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639/Private/UI/Show-IssueReport.ps1",
+          "sha256": "c45a92a598372bfedb0abb3b75a1c67603229febcd7f9b01ac068bdca5f67383"
+        },
+        {
+          "path": "Locksmith2-f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639/Private/UI/Show-Logo.ps1",
+          "sha256": "2e3f4fddad235d22d67e63c3c18be5ac3ca2e1bbe5c034e650821b8493fe1bf2"
+        },
+        {
+          "path": "Locksmith2-f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639/Private/UI/Show-PrivilegeContext.ps1",
+          "sha256": "89e854a94da97b9dc355373a32d54c16c90c9aee88a9c611ac030cc389bdb738"
+        },
+        {
+          "path": "Locksmith2-f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639/Private/Utility/Add-ToIssueStore.ps1",
+          "sha256": "6f77833ae65cc7923b3e6ba11853d1e766a3bfbaf5e91a6fd0641f49559fbe9d"
+        },
+        {
+          "path": "Locksmith2-f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639/Private/Utility/Expand-IssueByGroup.ps1",
+          "sha256": "bdc56a06913c689aa50f0d69274c6ff47d98575e63e65b658eaa34b21e37f47d"
+        },
+        {
+          "path": "Locksmith2-f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639/Private/Utility/Expand-IssueTemplate.ps1",
+          "sha256": "54fade4ec9957fa12b2a7ab957fc566f020dae9fcf4ea3cec8681d44a949b94a"
+        },
+        {
+          "path": "Locksmith2-f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639/Private/Utility/Get-AdcsObjectName.ps1",
+          "sha256": "0c90a32f98bd8b4a586b7f31e0521f275971eba1bb60a31bc9595b6b8db934fd"
+        },
+        {
+          "path": "Locksmith2-f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639/Private/Utility/Get-ForestNameFromDN.ps1",
+          "sha256": "ebfeb5704ea457959ec2dc4411dc732376dd0e7b871f37f1aa31e84b2a1a15a9"
+        },
+        {
+          "path": "Locksmith2-f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639/Private/Utility/Get-IssueCount.ps1",
+          "sha256": "0841e5c74b9019320b2c115894ef09f0ffbd67c59dce74ebdda33aa8f329587b"
+        },
+        {
+          "path": "Locksmith2-f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639/Private/Utility/Get-IssueTextOverride.ps1",
+          "sha256": "1fa6d629302de7d1061556018a1ce88dac1aa3ae6c05c9ab203c088dfb6139f4"
+        },
+        {
+          "path": "Locksmith2-f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639/Private/Utility/Install-NeededModule.ps1",
+          "sha256": "86274741d7d53e64ae69b70b82c00eabee10a5967297d96401f09f04f85cd2d7"
+        },
+        {
+          "path": "Locksmith2-f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639/Private/Utility/Repair-PowerShellEnvironment.ps1",
+          "sha256": "f2ae309c3d99a0dfee165ae17ffc1f2c5bc0518e8fd1857fae6649216013a101"
+        },
+        {
+          "path": "Locksmith2-f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639/Private/Utility/Resolve-LS2ConnectionContext.ps1",
+          "sha256": "162eef882f2c37903662f8f4ccef297ee0a90778a32455c2d4f578c6b46daa0e"
+        },
+        {
+          "path": "Locksmith2-f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639/Private/Utility/Update-DollarSignProfile.ps1",
+          "sha256": "df66ceaeca0462220a08fe96705827c4c6c9175918e40192c6c7700c764fab59"
+        },
+        {
+          "path": "Locksmith2-f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639/Private/Utility/Update-OutputEncoding.ps1",
+          "sha256": "18fbc8c40570fa56d177fe0a9533ae82aa8ba566ae171323f2839bccd7e6f23e"
+        },
+        {
+          "path": "Locksmith2-f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639/Public/Find-LS2RiskyPrincipal.ps1",
+          "sha256": "b6f08204999c457f97125e51a57058287aa230eb9fedbb5beb3f1fbeed980104"
+        },
+        {
+          "path": "Locksmith2-f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639/Public/Find-LS2VulnerableCA.ps1",
+          "sha256": "1927e348aa6b14328a64cd76bdfe998ef742a87e7c7cf2200640255291d81930"
+        },
+        {
+          "path": "Locksmith2-f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639/Public/Find-LS2VulnerableObject.ps1",
+          "sha256": "1f79940e3ef1bdbb8463907cb49903afa36c5fe0e865e9ea2002c15c95c8fd01"
+        },
+        {
+          "path": "Locksmith2-f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639/Public/Find-LS2VulnerableTemplate.ps1",
+          "sha256": "56d47d2fd68bc4958041af49f4022ef4b108c6860c294ec0ada75f07329a57bc"
+        },
+        {
+          "path": "Locksmith2-f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639/Public/Get-LS2Stores.ps1",
+          "sha256": "e39499b6a4399bab87dd614e716fec524b8b7f7367056fe924e916880e8d616f"
+        },
+        {
+          "path": "Locksmith2-f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639/Public/Invoke-Locksmith2.ps1",
+          "sha256": "c78b1113126307ac2e9a7bfdd386898f874fbe1e6c2434466956cce3a0f777bb"
+        },
+        {
+          "path": "Locksmith2-f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639/Public/New-LS2Dashboard.ps1",
+          "sha256": "b942527957ba3c5c80f186ec1b4ffd37b0c7f5a22c2efb720eb44b29e7f42ba0"
+        },
+        {
+          "path": "Locksmith2-f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639/Public/Set-LS2Credential.ps1",
+          "sha256": "93c0053455d6c26ec3346e6f3cc0c305bbb0beb5746c3e3d47637c13b7fdbe7f"
+        },
+        {
+          "path": "Locksmith2-f9a2bc28a19b4b769fdb6c03d7043ac0ebc94639/Public/Set-LS2Forest.ps1",
+          "sha256": "8e036ad9a6e533e0148a3d476113ac92bb523284ab8cf87d025dc428df99e18d"
+        }
+      ]
     },
     {
       "id": "get-windows-autopilot-info",
@@ -58,7 +1853,47 @@
         "url": "https://www.powershellgallery.com/api/v2/package/Get-WindowsAutoPilotInfo/3.9",
         "sha256": "c93baac868b20d93df1da81ebe6f35166feb4b62e25d56200522259d6599398a"
       },
-      "entryPoint": "Get-WindowsAutopilotInfo.ps1"
+      "entryPoint": "Get-WindowsAutopilotInfo.ps1",
+      "qualification": {
+        "kind": "HybridScriptApplication",
+        "artifactName": "AutopilotApplication",
+        "completeFunctionInventory": true,
+        "requiredExports": [],
+        "requiredAliases": [],
+        "requiredCompiledOwnedFunctions": [
+          {
+            "relativePath": "Get-WindowsAutopilotInfo.ps1",
+            "name": "<script>"
+          }
+        ],
+        "requiredScenarioIds": [
+          "pipeline-records",
+          "csv-append",
+          "partner-fallback",
+          "failure-and-recovery"
+        ],
+        "publicExportScenarios": {},
+        "observerScript": "Workflows/HardwareApplications/Observe-Autopilot.ps1",
+        "observerSha256": "5a5f49adc26eed8332d9b800e298e4ee9b564fe53fa46d351f20a255253501b3",
+        "observerSupport": [
+          {
+            "path": "Workflows/HardwareApplications/Hardware.Observer.Common.ps1",
+            "sha256": "755e67b10371d990d78eb4c81eeb6a4e706fc0928989e41c6aeb5dc3a1c2ca85"
+          }
+        ],
+        "runtimeIdentifier": "win-x64",
+        "singleFile": false,
+        "testArguments": [
+          "-?"
+        ],
+        "testWorkingDirectory": "."
+      },
+      "sourceInputs": [
+        {
+          "path": "Get-WindowsAutopilotInfo.ps1",
+          "sha256": "60c13cf3a63e0e38d41d075c85e95c7eb4a8ef301e0c605de6de29e5a552170d"
+        }
+      ]
     },
     {
       "id": "getbios",
@@ -74,7 +1909,98 @@
         "url": "https://www.powershellgallery.com/api/v2/package/GetBIOS/1.3.3",
         "sha256": "83625804e898c62516a3a37384d6f197d9ccb1b2bec1de7f8999d3d303ec4e44"
       },
-      "entryPoint": "GetBIOS.psd1"
+      "entryPoint": "GetBIOS.psd1",
+      "qualification": {
+        "kind": "HybridModuleWorkflow",
+        "artifactName": "GetBIOS",
+        "completeFunctionInventory": true,
+        "requiredExports": "Get-Bios",
+        "requiredAliases": [],
+        "requiredCompiledOwnedFunctions": [
+          {
+            "relativePath": "GetBIOS.psm1",
+            "name": "Get-Bios"
+          }
+        ],
+        "requiredScenarioIds": [
+          "vendor-dell",
+          "vendor-hp",
+          "vendor-lenovo",
+          "vendor-toshiba",
+          "remote-provider",
+          "provider-failure"
+        ],
+        "publicExportScenarios": {
+          "Get-Bios": [
+            "vendor-dell",
+            "vendor-hp",
+            "vendor-lenovo",
+            "vendor-toshiba",
+            "remote-provider",
+            "provider-failure"
+          ]
+        },
+        "observerScript": "Workflows/HardwareApplications/Observe-GetBIOS.ps1",
+        "observerSha256": "d7c7851dd8dc6eb6c43a37f3275e5b89b729e651f1f607c5a6ccb352177a0637",
+        "observerSupport": [
+          {
+            "path": "Workflows/HardwareApplications/Hardware.Observer.Common.ps1",
+            "sha256": "755e67b10371d990d78eb4c81eeb6a4e706fc0928989e41c6aeb5dc3a1c2ca85"
+          }
+        ],
+        "fixtureScript": "Workflows/HardwareApplications/Invoke-HardwareFixture.ps1",
+        "fixtureSha256": "da954b1fe184cc9e1760f562e895b8aa3a25e4be4dcbacfc4460c308fb4a9c4f",
+        "fixtureSupport": [
+          {
+            "path": "Workflows/HardwareApplications/Observe-GetBIOS.ps1",
+            "sha256": "d7c7851dd8dc6eb6c43a37f3275e5b89b729e651f1f607c5a6ccb352177a0637"
+          }
+        ],
+        "requiredCompiledNestedFunctions": [
+          {
+            "startOffset": 2362,
+            "parentStartLine": 43,
+            "relativePath": "GetBIOS.psm1",
+            "endOffset": 3408,
+            "parentName": "Get-Bios",
+            "sourceBodyName": "Get_Dell_BIOS_Settings"
+          },
+          {
+            "startOffset": 3420,
+            "parentStartLine": 43,
+            "relativePath": "GetBIOS.psm1",
+            "endOffset": 3850,
+            "parentName": "Get-Bios",
+            "sourceBodyName": "Get_HP_BIOS_Settings"
+          },
+          {
+            "startOffset": 3856,
+            "parentStartLine": 43,
+            "relativePath": "GetBIOS.psm1",
+            "endOffset": 4533,
+            "parentName": "Get-Bios",
+            "sourceBodyName": "Get_Lenovo_BIOS_Settings"
+          },
+          {
+            "startOffset": 4544,
+            "parentStartLine": 43,
+            "relativePath": "GetBIOS.psm1",
+            "endOffset": 4932,
+            "parentName": "Get-Bios",
+            "sourceBodyName": "Get_Toshiba_BIOS_Settings"
+          }
+        ]
+      },
+      "sourceInputs": [
+        {
+          "path": "GetBIOS.psd1",
+          "sha256": "74367d575806b3e5812901fd682feec555b906fc9d4ceae4627ca81300ab28fd"
+        },
+        {
+          "path": "GetBIOS.psm1",
+          "sha256": "3fd60f977ee9f4dadeb41e2297baa446556ccc8fdb8fe891e9b6ccc5129de59b"
+        }
+      ]
     },
     {
       "id": "powershell-install-script",
@@ -90,7 +2016,95 @@
         "url": "https://raw.githubusercontent.com/PowerShell/PowerShell/eb8b76e7c669423a016b5b405be5c9431849a338/tools/install-powershell.ps1",
         "sha256": "e84ea7b8c429c1d474664f5601f23f88201b21152a32f0a47906866da290273c"
       },
-      "entryPoint": "install-powershell.ps1"
+      "entryPoint": "install-powershell.ps1",
+      "qualification": {
+        "kind": "HybridModuleWorkflow",
+        "artifactName": "PowerShellInstaller",
+        "completeFunctionInventory": true,
+        "requiredExports": [
+          "Expand-ArchiveInternal",
+          "Remove-Destination",
+          "Test-PathNotInSettings",
+          "Add-PathTToSettings"
+        ],
+        "requiredAliases": [],
+        "requiredCompiledOwnedFunctions": [
+          {
+            "relativePath": "install-powershell.ps1",
+            "name": "Expand-ArchiveInternal"
+          },
+          {
+            "relativePath": "install-powershell.ps1",
+            "name": "Remove-Destination"
+          },
+          {
+            "relativePath": "install-powershell.ps1",
+            "name": "Test-PathNotInSettings"
+          },
+          {
+            "relativePath": "install-powershell.ps1",
+            "name": "Add-PathTToSettings"
+          }
+        ],
+        "requiredScenarioIds": [
+          "portable-install",
+          "isolated-path-registration",
+          "overwrite-contract"
+        ],
+        "publicExportScenarios": {
+          "Expand-ArchiveInternal": [
+            "portable-install"
+          ],
+          "Remove-Destination": [
+            "portable-install",
+            "overwrite-contract"
+          ],
+          "Test-PathNotInSettings": [
+            "isolated-path-registration"
+          ],
+          "Add-PathTToSettings": [
+            "isolated-path-registration"
+          ]
+        },
+        "observerScript": "Workflows/Installers/Observe-PowerShellInstaller.ps1",
+        "observerSha256": "1aaf634539f4fefd81ea9df5729b0f30478f6a2e829e840a995cd76058f0ad6a",
+        "observerSupport": [
+          {
+            "path": "Workflows/Installers/Installer.Observer.Common.ps1",
+            "sha256": "bc525206155d2c334f27893970cfeefe49348bf3073e111de0276cb4f77d5a23"
+          },
+          {
+            "path": "Workflows/Installers/InstallerRegistryScope.cs",
+            "sha256": "8e890c800e00ce1e6b4fae7a7a3fc2a3ce23fbbb1075f2f521b7af5bbf24334d"
+          },
+          {
+            "path": "Workflows/Installers/installer-payloads.json",
+            "sha256": "1650ebdd13ff89225eaed9f21f51da1e61b54704833af0f15463846a9e85fb62"
+          }
+        ],
+        "fixtureScript": "Workflows/Installers/Invoke-PowerShellInstallerFixture.ps1",
+        "fixtureSha256": "6dd3bce6290b884c51e76286694810cfddc5bdfd08ab4b4e2fb188b9e8535d90",
+        "fixtureSupport": [
+          {
+            "path": "Workflows/Installers/Invoke-InstallerFixture.ps1",
+            "sha256": "7acb282d8266edfbf2772074a9b38d7db9b650d76cdbc1e06dca65e2d4e02d56"
+          },
+          {
+            "path": "Workflows/Installers/Serve-InstallerPayloads.ps1",
+            "sha256": "ab725874ea592c95a5137e8fcd8b927d67c69501681e3959f6af8c3c8d2638db"
+          },
+          {
+            "path": "Workflows/Installers/Test-InstallerModule.ps1",
+            "sha256": "718880d8f577b9ed0dbc078f8d2bb897e77cfc417b8b5aff19591935f821e5a6"
+          }
+        ]
+      },
+      "sourceInputs": [
+        {
+          "path": "install-powershell.ps1",
+          "sha256": "e84ea7b8c429c1d474664f5601f23f88201b21152a32f0a47906866da290273c"
+        }
+      ]
     },
     {
       "id": "scoop-install-script",
@@ -108,13 +2122,254 @@
       },
       "entryPoint": "install.ps1",
       "qualification": {
-        "kind": "HybridModuleCommand",
-        "originalImportSurface": "DotSource",
-        "compiledImportSurface": "TypedAssembly",
-        "unitName": "Test-IsAdministrator",
-        "setupScript": "$env:CI = 'true'; $env:SCOOP_NOINSTALL = 'true'",
-        "probeScript": "(Test-IsAdministrator).ToString()"
-      }
+        "kind": "HybridModuleWorkflow",
+        "artifactName": "ScoopInstaller",
+        "completeFunctionInventory": true,
+        "requiredExports": [
+          "Install-Scoop",
+          "Test-Prerequisite",
+          "Test-ValidateParameter",
+          "Optimize-SecurityProtocol",
+          "Get-Downloader",
+          "Test-CommandAvailable",
+          "Expand-ZipArchive",
+          "Test-isFileLocked",
+          "Import-ScoopShim",
+          "Out-UTF8File",
+          "Add-ShimsDirToPath",
+          "Get-Env",
+          "Write-Env",
+          "Publish-Env",
+          "Add-DefaultConfig",
+          "Add-Config",
+          "Use-Config",
+          "Write-InstallInfo",
+          "Test-LanguageMode",
+          "Write-DebugInfo",
+          "Test-ShouldRunInstall",
+          "Test-IsAdministrator",
+          "Deny-Install",
+          "Exit-Install"
+        ],
+        "requiredAliases": [],
+        "requiredCompiledOwnedFunctions": [
+          {
+            "relativePath": "install.ps1",
+            "name": "Install-Scoop"
+          },
+          {
+            "relativePath": "install.ps1",
+            "name": "Test-Prerequisite"
+          },
+          {
+            "relativePath": "install.ps1",
+            "name": "Test-ValidateParameter"
+          },
+          {
+            "relativePath": "install.ps1",
+            "name": "Optimize-SecurityProtocol"
+          },
+          {
+            "relativePath": "install.ps1",
+            "name": "Get-Downloader"
+          },
+          {
+            "relativePath": "install.ps1",
+            "name": "Test-CommandAvailable"
+          },
+          {
+            "relativePath": "install.ps1",
+            "name": "Expand-ZipArchive"
+          },
+          {
+            "relativePath": "install.ps1",
+            "name": "Test-isFileLocked"
+          },
+          {
+            "relativePath": "install.ps1",
+            "name": "Import-ScoopShim"
+          },
+          {
+            "relativePath": "install.ps1",
+            "name": "Out-UTF8File"
+          },
+          {
+            "relativePath": "install.ps1",
+            "name": "Add-ShimsDirToPath"
+          },
+          {
+            "relativePath": "install.ps1",
+            "name": "Get-Env"
+          },
+          {
+            "relativePath": "install.ps1",
+            "name": "Write-Env"
+          },
+          {
+            "relativePath": "install.ps1",
+            "name": "Publish-Env"
+          },
+          {
+            "relativePath": "install.ps1",
+            "name": "Add-DefaultConfig"
+          },
+          {
+            "relativePath": "install.ps1",
+            "name": "Add-Config"
+          },
+          {
+            "relativePath": "install.ps1",
+            "name": "Use-Config"
+          },
+          {
+            "relativePath": "install.ps1",
+            "name": "Write-InstallInfo"
+          },
+          {
+            "relativePath": "install.ps1",
+            "name": "Test-LanguageMode"
+          },
+          {
+            "relativePath": "install.ps1",
+            "name": "Write-DebugInfo"
+          },
+          {
+            "relativePath": "install.ps1",
+            "name": "Test-ShouldRunInstall"
+          },
+          {
+            "relativePath": "install.ps1",
+            "name": "Test-IsAdministrator"
+          },
+          {
+            "relativePath": "install.ps1",
+            "name": "Deny-Install"
+          },
+          {
+            "relativePath": "install.ps1",
+            "name": "Exit-Install"
+          }
+        ],
+        "requiredScenarioIds": [
+          "install-from-pinned-repositories",
+          "file-lock-contract",
+          "controlled-install-failure"
+        ],
+        "publicExportScenarios": {
+          "Install-Scoop": [
+            "install-from-pinned-repositories"
+          ],
+          "Test-Prerequisite": [
+            "install-from-pinned-repositories"
+          ],
+          "Test-ValidateParameter": [
+            "install-from-pinned-repositories"
+          ],
+          "Optimize-SecurityProtocol": [
+            "install-from-pinned-repositories"
+          ],
+          "Get-Downloader": [
+            "install-from-pinned-repositories"
+          ],
+          "Test-CommandAvailable": [
+            "install-from-pinned-repositories"
+          ],
+          "Expand-ZipArchive": [
+            "install-from-pinned-repositories"
+          ],
+          "Test-isFileLocked": [
+            "install-from-pinned-repositories",
+            "file-lock-contract"
+          ],
+          "Import-ScoopShim": [
+            "install-from-pinned-repositories"
+          ],
+          "Out-UTF8File": [
+            "install-from-pinned-repositories"
+          ],
+          "Add-ShimsDirToPath": [
+            "install-from-pinned-repositories"
+          ],
+          "Get-Env": [
+            "install-from-pinned-repositories"
+          ],
+          "Write-Env": [
+            "install-from-pinned-repositories"
+          ],
+          "Publish-Env": [
+            "install-from-pinned-repositories"
+          ],
+          "Add-DefaultConfig": [
+            "install-from-pinned-repositories"
+          ],
+          "Add-Config": [
+            "install-from-pinned-repositories"
+          ],
+          "Use-Config": [
+            "install-from-pinned-repositories"
+          ],
+          "Write-InstallInfo": [
+            "install-from-pinned-repositories",
+            "controlled-install-failure"
+          ],
+          "Test-LanguageMode": [
+            "install-from-pinned-repositories"
+          ],
+          "Write-DebugInfo": [
+            "install-from-pinned-repositories"
+          ],
+          "Test-ShouldRunInstall": [
+            "install-from-pinned-repositories"
+          ],
+          "Test-IsAdministrator": [
+            "install-from-pinned-repositories"
+          ],
+          "Deny-Install": [
+            "controlled-install-failure"
+          ],
+          "Exit-Install": [
+            "controlled-install-failure"
+          ]
+        },
+        "observerScript": "Workflows/Installers/Observe-ScoopInstaller.ps1",
+        "observerSha256": "f3bc25fb4ba84d548f5502eb0f742cea4842e57dbbd70cff10ba258b04afdf2c",
+        "observerSupport": [
+          {
+            "path": "Workflows/Installers/Installer.Observer.Common.ps1",
+            "sha256": "bc525206155d2c334f27893970cfeefe49348bf3073e111de0276cb4f77d5a23"
+          },
+          {
+            "path": "Workflows/Installers/InstallerRegistryScope.cs",
+            "sha256": "8e890c800e00ce1e6b4fae7a7a3fc2a3ce23fbbb1075f2f521b7af5bbf24334d"
+          },
+          {
+            "path": "Workflows/Installers/installer-payloads.json",
+            "sha256": "1650ebdd13ff89225eaed9f21f51da1e61b54704833af0f15463846a9e85fb62"
+          }
+        ],
+        "fixtureScript": "Workflows/Installers/Invoke-ScoopInstallerFixture.ps1",
+        "fixtureSha256": "269f7112a2e237836e60f5e8164d6f25bc40a14196e4ff9e3735c5e6abf259a9",
+        "fixtureSupport": [
+          {
+            "path": "Workflows/Installers/Invoke-InstallerFixture.ps1",
+            "sha256": "7acb282d8266edfbf2772074a9b38d7db9b650d76cdbc1e06dca65e2d4e02d56"
+          },
+          {
+            "path": "Workflows/Installers/Serve-InstallerPayloads.ps1",
+            "sha256": "ab725874ea592c95a5137e8fcd8b927d67c69501681e3959f6af8c3c8d2638db"
+          },
+          {
+            "path": "Workflows/Installers/Test-InstallerModule.ps1",
+            "sha256": "718880d8f577b9ed0dbc078f8d2bb897e77cfc417b8b5aff19591935f821e5a6"
+          }
+        ]
+      },
+      "sourceInputs": [
+        {
+          "path": "install.ps1",
+          "sha256": "94f983b190438311e006b957db7c8422709e0ba62a6c2ac04e278164108f2512"
+        }
+      ]
     },
     {
       "id": "github-api-client-helpers",
@@ -132,12 +2387,121 @@
       },
       "entryPoint": "PowerShellForGitHub-fd4fa65f23ca30f18f85312a85348e660c287a9c/Helpers.ps1",
       "qualification": {
-        "kind": "HybridModuleCommand",
-        "originalImportSurface": "DotSource",
-        "compiledImportSurface": "TypedAssembly",
-        "unitName": "Get-SHA512Hash",
-        "probeScript": "Get-SHA512Hash -PlainText 'PowerForge'"
-      }
+        "kind": "HybridModuleWorkflow",
+        "artifactName": "GitHubHelpers",
+        "completeFunctionInventory": true,
+        "requiredExports": [
+          "Get-SHA512Hash",
+          "Write-Log",
+          "Write-InvocationLog",
+          "DeepCopy-Object",
+          "New-TemporaryDirectory",
+          "Write-InteractiveHost",
+          "Resolve-UnverifiedPath",
+          "Ensure-Directory",
+          "Get-HttpWebResponseContent",
+          "New-ErrorRecord"
+        ],
+        "requiredAliases": [],
+        "requiredCompiledOwnedFunctions": [
+          {
+            "relativePath": "Helpers.ps1",
+            "name": "Get-SHA512Hash"
+          },
+          {
+            "relativePath": "Helpers.ps1",
+            "name": "Write-Log"
+          },
+          {
+            "relativePath": "Helpers.ps1",
+            "name": "Write-InvocationLog"
+          },
+          {
+            "relativePath": "Helpers.ps1",
+            "name": "DeepCopy-Object"
+          },
+          {
+            "relativePath": "Helpers.ps1",
+            "name": "New-TemporaryDirectory"
+          },
+          {
+            "relativePath": "Helpers.ps1",
+            "name": "Write-InteractiveHost"
+          },
+          {
+            "relativePath": "Helpers.ps1",
+            "name": "Resolve-UnverifiedPath"
+          },
+          {
+            "relativePath": "Helpers.ps1",
+            "name": "Ensure-Directory"
+          },
+          {
+            "relativePath": "Helpers.ps1",
+            "name": "Get-HttpWebResponseContent"
+          },
+          {
+            "relativePath": "Helpers.ps1",
+            "name": "New-ErrorRecord"
+          }
+        ],
+        "requiredScenarioIds": [
+          "sha512",
+          "logging",
+          "invocation-redaction",
+          "deep-copy",
+          "temporary-directory",
+          "noninteractive-host",
+          "unverified-path",
+          "ensure-directory",
+          "http-response",
+          "error-record"
+        ],
+        "publicExportScenarios": {
+          "Get-SHA512Hash": [
+            "sha512"
+          ],
+          "Write-Log": [
+            "logging"
+          ],
+          "Write-InvocationLog": [
+            "invocation-redaction"
+          ],
+          "DeepCopy-Object": [
+            "deep-copy"
+          ],
+          "New-TemporaryDirectory": [
+            "temporary-directory"
+          ],
+          "Write-InteractiveHost": [
+            "noninteractive-host"
+          ],
+          "Resolve-UnverifiedPath": [
+            "unverified-path"
+          ],
+          "Ensure-Directory": [
+            "ensure-directory"
+          ],
+          "Get-HttpWebResponseContent": [
+            "http-response"
+          ],
+          "New-ErrorRecord": [
+            "error-record"
+          ]
+        },
+        "observerScript": "Workflows/GitHubHelpers/Observe-GitHubHelpers.ps1",
+        "observerSha256": "5e76cc918f6e3c0f351f888607f5909c0bbe1b6a662c1d374b0ca5fd3fc927b9"
+      },
+      "sourceInputs": [
+        {
+          "path": "PowerShellForGitHub-fd4fa65f23ca30f18f85312a85348e660c287a9c/Helpers.ps1",
+          "sha256": "90e1ad0bfc2f07e888efdfa438ee4ec6ea3bde0fbdd19478088764922b8aaef9"
+        },
+        {
+          "path": "PowerShellForGitHub-fd4fa65f23ca30f18f85312a85348e660c287a9c/LICENSE",
+          "sha256": "bea100d8314e79f8463556b8df43993b22e1df25062dcb2f1db2c454709d4b61"
+        }
+      ]
     }
   ]
 }

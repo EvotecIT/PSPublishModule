@@ -11,7 +11,7 @@ internal static partial class Program
     public static int Main(string[] args)
     {
 
-    ConsoleEncoding.EnsureUtf8();
+    using var consoleEncoding = ConsoleEncoding.UseUtf8(switchEncoding: true);
 
     var cli = ParseCliOptions(args, out var cliParseError);
     // ConsoleMonster reads NO_COLOR when it first detects the console, which happens after this point.

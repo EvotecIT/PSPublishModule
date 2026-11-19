@@ -160,7 +160,7 @@ internal static class PowerShellGeneratedSourcePublisher
 
     private static GeneratedMethodLocation FindGeneratedMethod(string sourceDirectory, string generatedFile, string generatedName)
     {
-        var pattern = @"^\s*(?:public|private|internal)\s+(?:static\s+)?.*\s" +
+        var pattern = @"^\s*(?:public|private|internal)\s+(?:static\s+)?[^=;""{}]+\s" +
                       System.Text.RegularExpressions.Regex.Escape(generatedName) + @"\s*\(";
         GeneratedMethodLocation? match = null;
         var path = Path.Combine(sourceDirectory, generatedFile);
