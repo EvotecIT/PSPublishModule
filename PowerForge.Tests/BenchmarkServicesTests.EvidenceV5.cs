@@ -418,9 +418,17 @@ public sealed partial class BenchmarkServicesTests
         string catalogPath = Path.Combine(root, "index.json");
         BenchmarkDeclarationDocument declarations = ThreeLibraryDeclarations();
         declarations.Comparisons[0].Cases = ["Read", "Write"];
+        // Write exists only for the restricted library, so the valid cells are listed explicitly.
+        declarations.Comparisons[0].Cells =
+        [
+            new BenchmarkExpectedCell { Case = "Read", Library = "OfficeIMO" },
+            new BenchmarkExpectedCell { Case = "Read", Library = "Sep" },
+            new BenchmarkExpectedCell { Case = "Write", Library = "EPPlus" }
+        ];
         declarations.Libraries.Single(value => value.Id == "EPPlus").Restriction = BenchmarkLibraryRestriction.PublishRestricted;
         declarations.Libraries.Single(value => value.Id == "EPPlus").Reason = "Publishing results needs permission.";
-        // Only the restricted library measured Write, so after redaction that case exists only as a licence marker.
+        // Only the restricted library measured Write, so after redaction that case and combination exist only as a
+        // licence marker, which still counts as present when the merge checks the lane again.
         new BenchmarkEvidenceCatalogService().UpdateFile(catalogPath, PublishRequest(MeasuredResult(
             ("OfficeIMO", "Read", Spread(10, 10)), ("Sep", "Read", Spread(20, 10)), ("EPPlus", "Write", Spread(5, 10))), declarations));
 

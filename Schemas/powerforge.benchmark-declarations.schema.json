@@ -46,6 +46,18 @@
         "values": { "type": "array", "minItems": 1, "items": { "type": "string" } }
       }
     },
+    "cell": {
+      "type": "object",
+      "properties": {
+        "case": { "type": "string", "description": "One of the comparison's declared cases." },
+        "library": { "type": "string", "description": "Library id; empty or absent for every library of the comparison." },
+        "parameters": {
+          "type": "object",
+          "description": "One declared value for every axis, keyed by axis name.",
+          "additionalProperties": { "type": "string" }
+        }
+      }
+    },
     "comparison": {
       "type": "object",
       "required": ["comparisonId", "area", "title", "subject", "libraries", "expectedPlatforms"],
@@ -63,6 +75,11 @@
         "libraries": { "type": "array", "minItems": 1, "items": { "type": "string" } },
         "axes": { "type": "array", "items": { "$ref": "#/$defs/axis" } },
         "cases": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+        "cells": {
+          "type": "array",
+          "description": "The case x library x axis-value cells the benchmark code defines, when not every combination is valid. Without it, every combination of the declared cases and axis values is expected for each library that ran.",
+          "items": { "$ref": "#/$defs/cell" }
+        },
         "expectedPlatforms": { "type": "array", "minItems": 1, "items": { "type": "string" } },
         "frameworks": { "type": "array", "items": { "type": "string" } },
         "eligibility": {

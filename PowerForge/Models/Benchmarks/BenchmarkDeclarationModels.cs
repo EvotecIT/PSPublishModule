@@ -99,6 +99,13 @@ public sealed class BenchmarkComparisonDefinition
     /// </summary>
     public string[] Cases { get; set; } = Array.Empty<string>();
 
+    /// <summary>
+    /// Optional list of the case × library × axis-value cells the benchmark code defines, for comparisons where
+    /// not every combination is valid. Without it, every combination of the declared cases and axis values is
+    /// expected for each library that ran. A missing or extra combination is declaration drift.
+    /// </summary>
+    public BenchmarkExpectedCell[] Cells { get; set; } = Array.Empty<BenchmarkExpectedCell>();
+
     /// <summary>Platforms expected for this comparison.</summary>
     public string[] ExpectedPlatforms { get; set; } = { "windows", "linux", "macos" };
 
@@ -110,6 +117,19 @@ public sealed class BenchmarkComparisonDefinition
     /// restriction classes; an author can only make it stricter.
     /// </summary>
     public BenchmarkEligibility Eligibility { get; set; } = new();
+}
+
+/// <summary>One cell a comparison's benchmark code defines.</summary>
+public sealed class BenchmarkExpectedCell
+{
+    /// <summary>Case name; one of the comparison's declared cases.</summary>
+    public string Case { get; set; } = string.Empty;
+
+    /// <summary>Library id, or empty when the cell applies to every library of the comparison.</summary>
+    public string Library { get; set; } = string.Empty;
+
+    /// <summary>One declared value for every axis of the comparison, keyed by axis name.</summary>
+    public Dictionary<string, string> Parameters { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 }
 
 /// <summary>One axis of a comparison's scenario matrix.</summary>

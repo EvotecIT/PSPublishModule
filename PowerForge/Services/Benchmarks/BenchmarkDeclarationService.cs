@@ -3,7 +3,7 @@ namespace PowerForge;
 /// <summary>
 /// Reads, validates and applies benchmark declarations: the library policy and comparison matrix.
 /// </summary>
-public sealed class BenchmarkDeclarationService
+public sealed partial class BenchmarkDeclarationService
 {
     /// <summary>Reads a schema 5 declaration document.</summary>
     /// <param name="path">Declaration JSON path.</param>
@@ -104,6 +104,7 @@ public sealed class BenchmarkDeclarationService
             string[] cases = comparison.Cases ?? Array.Empty<string>();
             if (cases.Distinct(StringComparer.OrdinalIgnoreCase).Count() != cases.Length)
                 Add(issues, subject, "duplicate-case", "Declared cases must be unique.");
+            ValidateExplicitCells(issues, subject, comparison);
             if (comparison.Eligibility is { Publishable: false } && string.IsNullOrWhiteSpace(comparison.Eligibility.Reason))
                 Add(issues, subject, "eligibility-reason", "A comparison declared not publishable needs a reason.");
         }
@@ -194,9 +195,9 @@ public sealed class BenchmarkDeclarationService
     }
 
     /// <summary>
-    /// Compares the cases, libraries and axis values in a result with the comparison declaration.
-    /// Any finding means the declaration drifted from the benchmark code: a case, library or axis value that
-    /// ran without being declared, or a declared case or axis value with no cell at all. A case that ran and
+    /// Compares the cases, libraries, axis values and their combinations in a result with the comparison
+    /// declaration. Any finding means the declaration drifted from the benchmark code: a case, library, axis value
+    /// or combination that ran without being declared, or a declared one with no cell at all. A case that ran and
     /// failed is a failed cell, not a missing one, and is never reported here.
     /// </summary>
     /// <param name="comparison">Comparison declaration.</param>
@@ -260,6 +261,7 @@ public sealed class BenchmarkDeclarationService
                 Add(issues, subject, "missing-axis-value", $"Declared axis '{axis.Name}' value '{value}' did not run.");
         }
 
+        CheckCombinations(issues, subject, comparison, cells);
         return issues.ToArray();
     }
 

@@ -721,7 +721,15 @@ Schema 5 declaration documents hold the library policy and the comparisons
 `acceptance-required`, `excluded`) and a `reason`. Each comparison has
 `comparisonId`, `area`, `group`, `title`, `subject`, `libraries`, `axes`, `cases`,
 `expectedPlatforms` and `frameworks`, plus an optional `eligibility` that can only
-exclude it. Catalogs derive each comparison's eligibility: a single-library
+exclude it and optional `cells` for comparisons where not every case × library ×
+axis-value combination is valid:
+
+```json
+"cells": [
+  { "case": "Create", "parameters": { "Scale": "Normal" } },
+  { "case": "Create", "library": "OfficeIMO", "parameters": { "Scale": "Huge" } }
+]
+``` Catalogs derive each comparison's eligibility: a single-library
 comparison is declared but never publishable. Restricted libraries do not block a
 comparison; the published lane drops their cells, which carry the issue
 "Not published (licence)", and publishes the rest.
@@ -736,7 +744,10 @@ $selection = Select-BenchmarkLibrary -Path ./Benchmarks/benchmarks.json -AcceptL
 
 The first lints the document. The second reports drift between a result and its
 declaration: cases, libraries or axis values that ran but are not declared, and
-declared cases or axis values with no cell at all. A case that ran and crashed is a
+declared cases or axis values with no cell at all. When the comparison declares its
+cases, it also checks every case × library × axis-value combination for each library
+that ran (`missing-combination`), or the explicit `cells` when given
+(`missing-combination`, `unexpected-combination`). A case that ran and crashed is a
 failed cell, not drift; it is excluded from publication and the rest of the lane is
 published. Both stop with an error unless `-PassThru` is used.
 `Select-BenchmarkLibrary` returns the libraries a runner may execute; excluded
