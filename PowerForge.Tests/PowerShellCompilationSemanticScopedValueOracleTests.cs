@@ -332,7 +332,7 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
             """;
         const string probe = """
             Add-Type -AssemblyName System.DirectoryServices
-            $entry = [System.DirectoryServices.DirectoryEntry]::new()
+            $entry = [System.DirectoryServices.DirectoryEntry]::new('oracle-nonbinding-path')
             $searcher = [System.DirectoryServices.DirectorySearcher]::new($entry)
             try {
                 $updated = Set-BorrowedSearchScope -Entry $entry -Searcher $searcher -Scope OneLevel
@@ -354,7 +354,11 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
                     mode=$returned.mode
                     common=(Read-CommonParameterType)
                 } | ConvertTo-Json -Compress
-            } finally { $searcher.Dispose(); $entry.Dispose() }
+            } finally {
+                $searcher.Dispose()
+                # PowerShell's ADSI adapter can bind to a directory when resolving an instance method.
+                [void][IDisposable].GetMethod('Dispose').Invoke($entry, @())
+            }
             """;
         CompareScopedArtifacts(source, probe,
             new[] { "Set-BorrowedSearchScope", "Read-CompletionMetadata", "Read-CommonParameterType", "Read-InlineModule" }, value =>
