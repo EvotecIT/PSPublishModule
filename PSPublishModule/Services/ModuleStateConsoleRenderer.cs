@@ -32,7 +32,7 @@ internal static class ModuleStateConsoleRenderer
             var diagnostics = CreateTable(("Severity", false), ("Code", false), ("Profile", false), ("Path", true), ("Message", true));
             foreach (var diagnostic in inventory.Diagnostics.Take(MaxRows))
             {
-                diagnostics.AddRow(
+                diagnostics.Row(
                     Severity(diagnostic.Severity),
                     Esc(diagnostic.Code),
                     Esc(diagnostic.ProfileName),
@@ -50,7 +50,7 @@ internal static class ModuleStateConsoleRenderer
                 ("Profile", false), ("Module root", true), ("Import", false), ("Loaded", false));
             foreach (var module in inventory.InstalledModules.Take(MaxRows))
             {
-                modules.AddRow(
+                modules.Row(
                     Esc(module.Name),
                     Esc(module.Version),
                     Esc(module.PowerShellEdition),
@@ -129,7 +129,7 @@ internal static class ModuleStateConsoleRenderer
             var commands = CreateTable(("Command", false), ("Module", false), ("Policy", false), ("Repair", false), ("Text", true));
             foreach (var command in result.Commands.Take(MaxRows))
             {
-                commands.AddRow(
+                commands.Row(
                     Esc(command.CommandName),
                     Esc(command.ModuleName),
                     Esc(command.VersionPolicy),
@@ -147,7 +147,7 @@ internal static class ModuleStateConsoleRenderer
                 ("Performed", false), ("Status", false), ("Dependencies", false), ("Details", true));
             foreach (var execution in result.ExecutionResults)
             {
-                executions.AddRow(
+                executions.Row(
                     Esc(execution.Operation),
                     Esc(execution.TargetPath),
                     Esc(execution.RepositoryName),
@@ -171,7 +171,7 @@ internal static class ModuleStateConsoleRenderer
             ("Target", false), ("License", false), ("Reason", true));
         foreach (var action in actions.Take(MaxRows))
         {
-            table.AddRow(
+            table.Row(
                 Esc(action.Kind),
                 Esc(action.ModuleName),
                 Esc(action.InstalledVersion),
@@ -193,7 +193,7 @@ internal static class ModuleStateConsoleRenderer
         var table = CreateTable(("Severity", false), ("Code", false), ("Modules", false), ("Placement", true), ("Message", true));
         foreach (var finding in findings.Take(MaxRows))
         {
-            table.AddRow(
+            table.Row(
                 Severity(finding.Severity),
                 Esc(finding.Code),
                 Esc(string.Join(", ", finding.ModuleNames ?? Array.Empty<string>())),
@@ -293,7 +293,7 @@ internal static class ModuleStateConsoleRenderer
                 column.MaxLines = TableColumn.Unlimited;
             else
                 column.Wrap = false;
-            table.AddColumn(column);
+            table.Column(column);
         }
         return table;
     }

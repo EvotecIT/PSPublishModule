@@ -31,16 +31,16 @@ internal static class ProjectBuildSummary
         foreach (var row in display.Totals) summary.Line(row.Label, row.Value);
 
         var table = new Table()
-            .AddColumn("Project")
-            .AddColumn("Packable")
-            .AddColumn("Version")
-            .AddColumn(display.IsPlan ? "Planned packages" : "Packages")
-            .AddColumn("Duration", ConsoleMonster.Layout.HorizontalAlignment.Right)
-            .AddColumn("Status")
-            .AddColumn("Error");
+            .Column("Project")
+            .Column("Packable")
+            .Column("Version")
+            .Column(display.IsPlan ? "Planned packages" : "Packages")
+            .Column("Duration", ConsoleMonster.Layout.HorizontalAlignment.Right)
+            .Column("Status")
+            .Column("Error");
         foreach (var project in display.Projects)
         {
-            table.AddRow(
+            table.Row(
                 Markup.Escape(project.ProjectName),
                 Markup.Escape(project.Packable),
                 Markup.Escape(project.VersionDisplay),

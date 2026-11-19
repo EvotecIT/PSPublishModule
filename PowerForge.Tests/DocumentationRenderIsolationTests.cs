@@ -30,7 +30,7 @@ public sealed class DocumentationRenderIsolationTests
             ModuleBootstrapperGenerator.Generate(root, "PSPublishModule",
                 new ExportSet(Array.Empty<string>(), new[] { "Get-ModuleDocumentation", "Show-ModuleDocumentation" }, Array.Empty<string>()),
                 new[] { "PSPublishModule.dll" }, handleRuntimes: false,
-                ignoreLibrariesOnLoad: new[] { "OfficeIMO.Core.dll", "OfficeIMO.Markdown.dll", "HtmlForgeX.Markdown.dll", "HtmlForgeX.dll" },
+                ignoreLibrariesOnLoad: new[] { "OfficeIMO.Core.dll", "OfficeIMO.Markdown.dll", "OfficeIMO.Toml.dll", "OfficeIMO.Yaml.dll", "HtmlForgeX.Markdown.dll", "HtmlForgeX.dll" },
                 targetFrameworks: new[] { "net472" });
             var scriptPath = Path.Combine(repoRoot, "PowerForge.Tests", "Fixtures", "DocumentationIsolation", "Test-DocumentationIsolation.ps1");
             var newerAssembly = Path.Combine(Directory.CreateDirectory(Path.Combine(root, "Newer")).FullName, "OfficeIMO.Markdown.dll");

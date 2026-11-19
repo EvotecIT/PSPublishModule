@@ -347,6 +347,8 @@
         "IgnoreLibraryOnLoad": [
           "OfficeIMO.Core.dll",
           "OfficeIMO.Markdown.dll",
+          "OfficeIMO.Toml.dll",
+          "OfficeIMO.Yaml.dll",
           "HtmlForgeX.Markdown.dll",
           "HtmlForgeX.dll"
         ],

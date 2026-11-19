@@ -24,8 +24,8 @@ internal static partial class ModulePipelineSummary
                 .Select(check => (Name: check.Name, check.Status, Detail: NormalizeCheckSummary(check.Name, check.Summary)))
                 .ToList();
             if (compatibilityOn) rows.Add(("Compatibility", res.CompatibilityReport!.Summary.Status, res.CompatibilityReport.Summary.Message));
-            var table = new Table().AddColumn("Check").AddColumn("Result");
-            foreach (var row in rows) table.AddRow(Markup.Escape(row.Name), SummaryFrame.Word(row.Status) + " [muted]" + Markup.Escape(row.Detail ?? string.Empty) + "[/]");
+            var table = new Table().Column("Check").Column("Result");
+            foreach (var row in rows) table.Row(Markup.Escape(row.Name), SummaryFrame.Word(row.Status) + " [muted]" + Markup.Escape(row.Detail ?? string.Empty) + "[/]");
             summary.Detail("Validation details", table);
         }
 
@@ -33,14 +33,14 @@ internal static partial class ModulePipelineSummary
         if (recommendations.Count > 0)
         {
             var hasLocation = recommendations.Any(row => !string.IsNullOrWhiteSpace(row.Where));
-            var table = new Table().AddColumn("When");
-            if (hasLocation) table.AddColumn("Where");
+            var table = new Table().Column("When");
+            if (hasLocation) table.Column("Where");
             // The action ends with the command to run ("Suggested command: ..."); show all of it.
-            table.AddColumn(new TableColumn("Do this") { MaxLines = TableColumn.Unlimited });
+            table.Column(new TableColumn("Do this") { MaxLines = TableColumn.Unlimited });
             foreach (var row in recommendations)
             {
-                if (hasLocation) table.AddRow(Markup.Escape(row.When), Markup.Escape(row.Where), Markup.Escape(row.Action));
-                else table.AddRow(Markup.Escape(row.When), Markup.Escape(row.Action));
+                if (hasLocation) table.Row(Markup.Escape(row.When), Markup.Escape(row.Where), Markup.Escape(row.Action));
+                else table.Row(Markup.Escape(row.When), Markup.Escape(row.Action));
             }
             summary.Detail("Recommended actions", table);
         }
@@ -140,8 +140,8 @@ internal static partial class ModulePipelineSummary
         foreach (var row in rows)
             summary.Attention.Add(ConsoleMonster.Frames.HealthState.Warning, $"File consistency ({label}): " + row.Reasons[0], row.RelativePath);
 
-        var table = new Table().AddColumn("Path").AddColumn("Issues");
-        foreach (var row in rows.Take(MaxFileRows)) table.AddRow(Markup.Escape(row.RelativePath), Markup.Escape(string.Join(", ", row.Reasons)));
+        var table = new Table().Column("Path").Column("Issues");
+        foreach (var row in rows.Take(MaxFileRows)) table.Row(Markup.Escape(row.RelativePath), Markup.Escape(string.Join(", ", row.Reasons)));
         var blocks = new List<IWidget>();
         if (!string.IsNullOrWhiteSpace(report!.ExportPath)) blocks.Add(TextBlock.FromMarkup("[muted]Report:[/] " + Markup.Escape(report.ExportPath!)));
         blocks.Add(table);
@@ -164,7 +164,7 @@ internal static partial class ModulePipelineSummary
             return;
         }
 
-        var table = new Table().AddColumn("File").AddColumn("Target").AddColumn("Type").AddColumn("Description").AddColumn("Recommendation");
+        var table = new Table().Column("File").Column("Target").Column("Type").Column("Description").Column("Recommendation");
         foreach (var file in affected.Take(MaxCompatibilityFiles))
         {
             var editions = new List<string>(2);
@@ -175,12 +175,12 @@ internal static partial class ModulePipelineSummary
             {
                 var type = issue.Type == PowerShellCompatibilityIssueType.DotNetFramework ? "DotNet" : issue.Type.ToString();
                 var description = string.IsNullOrWhiteSpace(issue.Description) ? "No description" : issue.Description;
-                table.AddRow(Markup.Escape(file.RelativePath), Markup.Escape(target), Markup.Escape(type), Markup.Escape(description),
+                table.Row(Markup.Escape(file.RelativePath), Markup.Escape(target), Markup.Escape(type), Markup.Escape(description),
                     Markup.Escape(string.IsNullOrWhiteSpace(issue.Recommendation) ? "Review this finding" : issue.Recommendation));
                 summary.Attention.Add(ConsoleMonster.Frames.HealthState.Warning, $"Compatibility ({target}): {type}", file.RelativePath);
             }
             if (file.Issues.Length > 4)
-                table.AddRow(Markup.Escape(file.RelativePath), Markup.Escape(target), "[muted]More[/]",
+                table.Row(Markup.Escape(file.RelativePath), Markup.Escape(target), "[muted]More[/]",
                     $"[muted]+{file.Issues.Length - 4} additional findings[/]", "[muted]Review the full CSV report for the remaining items[/]");
         }
         blocks.Add(table);
