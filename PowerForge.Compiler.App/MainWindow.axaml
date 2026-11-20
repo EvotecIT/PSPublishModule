@@ -1,0 +1,532 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:PowerForge.Compiler.App.ViewModels"
+        xmlns:engine="using:PowerForge.Compiler.App.Engine"
+        x:Class="PowerForge.Compiler.App.MainWindow"
+        x:DataType="vm:MainWindowViewModel"
+        Title="PowerForge Compiler"
+        Width="1180" Height="820" MinWidth="820" MinHeight="600"
+        WindowStartupLocation="CenterScreen"
+        ExtendClientAreaToDecorationsHint="True"
+        RequestedThemeVariant="Dark"
+        Background="{StaticResource PfConsole}"
+        Foreground="{StaticResource PfConsoleText}"
+        FontFamily="Segoe UI Variable Text, Segoe UI, Inter, Helvetica Neue, sans-serif"
+        FontSize="14">
+
+  <Window.Resources>
+    <ResourceDictionary>
+      <ResourceDictionary.ThemeDictionaries>
+        <ResourceDictionary x:Key="Light">
+          <SolidColorBrush x:Key="PfBg" Color="#EEF2F8" />
+          <SolidColorBrush x:Key="PfSurface" Color="#FFFFFF" />
+          <SolidColorBrush x:Key="PfInput" Color="#FFFFFF" />
+          <SolidColorBrush x:Key="PfStroke" Color="#CBD5E6" />
+          <SolidColorBrush x:Key="PfText" Color="#0B1F45" />
+          <SolidColorBrush x:Key="PfMuted" Color="#5B6B8C" />
+          <SolidColorBrush x:Key="PfPrimaryBg" Color="#012456" />
+          <SolidColorBrush x:Key="PfPrimaryFg" Color="#FFFFFF" />
+          <SolidColorBrush x:Key="PfNative" Color="#1F9D5C" />
+          <SolidColorBrush x:Key="PfMixed" Color="#2369C4" />
+          <SolidColorBrush x:Key="PfPackaged" Color="#B07A00" />
+          <SolidColorBrush x:Key="PfBlocked" Color="#CC3B3B" />
+        </ResourceDictionary>
+        <ResourceDictionary x:Key="Dark">
+          <SolidColorBrush x:Key="PfBg" Color="#0A1830" />
+          <SolidColorBrush x:Key="PfSurface" Color="#11244A" />
+          <SolidColorBrush x:Key="PfInput" Color="#0C1D3D" />
+          <SolidColorBrush x:Key="PfStroke" Color="#26406F" />
+          <SolidColorBrush x:Key="PfText" Color="#E9EEF7" />
+          <SolidColorBrush x:Key="PfMuted" Color="#96A7C7" />
+          <SolidColorBrush x:Key="PfPrimaryBg" Color="#E9EEF7" />
+          <SolidColorBrush x:Key="PfPrimaryFg" Color="#012456" />
+          <SolidColorBrush x:Key="PfNative" Color="#3DDC97" />
+          <SolidColorBrush x:Key="PfMixed" Color="#5AB0FF" />
+          <SolidColorBrush x:Key="PfPackaged" Color="#F5C451" />
+          <SolidColorBrush x:Key="PfBlocked" Color="#FF7A7A" />
+        </ResourceDictionary>
+      </ResourceDictionary.ThemeDictionaries>
+      <!-- The PowerShell console's own navy, used for the header and the build output in both themes. -->
+      <SolidColorBrush x:Key="PfConsole" Color="#012456" />
+      <SolidColorBrush x:Key="PfConsoleText" Color="#EEEDF0" />
+      <SolidColorBrush x:Key="PfConsoleMuted" Color="#A9BCE0" />
+      <SolidColorBrush x:Key="PfConsoleStroke" Color="#2C4C86" />
+      <SolidColorBrush x:Key="PfConsoleWarning" Color="#F5C451" />
+      <SolidColorBrush x:Key="PfConsoleError" Color="#FF8A80" />
+    </ResourceDictionary>
+  </Window.Resources>
+
+  <Window.Styles>
+    <Style Selector="TextBlock.muted"><Setter Property="Foreground" Value="{DynamicResource PfMuted}" /></Style>
+    <Style Selector="TextBlock.label">
+      <Setter Property="Foreground" Value="{DynamicResource PfMuted}" />
+      <Setter Property="FontSize" Value="13" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="Margin" Value="0,0,0,6" />
+    </Style>
+    <Style Selector="TextBlock.mono">
+      <Setter Property="FontFamily" Value="Cascadia Mono, Cascadia Code, Consolas, Menlo, monospace" />
+    </Style>
+
+    <!-- Header band buttons -->
+    <Style Selector="Button.band">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="Foreground" Value="{StaticResource PfConsoleText}" />
+      <Setter Property="BorderBrush" Value="{StaticResource PfConsoleStroke}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="6" />
+      <Setter Property="Padding" Value="14,7" />
+    </Style>
+
+    <Style Selector="Button.band:disabled">
+      <Setter Property="Opacity" Value="0.4" />
+    </Style>
+
+    <!-- Inputs sit on the panel colour -->
+    <Style Selector="TextBox, ComboBox">
+      <Setter Property="Background" Value="{DynamicResource PfInput}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource PfStroke}" />
+      <Setter Property="CornerRadius" Value="6" />
+      <Setter Property="MinHeight" Value="36" />
+    </Style>
+
+    <Style Selector="Button.primary">
+      <Setter Property="Background" Value="{DynamicResource PfPrimaryBg}" />
+      <Setter Property="Foreground" Value="{DynamicResource PfPrimaryFg}" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="FontSize" Value="15" />
+      <Setter Property="CornerRadius" Value="8" />
+      <Setter Property="Height" Value="44" />
+      <Setter Property="HorizontalAlignment" Value="Stretch" />
+      <Setter Property="HorizontalContentAlignment" Value="Center" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Button.quiet">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderBrush" Value="{DynamicResource PfStroke}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="8" />
+    </Style>
+
+    <Style Selector="Button.link">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="Foreground" Value="{DynamicResource PfMixed}" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="Cursor" Value="Hand" />
+    </Style>
+    <Style Selector="TextBlock.section">
+      <Setter Property="FontSize" Value="16" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="Margin" Value="0,0,0,4" />
+    </Style>
+    <Style Selector="RadioButton.choice">
+      <Setter Property="Margin" Value="0,2" />
+    </Style>
+
+    <!-- Mode track: no list chrome, the stops carry the state -->    <Style Selector="ListBox.track">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+    </Style>
+    <Style Selector="ListBox.track > ListBoxItem">
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="HorizontalContentAlignment" Value="Center" />
+      <Setter Property="Cursor" Value="Hand" />
+    </Style>
+    <Style Selector="ListBox.track > ListBoxItem:selected /template/ ContentPresenter">
+      <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="ListBox.track > ListBoxItem:pointerover /template/ ContentPresenter">
+      <Setter Property="Background" Value="Transparent" />
+    </Style>
+
+    <Style Selector="Ellipse.native"><Setter Property="Fill" Value="{DynamicResource PfNative}" /></Style>
+    <Style Selector="Ellipse.mixed"><Setter Property="Fill" Value="{DynamicResource PfMixed}" /></Style>
+    <Style Selector="Ellipse.packaged"><Setter Property="Fill" Value="{DynamicResource PfPackaged}" /></Style>
+    <Style Selector="Ellipse.blocked"><Setter Property="Fill" Value="{DynamicResource PfBlocked}" /></Style>
+    <Style Selector="Ellipse.ring.native"><Setter Property="Fill" Value="Transparent" /><Setter Property="Stroke" Value="{DynamicResource PfNative}" /></Style>
+    <Style Selector="Ellipse.ring.mixed"><Setter Property="Fill" Value="Transparent" /><Setter Property="Stroke" Value="{DynamicResource PfMixed}" /></Style>
+    <Style Selector="Ellipse.ring.packaged"><Setter Property="Fill" Value="Transparent" /><Setter Property="Stroke" Value="{DynamicResource PfPackaged}" /></Style>
+    <Style Selector="Ellipse.ring.blocked"><Setter Property="Fill" Value="Transparent" /><Setter Property="Stroke" Value="{DynamicResource PfBlocked}" /></Style>
+    <Style Selector="TextBlock.native"><Setter Property="Foreground" Value="{DynamicResource PfNative}" /></Style>
+    <Style Selector="TextBlock.mixed"><Setter Property="Foreground" Value="{DynamicResource PfMixed}" /></Style>
+    <Style Selector="TextBlock.packaged"><Setter Property="Foreground" Value="{DynamicResource PfPackaged}" /></Style>
+    <Style Selector="TextBlock.blocked"><Setter Property="Foreground" Value="{DynamicResource PfBlocked}" /></Style>
+
+    <!-- Problem rows: a severity bar, not a badge -->
+    <Style Selector="Border.severity"><Setter Property="Background" Value="{DynamicResource PfMixed}" /></Style>
+    <Style Selector="Border.severity.error"><Setter Property="Background" Value="{DynamicResource PfBlocked}" /></Style>
+    <Style Selector="Border.severity.warning"><Setter Property="Background" Value="{DynamicResource PfPackaged}" /></Style>
+
+    <Style Selector="TabItem">
+      <Setter Property="FontSize" Value="14" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="MinHeight" Value="38" />
+      <Setter Property="Padding" Value="0,0,22,0" />
+    </Style>
+
+    <Style Selector="TextBlock.console">
+      <Setter Property="FontFamily" Value="Cascadia Mono, Cascadia Code, Consolas, Menlo, monospace" />
+      <Setter Property="FontSize" Value="12.5" />
+      <Setter Property="Foreground" Value="{StaticResource PfConsoleText}" />
+      <Setter Property="TextWrapping" Value="Wrap" />
+      <Setter Property="LineHeight" Value="19" />
+    </Style>
+    <Style Selector="TextBlock.console.warning"><Setter Property="Foreground" Value="{StaticResource PfConsoleWarning}" /></Style>
+    <Style Selector="TextBlock.console.error"><Setter Property="Foreground" Value="{StaticResource PfConsoleError}" /></Style>
+  </Window.Styles>
+
+  <Grid x:Name="DropZone" RowDefinitions="Auto,*" DragDrop.AllowDrop="True">
+
+    <!-- Header band -->
+    <Border Grid.Row="0" Background="{StaticResource PfConsole}" Padding="32,44,32,22">
+      <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto">
+        <StackPanel Spacing="4" VerticalAlignment="Center">
+          <TextBlock Text="Turn PowerShell into an executable" FontSize="26" FontWeight="SemiBold"
+                     FontFamily="Segoe UI Variable Display, Segoe UI, Inter, sans-serif"
+                     Foreground="{StaticResource PfConsoleText}" IsVisible="{Binding !HasInput}" />
+          <TextBlock Text="{Binding InputName}" FontSize="26" FontWeight="SemiBold"
+                     FontFamily="Segoe UI Variable Display, Segoe UI, Inter, sans-serif"
+                     Foreground="{StaticResource PfConsoleText}" IsVisible="{Binding HasInput}" />
+          <TextBlock Classes="mono" Text="{Binding InputPath}" FontSize="12" Foreground="{StaticResource PfConsoleMuted}"
+                     IsVisible="{Binding HasInput}" TextTrimming="CharacterEllipsis" />
+          <TextBlock Text="{Binding InputSummary}" FontSize="13" Foreground="{StaticResource PfConsoleMuted}" IsVisible="{Binding HasCheck}" />
+        </StackPanel>
+        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+          <Button Classes="band" Content="Open…" IsEnabled="{Binding !IsBusy}">
+            <Button.Flyout>
+              <MenuFlyout Placement="BottomEdgeAlignedRight">
+                <MenuItem Header="Script or module file…" Click="OnChooseFile" />
+                <MenuItem Header="Module folder…" Click="OnChooseFolder" />
+                <Separator />
+                <MenuItem Header="Saved settings…" Click="OnOpenSettings" />
+              </MenuFlyout>
+            </Button.Flyout>
+          </Button>
+          <Panel IsVisible="{Binding HasInput}">
+            <Button Classes="band" Content="Check again" Command="{Binding RecheckCommand}" IsVisible="{Binding !IsChecking}" />
+            <Button Classes="band" Content="Stop checking" Command="{Binding CancelCommand}" IsVisible="{Binding IsChecking}" />
+          </Panel>
+        </StackPanel>
+      </Grid>
+    </Border>
+    <ProgressBar Grid.Row="0" VerticalAlignment="Bottom" IsIndeterminate="True" Height="3" MinHeight="3"
+                 Foreground="{DynamicResource PfMixed}" Background="Transparent" IsVisible="{Binding IsBusy}" />
+
+    <!-- The window is dark so its chrome reads on the navy band; the body follows the system theme. -->
+    <ThemeVariantScope Grid.Row="1" x:Name="BodyScope">
+    <Grid Background="{DynamicResource PfBg}" TextElement.Foreground="{DynamicResource PfText}" RowDefinitions="*,Auto">
+
+    <!-- Empty state -->
+    <Grid Grid.Row="0" IsVisible="{Binding !HasInput}" Margin="32" MaxWidth="820" Height="340" VerticalAlignment="Center">
+      <Rectangle Stroke="{DynamicResource PfStroke}" StrokeThickness="2" StrokeDashArray="6,5" RadiusX="16" RadiusY="16" />
+      <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="10" MaxWidth="520">
+        <TextBlock Text="Drop a script or module folder anywhere" FontSize="22" FontWeight="SemiBold" HorizontalAlignment="Center"
+                   FontFamily="Segoe UI Variable Display, Segoe UI, Inter, sans-serif" />
+        <TextBlock Classes="muted" TextWrapping="Wrap" TextAlignment="Center" FontSize="15"
+                   Text="It's checked in all three modes before anything is built, so you see what compiles to .NET, what stays PowerShell, and what needs fixing." />
+        <StackPanel Orientation="Horizontal" Spacing="10" HorizontalAlignment="Center" Margin="0,12,0,0">
+          <Button Classes="primary" Width="170" Content="Open script…" Click="OnChooseFile" />
+          <Button Classes="quiet" Height="44" Padding="20,0" VerticalContentAlignment="Center" Content="Open folder…" Click="OnChooseFolder" />
+        </StackPanel>
+        <Button Classes="link" Content="Open saved settings…" Click="OnOpenSettings" HorizontalAlignment="Center" />
+      </StackPanel>
+    </Grid>
+
+    <!-- Input problems before any mode could be checked -->
+    <StackPanel Grid.Row="0" Margin="32,26" Spacing="8" IsVisible="{Binding ShowInputProblems}">
+      <TextBlock Text="This can't be checked" FontSize="20" FontWeight="SemiBold" />
+      <ItemsControl ItemsSource="{Binding Diagnostics}">
+        <ItemsControl.ItemTemplate>
+          <DataTemplate x:DataType="vm:DiagnosticItemViewModel">
+            <TextBlock Text="{Binding Message}" TextWrapping="Wrap" Classes="muted" />
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+    </StackPanel>
+
+    <!-- Checked -->
+    <Grid Grid.Row="0" RowDefinitions="Auto,Auto,*" Margin="32,26,32,0" IsVisible="{Binding HasCheck}">
+
+      <!-- Mode track: from the script as it is to everything compiled -->
+      <Grid Grid.Row="0" ColumnDefinitions="*,*,*,*,*,*">
+        <Border Grid.Column="1" Grid.ColumnSpan="4" Height="2" VerticalAlignment="Top" Margin="0,15,0,0"
+                Background="{DynamicResource PfStroke}" />
+        <ListBox Grid.ColumnSpan="6" Classes="track" ItemsSource="{Binding Modes}" SelectedItem="{Binding SelectedMode}" IsEnabled="{Binding !IsBusy}">
+          <ListBox.ItemsPanel>
+            <ItemsPanelTemplate>
+              <UniformGrid Columns="3" />
+            </ItemsPanelTemplate>
+          </ListBox.ItemsPanel>
+          <ListBox.ItemTemplate>
+            <DataTemplate x:DataType="vm:ModeCardViewModel">
+              <StackPanel HorizontalAlignment="Center" Spacing="3" Margin="8,0,8,4">
+                <Grid Width="32" Height="32" HorizontalAlignment="Center">
+                  <Ellipse Width="32" Height="32" Fill="{DynamicResource PfBg}" />
+                  <Ellipse Width="32" Height="32" StrokeThickness="2.5" IsVisible="{Binding IsSelected}"
+                           Classes="ring" Classes.native="{Binding IsNative}" Classes.mixed="{Binding IsMixed}"
+                           Classes.packaged="{Binding IsPackaged}" Classes.blocked="{Binding IsBlocked}" />
+                  <Ellipse Width="16" Height="16"
+                           Classes.native="{Binding IsNative}" Classes.mixed="{Binding IsMixed}"
+                           Classes.packaged="{Binding IsPackaged}" Classes.blocked="{Binding IsBlocked}" />
+                </Grid>
+                <TextBlock Text="{Binding Title}" FontSize="17" FontWeight="SemiBold" HorizontalAlignment="Center" Margin="0,6,0,0" />
+                <TextBlock Text="{Binding OutcomeText}" FontSize="13" FontWeight="SemiBold" HorizontalAlignment="Center"
+                           Classes.native="{Binding IsNative}" Classes.mixed="{Binding IsMixed}"
+                           Classes.packaged="{Binding IsPackaged}" Classes.blocked="{Binding IsBlocked}" />
+                <TextBlock Classes="muted" Text="{Binding Description}" FontSize="12" HorizontalAlignment="Center" />
+                <TextBlock Text="Recommended" FontSize="12" HorizontalAlignment="Center" Classes="muted"
+                           FontStyle="Italic" IsVisible="{Binding IsRecommended}" />
+              </StackPanel>
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
+      </Grid>
+
+      <TextBlock Grid.Row="1" Text="{Binding SelectedVerdict}" FontSize="16" TextWrapping="Wrap" MaxWidth="860"
+                 HorizontalAlignment="Center" TextAlignment="Center" Margin="0,14,0,22" />
+
+      <Grid Grid.Row="2" ColumnDefinitions="310,26,*" Margin="0,0,0,8">
+
+        <!-- Build settings -->
+        <Border Background="{DynamicResource PfSurface}" BorderBrush="{DynamicResource PfStroke}" BorderThickness="1"
+                CornerRadius="12" Padding="20" VerticalAlignment="Top">
+          <!-- Settings scroll when the window is short; Compile and Stop stay pinned and reachable. -->
+          <Grid RowDefinitions="*,Auto">
+          <ScrollViewer Grid.Row="0" Padding="0,0,6,0">
+          <StackPanel Spacing="16">
+            <StackPanel>
+              <TextBlock Classes="label" Text="Build for" />
+              <ComboBox ItemsSource="{Binding Targets}" SelectedItem="{Binding SelectedTarget}" HorizontalAlignment="Stretch" IsEnabled="{Binding !IsBusy}">
+                <ComboBox.ItemTemplate>
+                  <DataTemplate x:DataType="engine:CompileTarget">
+                    <TextBlock Text="{Binding DisplayName}" />
+                  </DataTemplate>
+                </ComboBox.ItemTemplate>
+              </ComboBox>
+            </StackPanel>
+            <StackPanel>
+              <TextBlock Classes="label" Text="Save to" />
+              <Grid ColumnDefinitions="*,Auto">
+                <TextBox Text="{Binding OutputDirectory}" PlaceholderText="Next to the script" IsEnabled="{Binding !IsBusy}" />
+                <Button Grid.Column="1" Classes="quiet" Content="Browse" Margin="8,0,0,0" Height="36" VerticalContentAlignment="Center"
+                        Click="OnChooseOutput" IsEnabled="{Binding !IsBusy}" />
+              </Grid>
+            </StackPanel>
+            <StackPanel Spacing="6">
+              <CheckBox Content="Sign with my code-signing certificate" IsChecked="{Binding SignOutput}" IsEnabled="{Binding !IsBusy}" />
+              <ComboBox ItemsSource="{Binding Certificates}" SelectedItem="{Binding SelectedCertificate}" HorizontalAlignment="Stretch"
+                        IsVisible="{Binding SignOutput}" IsEnabled="{Binding !IsBusy}">
+                <ComboBox.ItemTemplate>
+                  <DataTemplate x:DataType="engine:SigningCertificate">
+                    <TextBlock Text="{Binding DisplayName}" TextTrimming="CharacterEllipsis" />
+                  </DataTemplate>
+                </ComboBox.ItemTemplate>
+              </ComboBox>
+              <TextBlock Classes="muted" Text="{Binding SigningHint}" TextWrapping="Wrap" FontSize="12" IsVisible="{Binding SignOutput}" />
+            </StackPanel>
+            <Border Height="1" Background="{DynamicResource PfStroke}" />
+            <StackPanel Spacing="2">
+              <TextBlock Classes="muted" Text="{Binding FilesSummary}" FontSize="12.5" TextWrapping="Wrap" />
+              <TextBlock Classes="muted" Text="{Binding SettingsSummary}" FontSize="12.5" TextTrimming="CharacterEllipsis" />
+              <Button Classes="link" Content="Edit details…" Click="OnOpenDetails" IsEnabled="{Binding !IsBusy}" Margin="0,4,0,0" />
+            </StackPanel>
+          </StackPanel>
+          </ScrollViewer>
+          <Grid Grid.Row="1" Margin="0,16,0,0">
+            <Button Classes="primary" Content="{Binding CompileButtonText}" Command="{Binding CompileCommand}" IsVisible="{Binding !IsCompiling}" />
+            <Button Classes="quiet" Content="Stop the build" Command="{Binding CancelCommand}" IsVisible="{Binding IsCompiling}"
+                    Height="44" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" VerticalContentAlignment="Center" />
+          </Grid>
+          </Grid>
+        </Border>
+
+        <!-- Result and details -->
+        <Grid Grid.Column="2" RowDefinitions="Auto,*">
+          <Border Grid.Row="0" IsVisible="{Binding HasResult}" Margin="0,0,0,14" CornerRadius="12" Padding="20,16"
+                  Background="{DynamicResource PfSurface}" BorderBrush="{DynamicResource PfNative}" BorderThickness="1">
+            <Grid ColumnDefinitions="*,Auto">
+              <StackPanel Spacing="4">
+                <TextBlock Text="{Binding ResultTitle}" FontSize="18" FontWeight="SemiBold" />
+                <TextBlock Text="{Binding ResultSummary}" TextWrapping="Wrap" />
+                <TextBlock Classes="mono muted" Text="{Binding ResultPath}" FontSize="12" TextTrimming="CharacterEllipsis" />
+                <TextBlock Classes="muted" Text="{Binding ResultDetail}" FontSize="12" />
+                <TextBlock Classes="packaged" FontSize="13" TextWrapping="Wrap" Margin="0,4,0,0" IsVisible="{Binding ResultContainsReadableSource}"
+                           Text="Anyone with this file can read the script inside it. Keep passwords, keys and other secrets out of the script." />
+              </StackPanel>
+              <Button Grid.Column="1" Classes="quiet" Content="Show in folder" Click="OnOpenOutput" VerticalAlignment="Top" Margin="16,0,0,0" />
+            </Grid>
+          </Border>
+
+          <TabControl Grid.Row="1" x:Name="Tabs" Padding="0,10,0,0">
+            <TabItem Header="{Binding ProblemsHeader}">
+              <Grid>
+                <TextBlock Classes="muted" Text="Nothing to fix in this mode." IsVisible="{Binding !HasDiagnostics}" Margin="0,6" />
+                <ScrollViewer>
+                  <ItemsControl ItemsSource="{Binding Diagnostics}">
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate x:DataType="vm:DiagnosticItemViewModel">
+                        <Grid ColumnDefinitions="4,14,*" Margin="0,0,10,14">
+                          <Border Classes="severity" Classes.error="{Binding IsError}" Classes.warning="{Binding IsWarning}" CornerRadius="2" />
+                          <StackPanel Grid.Column="2" Spacing="3">
+                            <TextBlock Text="{Binding Message}" TextWrapping="Wrap" />
+                            <StackPanel Orientation="Horizontal" Spacing="14">
+                              <TextBlock Classes="muted" Text="{Binding SeverityText}" FontSize="12" FontWeight="SemiBold" />
+                              <TextBlock Classes="mono muted" Text="{Binding Location}" FontSize="12" IsVisible="{Binding HasLocation}" />
+                              <TextBlock Classes="muted" Text="{Binding Code}" FontSize="12" />
+                            </StackPanel>
+                          </StackPanel>
+                        </Grid>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                </ScrollViewer>
+              </Grid>
+            </TabItem>
+
+            <TabItem Header="{Binding DependenciesHeader}">
+              <Grid>
+                <TextBlock Classes="muted" Text="Nothing else is needed beyond the script itself." IsVisible="{Binding !HasDependencies}" Margin="0,6" />
+                <ScrollViewer>
+                  <ItemsControl ItemsSource="{Binding Dependencies}">
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate x:DataType="engine:CompileDependency">
+                        <StackPanel Margin="0,0,10,12" Spacing="2">
+                          <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
+                          <TextBlock Classes="muted" FontSize="12" Text="{Binding PlacementText}" />
+                        </StackPanel>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                </ScrollViewer>
+              </Grid>
+            </TabItem>
+
+            <TabItem Header="Build output" x:Name="OutputTab">
+              <Border Background="{StaticResource PfConsole}" CornerRadius="10" Padding="16,12">
+                <Grid>
+                  <TextBlock Classes="console" Text="PS&gt; Compile to see the build here." Foreground="{StaticResource PfConsoleMuted}"
+                             IsVisible="{Binding !HasLog}" />
+                  <ScrollViewer x:Name="LogScroll">
+                    <ItemsControl ItemsSource="{Binding Log}">
+                      <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:LogLineViewModel">
+                          <TextBlock Classes="console" Classes.error="{Binding IsError}" Classes.warning="{Binding IsWarning}" Text="{Binding Text}" />
+                        </DataTemplate>
+                      </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                  </ScrollViewer>
+                </Grid>
+              </Border>
+            </TabItem>
+          </TabControl>
+        </Grid>
+      </Grid>
+    </Grid>
+
+    <TextBlock Grid.Row="1" Classes="muted" Text="{Binding StatusText}" FontSize="12.5" Margin="32,10,32,12" TextTrimming="CharacterEllipsis" />
+    <!-- Details: slides over the right side; closing it checks again when the file rules changed -->
+    <Grid Grid.RowSpan="2" IsVisible="{Binding IsDetailsOpen}">
+      <Border Background="#73000000" PointerPressed="OnDetailsScrimPressed" />
+      <Border HorizontalAlignment="Right" Width="470" Background="{DynamicResource PfSurface}"
+              BorderBrush="{DynamicResource PfStroke}" BorderThickness="1,0,0,0">
+        <Grid RowDefinitions="Auto,*">
+          <Grid ColumnDefinitions="*,Auto" Margin="28,24,28,8">
+            <TextBlock Text="Build details" FontSize="22" FontWeight="SemiBold"
+                       FontFamily="Segoe UI Variable Display, Segoe UI, Inter, sans-serif" />
+            <Button Grid.Column="1" Classes="quiet" Content="Done" Click="OnCloseDetails" Padding="18,6" />
+          </Grid>
+          <ScrollViewer Grid.Row="1">
+            <StackPanel Margin="28,8,28,28" Spacing="26">
+
+              <StackPanel Spacing="10">
+                <TextBlock Classes="section" Text="Files to include" />
+                <RadioButton Classes="choice" GroupName="files" IsChecked="{Binding FilesLoadedOnly}">
+                  <StackPanel>
+                    <TextBlock Text="The script and the files it loads" />
+                    <TextBlock Classes="muted" FontSize="12" TextWrapping="Wrap" Text="Dot-sourced scripts and the files a module declares. Usually right." />
+                  </StackPanel>
+                </RadioButton>
+                <RadioButton Classes="choice" GroupName="files" IsChecked="{Binding FilesWholeFolder}">
+                  <StackPanel>
+                    <TextBlock Text="Everything in the script's folder" />
+                    <TextBlock Classes="muted" FontSize="12" TextWrapping="Wrap" Text="For scripts that load files by computed paths. Strict can't use this." />
+                  </StackPanel>
+                </RadioButton>
+                <RadioButton Classes="choice" GroupName="files" IsChecked="{Binding FilesScriptOnly}">
+                  <TextBlock Text="Only the script" />
+                </RadioButton>
+
+                <TextBlock Classes="label" Text="Also include" Margin="0,8,0,0" />
+                <ItemsControl ItemsSource="{Binding IncludePatterns}">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:PatternItemViewModel">
+                      <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,4">
+                        <TextBlock Classes="mono" Text="{Binding Pattern}" VerticalAlignment="Center" FontSize="13" />
+                        <Button Grid.Column="1" Classes="link" Content="Remove" Command="{Binding RemoveCommand}" />
+                      </Grid>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+                <Grid ColumnDefinitions="*,Auto">
+                  <TextBox Text="{Binding NewInclude}" PlaceholderText="assets/*.json">
+                    <TextBox.KeyBindings>
+                      <KeyBinding Gesture="Enter" Command="{Binding AddIncludeCommand}" />
+                    </TextBox.KeyBindings>
+                  </TextBox>
+                  <Button Grid.Column="1" Classes="quiet" Content="Add" Margin="8,0,0,0" Height="36" VerticalContentAlignment="Center" Command="{Binding AddIncludeCommand}" />
+                </Grid>
+
+                <TextBlock Classes="label" Text="Leave out" Margin="0,8,0,0" />
+                <ItemsControl ItemsSource="{Binding ExcludePatterns}">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:PatternItemViewModel">
+                      <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,4">
+                        <TextBlock Classes="mono" Text="{Binding Pattern}" VerticalAlignment="Center" FontSize="13" />
+                        <Button Grid.Column="1" Classes="link" Content="Remove" Command="{Binding RemoveCommand}" />
+                      </Grid>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+                <Grid ColumnDefinitions="*,Auto">
+                  <TextBox Text="{Binding NewExclude}" PlaceholderText="tests/**">
+                    <TextBox.KeyBindings>
+                      <KeyBinding Gesture="Enter" Command="{Binding AddExcludeCommand}" />
+                    </TextBox.KeyBindings>
+                  </TextBox>
+                  <Button Grid.Column="1" Classes="quiet" Content="Add" Margin="8,0,0,0" Height="36" VerticalContentAlignment="Center" Command="{Binding AddExcludeCommand}" />
+                </Grid>
+                <TextBlock Classes="muted" FontSize="12" TextWrapping="Wrap" Text="Patterns are relative to the script's folder. Changes are checked again when you close this panel." />
+              </StackPanel>
+
+              <StackPanel Spacing="10">
+                <TextBlock Classes="section" Text="Saved settings" />
+                <TextBlock Classes="mono" Text="{Binding SettingsPath}" FontSize="12.5" TextWrapping="Wrap" IsVisible="{Binding HasSettingsFile}" />
+                <TextBlock Classes="muted" TextWrapping="Wrap" IsVisible="{Binding !HasSettingsFile}"
+                           Text="Not saved yet. Settings go into powerforge.psproject.json next to the script, the same file the powerforge command line builds from, so CI produces the same output." />
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                  <Button Classes="primary" Width="150" Height="38" FontSize="14" Content="Save settings" Click="OnSaveSettings" />
+                  <Button Classes="quiet" Height="38" Padding="16,0" VerticalContentAlignment="Center" Content="Save as…" Click="OnSaveSettingsAs" />
+                  <Button Classes="quiet" Height="38" Padding="16,0" VerticalContentAlignment="Center" Content="Open…" Click="OnOpenSettings" />
+                </StackPanel>
+                <TextBlock Classes="muted" FontSize="12.5" TextWrapping="Wrap" Text="{Binding SettingsMessage}" />
+                <TextBlock Classes="muted" FontSize="12" TextWrapping="Wrap"
+                           Text="Saving adds the selected mode and target to the file and keeps any targets already in it. Signing isn't saved; it depends on the machine." />
+              </StackPanel>
+            </StackPanel>
+          </ScrollViewer>
+        </Grid>
+      </Border>
+    </Grid>
+    </Grid>
+    </ThemeVariantScope>
+
+    <!-- Drop highlight over the whole window -->
+    <Border x:Name="DropOverlay" Grid.RowSpan="2" IsVisible="False" Background="#D9012456" IsHitTestVisible="False">
+      <TextBlock Text="Drop to check it" FontSize="26" FontWeight="SemiBold" Foreground="{StaticResource PfConsoleText}"
+                 HorizontalAlignment="Center" VerticalAlignment="Center" />
+    </Border>
+  </Grid>
+</Window>
