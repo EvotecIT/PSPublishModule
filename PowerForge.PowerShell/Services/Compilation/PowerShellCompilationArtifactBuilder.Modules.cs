@@ -26,7 +26,8 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                 PowerShellCompiledModuleManifest.NormalizeManifestRelativePath(reference))))
             .ToArray();
         var retainedSourcePaths = PowerShellHybridDependencyResolver.DiscoverModuleScopeDependencies(
-            spec.SourcePath, runtimeHooks.Concat(typed.SourcePaths), conventionalDiscovery.Loaders);
+            spec.SourcePath, runtimeHooks.Concat(typed.SourcePaths), conventionalDiscovery.Loaders,
+            PowerShellModuleRuntimeAlternatives.Stage);
         File.WriteAllText(
             modulePath,
             PowerShellHybridModuleComposer.ComposeRoot(

@@ -47,10 +47,13 @@ internal static class PowerShellHybridModuleComposer
         var ast = Parser.ParseFile(sourcePath, out var tokens, out var errors);
         if (errors.Length > 0)
             throw new InvalidOperationException("Hybrid module source could not be parsed while composing fallback code.");
+        var guardedPaths = PowerShellHybridModulePathGuard.CreateEdits(ast).ToArray();
         var initializer = typed.Methods.SingleOrDefault(static method => method.IsModuleInitializer &&
             method.NativeFunctionBinding is not null);
         if (initializer is not null)
         {
+            if (guardedPaths.Length != 0)
+                throw new InvalidOperationException("A compiled module initializer cannot replace a guarded runtime file load.");
             var factory = typed.NamespaceName + "." + PowerShellNativeFunctionSourceGenerator.FactoryType(typed);
             var typeDeclarations = string.Concat(ast.EndBlock!.Statements.OfType<TypeDefinitionAst>()
                 .Select(static declaration => declaration.Extent.Text + "\n"));
@@ -104,13 +107,22 @@ internal static class PowerShellHybridModuleComposer
                 string.Empty,
                 "export:" + command.Extent.StartOffset)));
         edits.AddRange(PowerShellHybridRegionRewriter.CreateEdits(sourcePath, ast, typed, wrapped));
+        foreach (var guard in guardedPaths)
+        {
+            if (edits.Any(edit => guard.Start < edit.Start + edit.Length && edit.Start < guard.Start + guard.Length))
+                throw new InvalidOperationException("A compiled source edit overlaps a guarded runtime file load.");
+            edits.Add(guard);
+        }
         foreach (var edit in edits.OrderByDescending(static edit => edit.Start))
         {
             source.Remove(edit.Start, edit.Length);
             source.Insert(edit.Start, edit.Replacement);
         }
 
-        var fallbackFunctions = ReadRetainedFunctionNames(typed.SourcePaths.Concat(retainedSourcePaths ?? Array.Empty<string>()), wrapped)
+        var retainedOnly = (retainedSourcePaths ?? Array.Empty<string>())
+            .Except(typed.SourcePaths, PowerShellCompilationPathSafety.PathComparer);
+        var fallbackFunctions = ReadRetainedFunctionNames(typed.SourcePaths, wrapped)
+            .Concat(ReadRetainedFunctionNames(retainedOnly, wrapped, allowInheritedTypes: true))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
         var compiledCmdlets = typed.Methods
@@ -382,14 +394,15 @@ internal static class PowerShellHybridModuleComposer
                 method.SourceLine, method.ConditionalDeclarationOffset))
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-    private static IEnumerable<string> ReadRetainedFunctionNames(IEnumerable<string> sourcePaths, ISet<string> wrapped)
+    private static IEnumerable<string> ReadRetainedFunctionNames(IEnumerable<string> sourcePaths, ISet<string> wrapped,
+        bool allowInheritedTypes = false)
     {
         foreach (var sourcePath in sourcePaths.Distinct(PowerShellCompilationPathSafety.PathComparer))
         {
             Token[] tokens;
             ParseError[] errors;
             var ast = Parser.ParseFile(sourcePath, out tokens, out errors);
-            if (errors.Length > 0)
+            if (errors.Any(error => !allowInheritedTypes || !PowerShellHybridDependencyResolver.IsStandaloneTypeResolutionError(error)))
                 throw new InvalidOperationException($"Module source '{sourcePath}' could not be parsed while composing fallback exports.");
             foreach (var function in ast.FindAll(static node => node is FunctionDefinitionAst, searchNestedScriptBlocks: false).Cast<FunctionDefinitionAst>())
                 if (!ContainsWrappedDeclaration(wrapped, sourcePath, function))

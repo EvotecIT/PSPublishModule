@@ -184,6 +184,14 @@ Directory discovery does not recurse into samples, tests, or nested modules look
 
 Unconditional top-level literal `$PSScriptRoot` dot-sourced files share the root module's compilation scope. The resolver also recognizes conventional top-level `Get-ChildItem $PSScriptRoot\Public\*.ps1 -Recurse` / `Private` loader declarations and their `$Import.FullName` dot-source loop without executing module code. Eligible functions in discovered `Public` or `Private` files can therefore become binary cmdlets, while unsupported functions remain in their staged script files. Conditional and function-local dot-sources, `ScriptsToProcess`, and script-based nested modules stay runtime content because PowerShell gives them different scope and loading semantics.
 
+A Hybrid binary module can also stage a finite set of scripts selected by an
+authored top-level `switch` and loaded with `. (Join-Path $PSScriptRoot $choice)`.
+Each branch returns one relative literal `.ps1` path and the switch has a default
+branch. Every file must exist and stay within the module root. The selection and
+dot-source execute in PowerShell, with the chosen path checked against the staged
+alternatives. Those files remain runtime sources, so host-specific class
+definitions keep their authored scope.
+
 Module inputs cannot be overridden to `Executable`. Use a standalone `.ps1` as the executable entrypoint or build the module as `BinaryModule`; PowerForge does not invent module-to-application startup semantics.
 
 Compile several standalone files without creating a manifest or build configuration:

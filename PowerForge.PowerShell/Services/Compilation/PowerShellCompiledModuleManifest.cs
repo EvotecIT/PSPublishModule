@@ -63,14 +63,12 @@ internal static class PowerShellCompiledModuleManifest
         if (includeHybridDependencies)
         {
             var sourceRoot = Path.GetDirectoryName(Path.GetFullPath(sourcePath)) ?? Directory.GetCurrentDirectory();
-            var conventionalDiscovery = PowerShellConventionalModuleSourceDiscovery.Analyze(sourcePath);
-            var conventionalSources = conventionalDiscovery.SourcePaths;
+            var conventionalSources = PowerShellConventionalModuleSourceDiscovery.Analyze(sourcePath).SourcePaths;
             var runtimeHooks = GetContainedRuntimeScriptFiles(sourcePath, sourceManifest)
-                .Select(reference => Path.GetFullPath(Path.Combine(sourceRoot, NormalizeManifestRelativePath(reference))))
-                .Concat(conventionalSources);
-            protectedFiles.AddRange(new[] { sourcePath }
-                .Concat(runtimeHooks)
-                .Concat(conventionalSources)
+                .Select(reference => Path.GetFullPath(Path.Combine(sourceRoot, NormalizeManifestRelativePath(reference))));
+            protectedFiles.AddRange(PowerShellHybridDependencyResolver.DiscoverModuleScopeDependencies(
+                sourcePath, null, null, PowerShellModuleRuntimeAlternatives.Stage));
+            protectedFiles.AddRange(runtimeHooks.Concat(conventionalSources)
                 .Distinct(PowerShellCompilationPathSafety.PathComparer)
                 .SelectMany(PowerShellHybridDependencyResolver.DiscoverModuleScopeDependencies));
         }

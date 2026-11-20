@@ -1,3 +1,5 @@
+using PowerForge;
+
 namespace PowerForge.Tests;
 
 public sealed partial class PowerShellCompilationSemanticOracleTests
@@ -67,6 +69,81 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
             value => Assert.Equal("{\"value\":\"loaded:sample\",\"sameType\":true}", value),
             importSetup: "$env:POWERFORGE_ORACLE_DOT_LOAD = 'load'",
             additionalSources: new Dictionary<string, string> { ["RecordTypes.ps1"] = types }, retainAdditionalSources: true);
+    }
+
+    [PinnedSemanticHostFact]
+    [Trait("Category", "PowerShellCompilerGate")]
+    public void SwitchSelectedModuleFilesUseTheImportingTypeScopeOnBothHosts()
+    {
+        const string source = """
+            class ModulePathOracleContext { [string] $Prefix = 'module' }
+            $path = switch ($PSVersionTable.PSVersion.Major) {
+                { $_ -ge 7 } { 'Modern.ps1' }
+                default { 'Desktop.ps1' }
+            }
+            . (Join-Path $PSScriptRoot $path)
+            function Get-SelectedFile { [ModulePathOracleRecord]::new().Describe() }
+            function Get-ModuleCount { return 21 }
+            Export-ModuleMember -Function Get-SelectedFile, Get-ModuleCount
+            """;
+        const string record = """
+            class ModulePathOracleRecord {
+                [ModulePathOracleContext] $Context
+                ModulePathOracleRecord() { $this.Context = [ModulePathOracleContext]::new() }
+                [string] Describe() { return $this.Context.Prefix + ':edition' }
+            }
+            """;
+        const string probe = """
+            [ordered]@{ selected = Get-SelectedFile; count = Get-ModuleCount } | ConvertTo-Json -Compress
+            """;
+        CompareScopedArtifacts(source, probe, new[] { "Get-ModuleCount" }, value =>
+        {
+            Assert.Contains(value, new[] { "{\"selected\":\"module:modern\",\"count\":21}", "{\"selected\":\"module:desktop\",\"count\":21}" });
+        }, assertArtifact: built =>
+        {
+            var root = Path.GetDirectoryName(built.ArtifactPath!)!;
+            Assert.True(File.Exists(Path.Combine(root, "Modern.ps1")));
+            Assert.True(File.Exists(Path.Combine(root, "Desktop.ps1")));
+            AssertRuntimeModulePathRejectsAnUnstagedFile(built);
+        }, additionalSources: new Dictionary<string, string>
+        {
+            ["Modern.ps1"] = record.Replace("edition", "modern", StringComparison.Ordinal),
+            ["Desktop.ps1"] = record.Replace("edition", "desktop", StringComparison.Ordinal)
+        }, discoverAdditionalSources: true);
+    }
+
+    private static void AssertRuntimeModulePathRejectsAnUnstagedFile(PowerShellCompilationBuildResult built)
+    {
+        using var fixture = OracleFixture.Create(string.Empty);
+        var unstaged = Path.Combine(fixture.RootPath, "Unstaged.ps1");
+        File.WriteAllText(unstaged, "throw 'Unstaged file executed'");
+        File.WriteAllText(fixture.ScriptPath, $$"""
+            function global:Join-Path {
+                param($Path, $ChildPath)
+                if ($ChildPath -in @('Modern.ps1', 'Desktop.ps1')) {
+                    return '{{unstaged.Replace("'", "''", StringComparison.Ordinal)}}'
+                }
+                Microsoft.PowerShell.Management\Join-Path @PSBoundParameters
+            }
+            try {
+                Import-Module '{{built.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal)}}' -Force -ErrorAction Stop
+                'Unexpected import success'
+            } catch {
+                $_.Exception.Message
+            }
+            """);
+        var profile = built.Manifest!.TargetContract!.SemanticProfileId;
+        var blocked = new PowerShellCompilationSemanticOracleRunner().Observe(
+            new PowerShellCompilationSemanticOracleRequest(profile, fixture.ScriptPath)
+            {
+                HostExecutablePath = profile == PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId
+                    ? Environment.GetEnvironmentVariable("POWERFORGE_PWSH76_PATH")
+                    : null,
+                ExpectedHostArtifactSha256 = PowerShellCompilationSemanticTestHost.GetIdentity(
+                    PowerShellCompilationSemanticHostArtifactPinCatalog.Get(profile))
+            });
+        Assert.Empty(blocked.ErrorRecords);
+        Assert.Equal("Module dot-source path is outside its staged alternatives.", Assert.Single(blocked.Success).Value);
     }
 
     [PinnedSemanticHostFact]

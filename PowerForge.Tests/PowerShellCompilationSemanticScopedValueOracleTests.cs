@@ -671,7 +671,8 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
 
     private static void CompareScopedArtifacts(string source, string probe, string[] compiledNames, Action<string> assertValue,
         string? importSetup = null, string? requiredModule = null, Action<PowerShellCompilationBuildResult>? assertArtifact = null,
-        IReadOnlyDictionary<string, string>? additionalSources = null, bool retainAdditionalSources = false)
+        IReadOnlyDictionary<string, string>? additionalSources = null, bool retainAdditionalSources = false,
+        bool discoverAdditionalSources = false)
     {
         var modernHost = Environment.GetEnvironmentVariable("POWERFORGE_PWSH76_PATH");
         Assert.False(string.IsNullOrWhiteSpace(modernHost), "The exact PowerShell 7.6.6 host is required.");
@@ -707,7 +708,7 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
                 TargetFramework = framework,
                 SemanticProfileId = profile,
                 ModuleManifestPath = manifest,
-                CompilationSourcePaths = retainAdditionalSources ? Array.Empty<string>() : additionalSourcePaths.ToArray()
+                CompilationSourcePaths = retainAdditionalSources || discoverAdditionalSources ? Array.Empty<string>() : additionalSourcePaths.ToArray()
             });
             Assert.True(built.Succeeded, built.Error + Environment.NewLine + built.BuildOutput);
             assertArtifact?.Invoke(built);

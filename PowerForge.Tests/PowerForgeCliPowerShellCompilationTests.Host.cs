@@ -157,6 +157,42 @@ public sealed partial class PowerForgeCliPowerShellCompilationTests
         }
     }
 
+    [Theory]
+    [InlineData("Missing.ps1", PowerShellCompilationMode.Hybrid, "Missing.ps1")]
+    [InlineData("../Outside.ps1", PowerShellCompilationMode.Hybrid, "dot-source expression")]
+    [InlineData("Present.ps1", PowerShellCompilationMode.Strict, "dot-source expression")]
+    public void CheckRejectsUnqualifiedModulePathAlternatives(string fallback, PowerShellCompilationMode mode, string diagnostic)
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge module paths", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var source = Path.Combine(root, "Example.psm1");
+            File.WriteAllText(Path.Combine(root, "Present.ps1"), "$script:answer = 21");
+            File.WriteAllText(source, $$"""
+                $path = switch ($PSVersionTable.PSVersion.Major) {
+                    { $_ -ge 7 } { 'Present.ps1' }
+                    default { '{{fallback}}' }
+                }
+                . (Join-Path $PSScriptRoot $path)
+                """);
+            var check = new PowerShellCompilationHostService().Check(new PowerShellCompilationCheckRequest(source)
+            {
+                Mode = mode,
+                OutputDirectory = Path.Combine(root, "output")
+            });
+
+            Assert.False(check.CanProceed);
+            Assert.Null(check.ProposedReview);
+            Assert.Contains(check.Diagnostics, item => item.Severity == PowerShellCompilationHostSeverity.Error &&
+                item.Message.Contains(diagnostic, StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
     private sealed class AtPhase(PowerShellCompilationHostPhase phase, Action callback) : IProgress<PowerShellCompilationProgress>
     {
         public void Report(PowerShellCompilationProgress value)
