@@ -55,6 +55,41 @@ zero skipped on each surface. It exercises pipeline assertions, object-property
 assertions, and an expected throwing script block. It does not execute every
 emitted Pester method or replace the fixed packet's invocation probes.
 
+## Additional published Gallery packages
+
+Eight additional version-pinned Gallery packages were measured with the Hybrid
+`net10.0` post-emission census on Windows x64. The baseline compiler at
+`833ca4cd6050a30249fcfc3dc6313c6e80083e2f` completed four package censuses.
+The compiler now completes all eight, with 707 of 736 units emitted. The
+packages were read from the original Gallery archives.
+
+| Gallery package | Version | Baseline emitted units | Current emitted units |
+| --- | --- | ---: | ---: |
+| PSWriteColor | 1.0.7 | Input rejected | 0/2 |
+| PSWriteHTML | 1.45.0 | Input rejected | 264/274 |
+| PSSharedGoods | 0.0.313 | Input rejected | 280/289 |
+| PowerInfoblox | 1.0.42 | Input rejected | 89/89 |
+| PSWordPress | 0.0.3 | 17/17 | 17/17 |
+| PSLansweeper | 0.0.3 | 2/2 | 2/2 |
+| PSBlackListChecker | 0.8.7 | 12/14 | 12/14 |
+| PasswordSolution | 2.1.0 | 43/49 | 43/49 |
+
+The four input rejections came from export lists assigned as literals immediately
+before `Export-ModuleMember`. Hybrid keeps these calls in the module so PowerShell
+binds their actual values, including any existing variable constraints. These counts describe the additional packages and are
+independent of the ten-module Gallery and seven-workload baselines.
+
+Three offline scenarios matched between the original and Hybrid artifacts on
+PowerShell 7.6.6 (`net10.0`) and Windows PowerShell 5.1.26100.9818
+(`net472`). All six comparisons checked the public command list and passed
+without skips.
+
+| Package | Observed behavior |
+| --- | --- |
+| PSWriteColor | `Write-Colour` resolves to `Write-Color`. Text output, host color records and the UTF-16 log match. The artifact retains the authored function body. |
+| PSWordPress | `Connect-WordPress` and `Get-WordPressPost` match for two explicitly requested pages from a loopback server. The comparisons cover the GET path, query values, synthetic authorization and returned post data. Both entry points have emitted CLR bodies. |
+| PSWriteHTML | `New-HTML` and `New-HTMLTable` produce the same report title, headers, escaped cell content and embedded-asset structure. Both entry points have emitted CLR bodies. |
+
 ## Why these forms were selected
 
 At 720/753, the remaining Gallery units comprised 13 in Pester, ten in

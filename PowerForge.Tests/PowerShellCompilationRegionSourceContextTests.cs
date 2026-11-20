@@ -77,6 +77,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         const string cleanNeighbor = "function Invoke-NewerNeighbor { [CmdletBinding()] param([object] $Trace) end { $Trace.Add('end'); 'end' } clean { $Trace.Add('clean'); 'hidden' } }";
         const string source = """
             using namespace System.Text
+            # Keep the module’s source intact when installing a guarded region.
             function Get-SourceContext([bool] $Enabled) {
                 $number = 1
                 if ($Enabled) { $number = 2 }

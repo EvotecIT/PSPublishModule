@@ -4,6 +4,37 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
 {
     [PinnedSemanticHostFact]
     [Trait("Category", "PowerShellCompilerGate")]
+    public void LiteralExportAssignmentsPreserveThePublicSurfaceOnBothHosts()
+    {
+        const string source = """
+            function Get-PublicValue { return 1 }
+            function Get-PrivateValue { return 2 }
+            function Get-OtherPrivateValue { return 3 }
+            Set-Alias -Name pfPublicValue -Value Get-PublicValue
+            Set-Alias -Name pfPrivateValue -Value Get-PrivateValue
+            [string] $constrainedNames = ''
+            $constrainedNames = 'Get-PrivateValue', 'Get-OtherPrivateValue'
+            $aliases = 'pfPublicValue'
+            $cmdlets = @()
+            Export-ModuleMember -Function $constrainedNames -Alias $aliases -Cmdlet $cmdlets
+            $functionNames = @('Get-PrivateValue')
+            $functionNames = @('Get-PublicValue')
+            Export-ModuleMember -Function $FunctionNames
+            """;
+        const string probe = """
+            $module = Get-Module ScopedValues
+            [ordered]@{
+                commands = @($module.ExportedCommands.Keys | Sort-Object)
+                aliasTarget = (Get-Alias pfPublicValue).Definition
+                value = pfPublicValue
+            } | ConvertTo-Json -Compress
+            """;
+        CompareScopedArtifacts(source, probe, new[] { "Get-PublicValue" }, value => Assert.Equal(
+            "{\"commands\":[\"Get-PublicValue\",\"pfPublicValue\"],\"aliasTarget\":\"Get-PublicValue\",\"value\":1}", value));
+    }
+
+    [PinnedSemanticHostFact]
+    [Trait("Category", "PowerShellCompilerGate")]
     public void DotSourcedClassKeepsItsIdentityAfterTheAuthoredLoadOnBothHosts()
     {
         const string source = """

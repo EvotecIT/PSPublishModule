@@ -323,7 +323,7 @@ powerforge powershell build .\MathTools.psm1 `
 Import-Module .\artifacts\MathTools.dll
 ```
 
-When `MathTools.psd1` exists beside `MathTools.psm1`, the primary artifact is a rewritten manifest in a module directory. `RootModule`, `FunctionsToExport`, and `CmdletsToExport` are remapped so a function that became a binary cmdlet keeps the same public name. Literal top-level `Export-ModuleMember` declarations are preserved across typed and fallback commands; dynamic export expressions are rejected. An omitted `AliasesToExport` entry stays omitted so aliases created by retained module source continue to follow PowerShell's default manifest policy.
+When `MathTools.psd1` exists beside `MathTools.psm1`, the primary artifact is a rewritten manifest in a module directory. `RootModule`, `FunctionsToExport`, and `CmdletsToExport` are remapped so a function that became a binary cmdlet keeps the same public name. Literal top-level `Export-ModuleMember` declarations preserve the public names of typed and retained commands. Hybrid also accepts export arguments that reference plain variables assigned literal strings or lists in the contiguous assignment block immediately before the export call. It keeps the authored call so PowerShell applies the module's variable bindings and export rules at import. Other dynamic export expressions are rejected. An omitted `AliasesToExport` entry stays omitted so aliases created by retained module source continue to follow PowerShell's default manifest policy.
 
 Build a hybrid module when only part of the source is eligible. The kind and mode are inferred from the module input:
 
