@@ -76,6 +76,7 @@ Request:
 | `Kind` | Optional; inferred as today when absent |
 | `Targets` | Optional target profile IDs from the support matrix; default is every profile supported on this host |
 | `LockSelection` | Optional mode and target ID for dependency review. Defaults to the recommended selection when one is available |
+| `ExecutableOptions` | Optional [executable settings](#executable-details) to validate for a bare script or project target |
 
 Result:
 
@@ -132,7 +133,7 @@ Most real scripts start with `#requires`. Package mode should handle the common 
 
 ### Compile
 
-The request includes the source input, `Mode`, `Target`, `OutputDirectory`, optional `ArtifactName`, optional signing settings, and the confirmed `DependencyLock` with its mode and target ID. Omitted mode and target use the confirmed selection. The other defaults match the existing build command.
+The request includes the source input, `Mode`, `Target`, `OutputDirectory`, optional `ArtifactName`, optional signing settings, optional `ExecutableOptions`, and the confirmed `DependencyLock` with its mode and target ID. Omitted mode and target use the confirmed selection. The other defaults match the existing build command.
 
 Result:
 
@@ -148,13 +149,13 @@ Result:
 
 ### Executable details
 
-People who package scripts today expect to set the file's identity and how it starts. The build spec has none of these yet; they belong in `PowerShellCompilationBuildSpec` and the generated project, so the CLI, cmdlets and hosts share them:
+The optional `ExecutableOptions` accepted by both `Check` and `Compile` describes the executable's identity and how it starts. The settings flow into `PowerShellCompilationBuildSpec` and the generated project, so the CLI, cmdlets and hosts share them.
 
 | Setting | Generated project | Platforms |
 |---|---|---|
 | `IconPath` (`.ico`) | `ApplicationIcon` | Windows; ignored elsewhere with an `Info` diagnostic |
 | `Version` (`x.y.z`) | `Version`, `FileVersion`, `AssemblyVersion`, `InformationalVersion` | All |
-| `ProductName`, `CompanyName`, `Copyright`, `FileDescription` | `Product`, `Company`, `Copyright`, `Description` | All (shown in Windows file properties) |
+| `ProductName`, `CompanyName`, `Copyright`, `FileDescription` | `Product`, `Company`, `Copyright`, `AssemblyTitle` | All (shown in Windows file properties) |
 | `WindowsSubsystem` (`Console` or `Windows`) | `OutputType` `Exe` or `WinExe` | Windows; `Windows` suits scripts that only show forms or dialogs |
 | `RequestedExecutionLevel` (`AsInvoker`, `HighestAvailable`, `RequireAdministrator`) | a generated `app.manifest` | Windows |
 
@@ -248,7 +249,8 @@ A simple host can start once slices 1 to 3 exist; the rest improve it.
 - Cancelling `Check` on a large module stops within one unit.
 - A check with two requested targets keeps each target's action and reasons addressable in each mode.
 - `Compile` succeeds when the selection and sources match the confirmed lock. Changing the mode, the target or an imported module name returns a diagnostic asking for a new check.
-- An executable built with an icon, version `1.2.3`, product and company names shows them in Windows file properties, and `RequireAdministrator` prompts for elevation on start.
+- `Check` on a bare script reports an unreadable icon supplied through `ExecutableOptions`.
+- An executable built with an icon, version `1.2.3`, product and company names, and file description shows those values in Windows file properties. `RequireAdministrator` prompts for elevation on start.
 - The JSON for `check`, `build` and `doctor` carries `SchemaVersion` and is covered by contract tests on the serialized shape.
 
 ## Open questions
