@@ -87,28 +87,35 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             : PowerShellHybridModuleComposer.GetExecutableCompiledMethodKeys(hybrid);
         var projectResources = new List<string>();
         var dependencySpecs = new List<string>();
+        var embeddedPaths = scriptDependencies.Prepend(fullSourcePath).ToArray();
         for (var index = 0; index < scriptDependencies.Length; index++)
         {
             var dependency = scriptDependencies[index];
             PowerShellCompilationPathSafety.EnsureContained(sourceRoot, dependency, $"Packaged dependency '{dependency}' escapes the executable entrypoint root.");
-            ValidatePackagedDependency(dependency, scriptDependencies.Prepend(fullSourcePath).ToArray());
             var fileName = $"Dependency{index:D4}.ps1";
             var target = Path.Combine(dependencyDirectory, fileName);
-            var composed = hybrid is null ? null : PowerShellHybridModuleComposer.ComposeDependency(dependency, hybrid, hybridCompiledMethods!, executable: true);
-            var retained = composed ?? Parser.ParseFile(dependency, out _, out _).Extent.Text;
-            var guarded = PowerShellPackagedScriptRewriter.RewriteDependencyDotSources(
-                retained, dependency, sourceRoot, scriptDependencies.Prepend(fullSourcePath).ToArray());
             var relativePath = FrameworkCompatibility.GetRelativePath(sourceRoot, dependency).Replace('\\', '/');
-            if (composed is null && guarded.Equals(retained, StringComparison.Ordinal))
+            File.Copy(dependency, target, overwrite: false);
+            var dependencyHash = ComputeSha256(target);
+            VerifyStagedPayload(dependency, relativePath, dependencyHash, inputHashes);
+
+            var ast = Parser.ParseFile(target, out var tokens, out var parseErrors);
+            if (parseErrors.Length != 0)
+                throw new InvalidOperationException($"Packaged dependency '{dependency}' could not be parsed while validating package semantics.");
+            PowerShellPackagedScriptRewriter.ValidateDependency(ast, dependency, embeddedPaths, allowDerivedPaths: true);
+            var composed = hybrid is null ? null : PowerShellHybridModuleComposer.ComposeDependency(
+                dependency, hybrid, hybridCompiledMethods!, executable: true, stagedSource: (ast, tokens));
+            var retained = composed ?? ast.Extent.Text;
+            var guarded = PowerShellPackagedScriptRewriter.RewriteDependencyDotSources(
+                retained, dependency, sourceRoot, embeddedPaths);
+            if (composed is not null || !guarded.Equals(retained, StringComparison.Ordinal))
             {
-                File.Copy(dependency, target, overwrite: false);
-                VerifyStagedPayload(dependency, relativePath, ComputeSha256(target), inputHashes);
-            }
-            else
                 File.WriteAllText(target, guarded, new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
+                dependencyHash = ComputeSha256(target);
+            }
             var logicalName = $"PowerForge.Compiled.{Path.GetFileNameWithoutExtension(fileName)}.ps1";
             projectResources.Add($"    <EmbeddedResource Include=\"EmbeddedDependencies/{fileName}\" LogicalName=\"{EscapeXml(logicalName)}\" />");
-            dependencySpecs.Add($"        new EmbeddedDependency({PowerShellCSharpLiteral.QuoteString(logicalName)}, {PowerShellCSharpLiteral.QuoteString(relativePath)}, {PowerShellCSharpLiteral.QuoteString(ComputeSha256(target))}, {GetExecutableUnixMode(dependency)}),");
+            dependencySpecs.Add($"        new EmbeddedDependency({PowerShellCSharpLiteral.QuoteString(logicalName)}, {PowerShellCSharpLiteral.QuoteString(relativePath)}, {PowerShellCSharpLiteral.QuoteString(dependencyHash)}, {GetExecutableUnixMode(dependency)}),");
         }
         for (var index = 0; index < resourceDependencies.Length; index++)
         {
@@ -162,6 +169,4 @@ public sealed partial class PowerShellCompilationArtifactBuilder
 #endif
     }
 
-    private static void ValidatePackagedDependency(string dependencyPath, IReadOnlyCollection<string> embeddedScriptPaths)
-        => PowerShellPackagedScriptRewriter.ValidateDependency(dependencyPath, embeddedScriptPaths, allowDerivedPaths: true);
 }

@@ -407,6 +407,15 @@ internal static partial class PowerShellPackagedScriptRewriter
         var ast = Parser.ParseFile(dependencyPath, out _, out var errors);
         if (errors.Length > 0)
             throw new InvalidOperationException($"Packaged dependency '{dependencyPath}' could not be parsed while validating package semantics.");
+        ValidateDependency(ast, dependencyPath, embeddedScriptPaths, allowDerivedPaths);
+    }
+
+    internal static void ValidateDependency(
+        ScriptBlockAst ast,
+        string dependencyPath,
+        IReadOnlyCollection<string> embeddedScriptPaths,
+        bool allowDerivedPaths)
+    {
         ValidateScriptRequirements(ast, dependencyPath);
         ValidateHostInteraction(ast);
         ValidateDotSources(ast, dependencyPath, embeddedScriptPaths, allowDerivedPaths);

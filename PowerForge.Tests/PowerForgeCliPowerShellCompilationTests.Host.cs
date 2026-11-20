@@ -110,39 +110,44 @@ public sealed partial class PowerForgeCliPowerShellCompilationTests
         }
     }
 
-    [Fact]
-    public void ReviewedBuild_RejectsChangedEmbeddedResourceBeforeCompilation()
+    [Theory]
+    [InlineData("label.txt", false)]
+    [InlineData("label.ps1", true)]
+    public void ReviewedBuild_RejectsChangedEmbeddedInputBeforeCompilation(string fileName, bool scriptDependency)
     {
         var root = Path.Combine(Path.GetTempPath(), "PowerForge reviewed package", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
         try
         {
             var source = Path.Combine(root, "Example.ps1");
-            var resource = Path.Combine(root, "label.txt");
+            var resource = Path.Combine(root, fileName);
             var output = Path.Combine(root, "output");
-            File.WriteAllText(source, "Get-Content -LiteralPath \"$PSScriptRoot/label.txt\"");
-            File.WriteAllText(resource, "reviewed content");
+            File.WriteAllText(source, scriptDependency
+                ? ". \"$PSScriptRoot/label.ps1\""
+                : "Get-Content -LiteralPath \"$PSScriptRoot/label.txt\"");
+            File.WriteAllText(resource, scriptDependency ? "'reviewed content'" : "reviewed content");
             var host = new PowerShellCompilationHostService();
             var request = new PowerShellCompilationCheckRequest(source)
             {
                 Mode = PowerShellCompilationMode.Package,
                 OutputDirectory = output,
-                IncludeResource = new[] { "label.txt" }
+                IncludeResource = scriptDependency ? Array.Empty<string>() : new[] { fileName }
             };
             var check = host.Check(request);
             Assert.True(check.CanProceed, string.Join(Environment.NewLine, check.Diagnostics.Select(item => item.Message)));
-            Assert.Contains(check.Dependencies, item => item.RelativePath == "label.txt" &&
+            Assert.Contains(check.Dependencies, item => item.RelativePath == fileName &&
                 item.Disposition == PowerShellCompilationDependencyDisposition.EmbeddedAndExtracted);
             var spec = new PowerShellCompilationBuildSpec(source, output, "Example",
                 PowerShellCompilationArtifactKind.Executable, PowerShellCompilationMode.Package)
             {
-                IncludeResource = request.IncludeResource
+                IncludeResource = request.IncludeResource,
+                CompilationSourcePaths = scriptDependency ? new[] { resource } : Array.Empty<string>()
             };
             var changed = host.Compile(spec, check.ProposedReview!, progress: new AtPhase(
                 PowerShellCompilationHostPhase.Shaping, () => File.WriteAllText(resource, "unreviewed content")));
 
             Assert.False(changed.Succeeded);
-            Assert.Contains("Staged PowerShell compilation payload 'label.txt' differs from the dependency lock",
+            Assert.Contains($"Staged PowerShell compilation payload '{fileName}' differs from the dependency lock",
                 changed.Error, StringComparison.Ordinal);
             Assert.Empty(Directory.EnumerateFiles(output));
         }
