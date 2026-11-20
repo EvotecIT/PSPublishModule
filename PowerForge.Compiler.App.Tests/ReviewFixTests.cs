@@ -81,7 +81,8 @@ public sealed class ReviewFixTests
         public PowerShellCompilationReview? ConfirmedReview { get; private set; }
         public string? ReviewedOutput { get; private set; }
 
-        public Task<CheckResult> CheckAsync(string inputPath, FileRules files, CancellationToken cancellationToken)
+        public Task<CheckResult> CheckAsync(string inputPath, FileRules files, CancellationToken cancellationToken,
+            PowerShellCompilationArtifactKind? kind = null)
         {
             if (CancelNextCheck) return Task.FromCanceled<CheckResult>(new CancellationToken(canceled: true));
             var mode = new ModeCheck(PowerShellCompilationMode.Hybrid, CompileOutcome.Mixed, 1, 1, 0,

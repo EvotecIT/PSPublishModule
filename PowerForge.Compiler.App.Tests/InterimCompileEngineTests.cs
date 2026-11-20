@@ -87,6 +87,32 @@ public sealed class InterimCompileEngineTests : IDisposable
     }
 
     [Fact]
+    public async Task ReviewShowsBothTheMinimumAndResolvedModuleVersion()
+    {
+        Write("Parent.psm1", "function Get-Count { return 21 }");
+        var parent = Write("Parent.psd1", """
+            @{
+                RootModule = 'Parent.psm1'
+                ModuleVersion = '1.0.0'
+                FunctionsToExport = @('Get-Count')
+                RequiredModules = @(@{ ModuleName = 'Reports'; ModuleVersion = '2.0.0' })
+            }
+            """);
+        Write("Reports.psm1", "function Get-Report { return 'ready' }");
+        Write("Reports.psd1", "@{ RootModule = 'Reports.psm1'; ModuleVersion = '2.3.0' }");
+
+        var engine = new InterimCompileEngine();
+        var target = engine.GetTargets(PowerShellCompilationMode.Hybrid, PowerShellCompilationArtifactKind.BinaryModule)
+            .Single(static item => item.TargetFramework == "net10.0");
+        var check = await engine.ReviewAsync(new CompileRequest(parent, target.Mode, target, null), CancellationToken.None);
+
+        Assert.NotNull(check.Review);
+        var requirement = Assert.Single(check.Dependencies, static dependency => dependency.Name == "Reports" &&
+            dependency.Detail.Contains("Minimum version 2.0.0", StringComparison.Ordinal));
+        Assert.Contains("Version 2.3.0", requirement.Detail, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task CheckCountsTypedFunctionAndEntryUnitsInHybridMode()
     {
         var script = Write("Add.ps1", "function Add-Numbers {\n    param([int] $A, [int] $B)\n    return $A + $B\n}\nAdd-Numbers -A 2 -B 3\n");

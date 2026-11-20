@@ -291,7 +291,8 @@ public sealed partial class MainWindowViewModel : ObservableObject
         StatusText = $"Checking {InputName} in all three modes…";
         try
         {
-            var check = await _engine.CheckAsync(path, CurrentFileRules, operation.Token);
+            var kind = _pendingSavedTarget?.ExactContract?.ArtifactKind ?? SelectedTarget?.ExactContract?.ArtifactKind;
+            var check = await _engine.CheckAsync(path, CurrentFileRules, operation.Token, kind);
             // A check that started later owns the window now; a cancelled one may still finish normally.
             if (generation != _checkGeneration) return false;
             ApplyCheck(check);
@@ -310,6 +311,8 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
     private void ApplyCheck(CheckResult check)
     {
+        var previousTarget = SelectedTarget;
+        var saved = TakePendingSavedTarget();
         _check = check;
         Modes.Clear();
         foreach (var mode in check.Modes)
@@ -317,13 +320,15 @@ public sealed partial class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(HasCheck));
         OnPropertyChanged(nameof(InputSummary));
 
-        var saved = TakePendingSavedTarget();
-        var initial = (saved is null ? null : Modes.FirstOrDefault(card => card.Mode == saved.Mode))
+        var preferredMode = saved?.Mode ?? previousTarget?.Mode;
+        var initial = Modes.FirstOrDefault(card => card.Mode == preferredMode)
                       ?? Modes.FirstOrDefault(static card => card.IsRecommended) ?? Modes.FirstOrDefault();
         _selectedMode = null;
         SelectedMode = initial;
         if (initial is null) RefreshSelectedMode();
         if (saved is not null) ApplySavedTarget(saved);
+        else if (previousTarget is not null && previousTarget.Mode == initial?.Mode)
+            SelectExactTarget(previousTarget);
 
         StatusText = check.Modes.Count == 0
             ? "This input can't be checked. See the problems below."

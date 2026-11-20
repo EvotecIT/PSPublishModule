@@ -21,8 +21,9 @@ internal sealed partial class InterimCompileEngine : ICompileEngine
         PowerShellCompilationMode.Strict
     };
 
-    public Task<CheckResult> CheckAsync(string inputPath, FileRules files, CancellationToken cancellationToken) =>
-        Task.Run(() => Check(inputPath, files, cancellationToken), cancellationToken);
+    public Task<CheckResult> CheckAsync(string inputPath, FileRules files, CancellationToken cancellationToken,
+        PowerShellCompilationArtifactKind? kind = null) =>
+        Task.Run(() => Check(inputPath, files, cancellationToken, kind), cancellationToken);
 
     public Task<CompileReviewResult> ReviewAsync(CompileRequest request, CancellationToken cancellationToken) =>
         Task.Run(() => Review(request, cancellationToken), cancellationToken);
@@ -54,7 +55,7 @@ internal sealed partial class InterimCompileEngine : ICompileEngine
             // Modes without qualified profiles still build for the current machine, framework-dependent.
             targets.Add(new CompileTarget($"host-{mode}", mode, TargetFramework, hostRuntime, PowerShellCompilationDeploymentModel.FrameworkDependent, "this machine", Advertised: true));
         }
-        return targets;
+        return targets.Select(target => target with { ExactContract = CreateTarget(kind, mode, target) }).ToArray();
     }
 
     public IReadOnlyList<SigningCertificate> GetSigningCertificates()
@@ -76,7 +77,8 @@ internal sealed partial class InterimCompileEngine : ICompileEngine
             .ToArray();
     }
 
-    private static CheckResult Check(string inputPath, FileRules files, CancellationToken cancellationToken)
+    private static CheckResult Check(string inputPath, FileRules files, CancellationToken cancellationToken,
+        PowerShellCompilationArtifactKind? kind)
     {
         var stopwatch = Stopwatch.StartNew();
         if (!TryGetExistingPath(inputPath, out var fullPath, out var pathProblem))
@@ -85,7 +87,7 @@ internal sealed partial class InterimCompileEngine : ICompileEngine
         PowerShellCompilationResolvedInput resolved;
         try
         {
-            resolved = new PowerShellCompilationInputResolver().Resolve(fullPath,
+            resolved = new PowerShellCompilationInputResolver().Resolve(fullPath, kind,
                 allowDynamicModuleRuntimeSources: files.Mode == PowerShellCompilationResourceMode.CompleteModule);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
@@ -167,7 +169,8 @@ internal sealed partial class InterimCompileEngine : ICompileEngine
                 if (!string.IsNullOrEmpty(identity.RequiredVersion)) version.Add($"Required version {identity.RequiredVersion}");
                 if (!string.IsNullOrEmpty(identity.MinimumVersion)) version.Add($"Minimum version {identity.MinimumVersion}");
                 if (!string.IsNullOrEmpty(identity.MaximumVersion)) version.Add($"Maximum version {identity.MaximumVersion}");
-                if (version.Count == 0 && !string.IsNullOrEmpty(identity.Version)) version.Add($"Version {identity.Version}");
+                if (!string.IsNullOrEmpty(identity.Version) && identity.Version != identity.RequiredVersion)
+                    version.Add($"Version {identity.Version}");
                 var details = version.Concat(new[] { identity.RuntimeIdentifier, identity.TargetFramework, identity.Guid, identity.Source })
                     .Where(static item => !string.IsNullOrWhiteSpace(item));
                 var placement = node.Disposition switch
@@ -250,7 +253,8 @@ internal sealed partial class InterimCompileEngine : ICompileEngine
     private static (PowerShellCompilationResolvedInput Input, PowerShellCompilationBuildSpec Spec) CreateBuildSpec(CompileRequest request)
     {
         var files = request.Files ?? FileRules.Default;
-        var resolved = new PowerShellCompilationInputResolver().Resolve(request.InputPath, mode: request.Mode,
+        var resolved = new PowerShellCompilationInputResolver().Resolve(request.InputPath,
+            kind: request.Target?.ExactContract?.ArtifactKind, mode: request.Mode,
             allowDynamicModuleRuntimeSources: AllowsRuntimeSources(files, request.Mode));
         return (resolved, new PowerShellCompilationBuildSpec(resolved.SourcePath,
             request.OutputDirectory ?? PowerShellCompilationOutputPolicy.GetDefaultOutputDirectory(resolved),

@@ -242,8 +242,7 @@ public sealed partial class MainWindowViewModel
         {
             var target = new CompileTarget(saved.Name, saved.Mode, saved.TargetFramework, saved.RuntimeIdentifier,
                 saved.Deployment, contract.SupportLevel, contract.SupportLevel is "Supported" or "PortableManaged", contract);
-            Targets.Insert(0, target);
-            SelectedTarget = target;
+            SelectExactTarget(target);
         }
         else
         {
@@ -254,6 +253,19 @@ public sealed partial class MainWindowViewModel
                              ?? SelectedTarget;
         }
         OutputDirectory = saved.OutputDirectory;
+    }
+
+    private void SelectExactTarget(CompileTarget target)
+    {
+        var existing = target.ExactContract is { } contract
+            ? Targets.FirstOrDefault(item => item.ExactContract?.ContractSha256 == contract.ContractSha256)
+            : Targets.FirstOrDefault(item => item.Id == target.Id);
+        if (existing is null)
+        {
+            Targets.Insert(0, target);
+            existing = target;
+        }
+        SelectedTarget = existing;
     }
 
     // Settings belong to one script; checking a different one starts from defaults.

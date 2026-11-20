@@ -74,6 +74,7 @@ public sealed class BuildSettingsTests : IDisposable
         var engine = new InterimCompileEngine();
         var model = new MainWindowViewModel(engine);
         await model.OpenSettingsAsync(settings);
+        await model.SetInputAsync(script);
         var selected = Assert.IsType<CompileTarget>(model.SelectedTarget);
         Assert.Equal(PowerShellCompilationMode.Strict, selected.Mode);
         var review = await engine.ReviewAsync(new CompileRequest(script, selected.Mode, selected, model.OutputDirectory),
@@ -82,6 +83,33 @@ public sealed class BuildSettingsTests : IDisposable
         Assert.NotNull(review.Review?.Target);
         Assert.False(review.Review.Target.SingleFile);
         Assert.Equal(contract.ContractSha256, review.Review.Target.ContractSha256);
+    }
+
+    [Fact]
+    public async Task AProjectCanReviewAndBuildItsScriptModuleAsADotNetLibrary()
+    {
+        var script = Path.Combine(_root, "Library.psm1");
+        File.WriteAllText(script, "function Get-ReportCount { return 21 }");
+        var settings = Path.Combine(_root, InterimCompileEngine.DefaultSettingsFileName);
+        var contract = PowerShellCompilationTargetContractService.Create(PowerShellCompilationArtifactKind.Library,
+            PowerShellCompilationMode.Strict, "net10.0", null, selfContained: false, singleFile: false,
+            PowerShellCompilationExecutableOptimization.None, explicitContract: true);
+        var projects = new PowerShellCompilationProjectManifestService();
+        projects.Save(settings, projects.Create(settings, script, "Library", contract));
+
+        var engine = new InterimCompileEngine();
+        var model = new MainWindowViewModel(engine);
+        await model.OpenSettingsAsync(settings);
+        var selected = Assert.IsType<CompileTarget>(model.SelectedTarget);
+        Assert.Equal(PowerShellCompilationArtifactKind.Library, selected.ExactContract?.ArtifactKind);
+        var request = new CompileRequest(script, selected.Mode, selected, model.OutputDirectory);
+        var review = await engine.ReviewAsync(request, CancellationToken.None);
+        Assert.NotNull(review.Review);
+
+        var built = await engine.CompileAsync(request, review.Review, progress: null, CancellationToken.None);
+        Assert.True(built.Succeeded, string.Join(Environment.NewLine, built.Diagnostics.Select(static item => item.Message)));
+        Assert.EndsWith(".dll", built.ArtifactPath, StringComparison.OrdinalIgnoreCase);
+        Assert.True(File.Exists(built.ArtifactPath!));
     }
 
     [Fact]

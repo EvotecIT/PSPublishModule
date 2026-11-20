@@ -134,7 +134,8 @@ public sealed class SettingsAndCheckOrderTests : IDisposable
                 Array.Empty<CompileDiagnostic>(), TimeSpan.Zero);
         }
 
-        public Task<CheckResult> CheckAsync(string inputPath, FileRules files, CancellationToken cancellationToken)
+        public Task<CheckResult> CheckAsync(string inputPath, FileRules files, CancellationToken cancellationToken,
+            PowerShellCompilationArtifactKind? kind = null)
         {
             if (CancelNext)
             {

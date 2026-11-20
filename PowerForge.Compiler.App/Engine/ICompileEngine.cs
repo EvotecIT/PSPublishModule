@@ -6,7 +6,8 @@ namespace PowerForge.Compiler.App.Engine;
 public interface ICompileEngine
 {
     /// <summary>Checks the input in every mode without building or running it. Never throws for input problems.</summary>
-    Task<CheckResult> CheckAsync(string inputPath, FileRules files, CancellationToken cancellationToken);
+    Task<CheckResult> CheckAsync(string inputPath, FileRules files, CancellationToken cancellationToken,
+        PowerShellCompilationArtifactKind? kind = null);
 
     /// <summary>Targets the engine can build for the given mode and input kind.</summary>
     IReadOnlyList<CompileTarget> GetTargets(PowerShellCompilationMode mode, PowerShellCompilationArtifactKind kind);

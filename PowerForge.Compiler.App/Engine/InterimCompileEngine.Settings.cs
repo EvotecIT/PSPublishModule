@@ -31,7 +31,7 @@ internal sealed partial class InterimCompileEngine
             var settingsPath = Path.GetFullPath(request.SettingsPath.Trim().Trim('"'));
             var inputPath = Path.GetFullPath(request.InputPath);
             var service = new PowerShellCompilationProjectManifestService();
-            var kind = new PowerShellCompilationInputResolver().Resolve(inputPath).Kind;
+            var kind = new PowerShellCompilationInputResolver().Resolve(inputPath, request.Target.ExactContract?.ArtifactKind).Kind;
             var contract = CreateTarget(kind, request.Mode, request.Target);
 
             // A fresh manifest gives the engine's own name, lock path and output folder for this target.
