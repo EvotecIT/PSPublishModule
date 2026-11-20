@@ -176,6 +176,11 @@ internal static class PowerShellCompiledModuleManifest
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToArray();
         var hasRuntimeControlledExports = explicitExports is { Commands.Length: 0 };
+        var hasRetainedAlternatives = rootModuleFileName.EndsWith(".psm1", StringComparison.OrdinalIgnoreCase) &&
+            PowerShellHybridDependencyResolver.DiscoverRetainedModuleAlternatives(sourcePath, typed.SourcePaths).Length > 0;
+        var functionExports = hasRetainedAlternatives
+            ? manifestFunctions
+            : hasScriptNestedModules && manifestFunctions is null ? null : selectedFallback;
 
         var mutator = new AstModuleManifestMutator();
         var rootKey = ModuleManifestValueReader.ReadTopLevelString(sourceManifest, "ModuleToProcess") is not null
@@ -191,7 +196,7 @@ internal static class PowerShellCompiledModuleManifest
         {
             mutator.TrySetManifestExports(
                 targetManifest,
-                hasScriptNestedModules && manifestFunctions is null ? null : selectedFallback,
+                functionExports,
                 selectedCmdlets,
                 manifestAliases);
         }

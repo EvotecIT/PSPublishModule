@@ -672,7 +672,7 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
     private static void CompareScopedArtifacts(string source, string probe, string[] compiledNames, Action<string> assertValue,
         string? importSetup = null, string? requiredModule = null, Action<PowerShellCompilationBuildResult>? assertArtifact = null,
         IReadOnlyDictionary<string, string>? additionalSources = null, bool retainAdditionalSources = false,
-        bool discoverAdditionalSources = false)
+        bool discoverAdditionalSources = false, string manifestFunctionPattern = "*")
     {
         var modernHost = Environment.GetEnvironmentVariable("POWERFORGE_PWSH76_PATH");
         Assert.False(string.IsNullOrWhiteSpace(modernHost), "The exact PowerShell 7.6.6 host is required.");
@@ -699,7 +699,8 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
                 manifest = Path.ChangeExtension(module, ".psd1");
                 var required = requiredModule is null ? string.Empty : " RequiredModules=@('" + requiredModule + "');";
                 var files = retainAdditionalSources ? " FileList=@(" + string.Join(", ", additionalSources!.Keys.Select(name => "'" + name + "'")) + ");" : string.Empty;
-                File.WriteAllText(manifest, "@{ RootModule='ScopedValues.psm1'; ModuleVersion='1.0.0'; FunctionsToExport='*';" + required + files + " }");
+                File.WriteAllText(manifest, "@{ RootModule='ScopedValues.psm1'; ModuleVersion='1.0.0'; FunctionsToExport='" +
+                    manifestFunctionPattern + "';" + required + files + " }");
             }
             var built = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
                 module, Path.Combine(fixture.RootPath, "built"), "ScopedValues", PowerShellCompilationArtifactKind.BinaryModule,

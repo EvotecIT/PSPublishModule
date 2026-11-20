@@ -85,9 +85,8 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
                 $PSScriptRoot = $env:POWERFORGE_TEST_EXTERNAL_MODULE_ROOT
             }
             . (Join-Path $PSScriptRoot $path)
-            function Get-SelectedFile { [ModulePathOracleRecord]::new() }
             function Get-ModuleCount { return 21 }
-            Export-ModuleMember -Function Get-SelectedFile, Get-ModuleCount
+            Export-ModuleMember -Function Get-SelectedFile, Get-ModuleCount, Read-ProfileDetail
             """;
         const string record = """
             class ModulePathOracleRecord {
@@ -95,7 +94,9 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
                 ModulePathOracleRecord() { $this.Context = [ModulePathOracleContext]::new() }
                 [string] Describe() { return $this.Context.Prefix + ':edition' }
             }
+            function Get-SelectedFile { [ModulePathOracleRecord]::new() }
             function Get-PrivateAlternative { 'private' }
+            function Read-ProfileDetail { 'filtered by the manifest' }
             """;
         const string probe = """
             $module = Get-Module ScopedValues
@@ -120,7 +121,7 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
         {
             ["Modern.ps1"] = record.Replace("edition", "modern", StringComparison.Ordinal),
             ["Desktop.ps1"] = record.Replace("edition", "desktop", StringComparison.Ordinal)
-        }, discoverAdditionalSources: true);
+        }, discoverAdditionalSources: true, manifestFunctionPattern: "Get-*");
     }
 
     private static void AssertRuntimeModulePathRejectsAnUnstagedFile(PowerShellCompilationBuildResult built)
