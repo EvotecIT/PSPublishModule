@@ -177,3 +177,25 @@ powerforge powershell census ./Main.ps1 --kind exe --mode Strict `
 Census accepts `--kind exe|dll|library`, `--mode Strict|Hybrid`, and `--semantic-profile`. Omitted kind is inferred per input. Incomplete input assessment retains successful products and `InputFailures` in JSON with a nonzero CLI exit code. Baselines require matching artifact, mode, profile, framework, and recursion contracts. The existing overload remains available to C# callers; use `RunWithOptions` for explicit contracts.
 
 The gate requires the repository .NET 10 SDK/runtime and the selected PowerShell host. `Fast` is the default development and pull-request lane. It selects the semantic/census/fuzz tests, generated module workflows on the available hosts, and the ABI, package, provider, project run/watch, and CLI contract families. Both lanes then run the same six Strict programs (24 authored units), including number-theory and calendar scenarios. `Full` retains the broader artifact matrix for an explicit integration or release qualification; it is not a prerequisite for each edit. The workflow's `compilerFullGate` manual-dispatch input selects that lane on the CI runner. Run `linux-x64` on Linux itself. Windows PowerShell 5.1/`net472` cases are selected only on Windows; host-capability JSON records their unavailability on Linux. The broader Hybrid module and NativeAOT lanes retain their own separately dated evidence.
+
+## Verify independent module workflows
+
+On Windows, build the `net10.0` CLI and set `POWERFORGE_PWSH76_PATH` to the
+pinned PowerShell executable from the compiler gate. Run the workflow matrix
+with the installed Windows PowerShell 5.1 available on the same machine.
+
+```powershell
+./Benchmarks/PowerShellCompilation/Corpus/Invoke-IndependentModuleVerification.ps1
+```
+
+The matrix verifies the Gallery package hashes in `independent-readiness.net10.json`,
+creates a dependency review for each target, and builds the unchanged module.
+It removes the original source from its build path while importing and exercising
+the artifact. The evidence records the observed exports, results, emitted
+methods and host identities for every comparison. The runner exits with an
+error if any comparison fails.
+
+Use `-WorkloadId` for a subset or `-Offline -PayloadCachePath <directory>`
+to reuse the verified external-assessment payload cache. `-WorkspacePath`
+controls where the runner creates temporary files. `-KeepRunArtifacts`
+preserves the original sources, reviewed locks and generated artifacts for inspection.

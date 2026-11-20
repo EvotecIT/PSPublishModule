@@ -267,6 +267,28 @@ emits 23/24 before its exit helper becomes complete. Their contracts qualify
 actual entries and delivered artifacts. Those first three workflows exercise
 all 38 of their owned functions.
 
+## Independent module workflow verification
+
+Four unmodified modules from the independent packet pass eight workflow
+comparisons with zero skips on PowerShell 7.6.6 and Windows PowerShell
+5.1.26100.9818. The runner builds each module in Hybrid mode with
+`CompleteModule` resources and a reviewed dependency lock. It compares the
+exported command list and the workflow result in separate PowerShell
+processes, with the input directory withdrawn for generated-module invocation.
+
+| Gallery package | Version | Emitted units on each target | Compared workflow |
+| --- | --- | ---: | --- |
+| PSFolderSize | 1.7.3 | 4/4 | Directory names, byte totals, file counts and output type for two fixture directories |
+| PowerShellHumanizer | 3.2.0 | 12/12 | Piped Roman numeral conversions and an ordinal from packaged PowerShell type data |
+| PSIni | 4.0.1 | 6/8 | INI file content, parsed settings and missing-file error identity |
+| Plaster | 2.1.5 | 49/58 | Manifest validation and generation of a named file from a parameterized template |
+
+The artifact ledger confirms complete emitted bodies for the exercised
+commands, except `Import-Ini`, which remains in PowerShell. These probes
+exercise named workflows and leave the separate seven-workload packet and
+per-unit census baselines unchanged.
+[Run the module workflow matrix](../Benchmarks/PowerShellCompilation/Corpus/README.md#verify-independent-module-workflows).
+
 ## Reproduce the measurements
 
 Build the current CLI and choose a disposable scratch directory with enough room
