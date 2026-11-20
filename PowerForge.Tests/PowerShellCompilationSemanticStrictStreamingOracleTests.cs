@@ -77,6 +77,34 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
     }
 
     [PinnedSemanticHostFact]
+    public void StrictStreamingRejectsOpenWriteOutputArgumentBinding()
+    {
+        var cases = new[]
+        {
+            ("Splat", "[int[]] $values = 1, 2; Write-Output @values"),
+            ("AttachedParameterWithAnExtraArgument", "Write-Output -InputObject:first second")
+        };
+        foreach (var scenario in cases)
+        foreach (var pin in PowerShellCompilationSemanticHostArtifactPinCatalog.Pins)
+        {
+            using var fixture = OracleFixture.Create(scenario.Item2);
+            var build = BuildStrictStreamingFixture(fixture, scenario.Item1, pin.ProfileId);
+            Assert.False(build.Succeeded);
+            Assert.Contains("Write-Output", build.Error, StringComparison.OrdinalIgnoreCase);
+        }
+    }
+
+    [PinnedSemanticHostFact]
+    public void StrictStreamingAllowsExplicitExitOnAnOtherwiseValueReturningPath()
+    {
+        CompareStrictStreamingCases(
+            ("ConditionalExit", """
+                param([int] $Status = 0)
+                if ($Status -ne 0) { exit $Status } else { return 7 }
+                """));
+    }
+
+    [PinnedSemanticHostFact]
     public void StrictStreamingWriteOutputEnumeratesTypedValuesOnBothPinnedHosts()
     {
         CompareStrictStreamingCases(
@@ -89,7 +117,9 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
                 [Array]::Clear($values, 1, 1)
                 Write-Output $values
                 Write-Output $null
-                """));
+                """),
+            ("EmptyInputProducesNoRecords", "Write-Output @()"),
+            ("NullInputProducesOneNullRecord", "Write-Output $null"));
     }
 
     [PinnedSemanticHostFact]

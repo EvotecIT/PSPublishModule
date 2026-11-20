@@ -146,6 +146,39 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
         }
     }
 
+    [PinnedSemanticHostFact]
+    [Trait("Category", "PowerShellCompilerGate")]
+    public async Task StrictExecutableObservesReturnedRecordBeforeFinallyExitsOnPinnedHosts()
+    {
+        using var fixture = OracleFixture.Create("""
+            param([int] $Status)
+            function Stop-Script {
+                param([int] $Code)
+                exit $Code
+            }
+            try { return 'before' } finally { Stop-Script $Status }
+            """);
+        var observer = new PowerShellCompilationSemanticRuntimeFreeArtifactObserver();
+        foreach (var pin in PowerShellCompilationSemanticHostArtifactPinCatalog.Pins)
+        {
+            var host = StrictStreamingHostPath(pin) ??
+                Path.Combine(Environment.SystemDirectory, "WindowsPowerShell", "v1.0", "powershell.exe");
+            var build = BuildStrictStreamingFixture(fixture, "StrictFinallyExit", pin.ProfileId);
+            Assert.True(build.Succeeded, build.Error + Environment.NewLine + build.BuildOutput);
+            foreach (var code in new[] { 0, 17 })
+            {
+                var argument = code.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                await AssertExitAndConsoleOutput(host, fixture.RootPath,
+                    new[] { "-NoLogo", "-NoProfile", "-NonInteractive", "-File", fixture.ScriptPath, argument },
+                    (argument, code, "before" + Environment.NewLine, string.Empty));
+                var observed = observer.Observe(pin.ProfileId, build, new[] { argument });
+                Assert.Equal(code, observed.ExitCode);
+                Assert.Equal("before", Assert.Single(observed.Success).Value);
+                Assert.Empty(observed.ErrorRecords);
+            }
+        }
+    }
+
     [Theory]
     [InlineData(PowerShellCompilationMode.Package, "$PSDefaultParameterValues = @{'Read-Host : MaskInput'=$true}; Read-Host")]
     [InlineData(PowerShellCompilationMode.Hybrid, "$PSDefaultParameterValues = @{'Read-Host : MaskInput'=$true}; Read-Host")]

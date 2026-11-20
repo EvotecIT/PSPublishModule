@@ -234,6 +234,7 @@ internal sealed partial class PowerShellSemanticAnalyzer
                 PowerShellBoundReturnStatement { EmitsValue: true } => true,
                 PowerShellBoundExpressionStatement { EmitsOutput: true } => true,
                 PowerShellBoundThrowStatement => true,
+                PowerShellBoundExitStatement { RuntimeFree: true } => true,
                 PowerShellBoundIfStatement conditional => conditional.ElseBlock is not null &&
                     conditional.Clauses.All(static clause => BlockReturnsValue(clause.Body)) &&
                     BlockReturnsValue(conditional.ElseBlock),

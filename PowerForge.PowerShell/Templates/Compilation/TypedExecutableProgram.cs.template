@@ -43,6 +43,12 @@ internal static class Program
         }
         catch (PowerShellScriptExit exit)
         {
+            if (UsesSemanticObservationProtocol())
+            {
+                if (!PowerShellStreamsUseObservationProtocol)
+                    BeginPowerShellStreams();
+                EndPowerShellStreams(authoredExit: true);
+            }
             return exit.Code;
         }
         catch (Exception exception)
@@ -314,10 +320,11 @@ internal static class Program
             WriteSemanticFrame("BEGIN", string.Empty, string.Empty);
     }
 
-    private static void EndPowerShellStreams()
+    private static void EndPowerShellStreams(bool authoredExit = false)
     {
         if (PowerShellStreamsUseObservationProtocol)
-            WriteSemanticFrame("END", string.Empty, PowerShellObservationFrameCount.ToString(CultureInfo.InvariantCulture));
+            WriteSemanticFrame("END", authoredExit ? "Exit" : string.Empty,
+                PowerShellObservationFrameCount.ToString(CultureInfo.InvariantCulture));
     }
 
     private static void WritePowerShellOutput(object? value)

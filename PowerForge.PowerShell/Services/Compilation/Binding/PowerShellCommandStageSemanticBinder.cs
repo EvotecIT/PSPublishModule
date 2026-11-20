@@ -96,7 +96,8 @@ internal static class PowerShellStreamCommandSemanticBinder
             command.Redirections.Count != 0)
             return false;
         if (allowTypedSuccessValue && (command.InvocationOperator != TokenKind.Unknown ||
-            PowerShellCommandRegionSemanticBinder.IsBackground(pipeline)))
+            PowerShellCommandRegionSemanticBinder.IsBackground(pipeline) ||
+            command.CommandElements.Any(static item => item is VariableExpressionAst { Splatted: true })))
             return false;
         if (provider.Family is not (PowerShellCompilationCommandFamily.Stream or PowerShellCompilationCommandFamily.ExternalOperation) ||
             !provider.Adapter.RuntimeFree)
@@ -129,6 +130,7 @@ internal static class PowerShellStreamCommandSemanticBinder
         }
         if (arguments.Length == 2 &&
             arguments[0] is CommandParameterAst parameter &&
+            (!allowTypedSuccessValue || parameter.Argument is null) &&
             IsAcceptedParameter(parameter.ParameterName, valueParameter) &&
             arguments[1] is ExpressionAst named)
         {
