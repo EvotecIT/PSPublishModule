@@ -118,9 +118,14 @@ public sealed partial class MissingFunctionsAnalyzer
         bool requireApprovedModuleSources,
         HashSet<string> ignoreFunctions,
         bool includeFunctionsRecursively,
-        ApprovedModuleSource? preferredApprovedModuleSource = null)
+        ApprovedModuleSource? preferredApprovedModuleSource = null,
+        List<AliasInvocationScope>? invocationScopes = null)
     {
         var parsed = ParseInput(filePath, code, approvedModuleSources);
+        bool isRootAnalysis = invocationScopes is null;
+        invocationScopes ??= new List<AliasInvocationScope>();
+        if (approvedModuleSources.Count > 0)
+            invocationScopes.Add(new AliasInvocationScope(preferredApprovedModuleSource, parsed));
 
         var consumerFunctionsForNestedAnalysis = new HashSet<string>(knownFunctions, StringComparer.OrdinalIgnoreCase);
         foreach (var functionName in parsed.FunctionNames)
@@ -140,15 +145,7 @@ public sealed partial class MissingFunctionsAnalyzer
         var listCommands = new List<MissingFunctionCommand>();
         foreach (var name in filteredNames)
         {
-            var info = ResolveCommand(
-                name,
-                approvedModules,
-                approvedModuleSources,
-                approvedModuleSourceOrder,
-                runtimeModuleSources,
-                runtimeModuleSourceOrder,
-                requireApprovedModuleSources,
-                preferredApprovedModuleSource);
+            var info = ResolveInvocation(name, preferredApprovedModuleSource);
             if (string.Equals(info.Source, "Microsoft.PowerShell.Core", StringComparison.OrdinalIgnoreCase))
                 continue;
 
@@ -169,6 +166,9 @@ public sealed partial class MissingFunctionsAnalyzer
             var ignoreNext = new HashSet<string>(ignoreFunctions, StringComparer.OrdinalIgnoreCase);
             foreach (var n in listCommands.Select(o => o.Name).Where(s => !string.IsNullOrWhiteSpace(s)))
                 ignoreNext.Add(n);
+            foreach (var command in listCommands)
+                if (command.InlineFunctionName is { } functionName)
+                    ignoreNext.Add(functionName);
 
             // Analyze each donor's functions in that donor's scope. Otherwise an unqualified
             // private helper can be stolen by an earlier approved module that happens to use
@@ -197,7 +197,8 @@ public sealed partial class MissingFunctionsAnalyzer
                     requireApprovedModuleSources: requireApprovedModuleSources,
                     ignoreFunctions: ignoreNext,
                     includeFunctionsRecursively: includeFunctionsRecursively,
-                    preferredApprovedModuleSource: donorSource);
+                    preferredApprovedModuleSource: donorSource,
+                    invocationScopes: invocationScopes);
 
                 combinedSummary.AddRange(nested.Summary);
                 combinedSummaryFiltered.AddRange(nested.SummaryFiltered);
@@ -209,6 +210,16 @@ public sealed partial class MissingFunctionsAnalyzer
             }
         }
 
+        if (isRootAnalysis &&
+            RejectConflictingAliasBindings(combinedSummary, approvedModules, consumerFunctionsForNestedAnalysis, parsed.DeclaredAliases,
+                invocationScopes, ResolveInvocation))
+        {
+            // An analyzed alias cannot be safely added to the consumer's single module scope.
+            analysisComplete = false;
+            combinedFunctions.Clear();
+            functionsTop.Clear();
+        }
+
         return new MissingFunctionsReport(
             summary: combinedSummary.ToArray(),
             summaryFiltered: combinedSummaryFiltered.ToArray(),
@@ -218,6 +229,10 @@ public sealed partial class MissingFunctionsAnalyzer
             nonInlineableApprovedModules: nonInlineableApprovedModules
                 .OrderBy(static name => name, StringComparer.OrdinalIgnoreCase)
                 .ToArray());
+
+        MissingFunctionCommand ResolveInvocation(string name, ApprovedModuleSource? donor)
+            => ResolveCommand(name, approvedModules, approvedModuleSources, approvedModuleSourceOrder,
+                runtimeModuleSources, runtimeModuleSourceOrder, requireApprovedModuleSources, donor);
     }
 
     private static List<string> BuildInlineFunctions(IEnumerable<MissingFunctionCommand> commands, HashSet<string> approvedModules)
@@ -225,6 +240,8 @@ public sealed partial class MissingFunctionsAnalyzer
         var output = new List<string>();
         if (approvedModules.Count == 0)
             return output;
+        var functionIndexes = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        var aliasNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var c in commands)
         {
@@ -245,7 +262,18 @@ public sealed partial class MissingFunctionsAnalyzer
             if (sb is null)
                 continue;
 
-            output.Add($"function {name} {{ {sb} }}");
+            string functionName = c.InlineFunctionName ?? name;
+            string functionKey = source + "\\" + functionName;
+            if (!functionIndexes.TryGetValue(functionKey, out int index))
+            {
+                index = output.Count;
+                functionIndexes.Add(functionKey, index);
+                string declaration = c.InlineFunctionIsFilter || c.CommandType == nameof(CommandTypes.Filter) ? "filter" : "function";
+                output.Add($"{declaration} {functionName} {{ {sb} }}");
+            }
+            if (c.InlineFunctionName is not null && aliasNames.Add(name))
+                output[index] += Environment.NewLine +
+                    $"Microsoft.PowerShell.Utility\\Set-Alias -Name '{name.Replace("'", "''")}' -Value '{functionName.Replace("'", "''")}' -Scope Script";
         }
 
         return output;
@@ -283,8 +311,10 @@ public sealed partial class MissingFunctionsAnalyzer
                 group => group.ToArray(),
                 StringComparer.OrdinalIgnoreCase);
 
-        var declaredFunctions = ast.FindAll(a => a is FunctionDefinitionAst, searchNestedScriptBlocks: false)
+        var rootFunctions = ast.FindAll(a => a is FunctionDefinitionAst, searchNestedScriptBlocks: false)
             .Cast<FunctionDefinitionAst>()
+            .ToArray();
+        var declaredFunctions = rootFunctions
             .Select(f => NestedFunctionVisibilityAnalyzer.NormalizeDeclaredFunctionName(f.Name))
             .Where(n => !string.IsNullOrWhiteSpace(n))
             .Distinct(StringComparer.OrdinalIgnoreCase)
@@ -294,7 +324,8 @@ public sealed partial class MissingFunctionsAnalyzer
         var allCommands = ast.FindAll(static node => node is CommandAst, searchNestedScriptBlocks: true)
             .Cast<CommandAst>()
             .ToArray();
-        var commandNames = ExtractCommandNames(allCommands, visibilityAnalyzer).ToArray();
+        var localFunctionCalls = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var commandNames = ExtractCommandNames(allCommands, visibilityAnalyzer, localFunctionCalls).ToArray();
         var hasDynamicCommandInvocation = allCommands.Any(static command =>
             (string.IsNullOrWhiteSpace(command.GetCommandName()) &&
              (command.CommandElements.Count == 0 || command.CommandElements[0] is not StringConstantExpressionAst) &&
@@ -313,6 +344,8 @@ public sealed partial class MissingFunctionsAnalyzer
             effectiveFilePath,
             declaredFunctions,
             commandNames,
+            localFunctionCalls,
+            ReadRootAliasNames(ast, rootFunctions),
             hasDynamicCommandInvocation,
             ApprovedModuleRuntimeReferenceAnalyzer.Find(
                 ast,
@@ -351,7 +384,8 @@ public sealed partial class MissingFunctionsAnalyzer
 
     private static IEnumerable<string> ExtractCommandNames(
         IEnumerable<CommandAst> allCommands,
-        NestedFunctionVisibilityAnalyzer visibilityAnalyzer)
+        NestedFunctionVisibilityAnalyzer visibilityAnalyzer,
+        HashSet<string> localFunctionCalls)
     {
         var adCmdlets = new HashSet<string>(new[]
         {
@@ -414,7 +448,10 @@ public sealed partial class MissingFunctionsAnalyzer
             if (!LooksLikeCommandName(name))
                 continue;
             if (visibilityAnalyzer.IsDeclaredInVisibleScope(cmd, name))
+            {
+                localFunctionCalls.Add(name);
                 continue;
+            }
 
             set.Add(name);
         }
@@ -463,7 +500,7 @@ public sealed partial class MissingFunctionsAnalyzer
                         $"The command '{name}' was not found in the selected module '{qualifiedSource.Name}' {qualifiedSource.Version ?? "(version unknown)"} at '{qualifiedSource.ModuleBasePath}'.");
                 }
 
-                return CreateResolution(qualifiedCommand, isAlias: qualifiedCommand is AliasInfo, isPrivate: true);
+                return CreateApprovedResolution(qualifiedSource, qualifiedCommand, qualified: true);
             }
 
             if (qualifier is null && preferredApprovedModuleSource is not null)
@@ -473,7 +510,7 @@ public sealed partial class MissingFunctionsAnalyzer
                     lookupName,
                     includePrivate: true);
                 if (preferredCommand is not null)
-                    return CreateResolution(preferredCommand, isAlias: preferredCommand is AliasInfo, isPrivate: true);
+                    return CreateApprovedResolution(preferredApprovedModuleSource, preferredCommand);
             }
 
             if (qualifier is null && runtimeModuleSources.Count > 0)
@@ -496,7 +533,7 @@ public sealed partial class MissingFunctionsAnalyzer
                     if (donorCommand is null)
                         continue;
 
-                    return CreateResolution(donorCommand, isAlias: donorCommand is AliasInfo, isPrivate: true);
+                    return CreateApprovedResolution(source, donorCommand);
                 }
             }
 
@@ -539,7 +576,7 @@ public sealed partial class MissingFunctionsAnalyzer
                         $"The command '{name}' was not found in the selected module '{selectedSource.Name}' {selectedSource.Version ?? "(version unknown)"} at '{selectedSource.ModuleBasePath}'.");
                 }
 
-                cmd = selectedCommand;
+                return CreateApprovedResolution(selectedSource, selectedCommand, qualified: qualifier is not null, isPrivate: false);
             }
 
             return CreateResolution(cmd, isAlias, isPrivate: false);
@@ -577,10 +614,7 @@ public sealed partial class MissingFunctionsAnalyzer
                         if (privateCommand is null)
                             continue;
 
-                        return CreateResolution(
-                            privateCommand,
-                            isAlias: privateCommand is AliasInfo,
-                            isPrivate: true);
+                        return CreateApprovedResolution(source, privateCommand);
                     }
                     catch (Exception moduleScopeException)
                     {
@@ -843,12 +877,16 @@ try {
             string? filePath,
             string[] functionNames,
             string[] commandNames,
+            HashSet<string> localFunctionCalls,
+            HashSet<string> declaredAliases,
             bool hasDynamicCommandInvocation,
             string[] nonInlineableApprovedModules)
         {
             FilePath = filePath;
             FunctionNames = functionNames;
             CommandNames = commandNames;
+            LocalFunctionCalls = localFunctionCalls;
+            DeclaredAliases = declaredAliases;
             HasDynamicCommandInvocation = hasDynamicCommandInvocation;
             NonInlineableApprovedModules = nonInlineableApprovedModules ?? Array.Empty<string>();
         }
@@ -856,6 +894,8 @@ try {
         public string? FilePath { get; }
         public string[] FunctionNames { get; }
         public string[] CommandNames { get; }
+        public HashSet<string> LocalFunctionCalls { get; }
+        public HashSet<string> DeclaredAliases { get; }
         public bool HasDynamicCommandInvocation { get; }
         public string[] NonInlineableApprovedModules { get; }
     }

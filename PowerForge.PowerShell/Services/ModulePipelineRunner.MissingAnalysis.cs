@@ -132,6 +132,13 @@ public sealed partial class ModulePipelineRunner
         var required = new HashSet<string>(requiredModules, StringComparer.OrdinalIgnoreCase);
         var approved = new HashSet<string>(plan.ApprovedModules ?? Array.Empty<string>(), StringComparer.OrdinalIgnoreCase);
         var external = new HashSet<string>(plan.ExternalModuleDependencies ?? Array.Empty<string>(), StringComparer.OrdinalIgnoreCase);
+        foreach (var alias in report.Summary.Where(command => command.IsAlias && approved.Contains(command.Source) &&
+                     (!plan.MergeMissing || !string.IsNullOrWhiteSpace(command.Error))))
+        {
+            string detail = plan.MergeMissing ? alias.Error : $"'{alias.Name}' requires MergeFunctionsFromApprovedModules.";
+            throw new InvalidOperationException(
+                $"Cannot merge an approved module alias. {detail} Enable function merging and use an unqualified script function, or declare the module only as a runtime dependency.");
+        }
         var embedded = new HashSet<string>(
             (plan.EmbeddedModules ?? Array.Empty<RequiredModuleReference>())
                 .Where(static module => module is not null && !string.IsNullOrWhiteSpace(module.ModuleName))
