@@ -120,6 +120,8 @@ public sealed class PowerShellCompilationSemanticProfileTests
     [Theory]
     [InlineData("#requires -Version 5.1\nfunction Get-Value { 42 }", PowerShellCompilationSemanticOracleCatalog.WindowsPowerShell51ProfileId)]
     [InlineData("#requires -PSEdition Core\nfunction Get-Value { 42 }", PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId)]
+    [InlineData("#requires -Version 5.1\nfunction Get-Value {\n@'\n#requires -Modules Example.NotARequirement\n'@\n}", PowerShellCompilationSemanticOracleCatalog.WindowsPowerShell51ProfileId)]
+    [InlineData("#requires -Version 5.1\nfunction Get-Value {\n@'\n#requires -Modules Example.NotARequirement\n'@\n}", PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId)]
     public void AnalyzerCompilesRequirementsSatisfiedByTheSelectedProfile(string source, string profileId)
     {
         var root = Path.Combine(Path.GetTempPath(), "PowerForgeRequiresProfileTests", Guid.NewGuid().ToString("N"));
