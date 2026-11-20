@@ -19,7 +19,8 @@ public sealed partial class PowerShellCompilationArtifactBuilder
         File.Copy(compiledAssembly, assemblyPath, overwrite: true);
         var files = new List<PowerShellCompilationArtifactFile>();
         var sourceRoot = Path.GetDirectoryName(Path.GetFullPath(spec.SourcePath)) ?? Directory.GetCurrentDirectory();
-        var conventionalDiscovery = PowerShellConventionalModuleSourceDiscovery.Analyze(spec.SourcePath);
+        var conventionalDiscovery = PowerShellConventionalModuleSourceDiscovery.Analyze(spec.SourcePath,
+            rejectChangingFileLists: spec.ResourceMode != PowerShellCompilationResourceMode.CompleteModule);
         var runtimeHooks = PowerShellCompiledModuleManifest.GetContainedRuntimeScriptFiles(spec.SourcePath, spec.ModuleManifestPath)
             .Select(reference => Path.GetFullPath(Path.Combine(
                 sourceRoot,

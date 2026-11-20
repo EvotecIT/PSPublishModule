@@ -605,6 +605,10 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         $alias.SetValue((Get-Item -LiteralPath "$PSScriptRoot/Initialize.ps1"), 0)
         foreach ($file in $public) { . $file.FullName }
         """)]
+    [InlineData("""
+        . { $public = @(Get-Item -LiteralPath "$PSScriptRoot/Initialize.ps1") }
+        foreach ($file in $public) { . $file.FullName }
+        """)]
     public void Build_RejectsFileNameExportsWhenLoaderAlsoUsesUnresolvedFiles(string load)
     {
         using var fixture = ArtifactFixture.Create(
@@ -627,6 +631,36 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
 
         Assert.False(result.Succeeded);
         Assert.Contains("non-literal export", result.Error, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(Directory.EnumerateFileSystemEntries(fixture.OutputPath));
+    }
+
+    [Fact]
+    public void Build_RejectsPrivateLoaderThatReplacesAnUnstagedFileInFinally()
+    {
+        using var fixture = ArtifactFixture.Create(
+            """
+            $private = @(Get-ChildItem -Path "$PSScriptRoot/Private/*.ps1")
+            foreach ($file in $private) {
+                try { . $file.FullName }
+                finally { $private[1] = Get-Item -LiteralPath "$PSScriptRoot/Initialize.ps1" }
+            }
+            function Get-Value { $script:Value }
+            Export-ModuleMember -Function Get-Value
+            """, ".psm1");
+        var sourceRoot = Path.GetDirectoryName(fixture.ScriptPath)!;
+        Directory.CreateDirectory(Path.Combine(sourceRoot, "Private"));
+        File.WriteAllText(Path.Combine(sourceRoot, "Private", "First.ps1"), "$script:Value = 1");
+        File.WriteAllText(Path.Combine(sourceRoot, "Private", "Second.ps1"), "$script:Value = 2");
+        File.WriteAllText(Path.Combine(sourceRoot, "Initialize.ps1"), "$script:Value = 3");
+        var spec = new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath, fixture.OutputPath, "PowerForge.PrivateLoader",
+            PowerShellCompilationArtifactKind.BinaryModule, PowerShellCompilationMode.Hybrid,
+            allowUnreviewedDependencyResolution: true);
+
+        var result = new PowerShellCompilationArtifactBuilder().Build(spec);
+
+        Assert.False(result.Succeeded);
+        Assert.Contains("can change its file list before or during loading", result.Error, StringComparison.OrdinalIgnoreCase);
         Assert.Empty(Directory.EnumerateFileSystemEntries(fixture.OutputPath));
     }
 

@@ -8,7 +8,7 @@ namespace PowerForge;
 /// </summary>
 internal static class PowerShellConventionalModuleSourceDiscovery
 {
-    internal static PowerShellConventionalModuleSourceDiscoveryResult Analyze(string sourcePath)
+    internal static PowerShellConventionalModuleSourceDiscoveryResult Analyze(string sourcePath, bool rejectChangingFileLists = false)
     {
         var rootPath = Path.GetFullPath(sourcePath);
         var sourceRoot = Path.GetDirectoryName(rootPath) ?? Directory.GetCurrentDirectory();
@@ -26,10 +26,11 @@ internal static class PowerShellConventionalModuleSourceDiscovery
                      .Cast<CommandAst>()
                      .Where(static command => GetUnqualifiedCommandName(command)?.Equals("Get-ChildItem", StringComparison.OrdinalIgnoreCase) == true))
         {
-            var acceptedLoaders = FindConventionalLoaders(command, ast, rootPath).ToArray();
-            if (acceptedLoaders.Length == 0 ||
-                !TryReadPathPattern(command, out var relativePattern, out var isLiteralPath, out var pathElementIndex) ||
+            if (!TryReadPathPattern(command, out var relativePattern, out var isLiteralPath, out var pathElementIndex) ||
                 !Path.GetExtension(relativePattern).Equals(".ps1", StringComparison.OrdinalIgnoreCase))
+                continue;
+            var acceptedLoaders = FindConventionalLoaders(command, ast, rootPath, rejectChangingFileLists).ToArray();
+            if (acceptedLoaders.Length == 0)
                 continue;
             var (recurse, excludes) = ReadLoaderOptions(command, rootPath, pathElementIndex);
             foreach (var loader in acceptedLoaders)
@@ -170,7 +171,7 @@ internal static class PowerShellConventionalModuleSourceDiscovery
                     enumeration.Assignment.Extent.EndOffset < loader.Extent.StartOffset &&
                     enumeration.Name.Equals(name, StringComparison.OrdinalIgnoreCase)).Assignment;
                 if (producer is null ||
-                    HasUnmodeledFileListUse(root, name, producer.Extent.EndOffset, loader.Condition.Extent.EndOffset, allowedUses))
+                    HasUnmodeledFileListUse(root, name, producer.Extent.EndOffset, loader.Extent.EndOffset, allowedUses))
                     return false;
 
                 if (loader.Extent.EndOffset < exportOffset &&
@@ -227,12 +228,12 @@ internal static class PowerShellConventionalModuleSourceDiscovery
     }
 
     private static bool HasUnmodeledFileListUse(
-        ScriptBlockAst root, string name, int startOffset, int endOffset, HashSet<VariableExpressionAst> allowedUses)
+        ScriptBlockAst root, string name, int startOffset, int endOffset, ISet<VariableExpressionAst>? allowedUses = null)
         => root.Find(node =>
                 node is VariableExpressionAst variable &&
                 variable.Extent.StartOffset >= startOffset && variable.Extent.StartOffset < endOffset &&
-                MatchesVariable(variable, name) && !allowedUses.Contains(variable),
-            searchNestedScriptBlocks: false) is not null;
+                MatchesVariable(variable, name) && (allowedUses is null || !allowedUses.Contains(variable)),
+            searchNestedScriptBlocks: true) is not null;
 
     private static bool IsDirectFileEnumeration(StatementAst initializer, PipelineAst pipeline)
         => ReferenceEquals(initializer, pipeline) ||
@@ -361,7 +362,8 @@ internal static class PowerShellConventionalModuleSourceDiscovery
     private static IEnumerable<PowerShellConventionalLoaderIdentity> FindConventionalLoaders(
         CommandAst command,
         ScriptBlockAst root,
-        string sourcePath)
+        string sourcePath,
+        bool rejectChangingFileLists)
     {
         foreach (var dotSource in GetPipelineDotSourceLoaders(command, root))
             yield return new PowerShellConventionalLoaderIdentity(sourcePath, dotSource.Extent.StartOffset);
@@ -381,18 +383,26 @@ internal static class PowerShellConventionalModuleSourceDiscovery
                     yield return new PowerShellConventionalLoaderIdentity(sourcePath, dotSource.Extent.StartOffset);
                 continue;
             }
-            if (assignedVariable is not null &&
-                assignment!.Extent.StartOffset < loader.Extent.StartOffset &&
-                !HasInterveningAssignment(root, assignedVariable, assignment.Extent.StartOffset, loader.Condition.Extent.EndOffset) &&
-                loader.Condition.FindAll(
+            if (assignedVariable is null ||
+                assignment!.Extent.EndOffset > loader.Extent.StartOffset ||
+                !loader.Condition.FindAll(
                     node => node is VariableExpressionAst variable &&
                             variable.VariablePath.UserPath.Equals(assignedVariable, StringComparison.OrdinalIgnoreCase) &&
                             !PowerShellAssignmentTargetPolicy.IsDirectAssignmentTarget(variable),
                     searchNestedScriptBlocks: false).Any())
+                continue;
+
+            if (HasInterveningAssignment(root, assignedVariable, assignment.Extent.StartOffset, loader.Extent.EndOffset) ||
+                HasUnmodeledFileListUse(root, assignedVariable, loader.Body.Extent.StartOffset, loader.Body.Extent.EndOffset))
             {
-                foreach (var dotSource in dotSources)
-                    yield return new PowerShellConventionalLoaderIdentity(sourcePath, dotSource.Extent.StartOffset);
+                if (rejectChangingFileLists)
+                    throw new InvalidOperationException(
+                        $"Conventional module loader at {sourcePath}:{loader.Extent.StartLineNumber} can change its file list before or during loading.");
+                continue;
             }
+
+            foreach (var dotSource in dotSources)
+                yield return new PowerShellConventionalLoaderIdentity(sourcePath, dotSource.Extent.StartOffset);
         }
     }
 
@@ -509,7 +519,7 @@ internal static class PowerShellConventionalModuleSourceDiscovery
                 node => node is AssignmentStatementAst assignment &&
                         assignment.Extent.StartOffset > producerOffset &&
                         assignment.Extent.StartOffset < loaderOffset,
-                searchNestedScriptBlocks: false)
+                searchNestedScriptBlocks: true)
             .Cast<AssignmentStatementAst>()
             .Any(assignment => WritesVariable(assignment.Left, variableName));
 
