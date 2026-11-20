@@ -1,12 +1,11 @@
-using System.Security.Cryptography;
-
 namespace PowerForge;
 
 public sealed partial class PowerShellCompilationArtifactBuilder
 {
     private static void ValidateExpectedDependencyLock(
         PowerShellCompilationBuildSpec spec,
-        PowerShellCompilationDependencyGraph actual)
+        PowerShellCompilationDependencyGraph actual,
+        string? approvedDependencyHash)
     {
         PowerShellCompilationDependencyLockHasher.EnsureValid(actual, "actual");
         VerifyDependencyInputsHaveNotDrifted(spec, actual);
@@ -19,6 +18,9 @@ public sealed partial class PowerShellCompilationArtifactBuilder
         }
 
         PowerShellCompilationDependencyLockHasher.EnsureValid(expected, nameof(spec.ExpectedDependencyLock));
+        if (approvedDependencyHash is not null &&
+            !approvedDependencyHash.Equals(actual.LockSha256, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("PowerShell compilation dependency lock drifted from the reviewed dependency hash.");
         if (expected.SchemaVersion != actual.SchemaVersion ||
             !expected.RootNodeId.Equals(actual.RootNodeId, StringComparison.Ordinal) ||
             !expected.LockSha256.Equals(actual.LockSha256, StringComparison.OrdinalIgnoreCase))
@@ -53,26 +55,55 @@ public sealed partial class PowerShellCompilationArtifactBuilder
         PowerShellCompilationBuildSpec spec,
         PowerShellCompilationDependencyGraph graph)
     {
-        var moduleRoot = Path.GetDirectoryName(Path.GetFullPath(spec.ModuleManifestPath ?? spec.SourcePath))
-                         ?? Directory.GetCurrentDirectory();
+        var moduleRoot = GetDependencyInputRoot(spec);
         foreach (var node in graph.Nodes.Where(static node => node.Exists && node.Identity.Sha256.Length > 0))
         {
-            var source = node.Identity.Source.Replace('/', Path.DirectorySeparatorChar);
-            var path = node.Identity.Provenance.Equals("DotNetRuntimePack", StringComparison.Ordinal)
-                ? ResolveRuntimePackAssetPath(node.Identity, spec.NuGetPackageRoot)
-                : node.Identity.Provenance is PowerShellWindowsModuleMetadata.AssemblyProvenance or PowerShellWindowsModuleMetadata.ManifestProvenance
-                    ? PowerShellWindowsModuleMetadata.ResolvePath(node.Identity.Source)
-                : Path.IsPathRooted(source) ? Path.GetFullPath(source) : Path.GetFullPath(Path.Combine(moduleRoot, source));
+            var path = ResolveLockedDependencyInputPath(node.Identity, moduleRoot, spec.NuGetPackageRoot);
             if (!File.Exists(path))
                 throw new InvalidOperationException($"Locked PowerShell compilation input '{node.Identity.Source}' disappeared after analysis.");
-            using var stream = File.OpenRead(path);
-            using var sha = SHA256.Create();
-            var actual = string.Concat(sha.ComputeHash(stream)
-                .Select(static value => value.ToString("x2", System.Globalization.CultureInfo.InvariantCulture)));
-            if (!actual.Equals(node.Identity.Sha256, StringComparison.OrdinalIgnoreCase))
+            if (!ComputeSha256(path).Equals(node.Identity.Sha256, StringComparison.OrdinalIgnoreCase))
                 throw new InvalidOperationException($"Locked PowerShell compilation input '{node.Identity.Source}' changed after analysis.");
         }
     }
+
+    private static Dictionary<string, string> CreateLockedDependencyFileHashes(
+        PowerShellCompilationBuildSpec spec, PowerShellCompilationDependencyGraph graph)
+    {
+        var hashes = new Dictionary<string, string>(PowerShellCompilationPathSafety.PathComparer);
+        var root = GetDependencyInputRoot(spec);
+        foreach (var node in graph.Nodes.Where(static node => node.Exists && node.Identity.Sha256.Length > 0))
+        {
+            var path = ResolveLockedDependencyInputPath(node.Identity, root, spec.NuGetPackageRoot);
+            if (hashes.TryGetValue(path, out var existing) &&
+                !existing.Equals(node.Identity.Sha256, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException($"Dependency lock records conflicting bytes for '{node.Identity.Source}'.");
+            hashes[path] = node.Identity.Sha256;
+        }
+        return hashes;
+    }
+
+    private static string ResolveLockedDependencyInputPath(PowerShellCompilationDependencyIdentity identity,
+        string moduleRoot, string? configuredPackageRoot)
+    {
+        if (identity.Provenance.Equals("DotNetRuntimePack", StringComparison.Ordinal))
+            return ResolveRuntimePackAssetPath(identity, configuredPackageRoot);
+        if (identity.Provenance is PowerShellWindowsModuleMetadata.AssemblyProvenance or PowerShellWindowsModuleMetadata.ManifestProvenance)
+            return PowerShellWindowsModuleMetadata.ResolvePath(identity.Source);
+        var source = identity.Source.Replace('/', Path.DirectorySeparatorChar);
+        return Path.GetFullPath(Path.Combine(moduleRoot, source));
+    }
+
+    private static void VerifyStagedPayload(string sourcePath, string relativePath, string stagedHash,
+        IReadOnlyDictionary<string, string> inputHashes)
+    {
+        if (!inputHashes.TryGetValue(Path.GetFullPath(sourcePath), out var lockedHash) ||
+            !stagedHash.Equals(lockedHash, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException($"Staged PowerShell compilation payload '{relativePath}' differs from the dependency lock.");
+    }
+
+    private static string GetDependencyInputRoot(PowerShellCompilationBuildSpec spec)
+        => Path.GetDirectoryName(Path.GetFullPath(spec.ModuleManifestPath ?? spec.SourcePath))
+           ?? Directory.GetCurrentDirectory();
 
     private static string ResolveRuntimePackAssetPath(PowerShellCompilationDependencyIdentity identity, string? configuredPackageRoot)
     {

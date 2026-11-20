@@ -49,11 +49,12 @@ internal sealed class PowerShellSemanticCompilationPipeline
         IEnumerable<ParsedSourceDocument> documents,
         string? targetFramework = null,
         PowerShellCompilationCapability capabilities = PowerShellCompilationCapability.None,
-        PowerShellNativeDependencyTypes? nativeDependencyTypes = null)
+        PowerShellNativeDependencyTypes? nativeDependencyTypes = null,
+        CancellationToken cancellationToken = default)
     {
         var sourceDocuments = documents.Select(document => document.WithNativeDependencyTypes(
             nativeDependencyTypes ?? document.NativeDependencyTypes)).ToArray();
-        var binding = _binder.BindWithRegionCandidates(sourceDocuments, targetFramework, capabilities);
+        var binding = _binder.BindWithRegionCandidates(sourceDocuments, targetFramework, capabilities, cancellationToken: cancellationToken);
         var bound = binding.Program;
         capabilities = bound.TargetCapabilities;
         var optimized = _optimizer.Optimize(bound);
@@ -66,11 +67,12 @@ internal sealed class PowerShellSemanticCompilationPipeline
         {
             if (remainingRounds-- == 0)
                 throw new InvalidOperationException("Local-call return contracts did not reach a stable representation.");
-            binding = _binder.BindWithRegionCandidates(sourceDocuments, targetFramework, capabilities, returnTypes);
+            binding = _binder.BindWithRegionCandidates(sourceDocuments, targetFramework, capabilities, returnTypes, cancellationToken);
             bound = binding.Program;
             optimized = _optimizer.Optimize(bound);
             analyzed = _analyzer.Analyze(optimized.Program);
         }
+        cancellationToken.ThrowIfCancellationRequested();
         var lowered = _lowerer.Lower(analyzed, capabilities);
         var emitted = _backend.Emit(lowered);
         var regionCandidates = _binder.RecoverRetainedRegionCandidates(sourceDocuments, bound, lowered,

@@ -279,7 +279,8 @@ internal static class PowerShellHybridModuleComposer
         string sourcePath,
         PowerShellTypedCompilationResult typed,
         ISet<string> wrappedCompiledMethods,
-        bool executable = false)
+        bool executable = false,
+        (ScriptBlockAst Ast, Token[] Tokens)? stagedSource = null)
     {
         var compiled = typed.Methods
             .Where(method => PowerShellCompilationPathSafety.PathEquals(
@@ -293,11 +294,7 @@ internal static class PowerShellHybridModuleComposer
         if (compiled.Count == 0 && !hasPromotedRegions)
             return null;
 
-        Token[] tokens;
-        ParseError[] errors;
-        var ast = Parser.ParseFile(sourcePath, out tokens, out errors);
-        if (errors.Length > 0)
-            throw new InvalidOperationException($"Hybrid module dependency '{sourcePath}' could not be parsed while composing fallback code.");
+        var (ast, tokens) = stagedSource ?? ParseDependency(sourcePath);
         var source = new StringBuilder(ast.Extent.Text);
         var edits = new List<PowerShellHybridSourceEdit>();
         foreach (var function in ast.FindAll(static node => node is FunctionDefinitionAst, searchNestedScriptBlocks: false)
@@ -352,6 +349,14 @@ internal static class PowerShellHybridModuleComposer
     {
         var separator = userPath.IndexOf(':');
         return separator < 0 ? userPath : userPath.Substring(separator + 1);
+    }
+
+    private static (ScriptBlockAst Ast, Token[] Tokens) ParseDependency(string sourcePath)
+    {
+        var ast = Parser.ParseFile(sourcePath, out var tokens, out var errors);
+        if (errors.Length > 0)
+            throw new InvalidOperationException($"Hybrid module dependency '{sourcePath}' could not be parsed while composing fallback code.");
+        return (ast, tokens);
     }
 
     internal static HashSet<string> GetWrappedCompiledMethodKeys(string sourcePath, PowerShellTypedCompilationResult typed)

@@ -4,7 +4,7 @@ namespace PowerForge;
 
 public sealed partial class PowerShellCompilationArtifactBuilder
 {
-    private static void ValidateSpec(PowerShellCompilationBuildSpec spec)
+    internal static void ValidateSpec(PowerShellCompilationBuildSpec spec)
     {
         if (!Enum.IsDefined(typeof(PowerShellCompilationArtifactKind), spec.Kind))
             throw new ArgumentOutOfRangeException(nameof(spec), "Artifact kind is not defined.");
@@ -75,6 +75,11 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             throw new ArgumentException("Signing requires an RFC3161 timestamp server URL.", nameof(spec));
         if (spec.SigningTimeoutSeconds < 1)
             throw new ArgumentOutOfRangeException(nameof(spec), "Signing timeout must be positive.");
+        ValidateTargetOptions(spec);
+    }
+
+    internal static void ValidateTargetOptions(PowerShellCompilationBuildSpec spec)
+    {
         PowerShellCompilationTargetFrameworkPolicy.EnsureSupported(spec.TargetFramework, spec.Kind);
         PowerShellCompilationBuildSpec.EnsureModeSupported(spec.Kind, spec.Mode);
         if (spec.Kind != PowerShellCompilationArtifactKind.Executable &&
@@ -120,7 +125,8 @@ public sealed partial class PowerShellCompilationArtifactBuilder
         string semanticProfileId,
         PowerShellCompilationCapability capabilities,
         IEnumerable<PowerShellCompilationCommandProviderContract> commandProviders,
-        PowerShellNativeDependencyTypes? nativeDependencyTypes = null)
+        PowerShellNativeDependencyTypes? nativeDependencyTypes = null,
+        CancellationToken cancellationToken = default)
     {
         var analyzer = new PowerShellCompilationAnalyzer(PowerShellCommandSemanticRegistry.Create(commandProviders), semanticProfileId,
             nativeDependencyTypes ?? PowerShellNativeDependencyTypes.Empty);
@@ -128,7 +134,18 @@ public sealed partial class PowerShellCompilationArtifactBuilder
         var basePath = paths.Length == 0
             ? Directory.GetCurrentDirectory()
             : Path.GetDirectoryName(paths[0]) ?? Directory.GetCurrentDirectory();
-        return analyzer.AnalyzeFiles(mode, paths, basePath, targetFramework, capabilities);
+        return analyzer.AnalyzeFiles(mode, paths, basePath, targetFramework, capabilities, cancellationToken);
+    }
+
+    internal static string[] GetValidatedRuntimeManifestHooks(PowerShellCompilationBuildSpec spec)
+    {
+        var hooks = spec.Kind == PowerShellCompilationArtifactKind.BinaryModule
+            ? PowerShellCompiledModuleManifest.GetRuntimeScriptHooks(spec.SourcePath, spec.ModuleManifestPath)
+            : Array.Empty<string>();
+        if (spec.Mode == PowerShellCompilationMode.Strict && hooks.Length > 0)
+            throw new InvalidOperationException(
+                $"Strict binary-module compilation rejected manifest runtime script hook(s): {string.Join(", ", hooks)}.");
+        return hooks;
     }
 
     private static void ValidateRuntimeHookSourceOwnership(
