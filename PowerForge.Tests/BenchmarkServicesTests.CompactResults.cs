@@ -223,6 +223,55 @@ public sealed partial class BenchmarkServicesTests
         Assert.Equal(json, Encoding.UTF8.GetString(BenchmarkEvidenceResultCodec.Encode(result)));
     }
 
+    [Fact]
+    public void CompactResult_ReadsAFileWithAByteOrderMark()
+    {
+        string root = CreateTempRoot();
+        BenchmarkRunResult result = MeasuredResult(("OfficeIMO", "Read", Spread(10, 10)));
+        string compact = Path.Combine(root, "compact.json");
+        string legacy = Path.Combine(root, "legacy.json");
+        byte[] bom = [0xEF, 0xBB, 0xBF];
+        File.WriteAllBytes(compact, bom.Concat(BenchmarkEvidenceResultCodec.Encode(result)).ToArray());
+        File.WriteAllBytes(legacy, bom.Concat(BenchmarkJson.SerializeCanonicalBytes(result)).ToArray());
+
+        Assert.Equal(10, BenchmarkEvidenceResultCodec.Read(compact).Samples.Length);
+        Assert.Equal(10, BenchmarkEvidenceResultCodec.Read(legacy).Samples.Length);
+    }
+
+    [Fact]
+    public void CompactResult_KeepsAliasesWhoseRoundedValuesDifferAndIsStable()
+    {
+        BenchmarkRunResult result = MeasuredResult(("OfficeIMO", "Read", Spread(10, 10)));
+        foreach (BenchmarkSample sample in result.Samples)
+        {
+            sample.Metrics["MeanMs"] = 1.234561;
+            sample.Metrics["Mean"] = 1.234562;
+            sample.Metrics["MaxMs"] = 2.5;
+            sample.Metrics["Max"] = 2.6;
+        }
+
+        byte[] first = BenchmarkEvidenceResultCodec.Encode(result);
+        byte[] second = BenchmarkEvidenceResultCodec.Encode(BenchmarkEvidenceResultCodec.Decode(first, "first"));
+
+        Assert.Equal(Encoding.UTF8.GetString(first), Encoding.UTF8.GetString(second));
+        Assert.DoesNotContain("\"Mean\":", Encoding.UTF8.GetString(first), StringComparison.Ordinal);
+        Assert.Contains("\"Max\":2.6", Encoding.UTF8.GetString(first), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void CompactResult_KeepsNullAndEmptyVariableValuesAsSeparateCases()
+    {
+        BenchmarkRunResult result = MeasuredResult(("OfficeIMO", "Read", Spread(10, 10)), ("OfficeIMO", "Read", Spread(20, 10)));
+        foreach ((BenchmarkSample sample, int index) in result.Samples.Select((sample, index) => (sample, index)))
+            sample.Variables["Mode"] = index < 10 ? null : string.Empty;
+
+        BenchmarkRunResult read = BenchmarkEvidenceResultCodec.Normalize(result);
+
+        Assert.Equal(10, read.Samples.Count(sample => sample.Variables["Mode"] is null));
+        Assert.Equal(10, read.Samples.Count(sample => sample.Variables["Mode"] == string.Empty));
+        Assert.Equal(2, read.Summary.Length);
+    }
+
     private static BenchmarkRunResult BenchmarkDotNetStyleResult()
     {
         const string job = "Job-ABC(IterationCount=15, LaunchCount=1, WarmupCount=5)";

@@ -69,7 +69,7 @@ internal static class BenchmarkEvidenceResultCodec
     {
         try
         {
-            using JsonDocument document = JsonDocument.Parse(bytes);
+            using JsonDocument document = JsonDocument.Parse(WithoutByteOrderMark(bytes));
             return IsCompact(document.RootElement);
         }
         catch (JsonException)
@@ -77,6 +77,12 @@ internal static class BenchmarkEvidenceResultCodec
             return false;
         }
     }
+
+    // Files saved by editors may start with a UTF-8 byte order mark, which the JSON reader rejects.
+    private static byte[] WithoutByteOrderMark(byte[] bytes)
+        => bytes.Length >= 3 && bytes[0] == 0xEF && bytes[1] == 0xBB && bytes[2] == 0xBF
+            ? bytes.Skip(3).ToArray()
+            : bytes;
 
     /// <summary>Whether the text holds a result in the published form.</summary>
     internal static bool IsCompact(string json)
@@ -110,6 +116,7 @@ internal static class BenchmarkEvidenceResultCodec
     internal static BenchmarkRunResult Decode(byte[] bytes, string sourceDescription)
     {
         if (bytes is null) throw new ArgumentNullException(nameof(bytes));
+        bytes = WithoutByteOrderMark(bytes);
         if (!IsCompact(bytes))
             return BenchmarkJson.ReadBytes<BenchmarkRunResult>(bytes, sourceDescription);
 
@@ -448,11 +455,12 @@ internal static class BenchmarkEvidenceResultCodec
             string? canonicalKey = FindKey(compact, canonical);
             if (canonicalKey is null)
                 continue;
-            double canonicalValue = compact[canonicalKey];
+            double canonicalValue = Round(compact[canonicalKey]);
             foreach (string alias in aliases)
             {
+                // Values are compared as they are written, so encoding a decoded result removes the same aliases.
                 string? aliasKey = FindKey(compact, alias);
-                if (aliasKey is not null && compact[aliasKey].Equals(canonicalValue))
+                if (aliasKey is not null && Round(compact[aliasKey]).Equals(canonicalValue))
                     compact.Remove(aliasKey);
             }
         }
@@ -505,7 +513,9 @@ internal static class BenchmarkEvidenceResultCodec
         foreach (KeyValuePair<string, string?> variable in (variables ?? new Dictionary<string, string?>())
                      .OrderBy(item => item.Key, StringComparer.OrdinalIgnoreCase))
         {
-            builder.Append(variable.Key.ToUpperInvariant()).Append('=').Append(variable.Value ?? string.Empty).Append('\u001e');
+            builder.Append(variable.Key.ToUpperInvariant())
+                .Append(variable.Value is null ? "\u0000" : "=" + variable.Value)
+                .Append('\u001e');
         }
         if (runId is not null)
             builder.Append('\u001d').Append(runId);
