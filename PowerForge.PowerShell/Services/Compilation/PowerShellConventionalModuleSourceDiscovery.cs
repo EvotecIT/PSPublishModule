@@ -143,9 +143,38 @@ internal static class PowerShellConventionalModuleSourceDiscovery
             string.IsNullOrEmpty(root.Extent.File))
             return false;
 
+        var enumerations = FindFileEnumerationAssignments(root, argument.Extent.StartOffset).ToArray();
+        foreach (var loader in root.FindAll(
+                     node => node is ForEachStatementAst candidate && IsTopLevel(candidate, root),
+                     searchNestedScriptBlocks: false).Cast<ForEachStatementAst>())
+        {
+            if (loader.Extent.EndOffset >= argument.Extent.StartOffset ||
+                !GetDirectDotSourceLoaders(loader).Any())
+                continue;
+
+            var names = enumerations
+                .Where(enumeration =>
+                    enumeration.Assignment.Extent.EndOffset < loader.Extent.StartOffset &&
+                    !HasInterveningAssignment(root, enumeration.Name,
+                        enumeration.Assignment.Extent.StartOffset, loader.Condition.Extent.EndOffset))
+                .Select(static enumeration => enumeration.Name);
+            var known = new HashSet<string>(names, StringComparer.OrdinalIgnoreCase);
+            var referenced = new List<string>();
+            if (TryReadFileEnumerationInputs(loader.Condition, referenced) &&
+                referenced.All(known.Contains) &&
+                referenced.Contains(receiver.VariablePath.UserPath, StringComparer.OrdinalIgnoreCase) &&
+                !HasInterveningAssignment(root, receiver.VariablePath.UserPath, loader.Extent.StartOffset, argument.Extent.StartOffset))
+                return true;
+        }
+        return false;
+    }
+
+    private static IEnumerable<(AssignmentStatementAst Assignment, string Name)> FindFileEnumerationAssignments(ScriptBlockAst root, int exportOffset)
+    {
         foreach (var producer in root.FindAll(static node => node is CommandAst, searchNestedScriptBlocks: false).Cast<CommandAst>())
         {
-            if (producer.Extent.StartOffset >= argument.Extent.StartOffset ||
+            if (producer.Extent.StartOffset >= exportOffset ||
+                !IsTopLevel(producer, root) ||
                 producer.Parent is not PipelineAst { PipelineElements.Count: 1 } pipeline ||
                 producer.Redirections.Count != 0 ||
                 !string.Equals(GetUnqualifiedCommandName(producer), "Get-ChildItem", StringComparison.OrdinalIgnoreCase) ||
@@ -156,15 +185,33 @@ internal static class PowerShellConventionalModuleSourceDiscovery
                     Operator: TokenKind.Equals,
                     Left: VariableExpressionAst { VariablePath.IsUnqualified: true } declared
                 } assignment ||
-                !IsDirectFileEnumeration(assignment.Right, pipeline) ||
-                !declared.VariablePath.UserPath.Equals(receiver.VariablePath.UserPath, StringComparison.OrdinalIgnoreCase) ||
-                HasInterveningAssignment(root, declared.VariablePath.UserPath, assignment.Extent.StartOffset, argument.Extent.StartOffset))
+                !IsDirectFileEnumeration(assignment.Right, pipeline))
                 continue;
 
-            if (FindConventionalLoaders(producer, root, root.Extent.File).Any())
-                return true;
+            yield return (assignment, declared.VariablePath.UserPath);
         }
-        return false;
+    }
+
+    private static bool TryReadFileEnumerationInputs(Ast node, List<string> names)
+    {
+        switch (node)
+        {
+            case PipelineAst { PipelineElements.Count: 1 } pipeline:
+                return TryReadFileEnumerationInputs(pipeline.PipelineElements[0], names);
+            case CommandExpressionAst { Redirections.Count: 0 } command:
+                return TryReadFileEnumerationInputs(command.Expression, names);
+            case ParenExpressionAst parenthesized:
+                return TryReadFileEnumerationInputs(parenthesized.Pipeline, names);
+            case ArrayExpressionAst { SubExpression.Statements.Count: 1 } array:
+                return TryReadFileEnumerationInputs(array.SubExpression.Statements[0], names);
+            case BinaryExpressionAst { Operator: TokenKind.Plus } binary:
+                return TryReadFileEnumerationInputs(binary.Left, names) && TryReadFileEnumerationInputs(binary.Right, names);
+            case VariableExpressionAst { VariablePath.IsUnqualified: true, Splatted: false } variable:
+                names.Add(variable.VariablePath.UserPath);
+                return true;
+            default:
+                return false;
+        }
     }
 
     private static bool IsDirectFileEnumeration(StatementAst initializer, PipelineAst pipeline)

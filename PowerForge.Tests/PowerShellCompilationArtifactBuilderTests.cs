@@ -583,6 +583,33 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     }
 
     [Fact]
+    public void Build_RejectsFileNameExportsWhenLoaderAlsoUsesUnresolvedFiles()
+    {
+        using var fixture = ArtifactFixture.Create(
+            """
+            $public = @(Get-ChildItem -Path "$PSScriptRoot/Public/*.ps1")
+            $extra = @(Get-Item -LiteralPath "$PSScriptRoot/Initialize.ps1")
+            foreach ($file in @($public + $extra)) { . $file.FullName }
+            Export-ModuleMember -Function $public.BaseName
+            """,
+            ".psm1");
+        var sourceRoot = Path.GetDirectoryName(fixture.ScriptPath)!;
+        Directory.CreateDirectory(Path.Combine(sourceRoot, "Public"));
+        File.WriteAllText(Path.Combine(sourceRoot, "Public", "Get-Value.ps1"), "function Get-Value { $script:Value }");
+        File.WriteAllText(Path.Combine(sourceRoot, "Initialize.ps1"), "$script:Value = 3");
+        var spec = new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath, fixture.OutputPath, "PowerForge.ComputedLoader",
+            PowerShellCompilationArtifactKind.BinaryModule, PowerShellCompilationMode.Hybrid,
+            allowUnreviewedDependencyResolution: true);
+
+        var result = new PowerShellCompilationArtifactBuilder().Build(spec);
+
+        Assert.False(result.Succeeded);
+        Assert.Contains("non-literal export", result.Error, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(Directory.EnumerateFileSystemEntries(fixture.OutputPath));
+    }
+
+    [Fact]
     public void Build_PackagedExecutableRejectsCaughtExitInstrumentation()
     {
         using var fixture = ArtifactFixture.Create(
