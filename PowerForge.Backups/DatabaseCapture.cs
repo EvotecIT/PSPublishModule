@@ -42,14 +42,22 @@ internal static class DatabaseCapture
         return result;
     }
 
-    internal static async Task VerifySqliteAsync(string path, string[] queries, CapturedDatabase captured,
-        bool full, CancellationToken token)
+    // Read-only and unpooled: the checked file stays byte-identical to its recorded SHA-256, and nothing keeps it open.
+    internal static SQLite ReadOnlyClient() => new()
     {
-        // Only standalone backup or restored files reach this method, never the live source.
-        using var client = new SQLite();
-        var check = Convert.ToString(await client.ExecuteScalarAsync(path,
-            full ? "PRAGMA integrity_check" : "PRAGMA quick_check", cancellationToken: token));
-        if (check != "ok") throw new InvalidDataException("SQLite integrity verification failed.");
+        ConnectionOptions = new SQLiteConnectionOptions { ReadOnly = true, Pooling = false, UseMemoryTempStore = false }
+    };
+
+    /// <param name="full">Compare the table count and representative counts with the capture (a restore drill).</param>
+    /// <param name="fullIntegrity">Run <c>integrity_check</c> rather than <c>quick_check</c>; defaults to <paramref name="full"/>.</param>
+    internal static async Task VerifySqliteAsync(string path, string[] queries, CapturedDatabase captured,
+        bool full, CancellationToken token, bool? fullIntegrity = null)
+    {
+        // Only standalone backup or restored files reach this method, never the live source. DbaClientX runs the check
+        // read-only on its own thread with a page cache sized for it.
+        using var client = ReadOnlyClient();
+        var integrity = await client.CheckIntegrityAsync(path, fullIntegrity ?? full, cancellationToken: token);
+        if (!integrity.IsHealthy) throw new InvalidDataException("SQLite integrity verification failed.");
         var tables = Convert.ToInt64(await client.ExecuteScalarAsync(path,
             "SELECT COUNT(*) FROM sqlite_schema WHERE type='table'", cancellationToken: token));
         var counts = new List<long>();

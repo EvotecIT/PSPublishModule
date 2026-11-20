@@ -51,6 +51,35 @@ public sealed partial class DatabaseBackupContracts : IDisposable
     }
 
     [Fact]
+    public async Task SqliteChecksOpenTheFileReadOnly()
+    {
+        var db = Path.Combine(_root, "downloaded.sqlite");
+        using (var writer = new SQLite())
+            await writer.ExecuteNonQueryAsync(db, "CREATE TABLE facts(id INTEGER PRIMARY KEY);");
+        using var check = DatabaseCapture.ReadOnlyClient();
+        await Assert.ThrowsAnyAsync<Exception>(() => check.ExecuteNonQueryAsync(db, "INSERT INTO facts VALUES(1);"));
+    }
+
+    [Theory]
+    [InlineData(1L << 30, true)]
+    [InlineData(8L << 30, true)]
+    [InlineData(56L << 30, false)]
+    public void RestoreDrillUsesTheFullSqliteCheckUpToItsSizeLimit(long size, bool full)
+        => Assert.Equal(full, RestoreDrill.FullSqliteCheck(size));
+
+    [Theory]
+    [InlineData(null, true)]
+    [InlineData(600, true)]
+    [InlineData(0, false)]
+    [InlineData(10081, false)]
+    public void RestoreDrillLimitIsOptionalAndBounded(int? minutes, bool valid)
+    {
+        var options = ValidOptions(); options.RestoreDrillTimeoutMinutes = minutes;
+        if (valid) options.Validate();
+        else Assert.Throws<InvalidDataException>(options.Validate);
+    }
+
+    [Fact]
     public void CleanupRefusesUnmarkedDirectoryAndPreservesContents()
     {
         var run = Path.Combine(_root, "valuable"); Directory.CreateDirectory(run);
