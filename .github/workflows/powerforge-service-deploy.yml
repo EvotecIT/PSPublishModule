@@ -286,7 +286,8 @@ jobs:
           $startInfo.RedirectStandardInput = $true
           $startInfo.Environment['POWERFORGE_STDOUT_PATH'] = $stdoutPath
           $startInfo.Environment['POWERFORGE_STDERR_PATH'] = $stderrPath
-          $captureCommand = 'ssh "$@" > >(tail --bytes=8193 > "$POWERFORGE_STDOUT_PATH") 2> >(tail --bytes=8193 > "$POWERFORGE_STDERR_PATH"); status=$?; wait; exit "$status"'
+          # Wait on both capture PIDs; a bare `wait` covers only the last process substitution (see Invoke-PowerForgeSshTransport.ps1).
+          $captureCommand = 'exec 3> >(tail --bytes=8193 > "$POWERFORGE_STDOUT_PATH"); out_pid=$!; exec 4> >(tail --bytes=8193 > "$POWERFORGE_STDERR_PATH"); err_pid=$!; ssh "$@" >&3 2>&4; status=$?; exec 3>&- 4>&-; wait "$out_pid" "$err_pid"; exit "$status"'
           foreach ($argument in @('-c', $captureCommand, 'powerforge-ssh') + $sshOptions + @(
             '-p', $env:DEPLOYMENT_PORT, $target,
             "powerforge-service-deploy-v1 --service $($env:DEPLOYMENT_SERVICE)"

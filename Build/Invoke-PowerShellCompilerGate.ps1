@@ -142,6 +142,8 @@ if ($requirePinnedOracle) {
     $requiredFamilies['native reference and chained assignment'] = 'PowerForge.Tests.PowerShellCompilationSemanticOracleTests.NativeReferencesArrayCastsAndChainedAssignmentsMatchBothHosts*'
     $requiredFamilies['native switch clauses and nested storage'] = 'PowerForge.Tests.PowerShellCompilationSemanticOracleTests.NativeSwitchVariablesAndNestedStorageUseAuthoredSemanticsOnBothHosts*'
     $requiredFamilies['native replacement declarations'] = 'PowerForge.Tests.PowerShellCompilationSemanticOracleTests.RepeatedRootDeclarationsPreserveImportOrderAndNativeBindingOnBothHosts*'
+    $requiredFamilies['literal module export assignments'] = 'PowerForge.Tests.PowerShellCompilationSemanticOracleTests.LiteralExportAssignmentsPreserveThePublicSurfaceOnBothHosts*'
+    $requiredFamilies['guarded region source context'] = 'PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.HybridGuardedRegion_PreservesUsingTypesInlineParametersAndMixedHostNeighbors*'
     $requiredFamilies['native module load declarations'] = 'PowerForge.Tests.PowerShellCompilationSemanticOracleTests.SeparatelyLoadedFunctionsPreserveCommandAvailabilityAndBindingOnBothHosts*'
     $requiredFamilies['module initialized types'] = 'PowerForge.Tests.PowerShellCompilationSemanticOracleTests.ModuleInitializedTypesBindAtInvocationOnBothHosts*'
     $requiredFamilies['deferred module clause storage'] = 'PowerForge.Tests.PowerShellCompilationSemanticOracleTests.DeferredModuleDeclarationsPreservePrivateStorageAcrossClausesOnBothHosts*'

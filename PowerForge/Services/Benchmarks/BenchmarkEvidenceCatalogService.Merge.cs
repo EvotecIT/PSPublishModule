@@ -78,7 +78,15 @@ public sealed partial class BenchmarkEvidenceCatalogService
                     availableArtifacts[history.ResultSha256] = historyBytes!;
             }
             foreach (BenchmarkEvidenceEntry entry in source.Entries)
-                candidates.Add(LoadBundleLane(sourceCatalogPath, entry));
+            {
+                BundleLane lane = LoadBundleLane(sourceCatalogPath, entry);
+                // Results recorded in an earlier form are rewritten in the published form, so every merged lane is
+                // evaluated and stored the same way and two copies of one run compare equal.
+                byte[] published = BenchmarkEvidenceResultCodec.Encode(lane.Result);
+                if (!lane.ArtifactBytes.AsSpan().SequenceEqual(published))
+                    ReplaceLaneResult(lane, lane.Result);
+                candidates.Add(lane);
+            }
         }
 
         var merged = new BenchmarkEvidenceCatalog
@@ -164,10 +172,8 @@ public sealed partial class BenchmarkEvidenceCatalogService
         ApplyCompatibility(entries);
         merged.ExpectedPlatforms = NormalizeExpectedPlatforms(expectedPlatforms ?? platformSets);
         merged.Entries = entries;
-        // Historical runs follow the same licence policy as current ones: libraries the merged declarations do not
-        // publish are removed from their copies too. Records are normalized after redaction so an original and its
-        // redacted copy collapse into one record.
-        var historyBytesByHash = new Dictionary<string, byte[]>(StringComparer.OrdinalIgnoreCase);
+        // Historical runs follow the same licence policy as current ones: a record lists only libraries the merged
+        // declarations publish, and a record that cannot be checked against its file is dropped when it claims one.
         var redactedHistoryRecords = new List<BenchmarkSupersededLane>();
         foreach (BenchmarkSupersededLane history in superseded)
         {
@@ -178,7 +184,7 @@ public sealed partial class BenchmarkEvidenceCatalogService
                     redactedHistoryRecords.Add(history);
                 continue;
             }
-            BenchmarkRunResult historyResult = BenchmarkJson.ReadBytes<BenchmarkRunResult>(historyBytes, history.ResultPath);
+            BenchmarkRunResult historyResult = BenchmarkEvidenceResultCodec.Decode(historyBytes, history.ResultPath);
             BenchmarkRunResult redactedHistory = RedactLibraries(historyResult, unpublished);
             history.Libraries = redactedHistory.Summary.Select(row => row.Library)
                 .Concat(redactedHistory.Samples.Select(sample => sample.Library))
@@ -186,32 +192,13 @@ public sealed partial class BenchmarkEvidenceCatalogService
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .OrderBy(value => value, StringComparer.OrdinalIgnoreCase)
                 .ToArray();
-            if (!ReferenceEquals(redactedHistory, historyResult))
-            {
-                string previousHash = history.ResultSha256.ToLowerInvariant();
-                historyBytes = BenchmarkJson.SerializeCanonicalBytes(redactedHistory);
-                history.ResultSha256 = ComputeSha256(historyBytes);
-                history.ResultPath = ReplaceContentHash(history.ResultPath, previousHash, history.ResultSha256);
-            }
-            historyBytesByHash[history.ResultSha256] = historyBytes;
             redactedHistoryRecords.Add(history);
         }
         merged.Superseded = NormalizeSuperseded(redactedHistoryRecords, entries);
-        var supersededArtifacts = new List<(string Path, string Sha256, byte[] Bytes)>();
+        // A superseded run stays in the history as a record: when it ran, when it was replaced, its libraries and
+        // the SHA-256 of its result. Its result file is not republished with the catalog.
         foreach (BenchmarkSupersededLane history in merged.Superseded)
-        {
-            if (!historyBytesByHash.TryGetValue(history.ResultSha256, out byte[]? historyBytes))
-                continue;
-            history.ResultPath = CreateContentAddressedResultPath(
-                publicPrefix is null ? history.ResultPath :
-                    publicPrefix + "/" + Uri.EscapeDataString(ExtractBundleArtifactFileName(history.ResultPath)),
-                history.ResultSha256);
-            history.ArtifactRelativePath = ExtractBundleArtifactRelativePath(history.ResultPath).Replace('\\', '/');
-            supersededArtifacts.Add((
-                ResolveBundleArtifactPath(outputCatalogPath, history.ArtifactRelativePath, history.ResultPath),
-                history.ResultSha256,
-                historyBytes));
-        }
+            history.ArtifactRelativePath = string.Empty;
         ApplyDefinitions(merged);
 
         Directory.CreateDirectory(outputDirectory);
@@ -235,17 +222,7 @@ public sealed partial class BenchmarkEvidenceCatalogService
             // independently committed publication.
             BenchmarkJson.WriteBytes(destinationPath, lane.ArtifactBytes);
         }
-        foreach ((string path, string sha256, byte[] bytes) in supersededArtifacts)
-        {
-            if (File.Exists(path))
-            {
-                if (!string.Equals(BenchmarkJson.ComputeFileSha256(path), sha256, StringComparison.OrdinalIgnoreCase))
-                    throw new InvalidOperationException($"Immutable benchmark artifact '{Path.GetFileName(path)}' already exists with different content.");
-                continue;
-            }
-            BenchmarkJson.WriteBytes(path, bytes);
-        }
-        BenchmarkJson.Write(outputCatalogPath, merged);
+        BenchmarkJson.WriteMinified(outputCatalogPath, merged);
         return merged;
     }
 
@@ -305,11 +282,11 @@ public sealed partial class BenchmarkEvidenceCatalogService
 
     private static void ReplaceLaneResult(BundleLane lane, BenchmarkRunResult redacted)
     {
-        byte[] bytes = BenchmarkJson.SerializeCanonicalBytes(redacted);
+        byte[] bytes = BenchmarkEvidenceResultCodec.Encode(redacted);
         string previousHash = lane.Entry.ResultSha256.ToLowerInvariant();
         string hash = ComputeSha256(bytes);
         lane.ArtifactBytes = bytes;
-        lane.Result = redacted;
+        lane.Result = BenchmarkEvidenceResultCodec.Decode(bytes, lane.Entry.ResultPath);
         lane.Entry.ResultSha256 = hash;
         lane.Entry.Compatibility = BuildCompatibility(redacted);
         lane.Entry.ResultPath = ReplaceContentHash(lane.Entry.ResultPath, previousHash, hash);
@@ -367,9 +344,7 @@ public sealed partial class BenchmarkEvidenceCatalogService
                 "does not match the SHA-256 recorded by its source catalog.");
         }
 
-        BenchmarkRunResult result = BenchmarkJson.ReadBytes<BenchmarkRunResult>(
-            bytes,
-            artifactPath);
+        BenchmarkRunResult result = BenchmarkEvidenceResultCodec.Decode(bytes, artifactPath);
         ValidateBundleEntryMatchesResult(sourceEntry, result);
         string expectedLaneKey = BenchmarkEvidenceIdentity.CreateLaneKey(
             sourceEntry.ComparisonId, sourceEntry.Platform, sourceEntry.Framework, sourceEntry.Profile, sourceEntry.Parameters);

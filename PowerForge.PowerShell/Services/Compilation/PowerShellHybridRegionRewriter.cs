@@ -153,7 +153,7 @@ internal static class PowerShellHybridRegionRewriter
         return edits.ToArray();
     }
 
-    private static string Quote(string value) => "'" + value.Replace("'", "''") + "'";
+    private static string Quote(string value) => "'" + CodeGeneration.EscapeSingleQuotedStringContent(value) + "'";
 
     private static string GetControlFlowTemporary(PowerShellCompiledRegion region)
         => "__PowerForgeRegionFlow_" + region.GeneratedName.TrimStart('_');

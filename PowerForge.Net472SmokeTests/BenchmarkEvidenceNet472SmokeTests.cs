@@ -39,8 +39,8 @@ public sealed class BenchmarkEvidenceNet472SmokeTests
             string json = File.ReadAllText(catalogPath);
             BenchmarkEvidenceCatalog reread = new BenchmarkEvidenceCatalogService().ReadCatalog(catalogPath);
 
-            Assert.Contains("\"profile\": \"standard\"", json);
-            Assert.Contains("\"restriction\": \"acceptance-required\"", json);
+            Assert.Contains("\"profile\":\"standard\"", json);
+            Assert.Contains("\"restriction\":\"acceptance-required\"", json);
             BenchmarkEvidenceEntry entry = Assert.Single(reread.Entries);
             Assert.Equal("smoke-read/windows/net472/standard", entry.LaneKey);
             Assert.True(Assert.Single(entry.Cells).Publishable);

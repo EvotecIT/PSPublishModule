@@ -147,8 +147,14 @@ loses; they stay in the matrix and in the published evidence.
   Ratios between overlapping cells are not claims.
 - Publish every run of a lane that was published. Never pick the best of several runs.
   A newer run replaces the latest lane; the earlier one stays in the catalog's
-  superseded history with its date and hash. Result files are content-addressed
-  (`windows.<sha256>.json`), so the superseded run's file is never overwritten.
+  superseded history as a record of its date, libraries and result hash. Result files
+  are content-addressed (`windows.<sha256>.json`), so a run's file is never
+  overwritten; a merged catalog publishes only the files of its current lanes.
+- Result files published with a catalog store each case once (its identity,
+  variables, job and metrics) with the samples as compact arrays. Durations and
+  metrics keep six significant digits, a metric repeated under another name is
+  written once, and summary rows are rebuilt from the samples when the file is read.
+  Results written in the earlier full form are still read, and a merge rewrites them.
 - Keep failed and skipped cells in the evidence with their reason. A crash of one
   library is a result, not something to hide.
 
@@ -313,7 +319,7 @@ standard thresholds are the floor for public claims.
 | Clean provenance, no machine name, pinned packages with hashes | publish policy, provenance capture |
 | Failed cells kept, partial lanes marked | catalog cells and `completeness` |
 | Lane identity (framework and affinity as dimensions) | catalog lane keys; framework or affinity in an id is rejected |
-| Superseded runs kept with date and hash, their files never overwritten | catalog `superseded` history, content-addressed result paths |
+| Superseded runs kept with date and hash, result files never overwritten | catalog `superseded` history, content-addressed result paths |
 | Recorded lanes still meet replaced declarations or policy | every catalog update re-evaluates all lanes |
 | Measurements unchanged after provenance capture | import and publish validation |
 

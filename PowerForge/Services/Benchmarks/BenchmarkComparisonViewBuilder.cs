@@ -42,7 +42,7 @@ public sealed partial class BenchmarkComparisonViewBuilder
             var file = ResolveResultFile(directory, entry);
             if (!File.Exists(file))
                 throw new FileNotFoundException($"Benchmark result for lane '{entry.LaneKey}' was not found.", file);
-            return BenchmarkJson.Read<BenchmarkRunResult>(file);
+            return BenchmarkEvidenceResultCodec.Read(file);
         });
     }
 

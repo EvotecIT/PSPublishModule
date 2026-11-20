@@ -249,17 +249,33 @@ public sealed partial class BenchmarkComparisonViewBuilder
                 bool licence = group.Any(IsLicence);
                 string reason = licence
                     ? "not published (licence)"
-                    : group.SelectMany(cell => cell.Issues).FirstOrDefault() ?? "not published";
+                    : MainIssue(group.SelectMany(cell => cell.Issues)) ?? "not published";
+                // When the library's other cells are published, the note names the cases it covers.
+                bool partial = entry.Cells.Any(cell =>
+                    string.Equals(cell.Library, group.Key, StringComparison.OrdinalIgnoreCase) &&
+                    !group.Contains(cell));
                 return new BenchmarkNotPublishedView
                 {
                     Library = group.Key,
                     Licence = licence,
                     Text = reason,
-                    Cells = group.Count()
+                    Cells = group.Count(),
+                    Cases = partial
+                        ? group.Select(cell => cell.Case).Where(value => !string.IsNullOrWhiteSpace(value))
+                            .Distinct(StringComparer.OrdinalIgnoreCase).ToArray()
+                        : Array.Empty<string>()
                 };
             })
             .OrderBy(value => value.Library, StringComparer.OrdinalIgnoreCase)
             .ToArray();
+    }
+
+    // A failed output validation explains a cell better than the crash or the missing samples that follow from it.
+    private static string? MainIssue(IEnumerable<string> issues)
+    {
+        string[] all = issues.ToArray();
+        return all.FirstOrDefault(issue => issue.StartsWith("Output validation", StringComparison.Ordinal))
+               ?? all.FirstOrDefault();
     }
 
     private static bool IsLicence(BenchmarkEvidenceCell cell)

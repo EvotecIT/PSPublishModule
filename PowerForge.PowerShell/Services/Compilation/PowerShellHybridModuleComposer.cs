@@ -425,7 +425,7 @@ internal static class PowerShellHybridModuleComposer
         => string.Join(", ", names.Select(name => "'" + EscapePowerShellSingleQuotedString(name) + "'"));
 
     private static string EscapePowerShellSingleQuotedString(string value)
-        => value.Replace("'", "''");
+        => CodeGeneration.EscapeSingleQuotedStringContent(value);
 
     private sealed class RuntimeRegionVariableNames
     {

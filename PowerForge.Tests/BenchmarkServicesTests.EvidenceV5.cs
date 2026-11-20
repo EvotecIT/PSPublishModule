@@ -287,12 +287,16 @@ public sealed partial class BenchmarkServicesTests
         BenchmarkSupersededLane lateHistory = Assert.Single(catalog.Superseded, value => value.GeneratedUtc == late.FinishedUtc);
         Assert.Equal(lateHistory.ResultSha256, BenchmarkJson.ComputeFileSha256(Path.Combine(root, "data", $"windows.{lateHistory.ResultSha256}.json")));
 
-        // Both superseded files are found through their local paths and copied into a fresh merged bundle.
+        // A merged catalog keeps both superseded runs as records; their files stay with the bundle that recorded them.
         string mergedRoot = Path.Combine(root, "published");
         BenchmarkEvidenceCatalog merged = service.MergeFiles(Path.Combine(mergedRoot, "index.json"), [catalogPath], null, null, "/data/benchmarks");
         Assert.Equal(2, merged.Superseded.Length);
-        Assert.All(merged.Superseded, history =>
-            Assert.Equal(history.ResultSha256, BenchmarkJson.ComputeFileSha256(Path.Combine(mergedRoot, history.ArtifactRelativePath))));
+        Assert.All(merged.Superseded, history => Assert.Equal(string.Empty, history.ArtifactRelativePath));
+        Assert.Equal(
+            catalog.Superseded.Select(history => history.ResultSha256).OrderBy(value => value),
+            merged.Superseded.Select(history => history.ResultSha256).OrderBy(value => value));
+        Assert.Equal(["index.json", Path.GetFileName(Assert.Single(merged.Entries).ArtifactRelativePath)],
+            Directory.GetFiles(mergedRoot, "*.json").Select(Path.GetFileName).Where(name => !name!.StartsWith(".", StringComparison.Ordinal)).OrderBy(value => value, StringComparer.Ordinal));
     }
 
     [Theory]
@@ -398,12 +402,10 @@ public sealed partial class BenchmarkServicesTests
         BenchmarkEvidenceCatalog merged = service.MergeFiles(Path.Combine(mergedRoot, "index.json"), [catalogPath], null, restricted);
         BenchmarkSupersededLane historyRun = Assert.Single(merged.Superseded);
         Assert.DoesNotContain("Sep", historyRun.Libraries);
-        BenchmarkSupersededLane history = historyRun;
-        string historyPath = Path.Combine(mergedRoot, history.ResultPath.Substring(history.ResultPath.LastIndexOf('/') + 1));
-        Assert.Equal(history.ResultSha256, BenchmarkJson.ComputeFileSha256(historyPath));
-        Assert.DoesNotContain(BenchmarkJson.Read<BenchmarkRunResult>(historyPath).Summary, row => row.Library == "Sep");
+        Assert.Equal(string.Empty, historyRun.ArtifactRelativePath);
         BenchmarkEvidenceEntry current = Assert.Single(merged.Entries);
-        Assert.DoesNotContain(BenchmarkJson.Read<BenchmarkRunResult>(Path.Combine(mergedRoot, current.ArtifactRelativePath)).Summary, row => row.Library == "Sep");
+        Assert.DoesNotContain(BenchmarkEvidenceResultCodec.Read(Path.Combine(mergedRoot, current.ArtifactRelativePath)).Summary, row => row.Library == "Sep");
+        Assert.Single(Directory.GetFiles(mergedRoot, "*.json"), path => !Path.GetFileName(path).StartsWith(".", StringComparison.Ordinal) && path != Path.Combine(mergedRoot, "index.json"));
 
         // Merging the output again together with the original bundle selects the same redacted runs.
         BenchmarkEvidenceCatalog remerged = service.MergeFiles(Path.Combine(mergedRoot, "index.json"), [Path.Combine(mergedRoot, "index.json"), catalogPath], null, restricted);
@@ -490,7 +492,7 @@ public sealed partial class BenchmarkServicesTests
 
         BenchmarkEvidenceEntry entry = Assert.Single(new BenchmarkEvidenceCatalogService().UpdateFile(catalogPath, PublishRequest(result, declarations)).Entries);
 
-        BenchmarkRunResult stored = BenchmarkJson.Read<BenchmarkRunResult>(Path.Combine(root, entry.ArtifactRelativePath));
+        BenchmarkRunResult stored = BenchmarkEvidenceResultCodec.Read(Path.Combine(root, entry.ArtifactRelativePath));
         Assert.DoesNotContain(stored.Comparison, row => row.Scenario == "Write" && row.Engine == "Shared");
         Assert.Contains(stored.Comparison, row => row.Scenario == "Read" && row.Engine == "Shared");
         Assert.Contains(stored.Comparison, row => row.Scenario == "Write" && row.Engine == "Sep");
@@ -521,7 +523,7 @@ public sealed partial class BenchmarkServicesTests
         BenchmarkRunView run = Assert.Single(view.Runs);
         Assert.Equal(new[] { "OfficeIMO", "Sep" }, run.Contenders.Select(contender => contender.Library).OrderBy(name => name));
         BenchmarkEvidenceEntry entry = Assert.Single(recorded.Entries);
-        BenchmarkRunResult stored = BenchmarkJson.Read<BenchmarkRunResult>(Path.Combine(root, entry.ArtifactRelativePath));
+        BenchmarkRunResult stored = BenchmarkEvidenceResultCodec.Read(Path.Combine(root, entry.ArtifactRelativePath));
         Assert.DoesNotContain(stored.Samples, sample => sample.Library == "EPPlus");
         Assert.DoesNotContain(stored.Summary, row => row.Library == "EPPlus");
         Assert.DoesNotContain(stored.Validations, validation => validation.Library == "EPPlus");

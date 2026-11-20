@@ -65,7 +65,7 @@
     <li>Times are {{ r.statistic | html.escape }}s; results whose confidence intervals overlap are reported as even.</li>
     {{~ for n in r.notPublished ~}}
     {{~ if !n.licence ~}}
-    <li>{{ n.library | html.escape }}: not published. {{ n.text | html.escape }}</li>
+    <li>{{ n.library | html.escape }}{{ if n.cases.size > 0 }} ({{ n.cases | array.join ", " | html.escape }}){{ end }}: not published. {{ n.text | html.escape }}</li>
     {{~ else if !in_comparison ~}}
     <li>{{ n.library | html.escape }}: not published (licence).</li>
     {{~ end ~}}
