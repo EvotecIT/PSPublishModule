@@ -145,6 +145,20 @@ Result:
 | `Timings` | Elapsed time per phase |
 | `Manifest` | The full `PowerShellCompilationArtifactManifest`, unchanged, for tools that need detail |
 
+### Executable details
+
+People who package scripts today expect to set the file's identity and how it starts. The build spec has none of these yet; they belong in `PowerShellCompilationBuildSpec` and the generated project, so the CLI, cmdlets and hosts share them:
+
+| Setting | Generated project | Platforms |
+|---|---|---|
+| `IconPath` (`.ico`) | `ApplicationIcon` | Windows; ignored elsewhere with an `Info` diagnostic |
+| `Version` (`x.y.z`) | `Version`, `FileVersion`, `AssemblyVersion`, `InformationalVersion` | All |
+| `ProductName`, `CompanyName`, `Copyright`, `FileDescription` | `Product`, `Company`, `Copyright`, `Description` | All (shown in Windows file properties) |
+| `WindowsSubsystem` (`Console` or `Windows`) | `OutputType` `Exe` or `WinExe` | Windows; `Windows` suits scripts that only show forms or dialogs |
+| `RequestedExecutionLevel` (`AsInvoker`, `HighestAvailable`, `RequireAdministrator`) | a generated `app.manifest` | Windows |
+
+`Check` validates these up front: a missing or unreadable icon, a version that is not `x.y.z`, or a `Windows` subsystem for a script that writes to the console all come back as diagnostics. The values are recorded in the artifact manifest so a rebuild reproduces them. A project file (`powerforge.psproject.json`) gains the same fields per target.
+
 ### Progress
 
 ```csharp
@@ -162,6 +176,8 @@ public enum PowerShellCompilationPhase
     Generating, Restoring, Compiling, Publishing, Signing, Verifying
 }
 ```
+
+Warnings from the generated project are the engine's to fix, not the user's. Today a Hybrid build reports `NU1510` (redundant `System.Reflection.Metadata` and `System.Collections.Immutable` references) and `CS8321` (an unused `__powerForgeConvertInvariant` helper) for an ordinary script. Generated code should build without warnings, and any remaining generator warnings go to verbose output, not to the user's progress lines.
 
 Phases come from the points `PowerShellCompilationBuildProgress` already logs. `Completed`/`Total` are set only where the count is real (units analyzed, projects compiled); hosts show an indeterminate bar otherwise. The `ILogger` lines stay for the CLI.
 
@@ -189,6 +205,7 @@ Each slice is useful on its own and adds a CLI command or option before any host
 5. **Compile result additions**: `Summary`, `FallbackUnits`, `Timings`, and returning input problems as diagnostics instead of throwing.
 6. **Progress phases** through `IProgress<PowerShellCompilationProgress>`.
 7. **`#requires` support in Package mode.**
+8. **Executable details**: icon, version and file properties, console or windowed subsystem, and requested execution level.
 
 A simple host can start once slices 1 to 3 exist; the rest improve it.
 
@@ -199,6 +216,7 @@ A simple host can start once slices 1 to 3 exist; the rest improve it.
 - `Check` and `Compile` return a result, not an exception, for a missing file, an unsupported input kind, a missing SDK and a rejected construct.
 - Cancelling `Check` on a large module stops within one unit.
 - `Compile` with the lock from `Check` succeeds; editing an imported module name between the two makes the lock validation fail with a diagnostic asking for a new check.
+- An executable built with an icon, version `1.2.3`, product and company names shows them in Windows file properties, and `RequireAdministrator` prompts for elevation on start.
 - The JSON for `check`, `build` and `doctor` carries `SchemaVersion` and is covered by contract tests on the serialized shape.
 
 ## Open questions
