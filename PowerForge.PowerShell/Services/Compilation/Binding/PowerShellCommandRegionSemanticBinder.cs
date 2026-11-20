@@ -100,7 +100,7 @@ internal static class PowerShellCommandRegionSemanticBinder
         if (!hasPipelineOperator && !RequiresNativePipelineBinding(pipeline) && (commands.Length == 0 || commands.All(command =>
                 commandResolver.IsRuntimeFreeCompilerIntrinsic(command, localFunctionNames, capabilities)))) return false;
         string? guardedDotSource = null;
-        if (document.NativeScriptRootName is not null && pipeline.PipelineElements.Count == 1 &&
+        if (document.NativeScriptRootName is not null && document.GuardPackagedPathReads && pipeline.PipelineElements.Count == 1 &&
             commands.SingleOrDefault() is { InvocationOperator: TokenKind.Dot } sourceLoad)
         {
             var owner = sourceLoad.Parent;
@@ -121,6 +121,13 @@ internal static class PowerShellCommandRegionSemanticBinder
             guardedPathOperands: document.GuardPackagedPathReads ? PowerShellPackagedPathOperandPolicy.SelectNativeRegionOperands(pipeline) : null);
         return true;
     }
+
+    internal static PowerShellBoundCommandRegionStatement BindNativeData(ParsedSourceDocument document, DataStatementAst statement,
+        PowerShellCommandSemanticResolver commandResolver, ISet<string>? localFunctionNames,
+        PowerShellCompilationCapability capabilities)
+        => new(PowerShellSourceParser.GetSpan(document, statement.Extent), statement.Extent.Text,
+            Array.Empty<PowerShellBoundCommandRegionArgument>(), BindStages(document, new[] { statement }, commandResolver,
+                localFunctionNames, capabilities), nativeSourcePath: document.Path, nativeSourceDocument: document.Text);
 
     internal static PowerShellBoundCommandRegionStatement BindRegion(
         ParsedSourceDocument document,

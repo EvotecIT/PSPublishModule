@@ -26,6 +26,18 @@ namespace PowerForge.Generated.Runtime
             throw (FlowControlException)Activator.CreateInstance(type, nonPublic: true)!;
         }
 
+        /// <summary>Transfers to the caller loop selected by an authored label expression.</summary>
+        public void TransferToCaller(bool isBreak, object? label)
+        {
+            EnsureActive();
+            var type = typeof(PSObject).Assembly.GetType("System.Management.Automation." +
+                (isBreak ? "BreakException" : "ContinueException"), true)!;
+            var constructor = type.GetConstructor(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
+                null, new[] { typeof(string) }, null)
+                ?? throw new NotSupportedException("PowerShell's native labeled loop transfer is unavailable.");
+            throw (FlowControlException)constructor.Invoke(new object[] { Stringify(label) });
+        }
+
         /// <summary>Lets the nearest matching authored loop consume SDK callback break or continue.</summary>
         public bool IsLoopTransfer(FlowControlException error, bool isBreak, string label)
         {

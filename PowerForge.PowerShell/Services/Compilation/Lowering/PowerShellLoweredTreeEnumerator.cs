@@ -96,6 +96,12 @@ internal static class PowerShellLoweredTreeEnumerator
             case PowerShellLoweredReturnStatement { Expression: not null } returned:
                 yield return returned.Expression;
                 break;
+            case PowerShellLoweredBreakStatement { CallerLabel: { } breakLabel }:
+                yield return breakLabel;
+                break;
+            case PowerShellLoweredContinueStatement { CallerLabel: { } continueLabel }:
+                yield return continueLabel;
+                break;
             case PowerShellLoweredExpressionStatement expression:
                 yield return expression.Expression;
                 break;

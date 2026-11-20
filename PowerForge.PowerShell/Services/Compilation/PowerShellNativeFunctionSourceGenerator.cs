@@ -18,6 +18,8 @@ internal static class PowerShellNativeFunctionSourceGenerator
     {
         if (method.NativeFunctionBinding is { HasClean: true, DynamicParameterDeclaration: not null })
             throw new InvalidOperationException("Dynamic discovery does not qualify the clean compatibility route.");
+        if (method.IsModuleInitializer && method.NativeFunctionBinding is { UsesDeferredTypeBinding: true })
+            throw new InvalidOperationException("A compiled module initializer requires a native script factory.");
         if (method.RequiresPowerShellRuntimeState ||
             method.RequiresPowerShellModuleStateRead || method.RequiresPowerShellModuleStateWrite ||
             method.RequiresProviderCancellation ||
@@ -30,6 +32,9 @@ internal static class PowerShellNativeFunctionSourceGenerator
         var functions = typed.Methods.Where(static method => method.NativeFunctionBinding is not null).ToArray();
         if (functions.Length == 0) return;
         builder.Append("public static class ").Append(FactoryType(typed)).AppendLine("\n{");
+        if (functions.Any(static method => method.NativeFunctionBinding!.UsesDeferredTypeBinding))
+            builder.AppendLine("    public static global::System.Management.Automation.ErrorRecord TakeDeferredClauseError(global::System.Management.Automation.EngineIntrinsics engine)")
+                .AppendLine("        => global::PowerForge.Generated.Runtime.PowerShellNativeFunctionHost.TakeDeferredClauseError(engine);");
         foreach (var method in functions)
         {
             Validate(method);
@@ -39,7 +44,8 @@ internal static class PowerShellNativeFunctionSourceGenerator
                 continue;
             }
             AppendFactory(builder, typed, method, executable: false);
-            AppendFactory(builder, typed, method, executable: true);
+            if (!method.IsModuleInitializer)
+                AppendFactory(builder, typed, method, executable: true);
         }
         builder.AppendLine("}");
     }
@@ -49,12 +55,10 @@ internal static class PowerShellNativeFunctionSourceGenerator
 
     private static void AppendDeferredBridge(StringBuilder builder, PowerShellTypedCompilationResult typed, PowerShellCompiledMethod method)
     {
-        builder.Append("    public static global::System.Management.Automation.ErrorRecord? ").Append(DeferredMethod(method))
+        builder.Append("    public static bool ").Append(DeferredMethod(method))
             .AppendLine("(global::System.Management.Automation.EngineIntrinsics engine, int clause)")
             .AppendLine("    {")
-            .AppendLine("        try")
-            .AppendLine("        {")
-            .Append("        global::PowerForge.Generated.Runtime.PowerShellNativeFunctionHost.InvokeDeferredTypeClause(engine, ")
+            .Append("        return global::PowerForge.Generated.Runtime.PowerShellNativeFunctionHost.InvokeDeferredTypeClause(engine, ")
             .Append(PowerShellCSharpLiteral.QuoteString(method.SourceName)).Append(", ")
             .Append(PowerShellCSharpLiteral.QuoteString(DeferredDeclarationBody(typed, method))).AppendLine(", context =>")
             .AppendLine("        {");
@@ -62,14 +66,7 @@ internal static class PowerShellNativeFunctionSourceGenerator
             PowerShellCSharpSymbolRenderer.Identifier(typed.TypeName) + "." + method.GeneratedName, method.SourceName,
             method.RequiresPowerShellStatementErrors, method.RequiresPowerShellStopping, method.RequiresPowerShellStreams,
             method.ReturnType == typeof(void).FullName, method.OutputScalarization == "EnumerateCollection");
-        builder.AppendLine("        });")
-            .AppendLine("            return null;")
-            .AppendLine("        }")
-            .AppendLine("        catch (global::System.Management.Automation.RuntimeException failure) when (failure is not global::System.Management.Automation.PipelineStoppedException)")
-            .AppendLine("        {")
-            .AppendLine("            return failure.ErrorRecord;")
-            .AppendLine("        }")
-            .AppendLine("    }");
+        builder.AppendLine("        });").AppendLine("    }");
     }
 
     private static void AppendFactory(StringBuilder builder, PowerShellTypedCompilationResult typed,
@@ -77,10 +74,11 @@ internal static class PowerShellNativeFunctionSourceGenerator
     {
         builder.Append("    public static global::System.Management.Automation.ScriptBlock ")
             .Append(executable ? ExecutableFactoryMethod(method) : FactoryMethod(method))
-            .AppendLine(executable ? "(global::System.Management.Automation.SessionState sessionState, string sourcePath)" : "(global::System.Management.Automation.PSModuleInfo module, string sourcePath)")
+            .Append(executable ? "(global::System.Management.Automation.SessionState sessionState, string sourcePath" : "(global::System.Management.Automation.PSModuleInfo module, string sourcePath")
+            .AppendLine(method.IsModuleInitializer ? ", global::System.Management.Automation.InvocationInfo moduleInvocation, object boundParameters)" : ")")
             .AppendLine("    {");
         var binding = method.NativeFunctionBinding!;
-        if (!binding.HasClean)
+        if (!binding.HasClean && !method.IsModuleInitializer)
         {
             builder.Append("        return global::PowerForge.Generated.Runtime.PowerShellNativeFunctionHost.CreateOwnedDeclaration(")
                 .Append(executable ? "sessionState" : "module").Append(", ")
@@ -96,8 +94,8 @@ internal static class PowerShellNativeFunctionSourceGenerator
         }
         else
         {
-            // Retain the existing clean-block host compatibility route: emitting a clean keyword
-            // into a module declaration would prevent older PowerShell hosts from importing it.
+            // Initializers have no function declaration. Clean blocks also use a standalone
+            // block so older PowerShell hosts can still parse and import the module.
             builder.Append(executable
                 ? "        return global::PowerForge.Generated.Runtime.PowerShellNativeFunctionHost.Create(\n"
                 : "        return global::PowerForge.Generated.Runtime.PowerShellNativeFunctionHost.Create(module,\n")
@@ -116,6 +114,9 @@ internal static class PowerShellNativeFunctionSourceGenerator
         builder
                 .AppendLine("            void Invoke(global::PowerForge.Generated.Runtime.PowerShellNativeFunctionContext context, int clause)")
                 .AppendLine("            {");
+            if (method.NativeModuleInitializerSource is { } authoredSource)
+                builder.Append("                context.SetModuleInvocation(moduleInvocation, boundParameters, ")
+                    .Append(PowerShellCSharpLiteral.QuoteString(authoredSource)).AppendLine(");");
             PowerShellNativeCallbackSource.AppendBody(builder, "                ",
                 PowerShellCSharpSymbolRenderer.Identifier(typed.TypeName) + "." + method.GeneratedName, method.SourceName,
                 method.RequiresPowerShellStatementErrors, method.RequiresPowerShellStopping, method.RequiresPowerShellStreams,
@@ -134,12 +135,9 @@ internal static class PowerShellNativeFunctionSourceGenerator
     private static string DeferredDeclarationBody(PowerShellTypedCompilationResult typed, PowerShellCompiledMethod method)
     {
         var body = DeclarationBody(method.NativeFunctionBinding!);
-        var bridge = "[" + typed.NamespaceName + "." + FactoryType(typed) + "]::" + DeferredMethod(method);
-        var failure = "$private:__PowerForgeDeferredFailure_" + method.GeneratedName.TrimStart('@');
-        foreach (var clause in new[] { ("begin", 0), ("process", 1), ("end", 2) })
-            body = body.Replace("throw 'Compiled " + clause.Item1 + " callback was not installed.'",
-                failure + " = " + bridge + "($ExecutionContext, " + clause.Item2 + "); if ($null -ne " + failure + ") { throw " + failure + " }");
-        return body;
+        var factory = "[" + typed.NamespaceName + "." + FactoryType(typed) + "]";
+        return global::PowerForge.Generated.Runtime.PowerShellNativeFunctionHost.BindDeferredClauses(body,
+            factory + "::" + DeferredMethod(method), factory + "::TakeDeferredClauseError");
     }
 
     private static string Callback(bool present, int clause)

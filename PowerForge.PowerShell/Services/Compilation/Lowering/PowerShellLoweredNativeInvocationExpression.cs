@@ -4,7 +4,8 @@ internal sealed class PowerShellLoweredNativeInvocationExpression : PowerShellLo
 {
     internal PowerShellLoweredNativeInvocationExpression(SourceSpan span, PowerShellLoweredExpression? receiver,
         Type? literalTargetType, string name, bool isStatic, PowerShellLoweredExpression[] arguments,
-        Type? targetConstraint, Type?[] argumentConstraints, PowerShellNativeReferenceArgument[]? references = null) : base(span, typeof(object))
+        Type? targetConstraint, Type?[] argumentConstraints, PowerShellNativeReferenceArgument[]? references = null,
+        PowerShellCommandRegionSourceSelection? authoredInvocation = null) : base(span, typeof(object))
     {
         Receiver = receiver;
         LiteralTargetType = literalTargetType;
@@ -14,6 +15,7 @@ internal sealed class PowerShellLoweredNativeInvocationExpression : PowerShellLo
         TargetConstraint = targetConstraint;
         ArgumentConstraints = argumentConstraints;
         References = references ?? Array.Empty<PowerShellNativeReferenceArgument>();
+        AuthoredInvocation = authoredInvocation;
     }
 
     internal PowerShellLoweredExpression? Receiver { get; }
@@ -24,4 +26,5 @@ internal sealed class PowerShellLoweredNativeInvocationExpression : PowerShellLo
     internal Type? TargetConstraint { get; }
     internal PowerShellImmutableArray<Type?> ArgumentConstraints { get; }
     internal PowerShellImmutableArray<PowerShellNativeReferenceArgument> References { get; }
+    internal PowerShellCommandRegionSourceSelection? AuthoredInvocation { get; }
 }

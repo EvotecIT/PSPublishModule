@@ -2,23 +2,21 @@
 
 For measurements from both fixed external packets, see the [coverage report](PowerForge.PowerShellCompilation.Coverage.md). The historical results below describe earlier compiler revisions.
 
-Hybrid modules can compile independent functions beside document-scope authored
-classes or enums while retaining their hosted initialization. The source type
-closure still rejects unsupported direct authored-type annotations and type
-expressions, including inside conditional function declarations. Runtime type
-lookup and calls to retained helpers can occur in emitted bodies. Native-bound
-function-local data classes support constant initializers, selected scalar
-types and one-dimensional arrays, and literal `ValidateSet` validation. Classes
-with methods, constructor declarations or inheritance retain their guards.
-References to a function-local class from a separate script block stay in
-hosted source so PowerShell can preserve the class's lexical identity.
-General authored-class and pipeline support remains outside the Strict subset.
+An eligible single-file Hybrid module can compile startup assignments, branches,
+data statements and function declarations in the importing scope. PowerShell
+binds import arguments and initializes module-scoped classes and enums.
+Compiled functions can construct those types and use their identity in typed
+storage and `[OutputType]` metadata.
+PowerShell runs authored class methods. Function-local data classes support
+constant initializers, selected scalar types, one-dimensional arrays and literal
+`ValidateSet` validation. Methods and inheritance in function-local classes, and
+references from a separate script block to a function-local class, still use
+hosted source. Strict supports its existing runtime-free subset.
 
-The fixed Gallery packet emits **720/753 complete units (95.62%)**, up from
-114/753 (15.14%) and the preceding 682/753 measurement. Pester emits 478/491 and
-PSFramework emits 166/176. The other eight modules keep their previous counts.
-All ten Hybrid artifacts build, import, and pass their invocation probes. The
-packet retains 33 source units.
+The fixed Gallery packet emits **753/753 complete units (100%)**, up from
+114/753 (15.14%) and the preceding 720/753 (95.62%). Pester emits 491/491 and
+PSFramework emits 176/176. All ten Hybrid artifacts build, import, and pass
+their invocation probes. The packet retains zero source units.
 
 Native-bound Hybrid functions can use public, non-nested types from authenticated
 delivered managed DLLs, including supported closed generic types, one-dimensional
@@ -28,7 +26,8 @@ can share a type name within a non-conflicting dependency graph; distinct assemb
 with native imports, accelerators outside the authenticated literal maps, nested/open generic types and
 unsupported constrained accesses keep their existing guards. Borrowed `Ast` and
 `FunctionDefinitionAst` parameters and `CompletionResultType` use native binding.
-Unlabeled caller-directed break/continue also use the host's flow-control owner.
+Caller-directed `break` and `continue` also use PowerShell flow control. A
+qualified literal or computed label can select a matching loop in the caller.
 Admitted function `exit` statements use the active SDK's exit conversion and
 script termination. Switch predicates that transfer outside their own body stay
 hosted. None of these forms adds general dependency-type or caller-transfer
@@ -46,8 +45,12 @@ Executable roots and functions that require a defining module remain hosted. Bor
 variable, cmdlet, dynamic-parameter, syntax-tree and parameter-metadata objects
 retain SDK identity. Local callers of native functions also use native binding.
 These are reusable syntax and type rules, with no module-name eligibility tests.
-Nested alias callbacks, alias functions with local types or `clean`, arbitrary
-registration code and unsupported callback bodies retain their guards.
+Nested function declarations can defer parameter and typed local resolution
+until invocation. Qualified casts can use the runtime type in overload
+selection, including when the surrounding `catch` observes the error. Literal
+module `Add-Type` loads and locked, directly dot-sourced class files can supply
+these runtime identities. Arbitrary type registration and deferred alias binding
+combined with `clean` or function-local type declarations still use hosted source.
 
 Hybrid module functions can split direct arrays across local assignment targets
 and preserve single array records from a captured command or statement. The
@@ -55,8 +58,9 @@ host owns the assignment order, typed storage conversions and wildcard switch
 matching. Multiple assignment discards pending records if its right-hand side
 exits before assignment. Supported inline SDK and delivered generic parameters retain their
 native types, and two ordinary same-name declarations in one source file take
-effect at their authored positions. Cross-file name collisions and unsupported
-declaration metadata keep their existing guards.
+effect at their authored positions. Functions in separately loaded source files
+enter command lookup when their declarations run. Ambiguous names and unsupported
+declaration metadata can still require retained source.
 
 Native Hybrid binding can also borrow public types from a Windows system module
 declared in `RequiredModules`. The compiler reads and locks metadata from the
@@ -65,8 +69,8 @@ GAC, after checking the host and image architectures. Windows owns the DLL and
 its dependencies. PowerShell imports the module through the authored manifest
 and binds its runtime objects.
 Static access and supported assignment can follow an earlier admitted literal
-`Add-Type` invocation in the same execution block. Types introduced during
-arbitrary module startup and unsupported class shapes remain open.
+`Add-Type` invocation in the same execution block. Type loads outside the
+documented forms and unsupported function-local class shapes retain hosted source.
 
 Advanced native executable roots support `begin`/`process`/`end` on the explicit
 `net10.0` Windows x64 target. Both host profiles prove the underlying lifecycle

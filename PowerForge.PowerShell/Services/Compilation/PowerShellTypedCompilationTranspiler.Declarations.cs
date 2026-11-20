@@ -4,6 +4,44 @@ namespace PowerForge;
 
 public sealed partial class PowerShellTypedCompilationTranspiler
 {
+    private static (BoundEmissionIndex Index, FunctionSource? Initializer, PowerShellCSharpMethodEmission? Emission) BindModuleStartup(
+        List<ParsedSource> sources, string? targetFramework, PowerShellCompilationCapability capabilities,
+        ICollection<PowerShellCompilationDiagnostic> diagnostics, PowerShellCommandSemanticRegistry commandRegistry,
+        string semanticProfileId, PowerShellNativeDependencyTypes? nativeDependencyTypes)
+    {
+        var original = sources.Count == 1 ? sources[0] : null;
+        if (PrepareNativeModuleInitializer(sources, capabilities) is { } candidate)
+        {
+            var initializerDiagnostics = new List<PowerShellCompilationDiagnostic>();
+            var bound = CreateBoundEmissionIndex(sources, targetFramework, capabilities, initializerDiagnostics,
+                commandRegistry, semanticProfileId, nativeDependencyTypes);
+            if (bound.Emissions.TryGetValue(GetSemanticMethodKey(candidate.Parsed.Path, candidate.Function.Name,
+                    candidate.Function.Extent.StartOffset), out var emission))
+            {
+                foreach (var diagnostic in initializerDiagnostics) diagnostics.Add(diagnostic);
+                return (bound, candidate, emission);
+            }
+            // Independently compilable functions keep the original declaration owner when startup is incomplete.
+            sources[0] = original!;
+        }
+        return (CreateBoundEmissionIndex(sources, targetFramework, capabilities, diagnostics, commandRegistry,
+            semanticProfileId, nativeDependencyTypes), null, null);
+    }
+
+    private static FunctionSource? PrepareNativeModuleInitializer(List<ParsedSource> sources,
+        PowerShellCompilationCapability capabilities)
+    {
+        if (capabilities != PowerShellCompilationCapabilities.HybridModule || sources.Count != 1)
+            return null;
+        var source = sources[0];
+        var unit = source.Plan.Units.SingleOrDefault(static unit => unit.Kind == PowerShellCompilationUnitKind.Script);
+        if (unit is null || PowerShellNativeModuleInitializerPolicy.TryCreate(source.Document) is not { } initializer)
+            return null;
+        var parsed = new ParsedSource(source.Path, source.Ast, source.Plan, initializer);
+        sources[0] = parsed;
+        return new FunctionSource(parsed, initializer.RootFunctionDeclarations.Single().Syntax, unit);
+    }
+
     private static void ApplyDeclarationSourceContext(List<ParsedSource> parsedFiles,
         PowerShellCompilationCapability capabilities, string? guardedExecutableEntryPath,
         IReadOnlyCollection<string>? nativeDeclarationTimingSourcePaths, bool nativeScriptEntry)

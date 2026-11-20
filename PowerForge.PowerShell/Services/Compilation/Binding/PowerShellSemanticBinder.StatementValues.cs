@@ -4,6 +4,52 @@ namespace PowerForge;
 
 internal sealed partial class PowerShellSemanticBinder
 {
+    private static IfStatementAst? FindTerminalBooleanConditional(PipelineAst pipeline)
+    {
+        // A sole Boolean record has the same output with or without a terminal subexpression.
+        // Leave other shapes on the ordinary value path, where capture cardinality stays explicit.
+        if (PowerShellCommandRegionSemanticBinder.IsBackground(pipeline) ||
+            pipeline.PipelineElements.Count != 1 ||
+            pipeline.PipelineElements[0] is not CommandExpressionAst
+            {
+                Redirections.Count: 0,
+                Expression: SubExpressionAst { SubExpression.Statements.Count: 1 } subexpression
+            } || subexpression.SubExpression.Traps?.Count > 0 ||
+            subexpression.SubExpression.Statements[0] is not IfStatementAst { ElseClause: { } otherwise } conditional)
+            return null;
+
+        var branches = conditional.Clauses.Select(static clause => clause.Item2).Append(otherwise);
+        return branches.All(IsSingleBooleanResult) &&
+               branches.Any(static branch => branch.Statements[0] is ReturnStatementAst) ? conditional : null;
+    }
+
+    private static bool IsSingleBooleanResult(StatementBlockAst branch)
+    {
+        if (branch.Traps?.Count > 0 || branch.Statements.Count != 1) return false;
+        var result = branch.Statements[0] switch
+        {
+            PipelineAst pipeline => pipeline.GetPureExpression(),
+            ReturnStatementAst { Pipeline: PipelineAst pipeline } => pipeline.GetPureExpression(),
+            _ => null
+        };
+        return result?.StaticType == typeof(bool) || result switch
+        {
+            VariableExpressionAst value => value.VariablePath.UserPath.Equals("true", StringComparison.OrdinalIgnoreCase) ||
+                                           value.VariablePath.UserPath.Equals("false", StringComparison.OrdinalIgnoreCase),
+            BinaryExpressionAst
+            {
+                Operator: TokenKind.Igt or TokenKind.Cgt,
+                Left: MemberExpressionAst
+                {
+                    Static: false, Expression: ArrayExpressionAst, Member: StringConstantExpressionAst member
+                },
+                Right: ConstantExpressionAst { Value: int }
+            } => member.Value.Equals("Length", StringComparison.OrdinalIgnoreCase) ||
+                 member.Value.Equals("Count", StringComparison.OrdinalIgnoreCase),
+            _ => false
+        };
+    }
+
     private static bool RequiresNativeStatementCapture(SubExpressionAst syntax)
         => syntax.SubExpression.Find(static node => node is SwitchStatementAst or TryStatementAst or LoopStatementAst,
             searchNestedScriptBlocks: false) is not null;

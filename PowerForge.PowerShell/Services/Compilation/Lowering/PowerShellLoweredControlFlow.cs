@@ -241,22 +241,28 @@ internal sealed class PowerShellLoweredTryStatement : PowerShellLoweredStatement
 
 internal sealed class PowerShellLoweredBreakStatement : PowerShellLoweredStatement
 {
-    internal PowerShellLoweredBreakStatement(SourceSpan span, SourceSpan? targetLoop = null, bool transferToCaller = false) : base(span)
+    internal PowerShellLoweredBreakStatement(SourceSpan span, SourceSpan? targetLoop = null, bool transferToCaller = false,
+        PowerShellLoweredExpression? callerLabel = null) : base(span)
     {
         TargetLoop = targetLoop;
         TransferToCaller = transferToCaller;
+        CallerLabel = callerLabel;
     }
     internal SourceSpan? TargetLoop { get; }
     internal bool TransferToCaller { get; }
+    internal PowerShellLoweredExpression? CallerLabel { get; }
 }
 
 internal sealed class PowerShellLoweredContinueStatement : PowerShellLoweredStatement
 {
-    internal PowerShellLoweredContinueStatement(SourceSpan span, SourceSpan? targetLoop = null, bool transferToCaller = false) : base(span)
+    internal PowerShellLoweredContinueStatement(SourceSpan span, SourceSpan? targetLoop = null, bool transferToCaller = false,
+        PowerShellLoweredExpression? callerLabel = null) : base(span)
     {
         TargetLoop = targetLoop;
         TransferToCaller = transferToCaller;
+        CallerLabel = callerLabel;
     }
     internal SourceSpan? TargetLoop { get; }
     internal bool TransferToCaller { get; }
+    internal PowerShellLoweredExpression? CallerLabel { get; }
 }

@@ -55,7 +55,8 @@ internal static class PowerShellNativeAccessSemanticBinder
 
     internal static PowerShellBoundExpression? BindInvocation(ParsedSourceDocument document, InvokeMemberExpressionAst syntax,
         Func<Ast, Type?, PowerShellBoundExpression?> bindExpression, string? targetFramework,
-        PowerShellCompilationCapability capabilities, ICollection<PowerShellSemanticDiagnostic> diagnostics)
+        PowerShellCompilationCapability capabilities, ICollection<PowerShellSemanticDiagnostic> diagnostics,
+        bool preserveAuthoredInvocation = false)
     {
         var span = PowerShellSourceParser.GetSpan(document, syntax.Extent);
         if (syntax.GetType().GetProperty("NullConditional")?.GetValue(syntax) is true ||
@@ -94,12 +95,20 @@ internal static class PowerShellNativeAccessSemanticBinder
             if (receiver is null) return null;
         }
         var argumentSyntax = syntax.Arguments?.ToArray() ?? Array.Empty<ExpressionAst>();
-        if (HasRuntimeTypeConstraint(document, syntax.Expression, targetFramework, capabilities) ||
-            argumentSyntax.Any(argument => HasRuntimeTypeConstraint(document, argument, targetFramework, capabilities)))
+        var constraints = argumentSyntax.Prepend(syntax.Expression)
+            .Select(value => FindRuntimeTypeConstraint(document, value, targetFramework, capabilities))
+            .OfType<TypeConstraintAst>().ToArray();
+        if (constraints.Length != 0)
         {
-            diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2632",
-                "Runtime-owned cast constraints retain their PowerShell overload-selection boundary.", span));
-            return null;
+            if (capabilities == PowerShellCompilationCapabilities.HybridModule && CanSelectInvocationSyntax(syntax) &&
+                constraints.All(constraint => document.NativeDependencyTypes.Qualifies(constraint.TypeName, capabilities)))
+                preserveAuthoredInvocation = true;
+            if (!preserveAuthoredInvocation)
+            {
+                diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2632",
+                    "Runtime-owned cast constraints retain their PowerShell overload-selection boundary.", span));
+                return null;
+            }
         }
         var arguments = new List<PowerShellBoundExpression>();
         var references = new List<PowerShellNativeReferenceArgument>();
@@ -156,8 +165,16 @@ internal static class PowerShellNativeAccessSemanticBinder
         }
         return new PowerShellBoundNativeInvocationExpression(span, receiver, literalTargetType, name.Value, syntax.Static,
             arguments.ToArray(), GetConstraint(syntax.Expression), argumentSyntax.Select(GetConstraint).ToArray(),
-            references.ToArray());
+            references.ToArray(), preserveAuthoredInvocation
+                ? new PowerShellCommandRegionSourceSelection(document.Path, document.Text, new[] { span }) : null);
     }
+
+    internal static bool CanSelectInvocationSyntax(InvokeMemberExpressionAst invocation)
+        => invocation.Find(static node => node is ScriptBlockExpressionAst or UsingExpressionAst or
+               LoopStatementAst or TryStatementAst or SwitchStatementAst or ReturnStatementAst or
+               ExitStatementAst or BreakStatementAst or ContinueStatementAst or TrapStatementAst ||
+               node is ConvertExpressionAst conversion && conversion.Type.TypeName.GetReflectionType() == typeof(System.Management.Automation.PSReference),
+               searchNestedScriptBlocks: false) is null;
 
     // Trailing references are evaluated after ordinary arguments; only real CLR by-ref
     // parameter may write it back. Optional and params overloads keep the call hosted.
@@ -214,6 +231,10 @@ internal static class PowerShellNativeAccessSemanticBinder
     // Retain constrained accesses until that exact identity can be passed to the native binder.
     private static bool HasRuntimeTypeConstraint(ParsedSourceDocument document, ExpressionAst? syntax, string? targetFramework,
         PowerShellCompilationCapability capabilities)
+        => FindRuntimeTypeConstraint(document, syntax, targetFramework, capabilities) is not null;
+
+    private static TypeConstraintAst? FindRuntimeTypeConstraint(ParsedSourceDocument document, ExpressionAst? syntax, string? targetFramework,
+        PowerShellCompilationCapability capabilities)
     {
         while (syntax is ParenExpressionAst parenthesized)
             syntax = parenthesized.Pipeline is PipelineAst pipeline ? pipeline.GetPureExpression() : null;
@@ -222,13 +243,13 @@ internal static class PowerShellNativeAccessSemanticBinder
             if (attributed is ConvertExpressionAst conversion &&
                 (document.NativeDependencyTypes.Qualifies(conversion.Type.TypeName, capabilities) ||
                  PowerShellHostedLocalTypePolicy.IsQualifiedClassConversion(document, conversion.Type, targetFramework, capabilities)))
-                return true;
+                return conversion.Type;
             if (attributed is ConvertExpressionAst closedConversion &&
                 closedConversion.Type.TypeName.GetReflectionType() is { } type &&
-                type != typeof(System.Management.Automation.PSReference)) return false;
+                type != typeof(System.Management.Automation.PSReference)) return null;
             syntax = attributed.Child;
         }
-        return false;
+        return null;
     }
 
     // Authored casts constrain overload selection independently of the value's runtime type.

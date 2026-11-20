@@ -1,28 +1,27 @@
-# PowerShell compiler measurements: 2026-11-19
+# PowerShell compiler measurements: 2026-11-20
 
 These results describe two fixed external packets on Windows x64 with SDK
-10.0.404. The public module probes use PowerShell 7.6.9. The external assessment
-runner, workload observers and semantic oracle use the
-pinned PowerShell 7.6.6 package; applicable oracle forms also run on Windows
-PowerShell 5.1.
+10.0.404. The public module probes, external assessment runner, workload
+observers and semantic oracle use the pinned PowerShell 7.6.6 package.
+Applicable oracle cases also run on Windows PowerShell 5.1.
 
 An emitted unit is a complete CLR method in the final output. A smaller compiled
-region inside retained source does not count as another emitted unit. A method
-can still require hosted PowerShell operations, so emission does not establish
-runtime-free execution.
+region inside retained source does not count as another emitted unit. An
+emitted method can call native PowerShell operations or pass an authored
+script block to a native callback. PowerShell also owns dynamic parameter
+discovery.
 
 | Packet | Complete emitted units | Complete emitted functions | Execution proof |
 | --- | ---: | ---: | --- |
-| Ten public Gallery modules | 720/753 (95.62%) | Not measured separately | 10/10 Hybrid artifacts built, imported, and passed an invocation probe |
+| Ten public Gallery modules | 753/753 (100%) | Not measured separately | 10/10 Hybrid artifacts built, imported, and passed an invocation probe |
 | Seven external workloads | 183/196 (93.37%) | 183/183 (100%) | 7/7 complete workloads passed. The packet covers 183 owned functions, one script root and four nested helpers in 34 scenarios on original, built, and installed surfaces. |
 
 The external assessment discovers 155 source files, with zero parser errors and
-zero acquisition or analysis failures. All 23 newly emitted methods are in
-Classic Locksmith. Its previous typed region is now part of the complete
-`Set-RiskRating` method. The public packet records 33 retained source units,
-564 runtime-routed units, and zero promoted regions. Those probes exercise
-Hybrid artifacts in PowerShell. The ratios describe the measured packets and
-their discovered units.
+zero acquisition or analysis failures. The previous increase of 23 complete
+methods came from Classic Locksmith, including the complete `Set-RiskRating`
+method. The Gallery packet records 553 runtime-routed units, zero retained
+source units, and zero promoted regions. Its probes exercise the generated
+Hybrid modules in PowerShell.
 
 The generated [public baseline](../Benchmarks/PowerShellCompilation/Corpus/public-corpus-baseline.net10.json)
 and [external baseline](../Benchmarks/PowerShellCompilation/Corpus/external-assessment-baseline.net10.json)
@@ -32,24 +31,23 @@ denominator. Earlier documents and `m29a-*` files preserve development results. 
 result from 2026-10-03 is a separate targeted maintainer packet and has not been
 rerun here. It must not replace either external measurement above.
 
-The same 753-unit packet rises from **114/753 (15.14%)** to **720/753 (95.62%)**.
-The interop changes that followed the 682/753 measurement added 38 complete
-methods. The Gallery refresh with Windows module and lexical type support
-again emits 720/753, and all ten artifact probes pass.
+The same 753-unit packet rises from **114/753 (15.14%)** at the starting
+measurement and **720/753 (95.62%)** at the previous refresh to **753/753
+(100%)**. All six programs in the companion Strict packet also pass.
 
-| Module | Before | After |
-| --- | ---: | ---: |
-| ImportExcel | 0/2 | 0/2 |
-| InvokeBuild | 0/1 | 0/1 |
-| Microsoft.PowerShell.Archive | 19/21 | 19/21 |
-| Pester | 0/491 | 478/491 |
-| platyPS | 42/43 | 42/43 |
-| Pode | 0/1 | 0/1 |
-| powershell-yaml | 14/15 | 14/15 |
-| PSFramework | 38/176 | 166/176 |
-| PSScriptAnalyzer | 1/2 | 1/2 |
-| ThreadJob | 0/1 | 0/1 |
-| **Total** | **114/753** | **720/753** |
+| Module | Starting measurement | Previous refresh | Current refresh |
+| --- | ---: | ---: | ---: |
+| ImportExcel | 0/2 | 0/2 | 2/2 |
+| InvokeBuild | 0/1 | 0/1 | 1/1 |
+| Microsoft.PowerShell.Archive | 19/21 | 19/21 | 21/21 |
+| Pester | 0/491 | 478/491 | 491/491 |
+| platyPS | 42/43 | 42/43 | 43/43 |
+| Pode | 0/1 | 0/1 | 1/1 |
+| powershell-yaml | 14/15 | 14/15 | 15/15 |
+| PSFramework | 38/176 | 166/176 | 176/176 |
+| PSScriptAnalyzer | 1/2 | 1/2 | 2/2 |
+| ThreadJob | 0/1 | 0/1 | 1/1 |
+| **Total** | **114/753** | **720/753** | **753/753** |
 
 A separate three-test Pester run also passes on the pinned PowerShell 7.6.6 host
 against both the original and generated modules: three passed, zero failed, and
@@ -69,6 +67,16 @@ initialization. Classic Locksmith retained 23 of 44 owned functions, with
 repeated uses of declared ActiveDirectory types and local data classes.
 Those type sources were the first targets for closing the last
 complete-workload gap.
+
+The final 33 Gallery units use the same rules across modules. Functions become
+available when PowerShell reaches their authored declarations, including
+declarations in separately loaded source files. A qualifying single-file module
+can emit its startup as a complete method. PowerShell keeps import arguments,
+the importing scope, authored class initialization, dynamic parameter discovery
+and native variable storage. Literal module type loads and locked class
+resources allow the native binder to resolve types at invocation. The compiler
+also admits selected captured statements, scoped member and index updates,
+and caller-loop transfers.
 
 The starting census reproduced 114/753 complete methods. Pester accounted for
 491 units and emitted none. Its document-wide `source.type-definition`

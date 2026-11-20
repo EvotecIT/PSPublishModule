@@ -120,7 +120,7 @@ namespace PowerForge.Generated.Runtime
 
         internal static string CreateDeclarationSource(string parameterDeclaration, string? sourcePath, string[] localNames,
             bool hasBegin, bool hasProcess, bool hasEnd, bool hasClean, string[]? localTypeDeclarations, string[]? functionTypeDeclarations,
-            string? dynamicParameterDeclaration)
+            string? dynamicParameterDeclaration, bool requiresUnoptimizedStorage = false)
         {
             var functionTypes = FunctionTypeSource(functionTypeDeclarations);
             if (functionTypes.Length != 0 && (hasBegin || hasProcess || hasClean || !hasEnd))
@@ -144,7 +144,8 @@ namespace PowerForge.Generated.Runtime
                     throw new ArgumentException("Only one dynamic parameter block is accepted as hosted binding metadata.", nameof(dynamicParameterDeclaration));
                 source += "\n" + dynamicParameterDeclaration;
             }
-            var localDeclarations = string.Empty;
+            // The host recognizes dot-sourcing during variable analysis even in an unreachable branch.
+            var localDeclarations = requiresUnoptimizedStorage ? ". {}; " : string.Empty;
             var typedLocals = new System.Collections.Generic.HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var typedDeclarations = string.Empty;
             foreach (var declaration in localTypeDeclarations ?? Array.Empty<string>())

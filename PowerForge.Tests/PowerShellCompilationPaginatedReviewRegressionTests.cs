@@ -259,8 +259,8 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
             PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true));
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
-        Assert.Contains(result.Manifest!.Diagnostics, diagnostic =>
-            diagnostic.Message.Contains("command-availability timing", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(result.Manifest!.UnitDispositionLedger!.Entries, static unit =>
+            unit.Name == "Get-Later" && unit.EmittedClrMethod && !unit.EmittedBinaryCmdlet);
         var escapedPath = result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal);
         var run = Run(
             "pwsh",

@@ -136,14 +136,15 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.All(owned, static unit =>
         {
             Assert.True(unit.EmittedClrMethod);
-            Assert.False(unit.RetainedHostedSource);
+            Assert.False(unit.RetainedHostedSource, JsonSerializer.Serialize(unit));
             Assert.False(unit.ShapingFallback);
             Assert.False(unit.Omitted);
             Assert.False(unit.Rejected);
             Assert.False(unit.EmittedBinaryCmdlet);
         });
         var initializer = Assert.Single(manifest.UnitDispositionLedger.Entries, static unit => unit.Kind == PowerShellCompilationUnitKind.Script);
-        Assert.True(initializer.RetainedHostedSource);
+        Assert.True(initializer.EmittedClrMethod);
+        Assert.False(initializer.RetainedHostedSource);
 
         const string observation = """
             & $module {

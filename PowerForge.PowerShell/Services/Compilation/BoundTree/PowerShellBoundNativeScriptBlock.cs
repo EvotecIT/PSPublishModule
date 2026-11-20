@@ -24,3 +24,18 @@ internal sealed class PowerShellBoundNativeScriptBlockExpression : PowerShellBou
     /// <summary>Retains the native constant-block identity for a switch predicate.</summary>
     internal bool IsSwitchPredicate { get; }
 }
+
+/// <summary>A script-block value whose captures and handlers are owned by its receiving PowerShell host.</summary>
+internal sealed class PowerShellBoundTransportedScriptBlockExpression : PowerShellBoundExpression
+{
+    internal PowerShellBoundTransportedScriptBlockExpression(SourceSpan span, string sourceDocument)
+        : base(span, new PowerShellTypeFact(typeof(System.Management.Automation.ScriptBlock), PowerShellTypeFactProvenance.Inferred,
+                "PowerShell owns invocation of this authored callback value."),
+            PowerShellValueState.Known, PowerShellSemanticEffect.Host,
+            PowerShellRequiredCapability.PowerShellHostTypes | PowerShellRequiredCapability.NativeFunctionBinding)
+    {
+        SourceDocument = sourceDocument;
+    }
+
+    internal string SourceDocument { get; }
+}

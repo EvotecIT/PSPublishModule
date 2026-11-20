@@ -119,17 +119,12 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
                 EmitSource = true
             });
             Assert.True(built.Succeeded, built.Error + Environment.NewLine + built.BuildOutput);
-            foreach (var name in new[] { "Read-Records", "Read-Commands", "ReadValues", "Read-ConditionalValues", "Read-RetainedRecord", "Read-DynamicRecord", "Read-StoppingRecords" })
+            foreach (var name in new[] { "New-RetainedRecord", "Test-RetainedRecord", "Read-Records", "Read-Commands", "ReadValues",
+                         "Read-ConditionalValues", "Read-RetainedRecord", "Read-DynamicRecord", "Read-StoppingRecords" })
             {
                 var unit = Assert.Single(built.Manifest!.UnitDispositionLedger!.Entries, unit => unit.Name == name);
                 Assert.True(unit.EmittedClrMethod, name + " must have a complete CLR body.");
                 Assert.False(unit.RetainedHostedSource, name + " must not use an authored source fallback.");
-            }
-            foreach (var name in new[] { "New-RetainedRecord", "Test-RetainedRecord" })
-            {
-                var retained = Assert.Single(built.Manifest!.UnitDispositionLedger!.Entries, unit => unit.Name == name);
-                Assert.False(retained.EmittedClrMethod);
-                Assert.True(retained.RetainedHostedSource);
             }
 
             var runner = new PowerShellCompilationSemanticOracleRunner();

@@ -27,7 +27,8 @@ internal sealed partial class PowerShellSemanticBinder
         var functionBody = FindOwningFunctionBody(syntax);
         if (capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding) &&
             capabilities.HasFlag(PowerShellCompilationCapability.PowerShellHostTypes) &&
-            (syntax is CommandAst or PipelineAst or CommandExpressionAst { Redirections.Count: > 0 }))
+            (syntax is CommandAst or PipelineAst or CommandExpressionAst { Redirections.Count: > 0 } ||
+             capabilities == PowerShellCompilationCapabilities.HybridModule && syntax is DataStatementAst))
             return PowerShellCommandRegionSemanticBinder.BindNativeCapture(document, syntax, authoredSyntax,
                 _commandResolver, functions.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase), capabilities);
         if (capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding) && syntax is IndexExpressionAst nativeIndex)
@@ -44,6 +45,10 @@ internal sealed partial class PowerShellSemanticBinder
             !HasClosedReferenceValueArgumentCatchAll(nativeInvocation) &&
             !HasAuthoredConstructorVariableArguments(document, nativeInvocation, capabilities))
         {
+            if (capabilities == PowerShellCompilationCapabilities.HybridModule && CanSelectObservedInvocation(nativeInvocation))
+                return PowerShellNativeAccessSemanticBinder.BindInvocation(document, nativeInvocation,
+                    (item, itemType) => BindExpression(document, item, symbols, functions, diagnostics, itemType, targetFramework, capabilities),
+                    targetFramework, capabilities, diagnostics, preserveAuthoredInvocation: true);
             diagnostics.Add(new PowerShellSemanticDiagnostic(
                 PowerShellCompilationFeatureIds.ForSyntax(nameof(InvokeMemberExpressionAst)),
                 "Native method invocation inside this observed catch boundary remains hosted until its argument and caught-error identity are closed.",
@@ -250,8 +255,9 @@ internal sealed partial class PowerShellSemanticBinder
                         return constantDelegate;
                 }
                 if (capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding) &&
-                    _nativeScriptBlocks.ContainsKey(ScriptBlockKey(document.DocumentId, scriptBlock.Extent.StartOffset)))
-                    return BindNativeScriptBlock(document, scriptBlock, functions, diagnostics);
+                    (_nativeScriptBlocks.ContainsKey(ScriptBlockKey(document.DocumentId, scriptBlock.Extent.StartOffset)) ||
+                     capabilities == PowerShellCompilationCapabilities.HybridModule && IsTransportedScriptBlock(scriptBlock)))
+                    return BindNativeScriptBlock(document, scriptBlock, functions, diagnostics, capabilities);
                 return PowerShellConstantBooleanDelegateSemanticBinder.Bind(
                     document,
                     scriptBlock,

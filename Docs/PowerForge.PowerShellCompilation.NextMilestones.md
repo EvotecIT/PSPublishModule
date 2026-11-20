@@ -2,18 +2,19 @@
 
 See the [current coverage report](PowerForge.PowerShellCompilation.Coverage.md)
 for the Gallery and external workload counts and the scope of each qualification.
-The Gallery packet emits 720/753 units and all ten artifact probes pass. The
+The Gallery packet emits 753/753 units and all ten artifact probes pass. The
 external packet emits 183/196 units and passes all seven workloads across 34
 scenarios, including all 44 Classic Locksmith functions. The older milestone
 records below keep their original inputs and results.
 
-The current Hybrid type rules cover admitted function-local data classes,
-managed types declared by installed Windows modules, and static access after
-an admitted literal type load in the same block. Broader class methods and
-inheritance, types created indirectly during module startup, and cross-file
-command availability remain outside those rules. In the Gallery packet,
-Pester's command-availability boundaries and PSFramework's runtime-loaded
-command-tree types are the largest remaining groups.
+Hybrid preserves command availability across admitted module file loads and
+can compile startup in the importing module's scope. Type admission covers
+managed types declared by installed Windows modules, selected module-scoped
+types, locked directly dot-sourced class files, and literal type loads during
+module setup. PowerShell initializes authored types, executes class methods,
+and resolves deferred parameter types and custom attributes. Arbitrary type
+registration, function-local methods and inheritance, and general Strict
+module startup remain open.
 
 At the October 16 checkpoint, the compiler continuation merged through [PR #1009](https://github.com/EvotecIT/PSPublishModule/pull/1009) on October 4 at `3640ba9c20d17671a63716795a89527e68c5f006`. This contract audit began at main `f5398d8da` and incorporated main `04cd3209b` before local Full qualification. The readiness assessment records candidate validation separately from historical qualification.
 

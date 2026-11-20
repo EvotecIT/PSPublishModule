@@ -66,6 +66,7 @@ namespace PowerForge.Generated.Runtime
             string? guardedDotSourceRelativePath = null, int[]? guardedPathOperands = null)
         {
             EnsureActive();
+            file = ModuleOperationFile(file);
             var key = file + "\0" + line + "\0" + column + "\0" + capture + "\0" + preservePartialOutput + "\0" +
                 startOffset + "\0" + endOffset + "\0" + source + "\0" + GetCommandRegionSourceId(sourceDocument) + "\0" + guardedDotSourceRelativePath + "\0" +
                 string.Join(",", guardedPathOperands ?? Array.Empty<int>());
@@ -87,31 +88,33 @@ namespace PowerForge.Generated.Runtime
             {
                 if (line < 1 || column < 1) throw new ArgumentOutOfRangeException(nameof(line));
                 var parseText = sourceDocument ?? new string('\n', line - 1) + new string(' ', column - 1) + source;
-                var parseArguments = new object[] { parseText, file, null!, null! };
-                var ast = (ScriptBlockAst)PowerShellNativeFunctionHost.Invoke(
-                    owner._contract.ParseInputWithFile, null, parseArguments)!;
-                var errors = (ParseError[])parseArguments[3];
-                ValidateSelectedSyntax(errors, source, nameof(source));
+                var document = owner._isModuleInitializer && sourceDocument is not null
+                    ? owner.GetModuleDocument(sourceDocument, file) : owner.ReadAssignmentDocument(parseText, file);
+                var ast = document.Ast;
+                ValidateSelectedSyntax(document.Errors, source, nameof(source));
                 if (sourceDocument is not null)
                 {
                     // The document supplies source metadata only. Detach exactly the selected pipeline;
                     // analysis and emission never receive another authored statement or function body.
-                    var selected = ast.FindAll(node => node is PipelineAst or CommandBaseAst && node.Extent.StartOffset == startOffset &&
+                    var selected = ast.FindAll(node => node is PipelineAst or CommandBaseAst or DataStatementAst &&
+                        node.Extent.StartOffset == startOffset &&
                         node.Extent.EndOffset == endOffset, searchNestedScriptBlocks: true)
                         .OrderBy(node => node is PipelineAst ? 0 : 1).FirstOrDefault();
                     if (selected is null || selected.Extent.Text != source ||
                         selected.Extent.StartLineNumber != line || selected.Extent.StartColumnNumber != column)
                         throw new ArgumentException("The native region does not match its authored pipeline span.", nameof(sourceDocument));
-                    var statement = selected is PipelineAst pipeline ? (PipelineAst)pipeline.Copy() :
-                        new PipelineAst(selected.Extent, new[] { (CommandBaseAst)selected.Copy() });
+                    var statement = selected is CommandBaseAst command
+                        ? new PipelineAst(command.Extent, new[] { (CommandBaseAst)command.Copy() })
+                        : (StatementAst)selected.Copy();
                     ast = new ScriptBlockAst(statement.Extent, null,
                         new StatementBlockAst(statement.Extent, new[] { statement }, null), isFilter: false);
                 }
                 if (ast.ParamBlock != null || ast.BeginBlock != null || ast.ProcessBlock != null ||
                     ast.DynamicParamBlock != null || ast.EndBlock == null ||
                     ast.EndBlock.Traps?.Count > 0 || ast.EndBlock.Statements.Count == 0 ||
-                    ast.EndBlock.Statements.Any(statement => statement is not PipelineAst))
-                    throw new ArgumentException("A native command region requires explicit pipeline statements.", nameof(source));
+                    ast.EndBlock.Statements.Any(statement => statement is not PipelineAst &&
+                        (sourceDocument is null || statement is not DataStatementAst)))
+                    throw new ArgumentException("A native command region requires an authored pipeline or data statement.", nameof(source));
 
                 if (guardedDotSourceRelativePath is not null)
                     ast = GuardSourceLoad(ast, guardedDotSourceRelativePath);

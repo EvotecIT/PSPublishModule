@@ -5,6 +5,16 @@ namespace PowerForge;
 
 internal sealed partial class PowerShellSemanticBinder
 {
+    private static bool CanSelectObservedInvocation(InvokeMemberExpressionAst invocation)
+    {
+        if (!HasCatchAllObservation(invocation) || invocation.Member is not StringConstantExpressionAst member ||
+            !PowerShellNativeAccessSemanticBinder.CanSelectInvocationSyntax(invocation))
+            return false;
+        return invocation.Expression is not TypeExpressionAst literal || literal.TypeName.GetReflectionType() is not { } receiver ||
+               ObservedCallCandidates(receiver, member.Value, invocation.Static, invocation.Arguments?.Count ?? 0)
+                   .All(static candidate => candidate.GetParameters().All(static parameter => parameter.ParameterType != typeof(Type)));
+    }
+
     // Keep the existing SDK invocation/error owners. This qualifier only proves that
     // a class-valued factory or explicit cast did not pass its authored Type as a value.
     private static bool HasClosedReferenceValueArgumentCatchAll(InvokeMemberExpressionAst invocation)

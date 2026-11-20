@@ -15,6 +15,7 @@ namespace PowerForge.Generated.Runtime
     {
         private static readonly ConcurrentDictionary<InvocationSiteKey, Func<object?, object?[], object?>> InvocationSites = new();
         private readonly Dictionary<string, NativeAstOperation> _localReferences = new(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<(string File, int Start, int End), NativeAstOperation> _authoredInvocations = new();
         private static readonly Lazy<MethodInfo> VariableReferenceOperation = new(() => typeof(PSObject).Assembly
             .GetType("System.Management.Automation.VariableOps", true)!
             .GetMethod("GetVariableAsRef", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic)
@@ -53,6 +54,31 @@ namespace PowerForge.Generated.Runtime
             EnsureActive();
             return InvocationSites.GetOrAdd(new InvocationSiteKey(name, isStatic, targetConstraint, argumentConstraints),
                 CreateInvocationSite)(receiver, arguments);
+        }
+
+        /// <summary>Executes one authored invocation with the native compiler's argument and error semantics.</summary>
+        public object? InvokeAuthoredMember(string file, string sourceDocument, int startOffset, int endOffset,
+            Action<IScriptExtent> completedPosition)
+        {
+            EnsureActive();
+            var key = (file, startOffset, endOffset);
+            if (!_authoredInvocations.TryGetValue(key, out var operation))
+            {
+                var document = ParseAssignmentDocument(sourceDocument, file, out var errors);
+                var invocation = (InvokeMemberExpressionAst?)document.Find(node => node is InvokeMemberExpressionAst &&
+                    node.Extent.StartOffset == startOffset && node.Extent.EndOffset == endOffset, searchNestedScriptBlocks: true)
+                    ?? throw new ArgumentException("The native member call does not match its authored span.", nameof(sourceDocument));
+                ValidateSelectedSyntax(errors, invocation.Extent.Text, nameof(sourceDocument));
+                var selected = (InvokeMemberExpressionAst)invocation.Copy();
+                var statement = new CommandExpressionAst(selected.Extent, selected, null);
+                var ast = new ScriptBlockAst(selected.Extent, null,
+                    new StatementBlockAst(selected.Extent, new[] { statement }, null), isFilter: false);
+                var native = new NativeAstCompiler(this, ast, assignmentVariables: true, preserveSelectedSequencePoints: true);
+                native.Expressions.Add(Expression.Convert((Expression)native.Invoke("VisitInvokeMemberExpression", selected)!, typeof(object)));
+                operation = native.Compile();
+                _authoredInvocations.Add(key, operation);
+            }
+            return operation.Invoke(FunctionContext, completedPosition: completedPosition);
         }
 
         private static Func<object?, object?[], object?> CreateInvocationSite(InvocationSiteKey key)

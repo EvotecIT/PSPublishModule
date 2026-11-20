@@ -144,8 +144,8 @@ public sealed partial class PowerShellTypedCompilationTranspiler
             return CreateResult(fullPaths, namespaceName, typeName, Array.Empty<PowerShellCompiledMethod>(), Array.Empty<string>(), diagnostics, parsedFiles, targetFramework, semanticProfileId);
         ApplyDeclarationSourceContext(parsedFiles, capabilities, guardedExecutableEntryPath,
             nativeDeclarationTimingSourcePaths, nativeScriptEntry);
-        var boundResult = CreateBoundEmissionIndex(parsedFiles, targetFramework, capabilities, diagnostics, commandRegistry, semanticProfileId,
-            nativeDependencyTypes);
+        var (boundResult, nativeModuleInitializer, nativeModuleEmission) = BindModuleStartup(parsedFiles, targetFramework,
+            capabilities, diagnostics, commandRegistry, semanticProfileId, nativeDependencyTypes);
         var boundEmissions = boundResult.Emissions;
         if (boundResult.RuntimeFreeModule is not null &&
             PowerShellRuntimeFreeModuleDefinition.IsReservedMemberName(PowerShellClrSymbolMapper.MapIdentifier(typeName)))
@@ -269,6 +269,15 @@ public sealed partial class PowerShellTypedCompilationTranspiler
             methods,
             diagnostics);
         methodSources.AddRange(selectedRegions.Promoted.Select(static region => region.GeneratedSource));
+
+        if (nativeModuleInitializer is { } nativeInitializer && nativeModuleEmission is { } nativeEmission)
+        {
+            var method = CreateCompiledMethod(nativeInitializer, nativeEmission, nativeInitializer.Unit.Name);
+            method.IsModuleInitializer = true;
+            method.NativeModuleInitializerSource = nativeInitializer.Parsed.Document.Text;
+            methods.Add(method);
+            methodSources.Add(nativeEmission.Source);
+        }
 
         if (boundResult.RuntimeFreeModule is { } module && boundResult.Initializer is { } initializer)
         {

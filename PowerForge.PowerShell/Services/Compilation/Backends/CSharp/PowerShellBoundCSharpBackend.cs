@@ -262,11 +262,13 @@ internal sealed partial class PowerShellBoundCSharpBackend
                     .Append(exited.Expression is null ? "null" : EmitExpression(exited.Expression)).AppendLine(");");
                 return;
             case PowerShellLoweredBreakStatement transfer:
-                if (transfer.TransferToCaller) builder.Append(prefix).AppendLine("__nativeFunction.TransferToCaller(true);");
+                if (transfer.TransferToCaller) builder.Append(prefix).Append("__nativeFunction.TransferToCaller(true")
+                    .Append(transfer.CallerLabel is null ? string.Empty : ", " + EmitExpression(transfer.CallerLabel)).AppendLine(");");
                 else EmitLoopTransfer(builder, transfer.TargetLoop, prefix, isContinue: false);
                 return;
             case PowerShellLoweredContinueStatement transfer:
-                if (transfer.TransferToCaller) builder.Append(prefix).AppendLine("__nativeFunction.TransferToCaller(false);");
+                if (transfer.TransferToCaller) builder.Append(prefix).Append("__nativeFunction.TransferToCaller(false")
+                    .Append(transfer.CallerLabel is null ? string.Empty : ", " + EmitExpression(transfer.CallerLabel)).AppendLine(");");
                 else EmitLoopTransfer(builder, transfer.TargetLoop, prefix, isContinue: true);
                 return;
             default:
@@ -281,6 +283,8 @@ internal sealed partial class PowerShellBoundCSharpBackend
             PowerShellLoweredLiteralExpression literal => EmitLiteral(literal),
             PowerShellLoweredNativeVariableExpression variable => EmitNativeVariableRead(variable),
             PowerShellLoweredNativeScriptBlockExpression block => EmitNativeBlockValue(block),
+            PowerShellLoweredTransportedScriptBlockExpression block => "__nativeFunction.CreateTransportedScriptBlock(" +
+                _nativeSourceDocuments.Reference(block.SourceDocument) + ", " + block.Span.StartOffset + ", " + block.Span.EndOffset + ")",
             PowerShellLoweredNativeLifecycleExpression lifecycle => "(__nativeFunction.LifecycleClause == " + lifecycle.Clause.ToString(System.Globalization.CultureInfo.InvariantCulture) + ")",
             PowerShellLoweredVariableExpression variable => RenderStorage(variable.Symbol),
             PowerShellLoweredConstantBooleanDelegateExpression booleanDelegate => EmitConstantBooleanDelegate(booleanDelegate),

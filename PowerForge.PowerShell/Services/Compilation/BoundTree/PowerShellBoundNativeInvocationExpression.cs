@@ -5,7 +5,8 @@ internal sealed class PowerShellBoundNativeInvocationExpression : PowerShellBoun
 {
     internal PowerShellBoundNativeInvocationExpression(SourceSpan span, PowerShellBoundExpression? receiver,
         Type? literalTargetType, string name, bool isStatic, PowerShellBoundExpression[] arguments,
-        Type? targetConstraint, Type?[] argumentConstraints, PowerShellNativeReferenceArgument[]? references = null)
+        Type? targetConstraint, Type?[] argumentConstraints, PowerShellNativeReferenceArgument[]? references = null,
+        PowerShellCommandRegionSourceSelection? authoredInvocation = null)
         : base(span, PowerShellTypeFact.Unknown, PowerShellValueState.Unknown,
             arguments.Aggregate((receiver?.Effects ?? PowerShellSemanticEffect.None) | PowerShellSemanticEffect.Host |
                 PowerShellSemanticEffect.Mutation | PowerShellSemanticEffect.TerminatingError |
@@ -24,6 +25,7 @@ internal sealed class PowerShellBoundNativeInvocationExpression : PowerShellBoun
         TargetConstraint = targetConstraint;
         ArgumentConstraints = argumentConstraints;
         References = references ?? Array.Empty<PowerShellNativeReferenceArgument>();
+        AuthoredInvocation = authoredInvocation;
     }
 
     internal PowerShellBoundExpression? Receiver { get; }
@@ -34,6 +36,7 @@ internal sealed class PowerShellBoundNativeInvocationExpression : PowerShellBoun
     internal Type? TargetConstraint { get; }
     internal PowerShellImmutableArray<Type?> ArgumentConstraints { get; }
     internal PowerShellImmutableArray<PowerShellNativeReferenceArgument> References { get; }
+    internal PowerShellCommandRegionSourceSelection? AuthoredInvocation { get; }
 
     private static bool IsProcessStart(Type? type, string name)
         => type == typeof(System.Diagnostics.Process) && name.Equals(nameof(System.Diagnostics.Process.Start), StringComparison.OrdinalIgnoreCase);

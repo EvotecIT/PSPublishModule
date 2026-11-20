@@ -11,14 +11,19 @@ internal static class PowerShellSourceSemanticValidator
     /// </summary>
     internal static bool CanRetainTypesBesideFunction(ParsedSourceDocument document,
         int functionStartOffset, int functionEndOffset, PowerShellCompilationCapability capabilities)
-        => capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding) &&
-           capabilities.HasFlag(PowerShellCompilationCapability.PowerShellModuleState) &&
-           document.TypeClosure.Declarations.Length > 0 &&
-           document.TypeClosure.Declarations.All(static declaration => declaration.IsDocumentScope) &&
-           !document.TypeClosure.References.Any(reference =>
-               reference.DeclarationCandidates.Length > 0 &&
-               reference.ConsumerSpan.StartOffset >= functionStartOffset &&
-               reference.ConsumerSpan.EndOffset <= functionEndOffset);
+    {
+        if (capabilities != PowerShellCompilationCapabilities.HybridModule || document.TypeClosure.Declarations.Length == 0 ||
+            document.TypeClosure.Declarations.Any(static declaration => !declaration.IsDocumentScope)) return false;
+        var consumingReferences = document.TypeClosure.References.Where(reference => reference.DeclarationCandidates.Length > 0 &&
+            reference.ConsumerSpan.StartOffset >= functionStartOffset && reference.ConsumerSpan.EndOffset <= functionEndOffset).ToArray();
+        if (consumingReferences.Length == 0) return true;
+        var function = document.RootFunctionDeclarations.Select(static declaration => declaration.Syntax).FirstOrDefault(candidate =>
+            candidate.Extent.StartOffset == functionStartOffset && candidate.Extent.EndOffset == functionEndOffset);
+        if (function is null) return false;
+        var names = PowerShellModuleTypeLoadPolicy.FindLexicalTypeAnchors(document, function);
+        return consumingReferences.All(reference => reference.DeclarationCandidates.Length == 1 && names.Contains(reference.TypeName) &&
+            reference.Kind is PowerShellSourceTypeReferenceKind.Constraint or PowerShellSourceTypeReferenceKind.Value);
+    }
 
     /// <summary>Whether a function's metadata can be detached without recreating hosted type identities or imports.</summary>
     internal static bool SupportsDetachedFunctionMetadata(ParsedSourceDocument document)

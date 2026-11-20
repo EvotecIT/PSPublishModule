@@ -19,6 +19,8 @@ internal static class PowerShellCompilationUnitDispositionLedgerBuilder
 
         var methods = (emittedMethods ?? shapedCompilation?.Methods ?? Array.Empty<PowerShellCompiledMethod>()).ToArray();
         var nestedBodies = methods.SelectMany(static method => method.NestedBodies).ToArray();
+        var initializerBodies = methods.Where(static method => method.IsModuleInitializer && method.NativeFunctionBinding is not null)
+            .SelectMany(static method => method.NestedBodies).ToHashSet();
         var wrappedMethodKeys = GetWrappedMethodKeys(plan.Mode, artifactKind, rootSourcePath, shapedCompilation);
         var plannedSourcePaths = plan.Files
             .Select(static file => Path.GetFullPath(file.FullPath))
@@ -65,7 +67,8 @@ internal static class PowerShellCompilationUnitDispositionLedgerBuilder
                     .ToArray() ?? Array.Empty<PowerShellCompiledRegion>();
                 var wrapped = declaration is null
                     ? wrappedMethodKeys.Contains(PowerShellHybridModuleComposer.GetCompiledMethodKey(file.FullPath, unit.Name, unit.StartLine))
-                    : PowerShellHybridModuleComposer.ContainsWrappedDeclaration(wrappedMethodKeys, file.FullPath, declaration);
+                    : PowerShellHybridModuleComposer.ContainsWrappedDeclaration(wrappedMethodKeys, file.FullPath, declaration) ||
+                      ownedBodies.Any(initializerBodies.Contains);
                 var emitted = method is not null || ownedBodies.Length > 0 ||
                               plan.Mode == PowerShellCompilationMode.Strict &&
                               artifactKind == PowerShellCompilationArtifactKind.Executable &&
@@ -73,7 +76,7 @@ internal static class PowerShellCompilationUnitDispositionLedgerBuilder
                               unit.Kind == PowerShellCompilationUnitKind.Script &&
                               unit.IsCompilable;
                 var emittedBinaryCmdlet = artifactKind == PowerShellCompilationArtifactKind.BinaryModule &&
-                                          dispositionMethod?.NativeFunctionBinding is null &&
+                                          dispositionMethod is { NativeFunctionBinding: null } &&
                                           (wrapped || lifecycleMethod is not null);
                 var retainedHostedSource = IsRetainedHostedSource(
                     plan.Mode,

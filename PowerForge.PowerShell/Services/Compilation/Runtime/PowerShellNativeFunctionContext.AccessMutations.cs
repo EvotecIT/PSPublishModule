@@ -57,7 +57,8 @@ namespace PowerForge.Generated.Runtime
         internal static VariableExpressionAst? FindNativeAccessMutationReceiver(ExpressionAst target)
             => target switch
             {
-                VariableExpressionAst variable when variable.VariablePath.IsUnqualified => variable,
+                VariableExpressionAst variable when variable.VariablePath.IsUnqualified || variable.VariablePath.IsScript ||
+                    variable.VariablePath.UserPath.StartsWith("private:", StringComparison.OrdinalIgnoreCase) => variable,
                 MemberExpressionAst { Static: false, Member: StringConstantExpressionAst } member
                     when member is not InvokeMemberExpressionAst &&
                          member.GetType().GetProperty("NullConditional")?.GetValue(member) is not true

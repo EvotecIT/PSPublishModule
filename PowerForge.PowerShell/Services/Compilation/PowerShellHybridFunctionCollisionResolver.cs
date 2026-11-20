@@ -14,8 +14,8 @@ internal static partial class PowerShellHybridFunctionCollisionResolver
         PowerShellCompilationCapability capabilities = PowerShellCompilationCapabilities.BinaryModule,
         PowerShellNativeDependencyTypes? nativeDependencyTypes = null)
     {
-        var definitions = new List<(string Path, ScriptBlockAst Root, FunctionDefinitionAst Function)>();
-        var sources = new List<(string Path, ScriptBlockAst Root, HashSet<string> InvokeCommandAliases)>();
+        var definitions = new List<(string Path, FunctionDefinitionAst Function)>();
+        var sources = new List<(string Path, ScriptBlockAst Root)>();
         foreach (var sourcePath in typed.SourcePaths)
         {
             Token[] tokens;
@@ -23,10 +23,10 @@ internal static partial class PowerShellHybridFunctionCollisionResolver
             var ast = Parser.ParseFile(sourcePath, out tokens, out errors);
             if (errors.Length > 0)
                 return typed;
-            sources.Add((sourcePath, ast, FindInvokeCommandAliases(ast)));
+            sources.Add((sourcePath, ast));
             definitions.AddRange(ast.FindAll(static node => node is FunctionDefinitionAst, searchNestedScriptBlocks: false)
                 .Cast<FunctionDefinitionAst>()
-                .Select(function => (sourcePath, ast, function)));
+                .Select(function => (sourcePath, function)));
         }
 
         var duplicateNames = definitions
@@ -39,16 +39,8 @@ internal static partial class PowerShellHybridFunctionCollisionResolver
                 (capabilities == PowerShellCompilationCapabilities.HybridModule ||
                  loadBoundPaths.Contains(Path.GetFullPath(string.IsNullOrWhiteSpace(method.SourcePath) ? typed.SourcePath : method.SourcePath))))
             .Select(static method => method.SourceName).ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var earlyAvailabilityNames = definitions
-            .Where(definition => !loadBoundNames.Contains(definition.Function.Name) && sources.Any(source => source.Root.FindAll(
-                    node => IsCommandReferenceCandidate(node, source.InvokeCommandAliases) &&
-                            (!PowerShellCompilationPathSafety.PathEquals(source.Path, definition.Path) ||
-                             node.Extent.StartOffset < definition.Function.Extent.StartOffset) &&
-                            IsModuleScope(node, source.Root),
-                    searchNestedScriptBlocks: true)
-                .Any(node => ReferencesFunction(node, definition.Function.Name, source.InvokeCommandAliases, source.Root))))
-            .Select(static definition => definition.Function.Name)
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var earlyAvailabilityNames = FindAvailabilitySensitiveFunctions(sources,
+            definitions.Where(definition => !loadBoundNames.Contains(definition.Function.Name)));
         var fallbackNames = duplicateNames
             .Concat(earlyAvailabilityNames)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -110,6 +102,27 @@ internal static partial class PowerShellHybridFunctionCollisionResolver
         result.RegionOpportunities = filtered.RegionOpportunities;
         result.CopySourceContextFrom(filtered);
         return result;
+    }
+
+    internal static HashSet<string> FindAvailabilitySensitiveFunctions(
+        IEnumerable<(string Path, ScriptBlockAst Root)> sources,
+        IEnumerable<(string Path, FunctionDefinitionAst Function)> definitions)
+    {
+        var references = sources.Select(source =>
+        {
+            var aliases = FindInvokeCommandAliases(source.Root);
+            var candidates = source.Root.FindAll(
+                node => IsCommandReferenceCandidate(node, aliases) && IsModuleScope(node, source.Root),
+                searchNestedScriptBlocks: true).ToArray();
+            return (source.Path, source.Root, Aliases: aliases, Candidates: candidates);
+        }).ToArray();
+
+        return definitions.Where(definition => references.Any(source => source.Candidates.Any(node =>
+                (!PowerShellCompilationPathSafety.PathEquals(source.Path, definition.Path) ||
+                 node.Extent.StartOffset < definition.Function.Extent.StartOffset) &&
+                ReferencesFunction(node, definition.Function.Name, source.Aliases, source.Root))))
+            .Select(static definition => definition.Function.Name)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
     }
 
     private static bool IsCommandReferenceCandidate(Ast node, HashSet<string> invokeCommandAliases)
