@@ -14,6 +14,9 @@ internal static partial class PowerShellCompilationSourcePathPlanner
             .OfType<CommandAst>()
             .Where(static command => command.InvocationOperator == TokenKind.Dot);
 
+    internal static bool HasModuleAlternatives(ScriptBlockAst root)
+        => GetModuleScopeDotSources(root).Any(command => TryPlanModuleAlternatives(root, command, out _, out _));
+
     /// <summary>Recognizes a finite set of authored paths without executing the switch or resolving Join-Path.</summary>
     internal static bool TryPlanModuleAlternatives(
         ScriptBlockAst root, CommandAst command, out CommandElementAst? operand, out string[] paths)

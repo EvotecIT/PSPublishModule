@@ -10,7 +10,7 @@ internal static class PowerShellHybridModulePathGuard
         {
             if (!PowerShellCompilationSourcePathPlanner.TryPlanModuleAlternatives(root, command, out var operand, out var paths))
                 continue;
-            var alternatives = string.Join(", ", paths.Select(static path => "'" + path.Replace("'", "''") + "'"));
+            var alternatives = string.Join(", ", paths.Select(static path => "'" + CodeGeneration.EscapeSingleQuotedStringContent(path) + "'"));
             var replacement = $$"""
                 (& {
                     param($candidate, $root, $alternatives)

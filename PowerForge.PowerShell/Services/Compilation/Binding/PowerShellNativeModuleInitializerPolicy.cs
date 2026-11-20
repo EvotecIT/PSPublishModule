@@ -18,8 +18,7 @@ internal static class PowerShellNativeModuleInitializerPolicy
             return null;
 
         // The retained module owns the load guard and the class scope for both alternatives.
-        if (PowerShellCompilationSourcePathPlanner.GetModuleScopeDotSources(root)
-            .Any(command => PowerShellCompilationSourcePathPlanner.TryPlanModuleAlternatives(root, command, out _, out _)))
+        if (PowerShellCompilationSourcePathPlanner.HasModuleAlternatives(root))
             return null;
 
         // Native type declarations are module metadata. The executable AST keeps the original

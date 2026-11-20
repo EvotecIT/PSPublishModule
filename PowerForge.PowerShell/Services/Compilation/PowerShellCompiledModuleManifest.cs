@@ -178,9 +178,7 @@ internal static class PowerShellCompiledModuleManifest
         var hasRuntimeControlledExports = explicitExports is { Commands.Length: 0 };
         var hasRetainedAlternatives = rootModuleFileName.EndsWith(".psm1", StringComparison.OrdinalIgnoreCase) &&
             PowerShellHybridDependencyResolver.DiscoverRetainedModuleAlternatives(sourcePath, typed.SourcePaths).Length > 0;
-        var functionExports = hasRetainedAlternatives
-            ? manifestFunctions
-            : hasScriptNestedModules && manifestFunctions is null ? null : selectedFallback;
+        var functionExports = hasScriptNestedModules && manifestFunctions is null ? null : selectedFallback;
 
         var mutator = new AstModuleManifestMutator();
         var rootKey = ModuleManifestValueReader.ReadTopLevelString(sourceManifest, "ModuleToProcess") is not null
@@ -192,7 +190,7 @@ internal static class PowerShellCompiledModuleManifest
                 PowerShellCompilationPathSafety.GetPathComparison(targetManifest)))
             throw new InvalidOperationException($"Module manifest '{sourceManifest}' does not contain a literal RootModule entry that can be updated.");
         ApplyTargetCompatibility(sourceManifest, targetManifest, targetFramework, mutator);
-        if (!hasRuntimeControlledExports)
+        if (!hasRuntimeControlledExports && !hasRetainedAlternatives)
         {
             mutator.TrySetManifestExports(
                 targetManifest,

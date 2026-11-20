@@ -78,7 +78,7 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
         const string source = """
             class ModulePathOracleContext { [string] $Prefix = 'module' }
             $path = switch ($PSVersionTable.PSVersion.Major) {
-                { $_ -ge 7 } { 'Modern.ps1' }
+                { $_ -ge 7 } { "Modern’s.ps1" }
                 default { 'Desktop.ps1' }
             }
             if ($env:POWERFORGE_TEST_EXTERNAL_MODULE_ROOT) {
@@ -114,14 +114,73 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
         }, assertArtifact: built =>
         {
             var root = Path.GetDirectoryName(built.ArtifactPath!)!;
-            Assert.True(File.Exists(Path.Combine(root, "Modern.ps1")));
+            Assert.True(File.Exists(Path.Combine(root, "Modern’s.ps1")));
             Assert.True(File.Exists(Path.Combine(root, "Desktop.ps1")));
             AssertRuntimeModulePathRejectsAnUnstagedFile(built);
         }, additionalSources: new Dictionary<string, string>
         {
-            ["Modern.ps1"] = record.Replace("edition", "modern", StringComparison.Ordinal),
+            ["Modern’s.ps1"] = record.Replace("edition", "modern", StringComparison.Ordinal),
             ["Desktop.ps1"] = record.Replace("edition", "desktop", StringComparison.Ordinal)
         }, discoverAdditionalSources: true, manifestFunctionPattern: "Get-*");
+    }
+
+    [PinnedSemanticHostFact]
+    [Trait("Category", "PowerShellCompilerGate")]
+    public void SelectedModuleFileCanOwnExportsWithoutAManifestOnBothHosts()
+    {
+        const string source = """
+            function Get-ModuleCount { return 21 }
+            $path = switch ($PSVersionTable.PSVersion.Major) {
+                { $_ -ge 7 } { 'Modern.ps1' }
+                default { 'Desktop.ps1' }
+            }
+            . (Join-Path $PSScriptRoot $path)
+            """;
+        const string alternative = """
+            function Get-Public { Get-ModuleCount }
+            function Get-Private { 'private' }
+            Export-ModuleMember -Function Get-Public
+            """;
+        const string probe = """
+            [ordered]@{
+                value = Get-Public
+                exports = @((Get-Module ScopedValues).ExportedCommands.Keys | Sort-Object)
+            } | ConvertTo-Json -Compress
+            """;
+        CompareScopedArtifacts(source, probe, new[] { "Get-ModuleCount" },
+            value => Assert.Equal("{\"value\":21,\"exports\":[\"Get-Public\"]}", value),
+            additionalSources: new Dictionary<string, string> { ["Modern.ps1"] = alternative, ["Desktop.ps1"] = alternative },
+            discoverAdditionalSources: true, manifestFunctionPattern: null);
+    }
+
+    [PinnedSemanticHostFact]
+    [Trait("Category", "PowerShellCompilerGate")]
+    public void RootModuleWildcardExportsCommandsCreatedByTheSelectedFileOnBothHosts()
+    {
+        const string source = """
+            $path = switch ($PSVersionTable.PSVersion.Major) {
+                { $_ -ge 7 } { 'Modern.ps1' }
+                default { 'Desktop.ps1' }
+            }
+            . (Join-Path $PSScriptRoot $path)
+            function Get-ModuleCount { return 21 }
+            Export-ModuleMember -Function Get-*
+            """;
+        const string alternative = """
+            Set-Item Function:Get-Runtime -Value { 42 }
+            function Read-Private { 'private' }
+            """;
+        const string probe = """
+            [ordered]@{
+                count = Get-ModuleCount
+                runtime = Get-Runtime
+                exports = @((Get-Module ScopedValues).ExportedCommands.Keys | Sort-Object)
+            } | ConvertTo-Json -Compress
+            """;
+        CompareScopedArtifacts(source, probe, new[] { "Get-ModuleCount" },
+            value => Assert.Equal("{\"count\":21,\"runtime\":42,\"exports\":[\"Get-ModuleCount\",\"Get-Runtime\"]}", value),
+            additionalSources: new Dictionary<string, string> { ["Modern.ps1"] = alternative, ["Desktop.ps1"] = alternative },
+            discoverAdditionalSources: true, manifestFunctionPattern: null);
     }
 
     private static void AssertRuntimeModulePathRejectsAnUnstagedFile(PowerShellCompilationBuildResult built)
@@ -129,7 +188,7 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
         using var fixture = OracleFixture.Create(string.Empty);
         var unstaged = Path.Combine(fixture.RootPath, "Unstaged.ps1");
         File.WriteAllText(unstaged, "throw 'Unstaged file executed'");
-        foreach (var name in new[] { "Modern.ps1", "Desktop.ps1" })
+        foreach (var name in new[] { "Modern’s.ps1", "Desktop.ps1" })
             File.WriteAllText(Path.Combine(fixture.RootPath, name), "throw 'Unstaged alternative executed'");
         File.WriteAllText(fixture.ScriptPath, $$"""
             $env:POWERFORGE_TEST_EXTERNAL_MODULE_ROOT = '{{fixture.RootPath.Replace("'", "''", StringComparison.Ordinal)}}'
@@ -143,7 +202,7 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
             }
             function global:Join-Path {
                 param($Path, $ChildPath)
-                if ($ChildPath -in @('Modern.ps1', 'Desktop.ps1')) {
+                if ($ChildPath -in @("Modern’s.ps1", 'Desktop.ps1')) {
                     return '{{unstaged.Replace("'", "''", StringComparison.Ordinal)}}'
                 }
                 Microsoft.PowerShell.Management\Join-Path @PSBoundParameters
@@ -154,7 +213,7 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
             } catch {
                 $_.Exception.Message
             }
-            """);
+            """, new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
         var profile = built.Manifest!.TargetContract!.SemanticProfileId;
         var blocked = new PowerShellCompilationSemanticOracleRunner().Observe(
             new PowerShellCompilationSemanticOracleRequest(profile, fixture.ScriptPath)
