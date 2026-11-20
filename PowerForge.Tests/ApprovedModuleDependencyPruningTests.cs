@@ -236,6 +236,12 @@ public sealed class ApprovedModuleDependencyPruningTests
     [InlineData("function Get-Date { 'alias-target' }; Set-Alias SharedAlias Get-Date", "consumer cmdlet")]
     [InlineData("function Get-Date { 'alias-target' }; Set-Alias SharedAlias Get-Date", "donor cmdlet")]
     [InlineData("function Get-Date { 'alias-target' }; Set-Alias SharedAlias Get-Date", "qualified cmdlet")]
+    [InlineData("function Get-SharedAliasTarget { [Alias(('Get-' + 'Date'))] param() 'alias-target' }; Set-Alias SharedAlias Get-SharedAliasTarget", "attribute cmdlet")]
+    [InlineData("function Get-SharedAliasTarget { [Alias('Get-Date')] param() 'alias-target' }; Set-Alias SharedAlias Get-SharedAliasTarget", "attribute donor cmdlet")]
+    [InlineData("function Get-SharedAliasTarget { [Alias('Get-AdditionalFixture')] param() 'alias-target' }; Set-Alias SharedAlias Get-SharedAliasTarget", "additional alias")]
+    [InlineData("function Get-SharedAliasTarget { 'alias-target' }; Set-Alias SharedAlias Get-SharedAliasTarget", "nested consumer function")]
+    [InlineData("function Get-SharedAliasTarget { 'alias-target' }; Set-Alias SharedAlias Get-SharedAliasTarget", "nested donor function")]
+    [InlineData("filter Convert-DonorItem { \"alias-$_\" }; Set-Alias SharedAlias Convert-DonorItem", "filter")]
     public void Run_PackagesApprovedDonorAliasOrReportsANameConflict(string aliasDeclaration, string? conflictScope)
     {
         var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
@@ -248,7 +254,8 @@ public sealed class ApprovedModuleDependencyPruningTests
             string parentDonor = conflictScope switch
             {
                 "nested donor" or "consumer alias" => "function Get-ParentAliasTarget { 'parent-copy' }; Set-Alias SharedAlias Get-ParentAliasTarget; function Get-ParentThing { SharedAlias }",
-                "donor cmdlet" => "function Get-ParentThing { Get-Date | Out-Null; 'parent-copy' }",
+                "donor cmdlet" or "attribute donor cmdlet" => "function Get-ParentThing { Get-Date | Out-Null; 'parent-copy' }",
+                "nested donor function" => "function Get-ParentThing { function SharedAlias { 'parent-copy' }; SharedAlias }",
                 _ => "function Get-SharedHelper { 'parent-copy' }; function Get-ParentThing { Get-SharedHelper }"
             };
             WriteModule(modules, "ParentDonor", parentDonor + "; Export-ModuleMember -Function Get-ParentThing");
@@ -259,18 +266,27 @@ public sealed class ApprovedModuleDependencyPruningTests
             {
                 "consumer" => "function Get-SharedAliasTarget { 'consumer' }; ",
                 "consumer alias" => "function Get-LocalTarget { 'consumer' }; Set-Alias SharedAlias Get-LocalTarget; ",
+                "nested consumer function" => "function Invoke-DonorAlias { SharedAlias }; ",
                 _ => string.Empty
             };
-            string consumerDateCall = conflictScope switch
+            string consumerSetup = conflictScope switch
             {
-                "consumer cmdlet" => "Get-Date | Out-Null; ",
+                "consumer cmdlet" or "attribute cmdlet" => "Get-Date | Out-Null; ",
                 "qualified cmdlet" => "Microsoft.PowerShell.Utility\\Get-Date | Out-Null; ",
+                "nested consumer function" => "function SharedAlias { 'local' }; SharedAlias; ",
                 _ => string.Empty
+            };
+            string aliasCall = conflictScope switch
+            {
+                "additional alias" => "SharedAlias; (Get-Alias -Name Get-AdditionalFixture).Definition; ",
+                "nested consumer function" => "Invoke-DonorAlias; ",
+                "filter" => "1,2 | SharedAlias; ",
+                _ => "SharedAlias; "
             };
             WriteModule(root, "source",
                 consumerPrefix +
-                "function Get-ConsumerThing { param([string]$ProviderName='PnP.PowerShell'); " + consumerDateCall +
-                "Get-ParentThing; SharedAlias; Get-Module -Name $ProviderName | Out-Null }; Export-ModuleMember Get-ConsumerThing");
+                "function Get-ConsumerThing { param([string]$ProviderName='PnP.PowerShell'); " + consumerSetup +
+                "Get-ParentThing; " + aliasCall + "Get-Module -Name $ProviderName | Out-Null }; Export-ModuleMember Get-ConsumerThing");
             File.WriteAllText(Path.Combine(source, "Consumer.format.ps1xml"),
                 "<Configuration><ViewDefinitions><View><Name>Consumer</Name><ViewSelectedBy><TypeName>System.String</TypeName></ViewSelectedBy><TableControl><TableRowEntries><TableRowEntry><TableColumnItems><TableColumnItem><PropertyName>Length</PropertyName></TableColumnItem></TableColumnItems></TableRowEntry></TableRowEntries></TableControl></View></ViewDefinitions></Configuration>");
             Assert.True(ManifestEditor.TrySetTopLevelStringArray(Path.Combine(source, "source.psd1"), "FormatsToProcess", new[] { "Consumer.format.ps1xml" }));
@@ -311,7 +327,7 @@ public sealed class ApprovedModuleDependencyPruningTests
             var runner = new ModulePipelineRunner(new NullLogger(), powerShellRunner: null,
                 moduleDependencyMetadataProvider: new FixtureMetadataProvider(modules),
                 missingFunctionAnalysisService: new PowerShellMissingFunctionAnalysisService());
-            if (conflictScope is not null and not "qualified cmdlet")
+            if (conflictScope is not (null or "qualified cmdlet" or "additional alias" or "filter"))
             {
                 var error = Assert.Throws<InvalidOperationException>(() => runner.Run(spec, runner.Plan(spec)));
                 Assert.Contains("SharedAlias", error.Message);
@@ -346,7 +362,13 @@ public sealed class ApprovedModuleDependencyPruningTests
             ps.Commands.Clear();
             var output = ps.AddCommand("Get-ConsumerThing").AddParameter("ErrorAction", "Stop").Invoke();
             Assert.Empty(ps.Streams.Error);
-            Assert.Equal(new[] { "parent-copy", "alias-target" }, output.Select(item => item.BaseObject.ToString()));
+            string[] expected = conflictScope switch
+            {
+                "additional alias" => new[] { "parent-copy", "alias-target", "Get-SharedAliasTarget" },
+                "filter" => new[] { "parent-copy", "alias-1", "alias-2" },
+                _ => new[] { "parent-copy", "alias-target" }
+            };
+            Assert.Equal(expected, output.Select(item => item.BaseObject.ToString()));
             ps.Commands.Clear();
             Assert.Empty(ps.AddCommand("Get-Module").AddParameter("Name", "SharedHelpers").Invoke());
             ps.Commands.Clear();

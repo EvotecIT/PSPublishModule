@@ -125,7 +125,7 @@ public sealed partial class MissingFunctionsAnalyzer
         bool isRootAnalysis = invocationScopes is null;
         invocationScopes ??= new List<AliasInvocationScope>();
         if (approvedModuleSources.Count > 0)
-            invocationScopes.Add(new AliasInvocationScope(preferredApprovedModuleSource, parsed.CommandNames));
+            invocationScopes.Add(new AliasInvocationScope(preferredApprovedModuleSource, parsed));
 
         var consumerFunctionsForNestedAnalysis = new HashSet<string>(knownFunctions, StringComparer.OrdinalIgnoreCase);
         foreach (var functionName in parsed.FunctionNames)
@@ -211,7 +211,7 @@ public sealed partial class MissingFunctionsAnalyzer
         }
 
         if (isRootAnalysis &&
-            RejectConflictingAliasBindings(combinedSummary, consumerFunctionsForNestedAnalysis, parsed.DeclaredAliases,
+            RejectConflictingAliasBindings(combinedSummary, approvedModules, consumerFunctionsForNestedAnalysis, parsed.DeclaredAliases,
                 invocationScopes, ResolveInvocation))
         {
             // An analyzed alias cannot be safely added to the consumer's single module scope.
@@ -268,7 +268,8 @@ public sealed partial class MissingFunctionsAnalyzer
             {
                 index = output.Count;
                 functionIndexes.Add(functionKey, index);
-                output.Add($"function {functionName} {{ {sb} }}");
+                string declaration = c.InlineFunctionIsFilter || c.CommandType == nameof(CommandTypes.Filter) ? "filter" : "function";
+                output.Add($"{declaration} {functionName} {{ {sb} }}");
             }
             if (c.InlineFunctionName is not null && aliasNames.Add(name))
                 output[index] += Environment.NewLine +
@@ -323,7 +324,8 @@ public sealed partial class MissingFunctionsAnalyzer
         var allCommands = ast.FindAll(static node => node is CommandAst, searchNestedScriptBlocks: true)
             .Cast<CommandAst>()
             .ToArray();
-        var commandNames = ExtractCommandNames(allCommands, visibilityAnalyzer).ToArray();
+        var localFunctionCalls = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var commandNames = ExtractCommandNames(allCommands, visibilityAnalyzer, localFunctionCalls).ToArray();
         var hasDynamicCommandInvocation = allCommands.Any(static command =>
             (string.IsNullOrWhiteSpace(command.GetCommandName()) &&
              (command.CommandElements.Count == 0 || command.CommandElements[0] is not StringConstantExpressionAst) &&
@@ -342,6 +344,7 @@ public sealed partial class MissingFunctionsAnalyzer
             effectiveFilePath,
             declaredFunctions,
             commandNames,
+            localFunctionCalls,
             ReadRootAliasNames(ast, rootFunctions),
             hasDynamicCommandInvocation,
             ApprovedModuleRuntimeReferenceAnalyzer.Find(
@@ -381,7 +384,8 @@ public sealed partial class MissingFunctionsAnalyzer
 
     private static IEnumerable<string> ExtractCommandNames(
         IEnumerable<CommandAst> allCommands,
-        NestedFunctionVisibilityAnalyzer visibilityAnalyzer)
+        NestedFunctionVisibilityAnalyzer visibilityAnalyzer,
+        HashSet<string> localFunctionCalls)
     {
         var adCmdlets = new HashSet<string>(new[]
         {
@@ -444,7 +448,10 @@ public sealed partial class MissingFunctionsAnalyzer
             if (!LooksLikeCommandName(name))
                 continue;
             if (visibilityAnalyzer.IsDeclaredInVisibleScope(cmd, name))
+            {
+                localFunctionCalls.Add(name);
                 continue;
+            }
 
             set.Add(name);
         }
@@ -870,6 +877,7 @@ try {
             string? filePath,
             string[] functionNames,
             string[] commandNames,
+            HashSet<string> localFunctionCalls,
             HashSet<string> declaredAliases,
             bool hasDynamicCommandInvocation,
             string[] nonInlineableApprovedModules)
@@ -877,6 +885,7 @@ try {
             FilePath = filePath;
             FunctionNames = functionNames;
             CommandNames = commandNames;
+            LocalFunctionCalls = localFunctionCalls;
             DeclaredAliases = declaredAliases;
             HasDynamicCommandInvocation = hasDynamicCommandInvocation;
             NonInlineableApprovedModules = nonInlineableApprovedModules ?? Array.Empty<string>();
@@ -885,6 +894,7 @@ try {
         public string? FilePath { get; }
         public string[] FunctionNames { get; }
         public string[] CommandNames { get; }
+        public HashSet<string> LocalFunctionCalls { get; }
         public HashSet<string> DeclaredAliases { get; }
         public bool HasDynamicCommandInvocation { get; }
         public string[] NonInlineableApprovedModules { get; }

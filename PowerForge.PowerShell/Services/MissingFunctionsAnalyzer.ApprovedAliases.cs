@@ -19,7 +19,8 @@ public sealed partial class MissingFunctionsAnalyzer
     }
 
     private static bool RejectConflictingAliasBindings(
-        List<MissingFunctionCommand> commands, HashSet<string> consumerFunctions, HashSet<string> consumerAliases,
+        List<MissingFunctionCommand> commands, HashSet<string> approvedModules,
+        HashSet<string> consumerFunctions, HashSet<string> consumerAliases,
         List<AliasInvocationScope> invocationScopes,
         Func<string, ApprovedModuleSource?, MissingFunctionCommand> resolveInvocation)
     {
@@ -28,20 +29,25 @@ public sealed partial class MissingFunctionsAnalyzer
             return false;
 
         var comparer = StringComparer.OrdinalIgnoreCase;
-        var functionsByName = commands.Where(command => command.ScriptBlock is not null)
-            .ToLookup(command => command.InlineFunctionName ?? command.Name, comparer);
-        var aliasesByName = aliases.ToLookup(alias => alias.Name, comparer);
+        var functions = commands.Where(command => command.ScriptBlock is not null && approvedModules.Contains(command.Source));
+        var functionsByName = functions.ToLookup(command => command.InlineFunctionName ?? command.Name, comparer);
+        var aliasesByName = aliases.Select(alias => (Name: alias.Name, Command: alias))
+            .Concat(functions.SelectMany(command => ReadFunctionAliases(command).Select(name => (Name: name, Command: command))))
+            .ToLookup(binding => binding.Name, binding => binding.Command, comparer);
+
         foreach (var alias in aliases)
         {
             string target = alias.InlineFunctionName!;
-            if (consumerFunctions.Contains(target) || consumerFunctions.Contains(alias.Name) ||
-                consumerAliases.Contains(target) || consumerAliases.Contains(alias.Name) ||
-                functionsByName.Contains(alias.Name) || aliasesByName.Contains(target) ||
-                functionsByName[target].Any(function => !comparer.Equals(function.Source, alias.Source)) ||
-                aliasesByName[alias.Name].Any(other => !comparer.Equals(other.Source, alias.Source) ||
-                                                      !comparer.Equals(other.InlineFunctionName, target)))
+            var aliasNames = new HashSet<string>(ReadFunctionAliases(alias), comparer) { alias.Name };
+            var conflict = aliasNames.FirstOrDefault(name => consumerFunctions.Contains(name) ||
+                consumerAliases.Contains(name) || functionsByName.Contains(name) ||
+                aliasesByName[name].Any(other => !SameTarget(other)));
+            if (conflict is null && (consumerFunctions.Contains(target) || consumerAliases.Contains(target) ||
+                aliasesByName.Contains(target) || functionsByName[target].Any(other => !SameTarget(other))))
+                conflict = target;
+            if (conflict is not null)
             {
-                alias.Error = $"The alias '{alias.Name}' from '{alias.Source}' cannot bind to '{target}' without a name conflict in the merged module.";
+                alias.Error = $"The alias '{alias.Name}' from '{alias.Source}', with target '{target}', would cause a name conflict at '{conflict}' in the merged module.";
                 continue;
             }
 
@@ -49,7 +55,9 @@ public sealed partial class MissingFunctionsAnalyzer
             {
                 if (comparer.Equals(alias.Source, scope.Donor?.Name))
                     continue;
-                string? conflict = ChangesBinding(alias.Name) ? alias.Name : ChangesBinding(target) ? target : null;
+                conflict = aliasNames.FirstOrDefault(name => scope.LocalFunctionCalls.Contains(name) || ChangesBinding(name));
+                if (conflict is null && ChangesBinding(target))
+                    conflict = target;
                 if (conflict is null)
                     continue;
                 string caller = scope.Donor is null ? "the consumer" : $"'{scope.Donor.Name}'";
@@ -57,30 +65,32 @@ public sealed partial class MissingFunctionsAnalyzer
                 break;
 
                 bool ChangesBinding(string name)
-                {
-                    if (!scope.InvokedNames.Contains(name))
-                        return false;
-                    // Reuse the original scope even for names filtered out of recursive analysis.
-                    var binding = resolveInvocation(name, scope.Donor);
-                    return !comparer.Equals(binding.Source, alias.Source) ||
-                           !comparer.Equals(binding.InlineFunctionName ?? binding.Name, target);
-                }
+                    => scope.InvokedNames.Contains(name) && !SameTarget(resolveInvocation(name, scope.Donor));
             }
+
+            bool SameTarget(MissingFunctionCommand command)
+                => comparer.Equals(command.Source, alias.Source) &&
+                   comparer.Equals(command.InlineFunctionName ?? command.Name, target);
         }
 
         return aliases.Any(alias => !string.IsNullOrWhiteSpace(alias.Error));
     }
 
+    private static IEnumerable<string> ReadFunctionAliases(MissingFunctionCommand command)
+        => command.ScriptBlock!.Attributes.OfType<AliasAttribute>().SelectMany(attribute => attribute.AliasNames);
+
     private sealed class AliasInvocationScope
     {
-        public AliasInvocationScope(ApprovedModuleSource? donor, IEnumerable<string> invokedNames)
+        public AliasInvocationScope(ApprovedModuleSource? donor, ParsedInput parsed)
         {
             Donor = donor;
-            InvokedNames = new HashSet<string>(invokedNames, StringComparer.OrdinalIgnoreCase);
+            InvokedNames = new HashSet<string>(parsed.CommandNames, StringComparer.OrdinalIgnoreCase);
+            LocalFunctionCalls = parsed.LocalFunctionCalls;
         }
 
         public ApprovedModuleSource? Donor { get; }
         public HashSet<string> InvokedNames { get; }
+        public HashSet<string> LocalFunctionCalls { get; }
     }
 
     private MissingFunctionCommand CreateApprovedResolution(
@@ -108,7 +118,8 @@ public sealed partial class MissingFunctionsAnalyzer
             return new MissingFunctionCommand(alias.Name, source.Name, "Alias", isAlias: true,
                 isPrivate: isPrivate, error: string.Empty, scriptBlock: function.ScriptBlock)
             {
-                InlineFunctionName = function.Name
+                InlineFunctionName = function.Name,
+                InlineFunctionIsFilter = function is FilterInfo
             };
         }
 

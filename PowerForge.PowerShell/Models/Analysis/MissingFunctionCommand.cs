@@ -34,6 +34,7 @@ public sealed class MissingFunctionCommand
 
     // A donor alias keeps its command name in the report and its target name in the merged module.
     internal string? InlineFunctionName { get; set; }
+    internal bool InlineFunctionIsFilter { get; set; }
 
     /// <summary>
     /// Creates a new <see cref="MissingFunctionCommand"/> instance.
