@@ -53,7 +53,7 @@ internal sealed class PowerShellModuleExportContract
         if (commands.Length != allCommands.Length)
             return RuntimeControlledExports();
 
-        var usesAssignedVariables = false;
+        var usesRuntimeBinding = false;
         var values = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase)
         {
             ["Function"] = new List<string>(),
@@ -63,8 +63,14 @@ internal sealed class PowerShellModuleExportContract
         };
         foreach (var command in commands)
         {
-            var commandStatement = (PipelineAst)command.Parent;
-            var assignments = ReadAdjacentLiteralAssignments(statements!, statements!.IndexOf(commandStatement));
+            var exportIndex = statements!.IndexOf((PipelineAst)command.Parent);
+            if (IsAdjacentLiteralSplat(command, statements, exportIndex))
+            {
+                usesRuntimeBinding = true;
+                continue;
+            }
+
+            var assignments = ReadAdjacentLiteralAssignments(statements, exportIndex);
             string? currentParameter = null;
             foreach (var element in command.CommandElements.Skip(1))
             {
@@ -73,20 +79,20 @@ internal sealed class PowerShellModuleExportContract
                     currentParameter = ResolveParameter(parameter);
                     if (parameter.Argument is not null)
                     {
-                        values[currentParameter].AddRange(ReadExportValues(parameter.Argument, assignments, ref usesAssignedVariables));
+                        values[currentParameter].AddRange(ReadExportValues(parameter.Argument, assignments, ref usesRuntimeBinding));
                         currentParameter = null;
                     }
                     continue;
                 }
                 if (currentParameter is null)
                     throw new InvalidOperationException($"Export-ModuleMember at line {command.Extent.StartLineNumber} uses positional or dynamic export arguments; use literal -Function, -Cmdlet, -Alias, or -Variable values.");
-                values[currentParameter].AddRange(ReadExportValues(element, assignments, ref usesAssignedVariables));
+                values[currentParameter].AddRange(ReadExportValues(element, assignments, ref usesRuntimeBinding));
             }
         }
 
-        // A literal assignment can still be coerced by existing variable attributes.
-        // Keep the authored export call so PowerShell binds the actual value.
-        if (usesAssignedVariables)
+        // Existing variable attributes may coerce either a literal value or a splat.
+        // Keep the authored export call so PowerShell binds the actual arguments.
+        if (usesRuntimeBinding)
             return RuntimeControlledExports();
 
         return new PowerShellModuleExportContract(
@@ -134,6 +140,30 @@ internal sealed class PowerShellModuleExportContract
         throw new InvalidOperationException($"Export-ModuleMember parameter '-{parameter.ParameterName}' is not supported by binary-module compilation.");
     }
 
+    private static bool IsAdjacentLiteralSplat(CommandAst command, IReadOnlyList<StatementAst> statements, int exportIndex)
+    {
+        if (exportIndex <= 0 || command.CommandElements.Count != 2 || command.Redirections.Count != 0 ||
+            command.CommandElements[1] is not VariableExpressionAst { Splatted: true, VariablePath.IsUnqualified: true } splat ||
+            statements[exportIndex - 1] is not AssignmentStatementAst
+            {
+                Operator: TokenKind.Equals,
+                Left: VariableExpressionAst { VariablePath.IsUnqualified: true } variable,
+                Right: CommandExpressionAst { Redirections.Count: 0, Expression: HashtableAst options }
+            } ||
+            !variable.VariablePath.UserPath.Equals(splat.VariablePath.UserPath, StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        return options.KeyValuePairs.All(pair =>
+            pair.Item1 is StringConstantExpressionAst key &&
+            (key.Value.Equals("Function", StringComparison.OrdinalIgnoreCase) ||
+             key.Value.Equals("Cmdlet", StringComparison.OrdinalIgnoreCase) ||
+             key.Value.Equals("Alias", StringComparison.OrdinalIgnoreCase) ||
+             key.Value.Equals("Variable", StringComparison.OrdinalIgnoreCase)) &&
+            pair.Item2 is PipelineAst { PipelineElements: { Count: 1 } } pipeline &&
+            pipeline.PipelineElements[0] is CommandExpressionAst { Redirections.Count: 0 } initializer &&
+            TryReadLiteralValues(initializer.Expression) is not null);
+    }
+
     private static HashSet<string> ReadAdjacentLiteralAssignments(
         IReadOnlyList<StatementAst> statements,
         int exportIndex)
@@ -162,12 +192,12 @@ internal sealed class PowerShellModuleExportContract
     private static IReadOnlyList<string> ReadExportValues(
         CommandElementAst element,
         HashSet<string> assignments,
-        ref bool usesAssignedVariables)
+        ref bool usesRuntimeBinding)
     {
         if (element is VariableExpressionAst { Splatted: false, VariablePath.IsUnqualified: true } variable &&
             assignments.Contains(variable.VariablePath.UserPath))
         {
-            usesAssignedVariables = true;
+            usesRuntimeBinding = true;
             return Array.Empty<string>();
         }
 

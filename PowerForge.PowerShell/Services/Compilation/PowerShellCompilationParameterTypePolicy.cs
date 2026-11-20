@@ -41,6 +41,7 @@ internal static class PowerShellCompilationParameterTypePolicy
     {
         typeof(PSSerializer),
         typeof(ErrorRecord),
+        typeof(ActionPreference),
         typeof(ActionPreferenceStopException),
         typeof(ErrorCategory),
         typeof(PSMemberTypes),
