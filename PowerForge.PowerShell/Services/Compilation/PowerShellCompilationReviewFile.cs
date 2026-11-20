@@ -43,13 +43,13 @@ public static class PowerShellCompilationReviewFile
             PowerShellCompilationPathSafety.EnsureNoLinksInExistingAncestors(moduleSourceDirectory, linkError);
             PowerShellCompilationPathSafety.EnsureNoLinksInExistingAncestors(fullPath, linkError);
 #endif
-            var sourceDirectory = ComparablePath(FrameworkCompatibility.ResolvePhysicalPath(moduleSourceDirectory))
+            var sourceDirectory = ComparableDirectory(FrameworkCompatibility.ResolvePhysicalPath(moduleSourceDirectory))
                 .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
             var physicalDirectory = FrameworkCompatibility.ResolvePhysicalPath(Path.GetDirectoryName(fullPath)!);
             fullPath = Path.Combine(physicalDirectory, Path.GetFileName(fullPath));
-            var comparablePath = ComparablePath(fullPath);
-            if (PowerShellCompilationPathSafety.PathEquals(comparablePath, sourceDirectory) ||
-                PowerShellCompilationPathSafety.PathStartsWith(comparablePath, sourceDirectory + Path.DirectorySeparatorChar))
+            var comparableDirectory = ComparableDirectory(physicalDirectory);
+            if (PowerShellCompilationPathSafety.PathEquals(comparableDirectory, sourceDirectory) ||
+                PowerShellCompilationPathSafety.PathStartsWith(comparableDirectory, sourceDirectory + Path.DirectorySeparatorChar))
                 throw new ArgumentException("Save the review outside the module source directory so it does not change the reviewed dependency inventory.", nameof(path));
         }
 
@@ -68,13 +68,13 @@ public static class PowerShellCompilationReviewFile
         }
     }
 
-    private static string ComparablePath(string path)
+    private static string ComparableDirectory(string path)
     {
         if (!FrameworkCompatibility.IsWindows()) return path;
         // Win32 device and extended DOS/UNC paths can name the same directory.
         if (path.StartsWith(@"\\.\", StringComparison.Ordinal))
             path = @"\\?\" + path.Substring(4);
-        return WindowsNativePath.GetExtendedPath(path);
+        return WindowsNativePath.GetLongPath(path);
     }
 }
 

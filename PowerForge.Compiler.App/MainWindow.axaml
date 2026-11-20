@@ -405,8 +405,8 @@
                 </ScrollViewer>
                 <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="8" Margin="0,8,0,0"
                             IsEnabled="{Binding CanCompile}">
-                  <Button Classes="band" Content="Open review" Click="OnOpenReview" />
-                  <Button Classes="band" Content="Save review" Click="OnSaveReview" IsEnabled="{Binding HasReview}" />
+                  <Button Classes="quiet" Content="Open review" Click="OnOpenReview" />
+                  <Button Classes="quiet" Content="Save review" Click="OnSaveReview" IsEnabled="{Binding HasReview}" />
                 </StackPanel>
               </Grid>
             </TabItem>
