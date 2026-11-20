@@ -65,7 +65,7 @@ when it cannot rule out protected options in parameter defaults.
 
 ### Compile and progress
 
-On success, `PowerShellCompilationBuildResult` gives the artifact and manifest paths. The manifest contains the compiled and fallback units and their dispositions. On failure, inspect `Error` and `Failure` for the stage and any source information. `ContainsEmbeddedPowerShellSource` identifies builds that carry PowerShell source. Package and Hybrid can carry readable script content. Strict emits compiled code without the embedded script.
+On success, `PowerShellCompilationBuildResult` gives the artifact and manifest paths. The manifest contains the compiled and fallback units and their dispositions. On failure, inspect `Error` and `Failure` for the stage and any source information. `ContainsEmbeddedPowerShellSource` identifies builds that carry PowerShell source. Package and Hybrid can carry readable script content. Strict compiles the admitted code. A Strict module can still carry PowerShell source as a staged resource, which also sets `ContainsEmbeddedPowerShellSource`.
 
 `Check` and `Compile` accept a cancellation token and can report phase changes through `IProgress<PowerShellCompilationProgress>`. Each report carries a phase. Dependency planning and shaping can finish their current operation before cancellation takes effect.
 
