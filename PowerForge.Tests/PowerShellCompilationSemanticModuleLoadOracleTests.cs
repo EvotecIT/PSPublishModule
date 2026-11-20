@@ -23,8 +23,18 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
                 [string] Describe() { return 'loaded:' + $this.Name }
             }
             """;
-        CompareScopedArtifacts(source, "(New-LoadedRecord 'sample').Describe()", new[] { "New-LoadedRecord" },
-            value => Assert.Equal("loaded:sample", value), importSetup: "$env:POWERFORGE_ORACLE_DOT_LOAD = 'load'",
+        const string probe = """
+            & (Get-Module ScopedValues) {
+                $record = New-LoadedRecord 'sample'
+                [ordered]@{
+                    value = $record.Describe()
+                    sameType = [object]::ReferenceEquals($record.GetType(), [DotLoadedOracleRecord])
+                } | ConvertTo-Json -Compress
+            }
+            """;
+        CompareScopedArtifacts(source, probe, new[] { "New-LoadedRecord" },
+            value => Assert.Equal("{\"value\":\"loaded:sample\",\"sameType\":true}", value),
+            importSetup: "$env:POWERFORGE_ORACLE_DOT_LOAD = 'load'",
             additionalSources: new Dictionary<string, string> { ["RecordTypes.ps1"] = types }, retainAdditionalSources: true);
     }
 

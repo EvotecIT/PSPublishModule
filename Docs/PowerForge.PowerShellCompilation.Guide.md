@@ -98,10 +98,10 @@ Locksmith2 emits and exercises all 100 owned functions across a read-only lab
 audit and four local scenarios on PowerShell 7.6.6. Live hardware, Graph
 registration, directory changes and global installations are outside the
 measured scenarios.
-The public Gallery packet emits **720/753 (95.62%)** of its units as complete CLR
-methods, up from 114/753 (15.14%) and the preceding 682/753 measurement. Pester
-emits 478/491 and PSFramework emits 166/176. The other eight modules keep their
-complete-method counts. All ten Hybrid artifacts pass the invocation probes.
+The public Gallery packet emits **753/753 (100%)** of its units as complete CLR
+methods, up from 114/753 (15.14%) and the preceding 720/753 measurement. Pester
+emits 491/491 and PSFramework emits 176/176. All ten Hybrid artifacts build,
+import, and pass their invocation probes.
 Neither packet measures the percentage of the PowerShell language supported.
 The maintainer's five-module packet is separate, targeted historical evidence.
 
