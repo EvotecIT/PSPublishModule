@@ -18,25 +18,10 @@ public sealed partial class MissingFunctionsAnalyzer
         return names;
     }
 
-    private void CheckAliasBindingsInDonorScope(
-        ApprovedModuleSource donor, IEnumerable<string> invokedNames, IReadOnlyList<MissingFunctionCommand> ancestorAliases)
-    {
-        var names = new HashSet<string>(invokedNames, StringComparer.OrdinalIgnoreCase);
-        foreach (var alias in ancestorAliases)
-        {
-            if (string.Equals(alias.Source, donor.Name, StringComparison.OrdinalIgnoreCase))
-                continue;
-            string target = alias.InlineFunctionName!;
-            if ((names.Contains(alias.Name) && GetCommandFromModuleScopeCached(donor, alias.Name) is not null) ||
-                (names.Contains(target) && GetCommandFromModuleScopeCached(donor, target) is not null))
-            {
-                alias.Error = $"The alias '{alias.Name}' from '{alias.Source}' cannot bind to '{target}' without a name conflict with '{donor.Name}' in the merged module.";
-            }
-        }
-    }
-
     private static bool RejectConflictingAliasBindings(
-        List<MissingFunctionCommand> commands, HashSet<string> consumerFunctions, HashSet<string> consumerAliases)
+        List<MissingFunctionCommand> commands, HashSet<string> consumerFunctions, HashSet<string> consumerAliases,
+        List<AliasInvocationScope> invocationScopes,
+        Func<string, ApprovedModuleSource?, MissingFunctionCommand> resolveInvocation)
     {
         var aliases = commands.Where(command => command.InlineFunctionName is not null).ToArray();
         if (aliases.Length == 0)
@@ -57,10 +42,45 @@ public sealed partial class MissingFunctionsAnalyzer
                                                       !comparer.Equals(other.InlineFunctionName, target)))
             {
                 alias.Error = $"The alias '{alias.Name}' from '{alias.Source}' cannot bind to '{target}' without a name conflict in the merged module.";
+                continue;
+            }
+
+            foreach (var scope in invocationScopes)
+            {
+                if (comparer.Equals(alias.Source, scope.Donor?.Name))
+                    continue;
+                string? conflict = ChangesBinding(alias.Name) ? alias.Name : ChangesBinding(target) ? target : null;
+                if (conflict is null)
+                    continue;
+                string caller = scope.Donor is null ? "the consumer" : $"'{scope.Donor.Name}'";
+                alias.Error = $"The alias '{alias.Name}' from '{alias.Source}', with target '{target}', would cause a name conflict by changing the binding of '{conflict}' in {caller}.";
+                break;
+
+                bool ChangesBinding(string name)
+                {
+                    if (!scope.InvokedNames.Contains(name))
+                        return false;
+                    // Reuse the original scope even for names filtered out of recursive analysis.
+                    var binding = resolveInvocation(name, scope.Donor);
+                    return !comparer.Equals(binding.Source, alias.Source) ||
+                           !comparer.Equals(binding.InlineFunctionName ?? binding.Name, target);
+                }
             }
         }
 
         return aliases.Any(alias => !string.IsNullOrWhiteSpace(alias.Error));
+    }
+
+    private sealed class AliasInvocationScope
+    {
+        public AliasInvocationScope(ApprovedModuleSource? donor, IEnumerable<string> invokedNames)
+        {
+            Donor = donor;
+            InvokedNames = new HashSet<string>(invokedNames, StringComparer.OrdinalIgnoreCase);
+        }
+
+        public ApprovedModuleSource? Donor { get; }
+        public HashSet<string> InvokedNames { get; }
     }
 
     private MissingFunctionCommand CreateApprovedResolution(

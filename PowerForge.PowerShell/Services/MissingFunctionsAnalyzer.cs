@@ -119,11 +119,13 @@ public sealed partial class MissingFunctionsAnalyzer
         HashSet<string> ignoreFunctions,
         bool includeFunctionsRecursively,
         ApprovedModuleSource? preferredApprovedModuleSource = null,
-        IReadOnlyList<MissingFunctionCommand>? ancestorAliases = null)
+        List<AliasInvocationScope>? invocationScopes = null)
     {
         var parsed = ParseInput(filePath, code, approvedModuleSources);
-        if (preferredApprovedModuleSource is not null && ancestorAliases is { Count: > 0 })
-            CheckAliasBindingsInDonorScope(preferredApprovedModuleSource, parsed.CommandNames, ancestorAliases);
+        bool isRootAnalysis = invocationScopes is null;
+        invocationScopes ??= new List<AliasInvocationScope>();
+        if (approvedModuleSources.Count > 0)
+            invocationScopes.Add(new AliasInvocationScope(preferredApprovedModuleSource, parsed.CommandNames));
 
         var consumerFunctionsForNestedAnalysis = new HashSet<string>(knownFunctions, StringComparer.OrdinalIgnoreCase);
         foreach (var functionName in parsed.FunctionNames)
@@ -143,15 +145,7 @@ public sealed partial class MissingFunctionsAnalyzer
         var listCommands = new List<MissingFunctionCommand>();
         foreach (var name in filteredNames)
         {
-            var info = ResolveCommand(
-                name,
-                approvedModules,
-                approvedModuleSources,
-                approvedModuleSourceOrder,
-                runtimeModuleSources,
-                runtimeModuleSourceOrder,
-                requireApprovedModuleSources,
-                preferredApprovedModuleSource);
+            var info = ResolveInvocation(name, preferredApprovedModuleSource);
             if (string.Equals(info.Source, "Microsoft.PowerShell.Core", StringComparison.OrdinalIgnoreCase))
                 continue;
 
@@ -175,9 +169,6 @@ public sealed partial class MissingFunctionsAnalyzer
             foreach (var command in listCommands)
                 if (command.InlineFunctionName is { } functionName)
                     ignoreNext.Add(functionName);
-            var aliasesOnPath = (ancestorAliases ?? Array.Empty<MissingFunctionCommand>())
-                .Concat(listCommands.Where(command => command.InlineFunctionName is not null))
-                .ToArray();
 
             // Analyze each donor's functions in that donor's scope. Otherwise an unqualified
             // private helper can be stolen by an earlier approved module that happens to use
@@ -207,7 +198,7 @@ public sealed partial class MissingFunctionsAnalyzer
                     ignoreFunctions: ignoreNext,
                     includeFunctionsRecursively: includeFunctionsRecursively,
                     preferredApprovedModuleSource: donorSource,
-                    ancestorAliases: aliasesOnPath);
+                    invocationScopes: invocationScopes);
 
                 combinedSummary.AddRange(nested.Summary);
                 combinedSummaryFiltered.AddRange(nested.SummaryFiltered);
@@ -219,8 +210,9 @@ public sealed partial class MissingFunctionsAnalyzer
             }
         }
 
-        if (preferredApprovedModuleSource is null &&
-            RejectConflictingAliasBindings(combinedSummary, consumerFunctionsForNestedAnalysis, parsed.DeclaredAliases))
+        if (isRootAnalysis &&
+            RejectConflictingAliasBindings(combinedSummary, consumerFunctionsForNestedAnalysis, parsed.DeclaredAliases,
+                invocationScopes, ResolveInvocation))
         {
             // An analyzed alias cannot be safely added to the consumer's single module scope.
             analysisComplete = false;
@@ -237,6 +229,10 @@ public sealed partial class MissingFunctionsAnalyzer
             nonInlineableApprovedModules: nonInlineableApprovedModules
                 .OrderBy(static name => name, StringComparer.OrdinalIgnoreCase)
                 .ToArray());
+
+        MissingFunctionCommand ResolveInvocation(string name, ApprovedModuleSource? donor)
+            => ResolveCommand(name, approvedModules, approvedModuleSources, approvedModuleSourceOrder,
+                runtimeModuleSources, runtimeModuleSourceOrder, requireApprovedModuleSources, donor);
     }
 
     private static List<string> BuildInlineFunctions(IEnumerable<MissingFunctionCommand> commands, HashSet<string> approvedModules)

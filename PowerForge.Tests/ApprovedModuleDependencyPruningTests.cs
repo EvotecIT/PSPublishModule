@@ -233,6 +233,9 @@ public sealed class ApprovedModuleDependencyPruningTests
     [InlineData("function Get-SharedAliasTarget { 'alias-target' }; Set-Alias SharedAlias Get-SharedAliasTarget", "consumer")]
     [InlineData("function Get-SharedAliasTarget { 'alias-target' }; Set-Alias SharedAlias Get-SharedAliasTarget", "nested donor")]
     [InlineData("function Get-SharedAliasTarget { 'alias-target' }; Set-Alias SharedAlias Get-SharedAliasTarget", "consumer alias")]
+    [InlineData("function Get-Date { 'alias-target' }; Set-Alias SharedAlias Get-Date", "consumer cmdlet")]
+    [InlineData("function Get-Date { 'alias-target' }; Set-Alias SharedAlias Get-Date", "donor cmdlet")]
+    [InlineData("function Get-Date { 'alias-target' }; Set-Alias SharedAlias Get-Date", "qualified cmdlet")]
     public void Run_PackagesApprovedDonorAliasOrReportsANameConflict(string aliasDeclaration, string? conflictScope)
     {
         var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
@@ -242,9 +245,13 @@ public sealed class ApprovedModuleDependencyPruningTests
         {
             string modules = Path.Combine(root, "installed");
             WriteModule(modules, "SharedHelpers", aliasDeclaration + "; Export-ModuleMember -Function @() -Alias SharedAlias");
-            WriteModule(modules, "ParentDonor", conflictScope is "nested donor" or "consumer alias"
-                ? "function Get-ParentAliasTarget { 'parent-copy' }; Set-Alias SharedAlias Get-ParentAliasTarget; function Get-ParentThing { SharedAlias }; Export-ModuleMember -Function Get-ParentThing"
-                : "function Get-SharedHelper { 'parent-copy' }; function Get-ParentThing { Get-SharedHelper }; Export-ModuleMember Get-ParentThing");
+            string parentDonor = conflictScope switch
+            {
+                "nested donor" or "consumer alias" => "function Get-ParentAliasTarget { 'parent-copy' }; Set-Alias SharedAlias Get-ParentAliasTarget; function Get-ParentThing { SharedAlias }",
+                "donor cmdlet" => "function Get-ParentThing { Get-Date | Out-Null; 'parent-copy' }",
+                _ => "function Get-SharedHelper { 'parent-copy' }; function Get-ParentThing { Get-SharedHelper }"
+            };
+            WriteModule(modules, "ParentDonor", parentDonor + "; Export-ModuleMember -Function Get-ParentThing");
             WriteModule(modules, "RuntimeDependency", "function Get-RuntimeThing { 'runtime' }; Export-ModuleMember Get-RuntimeThing");
             Environment.SetEnvironmentVariable("PSModulePath", modules + Path.PathSeparator + previousModulePath);
             string source = Path.Combine(root, "source");
@@ -254,9 +261,16 @@ public sealed class ApprovedModuleDependencyPruningTests
                 "consumer alias" => "function Get-LocalTarget { 'consumer' }; Set-Alias SharedAlias Get-LocalTarget; ",
                 _ => string.Empty
             };
+            string consumerDateCall = conflictScope switch
+            {
+                "consumer cmdlet" => "Get-Date | Out-Null; ",
+                "qualified cmdlet" => "Microsoft.PowerShell.Utility\\Get-Date | Out-Null; ",
+                _ => string.Empty
+            };
             WriteModule(root, "source",
                 consumerPrefix +
-                "function Get-ConsumerThing { param([string]$ProviderName='PnP.PowerShell'); Get-ParentThing; SharedAlias; Get-Module -Name $ProviderName | Out-Null }; Export-ModuleMember Get-ConsumerThing");
+                "function Get-ConsumerThing { param([string]$ProviderName='PnP.PowerShell'); " + consumerDateCall +
+                "Get-ParentThing; SharedAlias; Get-Module -Name $ProviderName | Out-Null }; Export-ModuleMember Get-ConsumerThing");
             File.WriteAllText(Path.Combine(source, "Consumer.format.ps1xml"),
                 "<Configuration><ViewDefinitions><View><Name>Consumer</Name><ViewSelectedBy><TypeName>System.String</TypeName></ViewSelectedBy><TableControl><TableRowEntries><TableRowEntry><TableColumnItems><TableColumnItem><PropertyName>Length</PropertyName></TableColumnItem></TableColumnItems></TableRowEntry></TableRowEntries></TableControl></View></ViewDefinitions></Configuration>");
             Assert.True(ManifestEditor.TrySetTopLevelStringArray(Path.Combine(source, "source.psd1"), "FormatsToProcess", new[] { "Consumer.format.ps1xml" }));
@@ -297,11 +311,11 @@ public sealed class ApprovedModuleDependencyPruningTests
             var runner = new ModulePipelineRunner(new NullLogger(), powerShellRunner: null,
                 moduleDependencyMetadataProvider: new FixtureMetadataProvider(modules),
                 missingFunctionAnalysisService: new PowerShellMissingFunctionAnalysisService());
-            if (conflictScope is not null)
+            if (conflictScope is not null and not "qualified cmdlet")
             {
                 var error = Assert.Throws<InvalidOperationException>(() => runner.Run(spec, runner.Plan(spec)));
                 Assert.Contains("SharedAlias", error.Message);
-                Assert.Contains("AliasTarget", error.Message);
+                Assert.Contains(conflictScope.EndsWith("cmdlet", StringComparison.Ordinal) ? "Get-Date" : "AliasTarget", error.Message);
                 Assert.Contains("name conflict", error.Message);
                 Assert.False(File.Exists(Path.Combine(root, "packed", "source.zip")));
                 return;
