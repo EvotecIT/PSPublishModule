@@ -32,9 +32,15 @@ internal static class Safety
     {
         DemandAbsolute(path);
         for (var current = Path.GetFullPath(path); !string.IsNullOrEmpty(current); current = Path.GetDirectoryName(current))
-            if ((File.Exists(current) || Directory.Exists(current)) &&
-                (File.GetAttributes(current) & FileAttributes.ReparsePoint) != 0)
+        {
+            // One read, not an existence check followed by a read: a live SQLite database creates and removes its
+            // -journal, -wal and -shm sidecars at any moment, and a sidecar gone between the two calls threw.
+            FileAttributes attributes;
+            try { attributes = File.GetAttributes(current); }
+            catch (Exception error) when (error is FileNotFoundException or DirectoryNotFoundException) { continue; }
+            if ((attributes & FileAttributes.ReparsePoint) != 0)
                 throw new IOException("A backup path traverses a reparse point.");
+        }
     }
 
     internal static async Task<string> HashAsync(string path, CancellationToken token)
