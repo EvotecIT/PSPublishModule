@@ -122,8 +122,8 @@ PoshRSJob contributed **1/2** and posh-git **69/90**. The packet also counted
 three promoted regions in posh-git. Letting PowerShell bind exports derived
 from the same file list used by a conventional module loader adds PSDepend
 with **38/43 units emitted**. The packet now completes for **18/20 inputs**
-with **258/327 units emitted**. PSProfiler still dot-sources a computed script
-block, and SimplySql already has a binary module as its manifest root.
+with **258/327 units emitted**. PSProfiler selects a dot-sourced file through a
+runtime switch. SimplySql has a binary module as its manifest root.
 
 On PowerShell 7.6.6 and Windows PowerShell 5.1.26100.9818, posh-git returned
 matching branch, untracked-file, repository, and export information for a
