@@ -19,6 +19,10 @@ internal sealed partial class PowerShellBoundCSharpBackend
 
     private string EmitNativeInvocation(PowerShellLoweredNativeInvocationExpression invocation)
     {
+        if (invocation.AuthoredInvocation is { } authored)
+            return $"__nativeFunction.InvokeAuthoredMember({QuotePortableSourcePath(authored.Path)}, " +
+                   $"{_nativeSourceDocuments.Reference(authored.Document)}, {invocation.Span.StartOffset}, " +
+                   $"{invocation.Span.EndOffset}, __statementErrors.AdoptNativeSequencePoint)";
         var arguments = "new object[] { " + string.Join(", ", invocation.Arguments.Select(EmitExpression)) + " }";
         var hasReferences = invocation.References.Count > 0;
         if (hasReferences)

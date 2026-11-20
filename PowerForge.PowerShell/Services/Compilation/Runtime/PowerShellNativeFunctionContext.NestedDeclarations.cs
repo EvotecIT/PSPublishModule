@@ -9,11 +9,32 @@ namespace PowerForge.Generated.Runtime
 
     public sealed partial class PowerShellNativeFunctionContext
     {
-        private readonly Dictionary<string, NativeAstOperation> _functionDeclarations = new(StringComparer.Ordinal);
+        private readonly Dictionary<(long Source, int Start, int End), NativeAstOperation> _functionDeclarations = new();
+
+        /// <summary>Creates compiled declaration clauses whose CLR types are first resolved by native invocation.</summary>
+        public ScriptBlock CreateDeferredFunctionBody(string sourceDocument, int startOffset, int endOffset,
+            string[] localNames, string[] localTypeDeclarations,
+            Action<PowerShellNativeFunctionContext>? begin, Action<PowerShellNativeFunctionContext>? process,
+            Action<PowerShellNativeFunctionContext>? end)
+        {
+            EnsureActive();
+            var file = _contract.DefiningFile.GetValue(FunctionContext) as string ?? string.Empty;
+            var definition = FindFunctionDefinition(sourceDocument, file, startOffset, endOffset);
+            if (definition.Body.DynamicParamBlock is not null ||
+                (definition.Body.BeginBlock is not null) != (begin is not null) ||
+                (definition.Body.ProcessBlock is not null) != (process is not null) ||
+                (definition.Body.EndBlock is not null) != (end is not null))
+                throw new ArgumentException("Every executable deferred clause requires its compiled callback.", nameof(sourceDocument));
+            var body = PowerShellNativeFunctionHost.CreateDeferredNestedFunction(definition, file, localNames,
+                localTypeDeclarations, begin, process, end);
+            PowerShellNativeFunctionHost.RegisterModuleTypeOwner(body, _moduleTypesOwner);
+            return body;
+        }
 
         /// <summary>Prepares a nested function's original native metadata with completely compiled clauses.</summary>
         /// <remarks>The returned body remains unbound; the native declaration later clones and binds it at execution.</remarks>
         public ScriptBlock CreateFunctionBody(string sourceDocument, int startOffset, int endOffset,
+            string[] localNames, string[] localTypeDeclarations,
             Action<PowerShellNativeFunctionContext>? begin, Action<PowerShellNativeFunctionContext>? process,
             Action<PowerShellNativeFunctionContext>? end, Action<PowerShellNativeFunctionContext>? clean = null)
         {
@@ -27,6 +48,15 @@ namespace PowerForge.Generated.Runtime
                 (clauses.EndBlock != null) != (end != null) ||
                 (cleanBlock != null) != (clean != null))
                 throw new ArgumentException("Every executable nested-function clause requires its compiled callback.", nameof(sourceDocument));
+            if (_isModuleInitializer && clean is null)
+            {
+                var source = PowerShellNativeFunctionHost.CreateDeclarationSource("param()", file, localNames,
+                    begin is not null, process is not null, end is not null, false, localTypeDeclarations, null, null,
+                    PowerShellNativeFunctionHost.RequiresUnoptimizedStorage(clauses));
+                var stub = PowerShellNativeFunctionHost.CreateNestedDeclarationStub(definition, source, file);
+                PowerShellNativeFunctionHost.RegisterModuleTypeOwner(stub, _moduleTypesOwner);
+                return PowerShellNativeFunctionHost.InstallLazyCompiledClauses(stub, begin, process, end, Array.Empty<string>());
+            }
             var native = new NativeAstCompiler(this, WrapDeclaration(definition));
             var wrapper = GetDefinitionWrapper((Expression)native.Invoke("VisitFunctionDefinition", definition)!);
             var field = GetWrapperBodyField(wrapper);
@@ -49,7 +79,7 @@ namespace PowerForge.Generated.Runtime
             EnsureActive();
             if (compiledBody is null) throw new ArgumentNullException(nameof(compiledBody));
             ValidateUnboundBody(compiledBody);
-            var key = startOffset + "\0" + endOffset + "\0" + sourceDocument;
+            var key = (GetCommandRegionSourceId(sourceDocument), startOffset, endOffset);
             if (!_functionDeclarations.TryGetValue(key, out var operation))
             {
                 var file = _contract.DefiningFile.GetValue(FunctionContext) as string ?? string.Empty;
@@ -66,13 +96,20 @@ namespace PowerForge.Generated.Runtime
             return compiledBody;
         }
 
-        private static FunctionDefinitionAst FindFunctionDefinition(string source, string file, int startOffset, int endOffset)
+        private FunctionDefinitionAst FindFunctionDefinition(string source, string file, int startOffset, int endOffset)
         {
-            var document = PowerShellNativeFunctionHost.ParseSelectedDocument(source, file, startOffset, endOffset);
-            var definition = document.Find(node => node is FunctionDefinitionAst && node.Extent.StartOffset == startOffset &&
-                node.Extent.EndOffset == endOffset, searchNestedScriptBlocks: true) as FunctionDefinitionAst;
-            if (definition is null || definition.IsWorkflow ||
-                definition.Body.DynamicParamBlock is not null)
+            FunctionDefinitionAst? definition;
+            if (_isModuleInitializer && GetModuleDocument(source, file) is { Errors.Length: 0 } module)
+                definition = module.FindDeclaration(startOffset, endOffset);
+            else
+            {
+                var document = PowerShellNativeFunctionHost.ParseSelectedDocument(source, file, startOffset, endOffset);
+                if (_moduleTypesOwner is not null)
+                    PowerShellNativeFunctionHost.AttachModuleTypeMetadata(document, _moduleTypesOwner);
+                definition = document.Find(node => node is FunctionDefinitionAst && node.Extent.StartOffset == startOffset &&
+                    node.Extent.EndOffset == endOffset, searchNestedScriptBlocks: true) as FunctionDefinitionAst;
+            }
+            if (definition is null || definition.IsWorkflow)
                 throw new ArgumentException("A nested compiled declaration requires one qualified function span and body metadata.", nameof(source));
             return definition;
         }

@@ -18,7 +18,8 @@ internal sealed partial class PowerShellSemanticBinder
             foreach (var expression in declaration.Syntax.Body.FindAll(static node => node is ScriptBlockExpressionAst,
                          searchNestedScriptBlocks: true).OfType<ScriptBlockExpressionAst>().Where(expression =>
                          capabilities.HasFlag(PowerShellCompilationCapability.PowerShellModuleState) &&
-                         IsCompiledValueScriptBlock(expression, targetFramework)))
+                         IsCompiledValueScriptBlock(expression, targetFramework) &&
+                         (capabilities != PowerShellCompilationCapabilities.HybridModule || !IsTransportedScriptBlock(expression))))
             {
                 var document = declaration.Document;
                 var key = ScriptBlockKey(document.DocumentId, expression.Extent.StartOffset);
@@ -44,7 +45,7 @@ internal sealed partial class PowerShellSemanticBinder
                 var symbol = new PowerShellSymbolId(PowerShellSymbolKind.NativeScriptBlock, document.DocumentId, name, span);
                 var function = CreateNativeFunctionSyntax(nested, name);
                 _nativeScriptBlocks.Add(key, symbol);
-                all.Add(new FunctionDeclaration(document, function, symbol));
+                all.Add(new FunctionDeclaration(document, function, symbol, nativeNestedDeclaration: true));
             }
         }
         return all.ToArray();
@@ -103,14 +104,46 @@ internal sealed partial class PowerShellSemanticBinder
         => documentId + ":" + offset.ToString(System.Globalization.CultureInfo.InvariantCulture);
 
     private PowerShellBoundExpression? BindNativeScriptBlock(ParsedSourceDocument document, ScriptBlockExpressionAst syntax,
-        IReadOnlyDictionary<string, PowerShellLocalCallSignature> functions, ICollection<PowerShellSemanticDiagnostic> diagnostics)
+        IReadOnlyDictionary<string, PowerShellLocalCallSignature> functions, ICollection<PowerShellSemanticDiagnostic> diagnostics,
+        PowerShellCompilationCapability capabilities)
     {
         var span = PowerShellSourceParser.GetSpan(document, syntax.Extent);
+        if (capabilities == PowerShellCompilationCapabilities.HybridModule && IsTransportedScriptBlock(syntax))
+            return new PowerShellBoundTransportedScriptBlockExpression(span, document.Text);
         if (_nativeScriptBlocks.TryGetValue(ScriptBlockKey(document.DocumentId, syntax.Extent.StartOffset), out var target) &&
             functions.ContainsKey(target.Name))
             return new PowerShellBoundNativeScriptBlockExpression(span, target, document.Text,
                 isSwitchPredicate: IsSwitchPredicate(syntax));
         diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2960", "The script block requires a completely compiled native body and supported invocation metadata.", span));
         return null;
+    }
+
+    private static bool IsTransportedScriptBlock(ScriptBlockExpressionAst syntax)
+    {
+        if (!Generated.Runtime.PowerShellNativeFunctionContext.RequiresNativeCallbackBody(syntax.ScriptBlock) ||
+            syntax.Parent is not CommandExpressionAst commandExpression)
+            return false;
+        var statement = commandExpression.Parent is PipelineAst { PipelineElements.Count: 1 } pipeline
+            ? pipeline.Parent : commandExpression.Parent;
+        if (statement is not AssignmentStatementAst { Operator: TokenKind.Equals } assignment) return false;
+        if (assignment.Left is MemberExpressionAst { Static: true, Expression: TypeExpressionAst, Member: StringConstantExpressionAst })
+            return true;
+        if (!IsAssignedScriptBlock(syntax) || FindOwningFunctionBody(syntax) is not { } owner)
+            return false;
+        var target = (VariableExpressionAst)assignment.Left;
+        var name = target.VariablePath.UserPath;
+        var references = owner.FindAll(node => node is VariableExpressionAst variable &&
+                variable.Extent.StartOffset > syntax.Extent.EndOffset &&
+                variable.VariablePath.UserPath.Equals(name, StringComparison.OrdinalIgnoreCase),
+            searchNestedScriptBlocks: false).OfType<VariableExpressionAst>()
+            .OrderBy(static variable => variable.Extent.StartOffset)
+            .TakeWhile(variable => variable.Parent is not AssignmentStatementAst write || !ReferenceEquals(variable, write.Left))
+            .ToArray();
+        return references.Length > 0 && references.All(variable =>
+            variable.Parent is CommandAst command &&
+            command.CommandElements.Skip(1).Zip(command.CommandElements, (value, parameter) => (value, parameter)).Any(pair =>
+                ReferenceEquals(pair.value, variable) && pair.parameter is CommandParameterAst { Argument: null } parameter &&
+                (parameter.ParameterName.Equals("ScriptBlock", StringComparison.OrdinalIgnoreCase) ||
+                 parameter.ParameterName.Equals("Parallel", StringComparison.OrdinalIgnoreCase))));
     }
 }

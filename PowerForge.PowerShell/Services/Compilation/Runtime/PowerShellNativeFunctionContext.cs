@@ -11,6 +11,8 @@ namespace PowerForge.Generated.Runtime
         private readonly object _executionContext;
         private readonly PowerShellNativeFunctionHost.NativeContract _contract;
         private readonly PowerShellNativeFunctionHost.FunctionTypeScope? _functionTypes;
+        private NamedBlockAst? _moduleTypesOwner;
+        private bool _isModuleInitializer;
         private readonly object _pipe;
         private readonly ICommandRuntime2 _runtime;
         private bool _disposed;
@@ -39,6 +41,8 @@ namespace PowerForge.Generated.Runtime
                 System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic)!
                 .GetValue(functionContext)!;
             _functionTypes = PowerShellNativeFunctionHost.InitializeFunctionTypes(functionScript, _executionContext);
+            if (_session.Module is not null)
+                _moduleTypesOwner = PowerShellNativeFunctionHost.FindModuleTypeOwner(functionScript);
         }
 
         /// <summary>Reads the actual variable value, including changes made by binding callbacks.</summary>
@@ -84,6 +88,18 @@ namespace PowerForge.Generated.Runtime
         {
             EnsureActive();
             _session.PSVariable.Set(name, value);
+        }
+
+        /// <summary>Uses the importing module's native invocation metadata during its compiled initializer.</summary>
+        public void SetModuleInvocation(InvocationInfo invocation, object boundParameters, string sourceDocument)
+        {
+            _isModuleInitializer = true;
+            SetVariable("MyInvocation", invocation);
+            SetVariable("PSBoundParameters", boundParameters);
+            if (invocation.MyCommand is ExternalScriptInfo script)
+                _moduleTypesOwner = PowerShellNativeFunctionHost.FindModuleTypeOwner(script.ScriptBlock.Ast);
+            // Parse before any authored startup statements load types or register aliases.
+            GetModuleDocument(sourceDocument, ModuleOperationFile(string.Empty));
         }
 
         /// <summary>Completes a compiled statement's explicit native execution-status transition.</summary>

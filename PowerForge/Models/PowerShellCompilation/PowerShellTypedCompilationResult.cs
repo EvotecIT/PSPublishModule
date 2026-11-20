@@ -204,6 +204,8 @@ public sealed class PowerShellCompiledMethod
     /// <summary>Whether this private method implements the authored initialization unit.</summary>
     public bool IsModuleInitializer { get; internal set; }
 
+    internal string? NativeModuleInitializerSource { get; set; }
+
     /// <summary>Resolved CLR return type name.</summary>
     public string ReturnType { get; }
 

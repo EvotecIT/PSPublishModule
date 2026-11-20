@@ -29,8 +29,16 @@ internal sealed partial class PowerShellSemanticBinder
                     ? CreateNativeFunctionSyntax(original, declaration.GetBindingName(document, capabilities))
                     : original;
                 var span = PowerShellSourceParser.GetSpan(document, function.Extent);
+                var owner = document;
+                if (!conditional && capabilities == PowerShellCompilationCapabilities.HybridModule &&
+                    document.TypeClosure.Declarations.Length > 0)
+                {
+                    var lexicalTypes = PowerShellModuleTypeLoadPolicy.FindLexicalTypeAnchors(document, original);
+                    if (lexicalTypes.Count != 0)
+                        owner = document.WithNativeDependencyTypes(document.NativeDependencyTypes.WithRuntimeLoadedTypes(lexicalTypes));
+                }
                 declarations.Add(new FunctionDeclaration(
-                    document,
+                    owner,
                     function,
                     new PowerShellSymbolId(conditional ? PowerShellSymbolKind.ConditionalFunction : PowerShellSymbolKind.Function,
                         document.DocumentId, function.Name, span)));
@@ -65,15 +73,18 @@ internal sealed partial class PowerShellSemanticBinder
 
     private sealed class FunctionDeclaration
     {
-        internal FunctionDeclaration(ParsedSourceDocument document, FunctionDefinitionAst syntax, PowerShellSymbolId symbol)
+        internal FunctionDeclaration(ParsedSourceDocument document, FunctionDefinitionAst syntax, PowerShellSymbolId symbol,
+            bool nativeNestedDeclaration = false)
         {
             Document = document;
             Syntax = syntax;
             Symbol = symbol;
+            NativeNestedDeclaration = nativeNestedDeclaration;
         }
 
         internal ParsedSourceDocument Document { get; }
         internal FunctionDefinitionAst Syntax { get; }
         internal PowerShellSymbolId Symbol { get; }
+        internal bool NativeNestedDeclaration { get; }
     }
 }

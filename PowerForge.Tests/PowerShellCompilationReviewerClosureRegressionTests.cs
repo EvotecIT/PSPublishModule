@@ -447,7 +447,7 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
         using var fixture = ArtifactFixture.Create(
             "$name = 'Get-Later'; try { $script:before = & $name } catch { $script:before = 'missing' }; " +
             "function Get-Later { [CmdletBinding()] param(); return 'later' }; " +
-            "function Get-Stable { [CmdletBinding()] param(); return 'stable' }; " +
+            "function Get-Stable { [CmdletBinding()] param(); return $script:before }; " +
             "Export-ModuleMember -Function Get-Later, Get-Stable",
             ".psm1");
         var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
@@ -458,13 +458,12 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
             PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true));
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
-        Assert.Equal(1, result.Manifest!.CompiledMethods);
-        Assert.Contains(result.Manifest.Diagnostics, static diagnostic =>
-            diagnostic.Message.Contains("command-availability timing", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(result.Manifest!.UnitDispositionLedger!.Entries, static unit =>
+            unit.Name == "Get-Later" && unit.EmittedClrMethod && !unit.EmittedBinaryCmdlet);
         var escapedPath = result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal);
         var run = Run("pwsh", "-NoProfile", "-NonInteractive", "-Command",
             $"Import-Module -Name '{escapedPath}' -Force; Get-Stable; Get-Later");
-        Assert.Equal((0, "stable" + Environment.NewLine + "later", string.Empty),
+        Assert.Equal((0, "missing" + Environment.NewLine + "later", string.Empty),
             (run.ExitCode, run.StandardOutput.Trim(), run.StandardError.Trim()));
     }
 
@@ -523,8 +522,8 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
             PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true));
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
-        Assert.Contains(result.Manifest!.Diagnostics, static diagnostic =>
-            diagnostic.Message.Contains("command-availability timing", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(result.Manifest!.UnitDispositionLedger!.Entries, static unit =>
+            unit.Name == "Get-Later" && unit.EmittedClrMethod && !unit.EmittedBinaryCmdlet);
         var escapedPath = result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal);
         var run = Run("pwsh", "-NoProfile", "-NonInteractive", "-Command",
             $"Import-Module -Name '{escapedPath}' -Force; Get-Before; Get-Later");

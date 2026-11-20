@@ -49,18 +49,26 @@ internal sealed partial class PowerShellBoundCSharpBackend
             });
             foreach (var body in emitted.NestedBodies)
                 nestedBodies.Add(body.WithSourceMap(body.SourceMap.Select(entry => shiftedMaps[entry]).ToArray()));
+            var deferredDeclaration = block.DeclarationName is not null && binding.UsesDeferredTypeBinding;
             builder.Append("    private static global::System.Management.Automation.ScriptBlock ")
                 .Append(NativeScriptBlockFactoryName(block.Target))
                 .AppendLine("(global::PowerForge.Generated.Runtime.PowerShellNativeFunctionContext creationContext)")
                 .AppendLine("    {")
-                .Append(block.DeclarationName is not null ? "        return creationContext.CreateFunctionBody(" :
+                .Append(deferredDeclaration ? "        return creationContext.CreateDeferredFunctionBody(" :
+                    block.DeclarationName is not null ? "        return creationContext.CreateFunctionBody(" :
                     block.IsSwitchPredicate ? "        return creationContext.CreateSwitchPredicate(" : "        return creationContext.CreateScriptBlock(")
                 .Append(_nativeSourceDocuments.Reference(block.SourceDocument))
-                .Append(", ").Append(block.Span.StartOffset).Append(", ").Append(block.Span.EndOffset).AppendLine(",")
+                .Append(", ").Append(block.Span.StartOffset).Append(", ").Append(block.Span.EndOffset).AppendLine(",");
+            if (block.DeclarationName is not null)
+                builder.Append("            new string[] { ").Append(string.Join(", ", binding.LocalNames.Select(PowerShellCSharpLiteral.QuoteString))).AppendLine(" },")
+                    .Append("            new string[] { ").Append(string.Join(", ", binding.LocalTypeDeclarations.Select(PowerShellCSharpLiteral.QuoteString))).AppendLine(" },");
+            builder
                 .Append("            ").Append(Callback(binding.HasBegin, 0)).AppendLine(",")
                 .Append("            ").Append(Callback(binding.HasProcess, 1)).AppendLine(",")
-                .Append("            ").Append(Callback(binding.HasEnd, 2)).AppendLine(",")
-                .Append("            ").Append(Callback(binding.HasClean, 3)).AppendLine(");")
+                .Append("            ").Append(Callback(binding.HasEnd, 2));
+            if (!deferredDeclaration)
+                builder.AppendLine(",").Append("            ").Append(Callback(binding.HasClean, 3));
+            builder.AppendLine(");")
                 .AppendLine("        static void Invoke(global::PowerForge.Generated.Runtime.PowerShellNativeFunctionContext context, int clause)")
                 .AppendLine("        {");
             PowerShellNativeCallbackSource.AppendBody(builder, "            ", child.GeneratedName, string.Empty,

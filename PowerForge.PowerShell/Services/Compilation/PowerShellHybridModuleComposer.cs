@@ -44,11 +44,22 @@ internal static class PowerShellHybridModuleComposer
         bool manifestControlsExports = false,
         IEnumerable<string>? retainedSourcePaths = null)
     {
-        Token[] tokens;
-        ParseError[] errors;
-        var ast = Parser.ParseFile(sourcePath, out tokens, out errors);
+        var ast = Parser.ParseFile(sourcePath, out var tokens, out var errors);
         if (errors.Length > 0)
             throw new InvalidOperationException("Hybrid module source could not be parsed while composing fallback code.");
+        var initializer = typed.Methods.SingleOrDefault(static method => method.IsModuleInitializer &&
+            method.NativeFunctionBinding is not null);
+        if (initializer is not null)
+        {
+            var factory = typed.NamespaceName + "." + PowerShellNativeFunctionSourceGenerator.FactoryType(typed);
+            var typeDeclarations = string.Concat(ast.EndBlock!.Statements.OfType<TypeDefinitionAst>()
+                .Select(static declaration => declaration.Extent.Text + "\n"));
+            var parameters = ast.ParamBlock is { } paramBlock ? ast.Extent.Text.Substring(0, paramBlock.Extent.EndOffset) + "\n" : string.Empty;
+            return parameters + typeDeclarations + "Microsoft.PowerShell.Core\\Import-Module -Name ([System.IO.Path]::Combine($PSScriptRoot, '" +
+                   EscapePowerShellSingleQuotedString(assemblyFileName) + "')) -Force -ErrorAction Stop\n" +
+                   ". ([" + factory + "]::" + PowerShellNativeFunctionSourceGenerator.FactoryMethod(initializer) +
+                   "($ExecutionContext.SessionState.Module, $PSCommandPath, $MyInvocation, $PSBoundParameters)) @args\n";
+        }
 
         var prologueEndOffset = ast.ParamBlock?.Extent.EndOffset ?? 0;
         foreach (var usingStatement in ast.FindAll(static node => node is UsingStatementAst, searchNestedScriptBlocks: false).Cast<UsingStatementAst>())

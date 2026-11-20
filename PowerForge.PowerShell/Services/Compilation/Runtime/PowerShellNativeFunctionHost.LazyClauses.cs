@@ -7,7 +7,7 @@ namespace PowerForge.Generated.Runtime
     public static partial class PowerShellNativeFunctionHost
     {
         /// <summary>Installs callbacks without constructing parameter attributes before native invocation.</summary>
-        private static ScriptBlock InstallLazyCompiledClauses(ScriptBlock script,
+        internal static ScriptBlock InstallLazyCompiledClauses(ScriptBlock script,
             Action<PowerShellNativeFunctionContext>? begin, Action<PowerShellNativeFunctionContext>? process,
             Action<PowerShellNativeFunctionContext>? end, string[] functionTypeDeclarations)
         {

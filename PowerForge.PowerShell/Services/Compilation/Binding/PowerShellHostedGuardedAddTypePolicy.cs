@@ -82,20 +82,27 @@ internal static class PowerShellHostedGuardedAddTypePolicy
     }
 
     private static bool IsLiteralAddType(StatementAst statement)
+        => TryReadLiteralDefinition(statement, out _);
+
+    internal static bool TryReadLiteralDefinition(StatementAst statement, out string definition)
     {
+        definition = string.Empty;
         if (statement is not PipelineAst { PipelineElements.Count: 1 } pipeline ||
             pipeline.PipelineElements[0] is not CommandAst command ||
             command.InvocationOperator != TokenKind.Unknown || command.Redirections.Count != 0 ||
             !string.Equals(command.GetCommandName(), "Add-Type", StringComparison.OrdinalIgnoreCase))
             return false;
-        if (command.CommandElements.Count == 2)
-            return command.CommandElements[1] is StringConstantExpressionAst { Value.Length: > 0 };
-        if (command.CommandElements.Count != 3 ||
-            command.CommandElements[1] is not CommandParameterAst parameter ||
-            !parameter.ParameterName.Equals("TypeDefinition", StringComparison.OrdinalIgnoreCase) ||
-            parameter.Argument is not null ||
-            command.CommandElements[2] is not StringConstantExpressionAst { Value.Length: > 0 })
+        var source = command.CommandElements.Count switch
+        {
+            2 => command.CommandElements[1],
+            3 when command.CommandElements[1] is CommandParameterAst { Argument: null } parameter &&
+                   parameter.ParameterName.Equals("TypeDefinition", StringComparison.OrdinalIgnoreCase)
+                => command.CommandElements[2],
+            _ => null
+        };
+        if (source is not StringConstantExpressionAst { Value.Length: > 0 } literal)
             return false;
+        definition = literal.Value;
         return true;
     }
 }

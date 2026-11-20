@@ -45,7 +45,8 @@ internal sealed partial class PowerShellSemanticBinder
         PowerShellCompilationCapability capabilities,
         IDictionary<string, PowerShellBoundRegionCandidate>? regionCandidates = null,
         IDictionary<string, PowerShellBoundRegionOpportunity>? regionOpportunities = null,
-        bool requiresNativeInvocation = false)
+        bool requiresNativeInvocation = false,
+        bool nativeNestedDeclaration = false)
     {
         var functionDiagnosticStart = diagnostics.Count;
         ClearFunctionRegionEvidence(regionCandidates, regionOpportunities, document.Path, functionSymbol.Name);
@@ -54,9 +55,13 @@ internal sealed partial class PowerShellSemanticBinder
             requiresNativeInvocation || PowerShellScriptRequirementPolicy.UsesNativeModuleRequirements(document, capabilities) ||
                 string.Equals(document.NativeScriptRootName, function.Name, StringComparison.Ordinal) ||
                 document.GuardPackagedPathReads && PowerShellPackagedPathOperandPolicy.RequiresGuardIn(function.Body),
-            document.NativeDependencyTypes);
+            document.NativeDependencyTypes,
+            usesModuleScope: function.Name == PowerShellNativeModuleInitializerPolicy.MethodName &&
+                document.NativeScriptRootName == function.Name);
         if (nativeFunctionBinding?.UsesDeferredTypeBinding == true &&
-            (functionSymbol.Kind == PowerShellSymbolKind.NativeScriptBlock || nativeFunctionBinding.HasClean ||
+            (functionSymbol.Kind == PowerShellSymbolKind.NativeScriptBlock &&
+                 (!nativeNestedDeclaration || capabilities != PowerShellCompilationCapabilities.HybridModule || nativeFunctionBinding.DynamicParameterDeclaration is not null) ||
+             nativeFunctionBinding.HasClean ||
              nativeFunctionBinding.FunctionTypeDeclarations.Count != 0))
         {
             diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2962",

@@ -104,7 +104,9 @@ internal sealed partial class PowerShellSemanticBinder
                              searchNestedScriptBlocks: false)).Cast<UnaryExpressionAst>())
             {
                 if (excludedTailOffset.HasValue && unary.Extent.StartOffset >= excludedTailOffset.Value) continue;
-                if (PowerShellAssignmentTargetPolicy.FindDirectVariable(unary.Child) is not { } variable) continue;
+                var variable = PowerShellAssignmentTargetPolicy.FindDirectVariable(unary.Child) ??
+                               NativeAccessMutationReceiver(unary.Child);
+                if (variable is null) continue;
                 var name = variable.VariablePath.UserPath;
                 if (symbols.ContainsKey(name)) continue;
                 var span = PowerShellSourceParser.GetSpan(document, variable.Extent);

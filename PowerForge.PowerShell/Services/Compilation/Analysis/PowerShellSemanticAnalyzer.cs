@@ -439,6 +439,8 @@ internal sealed partial class PowerShellSemanticAnalyzer
     {
         var expression = GetExpression(statement);
         if (expression is not null) yield return expression;
+        if (statement is PowerShellBoundBreakStatement { CallerLabel: { } breakLabel }) yield return breakLabel;
+        if (statement is PowerShellBoundContinueStatement { CallerLabel: { } continueLabel }) yield return continueLabel;
         if (statement is PowerShellBoundIndexAssignmentStatement indexAssignment)
         {
             yield return indexAssignment.Target;

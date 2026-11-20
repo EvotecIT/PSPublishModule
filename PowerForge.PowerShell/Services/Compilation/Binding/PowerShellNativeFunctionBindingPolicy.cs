@@ -27,7 +27,8 @@ internal static class PowerShellNativeFunctionBindingPolicy
     internal static HashSet<string> FindInvocationClosure(IEnumerable<FunctionDefinitionAst> functions,
         PowerShellCompilationCapability capabilities,
         string? targetFramework,
-        PowerShellNativeDependencyTypes? dependencyTypes = null)
+        PowerShellNativeDependencyTypes? dependencyTypes = null,
+        ISet<string>? availabilitySensitiveFunctions = null)
     {
         var result = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         if (!capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding)) return result;
@@ -40,6 +41,7 @@ internal static class PowerShellNativeFunctionBindingPolicy
                 .Distinct(StringComparer.OrdinalIgnoreCase).Select(name => (Name: name!, Caller: caller)))
             .ToLookup(static edge => edge.Name, static edge => edge.Caller, StringComparer.OrdinalIgnoreCase);
         var pending = new Queue<FunctionDefinitionAst>(declarations.Values.Where(function =>
+            availabilitySensitiveFunctions?.Contains(function.Name) == true ||
             RequiresNativeBinding(function, targetFramework, capabilities) ||
             dependencyTypes?.IsUsedBy(function, capabilities) == true));
         while (pending.Count > 0)
@@ -60,7 +62,8 @@ internal static class PowerShellNativeFunctionBindingPolicy
     internal static PowerShellNativeFunctionBinding? Select(FunctionDefinitionAst function, PowerShellCompilationCapability capabilities,
         string? targetFramework,
         bool requiresNativeInvocation = false,
-        PowerShellNativeDependencyTypes? dependencyTypes = null)
+        PowerShellNativeDependencyTypes? dependencyTypes = null,
+        bool usesModuleScope = false)
     {
         if (!capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding) ||
             function.Body.DynamicParamBlock is not null && !SupportsDynamicParameters(function.Body, capabilities))
@@ -71,14 +74,16 @@ internal static class PowerShellNativeFunctionBindingPolicy
         var declaration = function.Body.ParamBlock is { } block
             ? string.Join("\n", block.Attributes.Select(static attribute => attribute.Extent.Text).Concat(new[] { block.Extent.Text }))
             : "param(" + string.Join(",", parameters.Select(static parameter => parameter.Extent.Text)) + ")";
-        var locals = PowerShellNativeVariableAnalysis.Analyze(function);
+        // Startup is dot-sourced into the importing module. Its assignments declare
+        // storage at their authored positions, including constraints loaded at runtime.
+        var locals = usesModuleScope ? Array.Empty<string>() : PowerShellNativeVariableAnalysis.Analyze(function);
         return new PowerShellNativeFunctionBinding(declaration, locals,
-            PowerShellNativeVariableAnalysis.FindLocalTypeDeclarations(function, locals),
+            usesModuleScope ? Array.Empty<string>() : PowerShellNativeVariableAnalysis.FindLocalTypeDeclarations(function, locals),
             function.Body.BeginBlock is not null, function.Body.ProcessBlock is not null,
             function.Body.EndBlock is not null, function.Body.GetType().GetProperty("CleanBlock")?.GetValue(function.Body) is not null,
             PowerShellHostedLocalTypePolicy.FindDeclarations(function).Select(static definition => definition.Extent.Text),
             function.Body.DynamicParamBlock?.Extent.Text,
-            dependencyTypes?.RequiresDeferredBinding(function) == true);
+            !usesModuleScope && dependencyTypes?.RequiresDeferredBinding(function) == true);
     }
 
     internal static bool SupportsDynamicParameters(ScriptBlockAst body, PowerShellCompilationCapability capabilities)
@@ -98,8 +103,8 @@ internal static class PowerShellNativeFunctionBindingPolicy
         => RequiresNativeBasicCommandHost(function, capabilities) ||
            function.Body.Find(static node =>
                node is ExitStatementAst ||
-               node is BreakStatementAst { Label: null } && !PowerShellControlFlowBindingPolicy.HasBreakableAncestor(node) ||
-               node is ContinueStatementAst { Label: null } && !PowerShellControlFlowBindingPolicy.HasContinuableAncestor(node),
+               node is BreakStatementAst && !PowerShellControlFlowBindingPolicy.HasBreakableAncestor(node) ||
+               node is ContinueStatementAst && !PowerShellControlFlowBindingPolicy.HasContinuableAncestor(node),
                searchNestedScriptBlocks: false) is not null ||
            SupportsDynamicParameters(function.Body, capabilities) ||
            function.Body.BeginBlock is not null || function.Body.ProcessBlock is not null ||

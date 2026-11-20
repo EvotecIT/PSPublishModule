@@ -80,11 +80,14 @@ namespace PowerForge.Generated.Runtime
             int endLine, int endColumn, string sourceText)
         {
             EnsureActive();
+            if (_moduleTypesOwner is not null && PowerShellNativeFunctionHost.FindModuleDeclaredType(_moduleTypesOwner, typeName) is { } declaredType)
+                return declaredType;
             var extent = PowerShellSourceExtent.Create(file, line, column, endLine, endColumn, sourceText);
             var authored = CreateRuntimeTypeName(typeName);
             return (Type)PowerShellNativeFunctionHost.Invoke(ResolveRuntimeTypeName.Value, null,
                 new[] { authored, extent })!;
         }
+
 
         // All names need the parser's type-resolution preparation, including simple
         // host types whose assembly is not yet available to a freshly constructed TypeName.

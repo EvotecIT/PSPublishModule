@@ -203,7 +203,9 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         var result = BuildResolvedModule(fixture.RootPath, fixture.OutputPath, "PowerForge.DualRoleHook");
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
-        Assert.Equal(0, result.Manifest!.CompiledMethods);
+        var units = result.Manifest!.UnitDispositionLedger!.Entries;
+        Assert.True(Assert.Single(units, unit => unit.Name == "<script>").EmittedClrMethod);
+        Assert.DoesNotContain(units, unit => unit.Name == "Get-SharedValue" && unit.EmittedClrMethod);
         var staged = Path.Combine(Path.GetDirectoryName(result.ArtifactPath!)!, "Shared.ps1");
         Assert.True(File.Exists(staged));
         Assert.Contains("function Get-SharedValue", File.ReadAllText(staged), StringComparison.OrdinalIgnoreCase);

@@ -16,21 +16,24 @@ manifest shows which methods compiled and where the artifact relies on PowerShel
 | Selected CLR members, typed exceptions, bounded `try`/`catch`/`finally` | Supported where analysis proves the contract | Runtime type lookup and unsupported exception behavior |
 | Cmdlet calls and multi-stage pipelines in admitted Hybrid functions | Generally unsupported in Strict | PowerShell runs stages such as `ForEach-Object`, `Where-Object` and `Select-Object` inside compiled function bodies. Parameter binding, streams and downstream stopping use the active host |
 | Advanced parameters and `begin`/`process`/`end` | No general runtime-free binding support | Native-bound Hybrid functions preserve binding and lifecycle; native executable script roots also support these clauses on the explicit `net10.0` Windows x64 target, with every clause checked |
-| Functions beside authored classes | No general runtime-free authored-class support | Hybrid retains type initialization. Qualified function-local data classes preserve lexical identity, typed arrays, property validation, conversions, and static reads in the declaring function. Class references from separate script blocks stay in hosted source |
+| Module-scoped classes and enums | No general runtime-free authored-type support | Hybrid can compile functions that construct module-defined types, use them in local storage, and expose them in output metadata. PowerShell defines the types and runs their methods |
+| Function-local data classes | No general runtime-free authored-class support | Qualified functions preserve lexical identity, typed arrays, property validation, conversions, and static reads. References from separate script blocks require the defining scope |
 | Delivered managed dependency types in parameters, casts and metadata | No general dependency-type binding support | Hybrid reads authenticated delivered DLL metadata, including supported closed public generics. PowerShell handles loading, type identity, conversion, attributes and validation |
 | Types supplied by a declared Windows system module | Unsupported in Strict | Hybrid locks metadata from qualified system module manifests and assemblies for the matching Windows architecture. PowerShell resolves the declared module and binds the actual objects at invocation |
-| Type use after a literal `Add-Type` load | Unsupported in Strict | Hybrid supports static access after an admitted earlier load in the same block. PowerShell compiles or resolves the declaration, and the invocation owns assignment and conversion |
+| Types loaded during module setup | Unsupported in Strict | Hybrid can bind types from an authored literal `Add-Type` load or a locked, directly dot-sourced class file. PowerShell resolves the type when the function is invoked and reports missing types through its binding rules |
 | Borrowed SDK objects, syntax-tree nodes, parameter metadata and completion enums | No general runtime-free host-type support | Native Hybrid binding preserves identity for admitted session, variable, cmdlet, dynamic-parameter and AST types; the host owns conversion and mutation |
 | Returned script-block literals and literals in arrays or dictionaries | Unsupported in Strict | Admitted Hybrid module-function bodies compile completely and retain native dynamic scope, module state, closure capture, failures and later invocation; executable roots and functions needing that module owner remain hosted |
-| Literal type aliases registered for delivered managed types | Unsupported in Strict | Authenticated delivered registration scripts identify aliases without executing them during compilation; native invocation resolves parameter aliases after initialization. Nested alias callbacks, local type declarations and `clean` remain guarded |
+| Literal type aliases registered for delivered managed types | Unsupported in Strict | Authenticated delivered registration scripts identify aliases without executing them during compilation. PowerShell resolves the aliases at invocation, including in admitted nested function declarations and casts |
 | Local callers of native-bound functions | No general native binding in Strict | The call graph selects native invocation storage for callers and callees, preserving basic extra arguments and advanced parameter binding |
 | Multiple assignment to local variables | Unsupported in Strict | Hybrid preserves the number of pipeline records and the assignment order. A single array record stays together |
-| Same-file repeated root function declarations | Unsupported in Strict | Hybrid registers each supported body at its declaration, preserving calls made during module import |
+| Function declarations and file loads | Unsupported in Strict | Hybrid registers each supported body at its declaration and preserves command availability before and after a source file loads |
+| Script module startup and `data` statements | No general runtime-free module startup | A qualifying single-file Hybrid module can compile startup assignments, control flow and function declarations. PowerShell binds import arguments, processes dynamic parameters, initializes authored types and runs admitted command and `data` operations in the importing module's scope |
+| Script blocks supplied to native callbacks | Unsupported in Strict | Hybrid can compile the surrounding function while PowerShell invokes the callback and handles `$using:` capture, traps and cleanup |
 | Literal wildcard and bounded exact `switch` clauses | Within the typed scalar rules | Hybrid preserves host matching and enumeration for supported wildcard literals, numeric literals and exact variable labels |
 | Scoped storage and borrowed host values | Within the typed local and module-state rules | Hybrid handles supported nested script-scope index updates, direct environment reads under a conversion and access to selected SDK or directory objects with native identity |
 | Simple installed-module names in `#requires -Modules` | Unsupported in Strict | Hybrid keeps the directive in the module script. PowerShell loads required modules before its function declarations run |
 | Legacy `ModuleToProcess` module manifests | Subject to the same body checks | Generated modules preserve the legacy root key and its referenced artifact; declaring both root keys is rejected |
-| Unlabeled `break` and `continue` targeting a caller's loop | No general runtime-free caller transfer | Native Hybrid functions use PowerShell flow control, including finally and caller-loop behavior |
+| `break` and `continue` targeting a caller's loop | No general runtime-free caller transfer | Native Hybrid functions use PowerShell flow control for unlabeled transfers and admitted literal or computed labels. The caller's matching loop handles the transfer after `finally` runs |
 | `exit` in admitted Hybrid functions | Unsupported in Strict | The active PowerShell SDK owns exit conversion and script termination; caller-transfer predicates remain hosted |
 | Providers, remoting, dynamic script blocks | No general Strict support | Hybrid or Package uses the supported hosted paths; provider or service behavior needs separate execution proof |
 | Dynamic commands, `Invoke-Expression`, authored classes, WPF | No general runtime-free support | Retained source or explicitly supported hosted paths |
@@ -95,10 +98,10 @@ Locksmith2 emits and exercises all 100 owned functions across a read-only lab
 audit and four local scenarios on PowerShell 7.6.6. Live hardware, Graph
 registration, directory changes and global installations are outside the
 measured scenarios.
-The public Gallery packet emits **720/753 (95.62%)** of its units as complete CLR
-methods, up from 114/753 (15.14%) and the preceding 682/753 measurement. Pester
-emits 478/491 and PSFramework emits 166/176. The other eight modules keep their
-complete-method counts. All ten Hybrid artifacts pass the invocation probes.
+The public Gallery packet emits **753/753 (100%)** of its units as complete CLR
+methods, up from 114/753 (15.14%) and the preceding 720/753 measurement. Pester
+emits 491/491 and PSFramework emits 176/176. All ten Hybrid artifacts build,
+import, and pass their invocation probes.
 Neither packet measures the percentage of the PowerShell language supported.
 The maintainer's five-module packet is separate, targeted historical evidence.
 

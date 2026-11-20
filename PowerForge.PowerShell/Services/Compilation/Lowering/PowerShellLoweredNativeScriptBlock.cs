@@ -18,3 +18,14 @@ internal sealed class PowerShellLoweredNativeScriptBlockExpression : PowerShellL
     internal string? DeclarationName { get; }
     internal bool IsSwitchPredicate { get; }
 }
+
+internal sealed class PowerShellLoweredTransportedScriptBlockExpression : PowerShellLoweredExpression
+{
+    internal PowerShellLoweredTransportedScriptBlockExpression(SourceSpan span, string sourceDocument)
+        : base(span, typeof(System.Management.Automation.ScriptBlock))
+    {
+        SourceDocument = sourceDocument;
+    }
+
+    internal string SourceDocument { get; }
+}

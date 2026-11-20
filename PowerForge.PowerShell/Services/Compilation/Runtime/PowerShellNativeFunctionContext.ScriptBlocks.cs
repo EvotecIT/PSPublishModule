@@ -3,6 +3,7 @@ namespace PowerForge.Generated.Runtime
     using System;
     using System.Collections.Generic;
     using System.Management.Automation;
+    using System.Management.Automation.Language;
     using System.Reflection;
     using System.Runtime.CompilerServices;
 
@@ -54,5 +55,26 @@ namespace PowerForge.Generated.Runtime
             return PowerShellNativeFunctionHost.CreateCompiledScriptBlock(module, sourceDocument, file, startOffset, endOffset,
                 begin, process, end, clean);
         }
+
+        /// <summary>Creates a callback value for invocation by the receiving PowerShell host.</summary>
+        public ScriptBlock CreateTransportedScriptBlock(string sourceDocument, int startOffset, int endOffset)
+        {
+            EnsureActive();
+            var module = _session.Module ?? throw new NotSupportedException("A transported block requires a defining module.");
+            var file = _contract.DefiningFile.GetValue(FunctionContext) as string ?? string.Empty;
+            var document = PowerShellNativeFunctionHost.ParseSelectedDocument(sourceDocument, file, startOffset, endOffset);
+            if (_moduleTypesOwner is not null)
+                PowerShellNativeFunctionHost.AttachModuleTypeMetadata(document, _moduleTypesOwner);
+            var expression = document.Find(node => node is ScriptBlockExpressionAst &&
+                node.Extent.StartOffset == startOffset && node.Extent.EndOffset == endOffset,
+                searchNestedScriptBlocks: true) as ScriptBlockExpressionAst;
+            if (expression is null || !RequiresNativeCallbackBody(expression.ScriptBlock))
+                throw new ArgumentException("A transported block requires its authored capture or error-handling statements.", nameof(sourceDocument));
+            return module.NewBoundScriptBlock(expression.ScriptBlock.GetScriptBlock());
+        }
+
+        internal static bool RequiresNativeCallbackBody(ScriptBlockAst body)
+            => body.Find(static node => node is UsingExpressionAst or TrapStatementAst or TryStatementAst { Finally: not null },
+                searchNestedScriptBlocks: false) is not null;
     }
 }

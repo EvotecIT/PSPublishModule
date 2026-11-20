@@ -132,8 +132,7 @@ namespace PowerForge.Generated.Runtime
             => expression is MemberExpressionAst { Static: false, Member: StringConstantExpressionAst } member &&
                member is not InvokeMemberExpressionAst &&
                member.GetType().GetProperty("NullConditional")?.GetValue(member) is not true &&
-               (member.Expression is VariableExpressionAst { VariablePath.IsUnqualified: true } ||
-                IsNativeAssignmentKeyMember(member.Expression));
+               FindNativeAccessMutationReceiver(member.Expression) is not null;
 
         private static bool IsNativeAssignmentIndexPipeline(PipelineAst pipeline, bool allowCommand = false)
             => pipeline.PipelineElements.Count == 1 && !IsBackgroundAssignmentPipeline(pipeline) &&
@@ -157,10 +156,7 @@ namespace PowerForge.Generated.Runtime
                receiver.VariablePath.IsUnqualified ||
                expression is SubExpressionAst { SubExpression.Statements.Count: 1 } sub &&
                (sub.SubExpression.Traps is null || sub.SubExpression.Traps.Count == 0) &&
-               sub.SubExpression.Statements[0] is PipelineAst { PipelineElements.Count: 1 } pipeline &&
-               !IsBackgroundAssignmentPipeline(pipeline) &&
-               pipeline.PipelineElements[0] is CommandExpressionAst { Redirections.Count: 0 } command &&
-               IsNativeAssignmentInterpolation(command.Expression);
+               sub.SubExpression.Statements[0] is PipelineAst pipeline && IsNativeAssignmentIndexPipeline(pipeline, allowCommand: true);
 
         private static bool IsBackgroundAssignmentPipeline(PipelineAst pipeline)
             => pipeline.GetType().GetProperty("Background")?.GetValue(pipeline) is true;

@@ -286,24 +286,32 @@ internal sealed class PowerShellBoundTryStatement : PowerShellBoundStatement
 
 internal sealed class PowerShellBoundBreakStatement : PowerShellBoundStatement
 {
-    internal PowerShellBoundBreakStatement(SourceSpan span, SourceSpan? targetLoop = null, bool transferToCaller = false)
-        : base(span, transferToCaller ? PowerShellSemanticEffect.Host : PowerShellSemanticEffect.None)
+    internal PowerShellBoundBreakStatement(SourceSpan span, SourceSpan? targetLoop = null, bool transferToCaller = false,
+        PowerShellBoundExpression? callerLabel = null)
+        : base(span, (transferToCaller ? PowerShellSemanticEffect.Host : PowerShellSemanticEffect.None) |
+            (callerLabel?.Effects ?? PowerShellSemanticEffect.None))
     {
         TargetLoop = targetLoop;
         TransferToCaller = transferToCaller;
+        CallerLabel = callerLabel;
     }
     internal SourceSpan? TargetLoop { get; }
     internal bool TransferToCaller { get; }
+    internal PowerShellBoundExpression? CallerLabel { get; }
 }
 
 internal sealed class PowerShellBoundContinueStatement : PowerShellBoundStatement
 {
-    internal PowerShellBoundContinueStatement(SourceSpan span, SourceSpan? targetLoop = null, bool transferToCaller = false)
-        : base(span, transferToCaller ? PowerShellSemanticEffect.Host : PowerShellSemanticEffect.None)
+    internal PowerShellBoundContinueStatement(SourceSpan span, SourceSpan? targetLoop = null, bool transferToCaller = false,
+        PowerShellBoundExpression? callerLabel = null)
+        : base(span, (transferToCaller ? PowerShellSemanticEffect.Host : PowerShellSemanticEffect.None) |
+            (callerLabel?.Effects ?? PowerShellSemanticEffect.None))
     {
         TargetLoop = targetLoop;
         TransferToCaller = transferToCaller;
+        CallerLabel = callerLabel;
     }
     internal SourceSpan? TargetLoop { get; }
     internal bool TransferToCaller { get; }
+    internal PowerShellBoundExpression? CallerLabel { get; }
 }

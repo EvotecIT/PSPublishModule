@@ -18,6 +18,19 @@ internal sealed partial class PowerShellSemanticBinder
     {
         if (documents is null) throw new ArgumentNullException(nameof(documents));
         var orderedDocuments = documents.OrderBy(static item => item.DocumentId, StringComparer.Ordinal).ToArray();
+        if (capabilities == PowerShellCompilationCapabilities.HybridModule)
+        {
+            var runtimeLoadedTypes = PowerShellModuleTypeLoadPolicy.Discover(orderedDocuments);
+            if (runtimeLoadedTypes.Count != 0)
+                orderedDocuments = orderedDocuments.Select(document =>
+                    document.WithNativeDependencyTypes(document.NativeDependencyTypes.WithRuntimeLoadedTypes(runtimeLoadedTypes))).ToArray();
+            orderedDocuments = orderedDocuments.Select(static document =>
+                document.NativeScriptRootName == PowerShellNativeModuleInitializerPolicy.MethodName &&
+                document.TypeClosure.Declarations.Length > 0
+                    ? document.WithNativeDependencyTypes(document.NativeDependencyTypes.WithModuleDeclaredTypes(
+                        document.TypeClosure.Declarations.Select(static declaration => declaration.Name)))
+                    : document).ToArray();
+        }
         var diagnostics = new List<PowerShellSemanticDiagnostic>();
         _runtimeFreeModule = capabilities.HasFlag(PowerShellCompilationCapability.RuntimeFreeModuleState)
             ? PowerShellRuntimeFreeModuleDefinition.Discover(orderedDocuments, diagnostics, _commandResolver, capabilities) : null;
@@ -31,9 +44,18 @@ internal sealed partial class PowerShellSemanticBinder
                 new PowerShellSymbolId(PowerShellSymbolKind.ModuleInitializer, _runtimeFreeModule.Document.DocumentId,
                     _runtimeFreeModule.Initializer.Name, PowerShellSourceParser.GetSpan(_runtimeFreeModule.Document,
                         _runtimeFreeModule.Initializer.Extent)))).ToArray();
+        var availabilitySensitiveFunctions = capabilities == PowerShellCompilationCapabilities.HybridModule
+            ? PowerShellHybridFunctionCollisionResolver.FindAvailabilitySensitiveFunctions(
+                orderedDocuments.Select(static document => (document.Path, document.SyntaxRoot)),
+                declarations.Where(static declaration => declaration.Symbol.Kind == PowerShellSymbolKind.Function)
+                    .Select(static declaration => (declaration.Document.Path, declaration.Syntax)))
+            : null;
+        availabilitySensitiveFunctions?.UnionWith(declarations.Where(declaration =>
+                declaration.Document.NativeDependencyTypes.IsUsedBy(declaration.Syntax, capabilities))
+            .Select(static declaration => declaration.Syntax.Name));
         var nativeInvocationClosure = PowerShellNativeFunctionBindingPolicy.FindInvocationClosure(
             declarations.Select(static declaration => declaration.Syntax), capabilities, targetFramework,
-            orderedDocuments.FirstOrDefault()?.NativeDependencyTypes);
+            orderedDocuments.FirstOrDefault()?.NativeDependencyTypes, availabilitySensitiveFunctions);
         var numericErrorObservedCallees = PowerShellRuntimeExceptionCatchPolicy.FindNumericErrorObservedCallees(orderedDocuments);
         var conditionalNames = orderedDocuments.SelectMany(static document => document.RootFunctionDeclarations)
             .Where(declaration => declaration.UsesConditionalNativeBinding(capabilities))
@@ -102,7 +124,8 @@ internal sealed partial class PowerShellSemanticBinder
                         : null,
                     declaration.Symbol.Kind is PowerShellSymbolKind.NativeScriptBlock or PowerShellSymbolKind.ConditionalFunction ||
                     nativeInvocationClosure.Contains(declaration.Syntax.Name) ||
-                    declaration.Document.PreserveFunctionDeclarationTiming);
+                    declaration.Document.PreserveFunctionDeclarationTiming,
+                    declaration.NativeNestedDeclaration);
                 // An unresolved authored parameter keeps the function hosted. Its native
                 // binding may still yield safe prefix regions, while an ordinary hosted
                 // binding can independently prove a detached terminal region. Evaluate

@@ -10,21 +10,31 @@ using MethodAttributes = System.Reflection.MethodAttributes;
 
 namespace PowerForge;
 
-/// <summary>Metadata-only identities from locked module dependencies. Never loads dependency code.</summary>
+/// <summary>Type names supplied by locked dependencies and authored module declarations.</summary>
+/// <remarks>PowerShell resolves the actual types in the active module.</remarks>
 internal sealed class PowerShellNativeDependencyTypes
 {
     internal static readonly PowerShellNativeDependencyTypes Empty = new(new HashSet<string>(StringComparer.OrdinalIgnoreCase));
     private readonly HashSet<string> _names;
     private readonly HashSet<string> _aliases;
     private readonly HashSet<string> _moduleLocalClasses;
+    private readonly HashSet<string> _runtimeLoadedTypes;
 
     private PowerShellNativeDependencyTypes(HashSet<string> names, HashSet<string>? aliases = null,
-        HashSet<string>? moduleLocalClasses = null)
+        HashSet<string>? moduleLocalClasses = null, HashSet<string>? runtimeLoadedTypes = null)
     {
         _names = names;
         _aliases = aliases ?? new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         _moduleLocalClasses = moduleLocalClasses ?? new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        _runtimeLoadedTypes = runtimeLoadedTypes ?? new HashSet<string>(StringComparer.OrdinalIgnoreCase);
     }
+
+    internal PowerShellNativeDependencyTypes WithRuntimeLoadedTypes(HashSet<string> names)
+        => names.Count == 0 ? this : new PowerShellNativeDependencyTypes(_names, _aliases, _moduleLocalClasses,
+            _runtimeLoadedTypes.Count == 0 ? names : _runtimeLoadedTypes.Concat(names).ToHashSet(StringComparer.OrdinalIgnoreCase));
+
+    internal PowerShellNativeDependencyTypes WithModuleDeclaredTypes(IEnumerable<string> names)
+        => new(_names.Concat(names).ToHashSet(StringComparer.OrdinalIgnoreCase), _aliases, _moduleLocalClasses, _runtimeLoadedTypes);
 
     /// <summary>Identifies a locked authored class also loaded by the module's contained loader.</summary>
     internal bool IsModuleLocalClass(ITypeName name, PowerShellCompilationCapability capabilities)
@@ -32,13 +42,16 @@ internal sealed class PowerShellNativeDependencyTypes
 
     internal bool RequiresDeferredBinding(FunctionDefinitionAst function)
         => PowerShellParameterSyntax.GetParameters(function.Body).Any(parameter =>
-               parameter.Attributes.OfType<TypeConstraintAst>().Any(constraint => ContainsAlias(constraint.TypeName))) ||
-           function.Body.Find(node => node is TypeConstraintAst constraint && ContainsAlias(constraint.TypeName),
+               parameter.Attributes.OfType<TypeConstraintAst>().Any(constraint => ContainsDeferredType(constraint.TypeName))) ||
+           function.Body.Find(node => node is AssignmentStatementAst { Left: AttributedExpressionAst target } &&
+               target.Find(type => type is TypeConstraintAst constraint && ContainsDeferredType(constraint.TypeName),
+                   searchNestedScriptBlocks: false) is not null,
                searchNestedScriptBlocks: false) is not null;
 
-    private bool ContainsAlias(ITypeName name)
-        => _aliases.Contains(name.FullName) || name is ArrayTypeName array && ContainsAlias(array.ElementType) ||
-           name is GenericTypeName generic && generic.GenericArguments.Any(ContainsAlias);
+    private bool ContainsDeferredType(ITypeName name)
+        => _aliases.Contains(name.FullName) || _runtimeLoadedTypes.Contains(name.FullName) ||
+           name is ArrayTypeName array && ContainsDeferredType(array.ElementType) ||
+           name is GenericTypeName generic && generic.GenericArguments.Any(ContainsDeferredType);
 
     /// <summary>Only the active native binder may resolve these authored names; no CLR reference is inferred.</summary>
     internal bool Qualifies(ITypeName name, PowerShellCompilationCapability capabilities)
@@ -79,7 +92,7 @@ internal sealed class PowerShellNativeDependencyTypes
             return true;
         }
         if (name is not TypeName || name.FullName.IndexOf('`') >= 0) return false;
-        if (_names.Contains(name.FullName)) return containsDependency = true;
+        if (_names.Contains(name.FullName) || _runtimeLoadedTypes.Contains(name.FullName)) return containsDependency = true;
         return name.GetReflectionType() is { } known &&
                PowerShellCompilationParameterTypePolicy.CanUseInMethod(known, "net472", capabilities);
     }
@@ -161,15 +174,15 @@ internal sealed class PowerShellNativeDependencyTypes
             .Where(static value => !Path.IsPathRooted(value) && value.EndsWith(".ps1", StringComparison.OrdinalIgnoreCase))
             .Select(value => Path.GetFullPath(Path.Combine(root, PowerShellCompiledModuleManifest.NormalizeManifestRelativePath(value))))
             .ToArray();
-        var moduleLocalSources = declaredScripts.Length == 0
-            ? new HashSet<string>(PowerShellCompilationPathSafety.PathComparer)
-            : ReadModuleLocalSources(manifestPath!, root);
+        var moduleLocalSources = ReadModuleLocalSources(manifestPath!, root, declaredScripts.Length != 0,
+            out var literalDotSources);
         var moduleLocalClasses = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var path in declaredScripts)
+        foreach (var path in declaredScripts.Concat(literalDotSources).Distinct(PowerShellCompilationPathSafety.PathComparer))
         {
             PowerShellCompilationPathSafety.EnsureContained(root, path, "Authored class declaration must stay inside the root module.");
             PowerShellCompilationPathSafety.EnsureNoLinksFromFileSystemRoot(path, "Authored class declaration must not traverse links.");
-            var delivered = dependencies.Where(dependency => dependency.Discovery == PowerShellCompilationDependencyDiscovery.ScriptsToProcess &&
+            var delivered = dependencies.Where(dependency =>
+                (dependency.Discovery == PowerShellCompilationDependencyDiscovery.ScriptsToProcess || literalDotSources.Contains(path)) &&
                 dependency.Kind == PowerShellCompilationDependencyKind.PowerShellSource && dependency.Exists &&
                 dependency.Disposition == PowerShellCompilationDependencyDisposition.CopiedAdjacent &&
                 dependency.SourcePath is not null && PowerShellCompilationPathSafety.PathEquals(dependency.SourcePath, path)).ToArray();
@@ -202,16 +215,34 @@ internal sealed class PowerShellNativeDependencyTypes
             moduleLocalClasses);
     }
 
-    private static HashSet<string> ReadModuleLocalSources(string manifestPath, string root)
+    private static HashSet<string> ReadModuleLocalSources(string manifestPath, string root, bool includeConventional,
+        out HashSet<string> literalDotSources)
     {
         var relativeEntry = PowerShellCompiledModuleManifest.ReadRootModule(manifestPath);
         var paths = new HashSet<string>(PowerShellCompilationPathSafety.PathComparer);
+        literalDotSources = new HashSet<string>(PowerShellCompilationPathSafety.PathComparer);
         if (relativeEntry is null || !relativeEntry.EndsWith(".psm1", StringComparison.OrdinalIgnoreCase) ||
             Path.IsPathRooted(relativeEntry)) return paths;
         var entry = Path.GetFullPath(Path.Combine(root, PowerShellCompiledModuleManifest.NormalizeManifestRelativePath(relativeEntry)));
         PowerShellCompilationPathSafety.EnsureContained(root, entry, "Module class loader must stay inside the root module.");
         PowerShellCompilationPathSafety.EnsureNoLinksFromFileSystemRoot(entry, "Module class loader must not traverse links.");
-        if (File.Exists(entry)) paths.UnionWith(PowerShellConventionalModuleSourceDiscovery.Analyze(entry).SourcePaths);
+        if (!File.Exists(entry)) return paths;
+        if (includeConventional) paths.UnionWith(PowerShellConventionalModuleSourceDiscovery.Analyze(entry).SourcePaths);
+        var ast = Parser.ParseFile(entry, out _, out var errors);
+        if (errors.Length != 0) return paths;
+        foreach (var command in ast.FindAll(static node => node is CommandAst { InvocationOperator: TokenKind.Dot },
+                     searchNestedScriptBlocks: false).OfType<CommandAst>())
+        {
+            if (!PowerShellCompilationSourcePathPlanner.TryPlan(ast, command, allowDerivedPaths: false, out var fact) ||
+                !fact!.RelativePath.EndsWith(".ps1", StringComparison.OrdinalIgnoreCase) ||
+                fact.RelativePath.IndexOf(':') >= 0 || fact.RelativePath.IndexOfAny(Path.GetInvalidPathChars()) >= 0)
+                continue;
+            var path = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(entry)!,
+                PowerShellCompiledModuleManifest.NormalizeManifestRelativePath(fact.RelativePath)));
+            if (PowerShellCompilationPathSafety.PathStartsWith(path, root.TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar))
+                literalDotSources.Add(path);
+        }
+        paths.UnionWith(literalDotSources);
         return paths;
     }
 

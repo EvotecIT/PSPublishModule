@@ -439,6 +439,12 @@ internal sealed partial class PowerShellSemanticBinder
                 PowerShellControlFlowBindingPolicy.FindLocalLabeledLoop(labeledBreak, labeledBreak.Label) is { } targetLoop)
                 return new PowerShellBoundBreakStatement(PowerShellSourceParser.GetSpan(document, labeledBreak.Extent),
                     PowerShellSourceParser.GetSpan(document, targetLoop.Extent));
+            if (capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding) &&
+                !PowerShellControlFlowBindingPolicy.HasBreakableAncestor(labeledBreak) &&
+                BindExpression(document, labeledBreak.Label, symbols, functions, diagnostics,
+                    targetFramework: targetFramework, capabilities: capabilities) is { } callerLabel)
+                return new PowerShellBoundBreakStatement(PowerShellSourceParser.GetSpan(document, labeledBreak.Extent),
+                    transferToCaller: true, callerLabel: callerLabel);
             diagnostics.Add(new PowerShellSemanticDiagnostic(
                 "PSB2313",
                 "Labeled break requires a literal label resolving to one enclosing native loop in the same authored body.",
@@ -461,6 +467,12 @@ internal sealed partial class PowerShellSemanticBinder
                 PowerShellControlFlowBindingPolicy.FindLocalLabeledLoop(labeledContinue, labeledContinue.Label) is { } targetLoop)
                 return new PowerShellBoundContinueStatement(PowerShellSourceParser.GetSpan(document, labeledContinue.Extent),
                     PowerShellSourceParser.GetSpan(document, targetLoop.Extent));
+            if (capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding) &&
+                !PowerShellControlFlowBindingPolicy.HasContinuableAncestor(labeledContinue) &&
+                BindExpression(document, labeledContinue.Label, symbols, functions, diagnostics,
+                    targetFramework: targetFramework, capabilities: capabilities) is { } callerLabel)
+                return new PowerShellBoundContinueStatement(PowerShellSourceParser.GetSpan(document, labeledContinue.Extent),
+                    transferToCaller: true, callerLabel: callerLabel);
             diagnostics.Add(new PowerShellSemanticDiagnostic(
                 "PSB2315",
                 "Labeled continue requires a literal label resolving to one enclosing native loop in the same authored body.",
@@ -477,6 +489,9 @@ internal sealed partial class PowerShellSemanticBinder
                 PowerShellSourceParser.GetSpan(document, invalidContinue.Extent)));
             return null;
         }
+        if (capabilities == PowerShellCompilationCapabilities.HybridModule && statement is DataStatementAst data)
+            return PowerShellCommandRegionSemanticBinder.BindNativeData(document, data, _commandResolver,
+                functions.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase), capabilities);
         if (TryBindStatementDiscard(document, statement, symbols, functions, diagnostics, targetFramework, capabilities, out var discard))
             return discard;
         if (statement is PipelineAst { PipelineElements.Count: 1 } streamPipeline &&
@@ -553,6 +568,11 @@ internal sealed partial class PowerShellSemanticBinder
         }
         if (statement is PipelineAst pipeline)
         {
+            if (isTerminal && capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding) &&
+                FindTerminalBooleanConditional(pipeline) is { } conditional)
+                return BindStatementCore(document, conditional, symbols, functions, diagnostics, isTerminal,
+                    targetFramework, capabilities, allowNonTerminalSuccessOutput, nonTerminalSuccessOutputType);
+
             var expression = BindExpression(
                 document,
                 pipeline,

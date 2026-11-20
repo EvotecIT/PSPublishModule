@@ -64,9 +64,48 @@ namespace PowerForge.Generated.Runtime
             .GetProperty("Type", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
             ?? throw new NotSupportedException("PowerShell's authored type identity is unavailable."));
 
+        internal static void AttachModuleTypeMetadata(ScriptBlockAst document, NamedBlockAst owner)
+        {
+            foreach (var definition in document.EndBlock?.Statements.OfType<TypeDefinitionAst>() ?? Enumerable.Empty<TypeDefinitionAst>())
+            {
+                var retained = owner.Statements.OfType<TypeDefinitionAst>().SingleOrDefault(candidate =>
+                    candidate.Name.Equals(definition.Name, StringComparison.OrdinalIgnoreCase) &&
+                    candidate.Extent.Text.Replace("\r\n", "\n") == definition.Extent.Text.Replace("\r\n", "\n"));
+                if (retained is not null && RuntimeDeclaredType.Value.GetValue(retained, null) is Type type)
+                    RuntimeDeclaredType.Value.SetValue(definition, type, null);
+            }
+        }
+
+        internal static NamedBlockAst? FindModuleTypeOwner(Ast declaration)
+        {
+            var root = declaration;
+            while (root.Parent is { } parent) root = parent;
+            return root is ScriptBlockAst { EndBlock: { } body } && body.Statements.Any(static statement => statement is TypeDefinitionAst)
+                ? body : null;
+        }
+
+        internal static Type? FindModuleDeclaredType(NamedBlockAst owner, string name)
+        {
+            var elementName = name.EndsWith("[]", StringComparison.Ordinal) ? name.Substring(0, name.Length - 2) : name;
+            var declaration = owner.Statements.OfType<TypeDefinitionAst>().SingleOrDefault(type =>
+                type.Name.Equals(elementName, StringComparison.OrdinalIgnoreCase));
+            if (declaration is null || RuntimeDeclaredType.Value.GetValue(declaration, null) is not Type declaredType) return null;
+            return elementName.Length == name.Length ? declaredType : declaredType.MakeArrayType();
+        }
+
         // Cloned native blocks share compilation data. Associate only explicitly validated
         // compiler-owned frames with that data, without retaining unloaded functions globally.
         private static readonly ConditionalWeakTable<object, FunctionTypeScope> FunctionTypeScopes = new();
+        private static readonly ConditionalWeakTable<object, NamedBlockAst> ModuleTypeOwners = new();
+
+        internal static void RegisterModuleTypeOwner(ScriptBlock script, NamedBlockAst? owner)
+        {
+            if (owner is not null) ModuleTypeOwners.Add(NativeContract.Shared.Data.GetValue(script)!, owner);
+        }
+
+        internal static NamedBlockAst? FindModuleTypeOwner(ScriptBlock script)
+            => ModuleTypeOwners.TryGetValue(NativeContract.Shared.Data.GetValue(script)!, out var owner)
+                ? owner : FindModuleTypeOwner(script.Ast);
 
         internal sealed class FunctionTypeScope
         {

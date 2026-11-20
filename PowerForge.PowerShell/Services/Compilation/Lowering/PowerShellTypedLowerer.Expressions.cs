@@ -12,6 +12,7 @@ internal sealed partial class PowerShellTypedLowerer
             PowerShellBoundNativeReferenceExpression reference => new PowerShellLoweredNativeReferenceExpression(reference.Span, reference.Name, reference.DirectLocal),
             PowerShellBoundNativeTypeExpression nativeType => new PowerShellLoweredNativeTypeExpression(nativeType.Span, nativeType.Name),
             PowerShellBoundNativeScriptBlockExpression block => new PowerShellLoweredNativeScriptBlockExpression(block.Span, block.Target, block.SourceDocument, block.DeclarationName, block.IsSwitchPredicate),
+            PowerShellBoundTransportedScriptBlockExpression block => new PowerShellLoweredTransportedScriptBlockExpression(block.Span, block.SourceDocument),
             PowerShellBoundNativeLifecycleExpression lifecycle => new PowerShellLoweredNativeLifecycleExpression(lifecycle.Span, lifecycle.Clause),
             PowerShellBoundLiteralExpression literal => new PowerShellLoweredLiteralExpression(literal.Span, literal.Type.ClrType, literal.Value),
             PowerShellBoundNativeVariableExpression variable => new PowerShellLoweredNativeVariableExpression(
@@ -162,7 +163,7 @@ internal sealed partial class PowerShellTypedLowerer
                 nativeInvocation.LiteralTargetType, nativeInvocation.Name, nativeInvocation.IsStatic,
                 nativeInvocation.Arguments.Select(argument => LowerExpression(argument, functions, names, targetCapabilities)).ToArray(),
                 nativeInvocation.TargetConstraint, nativeInvocation.ArgumentConstraints.ToArray(),
-                nativeInvocation.References.ToArray()),
+                nativeInvocation.References.ToArray(), nativeInvocation.AuthoredInvocation),
             PowerShellBoundNativeIndexExpression nativeIndex => new PowerShellLoweredNativeIndexExpression(nativeIndex.Span,
                 LowerExpression(nativeIndex.Receiver, functions, names, targetCapabilities),
                 nativeIndex.Arguments.Select(argument => LowerExpression(argument, functions, names, targetCapabilities)).ToArray(),
