@@ -174,7 +174,8 @@ internal enum PowerShellRequiredCapability
     PowerShellModuleStateWrite = 32768,
     PowerShellStatementErrors = 65536,
     PowerShellStopping = 131072,
-    NativeFunctionBinding = 262144
+    NativeFunctionBinding = 262144,
+    RuntimeFreeSuccessOutput = 524288
 }
 
 internal enum PowerShellExecutionDispositionKind
@@ -426,7 +427,8 @@ internal class PowerShellBoundReturnStatement : PowerShellBoundStatement
 
 internal sealed class PowerShellBoundExpressionStatement : PowerShellBoundStatement
 {
-    internal PowerShellBoundExpressionStatement(SourceSpan span, PowerShellBoundExpression expression, bool emitsOutput, bool requiresOutputContinuation = false)
+    internal PowerShellBoundExpressionStatement(SourceSpan span, PowerShellBoundExpression expression, bool emitsOutput,
+        bool requiresOutputContinuation = false, bool discardsSuccessOutput = false)
         : base(span,
             expression.Effects |
             (emitsOutput ? PowerShellSemanticEffect.SuccessOutput : PowerShellSemanticEffect.None) |
@@ -436,12 +438,15 @@ internal sealed class PowerShellBoundExpressionStatement : PowerShellBoundStatem
         Expression = expression;
         EmitsOutput = emitsOutput;
         RequiresOutputContinuation = requiresOutputContinuation;
+        DiscardsSuccessOutput = discardsSuccessOutput;
     }
 
     internal PowerShellBoundExpression Expression { get; }
     internal bool EmitsOutput { get; }
     /// <summary>Success output must continue execution rather than become the method return.</summary>
     internal bool RequiresOutputContinuation { get; }
+    /// <summary>The authored statement explicitly discards its operand's success output.</summary>
+    internal bool DiscardsSuccessOutput { get; }
 }
 
 internal sealed class PowerShellBoundAssignmentStatement : PowerShellBoundStatement

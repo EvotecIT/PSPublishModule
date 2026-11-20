@@ -17,14 +17,16 @@ internal sealed class PowerShellBoundStreamWriteStatement : PowerShellBoundState
         PowerShellBoundExpression message,
         PowerShellOutputBindingKind outputBinding = PowerShellOutputBindingKind.Default,
         bool usesNativeInvocation = false,
-        bool usesCommandHostEnumeration = false)
+        bool usesCommandHostEnumeration = false,
+        bool runtimeFree = false)
         : base(
             span,
             (kind == PowerShellStreamCommandKind.Success
                 ? PowerShellSemanticEffect.SuccessOutput
                 : PowerShellSemanticEffect.NonSuccessStream) | message.Effects |
                 (usesNativeInvocation || usesCommandHostEnumeration ? PowerShellSemanticEffect.Host | PowerShellSemanticEffect.TerminatingError : 0),
-            (provider is { Adapter.RuntimeFree: true, Adapter.EntryPoint: not null }
+            (runtimeFree ? PowerShellRequiredCapability.RuntimeFreeSuccessOutput :
+                provider is { Adapter.RuntimeFree: true, Adapter.EntryPoint: not null }
                 ? PowerShellRequiredCapability.RuntimeFreeProviderOperations
                 : PowerShellRequiredCapability.PowerShellStreams) | message.Capabilities |
                 (usesNativeInvocation ? PowerShellRequiredCapability.NativeFunctionBinding | PowerShellRequiredCapability.PowerShellHost |
@@ -33,6 +35,9 @@ internal sealed class PowerShellBoundStreamWriteStatement : PowerShellBoundState
     {
         if (provider is null && kind != PowerShellStreamCommandKind.Success)
             throw new ArgumentException("Only implicit success output can omit a command provider.", nameof(provider));
+        if (runtimeFree && (provider is not null || usesNativeInvocation || usesCommandHostEnumeration))
+            throw new ArgumentException("Runtime-free implicit output uses only the CLR success stream.", nameof(runtimeFree));
+        RuntimeFree = runtimeFree;
         Kind = kind;
         Provider = provider;
         Message = message;
@@ -48,4 +53,5 @@ internal sealed class PowerShellBoundStreamWriteStatement : PowerShellBoundState
     internal PowerShellOutputBindingKind OutputBinding { get; }
     internal bool UsesNativeInvocation { get; }
     internal bool UsesCommandHostEnumeration { get; }
+    internal bool RuntimeFree { get; }
 }

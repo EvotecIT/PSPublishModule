@@ -10,6 +10,8 @@ internal static class PowerShellInt32RangePolicy
         if (expression.Type.ClrType != typeof(int)) return null;
         if (expression.Type.Int32Range is { } range) return range;
         if (expression is PowerShellBoundLiteralExpression { Value: int value }) return new(value, value);
+        if (expression is PowerShellBoundConversionExpression { Operand: { } operand } && operand.Type.ClrType == typeof(int))
+            return GetRange(operand);
         if (expression is PowerShellBoundClrMemberExpression
             { IsStatic: false, MemberName: "Length", Receiver: { } receiver } member &&
             (receiver.Type.ClrType.IsArray || member.DeclaringType == typeof(string)))
@@ -21,18 +23,44 @@ internal static class PowerShellInt32RangePolicy
         PowerShellBoundExpression left, PowerShellBoundExpression right, out PowerShellBoundExpression? result)
     {
         result = null;
-        if (operation is not ("Plus" or "Minus") || GetRange(left) is not { } a || GetRange(right) is not { } b)
+        if (operation is not ("Plus" or "Minus" or "Multiply") || GetRange(left) is not { } a || GetRange(right) is not { } b)
             return false;
-        var minimum = operation == "Plus" ? (long)a.Minimum + b.Minimum : (long)a.Minimum - b.Maximum;
-        var maximum = operation == "Plus" ? (long)a.Maximum + b.Maximum : (long)a.Maximum - b.Minimum;
-        if (minimum < int.MinValue || maximum > int.MaxValue) return false;
+        var bound = operation switch
+        {
+            "Plus" => PowerShellBoundBinaryOperator.Add,
+            "Minus" => PowerShellBoundBinaryOperator.Subtract,
+            _ => PowerShellBoundBinaryOperator.Multiply
+        };
+        var range = Apply(bound, a, b);
+        if (range is null) return false;
         result = new PowerShellBoundBinaryExpression(span,
-            operation == "Plus" ? PowerShellBoundBinaryOperator.Add : PowerShellBoundBinaryOperator.Subtract,
+            bound,
             left, right, new PowerShellTypeFact(typeof(int), PowerShellTypeFactProvenance.Inferred,
                 "Both arithmetic endpoints remain Int32; PowerShell cannot promote this operation.",
-                int32Range: new((int)minimum, (int)maximum)));
+                int32Range: range));
         return true;
     }
+
+    /// <summary>Returns the exact Int32 bounds when all operand pairs stay within Int32.</summary>
+    internal static PowerShellInt32Range? Apply(PowerShellBoundBinaryOperator operation, PowerShellInt32Range left, PowerShellInt32Range right)
+    {
+        var (minimum, maximum) = operation switch
+        {
+            PowerShellBoundBinaryOperator.Add => ((long)left.Minimum + right.Minimum, (long)left.Maximum + right.Maximum),
+            PowerShellBoundBinaryOperator.Subtract => ((long)left.Minimum - right.Maximum, (long)left.Maximum - right.Minimum),
+            PowerShellBoundBinaryOperator.Multiply => (MinimumProduct(left, right), MaximumProduct(left, right)),
+            _ => throw new ArgumentOutOfRangeException(nameof(operation))
+        };
+        return minimum >= int.MinValue && maximum <= int.MaxValue ? new((int)minimum, (int)maximum) : null;
+    }
+
+    private static long MinimumProduct(PowerShellInt32Range a, PowerShellInt32Range b)
+        => Math.Min(Math.Min((long)a.Minimum * b.Minimum, (long)a.Minimum * b.Maximum),
+            Math.Min((long)a.Maximum * b.Minimum, (long)a.Maximum * b.Maximum));
+
+    private static long MaximumProduct(PowerShellInt32Range a, PowerShellInt32Range b)
+        => Math.Max(Math.Max((long)a.Minimum * b.Minimum, (long)a.Minimum * b.Maximum),
+            Math.Max((long)a.Maximum * b.Minimum, (long)a.Maximum * b.Maximum));
 
     internal static void RefineDescendingCounter(ForStatementAst syntax, PowerShellBoundMutationExpression? initializer,
         IReadOnlyDictionary<string, PowerShellSemanticSymbolBinding> symbols)

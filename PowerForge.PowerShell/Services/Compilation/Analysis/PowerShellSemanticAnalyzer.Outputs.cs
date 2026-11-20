@@ -100,7 +100,8 @@ internal sealed partial class PowerShellSemanticAnalyzer
                     : PowerShellOutputCardinality.None;
             if (outputs.Any(static cardinality => cardinality == PowerShellOutputCardinality.Unknown))
                 return PowerShellOutputCardinality.Unknown;
-            if (outputs.Any(static cardinality => cardinality == PowerShellOutputCardinality.Collection))
+            if (outputs.Any(static cardinality => cardinality == PowerShellOutputCardinality.Collection) ||
+                statements.Any(static statement => statement is PowerShellBoundStreamWriteStatement { RuntimeFree: true }))
                 return PowerShellOutputCardinality.Collection;
             if (outputs.Length > 1 && statements.Any(static statement =>
                     statement is PowerShellBoundStreamWriteStatement { Kind: PowerShellStreamCommandKind.Success }))

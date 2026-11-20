@@ -117,6 +117,12 @@ $oracleTestPatterns = @(
     'PowerForge.Tests.PowerShellCompilationArtifactHardeningTests.Build_BinaryModuleLanguageModeMatchesPinnedPowerShell76AndInstalledWindowsPowerShell'
 )
 if ($requirePinnedOracle) {
+    $requiredFamilies['Strict streaming filter and map'] = $oracleTestPatterns[0] + 'StrictStreamingFilterAndMapMatchBothPinnedHosts*'
+    $requiredFamilies['Strict streaming upstream stop'] = $oracleTestPatterns[0] + 'StrictStreamingTakeStopsUpstreamOnBothPinnedHosts*'
+    $requiredFamilies['Strict streaming lifecycle'] = $oracleTestPatterns[0] + 'StrictStreamingFilterAndLifecycleMatchBothPinnedHosts*'
+    $requiredFamilies['Strict streaming overflow rejection'] = $oracleTestPatterns[0] + 'StrictStreamingRejectsOverflowThatContinuesOnBothPinnedHosts*'
+    $requiredFamilies['Strict streaming boundary rejection'] = $oracleTestPatterns[0] + 'StrictStreamingRejectsUnrepresentedSourceAndOutputEffectsOnBothPinnedHosts*'
+    $requiredFamilies['Strict streaming termination'] = $oracleTestPatterns[0] + 'StrictStreamingPreservesPriorOutputAndFailureExitOnBothPinnedHosts*'
     $requiredFamilies['returned and collected native callbacks'] = 'PowerForge.Tests.PowerShellCompilationSemanticOracleTests.ReturnedAndCollectedCallbacksPreserveNativeScopeClosureAndFailureOnBothHosts*'
     $requiredFamilies['borrowed invocation objects'] = 'PowerForge.Tests.PowerShellCompilationSemanticOracleTests.BorrowedInvocationObjectsPreserveIdentityMutationAndDynamicBindingOnBothHosts*'
     $requiredFamilies['native call closure'] = 'PowerForge.Tests.PowerShellCompilationSemanticOracleTests.NativeCalleesPreserveBasicExtraArgumentsAndAdvancedCallerBindingOnBothHosts*'

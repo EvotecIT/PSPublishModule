@@ -33,7 +33,8 @@ internal sealed partial class PowerShellSemanticBinder
             bound = new PowerShellBoundExpressionStatement(
                 PowerShellSourceParser.GetSpan(document, discardPipeline.Extent),
                 operand,
-                emitsOutput: false);
+                emitsOutput: false,
+                discardsSuccessOutput: true);
         }
         return true;
     }

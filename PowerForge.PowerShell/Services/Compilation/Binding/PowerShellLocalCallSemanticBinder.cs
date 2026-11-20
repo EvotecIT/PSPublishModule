@@ -27,7 +27,8 @@ internal sealed class PowerShellLocalCallSignature
         PowerShellBoundHelpMetadata? help,
         PowerShellCompiledRegionLocalCall? closedCollectionFactory = null,
         int pipelineLifecycleParameterIndex = -1,
-        bool pipelineLifecycleRequiresNonNullInput = false)
+        bool pipelineLifecycleRequiresNonNullInput = false,
+        PowerShellStrictPipelineReduction? strictPipelineReduction = null)
     {
         Symbol = symbol;
         Parameters = parameters;
@@ -38,6 +39,7 @@ internal sealed class PowerShellLocalCallSignature
         ClosedCollectionFactory = closedCollectionFactory;
         PipelineLifecycleParameterIndex = pipelineLifecycleParameterIndex;
         PipelineLifecycleRequiresNonNullInput = pipelineLifecycleRequiresNonNullInput;
+        StrictPipelineReduction = strictPipelineReduction;
     }
 
     internal PowerShellSymbolId Symbol { get; }
@@ -50,6 +52,7 @@ internal sealed class PowerShellLocalCallSignature
     internal int PipelineLifecycleParameterIndex { get; }
     internal bool IsPipelineLifecycle => PipelineLifecycleParameterIndex >= 0;
     internal bool PipelineLifecycleReturnsCollection { get; private set; }
+    internal PowerShellStrictPipelineReduction? StrictPipelineReduction { get; }
     internal bool PipelineLifecycleRequiresNonNullInput { get; }
     internal bool ReturnsModuleStateDerived { get; private set; }
     internal PowerShellTypeFact? AnalyzedReturnType { get; private set; }
@@ -134,7 +137,10 @@ internal static class PowerShellLocalCallSemanticBinder
             closedCollectionFactory,
             pipelineLifecycleParameterIndex,
             pipelineLifecycleParameterIndex >= 0 && PowerShellRuntimeFreePipelineLifecyclePolicy.RequiresNonNullCollection(
-                parameters[pipelineLifecycleParameterIndex].Type, capabilities));
+                parameters[pipelineLifecycleParameterIndex].Type, capabilities),
+            capabilities == PowerShellCompilationCapabilities.TypedExecutable && pipelineLifecycleParameterIndex >= 0
+                ? PowerShellStrictPipelineReduction.TryDescribe(function.Body, parameters[pipelineLifecycleParameterIndex])
+                : null);
     }
 
     internal static Type? InferReturnType(
