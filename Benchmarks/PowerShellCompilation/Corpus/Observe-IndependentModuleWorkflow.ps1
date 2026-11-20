@@ -1,6 +1,7 @@
 param([string] $ModulePath, [string] $ModuleName, [string] $DataRoot)
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
+$env:PSModulePath = [IO.Path]::Combine($PSHOME, 'Modules')
 
 Microsoft.PowerShell.Core\Import-Module Microsoft.PowerShell.Management, Microsoft.PowerShell.Utility
 [Threading.Thread]::CurrentThread.CurrentCulture = [Globalization.CultureInfo]::GetCultureInfo('en-US')

@@ -190,8 +190,9 @@ with the installed Windows PowerShell 5.1 available on the same machine.
 
 The matrix verifies the Gallery package hashes in `independent-readiness.net10.json`,
 creates a dependency review for each target, and builds the unchanged module.
-It removes the original source from its build path while importing and exercising
-the artifact. The evidence records the observed exports, results, emitted
+Each observation uses the selected host's built-in PowerShell module path.
+The runner moves the original source out of its build path before importing and
+exercising the artifact. The evidence records the observed exports, results, emitted
 methods and host identities for every comparison. The runner exits with an
 error if any comparison fails.
 
