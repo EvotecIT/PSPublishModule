@@ -190,37 +190,53 @@ public sealed partial class BenchmarkServicesTests
     }
 
     [Fact]
-    public void CompactResult_KeepsComparisonsThatNameAnAliasMetric()
+    public void CompactResult_KeepsAComparedAliasOnlyOnTheSamplesThatRecordedIt()
     {
-        BenchmarkRunResult result = BenchmarkDotNetStyleResult();
-        foreach (BenchmarkSample sample in result.Samples.Where(sample => sample.Library == "Sep"))
-        {
-            sample.Metrics["BytesAllocatedPerOperation"] = 1024;
-            sample.Metrics["Allocated"] = 1024;
-        }
-        // One engine with the library as the variable so both libraries share a comparison group.
+        BenchmarkRunResult result = MeasuredResult(("OfficeIMO", "Read", Spread(10, 10)), ("Sep", "Read", Spread(20, 10)));
         foreach (BenchmarkSample sample in result.Samples)
         {
-            sample.Engine = sample.Library;
-            sample.Variables.Remove("FullName");
-            sample.Variables.Remove("Method");
+            sample.Metrics["BytesAllocatedPerOperation"] = sample.Library == "Sep" ? 100 : 300;
+            if (sample.Library == "Sep")
+                sample.Metrics["Allocated"] = 100;
         }
-        result.Summary = new BenchmarkSummaryService().Summarize(result.Samples);
+        // An unsampled row is stored as it is, so it must keep the compared alias as well.
+        result.Summary = new BenchmarkSummaryService().Summarize(result.Samples).Append(new BenchmarkSummaryRow
+        {
+            Suite = "csv", Scenario = "Read", Operation = "Run", Engine = "EPPlus", Library = "EPPlus",
+            Host = "dotnet", Os = "Windows", RunMode = "standard", Status = "Failed", FailureCount = 1, MedianMs = 15,
+            Metrics = new Dictionary<string, double> { ["BytesAllocatedPerOperation"] = 50, ["Allocated"] = 50 }
+        }).ToArray();
         result.Comparison = new BenchmarkSummaryService().Compare(result.Summary, "Sep", "Allocated");
-        BenchmarkComparisonRow original = Assert.Single(result.Comparison, row => row.Engine == "OfficeIMO");
-        Assert.Equal(0.5, original.Ratio);
+        Assert.Equal(0.5, Assert.Single(result.Comparison, row => row.Engine == "EPPlus").Ratio);
 
         BenchmarkRunResult read = BenchmarkEvidenceResultCodec.Normalize(result);
 
-        BenchmarkComparisonRow decoded = Assert.Single(read.Comparison, row => row.Engine == "OfficeIMO");
-        Assert.Equal("Allocated", decoded.Metric);
-        Assert.Equal(512d, decoded.Actual);
-        Assert.Equal(1024d, decoded.Baseline);
-        Assert.Equal(0.5, decoded.Ratio);
-        // The alias is still written once and the encoding stays stable.
-        string json = Encoding.UTF8.GetString(BenchmarkEvidenceResultCodec.Encode(read));
-        Assert.DoesNotContain("\"Allocated\":", json.Replace("\"metric\":\"Allocated\"", string.Empty), StringComparison.Ordinal);
-        Assert.Equal(json, Encoding.UTF8.GetString(BenchmarkEvidenceResultCodec.Encode(result)));
+        Assert.All(read.Samples.Where(sample => sample.Library == "Sep"), sample => Assert.Equal(100d, sample.Metrics["Allocated"]));
+        Assert.All(read.Samples.Where(sample => sample.Library == "OfficeIMO"), sample => Assert.False(sample.Metrics.ContainsKey("Allocated")));
+        Assert.Equal(BenchmarkJson.Serialize(result.Comparison), BenchmarkJson.Serialize(read.Comparison));
+        Assert.Equal(
+            Encoding.UTF8.GetString(BenchmarkEvidenceResultCodec.Encode(result)),
+            Encoding.UTF8.GetString(BenchmarkEvidenceResultCodec.Encode(read)));
+    }
+
+    [Fact]
+    public void Import_WithSuiteOverrideKeepsUnsampledSummaryRows()
+    {
+        string root = CreateTempRoot();
+        BenchmarkRunResult result = MeasuredResult(("OfficeIMO", "Read", Spread(10, 10)));
+        result.Summary = result.Summary.Append(new BenchmarkSummaryRow
+        {
+            Suite = "csv", Scenario = "Write", Operation = "Run", Engine = "EPPlus", Library = "EPPlus",
+            Status = "Failed", FailureCount = 1, FailureReasons = new Dictionary<string, int> { ["Out of memory."] = 1 }
+        }).ToArray();
+        string path = Path.Combine(root, "result.json");
+        File.WriteAllBytes(path, BenchmarkEvidenceResultCodec.Encode(result));
+
+        BenchmarkRunResult imported = new BenchmarkResultImporter().Import(path, "renamed");
+
+        Assert.Equal(2, imported.Summary.Length);
+        Assert.All(imported.Summary, row => Assert.Equal("renamed", row.Suite));
+        Assert.Equal("Failed", Assert.Single(imported.Summary, row => row.Library == "EPPlus").Status);
     }
 
     [Fact]

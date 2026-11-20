@@ -95,19 +95,6 @@ internal static class BenchmarkEvidenceResultCodec
            format.ValueKind == JsonValueKind.String &&
            string.Equals(format.GetString(), FormatName, StringComparison.Ordinal);
 
-    /// <summary>The metric name a published result stores for an alias such as <c>Allocated</c> or <c>Gen0Collections</c>.</summary>
-    internal static string CanonicalMetric(string? metric)
-    {
-        if (string.IsNullOrEmpty(metric))
-            return metric ?? string.Empty;
-        foreach ((string canonical, string[] aliases) in MetricAliases)
-        {
-            if (aliases.Any(alias => string.Equals(alias, metric, StringComparison.OrdinalIgnoreCase)))
-                return canonical;
-        }
-        return metric!;
-    }
-
     /// <summary>Reads a published result file in either form.</summary>
     internal static BenchmarkRunResult Read(string path)
         => Decode(File.ReadAllBytes(path), path);
@@ -139,6 +126,11 @@ internal static class BenchmarkEvidenceResultCodec
         string defaultOs = MostCommon(samples.Select(sample => sample.Os)) ?? string.Empty;
         string defaultRunMode = MostCommon(samples.Select(sample => sample.RunMode)) ?? string.Empty;
 
+        // A metric a stored comparison names is kept under that name, even when it repeats its canonical metric,
+        // so the rebuilt comparison resolves the same values on exactly the samples that recorded it.
+        var compared = new HashSet<string>(
+            (result.Comparison ?? Array.Empty<BenchmarkComparisonRow>()).Select(row => row.Metric ?? string.Empty),
+            StringComparer.OrdinalIgnoreCase);
         var engines = new List<string>();
         var cases = new List<CompactCase>();
         // Cases keep the order in which their first sample was recorded.
@@ -184,7 +176,7 @@ internal static class BenchmarkEvidenceResultCodec
 
             // BenchmarkDotNet repeats its case statistics on every sample; they are stored once. Samples whose
             // metrics differ keep their own.
-            SortedDictionary<string, double>[] metrics = caseSamples.Select(sample => CompactMetrics(sample.Metrics)).ToArray();
+            SortedDictionary<string, double>[] metrics = caseSamples.Select(sample => CompactMetrics(sample.Metrics, compared)).ToArray();
             if (metrics.All(value => MetricsEqual(value, metrics[0])))
                 compact.Metrics = metrics[0].Count == 0 ? null : metrics[0];
             else
@@ -196,7 +188,7 @@ internal static class BenchmarkEvidenceResultCodec
         var sampledRows = new HashSet<string>(samples.Select(SampleRowKey), StringComparer.Ordinal);
         CompactSummary[] unsampled = (result.Summary ?? Array.Empty<BenchmarkSummaryRow>())
             .Where(row => !sampledRows.Contains(SummaryCaseKey(row)))
-            .Select(row => ToCompactSummary(row, engines))
+            .Select(row => ToCompactSummary(row, engines, compared))
             .ToArray();
 
         var comparisons = (result.Comparison ?? Array.Empty<BenchmarkComparisonRow>())
@@ -244,11 +236,6 @@ internal static class BenchmarkEvidenceResultCodec
     {
         CompactDefaults defaults = document.Defaults ?? new CompactDefaults();
         string[] engines = document.Engines ?? Array.Empty<string>();
-        string[] aliases = (document.Comparisons ?? Array.Empty<CompactComparison>())
-            .Select(definition => definition.Metric)
-            .Where(metric => !string.Equals(CanonicalMetric(metric), metric, StringComparison.OrdinalIgnoreCase))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
         var samples = new List<BenchmarkSample>();
         foreach (CompactCase item in document.Cases ?? Array.Empty<CompactCase>())
         {
@@ -291,7 +278,7 @@ internal static class BenchmarkEvidenceResultCodec
                     Reason = item.Reasons?[index] ?? string.Empty,
                     Variables = new Dictionary<string, string?>(item.Variables ?? new SortedDictionary<string, string?>(StringComparer.Ordinal), StringComparer.OrdinalIgnoreCase),
                     Metrics = new Dictionary<string, double>(
-                        WithAliases(item.SampleMetrics?[index] ?? item.Metrics ?? new SortedDictionary<string, double>(StringComparer.Ordinal), aliases),
+                        item.SampleMetrics?[index] ?? item.Metrics ?? new SortedDictionary<string, double>(StringComparer.Ordinal),
                         StringComparer.OrdinalIgnoreCase)
                 });
             }
@@ -328,24 +315,7 @@ internal static class BenchmarkEvidenceResultCodec
         return result;
     }
 
-    // A comparison may name a metric by an alias the published form stores once under its canonical name. The alias
-    // is restored on the samples, so the rebuilt summary rows carry it and the comparison resolves its values.
-    private static SortedDictionary<string, double> WithAliases(SortedDictionary<string, double> metrics, string[] aliases)
-    {
-        if (aliases.Length == 0)
-            return metrics;
-        var restored = new SortedDictionary<string, double>(metrics, StringComparer.Ordinal);
-        foreach (string alias in aliases)
-        {
-            string canonical = CanonicalMetric(alias);
-            string? key = restored.Keys.FirstOrDefault(name => string.Equals(name, canonical, StringComparison.OrdinalIgnoreCase));
-            if (key is not null && !restored.Keys.Any(name => string.Equals(name, alias, StringComparison.OrdinalIgnoreCase)))
-                restored[alias] = restored[key];
-        }
-        return restored;
-    }
-
-    private static CompactSummary ToCompactSummary(BenchmarkSummaryRow row, List<string> engines)
+    private static CompactSummary ToCompactSummary(BenchmarkSummaryRow row, List<string> engines, ISet<string> compared)
     {
         int engine = engines.IndexOf(row.Engine ?? string.Empty);
         if (engine < 0)
@@ -353,7 +323,7 @@ internal static class BenchmarkEvidenceResultCodec
             engines.Add(row.Engine ?? string.Empty);
             engine = engines.Count - 1;
         }
-        SortedDictionary<string, double> metrics = CompactMetrics(row.Metrics);
+        SortedDictionary<string, double> metrics = CompactMetrics(row.Metrics, compared);
         return new CompactSummary
         {
             Suite = NullIfEmpty(row.Suite),
@@ -443,7 +413,7 @@ internal static class BenchmarkEvidenceResultCodec
 
     private static double? RoundNullable(double? value) => value.HasValue ? Round(value.Value) : null;
 
-    private static SortedDictionary<string, double> CompactMetrics(IReadOnlyDictionary<string, double>? metrics)
+    private static SortedDictionary<string, double> CompactMetrics(IReadOnlyDictionary<string, double>? metrics, ISet<string> compared)
     {
         var compact = new SortedDictionary<string, double>(StringComparer.Ordinal);
         if (metrics is null)
@@ -460,7 +430,7 @@ internal static class BenchmarkEvidenceResultCodec
             {
                 // Values are compared as they are written, so encoding a decoded result removes the same aliases.
                 string? aliasKey = FindKey(compact, alias);
-                if (aliasKey is not null && Round(compact[aliasKey]).Equals(canonicalValue))
+                if (aliasKey is not null && !compared.Contains(aliasKey) && Round(compact[aliasKey]).Equals(canonicalValue))
                     compact.Remove(aliasKey);
             }
         }

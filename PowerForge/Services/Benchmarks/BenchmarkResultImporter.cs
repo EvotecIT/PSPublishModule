@@ -761,13 +761,12 @@ public sealed partial class BenchmarkResultImporter
         result.Suite = suite;
         foreach (var sample in result.Samples)
             sample.Suite = suite;
-        result.Summary = result.Samples.Length > 0
-            ? new BenchmarkSummaryService().Summarize(result.Samples)
-            : result.Summary.Select(row =>
-            {
-                row.Suite = suite;
-                return row;
-            }).ToArray();
+        // The existing rows are renamed rather than rebuilt, so rows of cases that failed before any sample was
+        // measured are kept.
+        if (result.Summary.Length == 0)
+            result.Summary = new BenchmarkSummaryService().Summarize(result.Samples);
+        foreach (var row in result.Summary)
+            row.Suite = suite;
         foreach (var row in result.Comparison)
             row.Suite = suite;
     }
