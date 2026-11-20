@@ -6,6 +6,7 @@ namespace PowerForge.Generated.Runtime
     using System.Management.Automation;
     using System.Management.Automation.Host;
     using System.Security;
+    using System.Text;
 
     /// <summary>Writes formatter output directly; existing stream subscriptions own informational diagnostics.</summary>
     internal sealed class PowerShellPackagedConsoleUI : PSHostUserInterface
@@ -36,10 +37,29 @@ namespace PowerForge.Generated.Runtime
         public override void WriteProgress(long sourceId, ProgressRecord record) { }
         public override string ReadLine()
         {
-            var line = Console.ReadLine();
-            if (Console.IsInputRedirected && line is not null)
-                WriteLine(line);
-            return line!;
+            if (!Console.IsInputRedirected)
+                return Console.ReadLine()!;
+
+            var input = Console.In;
+            var line = new StringBuilder();
+            int next;
+            while ((next = input.Read()) >= 0)
+            {
+                var character = (char)next;
+                Console.Out.Write(character);
+                if (character == '\r' && input.Peek() == '\n')
+                {
+                    input.Read();
+                    Console.Out.Write('\n');
+                }
+                if (character is '\r' or '\n')
+                    return line.ToString();
+                if (character == '\b')
+                    line.Remove(line.Length - 1, 1);
+                else
+                    line.Append(character);
+            }
+            return line.Length == 0 ? null! : line.ToString();
         }
 
         public override SecureString ReadLineAsSecureString() => throw PowerShellPackagedConsoleHost.NonInteractive();

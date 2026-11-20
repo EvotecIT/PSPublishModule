@@ -51,6 +51,7 @@ internal static partial class PowerShellPackagedScriptRewriter
 
         var invocationPaths = FindInvocationPaths(ast).ToArray();
         ValidateHostInteraction(ast);
+        ValidateReadHostDefaults(ast, sourcePath, embeddedScriptPaths ?? Array.Empty<string>());
         var parameterBindingPaths = FindParameterBindingPaths(ast).ToArray();
         var dependencyLoadPaths = string.IsNullOrWhiteSpace(dependencyCommandPathExpression)
             ? Array.Empty<VariableExpressionAst>()
@@ -547,19 +548,6 @@ internal static partial class PowerShellPackagedScriptRewriter
         if (!visited.Add(commandName)) return true;
         if (!aliasTargets.TryGetValue(commandName, out var targets)) return false;
         return targets.Any(target => ResolvesToInteractiveCommand(target, aliasTargets, visited));
-    }
-
-    private static bool IsPlainReadHost(CommandAst command)
-    {
-        var name = command.GetCommandName();
-        if (!string.Equals(name, "Read-Host", StringComparison.OrdinalIgnoreCase) &&
-            !string.Equals(name, "Microsoft.PowerShell.Utility\\Read-Host", StringComparison.OrdinalIgnoreCase))
-            return false;
-        return command.CommandElements.Skip(1).All(static element =>
-            element is not VariableExpressionAst { Splatted: true } &&
-            (element is not CommandParameterAst parameter ||
-             !("AsSecureString".StartsWith(parameter.ParameterName, StringComparison.OrdinalIgnoreCase) ||
-               "MaskInput".StartsWith(parameter.ParameterName, StringComparison.OrdinalIgnoreCase))));
     }
 
     private static bool IsInteractiveCommand(string? commandName)

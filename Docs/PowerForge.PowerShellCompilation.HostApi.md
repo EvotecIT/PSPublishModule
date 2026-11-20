@@ -132,9 +132,10 @@ Retained executable entries preserve compatible `#requires -Version` and `#requi
 The console host gets the root script's native `exit` code from PowerShell.
 PowerShell runs `finally` and keeps a child command's exit separate from the
 application's exit. Direct plain `Read-Host` reads standard input. Redirected
-input preserves the line echo, empty line and end-of-input behavior observed
+input preserves the original line terminator, empty lines and end-of-input observed
 on the pinned hosts. Secure and masked input, confirmation, credentials, and
-general host access remain outside the console contract.
+general host access remain outside the console contract. Check rejects input
+when it cannot rule out protected options in parameter defaults.
 
 ### Compile
 

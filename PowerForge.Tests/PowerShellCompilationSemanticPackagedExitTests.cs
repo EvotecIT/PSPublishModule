@@ -11,6 +11,7 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
     {
         const string source = """
             param([string] $Case)
+            $PSDefaultParameterValues = @{ 'Write-Output:NoEnumerate' = $false }
             function Get-ExitMarker { return 'before' }
             function Stop-Root { exit 31 }
             switch ($Case) {
@@ -27,8 +28,11 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
                 'function' { Get-ExitMarker; Stop-Root }
                 'nested' { exit $(exit 41) }
                 'trap' { trap { 'unexpected trap'; continue }; exit 43 }
-                'native' { & cmd.exe /d /c 'exit 37' }
-                'prompt' { $answer = Microsoft.PowerShell.Utility\Read-Host -Prompt 'Input'; "value=[$answer]" }
+                'native' { & cmd.exe /d /c 'exit 37'; "child=$LASTEXITCODE" }
+                'prompt' {
+                    $answer = Microsoft.PowerShell.Utility\Read-Host -Prompt 'Input'
+                    if ($null -eq $answer) { 'missing' } else { "value=[$answer]" }
+                }
                 'plain' {
                     $answer = Read-Host
                     if ($null -eq $answer) { 'missing' } else { "value=[$answer]" }
@@ -36,17 +40,22 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
             }
             'after'
             """;
+        var eol = Environment.NewLine;
         var cases = new (string Name, int Code, string Output, string Input)[]
         {
-            ("try", 17, "before\ncleanup", string.Empty),
-            ("catch", 23, "caught\ncleanup", string.Empty),
-            ("function", 31, "before", string.Empty),
+            ("try", 17, $"before{eol}cleanup{eol}", string.Empty),
+            ("catch", 23, $"caught{eol}cleanup{eol}", string.Empty),
+            ("function", 31, $"before{eol}", string.Empty),
             ("nested", 41, string.Empty, string.Empty),
             ("trap", 43, string.Empty, string.Empty),
-            ("native", 0, "after", string.Empty),
-            ("prompt", 0, "example line\nvalue=[example line]\nafter", "example line\n"),
-            ("plain", 0, "\nvalue=[]\nafter", "\n"),
-            ("plain", 0, "missing\nafter", string.Empty)
+            ("native", 0, $"child=37{eol}after{eol}", string.Empty),
+            ("prompt", 0, $"line\nvalue=[line]{eol}after{eol}", "line\n"),
+            ("prompt", 0, $"linevalue=[line]{eol}after{eol}", "line"),
+            ("prompt", 0, $"line\rvalue=[line]{eol}after{eol}", "line\r"),
+            ("prompt", 0, $"missing{eol}after{eol}", string.Empty),
+            ("plain", 0, $"\r\nvalue=[]{eol}after{eol}", "\r\n"),
+            ("plain", 0, $"xy\bz\r\nvalue=[xz]{eol}after{eol}", "xy\bz\r\n"),
+            ("plain", 0, $"missing{eol}after{eol}", string.Empty)
         };
         var modern = Environment.GetEnvironmentVariable("POWERFORGE_PWSH76_PATH");
         Assert.False(string.IsNullOrWhiteSpace(modern), "The exact PowerShell 7.6.6 host is required.");
@@ -90,6 +99,24 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
         }
     }
 
+    [Fact]
+    public void CheckRejectsReadHostDefaultsFromAStagedDependency()
+    {
+        using var fixture = OracleFixture.Create(". \"$PSScriptRoot/Setup.ps1\"; Read-Host");
+        File.WriteAllText(Path.Combine(fixture.RootPath, "Setup.ps1"),
+            "$PSDefaultParameterValues['Read-*:MaskInput'] = $true");
+
+        var check = new PowerShellCompilationHostService().Check(new PowerShellCompilationCheckRequest(fixture.ScriptPath)
+        {
+            Mode = PowerShellCompilationMode.Package,
+            OutputDirectory = Path.Combine(fixture.RootPath, "app")
+        });
+
+        Assert.False(check.CanProceed);
+        Assert.Contains(check.Diagnostics, item => item.Severity == PowerShellCompilationHostSeverity.Error &&
+            item.Message.Contains("cannot verify plain Read-Host input with parameter defaults", StringComparison.Ordinal));
+    }
+
     private static async Task AssertExitAndConsoleOutput(string executable, string root, string[] arguments,
         (string Name, int Code, string Output, string Input) expected)
     {
@@ -112,7 +139,7 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
             await process.StandardInput.WriteAsync(expected.Input.AsMemory(), timeout.Token);
             process.StandardInput.Close();
             await process.WaitForExitAsync(timeout.Token);
-            var observed = (process.ExitCode, (await stdout).ReplaceLineEndings("\n").TrimEnd('\n'), await stderr);
+            var observed = (process.ExitCode, await stdout, await stderr);
             Assert.Equal((expected.Code, expected.Output, string.Empty), observed);
         }
         finally
