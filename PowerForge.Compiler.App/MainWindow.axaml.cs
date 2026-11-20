@@ -1,8 +1,10 @@
 using System.ComponentModel;
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
+using Avalonia.Threading;
 using PowerForge.Compiler.App.ViewModels;
 
 namespace PowerForge.Compiler.App;
@@ -19,6 +21,13 @@ public sealed partial class MainWindow : Window
         DropZone.AddHandler(DragDrop.DragEnterEvent, OnDragEnter);
         DropZone.AddHandler(DragDrop.DragLeaveEvent, OnDragLeave);
         DropZone.AddHandler(DragDrop.DropEvent, OnDrop);
+
+        // The window stays dark so its title bar reads on the navy band; the body follows the system theme.
+        if (Application.Current is { } application)
+        {
+            BodyScope.RequestedThemeVariant = application.ActualThemeVariant;
+            application.ActualThemeVariantChanged += (_, _) => BodyScope.RequestedThemeVariant = application.ActualThemeVariant;
+        }
     }
 
     /// <inheritdoc />
@@ -53,7 +62,8 @@ public sealed partial class MainWindow : Window
     }
 
     private void OnLogChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e) =>
-        LogScroll.ScrollToEnd();
+        // Scroll after the new line has been measured, so the last line is fully visible.
+        Dispatcher.UIThread.Post(LogScroll.ScrollToEnd, DispatcherPriority.Background);
 
     private static string? GetDroppedPath(DragEventArgs e) =>
         e.DataTransfer.TryGetFiles()?.FirstOrDefault()?.TryGetLocalPath();
@@ -62,14 +72,14 @@ public sealed partial class MainWindow : Window
     {
         var accept = _viewModel is { IsBusy: false } && GetDroppedPath(e) is not null;
         e.DragEffects = accept ? DragDropEffects.Copy : DragDropEffects.None;
-        DropZone.Classes.Set("dragover", accept);
+        DropOverlay.IsVisible = accept;
     }
 
-    private void OnDragLeave(object? sender, DragEventArgs e) => DropZone.Classes.Set("dragover", false);
+    private void OnDragLeave(object? sender, DragEventArgs e) => DropOverlay.IsVisible = false;
 
     private async void OnDrop(object? sender, DragEventArgs e)
     {
-        DropZone.Classes.Set("dragover", false);
+        DropOverlay.IsVisible = false;
         if (_viewModel is not { IsBusy: false } || GetDroppedPath(e) is not { } path) return;
         await _viewModel.SetInputAsync(path);
     }

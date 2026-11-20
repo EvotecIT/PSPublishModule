@@ -15,7 +15,7 @@ public sealed class MainWindowViewModel : ObservableObject
     private CompileTarget? _selectedTarget;
     private string _inputPath = string.Empty;
     private string _outputDirectory = string.Empty;
-    private string _statusText = "Drop a PowerShell script, module file or module folder to check it.";
+    private string _statusText = string.Empty;
     private bool _isChecking;
     private bool _isCompiling;
     private CompileResult? _lastResult;
@@ -30,6 +30,7 @@ public sealed class MainWindowViewModel : ObservableObject
         CompileCommand = new RelayCommand(() => _ = CompileAsync(), () => CanCompile);
         CancelCommand = new RelayCommand(Cancel, () => IsBusy);
         RecheckCommand = new RelayCommand(() => _ = CheckAsync(InputPath), () => HasInput && !IsBusy);
+        Log.CollectionChanged += (_, _) => OnPropertyChanged(nameof(HasLog));
     }
 
     /// <summary>Opens a folder in the system file manager; supplied by the window.</summary>
@@ -82,7 +83,7 @@ public sealed class MainWindowViewModel : ObservableObject
 
     /// <summary>Kind and file count of the checked input.</summary>
     public string InputSummary => _check?.Kind is { } kind
-        ? $"{DescribeKind(kind)} · {_check.SourceFiles.Count} source file{(_check.SourceFiles.Count == 1 ? string.Empty : "s")} · checked in {_check.Elapsed.TotalSeconds:0.0}s"
+        ? $"{DescribeKind(kind)} from {_check.SourceFiles.Count} source file{(_check.SourceFiles.Count == 1 ? string.Empty : "s")}, checked in {_check.Elapsed.TotalSeconds:0.0} s"
         : string.Empty;
 
     /// <summary>Output folder; empty means the engine default next to the input.</summary>
@@ -139,6 +140,8 @@ public sealed class MainWindowViewModel : ObservableObject
         {
             if (!Set(ref _selectedMode, value)) return;
             foreach (var card in Modes) card.IsSelected = ReferenceEquals(card, value);
+            OnPropertyChanged(nameof(SelectedVerdict));
+            OnPropertyChanged(nameof(CompileButtonText));
             RefreshSelectedMode();
         }
     }
@@ -161,6 +164,7 @@ public sealed class MainWindowViewModel : ObservableObject
         {
             if (!Set(ref _isChecking, value)) return;
             OnPropertyChanged(nameof(IsBusy));
+            OnPropertyChanged(nameof(ShowInputProblems));
             RaiseCommandStates();
         }
     }
@@ -192,12 +196,12 @@ public sealed class MainWindowViewModel : ObservableObject
             var errors = Diagnostics.Count(static item => item.Diagnostic.Severity == CompileSeverity.Error);
             var warnings = Diagnostics.Count(static item => item.Diagnostic.Severity == CompileSeverity.Warning);
             var notes = Diagnostics.Count - errors - warnings;
-            return $"Problems  {errors} errors · {warnings} warnings · {notes} notes";
+            return errors + warnings == 0 ? $"Problems ({notes})" : $"Problems ({errors + warnings})";
         }
     }
 
     /// <summary>Header for the dependency list.</summary>
-    public string DependenciesHeader => $"Dependencies  {Dependencies.Count}";
+    public string DependenciesHeader => $"Dependencies ({Dependencies.Count})";
 
     /// <summary>True when the problems list has entries.</summary>
     public bool HasDiagnostics => Diagnostics.Count > 0;
@@ -208,15 +212,35 @@ public sealed class MainWindowViewModel : ObservableObject
     /// <summary>True when the last build succeeded.</summary>
     public bool HasResult => _lastResult is { Succeeded: true };
 
-    /// <summary>Plain description of the last build.</summary>
-    public string ResultTitle => _lastResult is { Succeeded: true } result ? DescribeOutcome(result.Summary, result.TypedUnits, result.RuntimeUnits) : string.Empty;
+    /// <summary>Headline for the last build.</summary>
+    public string ResultTitle => _lastResult is { Succeeded: true } result ? $"Compiled {Path.GetFileName(result.ArtifactPath)}" : string.Empty;
+
+    /// <summary>Plain description of what the last build contains.</summary>
+    public string ResultSummary => _lastResult is { Succeeded: true } result ? DescribeOutcome(result.Summary, result.TypedUnits, result.RuntimeUnits) : string.Empty;
+
+    /// <summary>Full path of the last artifact.</summary>
+    public string ResultPath => _lastResult?.ArtifactPath ?? string.Empty;
+
+    /// <summary>True when the input itself has problems and no mode could be checked.</summary>
+    public bool ShowInputProblems => HasInput && !HasCheck && !IsChecking && Diagnostics.Count > 0;
+
+    /// <summary>True once the build has written output.</summary>
+    public bool HasLog => Log.Count > 0;
+
+    /// <summary>Compile button text naming what will be built.</summary>
+    public string CompileButtonText => SelectedMode is { IsBlocked: true }
+        ? $"{SelectedMode.Title} can't build this"
+        : _check?.Kind == PowerShellCompilationArtifactKind.BinaryModule ? "Compile module" : "Compile executable";
+
+    /// <summary>The selected mode's verdict sentence.</summary>
+    public string SelectedVerdict => SelectedMode?.Verdict ?? string.Empty;
 
     /// <summary>True when the output carries the script as text anyone can read back.</summary>
     public bool ResultContainsReadableSource => _lastResult is { Succeeded: true, ContainsReadableSource: true };
 
     /// <summary>Path, size and time of the last build.</summary>
     public string ResultDetail => _lastResult is { Succeeded: true } result
-        ? $"{result.ArtifactPath} · {FormatSize(result.ArtifactSizeBytes)} · built in {result.Elapsed.TotalSeconds:0.0}s{(result.Signed ? " · signed" : string.Empty)}"
+        ? $"{FormatSize(result.ArtifactSizeBytes)}, built in {result.Elapsed.TotalSeconds:0} s{(result.Signed ? ", signed" : string.Empty)}"
         : string.Empty;
 
     /// <summary>Starts a check for a dropped or chosen path.</summary>
@@ -238,7 +262,7 @@ public sealed class MainWindowViewModel : ObservableObject
         RaiseResultChanged();
         Log.Clear();
         IsChecking = true;
-        StatusText = $"Checking {InputName} in Package, Hybrid and Strict modes…";
+        StatusText = $"Checking {InputName} in all three modes…";
         try
         {
             var check = await _engine.CheckAsync(path, operation.Token);
@@ -271,7 +295,7 @@ public sealed class MainWindowViewModel : ObservableObject
         StatusText = check.Modes.Count == 0
             ? "This input can't be checked. See the problems below."
             : check.Recommended is { } recommended
-                ? $"{recommended} is recommended for this input. Pick a mode and target, then compile."
+                ? $"{recommended} suits this input best. Pick a target and compile."
                 : "No mode can build this input yet. Each mode lists what blocks it.";
     }
 
@@ -305,7 +329,7 @@ public sealed class MainWindowViewModel : ObservableObject
         RaiseResultChanged();
         Log.Clear();
         IsCompiling = true;
-        StatusText = $"Compiling {InputName} ({card.Title}, {target.DisplayName})… The first build of a target takes longer.";
+        StatusText = $"Compiling {InputName} in {card.Title} for {target.DisplayName}. The first build for a target takes a minute or so.";
         var progress = new Progress<CompileProgress>(AppendLog);
         try
         {
@@ -326,7 +350,7 @@ public sealed class MainWindowViewModel : ObservableObject
             }
             else
             {
-                StatusText = "Built. Open the folder to find the output.";
+                StatusText = $"Compiled {Path.GetFileName(result.ArtifactPath)}.";
             }
         }
         catch (OperationCanceledException)
@@ -387,6 +411,7 @@ public sealed class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(DependenciesHeader));
         OnPropertyChanged(nameof(HasDiagnostics));
         OnPropertyChanged(nameof(HasDependencies));
+        OnPropertyChanged(nameof(ShowInputProblems));
     }
 
     private void RaiseResultChanged()
@@ -394,21 +419,23 @@ public sealed class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(HasResult));
         OnPropertyChanged(nameof(ResultTitle));
         OnPropertyChanged(nameof(ResultDetail));
+        OnPropertyChanged(nameof(ResultSummary));
+        OnPropertyChanged(nameof(ResultPath));
         OnPropertyChanged(nameof(ResultContainsReadableSource));
     }
 
     internal static string DescribeOutcome(CompileOutcome outcome, int typedUnits, int runtimeUnits) => outcome switch
     {
-        CompileOutcome.Native => "Compiled natively. No PowerShell runtime is needed to run it.",
-        CompileOutcome.Mixed => $"Partly native: {typedUnits} unit{(typedUnits == 1 ? string.Empty : "s")} compiled to typed code, {runtimeUnits} run on the PowerShell runtime.",
-        CompileOutcome.Packaged => "Packaged script. It runs on the PowerShell runtime carried in the executable; nothing was compiled to typed code.",
+        CompileOutcome.Native => "Everything was compiled to .NET. It runs without PowerShell.",
+        CompileOutcome.Mixed => $"{typedUnits} of {typedUnits + runtimeUnits} parts were compiled to .NET; the rest runs on the PowerShell runtime inside it.",
+        CompileOutcome.Packaged => "The script was packed with the PowerShell runtime. Nothing was compiled to .NET.",
         _ => "Not built."
     };
 
     private static string DescribeKind(PowerShellCompilationArtifactKind kind) => kind switch
     {
-        PowerShellCompilationArtifactKind.Executable => "Script → executable",
-        PowerShellCompilationArtifactKind.BinaryModule => "Module → binary module",
+        PowerShellCompilationArtifactKind.Executable => "Executable",
+        PowerShellCompilationArtifactKind.BinaryModule => "Binary module",
         _ => kind.ToString()
     };
 

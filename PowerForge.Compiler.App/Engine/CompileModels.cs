@@ -52,7 +52,16 @@ public sealed record CompileDiagnostic(
 }
 
 /// <summary>A file, module or library the input depends on.</summary>
-public sealed record CompileDependency(string Name, string Kind, DependencyPlacement Placement, string Detail);
+public sealed record CompileDependency(string Name, string Kind, DependencyPlacement Placement, string Detail)
+{
+    /// <summary>Where the dependency ends up, in plain words.</summary>
+    public string PlacementText => Placement switch
+    {
+        DependencyPlacement.Bundled => "Included in the output",
+        DependencyPlacement.RequiredOnTarget => "Must be installed on the machine that runs it",
+        _ => "Missing or can't be included"
+    };
+}
 
 /// <summary>The result of checking the input in one compilation mode.</summary>
 public sealed record ModeCheck(
@@ -84,15 +93,41 @@ public sealed record CompileTarget(
     bool Advertised)
 {
     /// <summary>Label for pickers.</summary>
-    public string DisplayName => $"{RuntimeIdentifier} · {DeploymentLabel}{(Advertised ? string.Empty : $" ({SupportLevel})")}";
+    public string DisplayName => $"{Platform}, {DeploymentLabel}{(Advertised ? string.Empty : " (preview)")}";
+
+    private string Platform
+    {
+        get
+        {
+            var parts = RuntimeIdentifier.Split('-', 2);
+            var os = parts[0] switch
+            {
+                "win" => "Windows",
+                "linux" => "Linux",
+                "linux-musl" => "Linux (musl)",
+                "osx" => "macOS",
+                _ => parts[0]
+            };
+            var architecture = parts.Length > 1 ? parts[1] switch
+            {
+                "x64" => "x64",
+                "arm64" => "Arm64",
+                "x86" => "x86",
+                "musl-x64" => "x64 (musl)",
+                "musl-arm64" => "Arm64 (musl)",
+                _ => parts[1]
+            } : string.Empty;
+            return string.IsNullOrEmpty(architecture) ? os : $"{os} {architecture}";
+        }
+    }
 
     private string DeploymentLabel => Deployment switch
     {
-        PowerShellCompilationDeploymentModel.FrameworkDependent => "needs .NET",
-        PowerShellCompilationDeploymentModel.SelfContained => "self-contained",
-        PowerShellCompilationDeploymentModel.Trimmed => "trimmed",
-        PowerShellCompilationDeploymentModel.ReadyToRun => "ready-to-run",
-        PowerShellCompilationDeploymentModel.NativeAot => "native AOT",
+        PowerShellCompilationDeploymentModel.FrameworkDependent => "needs .NET installed",
+        PowerShellCompilationDeploymentModel.SelfContained => "includes .NET",
+        PowerShellCompilationDeploymentModel.Trimmed => "includes trimmed .NET",
+        PowerShellCompilationDeploymentModel.ReadyToRun => "precompiled",
+        PowerShellCompilationDeploymentModel.NativeAot => "native, no .NET needed",
         _ => Deployment.ToString()
     };
 }
@@ -101,7 +136,7 @@ public sealed record CompileTarget(
 public sealed record SigningCertificate(string Thumbprint, string Subject, DateTime NotAfter)
 {
     /// <summary>Label for pickers.</summary>
-    public string DisplayName => $"{Subject} · expires {NotAfter:yyyy-MM-dd} · {Thumbprint[..Math.Min(8, Thumbprint.Length)]}…";
+    public string DisplayName => $"{Subject}, expires {NotAfter:d MMM yyyy}";
 }
 
 /// <summary>What to build.</summary>

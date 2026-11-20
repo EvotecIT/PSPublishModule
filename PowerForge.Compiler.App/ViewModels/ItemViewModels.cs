@@ -2,12 +2,12 @@ using PowerForge.Compiler.App.Engine;
 
 namespace PowerForge.Compiler.App.ViewModels;
 
-/// <summary>One mode card: what Package, Hybrid or Strict would produce.</summary>
+/// <summary>One stop on the mode track: what Package, Hybrid or Strict would produce.</summary>
 public sealed class ModeCardViewModel : ObservableObject
 {
     private bool _isSelected;
 
-    /// <summary>Creates a card.</summary>
+    /// <summary>Creates a stop.</summary>
     public ModeCardViewModel(ModeCheck check, bool isRecommended)
     {
         Check = check;
@@ -23,27 +23,36 @@ public sealed class ModeCardViewModel : ObservableObject
     /// <summary>Mode name.</summary>
     public string Title => Mode.ToString();
 
-    /// <summary>What the mode does, in one line.</summary>
-    public string Description => Mode switch
-    {
-        PowerShellCompilationMode.Strict => "Everything compiles to typed .NET code",
-        PowerShellCompilationMode.Hybrid => "Typed code where possible, PowerShell for the rest",
-        _ => "Embeds the script and runs it on PowerShell"
-    };
-
-    /// <summary>What this input would become in this mode.</summary>
+    /// <summary>Short result under the mode name.</summary>
     public string OutcomeText => Check.Outcome switch
     {
-        CompileOutcome.Native => "Compiles natively",
-        CompileOutcome.Mixed => $"{Check.TypedUnits} typed · {Check.RuntimeUnits} on PowerShell",
+        CompileOutcome.Native => "All compiled to .NET",
+        CompileOutcome.Mixed => $"{Check.TypedUnits} of {Check.TypedUnits + Check.RuntimeUnits} compiled to .NET",
         CompileOutcome.Packaged => "Runs on PowerShell",
-        _ => ErrorCount == 1 ? "Blocked by 1 error" : $"Blocked by {ErrorCount} errors"
+        _ => ErrorCount == 1 ? "1 error" : $"{ErrorCount} errors"
+    };
+
+    /// <summary>One sentence describing what this mode would build.</summary>
+    public string Verdict => Check.Outcome switch
+    {
+        CompileOutcome.Native => $"{Title} compiles everything to .NET. The executable doesn't need PowerShell to run.",
+        CompileOutcome.Mixed => $"{Title} compiles {Check.TypedUnits} of {Check.TypedUnits + Check.RuntimeUnits} parts to .NET. The rest runs on the PowerShell runtime inside the executable.",
+        CompileOutcome.Packaged => $"{Title} packs the script with the PowerShell runtime. Nothing is compiled to .NET, but it runs anywhere PowerShell would.",
+        _ => $"{Title} can't build this yet. {(ErrorCount == 1 ? "One error blocks it" : $"{ErrorCount} errors block it")}; the problems list shows where."
+    };
+
+    /// <summary>What the mode does, in plain words.</summary>
+    public string Description => Mode switch
+    {
+        PowerShellCompilationMode.Strict => "Everything as .NET code",
+        PowerShellCompilationMode.Hybrid => ".NET where it can, PowerShell for the rest",
+        _ => "The script as it is, with PowerShell"
     };
 
     /// <summary>True for the engine's suggested mode.</summary>
     public bool IsRecommended { get; }
 
-    /// <summary>True when this card is the chosen mode.</summary>
+    /// <summary>True when this stop is the chosen mode.</summary>
     public bool IsSelected
     {
         get => _isSelected;
@@ -80,8 +89,11 @@ public sealed class DiagnosticItemViewModel
     /// <summary>File and line.</summary>
     public string Location => Diagnostic.Location;
 
-    /// <summary>Code and feature, for searching docs.</summary>
-    public string Code => string.IsNullOrEmpty(Diagnostic.FeatureId) ? Diagnostic.Code : $"{Diagnostic.Code} · {Diagnostic.FeatureId}";
+    /// <summary>True when the finding has a location.</summary>
+    public bool HasLocation => !string.IsNullOrEmpty(Diagnostic.Location);
+
+    /// <summary>Compiler code, for searching docs.</summary>
+    public string Code => string.IsNullOrEmpty(Diagnostic.FeatureId) ? Diagnostic.Code : Diagnostic.FeatureId;
 
     /// <summary>Severity label.</summary>
     public string SeverityText => Diagnostic.Severity switch
