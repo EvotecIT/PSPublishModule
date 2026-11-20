@@ -60,8 +60,18 @@ internal sealed partial class PowerShellBoundCSharpBackend
             if (stream.EnumerateAuthoredArray)
             {
                 var record = getTemporaryIdentifier("outputRecord");
+                var collection = EmitExpression(stream.Message);
+                if (stream.Message is not PowerShellLoweredArrayExpression)
+                {
+                    var array = getTemporaryIdentifier("outputArray");
+                    builder.Append(prefix).Append("var ").Append(array).Append(" = ").Append(collection).AppendLine(";")
+                        .Append(prefix).Append("if (").Append(array).AppendLine(" is null)")
+                        .Append(prefix).Append("    ").Append(successSink).AppendLine("(null);")
+                        .Append(prefix).AppendLine("else");
+                    collection = array;
+                }
                 builder.Append(prefix).Append("foreach (var ").Append(record).Append(" in ")
-                    .Append(EmitExpression(stream.Message)).AppendLine(")")
+                    .Append(collection).AppendLine(")")
                     .Append(prefix).Append("    ").Append(successSink).Append("((object?)").Append(record).AppendLine(");");
                 return;
             }

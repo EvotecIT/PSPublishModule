@@ -126,6 +126,14 @@ internal sealed partial class PowerShellTypedLowerer
                     function.Symbol.Declaration));
                 continue;
             }
+            if (function.Capabilities.HasFlag(PowerShellRequiredCapability.RuntimeFreeSuccessOutput) &&
+                targetCapabilities != PowerShellCompilationCapabilities.TypedExecutable)
+            {
+                diagnostics.Add(new PowerShellSemanticDiagnostic(
+                    "PSL1017", "Runtime-free implicit success output requires the Strict executable target.",
+                    function.Symbol.Declaration));
+                continue;
+            }
             if (function.Capabilities.HasFlag(PowerShellRequiredCapability.PowerShellStreams) &&
                 !targetCapabilities.HasFlag(PowerShellCompilationCapability.PowerShellStreams))
             {
@@ -239,7 +247,9 @@ internal sealed partial class PowerShellTypedLowerer
                     .Distinct()
                     .OrderBy(static state => state)
                     .ToArray(),
-                ResolveCollectionElementType(function),
+                function.Capabilities.HasFlag(PowerShellRequiredCapability.RuntimeFreeSuccessOutput)
+                    ? PowerShellSuccessOutputTypePolicy.Resolve(function, boundFunctions)
+                    : ResolveCollectionElementType(function),
                 statements.ToArray(),
                 function.Body.Span,
                 statementErrorBindings.Contains(function.Symbol.StableKey),
@@ -491,13 +501,7 @@ internal sealed partial class PowerShellTypedLowerer
                 functions,
                 names,
                 targetCapabilities),
-            PowerShellBoundStreamWriteStatement stream => new PowerShellLoweredStreamWriteStatement(
-                stream.Span,
-                stream.Kind,
-                stream.Provider,
-                LowerExpression(stream.Message, functions, names, targetCapabilities),
-                stream.Provider is null && stream.Message is PowerShellBoundArrayExpression,
-                stream.OutputBinding, stream.UsesNativeInvocation, stream.UsesCommandHostEnumeration),
+            PowerShellBoundStreamWriteStatement stream => LowerStreamWrite(stream, functions, names, targetCapabilities),
             PowerShellBoundCommandRegionStatement region => new PowerShellLoweredCommandRegionStatement(
                 region.Span,
                 region.HostedFallbackSource,
@@ -558,6 +562,19 @@ internal sealed partial class PowerShellTypedLowerer
                 transfer.CallerLabel is null ? null : LowerExpression(transfer.CallerLabel, functions, names, targetCapabilities)),
             _ => throw new InvalidOperationException($"Bound statement '{statement.GetType().Name}' reached typed lowering without an owner.")
         };
+
+    private static PowerShellLoweredStreamWriteStatement LowerStreamWrite(
+        PowerShellBoundStreamWriteStatement stream,
+        IReadOnlyDictionary<string, LoweringFunctionContext> functions,
+        LoweredFunctionScope names,
+        PowerShellCompilationCapability targetCapabilities)
+    {
+        var message = LowerExpression(stream.Message, functions, names, targetCapabilities);
+        return new PowerShellLoweredStreamWriteStatement(stream.Span, stream.Kind, stream.Provider, message,
+            stream.Provider is null && (stream.Message is PowerShellBoundArrayExpression ||
+                stream.RuntimeFree && message.ClrType.IsArray),
+            stream.OutputBinding, stream.UsesNativeInvocation, stream.UsesCommandHostEnumeration);
+    }
 
     private static PowerShellLoweredStatement LowerExpressionStatement(
         PowerShellBoundExpressionStatement statement,

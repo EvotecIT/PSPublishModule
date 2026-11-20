@@ -11,7 +11,27 @@ PowerShell runs authored class methods. Function-local data classes support
 constant initializers, selected scalar types, one-dimensional arrays and literal
 `ValidateSet` validation. Methods and inheritance in function-local classes, and
 references from a separate script block to a function-local class, still use
-hosted source. Strict supports its existing runtime-free subset.
+hosted source.
+
+Strict `net10.0` executables can lower a top-level pipeline statement over a
+one-dimensional stable-scalar array into one CLR loop. The supported stages
+are literal Boolean `Where-Object` predicates, `ForEach-Object` blocks that
+return one scalar, and terminal `Select-Object -First` with a positive Int32
+literal. `$_` and `$PSItem` refer to the current record. A map can increment
+an enclosing Int32 local when the compiler can prove the update stays in
+range. Early stopping occurs inside the loop, so later upstream records
+cannot increment the counter. A null reference-array source contributes one
+null record to a filter or map, and `Select-Object -First` skips null records.
+An empty array contributes zero records.
+
+Pure filters can also feed a terminal local advanced function through the
+existing typed collection binding. The admitted function initializes one
+Int32 accumulator in `begin`, updates it with range-proven addition,
+subtraction or multiplication in `process`, and emits it once in `end`.
+Strict rejects possibly overflowing reducers. Capturing or explicitly
+discarding a streamed local call, general property projection, parallel
+script blocks, arbitrary stage commands and effectful lifecycle interleaving
+still require PowerShell.
 
 The fixed Gallery packet emits **753/753 complete units (100%)**, up from
 114/753 (15.14%) and the preceding 720/753 (95.62%). Pester emits 491/491 and

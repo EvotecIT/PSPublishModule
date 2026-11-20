@@ -55,6 +55,27 @@ zero skipped on each surface. It exercises pipeline assertions, object-property
 assertions, and an expected throwing script block. It does not execute every
 emitted Pester method or replace the fixed packet's invocation probes.
 
+## Strict streaming executable proof
+
+Three `net10.0` programs that Strict previously rejected now build as complete
+runtime-free executables. Their original scripts and generated executables
+run through the pinned semantic oracle.
+
+| Complete Strict programs | Before | Current |
+| --- | ---: | ---: |
+| Filter and map, take with observable upstream stopping, and filter into a local advanced reducer | 0/3 | 3/3 |
+
+The stages use CLR records and loops. The take stage stops inside the record
+loop. The advanced reducer receives the retained records through the existing
+typed collection binding after pure filters. PowerShell 7.6.6 and Windows
+PowerShell 5.1 each pass 29 typed output comparisons, one terminating-process
+comparison, and seven checks for shapes that Strict must reject, with zero
+failures and zero skips. The comparisons cover record types and order, empty
+and null input, early stopping, and `begin`, `process` and `end` execution.
+The generated artifacts verify the runtime-free dependency closure. The
+original six Strict programs continue to pass.
+[Semantic oracle tests](../PowerForge.Tests/PowerShellCompilationSemanticStrictStreamingOracleTests.cs).
+
 ## Additional published Gallery packages
 
 Eight additional version-pinned Gallery packages were measured with the Hybrid

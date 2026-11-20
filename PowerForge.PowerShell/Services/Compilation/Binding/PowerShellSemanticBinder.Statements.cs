@@ -251,7 +251,9 @@ internal sealed partial class PowerShellSemanticBinder
                 var discardedValue = BindExpression(document, assignment.Right, symbols, functions, diagnostics, targetFramework: targetFramework, capabilities: capabilities);
                 return discardedValue is null
                     ? null
-                    : new PowerShellBoundExpressionStatement(PowerShellSourceParser.GetSpan(document, assignment.Extent), discardedValue, emitsOutput: false);
+                    : new PowerShellBoundExpressionStatement(
+                        PowerShellSourceParser.GetSpan(document, assignment.Extent), discardedValue,
+                        emitsOutput: false, discardsSuccessOutput: true);
             }
             if (assignment.Left is IndexExpressionAst index)
             {

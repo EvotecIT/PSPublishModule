@@ -205,19 +205,21 @@ internal sealed partial class PowerShellSemanticAnalyzer
             {
                 var consumesValue = statement is not (PowerShellBoundReturnStatement or
                     PowerShellBoundExpressionStatement or PowerShellBoundStreamWriteStatement { Provider: null });
-                var target = FindConsumedCall(root, consumesValue);
+                var target = FindConsumedCall(root, consumesValue,
+                    statement is PowerShellBoundExpressionStatement { DiscardsSuccessOutput: true });
                 if (target is not null) return target;
             }
         }
         return null;
 
-        PowerShellBoundFunction? FindConsumedCall(PowerShellBoundExpression expression, bool consumesValue)
+        PowerShellBoundFunction? FindConsumedCall(PowerShellBoundExpression expression, bool consumesValue, bool discardsOutput = false)
         {
-            if (consumesValue && expression is PowerShellBoundInvocationExpression
+            if ((consumesValue || discardsOutput) && expression is PowerShellBoundInvocationExpression
                 { CapturesSuccessOutput: false, ResultProjection: PowerShellLocalCallResultProjection.None } invocation &&
                 functions.TryGetValue(invocation.Target.StableKey, out var target) &&
-                (target.ReturnType.ClrType.IsArray || target.Capabilities.HasFlag(PowerShellRequiredCapability.CommandRegion) ||
-                 HasSuccessStreamOutput(target, functions)))
+                (discardsOutput && target.Capabilities.HasFlag(PowerShellRequiredCapability.RuntimeFreeSuccessOutput) ||
+                 consumesValue && (target.ReturnType.ClrType.IsArray || target.Capabilities.HasFlag(PowerShellRequiredCapability.CommandRegion) ||
+                     HasSuccessStreamOutput(target, functions))))
                 return target;
             // Native collection items are statement-output roots, not scalar operands.
             // Their arguments still consume values and are checked recursively.

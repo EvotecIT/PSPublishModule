@@ -202,13 +202,22 @@ internal static class PowerShellMappingCommandSemanticBinder
             !resolution.Contract.ProviderId.Equals("powerforge.command.mapping.foreach-object", StringComparison.Ordinal))
             return false;
 
+        if (!TryGetRuntimeFreeScriptBlock(command, "Process", out processBlock)) return false;
+        input = source.Expression;
+        return true;
+    }
+
+    internal static bool TryGetRuntimeFreeScriptBlock(CommandAst command, string parameterName, out NamedBlockAst block)
+    {
+        block = null!;
         var arguments = command.CommandElements.Skip(1).ToArray();
         ScriptBlockExpressionAst? process = null;
         if (arguments.Length == 1)
             process = arguments[0] as ScriptBlockExpressionAst;
         else if (arguments.Length == 2 &&
                  arguments[0] is CommandParameterAst parameter &&
-                 parameter.ParameterName.Equals("Process", StringComparison.OrdinalIgnoreCase))
+                 parameter.Argument is null &&
+                 parameter.ParameterName.Equals(parameterName, StringComparison.OrdinalIgnoreCase))
             process = arguments[1] as ScriptBlockExpressionAst;
         if (process is null ||
             process.ScriptBlock.ParamBlock is not null ||
@@ -223,8 +232,7 @@ internal static class PowerShellMappingCommandSemanticBinder
             process.ScriptBlock.ScriptRequirements is not null)
             return false;
 
-        input = source.Expression;
-        processBlock = process.ScriptBlock.EndBlock;
+        block = process.ScriptBlock.EndBlock;
         return true;
     }
 
