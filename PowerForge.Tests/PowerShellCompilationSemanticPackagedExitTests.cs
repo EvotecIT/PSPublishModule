@@ -104,6 +104,11 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
     [InlineData(PowerShellCompilationMode.Hybrid, "$PSDefaultParameterValues = @{'Read-Host : MaskInput'=$true}; Read-Host")]
     [InlineData(PowerShellCompilationMode.Package, "Set-Alias Set-Defaults Set-Variable; Set-Defaults -N script:PSDefaultParameterValues @{'Read-Host:AsSecureString'=$true}; Read-Host")]
     [InlineData(PowerShellCompilationMode.Hybrid, "Set-Alias Set-Defaults Set-Variable; Set-Defaults -N script:PSDefaultParameterValues @{'Read-Host:AsSecureString'=$true}; Read-Host")]
+    [InlineData(PowerShellCompilationMode.Package, "function Set-Defaults { [CmdletBinding()] param() $PSCmdlet.SessionState.PSVariable.Set('PSDefaultParameterValues', @{'Read-Host:AsSecureString'=$true}) }; Set-Defaults; Read-Host")]
+    [InlineData(PowerShellCompilationMode.Hybrid, "function Set-Defaults { [CmdletBinding()] param($Name) $PSCmdlet.SessionState.PSVariable.Set($Name, @{'Read-Host:AsSecureString'=$true}) }; Set-Defaults PSDefaultParameterValues; Read-Host")]
+    [InlineData(PowerShellCompilationMode.Package, "Set-Item -LiteralPath Variable:PSDefaultParameterValues -Value @{'Read-Host:MaskInput'=$true}; Read-Host")]
+    [InlineData(PowerShellCompilationMode.Package, "Set-Item -Force -Value @{'Read-Host:MaskInput'=$true} Variable:PSDefaultParameterValues; Read-Host")]
+    [InlineData(PowerShellCompilationMode.Hybrid, "Set-Alias Set-Defaults Set-Item; Set-Defaults Variable:PSDefaultParameterValues @{'Read-Host:AsSecureString'=$true}; Read-Host")]
     public void CheckRejectsProtectedReadHostParameterDefaults(PowerShellCompilationMode mode, string source)
     {
         using var fixture = OracleFixture.Create(source);
@@ -117,6 +122,31 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
         Assert.Null(check.ProposedReview);
         Assert.Contains(check.Diagnostics, item => item.Severity == PowerShellCompilationHostSeverity.Error &&
             item.Message.Contains("cannot verify plain Read-Host input with parameter defaults", StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData(PowerShellCompilationMode.Package)]
+    [InlineData(PowerShellCompilationMode.Hybrid)]
+    public void CheckAllowsWriteToUnrelatedVariablesBeforeReadHost(PowerShellCompilationMode mode)
+    {
+        using var fixture = OracleFixture.Create("""
+            function Set-OtherValue {
+                [CmdletBinding()] param()
+                $PSCmdlet.SessionState.PSVariable.Set('OtherValue', 21)
+            }
+            Set-OtherValue
+            Set-Item -LiteralPath Variable:OtherValue -Value 42
+            Set-Item -LiteralPath C:\\output.txt -Value 'ordinary filesystem path'
+            Read-Host -Prompt 'Name'
+            """);
+        var check = new PowerShellCompilationHostService().Check(new PowerShellCompilationCheckRequest(fixture.ScriptPath)
+        {
+            Mode = mode,
+            OutputDirectory = Path.Combine(fixture.RootPath, "app")
+        });
+
+        Assert.True(check.CanProceed, string.Join(Environment.NewLine, check.Diagnostics.Select(static item => item.Message)));
+        Assert.NotNull(check.ProposedReview);
     }
 
     [Theory]

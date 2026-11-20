@@ -14,13 +14,15 @@ internal static partial class PowerShellPackagedScriptRewriter
             .Select(static path => Parser.ParseFile(path, out _, out _))
             .Prepend(entry)
             .ToArray();
-        var commands = sources.SelectMany(static root =>
-            root.FindAll(static node => node is CommandAst, searchNestedScriptBlocks: true).Cast<CommandAst>()).ToArray();
-        if (!commands.Any(IsPlainReadHost))
+        var commands = sources.SelectMany(static root => root
+            .FindAll(static node => node is CommandAst, searchNestedScriptBlocks: true).Cast<CommandAst>()
+            .Select(command => (Root: root, Command: command))).ToArray();
+        if (!commands.Any(static entry => IsPlainReadHost(entry.Command)))
             return;
 
-        var aliases = ReadLiteralAliasTargets(commands.Where(PowerShellAliasDefinitionPolicy.IsAliasDefinitionCommand), out var unknown);
-        unknown ??= commands.FirstOrDefault(command => MayReplaceParameterDefaults(command, aliases));
+        var aliases = ReadLiteralAliasTargets(commands.Select(static entry => entry.Command)
+            .Where(PowerShellAliasDefinitionPolicy.IsAliasDefinitionCommand), out var unknown);
+        unknown ??= commands.FirstOrDefault(entry => MayReplaceParameterDefaults(entry.Root, entry.Command, aliases)).Command;
         if (unknown is not null)
             throw UnverifiableReadHostDefaults(unknown);
 
@@ -30,7 +32,9 @@ internal static partial class PowerShellPackagedScriptRewriter
                 PowerShellAssignmentTargetPolicy.GetUnscopedVariableName(variable.VariablePath.UserPath)
                     .Equals(ParameterDefaults, StringComparison.OrdinalIgnoreCase) &&
                 !UsesSafeReadHostDefaults(variable), searchNestedScriptBlocks: true)
-                ?? FindIndirectVariableLookup(root, ParameterDefaults, topLevelOnly: false);
+                ?? FindIndirectVariableLookup(root, ParameterDefaults, topLevelOnly: false)
+                ?? root.Find(static node => node is InvokeMemberExpressionAst method &&
+                    MaySetParameterDefaults(method), searchNestedScriptBlocks: true);
             if (reference is not null)
                 throw UnverifiableReadHostDefaults(reference);
         }
@@ -72,10 +76,59 @@ internal static partial class PowerShellPackagedScriptRewriter
                "MaskInput".StartsWith(name, StringComparison.OrdinalIgnoreCase);
     }
 
-    private static bool MayReplaceParameterDefaults(CommandAst command, IReadOnlyDictionary<string, HashSet<string>> aliases)
-        => command.GetCommandName() is { } name &&
-           ResolvesToCommandMatching(name, aliases, IsVariableSettingCommand, new HashSet<string>(StringComparer.OrdinalIgnoreCase)) &&
-           GetVariableMayRetrieve(command, ParameterDefaults, allowScopePrefix: true);
+    private static bool MaySetParameterDefaults(InvokeMemberExpressionAst method)
+        => method.Member is StringConstantExpressionAst member &&
+           member.Value.Equals("Set", StringComparison.OrdinalIgnoreCase) &&
+           ReferencesPsVariableIntrinsics(method.Expression) &&
+           (method.Arguments.Count != 2 || method.Arguments[0] is not StringConstantExpressionAst name ||
+            PowerShellAssignmentTargetPolicy.GetUnscopedVariableName(name.Value)
+                .Equals(ParameterDefaults, StringComparison.OrdinalIgnoreCase));
+
+    private static bool MayReplaceParameterDefaults(ScriptBlockAst root, CommandAst command,
+        IReadOnlyDictionary<string, HashSet<string>> aliases)
+    {
+        if (command.GetCommandName() is not { } name) return false;
+        var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (ResolvesToCommandMatching(name, aliases, IsVariableSettingCommand, visited) &&
+            GetVariableMayRetrieve(command, ParameterDefaults, allowScopePrefix: true))
+            return true;
+
+        visited.Clear();
+        if (!ResolvesToCommandMatching(name, aliases, IsProviderSettingCommand, visited))
+            return false;
+        ExpressionAst? positional = null;
+        for (var index = 1; index < command.CommandElements.Count; index++)
+        {
+            if (command.CommandElements[index] is not CommandParameterAst parameter)
+            {
+                positional ??= command.CommandElements[index] as ExpressionAst;
+                continue;
+            }
+            if (IsProviderPathParameter(parameter.ParameterName))
+            {
+                var operand = parameter.Argument ?? command.CommandElements.ElementAtOrDefault(index + 1) as ExpressionAst;
+                return operand is null || PowerShellPackagedPathOperandPolicy.MayRetrieveVariable(operand, ParameterDefaults, root);
+            }
+            if (parameter.Argument is null && !IsProviderSettingSwitch(parameter.ParameterName) &&
+                command.CommandElements.ElementAtOrDefault(index + 1) is ExpressionAst)
+                index++;
+        }
+        return positional is not null &&
+            PowerShellPackagedPathOperandPolicy.MayRetrieveVariable(positional, ParameterDefaults, root);
+    }
+
+    private static bool IsProviderPathParameter(string name)
+        => "Path".StartsWith(name, StringComparison.OrdinalIgnoreCase) ||
+           "LiteralPath".StartsWith(name, StringComparison.OrdinalIgnoreCase) ||
+           name.Equals("PSPath", StringComparison.OrdinalIgnoreCase) || name.Equals("LP", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsProviderSettingSwitch(string name)
+        => new[] { "Force", "PassThru", "WhatIf", "Confirm", "Verbose", "Debug", "UseTransaction" }
+            .Any(candidate => candidate.StartsWith(name, StringComparison.OrdinalIgnoreCase)) ||
+           name.Equals("vb", StringComparison.OrdinalIgnoreCase) || name.Equals("db", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsProviderSettingCommand(string name)
+        => name.Split('\\').Last().ToUpperInvariant() is "SET-ITEM" or "NEW-ITEM" or "SI" or "NI";
 
     private static bool IsVariableSettingCommand(string name)
     {
