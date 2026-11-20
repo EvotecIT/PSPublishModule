@@ -135,7 +135,8 @@ enum for hosted compilation. The unchanged PSWriteColor 1.0.7 improved from
 **0/2** just after literal named exports were enabled to **2/2**. The other
 seven Gallery packages in that packet kept their previous counts.
 
-PSProfiler 1.0.5 now passes reviewed Hybrid builds using the
+The switch-selected load assessment completed **18/20 inputs** with **221/287**
+units emitted. PSProfiler 1.0.5 passes reviewed Hybrid builds using the
 `CompleteModule` resource mode. It emits **1/3 units** on both targets. Original
 and generated modules agree on the exported commands, four profiling rows,
 the number of observations per row, and the executed script result on
