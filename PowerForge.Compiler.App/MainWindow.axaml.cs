@@ -187,6 +187,31 @@ public sealed partial class MainWindow : Window
         if (files.FirstOrDefault()?.TryGetLocalPath() is { } path) await _viewModel.OpenSettingsAsync(path);
     }
 
+    private async void OnOpenReview(object? sender, RoutedEventArgs e)
+    {
+        if (_viewModel is not { } viewModel) return;
+        var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+        {
+            Title = "Open dependency review",
+            AllowMultiple = false,
+            FileTypeFilter = new[] { new FilePickerFileType("Dependency review") { Patterns = new[] { "*.json" } } }
+        });
+        if (files.FirstOrDefault()?.TryGetLocalPath() is { } path) await viewModel.OpenReviewAsync(path);
+    }
+
+    private async void OnSaveReview(object? sender, RoutedEventArgs e)
+    {
+        if (_viewModel is not { } viewModel) return;
+        var file = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+        {
+            Title = "Save dependency review",
+            SuggestedFileName = Path.GetFileNameWithoutExtension(viewModel.InputName) + ".review.json",
+            DefaultExtension = "json",
+            FileTypeChoices = new[] { new FilePickerFileType("Dependency review") { Patterns = new[] { "*.json" } } }
+        });
+        if (file?.TryGetLocalPath() is { } path) viewModel.SaveReview(path);
+    }
+
     private async void OnSaveSettings(object? sender, RoutedEventArgs e)
     {
         if (_viewModel is not null) await _viewModel.SaveSettingsAsync();

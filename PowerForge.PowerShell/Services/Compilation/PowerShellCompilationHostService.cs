@@ -59,7 +59,9 @@ public sealed class PowerShellCompilationHostService
                 diagnostics.Add(Error("powershell.dependency.cycle", string.Join(" -> ", cycle), input.SourcePath, "Remove the static dependency cycle before checking again."));
             return new PowerShellCompilationCheckResult
             {
-                ModuleSourceDirectory = input.Kind == PowerShellCompilationArtifactKind.BinaryModule ? input.ModuleRoot : null,
+                ModuleSourceDirectory = input.Kind == PowerShellCompilationArtifactKind.BinaryModule ||
+                    PowerShellCompilationDependencyPlanner.IsModuleInput(input.SourcePath, input.ModuleManifestPath)
+                    ? input.ModuleRoot : null,
                 Explanation = explanation,
                 Recommendation = new PowerShellCompilationProfileRecommendationService().Create(plan, target),
                 Dependencies = plan.Dependencies,

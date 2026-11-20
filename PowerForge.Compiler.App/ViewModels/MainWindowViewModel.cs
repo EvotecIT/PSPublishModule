@@ -23,7 +23,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
     private bool _signOutput;
     private SigningCertificate? _selectedCertificate;
     private string _signingHint = string.Empty;
-    private (CompileRequest Selection, PowerShellCompilationReview Review)? _review;
+    private (CompileRequest Selection, PowerShellCompilationReview Review, string? ModuleSourceDirectory)? _review;
 
     /// <summary>Creates the view model.</summary>
     public MainWindowViewModel(ICompileEngine engine)
@@ -444,7 +444,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         (left with { Files = null }) == (right with { Files = null }) &&
         SameRules(left.Files ?? FileRules.Default, right.Files ?? FileRules.Default);
 
-    private async Task PrepareReviewAsync(CompileRequest request, CompileTarget target)
+    private async Task PrepareReviewAsync(CompileRequest request, CompileTarget target, string? savedReviewPath = null)
     {
         var generation = ++_checkGeneration;
         using var operation = BeginOperation();
@@ -452,6 +452,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         StatusText = $"Checking {InputName} in {request.Mode} for {target.DisplayName}…";
         try
         {
+            var savedReview = savedReviewPath is null ? null : PowerShellCompilationReviewFile.Read(savedReviewPath);
             var result = await _engine.ReviewAsync(request, operation.Token);
             if (generation != _checkGeneration) return;
             operation.Token.ThrowIfCancellationRequested();
@@ -462,26 +463,66 @@ public sealed partial class MainWindowViewModel : ObservableObject
                 return;
             }
 
+            if (savedReview is not null && result.Review is { } checkedReview)
+                PowerShellCompilationReviewFile.EnsureMatches(savedReview, checkedReview);
             Dependencies.Clear();
             foreach (var dependency in result.Dependencies) Dependencies.Add(dependency);
             Diagnostics.Clear();
             foreach (var diagnostic in result.Diagnostics) Diagnostics.Add(new DiagnosticItemViewModel(diagnostic));
             if (result.Review is { } review)
-                _review = (request, review);
+                _review = (request, savedReview ?? review, result.ModuleSourceDirectory);
             RaiseListsChanged();
             OnPropertyChanged(nameof(HasReview));
             OnPropertyChanged(nameof(CompileButtonText));
             StatusText = HasReview
-                ? $"Review {request.Mode} dependencies for {target.DisplayName} ({(result.Review!.Target?.SingleFile == true ? "single file" : "directory output")}), then confirm the build."
+                ? savedReview is null
+                    ? $"Review {request.Mode} dependencies for {target.DisplayName} ({(result.Review!.Target?.SingleFile == true ? "single file" : "directory output")}), then confirm the build."
+                    : "Saved review matches this selection. Check the dependencies and confirm the build."
                 : "This build selection is blocked. See the problems below.";
         }
         catch (OperationCanceledException)
         {
             if (generation == _checkGeneration) StatusText = "Review cancelled.";
         }
+        catch (Exception error) when (savedReviewPath is not null &&
+            error is IOException or InvalidDataException or UnauthorizedAccessException or ArgumentException or
+                InvalidOperationException or System.Text.Json.JsonException)
+        {
+            if (generation == _checkGeneration)
+            {
+                Diagnostics.Add(new DiagnosticItemViewModel(new CompileDiagnostic(CompileSeverity.Error,
+                    "ReviewFile", string.Empty, error.Message, savedReviewPath, 0, 0)));
+                RaiseListsChanged();
+                StatusText = "Could not open the dependency review. See the problems below.";
+            }
+        }
         finally
         {
             if (generation == _checkGeneration) IsChecking = false;
+        }
+    }
+
+    /// <summary>Checks a saved dependency review for the current selection before offering confirmation.</summary>
+    public Task OpenReviewAsync(string path)
+    {
+        if (!CanCompile || SelectedMode is not { } mode || SelectedTarget is not { } target) return Task.CompletedTask;
+        InvalidateReview();
+        RefreshProblems();
+        return PrepareReviewAsync(CreateCompileRequest(mode.Mode, target), target, path);
+    }
+
+    /// <summary>Creates a dependency review file for the current selection.</summary>
+    public void SaveReview(string path)
+    {
+        if (!CanCompile || _review is not { } review) return;
+        try
+        {
+            PowerShellCompilationReviewFile.Write(path, review.Review, review.ModuleSourceDirectory);
+            StatusText = $"Saved dependency review to {Path.GetFileName(path)}.";
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException)
+        {
+            StatusText = error.Message;
         }
     }
 

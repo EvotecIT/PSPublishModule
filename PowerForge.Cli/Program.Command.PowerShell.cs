@@ -155,8 +155,7 @@ internal static partial class Program
             var reviewedCheckPath = TryGetOptionValue(args, "--reviewed-check");
             var review = reviewedCheckPath is null
                 ? null
-                : JsonSerializer.Deserialize(File.ReadAllText(reviewedCheckPath), CliJson.Context.PowerShellCompilationReview)
-                  ?? throw new InvalidDataException("The dependency review was empty.");
+                : PowerShellCompilationReviewFile.Read(reviewedCheckPath);
             var spec = new PowerShellCompilationBuildSpec(resolved.SourcePath, outputDirectory, artifactName, resolved.Kind, resolved.Mode)
             {
                 ModuleManifestPath = resolved.ModuleManifestPath,

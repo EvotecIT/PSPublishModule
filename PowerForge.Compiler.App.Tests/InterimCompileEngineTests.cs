@@ -1,5 +1,6 @@
 using PowerForge;
 using PowerForge.Compiler.App.Engine;
+using PowerForge.Compiler.App.ViewModels;
 
 namespace PowerForge.Compiler.App.Tests;
 
@@ -69,6 +70,52 @@ public sealed class InterimCompileEngineTests : IDisposable
             diagnostic.Message.Contains("review", StringComparison.OrdinalIgnoreCase) ||
             diagnostic.Message.Contains("lock", StringComparison.OrdinalIgnoreCase));
         Assert.Equal(delivered, File.ReadAllBytes(first.ArtifactPath!));
+    }
+
+    [Fact]
+    public async Task SavedReviewEnablesConfirmationOnlyForTheMatchingDesktopSelection()
+    {
+        var script = Write("Handoff.ps1", "return 21");
+        var engine = new InterimCompileEngine();
+        var model = new MainWindowViewModel(engine);
+        await model.SetInputAsync(script);
+        model.OutputDirectory = Path.Combine(_root, "handoff-output");
+        model.SelectedMode = Assert.Single(model.Modes, mode => mode.Mode == PowerShellCompilationMode.Strict);
+        var target = model.Targets.First(candidate =>
+            candidate.RuntimeIdentifier == System.Runtime.InteropServices.RuntimeInformation.RuntimeIdentifier &&
+            candidate.Deployment == PowerShellCompilationDeploymentModel.FrameworkDependent);
+        model.SelectedTarget = target;
+        var selection = new CompileRequest(script, target.Mode, target, model.OutputDirectory);
+        var sourceCheck = await engine.ReviewAsync(selection, CancellationToken.None);
+        Assert.True(sourceCheck.Review is not null, string.Join(Environment.NewLine,
+            sourceCheck.Diagnostics.Select(static item => item.Message)));
+        var review = sourceCheck.Review!;
+        var reviewPath = Path.Combine(_root, "incoming.review.json");
+        PowerShellCompilationReviewFile.Write(reviewPath, review, sourceCheck.ModuleSourceDirectory);
+
+        await model.OpenReviewAsync(reviewPath);
+
+        Assert.True(model.HasReview, model.StatusText);
+        Assert.Equal("Confirm and compile", model.CompileButtonText);
+        Assert.False(Directory.Exists(model.OutputDirectory));
+        var exportedPath = Path.Combine(_root, "outgoing.review.json");
+        model.SaveReview(exportedPath);
+        Assert.Equal(File.ReadAllBytes(reviewPath), File.ReadAllBytes(exportedPath));
+
+        File.WriteAllText(script, "return 22");
+        await model.OpenReviewAsync(reviewPath);
+        Assert.False(model.HasReview);
+        Assert.Contains(model.Diagnostics, item => item.Diagnostic.Message.Contains("dependencies differ", StringComparison.OrdinalIgnoreCase));
+        Assert.False(Directory.Exists(model.OutputDirectory));
+
+        File.WriteAllText(script, "return 21");
+        var malformed = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(reviewPath))!;
+        malformed["dependencyLock"]!["cycles"] = null;
+        var malformedPath = Write("malformed.review.json", malformed.ToJsonString());
+        await model.OpenReviewAsync(malformedPath);
+        Assert.False(model.HasReview);
+        Assert.Contains(model.Diagnostics, item => item.Diagnostic.Message.Contains("invalid graph structure", StringComparison.OrdinalIgnoreCase));
+        Assert.False(Directory.Exists(model.OutputDirectory));
     }
 
     [Fact]
