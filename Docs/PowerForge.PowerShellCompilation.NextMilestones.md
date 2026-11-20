@@ -19,6 +19,12 @@ and resolves deferred parameter types and custom attributes. Arbitrary type
 registration, function-local methods and inheritance, and general Strict
 module startup remain open.
 
+Hybrid also supports a root module switch that produces one of a bounded set
+of literal script paths. Each file is recorded in the dependency closure.
+PowerShell retains selection, loading, and type resolution in module scope.
+The PSProfiler comparison and emitted unit count are recorded in the
+[coverage report](PowerForge.PowerShellCompilation.Coverage.md#independent-script-and-module-assessment).
+
 At the October 16 checkpoint, the compiler continuation merged through [PR #1009](https://github.com/EvotecIT/PSPublishModule/pull/1009) on October 4 at `3640ba9c20d17671a63716795a89527e68c5f006`. This contract audit began at main `f5398d8da` and incorporated main `04cd3209b` before local Full qualification. The readiness assessment records candidate validation separately from historical qualification.
 
 M24–M28 have completed bounded local implementation gates, including the September 22 audit corrections. M28 covers executable run/watch, Strict library NuGet packaging, grouped project diagnostics, and a module consumer quickstart on both supported Windows PowerShell hosts. **M29 has completed its pinned local coverage gate:** 30 newly emitted and differentially executed module functions across four blocker families, an offline standalone compiled workflow, and zero accepted per-function regressions. The active slice qualifies complete ordinary modules and a complete multi-file application through the canonical artifact lifecycle. M30 has completed its selected public 3.0.169 Linux and Windows target gates; additional physical profiles, clean-image repetition and broad management validation remain partial. M31 precision and performance optimization remain deferred while whole-workflow correctness is qualified. Direct source-debugger qualification remains deferred. A historical local milestone does not establish current-candidate correctness, general PowerShell compatibility, or qualification on an untested host.

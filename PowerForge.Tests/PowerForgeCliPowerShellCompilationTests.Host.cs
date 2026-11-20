@@ -157,6 +157,96 @@ public sealed partial class PowerForgeCliPowerShellCompilationTests
         }
     }
 
+    [Theory]
+    [InlineData("Missing.ps1", PowerShellCompilationMode.Hybrid, "Missing.ps1")]
+    [InlineData("../Outside.ps1", PowerShellCompilationMode.Hybrid, "dot-source expression")]
+    [InlineData("Present.ps1", PowerShellCompilationMode.Strict, "dot-source expression")]
+    public void CheckRejectsUnqualifiedModulePathAlternatives(string fallback, PowerShellCompilationMode mode, string diagnostic)
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge module paths", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var source = Path.Combine(root, "Example.psm1");
+            File.WriteAllText(Path.Combine(root, "Present.ps1"), "$script:answer = 21");
+            File.WriteAllText(source, $$"""
+                $path = switch ($PSVersionTable.PSVersion.Major) {
+                    { $_ -ge 7 } { 'Present.ps1' }
+                    default { '{{fallback}}' }
+                }
+                . (Join-Path $PSScriptRoot $path)
+                """);
+            var check = new PowerShellCompilationHostService().Check(new PowerShellCompilationCheckRequest(source)
+            {
+                Mode = mode,
+                OutputDirectory = Path.Combine(root, "output")
+            });
+
+            Assert.False(check.CanProceed);
+            Assert.Null(check.ProposedReview);
+            Assert.Contains(check.Diagnostics, item => item.Severity == PowerShellCompilationHostSeverity.Error &&
+                item.Message.Contains(diagnostic, StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void ModuleSwitchAlternativesRequireRuntimeOwnershipAndRemainLockedWhenInactive()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "PowerForge module review", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var source = Path.Combine(root, "Example.psm1");
+            var active = Path.Combine(root, "Active.ps1");
+            var inactive = Path.Combine(root, "Inactive.ps1");
+            var output = Path.Combine(root, "output");
+            File.WriteAllText(active, "$script:value = 21");
+            File.WriteAllText(inactive, "$script:value = 13");
+            File.WriteAllText(source, """
+                $path = switch ('active') { 'active' { 'Active.ps1' } default { 'Inactive.ps1' } }
+                . (Join-Path $PSScriptRoot $path)
+                function Get-Example { $script:value }
+                Export-ModuleMember -Function Get-Example
+                """);
+            var host = new PowerShellCompilationHostService();
+            var check = host.Check(new PowerShellCompilationCheckRequest(source) { OutputDirectory = output });
+            Assert.True(check.CanProceed, string.Join(Environment.NewLine, check.Diagnostics.Select(item => item.Message)));
+            foreach (var file in new[] { "Active.ps1", "Inactive.ps1" })
+                Assert.Contains(check.Dependencies, item => item.RelativePath == file &&
+                    item.Disposition == PowerShellCompilationDependencyDisposition.PreservedScript);
+
+            var spec = new PowerShellCompilationBuildSpec(source, output, "Example",
+                PowerShellCompilationArtifactKind.BinaryModule, PowerShellCompilationMode.Hybrid,
+                allowUnreviewedDependencyResolution: true);
+            spec.ExcludeResource = new[] { "Inactive.ps1" };
+            var excluded = new PowerShellCompilationArtifactBuilder().Build(spec);
+            Assert.False(excluded.Succeeded);
+            Assert.Contains("Inactive.ps1' cannot be excluded", excluded.Error, StringComparison.OrdinalIgnoreCase);
+
+            spec.ExcludeResource = Array.Empty<string>();
+            spec.CompilationSourcePaths = new[] { inactive };
+            var compiled = new PowerShellCompilationArtifactBuilder().Build(spec);
+            Assert.False(compiled.Succeeded);
+            Assert.Contains("cannot also be a compilation source", compiled.Error, StringComparison.OrdinalIgnoreCase);
+
+            spec.CompilationSourcePaths = Array.Empty<string>();
+            spec.AllowUnreviewedDependencyResolution = false;
+            File.WriteAllText(inactive, "$script:value = 15");
+            var changed = host.Compile(spec, check.ProposedReview!);
+            Assert.False(changed.Succeeded);
+            Assert.Contains("dependency lock drifted", changed.Error, StringComparison.OrdinalIgnoreCase);
+            Assert.Empty(Directory.EnumerateFileSystemEntries(output));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
     private sealed class AtPhase(PowerShellCompilationHostPhase phase, Action callback) : IProgress<PowerShellCompilationProgress>
     {
         public void Report(PowerShellCompilationProgress value)

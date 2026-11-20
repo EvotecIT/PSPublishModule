@@ -4,7 +4,7 @@ using System.Text.RegularExpressions;
 namespace PowerForge;
 
 /// <summary>Recognizes source-path syntax without executing commands or treating their runtime binding as trusted.</summary>
-internal static class PowerShellCompilationSourcePathPlanner
+internal static partial class PowerShellCompilationSourcePathPlanner
 {
     private static readonly Regex ScriptRootPath = new(
         @"^\$(?:\{)?PSScriptRoot(?:\})?(?<suffix>[\\/].+)$",
@@ -64,9 +64,7 @@ internal static class PowerShellCompilationSourcePathPlanner
             pipeline.PipelineElements[0] is not CommandAst { CommandElements.Count: 3 } command ||
             command.InvocationOperator is TokenKind.Dot or TokenKind.Ampersand || command.Redirections.Count != 0)
             return null;
-        var name = command.GetCommandName();
-        if (!string.Equals(name, "Join-Path", StringComparison.OrdinalIgnoreCase) &&
-            !string.Equals(name, "Microsoft.PowerShell.Management\\Join-Path", StringComparison.OrdinalIgnoreCase)) return null;
+        if (!IsJoinPathCommand(command)) return null;
         if (command.CommandElements[1] is not VariableExpressionAst root || !IsScriptRoot(root) ||
             command.CommandElements[2] is not StringConstantExpressionAst child ||
             string.IsNullOrWhiteSpace(child.Value) || child.Value.IndexOfAny(new[] { '\0', ':' }) >= 0 ||

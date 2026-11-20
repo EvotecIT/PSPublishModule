@@ -139,6 +139,15 @@ enum for hosted compilation. The unchanged PSWriteColor 1.0.7 improved from
 **0/2** just after literal named exports were enabled to **2/2**. The other
 seven Gallery packages in that packet kept their previous counts.
 
+The switch-selected load assessment completed **18/20 inputs** with **221/287**
+units emitted. PSProfiler 1.0.5 passes reviewed Hybrid builds using the
+`CompleteModule` resource mode. It emits **1/3 units** on both targets. Original
+and generated modules agree on the exported commands, four profiling rows,
+the number of observations per row, and the executed script result on
+PowerShell 7.6.6 and Windows PowerShell 5.1.26100.9818. The two visitor class
+files are staged as runtime scripts. PowerShell selects and loads the matching
+class in the module scope.
+
 ## Why these forms were selected
 
 At 720/753, the remaining Gallery units comprised 13 in Pester, ten in

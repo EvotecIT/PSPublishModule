@@ -56,6 +56,11 @@ public sealed partial class PowerShellTypedCompilationTranspiler
             var entry = Path.GetFullPath(guardedExecutableEntryPath!);
             if (parsedFiles.Any(file => PowerShellCompilationPathSafety.PathEquals(file.Path, entry))) declarationPaths.Add(entry);
         }
+        // Runtime-selected files share the authored export scope. Method-backed
+        // commands must be declared as functions so PowerShell resolves those exports.
+        if (capabilities == PowerShellCompilationCapabilities.HybridModule &&
+            PowerShellCompilationSourcePathPlanner.HasModuleAlternatives(parsedFiles[0].Ast))
+            declarationPaths.UnionWith(parsedFiles.Select(static file => file.Path));
         for (var index = 0; index < parsedFiles.Count; index++)
         {
             var file = parsedFiles[index];

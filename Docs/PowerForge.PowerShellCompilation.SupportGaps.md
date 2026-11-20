@@ -72,6 +72,15 @@ module `Add-Type` loads and locked, directly dot-sourced class files can supply
 these runtime identities. Arbitrary type registration and deferred alias binding
 combined with `clean` or function-local type declarations still use hosted source.
 
+Hybrid binary modules can retain a top-level `switch` whose branches, including
+the default, produce literal relative `.ps1` paths. The result feeds a direct
+`. (Join-Path $PSScriptRoot $choice)` load. Every alternative must exist within
+the module and belong to the dependency closure. The generated module checks
+the selected path before loading it. PowerShell parses the selected file in
+the importing scope, allowing alternatives to declare the same class and
+use types declared by the root module. Strict and executable builds require
+their own supported source closure.
+
 Hybrid module functions can split direct arrays across local assignment targets
 and preserve single array records from a captured command or statement. The
 host owns the assignment order, typed storage conversions and wildcard switch

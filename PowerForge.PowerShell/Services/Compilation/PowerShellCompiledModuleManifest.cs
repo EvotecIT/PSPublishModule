@@ -63,14 +63,12 @@ internal static class PowerShellCompiledModuleManifest
         if (includeHybridDependencies)
         {
             var sourceRoot = Path.GetDirectoryName(Path.GetFullPath(sourcePath)) ?? Directory.GetCurrentDirectory();
-            var conventionalDiscovery = PowerShellConventionalModuleSourceDiscovery.Analyze(sourcePath);
-            var conventionalSources = conventionalDiscovery.SourcePaths;
+            var conventionalSources = PowerShellConventionalModuleSourceDiscovery.Analyze(sourcePath).SourcePaths;
             var runtimeHooks = GetContainedRuntimeScriptFiles(sourcePath, sourceManifest)
-                .Select(reference => Path.GetFullPath(Path.Combine(sourceRoot, NormalizeManifestRelativePath(reference))))
-                .Concat(conventionalSources);
-            protectedFiles.AddRange(new[] { sourcePath }
-                .Concat(runtimeHooks)
-                .Concat(conventionalSources)
+                .Select(reference => Path.GetFullPath(Path.Combine(sourceRoot, NormalizeManifestRelativePath(reference))));
+            protectedFiles.AddRange(PowerShellHybridDependencyResolver.DiscoverModuleScopeDependencies(
+                sourcePath, null, null, PowerShellModuleRuntimeAlternatives.Stage));
+            protectedFiles.AddRange(runtimeHooks.Concat(conventionalSources)
                 .Distinct(PowerShellCompilationPathSafety.PathComparer)
                 .SelectMany(PowerShellHybridDependencyResolver.DiscoverModuleScopeDependencies));
         }
@@ -178,6 +176,9 @@ internal static class PowerShellCompiledModuleManifest
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToArray();
         var hasRuntimeControlledExports = explicitExports is { Commands.Length: 0 };
+        var hasRetainedAlternatives = rootModuleFileName.EndsWith(".psm1", StringComparison.OrdinalIgnoreCase) &&
+            PowerShellHybridDependencyResolver.DiscoverRetainedModuleAlternatives(sourcePath, typed.SourcePaths).Length > 0;
+        var functionExports = hasScriptNestedModules && manifestFunctions is null ? null : selectedFallback;
 
         var mutator = new AstModuleManifestMutator();
         var rootKey = ModuleManifestValueReader.ReadTopLevelString(sourceManifest, "ModuleToProcess") is not null
@@ -189,11 +190,11 @@ internal static class PowerShellCompiledModuleManifest
                 PowerShellCompilationPathSafety.GetPathComparison(targetManifest)))
             throw new InvalidOperationException($"Module manifest '{sourceManifest}' does not contain a literal RootModule entry that can be updated.");
         ApplyTargetCompatibility(sourceManifest, targetManifest, targetFramework, mutator);
-        if (!hasRuntimeControlledExports)
+        if (!hasRuntimeControlledExports && !hasRetainedAlternatives)
         {
             mutator.TrySetManifestExports(
                 targetManifest,
-                hasScriptNestedModules && manifestFunctions is null ? null : selectedFallback,
+                functionExports,
                 selectedCmdlets,
                 manifestAliases);
         }

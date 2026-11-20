@@ -671,7 +671,8 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
 
     private static void CompareScopedArtifacts(string source, string probe, string[] compiledNames, Action<string> assertValue,
         string? importSetup = null, string? requiredModule = null, Action<PowerShellCompilationBuildResult>? assertArtifact = null,
-        IReadOnlyDictionary<string, string>? additionalSources = null, bool retainAdditionalSources = false)
+        IReadOnlyDictionary<string, string>? additionalSources = null, bool retainAdditionalSources = false,
+        bool discoverAdditionalSources = false, string? manifestFunctionPattern = "*")
     {
         var modernHost = Environment.GetEnvironmentVariable("POWERFORGE_PWSH76_PATH");
         Assert.False(string.IsNullOrWhiteSpace(modernHost), "The exact PowerShell 7.6.6 host is required.");
@@ -683,7 +684,7 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
         {
             using var fixture = OracleFixture.Create(string.Empty);
             var module = Path.Combine(fixture.RootPath, "ScopedValues.psm1");
-            File.WriteAllText(module, source);
+            File.WriteAllText(module, source, new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
             var additionalSourcePaths = new List<string>();
             if (additionalSources is not null)
                 foreach (var (name, content) in additionalSources)
@@ -693,12 +694,13 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
                     additionalSourcePaths.Add(path);
                 }
             string? manifest = null;
-            if (requiredModule is not null || retainAdditionalSources)
+            if (requiredModule is not null || retainAdditionalSources || discoverAdditionalSources && manifestFunctionPattern is not null)
             {
                 manifest = Path.ChangeExtension(module, ".psd1");
                 var required = requiredModule is null ? string.Empty : " RequiredModules=@('" + requiredModule + "');";
                 var files = retainAdditionalSources ? " FileList=@(" + string.Join(", ", additionalSources!.Keys.Select(name => "'" + name + "'")) + ");" : string.Empty;
-                File.WriteAllText(manifest, "@{ RootModule='ScopedValues.psm1'; ModuleVersion='1.0.0'; FunctionsToExport='*';" + required + files + " }");
+                File.WriteAllText(manifest, "@{ RootModule='ScopedValues.psm1'; ModuleVersion='1.0.0'; FunctionsToExport='" +
+                    manifestFunctionPattern + "';" + required + files + " }");
             }
             var built = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
                 module, Path.Combine(fixture.RootPath, "built"), "ScopedValues", PowerShellCompilationArtifactKind.BinaryModule,
@@ -707,7 +709,7 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
                 TargetFramework = framework,
                 SemanticProfileId = profile,
                 ModuleManifestPath = manifest,
-                CompilationSourcePaths = retainAdditionalSources ? Array.Empty<string>() : additionalSourcePaths.ToArray()
+                CompilationSourcePaths = retainAdditionalSources || discoverAdditionalSources ? Array.Empty<string>() : additionalSourcePaths.ToArray()
             });
             Assert.True(built.Succeeded, built.Error + Environment.NewLine + built.BuildOutput);
             assertArtifact?.Invoke(built);
