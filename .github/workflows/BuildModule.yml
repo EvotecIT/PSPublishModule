@@ -334,6 +334,11 @@ jobs:
         timeout-minutes: 5
         run: dotnet test .\PowerForge.Web.Protocols.Tests\PowerForge.Web.Protocols.Tests.csproj -c Release --nologo
 
+      - name: Test the compiler app
+        shell: pwsh
+        timeout-minutes: 10
+        run: dotnet test .\PowerForge.Compiler.App.Tests\PowerForge.Compiler.App.Tests.csproj -c Release --nologo
+
       - name: Build Module
         shell: pwsh
         # Approved-module downloads can exceed ten minutes while the Gallery retries requests.

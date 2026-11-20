@@ -9,6 +9,15 @@ const script = path.join(__dirname, 'Restore-DependencyInputs.ps1');
 const stageScript = path.join(__dirname, 'Stage-DependencyGraphs.ps1');
 const sdkScript = path.join(__dirname, 'Assert-DependencySdk.ps1');
 
+// Each call starts a fresh pwsh, which can take well over 30 seconds on a busy hosted runner.
+const PWSH_TIMEOUT = 120000;
+
+// Runs pwsh and reports a timeout or spawn failure in stderr, so assertion messages say why status is null.
+function pwsh(args, options) {
+  const result = spawnSync('pwsh', args, options);
+  if (result.error) result.stderr = `${result.stderr ?? ''}\n${result.error.message}`;
+  return result;
+}
 function fixture(t) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'powerforge dependency inputs '));
   t.after(() => fs.rmSync(root, {recursive: true, force: true}));
@@ -17,7 +26,7 @@ function fixture(t) {
 }
 
 function run(root, projects, workloads = '', version = '') {
-  return spawnSync('pwsh', ['-NoLogo', '-NoProfile', '-File', script, '-ProjectsJson', JSON.stringify(projects), '-Workloads', workloads, '-WorkloadVersion', version], {
+  return pwsh(['-NoLogo', '-NoProfile', '-File', script, '-ProjectsJson', JSON.stringify(projects), '-Workloads', workloads, '-WorkloadVersion', version], {
     cwd: root, encoding: 'utf8', timeout: 180000,
     env: {...process.env, MSBUILDDISABLENODEREUSE: '1', DOTNET_CLI_USE_MSBUILD_SERVER: '0'}
   });
@@ -26,8 +35,8 @@ function run(root, projects, workloads = '', version = '') {
 function sdk(root, setup, hideDotnet = false) {
   const command = (hideDotnet ? "$env:PATH = ''; " : '') +
     (setup === undefined ? '& $env:TEST_SDK_SCRIPT -Restore' : '& $env:TEST_SDK_SCRIPT -SetupDotNet $env:TEST_SETUP_DOTNET -Restore');
-  return spawnSync('pwsh', ['-NoLogo', '-NoProfile', '-Command', command], {
-    cwd: root, encoding: 'utf8', timeout: 30000,
+  return pwsh(['-NoLogo', '-NoProfile', '-Command', command], {
+    cwd: root, encoding: 'utf8', timeout: PWSH_TIMEOUT,
     env: {...process.env, TEST_SDK_SCRIPT: sdkScript, TEST_SETUP_DOTNET: setup ?? ''}
   });
 }
@@ -130,8 +139,8 @@ function dotnet {
   for (const [version, fail] of [['10.0.112', false], ['', false], ['10.0.112', true]]) {
     const callsFile = path.join(root, 'calls.jsonl');
     fs.rmSync(callsFile, {force: true});
-    const result = spawnSync('pwsh', ['-NoLogo', '-NoProfile', '-File', harness], {
-      cwd: root, encoding: 'utf8', timeout: 30000,
+    const result = pwsh(['-NoLogo', '-NoProfile', '-File', harness], {
+      cwd: root, encoding: 'utf8', timeout: PWSH_TIMEOUT,
       env: {...process.env, TEST_ROOT: root, TEST_SCRIPT: script, TEST_VERSION: version, TEST_FAIL: fail ? '1' : '0'}
     });
     assert.equal(result.status === 0, !fail, result.stdout + result.stderr);
@@ -151,8 +160,8 @@ test('a failed restore stops before later project graphs are produced', t => {
 });
 
 function stage(mode, source, output) {
-  return spawnSync('pwsh', ['-NoLogo', '-NoProfile', '-File', stageScript, '-Mode', mode, '-Source', source, '-OutputPath', output], {
-    encoding: 'utf8', timeout: 30000
+  return pwsh(['-NoLogo', '-NoProfile', '-File', stageScript, '-Mode', mode, '-Source', source, '-OutputPath', output], {
+    encoding: 'utf8', timeout: PWSH_TIMEOUT
   });
 }
 

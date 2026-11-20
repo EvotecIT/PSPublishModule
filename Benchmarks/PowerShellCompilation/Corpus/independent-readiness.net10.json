@@ -1,0 +1,330 @@
+{
+  "schemaVersion": 1,
+  "packetId": "powerforge-independent-readiness-net10-v1",
+  "fixedOn": "2026-11-20",
+  "semanticProfile": "PowerForge.Oracle.PowerShell/7.6",
+  "targetFramework": "net10.0",
+  "purpose": "Independent, unchanged public scripts and modules selected for common PowerShell workloads before compiler changes.",
+  "workloads": [
+    {
+      "id": "PSFolderSize",
+      "workloadKind": "Module",
+      "scenarioFamily": "published-module",
+      "repositoryUrl": "https://github.com/gngrninja/PSFolderSize/",
+      "license": "See package license information; source remains external",
+      "licenseUrl": "https://github.com/gngrninja/PSFolderSize/blob/master/README.md",
+      "revisionKind": "GalleryVersion",
+      "revision": "1.7.3",
+      "acquisition": {
+        "kind": "ZipArchive",
+        "url": "https://www.powershellgallery.com/api/v2/package/PSFolderSize/1.7.3",
+        "sha256": "77c51855d3bc8d3d4fe194be1da0cfcbf9e2dba37ed80a17f2d18171a8e4b1cf"
+      },
+      "entryPoint": "PSFolderSize.psd1"
+    },
+    {
+      "id": "PowerShellHumanizer",
+      "workloadKind": "Module",
+      "scenarioFamily": "published-module",
+      "repositoryUrl": "https://github.com/dfinke/PowerShellHumanizer",
+      "license": "See package license information; source remains external",
+      "licenseUrl": "https://github.com/dfinke/PowerShellHumanizer/blob/master/LICENSE.txt",
+      "revisionKind": "GalleryVersion",
+      "revision": "3.2.0",
+      "acquisition": {
+        "kind": "ZipArchive",
+        "url": "https://www.powershellgallery.com/api/v2/package/PowerShellHumanizer/3.2.0",
+        "sha256": "f2f650ee42692661d493fe25e69a2d367b94ba5e1cd19d81870bad78878d5201"
+      },
+      "entryPoint": "PowerShellHumanizer.psd1"
+    },
+    {
+      "id": "PoshRSJob",
+      "workloadKind": "Module",
+      "scenarioFamily": "published-module",
+      "repositoryUrl": "https://github.com/proxb/PoshRSJob",
+      "license": "See package license information; source remains external",
+      "licenseUrl": "https://opensource.org/licenses/MIT",
+      "revisionKind": "GalleryVersion",
+      "revision": "1.7.4.4",
+      "acquisition": {
+        "kind": "ZipArchive",
+        "url": "https://www.powershellgallery.com/api/v2/package/PoshRSJob/1.7.4.4",
+        "sha256": "7dc59805bc9476992733cde20cc57dd3051e3b454b1e3e9512fac8c1f764b9da"
+      },
+      "entryPoint": "PoshRSJob.psd1"
+    },
+    {
+      "id": "Terminal-Icons",
+      "workloadKind": "Module",
+      "scenarioFamily": "published-module",
+      "repositoryUrl": "https://github.com/devblackops/Terminal-Icons",
+      "license": "See package license information; source remains external",
+      "licenseUrl": "https://raw.githubusercontent.com/devblackops/Terminal-Icons/master/LICENSE",
+      "revisionKind": "GalleryVersion",
+      "revision": "0.11.0",
+      "acquisition": {
+        "kind": "ZipArchive",
+        "url": "https://www.powershellgallery.com/api/v2/package/Terminal-Icons/0.11.0",
+        "sha256": "0d5086fbd48b4b12d5c00b1e226393b326b38c3e06dbf8825f522188e9dfe4dd"
+      },
+      "entryPoint": "Terminal-Icons.psd1"
+    },
+    {
+      "id": "PSFzf",
+      "workloadKind": "Module",
+      "scenarioFamily": "published-module",
+      "repositoryUrl": "https://www.powershellgallery.com/packages/PSFzf",
+      "license": "See package license information; source remains external",
+      "licenseUrl": "https://www.powershellgallery.com/packages/PSFzf",
+      "revisionKind": "GalleryVersion",
+      "revision": "2.7.12",
+      "acquisition": {
+        "kind": "ZipArchive",
+        "url": "https://www.powershellgallery.com/api/v2/package/PSFzf/2.7.12",
+        "sha256": "5d5c55df79d24b5efbb6c6715c12ec12cb34f32dca57f5c90868de7f47a9b1ad"
+      },
+      "entryPoint": "PSFzf.psd1"
+    },
+    {
+      "id": "PSIni",
+      "workloadKind": "Module",
+      "scenarioFamily": "published-module",
+      "repositoryUrl": "https://github.com/lipkau/PSIni",
+      "license": "See package license information; source remains external",
+      "licenseUrl": "https://github.com/lipkau/PSIni/blob/master/LICENSE",
+      "revisionKind": "GalleryVersion",
+      "revision": "4.0.1",
+      "acquisition": {
+        "kind": "ZipArchive",
+        "url": "https://www.powershellgallery.com/api/v2/package/PsIni/4.0.1",
+        "sha256": "4d5eb316b7200b0e035cac74d29977b7904a9f7604e8838e1c90a10df84454c1"
+      },
+      "entryPoint": "PSIni.psd1"
+    },
+    {
+      "id": "PSProfiler",
+      "workloadKind": "Module",
+      "scenarioFamily": "published-module",
+      "repositoryUrl": "https://github.com/IISResetMe/PSProfiler",
+      "license": "See package license information; source remains external",
+      "licenseUrl": "https://github.com/IISResetMe/PSProfiler",
+      "revisionKind": "GalleryVersion",
+      "revision": "1.0.5",
+      "acquisition": {
+        "kind": "ZipArchive",
+        "url": "https://www.powershellgallery.com/api/v2/package/PSProfiler/1.0.5",
+        "sha256": "884350ac34ae5fff6ef1edbc2f07d2e7df3686fac243ea0d7265b584274b8cb7"
+      },
+      "entryPoint": "PSProfiler.psd1"
+    },
+    {
+      "id": "SimplySql",
+      "workloadKind": "Module",
+      "scenarioFamily": "published-module",
+      "repositoryUrl": "https://github.com/mithrandyr/SimplySql",
+      "license": "See package license information; source remains external",
+      "licenseUrl": "https://github.com/mithrandyr/SimplySql/blob/master/LICENSE",
+      "revisionKind": "GalleryVersion",
+      "revision": "2.2.0.106",
+      "acquisition": {
+        "kind": "ZipArchive",
+        "url": "https://www.powershellgallery.com/api/v2/package/SimplySql/2.2.0.106",
+        "sha256": "d0e2803c063275f102b86513e5feaa220e4738d838b4f8b00b835b43af9f60f2"
+      },
+      "entryPoint": "SimplySql.psd1"
+    },
+    {
+      "id": "posh-git",
+      "workloadKind": "Module",
+      "scenarioFamily": "published-module",
+      "repositoryUrl": "https://github.com/dahlbyk/posh-git",
+      "license": "See package license information; source remains external",
+      "licenseUrl": "https://github.com/dahlbyk/posh-git/blob/v1.1.0/LICENSE.txt",
+      "revisionKind": "GalleryVersion",
+      "revision": "1.1.0",
+      "acquisition": {
+        "kind": "ZipArchive",
+        "url": "https://www.powershellgallery.com/api/v2/package/posh-git/1.1.0",
+        "sha256": "87d9d37eb63d0d1b5f66622ab7ec16cd452a43cec45963ac0e596737750a00cc"
+      },
+      "entryPoint": "posh-git.psd1"
+    },
+    {
+      "id": "Plaster",
+      "workloadKind": "Module",
+      "scenarioFamily": "published-module",
+      "repositoryUrl": "https://github.com/PowerShellOrg/Plaster",
+      "license": "See package license information; source remains external",
+      "licenseUrl": "https://github.com/PowerShellOrg/Plaster/blob/master/LICENSE",
+      "revisionKind": "GalleryVersion",
+      "revision": "2.1.5",
+      "acquisition": {
+        "kind": "ZipArchive",
+        "url": "https://www.powershellgallery.com/api/v2/package/Plaster/2.1.5",
+        "sha256": "aba323cdc45f850cae21649ce7652cc1d18cdb17909a3d80f12089fcc0867068"
+      },
+      "entryPoint": "Plaster.psd1"
+    },
+    {
+      "id": "Configuration",
+      "workloadKind": "Module",
+      "scenarioFamily": "published-module",
+      "repositoryUrl": "https://github.com/PoshCode/Configuration",
+      "license": "See package license information; source remains external",
+      "licenseUrl": "http://opensource.org/licenses/MIT",
+      "revisionKind": "GalleryVersion",
+      "revision": "1.6.0",
+      "acquisition": {
+        "kind": "ZipArchive",
+        "url": "https://www.powershellgallery.com/api/v2/package/Configuration/1.6.0",
+        "sha256": "8d1e25e1a15ad60b213086259caa351f5836a8cb63efcb5d827bc219eb985dc1"
+      },
+      "entryPoint": "Configuration.psd1"
+    },
+    {
+      "id": "PSDepend",
+      "workloadKind": "Module",
+      "scenarioFamily": "published-module",
+      "repositoryUrl": "https://github.com/PowerShellOrg/PSDepend/",
+      "license": "See package license information; source remains external",
+      "licenseUrl": "https://github.com/PowerShellOrg/PSDepend/blob/main/LICENSE",
+      "revisionKind": "GalleryVersion",
+      "revision": "0.6.0",
+      "acquisition": {
+        "kind": "ZipArchive",
+        "url": "https://www.powershellgallery.com/api/v2/package/PSDepend/0.6.0",
+        "sha256": "5ec1244c12429af80e2da35f2a2e0c137475de84c4428c7d0b4c4ea6a974f963"
+      },
+      "entryPoint": "PSDepend.psd1"
+    },
+    {
+      "id": "Get-InstalledSoftware",
+      "workloadKind": "Script",
+      "scenarioFamily": "standalone-utility",
+      "repositoryUrl": "https://www.powershellgallery.com/packages/Get-InstalledSoftware",
+      "license": "See package license information; source remains external",
+      "licenseUrl": "https://www.powershellgallery.com/packages/Get-InstalledSoftware",
+      "revisionKind": "GalleryVersion",
+      "revision": "1.0.0",
+      "acquisition": {
+        "kind": "ZipArchive",
+        "url": "https://www.powershellgallery.com/api/v2/package/Get-InstalledSoftware/1.0.0",
+        "sha256": "92e7d1a98de4f41ed2b63d35acf33f8291f6fea2ab48d6f6ff0f149898759909"
+      },
+      "entryPoint": "Get-InstalledSoftware.ps1"
+    },
+    {
+      "id": "ConvertTo-Markdown",
+      "workloadKind": "Script",
+      "scenarioFamily": "standalone-utility",
+      "repositoryUrl": "https://github.com/jimbrig/PSScripts/tree/main/ConvertTo-Markdown/",
+      "license": "See package license information; source remains external",
+      "licenseUrl": "https://github.com/jimbrig/PSScripts/blob/main/LICENSE",
+      "revisionKind": "GalleryVersion",
+      "revision": "1.0.2",
+      "acquisition": {
+        "kind": "ZipArchive",
+        "url": "https://www.powershellgallery.com/api/v2/package/ConvertTo-Markdown/1.0.2",
+        "sha256": "df5b2569f71841125bb0238cb3fc01f7acdc166ea1e366f7c715780e9284b010"
+      },
+      "entryPoint": "ConvertTo-Markdown.ps1"
+    },
+    {
+      "id": "Get-UEFICertificate",
+      "workloadKind": "Script",
+      "scenarioFamily": "standalone-utility",
+      "repositoryUrl": "https://github.com/richardhicks/uefi/",
+      "license": "See package license information; source remains external",
+      "licenseUrl": "https://github.com/richardhicks/uefi/blob/main/LICENSE",
+      "revisionKind": "GalleryVersion",
+      "revision": "1.3.0",
+      "acquisition": {
+        "kind": "ZipArchive",
+        "url": "https://www.powershellgallery.com/api/v2/package/Get-UEFICertificate/1.3.0",
+        "sha256": "62d6c98a55bfb9a3e13870cbafdd30b08684e4ea5144133bdc0e9d51ae4b824a"
+      },
+      "entryPoint": "Get-UEFICertificate.ps1"
+    },
+    {
+      "id": "convert-csv2txt",
+      "workloadKind": "Script",
+      "scenarioFamily": "standalone-utility",
+      "repositoryUrl": "https://github.com/fleschutz/PowerShell",
+      "license": "CC0-1.0",
+      "licenseUrl": "https://github.com/fleschutz/PowerShell",
+      "revisionKind": "GitCommit",
+      "revision": "50082bcec78864a42527a4291b34d4af7fdb8be9",
+      "acquisition": {
+        "kind": "File",
+        "url": "https://raw.githubusercontent.com/fleschutz/PowerShell/50082bcec78864a42527a4291b34d4af7fdb8be9/scripts/convert-csv2txt.ps1",
+        "sha256": "5b73b65affc2333514c993de8929ec078d4ca622bb3360733739b105a1509803"
+      },
+      "entryPoint": "convert-csv2txt.ps1"
+    },
+    {
+      "id": "get-sha256",
+      "workloadKind": "Script",
+      "scenarioFamily": "standalone-utility",
+      "repositoryUrl": "https://github.com/fleschutz/PowerShell",
+      "license": "CC0-1.0",
+      "licenseUrl": "https://github.com/fleschutz/PowerShell",
+      "revisionKind": "GitCommit",
+      "revision": "50082bcec78864a42527a4291b34d4af7fdb8be9",
+      "acquisition": {
+        "kind": "File",
+        "url": "https://raw.githubusercontent.com/fleschutz/PowerShell/50082bcec78864a42527a4291b34d4af7fdb8be9/scripts/get-sha256.ps1",
+        "sha256": "2c5cf2ccb22bac5d4736270d66b5e11076f121d6c540c8afa7da5eac77b1a4bc"
+      },
+      "entryPoint": "get-sha256.ps1"
+    },
+    {
+      "id": "check-xml-file",
+      "workloadKind": "Script",
+      "scenarioFamily": "standalone-utility",
+      "repositoryUrl": "https://github.com/fleschutz/PowerShell",
+      "license": "CC0-1.0",
+      "licenseUrl": "https://github.com/fleschutz/PowerShell",
+      "revisionKind": "GitCommit",
+      "revision": "50082bcec78864a42527a4291b34d4af7fdb8be9",
+      "acquisition": {
+        "kind": "File",
+        "url": "https://raw.githubusercontent.com/fleschutz/PowerShell/50082bcec78864a42527a4291b34d4af7fdb8be9/scripts/check-xml-file.ps1",
+        "sha256": "49c93000065813068c2fa55ead00573b87dc2be174b7482fc1b930192e473339"
+      },
+      "entryPoint": "check-xml-file.ps1"
+    },
+    {
+      "id": "check-drive-space",
+      "workloadKind": "Script",
+      "scenarioFamily": "standalone-utility",
+      "repositoryUrl": "https://github.com/fleschutz/PowerShell",
+      "license": "CC0-1.0",
+      "licenseUrl": "https://github.com/fleschutz/PowerShell",
+      "revisionKind": "GitCommit",
+      "revision": "50082bcec78864a42527a4291b34d4af7fdb8be9",
+      "acquisition": {
+        "kind": "File",
+        "url": "https://raw.githubusercontent.com/fleschutz/PowerShell/50082bcec78864a42527a4291b34d4af7fdb8be9/scripts/check-drive-space.ps1",
+        "sha256": "2ba49c7273ed3d6e1051e104cb9b0ba051cce0a9b2ec5b71145cd7fefef17ddb"
+      },
+      "entryPoint": "check-drive-space.ps1"
+    },
+    {
+      "id": "check-powershell",
+      "workloadKind": "Script",
+      "scenarioFamily": "standalone-utility",
+      "repositoryUrl": "https://github.com/fleschutz/PowerShell",
+      "license": "CC0-1.0",
+      "licenseUrl": "https://github.com/fleschutz/PowerShell",
+      "revisionKind": "GitCommit",
+      "revision": "50082bcec78864a42527a4291b34d4af7fdb8be9",
+      "acquisition": {
+        "kind": "File",
+        "url": "https://raw.githubusercontent.com/fleschutz/PowerShell/50082bcec78864a42527a4291b34d4af7fdb8be9/scripts/check-powershell.ps1",
+        "sha256": "6ede584f02aaf435c1e7c30789bac50fc054b3e316d078ce8d5d3b832de60dcb"
+      },
+      "entryPoint": "check-powershell.ps1"
+    }
+  ]
+}

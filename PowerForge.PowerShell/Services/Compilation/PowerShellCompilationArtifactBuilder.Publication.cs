@@ -9,18 +9,21 @@ public sealed partial class PowerShellCompilationArtifactBuilder
         string publishDirectory,
         PowerShellTypedCompilationResult? typed,
         bool usesPowerShellRuntimeFallback,
-        string outputDirectory)
+        string outputDirectory,
+        IReadOnlyDictionary<string, string> inputHashes)
     {
+        void VerifyCopiedInput(string sourcePath, string stagedPath)
+            => VerifyStagedPayload(sourcePath, Path.GetFileName(sourcePath), ComputeSha256(stagedPath), inputHashes);
         if (spec.Kind is PowerShellCompilationArtifactKind.Library or PowerShellCompilationArtifactKind.BinaryModule)
         {
             var source = Path.Combine(publishDirectory, generatedAssemblyName + ".dll");
             if (!File.Exists(source)) throw new FileNotFoundException("Generated library was not found.", source);
             if (spec.Kind == PowerShellCompilationArtifactKind.BinaryModule &&
                 (usesPowerShellRuntimeFallback || typed?.Methods.Any(static method => method.NativeFunctionBinding is not null) == true))
-                return CopyHybridModule(spec, artifactName, source, typed ?? throw new InvalidOperationException("Typed module metadata was not available."), outputDirectory);
+                return CopyHybridModule(spec, artifactName, source, typed ?? throw new InvalidOperationException("Typed module metadata was not available."), outputDirectory, VerifyCopiedInput);
             if (spec.Kind == PowerShellCompilationArtifactKind.BinaryModule &&
                 (!string.IsNullOrWhiteSpace(spec.ModuleManifestPath) || HasSiblingModuleManifest(spec.SourcePath)))
-                return CopyStrictModuleWithManifest(spec, artifactName, source, typed ?? throw new InvalidOperationException("Typed module metadata was not available."), outputDirectory);
+                return CopyStrictModuleWithManifest(spec, artifactName, source, typed ?? throw new InvalidOperationException("Typed module metadata was not available."), outputDirectory, VerifyCopiedInput);
             var target = Path.Combine(outputDirectory, artifactName + ".dll");
             File.Copy(source, target, overwrite: true);
             return CreateCopiedArtifactWithSymbols(source, target, "Primary");

@@ -117,7 +117,7 @@ internal sealed class PowerShellBoundOptimizer
             PowerShellBoundReturnStatement returned => new PowerShellBoundReturnStatement(
                 returned.Span, returned.Expression is null ? null : OptimizeExpression(returned.Expression), returned.EmitsValue),
             PowerShellBoundExpressionStatement expression => new PowerShellBoundExpressionStatement(
-                expression.Span, OptimizeExpression(expression.Expression), expression.EmitsOutput, expression.RequiresOutputContinuation),
+                expression.Span, OptimizeExpression(expression.Expression), expression.EmitsOutput, expression.RequiresOutputContinuation, expression.DiscardsSuccessOutput),
             PowerShellBoundForStatement loop => new PowerShellBoundForStatement(
                 loop.Span,
                 loop.Initializer is null ? null : (PowerShellBoundMutationExpression)OptimizeExpression(loop.Initializer),
@@ -144,7 +144,7 @@ internal sealed class PowerShellBoundOptimizer
                 attempted.Catches.Select(clause => new PowerShellBoundCatchClause(clause.ExceptionTypes.ToArray(), OptimizeBlock(clause.Body))).ToArray(),
                 attempted.FinallyBlock is null ? null : OptimizeBlock(attempted.FinallyBlock), attempted.SuspendHostStopping),
             PowerShellBoundStreamWriteStatement stream => new PowerShellBoundStreamWriteStatement(
-                stream.Span, stream.Kind, stream.Provider, OptimizeExpression(stream.Message), stream.OutputBinding, stream.UsesNativeInvocation, stream.UsesCommandHostEnumeration),
+                stream.Span, stream.Kind, stream.Provider, OptimizeExpression(stream.Message), stream.OutputBinding, stream.UsesNativeInvocation, stream.UsesCommandHostEnumeration, stream.RuntimeFree),
             PowerShellBoundIndexAssignmentStatement index => new PowerShellBoundIndexAssignmentStatement(
                 index.Span, OptimizeExpression(index.Target), OptimizeExpression(index.Index), OptimizeExpression(index.Value), index.Kind, index.UsePowerShellRuntimeErrors),
             PowerShellBoundClrMemberAssignmentStatement member => new PowerShellBoundClrMemberAssignmentStatement(

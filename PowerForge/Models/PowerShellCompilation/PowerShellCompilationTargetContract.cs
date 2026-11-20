@@ -34,6 +34,8 @@ public enum PowerShellCompilationDeploymentModel
 /// </summary>
 public sealed class PowerShellCompilationTargetContract
 {
+    internal PowerShellCompilationTargetContract Copy() => (PowerShellCompilationTargetContract)MemberwiseClone();
+
     /// <summary>Target-contract schema version.</summary>
     public int SchemaVersion { get; set; } = 3;
 

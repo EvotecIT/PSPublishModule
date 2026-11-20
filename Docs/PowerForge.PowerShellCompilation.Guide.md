@@ -14,8 +14,8 @@ manifest shows which methods compiled and where the artifact relies on PowerShel
 | `if`, `for`, `while`, `do`, array `foreach`, `return` | Supported within the typed rules | Dynamic enumeration and labeled loop control |
 | Local function calls | Supported when the complete reachable code compiles | An unsupported reachable function prevents a Strict build |
 | Selected CLR members, typed exceptions, bounded `try`/`catch`/`finally` | Supported where analysis proves the contract | Runtime type lookup and unsupported exception behavior |
-| Cmdlet calls and multi-stage pipelines in admitted Hybrid functions | Generally unsupported in Strict | PowerShell runs stages such as `ForEach-Object`, `Where-Object` and `Select-Object` inside compiled function bodies. Parameter binding, streams and downstream stopping use the active host |
-| Advanced parameters and `begin`/`process`/`end` | No general runtime-free binding support | Native-bound Hybrid functions preserve binding and lifecycle; native executable script roots also support these clauses on the explicit `net10.0` Windows x64 target, with every clause checked |
+| Pipelines over one-dimensional stable-scalar arrays | Strict `net10.0` executables support literal Boolean `Where-Object` predicates, single-scalar `ForEach-Object` blocks and terminal `Select-Object -First` with a positive Int32 literal. The terminal stage stops upstream after the requested number of non-null records | Hybrid uses native binding for general cmdlet invocation, object projection and script-block behavior |
+| Advanced parameters and `begin`/`process`/`end` | A pure filter chain can feed a terminal local Int32 reducer through one exact by-value `ValueFromPipeline` parameter. The compiler proves the accumulator operations stay in range | Native-bound Hybrid functions preserve richer binding, process output and lifecycle behavior using the active PowerShell host |
 | Module-scoped classes and enums | No general runtime-free authored-type support | Hybrid can compile functions that construct module-defined types, use them in local storage, and expose them in output metadata. PowerShell defines the types and runs their methods |
 | Function-local data classes | No general runtime-free authored-class support | Qualified functions preserve lexical identity, typed arrays, property validation, conversions, and static reads. References from separate script blocks require the defining scope |
 | Delivered managed dependency types in parameters, casts and metadata | No general dependency-type binding support | Hybrid reads authenticated delivered DLL metadata, including supported closed public generics. PowerShell handles loading, type identity, conversion, attributes and validation |
@@ -57,6 +57,31 @@ targets one OS and architecture. Strict does not automatically mean NativeAOT;
 choose the deployment explicitly. The current supported executable targets are
 Strict `net10.0` on Windows x64 and Linux x64, framework-dependent or NativeAOT.
 Other combinations remain experimental. Packaging does not conceal source.
+
+Packaged entries preserve compatible `#requires -Version` and
+`#requires -PSEdition` directives in the embedded script. Check and build apply
+the embedded PowerShell host's supported major and minor versions and edition.
+Requirements for modules, assemblies, a particular shell, or elevation block
+the build. Script dependencies with `#requires` directives also block the build.
+
+Two clean Windows x64 NativeAOT builds of the
+[file-summary example](../Examples/PowerShellCompilation/Get-FileLineSummary.ps1) produced
+byte-identical executables with the build cache disabled. The executable
+records the PDB filename without the temporary build path. The separate native
+PDB files differed between the two builds. Independently repeated Linux x64
+NativeAOT builds of that script also produced byte-identical executables.
+
+Before building, restore the SDK-selected runtime pack for your target.
+Follow the [runtime pack preparation steps](PowerForge.PowerShellCompilation.md#dependencies-and-runtime-resources).
+
+```powershell
+powerforge powershell build ./Examples/PowerShellCompilation/Get-FileLineSummary.ps1 --mode Strict --framework net10.0 --rid win-x64 --self-contained --optimization NativeAot --no-build-cache --allow-unreviewed-dependencies --out ./artifacts/file-summary
+./artifacts/file-summary/Get-FileLineSummary.exe --Path ./example.txt --MinimumLength 5
+```
+
+Use `linux-x64` and omit the `.exe` suffix on Linux. The example counts all
+lines, then reports the number and total character count of lines that meet the
+minimum length. It reports a missing file as a terminating error.
 
 ## Two small Strict programs
 

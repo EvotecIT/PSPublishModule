@@ -9,7 +9,8 @@ public sealed partial class PowerShellCompilationArtifactBuilder
         string artifactName,
         string compiledAssembly,
         PowerShellTypedCompilationResult typed,
-        string outputDirectory)
+        string outputDirectory,
+        Action<string, string> verifyCopiedInput)
     {
         var moduleDirectory = Path.Combine(outputDirectory, artifactName);
         Directory.CreateDirectory(moduleDirectory);
@@ -45,7 +46,8 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             artifactName,
             Path.GetFileName(modulePath),
             typed,
-            spec.TargetFramework);
+            spec.TargetFramework,
+            verifyCopiedInput);
         if (manifestFiles is not null)
         {
             var primaryManifest = manifestFiles.First(path => path.EndsWith(artifactName + ".psd1", StringComparison.OrdinalIgnoreCase));
@@ -69,7 +71,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                      runtimeHooks,
                      path => PowerShellHybridModuleComposer.ComposeDependency(path, typed, wrappedCompiledMethods),
                      typed.SourcePaths.Where(path => !PowerShellCompilationPathSafety.PathEquals(path, spec.SourcePath)),
-                     conventionalLoaders: conventionalDiscovery.Loaders))
+                     conventionalLoaders: conventionalDiscovery.Loaders, verifyCopiedInput: verifyCopiedInput))
             files.Add(CreateArtifactFile(
                 dependency.Path,
                 dependency.IsGenerated ? "GeneratedModuleDependency" : "ModuleDependency"));
@@ -82,7 +84,8 @@ public sealed partial class PowerShellCompilationArtifactBuilder
         string artifactName,
         string compiledAssembly,
         PowerShellTypedCompilationResult typed,
-        string outputDirectory)
+        string outputDirectory,
+        Action<string, string> verifyCopiedInput)
     {
         var moduleDirectory = Path.Combine(outputDirectory, artifactName);
         Directory.CreateDirectory(moduleDirectory);
@@ -97,7 +100,8 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             artifactName,
             Path.GetFileName(assemblyPath),
             typed,
-            spec.TargetFramework) ?? throw new InvalidOperationException("The sibling module manifest was not available during artifact publication.");
+            spec.TargetFramework,
+            verifyCopiedInput) ?? throw new InvalidOperationException("The sibling module manifest was not available during artifact publication.");
         var primaryManifest = manifestFiles.First(path => path.EndsWith(artifactName + ".psd1", StringComparison.OrdinalIgnoreCase));
         foreach (var manifestFile in manifestFiles)
             files.Add(CreateArtifactFile(manifestFile, PowerShellCompilationPathSafety.PathEquals(manifestFile, primaryManifest) ? "PrimaryModuleManifest" : "ModuleDependency"));

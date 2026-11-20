@@ -30,9 +30,7 @@ internal sealed partial class PowerShellSemanticAnalyzer
                 }
                 if (EnumerateStatements(function.Body).OfType<PowerShellBoundStreamWriteStatement>().Any(statement =>
                         statement.Provider is null && !statement.UsesNativeInvocation && !statement.UsesCommandHostEnumeration &&
-                        statement.Message is not PowerShellBoundArrayExpression &&
-                        ResolveType(statement.Message, lookup).ClrType != typeof(void) &&
-                        !PowerShellStableScalarTypePolicy.IsSupported(ResolveType(statement.Message, lookup))))
+                        RequiresHostedOutputEnumeration(statement, ResolveType(statement.Message, lookup))))
                     return function.WithAnalysis(disposition: new PowerShellExecutionDisposition(
                         PowerShellExecutionDispositionKind.Fallback,
                         "control.output.enumeration",
@@ -40,8 +38,7 @@ internal sealed partial class PowerShellSemanticAnalyzer
                 if (program.SemanticHostFamily == PowerShellCompilationSemanticHostFamily.WindowsPowerShell51 &&
                     EnumerateStatements(function.Body).OfType<PowerShellBoundStreamWriteStatement>().Any(statement =>
                         statement.Provider is null && !statement.UsesNativeInvocation && !statement.UsesCommandHostEnumeration && statement.Message is PowerShellBoundArrayExpression array &&
-                        array.Elements.Any(element => element is not PowerShellBoundLiteralExpression { Value: null } &&
-                            !PowerShellStableScalarTypePolicy.IsSupported(element.Type))))
+                        array.Elements.Any(RequiresHostedArrayRecord)))
                     return function.WithAnalysis(disposition: new PowerShellExecutionDisposition(
                         PowerShellExecutionDispositionKind.Fallback,
                         "control.output.ps51-record-wrapper",
@@ -140,6 +137,21 @@ internal sealed partial class PowerShellSemanticAnalyzer
             }, static (left, right) => left.Disposition.Kind == right.Disposition.Kind && left.Disposition.ReasonCode == right.Disposition.ReasonCode);
             return program.WithFunctions(functions.Values.OrderBy(static function => function.Symbol.StableKey, StringComparer.Ordinal).ToArray());
         }
+
+        private static bool RequiresHostedOutputEnumeration(PowerShellBoundStreamWriteStatement statement, PowerShellTypeFact type)
+        {
+            if (statement.Message is PowerShellBoundArrayExpression array)
+                return statement.RuntimeFree && array.Elements.Any(RequiresHostedArrayRecord);
+            if (type.ClrType == typeof(void) || PowerShellStableScalarTypePolicy.IsSupported(type))
+                return false;
+            var clr = type.ClrType;
+            return !statement.RuntimeFree || !clr.IsArray || clr.GetArrayRank() != 1 ||
+                !PowerShellStableScalarTypePolicy.IsSupported(clr.GetElementType()!);
+        }
+
+        private static bool RequiresHostedArrayRecord(PowerShellBoundExpression record)
+            => record is not PowerShellBoundLiteralExpression { Value: null } &&
+               !PowerShellStableScalarTypePolicy.IsSupported(record.Type);
 
         private static PowerShellBoundFunction? GetNativeBindingTargetRequiringClrCall(
             PowerShellBoundFunction function,

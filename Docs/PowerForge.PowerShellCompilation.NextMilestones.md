@@ -4,8 +4,11 @@ See the [current coverage report](PowerForge.PowerShellCompilation.Coverage.md)
 for the Gallery and external workload counts and the scope of each qualification.
 The Gallery packet emits 753/753 units and all ten artifact probes pass. The
 external packet emits 183/196 units and passes all seven workloads across 34
-scenarios, including all 44 Classic Locksmith functions. The older milestone
-records below keep their original inputs and results.
+scenarios, including all 44 Classic Locksmith functions. Strict executables
+compile three previously rejected pipeline programs covering filter and map,
+upstream stopping, and a pure filter feeding a local advanced lifecycle.
+General projection, pipeline value capture, and lifecycle interleaving remain
+open. The older milestone records below keep their original inputs and results.
 
 Hybrid preserves command availability across admitted module file loads and
 can compile startup in the importing module's scope. Type admission covers

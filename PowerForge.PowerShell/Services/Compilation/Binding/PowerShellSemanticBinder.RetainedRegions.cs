@@ -16,7 +16,7 @@ internal sealed partial class PowerShellSemanticBinder
                      !emitted.Contains(function.Symbol.StableKey)))
         {
             var document = documents.FirstOrDefault(document => document.DocumentId == function.Symbol.DocumentId);
-            if (document is null) continue;
+            if (document is null || document.NativeScriptRootName == function.Symbol.Name) continue;
             var opportunity = opportunities.FirstOrDefault(opportunity =>
                 PowerShellCompilationPathSafety.PathEquals(opportunity.SourcePath, document.Path) &&
                 opportunity.SourceName.Equals(function.Symbol.Name, StringComparison.OrdinalIgnoreCase));

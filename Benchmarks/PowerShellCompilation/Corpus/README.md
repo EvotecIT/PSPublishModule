@@ -15,6 +15,18 @@ This checked-in corpus is the portable, product-neutral acceptance surface for P
 - `m29-portfolio-ledger.net10-net472.json` pins the M29 five-module, two-target per-function dispositions, source provenance, loader closure, license disposition, and co-blocker pairs. Its 30 named execution credits refer to the bounded offline original/generated probes in the assessment; other emitted methods and promoted regions are analysis results only. The external Fibonacci application has a separate functional entry with its generated-host and performance limits.
 - `Corpus.Runner.Common.ps1` owns exact-hash HTTPS acquisition, offline cache verification, contained archive extraction, expansion limits, owned child-process execution, portable candidate/opportunity projection, and evidence-only aggregation for both packets.
 
+- `independent-readiness.net10.json` pins 12 further Gallery modules, three
+  Gallery scripts, and five scripts from a single public Git revision. Run it
+  with `Invoke-ExternalAssessment.ps1 -PacketPath <packet> -BaselinePath <baseline> -EvidencePath <report> -RefreshBaseline`.
+  Use an unused baseline path for this packet. The report records failed inputs
+  even when the run exits with an error and leaves the baseline untouched.
+  The initial 2026-11-20 census completed 15/20 inputs and emitted 150/192
+  units across those 15. Five module inputs report admission failures. The
+  packet preserves those inputs so the failures remain visible. Census results
+  measure emission. Run a separate original/generated comparison to establish
+  behavior for a particular workflow. The runner refreshes baselines only
+  when every input completes.
+
 Run the portable coverage gate from the repository root:
 
 ```powershell

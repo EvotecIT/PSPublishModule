@@ -90,6 +90,7 @@ $requiredFamilies = @{
     'basic-function Test-Path command lookup' = 'PowerForge.Tests.PowerShellCompilationArtifactHardeningTests.Build_HybridBasicFunctionKeepsTestPathOnPowerShellCommandLookup*'
 }
 $windowsRequiredFamilies = @{
+    'reproducible Windows NativeAOT executable' = 'PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.Build_WindowsNativeAotExecutableIsByteIdenticalAcrossFreshWorkspaces*'
     'native delegate conversion' = 'PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.NativeDelegateCasts_PreserveArgumentsDynamicScopeOutputAndEscape*'
     'native launcher argument order' = 'PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.Build_HybridNativeScriptRootPreservesOrderedUnboundArguments*'
     'native Hybrid executable console presentation' = 'PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.Build_NativeHybridConsolePreservesFormattingStreamsAndAuthoredErrors*'
@@ -117,6 +118,12 @@ $oracleTestPatterns = @(
     'PowerForge.Tests.PowerShellCompilationArtifactHardeningTests.Build_BinaryModuleLanguageModeMatchesPinnedPowerShell76AndInstalledWindowsPowerShell'
 )
 if ($requirePinnedOracle) {
+    $requiredFamilies['Strict streaming filter and map'] = $oracleTestPatterns[0] + 'StrictStreamingFilterAndMapMatchBothPinnedHosts*'
+    $requiredFamilies['Strict streaming upstream stop'] = $oracleTestPatterns[0] + 'StrictStreamingTakeStopsUpstreamOnBothPinnedHosts*'
+    $requiredFamilies['Strict streaming lifecycle'] = $oracleTestPatterns[0] + 'StrictStreamingFilterAndLifecycleMatchBothPinnedHosts*'
+    $requiredFamilies['Strict streaming overflow rejection'] = $oracleTestPatterns[0] + 'StrictStreamingRejectsOverflowThatContinuesOnBothPinnedHosts*'
+    $requiredFamilies['Strict streaming boundary rejection'] = $oracleTestPatterns[0] + 'StrictStreamingRejectsUnrepresentedSourceAndOutputEffectsOnBothPinnedHosts*'
+    $requiredFamilies['Strict streaming termination'] = $oracleTestPatterns[0] + 'StrictStreamingPreservesPriorOutputAndFailureExitOnBothPinnedHosts*'
     $requiredFamilies['returned and collected native callbacks'] = 'PowerForge.Tests.PowerShellCompilationSemanticOracleTests.ReturnedAndCollectedCallbacksPreserveNativeScopeClosureAndFailureOnBothHosts*'
     $requiredFamilies['borrowed invocation objects'] = 'PowerForge.Tests.PowerShellCompilationSemanticOracleTests.BorrowedInvocationObjectsPreserveIdentityMutationAndDynamicBindingOnBothHosts*'
     $requiredFamilies['native call closure'] = 'PowerForge.Tests.PowerShellCompilationSemanticOracleTests.NativeCalleesPreserveBasicExtraArgumentsAndAdvancedCallerBindingOnBothHosts*'
@@ -136,6 +143,8 @@ if ($requirePinnedOracle) {
     $requiredFamilies['native reference and chained assignment'] = 'PowerForge.Tests.PowerShellCompilationSemanticOracleTests.NativeReferencesArrayCastsAndChainedAssignmentsMatchBothHosts*'
     $requiredFamilies['native switch clauses and nested storage'] = 'PowerForge.Tests.PowerShellCompilationSemanticOracleTests.NativeSwitchVariablesAndNestedStorageUseAuthoredSemanticsOnBothHosts*'
     $requiredFamilies['native replacement declarations'] = 'PowerForge.Tests.PowerShellCompilationSemanticOracleTests.RepeatedRootDeclarationsPreserveImportOrderAndNativeBindingOnBothHosts*'
+    $requiredFamilies['literal module export assignments'] = 'PowerForge.Tests.PowerShellCompilationSemanticOracleTests.LiteralExportAssignmentsPreserveThePublicSurfaceOnBothHosts*'
+    $requiredFamilies['guarded region source context'] = 'PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.HybridGuardedRegion_PreservesUsingTypesInlineParametersAndMixedHostNeighbors*'
     $requiredFamilies['native module load declarations'] = 'PowerForge.Tests.PowerShellCompilationSemanticOracleTests.SeparatelyLoadedFunctionsPreserveCommandAvailabilityAndBindingOnBothHosts*'
     $requiredFamilies['module initialized types'] = 'PowerForge.Tests.PowerShellCompilationSemanticOracleTests.ModuleInitializedTypesBindAtInvocationOnBothHosts*'
     $requiredFamilies['deferred module clause storage'] = 'PowerForge.Tests.PowerShellCompilationSemanticOracleTests.DeferredModuleDeclarationsPreservePrivateStorageAcrossClausesOnBothHosts*'

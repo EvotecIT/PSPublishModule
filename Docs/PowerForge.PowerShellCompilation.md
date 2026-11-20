@@ -10,6 +10,35 @@ PowerForge can turn a `.ps1`, `.psm1`, `.psd1`, or conventional module directory
 
 These are deliberately separate claims. Packaging makes a script easier to distribute, but does not make its body faster. Typed compilation removes PowerShell's dynamic execution path for a conservative function subset and can improve CPU-bound code. Every build writes a JSON manifest that says which path was used.
 
+
+## Check and build a reviewed selection
+
+`powershell check` inspects a script or module without running it. Use it with
+the mode and target you intend to build. It reports source findings, artifact
+decisions, and the dependencies for that selection. `powershell doctor` shows
+the selected .NET SDK. With an explicit modern target contract it also checks
+whether the selected SDK describes that framework.
+
+```powershell
+powerforge powershell check ./example.ps1 --mode Strict --write-review ./example.review.json
+# Review the target and dependencies before passing the file to build.
+powerforge powershell build ./example.ps1 --mode Strict --reviewed-check ./example.review.json
+```
+
+Use the same mode, target contract, and resource settings in both commands.
+For a module, save the review outside its source directory. The module
+dependency inventory includes files from that directory.
+The build validates the target and resolves the dependency graph again before
+emission. To change the selection or refresh a changed source, run `check`
+again and save a new review file. The existing `--dependency-lock` option
+continues to accept a dependency graph for scripted builds.
+
+The CLI and other hosts can use `PowerShellCompilationHostService` for the same
+analysis, review, and build behavior. The service accepts cancellation and
+reports coarse progress phases. Dependency planning and shaping can finish
+their current operation before a cancellation takes effect.
+
+
 ## Build artifacts
 
 | Kind | Default mode | Result | PowerShell required at runtime | Typed speedup expected |
@@ -323,7 +352,7 @@ powerforge powershell build .\MathTools.psm1 `
 Import-Module .\artifacts\MathTools.dll
 ```
 
-When `MathTools.psd1` exists beside `MathTools.psm1`, the primary artifact is a rewritten manifest in a module directory. `RootModule`, `FunctionsToExport`, and `CmdletsToExport` are remapped so a function that became a binary cmdlet keeps the same public name. Literal top-level `Export-ModuleMember` declarations are preserved across typed and fallback commands; dynamic export expressions are rejected. An omitted `AliasesToExport` entry stays omitted so aliases created by retained module source continue to follow PowerShell's default manifest policy.
+When `MathTools.psd1` exists beside `MathTools.psm1`, the primary artifact is a rewritten manifest in a module directory. `RootModule`, `FunctionsToExport`, and `CmdletsToExport` are remapped so a function that became a binary cmdlet keeps the same public name. Literal top-level `Export-ModuleMember` declarations preserve the public names of typed and retained commands. Hybrid also accepts export arguments that reference plain variables assigned literal strings or lists in the contiguous assignment block immediately before the export call. It keeps the authored call so PowerShell applies the module's variable bindings and export rules at import. Other dynamic export expressions are rejected. An omitted `AliasesToExport` entry stays omitted so aliases created by retained module source continue to follow PowerShell's default manifest policy.
 
 Build a hybrid module when only part of the source is eligible. The kind and mode are inferred from the module input:
 

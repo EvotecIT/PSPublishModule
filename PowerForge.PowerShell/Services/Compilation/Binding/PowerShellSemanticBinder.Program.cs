@@ -14,9 +14,11 @@ internal sealed partial class PowerShellSemanticBinder
         IEnumerable<ParsedSourceDocument> documents,
         string? targetFramework = null,
         PowerShellCompilationCapability capabilities = PowerShellCompilationCapability.None,
-        IReadOnlyDictionary<string, PowerShellTypeFact>? analyzedReturnTypes = null)
+        IReadOnlyDictionary<string, PowerShellTypeFact>? analyzedReturnTypes = null,
+        CancellationToken cancellationToken = default)
     {
         if (documents is null) throw new ArgumentNullException(nameof(documents));
+        cancellationToken.ThrowIfCancellationRequested();
         var orderedDocuments = documents.OrderBy(static item => item.DocumentId, StringComparer.Ordinal).ToArray();
         if (capabilities == PowerShellCompilationCapabilities.HybridModule)
         {
@@ -78,6 +80,7 @@ internal sealed partial class PowerShellSemanticBinder
             var changed = false;
             foreach (var declaration in declarations)
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 if (!functionsByName.TryGetValue(declaration.Syntax.Name, out var signature) || signature.DeclaredReturnType is not null)
                     continue;
                 var inferred = PowerShellLocalCallSemanticBinder.InferReturnType(declaration.Syntax, signature.Parameters, functionsByName);
@@ -105,8 +108,13 @@ internal sealed partial class PowerShellSemanticBinder
             var roundDiagnostics = new List<PowerShellSemanticDiagnostic>();
             foreach (var declaration in declarations.OrderBy(static item => item.Symbol.StableKey, StringComparer.Ordinal))
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 if (declaration.Document.Errors.Length > 0 || !functionsByName.ContainsKey(declaration.Syntax.Name)) continue;
                 var functionDiagnostics = new List<PowerShellSemanticDiagnostic>();
+                // The guarded region rewriter attaches only to authored functions.
+                // A synthetic file initializer must lower as a whole or stay hosted.
+                var syntheticRoot = declaration.Document.NativeScriptRootName == declaration.Syntax.Name;
+                var canOwnRetainedRegion = declaration.Symbol.Kind == PowerShellSymbolKind.Function && !syntheticRoot;
                 var bound = BindFunction(
                     declaration.Document,
                     declaration.Syntax,
@@ -116,10 +124,10 @@ internal sealed partial class PowerShellSemanticBinder
                     targetFramework,
                     capabilities,
                     capabilities.HasFlag(PowerShellCompilationCapability.HybridTypedRegions) &&
-                    declaration.Symbol.Kind == PowerShellSymbolKind.Function
+                    canOwnRetainedRegion
                         ? regionCandidates
                         : null,
-                    capabilities.HasFlag(PowerShellCompilationCapability.HybridTypedRegions)
+                    capabilities.HasFlag(PowerShellCompilationCapability.HybridTypedRegions) && !syntheticRoot
                         ? regionOpportunities
                         : null,
                     declaration.Symbol.Kind is PowerShellSymbolKind.NativeScriptBlock or PowerShellSymbolKind.ConditionalFunction ||
@@ -131,7 +139,7 @@ internal sealed partial class PowerShellSemanticBinder
                 // binding can independently prove a detached terminal region. Evaluate
                 // that second view in isolation so neither binding erases the other's
                 // candidates or promotes the unresolved function as a whole.
-                if (bound is null &&
+                if (bound is null && canOwnRetainedRegion &&
                     capabilities.HasFlag(PowerShellCompilationCapability.HybridTypedRegions) &&
                     capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding) &&
                     functionDiagnostics.Any(static diagnostic => diagnostic.Code == PowerShellCompilationFeatureIds.ParameterType) &&

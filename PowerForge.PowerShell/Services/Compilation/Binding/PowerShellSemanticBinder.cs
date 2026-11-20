@@ -172,6 +172,7 @@ internal sealed partial class PowerShellSemanticBinder
 
         var statements = new List<PowerShellBoundStatement>();
         var statementBindings = new List<PowerShellBoundStatementBinding>();
+        var pipelineLocals = new List<PowerShellBoundLocal>();
         var bodyIsValid = true;
         var lastFailedStatementIndex = -1;
         for (var index = 0; index < authoredStatements.Length; index++)
@@ -223,6 +224,24 @@ internal sealed partial class PowerShellSemanticBinder
                 continue;
             }
             var diagnosticCount = diagnostics.Count;
+            if (capabilities == PowerShellCompilationCapabilities.TypedExecutable && statement is PipelineAst pipeline &&
+                TryBindStrictStreamingPipeline(document, pipeline, symbols, functions, localFunctionNames, statements, diagnostics,
+                    index == authoredStatements.Length - 1, targetFramework, pipelineLocals, out var streaming))
+            {
+                if (streaming is not null)
+                {
+                    statements.AddRange(streaming);
+                    statementBindings.AddRange(streaming.Select(boundStatement =>
+                        new PowerShellBoundStatementBinding(authoredStatementIndex, authoredStatementIndex, boundStatement)));
+                    continue;
+                }
+                if (diagnostics.Count == diagnosticCount)
+                    RejectStrictPipeline(diagnostics, PowerShellSourceParser.GetSpan(document, statement.Extent),
+                        "could not prove the source and stage contracts");
+                bodyIsValid = false;
+                lastFailedStatementIndex = authoredStatementIndex;
+                continue;
+            }
             var bound = BindStatement(document, statement, symbols, functions, diagnostics, index == authoredStatements.Length - 1, targetFramework, capabilities);
             if (bound is null)
             {
@@ -244,7 +263,8 @@ internal sealed partial class PowerShellSemanticBinder
             !capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding))
             PowerShellClosedLocalCollectionFactoryPolicy.NormalizeBoundReturn(statements, statementBindings);
         var refinedTypes = symbols.Values.ToDictionary(static binding => binding.Symbol.StableKey, static binding => binding.Type, StringComparer.Ordinal);
-        locals = locals.Select(local => new PowerShellBoundLocal(local.Symbol, refinedTypes[local.Symbol.StableKey])).ToArray();
+        locals = locals.Select(local => new PowerShellBoundLocal(local.Symbol, refinedTypes[local.Symbol.StableKey]))
+            .Concat(pipelineLocals).ToArray();
         // A fully bound body may still need its authored PowerShell header after cmdlet shaping.
         // Keep the ordinary terminal-region candidate so that final shaping can retain that header
         // while delegating the proven body through the same region ABI.

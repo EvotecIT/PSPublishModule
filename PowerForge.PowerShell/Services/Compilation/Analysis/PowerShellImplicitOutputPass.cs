@@ -45,7 +45,8 @@ internal sealed class PowerShellImplicitOutputPass : IPowerShellSemanticPass
         var commandEnumeration = program.TargetCapabilities.HasFlag(PowerShellCompilationCapability.PowerShellStatementErrors);
         return program.WithFunctions(program.Functions.Select(function => selected.Contains(function.Symbol.StableKey)
             ? function.WithBody(RewriteBlock(function.Body, function.NativeFunctionBinding is not null,
-                commandEnumeration, documents[function.Symbol.DocumentId]))
+                commandEnumeration, documents[function.Symbol.DocumentId],
+                runtimeFree: program.TargetCapabilities == PowerShellCompilationCapabilities.TypedExecutable))
             : function).ToArray());
     }
 
@@ -55,7 +56,7 @@ internal sealed class PowerShellImplicitOutputPass : IPowerShellSemanticPass
             sourcePath, body.Span, Array.Empty<PowerShellSymbolId>(), sourceText));
 
     private static PowerShellBoundBlock RewriteBlock(PowerShellBoundBlock block, bool usesNativeInvocation,
-        bool commandEnumeration, PowerShellBoundSourceDocument document, bool alreadyProtected = false)
+        bool commandEnumeration, PowerShellBoundSourceDocument document, bool alreadyProtected = false, bool runtimeFree = false)
     {
         var statements = new List<PowerShellBoundStatement>();
         foreach (var statement in block.Statements)
@@ -63,12 +64,12 @@ internal sealed class PowerShellImplicitOutputPass : IPowerShellSemanticPass
             if (statement is PowerShellBoundStatementErrorBoundary boundary)
             {
                 statements.Add(new PowerShellBoundStatementErrorBoundary(
-                    RewriteBlock(boundary.Body, usesNativeInvocation, commandEnumeration, document, true),
+                    RewriteBlock(boundary.Body, usesNativeInvocation, commandEnumeration, document, true, runtimeFree),
                     boundary.SourcePath, boundary.SourceText, boundary.NativeSuccessStatus, boundary.NativeSequencePoint));
             }
             else if (statement is PowerShellBoundReturnStatement { EmitsSuccessOutput: true, Expression: not null } returned)
             {
-                var output = Output(returned.Span, returned.Expression, usesNativeInvocation, commandEnumeration);
+                var output = Output(returned.Span, returned.Expression, usesNativeInvocation, commandEnumeration, runtimeFree);
                 var exit = new PowerShellBoundReturnStatement(returned.Span, null);
                 if (output.UsesCommandHostEnumeration && !alreadyProtected)
                     statements.Add(Protect(new PowerShellBoundStatement[] { output, exit }, returned.Span, document));
@@ -80,27 +81,27 @@ internal sealed class PowerShellImplicitOutputPass : IPowerShellSemanticPass
             }
             else if (statement is PowerShellBoundExpressionStatement { EmitsOutput: true } expression)
             {
-                statements.Add(Output(expression.Span, expression.Expression, usesNativeInvocation, commandEnumeration));
+                statements.Add(Output(expression.Span, expression.Expression, usesNativeInvocation, commandEnumeration, runtimeFree));
             }
             else if (statement is PowerShellBoundStreamWriteStatement { Provider: null } stream)
             {
-                statements.Add(Output(stream.Span, stream.Message, usesNativeInvocation, commandEnumeration));
+                statements.Add(Output(stream.Span, stream.Message, usesNativeInvocation, commandEnumeration, runtimeFree));
             }
             else
             {
                 statements.Add(PowerShellBoundStatementRewriter.RewriteNestedBlocks(statement,
-                    nested => RewriteBlock(nested, usesNativeInvocation, commandEnumeration, document)));
+                    nested => RewriteBlock(nested, usesNativeInvocation, commandEnumeration, document, runtimeFree: runtimeFree)));
             }
         }
         return new PowerShellBoundBlock(block.Span, statements.ToArray());
     }
 
     private static PowerShellBoundStreamWriteStatement Output(SourceSpan span, PowerShellBoundExpression expression,
-        bool usesNativeInvocation, bool commandEnumeration)
+        bool usesNativeInvocation, bool commandEnumeration, bool runtimeFree)
         => new(span, PowerShellStreamCommandKind.Success, provider: null, expression, usesNativeInvocation: usesNativeInvocation,
             usesCommandHostEnumeration: !usesNativeInvocation && commandEnumeration &&
                 expression.Type.ClrType != typeof(void) &&
-                !PowerShellStableScalarTypePolicy.IsSupported(expression.Type));
+                !PowerShellStableScalarTypePolicy.IsSupported(expression.Type), runtimeFree: runtimeFree);
 
     private static bool IsDirectOutputRecord(
         PowerShellBoundFunction function,

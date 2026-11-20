@@ -55,6 +55,86 @@ zero skipped on each surface. It exercises pipeline assertions, object-property
 assertions, and an expected throwing script block. It does not execute every
 emitted Pester method or replace the fixed packet's invocation probes.
 
+## Strict streaming executable proof
+
+Three `net10.0` programs that Strict previously rejected now build as complete
+runtime-free executables. Their original scripts and generated executables
+run through the pinned semantic oracle.
+
+| Complete Strict programs | Before | Current |
+| --- | ---: | ---: |
+| Filter and map, take with observable upstream stopping, and filter into a local advanced reducer | 0/3 | 3/3 |
+
+The stages use CLR records and loops. The take stage stops inside the record
+loop. The advanced reducer receives the retained records through the existing
+typed collection binding after pure filters. PowerShell 7.6.6 and Windows
+PowerShell 5.1 each pass 29 typed output comparisons, one terminating-process
+comparison, and seven checks for shapes that Strict must reject, with zero
+failures and zero skips. The comparisons cover record types and order, empty
+and null input, early stopping, and `begin`, `process` and `end` execution.
+The generated artifacts verify the runtime-free dependency closure. The
+original six Strict programs continue to pass.
+[Semantic oracle tests](../PowerForge.Tests/PowerShellCompilationSemanticStrictStreamingOracleTests.cs).
+
+## Additional published Gallery packages
+
+Eight additional version-pinned Gallery packages were measured with the Hybrid
+`net10.0` post-emission census on Windows x64. The baseline compiler at
+`833ca4cd6050a30249fcfc3dc6313c6e80083e2f` completed four package censuses.
+The compiler now completes all eight, with 709 of 736 units emitted. The
+packages were read from the original Gallery archives.
+
+| Gallery package | Version | Baseline emitted units | Current emitted units |
+| --- | --- | ---: | ---: |
+| PSWriteColor | 1.0.7 | Input rejected | 2/2 |
+| PSWriteHTML | 1.45.0 | Input rejected | 264/274 |
+| PSSharedGoods | 0.0.313 | Input rejected | 280/289 |
+| PowerInfoblox | 1.0.42 | Input rejected | 89/89 |
+| PSWordPress | 0.0.3 | 17/17 | 17/17 |
+| PSLansweeper | 0.0.3 | 2/2 | 2/2 |
+| PSBlackListChecker | 0.8.7 | 12/14 | 12/14 |
+| PasswordSolution | 2.1.0 | 43/49 | 43/49 |
+
+The four input rejections came from export lists assigned as literals immediately
+before `Export-ModuleMember`. Hybrid keeps these calls in the module so PowerShell
+binds their actual values, including any existing variable constraints. These counts describe the additional packages and are
+independent of the ten-module Gallery and seven-workload baselines.
+
+Three offline scenarios matched between the original and Hybrid artifacts on
+PowerShell 7.6.6 (`net10.0`) and Windows PowerShell 5.1.26100.9818
+(`net472`). All six comparisons checked the public command list and passed
+without skips.
+
+| Package | Observed behavior |
+| --- | --- |
+| PSWriteColor | `Write-Colour` resolves to `Write-Color`. Text output, host color records and the UTF-16 log match. The tested function body has an emitted CLR method. |
+| PSWordPress | `Connect-WordPress` and `Get-WordPressPost` match for two explicitly requested pages from a loopback server. The comparisons cover the GET path, query values, synthetic authorization and returned post data. Both entry points have emitted CLR bodies. |
+| PSWriteHTML | `New-HTML` and `New-HTMLTable` produce the same report title, headers, escaped cell content and embedded-asset structure. Both entry points have emitted CLR bodies. |
+
+## Independent script and module assessment
+
+A separate packet pins 12 Gallery modules and eight standalone scripts from
+the Gallery and a public Git revision. On PowerShell 7.6.6 the starting census
+completed for **15/20 inputs**, with **150/192 units emitted**. Support for
+a top-level export call splatted from an immediately preceding literal
+hashtable increased this to **17/20 inputs** and **220/284 units emitted**.
+PoshRSJob contributed **1/2** and posh-git **69/90**. The packet also counted
+three promoted regions in posh-git. Three modules still failed admission.
+PSDepend uses a computed export list, PSProfiler dot-sources a computed
+script block, and SimplySql already has a binary module as its manifest root.
+
+On PowerShell 7.6.6 and Windows PowerShell 5.1.26100.9818, posh-git returned
+matching branch, untracked-file, repository, and export information for a
+local Git fixture. PoshRSJob matched the exported commands, job completion,
+and output of a start, wait, receive, and remove sequence using the
+`CompleteModule` resource mode. All four original and Hybrid comparisons passed
+without skips.
+
+The same change admits static references to PowerShell's `ActionPreference`
+enum for hosted compilation. The unchanged PSWriteColor 1.0.7 improved from
+**0/2** just after literal named exports were enabled to **2/2**. The other
+seven Gallery packages in that packet kept their previous counts.
+
 ## Why these forms were selected
 
 At 720/753, the remaining Gallery units comprised 13 in Pester, ten in
