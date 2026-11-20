@@ -76,7 +76,7 @@ public sealed class PowerShellCompilationCheckResult
     public int SchemaVersion => 1;
     /// <summary>Whether the selected artifact can proceed to a reviewed build.</summary>
     public bool CanProceed => ProposedReview is not null;
-    /// <summary>Directory inventoried for a script module input.</summary>
+    /// <summary>Source directory protected from review-file writes for a module build or module input.</summary>
     public string? ModuleSourceDirectory { get; set; }
     /// <summary>Canonical artifact-aware analysis.</summary>
     public PowerShellCompilationExplanation? Explanation { get; set; }

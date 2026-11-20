@@ -43,12 +43,13 @@ public static class PowerShellCompilationReviewFile
             PowerShellCompilationPathSafety.EnsureNoLinksInExistingAncestors(moduleSourceDirectory, linkError);
             PowerShellCompilationPathSafety.EnsureNoLinksInExistingAncestors(fullPath, linkError);
 #endif
-            var sourceDirectory = FrameworkCompatibility.ResolvePhysicalPath(moduleSourceDirectory)
+            var sourceDirectory = ComparablePath(FrameworkCompatibility.ResolvePhysicalPath(moduleSourceDirectory))
                 .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
             var physicalDirectory = FrameworkCompatibility.ResolvePhysicalPath(Path.GetDirectoryName(fullPath)!);
             fullPath = Path.Combine(physicalDirectory, Path.GetFileName(fullPath));
-            if (PowerShellCompilationPathSafety.PathEquals(fullPath, sourceDirectory) ||
-                PowerShellCompilationPathSafety.PathStartsWith(fullPath, sourceDirectory + Path.DirectorySeparatorChar))
+            var comparablePath = ComparablePath(fullPath);
+            if (PowerShellCompilationPathSafety.PathEquals(comparablePath, sourceDirectory) ||
+                PowerShellCompilationPathSafety.PathStartsWith(comparablePath, sourceDirectory + Path.DirectorySeparatorChar))
                 throw new ArgumentException("Save the review outside the module source directory so it does not change the reviewed dependency inventory.", nameof(path));
         }
 
@@ -65,6 +66,15 @@ public static class PowerShellCompilationReviewFile
             if (created) File.Delete(fullPath);
             throw;
         }
+    }
+
+    private static string ComparablePath(string path)
+    {
+        if (!FrameworkCompatibility.IsWindows()) return path;
+        // Win32 device and extended DOS/UNC paths can name the same directory.
+        if (path.StartsWith(@"\\.\", StringComparison.Ordinal))
+            path = @"\\?\" + path.Substring(4);
+        return WindowsNativePath.GetExtendedPath(path);
     }
 }
 
