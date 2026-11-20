@@ -492,8 +492,19 @@ internal static class PowerShellConventionalModuleSourceDiscovery
                         assignment.Extent.StartOffset < loaderOffset,
                 searchNestedScriptBlocks: false)
             .Cast<AssignmentStatementAst>()
-            .Select(static assignment => FindAssignedVariable(assignment.Left))
-            .Any(name => name?.Equals(variableName, StringComparison.OrdinalIgnoreCase) == true);
+            .Select(static assignment => FindWrittenVariable(assignment.Left))
+            .Any(name => name is not null &&
+                         PowerShellAssignmentTargetPolicy.GetUnscopedVariableName(name).Equals(
+                             PowerShellAssignmentTargetPolicy.GetUnscopedVariableName(variableName), StringComparison.OrdinalIgnoreCase));
+
+    private static string? FindWrittenVariable(ExpressionAst target) => target switch
+    {
+        IndexExpressionAst index => FindWrittenVariable(index.Target),
+        MemberExpressionAst member => FindWrittenVariable(member.Expression),
+        ConvertExpressionAst conversion => FindWrittenVariable(conversion.Child),
+        VariableExpressionAst variable => variable.VariablePath.UserPath,
+        _ => null
+    };
 
     private static string? FindAssignedVariable(ExpressionAst expression)
     {
