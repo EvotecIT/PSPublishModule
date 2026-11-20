@@ -27,6 +27,7 @@ public sealed partial class PowerForgeCliPowerShellCompilationTests
             var result = checkedResult.RootElement.GetProperty("result");
             Assert.True(result.GetProperty("canProceed").GetBoolean());
             Assert.Equal(1, result.GetProperty("schemaVersion").GetInt32());
+            Assert.Equal(result.GetProperty("proposedReview").GetRawText(), File.ReadAllText(review));
 
             var wrongTarget = await RunCliAsync(repository,
                 new[] { "powershell", "build", source, "--mode", "Package", "--out", output,
@@ -188,7 +189,13 @@ public sealed partial class PowerForgeCliPowerShellCompilationTests
             var outside = await RunCliAsync(repository,
                 new[] { "powershell", "check", source, "--write-review", outsideReview, "--output", "json" });
             Assert.True(outside.ExitCode == 0, outside.StdOut + outside.StdErr);
-            Assert.True(File.Exists(outsideReview));
+            var originalReview = File.ReadAllBytes(outsideReview);
+
+            var repeated = await RunCliAsync(repository,
+                new[] { "powershell", "check", source, "--write-review", outsideReview, "--output", "json" });
+            Assert.Equal(1, repeated.ExitCode);
+            Assert.Equal(originalReview, File.ReadAllBytes(outsideReview));
+            Assert.Empty(Directory.EnumerateFiles(root, ".powerforge-review-*.tmp"));
         }
         finally
         {

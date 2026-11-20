@@ -38,11 +38,7 @@ internal static partial class Program
         {
             try
             {
-                if (result.ModuleSourceDirectory is { } moduleSourceDirectory && IsInsideModuleSource(moduleSourceDirectory, reviewPath))
-                    return WritePowerShellError(outputJson, 1,
-                        "Save the review outside the module source directory so it does not change the reviewed dependency inventory.", logger, command);
-                using var file = new FileStream(reviewPath, FileMode.CreateNew, FileAccess.Write, FileShare.None);
-                JsonSerializer.Serialize(file, result.ProposedReview, CliJson.Context.PowerShellCompilationReview);
+                PowerShellCompilationReviewFile.Write(reviewPath, result.ProposedReview, result.ModuleSourceDirectory);
             }
             catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException)
             {
@@ -61,13 +57,6 @@ internal static partial class Program
         if (result.CanProceed && reviewPath is not null)
             logger.Info($"Review the reported dependencies before building with --reviewed-check \"{reviewPath}\".");
         return result.CanProceed ? 0 : 1;
-    }
-
-    private static bool IsInsideModuleSource(string root, string path)
-    {
-        var relative = Path.GetRelativePath(root, path);
-        return !Path.IsPathRooted(relative) && relative != ".." &&
-               !relative.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal);
     }
 
     private static int CommandPowerShellDoctor(string[] args, bool outputJson, ILogger logger)
