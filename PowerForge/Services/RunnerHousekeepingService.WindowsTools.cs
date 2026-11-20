@@ -87,9 +87,6 @@ public sealed partial class RunnerHousekeepingService
         try
         {
             MaintenanceRecover(run, recoverWindowsTools: true);
-            MaintenanceDeleteIsolated(run);
-            run.State.Due |= MaintenanceHasPendingJournals(run);
-            run.Isolated.Clear();
             MaintenanceRetainOnIo(run, "Windows build tooling", () => MaintenanceWindowsTools(run, tools));
             MaintenanceDeleteIsolated(run);
         }

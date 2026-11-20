@@ -197,33 +197,37 @@ public sealed partial class RunnerHousekeepingService
     private void MaintenanceDeleteIsolated(MaintenanceRun run)
     {
         foreach (var journal in run.Isolated)
+            if (!MaintenanceDeleteIsolated(run, journal)) break;
+    }
+
+    private bool MaintenanceDeleteIsolated(MaintenanceRun run, RunnerMaintenanceJournal journal)
+    {
+        var stage = MaintenanceStage(journal);
+        try
         {
-            if (run.Expired) { run.Retained.Add("Quarantine cleanup deferred by the execution budget."); break; }
-            var stage = MaintenanceStage(journal);
-            try
+            if (run.Expired) throw new MaintenanceBudgetExpiredException();
+            MaintenancePhysicalPath(stage);
+            if (Directory.Exists(stage) || File.Exists(stage))
             {
-                MaintenancePhysicalPath(stage);
-                if (Directory.Exists(stage) || File.Exists(stage))
-                {
-                    if (!journal.RuntimeIpc) MaintenanceSnapshot(run, stage, journal.Directory, sensitive: false, repository: journal.Repository);
-                    DeleteTarget(stage, allowSudo: false, isDirectory: journal.Directory, allowedRootPath: journal.Root);
-                    run.Result.RemovedBytes += journal.Bytes;
-                    run.Removed.Add(journal.Source);
-                }
-                File.Delete(Path.Combine(run.Spec.StateRootPath, "journal", journal.Id + ".json"));
-                var parent = Path.GetDirectoryName(stage)!;
-                if (Directory.Exists(parent) && !Directory.EnumerateFileSystemEntries(parent).Any()) Directory.Delete(parent);
+                if (!journal.RuntimeIpc) MaintenanceSnapshot(run, stage, journal.Directory, sensitive: false, repository: journal.Repository);
+                DeleteTarget(stage, allowSudo: false, isDirectory: journal.Directory, allowedRootPath: journal.Root);
+                run.Result.RemovedBytes += journal.Bytes;
+                run.Removed.Add(journal.Source);
             }
-            catch (MaintenanceBudgetExpiredException)
-            {
-                run.Retained.Add("Quarantine cleanup deferred by the execution budget.");
-                break;
-            }
-            catch (Exception error) when (error is IOException || error is UnauthorizedAccessException)
-            {
-                run.Errors.Add("Quarantine cleanup retained " + journal.Id + " — " + error.GetType().Name);
-            }
+            File.Delete(Path.Combine(run.Spec.StateRootPath, "journal", journal.Id + ".json"));
+            var parent = Path.GetDirectoryName(stage)!;
+            if (Directory.Exists(parent) && !Directory.EnumerateFileSystemEntries(parent).Any()) Directory.Delete(parent);
         }
+        catch (MaintenanceBudgetExpiredException)
+        {
+            run.Retained.Add("Quarantine cleanup deferred by the execution budget.");
+            return false;
+        }
+        catch (Exception error) when (error is IOException || error is UnauthorizedAccessException)
+        {
+            run.Errors.Add("Quarantine cleanup retained " + journal.Id + " — " + error.GetType().Name);
+        }
+        return true;
     }
 
     private static int? MaintenanceRuntimeIpcOwner(string path)

@@ -9,7 +9,7 @@ namespace PowerForge;
 
 public sealed partial class RunnerHousekeepingService
 {
-    private static void MaintenanceRecover(MaintenanceRun run, bool recoverWindowsTools)
+    private void MaintenanceRecover(MaintenanceRun run, bool recoverWindowsTools)
     {
         var directory = Path.Combine(run.Spec.StateRootPath, "journal");
         if (!Directory.Exists(directory)) return;
@@ -48,7 +48,15 @@ public sealed partial class RunnerHousekeepingService
                 var stage = MaintenanceStage(journal);
                 if (File.Exists(stage) || Directory.Exists(stage))
                 {
-                    if (!run.DryRun) run.Isolated.Add(journal);
+                    if (run.DryRun) continue;
+                    // Finish recovered tool records as we find them so discovery cannot spend their entire time slice.
+                    if (recoverWindowsTools)
+                    {
+                        var canContinue = MaintenanceDeleteIsolated(run, journal);
+                        run.State.Due |= File.Exists(record);
+                        if (!canContinue) break;
+                    }
+                    else run.Isolated.Add(journal);
                 }
                 else if (!run.DryRun) File.Delete(record);
             }
