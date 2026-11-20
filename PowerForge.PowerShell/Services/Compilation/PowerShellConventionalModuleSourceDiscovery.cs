@@ -143,13 +143,14 @@ internal static class PowerShellConventionalModuleSourceDiscovery
             string.IsNullOrEmpty(root.Extent.File))
             return false;
 
-        var enumerations = FindFileEnumerationAssignments(root, argument.Extent.StartOffset).ToArray();
+        var exportOffset = argument.Extent.StartOffset;
+        var enumerations = FindFileEnumerationAssignments(root).ToArray();
+        var loadsExportedFiles = false;
         foreach (var loader in root.FindAll(
                      node => node is ForEachStatementAst candidate && IsTopLevel(candidate, root),
                      searchNestedScriptBlocks: false).Cast<ForEachStatementAst>())
         {
-            if (loader.Extent.EndOffset >= argument.Extent.StartOffset ||
-                !GetDirectDotSourceLoaders(loader).Any())
+            if (!GetDirectDotSourceLoaders(loader).Any())
                 continue;
 
             var names = enumerations
@@ -160,21 +161,21 @@ internal static class PowerShellConventionalModuleSourceDiscovery
                 .Select(static enumeration => enumeration.Name);
             var known = new HashSet<string>(names, StringComparer.OrdinalIgnoreCase);
             var referenced = new List<string>();
-            if (TryReadFileEnumerationInputs(loader.Condition, referenced) &&
-                referenced.All(known.Contains) &&
+            if (!TryReadFileEnumerationInputs(loader.Condition, referenced) || !referenced.All(known.Contains))
+                return false;
+            if (loader.Extent.EndOffset < exportOffset &&
                 referenced.Contains(receiver.VariablePath.UserPath, StringComparer.OrdinalIgnoreCase) &&
-                !HasInterveningAssignment(root, receiver.VariablePath.UserPath, loader.Extent.StartOffset, argument.Extent.StartOffset))
-                return true;
+                !HasInterveningAssignment(root, receiver.VariablePath.UserPath, loader.Extent.StartOffset, exportOffset))
+                loadsExportedFiles = true;
         }
-        return false;
+        return loadsExportedFiles;
     }
 
-    private static IEnumerable<(AssignmentStatementAst Assignment, string Name)> FindFileEnumerationAssignments(ScriptBlockAst root, int exportOffset)
+    private static IEnumerable<(AssignmentStatementAst Assignment, string Name)> FindFileEnumerationAssignments(ScriptBlockAst root)
     {
         foreach (var producer in root.FindAll(static node => node is CommandAst, searchNestedScriptBlocks: false).Cast<CommandAst>())
         {
-            if (producer.Extent.StartOffset >= exportOffset ||
-                !IsTopLevel(producer, root) ||
+            if (!IsTopLevel(producer, root) ||
                 producer.Parent is not PipelineAst { PipelineElements.Count: 1 } pipeline ||
                 producer.Redirections.Count != 0 ||
                 !string.Equals(GetUnqualifiedCommandName(producer), "Get-ChildItem", StringComparison.OrdinalIgnoreCase) ||

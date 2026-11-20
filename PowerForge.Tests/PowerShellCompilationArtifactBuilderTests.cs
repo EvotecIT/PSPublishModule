@@ -589,6 +589,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             """
             $public = @(Get-ChildItem -Path "$PSScriptRoot/Public/*.ps1")
             $extra = @(Get-Item -LiteralPath "$PSScriptRoot/Initialize.ps1")
+            foreach ($file in $public) { . $file.FullName }
             foreach ($file in @($public + $extra)) { . $file.FullName }
             Export-ModuleMember -Function $public.BaseName
             """,
