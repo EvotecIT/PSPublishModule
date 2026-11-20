@@ -17,7 +17,8 @@ $ErrorActionPreference = 'Stop'
 function Get-HostEvidence {
     param([string] $Executable, [string] $WorkingDirectory)
 
-    $identityCommand = '[Console]::Write(([ordered]@{version=$PSVersionTable.PSVersion.ToString();edition=$PSVersionTable.PSEdition}| ConvertTo-Json -Compress))'
+    $identityCommand = '$env:PSModulePath = [IO.Path]::Combine($PSHOME, ''Modules''); ' +
+        '[Console]::Write(([ordered]@{version=$PSVersionTable.PSVersion.ToString();edition=$PSVersionTable.PSEdition}| ConvertTo-Json -Compress))'
     $identity = Invoke-OwnedProcess -FileName $Executable -Arguments @('-NoProfile', '-NonInteractive', '-Command', $identityCommand) -WorkingDirectory $WorkingDirectory -TimeoutSeconds 45
     if ($identity.ExitCode -ne 0 -or $identity.StandardError) { throw 'Cannot identify the source PowerShell host.' }
     $hostIdentity = $identity.StandardOutput | ConvertFrom-Json
