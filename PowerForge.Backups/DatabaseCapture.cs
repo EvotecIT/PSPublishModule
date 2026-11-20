@@ -42,26 +42,22 @@ internal static class DatabaseCapture
         return result;
     }
 
-    // Negative: kibibytes, as SQLite's cache_size reads it.
-    internal const int CheckCacheKibibytes = -256 * 1024;
-
-    // Read-only, so the checked file stays byte-identical to its recorded SHA-256. The default 2 MB page cache makes
-    // integrity_check re-read index pages from disk for every row: a 56 GB file with 108 indexes read about 365 GB in four
-    // hours without finishing. A 256 MB cache keeps the pages it revisits; SQLite allocates it only as pages are read, and
-    // an unpooled connection frees it (and the file) when each statement's connection closes.
-    internal static SQLite CheckClient() => new()
+    // Read-only and unpooled: the checked file stays byte-identical to its recorded SHA-256, and nothing keeps it open.
+    internal static SQLite ReadOnlyClient() => new()
     {
-        ConnectionOptions = new SQLiteConnectionOptions { ReadOnly = true, Pooling = false, CacheSize = CheckCacheKibibytes, UseMemoryTempStore = false }
+        ConnectionOptions = new SQLiteConnectionOptions { ReadOnly = true, Pooling = false, UseMemoryTempStore = false }
     };
 
+    /// <param name="full">Compare the table count and representative counts with the capture (a restore drill).</param>
+    /// <param name="fullIntegrity">Run <c>integrity_check</c> rather than <c>quick_check</c>; defaults to <paramref name="full"/>.</param>
     internal static async Task VerifySqliteAsync(string path, string[] queries, CapturedDatabase captured,
-        bool full, CancellationToken token)
+        bool full, CancellationToken token, bool? fullIntegrity = null)
     {
-        // Only standalone backup or restored files reach this method, never the live source.
-        using var client = CheckClient();
-        var check = Convert.ToString(await client.ExecuteScalarAsync(path,
-            full ? "PRAGMA integrity_check" : "PRAGMA quick_check", cancellationToken: token));
-        if (check != "ok") throw new InvalidDataException("SQLite integrity verification failed.");
+        // Only standalone backup or restored files reach this method, never the live source. DbaClientX runs the check
+        // read-only on its own thread with a page cache sized for it.
+        using var client = ReadOnlyClient();
+        var integrity = await client.CheckIntegrityAsync(path, fullIntegrity ?? full, cancellationToken: token);
+        if (!integrity.IsHealthy) throw new InvalidDataException("SQLite integrity verification failed.");
         var tables = Convert.ToInt64(await client.ExecuteScalarAsync(path,
             "SELECT COUNT(*) FROM sqlite_schema WHERE type='table'", cancellationToken: token));
         var counts = new List<long>();

@@ -83,7 +83,7 @@ public sealed class RestoreDrill
                     report.Plan("restore:" + id, "Restore " + id + " into SQL Server", 100, RestoreDrillUnit.Percent);
                     report.Plan("check:" + id, "Check " + id + " (DBCC CHECKDB)", 100, RestoreDrillUnit.Percent);
                 }
-                else report.Plan("check:" + id, "Check " + id + " (SQLite integrity)", 0, RestoreDrillUnit.None);
+                else report.Plan("check:" + id, "Check " + id + (FullSqliteCheck(file.SizeBytes) ? " (SQLite integrity_check)" : " (SQLite quick_check)"), 0, RestoreDrillUnit.None);
             }
             steps.Start("capture", "the recovery files capture.json lists");
             foreach (var file in header.Files.Where(f => !IsDatabaseEntry(f)))
@@ -123,7 +123,7 @@ public sealed class RestoreDrill
                 if (source.Provider == "sqlite")
                 {
                     steps.Start(checkKey, "working; SQLite gives no percentage");
-                    await DatabaseCapture.VerifySqliteAsync(path, source.ValidationQueries, captured, true, token);
+                    await DatabaseCapture.VerifySqliteAsync(path, source.ValidationQueries, captured, true, token, FullSqliteCheck(captured.SizeBytes));
                     steps.Finish(checkKey);
                 }
                 else
@@ -161,8 +161,10 @@ public sealed class RestoreDrill
                     : timeout.IsCancellationRequested && error is OperationCanceledException ? "TimedOut" : error.GetType().Name;
                 state.CompletedAtUtc = DateTimeOffset.UtcNow;
             }
-            steps.FailRunning(cancelled ? "cancelled by the user" : state.ErrorType == "TimedOut" ? "stopped at the drill's time limit" : error.GetType().Name);
+            var timedOut = state.ErrorType == "TimedOut";
+            steps.FailRunning(cancelled ? "cancelled by the user" : timedOut ? "stopped at the drill's time limit" : error.GetType().Name);
             Record();
+            if (timedOut) throw new TimeoutException("The restore drill reached its time limit.", error);
             throw;
         }
         finally
@@ -186,6 +188,17 @@ public sealed class RestoreDrill
         }
         if (!state.Healthy) throw new IOException("Restore drill cleanup failed.");
     }
+
+    /// <summary>The largest SQLite file the drill checks with <c>integrity_check</c>; larger files get <c>quick_check</c>.</summary>
+    /// <remarks>
+    /// Both read every page, but <c>integrity_check</c> also looks up every index entry of every row. A drill's SQLite file
+    /// is a backup copy whose pages lie scattered across it, and SQLite reads them one 4 KB page at a time: on a 56 GB copy
+    /// with 108 indexes <c>quick_check</c> took 34 minutes, and <c>integrity_check</c> with a 256 MB cache was still running
+    /// at 50. The table and representative row counts are compared with the capture either way.
+    /// </remarks>
+    internal const long FullSqliteCheckMaxBytes = 8L << 30;
+
+    internal static bool FullSqliteCheck(long sizeBytes) => sizeBytes <= FullSqliteCheckMaxBytes;
 
     private static bool IsDatabaseEntry(CapturedFile file)
         => file.Entry.EndsWith(".sqlite", StringComparison.Ordinal) || file.Entry.EndsWith(".bak", StringComparison.Ordinal);

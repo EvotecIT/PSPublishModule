@@ -34,12 +34,14 @@ internal static class RestoreDrillCommand
         var live = CanDrawLive();
         var view = live ? new LiveView() : null;
         var text = live ? null : new RestoreDrillTextProgress(Console.Out);
-        IRestoreDrillProgress progress = view is not null ? view : text!;
+        var steps = new StepTracker(view is not null ? view : text!);
+        IRestoreDrillProgress progress = steps;
         var header = Header(set, record, priority);
         if (view is null) Console.Out.WriteLine(string.Join(Environment.NewLine, header.Select(line => line.Label + ": " + line.Value)));
 
         string outcome;
         string reason = string.Empty;
+        string next = string.Empty;
         using var heartbeat = text is null ? null : new Timer(_ => { try { text.Heartbeat(); } catch (Exception) { /* output never stops the drill */ } }, null, TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5));
         try
         {
@@ -50,16 +52,58 @@ internal static class RestoreDrillCommand
         }
         catch (Exception error)
         {
-            outcome = cancellation.IsCancellationRequested ? "cancelled" : "failed";
-            // Provider exception messages can contain credentials or customer data; the type names the failure.
-            reason = error.GetType().Name;
+            (outcome, reason, next) = Explain(error, cancellation.IsCancellationRequested, steps.Stopped, options.RestoreDrillTimeoutMinutes);
         }
         finally { finished.Set(); }
 
         var checkedCount = view?.CheckedDatabases ?? 0;
-        if (view is not null) Terminal.Write(ResultPanel(outcome, reason, record, checkedCount));
-        else Console.Out.WriteLine(ResultLine(outcome, reason, record));
+        if (view is not null) Terminal.Write(ResultPanel(outcome, reason, next, record, checkedCount));
+        else Console.Out.WriteLine(ResultLine(outcome, reason, next, record));
         return outcome switch { "passed" => 0, "cancelled" => 130, _ => 1 };
+    }
+
+    /// <summary>
+    /// Says what stopped the drill and what to do about it. A stop by the user and a time limit say nothing about the backup;
+    /// a failed check does. Only this library's own check messages are shown: provider messages can contain credentials or
+    /// customer data, so other failures are named by type.
+    /// </summary>
+    internal static (string Outcome, string Reason, string Next) Explain(Exception error, bool cancelledByUser, string? step, int? limitMinutes)
+    {
+        var where = step is null ? "" : " while " + Gerund(step);
+        if (cancelledByUser)
+            return ("cancelled", "Stopped by the user" + where + " (Ctrl+C or the window was closed).",
+                "Throwaway copies are removed and live data was not touched. Run it again whenever convenient.");
+        if (error is TimeoutException)
+            return ("timed out", "Stopped at the " + Limit(limitMinutes) + " time limit" + where + ". Nothing wrong was found in what it had checked.",
+                "This is not a problem with the backup. Raise or remove restoreDrillTimeoutMinutes and run it again.");
+        if (error is InvalidDataException)
+            return ("failed", "A check failed" + where + ": " + error.Message,
+                "Do not rely on this backup set until the cause is known. Check that set's files, or run the drill on an earlier set.");
+        return ("failed", "The drill could not finish" + where + ": " + error.GetType().Name + ".",
+            "This does not show that the backup is damaged. Fix the cause (space, access, SQL Server) and run it again.");
+    }
+
+    private static string Limit(int? minutes) => minutes switch
+    {
+        null => "configured",
+        { } m when m % 60 == 0 => (m / 60).ToString(CultureInfo.InvariantCulture) + "-hour",
+        { } m => m.ToString(CultureInfo.InvariantCulture) + "-minute"
+    };
+
+    // Step labels start with a verb ("Check ddnext (SQLite integrity)"); "while checking ddnext (SQLite integrity)" reads better.
+    internal static string Gerund(string label)
+    {
+        var space = label.IndexOf(' ');
+        if (space < 0) return label;
+        var rest = label[(space + 1)..];
+        return label[..space] switch
+        {
+            "Check" => "checking " + rest,
+            "Checksum" => "verifying the checksum of " + rest,
+            "Copy" => "copying " + rest,
+            "Restore" => "restoring " + rest,
+            _ => char.ToLowerInvariant(label[0]) + label[1..]
+        };
     }
 
     internal static IReadOnlyList<(string Label, string Value)> Header(string set, string record, string priority) =>
@@ -71,11 +115,12 @@ internal static class RestoreDrillCommand
         ("To stop", "Close this window or press Ctrl+C. The attempt is recorded as cancelled, not failed.")
     ];
 
-    internal static string ResultLine(string outcome, string reason, string record) => outcome switch
+    internal static string ResultLine(string outcome, string reason, string next, string record) => outcome switch
     {
         "passed" => "Restore drill passed. Every database restored and checked. Record: " + record + ". Nothing else to do; the health monitor reads this record.",
-        "cancelled" => "Restore drill cancelled by the user. Throwaway copies are removed and live data was not touched. Record: " + record + ". Run it again whenever convenient.",
-        _ => "Restore drill failed: " + reason + ". Record: " + record + ". The step marked failed above shows where it stopped; fix that and run the drill again."
+        "cancelled" => "Restore drill cancelled. " + reason + " " + next + " Record: " + record + ".",
+        "timed out" => "Restore drill stopped. " + reason + " " + next + " Record: " + record + ".",
+        _ => "Restore drill failed. " + reason + " " + next + " Record: " + record + "."
     };
 
     private static IWidget HeaderPanel(IReadOnlyList<(string Label, string Value)> header)
@@ -93,7 +138,7 @@ internal static class RestoreDrillCommand
             "[accent][bold]PowerForge restore drill[/][/]") { BorderRole = ThemeToken.Accent };
     }
 
-    private static IWidget ResultPanel(string outcome, string reason, string record, int databases)
+    private static IWidget ResultPanel(string outcome, string reason, string next, string record, int databases)
     {
         var facts = new KeyValueList();
         switch (outcome)
@@ -103,19 +148,23 @@ internal static class RestoreDrillCommand
                 facts.Add("Next", "Nothing to do. The health monitor reads this record.");
                 break;
             case "cancelled":
-                facts.Add("Result", "[warn][bold]Cancelled[/][/] by the user");
-                facts.Add("Next", "Throwaway copies are removed and live data was not touched. Run it again whenever convenient.");
+                facts.Add("Result", "[warn][bold]Cancelled[/][/]: " + Markup.Escape(reason));
+                facts.Add("Next", Markup.Escape(next));
+                break;
+            case "timed out":
+                facts.Add("Result", "[warn][bold]Stopped[/][/]: " + Markup.Escape(reason));
+                facts.Add("Next", Markup.Escape(next));
                 break;
             default:
                 facts.Add("Result", "[fail][bold]Failed[/][/]: " + Markup.Escape(reason));
-                facts.Add("Next", "The step marked failed above shows where it stopped. Fix that and run the drill again.");
+                facts.Add("Next", Markup.Escape(next));
                 break;
         }
         facts.Add("Record", "[muted]" + Markup.Escape(record) + "[/]");
         return new Panel(facts, "[bold]Restore drill result[/]")
         {
             Verdict = true,
-            Status = outcome switch { "passed" => StatusKind.Pass, "cancelled" => StatusKind.Warn, _ => StatusKind.Fail }
+            Status = outcome switch { "passed" => StatusKind.Pass, "cancelled" or "timed out" => StatusKind.Warn, _ => StatusKind.Fail }
         };
     }
 
@@ -182,6 +231,31 @@ internal static class RestoreDrillCommand
     [DllImport("kernel32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool SetConsoleCtrlHandler(ConsoleCtrlHandler handler, [MarshalAs(UnmanagedType.Bool)] bool add);
+
+    /// <summary>Passes progress on and remembers the label of the step that ended unfinished when the drill stopped.</summary>
+    private sealed class StepTracker(IRestoreDrillProgress inner) : IRestoreDrillProgress
+    {
+        private readonly object _gate = new();
+        private readonly Dictionary<string, string> _labels = new(StringComparer.Ordinal);
+
+        internal string? Stopped { get; private set; }
+
+        public void Plan(string key, string label, long total, RestoreDrillUnit unit)
+        {
+            lock (_gate) _labels[key] = label;
+            inner.Plan(key, label, total, unit);
+        }
+
+        public void Start(string key, string? detail = null) => inner.Start(key, detail);
+
+        public void Report(string key, long done, string? detail = null) => inner.Report(key, done, detail);
+
+        public void Finish(string key, bool succeeded, string? detail = null)
+        {
+            if (!succeeded) lock (_gate) if (_labels.TryGetValue(key, out var label)) Stopped = label;
+            inner.Finish(key, succeeded, detail);
+        }
+    }
 
     /// <summary>The live console view: the header above one ConsoleMonster lane per step.</summary>
     private sealed class LiveView : IRestoreDrillProgress

@@ -51,15 +51,21 @@ public sealed partial class DatabaseBackupContracts : IDisposable
     }
 
     [Fact]
-    public async Task SqliteChecksAreReadOnlyWithALargePageCache()
+    public async Task SqliteChecksOpenTheFileReadOnly()
     {
         var db = Path.Combine(_root, "downloaded.sqlite");
         using (var writer = new SQLite())
             await writer.ExecuteNonQueryAsync(db, "CREATE TABLE facts(id INTEGER PRIMARY KEY);");
-        using var check = DatabaseCapture.CheckClient();
-        Assert.Equal((long)DatabaseCapture.CheckCacheKibibytes, Convert.ToInt64(await check.ExecuteScalarAsync(db, "PRAGMA cache_size")));
+        using var check = DatabaseCapture.ReadOnlyClient();
         await Assert.ThrowsAnyAsync<Exception>(() => check.ExecuteNonQueryAsync(db, "INSERT INTO facts VALUES(1);"));
     }
+
+    [Theory]
+    [InlineData(1L << 30, true)]
+    [InlineData(8L << 30, true)]
+    [InlineData(56L << 30, false)]
+    public void RestoreDrillUsesTheFullSqliteCheckUpToItsSizeLimit(long size, bool full)
+        => Assert.Equal(full, RestoreDrill.FullSqliteCheck(size));
 
     [Theory]
     [InlineData(null, true)]
