@@ -177,9 +177,7 @@ internal static class PowerShellConventionalModuleSourceDiscovery
             foreach (var input in inputs)
             {
                 var name = input.VariablePath.UserPath;
-                var producer = enumerations.LastOrDefault(enumeration =>
-                    enumeration.Assignment.Extent.EndOffset < loader.Extent.StartOffset &&
-                    enumeration.Name.Equals(name, StringComparison.OrdinalIgnoreCase)).Assignment;
+                var producer = FindEffectiveEnumeration(enumerations, name, loader.Extent.StartOffset);
                 if (producer is null ||
                     HasInterveningAssignment(root, name, producer.Extent.EndOffset, loader.Extent.EndOffset) ||
                     HasUnmodeledFileListUse(root, name, producer.Extent.EndOffset, loader.Extent.EndOffset, allowedUses))
@@ -390,8 +388,9 @@ internal static class PowerShellConventionalModuleSourceDiscovery
                 continue;
             if (IsDescendantOf(command, loader.Condition))
             {
+                var direct = IsDirectLoopEnumeration(loader, command);
                 foreach (var dotSource in dotSources)
-                    yield return (new PowerShellConventionalLoaderIdentity(sourcePath, dotSource.Extent.StartOffset), Stable: true);
+                    yield return (new PowerShellConventionalLoaderIdentity(sourcePath, dotSource.Extent.StartOffset), direct);
                 continue;
             }
             if (assignedVariable is null ||
@@ -403,19 +402,45 @@ internal static class PowerShellConventionalModuleSourceDiscovery
                     searchNestedScriptBlocks: false).Any())
                 continue;
 
-            var effective = enumerations.LastOrDefault(enumeration =>
-                enumeration.Assignment.Extent.EndOffset <= loader.Extent.StartOffset &&
-                enumeration.Name.Equals(assignedVariable, StringComparison.OrdinalIgnoreCase) &&
-                enumeration.Assignment.Extent.StartOffset >= assignment.Extent.StartOffset).Assignment;
-            if (effective is not null && !ReferenceEquals(effective, assignment))
+            var effective = FindEffectiveEnumeration(enumerations, assignedVariable, loader.Extent.StartOffset);
+            if (effective is not null && !ReferenceEquals(effective, assignment) &&
+                effective.Extent.StartOffset >= assignment.Extent.StartOffset)
                 continue;
 
-            var stable = !HasInterveningAssignment(root, assignedVariable, assignment.Extent.EndOffset, loader.Extent.EndOffset) &&
-                !HasUnmodeledFileListUse(root, assignedVariable, loader.Body.Extent.StartOffset, loader.Body.Extent.EndOffset);
+            var inputs = new List<VariableExpressionAst>();
+            var stable = TryReadFileEnumerationInputs(loader.Condition, inputs) &&
+                inputs.All(input => HasStableEnumeration(root, loader, input, enumerations));
             foreach (var dotSource in dotSources)
                 yield return (new PowerShellConventionalLoaderIdentity(sourcePath, dotSource.Extent.StartOffset), stable);
         }
     }
+
+    private static AssignmentStatementAst? FindEffectiveEnumeration(
+        IEnumerable<(AssignmentStatementAst Assignment, string Name)> enumerations, string name, int before)
+        => enumerations.LastOrDefault(enumeration =>
+            enumeration.Assignment.Extent.EndOffset <= before &&
+            enumeration.Name.Equals(name, StringComparison.OrdinalIgnoreCase)).Assignment;
+
+    private static bool HasStableEnumeration(
+        ScriptBlockAst root, ForEachStatementAst loader, VariableExpressionAst input,
+        IEnumerable<(AssignmentStatementAst Assignment, string Name)> enumerations)
+    {
+        var name = input.VariablePath.UserPath;
+        var producer = FindEffectiveEnumeration(enumerations, name, loader.Extent.StartOffset);
+        return producer is not null &&
+            !HasInterveningAssignment(root, name, producer.Extent.EndOffset, loader.Extent.EndOffset) &&
+            !HasUnmodeledFileListUse(root, name, loader.Body.Extent.StartOffset, loader.Body.Extent.EndOffset);
+    }
+
+    private static bool IsDirectLoopEnumeration(ForEachStatementAst loader, CommandAst producer)
+        => producer.Parent is PipelineAst { PipelineElements.Count: 1 } pipeline &&
+            (ReferenceEquals(loader.Condition, pipeline) ||
+             loader.Condition is PipelineAst { PipelineElements.Count: 1 } condition &&
+             condition.PipelineElements[0] is CommandExpressionAst
+             {
+                 Redirections.Count: 0,
+                 Expression: ArrayExpressionAst { SubExpression.Statements.Count: 1 } array
+             } && ReferenceEquals(array.SubExpression.Statements[0], pipeline));
 
     private static IEnumerable<CommandAst> GetPipelineDotSourceLoaders(CommandAst producer, ScriptBlockAst root)
     {

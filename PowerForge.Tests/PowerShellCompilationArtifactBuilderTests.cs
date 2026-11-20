@@ -669,16 +669,23 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.True(File.Exists(Path.Combine(moduleRoot, "Private", "Initialize.ps1")));
     }
 
-    [Fact]
-    public void Build_RejectsPrivateLoaderThatReplacesAnUnstagedFileInFinally()
+    [Theory]
+    [InlineData("""
+        foreach ($file in $private) {
+            try { . $file.FullName }
+            finally { $private[1] = Get-Item -LiteralPath "$PSScriptRoot/Initialize.ps1" }
+        }
+        """)]
+    [InlineData("""
+        $other = @(Get-Item -LiteralPath "$PSScriptRoot/Initialize.ps1")
+        foreach ($file in ($private + $other)) { . $file.FullName }
+        """)]
+    public void Build_RejectsPrivateLoaderWithAnUnverifiedFileList(string loader)
     {
         using var fixture = ArtifactFixture.Create(
-            """
+            $$"""
             $private = @(Get-ChildItem -Path "$PSScriptRoot/Private/*.ps1")
-            foreach ($file in $private) {
-                try { . $file.FullName }
-                finally { $private[1] = Get-Item -LiteralPath "$PSScriptRoot/Initialize.ps1" }
-            }
+            {{loader}}
             function Get-Value { $script:Value }
             Export-ModuleMember -Function Get-Value
             """, ".psm1");
