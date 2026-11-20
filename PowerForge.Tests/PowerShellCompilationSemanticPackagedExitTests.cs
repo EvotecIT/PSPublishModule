@@ -99,8 +99,30 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
         }
     }
 
-    [Fact]
-    public void CheckRejectsReadHostDefaultsFromAStagedDependency()
+    [Theory]
+    [InlineData(PowerShellCompilationMode.Package, "$PSDefaultParameterValues = @{'Read-Host : MaskInput'=$true}; Read-Host")]
+    [InlineData(PowerShellCompilationMode.Hybrid, "$PSDefaultParameterValues = @{'Read-Host : MaskInput'=$true}; Read-Host")]
+    [InlineData(PowerShellCompilationMode.Package, "Set-Alias Set-Defaults Set-Variable; Set-Defaults -N script:PSDefaultParameterValues @{'Read-Host:AsSecureString'=$true}; Read-Host")]
+    [InlineData(PowerShellCompilationMode.Hybrid, "Set-Alias Set-Defaults Set-Variable; Set-Defaults -N script:PSDefaultParameterValues @{'Read-Host:AsSecureString'=$true}; Read-Host")]
+    public void CheckRejectsProtectedReadHostParameterDefaults(PowerShellCompilationMode mode, string source)
+    {
+        using var fixture = OracleFixture.Create(source);
+        var check = new PowerShellCompilationHostService().Check(new PowerShellCompilationCheckRequest(fixture.ScriptPath)
+        {
+            Mode = mode,
+            OutputDirectory = Path.Combine(fixture.RootPath, "app")
+        });
+
+        Assert.False(check.CanProceed);
+        Assert.Null(check.ProposedReview);
+        Assert.Contains(check.Diagnostics, item => item.Severity == PowerShellCompilationHostSeverity.Error &&
+            item.Message.Contains("cannot verify plain Read-Host input with parameter defaults", StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData(PowerShellCompilationMode.Package)]
+    [InlineData(PowerShellCompilationMode.Hybrid)]
+    public void CheckRejectsReadHostDefaultsFromAStagedDependency(PowerShellCompilationMode mode)
     {
         using var fixture = OracleFixture.Create(". \"$PSScriptRoot/Setup.ps1\"; Read-Host");
         File.WriteAllText(Path.Combine(fixture.RootPath, "Setup.ps1"),
@@ -108,7 +130,7 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
 
         var check = new PowerShellCompilationHostService().Check(new PowerShellCompilationCheckRequest(fixture.ScriptPath)
         {
-            Mode = PowerShellCompilationMode.Package,
+            Mode = mode,
             OutputDirectory = Path.Combine(fixture.RootPath, "app")
         });
 

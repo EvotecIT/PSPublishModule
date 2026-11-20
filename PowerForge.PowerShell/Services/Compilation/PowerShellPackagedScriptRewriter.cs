@@ -309,22 +309,24 @@ internal static partial class PowerShellPackagedScriptRewriter
         return operand is not null && PowerShellPackagedPathOperandPolicy.MayRetrieveVariable(operand, variableName, root);
     }
 
-    private static bool GetVariableMayRetrieve(CommandAst command, string variableName)
+    private static bool GetVariableMayRetrieve(CommandAst command, string variableName, bool allowScopePrefix = false)
     {
+        bool Matches(string value) => VariablePatternMatches(
+            allowScopePrefix ? PowerShellAssignmentTargetPolicy.GetUnscopedVariableName(value) : value, variableName);
         var elements = command.CommandElements.Skip(1).ToArray();
         for (var index = 0; index < elements.Length; index++)
         {
             if (elements[index] is not CommandParameterAst parameter ||
-                !parameter.ParameterName.Equals("Name", StringComparison.OrdinalIgnoreCase))
+                !"Name".StartsWith(parameter.ParameterName, StringComparison.OrdinalIgnoreCase))
                 continue;
             if (parameter.Argument is StringConstantExpressionAst inline)
-                return VariablePatternMatches(inline.Value, variableName);
+                return Matches(inline.Value);
             return index + 1 >= elements.Length ||
                    elements[index + 1] is not StringConstantExpressionAst named ||
-                   VariablePatternMatches(named.Value, variableName);
+                   Matches(named.Value);
         }
         return elements.FirstOrDefault() is not StringConstantExpressionAst positional ||
-               VariablePatternMatches(positional.Value, variableName);
+               Matches(positional.Value);
     }
 
     private static bool ReferencesPsVariableIntrinsics(ExpressionAst expression)
@@ -375,11 +377,14 @@ internal static partial class PowerShellPackagedScriptRewriter
         }
     }
 
-    internal static void ValidateEntryRequirements(string sourcePath)
+    internal static void ValidateRetainedEntryRequirements(string sourcePath, IEnumerable<string> embeddedSources)
     {
         var ast = Parser.ParseFile(sourcePath, out var tokens, out var errors);
         if (errors.Length == 0)
+        {
             ValidateEntryRequirements(ast, tokens, sourcePath);
+            ValidateReadHostDefaults(ast, sourcePath, embeddedSources);
+        }
     }
 
     private static void ValidateEntryRequirements(ScriptBlockAst ast, Token[] tokens, string sourcePath)
@@ -517,11 +522,31 @@ internal static partial class PowerShellPackagedScriptRewriter
                 searchNestedScriptBlocks: true)
             .Cast<CommandAst>()
             .ToArray();
+        var targets = ReadLiteralAliasTargets(definitions, out var unknown);
+        if (unknown is not null)
+            return unknown;
+
+        foreach (var definition in definitions)
+        {
+            PowerShellAliasDefinitionPolicy.TryGetLiteralDefinition(definition, out _, out var targetName);
+            if (ResolvesToCommandMatching(targetName, targets, IsInteractiveCommand, new HashSet<string>(StringComparer.OrdinalIgnoreCase)))
+                return definition;
+        }
+        return null;
+    }
+
+    private static IReadOnlyDictionary<string, HashSet<string>> ReadLiteralAliasTargets(
+        IEnumerable<CommandAst> definitions, out CommandAst? unknown)
+    {
         var targets = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
+        unknown = null;
         foreach (var definition in definitions)
         {
             if (!PowerShellAliasDefinitionPolicy.TryGetLiteralDefinition(definition, out var aliasName, out var targetName))
-                return definition;
+            {
+                unknown = definition;
+                return targets;
+            }
             if (!targets.TryGetValue(aliasName, out var aliasTargets))
             {
                 aliasTargets = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -529,25 +554,19 @@ internal static partial class PowerShellPackagedScriptRewriter
             }
             aliasTargets.Add(targetName);
         }
-
-        foreach (var definition in definitions)
-        {
-            PowerShellAliasDefinitionPolicy.TryGetLiteralDefinition(definition, out _, out var targetName);
-            if (ResolvesToInteractiveCommand(targetName, targets, new HashSet<string>(StringComparer.OrdinalIgnoreCase)))
-                return definition;
-        }
-        return null;
+        return targets;
     }
 
-    private static bool ResolvesToInteractiveCommand(
+    private static bool ResolvesToCommandMatching(
         string commandName,
         IReadOnlyDictionary<string, HashSet<string>> aliasTargets,
+        Func<string, bool> matches,
         HashSet<string> visited)
     {
-        if (IsInteractiveCommand(commandName)) return true;
+        if (matches(commandName)) return true;
         if (!visited.Add(commandName)) return true;
         if (!aliasTargets.TryGetValue(commandName, out var targets)) return false;
-        return targets.Any(target => ResolvesToInteractiveCommand(target, aliasTargets, visited));
+        return targets.Any(target => ResolvesToCommandMatching(target, aliasTargets, matches, visited));
     }
 
     private static bool IsInteractiveCommand(string? commandName)

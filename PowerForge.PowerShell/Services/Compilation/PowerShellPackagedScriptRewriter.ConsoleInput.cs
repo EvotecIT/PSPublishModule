@@ -14,25 +14,30 @@ internal static partial class PowerShellPackagedScriptRewriter
             .Select(static path => Parser.ParseFile(path, out _, out _))
             .Prepend(entry)
             .ToArray();
-        if (!sources.Any(static root => root.Find(
-                static node => node is CommandAst command && IsPlainReadHost(command),
-                searchNestedScriptBlocks: true) is not null))
+        var commands = sources.SelectMany(static root =>
+            root.FindAll(static node => node is CommandAst, searchNestedScriptBlocks: true).Cast<CommandAst>()).ToArray();
+        if (!commands.Any(IsPlainReadHost))
             return;
+
+        var aliases = ReadLiteralAliasTargets(commands.Where(PowerShellAliasDefinitionPolicy.IsAliasDefinitionCommand), out var unknown);
+        unknown ??= commands.FirstOrDefault(command => MayReplaceParameterDefaults(command, aliases));
+        if (unknown is not null)
+            throw UnverifiableReadHostDefaults(unknown);
 
         foreach (var root in sources)
         {
-            var unknown = root.Find(static node => node is VariableExpressionAst variable &&
+            var reference = root.Find(static node => node is VariableExpressionAst variable &&
                 PowerShellAssignmentTargetPolicy.GetUnscopedVariableName(variable.VariablePath.UserPath)
                     .Equals(ParameterDefaults, StringComparison.OrdinalIgnoreCase) &&
                 !UsesSafeReadHostDefaults(variable), searchNestedScriptBlocks: true)
-                ?? FindIndirectVariableLookup(root, ParameterDefaults, topLevelOnly: false)
-                ?? root.Find(static node => node is CommandAst command && MayReplaceParameterDefaults(command),
-                    searchNestedScriptBlocks: true);
-            if (unknown is not null)
-                throw new InvalidOperationException(
-                    $"Packaged executable generation cannot verify plain Read-Host input with parameter defaults at line {unknown.Extent.StartLineNumber}.");
+                ?? FindIndirectVariableLookup(root, ParameterDefaults, topLevelOnly: false);
+            if (reference is not null)
+                throw UnverifiableReadHostDefaults(reference);
         }
     }
+
+    private static InvalidOperationException UnverifiableReadHostDefaults(Ast node)
+        => new($"Packaged executable generation cannot verify plain Read-Host input with parameter defaults at line {node.Extent.StartLineNumber}.");
 
     private static bool UsesSafeReadHostDefaults(VariableExpressionAst variable)
     {
@@ -57,26 +62,29 @@ internal static partial class PowerShellPackagedScriptRewriter
         if (separator < 0)
             return false;
 
-        var command = new WildcardPattern(key.Substring(0, separator), WildcardOptions.IgnoreCase);
+        var command = new WildcardPattern(key.Substring(0, separator).Trim(), WildcardOptions.IgnoreCase);
         if (!command.IsMatch("Read-Host") && !command.IsMatch("Microsoft.PowerShell.Utility\\Read-Host"))
             return false;
-        var name = key.Substring(separator + 1);
+        var name = key.Substring(separator + 1).Trim();
         var parameter = new WildcardPattern(name, WildcardOptions.IgnoreCase);
         return parameter.IsMatch("AsSecureString") || parameter.IsMatch("MaskInput") ||
                "AsSecureString".StartsWith(name, StringComparison.OrdinalIgnoreCase) ||
                "MaskInput".StartsWith(name, StringComparison.OrdinalIgnoreCase);
     }
 
-    private static bool MayReplaceParameterDefaults(CommandAst command)
+    private static bool MayReplaceParameterDefaults(CommandAst command, IReadOnlyDictionary<string, HashSet<string>> aliases)
+        => command.GetCommandName() is { } name &&
+           ResolvesToCommandMatching(name, aliases, IsVariableSettingCommand, new HashSet<string>(StringComparer.OrdinalIgnoreCase)) &&
+           GetVariableMayRetrieve(command, ParameterDefaults, allowScopePrefix: true);
+
+    private static bool IsVariableSettingCommand(string name)
     {
-        var name = command.GetCommandName()?.Split('\\').Last();
-        return name is not null &&
-               (name.Equals("Set-Variable", StringComparison.OrdinalIgnoreCase) ||
-                name.Equals("New-Variable", StringComparison.OrdinalIgnoreCase) ||
-                name.Equals("set", StringComparison.OrdinalIgnoreCase) ||
-                name.Equals("sv", StringComparison.OrdinalIgnoreCase) ||
-                name.Equals("nv", StringComparison.OrdinalIgnoreCase)) &&
-               GetVariableMayRetrieve(command, ParameterDefaults);
+        var unqualified = name.Split('\\').Last();
+        return unqualified.Equals("Set-Variable", StringComparison.OrdinalIgnoreCase) ||
+               unqualified.Equals("New-Variable", StringComparison.OrdinalIgnoreCase) ||
+               unqualified.Equals("set", StringComparison.OrdinalIgnoreCase) ||
+               unqualified.Equals("sv", StringComparison.OrdinalIgnoreCase) ||
+               unqualified.Equals("nv", StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool IsPlainReadHost(CommandAst command)
