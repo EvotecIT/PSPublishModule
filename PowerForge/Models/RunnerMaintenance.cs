@@ -54,6 +54,29 @@ public sealed class RunnerMaintenanceSpec
 
     /// <summary>Optional retained Docker builder-cache budget. Images, containers and volumes are outside this policy.</summary>
     public int? DockerBuilderCacheGiB { get; set; }
+
+    /// <summary>Optional retention of superseded Windows build tooling, enabled on the machine by its operator.</summary>
+    public RunnerWindowsToolRetention? WindowsToolRetention { get; set; }
+}
+
+/// <summary>Machine-local retention policy for installed .NET runtime packs and PSPublishModule.</summary>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed class RunnerWindowsToolRetention
+{
+    /// <summary>Physical .NET installation root. SDK directories are outside retention.</summary>
+    public string DotNetRoot { get; set; } = string.Empty;
+
+    /// <summary>Physical versioned PSPublishModule installation directories for the runner account.</summary>
+    public string[] PSPublishModuleRoots { get; set; } = Array.Empty<string>();
+
+    /// <summary>Exact .NET runtime or pack versions required by audited CI or applications.</summary>
+    public string[] ProtectedDotNetVersions { get; set; } = Array.Empty<string>();
+
+    /// <summary>Exact PSPublishModule versions required by audited CI or applications.</summary>
+    public string[] ProtectedPSPublishModuleVersions { get; set; } = Array.Empty<string>();
+
+    /// <summary>Minimum age of a stable installation before it can be retired.</summary>
+    public int MinimumAgeDays { get; set; } = 14;
 }
 
 /// <summary>One installed runner and its private job temporary directory.</summary>

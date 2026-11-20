@@ -9,21 +9,23 @@ namespace PowerForge;
 
 public sealed partial class RunnerHousekeepingService
 {
-    private static void MaintenanceRecover(MaintenanceRun run)
+    private void MaintenanceRecover(MaintenanceRun run, bool recoverWindowsTools)
     {
-        var directory = Path.Combine(run.Spec.StateRootPath, "journal");
-        if (!Directory.Exists(directory)) return;
         var roots = run.Spec.Runners.SelectMany(r => new[] { r.WorkRootPath, r.TempPath, Path.Combine(r.RootPath, "_diag") })
             .Concat(run.Spec.LegacyTemporaryRoots.Select(r => r.RootPath))
             .Concat(new[] { run.Spec.NuGetPackagesPath, run.Spec.NuGetHttpCachePath }).Where(p => !string.IsNullOrEmpty(p)).ToArray();
-        foreach (var record in Directory.EnumerateFiles(directory, "*.json"))
+        var toolRoots = recoverWindowsTools && run.Spec.WindowsToolRetention is { } tools
+            ? WindowsToolRetentionRoots(tools).ToArray() : Array.Empty<string>();
+        foreach (var record in MaintenanceRecoveryRecords(run, recoverWindowsTools))
         {
             if (run.Expired) break;
             try
             {
                 var journal = MaintenanceRead(record, RunnerMaintenanceJsonContext.Default.RunnerMaintenanceJournal);
+                if ((journal?.WindowsTool == true) != recoverWindowsTools) continue;
                 if (journal is null || journal.SchemaVersion != 1 || !Guid.TryParseExact(journal.Id, "N", out _) ||
-                    Path.GetFileNameWithoutExtension(record) != journal.Id || !roots.Any(r => PathsEqual(r!, journal.Root)) ||
+                    Path.GetFileNameWithoutExtension(record) != journal.Id ||
+                    !(journal.WindowsTool ? toolRoots : roots).Any(r => PathsEqual(r!, journal.Root)) ||
                     !MaintenanceContains(journal.Root, journal.Source) || MaintenanceContains(Path.Combine(journal.Root, MaintenanceQuarantine), journal.Source))
                 {
                     run.Errors.Add("Quarantine record " + Path.GetFileName(record) + " failed its enrolled-root check and was retained.");
@@ -44,7 +46,11 @@ public sealed partial class RunnerHousekeepingService
                 var stage = MaintenanceStage(journal);
                 if (File.Exists(stage) || Directory.Exists(stage))
                 {
-                    if (!run.DryRun) run.Isolated.Add(journal);
+                    if (run.DryRun) continue;
+                    // Finish recovered records as we find them so discovery cannot spend their entire time slice.
+                    var canContinue = MaintenanceDeleteIsolated(run, journal, record);
+                    run.State.Due |= File.Exists(record);
+                    if (!canContinue) break;
                 }
                 else if (!run.DryRun) File.Delete(record);
             }
@@ -53,6 +59,21 @@ public sealed partial class RunnerHousekeepingService
                 run.Errors.Add("Quarantine record " + Path.GetFileName(record) + " retained — " + error.Message);
             }
         }
+    }
+
+    private static IEnumerable<string> MaintenanceRecoveryRecords(MaintenanceRun run, bool recoverWindowsTools)
+    {
+        if (recoverWindowsTools)
+        {
+            var toolDirectory = MaintenanceJournalDirectory(run, windowsTool: true);
+            if (Directory.Exists(toolDirectory))
+                foreach (var record in Directory.EnumerateFiles(toolDirectory, "*.json")) yield return record;
+        }
+
+        // Earlier Windows tool builds wrote records alongside ordinary cleanup.
+        var directory = MaintenanceJournalDirectory(run, windowsTool: false);
+        if (Directory.Exists(directory))
+            foreach (var record in Directory.EnumerateFiles(directory, "*.json")) yield return record;
     }
 
     private static void MaintenanceRecordJob(MaintenanceRun run, RunnerMaintenancePhase phase)
@@ -156,7 +177,8 @@ public sealed partial class RunnerHousekeepingService
         }
     }
 
-    private static IEnumerable<string> MaintenanceDirectories(string root, MaintenanceRun run, bool includeGenerated = false)
+    private static IEnumerable<string> MaintenanceDirectories(string root, MaintenanceRun run, bool includeGenerated = false,
+        Func<string, bool>? excludeDirectory = null)
     {
         if (!Directory.Exists(root)) yield break;
         var pending = new Stack<string>();
@@ -169,7 +191,8 @@ public sealed partial class RunnerHousekeepingService
             foreach (var child in Directory.EnumerateDirectories(current))
             {
                 var name = Path.GetFileName(child);
-                if (name == ".git" || name == MaintenanceQuarantine || !includeGenerated && (name == "node_modules" || name == "bin" || name == "packages")) continue;
+                if (name == ".git" || name == MaintenanceQuarantine || !includeGenerated && (name == "node_modules" || name == "bin" || name == "packages") ||
+                    excludeDirectory?.Invoke(name) == true) continue;
                 if ((File.GetAttributes(child) & FileAttributes.ReparsePoint) == 0) pending.Push(child);
             }
         }

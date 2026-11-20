@@ -21,6 +21,7 @@ public sealed partial class RunnerHousekeepingService
         internal RunnerMaintenanceResult Result = new();
         internal RunnerMaintenanceState State = new();
         internal Stopwatch Clock = Stopwatch.StartNew();
+        internal TimeSpan? PhaseDeadline;
         internal readonly List<string> Removed = new();
         internal readonly List<string> Planned = new();
         internal readonly List<string> Retained = new();
@@ -36,7 +37,12 @@ public sealed partial class RunnerHousekeepingService
         internal bool Deep;
         internal long SimulatedFree;
         internal RunnerMaintenanceJob? Job;
-        internal bool Expired => Clock.Elapsed.TotalSeconds >= Spec.MaximumRunSeconds;
+        internal bool Expired => Clock.Elapsed >= (PhaseDeadline ?? TimeSpan.FromSeconds(Spec.MaximumRunSeconds));
+    }
+
+    private sealed class MaintenanceBudgetExpiredException : IOException
+    {
+        internal MaintenanceBudgetExpiredException() : base("Maintenance execution budget reached.") { }
     }
 
     private static bool MaintenanceContains(string root, string path) =>
@@ -104,7 +110,7 @@ public sealed partial class RunnerHousekeepingService
         else InspectFile(path);
         while (pending.Count > 0)
         {
-            if (run.Expired) throw new IOException("Maintenance execution budget reached.");
+            if (run.Expired) throw new MaintenanceBudgetExpiredException();
             var current = pending.Pop();
             MaintenancePhysicalPath(current);
             foreach (var entry in Directory.EnumerateFileSystemEntries(current))
@@ -121,7 +127,7 @@ public sealed partial class RunnerHousekeepingService
 
         void InspectFile(string file)
         {
-            if (run.Expired) throw new IOException("Maintenance execution budget reached.");
+            if (run.Expired) throw new MaintenanceBudgetExpiredException();
             MaintenancePhysicalPath(file);
             if (olderThan.HasValue && File.GetLastWriteTimeUtc(file) >= olderThan.Value) throw new IOException("Recent temporary entry retained.");
             if (sensitive && MaintenanceSensitive(file)) throw new IOException("Package, key or database payload retained.");
@@ -139,12 +145,22 @@ public sealed partial class RunnerHousekeepingService
 
     private static string MaintenanceStage(RunnerMaintenanceJournal journal) => Path.Combine(journal.Root, MaintenanceQuarantine, journal.Id);
 
+    private static string MaintenanceJournalDirectory(MaintenanceRun run, bool windowsTool)
+        => Path.Combine(run.Spec.StateRootPath, windowsTool ? "tool-journal" : "journal");
+
+    private static string MaintenanceJournalPath(MaintenanceRun run, RunnerMaintenanceJournal journal)
+        => Path.Combine(MaintenanceJournalDirectory(run, journal.WindowsTool), journal.Id + ".json");
+
+    private static bool MaintenanceHasPendingJournals(MaintenanceRun run)
+        => run.Isolated.Any(journal => File.Exists(MaintenanceJournalPath(run, journal)));
+
     private static bool MaintenanceExcludedInstallation(MaintenanceRun run, string path)
         => run.Spec.Runners.Where(r => !r.CleanupEnabled)
             .SelectMany(r => new[] { r.RootPath, r.WorkRootPath, r.TempPath })
             .Any(root => PathsEqual(root, path) || MaintenanceContains(root, path) || MaintenanceContains(path, root));
 
-    private static void MaintenanceIsolate(MaintenanceRun run, string path, string root, bool directory, bool sensitive = true, bool repository = false, bool runtimeIpc = false, DateTime? olderThan = null)
+    private static void MaintenanceIsolate(MaintenanceRun run, string path, string root, bool directory,
+        bool sensitive = true, bool repository = false, bool runtimeIpc = false, DateTime? olderThan = null, bool windowsTool = false)
     {
         if (run.Expired || !MaintenanceContains(root, path) || Path.GetFileName(path) == MaintenanceQuarantine) return;
         if (MaintenanceExcludedInstallation(run, path))
@@ -164,11 +180,12 @@ public sealed partial class RunnerHousekeepingService
                 run.SimulatedFree += bytes;
                 return;
             }
-            var journal = new RunnerMaintenanceJournal { Id = Guid.NewGuid().ToString("N"), Root = root, Source = path, Directory = directory, Bytes = bytes, Repository = repository, RuntimeIpc = runtimeIpc };
+            var journal = new RunnerMaintenanceJournal { Id = Guid.NewGuid().ToString("N"), Root = root, Source = path,
+                Directory = directory, Bytes = bytes, Repository = repository, RuntimeIpc = runtimeIpc, WindowsTool = windowsTool };
             var stage = MaintenanceStage(journal);
             MaintenancePhysicalPath(stage);
             Directory.CreateDirectory(Path.GetDirectoryName(stage)!);
-            var record = Path.Combine(run.Spec.StateRootPath, "journal", journal.Id + ".json");
+            var record = MaintenanceJournalPath(run, journal);
             MaintenanceWrite(record, journal, RunnerMaintenanceJsonContext.Default.RunnerMaintenanceJournal);
             if (directory) Directory.Move(path, stage);
             else File.Move(path, stage);
@@ -186,28 +203,37 @@ public sealed partial class RunnerHousekeepingService
     private void MaintenanceDeleteIsolated(MaintenanceRun run)
     {
         foreach (var journal in run.Isolated)
+            if (!MaintenanceDeleteIsolated(run, journal, MaintenanceJournalPath(run, journal))) break;
+    }
+
+    private bool MaintenanceDeleteIsolated(MaintenanceRun run, RunnerMaintenanceJournal journal, string record)
+    {
+        var stage = MaintenanceStage(journal);
+        try
         {
-            if (run.Expired) { run.Retained.Add("Quarantine cleanup deferred by the execution budget."); break; }
-            var stage = MaintenanceStage(journal);
-            try
+            if (run.Expired) throw new MaintenanceBudgetExpiredException();
+            MaintenancePhysicalPath(stage);
+            if (Directory.Exists(stage) || File.Exists(stage))
             {
-                MaintenancePhysicalPath(stage);
-                if (Directory.Exists(stage) || File.Exists(stage))
-                {
-                    if (!journal.RuntimeIpc) MaintenanceSnapshot(run, stage, journal.Directory, sensitive: false, repository: journal.Repository);
-                    DeleteTarget(stage, allowSudo: false, isDirectory: journal.Directory, allowedRootPath: journal.Root);
-                    run.Result.RemovedBytes += journal.Bytes;
-                    run.Removed.Add(journal.Source);
-                }
-                File.Delete(Path.Combine(run.Spec.StateRootPath, "journal", journal.Id + ".json"));
-                var parent = Path.GetDirectoryName(stage)!;
-                if (Directory.Exists(parent) && !Directory.EnumerateFileSystemEntries(parent).Any()) Directory.Delete(parent);
+                if (!journal.RuntimeIpc) MaintenanceSnapshot(run, stage, journal.Directory, sensitive: false, repository: journal.Repository);
+                DeleteTarget(stage, allowSudo: false, isDirectory: journal.Directory, allowedRootPath: journal.Root);
+                run.Result.RemovedBytes += journal.Bytes;
+                run.Removed.Add(journal.Source);
             }
-            catch (Exception error) when (error is IOException || error is UnauthorizedAccessException)
-            {
-                run.Errors.Add("Quarantine cleanup retained " + journal.Id + " — " + error.GetType().Name);
-            }
+            File.Delete(record);
+            var parent = Path.GetDirectoryName(stage)!;
+            if (Directory.Exists(parent) && !Directory.EnumerateFileSystemEntries(parent).Any()) Directory.Delete(parent);
         }
+        catch (MaintenanceBudgetExpiredException)
+        {
+            run.Retained.Add("Quarantine cleanup deferred by the execution budget.");
+            return false;
+        }
+        catch (Exception error) when (error is IOException || error is UnauthorizedAccessException)
+        {
+            run.Errors.Add("Quarantine cleanup retained " + journal.Id + " — " + error.GetType().Name);
+        }
+        return true;
     }
 
     private static int? MaintenanceRuntimeIpcOwner(string path)
