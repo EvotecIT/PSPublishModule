@@ -160,6 +160,23 @@ People who package scripts today expect to set the file's identity and how it st
 
 `Check` validates these up front: a missing or unreadable icon, a version that is not `x.y.z`, or a `Windows` subsystem for a script that writes to the console all come back as diagnostics. The values are recorded in the artifact manifest so a rebuild reproduces them. A project file (`powerforge.psproject.json`) gains the same fields per target.
 
+### Signing
+
+`SignArtifact` today signs the files the build itself produces (the primary executable, generated assemblies and module manifests) after publishing, through Windows Authenticode. It does not sign what goes inside them. That leaves gaps on locked-down machines:
+
+- Scripts embedded and extracted at run time (`EmbeddedAndExtracted`) land on disk unsigned, so they fail under an `AllSigned` execution policy, WDAC or AppLocker script rules.
+- In a single-file executable, build-owned assemblies and native libraries that the bundle extracts are signed only as part of the outer file, not individually.
+- Third-party dependencies keep whatever signature they shipped with, and unsigned ones stay unsigned.
+
+Proposed order, all in one signing session so a hardware key prompts once:
+
+1. Sign authored scripts and modules (`.ps1`, `.psm1`, `.psd1`) before they are embedded, so the extracted copies carry valid signatures.
+2. Sign build-owned assemblies and native libraries before single-file bundling.
+3. Optionally sign unsigned third-party assemblies (`SignDependencies`, off by default, matching PSPublishModule's dependency-signing option); never replace an existing valid signature.
+4. Sign the outer executable or module last.
+
+The manifest lists every signed file, including those inside the bundle, with its role and signer thumbprint, and `Check` reports when signing is requested on a platform without a supported signer. Signing stays Windows Authenticode for now; macOS `codesign` and Linux detached signatures are a later step.
+
 ### What the output reveals
 
 Packaging a script is not protecting it. Commercial packagers store the script in a resource, sometimes encrypted with a key that ships in the same executable, and the full script can be recovered from it. This compiler should say plainly what its output contains rather than suggest protection it cannot give:
@@ -218,7 +235,8 @@ Each slice is useful on its own and adds a CLI command or option before any host
 6. **Progress phases** through `IProgress<PowerShellCompilationProgress>`.
 7. **`#requires` support in Package mode.**
 8. **Executable details**: icon, version and file properties, console or windowed subsystem, and requested execution level.
-9. **Source exposure**: relative embedded paths, `ContainsEmbeddedPowerShellSource` in the compile result, and the secret warnings in `Check`.
+9. **Signing inside the output**: embedded scripts and bundled build-owned files signed before packaging, optional dependency signing, one signing session.
+10. **Source exposure**: relative embedded paths, `ContainsEmbeddedPowerShellSource` in the compile result, and the secret warnings in `Check`.
 
 A simple host can start once slices 1 to 3 exist; the rest improve it.
 
