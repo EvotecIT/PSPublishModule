@@ -1,6 +1,6 @@
 # Check and compile a script from a simple host
 
-Status: proposal. Nothing on this page is implemented yet. The [feature roadmap](#feature-roadmap) lists every packaging feature with a stable ID, what the engine supports today and which slice delivers it.
+The shared `Check`, `Compile` and `Doctor` service and the reviewed CLI workflow are available. See the [compiler guide](PowerForge.PowerShellCompilation.md) for the current commands. This page describes the planned host experience and tracks packaging support in the [feature roadmap](#feature-roadmap).
 
 This page specifies the engine surface for a small "drop a script, get an executable or a clear list of what's wrong" host: a desktop window, an editor extension, or a CI step. The host stays thin. Every decision, message and result comes from the engine, so the CLI and the cmdlets gain the same behaviour.
 
@@ -122,12 +122,10 @@ The dependency-lock requirement stays. The host flow makes the review explicit a
 
 ### Package-mode script forms
 
-Most real scripts start with `#requires`. Package mode should handle the common forms instead of refusing them:
+Retained executable entries preserve compatible `#requires -Version` and `#requires -PSEdition` directives. Check and build validate the embedded host's supported major and minor versions and edition. Embedded script dependencies with directives remain blocked.
 
-- `#requires -Version` and `-PSEdition`: emit an equivalent startup check in the executable, with the same failure message PowerShell gives.
-- `#requires -Modules` with names and versions: treat each as a `RequiredOnTarget` dependency in the lock and check it at startup.
-- `#requires -RunAsAdministrator`: check elevation at startup.
-- Anything else (`-Assembly`, `-ShellId`): stays a diagnostic with a fix.
+- Module requirements remain blocked for retained executables. The planned contract records the name and version constraints as target-machine dependencies in the reviewed lock and enforces them at startup.
+- Elevation, assembly and application-specific shell requirements remain blocked.
 
 `using module`, `using assembly`, and `exit` inside dot-sourced dependencies stay unsupported for now, but are reported by `Check` with a severity and a fix.
 
@@ -286,7 +284,7 @@ The host is the program inside the executable that runs the script and implement
 | D1 | Dot-sourced scripts and files inside the module bundled | All | Supported | Done |
 | D2 | Extra files and resources (include, exclude, whole module) | ps2exe (`-embedFiles`), Pro Tools, SAPIEN | Supported in the engine | Expose in hosts |
 | D3 | Bundle installed modules from the build machine | Pro Tools, SAPIEN | Missing: reported as needed on the target machine | Slice 14 |
-| D4 | `#requires -Modules`, `-Version`, `-PSEdition`, `-RunAsAdministrator` as startup checks | ps2exe and SAPIEN run them as PowerShell would | Rejected in Package mode | Slice 7 |
+| D4 | Executable `#requires` directives | ps2exe and SAPIEN run them as PowerShell would | Compatible version and edition requirements in retained entries. Module and elevation requirements remain blocked. | Slice 7 |
 | D5 | Native libraries | Varies | Carried in Package and Hybrid, rejected in Strict | Done |
 | D6 | A settings file next to the executable | ps2exe (`-configFile`) | Missing | Later; the script can read its own settings file today |
 

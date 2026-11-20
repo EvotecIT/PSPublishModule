@@ -29,9 +29,9 @@ public sealed class InterimCompileEngineTests : IDisposable
     }
 
     [Fact]
-    public async Task CheckBlocksPackageModeOnRequiresAndRecommendsAModeThatBuilds()
+    public async Task CheckReportsAnIncompatiblePowerShellRequirementInPackageMode()
     {
-        var script = Write("Report.ps1", "#requires -Version 7.4\nGet-ChildItem -Path $PSScriptRoot | Select-Object Name\n");
+        var script = Write("Report.ps1", "#requires -Version 99.0\nGet-ChildItem -Path $PSScriptRoot | Select-Object Name\n");
 
         var result = await new InterimCompileEngine().CheckAsync(script, FileRules.Default, CancellationToken.None);
 
@@ -43,9 +43,6 @@ public sealed class InterimCompileEngineTests : IDisposable
         Assert.Equal(script, requires.FilePath, ignoreCase: true);
         Assert.Contains("#requires", requires.Message, StringComparison.Ordinal);
 
-        var hybrid = Assert.Single(result.Modes, static mode => mode.Mode == PowerShellCompilationMode.Hybrid);
-        Assert.NotEqual(CompileOutcome.Blocked, hybrid.Outcome);
-        Assert.Equal(PowerShellCompilationMode.Hybrid, result.Recommended);
     }
 
     [Fact]
