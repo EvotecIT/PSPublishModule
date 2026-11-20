@@ -119,15 +119,19 @@ completed for **15/20 inputs**, with **150/192 units emitted**. Support for
 a top-level export call splatted from an immediately preceding literal
 hashtable increased this to **17/20 inputs** and **220/284 units emitted**.
 PoshRSJob contributed **1/2** and posh-git **69/90**. The packet also counted
-three promoted regions in posh-git. Three modules still failed admission.
-PSDepend uses a computed export list, PSProfiler dot-sources a computed
-script block, and SimplySql already has a binary module as its manifest root.
+three promoted regions in posh-git. Letting PowerShell bind exports derived
+from the same file list used by a conventional module loader adds PSDepend
+with **38/43 units emitted**. The packet now completes for **18/20 inputs**
+with **258/327 units emitted**. PSProfiler selects a dot-sourced file through a
+runtime switch. SimplySql has a binary module as its manifest root.
 
 On PowerShell 7.6.6 and Windows PowerShell 5.1.26100.9818, posh-git returned
 matching branch, untracked-file, repository, and export information for a
 local Git fixture. PoshRSJob matched the exported commands, job completion,
 and output of a start, wait, receive, and remove sequence using the
-`CompleteModule` resource mode. All four original and Hybrid comparisons passed
+`CompleteModule` resource mode. PSDepend's exported functions and
+`Get-PSDependType -DependencyType PSGalleryModule -SkipHelp` results matched
+under the same resource mode. All six original and Hybrid comparisons passed
 without skips.
 
 The same change admits static references to PowerShell's `ActionPreference`

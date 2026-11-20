@@ -36,6 +36,30 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
 
     [PinnedSemanticHostFact]
     [Trait("Category", "PowerShellCompilerGate")]
+    public void ConventionalFileNameExportsPreserveTheAuthoredSurfaceOnBothHosts()
+    {
+        const string source = """
+            $public = @(Get-ChildItem -Path "$PSScriptRoot/Read-Public*.ps1" -ErrorAction SilentlyContinue)
+            foreach ($file in $public) {
+                . $file.FullName
+            }
+            function Read-PrivateFlavor { return 'private' }
+            Export-ModuleMember -Function $public.BaseName
+            """;
+        const string probe = """
+            [ordered]@{
+                functions = @((Get-Module ScopedValues).ExportedFunctions.Keys | Sort-Object)
+                value = Read-PublicFlavor
+                private = $null -ne (Get-Command Read-PrivateFlavor -ErrorAction Ignore)
+            } | ConvertTo-Json -Compress
+            """;
+        CompareScopedArtifacts(source, probe, new[] { "Read-PublicFlavor" }, value => Assert.Equal(
+            "{\"functions\":[\"Read-PublicFlavor\"],\"value\":\"vanilla\",\"private\":false}", value),
+            additionalSources: new Dictionary<string, string> { ["Read-PublicFlavor.ps1"] = "function Read-PublicFlavor { [CmdletBinding()] param() begin {} end { 'vanilla' } }" });
+    }
+
+    [PinnedSemanticHostFact]
+    [Trait("Category", "PowerShellCompilerGate")]
     public void ActionPreferenceComparisonPreservesInformationBindingOnBothHosts()
     {
         const string source = """

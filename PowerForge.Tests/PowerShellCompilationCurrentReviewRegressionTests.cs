@@ -306,14 +306,18 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
         Assert.Equal("Stop", exact.StandardOutput.Trim());
     }
 
-    [Fact]
-    public void Resolve_DefaultOutputAvoidsRecursiveLoaderAndExplicitOverlapFailsBeforePublication()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Resolve_DefaultOutputAvoidsRecursiveLoaderAndExplicitOverlapFailsBeforePublication(bool changesFileList)
     {
+        var mutation = changesFileList ? "Set-Variable -Name Files -Value $Files; " : string.Empty;
         using var fixture = ArtifactFixture.Create(
-            "$Files = @(Get-ChildItem -Path \"$PSScriptRoot/*.ps1\" -Recurse); foreach ($File in $Files) { . $File.FullName }; Export-ModuleMember -Function Get-One",
+            "$Files = @(Get-ChildItem -Path \"$PSScriptRoot/*.ps1\" -Recurse); " + mutation +
+            "foreach ($File in $Files) { . $File.FullName }; Export-ModuleMember -Function Get-One",
             ".psm1");
         File.WriteAllText(Path.Combine(fixture.RootPath, "Get-One.ps1"), "function Get-One { return 1 }");
-        var resolved = new PowerShellCompilationInputResolver().Resolve(fixture.RootPath);
+        var resolved = new PowerShellCompilationInputResolver().Resolve(fixture.RootPath, allowDynamicModuleRuntimeSources: changesFileList);
 
         var defaultOutput = PowerShellCompilationOutputPolicy.GetDefaultOutputDirectory(resolved);
         Assert.False(defaultOutput.StartsWith(
@@ -322,7 +326,7 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
 
         Directory.CreateDirectory(Path.Combine(defaultOutput, "Generated"));
         File.WriteAllText(Path.Combine(defaultOutput, "Generated", "Generated.ps1"), "function Get-Generated { return 2 }");
-        var secondResolution = new PowerShellCompilationInputResolver().Resolve(fixture.RootPath);
+        var secondResolution = new PowerShellCompilationInputResolver().Resolve(fixture.RootPath, allowDynamicModuleRuntimeSources: changesFileList);
         Assert.DoesNotContain(secondResolution.SourceFiles, path => path.Contains("Generated.ps1", StringComparison.OrdinalIgnoreCase));
 
         var unsafeOutput = Path.Combine(fixture.RootPath, "artifacts");
@@ -335,7 +339,8 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
                 resolved.Mode, allowUnreviewedDependencyResolution: true)
             {
                 CompilationSourcePaths = resolved.CompilationSourceFiles,
-                ModuleManifestPath = resolved.ModuleManifestPath
+                ModuleManifestPath = resolved.ModuleManifestPath,
+                ResourceMode = changesFileList ? PowerShellCompilationResourceMode.CompleteModule : PowerShellCompilationResourceMode.Declared
             }));
         Assert.Contains("recursive conventional loader root", exception.Message, StringComparison.OrdinalIgnoreCase);
         Assert.False(Directory.Exists(unsafeOutput));

@@ -8,7 +8,12 @@ namespace PowerForge;
 /// </summary>
 internal static class PowerShellConventionalModuleSourceDiscovery
 {
-    internal static PowerShellConventionalModuleSourceDiscoveryResult Analyze(string sourcePath)
+    private static readonly HashSet<string> VariableWritingCommands = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "Set-Variable", "New-Variable", "Remove-Variable", "Clear-Variable", "set", "sv", "nv", "rv", "clv"
+    };
+
+    internal static PowerShellConventionalModuleSourceDiscoveryResult Analyze(string sourcePath, bool rejectChangingFileLists = false)
     {
         var rootPath = Path.GetFullPath(sourcePath);
         var sourceRoot = Path.GetDirectoryName(rootPath) ?? Directory.GetCurrentDirectory();
@@ -20,20 +25,26 @@ internal static class PowerShellConventionalModuleSourceDiscovery
         var discoveredDirectories = new HashSet<string>(PowerShellCompilationPathSafety.PathComparer);
         var recursiveDirectories = new HashSet<string>(PowerShellCompilationPathSafety.PathComparer);
         var loaders = new Dictionary<int, PowerShellConventionalLoaderIdentity>();
+        var hasLocalProducer = HasLocalEnumerationFunction(ast);
+        var enumerations = FindFileEnumerationAssignments(ast, hasLocalProducer).ToArray();
         foreach (var command in ast.FindAll(
                      node => node is CommandAst candidate && IsTopLevel(candidate, ast),
                      searchNestedScriptBlocks: true)
                      .Cast<CommandAst>()
                      .Where(static command => GetUnqualifiedCommandName(command)?.Equals("Get-ChildItem", StringComparison.OrdinalIgnoreCase) == true))
         {
-            var acceptedLoaders = FindConventionalLoaders(command, ast, rootPath).ToArray();
-            if (acceptedLoaders.Length == 0 ||
-                !TryReadPathPattern(command, out var relativePattern, out var isLiteralPath, out var pathElementIndex) ||
+            if (!TryReadPathPattern(command, out var relativePattern, out var isLiteralPath, out var pathElementIndex) ||
                 !Path.GetExtension(relativePattern).Equals(".ps1", StringComparison.OrdinalIgnoreCase))
                 continue;
+            var trustedProducer = IsFileEnumerationCommand(command, hasLocalProducer);
+            var associations = FindConventionalLoaders(command, ast, rootPath, enumerations)
+                .Select(association => (association.Loader, Stable: association.Stable && trustedProducer)).ToArray();
+            if (associations.Length == 0)
+                continue;
+            if (rejectChangingFileLists && associations.Any(static association => !association.Stable))
+                throw new InvalidOperationException(
+                    $"Conventional module loader at {rootPath}:{command.Extent.StartLineNumber} can change its file list before or during loading.");
             var (recurse, excludes) = ReadLoaderOptions(command, rootPath, pathElementIndex);
-            foreach (var loader in acceptedLoaders)
-                loaders[loader.StartOffset] = loader;
 
             var normalized = relativePattern.Replace('\\', Path.DirectorySeparatorChar).Replace('/', Path.DirectorySeparatorChar);
             if (isLiteralPath && WildcardPattern.ContainsWildcardCharacters(relativePattern))
@@ -50,12 +61,15 @@ internal static class PowerShellConventionalModuleSourceDiscovery
             var searchRoot = Path.GetFullPath(Path.Combine(sourceRoot, directoryPart));
             if (!PowerShellCompilationPathSafety.PathEquals(sourceRoot, searchRoot))
                 PowerShellCompilationPathSafety.EnsureContained(sourceRoot, searchRoot, $"Conventional module source pattern '{relativePattern}' escapes the module root.");
-            if (!Directory.Exists(searchRoot))
+            if (recurse)
+                recursiveDirectories.Add(searchRoot);
+            var accepted = associations.Where(static association => association.Stable).ToArray();
+            foreach (var association in accepted)
+                loaders[association.Loader.StartOffset] = association.Loader;
+            if (accepted.Length == 0 || !Directory.Exists(searchRoot))
                 continue;
             PowerShellCompilationPathSafety.EnsureNoLinks(sourceRoot, searchRoot, $"Conventional module source pattern '{relativePattern}' traverses a symbolic link or junction.");
             discoveredDirectories.Add(searchRoot);
-            if (recurse)
-                recursiveDirectories.Add(searchRoot);
             var wildcard = new WildcardPattern(filePattern, WildcardOptions.IgnoreCase | WildcardOptions.Compiled);
             var excluded = excludes.Select(pattern => new WildcardPattern(pattern, WildcardOptions.IgnoreCase | WildcardOptions.Compiled)).ToArray();
             foreach (var file in EnumerateAccessibleFiles(searchRoot, recurse)
@@ -129,6 +143,131 @@ internal static class PowerShellConventionalModuleSourceDiscovery
 
     private static bool IsAccessFailure(Exception exception)
         => exception is UnauthorizedAccessException or IOException or System.Security.SecurityException;
+
+    internal static bool IsFileNameExport(ScriptBlockAst root, CommandElementAst argument)
+    {
+        if (argument is not MemberExpressionAst
+            {
+                Static: false,
+                Expression: VariableExpressionAst { VariablePath.IsUnqualified: true } receiver,
+                Member: StringConstantExpressionAst member
+            } ||
+            argument is InvokeMemberExpressionAst ||
+            !member.Value.Equals("BaseName", StringComparison.OrdinalIgnoreCase) ||
+            string.IsNullOrEmpty(root.Extent.File))
+            return false;
+
+        var exportOffset = argument.Extent.StartOffset;
+        var enumerations = FindFileEnumerationAssignments(root, HasLocalEnumerationFunction(root)).ToArray();
+        var loaders = new List<(ForEachStatementAst Loop, List<VariableExpressionAst> Inputs)>();
+        foreach (var loader in root.FindAll(
+                     node => node is ForEachStatementAst candidate && IsTopLevel(candidate, root),
+                     searchNestedScriptBlocks: false).Cast<ForEachStatementAst>())
+        {
+            if (!GetDirectDotSourceLoaders(loader).Any())
+                continue;
+
+            var inputs = new List<VariableExpressionAst>();
+            if (!TryReadFileEnumerationInputs(loader.Condition, inputs))
+                return false;
+            loaders.Add((loader, inputs));
+        }
+
+        var allowedUses = new HashSet<VariableExpressionAst>(loaders.SelectMany(static loader => loader.Inputs)) { receiver };
+        var loadsExportedFiles = false;
+        foreach (var (loader, inputs) in loaders)
+        {
+            foreach (var input in inputs)
+            {
+                var name = input.VariablePath.UserPath;
+                var producer = FindEffectiveEnumeration(enumerations, name, loader.Extent.StartOffset);
+                if (producer is null ||
+                    HasInterveningAssignment(root, name, producer.Extent.EndOffset, loader.Extent.EndOffset) ||
+                    HasUnmodeledFileListUse(root, name, producer.Extent.EndOffset, loader.Extent.EndOffset, allowedUses))
+                    return false;
+
+                if (loader.Extent.EndOffset < exportOffset &&
+                    name.Equals(receiver.VariablePath.UserPath, StringComparison.OrdinalIgnoreCase) &&
+                    !HasUnmodeledFileListUse(root, name, producer.Extent.EndOffset, exportOffset, allowedUses))
+                    loadsExportedFiles = true;
+            }
+        }
+        return loadsExportedFiles;
+    }
+
+    private static IEnumerable<(AssignmentStatementAst Assignment, string Name)> FindFileEnumerationAssignments(
+        ScriptBlockAst root, bool hasLocalProducer)
+    {
+        foreach (var producer in root.FindAll(static node => node is CommandAst, searchNestedScriptBlocks: false).Cast<CommandAst>())
+        {
+            if (!IsTopLevel(producer, root) ||
+                producer.Parent is not PipelineAst { PipelineElements.Count: 1 } pipeline ||
+                producer.Redirections.Count != 0 ||
+                !IsFileEnumerationCommand(producer, hasLocalProducer) ||
+                !TryReadPathPattern(producer, out var pattern, out _, out _) ||
+                !Path.GetExtension(pattern).Equals(".ps1", StringComparison.OrdinalIgnoreCase) ||
+                FindAncestor<AssignmentStatementAst>(producer, root) is not
+                {
+                    Operator: TokenKind.Equals,
+                    Left: VariableExpressionAst { VariablePath.IsUnqualified: true } declared
+                } assignment ||
+                !IsDirectFileEnumeration(assignment.Right, pipeline))
+                continue;
+
+            yield return (assignment, declared.VariablePath.UserPath);
+        }
+    }
+
+    private static bool HasLocalEnumerationFunction(ScriptBlockAst root)
+        => root.FindAll(static node => node is FunctionDefinitionAst, searchNestedScriptBlocks: false)
+            .Cast<FunctionDefinitionAst>()
+            .Any(static function => function.Name.Substring(function.Name.LastIndexOf(':') + 1)
+                .Equals("Get-ChildItem", StringComparison.OrdinalIgnoreCase));
+
+    private static bool IsFileEnumerationCommand(CommandAst producer, bool hasLocalProducer)
+    {
+        var name = producer.GetCommandName();
+        return string.Equals(name, @"Microsoft.PowerShell.Management\Get-ChildItem", StringComparison.OrdinalIgnoreCase) ||
+               !hasLocalProducer && string.Equals(name, "Get-ChildItem", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool TryReadFileEnumerationInputs(Ast node, List<VariableExpressionAst> inputs)
+    {
+        switch (node)
+        {
+            case PipelineAst { PipelineElements.Count: 1 } pipeline:
+                return TryReadFileEnumerationInputs(pipeline.PipelineElements[0], inputs);
+            case CommandExpressionAst { Redirections.Count: 0 } command:
+                return TryReadFileEnumerationInputs(command.Expression, inputs);
+            case ParenExpressionAst parenthesized:
+                return TryReadFileEnumerationInputs(parenthesized.Pipeline, inputs);
+            case ArrayExpressionAst { SubExpression.Statements.Count: 1 } array:
+                return TryReadFileEnumerationInputs(array.SubExpression.Statements[0], inputs);
+            case BinaryExpressionAst { Operator: TokenKind.Plus } binary:
+                return TryReadFileEnumerationInputs(binary.Left, inputs) && TryReadFileEnumerationInputs(binary.Right, inputs);
+            case VariableExpressionAst { VariablePath.IsUnqualified: true, Splatted: false } variable:
+                inputs.Add(variable);
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    private static bool HasUnmodeledFileListUse(
+        ScriptBlockAst root, string name, int startOffset, int endOffset, ISet<VariableExpressionAst>? allowedUses = null)
+        => root.Find(node =>
+                node is VariableExpressionAst variable &&
+                variable.Extent.StartOffset >= startOffset && variable.Extent.StartOffset < endOffset &&
+                MatchesVariable(variable, name) && (allowedUses is null || !allowedUses.Contains(variable)),
+            searchNestedScriptBlocks: true) is not null;
+
+    private static bool IsDirectFileEnumeration(StatementAst initializer, PipelineAst pipeline)
+        => ReferenceEquals(initializer, pipeline) ||
+           initializer is CommandExpressionAst
+           {
+               Redirections.Count: 0,
+               Expression: ArrayExpressionAst { SubExpression.Statements.Count: 1 } array
+           } && ReferenceEquals(array.SubExpression.Statements[0], pipeline);
 
     private static bool TryReadPathPattern(
         CommandAst command,
@@ -246,13 +385,14 @@ internal static class PowerShellConventionalModuleSourceDiscovery
         return true;
     }
 
-    private static IEnumerable<PowerShellConventionalLoaderIdentity> FindConventionalLoaders(
+    private static IEnumerable<(PowerShellConventionalLoaderIdentity Loader, bool Stable)> FindConventionalLoaders(
         CommandAst command,
         ScriptBlockAst root,
-        string sourcePath)
+        string sourcePath,
+        (AssignmentStatementAst Assignment, string Name)[] enumerations)
     {
         foreach (var dotSource in GetPipelineDotSourceLoaders(command, root))
-            yield return new PowerShellConventionalLoaderIdentity(sourcePath, dotSource.Extent.StartOffset);
+            yield return (new PowerShellConventionalLoaderIdentity(sourcePath, dotSource.Extent.StartOffset), Stable: true);
 
         var assignment = FindAncestor<AssignmentStatementAst>(command, root);
         var assignedVariable = assignment is null ? null : FindAssignedVariable(assignment.Left);
@@ -265,24 +405,59 @@ internal static class PowerShellConventionalModuleSourceDiscovery
                 continue;
             if (IsDescendantOf(command, loader.Condition))
             {
+                var direct = IsDirectLoopEnumeration(loader, command);
                 foreach (var dotSource in dotSources)
-                    yield return new PowerShellConventionalLoaderIdentity(sourcePath, dotSource.Extent.StartOffset);
+                    yield return (new PowerShellConventionalLoaderIdentity(sourcePath, dotSource.Extent.StartOffset), direct);
                 continue;
             }
-            if (assignedVariable is not null &&
-                assignment!.Extent.StartOffset < loader.Extent.StartOffset &&
-                !HasInterveningAssignment(root, assignedVariable, assignment.Extent.StartOffset, loader.Condition.Extent.EndOffset) &&
-                loader.Condition.FindAll(
+            if (assignedVariable is null ||
+                assignment!.Extent.EndOffset > loader.Extent.StartOffset ||
+                !loader.Condition.FindAll(
                     node => node is VariableExpressionAst variable &&
                             variable.VariablePath.UserPath.Equals(assignedVariable, StringComparison.OrdinalIgnoreCase) &&
                             !PowerShellAssignmentTargetPolicy.IsDirectAssignmentTarget(variable),
                     searchNestedScriptBlocks: false).Any())
-            {
-                foreach (var dotSource in dotSources)
-                    yield return new PowerShellConventionalLoaderIdentity(sourcePath, dotSource.Extent.StartOffset);
-            }
+                continue;
+
+            var effective = FindEffectiveEnumeration(enumerations, assignedVariable, loader.Extent.StartOffset);
+            if (effective is not null && !ReferenceEquals(effective, assignment) &&
+                effective.Extent.StartOffset >= assignment.Extent.StartOffset)
+                continue;
+
+            var inputs = new List<VariableExpressionAst>();
+            var stable = TryReadFileEnumerationInputs(loader.Condition, inputs) &&
+                inputs.All(input => HasStableEnumeration(root, loader, input, enumerations));
+            foreach (var dotSource in dotSources)
+                yield return (new PowerShellConventionalLoaderIdentity(sourcePath, dotSource.Extent.StartOffset), stable);
         }
     }
+
+    private static AssignmentStatementAst? FindEffectiveEnumeration(
+        IEnumerable<(AssignmentStatementAst Assignment, string Name)> enumerations, string name, int before)
+        => enumerations.LastOrDefault(enumeration =>
+            enumeration.Assignment.Extent.EndOffset <= before &&
+            enumeration.Name.Equals(name, StringComparison.OrdinalIgnoreCase)).Assignment;
+
+    private static bool HasStableEnumeration(
+        ScriptBlockAst root, ForEachStatementAst loader, VariableExpressionAst input,
+        IEnumerable<(AssignmentStatementAst Assignment, string Name)> enumerations)
+    {
+        var name = input.VariablePath.UserPath;
+        var producer = FindEffectiveEnumeration(enumerations, name, loader.Extent.StartOffset);
+        return producer is not null &&
+            !HasInterveningAssignment(root, name, producer.Extent.EndOffset, loader.Extent.EndOffset) &&
+            !HasUnmodeledFileListUse(root, name, loader.Body.Extent.StartOffset, loader.Body.Extent.EndOffset);
+    }
+
+    private static bool IsDirectLoopEnumeration(ForEachStatementAst loader, CommandAst producer)
+        => producer.Parent is PipelineAst { PipelineElements.Count: 1 } pipeline &&
+            (ReferenceEquals(loader.Condition, pipeline) ||
+             loader.Condition is PipelineAst { PipelineElements.Count: 1 } condition &&
+             condition.PipelineElements[0] is CommandExpressionAst
+             {
+                 Redirections.Count: 0,
+                 Expression: ArrayExpressionAst { SubExpression.Statements.Count: 1 } array
+             } && ReferenceEquals(array.SubExpression.Statements[0], pipeline));
 
     private static IEnumerable<CommandAst> GetPipelineDotSourceLoaders(CommandAst producer, ScriptBlockAst root)
     {
@@ -393,14 +568,50 @@ internal static class PowerShellConventionalModuleSourceDiscovery
     }
 
     private static bool HasInterveningAssignment(ScriptBlockAst root, string variableName, int producerOffset, int loaderOffset)
-        => root.FindAll(
-                node => node is AssignmentStatementAst assignment &&
-                        assignment.Extent.StartOffset > producerOffset &&
-                        assignment.Extent.StartOffset < loaderOffset,
-                searchNestedScriptBlocks: false)
-            .Cast<AssignmentStatementAst>()
-            .Select(static assignment => FindAssignedVariable(assignment.Left))
-            .Any(name => name?.Equals(variableName, StringComparison.OrdinalIgnoreCase) == true);
+        => root.Find(
+            node => node.Extent.StartOffset >= producerOffset && node.Extent.StartOffset < loaderOffset &&
+                    (node is AssignmentStatementAst assignment && WritesVariable(assignment.Left, variableName) ||
+                     node is ForEachStatementAst loop && MatchesVariable(loop.Variable, variableName) ||
+                     node is UnaryExpressionAst { TokenKind: TokenKind.PlusPlus or TokenKind.MinusMinus } unary &&
+                        WritesVariable(unary.Child, variableName) ||
+                     node is CommandAst command && CanChangeFileList(command, variableName)),
+            searchNestedScriptBlocks: true) is not null;
+
+    private static bool CanChangeFileList(CommandAst command, string variableName)
+    {
+        var name = GetUnqualifiedCommandName(command);
+        if (name is null || !VariableWritingCommands.Contains(name))
+            return false;
+
+        var elements = command.CommandElements;
+        for (var index = 1; index < elements.Count; index++)
+        {
+            if (elements[index] is not CommandParameterAst parameter ||
+                !"Name".StartsWith(parameter.ParameterName, StringComparison.OrdinalIgnoreCase))
+                continue;
+            return CouldTargetVariable(parameter.Argument ?? (index + 1 < elements.Count ? elements[index + 1] : null), variableName);
+        }
+        return CouldTargetVariable(elements.Count > 1 ? elements[1] : null, variableName);
+    }
+
+    private static bool CouldTargetVariable(CommandElementAst? argument, string name)
+        => argument is not StringConstantExpressionAst target ||
+           new WildcardPattern(PowerShellAssignmentTargetPolicy.GetUnscopedVariableName(target.Value), WildcardOptions.IgnoreCase)
+               .IsMatch(name);
+
+    private static bool WritesVariable(ExpressionAst target, string name) => target switch
+    {
+        ArrayLiteralAst array => array.Elements.Any(element => WritesVariable(element, name)),
+        IndexExpressionAst index => WritesVariable(index.Target, name),
+        MemberExpressionAst member => WritesVariable(member.Expression, name),
+        ConvertExpressionAst conversion => WritesVariable(conversion.Child, name),
+        VariableExpressionAst variable => MatchesVariable(variable, name),
+        _ => false
+    };
+
+    private static bool MatchesVariable(VariableExpressionAst variable, string name)
+        => PowerShellAssignmentTargetPolicy.GetUnscopedVariableName(variable.VariablePath.UserPath).Equals(
+            PowerShellAssignmentTargetPolicy.GetUnscopedVariableName(name), StringComparison.OrdinalIgnoreCase);
 
     private static string? FindAssignedVariable(ExpressionAst expression)
     {
