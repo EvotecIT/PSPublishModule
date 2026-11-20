@@ -10,6 +10,13 @@ The path argument is optional; you can also drop a file on the window or use Ope
 
 Select **Review dependencies** to check the selected mode, target and file rules. The Dependencies tab shows what the build includes and what the target machine needs. **Confirm and compile** builds from that exact review. Changing the selection clears the review, and changed inputs require a fresh review when you build.
 
+Use **Save review** in the Dependencies tab to pass the review to the CLI with
+`powerforge powershell build --reviewed-check`. Use **Open review** to load a
+file made by `powerforge powershell check --write-review`. Select the same
+source, target and file rules first. The app checks the current dependency
+graph against the file before offering **Confirm and compile**. Save module
+review files outside the module's source directory.
+
 **Edit details** opens a side panel for the files that go into the output (the script and what it loads, the whole folder, or only the script, plus include and leave-out patterns) and for saved settings. Settings are the engine's own `powerforge.psproject.json`, so a file saved here builds the same way with `powerforge powershell project build`. Saving adds the selected mode and target and keeps any targets already in the file. Opening a settings file, or passing or dropping one, checks the script it names with the saved files, mode, target and output folder.
 
 ## How it talks to the engine

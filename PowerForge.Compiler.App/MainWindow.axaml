@@ -388,7 +388,7 @@
             </TabItem>
 
             <TabItem Header="{Binding DependenciesHeader}">
-              <Grid>
+              <Grid RowDefinitions="*,Auto">
                 <TextBlock Classes="muted" Text="Nothing else is needed beyond the script itself." IsVisible="{Binding !HasDependencies}" Margin="0,6" />
                 <ScrollViewer>
                   <ItemsControl ItemsSource="{Binding Dependencies}">
@@ -403,6 +403,11 @@
                     </ItemsControl.ItemTemplate>
                   </ItemsControl>
                 </ScrollViewer>
+                <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="8" Margin="0,8,0,0"
+                            IsEnabled="{Binding CanCompile}">
+                  <Button Classes="band" Content="Open review" Click="OnOpenReview" />
+                  <Button Classes="band" Content="Save review" Click="OnSaveReview" IsEnabled="{Binding HasReview}" />
+                </StackPanel>
               </Grid>
             </TabItem>
 

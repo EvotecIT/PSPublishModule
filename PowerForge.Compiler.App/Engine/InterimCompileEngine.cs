@@ -151,7 +151,8 @@ internal sealed partial class InterimCompileEngine : ICompileEngine
                 : MapDependencies(check.Dependencies, resolved.SourcePath);
             var diagnostics = check.Diagnostics.Concat(doctor?.Diagnostics ?? Array.Empty<PowerShellCompilationHostDiagnostic>())
                 .Select(MapDiagnostic).ToArray();
-            return new CompileReviewResult(doctor is { Succeeded: true } ? check.ProposedReview : null, dependencies, diagnostics);
+            return new CompileReviewResult(doctor is { Succeeded: true } ? check.ProposedReview : null, dependencies,
+                diagnostics, check.ModuleSourceDirectory);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {

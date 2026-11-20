@@ -212,7 +212,8 @@ public sealed record CompileRequest(
 public sealed record CompileReviewResult(
     PowerShellCompilationReview? Review,
     IReadOnlyList<CompileDependency> Dependencies,
-    IReadOnlyList<CompileDiagnostic> Diagnostics);
+    IReadOnlyList<CompileDiagnostic> Diagnostics,
+    string? ModuleSourceDirectory = null);
 
 /// <summary>What a build produced.</summary>
 public sealed record CompileResult(

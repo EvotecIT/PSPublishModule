@@ -13,6 +13,24 @@ public static class PowerShellCompilationReviewFile
                ?? throw new InvalidDataException("The dependency review was empty.");
     }
 
+    /// <summary>Verifies a saved review against a newly checked selection without building.</summary>
+    public static void EnsureMatches(PowerShellCompilationReview saved, PowerShellCompilationReview current)
+    {
+        if (saved is null) throw new ArgumentNullException(nameof(saved));
+        if (current is null) throw new ArgumentNullException(nameof(current));
+        if (saved.SchemaVersion != 1 || saved.Target is null || saved.DependencyLock is null ||
+            current.SchemaVersion != 1 || current.Target is null || current.DependencyLock is null)
+            throw new InvalidDataException("The dependency review must contain a supported target and dependency lock.");
+
+        var savedTarget = PowerShellCompilationTargetContractService.Normalize(saved.Target.Copy());
+        var currentTarget = PowerShellCompilationTargetContractService.Normalize(current.Target.Copy());
+        if (!string.Equals(savedTarget.ContractSha256, currentTarget.ContractSha256, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("The saved review is for a different target. Select the reviewed target or create a new review.");
+        PowerShellCompilationDependencyLockHasher.EnsureValid(saved.DependencyLock, nameof(saved));
+        if (!string.Equals(saved.DependencyLock.LockSha256, current.DependencyLock.LockSha256, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("The dependencies differ from the saved review. Review the current dependencies before building.");
+    }
+
     /// <summary>Creates a review file without overwriting an existing file or changing module inputs.</summary>
     public static void Write(string path, PowerShellCompilationReview review, string? moduleSourceDirectory)
     {
