@@ -4,7 +4,7 @@ using System.Management.Automation.Language;
 namespace PowerForge;
 
 /// <summary>
-/// Reads literal module export declarations so compiled functions retain the original public surface.
+/// Reads statically known module export declarations so compiled functions retain the original public surface.
 /// </summary>
 internal sealed class PowerShellModuleExportContract
 {
@@ -41,7 +41,8 @@ internal sealed class PowerShellModuleExportContract
         if (allCommands.Length == 0)
             return null;
 
-        var commands = (ast.EndBlock?.Statements.AsEnumerable() ?? Enumerable.Empty<StatementAst>())
+        var statements = ast.EndBlock?.Statements;
+        var commands = (statements?.AsEnumerable() ?? Enumerable.Empty<StatementAst>())
             .OfType<PipelineAst>()
             .Where(static pipeline => pipeline.PipelineElements.Count == 1)
             .Select(static pipeline => pipeline.PipelineElements[0])
@@ -50,15 +51,9 @@ internal sealed class PowerShellModuleExportContract
             .OrderBy(static command => command.Extent.StartOffset)
             .ToArray();
         if (commands.Length != allCommands.Length)
-        {
-            return new PowerShellModuleExportContract(
-                Array.Empty<CommandAst>(),
-                Array.Empty<string>(),
-                Array.Empty<string>(),
-                Array.Empty<string>(),
-                Array.Empty<string>(),
-                hasRuntimeControlledExports: true);
-        }
+            return RuntimeControlledExports();
+
+        var usesAssignedVariables = false;
         var values = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase)
         {
             ["Function"] = new List<string>(),
@@ -68,6 +63,8 @@ internal sealed class PowerShellModuleExportContract
         };
         foreach (var command in commands)
         {
+            var commandStatement = (PipelineAst)command.Parent;
+            var assignments = ReadAdjacentLiteralAssignments(statements!, statements!.IndexOf(commandStatement));
             string? currentParameter = null;
             foreach (var element in command.CommandElements.Skip(1))
             {
@@ -76,18 +73,21 @@ internal sealed class PowerShellModuleExportContract
                     currentParameter = ResolveParameter(parameter);
                     if (parameter.Argument is not null)
                     {
-                        foreach (var value in ReadLiteralValues(parameter.Argument))
-                            values[currentParameter].Add(value);
+                        values[currentParameter].AddRange(ReadExportValues(parameter.Argument, assignments, ref usesAssignedVariables));
                         currentParameter = null;
                     }
                     continue;
                 }
                 if (currentParameter is null)
                     throw new InvalidOperationException($"Export-ModuleMember at line {command.Extent.StartLineNumber} uses positional or dynamic export arguments; use literal -Function, -Cmdlet, -Alias, or -Variable values.");
-                foreach (var value in ReadLiteralValues(element))
-                    values[currentParameter].Add(value);
+                values[currentParameter].AddRange(ReadExportValues(element, assignments, ref usesAssignedVariables));
             }
         }
+
+        // A literal assignment can still be coerced by existing variable attributes.
+        // Keep the authored export call so PowerShell binds the actual value.
+        if (usesAssignedVariables)
+            return RuntimeControlledExports();
 
         return new PowerShellModuleExportContract(
             commands,
@@ -96,6 +96,15 @@ internal sealed class PowerShellModuleExportContract
             Normalize(values["Alias"]),
             Normalize(values["Variable"]));
     }
+
+    private static PowerShellModuleExportContract RuntimeControlledExports()
+        => new(
+            Array.Empty<CommandAst>(),
+            Array.Empty<string>(),
+            Array.Empty<string>(),
+            Array.Empty<string>(),
+            Array.Empty<string>(),
+            hasRuntimeControlledExports: true);
 
     internal string[] SelectFunctions(IEnumerable<string> names)
         => Select(names, Functions);
@@ -125,7 +134,48 @@ internal sealed class PowerShellModuleExportContract
         throw new InvalidOperationException($"Export-ModuleMember parameter '-{parameter.ParameterName}' is not supported by binary-module compilation.");
     }
 
-    private static IEnumerable<string> ReadLiteralValues(CommandElementAst element)
+    private static HashSet<string> ReadAdjacentLiteralAssignments(
+        IReadOnlyList<StatementAst> statements,
+        int exportIndex)
+    {
+        var assignments = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        for (var index = exportIndex - 1; index >= 0; index--)
+        {
+            // Stop at the first statement that could change the value or binding of a variable.
+            if (statements[index] is not AssignmentStatementAst
+                {
+                    Operator: TokenKind.Equals,
+                    Left: VariableExpressionAst { VariablePath.IsUnqualified: true } variable,
+                    Right: CommandExpressionAst { Redirections.Count: 0 } initializer
+                } ||
+                TryReadLiteralValues(initializer.Expression) is null)
+            {
+                break;
+            }
+
+            assignments.Add(variable.VariablePath.UserPath);
+        }
+
+        return assignments;
+    }
+
+    private static IReadOnlyList<string> ReadExportValues(
+        CommandElementAst element,
+        HashSet<string> assignments,
+        ref bool usesAssignedVariables)
+    {
+        if (element is VariableExpressionAst { Splatted: false, VariablePath.IsUnqualified: true } variable &&
+            assignments.Contains(variable.VariablePath.UserPath))
+        {
+            usesAssignedVariables = true;
+            return Array.Empty<string>();
+        }
+
+        return TryReadLiteralValues(element) ??
+            throw new InvalidOperationException($"Export-ModuleMember at line {element.Extent.StartLineNumber} contains a non-literal export expression.");
+    }
+
+    private static IReadOnlyList<string>? TryReadLiteralValues(CommandElementAst element)
     {
         if (element is StringConstantExpressionAst text && !string.IsNullOrWhiteSpace(text.Value))
             return new[] { text.Value };
@@ -135,7 +185,7 @@ internal sealed class PowerShellModuleExportContract
             foreach (var item in array.Elements)
             {
                 if (item is not StringConstantExpressionAst literal || string.IsNullOrWhiteSpace(literal.Value))
-                    throw new InvalidOperationException($"Export-ModuleMember at line {element.Extent.StartLineNumber} contains a non-literal export name.");
+                    return null;
                 values.Add(literal.Value);
             }
             return values;
@@ -146,15 +196,16 @@ internal sealed class PowerShellModuleExportContract
             foreach (var statement in arrayExpression.SubExpression.Statements)
             {
                 if (statement is not PipelineAst { PipelineElements: { Count: 1 } } pipeline ||
-                    pipeline.PipelineElements[0] is not CommandExpressionAst commandExpression)
+                    pipeline.PipelineElements[0] is not CommandExpressionAst { Redirections.Count: 0 } commandExpression ||
+                    TryReadLiteralValues(commandExpression.Expression) is not { } statementValues)
                 {
-                    throw new InvalidOperationException($"Export-ModuleMember at line {element.Extent.StartLineNumber} contains a non-literal export array.");
+                    return null;
                 }
-                values.AddRange(ReadLiteralValues(commandExpression.Expression));
+                values.AddRange(statementValues);
             }
             return values;
         }
-        throw new InvalidOperationException($"Export-ModuleMember at line {element.Extent.StartLineNumber} contains a non-literal export expression.");
+        return null;
     }
 
     private static string[] Select(IEnumerable<string> names, string[] patterns)

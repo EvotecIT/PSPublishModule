@@ -370,7 +370,8 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             """
             function Get-PublicValue { return 1 }
             function Get-PrivateValue { return 2 }
-            Export-ModuleMember -Function @('Get-PublicValue')
+            Set-Alias -Name "pfPublicValue’sAlias" -Value Get-PublicValue
+            Export-ModuleMember -Function @('Get-PublicValue') -Alias "pfPublicValue’sAlias"
             """);
         var spec = new PowerShellCompilationBuildSpec(
             fixture.ScriptPath,
@@ -384,7 +385,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         Assert.NotNull(result.ArtifactPath);
         var escapedModulePath = result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal);
-        var command = $"Import-Module -Name '{escapedModulePath}' -Force; [bool](Get-Command Get-PublicValue -ErrorAction SilentlyContinue); [bool](Get-Command Get-PrivateValue -ErrorAction SilentlyContinue); Get-PublicValue";
+        var command = $"Import-Module -Name '{escapedModulePath}' -Force; [bool](Get-Command Get-PublicValue -ErrorAction SilentlyContinue); [bool](Get-Command Get-PrivateValue -ErrorAction SilentlyContinue); $alias = 'pfPublicValue' + [char]0x2019 + 'sAlias'; (Get-Alias -Name $alias).Definition; & $alias";
         var startInfo = new ProcessStartInfo
         {
             FileName = "pwsh",
@@ -402,7 +403,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         var standardError = process.StandardError.ReadToEnd();
         Assert.True(process.WaitForExit(60_000), "Selective-export module proof did not exit within 60 seconds.");
         Assert.True(process.ExitCode == 0, $"Exit code: {process.ExitCode}{Environment.NewLine}{standardError}{Environment.NewLine}{standardOutput}");
-        Assert.Equal(new[] { "True", "False", "1" }, standardOutput.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries));
+        Assert.Equal(new[] { "True", "False", "Get-PublicValue", "1" }, standardOutput.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries));
         Assert.True(string.IsNullOrWhiteSpace(standardError), standardError);
     }
 
@@ -554,13 +555,16 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.Empty(Directory.EnumerateFileSystemEntries(fixture.OutputPath));
     }
 
-    [Fact]
-    public void Build_RejectsDynamicExportModuleMemberWithoutPublishingPartialArtifacts()
+    [Theory]
+    [InlineData("$exports = (Get-Command Get-PublicValue).Name")]
+    [InlineData("$exports = @('Get-PublicValue'); Clear-Variable -Name exports")]
+    [InlineData("$exports = @('Get-PublicValue'); $exports += 'Get-*'")]
+    public void Build_RejectsDynamicExportModuleMemberWithoutPublishingPartialArtifacts(string assignment)
     {
         using var fixture = ArtifactFixture.Create(
-            """
+            $$"""
             function Get-PublicValue { return 1 }
-            $exports = 'Get-PublicValue'
+            {{assignment}}
             Export-ModuleMember -Function $exports
             """,
             ".psm1");
