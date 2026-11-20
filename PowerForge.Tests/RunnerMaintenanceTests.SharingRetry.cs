@@ -60,4 +60,33 @@ public sealed partial class RunnerMaintenanceTests
         Assert.Equal(5, persistent);
         Assert.Equal(1, expired);
     }
+
+    [Fact]
+    public void MaintenanceRetrySharing_DoesNotTryAgainWhenTheBudgetRunsOutDuringAWait()
+    {
+        var attempts = 0;
+        var budgetLeft = true;
+
+        Assert.Throws<TimeoutException>(() => RunnerHousekeepingService.MaintenanceRetrySharing<int>(() =>
+        {
+            attempts++;
+            throw new IOException("held", SharingViolation);
+        }, stop: () => !budgetLeft, expired: static () => new TimeoutException(), wait: _ => budgetLeft = false));
+
+        Assert.Equal(1, attempts);
+    }
+
+    [Fact]
+    public void MaintenanceRetrySharing_ReportsTheBudgetInsteadOfTheLockOnceItIsGone()
+    {
+        var attempts = 0;
+
+        Assert.Throws<TimeoutException>(() => RunnerHousekeepingService.MaintenanceRetrySharing<int>(() =>
+        {
+            attempts++;
+            throw new IOException("held", LockViolation);
+        }, stop: static () => true, expired: static () => new TimeoutException(), wait: static _ => { }));
+
+        Assert.Equal(1, attempts);
+    }
 }

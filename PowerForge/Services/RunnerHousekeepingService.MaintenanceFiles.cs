@@ -75,14 +75,27 @@ public sealed partial class RunnerHousekeepingService
 
     // Scanners and indexers briefly open freshly written files without sharing. Retry only native sharing and
     // lock violations (ERROR_SHARING_VIOLATION 32, ERROR_LOCK_VIOLATION 33); a persistent holder is still retained.
-    internal static T MaintenanceRetrySharing<T>(Func<T> operation, Func<bool> stop, Action<TimeSpan>? wait = null)
+    // When the run's budget is gone, `expired` supplies the exception callers already treat as a deferral, and no
+    // further attempt is made after a wait; with budget left, a holder that outlasts the retries keeps its original error.
+    internal static T MaintenanceRetrySharing<T>(Func<T> operation, Func<bool> stop, Func<Exception>? expired = null, Action<TimeSpan>? wait = null)
     {
         for (var attempt = 1; ; attempt++)
         {
             try { return operation(); }
-            catch (IOException error) when (attempt < 5 && !stop() && (error.HResult & 0xFFFF) is 32 or 33)
+            catch (IOException error) when ((error.HResult & 0xFFFF) is 32 or 33)
             {
+                if (stop())
+                {
+                    if (expired is null) throw;
+                    throw expired();
+                }
+                if (attempt >= 5) throw;
                 (wait ?? Thread.Sleep)(TimeSpan.FromMilliseconds(100 * attempt));
+                if (stop())
+                {
+                    if (expired is null) throw;
+                    throw expired();
+                }
             }
         }
     }
@@ -145,7 +158,7 @@ public sealed partial class RunnerHousekeepingService
             MaintenancePhysicalPath(file);
             if (olderThan.HasValue && File.GetLastWriteTimeUtc(file) >= olderThan.Value) throw new IOException("Recent temporary entry retained.");
             if (sensitive && MaintenanceSensitive(file)) throw new IOException("Package, key or database payload retained.");
-            using var handle = MaintenanceRetrySharing(() => RunnerMaintenanceProcesses.OpenRegularFile(file), () => run.Expired);
+            using var handle = MaintenanceRetrySharing(() => RunnerMaintenanceProcesses.OpenRegularFile(file), () => run.Expired, static () => new MaintenanceBudgetExpiredException());
             bytes += handle.Length;
         }
     }
@@ -206,7 +219,7 @@ public sealed partial class RunnerHousekeepingService
                 if (directory) Directory.Move(path, stage);
                 else File.Move(path, stage);
                 return true;
-            }, () => run.Expired);
+            }, () => run.Expired, static () => new MaintenanceBudgetExpiredException());
             journal.Moved = true;
             MaintenanceWrite(record, journal, RunnerMaintenanceJsonContext.Default.RunnerMaintenanceJournal);
             run.Isolated.Add(journal);
