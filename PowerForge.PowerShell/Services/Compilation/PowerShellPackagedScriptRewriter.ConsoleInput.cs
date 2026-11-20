@@ -96,6 +96,9 @@ internal static partial class PowerShellPackagedScriptRewriter
         visited.Clear();
         if (!ResolvesToCommandMatching(name, aliases, IsProviderSettingCommand, visited))
             return false;
+        visited.Clear();
+        var childName = ResolvesToCommandMatching(name, aliases, IsProviderCreationCommand, visited)
+            ? ReadProviderChildName(command) : null;
         ExpressionAst? positional = null;
         for (var index = 1; index < command.CommandElements.Count; index++)
         {
@@ -107,14 +110,27 @@ internal static partial class PowerShellPackagedScriptRewriter
             if (IsProviderPathParameter(parameter.ParameterName))
             {
                 var operand = parameter.Argument ?? command.CommandElements.ElementAtOrDefault(index + 1) as ExpressionAst;
-                return operand is null || PowerShellPackagedPathOperandPolicy.MayRetrieveVariable(operand, ParameterDefaults, root);
+                return operand is null || PowerShellPackagedPathOperandPolicy.MayRetrieveVariable(operand, ParameterDefaults, root, childName);
             }
             if (parameter.Argument is null && !IsProviderSettingSwitch(parameter.ParameterName) &&
                 command.CommandElements.ElementAtOrDefault(index + 1) is ExpressionAst)
                 index++;
         }
         return positional is not null &&
-            PowerShellPackagedPathOperandPolicy.MayRetrieveVariable(positional, ParameterDefaults, root);
+            PowerShellPackagedPathOperandPolicy.MayRetrieveVariable(positional, ParameterDefaults, root, childName);
+    }
+
+    private static string? ReadProviderChildName(CommandAst command)
+    {
+        for (var index = 1; index < command.CommandElements.Count; index++)
+        {
+            if (command.CommandElements[index] is not CommandParameterAst parameter ||
+                !"Name".StartsWith(parameter.ParameterName, StringComparison.OrdinalIgnoreCase))
+                continue;
+            var value = parameter.Argument ?? command.CommandElements.ElementAtOrDefault(index + 1) as ExpressionAst;
+            return (value as StringConstantExpressionAst)?.Value;
+        }
+        return null;
     }
 
     private static bool IsProviderPathParameter(string name)
@@ -129,6 +145,9 @@ internal static partial class PowerShellPackagedScriptRewriter
 
     private static bool IsProviderSettingCommand(string name)
         => name.Split('\\').Last().ToUpperInvariant() is "SET-ITEM" or "NEW-ITEM" or "SI" or "NI";
+
+    private static bool IsProviderCreationCommand(string name)
+        => name.Split('\\').Last().ToUpperInvariant() is "NEW-ITEM" or "NI";
 
     private static bool IsVariableSettingCommand(string name)
     {

@@ -108,6 +108,7 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
     [InlineData(PowerShellCompilationMode.Hybrid, "function Set-Defaults { [CmdletBinding()] param($Name) $PSCmdlet.SessionState.PSVariable.Set($Name, @{'Read-Host:AsSecureString'=$true}) }; Set-Defaults PSDefaultParameterValues; Read-Host")]
     [InlineData(PowerShellCompilationMode.Package, "Set-Item -LiteralPath Variable:PSDefaultParameterValues -Value @{'Read-Host:MaskInput'=$true}; Read-Host")]
     [InlineData(PowerShellCompilationMode.Package, "Set-Item -Force -Value @{'Read-Host:MaskInput'=$true} Variable:PSDefaultParameterValues; Read-Host")]
+    [InlineData(PowerShellCompilationMode.Package, "New-Item -Path Variable: -Name PSDefaultParameterValues -Value @{'Read-Host:AsSecureString'=$true} -Force; Read-Host")]
     [InlineData(PowerShellCompilationMode.Hybrid, "Set-Alias Set-Defaults Set-Item; Set-Defaults Variable:PSDefaultParameterValues @{'Read-Host:AsSecureString'=$true}; Read-Host")]
     public void CheckRejectsProtectedReadHostParameterDefaults(PowerShellCompilationMode mode, string source)
     {
@@ -136,6 +137,7 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
             }
             Set-OtherValue
             Set-Item -LiteralPath Variable:OtherValue -Value 42
+            New-Item -Path Variable: -Name ItemValue -Value 19
             Set-Item -LiteralPath C:\\output.txt -Value 'ordinary filesystem path'
             Read-Host -Prompt 'Name'
             """);
