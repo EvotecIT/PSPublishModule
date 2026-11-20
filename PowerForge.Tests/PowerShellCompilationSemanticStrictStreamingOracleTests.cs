@@ -67,6 +67,35 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
     }
 
     [PinnedSemanticHostFact]
+    public void StrictStreamingCollectsTypedArraysWithNativeRecordSemantics()
+    {
+        CompareStrictStreamingCases(
+            ("CollectedRecordsStayInOrder", """
+                [int[]] $values = 3, 1, 2, 3
+                [int[]] $result = @($values | Where-Object { $_ -gt 1 } | ForEach-Object { $_ * 2 })
+                $result
+                """),
+            ("EmptyCaptureProducesAnArray", """
+                [int[]] $values = 1, 2
+                [int[]] $result = @($values | Where-Object { $_ -gt 2 })
+                $result.Length
+                """),
+            ("CollectedTakeStopsUpstream", """
+                [int[]] $values = 2, 1, 4
+                [int] $seen = 0
+                [int[]] $result = @($values | Where-Object { $_ -gt 1 } | ForEach-Object { $seen++; [int] ($_ * 2) } | Select-Object -First 1)
+                if ($seen -ne 1) { throw [System.InvalidOperationException]::new('Upstream did not stop.') }
+                $result
+                """),
+            ("TypedStringArrayNormalizesNull", """
+                [string[]] $values = 'drop', 'keep'
+                [Array]::Clear($values, 0, 1)
+                [string[]] $result = @($values | Where-Object { $true })
+                $result
+                """));
+    }
+
+    [PinnedSemanticHostFact]
     public void StrictStreamingFilterAndLifecycleMatchBothPinnedHosts()
     {
         CompareStrictStreamingCases(

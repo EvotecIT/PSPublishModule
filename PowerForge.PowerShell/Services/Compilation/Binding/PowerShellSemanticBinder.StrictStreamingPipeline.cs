@@ -8,6 +8,45 @@ internal sealed partial class PowerShellSemanticBinder
     private sealed record StrictPipelineStage(CommandAst Command, NamedBlockAst? Predicate, NamedBlockAst? Map, int? First,
         PowerShellLocalCallSignature? Lifecycle);
 
+    private static bool TryGetStrictStreamingPipeline(
+        StatementAst statement, IReadOnlyDictionary<string, PowerShellSemanticSymbolBinding> symbols,
+        out PipelineAst pipeline, out PowerShellSemanticSymbolBinding? capture)
+    {
+        capture = null;
+        if (statement is PipelineAst direct)
+        {
+            pipeline = direct;
+            return true;
+        }
+
+        pipeline = null!;
+        if (statement is not AssignmentStatementAst
+            {
+                Operator: TokenKind.Equals,
+                Left: AttributedExpressionAst
+                {
+                    Attribute: TypeConstraintAst constraint,
+                    Child: VariableExpressionAst { VariablePath.IsUnqualified: true } variable
+                }
+            } assignment ||
+            UnwrapExpression(assignment.Right) is not ArrayExpressionAst
+            {
+                SubExpression.Traps: null or { Count: 0 },
+                SubExpression.Statements: [PipelineAst collected]
+            } ||
+            !symbols.TryGetValue(variable.VariablePath.UserPath, out var target) ||
+            target.Symbol.Kind != PowerShellSymbolKind.Local ||
+            constraint.TypeName.GetReflectionType() is not { IsArray: true } vector ||
+            vector != target.Type.ClrType ||
+            vector.GetArrayRank() != 1 ||
+            !PowerShellStableScalarTypePolicy.IsSupported(vector.GetElementType()!))
+            return false;
+
+        pipeline = collected;
+        capture = target;
+        return true;
+    }
+
     /// <summary>Lowers proven stages into one CLR record loop before ordinary statement binding.</summary>
     private bool TryBindStrictStreamingPipeline(
         ParsedSourceDocument document,
@@ -20,6 +59,7 @@ internal sealed partial class PowerShellSemanticBinder
         bool isTerminal,
         string? targetFramework,
         List<PowerShellBoundLocal> generatedLocals,
+        PowerShellSemanticSymbolBinding? capture,
         out PowerShellBoundStatement[]? result)
     {
         result = null;
@@ -33,6 +73,9 @@ internal sealed partial class PowerShellSemanticBinder
                 node is PipelineAst nested && PowerShellCommandRegionSemanticBinder.IsBackground(nested),
                 searchNestedScriptBlocks: true) is not null)
             return RejectStrictPipeline(diagnostics, span, "requires foreground expressions without redirection");
+
+        if (capture is not null && stages.Any(static stage => stage.Lifecycle is not null))
+            return RejectStrictPipeline(diagnostics, span, "cannot collect the output of a local lifecycle");
 
         const PowerShellCompilationCapability capabilities = PowerShellCompilationCapabilities.TypedExecutable;
         var input = BindExpression(document, source.Expression, symbols, functions, diagnostics,
@@ -66,6 +109,29 @@ internal sealed partial class PowerShellSemanticBinder
         if (element == typeof(int) && initializer is not null && GetStrictElementRange(initializer) is { } range)
             itemType = itemType.WithInt32Range(range);
 
+        var capturedElementType = capture?.Type.ClrType.GetElementType();
+        var collector = capturedElementType is null
+            ? null
+            : CreateRecordCollector(CreatePipelineCollectionName(symbols, pipeline.Extent.StartOffset), capturedElementType, span);
+        if (capture is not null && collector is not null && capturedElementType is not null)
+        {
+            var count = new PowerShellBoundClrMemberExpression(span, collector.Type.ClrType, nameof(List<int>.Count),
+                false, collector, PowerShellClrReceiverBehavior.None, StrictPipelineType(typeof(int)));
+            var isEmpty = new PowerShellBoundBinaryExpression(span, PowerShellBoundBinaryOperator.Equal,
+                count, StrictIntLiteral(span, 0), StrictPipelineType(typeof(bool)));
+            // PowerShell creates a new typed array for each @() collection, including empty collections.
+            var empty = new PowerShellBoundArrayExpression(span, capture.Type.ClrType, PowerShellBoundArrayKind.CollectedExpression,
+                Array.Empty<PowerShellBoundExpression>());
+            suffix.Add(new PowerShellBoundIfStatement(span,
+                new[]
+                {
+                    new PowerShellBoundConditionalClause(isEmpty,
+                        new PowerShellBoundBlock(span, new[] { new PowerShellBoundAssignmentStatement(span, capture.Symbol, empty) }))
+                },
+                new PowerShellBoundBlock(span,
+                    new[] { new PowerShellBoundAssignmentStatement(span, capture.Symbol, ToArray(collector, capturedElementType, span)) })));
+        }
+
         var item = new PowerShellBoundVariableExpression(span, itemSymbol, itemType, PowerShellValueState.Unknown);
         var body = BindStages(item);
         if (body is null) return true;
@@ -78,6 +144,8 @@ internal sealed partial class PowerShellSemanticBinder
             declareVariable: true, nullCollectionElement: nullRecord);
         result = setup.Append(loop).Concat(suffix).ToArray();
         generatedLocals.AddRange(pipelineLocals);
+        if (capture is not null)
+            capture.Refine(capture.Type, PowerShellValueState.Known);
         foreach (var symbol in symbols.Values)
             if (counterWrites.Contains(symbol.Symbol.StableKey))
                 symbol.ForgetValueState();
@@ -119,7 +187,9 @@ internal sealed partial class PowerShellSemanticBinder
                 }
                 else if (stage.First is { } first)
                 {
-                    statements.AddRange(BindTake(stage, current, stageSpan, first));
+                    var take = BindTake(stage, current, stageSpan, first);
+                    if (take is null) return null;
+                    statements.AddRange(take);
                 }
                 else
                 {
@@ -129,7 +199,11 @@ internal sealed partial class PowerShellSemanticBinder
                 }
             }
             if (stages.Last() is { First: null, Lifecycle: null })
-                statements.Add(StrictPipelineOutput(current));
+            {
+                var output = BindRecordOutput(current);
+                if (output is null) return null;
+                statements.Add(output);
+            }
 
             while (guards.Count > 0)
             {
@@ -140,15 +214,17 @@ internal sealed partial class PowerShellSemanticBinder
             return statements.ToArray();
         }
 
-        PowerShellBoundStatement[] BindTake(StrictPipelineStage stage, PowerShellBoundVariableExpression current, SourceSpan stageSpan, int first)
+        PowerShellBoundStatement[]? BindTake(StrictPipelineStage stage, PowerShellBoundVariableExpression current, SourceSpan stageSpan, int first)
         {
+            var output = BindRecordOutput(current);
+            if (output is null) return null;
             var count = CreateLocal(CreatePipelineOutputName(symbols, stage.Command.Extent.StartOffset), typeof(int), stageSpan);
             var zero = StrictIntLiteral(stageSpan, 0);
             var one = StrictIntLiteral(stageSpan, 1);
             setup.Add(new PowerShellBoundAssignmentStatement(stageSpan, count.Symbol, StrictIntLiteral(stageSpan, first)));
             var take = new PowerShellBoundStatement[]
             {
-                StrictPipelineOutput(current),
+                output,
                 new PowerShellBoundAssignmentStatement(stageSpan, count.Symbol,
                     new PowerShellBoundBinaryExpression(stageSpan, PowerShellBoundBinaryOperator.Subtract, count, one, count.Type)),
                 StrictPipelineIf(stageSpan,
@@ -183,23 +259,46 @@ internal sealed partial class PowerShellSemanticBinder
                 return null;
             }
             var recordType = current.Type.ClrType;
-            var listType = typeof(List<>).MakeGenericType(recordType);
-            var collection = CreateLocal(CreatePipelineCollectionName(symbols, stage.Command.Extent.StartOffset), listType, stageSpan);
-            setup.Add(new PowerShellBoundAssignmentStatement(stageSpan, collection.Symbol,
-                new PowerShellBoundClrInvocationExpression(stageSpan, listType, ".ctor", PowerShellClrInvocationKind.Constructor,
-                    null, PowerShellClrReceiverBehavior.None, Array.Empty<PowerShellBoundExpression>(), Type.EmptyTypes, collection.Type)));
-            var inputArray = new PowerShellBoundClrInvocationExpression(stageSpan, listType, nameof(List<int>.ToArray),
-                PowerShellClrInvocationKind.InstanceMethod, collection, PowerShellClrReceiverBehavior.None,
-                Array.Empty<PowerShellBoundExpression>(), Type.EmptyTypes, StrictPipelineType(recordType.MakeArrayType()));
+            var collection = CreateRecordCollector(CreatePipelineCollectionName(symbols, stage.Command.Extent.StartOffset), recordType, stageSpan);
+            var inputArray = ToArray(collection, recordType, stageSpan);
             var call = PowerShellLocalCallSemanticBinder.Bind(document, stage.Command, lifecycle,
                 (syntax, expectedType) => BindExpression(document, syntax, symbols, functions, diagnostics, expectedType, targetFramework, capabilities),
                 targetFramework, capabilities, diagnostics, inputArray);
             if (call is null) return null;
             suffix.Add(new PowerShellBoundReturnStatement(stageSpan, call));
-            var add = new PowerShellBoundClrInvocationExpression(stageSpan, listType, nameof(List<int>.Add),
-                PowerShellClrInvocationKind.InstanceMethod, collection, PowerShellClrReceiverBehavior.None,
-                new[] { current }, new[] { recordType }, StrictPipelineType(typeof(void)));
-            return new PowerShellBoundExpressionStatement(stageSpan, add, emitsOutput: false);
+            return AppendRecord(collection, current);
+        }
+
+        PowerShellBoundStatement? BindRecordOutput(PowerShellBoundVariableExpression current)
+        {
+            if (collector is null) return StrictPipelineOutput(current);
+            if (current.Type.ClrType != capturedElementType)
+            {
+                RejectStrictPipeline(diagnostics, current.Span, "requires captured records to match the declared array element type");
+                return null;
+            }
+            if (capturedElementType != typeof(string)) return AppendRecord(collector, current);
+
+            // PowerShell converts a null success record to an empty string when assigning to String[].
+            var recordSpan = current.Span;
+            var nullValue = new PowerShellBoundLiteralExpression(recordSpan, null, current.Type, PowerShellValueState.Null);
+            var isNull = new PowerShellBoundBinaryExpression(recordSpan, PowerShellBoundBinaryOperator.NullEqual,
+                current, nullValue, StrictPipelineType(typeof(bool)));
+            var emptyString = new PowerShellBoundLiteralExpression(recordSpan, string.Empty, current.Type, PowerShellValueState.Known);
+            return new PowerShellBoundIfStatement(recordSpan,
+                new[] { new PowerShellBoundConditionalClause(isNull,
+                    new PowerShellBoundBlock(recordSpan, new[] { AppendRecord(collector, emptyString) })) },
+                new PowerShellBoundBlock(recordSpan, new[] { AppendRecord(collector, current) }));
+        }
+
+        PowerShellBoundVariableExpression CreateRecordCollector(string name, Type recordType, SourceSpan collectorSpan)
+        {
+            var listType = typeof(List<>).MakeGenericType(recordType);
+            var collection = CreateLocal(name, listType, collectorSpan);
+            setup.Add(new PowerShellBoundAssignmentStatement(collectorSpan, collection.Symbol,
+                new PowerShellBoundClrInvocationExpression(collectorSpan, listType, ".ctor", PowerShellClrInvocationKind.Constructor,
+                    null, PowerShellClrReceiverBehavior.None, Array.Empty<PowerShellBoundExpression>(), Type.EmptyTypes, collection.Type)));
+            return collection;
         }
 
         PowerShellBoundExpression? BindStageExpression(StatementAst syntax, PowerShellBoundVariableExpression current, Type? requiredType)
@@ -226,6 +325,17 @@ internal sealed partial class PowerShellSemanticBinder
             return new PowerShellBoundVariableExpression(declaration, symbol, fact, PowerShellValueState.Known);
         }
     }
+
+    private static PowerShellBoundExpression ToArray(PowerShellBoundVariableExpression collection, Type recordType, SourceSpan span)
+        => new PowerShellBoundClrInvocationExpression(span, collection.Type.ClrType, nameof(List<int>.ToArray),
+            PowerShellClrInvocationKind.InstanceMethod, collection, PowerShellClrReceiverBehavior.None,
+            Array.Empty<PowerShellBoundExpression>(), Type.EmptyTypes, StrictPipelineType(recordType.MakeArrayType()));
+
+    private static PowerShellBoundStatement AppendRecord(PowerShellBoundVariableExpression collection, PowerShellBoundExpression record)
+        => new PowerShellBoundExpressionStatement(record.Span,
+            new PowerShellBoundClrInvocationExpression(record.Span, collection.Type.ClrType, nameof(List<int>.Add),
+                PowerShellClrInvocationKind.InstanceMethod, collection, PowerShellClrReceiverBehavior.None,
+                new[] { record }, new[] { record.Type.ClrType }, StrictPipelineType(typeof(void))), emitsOutput: false);
 
     private bool TryDescribeStrictPipeline(
         PipelineAst pipeline,

@@ -224,9 +224,10 @@ internal sealed partial class PowerShellSemanticBinder
                 continue;
             }
             var diagnosticCount = diagnostics.Count;
-            if (capabilities == PowerShellCompilationCapabilities.TypedExecutable && statement is PipelineAst pipeline &&
+            if (capabilities == PowerShellCompilationCapabilities.TypedExecutable &&
+                TryGetStrictStreamingPipeline(statement, symbols, out var pipeline, out var pipelineCapture) &&
                 TryBindStrictStreamingPipeline(document, pipeline, symbols, functions, localFunctionNames, statements, diagnostics,
-                    index == authoredStatements.Length - 1, targetFramework, pipelineLocals, out var streaming))
+                    index == authoredStatements.Length - 1, targetFramework, pipelineLocals, pipelineCapture, out var streaming))
             {
                 if (streaming is not null)
                 {
