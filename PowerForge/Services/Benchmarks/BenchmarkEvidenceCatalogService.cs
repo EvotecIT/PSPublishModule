@@ -92,6 +92,8 @@ public sealed partial class BenchmarkEvidenceCatalogService
             ValidateBoundPublishIdentity(result, normalizedComparisonId, profileName);
         }
 
+        // The lane is evaluated on the result exactly as its published file reads back.
+        result = BenchmarkEvidenceResultCodec.Normalize(result);
         string resolvedPlatform = ResolvePlatform(result, request.Platform);
         DateTimeOffset generatedUtc = ResolveGeneratedUtc(result);
         string framework = BenchmarkEvidenceIdentity.ResolveFramework(result, request.Framework);
@@ -118,7 +120,7 @@ public sealed partial class BenchmarkEvidenceCatalogService
             LaneKey = BenchmarkEvidenceIdentity.CreateLaneKey(normalizedComparisonId, resolvedPlatform, framework, request.Profile, parameters),
             GeneratedUtc = generatedUtc,
             Publish = request.Publish,
-            ResultSha256 = BenchmarkJson.ComputeSha256(payload),
+            ResultSha256 = BenchmarkEvidenceResultCodec.ComputeSha256(payload),
             Suite = payload.Suite,
             Environment = CopyEnvironment(payload.Environment),
             Compatibility = BuildCompatibility(payload)
@@ -240,7 +242,8 @@ public sealed partial class BenchmarkEvidenceCatalogService
             ResolveLaneParameters(result, request.Parameters));
         BenchmarkEvidenceEntry writtenEntry = updated.Entries.Single(entry =>
             string.Equals(entry.LaneKey, laneKey, StringComparison.OrdinalIgnoreCase));
-        string inputHash = BenchmarkJson.ComputeSha256(payload);
+        byte[] payloadBytes = BenchmarkEvidenceResultCodec.Encode(payload);
+        string inputHash = BenchmarkEvidenceResultCodec.ComputeSha256(payloadBytes);
         string resultPath = CreateContentAddressedResultPath(request.ResultPath, inputHash);
         bool inputWasSelected = string.Equals(
                                     writtenEntry.ResultSha256,
@@ -293,7 +296,7 @@ public sealed partial class BenchmarkEvidenceCatalogService
         {
             if (artifactSelected)
             {
-                BenchmarkJson.Write(artifactPath!, payload);
+                BenchmarkJson.WriteBytes(artifactPath!, payloadBytes);
                 string writtenHash = BenchmarkJson.ComputeFileSha256(artifactPath!);
                 if (!string.Equals(inputHash, writtenHash, StringComparison.OrdinalIgnoreCase))
                 {
