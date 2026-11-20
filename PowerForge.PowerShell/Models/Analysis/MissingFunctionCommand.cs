@@ -25,12 +25,15 @@ public sealed class MissingFunctionCommand
     public bool IsPrivate { get; }
 
     /// <summary>Error message when resolution failed; empty when resolved.</summary>
-    public string Error { get; }
+    public string Error { get; internal set; }
 
     /// <summary>
     /// ScriptBlock for function commands, when available; used to build inline helper definitions.
     /// </summary>
     public ScriptBlock? ScriptBlock { get; }
+
+    // A donor alias keeps its command name in the report and its target name in the merged module.
+    internal string? InlineFunctionName { get; set; }
 
     /// <summary>
     /// Creates a new <see cref="MissingFunctionCommand"/> instance.

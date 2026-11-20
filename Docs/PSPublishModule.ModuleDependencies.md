@@ -25,20 +25,17 @@ the module package should not force PowerShell dependency resolution.
 `ApprovedModule` is a build-time helper contract for merge and missing-command
 workflows. It is not a runtime dependency declaration.
 
-When a dependency is both required and approved, `-MergeFunctionsFromApprovedModules`
-removes its runtime requirement once complete analysis proves that the merged
-output satisfies it. This includes helpers already present in the consumer or
-another approved donor; a donor does not need to contribute another copy of a
-function to become unnecessary. Artefacts with `-AddRequiredModules` copy the
-remaining runtime dependencies after that pruning.
+The finalized manifest and artefacts omit approved modules, even when they are
+also listed as required. Use `-MergeFunctionsFromApprovedModules` to embed
+referenced script functions. An unqualified call through a donor alias can be
+merged when the alias resolves to a script function in that donor. PowerForge
+embeds the target and makes the alias available inside the built module. It
+reports aliases whose target cannot be merged or whose name would conflict in
+the built module.
 
-Module-qualified calls, module-management lookups, module-owned types and unresolved dynamic invocation can
-still require the original module. Approval permits merging; it does not make an
-unresolved runtime reference safe to remove. Donors exporting variables, aliases,
-binary commands, providers, type data or formatting data retain their runtime
-requirement. An absent donor is retained when its selected runtime surface cannot
-be inspected. Builds with merging disabled keep
-their configured required modules.
+Use `RequiredModule` alone when code needs the original module at runtime, for
+example for module-qualified alias calls, binary commands or runtime state.
+Artefacts with `-AddRequiredModules` copy the remaining runtime dependencies.
 
 For launcher/configuration ZIPs with the main module and remaining dependencies
 under `Modules`, use the native [delivery bundle layout](PSPublishModule.ModuleDelivery.md).

@@ -227,8 +227,13 @@ public sealed class ApprovedModuleDependencyPruningTests
         }
     }
 
-    [Fact]
-    public void Run_FinalManifestAndArchiveContainOnlyRemainingRuntimeDependencies()
+    [Theory]
+    [InlineData("function Get-SharedAliasTarget { [Alias('SharedAlias')] param() 'alias-target' }", null)]
+    [InlineData("function Get-SharedAliasTarget { 'alias-target' }; Set-Alias SharedAlias Get-SharedAliasTarget", null)]
+    [InlineData("function Get-SharedAliasTarget { 'alias-target' }; Set-Alias SharedAlias Get-SharedAliasTarget", "consumer")]
+    [InlineData("function Get-SharedAliasTarget { 'alias-target' }; Set-Alias SharedAlias Get-SharedAliasTarget", "nested donor")]
+    [InlineData("function Get-SharedAliasTarget { 'alias-target' }; Set-Alias SharedAlias Get-SharedAliasTarget", "consumer alias")]
+    public void Run_PackagesApprovedDonorAliasOrReportsANameConflict(string aliasDeclaration, string? conflictScope)
     {
         var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
         var previousModulePath = Environment.GetEnvironmentVariable("PSModulePath");
@@ -236,12 +241,22 @@ public sealed class ApprovedModuleDependencyPruningTests
         try
         {
             string modules = Path.Combine(root, "installed");
-            WriteModule(modules, "SharedHelpers", "function Get-SharedHelper { 'shared' }; Set-Alias SharedAlias Get-SharedHelper; Export-ModuleMember -Function Get-SharedHelper -Alias SharedAlias");
-            WriteModule(modules, "ParentDonor", "function Get-SharedHelper { 'parent-copy' }; function Get-ParentThing { Get-SharedHelper }; Export-ModuleMember Get-ParentThing");
+            WriteModule(modules, "SharedHelpers", aliasDeclaration + "; Export-ModuleMember -Function @() -Alias SharedAlias");
+            WriteModule(modules, "ParentDonor", conflictScope is "nested donor" or "consumer alias"
+                ? "function Get-ParentAliasTarget { 'parent-copy' }; Set-Alias SharedAlias Get-ParentAliasTarget; function Get-ParentThing { SharedAlias }; Export-ModuleMember -Function Get-ParentThing"
+                : "function Get-SharedHelper { 'parent-copy' }; function Get-ParentThing { Get-SharedHelper }; Export-ModuleMember Get-ParentThing");
             WriteModule(modules, "RuntimeDependency", "function Get-RuntimeThing { 'runtime' }; Export-ModuleMember Get-RuntimeThing");
             Environment.SetEnvironmentVariable("PSModulePath", modules + Path.PathSeparator + previousModulePath);
             string source = Path.Combine(root, "source");
-            WriteModule(root, "source", "function Get-ConsumerThing { param([string]$ProviderName='PnP.PowerShell'); Get-ParentThing; Get-Module -Name $ProviderName | Out-Null }; Export-ModuleMember Get-ConsumerThing");
+            string consumerPrefix = conflictScope switch
+            {
+                "consumer" => "function Get-SharedAliasTarget { 'consumer' }; ",
+                "consumer alias" => "function Get-LocalTarget { 'consumer' }; Set-Alias SharedAlias Get-LocalTarget; ",
+                _ => string.Empty
+            };
+            WriteModule(root, "source",
+                consumerPrefix +
+                "function Get-ConsumerThing { param([string]$ProviderName='PnP.PowerShell'); Get-ParentThing; SharedAlias; Get-Module -Name $ProviderName | Out-Null }; Export-ModuleMember Get-ConsumerThing");
             File.WriteAllText(Path.Combine(source, "Consumer.format.ps1xml"),
                 "<Configuration><ViewDefinitions><View><Name>Consumer</Name><ViewSelectedBy><TypeName>System.String</TypeName></ViewSelectedBy><TableControl><TableRowEntries><TableRowEntry><TableColumnItems><TableColumnItem><PropertyName>Length</PropertyName></TableColumnItem></TableColumnItems></TableRowEntry></TableRowEntries></TableControl></View></ViewDefinitions></Configuration>");
             Assert.True(ManifestEditor.TrySetTopLevelStringArray(Path.Combine(source, "source.psd1"), "FormatsToProcess", new[] { "Consumer.format.ps1xml" }));
@@ -282,6 +297,16 @@ public sealed class ApprovedModuleDependencyPruningTests
             var runner = new ModulePipelineRunner(new NullLogger(), powerShellRunner: null,
                 moduleDependencyMetadataProvider: new FixtureMetadataProvider(modules),
                 missingFunctionAnalysisService: new PowerShellMissingFunctionAnalysisService());
+            if (conflictScope is not null)
+            {
+                var error = Assert.Throws<InvalidOperationException>(() => runner.Run(spec, runner.Plan(spec)));
+                Assert.Contains("SharedAlias", error.Message);
+                Assert.Contains("AliasTarget", error.Message);
+                Assert.Contains("name conflict", error.Message);
+                Assert.False(File.Exists(Path.Combine(root, "packed", "source.zip")));
+                return;
+            }
+
             var result = runner.Run(spec, runner.Plan(spec));
             string manifest = File.ReadAllText(result.BuildResult.ManifestPath);
             Assert.Contains("RuntimeDependency", manifest);
@@ -291,6 +316,28 @@ public sealed class ApprovedModuleDependencyPruningTests
             Assert.Contains(zip.Entries, entry => entry.FullName == "RuntimeDependency/RuntimeDependency.psd1");
             Assert.DoesNotContain(zip.Entries, entry => entry.FullName.StartsWith("SharedHelpers/", StringComparison.Ordinal));
             Assert.DoesNotContain(zip.Entries, entry => entry.FullName.StartsWith("ParentDonor/", StringComparison.Ordinal));
+            string extracted = Path.Combine(root, "consumer");
+            string consumerManifest = Assert.Single(zip.Entries, entry => entry.Name == "source.psd1").FullName;
+            zip.ExtractToDirectory(extracted);
+            Environment.SetEnvironmentVariable("PSModulePath", extracted + Path.PathSeparator + previousModulePath);
+            var initialState = System.Management.Automation.Runspaces.InitialSessionState.CreateDefault();
+            initialState.AuthorizationManager = new System.Management.Automation.AuthorizationManager("PowerForge.Tests");
+            using var runspace = System.Management.Automation.Runspaces.RunspaceFactory.CreateRunspace(initialState);
+            runspace.Open();
+            using var ps = System.Management.Automation.PowerShell.Create();
+            ps.Runspace = runspace;
+            ps.AddCommand("Import-Module").AddParameter("Name", Path.Combine(extracted, consumerManifest))
+                .AddParameter("ErrorAction", "Stop").Invoke();
+            Assert.Empty(ps.Streams.Error);
+            ps.Commands.Clear();
+            var output = ps.AddCommand("Get-ConsumerThing").AddParameter("ErrorAction", "Stop").Invoke();
+            Assert.Empty(ps.Streams.Error);
+            Assert.Equal(new[] { "parent-copy", "alias-target" }, output.Select(item => item.BaseObject.ToString()));
+            ps.Commands.Clear();
+            Assert.Empty(ps.AddCommand("Get-Module").AddParameter("Name", "SharedHelpers").Invoke());
+            ps.Commands.Clear();
+            Assert.Empty(ps.AddCommand("Get-Alias").AddParameter("Name", "SharedAlias")
+                .AddParameter("ErrorAction", "SilentlyContinue").Invoke());
         }
         finally
         {
