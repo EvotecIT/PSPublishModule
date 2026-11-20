@@ -160,6 +160,17 @@ People who package scripts today expect to set the file's identity and how it st
 
 `Check` validates these up front: a missing or unreadable icon, a version that is not `x.y.z`, or a `Windows` subsystem for a script that writes to the console all come back as diagnostics. The values are recorded in the artifact manifest so a rebuild reproduces them. A project file (`powerforge.psproject.json`) gains the same fields per target.
 
+### What the output reveals
+
+Packaging a script is not protecting it. Commercial packagers store the script in a resource, sometimes encrypted with a key that ships in the same executable, and the full script can be recovered from it. This compiler should say plainly what its output contains rather than suggest protection it cannot give:
+
+- Package and Hybrid executables carry the authored script. In a Hybrid build today the whole script is embedded as a UTF-16 string in the generated assembly, readable with any strings tool. The manifest already records this as `ContainsEmbeddedPowerShellSource`; `Compile` returns it, and hosts show it next to the result.
+- Strict output contains no script text, but its logic is visible to any .NET decompiler. Hosts describe it as compiled code, not as protected code.
+- The embedded source currently includes the absolute path of the build machine's source file. Embed the path relative to the module root instead, so builds don't leak local paths and are reproducible across machines.
+- `Check` warns about likely secrets in the input: string literals assigned to names such as `password`, `secret`, `key`, `token` or `connectionString`, literal byte arrays passed to `Aes`/`Rijndael` keys, and values that match common credential formats. The warning names the line and says that anything in the script ships to every machine that runs the output.
+
+No obfuscation or encryption option is planned: any key needed to run the script has to ship with it.
+
 ### Progress
 
 ```csharp
@@ -207,6 +218,7 @@ Each slice is useful on its own and adds a CLI command or option before any host
 6. **Progress phases** through `IProgress<PowerShellCompilationProgress>`.
 7. **`#requires` support in Package mode.**
 8. **Executable details**: icon, version and file properties, console or windowed subsystem, and requested execution level.
+9. **Source exposure**: relative embedded paths, `ContainsEmbeddedPowerShellSource` in the compile result, and the secret warnings in `Check`.
 
 A simple host can start once slices 1 to 3 exist; the rest improve it.
 
