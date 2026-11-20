@@ -43,6 +43,7 @@ public sealed partial class MainWindow : Window
         _viewModel = DataContext as MainWindowViewModel;
         if (_viewModel is null) return;
         _viewModel.OpenFolder = OpenFolderAsync;
+        _viewModel.PickSettingsSavePath = PickSettingsSavePathAsync;
         _viewModel.PropertyChanged += OnViewModelPropertyChanged;
         _viewModel.Log.CollectionChanged += OnLogChanged;
     }
@@ -130,5 +131,68 @@ public sealed partial class MainWindow : Window
     private async Task OpenFolderAsync(string folder)
     {
         if (Directory.Exists(folder)) await Launcher.LaunchDirectoryInfoAsync(new DirectoryInfo(folder));
+    }
+
+    /// <inheritdoc />
+    protected override async void OnKeyDown(KeyEventArgs e)
+    {
+        base.OnKeyDown(e);
+        if (e.Key == Key.Escape && _viewModel is { IsDetailsOpen: true })
+        {
+            e.Handled = true;
+            await _viewModel.CloseDetailsAsync();
+        }
+    }
+
+    private void OnOpenDetails(object? sender, RoutedEventArgs e) => _viewModel?.OpenDetails();
+
+    private async void OnCloseDetails(object? sender, RoutedEventArgs e)
+    {
+        if (_viewModel is not null) await _viewModel.CloseDetailsAsync();
+    }
+
+    private async void OnDetailsScrimPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (_viewModel is not null) await _viewModel.CloseDetailsAsync();
+    }
+
+    private async void OnOpenSettings(object? sender, RoutedEventArgs e)
+    {
+        if (_viewModel is null) return;
+        var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+        {
+            Title = "Open saved build settings",
+            AllowMultiple = false,
+            FileTypeFilter = new[]
+            {
+                new FilePickerFileType("PowerForge settings") { Patterns = new[] { "*.psproject.json" } },
+                FilePickerFileTypes.All
+            }
+        });
+        if (files.FirstOrDefault()?.TryGetLocalPath() is { } path) await _viewModel.OpenSettingsAsync(path);
+    }
+
+    private async void OnSaveSettings(object? sender, RoutedEventArgs e)
+    {
+        if (_viewModel is not null) await _viewModel.SaveSettingsAsync();
+    }
+
+    private async void OnSaveSettingsAs(object? sender, RoutedEventArgs e)
+    {
+        if (_viewModel is not null) await _viewModel.SaveSettingsAsAsync();
+    }
+
+    private async Task<string?> PickSettingsSavePathAsync(string suggestedPath)
+    {
+        var folder = await StorageProvider.TryGetFolderFromPathAsync(Path.GetDirectoryName(suggestedPath) ?? string.Empty);
+        var file = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+        {
+            Title = "Save build settings",
+            SuggestedFileName = Path.GetFileName(suggestedPath),
+            SuggestedStartLocation = folder,
+            DefaultExtension = "json",
+            FileTypeChoices = new[] { new FilePickerFileType("PowerForge settings") { Patterns = new[] { "*.psproject.json" } } }
+        });
+        return file?.TryGetLocalPath();
     }
 }

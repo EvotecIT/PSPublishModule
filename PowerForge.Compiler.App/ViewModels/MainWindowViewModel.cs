@@ -4,7 +4,7 @@ using PowerForge.Compiler.App.Engine;
 namespace PowerForge.Compiler.App.ViewModels;
 
 /// <summary>State and actions for the single window.</summary>
-public sealed class MainWindowViewModel : ObservableObject
+public sealed partial class MainWindowViewModel : ObservableObject
 {
     private const int MaximumLogLines = 400;
 
@@ -244,7 +244,12 @@ public sealed class MainWindowViewModel : ObservableObject
         : string.Empty;
 
     /// <summary>Starts a check for a dropped or chosen path.</summary>
-    public Task SetInputAsync(string path) => CheckAsync(path);
+    public Task SetInputAsync(string path)
+    {
+        if (path.EndsWith(".psproject.json", StringComparison.OrdinalIgnoreCase)) return OpenSettingsAsync(path);
+        ForgetSettingsFor(path);
+        return CheckAsync(path);
+    }
 
     /// <summary>Opens the folder that holds the last artifact.</summary>
     public async Task OpenOutputAsync()
@@ -265,7 +270,7 @@ public sealed class MainWindowViewModel : ObservableObject
         StatusText = $"Checking {InputName} in all three modes…";
         try
         {
-            var check = await _engine.CheckAsync(path, operation.Token);
+            var check = await _engine.CheckAsync(path, CurrentFileRules, operation.Token);
             ApplyCheck(check);
         }
         catch (OperationCanceledException)
@@ -287,10 +292,13 @@ public sealed class MainWindowViewModel : ObservableObject
         OnPropertyChanged(nameof(HasCheck));
         OnPropertyChanged(nameof(InputSummary));
 
-        var initial = Modes.FirstOrDefault(static card => card.IsRecommended) ?? Modes.FirstOrDefault();
+        var saved = TakePendingSavedTarget();
+        var initial = (saved is null ? null : Modes.FirstOrDefault(card => card.Mode == saved.Mode))
+                      ?? Modes.FirstOrDefault(static card => card.IsRecommended) ?? Modes.FirstOrDefault();
         _selectedMode = null;
         SelectedMode = initial;
         if (initial is null) RefreshSelectedMode();
+        if (saved is not null) ApplySavedTarget(saved);
 
         StatusText = check.Modes.Count == 0
             ? "This input can't be checked. See the problems below."
@@ -338,7 +346,8 @@ public sealed class MainWindowViewModel : ObservableObject
                 card.Mode,
                 target,
                 string.IsNullOrWhiteSpace(OutputDirectory) ? null : OutputDirectory.Trim(),
-                SignOutput ? SelectedCertificate?.Thumbprint : null);
+                SignOutput ? SelectedCertificate?.Thumbprint : null,
+                CurrentFileRules);
             var result = await _engine.CompileAsync(request, progress, operation.Token);
             _lastResult = result;
             if (!result.Succeeded)

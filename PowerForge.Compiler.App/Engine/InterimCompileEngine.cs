@@ -9,7 +9,7 @@ namespace PowerForge.Compiler.App.Engine;
 /// Maps today's compiler services onto <see cref="ICompileEngine"/>. When the engine gains the host service
 /// described in Docs/PowerForge.PowerShellCompilation.HostApi.md, this class shrinks to a direct call.
 /// </summary>
-internal sealed class InterimCompileEngine : ICompileEngine
+internal sealed partial class InterimCompileEngine : ICompileEngine
 {
     // The engine's default (PowerShellCompilationTargetFrameworkPolicy.Default) is internal; executables accept only net10.0.
     private const string TargetFramework = "net10.0";
@@ -21,8 +21,8 @@ internal sealed class InterimCompileEngine : ICompileEngine
         PowerShellCompilationMode.Strict
     };
 
-    public Task<CheckResult> CheckAsync(string inputPath, CancellationToken cancellationToken) =>
-        Task.Run(() => Check(inputPath, cancellationToken), cancellationToken);
+    public Task<CheckResult> CheckAsync(string inputPath, FileRules files, CancellationToken cancellationToken) =>
+        Task.Run(() => Check(inputPath, files, cancellationToken), cancellationToken);
 
     public Task<CompileResult> CompileAsync(CompileRequest request, IProgress<CompileProgress>? progress, CancellationToken cancellationToken) =>
         Task.Run(() => Compile(request, progress, cancellationToken), cancellationToken);
@@ -71,7 +71,7 @@ internal sealed class InterimCompileEngine : ICompileEngine
             .ToArray();
     }
 
-    private static CheckResult Check(string inputPath, CancellationToken cancellationToken)
+    private static CheckResult Check(string inputPath, FileRules files, CancellationToken cancellationToken)
     {
         var stopwatch = Stopwatch.StartNew();
         if (!TryGetExistingPath(inputPath, out var fullPath, out var pathProblem))
@@ -91,7 +91,7 @@ internal sealed class InterimCompileEngine : ICompileEngine
         foreach (var mode in CheckedModes)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            modes.Add(CheckMode(fullPath, resolved.Kind, mode));
+            modes.Add(CheckMode(fullPath, resolved.Kind, mode, files));
         }
 
         return new CheckResult(
@@ -104,18 +104,18 @@ internal sealed class InterimCompileEngine : ICompileEngine
             stopwatch.Elapsed);
     }
 
-    private static ModeCheck CheckMode(string fullPath, PowerShellCompilationArtifactKind kind, PowerShellCompilationMode mode)
+    private static ModeCheck CheckMode(string fullPath, PowerShellCompilationArtifactKind kind, PowerShellCompilationMode mode, FileRules files)
     {
         try
         {
-            var resolved = new PowerShellCompilationInputResolver().Resolve(fullPath, kind, mode);
+            var resolved = new PowerShellCompilationInputResolver().Resolve(fullPath, kind, mode, AllowsRuntimeSources(files, mode));
             var plan = new PowerShellCompilationAnalyzer(Array.Empty<PowerShellCompilationCommandProviderContract>(), GetSemanticProfileId()).Analyze(
                 resolved,
                 mode,
                 TargetFramework,
-                PowerShellCompilationResourceMode.Declared,
-                Array.Empty<string>(),
-                Array.Empty<string>(),
+                files.Mode,
+                files.Include,
+                files.Exclude,
                 PowerShellCompilationOutputPolicy.GetDefaultOutputDirectory(resolved),
                 null);
             var explanation = PowerShellCompilationExplainShaper.CreateFinalExplanation(resolved, plan, TargetFramework);
@@ -224,7 +224,8 @@ internal sealed class InterimCompileEngine : ICompileEngine
         var logger = new ProgressLogger(progress);
         try
         {
-            var resolved = new PowerShellCompilationInputResolver().Resolve(fullPath, mode: request.Mode);
+            var files = request.Files ?? FileRules.Default;
+            var resolved = new PowerShellCompilationInputResolver().Resolve(fullPath, mode: request.Mode, allowDynamicModuleRuntimeSources: AllowsRuntimeSources(files, request.Mode));
             var deployment = request.Target?.Deployment ?? PowerShellCompilationDeploymentModel.FrameworkDependent;
             var spec = new PowerShellCompilationBuildSpec(
                 resolved.SourcePath,
@@ -236,7 +237,9 @@ internal sealed class InterimCompileEngine : ICompileEngine
                 ModuleManifestPath = resolved.ModuleManifestPath,
                 CompilationSourcePaths = resolved.CompilationSourceFiles,
                 RuntimeSourcePaths = resolved.SourceFiles,
-                ResourceMode = PowerShellCompilationResourceMode.Declared,
+                ResourceMode = files.Mode,
+                IncludeResource = files.Include.ToArray(),
+                ExcludeResource = files.Exclude.ToArray(),
                 TargetFramework = TargetFramework,
                 SemanticProfileId = GetSemanticProfileId(),
                 RuntimeIdentifier = request.Target?.RuntimeIdentifier,
@@ -358,6 +361,10 @@ internal sealed class InterimCompileEngine : ICompileEngine
         problem = $"'{fullPath}' does not exist.";
         return false;
     }
+
+    // Matches the CLI: a whole-module build carries files PowerShell loads at run time, which Strict cannot represent.
+    private static bool AllowsRuntimeSources(FileRules files, PowerShellCompilationMode mode) =>
+        files.Mode == PowerShellCompilationResourceMode.CompleteModule && mode != PowerShellCompilationMode.Strict;
 
     private static string GetSemanticProfileId() =>
         PowerShellCompilationSemanticOracleCatalog.Get(

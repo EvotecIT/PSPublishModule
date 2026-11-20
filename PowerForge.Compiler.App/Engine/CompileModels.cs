@@ -132,6 +132,43 @@ public sealed record CompileTarget(
     };
 }
 
+/// <summary>Which files besides the script go into the output.</summary>
+public sealed record FileRules(
+    PowerShellCompilationResourceMode Mode,
+    IReadOnlyList<string> Include,
+    IReadOnlyList<string> Exclude)
+{
+    /// <summary>The engine default: the script and the files it loads.</summary>
+    public static FileRules Default { get; } = new(PowerShellCompilationResourceMode.Declared, Array.Empty<string>(), Array.Empty<string>());
+}
+
+/// <summary>One build target stored in a settings file.</summary>
+public sealed record SavedTarget(
+    string Name,
+    PowerShellCompilationMode Mode,
+    string RuntimeIdentifier,
+    PowerShellCompilationDeploymentModel Deployment,
+    string OutputDirectory);
+
+/// <summary>Build settings read from or written to a <c>powerforge.psproject.json</c> file.</summary>
+public sealed record BuildSettings(
+    string SettingsPath,
+    string InputPath,
+    FileRules Files,
+    IReadOnlyList<SavedTarget> Targets);
+
+/// <summary>What to store when saving settings.</summary>
+public sealed record SaveSettingsRequest(
+    string SettingsPath,
+    string InputPath,
+    FileRules Files,
+    PowerShellCompilationMode Mode,
+    CompileTarget Target,
+    string? OutputDirectory);
+
+/// <summary>The outcome of opening or saving settings.</summary>
+public sealed record SettingsResult(BuildSettings? Settings, CompileDiagnostic? Problem);
+
 /// <summary>A code-signing certificate the user can sign with.</summary>
 public sealed record SigningCertificate(string Thumbprint, string Subject, DateTime NotAfter)
 {
@@ -145,7 +182,8 @@ public sealed record CompileRequest(
     PowerShellCompilationMode Mode,
     CompileTarget? Target,
     string? OutputDirectory,
-    string? SigningThumbprint = null);
+    string? SigningThumbprint = null,
+    FileRules? Files = null);
 
 /// <summary>What a build produced.</summary>
 public sealed record CompileResult(

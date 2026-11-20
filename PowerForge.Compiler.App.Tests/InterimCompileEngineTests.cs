@@ -19,7 +19,7 @@ public sealed class InterimCompileEngineTests : IDisposable
     {
         var missing = Path.Combine(_root, "missing.ps1");
 
-        var result = await new InterimCompileEngine().CheckAsync(missing, CancellationToken.None);
+        var result = await new InterimCompileEngine().CheckAsync(missing, FileRules.Default, CancellationToken.None);
 
         Assert.Empty(result.Modes);
         Assert.Null(result.Recommended);
@@ -33,7 +33,7 @@ public sealed class InterimCompileEngineTests : IDisposable
     {
         var script = Write("Report.ps1", "#requires -Version 7.4\nGet-ChildItem -Path $PSScriptRoot | Select-Object Name\n");
 
-        var result = await new InterimCompileEngine().CheckAsync(script, CancellationToken.None);
+        var result = await new InterimCompileEngine().CheckAsync(script, FileRules.Default, CancellationToken.None);
 
         Assert.Equal(PowerShellCompilationArtifactKind.Executable, result.Kind);
         var package = Assert.Single(result.Modes, static mode => mode.Mode == PowerShellCompilationMode.Package);
@@ -53,7 +53,7 @@ public sealed class InterimCompileEngineTests : IDisposable
     {
         var script = Write("Add.ps1", "function Add-Numbers {\n    param([int] $A, [int] $B)\n    return $A + $B\n}\nAdd-Numbers -A 2 -B 3\n");
 
-        var result = await new InterimCompileEngine().CheckAsync(script, CancellationToken.None);
+        var result = await new InterimCompileEngine().CheckAsync(script, FileRules.Default, CancellationToken.None);
 
         var hybrid = Assert.Single(result.Modes, static mode => mode.Mode == PowerShellCompilationMode.Hybrid);
         Assert.Equal(CompileOutcome.Mixed, hybrid.Outcome);

@@ -6,7 +6,9 @@ A small desktop window over the PowerShell compiler: drop a script, module file 
 dotnet run --project PowerForge.Compiler.App -- ./MyScript.ps1
 ```
 
-The path argument is optional; you can also drop a file on the window or use the Choose buttons. Output goes to `artifacts` next to the input unless you pick a folder.
+The path argument is optional; you can also drop a file on the window or use Open. Output goes to `artifacts` next to the input unless you pick a folder.
+
+**Edit details** opens a side panel for the files that go into the output (the script and what it loads, the whole folder, or only the script, plus include and leave-out patterns) and for saved settings. Settings are the engine's own `powerforge.psproject.json`, so a file saved here builds the same way with `powerforge powershell project build`. Saving adds the selected mode and target and keeps any targets already in the file. Opening a settings file, or passing or dropping one, checks the script it names with the saved files, mode, target and output folder.
 
 ## How it talks to the engine
 
