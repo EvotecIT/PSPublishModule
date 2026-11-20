@@ -81,8 +81,11 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
                 { $_ -ge 7 } { 'Modern.ps1' }
                 default { 'Desktop.ps1' }
             }
+            if ($env:POWERFORGE_TEST_EXTERNAL_MODULE_ROOT) {
+                $PSScriptRoot = $env:POWERFORGE_TEST_EXTERNAL_MODULE_ROOT
+            }
             . (Join-Path $PSScriptRoot $path)
-            function Get-SelectedFile { [ModulePathOracleRecord]::new().Describe() }
+            function Get-SelectedFile { [ModulePathOracleRecord]::new() }
             function Get-ModuleCount { return 21 }
             Export-ModuleMember -Function Get-SelectedFile, Get-ModuleCount
             """;
@@ -92,13 +95,21 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
                 ModulePathOracleRecord() { $this.Context = [ModulePathOracleContext]::new() }
                 [string] Describe() { return $this.Context.Prefix + ':edition' }
             }
+            function Get-PrivateAlternative { 'private' }
             """;
         const string probe = """
-            [ordered]@{ selected = Get-SelectedFile; count = Get-ModuleCount } | ConvertTo-Json -Compress
+            $module = Get-Module ScopedValues
+            $record = Get-SelectedFile
+            $sameType = & $module { param($instance) [object]::ReferenceEquals($instance.GetType(), [ModulePathOracleRecord]) } $record
+            [ordered]@{
+                selected = $record.Describe(); count = Get-ModuleCount; sameType = $sameType
+                exports = @($module.ExportedCommands.Keys | Sort-Object)
+            } | ConvertTo-Json -Compress
             """;
         CompareScopedArtifacts(source, probe, new[] { "Get-ModuleCount" }, value =>
         {
-            Assert.Contains(value, new[] { "{\"selected\":\"module:modern\",\"count\":21}", "{\"selected\":\"module:desktop\",\"count\":21}" });
+            const string remainder = "\",\"count\":21,\"sameType\":true,\"exports\":[\"Get-ModuleCount\",\"Get-SelectedFile\"]}";
+            Assert.Contains(value, new[] { "{\"selected\":\"module:modern" + remainder, "{\"selected\":\"module:desktop" + remainder });
         }, assertArtifact: built =>
         {
             var root = Path.GetDirectoryName(built.ArtifactPath!)!;
@@ -117,7 +128,18 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
         using var fixture = OracleFixture.Create(string.Empty);
         var unstaged = Path.Combine(fixture.RootPath, "Unstaged.ps1");
         File.WriteAllText(unstaged, "throw 'Unstaged file executed'");
+        foreach (var name in new[] { "Modern.ps1", "Desktop.ps1" })
+            File.WriteAllText(Path.Combine(fixture.RootPath, name), "throw 'Unstaged alternative executed'");
         File.WriteAllText(fixture.ScriptPath, $$"""
+            $env:POWERFORGE_TEST_EXTERNAL_MODULE_ROOT = '{{fixture.RootPath.Replace("'", "''", StringComparison.Ordinal)}}'
+            try {
+                Import-Module '{{built.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal)}}' -Force -ErrorAction Stop
+                'Unexpected import success'
+            } catch {
+                $_.Exception.Message
+            } finally {
+                Remove-Item Env:POWERFORGE_TEST_EXTERNAL_MODULE_ROOT
+            }
             function global:Join-Path {
                 param($Path, $ChildPath)
                 if ($ChildPath -in @('Modern.ps1', 'Desktop.ps1')) {
@@ -143,7 +165,8 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
                     PowerShellCompilationSemanticHostArtifactPinCatalog.Get(profile))
             });
         Assert.Empty(blocked.ErrorRecords);
-        Assert.Equal("Module dot-source path is outside its staged alternatives.", Assert.Single(blocked.Success).Value);
+        Assert.Equal(2, blocked.Success.Length);
+        Assert.All(blocked.Success, item => Assert.Equal("Module dot-source path is outside its staged alternatives.", item.Value));
     }
 
     [PinnedSemanticHostFact]

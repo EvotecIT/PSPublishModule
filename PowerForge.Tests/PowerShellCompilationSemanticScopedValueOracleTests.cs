@@ -694,7 +694,7 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
                     additionalSourcePaths.Add(path);
                 }
             string? manifest = null;
-            if (requiredModule is not null || retainAdditionalSources)
+            if (requiredModule is not null || retainAdditionalSources || discoverAdditionalSources)
             {
                 manifest = Path.ChangeExtension(module, ".psd1");
                 var required = requiredModule is null ? string.Empty : " RequiredModules=@('" + requiredModule + "');";

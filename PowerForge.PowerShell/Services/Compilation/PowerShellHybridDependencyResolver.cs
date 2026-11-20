@@ -77,6 +77,20 @@ internal static class PowerShellHybridDependencyResolver
         => DiscoverDependenciesCore(sourcePath, additionalEntryPaths, moduleScopeOnly: true,
             conventionalLoaders, runtimeAlternatives: runtimeAlternatives);
 
+    internal static string[] DiscoverRetainedModuleAlternatives(string sourcePath, IEnumerable<string> compilationSources)
+    {
+        // Traverse the alternate branches independently so a path reached by both
+        // a static loader and a switch cannot disappear from the overlap check.
+        var alternatives = DiscoverDependenciesCore(sourcePath, null, moduleScopeOnly: true, conventionalLoaders: null,
+                runtimeAlternatives: PowerShellModuleRuntimeAlternatives.StageAlternativesOnly)
+            .Where(path => !PowerShellCompilationPathSafety.PathEquals(path, Path.GetFullPath(sourcePath))).ToArray();
+        var overlap = alternatives.Intersect(compilationSources, PowerShellCompilationPathSafety.PathComparer).FirstOrDefault();
+        if (overlap is not null)
+            throw new InvalidOperationException(
+                $"Module switch alternative '{overlap}' cannot also be a compilation source. Its runtime file identity must be preserved.");
+        return alternatives;
+    }
+
     private static string[] DiscoverDependenciesCore(
         string sourcePath,
         IEnumerable<string>? additionalEntryPaths,
@@ -138,6 +152,11 @@ internal static class PowerShellHybridDependencyResolver
                     if (runtimeAlternatives == PowerShellModuleRuntimeAlternatives.Skip)
                         continue;
                 }
+                else if (runtimeAlternatives == PowerShellModuleRuntimeAlternatives.StageAlternativesOnly &&
+                         PowerShellCompilationPathSafety.PathEquals(current, primarySource))
+                {
+                    continue;
+                }
                 else if (PowerShellCompilationSourcePathPlanner.TryPlan(ast, command, allowDerivedPaths, out var fact))
                 {
                     paths = new[] { fact!.RelativePath };
@@ -154,6 +173,8 @@ internal static class PowerShellHybridDependencyResolver
                         throw new InvalidOperationException($"Dot-source path '{relativePath}' at {current}:{command.Extent.StartLineNumber} must be a contained literal path without wildcards.");
                     var dependency = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(current)!, relativePath));
                     PowerShellCompilationPathSafety.EnsureContained(sourceRoot, dependency, $"Dot-source path at {current}:{command.Extent.StartLineNumber} escapes the hybrid module source root.");
+                    if (selectedAtImport && PowerShellCompilationPathSafety.PathEquals(dependency, primarySource))
+                        throw new InvalidOperationException($"Module switch alternative '{relativePath}' selects the importing source itself.");
                     if (!File.Exists(dependency))
                         throw new FileNotFoundException($"Dot-sourced hybrid module dependency '{relativePath}' was not found for {current}:{command.Extent.StartLineNumber}.", dependency);
                     PowerShellCompilationPathSafety.EnsureNoLinks(sourceRoot, dependency, $"Dot-source path at {current}:{command.Extent.StartLineNumber} traverses a symbolic link or junction, which is not allowed for hybrid staging.");
@@ -185,7 +206,8 @@ internal enum PowerShellModuleRuntimeAlternatives
 {
     Reject,
     Skip,
-    Stage
+    Stage,
+    StageAlternativesOnly
 }
 
 /// <summary>Describes a staged hybrid dependency and whether PowerForge generated its current contents.</summary>

@@ -27,7 +27,7 @@ internal static class PowerShellHybridModulePathGuard
                         }
                     }
                     throw 'Module dot-source path is outside its staged alternatives.'
-                } {{operand!.Extent.Text}} $PSScriptRoot @({{alternatives}}))
+                } {{operand!.Extent.Text}} $ExecutionContext.SessionState.Module.ModuleBase @({{alternatives}}))
                 """;
             yield return new PowerShellHybridSourceEdit(
                 operand!.Extent.StartOffset, operand.Extent.EndOffset - operand.Extent.StartOffset,

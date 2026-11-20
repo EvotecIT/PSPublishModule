@@ -190,7 +190,10 @@ internal static class PowerShellHybridModuleComposer
         source.Insert(prologueEndOffset, import.ToString());
         var builder = new StringBuilder(source.ToString());
         if (source.Length > 0 && source[source.Length - 1] != '\n') builder.AppendLine();
-        if (!manifestControlsExports && (exportContract is null || exportContract.Commands.Length > 0))
+        // A manifest can further restrict module exports, but its wildcard must
+        // not replace an authored filter for functions in runtime-only files.
+        var keepAuthoredFilter = guardedPaths.Length != 0 && exportContract is { Commands.Length: > 0 };
+        if ((!manifestControlsExports || keepAuthoredFilter) && (exportContract is null || exportContract.Commands.Length > 0))
         {
             builder.AppendLine();
             builder.Append("Microsoft.PowerShell.Core\\Export-ModuleMember -Function @(").Append(JoinPowerShellNames(exportedFallbackFunctions))

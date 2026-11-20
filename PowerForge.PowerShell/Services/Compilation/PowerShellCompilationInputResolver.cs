@@ -296,6 +296,8 @@ public sealed class PowerShellCompilationInputResolver
                 .OrderBy(file => PowerShellCompilationPathSafety.PathComparer.Equals(file, sourcePath) ? 0 : 1)
                 .ThenBy(file => FrameworkCompatibility.GetRelativePath(moduleRoot, file), StringComparer.OrdinalIgnoreCase)
                 .ToArray();
+            if (hybridModule)
+                _ = PowerShellHybridDependencyResolver.DiscoverRetainedModuleAlternatives(sourcePath, compilationSourceFiles);
             sourceFiles = (allowDynamicModuleRuntimeSources && resolvedMode != PowerShellCompilationMode.Strict
                     ? new[] { sourcePath }
                         .Concat(runtimeHooks)

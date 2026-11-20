@@ -102,14 +102,21 @@ public sealed partial class PowerShellCompilationDependencyPlanner
             ? PowerShellCompiledModuleManifest.ResolveSourceManifest(spec.SourcePath, spec.ModuleManifestPath) : spec.ModuleManifestPath;
         if (!File.Exists(manifestPath)) manifestPath = null;
         var moduleRoot = Path.GetDirectoryName(Path.GetFullPath(manifestPath ?? spec.SourcePath)) ?? Directory.GetCurrentDirectory();
+        var compilationPaths = sourceFiles.ToArray();
+        var runtimePaths = spec.RuntimeSourcePaths is { Length: > 0 } ? spec.RuntimeSourcePaths : compilationPaths;
+        if (spec.Kind == PowerShellCompilationArtifactKind.BinaryModule && spec.Mode == PowerShellCompilationMode.Hybrid)
+        {
+            var alternatives = PowerShellHybridDependencyResolver.DiscoverRetainedModuleAlternatives(spec.SourcePath, compilationPaths);
+            runtimePaths = runtimePaths.Concat(alternatives).Distinct(PowerShellCompilationPathSafety.PathComparer).ToArray();
+        }
         return AnalyzeCore(
             spec.SourcePath,
             manifestPath,
             moduleRoot,
             spec.Kind,
             spec.Mode,
-            spec.RuntimeSourcePaths is { Length: > 0 } ? spec.RuntimeSourcePaths : sourceFiles.ToArray(),
-            sourceFiles,
+            runtimePaths,
+            compilationPaths,
             spec.ResourceMode,
             spec.IncludeResource,
             spec.ExcludeResource,
