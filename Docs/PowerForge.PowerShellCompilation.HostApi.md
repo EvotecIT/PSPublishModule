@@ -171,7 +171,7 @@ The optional `ExecutableOptions` accepted by both `Check` and `Compile` describe
 
 Proposed order, all in one signing session so a hardware key prompts once:
 
-1. Sign authored scripts and modules (`.ps1`, `.psm1`, `.psd1`) before they are embedded, so the extracted copies carry valid signatures.
+1. Finish composing and rewriting the staged scripts and modules (`.ps1`, `.psm1`, `.psd1`), then sign those final files. Hash and embed the signed bytes so the extracted copies carry valid signatures.
 2. Sign build-owned assemblies and native libraries before single-file bundling.
 3. Optionally sign unsigned third-party assemblies (`SignDependencies`, off by default, matching PSPublishModule's dependency-signing option); never replace an existing valid signature.
 4. Sign the outer executable or module last.
@@ -251,6 +251,7 @@ A simple host can start once slices 1 to 3 exist; the rest improve it.
 - `Compile` succeeds when the selection and sources match the confirmed lock. Changing the mode, the target or an imported module name returns a diagnostic asking for a new check.
 - `Check` on a bare script reports an unreadable icon supplied through `ExecutableOptions`.
 - An executable built with an icon, version `1.2.3`, product and company names, and file description shows those values in Windows file properties. `RequireAdministrator` prompts for elevation on start.
+- A rewritten Hybrid script dependency has a valid signature after extraction and matches the embedded hash.
 - The JSON for `check`, `build` and `doctor` carries `SchemaVersion` and is covered by contract tests on the serialized shape.
 
 ## Open questions
