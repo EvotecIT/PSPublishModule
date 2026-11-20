@@ -58,6 +58,25 @@ choose the deployment explicitly. The current supported executable targets are
 Strict `net10.0` on Windows x64 and Linux x64, framework-dependent or NativeAOT.
 Other combinations remain experimental. Packaging does not conceal source.
 
+Two clean Windows x64 NativeAOT builds of the
+[file-summary example](../Examples/PowerShellCompilation/Get-FileLineSummary.ps1) produced
+byte-identical executables with the build cache disabled. The executable
+records the PDB filename without the temporary build path. The separate native
+PDB files differed between the two builds. Independently repeated Linux x64
+NativeAOT builds of that script also produced byte-identical executables.
+
+Before building, restore the SDK-selected runtime pack for your target.
+Follow the [runtime pack preparation steps](PowerForge.PowerShellCompilation.md#dependencies-and-runtime-resources).
+
+```powershell
+powerforge powershell build ./Examples/PowerShellCompilation/Get-FileLineSummary.ps1 --mode Strict --framework net10.0 --rid win-x64 --self-contained --optimization NativeAot --no-build-cache --allow-unreviewed-dependencies --out ./artifacts/file-summary
+./artifacts/file-summary/Get-FileLineSummary.exe --Path ./example.txt --MinimumLength 5
+```
+
+Use `linux-x64` and omit the `.exe` suffix on Linux. The example counts all
+lines, then reports the number and total character count of lines that meet the
+minimum length. It reports a missing file as a terminating error.
+
 ## Two small Strict programs
 
 From the repository root, build the checked-in examples:

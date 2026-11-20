@@ -90,6 +90,7 @@ $requiredFamilies = @{
     'basic-function Test-Path command lookup' = 'PowerForge.Tests.PowerShellCompilationArtifactHardeningTests.Build_HybridBasicFunctionKeepsTestPathOnPowerShellCommandLookup*'
 }
 $windowsRequiredFamilies = @{
+    'reproducible Windows NativeAOT executable' = 'PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.Build_WindowsNativeAotExecutableIsByteIdenticalAcrossFreshWorkspaces*'
     'native delegate conversion' = 'PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.NativeDelegateCasts_PreserveArgumentsDynamicScopeOutputAndEscape*'
     'native launcher argument order' = 'PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.Build_HybridNativeScriptRootPreservesOrderedUnboundArguments*'
     'native Hybrid executable console presentation' = 'PowerForge.Tests.PowerShellCompilationArtifactBuilderTests.Build_NativeHybridConsolePreservesFormattingStreamsAndAuthoredErrors*'
