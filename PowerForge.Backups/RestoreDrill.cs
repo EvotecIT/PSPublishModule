@@ -30,7 +30,7 @@ public sealed class RestoreDrill
         var statusPath = Path.Combine(Path.GetDirectoryName(options.StatePath)!, "restore-drill.json");
         var state = new RestoreDrillState { StartedAtUtc = DateTimeOffset.UtcNow, Status = "running", CaptureSha256 = expectedCaptureSha256 };
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        timeout.CancelAfter(TimeSpan.FromMinutes(options.TimeoutMinutes));
+        if (options.RestoreDrillTimeoutMinutes is { } limit) timeout.CancelAfter(TimeSpan.FromMinutes(limit));
         var token = timeout.Token;
         var stateGate = new object();
         void Record()
@@ -156,10 +156,12 @@ public sealed class RestoreDrill
                 // Read under the lock the cancellation callback takes, so a cancellation it recorded is never overwritten.
                 cancelled = cancellationToken.IsCancellationRequested || state.Status == "cancelled";
                 state.Status = cancelled ? "cancelled" : "failed";
-                state.ErrorType = cancelled ? "CancelledByUser" : error.GetType().Name;
+                // The drill's own limit cancels the linked token; name that, so it is not mistaken for a stop by the user.
+                state.ErrorType = cancelled ? "CancelledByUser"
+                    : timeout.IsCancellationRequested && error is OperationCanceledException ? "TimedOut" : error.GetType().Name;
                 state.CompletedAtUtc = DateTimeOffset.UtcNow;
             }
-            steps.FailRunning(cancelled ? "cancelled by the user" : error.GetType().Name);
+            steps.FailRunning(cancelled ? "cancelled by the user" : state.ErrorType == "TimedOut" ? "stopped at the drill's time limit" : error.GetType().Name);
             Record();
             throw;
         }

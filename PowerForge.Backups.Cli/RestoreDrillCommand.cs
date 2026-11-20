@@ -15,8 +15,8 @@ namespace PowerForge.Backups.Cli;
 /// <summary>
 /// Runs a restore drill so that whoever sees it can tell what it is and how far it has got: a header saying what it does
 /// and that live data is not touched, one progress row per step, and a closing panel with the outcome. Redirected output
-/// gets the same information as plain lines. The drill runs at background priority, and closing the window records the
-/// attempt as cancelled.
+/// gets the same information as plain lines. The drill runs at reduced CPU and disk priority, and closing the window records
+/// the attempt as cancelled.
 /// </summary>
 internal static class RestoreDrillCommand
 {
@@ -126,14 +126,21 @@ internal static class RestoreDrillCommand
         return profile.Mode == OutputMode.Interactive && Terminal.IsConsole(Terminal.Target);
     }
 
-    // Background mode lowers CPU, disk and memory priority together on Windows. SQL Server's own restore I/O runs in
-    // its service process and keeps that process's priority.
+    // Below-normal CPU, low disk and below-normal memory priority. Background mode (very low disk and memory priority)
+    // let a busy SQL Server starve the drill: a 56 GB SQLite check ran past four hours. SQL Server's own restore I/O runs
+    // in its service process and keeps that process's priority.
     private static string LowerPriority()
     {
-        if (OperatingSystem.IsWindows() && SetPriorityClass(GetCurrentProcess(), ProcessModeBackgroundBegin))
-            return "Runs at background CPU and disk priority, so other work goes first.";
-        try { Process.GetCurrentProcess().PriorityClass = ProcessPriorityClass.BelowNormal; } catch (Exception) { }
-        return "Runs at below-normal CPU priority.";
+        try { Process.GetCurrentProcess().PriorityClass = ProcessPriorityClass.BelowNormal; }
+        catch (Exception) { return "Runs at normal priority."; }
+        if (!OperatingSystem.IsWindows()) return "Runs at below-normal CPU priority.";
+        var process = GetCurrentProcess();
+        var memory = new MemoryPriorityInformation { MemoryPriority = MemoryPriorityBelowNormal };
+        SetProcessInformation(process, ProcessMemoryPriority, ref memory, (uint)Marshal.SizeOf<MemoryPriorityInformation>());
+        var io = IoPriorityLow;
+        return NtSetInformationProcess(process, ProcessIoPriority, ref io, sizeof(int)) == 0
+            ? "Runs at below-normal CPU and low disk priority, so other work goes first."
+            : "Runs at below-normal CPU priority.";
     }
 
     // Closing the console gives a process about five seconds; cancel, then wait for the drill to record the outcome.
@@ -150,14 +157,24 @@ internal static class RestoreDrillCommand
         SetConsoleCtrlHandler(_closeHandler, true);
     }
 
-    private const uint ProcessModeBackgroundBegin = 0x00100000;
+    private const int ProcessMemoryPriority = 0, ProcessIoPriority = 33;
+    private const uint MemoryPriorityBelowNormal = 4;
+    private const int IoPriorityLow = 1;
     private const uint CtrlC = 0, CtrlBreak = 1, CtrlClose = 2;
 
     private delegate bool ConsoleCtrlHandler(uint signal);
 
+    [StructLayout(LayoutKind.Sequential)]
+    private struct MemoryPriorityInformation { public uint MemoryPriority; }
+
     [DllImport("kernel32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool SetPriorityClass(IntPtr process, uint priorityClass);
+    private static extern bool SetProcessInformation(IntPtr process, int informationClass, ref MemoryPriorityInformation information, uint size);
+
+    // The process I/O priority has no documented Win32 setter; Process Explorer and Task Manager use this call. Low (1)
+    // sits between background's very low (0) and normal (2). A failure leaves the normal I/O priority.
+    [DllImport("ntdll.dll")]
+    private static extern int NtSetInformationProcess(IntPtr process, int informationClass, ref int information, int length);
 
     [DllImport("kernel32.dll")]
     private static extern IntPtr GetCurrentProcess();

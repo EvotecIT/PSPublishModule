@@ -10,6 +10,11 @@ public sealed class BackupOptions
     public string WorkRoot { get; set; } = "";
     public string StatePath { get; set; } = "";
     public int TimeoutMinutes { get; set; } = 240;
+    /// <summary>
+    /// Optional limit for a restore drill. Null means none: a drill is started by hand, Ctrl+C or closing its window stops
+    /// it, and checking a large set at reduced priority can take longer than the nightly run's <see cref="TimeoutMinutes"/>.
+    /// </summary>
+    public int? RestoreDrillTimeoutMinutes { get; set; }
     public long MinimumFreeBytes { get; set; } = 150L * 1024 * 1024 * 1024;
     public SshDestination Destination { get; set; } = new();
     public DatabaseSource[] Databases { get; set; } = [];
@@ -35,7 +40,7 @@ public sealed class BackupOptions
         if (Destination is null || Databases is null || RecoveryFiles is null ||
             Databases.Any(source => source is null) || RecoveryFiles.Any(file => file is null))
             throw new InvalidDataException("Destination, database and recovery inventories must not be null.");
-        if (TimeoutMinutes is < 1 or > 1440 || MinimumFreeBytes < 0)
+        if (TimeoutMinutes is < 1 or > 1440 || RestoreDrillTimeoutMinutes is < 1 or > 10080 || MinimumFreeBytes < 0)
             throw new InvalidDataException("Invalid time or space budget.");
         foreach (var path in new[] { WorkRoot, StatePath, Destination.IdentityFile, Destination.KnownHostsFile, Destination.SshExecutable })
             Safety.DemandAbsolute(path);
