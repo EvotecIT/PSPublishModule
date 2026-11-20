@@ -4,6 +4,9 @@ namespace PowerForge;
 
 public sealed partial class PowerShellCompilationDependencyPlanner
 {
+    internal static bool IsModuleInput(string sourcePath, string? manifestPath)
+        => manifestPath is not null || Path.GetExtension(sourcePath).Equals(".psm1", StringComparison.OrdinalIgnoreCase);
+
     private static readonly (string Name, PowerShellCompilationDependencyDiscovery Discovery)[] ConventionalDirectories =
     {
         ("Resources", PowerShellCompilationDependencyDiscovery.ConventionalResourceDirectory),
@@ -30,7 +33,7 @@ public sealed partial class PowerShellCompilationDependencyPlanner
     {
         var includePatterns = NormalizePatterns(includeResource, nameof(includeResource));
         var excludePatterns = NormalizePatterns(excludeResource, nameof(excludeResource));
-        var isModuleInput = manifestPath is not null || Path.GetExtension(sourcePath).Equals(".psm1", StringComparison.OrdinalIgnoreCase);
+        var isModuleInput = IsModuleInput(sourcePath, manifestPath);
         var outputRoot = string.IsNullOrWhiteSpace(outputDirectory) ? null : Path.GetFullPath(outputDirectory!);
         var generatedRoots = (generatedOutputDirectories ?? Array.Empty<string>())
             .Where(static path => !string.IsNullOrWhiteSpace(path))

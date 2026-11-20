@@ -167,8 +167,10 @@ public sealed partial class PowerForgeCliPowerShellCompilationTests
         }
     }
 
-    [Fact]
-    public async Task Check_RejectsWritingReviewIntoModuleInventory()
+    [Theory]
+    [InlineData("dll", "Hybrid")]
+    [InlineData("library", "Strict")]
+    public async Task Check_RejectsWritingReviewIntoModuleInventory(string kind, string mode)
     {
         var repository = FindRepositoryRoot();
         var root = Path.Combine(Path.GetTempPath(), "PowerForge review location", Guid.NewGuid().ToString("N"));
@@ -180,22 +182,63 @@ public sealed partial class PowerForgeCliPowerShellCompilationTests
             var review = Path.Combine(moduleRoot, "review.json");
             File.WriteAllText(source, "function Get-Example { return 42 }");
             var check = await RunCliAsync(repository,
-                new[] { "powershell", "check", source, "--write-review", review, "--output", "json" });
+                new[] { "powershell", "check", source, "--kind", kind, "--mode", mode,
+                    "--write-review", review, "--output", "json" });
             Assert.Equal(1, check.ExitCode);
             Assert.Contains("Save the review outside the module source directory", check.StdOut, StringComparison.Ordinal);
             Assert.False(File.Exists(review));
 
             var outsideReview = Path.Combine(root, "review.json");
             var outside = await RunCliAsync(repository,
-                new[] { "powershell", "check", source, "--write-review", outsideReview, "--output", "json" });
+                new[] { "powershell", "check", source, "--kind", kind, "--mode", mode,
+                    "--write-review", outsideReview, "--output", "json" });
             Assert.True(outside.ExitCode == 0, outside.StdOut + outside.StdErr);
             var originalReview = File.ReadAllBytes(outsideReview);
 
             var repeated = await RunCliAsync(repository,
-                new[] { "powershell", "check", source, "--write-review", outsideReview, "--output", "json" });
+                new[] { "powershell", "check", source, "--kind", kind, "--mode", mode,
+                    "--write-review", outsideReview, "--output", "json" });
             Assert.Equal(1, repeated.ExitCode);
             Assert.Equal(originalReview, File.ReadAllBytes(outsideReview));
-            Assert.Empty(Directory.EnumerateFiles(root, ".powerforge-review-*.tmp"));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task ConcurrentReviewSavesPreserveTheFirstWrittenFile()
+    {
+        var root = Directory.CreateTempSubdirectory("PowerForge-Review-").FullName;
+        try
+        {
+            var source = Path.Combine(root, "Example.ps1");
+            File.WriteAllText(source, "return 21");
+            var proposed = new PowerShellCompilationHostService().Check(new PowerShellCompilationCheckRequest(source)
+            {
+                Mode = PowerShellCompilationMode.Strict
+            }).ProposedReview;
+            var review = Assert.IsType<PowerShellCompilationReview>(proposed);
+            var destination = Path.Combine(root, "review.json");
+            var start = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            var attempts = Enumerable.Range(0, 8).Select(async _ =>
+            {
+                await start.Task;
+                try
+                {
+                    PowerShellCompilationReviewFile.Write(destination, review, null);
+                    return true;
+                }
+                catch (IOException)
+                {
+                    return false;
+                }
+            }).ToArray();
+            start.SetResult();
+
+            Assert.Single(await Task.WhenAll(attempts), static written => written);
+            PowerShellCompilationReviewFile.EnsureMatches(PowerShellCompilationReviewFile.Read(destination), review);
         }
         finally
         {

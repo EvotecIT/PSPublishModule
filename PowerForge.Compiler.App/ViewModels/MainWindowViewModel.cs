@@ -488,7 +488,13 @@ public sealed partial class MainWindowViewModel : ObservableObject
             error is IOException or InvalidDataException or UnauthorizedAccessException or ArgumentException or
                 InvalidOperationException or System.Text.Json.JsonException)
         {
-            if (generation == _checkGeneration) StatusText = error.Message;
+            if (generation == _checkGeneration)
+            {
+                Diagnostics.Add(new DiagnosticItemViewModel(new CompileDiagnostic(CompileSeverity.Error,
+                    "ReviewFile", string.Empty, error.Message, savedReviewPath, 0, 0)));
+                RaiseListsChanged();
+                StatusText = "Could not open the dependency review. See the problems below.";
+            }
         }
         finally
         {
@@ -501,6 +507,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
     {
         if (!CanCompile || SelectedMode is not { } mode || SelectedTarget is not { } target) return Task.CompletedTask;
         InvalidateReview();
+        RefreshProblems();
         return PrepareReviewAsync(CreateCompileRequest(mode.Mode, target), target, path);
     }
 

@@ -38,6 +38,44 @@ internal static class FrameworkCompatibility
 #endif
     }
 
+    /// <summary>Resolves links in existing path components.</summary>
+    internal static string ResolvePhysicalPath(string path)
+    {
+#if NET8_0_OR_GREATER
+        var fullPath = Path.GetFullPath(path);
+        var pathRoot = Path.GetPathRoot(fullPath);
+        if (string.IsNullOrWhiteSpace(pathRoot))
+            return fullPath;
+
+        var current = pathRoot;
+        var components = fullPath[pathRoot.Length..].Split(
+            [Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar],
+            StringSplitOptions.RemoveEmptyEntries);
+        foreach (var component in components)
+        {
+            var candidate = Path.Combine(current, component);
+            FileSystemInfo? info = Directory.Exists(candidate)
+                ? new DirectoryInfo(candidate)
+                : File.Exists(candidate)
+                    ? new FileInfo(candidate)
+                    : null;
+            if (info?.LinkTarget is not null)
+            {
+                var resolvedTarget = info.ResolveLinkTarget(returnFinalTarget: true)?.FullName;
+                current = string.IsNullOrWhiteSpace(resolvedTarget)
+                    ? candidate
+                    : ResolvePhysicalPath(resolvedTarget);
+            }
+            else
+                current = candidate;
+        }
+
+        return Path.GetFullPath(current);
+#else
+        return Path.GetFullPath(path);
+#endif
+    }
+
     public static StringComparison PathStringComparison()
         => DefaultPathStringComparison();
 

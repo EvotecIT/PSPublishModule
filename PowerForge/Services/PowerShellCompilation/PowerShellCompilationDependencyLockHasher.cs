@@ -10,6 +10,11 @@ public static class PowerShellCompilationDependencyLockHasher
     public static string ComputeSha256(PowerShellCompilationDependencyGraph graph)
     {
         if (graph is null) throw new ArgumentNullException(nameof(graph));
+        if (graph.RootNodeId is null || graph.Nodes is null || graph.Edges is null || graph.Cycles is null || graph.Conflicts is null ||
+            graph.Nodes.Any(static node => node is null || node.Id is null || node.Identity is null || node.Policy is null || node.Interop is null) ||
+            graph.Edges.Any(static edge => edge is null || edge.FromId is null || edge.ToId is null) ||
+            graph.Cycles.Any(static cycle => cycle is null))
+            throw new ArgumentException("The PowerShell compilation dependency lock has an invalid graph structure.", nameof(graph));
         var builder = new StringBuilder();
         Append("graph", graph.SchemaVersion, graph.RootNodeId);
         foreach (var node in graph.Nodes.OrderBy(static item => item.Id, StringComparer.Ordinal))

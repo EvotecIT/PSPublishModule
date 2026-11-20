@@ -105,7 +105,16 @@ public sealed class InterimCompileEngineTests : IDisposable
         File.WriteAllText(script, "return 22");
         await model.OpenReviewAsync(reviewPath);
         Assert.False(model.HasReview);
-        Assert.Contains("dependencies differ", model.StatusText, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(model.Diagnostics, item => item.Diagnostic.Message.Contains("dependencies differ", StringComparison.OrdinalIgnoreCase));
+        Assert.False(Directory.Exists(model.OutputDirectory));
+
+        File.WriteAllText(script, "return 21");
+        var malformed = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(reviewPath))!;
+        malformed["dependencyLock"]!["cycles"] = null;
+        var malformedPath = Write("malformed.review.json", malformed.ToJsonString());
+        await model.OpenReviewAsync(malformedPath);
+        Assert.False(model.HasReview);
+        Assert.Contains(model.Diagnostics, item => item.Diagnostic.Message.Contains("invalid graph structure", StringComparison.OrdinalIgnoreCase));
         Assert.False(Directory.Exists(model.OutputDirectory));
     }
 

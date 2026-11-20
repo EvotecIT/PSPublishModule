@@ -38,29 +38,32 @@ public static class PowerShellCompilationReviewFile
         var fullPath = Path.GetFullPath(path);
         if (moduleSourceDirectory is not null)
         {
-            var sourceDirectory = Path.GetFullPath(moduleSourceDirectory)
+#if NET472
+            const string linkError = "Save the review through a path without symbolic links or junctions.";
+            PowerShellCompilationPathSafety.EnsureNoLinksInExistingAncestors(moduleSourceDirectory, linkError);
+            PowerShellCompilationPathSafety.EnsureNoLinksInExistingAncestors(fullPath, linkError);
+#endif
+            var sourceDirectory = FrameworkCompatibility.ResolvePhysicalPath(moduleSourceDirectory)
                 .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            var physicalDirectory = FrameworkCompatibility.ResolvePhysicalPath(Path.GetDirectoryName(fullPath)!);
+            fullPath = Path.Combine(physicalDirectory, Path.GetFileName(fullPath));
             if (PowerShellCompilationPathSafety.PathEquals(fullPath, sourceDirectory) ||
                 PowerShellCompilationPathSafety.PathStartsWith(fullPath, sourceDirectory + Path.DirectorySeparatorChar))
                 throw new ArgumentException("Save the review outside the module source directory so it does not change the reviewed dependency inventory.", nameof(path));
         }
 
-        var directory = Path.GetDirectoryName(fullPath) ?? Directory.GetCurrentDirectory();
-        var temporary = Path.Combine(directory, $".powerforge-review-{Guid.NewGuid():N}.tmp");
-        var staged = false;
+        var content = JsonSerializer.SerializeToUtf8Bytes(review, PowerShellCompilationReviewJsonContext.Default.PowerShellCompilationReview);
+        var created = false;
         try
         {
-            using (var stream = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None))
-            {
-                staged = true;
-                JsonSerializer.Serialize(stream, review, PowerShellCompilationReviewJsonContext.Default.PowerShellCompilationReview);
-            }
-            File.Move(temporary, fullPath);
-            staged = false;
+            using var stream = new FileStream(fullPath, FileMode.CreateNew, FileAccess.Write, FileShare.None);
+            created = true;
+            stream.Write(content, 0, content.Length);
         }
-        finally
+        catch
         {
-            if (staged) File.Delete(temporary);
+            if (created) File.Delete(fullPath);
+            throw;
         }
     }
 }
