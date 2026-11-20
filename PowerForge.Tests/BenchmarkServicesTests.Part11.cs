@@ -259,11 +259,11 @@ public sealed partial class BenchmarkServicesTests
             resultArtifactPath: Path.Combine(sourceRoot, "windows-full.json"));
         string artifactPath = Path.Combine(sourceRoot, Assert.Single(recorded.Entries).ArtifactRelativePath);
 
-        BenchmarkRunResult result = BenchmarkJson.Read<BenchmarkRunResult>(artifactPath);
+        BenchmarkRunResult result = BenchmarkEvidenceResultCodec.Read(artifactPath);
         result.Metadata["gitWorktreeClean"] = "false";
-        BenchmarkJson.Write(artifactPath, result);
+        File.WriteAllBytes(artifactPath, BenchmarkEvidenceResultCodec.Encode(result));
         BenchmarkEvidenceCatalog catalog = BenchmarkJson.Read<BenchmarkEvidenceCatalog>(catalogPath);
-        catalog.Entries[0].ResultSha256 = BenchmarkJson.ComputeSha256(result);
+        catalog.Entries[0].ResultSha256 = BenchmarkEvidenceResultCodec.ComputeSha256(result);
         BenchmarkJson.Write(catalogPath, catalog);
 
         InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>

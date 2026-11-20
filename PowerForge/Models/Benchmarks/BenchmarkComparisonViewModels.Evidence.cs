@@ -133,6 +133,9 @@ public sealed class BenchmarkNotPublishedView
 
     /// <summary>Number of cells left out.</summary>
     public int Cells { get; set; }
+
+    /// <summary>Cases the note covers when the library's other cases are published; empty when none of its cells are.</summary>
+    public string[] Cases { get; set; } = Array.Empty<string>();
 }
 
 /// <summary>Index of the comparisons in one area, for loading the area's full data on demand.</summary>

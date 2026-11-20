@@ -503,7 +503,9 @@ drive root. A relative `-ResultPath` is written beside the catalog.
 
 `Update-BenchmarkEvidenceCatalog` writes each result under a content-addressed name
 (`windows-full.<sha256>.json`) and records that path, so a superseded run's file is
-never overwritten. Every update also re-evaluates the lanes already in the catalog
+never overwritten. The file stores each case once with its samples as compact arrays,
+rounded to six significant digits; summary rows are rebuilt from the samples when it is
+read. The catalog itself is written on one line. Every update also re-evaluates the lanes already in the catalog
 against the current declarations and policy, and refuses the update if a published
 lane no longer meets them.
 
@@ -514,10 +516,12 @@ row must carry its library, so redaction can tell which rows to remove.
 The merge verifies every normalized result against the SHA-256 and lane metadata
 recorded by its source catalog, re-evaluates every lane against the declarations
 and publish policy, and rejects conflicting copies of the same lane. Verified
-results are written beside the destination catalog under immutable,
-content-addressed file names before the catalog is atomically switched. When two
-bundles carry different runs of the same lane, the newest becomes the lane and the
-older one is kept in `superseded` with its date and hash. Catalogs and declaration
+results are written beside the destination catalog in the compact form, under
+immutable, content-addressed file names, before the catalog is atomically switched;
+results recorded in the earlier full form are rewritten. When two bundles carry
+different runs of the same lane, the newest becomes the lane and the older one is
+kept in `superseded` as a record of its date, libraries and hash. Superseded result
+files are not republished with the merged catalog. Catalogs and declaration
 files from earlier schemas are rejected; record fresh runs instead.
 
 Windows, Linux, and macOS remain separate entries. `availability` lists every
