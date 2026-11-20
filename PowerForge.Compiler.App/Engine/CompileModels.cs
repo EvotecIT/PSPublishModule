@@ -31,6 +31,8 @@ public enum DependencyPlacement
     Bundled,
     /// <summary>Must exist on the machine that runs the output.</summary>
     RequiredOnTarget,
+    /// <summary>Deliberately left out of the output by the selected file rules.</summary>
+    Excluded,
     /// <summary>Missing or not deliverable; the build cannot include it.</summary>
     Blocked
 }
@@ -43,7 +45,8 @@ public sealed record CompileDiagnostic(
     string Message,
     string FilePath,
     int Line,
-    int Column)
+    int Column,
+    string Fix = "")
 {
     /// <summary>File and line for display, or an empty string when unknown.</summary>
     public string Location => string.IsNullOrEmpty(FilePath)
@@ -59,6 +62,7 @@ public sealed record CompileDependency(string Name, string Kind, DependencyPlace
     {
         DependencyPlacement.Bundled => "Included in the output",
         DependencyPlacement.RequiredOnTarget => "Must be installed on the machine that runs it",
+        DependencyPlacement.Excluded => "Left out of the output",
         _ => "Missing or can't be included"
     };
 }
@@ -192,6 +196,12 @@ public sealed record CompileRequest(
     string? OutputDirectory,
     string? SigningThumbprint = null,
     FileRules? Files = null);
+
+/// <summary>The dependencies and prerequisites shown for a specific build selection.</summary>
+public sealed record CompileReviewResult(
+    PowerShellCompilationReview? Review,
+    IReadOnlyList<CompileDependency> Dependencies,
+    IReadOnlyList<CompileDiagnostic> Diagnostics);
 
 /// <summary>What a build produced.</summary>
 public sealed record CompileResult(

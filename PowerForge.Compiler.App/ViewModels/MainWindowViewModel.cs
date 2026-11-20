@@ -23,6 +23,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
     private bool _signOutput;
     private SigningCertificate? _selectedCertificate;
     private string _signingHint = string.Empty;
+    private (CompileRequest Selection, PowerShellCompilationReview Review)? _review;
 
     /// <summary>Creates the view model.</summary>
     public MainWindowViewModel(ICompileEngine engine)
@@ -32,6 +33,8 @@ public sealed partial class MainWindowViewModel : ObservableObject
         CancelCommand = new RelayCommand(Cancel, () => IsBusy);
         RecheckCommand = new RelayCommand(() => _ = CheckAsync(InputPath), () => HasInput && !IsBusy);
         Log.CollectionChanged += (_, _) => OnPropertyChanged(nameof(HasLog));
+        IncludePatterns.CollectionChanged += (_, _) => InvalidateReview();
+        ExcludePatterns.CollectionChanged += (_, _) => InvalidateReview();
     }
 
     /// <summary>Opens a folder in the system file manager; supplied by the window.</summary>
@@ -91,7 +94,10 @@ public sealed partial class MainWindowViewModel : ObservableObject
     public string OutputDirectory
     {
         get => _outputDirectory;
-        set => Set(ref _outputDirectory, value);
+        set
+        {
+            if (Set(ref _outputDirectory, value)) InvalidateReview();
+        }
     }
 
     /// <summary>Code-signing certificates, loaded when signing is turned on.</summary>
@@ -104,6 +110,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         set
         {
             if (!Set(ref _signOutput, value)) return;
+            InvalidateReview();
             if (value && Certificates.Count == 0) LoadCertificates();
             RaiseCommandStates();
         }
@@ -115,7 +122,9 @@ public sealed partial class MainWindowViewModel : ObservableObject
         get => _selectedCertificate;
         set
         {
-            if (Set(ref _selectedCertificate, value)) RaiseCommandStates();
+            if (!Set(ref _selectedCertificate, value)) return;
+            InvalidateReview();
+            RaiseCommandStates();
         }
     }
 
@@ -140,6 +149,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         set
         {
             if (!Set(ref _selectedMode, value)) return;
+            InvalidateReview();
             foreach (var card in Modes) card.IsSelected = ReferenceEquals(card, value);
             OnPropertyChanged(nameof(SelectedVerdict));
             OnPropertyChanged(nameof(CompileButtonText));
@@ -153,7 +163,9 @@ public sealed partial class MainWindowViewModel : ObservableObject
         get => _selectedTarget;
         set
         {
-            if (Set(ref _selectedTarget, value)) RaiseCommandStates();
+            if (!Set(ref _selectedTarget, value)) return;
+            InvalidateReview();
+            RaiseCommandStates();
         }
     }
 
@@ -202,7 +214,10 @@ public sealed partial class MainWindowViewModel : ObservableObject
     }
 
     /// <summary>Header for the dependency list.</summary>
-    public string DependenciesHeader => $"Dependencies ({Dependencies.Count})";
+    public string DependenciesHeader => $"{(HasReview ? "Reviewed dependencies" : "Dependencies")} ({Dependencies.Count})";
+
+    /// <summary>True when the exact selection is ready for explicit confirmation.</summary>
+    public bool HasReview => _review.HasValue;
 
     /// <summary>True when the problems list has entries.</summary>
     public bool HasDiagnostics => Diagnostics.Count > 0;
@@ -231,7 +246,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
     /// <summary>Compile button text naming what will be built.</summary>
     public string CompileButtonText => SelectedMode is { IsBlocked: true }
         ? $"{SelectedMode.Title} can't build this"
-        : _check?.Kind == PowerShellCompilationArtifactKind.BinaryModule ? "Compile module" : "Compile executable";
+        : HasReview ? "Confirm and compile" : "Review dependencies";
 
     /// <summary>The selected mode's verdict sentence.</summary>
     public string SelectedVerdict => SelectedMode?.Verdict ?? string.Empty;
@@ -263,6 +278,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
     private async Task<bool> CheckAsync(string path)
     {
         Cancel();
+        InvalidateReview();
         var generation = ++_checkGeneration;
         using var operation = BeginOperation();
         // A different input must never be compiled with the previous input's mode and target, even if its check is cancelled.
@@ -312,7 +328,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         StatusText = check.Modes.Count == 0
             ? "This input can't be checked. See the problems below."
             : check.Recommended is { } recommended
-                ? $"{recommended} suits this input best. Pick a target and compile."
+                ? $"{recommended} suits this input best. Pick a target and review its dependencies."
                 : "No mode can build this input yet. Each mode lists what blocks it.";
     }
 
@@ -361,7 +377,15 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
     private async Task CompileAsync()
     {
-        if (SelectedMode is not { } card || SelectedTarget is not { } target) return;
+        if (!CanCompile || SelectedMode is not { } card || SelectedTarget is not { } target) return;
+        var request = CreateCompileRequest(card.Mode, target);
+        if (_review is not { } approved || !SameSelection(approved.Selection, request))
+        {
+            InvalidateReview();
+            await PrepareReviewAsync(request, target);
+            return;
+        }
+        var generation = ++_checkGeneration;
         using var operation = BeginOperation();
         _lastResult = null;
         RaiseResultChanged();
@@ -369,17 +393,15 @@ public sealed partial class MainWindowViewModel : ObservableObject
         Log.Clear();
         IsCompiling = true;
         StatusText = $"Compiling {InputName} in {card.Title} for {target.DisplayName}. The first build for a target takes a minute or so.";
-        var progress = new Progress<CompileProgress>(AppendLog);
+        var progress = new Progress<CompileProgress>(line =>
+        {
+            if (generation == _checkGeneration) AppendLog(line);
+        });
         try
         {
-            var request = new CompileRequest(
-                InputPath,
-                card.Mode,
-                target,
-                string.IsNullOrWhiteSpace(OutputDirectory) ? null : OutputDirectory.Trim(),
-                SignOutput ? SelectedCertificate?.Thumbprint : null,
-                CurrentFileRules);
-            var result = await _engine.CompileAsync(request, progress, operation.Token);
+            var result = await _engine.CompileAsync(request, approved.Review, progress, operation.Token);
+            if (generation != _checkGeneration) return;
+            InvalidateReview();
             _lastResult = result;
             if (!result.Succeeded)
             {
@@ -395,13 +417,79 @@ public sealed partial class MainWindowViewModel : ObservableObject
         }
         catch (OperationCanceledException)
         {
-            StatusText = "Build cancelled.";
+            if (generation == _checkGeneration)
+            {
+                InvalidateReview();
+                StatusText = "Build cancelled.";
+            }
         }
         finally
         {
             IsCompiling = false;
             RaiseResultChanged();
         }
+    }
+
+    private CompileRequest CreateCompileRequest(PowerShellCompilationMode mode, CompileTarget target) => new(
+        InputPath, mode, target,
+        string.IsNullOrWhiteSpace(OutputDirectory) ? null : OutputDirectory.Trim(),
+        SignOutput ? SelectedCertificate?.Thumbprint : null, CurrentFileRules);
+
+    private static bool SameSelection(CompileRequest left, CompileRequest right) =>
+        (left with { Files = null }) == (right with { Files = null }) &&
+        SameRules(left.Files ?? FileRules.Default, right.Files ?? FileRules.Default);
+
+    private async Task PrepareReviewAsync(CompileRequest request, CompileTarget target)
+    {
+        var generation = ++_checkGeneration;
+        using var operation = BeginOperation();
+        IsChecking = true;
+        StatusText = $"Checking {InputName} in {request.Mode} for {target.DisplayName}…";
+        try
+        {
+            var result = await _engine.ReviewAsync(request, operation.Token);
+            if (generation != _checkGeneration) return;
+            operation.Token.ThrowIfCancellationRequested();
+            if (SelectedMode is not { } mode || SelectedTarget is not { } currentTarget ||
+                !SameSelection(request, CreateCompileRequest(mode.Mode, currentTarget)))
+            {
+                StatusText = "The build selection changed. Review the current dependencies.";
+                return;
+            }
+
+            Dependencies.Clear();
+            foreach (var dependency in result.Dependencies) Dependencies.Add(dependency);
+            Diagnostics.Clear();
+            foreach (var diagnostic in result.Diagnostics) Diagnostics.Add(new DiagnosticItemViewModel(diagnostic));
+            if (result.Review is { } review)
+                _review = (request, review);
+            RaiseListsChanged();
+            OnPropertyChanged(nameof(HasReview));
+            OnPropertyChanged(nameof(CompileButtonText));
+            StatusText = HasReview
+                ? $"Review {request.Mode} dependencies for {target.DisplayName}, then confirm the build."
+                : "This build selection is blocked. See the problems below.";
+        }
+        catch (OperationCanceledException)
+        {
+            if (generation == _checkGeneration) StatusText = "Review cancelled.";
+        }
+        finally
+        {
+            if (generation == _checkGeneration) IsChecking = false;
+        }
+    }
+
+    private void InvalidateReview()
+    {
+        if (!HasReview) return;
+        _review = null;
+        Dependencies.Clear();
+        if (SelectedMode is { } card)
+            foreach (var dependency in card.Check.Dependencies) Dependencies.Add(dependency);
+        RefreshProblems();
+        OnPropertyChanged(nameof(HasReview));
+        OnPropertyChanged(nameof(CompileButtonText));
     }
 
     private void LoadCertificates()
@@ -467,7 +555,8 @@ public sealed partial class MainWindowViewModel : ObservableObject
     internal static string DescribeOutcome(CompileOutcome outcome, int typedUnits, int runtimeUnits) => outcome switch
     {
         CompileOutcome.Native => "Everything was compiled to .NET. It runs without PowerShell.",
-        CompileOutcome.Mixed => $"{typedUnits} of {typedUnits + runtimeUnits} parts were compiled to .NET; the rest runs on the PowerShell runtime inside it.",
+        CompileOutcome.Mixed when runtimeUnits == 0 => $"Compiled {typedUnits} units to .NET. Includes the PowerShell runtime.",
+        CompileOutcome.Mixed => $"Compiled {typedUnits} of {typedUnits + runtimeUnits} units to .NET. {runtimeUnits} run on the included PowerShell runtime.",
         CompileOutcome.Packaged => "The script was packed with the PowerShell runtime. Nothing was compiled to .NET.",
         _ => "Not built."
     };

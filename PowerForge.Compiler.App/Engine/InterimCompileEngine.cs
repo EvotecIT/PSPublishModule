@@ -6,13 +6,13 @@ using System.Security.Cryptography.X509Certificates;
 namespace PowerForge.Compiler.App.Engine;
 
 /// <summary>
-/// Maps today's compiler services onto <see cref="ICompileEngine"/>. When the engine gains the host service
-/// described in Docs/PowerForge.PowerShellCompilation.HostApi.md, this class shrinks to a direct call.
+/// Maps the shared compiler host service onto the window's models.
 /// </summary>
 internal sealed partial class InterimCompileEngine : ICompileEngine
 {
     // The engine's default (PowerShellCompilationTargetFrameworkPolicy.Default) is internal; executables accept only net10.0.
     private const string TargetFramework = "net10.0";
+    private static readonly PowerShellCompilationHostService Host = new();
 
     private static readonly PowerShellCompilationMode[] CheckedModes =
     {
@@ -24,8 +24,12 @@ internal sealed partial class InterimCompileEngine : ICompileEngine
     public Task<CheckResult> CheckAsync(string inputPath, FileRules files, CancellationToken cancellationToken) =>
         Task.Run(() => Check(inputPath, files, cancellationToken), cancellationToken);
 
-    public Task<CompileResult> CompileAsync(CompileRequest request, IProgress<CompileProgress>? progress, CancellationToken cancellationToken) =>
-        Task.Run(() => Compile(request, progress, cancellationToken), cancellationToken);
+    public Task<CompileReviewResult> ReviewAsync(CompileRequest request, CancellationToken cancellationToken) =>
+        Task.Run(() => Review(request, cancellationToken), cancellationToken);
+
+    public Task<CompileResult> CompileAsync(CompileRequest request, PowerShellCompilationReview review,
+        IProgress<CompileProgress>? progress, CancellationToken cancellationToken) =>
+        Task.Run(() => Compile(request, review, progress, cancellationToken), cancellationToken);
 
     public IReadOnlyList<CompileTarget> GetTargets(PowerShellCompilationMode mode, PowerShellCompilationArtifactKind kind)
     {
@@ -81,7 +85,8 @@ internal sealed partial class InterimCompileEngine : ICompileEngine
         PowerShellCompilationResolvedInput resolved;
         try
         {
-            resolved = new PowerShellCompilationInputResolver().Resolve(fullPath);
+            resolved = new PowerShellCompilationInputResolver().Resolve(fullPath,
+                allowDynamicModuleRuntimeSources: files.Mode == PowerShellCompilationResourceMode.CompleteModule);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -92,7 +97,7 @@ internal sealed partial class InterimCompileEngine : ICompileEngine
         foreach (var mode in CheckedModes)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            modes.Add(CheckMode(fullPath, resolved.Kind, mode, files));
+            modes.Add(CheckMode(fullPath, resolved, mode, files, cancellationToken));
         }
 
         return new CheckResult(
@@ -105,73 +110,58 @@ internal sealed partial class InterimCompileEngine : ICompileEngine
             stopwatch.Elapsed);
     }
 
-    private static ModeCheck CheckMode(string fullPath, PowerShellCompilationArtifactKind kind, PowerShellCompilationMode mode, FileRules files)
+    private static ModeCheck CheckMode(string fullPath, PowerShellCompilationResolvedInput resolved,
+        PowerShellCompilationMode mode, FileRules files, CancellationToken cancellationToken)
+    {
+        var check = Host.Check(new PowerShellCompilationCheckRequest(fullPath)
+        {
+            Kind = resolved.Kind,
+            Mode = mode,
+            ResourceMode = files.Mode,
+            IncludeResource = files.Include.ToArray(),
+            ExcludeResource = files.Exclude.ToArray()
+        }, cancellationToken);
+        return new ModeCheck(mode,
+            GetOutcome(mode, check.CanProceed, check.Explanation?.TypedUnits ?? 0),
+            check.Explanation?.TypedUnits ?? 0,
+            check.Explanation?.RuntimeFallbackUnits ?? 0,
+            check.Explanation?.RejectedUnits ?? 0,
+            check.Diagnostics.Select(MapDiagnostic).ToArray(),
+            MapDependencies(check.Dependencies, resolved.SourcePath));
+    }
+
+    private static CompileReviewResult Review(CompileRequest request, CancellationToken cancellationToken)
     {
         try
         {
-            var resolved = new PowerShellCompilationInputResolver().Resolve(fullPath, kind, mode, AllowsRuntimeSources(files, mode));
-            var plan = new PowerShellCompilationAnalyzer(Array.Empty<PowerShellCompilationCommandProviderContract>(), GetSemanticProfileId()).Analyze(
-                resolved,
-                mode,
-                TargetFramework,
-                files.Mode,
-                files.Include,
-                files.Exclude,
-                PowerShellCompilationOutputPolicy.GetDefaultOutputDirectory(resolved),
-                null);
-            var explanation = PowerShellCompilationExplainShaper.CreateFinalExplanation(resolved, plan, TargetFramework);
-            return MapExplanation(mode, explanation, resolved);
+            var (resolved, spec) = CreateBuildSpec(request);
+            var check = Host.Check(new PowerShellCompilationCheckRequest(request.InputPath)
+            {
+                Target = spec.TargetContract,
+                OutputDirectory = spec.OutputDirectory,
+                ResourceMode = spec.ResourceMode,
+                IncludeResource = spec.IncludeResource,
+                ExcludeResource = spec.ExcludeResource
+            }, cancellationToken);
+            var doctor = check.CanProceed ? Host.Doctor(check.ProposedReview!.Target, cancellationToken) : null;
+            var dependencies = MapDependencies(check.Dependencies, resolved.SourcePath);
+            var diagnostics = check.Diagnostics.Concat(doctor?.Diagnostics ?? Array.Empty<PowerShellCompilationHostDiagnostic>())
+                .Select(MapDiagnostic).ToArray();
+            return new CompileReviewResult(doctor is { Succeeded: true } ? check.ProposedReview : null, dependencies, diagnostics);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            // The engine refuses some inputs by throwing (for example a Strict result type it cannot represent).
-            return new ModeCheck(
-                mode,
-                CompileOutcome.Blocked,
-                0,
-                0,
-                0,
-                new[] { new CompileDiagnostic(CompileSeverity.Error, "Rejected", string.Empty, ex.Message, fullPath, 0, 0) },
-                Array.Empty<CompileDependency>());
+            return new CompileReviewResult(null, Array.Empty<CompileDependency>(),
+                new[] { new CompileDiagnostic(CompileSeverity.Error, "InputError", string.Empty, ex.Message, request.InputPath, 0, 0) });
         }
     }
 
-    internal static ModeCheck MapExplanation(
-        PowerShellCompilationMode mode,
-        PowerShellCompilationExplanation explanation,
-        PowerShellCompilationResolvedInput resolved)
+    private static CompileDependency[] MapDependencies(IEnumerable<PowerShellCompilationDependency> dependencies, string sourcePath)
     {
-        var root = resolved.ModuleRoot;
-        var diagnostics = new List<CompileDiagnostic>();
-        foreach (var file in explanation.Files)
-        {
-            var path = Path.GetFullPath(Path.Combine(root, file.RelativePath));
-            foreach (var cause in file.Causes)
-                diagnostics.Add(ToDiagnostic(cause, path, explanation.CanProceed ? CompileSeverity.Warning : CompileSeverity.Error));
-            foreach (var unit in file.Units)
-            {
-                var severity = unit.Decision == PowerShellCompilationDecisionKind.Rejected ? CompileSeverity.Error : CompileSeverity.Info;
-                foreach (var cause in unit.Causes)
-                    diagnostics.Add(ToDiagnostic(cause, path, severity));
-            }
-        }
-
-        foreach (var cause in explanation.DependencyCauses)
-        {
-            diagnostics.Add(new CompileDiagnostic(
-                explanation.CanProceed ? CompileSeverity.Warning : CompileSeverity.Error,
-                cause.Kind.ToString(),
-                cause.Discovery.ToString(),
-                cause.Message,
-                string.IsNullOrEmpty(cause.RelativePath) ? string.Empty : Path.GetFullPath(Path.Combine(root, cause.RelativePath)),
-                0,
-                0));
-        }
-
-        var entryName = Path.GetFileName(resolved.SourcePath);
-        var dependencies = explanation.Dependencies
+        var comparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+        return dependencies
             .Where(dependency => !(dependency.Kind == PowerShellCompilationDependencyKind.PowerShellSource &&
-                                   Path.GetFileName(dependency.RelativePath).Equals(entryName, StringComparison.OrdinalIgnoreCase)))
+                                   string.Equals(dependency.SourcePath, sourcePath, comparison)))
             .Select(static dependency => new CompileDependency(
                 string.IsNullOrEmpty(dependency.Name) ? dependency.RelativePath : dependency.Name,
                 dependency.Kind.ToString(),
@@ -179,19 +169,6 @@ internal sealed partial class InterimCompileEngine : ICompileEngine
                 dependency.RelativePath))
             .ToArray();
 
-        return new ModeCheck(
-            mode,
-            GetOutcome(mode, explanation.CanProceed, explanation.TypedUnits),
-            explanation.TypedUnits,
-            explanation.RuntimeFallbackUnits,
-            explanation.RejectedUnits,
-            diagnostics
-                .OrderByDescending(static diagnostic => diagnostic.Severity)
-                .ThenBy(static diagnostic => diagnostic.FilePath, StringComparer.OrdinalIgnoreCase)
-                .ThenBy(static diagnostic => diagnostic.Line)
-                .ThenBy(static diagnostic => diagnostic.Column)
-                .ToArray(),
-            dependencies);
     }
 
     internal static CompileOutcome GetOutcome(PowerShellCompilationMode mode, bool canProceed, int typedUnits)
@@ -216,7 +193,8 @@ internal sealed partial class InterimCompileEngine : ICompileEngine
                 ?? Find(PowerShellCompilationMode.Hybrid, CompileOutcome.Packaged))?.Mode;
     }
 
-    private static CompileResult Compile(CompileRequest request, IProgress<CompileProgress>? progress, CancellationToken cancellationToken)
+    private static CompileResult Compile(CompileRequest request, PowerShellCompilationReview review,
+        IProgress<CompileProgress>? progress, CancellationToken cancellationToken)
     {
         var stopwatch = Stopwatch.StartNew();
         if (!TryGetExistingPath(request.InputPath, out var fullPath, out var pathProblem))
@@ -225,45 +203,8 @@ internal sealed partial class InterimCompileEngine : ICompileEngine
         var logger = new ProgressLogger(progress);
         try
         {
-            var files = request.Files ?? FileRules.Default;
-            var resolved = new PowerShellCompilationInputResolver().Resolve(fullPath, mode: request.Mode, allowDynamicModuleRuntimeSources: AllowsRuntimeSources(files, request.Mode));
-            var deployment = request.Target?.Deployment ?? PowerShellCompilationDeploymentModel.FrameworkDependent;
-            var framework = string.IsNullOrWhiteSpace(request.Target?.TargetFramework) ? TargetFramework : request.Target!.TargetFramework;
-            var spec = new PowerShellCompilationBuildSpec(
-                resolved.SourcePath,
-                request.OutputDirectory ?? PowerShellCompilationOutputPolicy.GetDefaultOutputDirectory(resolved),
-                resolved.ArtifactName,
-                resolved.Kind,
-                resolved.Mode)
-            {
-                ModuleManifestPath = resolved.ModuleManifestPath,
-                CompilationSourcePaths = resolved.CompilationSourceFiles,
-                RuntimeSourcePaths = resolved.SourceFiles,
-                ResourceMode = files.Mode,
-                IncludeResource = files.Include.ToArray(),
-                ExcludeResource = files.Exclude.ToArray(),
-                TargetFramework = framework,
-                SemanticProfileId = GetSemanticProfileId(framework),
-                RuntimeIdentifier = request.Target?.RuntimeIdentifier,
-                // The engine requires self-contained single-file output for trimmed and NativeAOT executables.
-                SelfContained = RequiresSelfContained(deployment),
-                SingleFile = true,
-                Optimization = deployment switch
-                {
-                    PowerShellCompilationDeploymentModel.Trimmed => PowerShellCompilationExecutableOptimization.Trimmed,
-                    PowerShellCompilationDeploymentModel.NativeAot => PowerShellCompilationExecutableOptimization.NativeAot,
-                    _ => PowerShellCompilationExecutableOptimization.None
-                },
-                UseBuildCache = true,
-                SignArtifact = !string.IsNullOrWhiteSpace(request.SigningThumbprint),
-                CertificateThumbprint = request.SigningThumbprint,
-                CertificateStoreLocation = CertificateStoreLocation.CurrentUser,
-                TimeStampServer = "http://timestamp.digicert.com",
-                // A development build until the engine produces a reviewed lock from Check (HostApi.md, slice 3).
-                AllowUnreviewedDependencyResolution = true
-            };
-
-            var result = new PowerShellCompilationArtifactBuilder().Build(spec, logger, cancellationToken);
+            var (_, spec) = CreateBuildSpec(request);
+            var result = Host.Compile(spec, review, logger, cancellationToken);
             stopwatch.Stop();
             if (result.Succeeded)
                 PowerShellCompilationBuildReport.WriteSuccess(logger, result, stopwatch.Elapsed);
@@ -277,6 +218,47 @@ internal sealed partial class InterimCompileEngine : ICompileEngine
         {
             return Failed(new CompileDiagnostic(CompileSeverity.Error, "BuildError", string.Empty, ex.Message, fullPath, 0, 0), request.Mode, stopwatch.Elapsed);
         }
+    }
+
+    private static (PowerShellCompilationResolvedInput Input, PowerShellCompilationBuildSpec Spec) CreateBuildSpec(CompileRequest request)
+    {
+        var files = request.Files ?? FileRules.Default;
+        var resolved = new PowerShellCompilationInputResolver().Resolve(request.InputPath, mode: request.Mode,
+            allowDynamicModuleRuntimeSources: AllowsRuntimeSources(files, request.Mode));
+        return (resolved, new PowerShellCompilationBuildSpec(resolved.SourcePath,
+            request.OutputDirectory ?? PowerShellCompilationOutputPolicy.GetDefaultOutputDirectory(resolved),
+            resolved.ArtifactName, resolved.Kind, resolved.Mode)
+        {
+            ModuleManifestPath = resolved.ModuleManifestPath,
+            CompilationSourcePaths = resolved.CompilationSourceFiles,
+            RuntimeSourcePaths = resolved.SourceFiles,
+            ResourceMode = files.Mode,
+            IncludeResource = files.Include.ToArray(),
+            ExcludeResource = files.Exclude.ToArray(),
+            TargetContract = CreateTarget(resolved.Kind, resolved.Mode, request.Target),
+            UseBuildCache = true,
+            SignArtifact = !string.IsNullOrWhiteSpace(request.SigningThumbprint),
+            CertificateThumbprint = request.SigningThumbprint,
+            CertificateStoreLocation = CertificateStoreLocation.CurrentUser,
+            TimeStampServer = "http://timestamp.digicert.com"
+        });
+    }
+
+    private static PowerShellCompilationTargetContract CreateTarget(PowerShellCompilationArtifactKind kind,
+        PowerShellCompilationMode mode, CompileTarget? target)
+    {
+        var deployment = target?.Deployment ?? PowerShellCompilationDeploymentModel.FrameworkDependent;
+        var framework = string.IsNullOrWhiteSpace(target?.TargetFramework) ? TargetFramework : target.TargetFramework;
+        var optimization = deployment switch
+        {
+            PowerShellCompilationDeploymentModel.Trimmed => PowerShellCompilationExecutableOptimization.Trimmed,
+            PowerShellCompilationDeploymentModel.NativeAot => PowerShellCompilationExecutableOptimization.NativeAot,
+            _ => PowerShellCompilationExecutableOptimization.None
+        };
+        return PowerShellCompilationTargetContractService.Create(kind, mode, framework,
+            target?.RuntimeIdentifier, RequiresSelfContained(deployment),
+            singleFile: kind == PowerShellCompilationArtifactKind.Executable,
+            optimization, explicitContract: true);
     }
 
     internal static CompileResult MapBuildResult(PowerShellCompilationBuildResult result, PowerShellCompilationMode mode, TimeSpan elapsed)
@@ -370,22 +352,21 @@ internal sealed partial class InterimCompileEngine : ICompileEngine
     private static bool AllowsRuntimeSources(FileRules files, PowerShellCompilationMode mode) =>
         files.Mode == PowerShellCompilationResourceMode.CompleteModule && mode != PowerShellCompilationMode.Strict;
 
-    private static string GetSemanticProfileId(string targetFramework = TargetFramework) =>
-        PowerShellCompilationSemanticOracleCatalog.Get(
-            PowerShellCompilationTargetContractService.GetDefaultSemanticProfileId(targetFramework)).ProfileId;
-
     internal static bool RequiresSelfContained(PowerShellCompilationDeploymentModel deployment) =>
         deployment is PowerShellCompilationDeploymentModel.SelfContained
             or PowerShellCompilationDeploymentModel.Trimmed
             or PowerShellCompilationDeploymentModel.NativeAot;
 
-    private static CompileDiagnostic ToDiagnostic(PowerShellCompilationExplanationDiagnostic cause, string path, CompileSeverity severity) =>
-        new(severity, cause.Code.ToString(), cause.FeatureId, cause.Message, path, cause.Line, cause.Column);
+    private static CompileDiagnostic MapDiagnostic(PowerShellCompilationHostDiagnostic diagnostic) =>
+        new(diagnostic.Severity == PowerShellCompilationHostSeverity.Error ? CompileSeverity.Error : CompileSeverity.Warning,
+            diagnostic.Code.ToString(), diagnostic.FeatureId, diagnostic.Message, diagnostic.FilePath,
+            diagnostic.Line, diagnostic.Column, diagnostic.Fix);
 
     private static DependencyPlacement ToPlacement(PowerShellCompilationDependencyDisposition disposition) => disposition switch
     {
         PowerShellCompilationDependencyDisposition.ExternalRequirement => DependencyPlacement.RequiredOnTarget,
-        PowerShellCompilationDependencyDisposition.NotIncluded or PowerShellCompilationDependencyDisposition.Missing => DependencyPlacement.Blocked,
+        PowerShellCompilationDependencyDisposition.NotIncluded => DependencyPlacement.Excluded,
+        PowerShellCompilationDependencyDisposition.Missing => DependencyPlacement.Blocked,
         _ => DependencyPlacement.Bundled
     };
 

@@ -270,6 +270,7 @@ public sealed partial class MainWindowViewModel
     {
         if (_fileMode == mode) return;
         _fileMode = mode;
+        InvalidateReview();
         OnPropertyChanged(nameof(FilesLoadedOnly));
         OnPropertyChanged(nameof(FilesWholeFolder));
         OnPropertyChanged(nameof(FilesScriptOnly));

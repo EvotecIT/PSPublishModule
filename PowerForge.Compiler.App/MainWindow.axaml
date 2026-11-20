@@ -372,6 +372,7 @@
                           <Border Classes="severity" Classes.error="{Binding IsError}" Classes.warning="{Binding IsWarning}" CornerRadius="2" />
                           <StackPanel Grid.Column="2" Spacing="3">
                             <TextBlock Text="{Binding Message}" TextWrapping="Wrap" />
+                            <TextBlock Classes="muted" Text="{Binding Fix}" IsVisible="{Binding HasFix}" TextWrapping="Wrap" />
                             <StackPanel Orientation="Horizontal" Spacing="14">
                               <TextBlock Classes="muted" Text="{Binding SeverityText}" FontSize="12" FontWeight="SemiBold" />
                               <TextBlock Classes="mono muted" Text="{Binding Location}" FontSize="12" IsVisible="{Binding HasLocation}" />

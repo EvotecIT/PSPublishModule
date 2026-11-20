@@ -61,6 +61,10 @@ public sealed partial class MainWindow : Window
         {
             Tabs.SelectedIndex = 0;
         }
+        else if (e.PropertyName == nameof(MainWindowViewModel.HasReview) && _viewModel.HasReview)
+        {
+            Tabs.SelectedIndex = 1;
+        }
     }
 
     private void OnLogChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e) =>

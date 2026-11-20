@@ -86,6 +86,12 @@ public sealed class DiagnosticItemViewModel
     /// <summary>Message text.</summary>
     public string Message => Diagnostic.Message;
 
+    /// <summary>Suggested correction, when the compiler provides one.</summary>
+    public string Fix => Diagnostic.Fix;
+
+    /// <summary>Whether the finding has a suggested correction.</summary>
+    public bool HasFix => !string.IsNullOrEmpty(Fix);
+
     /// <summary>File and line.</summary>
     public string Location => Diagnostic.Location;
 

@@ -32,22 +32,7 @@ internal sealed partial class InterimCompileEngine
             var inputPath = Path.GetFullPath(request.InputPath);
             var service = new PowerShellCompilationProjectManifestService();
             var kind = new PowerShellCompilationInputResolver().Resolve(inputPath).Kind;
-            var deployment = request.Target.Deployment;
-            var contract = PowerShellCompilationTargetContractService.Create(
-                kind,
-                request.Mode,
-                request.Target.TargetFramework,
-                request.Target.RuntimeIdentifier,
-                selfContained: RequiresSelfContained(deployment),
-                singleFile: true,
-                optimization: deployment switch
-                {
-                    PowerShellCompilationDeploymentModel.Trimmed => PowerShellCompilationExecutableOptimization.Trimmed,
-                    PowerShellCompilationDeploymentModel.NativeAot => PowerShellCompilationExecutableOptimization.NativeAot,
-                    _ => PowerShellCompilationExecutableOptimization.None
-                },
-                explicitContract: true,
-                semanticProfileId: GetSemanticProfileId(request.Target.TargetFramework));
+            var contract = CreateTarget(kind, request.Mode, request.Target);
 
             // A fresh manifest gives the engine's own name, lock path and output folder for this target.
             var fresh = service.Create(settingsPath, inputPath, Path.GetFileNameWithoutExtension(inputPath.TrimEnd('\\', '/')), contract);

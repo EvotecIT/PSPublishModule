@@ -29,9 +29,9 @@ public sealed class InterimCompileEngineTests : IDisposable
     }
 
     [Fact]
-    public async Task CheckBlocksPackageModeOnRequiresAndRecommendsAModeThatBuilds()
+    public async Task CheckReportsAnIncompatiblePowerShellRequirementInPackageMode()
     {
-        var script = Write("Report.ps1", "#requires -Version 7.4\nGet-ChildItem -Path $PSScriptRoot | Select-Object Name\n");
+        var script = Write("Report.ps1", "#requires -Version 99.0\nGet-ChildItem -Path $PSScriptRoot | Select-Object Name\n");
 
         var result = await new InterimCompileEngine().CheckAsync(script, FileRules.Default, CancellationToken.None);
 
@@ -43,13 +43,36 @@ public sealed class InterimCompileEngineTests : IDisposable
         Assert.Equal(script, requires.FilePath, ignoreCase: true);
         Assert.Contains("#requires", requires.Message, StringComparison.Ordinal);
 
-        var hybrid = Assert.Single(result.Modes, static mode => mode.Mode == PowerShellCompilationMode.Hybrid);
-        Assert.NotEqual(CompileOutcome.Blocked, hybrid.Outcome);
-        Assert.Equal(PowerShellCompilationMode.Hybrid, result.Recommended);
     }
 
     [Fact]
-    public async Task CheckCountsTypedFunctionsInHybridMode()
+    public async Task ReviewedSelectionBuildsAndRejectsChangedSource()
+    {
+        var script = Write("Reviewed.ps1", "return 21");
+        var engine = new InterimCompileEngine();
+        var target = new CompileTarget("local", PowerShellCompilationMode.Strict, "net10.0",
+            System.Runtime.InteropServices.RuntimeInformation.RuntimeIdentifier,
+            PowerShellCompilationDeploymentModel.FrameworkDependent, "Supported", true);
+        var output = Path.Combine(_root, "output");
+        var request = new CompileRequest(script, PowerShellCompilationMode.Strict, target, output);
+        var check = await engine.ReviewAsync(request, CancellationToken.None);
+        Assert.NotNull(check.Review);
+
+        var first = await engine.CompileAsync(request, check.Review, progress: null, CancellationToken.None);
+        Assert.True(first.Succeeded, string.Join(Environment.NewLine, first.Diagnostics.Select(static item => item.Message)));
+        var delivered = File.ReadAllBytes(first.ArtifactPath!);
+        File.WriteAllText(script, "return 22");
+
+        var second = await engine.CompileAsync(request, check.Review, progress: null, CancellationToken.None);
+        Assert.False(second.Succeeded);
+        Assert.Contains(second.Diagnostics, static diagnostic =>
+            diagnostic.Message.Contains("review", StringComparison.OrdinalIgnoreCase) ||
+            diagnostic.Message.Contains("lock", StringComparison.OrdinalIgnoreCase));
+        Assert.Equal(delivered, File.ReadAllBytes(first.ArtifactPath!));
+    }
+
+    [Fact]
+    public async Task CheckCountsTypedFunctionAndEntryUnitsInHybridMode()
     {
         var script = Write("Add.ps1", "function Add-Numbers {\n    param([int] $A, [int] $B)\n    return $A + $B\n}\nAdd-Numbers -A 2 -B 3\n");
 
@@ -57,7 +80,7 @@ public sealed class InterimCompileEngineTests : IDisposable
 
         var hybrid = Assert.Single(result.Modes, static mode => mode.Mode == PowerShellCompilationMode.Hybrid);
         Assert.Equal(CompileOutcome.Mixed, hybrid.Outcome);
-        Assert.Equal(1, hybrid.TypedUnits);
+        Assert.Equal(2, hybrid.TypedUnits);
         Assert.All(result.Modes, static mode => Assert.DoesNotContain(mode.Dependencies, static dependency => dependency.Name == "Add.ps1"));
     }
 

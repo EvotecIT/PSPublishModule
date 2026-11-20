@@ -153,7 +153,11 @@ public sealed class SettingsAndCheckOrderTests : IDisposable
 
         public IReadOnlyList<SigningCertificate> GetSigningCertificates() => Array.Empty<SigningCertificate>();
 
-        public Task<CompileResult> CompileAsync(CompileRequest request, IProgress<CompileProgress>? progress, CancellationToken cancellationToken) =>
+        public Task<CompileReviewResult> ReviewAsync(CompileRequest request, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task<CompileResult> CompileAsync(CompileRequest request, PowerShellCompilationReview review,
+            IProgress<CompileProgress>? progress, CancellationToken cancellationToken) =>
             throw new NotSupportedException();
 
         public SettingsResult OpenSettings(string settingsPath) => new(Settings, null);
