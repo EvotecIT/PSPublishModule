@@ -25,7 +25,8 @@ internal static class PowerShellConventionalModuleSourceDiscovery
         var discoveredDirectories = new HashSet<string>(PowerShellCompilationPathSafety.PathComparer);
         var recursiveDirectories = new HashSet<string>(PowerShellCompilationPathSafety.PathComparer);
         var loaders = new Dictionary<int, PowerShellConventionalLoaderIdentity>();
-        var enumerations = FindFileEnumerationAssignments(ast).ToArray();
+        var hasLocalProducer = HasLocalEnumerationFunction(ast);
+        var enumerations = FindFileEnumerationAssignments(ast, hasLocalProducer).ToArray();
         foreach (var command in ast.FindAll(
                      node => node is CommandAst candidate && IsTopLevel(candidate, ast),
                      searchNestedScriptBlocks: true)
@@ -35,7 +36,9 @@ internal static class PowerShellConventionalModuleSourceDiscovery
             if (!TryReadPathPattern(command, out var relativePattern, out var isLiteralPath, out var pathElementIndex) ||
                 !Path.GetExtension(relativePattern).Equals(".ps1", StringComparison.OrdinalIgnoreCase))
                 continue;
-            var associations = FindConventionalLoaders(command, ast, rootPath, enumerations).ToArray();
+            var trustedProducer = IsFileEnumerationCommand(command, hasLocalProducer);
+            var associations = FindConventionalLoaders(command, ast, rootPath, enumerations)
+                .Select(association => (association.Loader, Stable: association.Stable && trustedProducer)).ToArray();
             if (associations.Length == 0)
                 continue;
             if (rejectChangingFileLists && associations.Any(static association => !association.Stable))
@@ -155,7 +158,7 @@ internal static class PowerShellConventionalModuleSourceDiscovery
             return false;
 
         var exportOffset = argument.Extent.StartOffset;
-        var enumerations = FindFileEnumerationAssignments(root).ToArray();
+        var enumerations = FindFileEnumerationAssignments(root, HasLocalEnumerationFunction(root)).ToArray();
         var loaders = new List<(ForEachStatementAst Loop, List<VariableExpressionAst> Inputs)>();
         foreach (var loader in root.FindAll(
                      node => node is ForEachStatementAst candidate && IsTopLevel(candidate, root),
@@ -192,14 +195,15 @@ internal static class PowerShellConventionalModuleSourceDiscovery
         return loadsExportedFiles;
     }
 
-    private static IEnumerable<(AssignmentStatementAst Assignment, string Name)> FindFileEnumerationAssignments(ScriptBlockAst root)
+    private static IEnumerable<(AssignmentStatementAst Assignment, string Name)> FindFileEnumerationAssignments(
+        ScriptBlockAst root, bool hasLocalProducer)
     {
         foreach (var producer in root.FindAll(static node => node is CommandAst, searchNestedScriptBlocks: false).Cast<CommandAst>())
         {
             if (!IsTopLevel(producer, root) ||
                 producer.Parent is not PipelineAst { PipelineElements.Count: 1 } pipeline ||
                 producer.Redirections.Count != 0 ||
-                !string.Equals(GetUnqualifiedCommandName(producer), "Get-ChildItem", StringComparison.OrdinalIgnoreCase) ||
+                !IsFileEnumerationCommand(producer, hasLocalProducer) ||
                 !TryReadPathPattern(producer, out var pattern, out _, out _) ||
                 !Path.GetExtension(pattern).Equals(".ps1", StringComparison.OrdinalIgnoreCase) ||
                 FindAncestor<AssignmentStatementAst>(producer, root) is not
@@ -212,6 +216,19 @@ internal static class PowerShellConventionalModuleSourceDiscovery
 
             yield return (assignment, declared.VariablePath.UserPath);
         }
+    }
+
+    private static bool HasLocalEnumerationFunction(ScriptBlockAst root)
+        => root.FindAll(static node => node is FunctionDefinitionAst, searchNestedScriptBlocks: false)
+            .Cast<FunctionDefinitionAst>()
+            .Any(static function => function.Name.Substring(function.Name.LastIndexOf(':') + 1)
+                .Equals("Get-ChildItem", StringComparison.OrdinalIgnoreCase));
+
+    private static bool IsFileEnumerationCommand(CommandAst producer, bool hasLocalProducer)
+    {
+        var name = producer.GetCommandName();
+        return string.Equals(name, @"Microsoft.PowerShell.Management\Get-ChildItem", StringComparison.OrdinalIgnoreCase) ||
+               !hasLocalProducer && string.Equals(name, "Get-ChildItem", StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool TryReadFileEnumerationInputs(Ast node, List<VariableExpressionAst> inputs)

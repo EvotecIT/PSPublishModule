@@ -445,14 +445,17 @@ public sealed partial class PowerShellCompilationInputResolverTests
         Assert.Contains("requires a wildcard file pattern", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
-    [Fact]
-    public void Resolve_RejectsConditionalConventionalSourceProducer()
+    [Theory]
+    [InlineData("if ($false) { $Files = @(Get-ChildItem -Path $PSScriptRoot/Public/*.ps1) }")]
+    [InlineData("function script:Get-ChildItem { param($Path); [pscustomobject]@{ FullName = 'Other.ps1' } }; $Files = @(Get-ChildItem -Path $PSScriptRoot/Public/*.ps1)")]
+    [InlineData(@"$Files = @(OtherManagement\Get-ChildItem -Path $PSScriptRoot/Public/*.ps1)")]
+    public void Resolve_RejectsUnprovenConventionalSourceProducer(string producer)
     {
         using var fixture = ResolverFixture.Create("ConditionalProducerModule");
         fixture.Write("ConditionalProducerModule.psd1", "@{ RootModule = 'ConditionalProducerModule.psm1' }");
         fixture.Write(
             "ConditionalProducerModule.psm1",
-            "if ($false) { $Files = @(Get-ChildItem -Path $PSScriptRoot/Public/*.ps1) }; foreach ($File in $Files) { . $File.FullName }");
+            producer + "; foreach ($File in $Files) { . $File.FullName }");
         fixture.Write("Public/Get-UnloadedProof.ps1", "function Get-UnloadedProof { return 1 }");
 
         var exception = Assert.Throws<InvalidOperationException>(() =>
