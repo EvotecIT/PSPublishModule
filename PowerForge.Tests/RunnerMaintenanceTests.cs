@@ -7,7 +7,7 @@ namespace PowerForge.Tests;
 public sealed class RunnerMaintenanceCollection;
 
 [Collection("Runner maintenance")]
-public sealed class RunnerMaintenanceTests
+public sealed partial class RunnerMaintenanceTests
 {
     [Fact]
     public void Maintain_DisabledInstallationRetainsOutputAndQuarantineWhileOtherRunnerCleans()
