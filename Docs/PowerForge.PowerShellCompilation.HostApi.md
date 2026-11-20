@@ -238,7 +238,6 @@ Each slice is useful on its own and adds a CLI command or option before any host
 8. **Executable details**: icon, version and file properties, console or windowed subsystem, and requested execution level.
 9. **Signing inside the output**: embedded scripts and bundled build-owned files signed before packaging, optional dependency signing, one signing session.
 10. **Source exposure**: relative embedded paths, `ContainsEmbeddedPowerShellSource` in the compile result, and the secret warnings in `Check`.
-
 11. **Startup manifest and threading**: roadmap items E5 to E7.
 12. **Windowed host**: H2 and H3.
 13. **Tray host**: H4 and E8.
