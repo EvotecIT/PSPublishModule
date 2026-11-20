@@ -305,7 +305,7 @@ public sealed partial class BenchmarkEvidenceCatalogService
                 }
             }
 
-            BenchmarkJson.Write(fullPath, updated);
+            BenchmarkJson.WriteMinified(fullPath, updated);
             return updated;
         }
         catch (Exception publicationException)

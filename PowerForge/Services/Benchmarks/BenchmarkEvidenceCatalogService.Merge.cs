@@ -222,7 +222,7 @@ public sealed partial class BenchmarkEvidenceCatalogService
             // independently committed publication.
             BenchmarkJson.WriteBytes(destinationPath, lane.ArtifactBytes);
         }
-        BenchmarkJson.Write(outputCatalogPath, merged);
+        BenchmarkJson.WriteMinified(outputCatalogPath, merged);
         return merged;
     }
 

@@ -11,7 +11,11 @@ namespace PowerForge;
 /// </summary>
 public static class BenchmarkJson
 {
-    private static readonly JsonSerializerOptions Options = new()
+    private static readonly JsonSerializerOptions MinifiedOptions = new(CreateOptions()) { WriteIndented = false };
+
+    private static readonly JsonSerializerOptions Options = CreateOptions();
+
+    private static JsonSerializerOptions CreateOptions() => new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         PropertyNameCaseInsensitive = true,
@@ -178,6 +182,13 @@ public static class BenchmarkJson
         return BitConverter.ToString(sha256.ComputeHash(bytes))
             .Replace("-", string.Empty)
             .ToLowerInvariant();
+    }
+
+    /// <summary>Writes a JSON artifact on one line, for large published files that are read by tools rather than people.</summary>
+    internal static void WriteMinified<T>(string path, T value)
+    {
+        if (string.IsNullOrWhiteSpace(path)) throw new ArgumentException("Output path is required.", nameof(path));
+        WriteBytes(path, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false).GetBytes(JsonSerializer.Serialize(value, MinifiedOptions)));
     }
 
     internal static byte[] SerializeCanonicalBytes<T>(T value)

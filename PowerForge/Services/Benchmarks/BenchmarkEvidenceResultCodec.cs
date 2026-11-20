@@ -194,7 +194,8 @@ internal static class BenchmarkEvidenceResultCodec
             Runner = result.Runner,
             Metadata = SortedOrNull(result.Metadata),
             Artifacts = SortedOrNull(result.Artifacts),
-            Validations = result.Validations is { Length: > 0 } ? result.Validations : null,
+            // Every benchmark process records the validation it ran, so identical records repeat once per case.
+            Validations = result.Validations is { Length: > 0 } ? DistinctValidations(result.Validations) : null,
             AcceptedLibraries = result.AcceptedLibraries is { Length: > 0 } ? result.AcceptedLibraries : null,
             Defaults = new CompactDefaults
             {
@@ -371,6 +372,13 @@ internal static class BenchmarkEvidenceResultCodec
             FailureReasons = new Dictionary<string, int>(row.FailureReasons ?? new SortedDictionary<string, int>(StringComparer.Ordinal), StringComparer.OrdinalIgnoreCase),
             Metrics = new Dictionary<string, double>(row.Metrics ?? new SortedDictionary<string, double>(StringComparer.Ordinal), StringComparer.OrdinalIgnoreCase)
         };
+
+    private static BenchmarkOutputValidation[] DistinctValidations(IEnumerable<BenchmarkOutputValidation> validations)
+        => validations
+            .GroupBy(value => (value.Library ?? string.Empty) + "" + (value.Case ?? string.Empty) + "" +
+                              (value.Status?.ToString() ?? string.Empty) + "" + (value.Detail ?? string.Empty), StringComparer.Ordinal)
+            .Select(group => group.First())
+            .ToArray();
 
     /// <summary>Rounds a measured value to the six significant digits published results keep.</summary>
     internal static double Round(double value)
