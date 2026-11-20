@@ -56,6 +56,8 @@ public sealed partial class PowerShellCompilationArtifactBuilder
         }
         foreach (var sourceDirectory in conventionalDiscovery.SourceDirectories)
         {
+            if (PowerShellCompilationPathSafety.PathEquals(sourceRoot, sourceDirectory))
+                continue;
             var relativeDirectory = FrameworkCompatibility.GetRelativePath(sourceRoot, sourceDirectory);
             var targetDirectory = Path.GetFullPath(Path.Combine(moduleDirectory, relativeDirectory));
             PowerShellCompilationPathSafety.EnsureContained(

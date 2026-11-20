@@ -79,14 +79,14 @@ internal sealed class PowerShellModuleExportContract
                     currentParameter = ResolveParameter(parameter);
                     if (parameter.Argument is not null)
                     {
-                        values[currentParameter].AddRange(ReadExportValues(parameter.Argument, assignments, ref usesRuntimeBinding));
+                        values[currentParameter].AddRange(ReadExportValues(ast, currentParameter, parameter.Argument, assignments, ref usesRuntimeBinding));
                         currentParameter = null;
                     }
                     continue;
                 }
                 if (currentParameter is null)
                     throw new InvalidOperationException($"Export-ModuleMember at line {command.Extent.StartLineNumber} uses positional or dynamic export arguments; use literal -Function, -Cmdlet, -Alias, or -Variable values.");
-                values[currentParameter].AddRange(ReadExportValues(element, assignments, ref usesRuntimeBinding));
+                values[currentParameter].AddRange(ReadExportValues(ast, currentParameter, element, assignments, ref usesRuntimeBinding));
             }
         }
 
@@ -190,12 +190,15 @@ internal sealed class PowerShellModuleExportContract
     }
 
     private static IReadOnlyList<string> ReadExportValues(
+        ScriptBlockAst root,
+        string parameterName,
         CommandElementAst element,
         HashSet<string> assignments,
         ref bool usesRuntimeBinding)
     {
         if (element is VariableExpressionAst { Splatted: false, VariablePath.IsUnqualified: true } variable &&
-            assignments.Contains(variable.VariablePath.UserPath))
+            assignments.Contains(variable.VariablePath.UserPath) ||
+            parameterName == "Function" && PowerShellConventionalModuleSourceDiscovery.IsFileNameExport(root, element))
         {
             usesRuntimeBinding = true;
             return Array.Empty<string>();

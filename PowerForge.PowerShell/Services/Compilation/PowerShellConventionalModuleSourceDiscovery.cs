@@ -130,6 +130,51 @@ internal static class PowerShellConventionalModuleSourceDiscovery
     private static bool IsAccessFailure(Exception exception)
         => exception is UnauthorizedAccessException or IOException or System.Security.SecurityException;
 
+    internal static bool IsFileNameExport(ScriptBlockAst root, CommandElementAst argument)
+    {
+        if (argument is not MemberExpressionAst
+            {
+                Static: false,
+                Expression: VariableExpressionAst { VariablePath.IsUnqualified: true } receiver,
+                Member: StringConstantExpressionAst member
+            } ||
+            argument is InvokeMemberExpressionAst ||
+            !member.Value.Equals("BaseName", StringComparison.OrdinalIgnoreCase) ||
+            string.IsNullOrEmpty(root.Extent.File))
+            return false;
+
+        foreach (var producer in root.FindAll(static node => node is CommandAst, searchNestedScriptBlocks: false).Cast<CommandAst>())
+        {
+            if (producer.Extent.StartOffset >= argument.Extent.StartOffset ||
+                producer.Parent is not PipelineAst { PipelineElements.Count: 1 } pipeline ||
+                producer.Redirections.Count != 0 ||
+                !string.Equals(GetUnqualifiedCommandName(producer), "Get-ChildItem", StringComparison.OrdinalIgnoreCase) ||
+                !TryReadPathPattern(producer, out var pattern, out _, out _) ||
+                !Path.GetExtension(pattern).Equals(".ps1", StringComparison.OrdinalIgnoreCase) ||
+                FindAncestor<AssignmentStatementAst>(producer, root) is not
+                {
+                    Operator: TokenKind.Equals,
+                    Left: VariableExpressionAst { VariablePath.IsUnqualified: true } declared
+                } assignment ||
+                !IsDirectFileEnumeration(assignment.Right, pipeline) ||
+                !declared.VariablePath.UserPath.Equals(receiver.VariablePath.UserPath, StringComparison.OrdinalIgnoreCase) ||
+                HasInterveningAssignment(root, declared.VariablePath.UserPath, assignment.Extent.StartOffset, argument.Extent.StartOffset))
+                continue;
+
+            if (FindConventionalLoaders(producer, root, root.Extent.File).Any())
+                return true;
+        }
+        return false;
+    }
+
+    private static bool IsDirectFileEnumeration(StatementAst initializer, PipelineAst pipeline)
+        => ReferenceEquals(initializer, pipeline) ||
+           initializer is CommandExpressionAst
+           {
+               Redirections.Count: 0,
+               Expression: ArrayExpressionAst { SubExpression.Statements.Count: 1 } array
+           } && ReferenceEquals(array.SubExpression.Statements[0], pipeline);
+
     private static bool TryReadPathPattern(
         CommandAst command,
         out string relativePattern,
