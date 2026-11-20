@@ -49,6 +49,8 @@ internal sealed partial class InterimCompileEngine
 
             var existing = manifest.Artifacts.FirstOrDefault(saved => saved.Name.Equals(artifact.Name, StringComparison.Ordinal)) ?? artifact;
 
+            existing.Target = artifact.Target;
+
             // A blank output folder means the engine default, which also clears an earlier override.
             var root = Path.GetDirectoryName(settingsPath) ?? Directory.GetCurrentDirectory();
             existing.OutputDirectory = string.IsNullOrWhiteSpace(request.OutputDirectory)

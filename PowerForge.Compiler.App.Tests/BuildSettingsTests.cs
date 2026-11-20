@@ -69,9 +69,19 @@ public sealed class BuildSettingsTests : IDisposable
             PowerShellCompilationMode.Strict, "net10.0", System.Runtime.InteropServices.RuntimeInformation.RuntimeIdentifier,
             selfContained: false, singleFile: false, PowerShellCompilationExecutableOptimization.None, explicitContract: true);
         var projects = new PowerShellCompilationProjectManifestService();
-        projects.Save(settings, projects.Create(settings, script, "DirectoryTarget", contract));
+        var singleFile = PowerShellCompilationTargetContractService.Create(PowerShellCompilationArtifactKind.Executable,
+            PowerShellCompilationMode.Strict, "net10.0", contract.RuntimeIdentifier,
+            selfContained: false, singleFile: true, PowerShellCompilationExecutableOptimization.None, explicitContract: true);
+        projects.Save(settings, projects.Create(settings, script, "DirectoryTarget", singleFile));
 
         var engine = new InterimCompileEngine();
+        var target = engine.GetTargets(PowerShellCompilationMode.Strict, PowerShellCompilationArtifactKind.Executable)
+            .First(candidate => candidate.RuntimeIdentifier == contract.RuntimeIdentifier);
+        var saved = engine.SaveSettings(new SaveSettingsRequest(settings, script, FileRules.Default, target.Mode,
+            target with { ExactContract = contract }, null));
+        Assert.Null(saved.Problem);
+        Assert.Single(Assert.IsType<BuildSettings>(saved.Settings).Targets);
+
         var model = new MainWindowViewModel(engine);
         await model.OpenSettingsAsync(settings);
         await model.SetInputAsync(script);
