@@ -173,6 +173,9 @@ internal sealed partial class PowerShellSemanticBinder
         var statements = new List<PowerShellBoundStatement>();
         var statementBindings = new List<PowerShellBoundStatementBinding>();
         var pipelineLocals = new List<PowerShellBoundLocal>();
+        var strictStreaming = capabilities == PowerShellCompilationCapabilities.TypedExecutable
+            ? new StrictStreamingBinding(localFunctionNames, pipelineLocals)
+            : null;
         var bodyIsValid = true;
         var lastFailedStatementIndex = -1;
         for (var index = 0; index < authoredStatements.Length; index++)
@@ -224,10 +227,9 @@ internal sealed partial class PowerShellSemanticBinder
                 continue;
             }
             var diagnosticCount = diagnostics.Count;
-            if (capabilities == PowerShellCompilationCapabilities.TypedExecutable &&
-                TryGetStrictStreamingPipeline(statement, symbols, out var pipeline, out var pipelineCapture) &&
-                TryBindStrictStreamingPipeline(document, pipeline, symbols, functions, localFunctionNames, statements, diagnostics,
-                    index == authoredStatements.Length - 1, targetFramework, pipelineLocals, pipelineCapture, out var streaming))
+            var isTerminal = index == authoredStatements.Length - 1;
+            if (TryBindStrictStreamingStatement(strictStreaming, document, statement, symbols, functions, statements,
+                    diagnostics, isTerminal, targetFramework, out var streaming))
             {
                 if (streaming is not null)
                 {
@@ -236,14 +238,12 @@ internal sealed partial class PowerShellSemanticBinder
                         new PowerShellBoundStatementBinding(authoredStatementIndex, authoredStatementIndex, boundStatement)));
                     continue;
                 }
-                if (diagnostics.Count == diagnosticCount)
-                    RejectStrictPipeline(diagnostics, PowerShellSourceParser.GetSpan(document, statement.Extent),
-                        "could not prove the source and stage contracts");
                 bodyIsValid = false;
                 lastFailedStatementIndex = authoredStatementIndex;
                 continue;
             }
-            var bound = BindStatement(document, statement, symbols, functions, diagnostics, index == authoredStatements.Length - 1, targetFramework, capabilities);
+            var bound = BindStatement(document, statement, symbols, functions, diagnostics, isTerminal, targetFramework, capabilities,
+                strictStreaming: strictStreaming);
             if (bound is null)
             {
                 if (diagnostics.Count == diagnosticCount)

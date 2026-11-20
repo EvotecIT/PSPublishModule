@@ -5,8 +5,37 @@ namespace PowerForge;
 
 internal sealed partial class PowerShellSemanticBinder
 {
-    private sealed record StrictPipelineStage(CommandAst Command, NamedBlockAst? Predicate, NamedBlockAst? Map, int? First,
-        PowerShellLocalCallSignature? Lifecycle);
+    private sealed record StrictPipelineStage(CommandAst Command, NamedBlockAst? Predicate = null, NamedBlockAst? Map = null,
+        string? ExpandProperty = null, int? First = null, PowerShellLocalCallSignature? Lifecycle = null);
+
+    private sealed record StrictStreamingBinding(ISet<string> LocalFunctionNames, List<PowerShellBoundLocal> GeneratedLocals);
+
+    private bool TryBindStrictStreamingStatement(
+        StrictStreamingBinding? binding, ParsedSourceDocument document, StatementAst statement,
+        IReadOnlyDictionary<string, PowerShellSemanticSymbolBinding> symbols,
+        IReadOnlyDictionary<string, PowerShellLocalCallSignature> functions, IReadOnlyList<PowerShellBoundStatement> preceding,
+        ICollection<PowerShellSemanticDiagnostic> diagnostics, bool isTerminal, string? targetFramework,
+        out PowerShellBoundStatement[]? streaming)
+    {
+        streaming = null;
+        var diagnosticCount = diagnostics.Count;
+        if (binding is null || !TryGetStrictStreamingPipeline(statement, symbols, out var pipeline, out var capture) ||
+            !TryBindStrictStreamingPipeline(document, pipeline, symbols, functions, binding.LocalFunctionNames, preceding,
+                diagnostics, isTerminal, targetFramework, binding.GeneratedLocals, capture, out streaming))
+            return false;
+        if (streaming is null)
+        {
+            if (diagnostics.Count == diagnosticCount)
+                RejectStrictPipeline(diagnostics, PowerShellSourceParser.GetSpan(document, statement.Extent),
+                    "could not prove the source and stage contracts");
+        }
+        else if (statement is ReturnStatementAst && streaming.LastOrDefault() is not PowerShellBoundReturnStatement)
+        {
+            streaming = streaming.Append(new PowerShellBoundReturnStatement(
+                PowerShellSourceParser.GetSpan(document, statement.Extent), null)).ToArray();
+        }
+        return true;
+    }
 
     private static bool TryGetStrictStreamingPipeline(
         StatementAst statement, IReadOnlyDictionary<string, PowerShellSemanticSymbolBinding> symbols,
@@ -16,6 +45,11 @@ internal sealed partial class PowerShellSemanticBinder
         if (statement is PipelineAst direct)
         {
             pipeline = direct;
+            return true;
+        }
+        if (statement is ReturnStatementAst { Pipeline: PipelineAst returned })
+        {
+            pipeline = returned;
             return true;
         }
 
@@ -164,8 +198,7 @@ internal sealed partial class PowerShellSemanticBinder
                 {
                     var condition = BindStageExpression(predicate.Statements[0], current, typeof(bool));
                     if (condition is null) return null;
-                    guards.Push((statements, stageSpan, condition));
-                    statements = new List<PowerShellBoundStatement>();
+                    GuardFollowingStages(stageSpan, condition);
                 }
                 else if (stage.Map is { } map)
                 {
@@ -180,10 +213,20 @@ internal sealed partial class PowerShellSemanticBinder
                         if (update is null) return null;
                         statements.Add(update);
                     }
-                    var mapped = CreateStrictPipelineItem(document, symbols, stageSpan, stage.Command.Extent.StartOffset);
-                    pipelineLocals.Add(new PowerShellBoundLocal(mapped, value.Type));
-                    statements.Add(new PowerShellBoundAssignmentStatement(stageSpan, mapped, value));
-                    current = new PowerShellBoundVariableExpression(stageSpan, mapped, value.Type, value.ValueState);
+                    current = AssignStageResult(stage, stageSpan, value);
+                }
+                else if (stage.ExpandProperty is { } property)
+                {
+                    var value = BindStrictPipelineProperty(current, stageSpan, property);
+                    if (value is null)
+                    {
+                        RejectStrictPipeline(diagnostics, stageSpan,
+                            "requires an exact, known total scalar property for Select-Object -ExpandProperty");
+                        return null;
+                    }
+                    if (!PowerShellClrTypeSemantics.IsNonNullableValueType(current.Type.ClrType))
+                        GuardFollowingStages(stageSpan, StrictPipelineRecordIsNotNull(stageSpan, current));
+                    current = AssignStageResult(stage, stageSpan, value);
                 }
                 else if (stage.First is { } first)
                 {
@@ -212,6 +255,21 @@ internal sealed partial class PowerShellSemanticBinder
                 statements = guard.Parent;
             }
             return statements.ToArray();
+
+            void GuardFollowingStages(SourceSpan stageSpan, PowerShellBoundExpression condition)
+            {
+                guards.Push((statements, stageSpan, condition));
+                statements = new List<PowerShellBoundStatement>();
+            }
+
+            PowerShellBoundVariableExpression AssignStageResult(
+                StrictPipelineStage stage, SourceSpan stageSpan, PowerShellBoundExpression value)
+            {
+                var mapped = CreateStrictPipelineItem(document, symbols, stageSpan, stage.Command.Extent.StartOffset);
+                pipelineLocals.Add(new PowerShellBoundLocal(mapped, value.Type));
+                statements.Add(new PowerShellBoundAssignmentStatement(stageSpan, mapped, value));
+                return new PowerShellBoundVariableExpression(stageSpan, mapped, value.Type, value.ValueState);
+            }
         }
 
         PowerShellBoundStatement[]? BindTake(StrictPipelineStage stage, PowerShellBoundVariableExpression current, SourceSpan stageSpan, int first)
@@ -232,10 +290,7 @@ internal sealed partial class PowerShellSemanticBinder
                     new PowerShellBoundStatement[] { new PowerShellBoundBreakStatement(stageSpan) })
             };
             if (PowerShellClrTypeSemantics.IsNonNullableValueType(current.Type.ClrType)) return take;
-            var nullValue = new PowerShellBoundLiteralExpression(stageSpan, null, current.Type, PowerShellValueState.Null);
-            var notNull = new PowerShellBoundBinaryExpression(stageSpan, PowerShellBoundBinaryOperator.NullNotEqual,
-                current, nullValue, StrictPipelineType(typeof(bool)));
-            return new[] { StrictPipelineIf(stageSpan, notNull, take) };
+            return new[] { StrictPipelineIf(stageSpan, StrictPipelineRecordIsNotNull(stageSpan, current), take) };
         }
 
         PowerShellBoundStatement? BindReduction(StrictPipelineStage stage, PowerShellBoundVariableExpression current, SourceSpan stageSpan)
@@ -326,6 +381,31 @@ internal sealed partial class PowerShellSemanticBinder
         }
     }
 
+    private static PowerShellBoundExpression? BindStrictPipelineProperty(
+        PowerShellBoundVariableExpression record, SourceSpan span, string property)
+    {
+        // These getters are total on their exact CLR record types and have the
+        // same scalar shape on both pinned hosts. Other properties can be
+        // adapted, invoke user code or report a nonterminating error per record.
+        var type = record.Type.ClrType;
+        var memberName = type == typeof(string) && property.Equals(nameof(string.Length), StringComparison.OrdinalIgnoreCase)
+            ? nameof(string.Length)
+            : type == typeof(TimeSpan) && property.Equals(nameof(TimeSpan.Ticks), StringComparison.OrdinalIgnoreCase)
+                ? nameof(TimeSpan.Ticks)
+                : null;
+        if (memberName is null) return null;
+        var resultType = type == typeof(string) ? typeof(int) : typeof(long);
+        var receiver = type == typeof(string) ? PowerShellClrReceiverBehavior.NormalizeNullString : PowerShellClrReceiverBehavior.None;
+        return new PowerShellBoundClrMemberExpression(span, type, memberName, false, record, receiver, StrictPipelineType(resultType));
+    }
+
+    private static PowerShellBoundExpression StrictPipelineRecordIsNotNull(SourceSpan span, PowerShellBoundVariableExpression current)
+    {
+        var nullValue = new PowerShellBoundLiteralExpression(span, null, current.Type, PowerShellValueState.Null);
+        return new PowerShellBoundBinaryExpression(span, PowerShellBoundBinaryOperator.NullNotEqual,
+            current, nullValue, StrictPipelineType(typeof(bool)));
+    }
+
     private static PowerShellBoundExpression ToArray(PowerShellBoundVariableExpression collection, Type recordType, SourceSpan span)
         => new PowerShellBoundClrInvocationExpression(span, collection.Type.ClrType, nameof(List<int>.ToArray),
             PowerShellClrInvocationKind.InstanceMethod, collection, PowerShellClrReceiverBehavior.None,
@@ -352,34 +432,40 @@ internal sealed partial class PowerShellSemanticBinder
             var terminal = index == pipeline.PipelineElements.Count - 1;
             var resolution = _commandResolver.Resolve(command, localFunctionNames, PowerShellCompilationCapabilities.TypedExecutable);
             var provider = resolution.IsProvider ? resolution.Contract : null;
-            var name = command.GetCommandName()?.Split('\\').Last();
-            if (provider?.CommandName.Equals(name, StringComparison.OrdinalIgnoreCase) == true)
+            if (provider is not null)
             {
                 switch (provider.ProviderId)
                 {
                     case "powerforge.command.filtering.where-object" when
                         PowerShellMappingCommandSemanticBinder.TryGetRuntimeFreeScriptBlock(command, "FilterScript", out var predicate) &&
                         predicate is { Unnamed: true, Statements.Count: 1 } && IsStrictStageResult(predicate.Statements[0]):
-                        discovered.Add(new(command, predicate, null, null, null));
+                        discovered.Add(new(command, Predicate: predicate));
                         continue;
                     case "powerforge.command.mapping.foreach-object" when
                         PowerShellMappingCommandSemanticBinder.TryGetRuntimeFreeScriptBlock(command, "Process", out var map) &&
                         map.Unnamed && map.Statements.Count is 1 or 2 && IsStrictStageResult(map.Statements.Last()) &&
                         (map.Statements.Count == 1 || TryGetStrictStageIncrement(map.Statements[0], out _)):
-                        discovered.Add(new(command, null, map, null, null));
+                        discovered.Add(new(command, Map: map));
+                        continue;
+                    case "powerforge.command.projection.select-object" when
+                        command.CommandElements.Count == 3 &&
+                        command.CommandElements[1] is CommandParameterAst { Argument: null } expandParameter &&
+                        expandParameter.ParameterName.Equals("ExpandProperty", StringComparison.OrdinalIgnoreCase) &&
+                        command.CommandElements[2] is StringConstantExpressionAst { Value.Length: > 0 } property:
+                        discovered.Add(new(command, ExpandProperty: property.Value));
                         continue;
                     case "powerforge.command.projection.select-object" when terminal &&
                         command.CommandElements.Count == 3 &&
                         command.CommandElements[1] is CommandParameterAst { Argument: null } firstParameter &&
                         firstParameter.ParameterName.Equals("First", StringComparison.OrdinalIgnoreCase) &&
                         command.CommandElements[2] is ConstantExpressionAst { Value: int first } && first > 0:
-                        discovered.Add(new(command, null, null, first, null));
+                        discovered.Add(new(command, First: first));
                         continue;
                 }
             }
             if (terminal && index > 1 && TryGetLocalFunction(command, functions, out var lifecycle) && lifecycle.IsPipelineLifecycle)
             {
-                discovered.Add(new(command, null, null, null, lifecycle));
+                discovered.Add(new(command, Lifecycle: lifecycle));
                 continue;
             }
             return false;

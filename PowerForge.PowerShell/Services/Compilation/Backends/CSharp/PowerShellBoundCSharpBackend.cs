@@ -220,12 +220,13 @@ internal sealed partial class PowerShellBoundCSharpBackend
                 EmitNativeTry(builder, attempted, indent, getTemporaryIdentifier, discardHelper, sourceMap, successOutputSink);
                 return;
             case PowerShellLoweredTryStatement tryStatement:
+                var runtimeFreeExecutable = _targetCapabilities == PowerShellCompilationCapabilities.TypedExecutable;
                 builder.Append(prefix).AppendLine("try");
                 EmitBlock(builder, tryStatement.Statements, indent, getTemporaryIdentifier, discardHelper, sourceMap,
                     successOutputSink: successOutputSink);
                 foreach (var clause in tryStatement.Catches)
                 {
-                    if (clause.ExceptionTypes.Length == 0 && !clause.ExcludePowerShellControlFlow)
+                    if (clause.ExceptionTypes.Length == 0 && !clause.ExcludePowerShellControlFlow && !runtimeFreeExecutable)
                     {
                         builder.Append(prefix).AppendLine("catch (global::System.Exception)");
                         EmitBlock(builder, clause.Statements, indent, getTemporaryIdentifier, discardHelper, sourceMap,
@@ -245,6 +246,11 @@ internal sealed partial class PowerShellBoundCSharpBackend
                     if (clause.ExcludePowerShellControlFlow)
                         filter = $"{clause.ExceptionTemporary} is not global::System.Management.Automation.PipelineStoppedException && " +
                             $"{clause.ExceptionTemporary} is not global::System.Management.Automation.FlowControlException && ({filter})";
+                    if (runtimeFreeExecutable)
+                    {
+                        var userException = $"{clause.ExceptionTemporary} is not global::PowerForge.Compiled.PowerShellScriptExit";
+                        filter = clause.ExceptionTypes.Length == 0 ? userException : $"{userException} && ({filter})";
+                    }
                     builder.Append(prefix).Append("catch (global::System.Exception ")
                         .Append(clause.ExceptionTemporary).Append(") when (").Append(filter).AppendLine(")");
                     EmitBlock(builder, clause.Statements, indent, getTemporaryIdentifier, discardHelper, sourceMap,
@@ -256,6 +262,10 @@ internal sealed partial class PowerShellBoundCSharpBackend
                     EmitBlock(builder, tryStatement.FinallyStatements, indent, getTemporaryIdentifier, discardHelper, sourceMap,
                         successOutputSink: successOutputSink);
                 }
+                return;
+            case PowerShellLoweredExitStatement strictExit when _targetCapabilities == PowerShellCompilationCapabilities.TypedExecutable:
+                builder.Append(prefix).Append("throw new global::PowerForge.Compiled.PowerShellScriptExit(")
+                    .Append(strictExit.Expression is null ? "0" : EmitExpression(strictExit.Expression)).AppendLine(");");
                 return;
             case PowerShellLoweredExitStatement exited:
                 builder.Append(prefix).Append("__nativeFunction.Exit(")

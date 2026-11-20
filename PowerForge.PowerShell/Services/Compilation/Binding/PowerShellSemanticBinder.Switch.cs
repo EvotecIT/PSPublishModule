@@ -11,7 +11,8 @@ internal sealed partial class PowerShellSemanticBinder
         IReadOnlyDictionary<string, PowerShellLocalCallSignature> functions,
         ICollection<PowerShellSemanticDiagnostic> diagnostics,
         string? targetFramework,
-        PowerShellCompilationCapability capabilities)
+        PowerShellCompilationCapability capabilities,
+        StrictStreamingBinding? strictStreaming)
     {
         var wildcard = (statement.Flags & SwitchFlags.Wildcard) != 0;
         if ((statement.Flags & (SwitchFlags.File | SwitchFlags.Parallel)) != 0 ||
@@ -173,7 +174,8 @@ internal sealed partial class PowerShellSemanticBinder
                 return null;
             }
 
-            var body = BindBlock(document, clause.Item2, clauseSymbols, functions, diagnostics, targetFramework, capabilities);
+            var body = BindBlock(document, clause.Item2, clauseSymbols, functions, diagnostics, targetFramework, capabilities,
+                strictStreaming: strictStreaming);
             if (body is null) return null;
             clauses.Add(new PowerShellBoundSwitchClause(clauseValue, body,
                 PowerShellSourceParser.GetSourceLines(document, clauseValue.Span)));
@@ -188,7 +190,8 @@ internal sealed partial class PowerShellSemanticBinder
         if (statement.Default is not null)
         {
             var defaultSymbols = CloneSymbols(baselineSymbols);
-            defaultBlock = BindBlock(document, statement.Default, defaultSymbols, functions, diagnostics, targetFramework, capabilities);
+            defaultBlock = BindBlock(document, statement.Default, defaultSymbols, functions, diagnostics, targetFramework, capabilities,
+                strictStreaming: strictStreaming);
             if (defaultBlock is null) return null;
             pathSymbols.Add(defaultSymbols);
         }

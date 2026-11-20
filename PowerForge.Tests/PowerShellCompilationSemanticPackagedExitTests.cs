@@ -99,6 +99,53 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
         }
     }
 
+    [PinnedSemanticHostFact]
+    [Trait("Category", "PowerShellCompilerGate")]
+    public async Task StrictExecutableExitUnwindsLocalFunctionsWithoutEnteringCatchOnPinnedHosts()
+    {
+        using var fixture = OracleFixture.Create("""
+            param([int] $Code = 37)
+            function Stop-Script {
+                param([int] $Status)
+                try {
+                    'before', 'unused' | Select-Object -First 1
+                    if ($Status -eq 0) { exit }
+                    exit $Status
+                } catch {
+                    'inner catch', 'unused' | Select-Object -First 1
+                } finally {
+                    'inner finally', 'unused' | Select-Object -First 1
+                }
+            }
+            try {
+                Stop-Script $Code
+                'after call', 'unused' | Select-Object -First 1
+            } catch {
+                'outer catch', 'unused' | Select-Object -First 1
+            } finally {
+                'outer finally', 'unused' | Select-Object -First 1
+            }
+            'after try', 'unused' | Select-Object -First 1
+            """);
+        var output = string.Join(Environment.NewLine, "before", "inner finally", "outer finally", string.Empty);
+        foreach (var pin in PowerShellCompilationSemanticHostArtifactPinCatalog.Pins)
+        {
+            var host = StrictStreamingHostPath(pin) ??
+                Path.Combine(Environment.SystemDirectory, "WindowsPowerShell", "v1.0", "powershell.exe");
+            var build = BuildStrictStreamingFixture(fixture, "StrictScriptExit", pin.ProfileId);
+            Assert.True(build.Succeeded, build.Error + Environment.NewLine + build.BuildOutput);
+            Assert.False(build.Manifest!.RequiresPowerShellRuntime);
+            Assert.True(build.Manifest.DependencyClosureVerified);
+            foreach (var code in new[] { "37", "0" })
+            {
+                var expected = (code, code == "37" ? 37 : 0, output, string.Empty);
+                await AssertExitAndConsoleOutput(host, fixture.RootPath,
+                    new[] { "-NoLogo", "-NoProfile", "-NonInteractive", "-File", fixture.ScriptPath, code }, expected);
+                await AssertExitAndConsoleOutput(build.ArtifactPath!, fixture.RootPath, new[] { code }, expected);
+            }
+        }
+    }
+
     [Theory]
     [InlineData(PowerShellCompilationMode.Package, "$PSDefaultParameterValues = @{'Read-Host : MaskInput'=$true}; Read-Host")]
     [InlineData(PowerShellCompilationMode.Hybrid, "$PSDefaultParameterValues = @{'Read-Host : MaskInput'=$true}; Read-Host")]

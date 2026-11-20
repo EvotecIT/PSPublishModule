@@ -67,6 +67,66 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
     }
 
     [PinnedSemanticHostFact]
+    public void StrictStreamingExpandsKnownPropertiesOnBothPinnedHosts()
+    {
+        CompareStrictStreamingCases(
+            ("ExpansionDropsNullAndKeepsZeroLength", """
+                [string[]] $values = 'one', 'placeholder', '', 'one', 'aa'
+                [Array]::Clear($values, 1, 1)
+                $values | Select-Object -ExpandProperty Length
+                """),
+            ("AliasedPropertyExpansionStreamsIntoCapture", """
+                [string[]] $values = 'pie', '', 'other', 'too-long'
+                [int[]] $result = @($values | select -ExpandProperty lEnGtH | where { $_ -gt 0 } | % { $_ } | select -First 2)
+                $result
+                """),
+            ("TimeSpanTicksRetainInt64Type", """
+                [TimeSpan] $first = [TimeSpan]::new([long] 40000)
+                [TimeSpan] $second = [TimeSpan]::new([long] -20000)
+                [TimeSpan[]] $values = $first, $second
+                $values | Microsoft.PowerShell.Utility\Select-Object -ExpandProperty Ticks
+                """));
+    }
+
+    [PinnedSemanticHostFact]
+    public void StrictStreamingRunsWithinTypedControlFlowOnBothPinnedHosts()
+    {
+        CompareStrictStreamingCases(
+            ("PipelineInTryThenCatchAndFinally", """
+                try {
+                    1, 2 | ForEach-Object { $_ }
+                    throw [System.InvalidOperationException]::new('go to catch')
+                } catch {
+                    3, 4 | Select-Object -First 1
+                } finally {
+                    5, 6 | Where-Object { $_ -eq 6 }
+                }
+                """),
+            ("CaptureInsideAnIf", """
+                [int[]] $result = 8, 9
+                if ($result.Length -eq 2) {
+                    [int[]] $result = @('one', '', 'four' | Select-Object -ExpandProperty Length | Where-Object { $_ -gt 0 })
+                }
+                $result
+                """),
+            ("PipelineReturnEmitsBeforeFinally", """
+                function Get-Results {
+                    try {
+                        return 'one', 'two', 'three' | Select-Object -First 2
+                    } finally {
+                        'finally', 'ignored' | Select-Object -First 1
+                    }
+                }
+                Get-Results
+                """),
+            ("PipelineRestartsEachLoopIteration", """
+                foreach ($number in 7, 8, 9) {
+                    1, 2, 3 | ForEach-Object { $_ } | Select-Object -First 1
+                }
+                """));
+    }
+
+    [PinnedSemanticHostFact]
     public void StrictStreamingCollectsTypedArraysWithNativeRecordSemantics()
     {
         CompareStrictStreamingCases(

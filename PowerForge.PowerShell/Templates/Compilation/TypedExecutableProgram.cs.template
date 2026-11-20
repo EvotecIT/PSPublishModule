@@ -41,6 +41,10 @@ internal static class Program
             var values = ParseArguments(args, out var boundParameters);
 {{INVOCATION}}
         }
+        catch (PowerShellScriptExit exit)
+        {
+            return exit.Code;
+        }
         catch (Exception exception)
         {
             Console.Error.WriteLine(exception.Message);
@@ -546,4 +550,11 @@ internal static class Program
         internal ValidationKind Kind { get; }
         internal string[] Arguments { get; }
     }
+}
+
+internal sealed class PowerShellScriptExit : Exception
+{
+    internal PowerShellScriptExit(int code) => Code = code;
+
+    internal int Code { get; }
 }
