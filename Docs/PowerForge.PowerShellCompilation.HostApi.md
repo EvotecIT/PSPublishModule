@@ -1,6 +1,6 @@
 # Check and compile a script from a simple host
 
-Status: proposal. Nothing on this page is implemented yet.
+Status: proposal. Nothing on this page is implemented yet. The [feature roadmap](#feature-roadmap) lists every packaging feature with a stable ID, what the engine supports today and which slice delivers it.
 
 This page specifies the engine surface for a small "drop a script, get an executable or a clear list of what's wrong" host: a desktop window, an editor extension, or a CI step. The host stays thin. Every decision, message and result comes from the engine, so the CLI and the cmdlets gain the same behaviour.
 
@@ -239,7 +239,128 @@ Each slice is useful on its own and adds a CLI command or option before any host
 9. **Signing inside the output**: embedded scripts and bundled build-owned files signed before packaging, optional dependency signing, one signing session.
 10. **Source exposure**: relative embedded paths, `ContainsEmbeddedPowerShellSource` in the compile result, and the secret warnings in `Check`.
 
+11. **Startup manifest and threading**: roadmap items E5 to E7.
+12. **Windowed host**: H2 and H3.
+13. **Tray host**: H4 and E8.
+14. **Bundled installed modules**: D3.
+15. **Target breadth**: T3 and T4, after the decision in T5.
+16. **Installer output**: S4.
+17. **Service host**: H5, only when there is a concrete request.
+
 A simple host can start once slices 1 to 3 exist; the rest improve it.
+
+## Feature roadmap
+
+Everything people expect from a tool that turns PowerShell into an executable, compared with the packagers they already know (ps2exe and its forks ps12exe and PS2EXE.Core, PowerShell Pro Tools, SAPIEN PowerShell Studio), and where this engine stands. The IDs are stable; refer to them from issues and PRs. "Slice" points to the delivery order above.
+
+Competitor columns record what their documentation describes; confirm a specific claim before quoting it publicly.
+
+### Identity and startup
+
+| ID | Feature | Others | Engine today | Plan |
+|---|---|---|---|---|
+| E1 | Executable icon | ps2exe, Pro Tools, SAPIEN | Missing | Slice 8 |
+| E2 | Version, product, company, copyright, description | ps2exe, Pro Tools, SAPIEN | Missing | Slice 8 |
+| E3 | Console or windowed subsystem | ps2exe (`-noConsole`), Pro Tools, SAPIEN | Console only | Slice 8 (subsystem), slice 12 (windowed host) |
+| E4 | Requested execution level (run as administrator) | ps2exe (`-requireAdmin`), Pro Tools, SAPIEN | Missing | Slice 8 |
+| E5 | Manifest `supportedOS` and `longPathAware` entries | ps2exe (`-supportOS`, `-longPaths`) | Missing | Slice 11 |
+| E6 | DPI awareness for forms (`PerMonitorV2`) | ps2exe (`-DPIAware`, `-winFormsDPIAware`), SAPIEN | Missing | Slice 11 |
+| E7 | Thread apartment: STA for windowed and tray hosts, MTA on request | ps2exe (`-STA`, `-MTA`), SAPIEN | Not configurable | Slice 11 |
+| E8 | Single instance (a second start activates the first) | SAPIEN tray applications | Missing | Slice 13 |
+
+### Hosts
+
+The host is the program inside the executable that runs the script and implements PowerShell's prompts and output.
+
+| ID | Feature | Others | Engine today | Plan |
+|---|---|---|---|---|
+| H1 | Console host: arguments passed to the script, `exit` codes preserved | All | Supported (`PowerShellPackagedConsoleHost`, `SetShouldExit`) | Done; console encoding (UTF-8 in and out) still to verify |
+| H2 | Windowed host: no console window, and `Read-Host`, `PromptForChoice`, `Get-Credential` and `Write-Progress` shown as dialogs | ps2exe (`-noConsole`, `-credentialGUI`), SAPIEN Windows Forms engine | Missing | Slice 12 |
+| H3 | Output routing in windowed mode: where `Write-Output`, `Write-Warning` and `Write-Error` go (an output window, a log file, or nowhere), and an error dialog for unhandled failures | ps2exe (`-noOutput`, `-noError`), SAPIEN | Missing | Slice 12 |
+| H4 | Tray host: notification-area icon, a message loop that keeps running, a menu whose items call script functions, a timer function, notifications, About and Exit | SAPIEN tray engine | Missing | Slice 13 |
+| H5 | Windows service host | Pro Tools, SAPIEN | Missing | Slice 17, on request; a scheduled task covers most background work |
+
+### Content and dependencies
+
+| ID | Feature | Others | Engine today | Plan |
+|---|---|---|---|---|
+| D1 | Dot-sourced scripts and files inside the module bundled | All | Supported | Done |
+| D2 | Extra files and resources (include, exclude, whole module) | ps2exe (`-embedFiles`), Pro Tools, SAPIEN | Supported in the engine | Expose in hosts |
+| D3 | Bundle installed modules from the build machine | Pro Tools, SAPIEN | Missing: reported as needed on the target machine | Slice 14 |
+| D4 | `#requires -Modules`, `-Version`, `-PSEdition`, `-RunAsAdministrator` as startup checks | ps2exe and SAPIEN run them as PowerShell would | Rejected in Package mode | Slice 7 |
+| D5 | Native libraries | Varies | Carried in Package and Hybrid, rejected in Strict | Done |
+| D6 | A settings file next to the executable | ps2exe (`-configFile`) | Missing | Later; the script can read its own settings file today |
+
+### Targets
+
+| ID | Feature | Others | Engine today | Plan |
+|---|---|---|---|---|
+| T1 | Windows and Linux x64 | ps2exe and SAPIEN are Windows only | Supported (Strict profiles) | Done |
+| T2 | macOS and Arm64 | None | Preview (Milestone 30) | Next milestones |
+| T3 | Windows x86 | ps2exe (`-x86`), SAPIEN | Runtime identifier mapping exists; no support-matrix profile | Slice 15 |
+| T4 | Choice of PowerShell 7 version for executables (7.4 on `net8.0`, 7.6 on `net10.0`) | SAPIEN, Pro Tools | Semantic profiles exist for both; executables accept `net10.0` only | Slice 15 |
+| T5 | Windows PowerShell 5.1 executables | ps2exe, SAPIEN, Pro Tools | Not supported | Decision needed: it means a .NET Framework host and a separate semantic profile |
+
+### Signing and distribution
+
+| ID | Feature | Others | Engine today | Plan |
+|---|---|---|---|---|
+| S1 | Authenticode signing of the output | SAPIEN; ps2exe output is signed afterwards | Supported for build-owned files | Done |
+| S2 | Signing content inside the output | None documented | Missing | Slice 9 |
+| S3 | macOS `codesign` and notarization, Linux detached signatures | None | Missing | Later, with T2 |
+| S4 | MSI installer from the compiled output | SAPIEN | WiX installer support exists elsewhere in PowerForge, not connected | Slice 16 |
+
+### Trust and transparency
+
+| ID | Feature | Others | Engine today | Plan |
+|---|---|---|---|---|
+| X1 | Say whether the output carries readable script text | None | Recorded in the manifest only | Slice 10 |
+| X2 | No absolute build paths in the output | — | The embedded source carries the build machine's path | Slice 10 |
+| X3 | Warn about likely secrets before building | None | Missing | Slice 10 |
+| X4 | Malware scan of the script before packaging (AMSI on Windows) | SAPIEN | Missing | Later, as a `Check` diagnostic |
+| X5 | Obfuscation or encryption of the script | SAPIEN, Pro Tools, some ps2exe forks | Not planned: the key ships with the executable, so it only hides the script from casual readers |
+| X6 | Restrict the executable to a domain, machine, user or MAC address | SAPIEN | Not planned: easy to bypass and it gives a false sense of control |
+| X7 | Run as stored alternate credentials | SAPIEN | Not planned: it needs a credential inside the executable |
+
+### Project settings
+
+| ID | Feature | Others | Engine today | Plan |
+|---|---|---|---|---|
+| P1 | Saved build settings with several targets | Pro Tools package config, SAPIEN project | Supported (`powerforge.psproject.json`) | Hosts open and save it |
+| P2 | E1 to E8, H2 to H4 and D3 settings per target in the project file | — | Missing | With each slice |
+
+### Slice details
+
+**Slice 11, startup manifest and threading.** Generate `app.manifest` entries for `supportedOS` and `longPathAware`, set `PerMonitorV2` DPI awareness for windowed and tray hosts, and run those hosts on an STA thread (forms and many COM objects need it). `ApartmentState` stays MTA for console hosts unless the build asks for STA.
+
+**Slice 12, windowed host.** A `PSHostUserInterface` that shows prompts, choices, credential requests and progress as dialogs; an output policy (`Window`, `LogFile`, `None`) for the success, warning and error streams; and an error dialog with the message and a "copy details" action for unhandled failures. Exit codes behave as in the console host. `Check` warns when a windowed build contains `Read-Host` inside a loop, or console-only calls such as `[Console]::ReadKey()`.
+
+**Slice 13, tray host.** Built on the windowed host. The build settings can declare the tray:
+
+```json
+{
+  "Tray": {
+    "Tooltip": "IT helper",
+    "Menu": [
+      { "Text": "Create a ticket", "Function": "New-HelpdeskTicket" },
+      { "Separator": true },
+      { "Text": "Open the IT portal", "Function": "Open-ItPortal" }
+    ],
+    "Timer": { "Function": "Test-PasswordExpiry", "IntervalMinutes": 60 },
+    "SingleInstance": true
+  }
+}
+```
+
+Each menu item and the timer call a function in the script, so in Hybrid builds those functions can compile to .NET. The script can also reach a `$PowerForgeTray` object to add items and show notifications at run time. `Check` reports a declared function that doesn't exist. The icon is the executable icon (E1). About and Exit are always present.
+
+**Slice 14, bundled installed modules.** `Check` resolves each external module from `PSModulePath` and offers `Bundle` or `RequiredOnTarget` for each. Bundled modules are recorded in the reviewed lock with name, version, path, file hashes and signature status, embedded in the output, and loaded from there at startup before `PSModulePath`. A module with native binaries for another platform is a diagnostic. Bundling never changes the module's files, so their signatures stay valid.
+
+**Slice 15, target breadth.** Add `win-x86` profiles once tested, and allow `net8.0` executables for PowerShell 7.4 alongside `net10.0`. Windows PowerShell 5.1 waits for the decision in T5.
+
+**Slice 16, installer output.** Optionally wrap the compiled executable in an MSI through PowerForge's existing WiX support: product name, version and icon come from E1 and E2, and the MSI is signed in the same session as the executable.
+
+**Slice 17, service host.** A host that runs the script as a Windows service with start, stop and an optional loop function. Build it only for a concrete request.
 
 ## Acceptance
 
@@ -252,6 +373,9 @@ A simple host can start once slices 1 to 3 exist; the rest improve it.
 - `Check` on a bare script reports an unreadable icon supplied through `ExecutableOptions`.
 - An executable built with an icon, version `1.2.3`, product and company names, and file description shows those values in Windows file properties. `RequireAdministrator` prompts for elevation on start.
 - A rewritten Hybrid script dependency has a valid signature after extraction and matches the embedded hash.
+- A windowed build of a script that calls `Read-Host` and `Get-Credential` shows both as dialogs and never opens a console window.
+- A tray build with two menu items and a timer calls the named functions, keeps a single instance, and exits cleanly from the Exit item.
+- A script that imports an installed module, built with that module bundled, runs on a machine where the module isn't installed.
 - The JSON for `check`, `build` and `doctor` carries `SchemaVersion` and is covered by contract tests on the serialized shape.
 
 ## Open questions
@@ -259,3 +383,6 @@ A simple host can start once slices 1 to 3 exist; the rest improve it.
 - Should `Check` default to every supported target, or only to the host's own runtime, to keep it fast?
 - Should the catalog live in code (an attribute on each enum member) or in a JSON resource that docs can also render?
 - Should `Recommended` ever pick Strict automatically, or only suggest it when Strict compiles the whole program?
+- T5: is a Windows PowerShell 5.1 executable worth a .NET Framework host, or is PowerShell 7 the only executable target?
+- Slice 14: should bundling a module also bundle its license file and record it in the manifest?
+- Slice 13: is the declared tray menu enough, or do scripts need to build the whole menu themselves?
