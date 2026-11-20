@@ -76,7 +76,9 @@ internal static class RestoreDrillCommand
         if (error is TimeoutException)
             return ("timed out", "Stopped at the " + Limit(limitMinutes) + " time limit" + where + ". Nothing wrong was found in what it had checked.",
                 "This is not a problem with the backup. Raise or remove restoreDrillTimeoutMinutes and run it again.");
-        if (error is InvalidDataException)
+        // .NET also throws InvalidDataException (compression, for example) with messages that can quote data; show only
+        // the backup library's own check messages, which name the check and never a value.
+        if (error is InvalidDataException && error.TargetSite?.Module.Assembly == typeof(RestoreDrill).Assembly)
             return ("failed", "A check failed" + where + ": " + error.Message,
                 "Do not rely on this backup set until the cause is known. Check that set's files, or run the drill on an earlier set.");
         return ("failed", "The drill could not finish" + where + ": " + error.GetType().Name + ".",

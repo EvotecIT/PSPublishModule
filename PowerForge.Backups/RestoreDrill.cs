@@ -150,18 +150,17 @@ public sealed class RestoreDrill
         }
         catch (Exception error)
         {
-            bool cancelled;
+            bool cancelled, timedOut;
             lock (stateGate)
             {
                 // Read under the lock the cancellation callback takes, so a cancellation it recorded is never overwritten.
                 cancelled = cancellationToken.IsCancellationRequested || state.Status == "cancelled";
-                state.Status = cancelled ? "cancelled" : "failed";
                 // The drill's own limit cancels the linked token; name that, so it is not mistaken for a stop by the user.
-                state.ErrorType = cancelled ? "CancelledByUser"
-                    : timeout.IsCancellationRequested && error is OperationCanceledException ? "TimedOut" : error.GetType().Name;
+                timedOut = !cancelled && timeout.IsCancellationRequested && error is OperationCanceledException;
+                state.Status = cancelled ? "cancelled" : "failed";
+                state.ErrorType = cancelled ? "CancelledByUser" : timedOut ? "TimedOut" : error.GetType().Name;
                 state.CompletedAtUtc = DateTimeOffset.UtcNow;
             }
-            var timedOut = state.ErrorType == "TimedOut";
             steps.FailRunning(cancelled ? "cancelled by the user" : timedOut ? "stopped at the drill's time limit" : error.GetType().Name);
             Record();
             if (timedOut) throw new TimeoutException("The restore drill reached its time limit.", error);
