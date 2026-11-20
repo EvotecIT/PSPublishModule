@@ -112,7 +112,8 @@ internal static class PowerShellCompiledModuleManifest
         string artifactName,
         string rootModuleFileName,
         PowerShellTypedCompilationResult typed,
-        string targetFramework)
+        string targetFramework,
+        Action<string, string> verifyCopiedInput)
     {
         var sourceManifest = ResolveSourceManifest(sourcePath, moduleManifestPath);
         if (!File.Exists(sourceManifest))
@@ -120,6 +121,7 @@ internal static class PowerShellCompiledModuleManifest
 
         var targetManifest = Path.Combine(moduleDirectory, artifactName + ".psd1");
         File.Copy(sourceManifest, targetManifest, overwrite: true);
+        verifyCopiedInput(sourceManifest, targetManifest);
         var allFunctions = ReadFunctionNames(typed.SourcePaths);
         var compiled = typed.Methods.Where(static method => method.NativeFunctionBinding is null).Select(static method => method.SourceName).ToArray();
         var compiledSet = compiled.ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -232,6 +234,7 @@ internal static class PowerShellCompiledModuleManifest
                 throw new InvalidOperationException($"Module manifest file reference '{reference.RelativePath}' collides with a generated compilation artifact.");
             Directory.CreateDirectory(Path.GetDirectoryName(targetFile) ?? moduleDirectory);
             File.Copy(sourceFile, targetFile, overwrite: false);
+            verifyCopiedInput(sourceFile, targetFile);
             copied.Add(targetFile);
         }
         return copied.ToArray();

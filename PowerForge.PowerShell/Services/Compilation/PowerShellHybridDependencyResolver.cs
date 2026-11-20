@@ -14,7 +14,8 @@ internal static class PowerShellHybridDependencyResolver
         IEnumerable<string>? additionalEntryPaths = null,
         Func<string, string?>? contentTransformer = null,
         IEnumerable<string>? explicitDependencyPaths = null,
-        IReadOnlyCollection<PowerShellConventionalLoaderIdentity>? conventionalLoaders = null)
+        IReadOnlyCollection<PowerShellConventionalLoaderIdentity>? conventionalLoaders = null,
+        Action<string, string>? verifyCopiedInput = null)
     {
         var sourceRoot = Path.GetFullPath(Path.GetDirectoryName(sourcePath) ?? Directory.GetCurrentDirectory());
         var comparer = PowerShellCompilationPathSafety.PathComparer;
@@ -50,6 +51,8 @@ internal static class PowerShellHybridDependencyResolver
                 File.Copy(dependency, target, overwrite: false);
                 copied.Add(new PowerShellHybridDependencyCopy(target, isGenerated: false));
             }
+            if (transformedContent is null)
+                verifyCopiedInput?.Invoke(dependency, target);
         }
         return copied.ToArray();
     }

@@ -47,9 +47,16 @@ public sealed partial class PowerShellCompilationArtifactBuilder
     /// <param name="logger">Optional progress logger; it must accept calls from any thread.</param>
     /// <param name="cancellationToken">Cancels child build processes and publication.</param>
     public PowerShellCompilationBuildResult Build(PowerShellCompilationBuildSpec spec, ILogger? logger, CancellationToken cancellationToken)
+        => Build(spec, logger, cancellationToken, phaseProgress: null);
+
+    internal PowerShellCompilationBuildResult Build(PowerShellCompilationBuildSpec spec, ILogger? logger,
+        CancellationToken cancellationToken, IProgress<PowerShellCompilationProgress>? phaseProgress,
+        string? approvedDependencyHash = null)
     {
         if (spec is null) throw new ArgumentNullException(nameof(spec));
         var progress = logger is null ? PowerShellCompilationBuildProgress.None : new PowerShellCompilationBuildProgress(logger);
+        cancellationToken.ThrowIfCancellationRequested();
+        PowerShellCompilationProgress.Report(phaseProgress, PowerShellCompilationHostPhase.Resolving);
         cancellationToken.ThrowIfCancellationRequested();
         ApplyExplicitTargetContract(spec);
         ValidateSpec(spec);
@@ -86,6 +93,8 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             ValidateRuntimeHookSourceOwnership(spec, compilationSourcePaths);
             ValidateRuntimeSourcePaths(spec, compilationSourcePaths);
             ValidateDirectProviderInputs(spec.CommandProviders);
+            PowerShellCompilationProgress.Report(phaseProgress, PowerShellCompilationHostPhase.PlanningDependencies);
+            cancellationToken.ThrowIfCancellationRequested();
             failureStage = PowerShellCompilationFailureStage.Dependency;
             var providerResolution = ResolveProviderPackages(spec);
             var providerRuntimeAssemblies = PrepareProviderRuntimeAssemblies(workspace, providerResolution);
@@ -101,7 +110,8 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             var dependencyPlan = PowerShellCompilationDependencyPlanner.Analyze(spec, compilationSourcePaths);
             var dependencyGraph = PowerShellCompilationDependencyPlanner.AnalyzeGraph(spec, compilationSourcePaths, dependencyPlan);
             var generatedAssemblyName = ResolveGeneratedAssemblyName(spec, artifactName, dependencyGraph);
-            ValidateExpectedDependencyLock(spec, dependencyGraph);
+            ValidateExpectedDependencyLock(spec, dependencyGraph, approvedDependencyHash);
+            var inputHashes = CreateLockedDependencyFileHashes(spec, dependencyGraph);
             if (dependencyGraph.Conflicts.Length > 0)
                 throw new InvalidOperationException("PowerShell compilation dependency graph contains incompatible identities: " + string.Join(" ", dependencyGraph.Conflicts));
             if (dependencyGraph.Cycles.Length > 0)
@@ -126,13 +136,14 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                 throw new FileNotFoundException($"Required PowerShell compilation dependency was not found: {string.Join(", ", missingDependencies.Select(static dependency => dependency.RelativePath))}.");
             }
             progress.Completed($"Resolved {compilationSourcePaths.Length} source file(s), {dependencyPlan.Length} dependency item(s) and the .NET SDK");
+            PowerShellCompilationProgress.Report(phaseProgress, PowerShellCompilationHostPhase.Analyzing);
             failureStage = PowerShellCompilationFailureStage.Analysis;
             var capabilities = PowerShellCompilationBuildSpec.GetCapabilities(spec.Kind, spec.Mode);
             var nativeManifestPath = spec.Kind == PowerShellCompilationArtifactKind.BinaryModule
                 ? PowerShellCompiledModuleManifest.ResolveSourceManifest(spec.SourcePath, spec.ModuleManifestPath) : spec.ModuleManifestPath;
             var nativeDependencyTypes = PowerShellNativeDependencyTypes.Create(nativeManifestPath, dependencyPlan, dependencyGraph);
             var plan = AnalyzeCompilationSources(compilationSourcePaths, spec.Mode, spec.TargetFramework, spec.SemanticProfileId, capabilities,
-                commandProviderInputs, nativeDependencyTypes);
+                commandProviderInputs, nativeDependencyTypes, cancellationToken);
             // Artifact shaping must use the same resolved target as explain, locks
             // and publication. Source-only analysis intentionally has no delivery target.
             plan = new PowerShellCompilationPlan(plan.Mode, plan.Files, plan.TargetFramework,
@@ -142,6 +153,8 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                 throw new InvalidOperationException("PowerShell source contains parser errors; no artifact was produced.");
             progress.Completed($"Analyzed {plan.TotalUnits} unit(s) ({spec.Mode}): {plan.CompilableUnits} eligible for typed code");
 
+            PowerShellCompilationProgress.Report(phaseProgress, PowerShellCompilationHostPhase.Shaping);
+            cancellationToken.ThrowIfCancellationRequested();
             var publishDirectory = Path.Combine(workspace, "publish");
             Directory.CreateDirectory(publishDirectory);
             PowerShellTypedCompilationResult? typed = null;
@@ -156,12 +169,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             PowerShellRuntimeFreeArtifactContract? runtimeFreeContract = null;
             PowerShellCompilationAbiManifest? publicAbi = null;
             PowerShellCompilationDependencyClosure? dependencyClosure = null;
-            var runtimeManifestHooks = spec.Kind == PowerShellCompilationArtifactKind.BinaryModule
-                ? PowerShellCompiledModuleManifest.GetRuntimeScriptHooks(spec.SourcePath, spec.ModuleManifestPath)
-                : Array.Empty<string>();
-            if (spec.Mode == PowerShellCompilationMode.Strict && runtimeManifestHooks.Length > 0)
-                throw new InvalidOperationException(
-                    $"Strict binary-module compilation rejected manifest runtime script hook(s): {string.Join(", ", runtimeManifestHooks)}.");
+            var runtimeManifestHooks = GetValidatedRuntimeManifestHooks(spec);
             if (spec.Kind == PowerShellCompilationArtifactKind.Executable && spec.Mode == PowerShellCompilationMode.Strict)
             {
                 var executable = PowerShellTypedExecutableEmitter.Emit(
@@ -203,6 +211,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                     compilationSourcePaths,
                     plan,
                     dependencyPlan,
+                    inputHashes,
                     commandProviderInputs,
                     providerProjectReferences);
                 typed = hybrid.Typed;
@@ -310,7 +319,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             }
             else
             {
-                var packagedSources = PreparePackagedSources(workspace, spec.SourcePath, compilationSourcePaths, dependencyPlan);
+                var packagedSources = PreparePackagedSources(workspace, spec.SourcePath, compilationSourcePaths, dependencyPlan, inputHashes);
                 var parameterInitializers = PowerShellPackagedParameterBindingPolicy.Generate(spec.SourcePath, spec.TargetFramework);
                 var sourceMapping = new PowerShellPackagedSourceMapping(spec.SourcePath);
                 var packagedScript = GeneratePackagedScript(spec.SourcePath, packagedSources, sourceMapping: sourceMapping);
@@ -427,6 +436,9 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                 : PowerShellCompilationFailureStage.Optimization;
             var cacheHit = authenticatedPublish is null && PowerShellCompilationArtifactBuildCache.TryRestore(spec, buildCache, publishDirectory);
             if (cacheHit) progress.Completed("Reused the verified build cache; dotnet was not run");
+            VerifyDependencyInputsHaveNotDrifted(spec, dependencyGraph);
+            PowerShellCompilationProgress.Report(phaseProgress, PowerShellCompilationHostPhase.Compiling);
+            cancellationToken.ThrowIfCancellationRequested();
             var process = cacheHit
                 ? new GeneratedBuildProcessResult(0, "PowerForge compilation build cache: verified content-addressed hit.", timedOut: false)
                 : RunDotNetBuild(spec, projectPath, publishDirectory, runtimeIdentifier, restoreCompleted: restore is not null, cancellationToken,
@@ -447,11 +459,14 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             else PowerShellCompilationArtifactBuildCache.Store(spec, buildCache, publishDirectory);
             VerifyDependencyInputsHaveNotDrifted(spec, dependencyGraph);
 
+            PowerShellCompilationProgress.Report(phaseProgress, PowerShellCompilationHostPhase.Publishing);
+            cancellationToken.ThrowIfCancellationRequested();
             failureStage = PowerShellCompilationFailureStage.Publication;
             var artifactStagingDirectory = PowerShellArtifactSetPublisher.CreateStagingDirectory(spec.OutputDirectory, artifactName);
             try
             {
-                var stagedArtifact = CopyArtifact(spec, artifactName, generatedAssemblyName, publishDirectory, typed, usesPowerShellRuntimeFallback, artifactStagingDirectory);
+                var stagedArtifact = CopyArtifact(spec, artifactName, generatedAssemblyName, publishDirectory,
+                    typed, usesPowerShellRuntimeFallback, artifactStagingDirectory, inputHashes);
                 stagedArtifact = stagedArtifact.WithReplacementFiles(CopyProviderRuntimeAssemblies(
                     spec,
                     stagedArtifact.PrimaryPath,
@@ -463,7 +478,8 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                     stagedArtifact.PrimaryPath,
                     artifactName,
                     dependencyPlan,
-                    stagedArtifact.Files));
+                    stagedArtifact.Files,
+                    inputHashes));
                 stagedArtifact = stagedArtifact.WithAdditionalFiles(WriteBuildEvidence(
                     workspace,
                     artifactStagingDirectory,
@@ -525,6 +541,8 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                     if (irSnapshotFile is not null)
                         stagedArtifact = stagedArtifact.WithAdditionalFiles(new[] { irSnapshotFile });
                 }
+                VerifyDependencyInputsHaveNotDrifted(spec, dependencyGraph);
+                cancellationToken.ThrowIfCancellationRequested();
                 var signing = PowerShellCompilationArtifactSigner.Sign(spec, stagedArtifact.Files);
                 if (signing is not null)
                 {

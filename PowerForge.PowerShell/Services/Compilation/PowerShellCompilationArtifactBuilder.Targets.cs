@@ -59,7 +59,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                 : spec.SemanticProfileId.Trim()).ProfileId;
     }
 
-    private static PowerShellCompilationTargetContract ResolveTargetContract(
+    internal static PowerShellCompilationTargetContract ResolveTargetContract(
         PowerShellCompilationBuildSpec spec,
         string? runtimeIdentifier)
     {

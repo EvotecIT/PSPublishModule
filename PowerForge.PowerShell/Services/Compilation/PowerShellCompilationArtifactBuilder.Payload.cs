@@ -6,9 +6,9 @@ public sealed partial class PowerShellCompilationArtifactBuilder
         string primaryArtifactPath,
         string artifactName,
         IEnumerable<PowerShellCompilationDependency> dependencies,
-        IEnumerable<PowerShellCompilationArtifactFile> existingFiles)
+        IEnumerable<PowerShellCompilationArtifactFile> existingFiles,
+        IReadOnlyDictionary<string, string> inputHashes)
     {
-        var plannedDependencies = dependencies.ToArray();
         var payloadRoot = Path.GetDirectoryName(Path.GetFullPath(primaryArtifactPath))
                           ?? throw new InvalidOperationException("The staged artifact has no containing directory.");
         var existingArtifacts = existingFiles
@@ -16,7 +16,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             .ToDictionary(static group => group.Key, static group => group.First(), PowerShellCompilationPathSafety.PathComparer);
         var existing = existingArtifacts.Keys.ToHashSet(PowerShellCompilationPathSafety.PathComparer);
         var copied = new List<PowerShellCompilationArtifactFile>();
-        foreach (var dependency in plannedDependencies.Where(static dependency =>
+        foreach (var dependency in dependencies.Where(static dependency =>
                      dependency.Exists &&
                      dependency.SourcePath is not null &&
                      dependency.Disposition == PowerShellCompilationDependencyDisposition.CopiedAdjacent &&
@@ -40,9 +40,13 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                 if ((existingArtifacts.TryGetValue(targetPath, out var existingArtifact) &&
                      (existingArtifact.Role.Equals("GeneratedModuleDependency", StringComparison.Ordinal) ||
                       existingArtifact.Role.Equals("PrimaryModule", StringComparison.Ordinal) &&
-                      dependency.Kind == PowerShellCompilationDependencyKind.PowerShellSource)) ||
-                    FilesHaveSameContent(dependency.SourcePath!, targetPath))
+                      dependency.Kind == PowerShellCompilationDependencyKind.PowerShellSource)))
                     continue;
+                if (FilesHaveSameContent(dependency.SourcePath!, targetPath))
+                {
+                    VerifyStagedPayload(dependency.SourcePath!, dependency.RelativePath, ComputeSha256(targetPath), inputHashes);
+                    continue;
+                }
                 throw new InvalidOperationException($"Planned payload '{dependency.RelativePath}' collides with a generated artifact.");
             }
             if (File.Exists(targetPath))
@@ -50,7 +54,9 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             Directory.CreateDirectory(Path.GetDirectoryName(targetPath) ?? payloadRoot);
             File.Copy(dependency.SourcePath!, targetPath, overwrite: false);
             existing.Add(targetPath);
-            copied.Add(CreateArtifactFile(targetPath, GetPayloadRole(dependency.Kind)));
+            var artifactFile = CreateArtifactFile(targetPath, GetPayloadRole(dependency.Kind));
+            VerifyStagedPayload(dependency.SourcePath!, dependency.RelativePath, artifactFile.Sha256, inputHashes);
+            copied.Add(artifactFile);
         }
         return copied.ToArray();
     }

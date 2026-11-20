@@ -11,6 +11,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
         string[] compilationSourcePaths,
         PowerShellCompilationPlan plan,
         PowerShellCompilationDependency[] dependencyPlan,
+        IReadOnlyDictionary<string, string> inputHashes,
         PowerShellCompilationCommandProviderContract[] commandProviders,
         string providerProjectReferences)
     {
@@ -44,23 +45,29 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             PowerShellBinaryCmdletSourceGenerator.Generate(typed, exportedFunctions: null, targetFramework: spec.TargetFramework),
             new UTF8Encoding(false));
 
-        var packagedSources = PreparePackagedSources(workspace, spec.SourcePath, compilationSourcePaths, dependencyPlan, typed,
-            nativeScriptEntry: nativeEntry);
+        var packagedSources = PreparePackagedSources(workspace, spec.SourcePath, compilationSourcePaths, dependencyPlan,
+            inputHashes, typed, nativeScriptEntry: nativeEntry);
         var parameterInitializers = PowerShellPackagedParameterBindingPolicy.Generate(spec.SourcePath, spec.TargetFramework,
             nativeScriptEntry: nativeEntry);
         // The native owner reparses exact authored text. Do not rewrite its variables,
         // insert registrations or replace its body before hashing/native script dispatch.
         var sourceMapping = nativeEntry ? null : new PowerShellPackagedSourceMapping(spec.SourcePath);
-        var packagedScript = nativeEntry ? File.ReadAllText(spec.SourcePath)
-            : GeneratePackagedScript(spec.SourcePath, packagedSources, typed, sourceMapping);
-        if (entry is not null && !nativeEntry)
-            packagedScript = PowerShellHybridExecutableEntryEmitter.ComposeScript(packagedScript, spec.SourcePath, entry, sourceMapping);
-        sourceMapping?.Write(workspace);
         var packagedScriptPath = Path.Combine(workspace, "Source.ps1");
         if (nativeEntry)
+        {
             File.Copy(spec.SourcePath, packagedScriptPath, overwrite: false);
+        }
         else
+        {
+            var packagedScript = GeneratePackagedScript(spec.SourcePath, packagedSources, typed, sourceMapping);
+            if (entry is not null)
+                packagedScript = PowerShellHybridExecutableEntryEmitter.ComposeScript(packagedScript, spec.SourcePath, entry, sourceMapping);
+            sourceMapping?.Write(workspace);
             File.WriteAllText(packagedScriptPath, packagedScript, new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
+        }
+        var entryHash = ComputeSha256(packagedScriptPath);
+        if (nativeEntry)
+            VerifyStagedPayload(spec.SourcePath, packagedSources.EntryRelativePath, entryHash, inputHashes);
         File.WriteAllText(
             Path.Combine(workspace, "Program.cs"),
             ReadTemplate(PackagedProgramTemplate)
@@ -71,7 +78,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                 .Replace("{{BOOLEAN_PARAMETERS}}", parameterInitializers.BooleanParameters)
                 .Replace("{{PARAMETER_ALIASES}}", parameterInitializers.ParameterAliases)
                 .Replace("{{ENTRY_RELATIVE_PATH}}", PowerShellCSharpLiteral.QuoteString(packagedSources.EntryRelativePath))
-                .Replace("{{ENTRY_SHA256}}", PowerShellCSharpLiteral.QuoteString(ComputeSha256(packagedScriptPath)))
+                .Replace("{{ENTRY_SHA256}}", PowerShellCSharpLiteral.QuoteString(entryHash))
                 .Replace("{{DEPENDENCY_SPECS}}", packagedSources.DependencySpecs)
                 .Replace("{{TARGET_FRAMEWORK}}", PowerShellCSharpLiteral.QuoteString(spec.TargetFramework)),
             new UTF8Encoding(false));

@@ -7,7 +7,7 @@ internal static partial class Program
     private const string PowerShellAnalyzeUsage =
         "Usage: powerforge powershell analyze <path> [--target-contract <target.json>] [--semantic-profile <id>] [--kind <exe|dll|library>] [--mode <Analyze|Package|Hybrid|Strict>] [--framework <tfm>] [--out <directory>] [--resource-mode <Declared|CompleteModule|None>] [--include-resource <path-or-glob> ...] [--exclude-resource <path-or-glob> ...] [--output json]";
     private const string PowerShellBuildUsage =
-        "Usage: powerforge powershell build <path> [--path <additional.ps1> ...] [--entry-point <main.ps1>] [--kind <exe|dll|library>] [--out <directory>] [--name <artifact>] [--mode <Package|Hybrid|Strict>] [--target-contract <target.json>] [--semantic-profile <id>] [--framework <tfm>] [--dependency-lock <graph.json> | --allow-unreviewed-dependencies] [--expected-abi-sha256 <sha256>] [--resource-mode <Declared|CompleteModule|None>] [--include-resource <path-or-glob> ...] [--exclude-resource <path-or-glob> ...] [--rid <rid>] [--self-contained] [--optimization <None|Trimmed|NativeAot>] [--cache-directory <path>] [--no-build-cache] [--emit-source] [--emit-ir] [--sign] [--certificate-thumbprint <thumbprint>] [--certificate-store <CurrentUser|LocalMachine>] [--timestamp-server <url>] [--signing-timeout <seconds>] [--no-single-file] [--keep-workspace] [--output json]";
+        "Usage: powerforge powershell build <path> [--path <additional.ps1> ...] [--entry-point <main.ps1>] [--kind <exe|dll|library>] [--out <directory>] [--name <artifact>] [--mode <Package|Hybrid|Strict>] [--target-contract <target.json>] [--semantic-profile <id>] [--framework <tfm>] [--dependency-lock <graph.json> | --reviewed-check <review.json> | --allow-unreviewed-dependencies] [--expected-abi-sha256 <sha256>] [--resource-mode <Declared|CompleteModule|None>] [--include-resource <path-or-glob> ...] [--exclude-resource <path-or-glob> ...] [--rid <rid>] [--self-contained] [--optimization <None|Trimmed|NativeAot>] [--cache-directory <path>] [--no-build-cache] [--emit-source] [--emit-ir] [--sign] [--certificate-thumbprint <thumbprint>] [--certificate-store <CurrentUser|LocalMachine>] [--timestamp-server <url>] [--signing-timeout <seconds>] [--no-single-file] [--keep-workspace] [--output json]";
     private const string PowerShellCensusUsage =
         "Usage: powerforge powershell census <path> [--path <product-root> ...] [--kind <exe|library|module>] [--mode <Strict|Hybrid>] [--framework <tfm>] [--semantic-profile <id>] [--baseline <census.json>] [--write-baseline <census.json>] [--no-recurse] [--output json]";
     private const string PowerShellExplainUsage =
@@ -37,6 +37,10 @@ internal static partial class Program
                 return CommandPowerShellCensus(argv.Skip(1).ToArray(), outputJson, logger);
             if (argv[0].Equals("explain", StringComparison.OrdinalIgnoreCase))
                 return CommandPowerShellExplain(argv.Skip(1).ToArray(), outputJson, logger);
+            if (argv[0].Equals("check", StringComparison.OrdinalIgnoreCase))
+                return CommandPowerShellCheck(argv.Skip(1).ToArray(), outputJson, logger);
+            if (argv[0].Equals("doctor", StringComparison.OrdinalIgnoreCase))
+                return CommandPowerShellDoctor(argv.Skip(1).ToArray(), outputJson, logger);
             if (argv[0].Equals("diagnose", StringComparison.OrdinalIgnoreCase))
                 return CommandPowerShellDiagnose(argv.Skip(1).ToArray(), outputJson, logger);
             return WritePowerShellError(outputJson, 2, $"Unknown PowerShell subcommand '{argv[0]}'.", logger);
@@ -55,7 +59,7 @@ internal static partial class Program
 
         if (!TryValidatePowerShellArguments(
                 args,
-                new[] { "--path", "--entry-point", "--kind", "--target", "--out", "--output-directory", "--name", "--mode", "--target-contract", "--semantic-profile", "--framework", "--dependency-lock", "--expected-abi-sha256", "--resource-mode", "--include-resource", "--exclude-resource", "--rid", "--optimization", "--cache-directory", "--certificate-thumbprint", "--certificate-store", "--timestamp-server", "--signing-timeout", "--timeout", "--output" },
+                new[] { "--path", "--entry-point", "--kind", "--target", "--out", "--output-directory", "--name", "--mode", "--target-contract", "--semantic-profile", "--framework", "--dependency-lock", "--reviewed-check", "--expected-abi-sha256", "--resource-mode", "--include-resource", "--exclude-resource", "--rid", "--optimization", "--cache-directory", "--certificate-thumbprint", "--certificate-store", "--timestamp-server", "--signing-timeout", "--timeout", "--output" },
                 new[] { "--self-contained", "--allow-unreviewed-dependencies", "--no-build-cache", "--emit-source", "--emit-ir", "--sign", "--no-single-file", "--keep-workspace", "--json", "--output-json" },
                 out var positionalPath,
                 out var argumentError))
@@ -148,6 +152,11 @@ internal static partial class Program
                     CliJson.Options)
                     ?? throw new InvalidDataException($"Dependency lock '{fullDependencyLockPath}' did not contain a graph.");
             }
+            var reviewedCheckPath = TryGetOptionValue(args, "--reviewed-check");
+            var review = reviewedCheckPath is null
+                ? null
+                : JsonSerializer.Deserialize(File.ReadAllText(reviewedCheckPath), CliJson.Context.PowerShellCompilationReview)
+                  ?? throw new InvalidDataException("The dependency review was empty.");
             var spec = new PowerShellCompilationBuildSpec(resolved.SourcePath, outputDirectory, artifactName, resolved.Kind, resolved.Mode)
             {
                 ModuleManifestPath = resolved.ModuleManifestPath,
@@ -193,7 +202,10 @@ internal static partial class Program
 
             var stopwatch = System.Diagnostics.Stopwatch.StartNew();
             // JSON output stays machine-readable: no progress is reported while it is requested.
-            var result = new PowerShellCompilationArtifactBuilder().Build(spec, outputJson ? null : logger, CancellationToken.None);
+            var buildLogger = outputJson ? null : logger;
+            var result = review is null
+                ? new PowerShellCompilationArtifactBuilder().Build(spec, buildLogger, CancellationToken.None)
+                : new PowerShellCompilationHostService().Compile(spec, review, buildLogger);
             stopwatch.Stop();
             var exitCode = result.Succeeded ? 0 : 1;
             if (outputJson)
@@ -508,6 +520,8 @@ internal static partial class Program
             Console.WriteLine(PowerShellProjectRunUsage);
             Console.WriteLine(PowerShellProjectPackUsage);
             Console.WriteLine(PowerShellSupportUsage);
+        Console.WriteLine(PowerShellCheckUsage);
+        Console.WriteLine(PowerShellDoctorUsage);
         }
     }
 

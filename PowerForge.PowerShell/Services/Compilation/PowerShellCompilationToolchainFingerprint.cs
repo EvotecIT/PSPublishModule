@@ -25,16 +25,19 @@ internal static class PowerShellCompilationToolchainFingerprint
             return SdkHashes.GetOrAdd(selection.RootPath, ComputeToolchainSha256);
     }
 
-    internal static PowerShellCompilationSdkSelection ResolveSelectedSdk()
+    internal static PowerShellCompilationSdkSelection ResolveSelectedSdk(CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         using var environment = PowerShellCompilationWorkspace.Create(keep: false);
         var versionRun = new ProcessRunner().RunAsync(PowerShellCompilationSdkProcessEnvironment.CreateDiscoveryRequest(
-            Directory.GetCurrentDirectory(), environment.Path, new[] { "--version" })).GetAwaiter().GetResult();
+            Directory.GetCurrentDirectory(), environment.Path, new[] { "--version" }), cancellationToken).GetAwaiter().GetResult();
+        cancellationToken.ThrowIfCancellationRequested();
         if (!versionRun.Succeeded || string.IsNullOrWhiteSpace(versionRun.StdOut))
             throw new InvalidOperationException("Unable to resolve the selected dotnet SDK version for PowerShell compilation.");
         var sdkVersion = versionRun.StdOut.Trim();
         var run = new ProcessRunner().RunAsync(PowerShellCompilationSdkProcessEnvironment.CreateDiscoveryRequest(
-            Directory.GetCurrentDirectory(), environment.Path, new[] { "--list-sdks" })).GetAwaiter().GetResult();
+            Directory.GetCurrentDirectory(), environment.Path, new[] { "--list-sdks" }), cancellationToken).GetAwaiter().GetResult();
+        cancellationToken.ThrowIfCancellationRequested();
         if (!run.Succeeded)
             throw new InvalidOperationException("Unable to enumerate installed dotnet SDK paths for build-cache provenance.");
         var sdkRoot = run.StdOut.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
@@ -55,8 +58,10 @@ internal static class PowerShellCompilationToolchainFingerprint
     }
 
     internal static string ResolveRuntimePackVersion(string targetFramework)
+        => ResolveRuntimePackVersion(targetFramework, ResolveSelectedSdk());
+
+    internal static string ResolveRuntimePackVersion(string targetFramework, PowerShellCompilationSdkSelection selection)
     {
-        var selection = ResolveSelectedSdk();
         var bundledVersionsPath = Path.Combine(selection.RootPath, "Microsoft.NETCoreSdk.BundledVersions.props");
         if (!File.Exists(bundledVersionsPath))
             throw new InvalidOperationException($"Selected dotnet SDK '{selection.Version}' does not expose bundled runtime-pack metadata.");

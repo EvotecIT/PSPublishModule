@@ -20,7 +20,8 @@ public sealed partial class PowerShellCompilationAnalyzer
         PowerShellCompilationCapability capabilities,
         PowerShellCommandSemanticRegistry commandRegistry,
         string semanticProfileId,
-        PowerShellNativeDependencyTypes? nativeDependencyTypes = null)
+        PowerShellNativeDependencyTypes? nativeDependencyTypes = null,
+        CancellationToken cancellationToken = default)
     {
         var documents = sourcePaths.Select(path => PowerShellSourceParser.ParseFile(path, identityRoot)
             .WithNativeDependencyTypes(nativeDependencyTypes ?? PowerShellNativeDependencyTypes.Empty)).ToArray();
@@ -41,6 +42,7 @@ public sealed partial class PowerShellCompilationAnalyzer
 
         foreach (var file in structural)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             if (!documentsByPath.TryGetValue(Path.GetFullPath(file.FullPath), out var document) || document.Errors.Length > 0)
                 continue;
             var functions = PowerShellSourceParser.GetTopLevelFunctions(document.SyntaxRoot, capabilities).ToArray();
@@ -102,7 +104,7 @@ public sealed partial class PowerShellCompilationAnalyzer
         }
 
         var semantic = new PowerShellSemanticCompilationPipeline(commandRegistry, semanticProfileId).Compile(
-            compilationDocuments, targetFramework, capabilities, nativeDependencyTypes);
+            compilationDocuments, targetFramework, capabilities, nativeDependencyTypes, cancellationToken);
         var result = structural.Select(file => new PowerShellCompilationFilePlan(
             file.FullPath,
             file.RelativePath,
