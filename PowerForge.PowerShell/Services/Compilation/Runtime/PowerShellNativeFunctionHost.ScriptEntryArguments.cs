@@ -4,6 +4,7 @@ namespace PowerForge.Generated.Runtime
     using System.Collections.Generic;
     using System.Management.Automation;
     using System.Management.Automation.Runspaces;
+    using System.Reflection;
     using System.Runtime.ExceptionServices;
 
     public static partial class PowerShellNativeFunctionHost
@@ -15,7 +16,7 @@ namespace PowerForge.Generated.Runtime
             if (powerShell == null) throw new ArgumentNullException(nameof(powerShell));
             if (entry == null) throw new ArgumentNullException(nameof(entry));
             if (arguments == null) throw new ArgumentNullException(nameof(arguments));
-            var lookup = new NativeScriptEntryLookup(powerShell.Runspace.SessionStateProxy.InvokeCommand, entry);
+            var lookup = new NativeScriptEntryLookup(powerShell.Runspace, entry);
             try
             {
                 // CommandInfo dispatch forces cmdlet binding and internal origin in the SDK.
@@ -35,18 +36,26 @@ namespace PowerForge.Generated.Runtime
         {
             private readonly CommandInvocationIntrinsics _commands;
             private readonly ExternalScriptInfo _entry;
+            private readonly object _executionContext;
+            private readonly PropertyInfo _rethrowExit;
             private readonly EventHandler<CommandLookupEventArgs>? _previous;
             private readonly EventHandler<CommandLookupEventArgs> _installed;
             private ExceptionDispatchInfo? _failure;
+            private bool? _previousExitPolicy;
             private bool _disposed;
 
-            internal NativeScriptEntryLookup(CommandInvocationIntrinsics commands, ExternalScriptInfo entry)
+            internal NativeScriptEntryLookup(Runspace runspace, ExternalScriptInfo entry)
             {
-                _commands = commands;
+                _commands = runspace.SessionStateProxy.InvokeCommand;
                 _entry = entry;
-                _previous = commands.PostCommandLookupAction;
+                const BindingFlags flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+                _executionContext = runspace.GetType().GetProperty("ExecutionContext", flags)?.GetValue(runspace)
+                    ?? throw new NotSupportedException("The PowerShell runspace does not expose its native script invocation context.");
+                _rethrowExit = _executionContext.GetType().GetProperty("ScriptCommandProcessorShouldRethrowExit", flags)
+                    ?? throw new NotSupportedException("The PowerShell runspace does not support native application exit.");
+                _previous = _commands.PostCommandLookupAction;
                 _installed = Lookup;
-                commands.PostCommandLookupAction = _installed;
+                _commands.PostCommandLookupAction = _installed;
             }
 
             private void Lookup(object? sender, CommandLookupEventArgs lookup)
@@ -62,6 +71,13 @@ namespace PowerForge.Generated.Runtime
                         !string.Equals(discovered.Path, _entry.Path, comparison)) return;
                     if (!string.Equals(discovered.ScriptContents, _entry.ScriptContents, StringComparison.Ordinal))
                         throw new InvalidOperationException("The discovered root source differs from its prepared native entry.");
+                    // PowerShell consumes this policy when it constructs the entry command.
+                    // The entry's exit reaches the process host. Child commands keep their own policy.
+                    if (!_previousExitPolicy.HasValue)
+                    {
+                        _previousExitPolicy = (bool)_rethrowExit.GetValue(_executionContext)!;
+                        _rethrowExit.SetValue(_executionContext, true);
+                    }
                     lookup.Command = _entry;
                 }
                 catch (Exception error) when (ownedRoot)
@@ -78,15 +94,26 @@ namespace PowerForge.Generated.Runtime
             {
                 if (invocation == null) throw new ArgumentNullException(nameof(invocation));
                 if (_disposed) throw new ObjectDisposedException(nameof(NativeScriptEntryLookup));
-                try { invocation(); }
-                catch (CommandNotFoundException error) when (_failure is not null &&
-                    string.Equals(error.CommandName, _entry.Path, Environment.OSVersion.Platform == PlatformID.Win32NT
-                        ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
+                try
                 {
-                    _failure.Throw();
-                    throw;
+                    try { invocation(); }
+                    catch (CommandNotFoundException error) when (_failure is not null &&
+                        string.Equals(error.CommandName, _entry.Path, Environment.OSVersion.Platform == PlatformID.Win32NT
+                            ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
+                    {
+                        _failure.Throw();
+                        throw;
+                    }
+                    _failure?.Throw();
                 }
-                _failure?.Throw();
+                finally
+                {
+                    if (_previousExitPolicy is { } original)
+                    {
+                        _rethrowExit.SetValue(_executionContext, original);
+                        _previousExitPolicy = null;
+                    }
+                }
             }
 
             public void Dispose()

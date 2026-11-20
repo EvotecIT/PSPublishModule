@@ -129,6 +129,13 @@ Retained executable entries preserve compatible `#requires -Version` and `#requi
 
 `using module`, `using assembly`, and `exit` inside dot-sourced dependencies stay unsupported for now, but are reported by `Check` with a severity and a fix.
 
+The console host gets the root script's native `exit` code from PowerShell.
+PowerShell runs `finally` and keeps a child command's exit separate from the
+application's exit. Direct plain `Read-Host` reads standard input. Redirected
+input preserves the line echo, empty line and end-of-input behavior observed
+on the pinned hosts. Secure and masked input, confirmation, credentials, and
+general host access remain outside the console contract.
+
 ### Compile
 
 The request includes the source input, `Mode`, `Target`, `OutputDirectory`, optional `ArtifactName`, optional signing settings, optional `ExecutableOptions`, and the confirmed `DependencyLock` with its mode and target ID. Omitted mode and target use the confirmed selection. The other defaults match the existing build command.
@@ -271,7 +278,7 @@ The host is the program inside the executable that runs the script and implement
 
 | ID | Feature | Others | Engine today | Plan |
 |---|---|---|---|---|
-| H1 | Console host: arguments passed to the script, `exit` codes preserved | All | Supported (`PowerShellPackagedConsoleHost`, `SetShouldExit`) | Done; console encoding (UTF-8 in and out) still to verify |
+| H1 | Console host: script arguments, native root `exit`, and plain `Read-Host` | All | Supported for retained console executables | Both-host exit and redirected input comparisons pass. Interactive terminal editing and broader encoding remain open |
 | H2 | Windowed host: no console window, and `Read-Host`, `PromptForChoice`, `Get-Credential` and `Write-Progress` shown as dialogs | ps2exe (`-noConsole`, `-credentialGUI`), SAPIEN Windows Forms engine | Missing | Slice 12 |
 | H3 | Output routing in windowed mode: where `Write-Output`, `Write-Warning` and `Write-Error` go (an output window, a log file, or nowhere), and an error dialog for unhandled failures | ps2exe (`-noOutput`, `-noError`), SAPIEN | Missing | Slice 12 |
 | H4 | Tray host: notification-area icon, a message loop that keeps running, a menu whose items call script functions, a timer function, notifications, About and Exit | SAPIEN tray engine | Missing | Slice 13 |

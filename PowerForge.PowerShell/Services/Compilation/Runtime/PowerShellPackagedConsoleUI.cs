@@ -34,10 +34,28 @@ namespace PowerForge.Generated.Runtime
         public override void WriteVerboseLine(string message) { }
         public override void WriteWarningLine(string message) { }
         public override void WriteProgress(long sourceId, ProgressRecord record) { }
-        public override string ReadLine() => throw PowerShellPackagedConsoleHost.NonInteractive();
+        public override string ReadLine()
+        {
+            var line = Console.ReadLine();
+            if (Console.IsInputRedirected && line is not null)
+                WriteLine(line);
+            return line!;
+        }
+
         public override SecureString ReadLineAsSecureString() => throw PowerShellPackagedConsoleHost.NonInteractive();
+
         public override Dictionary<string, PSObject> Prompt(string caption, string message, Collection<FieldDescription> descriptions)
-            => throw PowerShellPackagedConsoleHost.NonInteractive();
+        {
+            if (caption.Length != 0 || message.Length != 0 || descriptions.Count != 1 ||
+                descriptions[0].ParameterTypeFullName != typeof(string).FullName)
+                throw PowerShellPackagedConsoleHost.NonInteractive();
+
+            var field = descriptions[0].Name;
+            if (!Console.IsInputRedirected && field.Length != 0)
+                Write(field + ": ");
+            var line = ReadLine();
+            return line is null ? null! : new Dictionary<string, PSObject> { [field] = PSObject.AsPSObject(line) };
+        }
         public override int PromptForChoice(string caption, string message, Collection<ChoiceDescription> choices, int defaultChoice)
             => throw PowerShellPackagedConsoleHost.NonInteractive();
         public override PSCredential PromptForCredential(string caption, string message, string userName, string targetName)

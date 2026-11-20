@@ -228,7 +228,7 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
 
     [Theory]
     [InlineData("param([Parameter(Mandatory)] [string] $Name); $Name")]
-    [InlineData("Read-Host 'Value'")]
+    [InlineData("Read-Host -AsSecureString 'Value'")]
     [InlineData("process { 1 }")]
     public void Analyze_PackageReportsDeterministicBuildValidation(string source)
     {

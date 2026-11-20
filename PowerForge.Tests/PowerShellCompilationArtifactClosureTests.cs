@@ -468,22 +468,6 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
     }
 
     [Fact]
-    public void Build_PackagedExecutableRejectsNestedExitStatements()
-    {
-        using var fixture = ArtifactFixture.Create("exit $(exit 1)");
-
-        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
-            fixture.ScriptPath,
-            fixture.OutputPath,
-            "PowerForge.NestedExit",
-            PowerShellCompilationArtifactKind.Executable,
-            PowerShellCompilationMode.Package, allowUnreviewedDependencyResolution: true));
-
-        Assert.False(result.Succeeded);
-        Assert.Contains("nested exit statements", result.Error, StringComparison.OrdinalIgnoreCase);
-    }
-
-    [Fact]
     public void Build_HybridModuleRejectsLinkedDotSourceDependencyBeforePublication()
     {
         using var fixture = ArtifactFixture.Create(

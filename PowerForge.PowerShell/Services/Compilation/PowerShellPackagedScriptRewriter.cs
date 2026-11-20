@@ -4,7 +4,7 @@ using System.Text;
 namespace PowerForge;
 
 /// <summary>
-/// Preserves file-backed script semantics when source is embedded and invoked through AddScript.
+/// Preserves authored paths and bound file dependencies for retained executable entries.
 /// </summary>
 internal static partial class PowerShellPackagedScriptRewriter
 {
@@ -49,11 +49,6 @@ internal static partial class PowerShellPackagedScriptRewriter
                 $"Packaged executable generation does not support the explicit '{explicitNamedBlock.BlockKind.ToString().ToLowerInvariant()}' named block because embedded AddScript execution cannot preserve script pipeline lifecycle semantics.");
         }
 
-        var exits = ast.FindAll(static node => node is ExitStatementAst, searchNestedScriptBlocks: true)
-            .Cast<ExitStatementAst>()
-            .ToArray();
-        ValidateExits(ast, exits);
-
         var invocationPaths = FindInvocationPaths(ast).ToArray();
         ValidateHostInteraction(ast);
         var parameterBindingPaths = FindParameterBindingPaths(ast).ToArray();
@@ -63,13 +58,10 @@ internal static partial class PowerShellPackagedScriptRewriter
         var embeddedResourcePaths = string.IsNullOrWhiteSpace(dependencyCommandPathExpression)
             ? Array.Empty<VariableExpressionAst>()
             : FindEmbeddedResourcePaths(ast, embeddedResourceRelativePaths ?? Array.Empty<string>()).ToArray();
-        var replacements = exits.Select(exit => CreateExitReplacement(exit, invocationPaths, commandPathExpression))
-            .Concat(invocationPaths
-                .Where(path => !exits.Any(exit => Contains(exit.Extent, path.Extent)))
-                .Select(path => new SourceReplacement(
-                    path.Extent.StartOffset,
-                    path.Extent.EndOffset,
-                    GetInvocationMetadataExpression(path, commandPathExpression))))
+        var replacements = invocationPaths.Select(path => new SourceReplacement(
+                path.Extent.StartOffset,
+                path.Extent.EndOffset,
+                GetInvocationMetadataExpression(path, commandPathExpression)))
             .Concat(parameterBindingPaths.Select(path => new SourceReplacement(
                 path.Extent.StartOffset,
                 path.Extent.EndOffset,
@@ -133,53 +125,6 @@ internal static partial class PowerShellPackagedScriptRewriter
         if (ast.GetType().GetProperty("CleanBlock")?.GetValue(ast) is NamedBlockAst cleanBlock) return cleanBlock;
         return ast.EndBlock is { Unnamed: false } ? ast.EndBlock : null;
     }
-
-    private static void ValidateExits(ScriptBlockAst ast, ExitStatementAst[] exits)
-    {
-        if (exits.Length > 0 && ast.FindAll(static node => node is TrapStatementAst, searchNestedScriptBlocks: true).Any())
-            throw new InvalidOperationException("Packaged scripts that combine exit with trap are not supported because exception instrumentation would change trap semantics.");
-        if (exits.Any(exit => exits.Any(other => !ReferenceEquals(exit, other) && Contains(exit.Extent, other.Extent))))
-            throw new InvalidOperationException("Packaged executable generation does not support nested exit statements.");
-        foreach (var exit in exits)
-        {
-            for (var parent = exit.Parent; parent is not null && !ReferenceEquals(parent, ast); parent = parent.Parent)
-            {
-                if (parent is FunctionDefinitionAst or ScriptBlockExpressionAst ||
-                    parent is ScriptBlockAst scriptBlock && !ReferenceEquals(scriptBlock, ast) ||
-                    parent is TryStatementAst tryStatement && tryStatement.CatchClauses.Count > 0)
-                    throw new InvalidOperationException($"exit at line {exit.Extent.StartLineNumber} cannot be packaged safely because exception instrumentation would change nested or catch behavior.");
-            }
-        }
-    }
-
-    private static SourceReplacement CreateExitReplacement(
-        ExitStatementAst exit,
-        MemberExpressionAst[] invocationPaths,
-        string commandPathExpression)
-    {
-        var expression = exit.Pipeline?.Extent.Text;
-        var exitCode = "0";
-        if (!string.IsNullOrWhiteSpace(expression))
-        {
-            var rewritten = new StringBuilder(expression);
-            foreach (var path in invocationPaths
-                         .Where(path => Contains(exit.Pipeline!.Extent, path.Extent))
-                         .OrderByDescending(static path => path.Extent.StartOffset))
-            {
-                var offset = path.Extent.StartOffset - exit.Pipeline!.Extent.StartOffset;
-                rewritten.Remove(offset, path.Extent.EndOffset - path.Extent.StartOffset);
-                rewritten.Insert(offset, GetInvocationMetadataExpression(path, commandPathExpression));
-            }
-            exitCode = "[int](" + rewritten + ")";
-        }
-        return new SourceReplacement(
-            exit.Extent.StartOffset,
-            exit.Extent.EndOffset,
-            "throw [PowerForge.Compiled.PowerForgeScriptExitException]::new(" + exitCode + ")");
-    }
-
-    private static bool Contains(IScriptExtent outer, IScriptExtent inner)
-        => inner.StartOffset >= outer.StartOffset && inner.EndOffset <= outer.EndOffset;
 
     private static IEnumerable<MemberExpressionAst> FindInvocationPaths(ScriptBlockAst ast)
     {
@@ -484,7 +429,7 @@ internal static partial class PowerShellPackagedScriptRewriter
         if (SupportsShouldProcess(ast) || confirmationInvocation is not null)
         {
             throw new InvalidOperationException(
-                $"Packaged executable generation does not support confirmation-capable script interaction '{confirmationInvocation?.Extent.Text ?? "SupportsShouldProcess"}' because the embedded runspace has no console-backed PSHost.");
+                $"Packaged executable generation does not support confirmation-capable script interaction '{confirmationInvocation?.Extent.Text ?? "SupportsShouldProcess"}' because the embedded runspace does not provide that host interaction.");
         }
 
         var hostReference = ast.FindAll(
@@ -536,11 +481,11 @@ internal static partial class PowerShellPackagedScriptRewriter
 
         var interactiveCommand = ast.FindAll(static node => node is CommandAst, searchNestedScriptBlocks: true)
             .Cast<CommandAst>()
-            .FirstOrDefault(static command => IsInteractiveCommand(command.GetCommandName()));
+            .FirstOrDefault(static command => IsInteractiveCommand(command.GetCommandName()) && !IsPlainReadHost(command));
         if (interactiveCommand is not null)
         {
             throw new InvalidOperationException(
-                $"Packaged executable generation does not support interactive command '{interactiveCommand.GetCommandName()}' because the embedded runspace has no console-backed PSHost.");
+                $"Packaged executable generation does not support interactive command '{interactiveCommand.GetCommandName()}' because the embedded runspace does not provide that host interaction.");
         }
 
         var dynamicCommand = ast.FindAll(static node => node is CommandAst, searchNestedScriptBlocks: true)
@@ -602,6 +547,19 @@ internal static partial class PowerShellPackagedScriptRewriter
         if (!visited.Add(commandName)) return true;
         if (!aliasTargets.TryGetValue(commandName, out var targets)) return false;
         return targets.Any(target => ResolvesToInteractiveCommand(target, aliasTargets, visited));
+    }
+
+    private static bool IsPlainReadHost(CommandAst command)
+    {
+        var name = command.GetCommandName();
+        if (!string.Equals(name, "Read-Host", StringComparison.OrdinalIgnoreCase) &&
+            !string.Equals(name, "Microsoft.PowerShell.Utility\\Read-Host", StringComparison.OrdinalIgnoreCase))
+            return false;
+        return command.CommandElements.Skip(1).All(static element =>
+            element is not VariableExpressionAst { Splatted: true } &&
+            (element is not CommandParameterAst parameter ||
+             !("AsSecureString".StartsWith(parameter.ParameterName, StringComparison.OrdinalIgnoreCase) ||
+               "MaskInput".StartsWith(parameter.ParameterName, StringComparison.OrdinalIgnoreCase))));
     }
 
     private static bool IsInteractiveCommand(string? commandName)

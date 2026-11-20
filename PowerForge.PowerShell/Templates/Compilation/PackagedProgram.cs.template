@@ -43,7 +43,6 @@ internal static class Program
             powerShell.Commands.Commands[powerShell.Commands.Commands.Count - 1].MergeUnclaimedPreviousCommandResults =
                 PipelineResultTypes.Error | PipelineResultTypes.Output;
 
-            int? requestedExitCode = null;
             using var output = new PSDataCollection<PSObject>();
             output.DataAdded += (_, eventArgs) => Console.Out.WriteLine(output[eventArgs.Index]?.ToString());
             // The host owns information display, including visibility preferences and Write-Host's newline policy.
@@ -53,19 +52,11 @@ internal static class Program
             powerShell.Streams.Error.DataAdded += (_, eventArgs) =>
             {
                 var error = powerShell.Streams.Error[eventArgs.Index];
-                if (TryGetScriptExitCode(error.Exception, out var exitCode))
-                    requestedExitCode ??= exitCode;
-                else
-                    Console.Error.WriteLine(error.ToString());
+                Console.Error.WriteLine(error.ToString());
             };
             try
             {
 {{PIPELINE_INVOCATION}}
-            }
-            catch (RuntimeException exception) when (TryGetScriptExitCode(exception, out _))
-            {
-                TryGetScriptExitCode(exception, out var exitCode);
-                requestedExitCode = exitCode;
             }
             catch (RuntimeException exception)
             {
@@ -73,8 +64,6 @@ internal static class Program
                 return 1;
             }
 
-            if (requestedExitCode.HasValue)
-                return requestedExitCode.Value;
             if (consoleHost.RequestedExitCode.HasValue)
                 return consoleHost.RequestedExitCode.Value;
             if (powerShell.InvocationStateInfo.State == PSInvocationState.Failed)
@@ -385,24 +374,6 @@ internal static class Program
             _ => throw new ArgumentException($"{kind} parameter '-{name}' requires an explicit Boolean value such as '$true' or '$false'.")
         };
 
-    private static bool TryGetScriptExitCode(Exception exception, out int exitCode)
-    {
-        if (exception is PowerForgeScriptExitException scriptExit)
-        {
-            exitCode = scriptExit.ExitCode;
-            return true;
-        }
-        if (exception is RuntimeException runtimeException &&
-            runtimeException.ErrorRecord?.Exception is Exception recordException &&
-            !ReferenceEquals(recordException, exception) &&
-            TryGetScriptExitCode(recordException, out exitCode))
-            return true;
-        if (exception.InnerException is not null && TryGetScriptExitCode(exception.InnerException, out exitCode))
-            return true;
-        exitCode = 0;
-        return false;
-    }
-
     private sealed class ScriptArgument
     {
         internal ScriptArgument(string? name, object? value)
@@ -441,15 +412,4 @@ public static class PowerForgePackagedEntryPoint
     /// <remarks>This is a point-in-time source-load check, not an atomic filesystem lease.</remarks>
     public static string ValidateDotSource(object? operand, string selectedRelativePath)
         => Program.ValidateDotSource(operand, selectedRelativePath);
-}
-
-public sealed class PowerForgeScriptExitException : Exception
-{
-    public PowerForgeScriptExitException(int exitCode)
-        : base($"PowerShell script requested process exit code {exitCode}.")
-    {
-        ExitCode = exitCode;
-    }
-
-    public int ExitCode { get; }
 }

@@ -583,28 +583,6 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     }
 
     [Fact]
-    public void Build_PackagedExecutableRejectsCaughtExitInstrumentation()
-    {
-        using var fixture = ArtifactFixture.Create(
-            """
-            try { exit 7 }
-            catch { 'caught' }
-            """);
-        var spec = new PowerShellCompilationBuildSpec(
-            fixture.ScriptPath,
-            fixture.OutputPath,
-            "PowerForge.CaughtExit",
-            PowerShellCompilationArtifactKind.Executable,
-            PowerShellCompilationMode.Package, allowUnreviewedDependencyResolution: true);
-
-        var result = new PowerShellCompilationArtifactBuilder().Build(spec);
-
-        Assert.False(result.Succeeded);
-        Assert.Contains("catch behavior", result.Error, StringComparison.OrdinalIgnoreCase);
-        Assert.Empty(Directory.EnumerateFileSystemEntries(fixture.OutputPath));
-    }
-
-    [Fact]
     public void Build_MultiFileExecutablePreservesNestedPowerShellRuntimeTreeAndUnownedFiles()
     {
         using var fixture = ArtifactFixture.Create(

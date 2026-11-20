@@ -35,7 +35,7 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
     }
 
     [Theory]
-    [InlineData("Read-Host -Prompt 'Name'")]
+    [InlineData("Read-Host -AsSecureString -Prompt 'Name'")]
     [InlineData("Get-Credential")]
     [InlineData("$Host.UI.WriteLine('value')")]
     [InlineData("[CmdletBinding(SupportsShouldProcess = $true)] param(); 'value'")]
