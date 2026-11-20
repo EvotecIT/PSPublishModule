@@ -31,6 +31,12 @@ public enum DependencyPlacement
     Bundled,
     /// <summary>Must exist on the machine that runs the output.</summary>
     RequiredOnTarget,
+    /// <summary>Restored by the build.</summary>
+    Restored,
+    /// <summary>Referenced by the generated artifact.</summary>
+    Referenced,
+    /// <summary>Handled by PowerShell or the operating system.</summary>
+    Hosted,
     /// <summary>Deliberately left out of the output by the selected file rules.</summary>
     Excluded,
     /// <summary>Missing or not deliverable; the build cannot include it.</summary>
@@ -62,6 +68,9 @@ public sealed record CompileDependency(string Name, string Kind, DependencyPlace
     {
         DependencyPlacement.Bundled => "Included in the output",
         DependencyPlacement.RequiredOnTarget => "Must be installed on the machine that runs it",
+        DependencyPlacement.Restored => "Restored for this build",
+        DependencyPlacement.Referenced => "Referenced by the generated artifact",
+        DependencyPlacement.Hosted => "Handled by PowerShell or the operating system",
         DependencyPlacement.Excluded => "Left out of the output",
         _ => "Missing or can't be included"
     };
@@ -95,7 +104,8 @@ public sealed record CompileTarget(
     string RuntimeIdentifier,
     PowerShellCompilationDeploymentModel Deployment,
     string SupportLevel,
-    bool Advertised)
+    bool Advertised,
+    PowerShellCompilationTargetContract? ExactContract = null)
 {
     /// <summary>Label for pickers.</summary>
     public string DisplayName => (IsWindowsPowerShell ? "Windows PowerShell 5.1" : $"{Platform}, {DeploymentLabel}") +
@@ -160,7 +170,8 @@ public sealed record SavedTarget(
     string TargetFramework,
     string RuntimeIdentifier,
     PowerShellCompilationDeploymentModel Deployment,
-    string OutputDirectory);
+    string OutputDirectory,
+    PowerShellCompilationTargetContract? ExactContract = null);
 
 /// <summary>Build settings read from or written to a <c>powerforge.psproject.json</c> file.</summary>
 public sealed record BuildSettings(

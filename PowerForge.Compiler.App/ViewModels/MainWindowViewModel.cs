@@ -467,7 +467,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
             OnPropertyChanged(nameof(HasReview));
             OnPropertyChanged(nameof(CompileButtonText));
             StatusText = HasReview
-                ? $"Review {request.Mode} dependencies for {target.DisplayName}, then confirm the build."
+                ? $"Review {request.Mode} dependencies for {target.DisplayName} ({(result.Review!.Target?.SingleFile == true ? "single file" : "directory output")}), then confirm the build."
                 : "This build selection is blocked. See the problems below.";
         }
         catch (OperationCanceledException)

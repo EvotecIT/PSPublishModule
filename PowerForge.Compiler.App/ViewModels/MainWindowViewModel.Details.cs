@@ -238,11 +238,21 @@ public sealed partial class MainWindowViewModel
 
     private void ApplySavedTarget(SavedTarget saved)
     {
-        SelectedTarget = Targets.FirstOrDefault(target =>
+        if (saved.ExactContract is { } contract && SelectedMode?.Mode == saved.Mode)
+        {
+            var target = new CompileTarget(saved.Name, saved.Mode, saved.TargetFramework, saved.RuntimeIdentifier,
+                saved.Deployment, contract.SupportLevel, contract.SupportLevel is "Supported" or "PortableManaged", contract);
+            Targets.Insert(0, target);
+            SelectedTarget = target;
+        }
+        else
+        {
+            SelectedTarget = Targets.FirstOrDefault(target =>
                              target.TargetFramework.Equals(saved.TargetFramework, StringComparison.OrdinalIgnoreCase) &&
                              target.RuntimeIdentifier.Equals(saved.RuntimeIdentifier, StringComparison.OrdinalIgnoreCase) &&
                              target.Deployment == saved.Deployment)
-                         ?? SelectedTarget;
+                             ?? SelectedTarget;
+        }
         OutputDirectory = saved.OutputDirectory;
     }
 

@@ -93,7 +93,8 @@ internal sealed partial class InterimCompileEngine
                     artifact.Target.TargetFramework,
                     artifact.Target.RuntimeIdentifier,
                     artifact.Target.Deployment,
-                    Path.GetFullPath(Path.Combine(root, artifact.OutputDirectory))))
+                    Path.GetFullPath(Path.Combine(root, artifact.OutputDirectory)),
+                    artifact.Target))
                 .ToArray());
     }
 

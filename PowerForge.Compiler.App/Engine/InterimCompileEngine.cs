@@ -144,7 +144,9 @@ internal sealed partial class InterimCompileEngine : ICompileEngine
                 ExcludeResource = spec.ExcludeResource
             }, cancellationToken);
             var doctor = check.CanProceed ? Host.Doctor(check.ProposedReview!.Target, cancellationToken) : null;
-            var dependencies = MapDependencies(check.Dependencies, resolved.SourcePath);
+            var dependencies = check.ProposedReview?.DependencyLock is { } graph
+                ? MapReviewedDependencies(graph)
+                : MapDependencies(check.Dependencies, resolved.SourcePath);
             var diagnostics = check.Diagnostics.Concat(doctor?.Diagnostics ?? Array.Empty<PowerShellCompilationHostDiagnostic>())
                 .Select(MapDiagnostic).ToArray();
             return new CompileReviewResult(doctor is { Succeeded: true } ? check.ProposedReview : null, dependencies, diagnostics);
@@ -155,6 +157,31 @@ internal sealed partial class InterimCompileEngine : ICompileEngine
                 new[] { new CompileDiagnostic(CompileSeverity.Error, "InputError", string.Empty, ex.Message, request.InputPath, 0, 0) });
         }
     }
+
+    private static CompileDependency[] MapReviewedDependencies(PowerShellCompilationDependencyGraph graph) =>
+        graph.Nodes.Where(node => node.Id != graph.RootNodeId)
+            .Select(static node =>
+            {
+                var identity = node.Identity;
+                var version = new List<string>();
+                if (!string.IsNullOrEmpty(identity.RequiredVersion)) version.Add($"Required version {identity.RequiredVersion}");
+                if (!string.IsNullOrEmpty(identity.MinimumVersion)) version.Add($"Minimum version {identity.MinimumVersion}");
+                if (!string.IsNullOrEmpty(identity.MaximumVersion)) version.Add($"Maximum version {identity.MaximumVersion}");
+                if (version.Count == 0 && !string.IsNullOrEmpty(identity.Version)) version.Add($"Version {identity.Version}");
+                var details = version.Concat(new[] { identity.RuntimeIdentifier, identity.TargetFramework, identity.Guid, identity.Source })
+                    .Where(static item => !string.IsNullOrWhiteSpace(item));
+                var placement = node.Disposition switch
+                {
+                    PowerShellCompilationDependencyGraphDisposition.External => DependencyPlacement.RequiredOnTarget,
+                    PowerShellCompilationDependencyGraphDisposition.PrivateRestored => DependencyPlacement.Restored,
+                    PowerShellCompilationDependencyGraphDisposition.Referenced => DependencyPlacement.Referenced,
+                    PowerShellCompilationDependencyGraphDisposition.Hosted => DependencyPlacement.Hosted,
+                    PowerShellCompilationDependencyGraphDisposition.Rejected => DependencyPlacement.Blocked,
+                    _ => DependencyPlacement.Bundled
+                };
+                return new CompileDependency(string.IsNullOrEmpty(identity.Name) ? node.Id : identity.Name,
+                    node.Kind.ToString(), placement, string.Join(" · ", details));
+            }).ToArray();
 
     private static CompileDependency[] MapDependencies(IEnumerable<PowerShellCompilationDependency> dependencies, string sourcePath)
     {
@@ -247,8 +274,10 @@ internal sealed partial class InterimCompileEngine : ICompileEngine
     private static PowerShellCompilationTargetContract CreateTarget(PowerShellCompilationArtifactKind kind,
         PowerShellCompilationMode mode, CompileTarget? target)
     {
+        if (target?.ExactContract is { } saved) return saved;
         var deployment = target?.Deployment ?? PowerShellCompilationDeploymentModel.FrameworkDependent;
         var framework = string.IsNullOrWhiteSpace(target?.TargetFramework) ? TargetFramework : target.TargetFramework;
+        var rid = target?.RuntimeIdentifier;
         var optimization = deployment switch
         {
             PowerShellCompilationDeploymentModel.Trimmed => PowerShellCompilationExecutableOptimization.Trimmed,
@@ -256,8 +285,8 @@ internal sealed partial class InterimCompileEngine : ICompileEngine
             _ => PowerShellCompilationExecutableOptimization.None
         };
         return PowerShellCompilationTargetContractService.Create(kind, mode, framework,
-            target?.RuntimeIdentifier, RequiresSelfContained(deployment),
-            singleFile: kind == PowerShellCompilationArtifactKind.Executable,
+            rid, RequiresSelfContained(deployment),
+            singleFile: kind == PowerShellCompilationArtifactKind.Executable && !string.IsNullOrWhiteSpace(rid),
             optimization, explicitContract: true);
     }
 

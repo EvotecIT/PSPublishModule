@@ -72,6 +72,21 @@ public sealed class InterimCompileEngineTests : IDisposable
     }
 
     [Fact]
+    public async Task PackageReviewPreservesPortableOutputAndShowsTheLockedPowerShellSdk()
+    {
+        var script = Write("Portable.ps1", "Write-Output 'daily report'");
+        var engine = new InterimCompileEngine();
+        var target = Assert.Single(engine.GetTargets(PowerShellCompilationMode.Package, PowerShellCompilationArtifactKind.Executable));
+        var check = await engine.ReviewAsync(new CompileRequest(script, target.Mode, target, null), CancellationToken.None);
+
+        Assert.NotNull(check.Review?.Target);
+        Assert.Empty(check.Review.Target.RuntimeIdentifier);
+        Assert.False(check.Review.Target.SingleFile);
+        var sdk = Assert.Single(check.Dependencies, static dependency => dependency.Name == "Microsoft.PowerShell.SDK");
+        Assert.Contains("Version 7.6.6", sdk.Detail, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task CheckCountsTypedFunctionAndEntryUnitsInHybridMode()
     {
         var script = Write("Add.ps1", "function Add-Numbers {\n    param([int] $A, [int] $B)\n    return $A + $B\n}\nAdd-Numbers -A 2 -B 3\n");

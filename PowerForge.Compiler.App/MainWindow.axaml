@@ -397,6 +397,7 @@
                         <StackPanel Margin="0,0,10,12" Spacing="2">
                           <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
                           <TextBlock Classes="muted" FontSize="12" Text="{Binding PlacementText}" />
+                          <TextBlock Classes="muted" FontSize="12" Text="{Binding Detail}" TextWrapping="Wrap" />
                         </StackPanel>
                       </DataTemplate>
                     </ItemsControl.ItemTemplate>

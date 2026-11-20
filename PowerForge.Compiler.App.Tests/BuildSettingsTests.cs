@@ -1,5 +1,6 @@
 using PowerForge;
 using PowerForge.Compiler.App.Engine;
+using PowerForge.Compiler.App.ViewModels;
 
 namespace PowerForge.Compiler.App.Tests;
 
@@ -56,6 +57,31 @@ public sealed class BuildSettingsTests : IDisposable
         Assert.Equal(
             new[] { PowerShellCompilationMode.Hybrid, PowerShellCompilationMode.Package }.OrderBy(static mode => mode),
             settings.Targets.Select(static saved => saved.Mode).OrderBy(static mode => mode));
+    }
+
+    [Fact]
+    public async Task OpeningADirectoryTargetPreservesItsExactReviewContract()
+    {
+        var script = Path.Combine(_root, "DirectoryTarget.ps1");
+        File.WriteAllText(script, "return 21");
+        var settings = Path.Combine(_root, InterimCompileEngine.DefaultSettingsFileName);
+        var contract = PowerShellCompilationTargetContractService.Create(PowerShellCompilationArtifactKind.Executable,
+            PowerShellCompilationMode.Strict, "net10.0", System.Runtime.InteropServices.RuntimeInformation.RuntimeIdentifier,
+            selfContained: false, singleFile: false, PowerShellCompilationExecutableOptimization.None, explicitContract: true);
+        var projects = new PowerShellCompilationProjectManifestService();
+        projects.Save(settings, projects.Create(settings, script, "DirectoryTarget", contract));
+
+        var engine = new InterimCompileEngine();
+        var model = new MainWindowViewModel(engine);
+        await model.OpenSettingsAsync(settings);
+        var selected = Assert.IsType<CompileTarget>(model.SelectedTarget);
+        Assert.Equal(PowerShellCompilationMode.Strict, selected.Mode);
+        var review = await engine.ReviewAsync(new CompileRequest(script, selected.Mode, selected, model.OutputDirectory),
+            CancellationToken.None);
+
+        Assert.NotNull(review.Review?.Target);
+        Assert.False(review.Review.Target.SingleFile);
+        Assert.Equal(contract.ContractSha256, review.Review.Target.ContractSha256);
     }
 
     [Fact]
