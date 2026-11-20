@@ -151,8 +151,10 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
                 """, "closed inline source", new[] { "2147483647", "2147483647" }),
             ("CaptureLocalStream", streamingCommand + Environment.NewLine +
                 "[int] $result = (Get-One)\n$result", "consumed as a value", new[] { "1" }),
-            ("DiscardLocalStream", streamingCommand + Environment.NewLine +
-                "[void](Get-One)\n10", "writes success records", new[] { "10" })
+            ("DiscardLocalStreamWithVoid", streamingCommand + Environment.NewLine +
+                "[void](Get-One)\n10", "writes success records", new[] { "10" }),
+            ("DiscardLocalStreamWithNullAssignment", streamingCommand + Environment.NewLine +
+                "$null = Get-One\n10", "writes success records", new[] { "10" })
         };
         foreach (var (name, source, diagnostic, expected) in cases)
         foreach (var pin in PowerShellCompilationSemanticHostArtifactPinCatalog.Pins)

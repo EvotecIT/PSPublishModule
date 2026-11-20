@@ -28,9 +28,10 @@ Pure filters can also feed a terminal local advanced function through the
 existing typed collection binding. The admitted function initializes one
 Int32 accumulator in `begin`, updates it with range-proven addition,
 subtraction or multiplication in `process`, and emits it once in `end`.
-Strict rejects possibly overflowing reducers. Assignment capture of streamed
-output, general property projection, parallel script blocks, arbitrary stage
-commands and effectful lifecycle interleaving still require PowerShell.
+Strict rejects possibly overflowing reducers. Capturing or explicitly
+discarding a streamed local call, general property projection, parallel
+script blocks, arbitrary stage commands and effectful lifecycle interleaving
+still require PowerShell.
 
 The fixed Gallery packet emits **753/753 complete units (100%)**, up from
 114/753 (15.14%) and the preceding 720/753 (95.62%). Pester emits 491/491 and

@@ -69,7 +69,7 @@ The stages use CLR records and loops. The take stage stops inside the record
 loop. The advanced reducer receives the retained records through the existing
 typed collection binding after pure filters. PowerShell 7.6.6 and Windows
 PowerShell 5.1 each pass 29 typed output comparisons, one terminating-process
-comparison, and six checks for shapes that Strict must reject, with zero
+comparison, and seven checks for shapes that Strict must reject, with zero
 failures and zero skips. The comparisons cover record types and order, empty
 and null input, early stopping, and `begin`, `process` and `end` execution.
 The generated artifacts verify the runtime-free dependency closure. The
