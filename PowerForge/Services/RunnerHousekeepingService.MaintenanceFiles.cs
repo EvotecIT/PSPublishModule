@@ -73,6 +73,20 @@ public sealed partial class RunnerHousekeepingService
         return null;
     }
 
+    // Scanners and indexers briefly open freshly written files without sharing. Retry only native sharing and
+    // lock violations (ERROR_SHARING_VIOLATION 32, ERROR_LOCK_VIOLATION 33); a persistent holder is still retained.
+    internal static T MaintenanceRetrySharing<T>(Func<T> operation, Func<bool> stop, Action<TimeSpan>? wait = null)
+    {
+        for (var attempt = 1; ; attempt++)
+        {
+            try { return operation(); }
+            catch (IOException error) when (attempt < 5 && !stop() && (error.HResult & 0xFFFF) is 32 or 33)
+            {
+                (wait ?? Thread.Sleep)(TimeSpan.FromMilliseconds(100 * attempt));
+            }
+        }
+    }
+
     private static void MaintenanceWrite<T>(string path, T value, JsonTypeInfo<T> type)
         => MaintenanceWriteText(path, JsonSerializer.Serialize(value, type));
 
@@ -131,7 +145,7 @@ public sealed partial class RunnerHousekeepingService
             MaintenancePhysicalPath(file);
             if (olderThan.HasValue && File.GetLastWriteTimeUtc(file) >= olderThan.Value) throw new IOException("Recent temporary entry retained.");
             if (sensitive && MaintenanceSensitive(file)) throw new IOException("Package, key or database payload retained.");
-            using var handle = RunnerMaintenanceProcesses.OpenRegularFile(file);
+            using var handle = MaintenanceRetrySharing(() => RunnerMaintenanceProcesses.OpenRegularFile(file), () => run.Expired);
             bytes += handle.Length;
         }
     }
@@ -187,8 +201,12 @@ public sealed partial class RunnerHousekeepingService
             Directory.CreateDirectory(Path.GetDirectoryName(stage)!);
             var record = MaintenanceJournalPath(run, journal);
             MaintenanceWrite(record, journal, RunnerMaintenanceJsonContext.Default.RunnerMaintenanceJournal);
-            if (directory) Directory.Move(path, stage);
-            else File.Move(path, stage);
+            MaintenanceRetrySharing(() =>
+            {
+                if (directory) Directory.Move(path, stage);
+                else File.Move(path, stage);
+                return true;
+            }, () => run.Expired);
             journal.Moved = true;
             MaintenanceWrite(record, journal, RunnerMaintenanceJsonContext.Default.RunnerMaintenanceJournal);
             run.Isolated.Add(journal);
@@ -196,7 +214,8 @@ public sealed partial class RunnerHousekeepingService
         }
         catch (Exception error) when (error is IOException || error is UnauthorizedAccessException)
         {
-            run.Retained.Add(path + " — " + error.GetType().Name);
+            // The native error code tells a sharing violation from a permission problem when reading the log.
+            run.Retained.Add($"{path} — {error.GetType().Name} (0x{error.HResult:X8})");
         }
     }
 
