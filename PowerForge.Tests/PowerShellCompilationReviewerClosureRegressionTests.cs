@@ -228,8 +228,10 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
 
     [Theory]
     [InlineData("param([Parameter(Mandatory)] [string] $Name); $Name")]
-    [InlineData("Read-Host 'Value'")]
+    [InlineData("Read-Host -AsSecureString 'Value'")]
     [InlineData("process { 1 }")]
+    [InlineData("$PSDefaultParameterValues = @{'Read-Host:MaskInput'=$true}; Read-Host")]
+    [InlineData("Set-Variable PSDefaultParameterValues @{'Read-Host:AsSecureString'=$true}; Read-Host")]
     public void Analyze_PackageReportsDeterministicBuildValidation(string source)
     {
         using var fixture = ArtifactFixture.Create(source);

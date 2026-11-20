@@ -36,6 +36,8 @@ manifest shows which methods compiled and where the artifact relies on PowerShel
 | Legacy `ModuleToProcess` module manifests | Subject to the same body checks | Generated modules preserve the legacy root key and its referenced artifact; declaring both root keys is rejected |
 | `break` and `continue` targeting a caller's loop | No general runtime-free caller transfer | Native Hybrid functions use PowerShell flow control for unlabeled transfers and admitted literal or computed labels. The caller's matching loop handles the transfer after `finally` runs |
 | `exit` in admitted Hybrid functions | Unsupported in Strict | The active PowerShell SDK owns exit conversion and script termination; caller-transfer predicates remain hosted |
+| `exit` in retained executable entries | Unsupported in Strict | Package and Hybrid use PowerShell exit conversion and unwinding, including exit in a function, catch, nested expression, or trap scope |
+| Plain `Read-Host` in retained executables | Unsupported in Strict | Package and Hybrid accept direct line input with or without a prompt. Masked or secure input, choices, credentials, and general host UI remain unsupported |
 | Providers, remoting, dynamic script blocks | No general Strict support | Hybrid or Package uses the supported hosted paths; provider or service behavior needs separate execution proof |
 | Dynamic commands, `Invoke-Expression`, authored classes, WPF | No general runtime-free support | Retained source or explicitly supported hosted paths |
 

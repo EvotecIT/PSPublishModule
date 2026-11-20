@@ -138,7 +138,7 @@ public sealed partial class PowerShellCompilationArtifactHardeningTests
     {
         var sources = new[]
         {
-            "Read-Host -Prompt 'Name'",
+            "Read-Host -MaskInput -Prompt 'Name'",
             "$Host.UI.PromptForChoice('Title', 'Question', @(), 0)",
             "Get-Credential"
         };

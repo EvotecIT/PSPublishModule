@@ -140,7 +140,7 @@ public sealed partial class PowerShellCompilationAnalyzer
                 .Distinct(PowerShellCompilationPathSafety.PathComparer)
                 .ToArray();
             if (mode == PowerShellCompilationMode.Hybrid)
-                PowerShellPackagedScriptRewriter.ValidateEntryRequirements(input.SourcePath);
+                PowerShellPackagedScriptRewriter.ValidateRetainedEntryRequirements(input.SourcePath, embeddedScripts);
             else
             {
                 PowerShellPackagedParameterBindingPolicy.Generate(input.SourcePath, targetFramework);

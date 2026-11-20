@@ -111,6 +111,20 @@ without skips.
 | PSWordPress | `Connect-WordPress` and `Get-WordPressPost` match for two explicitly requested pages from a loopback server. The comparisons cover the GET path, query values, synthetic authorization and returned post data. Both entry points have emitted CLR bodies. |
 | PSWriteHTML | `New-HTML` and `New-HTMLTable` produce the same report title, headers, escaped cell content and embedded-asset structure. Both entry points have emitted CLR bodies. |
 
+## Retained standalone console applications
+
+Unchanged `convert-csv2txt`, `check-xml-file` and `get-sha256` from the
+independent packet built as reviewed Package executables. Each ran with a
+path argument, the same path supplied through standard input, and a failure
+input. All **9/9** comparisons matched standard output, standard error and
+process exit code against PowerShell 7.6.6. These entries run their authored
+source in the embedded engine.
+
+The pinned PowerShell 7.6.6 and Windows PowerShell 5.1.26100.9818 oracle also
+covers native root exits in `try`, `catch`, functions and nested expressions,
+`finally` output, a trap scope, a native child's nonzero exit, plain redirected
+input, empty lines and end-of-input. Package and Hybrid both pass those cases.
+
 ## Independent script and module assessment
 
 A separate packet pins 12 Gallery modules and eight standalone scripts from

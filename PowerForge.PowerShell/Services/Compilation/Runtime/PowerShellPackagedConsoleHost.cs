@@ -4,7 +4,7 @@ namespace PowerForge.Generated.Runtime
     using System.Globalization;
     using System.Management.Automation.Host;
 
-    /// <summary>Provides synchronous console output and formatting geometry without interactive input.</summary>
+    /// <summary>Provides ordinary line input, synchronous console output and formatting geometry.</summary>
     internal sealed class PowerShellPackagedConsoleHost : PSHost
     {
         private readonly Guid _id = Guid.NewGuid();
@@ -22,6 +22,6 @@ namespace PowerForge.Generated.Runtime
         public override void EnterNestedPrompt() => throw NonInteractive();
         public override void ExitNestedPrompt() => throw NonInteractive();
         internal static NotSupportedException NonInteractive()
-            => new NotSupportedException("Packaged executables do not support interactive console input.");
+            => new NotSupportedException("Packaged executables do not support this console operation.");
     }
 }

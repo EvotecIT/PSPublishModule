@@ -68,7 +68,7 @@ namespace PowerForge.Generated.Runtime
             property.SetValue(info, ast.GetScriptBlock(), null);
             // The native setter transfers file language mode. The scoped lookup retains
             // normal authorization, basic binding, caller frame and prior lookup hooks.
-            var lookup = new PowerShellNativeFunctionHost.NativeScriptEntryLookup(shell.Runspace.SessionStateProxy.InvokeCommand, info);
+            var lookup = new PowerShellNativeFunctionHost.NativeScriptEntryLookup(shell.Runspace, info);
             try { shell.AddCommand(info.Path, useLocalScope: false); return lookup; }
             catch { lookup.Dispose(); throw; }
         }

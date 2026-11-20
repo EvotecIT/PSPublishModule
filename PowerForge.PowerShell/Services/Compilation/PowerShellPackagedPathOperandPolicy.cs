@@ -71,7 +71,7 @@ internal static class PowerShellPackagedPathOperandPolicy
             throw Refusal(command, "implicit current-location reads require a bare standalone pipeline without redirection");
     }
 
-    internal static bool MayRetrieveVariable(ExpressionAst operand, string variableName, ScriptBlockAst root)
+    internal static bool MayRetrieveVariable(ExpressionAst operand, string variableName, ScriptBlockAst root, string? childName = null)
     {
         if (!TryGetLiteralPaths(operand, out var paths))
         {
@@ -93,9 +93,14 @@ internal static class PowerShellPackagedPathOperandPolicy
             };
             if (assigned is null || !TryGetLiteralPaths(assigned, out paths)) return false;
         }
-        return paths.Any(value => TryGetVariablePattern(value, out var pattern) &&
-            (string.IsNullOrEmpty(pattern) || new WildcardPattern(pattern,
-                WildcardOptions.IgnoreCase | WildcardOptions.CultureInvariant).IsMatch(variableName)));
+        return paths.Any(value =>
+        {
+            if (!TryGetVariablePattern(value, out var pattern)) return false;
+            if (pattern.Length == 0 && !string.IsNullOrEmpty(childName))
+                return Unscope(childName!).Equals(variableName, StringComparison.OrdinalIgnoreCase);
+            return pattern.Length == 0 || new WildcardPattern(pattern,
+                WildcardOptions.IgnoreCase | WildcardOptions.CultureInvariant).IsMatch(variableName);
+        });
     }
 
     internal static bool RequiresRuntimeGuard(ExpressionAst operand)

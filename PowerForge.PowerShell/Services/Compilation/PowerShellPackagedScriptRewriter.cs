@@ -4,7 +4,7 @@ using System.Text;
 namespace PowerForge;
 
 /// <summary>
-/// Preserves file-backed script semantics when source is embedded and invoked through AddScript.
+/// Preserves authored paths and bound file dependencies for retained executable entries.
 /// </summary>
 internal static partial class PowerShellPackagedScriptRewriter
 {
@@ -49,13 +49,9 @@ internal static partial class PowerShellPackagedScriptRewriter
                 $"Packaged executable generation does not support the explicit '{explicitNamedBlock.BlockKind.ToString().ToLowerInvariant()}' named block because embedded AddScript execution cannot preserve script pipeline lifecycle semantics.");
         }
 
-        var exits = ast.FindAll(static node => node is ExitStatementAst, searchNestedScriptBlocks: true)
-            .Cast<ExitStatementAst>()
-            .ToArray();
-        ValidateExits(ast, exits);
-
         var invocationPaths = FindInvocationPaths(ast).ToArray();
         ValidateHostInteraction(ast);
+        ValidateReadHostDefaults(ast, sourcePath, embeddedScriptPaths ?? Array.Empty<string>());
         var parameterBindingPaths = FindParameterBindingPaths(ast).ToArray();
         var dependencyLoadPaths = string.IsNullOrWhiteSpace(dependencyCommandPathExpression)
             ? Array.Empty<VariableExpressionAst>()
@@ -63,13 +59,10 @@ internal static partial class PowerShellPackagedScriptRewriter
         var embeddedResourcePaths = string.IsNullOrWhiteSpace(dependencyCommandPathExpression)
             ? Array.Empty<VariableExpressionAst>()
             : FindEmbeddedResourcePaths(ast, embeddedResourceRelativePaths ?? Array.Empty<string>()).ToArray();
-        var replacements = exits.Select(exit => CreateExitReplacement(exit, invocationPaths, commandPathExpression))
-            .Concat(invocationPaths
-                .Where(path => !exits.Any(exit => Contains(exit.Extent, path.Extent)))
-                .Select(path => new SourceReplacement(
-                    path.Extent.StartOffset,
-                    path.Extent.EndOffset,
-                    GetInvocationMetadataExpression(path, commandPathExpression))))
+        var replacements = invocationPaths.Select(path => new SourceReplacement(
+                path.Extent.StartOffset,
+                path.Extent.EndOffset,
+                GetInvocationMetadataExpression(path, commandPathExpression)))
             .Concat(parameterBindingPaths.Select(path => new SourceReplacement(
                 path.Extent.StartOffset,
                 path.Extent.EndOffset,
@@ -133,53 +126,6 @@ internal static partial class PowerShellPackagedScriptRewriter
         if (ast.GetType().GetProperty("CleanBlock")?.GetValue(ast) is NamedBlockAst cleanBlock) return cleanBlock;
         return ast.EndBlock is { Unnamed: false } ? ast.EndBlock : null;
     }
-
-    private static void ValidateExits(ScriptBlockAst ast, ExitStatementAst[] exits)
-    {
-        if (exits.Length > 0 && ast.FindAll(static node => node is TrapStatementAst, searchNestedScriptBlocks: true).Any())
-            throw new InvalidOperationException("Packaged scripts that combine exit with trap are not supported because exception instrumentation would change trap semantics.");
-        if (exits.Any(exit => exits.Any(other => !ReferenceEquals(exit, other) && Contains(exit.Extent, other.Extent))))
-            throw new InvalidOperationException("Packaged executable generation does not support nested exit statements.");
-        foreach (var exit in exits)
-        {
-            for (var parent = exit.Parent; parent is not null && !ReferenceEquals(parent, ast); parent = parent.Parent)
-            {
-                if (parent is FunctionDefinitionAst or ScriptBlockExpressionAst ||
-                    parent is ScriptBlockAst scriptBlock && !ReferenceEquals(scriptBlock, ast) ||
-                    parent is TryStatementAst tryStatement && tryStatement.CatchClauses.Count > 0)
-                    throw new InvalidOperationException($"exit at line {exit.Extent.StartLineNumber} cannot be packaged safely because exception instrumentation would change nested or catch behavior.");
-            }
-        }
-    }
-
-    private static SourceReplacement CreateExitReplacement(
-        ExitStatementAst exit,
-        MemberExpressionAst[] invocationPaths,
-        string commandPathExpression)
-    {
-        var expression = exit.Pipeline?.Extent.Text;
-        var exitCode = "0";
-        if (!string.IsNullOrWhiteSpace(expression))
-        {
-            var rewritten = new StringBuilder(expression);
-            foreach (var path in invocationPaths
-                         .Where(path => Contains(exit.Pipeline!.Extent, path.Extent))
-                         .OrderByDescending(static path => path.Extent.StartOffset))
-            {
-                var offset = path.Extent.StartOffset - exit.Pipeline!.Extent.StartOffset;
-                rewritten.Remove(offset, path.Extent.EndOffset - path.Extent.StartOffset);
-                rewritten.Insert(offset, GetInvocationMetadataExpression(path, commandPathExpression));
-            }
-            exitCode = "[int](" + rewritten + ")";
-        }
-        return new SourceReplacement(
-            exit.Extent.StartOffset,
-            exit.Extent.EndOffset,
-            "throw [PowerForge.Compiled.PowerForgeScriptExitException]::new(" + exitCode + ")");
-    }
-
-    private static bool Contains(IScriptExtent outer, IScriptExtent inner)
-        => inner.StartOffset >= outer.StartOffset && inner.EndOffset <= outer.EndOffset;
 
     private static IEnumerable<MemberExpressionAst> FindInvocationPaths(ScriptBlockAst ast)
     {
@@ -363,22 +309,24 @@ internal static partial class PowerShellPackagedScriptRewriter
         return operand is not null && PowerShellPackagedPathOperandPolicy.MayRetrieveVariable(operand, variableName, root);
     }
 
-    private static bool GetVariableMayRetrieve(CommandAst command, string variableName)
+    private static bool GetVariableMayRetrieve(CommandAst command, string variableName, bool allowScopePrefix = false)
     {
+        bool Matches(string value) => VariablePatternMatches(
+            allowScopePrefix ? PowerShellAssignmentTargetPolicy.GetUnscopedVariableName(value) : value, variableName);
         var elements = command.CommandElements.Skip(1).ToArray();
         for (var index = 0; index < elements.Length; index++)
         {
             if (elements[index] is not CommandParameterAst parameter ||
-                !parameter.ParameterName.Equals("Name", StringComparison.OrdinalIgnoreCase))
+                !"Name".StartsWith(parameter.ParameterName, StringComparison.OrdinalIgnoreCase))
                 continue;
             if (parameter.Argument is StringConstantExpressionAst inline)
-                return VariablePatternMatches(inline.Value, variableName);
+                return Matches(inline.Value);
             return index + 1 >= elements.Length ||
                    elements[index + 1] is not StringConstantExpressionAst named ||
-                   VariablePatternMatches(named.Value, variableName);
+                   Matches(named.Value);
         }
         return elements.FirstOrDefault() is not StringConstantExpressionAst positional ||
-               VariablePatternMatches(positional.Value, variableName);
+               Matches(positional.Value);
     }
 
     private static bool ReferencesPsVariableIntrinsics(ExpressionAst expression)
@@ -429,11 +377,14 @@ internal static partial class PowerShellPackagedScriptRewriter
         }
     }
 
-    internal static void ValidateEntryRequirements(string sourcePath)
+    internal static void ValidateRetainedEntryRequirements(string sourcePath, IEnumerable<string> embeddedSources)
     {
         var ast = Parser.ParseFile(sourcePath, out var tokens, out var errors);
         if (errors.Length == 0)
+        {
             ValidateEntryRequirements(ast, tokens, sourcePath);
+            ValidateReadHostDefaults(ast, sourcePath, embeddedSources);
+        }
     }
 
     private static void ValidateEntryRequirements(ScriptBlockAst ast, Token[] tokens, string sourcePath)
@@ -484,7 +435,7 @@ internal static partial class PowerShellPackagedScriptRewriter
         if (SupportsShouldProcess(ast) || confirmationInvocation is not null)
         {
             throw new InvalidOperationException(
-                $"Packaged executable generation does not support confirmation-capable script interaction '{confirmationInvocation?.Extent.Text ?? "SupportsShouldProcess"}' because the embedded runspace has no console-backed PSHost.");
+                $"Packaged executable generation does not support confirmation-capable script interaction '{confirmationInvocation?.Extent.Text ?? "SupportsShouldProcess"}' because the embedded runspace does not provide that host interaction.");
         }
 
         var hostReference = ast.FindAll(
@@ -536,11 +487,11 @@ internal static partial class PowerShellPackagedScriptRewriter
 
         var interactiveCommand = ast.FindAll(static node => node is CommandAst, searchNestedScriptBlocks: true)
             .Cast<CommandAst>()
-            .FirstOrDefault(static command => IsInteractiveCommand(command.GetCommandName()));
+            .FirstOrDefault(static command => IsInteractiveCommand(command.GetCommandName()) && !IsPlainReadHost(command));
         if (interactiveCommand is not null)
         {
             throw new InvalidOperationException(
-                $"Packaged executable generation does not support interactive command '{interactiveCommand.GetCommandName()}' because the embedded runspace has no console-backed PSHost.");
+                $"Packaged executable generation does not support interactive command '{interactiveCommand.GetCommandName()}' because the embedded runspace does not provide that host interaction.");
         }
 
         var dynamicCommand = ast.FindAll(static node => node is CommandAst, searchNestedScriptBlocks: true)
@@ -571,11 +522,31 @@ internal static partial class PowerShellPackagedScriptRewriter
                 searchNestedScriptBlocks: true)
             .Cast<CommandAst>()
             .ToArray();
+        var targets = ReadLiteralAliasTargets(definitions, out var unknown);
+        if (unknown is not null)
+            return unknown;
+
+        foreach (var definition in definitions)
+        {
+            PowerShellAliasDefinitionPolicy.TryGetLiteralDefinition(definition, out _, out var targetName);
+            if (ResolvesToCommandMatching(targetName, targets, IsInteractiveCommand, new HashSet<string>(StringComparer.OrdinalIgnoreCase)))
+                return definition;
+        }
+        return null;
+    }
+
+    private static IReadOnlyDictionary<string, HashSet<string>> ReadLiteralAliasTargets(
+        IEnumerable<CommandAst> definitions, out CommandAst? unknown)
+    {
         var targets = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
+        unknown = null;
         foreach (var definition in definitions)
         {
             if (!PowerShellAliasDefinitionPolicy.TryGetLiteralDefinition(definition, out var aliasName, out var targetName))
-                return definition;
+            {
+                unknown = definition;
+                return targets;
+            }
             if (!targets.TryGetValue(aliasName, out var aliasTargets))
             {
                 aliasTargets = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -583,25 +554,19 @@ internal static partial class PowerShellPackagedScriptRewriter
             }
             aliasTargets.Add(targetName);
         }
-
-        foreach (var definition in definitions)
-        {
-            PowerShellAliasDefinitionPolicy.TryGetLiteralDefinition(definition, out _, out var targetName);
-            if (ResolvesToInteractiveCommand(targetName, targets, new HashSet<string>(StringComparer.OrdinalIgnoreCase)))
-                return definition;
-        }
-        return null;
+        return targets;
     }
 
-    private static bool ResolvesToInteractiveCommand(
+    private static bool ResolvesToCommandMatching(
         string commandName,
         IReadOnlyDictionary<string, HashSet<string>> aliasTargets,
+        Func<string, bool> matches,
         HashSet<string> visited)
     {
-        if (IsInteractiveCommand(commandName)) return true;
+        if (matches(commandName)) return true;
         if (!visited.Add(commandName)) return true;
         if (!aliasTargets.TryGetValue(commandName, out var targets)) return false;
-        return targets.Any(target => ResolvesToInteractiveCommand(target, aliasTargets, visited));
+        return targets.Any(target => ResolvesToCommandMatching(target, aliasTargets, matches, visited));
     }
 
     private static bool IsInteractiveCommand(string? commandName)
