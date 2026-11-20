@@ -238,12 +238,34 @@ public sealed partial class MainWindowViewModel
 
     private void ApplySavedTarget(SavedTarget saved)
     {
-        SelectedTarget = Targets.FirstOrDefault(target =>
+        if (saved.ExactContract is { } contract && SelectedMode?.Mode == saved.Mode)
+        {
+            var target = new CompileTarget(saved.Name, saved.Mode, saved.TargetFramework, saved.RuntimeIdentifier,
+                saved.Deployment, contract.SupportLevel, contract.SupportLevel is "Supported" or "PortableManaged", contract);
+            SelectExactTarget(target);
+        }
+        else
+        {
+            SelectedTarget = Targets.FirstOrDefault(target =>
                              target.TargetFramework.Equals(saved.TargetFramework, StringComparison.OrdinalIgnoreCase) &&
                              target.RuntimeIdentifier.Equals(saved.RuntimeIdentifier, StringComparison.OrdinalIgnoreCase) &&
                              target.Deployment == saved.Deployment)
-                         ?? SelectedTarget;
+                             ?? SelectedTarget;
+        }
         OutputDirectory = saved.OutputDirectory;
+    }
+
+    private void SelectExactTarget(CompileTarget target)
+    {
+        var existing = target.ExactContract is { } contract
+            ? Targets.FirstOrDefault(item => item.ExactContract?.ContractSha256 == contract.ContractSha256)
+            : Targets.FirstOrDefault(item => item.Id == target.Id);
+        if (existing is null)
+        {
+            Targets.Insert(0, target);
+            existing = target;
+        }
+        SelectedTarget = existing;
     }
 
     // Settings belong to one script; checking a different one starts from defaults.
@@ -270,6 +292,7 @@ public sealed partial class MainWindowViewModel
     {
         if (_fileMode == mode) return;
         _fileMode = mode;
+        InvalidateReview();
         OnPropertyChanged(nameof(FilesLoadedOnly));
         OnPropertyChanged(nameof(FilesWholeFolder));
         OnPropertyChanged(nameof(FilesScriptOnly));

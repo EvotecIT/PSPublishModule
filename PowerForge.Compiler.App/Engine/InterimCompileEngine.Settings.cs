@@ -31,23 +31,8 @@ internal sealed partial class InterimCompileEngine
             var settingsPath = Path.GetFullPath(request.SettingsPath.Trim().Trim('"'));
             var inputPath = Path.GetFullPath(request.InputPath);
             var service = new PowerShellCompilationProjectManifestService();
-            var kind = new PowerShellCompilationInputResolver().Resolve(inputPath).Kind;
-            var deployment = request.Target.Deployment;
-            var contract = PowerShellCompilationTargetContractService.Create(
-                kind,
-                request.Mode,
-                request.Target.TargetFramework,
-                request.Target.RuntimeIdentifier,
-                selfContained: RequiresSelfContained(deployment),
-                singleFile: true,
-                optimization: deployment switch
-                {
-                    PowerShellCompilationDeploymentModel.Trimmed => PowerShellCompilationExecutableOptimization.Trimmed,
-                    PowerShellCompilationDeploymentModel.NativeAot => PowerShellCompilationExecutableOptimization.NativeAot,
-                    _ => PowerShellCompilationExecutableOptimization.None
-                },
-                explicitContract: true,
-                semanticProfileId: GetSemanticProfileId(request.Target.TargetFramework));
+            var kind = new PowerShellCompilationInputResolver().Resolve(inputPath, request.Target.ExactContract?.ArtifactKind).Kind;
+            var contract = CreateTarget(kind, request.Mode, request.Target);
 
             // A fresh manifest gives the engine's own name, lock path and output folder for this target.
             var fresh = service.Create(settingsPath, inputPath, Path.GetFileNameWithoutExtension(inputPath.TrimEnd('\\', '/')), contract);
@@ -63,6 +48,8 @@ internal sealed partial class InterimCompileEngine
             }
 
             var existing = manifest.Artifacts.FirstOrDefault(saved => saved.Name.Equals(artifact.Name, StringComparison.Ordinal)) ?? artifact;
+
+            existing.Target = artifact.Target;
 
             // A blank output folder means the engine default, which also clears an earlier override.
             var root = Path.GetDirectoryName(settingsPath) ?? Directory.GetCurrentDirectory();
@@ -108,7 +95,8 @@ internal sealed partial class InterimCompileEngine
                     artifact.Target.TargetFramework,
                     artifact.Target.RuntimeIdentifier,
                     artifact.Target.Deployment,
-                    Path.GetFullPath(Path.Combine(root, artifact.OutputDirectory))))
+                    Path.GetFullPath(Path.Combine(root, artifact.OutputDirectory)),
+                    artifact.Target))
                 .ToArray());
     }
 
