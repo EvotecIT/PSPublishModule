@@ -128,7 +128,7 @@ public sealed class PowerShellCompilationHostService
                 target = ResolveTarget(spec);
                 PowerShellCompilationArtifactBuilder.ValidateTargetOptions(spec);
             }
-            var sdk = PowerShellCompilationToolchainFingerprint.ResolveSelectedSdk(cancellationToken);
+            var sdk = PowerShellCompilationToolchainFingerprint.DiscoverSelectedSdk(cancellationToken);
             if (target is not null && PowerShellCompilationTargetFrameworkPolicy.IsModern(target.TargetFramework))
                 _ = PowerShellCompilationToolchainFingerprint.ResolveRuntimePackVersion(target.TargetFramework, sdk);
             cancellationToken.ThrowIfCancellationRequested();

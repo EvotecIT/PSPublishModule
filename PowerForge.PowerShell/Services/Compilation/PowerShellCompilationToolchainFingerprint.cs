@@ -25,7 +25,10 @@ internal static class PowerShellCompilationToolchainFingerprint
             return SdkHashes.GetOrAdd(selection.RootPath, ComputeToolchainSha256);
     }
 
-    internal static PowerShellCompilationSdkSelection ResolveSelectedSdk(CancellationToken cancellationToken = default)
+    internal static PowerShellCompilationSdkSelection ResolveSelectedSdk()
+        => DiscoverSelectedSdk(CancellationToken.None);
+
+    internal static PowerShellCompilationSdkSelection DiscoverSelectedSdk(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         using var environment = PowerShellCompilationWorkspace.Create(keep: false);
