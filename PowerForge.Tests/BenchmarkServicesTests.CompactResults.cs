@@ -167,6 +167,62 @@ public sealed partial class BenchmarkServicesTests
         Assert.Equal(["LazyValues"], officeImo.Cases);
     }
 
+    [Fact]
+    public void CompactResult_ReadsBackThroughEveryPublicReader()
+    {
+        string root = CreateTempRoot();
+        BenchmarkRunResult measured = MeasuredResult(("OfficeIMO", "Read", Spread(10, 10)), ("Sep", "Read", Spread(20, 10)));
+        measured.Comparison = new BenchmarkSummaryService().Compare(measured.Summary, "Sep");
+        BenchmarkEvidenceCatalog catalog = new BenchmarkEvidenceCatalogService().UpdateFile(
+            Path.Combine(root, "index.json"), PublishRequest(measured, TestDeclarations()));
+        string path = Path.Combine(root, Assert.Single(catalog.Entries).ArtifactRelativePath);
+        Assert.True(BenchmarkEvidenceResultCodec.IsCompact(File.ReadAllBytes(path)));
+        BenchmarkRunResult expected = BenchmarkEvidenceResultCodec.Read(path);
+        Assert.Equal(20, expected.Samples.Length);
+        Assert.NotEmpty(expected.Comparison);
+
+        Assert.Equal(BenchmarkJson.Serialize(expected), BenchmarkJson.Serialize(BenchmarkJson.Read<BenchmarkRunResult>(path)));
+        Assert.Equal(BenchmarkJson.Serialize(expected.Summary), BenchmarkJson.Serialize(BenchmarkJson.ReadSummary(path)));
+        Assert.Equal(BenchmarkJson.Serialize(expected.Comparison), BenchmarkJson.Serialize(BenchmarkJson.ReadComparison(path)));
+        BenchmarkRunResult imported = new BenchmarkResultImporter().Import(path);
+        Assert.Equal(BenchmarkJson.Serialize(expected.Samples), BenchmarkJson.Serialize(imported.Samples));
+        Assert.Equal(BenchmarkJson.Serialize(expected.Summary), BenchmarkJson.Serialize(imported.Summary));
+    }
+
+    [Fact]
+    public void CompactResult_KeepsComparisonsThatNameAnAliasMetric()
+    {
+        BenchmarkRunResult result = BenchmarkDotNetStyleResult();
+        foreach (BenchmarkSample sample in result.Samples.Where(sample => sample.Library == "Sep"))
+        {
+            sample.Metrics["BytesAllocatedPerOperation"] = 1024;
+            sample.Metrics["Allocated"] = 1024;
+        }
+        // One engine with the library as the variable so both libraries share a comparison group.
+        foreach (BenchmarkSample sample in result.Samples)
+        {
+            sample.Engine = sample.Library;
+            sample.Variables.Remove("FullName");
+            sample.Variables.Remove("Method");
+        }
+        result.Summary = new BenchmarkSummaryService().Summarize(result.Samples);
+        result.Comparison = new BenchmarkSummaryService().Compare(result.Summary, "Sep", "Allocated");
+        BenchmarkComparisonRow original = Assert.Single(result.Comparison, row => row.Engine == "OfficeIMO");
+        Assert.Equal(0.5, original.Ratio);
+
+        BenchmarkRunResult read = BenchmarkEvidenceResultCodec.Normalize(result);
+
+        BenchmarkComparisonRow decoded = Assert.Single(read.Comparison, row => row.Engine == "OfficeIMO");
+        Assert.Equal("Allocated", decoded.Metric);
+        Assert.Equal(512d, decoded.Actual);
+        Assert.Equal(1024d, decoded.Baseline);
+        Assert.Equal(0.5, decoded.Ratio);
+        // The alias is still written once and the encoding stays stable.
+        string json = Encoding.UTF8.GetString(BenchmarkEvidenceResultCodec.Encode(read));
+        Assert.DoesNotContain("\"Allocated\":", json.Replace("\"metric\":\"Allocated\"", string.Empty), StringComparison.Ordinal);
+        Assert.Equal(json, Encoding.UTF8.GetString(BenchmarkEvidenceResultCodec.Encode(result)));
+    }
+
     private static BenchmarkRunResult BenchmarkDotNetStyleResult()
     {
         const string job = "Job-ABC(IterationCount=15, LaunchCount=1, WarmupCount=5)";

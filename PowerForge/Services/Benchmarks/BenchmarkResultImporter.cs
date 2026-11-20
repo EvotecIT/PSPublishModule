@@ -340,7 +340,8 @@ public sealed partial class BenchmarkResultImporter
         using var stream = File.OpenRead(path);
         using var doc = JsonDocument.Parse(stream);
         var root = doc.RootElement;
-        if (root.ValueKind == JsonValueKind.Object && BenchmarkJson.TryGetPropertyIgnoreCase(root, "samples", out var samplesNode))
+        if (root.ValueKind == JsonValueKind.Object &&
+            (BenchmarkEvidenceResultCodec.IsCompact(root) || BenchmarkJson.TryGetPropertyIgnoreCase(root, "samples", out _)))
         {
             var result = BenchmarkJson.Read<BenchmarkRunResult>(path);
             if (!string.IsNullOrWhiteSpace(suite))

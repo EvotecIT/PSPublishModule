@@ -70,15 +70,36 @@ internal static class BenchmarkEvidenceResultCodec
         try
         {
             using JsonDocument document = JsonDocument.Parse(bytes);
-            return document.RootElement.ValueKind == JsonValueKind.Object &&
-                   document.RootElement.TryGetProperty("format", out JsonElement format) &&
-                   format.ValueKind == JsonValueKind.String &&
-                   string.Equals(format.GetString(), FormatName, StringComparison.Ordinal);
+            return IsCompact(document.RootElement);
         }
         catch (JsonException)
         {
             return false;
         }
+    }
+
+    /// <summary>Whether the text holds a result in the published form.</summary>
+    internal static bool IsCompact(string json)
+        => IsCompact(new UTF8Encoding(encoderShouldEmitUTF8Identifier: false).GetBytes(json));
+
+    /// <summary>Whether a parsed document root is a result in the published form.</summary>
+    internal static bool IsCompact(JsonElement root)
+        => root.ValueKind == JsonValueKind.Object &&
+           root.TryGetProperty("format", out JsonElement format) &&
+           format.ValueKind == JsonValueKind.String &&
+           string.Equals(format.GetString(), FormatName, StringComparison.Ordinal);
+
+    /// <summary>The metric name a published result stores for an alias such as <c>Allocated</c> or <c>Gen0Collections</c>.</summary>
+    internal static string CanonicalMetric(string? metric)
+    {
+        if (string.IsNullOrEmpty(metric))
+            return metric ?? string.Empty;
+        foreach ((string canonical, string[] aliases) in MetricAliases)
+        {
+            if (aliases.Any(alias => string.Equals(alias, metric, StringComparison.OrdinalIgnoreCase)))
+                return canonical;
+        }
+        return metric!;
     }
 
     /// <summary>Reads a published result file in either form.</summary>
@@ -175,7 +196,7 @@ internal static class BenchmarkEvidenceResultCodec
             .Select(row => new CompactComparison
             {
                 BaselineEngine = row.BaselineEngine ?? string.Empty,
-                Metric = row.Metric ?? "MedianMs",
+                Metric = string.IsNullOrEmpty(row.Metric) ? "MedianMs" : row.Metric,
                 TieTolerance = row.TieTolerance
             })
             .GroupBy(value => value.BaselineEngine + "\u001f" + value.Metric + "\u001f" + value.TieTolerance.ToString("R", CultureInfo.InvariantCulture), StringComparer.Ordinal)
@@ -216,6 +237,11 @@ internal static class BenchmarkEvidenceResultCodec
     {
         CompactDefaults defaults = document.Defaults ?? new CompactDefaults();
         string[] engines = document.Engines ?? Array.Empty<string>();
+        string[] aliases = (document.Comparisons ?? Array.Empty<CompactComparison>())
+            .Select(definition => definition.Metric)
+            .Where(metric => !string.Equals(CanonicalMetric(metric), metric, StringComparison.OrdinalIgnoreCase))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
         var samples = new List<BenchmarkSample>();
         foreach (CompactCase item in document.Cases ?? Array.Empty<CompactCase>())
         {
@@ -258,7 +284,7 @@ internal static class BenchmarkEvidenceResultCodec
                     Reason = item.Reasons?[index] ?? string.Empty,
                     Variables = new Dictionary<string, string?>(item.Variables ?? new SortedDictionary<string, string?>(StringComparer.Ordinal), StringComparer.OrdinalIgnoreCase),
                     Metrics = new Dictionary<string, double>(
-                        item.SampleMetrics?[index] ?? item.Metrics ?? new SortedDictionary<string, double>(StringComparer.Ordinal),
+                        WithAliases(item.SampleMetrics?[index] ?? item.Metrics ?? new SortedDictionary<string, double>(StringComparer.Ordinal), aliases),
                         StringComparer.OrdinalIgnoreCase)
                 });
             }
@@ -293,6 +319,23 @@ internal static class BenchmarkEvidenceResultCodec
                 .ToArray();
         }
         return result;
+    }
+
+    // A comparison may name a metric by an alias the published form stores once under its canonical name. The alias
+    // is restored on the samples, so the rebuilt summary rows carry it and the comparison resolves its values.
+    private static SortedDictionary<string, double> WithAliases(SortedDictionary<string, double> metrics, string[] aliases)
+    {
+        if (aliases.Length == 0)
+            return metrics;
+        var restored = new SortedDictionary<string, double>(metrics, StringComparer.Ordinal);
+        foreach (string alias in aliases)
+        {
+            string canonical = CanonicalMetric(alias);
+            string? key = restored.Keys.FirstOrDefault(name => string.Equals(name, canonical, StringComparison.OrdinalIgnoreCase));
+            if (key is not null && !restored.Keys.Any(name => string.Equals(name, alias, StringComparison.OrdinalIgnoreCase)))
+                restored[alias] = restored[key];
+        }
+        return restored;
     }
 
     private static CompactSummary ToCompactSummary(BenchmarkSummaryRow row, List<string> engines)

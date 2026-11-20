@@ -283,6 +283,9 @@ public static class BenchmarkJson
         using var stream = OpenSnapshot(path);
         using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
         var json = reader.ReadToEnd();
+        // A result published with an evidence catalog is stored in the compact form and expanded here.
+        if (typeof(T) == typeof(BenchmarkRunResult) && BenchmarkEvidenceResultCodec.IsCompact(json))
+            return (T)(object)BenchmarkEvidenceResultCodec.Decode(new UTF8Encoding(false).GetBytes(json), path);
         return JsonSerializer.Deserialize<T>(json, Options)
                ?? throw new InvalidOperationException($"Unable to deserialize benchmark JSON: {path}");
     }
@@ -290,6 +293,8 @@ public static class BenchmarkJson
     internal static T ReadBytes<T>(byte[] bytes, string sourceDescription)
     {
         if (bytes is null) throw new ArgumentNullException(nameof(bytes));
+        if (typeof(T) == typeof(BenchmarkRunResult) && BenchmarkEvidenceResultCodec.IsCompact(bytes))
+            return (T)(object)BenchmarkEvidenceResultCodec.Decode(bytes, sourceDescription);
         return JsonSerializer.Deserialize<T>(bytes, Options)
                ?? throw new InvalidOperationException(
                    $"Unable to deserialize benchmark JSON: {sourceDescription}");
@@ -325,6 +330,8 @@ public static class BenchmarkJson
         using var stream = OpenSnapshot(path);
         using var doc = JsonDocument.Parse(stream);
         var root = doc.RootElement;
+        if (BenchmarkEvidenceResultCodec.IsCompact(root))
+            return Read<BenchmarkRunResult>(path).Summary;
         if (root.ValueKind == JsonValueKind.Array)
             return JsonSerializer.Deserialize<BenchmarkSummaryRow[]>(root.GetRawText(), Options) ?? Array.Empty<BenchmarkSummaryRow>();
         if (root.ValueKind == JsonValueKind.Object && TryGetPropertyIgnoreCase(root, "summary", out var summary))
@@ -343,6 +350,8 @@ public static class BenchmarkJson
         using var stream = File.OpenRead(path);
         using var doc = JsonDocument.Parse(stream);
         var root = doc.RootElement;
+        if (BenchmarkEvidenceResultCodec.IsCompact(root))
+            return Read<BenchmarkRunResult>(path).Comparison;
         if (root.ValueKind == JsonValueKind.Array)
             return JsonSerializer.Deserialize<BenchmarkComparisonRow[]>(root.GetRawText(), Options) ?? Array.Empty<BenchmarkComparisonRow>();
         if (root.ValueKind == JsonValueKind.Object && TryGetPropertyIgnoreCase(root, "comparison", out var comparison))
