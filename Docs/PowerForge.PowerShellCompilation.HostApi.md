@@ -8,8 +8,8 @@ The target experience:
 
 1. Drop a `.ps1`, a `.psm1`/`.psd1` or a module folder.
 2. Within a few seconds, see whether it compiles, in which modes, and every problem with its file, line, severity and how to fix it.
-3. Confirm the external modules the result will need on the target machine.
-4. Pick a target from the supported profiles and compile, with phase progress and cancel.
+3. Pick a mode and target, then confirm the dependencies for that selection.
+4. Compile with phase progress and cancel.
 5. Open the output and see what compiled natively and what runs on the hosted PowerShell runtime.
 
 ## Non-goals
@@ -57,7 +57,7 @@ public sealed class PowerShellCompilationHostService
 
 | Operation | CLI | Purpose |
 |---|---|---|
-| `Check` | `powershell check <path>` | Everything a host shows before compiling. Never builds, never runs the script |
+| `Check` | `powershell check <path> [--mode <mode> --target <id>]` | Shows the available selections and prepares dependency review for one selection |
 | `Compile` | `powershell build <path>` keeps its name and gains the same request shape | Builds one artifact from a confirmed check |
 | `Doctor` | `powershell doctor [--target <id>]` | Checks this machine against a target profile |
 
@@ -75,6 +75,7 @@ Request:
 | `EntryPoint` | Optional, as today |
 | `Kind` | Optional; inferred as today when absent |
 | `Targets` | Optional target profile IDs from the support matrix; default is every profile supported on this host |
+| `LockSelection` | Optional mode and target ID for dependency review. Defaults to the recommended selection when one is available |
 
 Result:
 
@@ -82,15 +83,15 @@ Result:
 |---|---|
 | `SchemaVersion` | Starts at 1 |
 | `Input` | Resolved kind, entry point and source files |
-| `Modes` | One entry each for Package, Hybrid and Strict: `Outcome` (`Compiles`, `CompilesWithFallback`, `Blocked`), unit counts from the plan, and the profile recommendation's action and reasons |
+| `Modes` | One entry each for Package, Hybrid and Strict with its `Outcome` (`Compiles`, `CompilesWithFallback`, `Blocked`) and unit counts from the plan. Each mode has recommendations keyed by requested target ID, with that target's action and reasons |
 | `Recommended` | The mode and target the engine suggests for this input, with one sentence of reasoning taken from the recommendation |
 | `Diagnostics` | Every finding, in source order, in the shape below |
-| `Dependencies` | Each external module, script and native library, with `Disposition` (`Bundled`, `RequiredOnTarget`, `Blocked`) and the source location that introduced it |
-| `ProposedLock` | The dependency lock that a confirmed compile will pass as `ExpectedDependencyLock` |
+| `Dependencies` | The external modules, scripts and native libraries for the selected mode and target, with `Disposition` (`Bundled`, `RequiredOnTarget`, `Blocked`) and the source location that introduced each one |
+| `ProposedLock` | The selected mode, target ID and proposed dependency graph. Absent when there is no selected pair or the pair is blocked |
 | `Prerequisites` | The `Doctor` result for the requested targets |
 | `Timings` | Elapsed time per phase |
 
-Check runs the analyzer once per requested mode, the explanation service, the dependency planner and the profile recommendation for each target. It also runs the Package-mode validations that `PowerShellPackagedScriptRewriter` performs today, so those limits appear here as diagnostics, not later as build exceptions.
+Check runs the analyzer and explanation service in Package, Hybrid and Strict and computes a profile recommendation for each mode and target. It plans dependencies for the selected pair. It also reports the Package-mode validations that `PowerShellPackagedScriptRewriter` performs today. Check never builds or runs the script.
 
 ### Diagnostics
 
@@ -111,10 +112,10 @@ Severity, title, fix and help link come from one catalog keyed by `PowerShellCom
 
 The dependency-lock requirement stays. The host flow makes the review explicit and quick:
 
-1. `Check` returns `Dependencies` and a `ProposedLock`.
+1. `Check` returns `Dependencies` and a `ProposedLock` for the selected mode and target. To review another selection, the host calls `Check` with that pair.
 2. The host shows each `RequiredOnTarget` item as "this executable needs module X on the machine that runs it" and each `Blocked` item as a diagnostic.
-3. The user confirms.
-4. `Compile` receives the confirmed lock as `ExpectedDependencyLock`. If the sources changed since `Check`, the existing lock validation fails and the host asks for a fresh check.
+3. The user confirms the lock for the named selection.
+4. `Compile` verifies that the requested mode and target match the confirmed selection, then passes the lock to the builder as `ExpectedDependencyLock`. A different selection or a stale lock returns a diagnostic asking for a fresh check before the build starts.
 
 `AllowUnreviewedDependencyResolution` remains for scripted development builds and is never the host default.
 
@@ -131,7 +132,7 @@ Most real scripts start with `#requires`. Package mode should handle the common 
 
 ### Compile
 
-Request: the `Check` input, plus `Mode`, `Target`, `OutputDirectory`, optional `ArtifactName`, optional signing settings, and the confirmed `DependencyLock`. Every field except the lock has the current default.
+The request includes the source input, `Mode`, `Target`, `OutputDirectory`, optional `ArtifactName`, optional signing settings, and the confirmed `DependencyLock` with its mode and target ID. Omitted mode and target use the confirmed selection. The other defaults match the existing build command.
 
 Result:
 
@@ -200,7 +201,7 @@ Each slice is useful on its own and adds a CLI command or option before any host
 
 1. **Diagnostic catalog and severity**, with the catalog test. The CLI's text output uses it immediately.
 2. **`Check` and `powershell check`**: one result, no project file, Package-mode validations moved up front, cancellable analysis.
-3. **Reviewed lock from check**: `ProposedLock` and passing it to `Compile`; `powershell build --lock <file>` for scripted use.
+3. **Reviewed lock from check** for one mode and target. The host passes it to `Compile` and scripts use `powershell build --dependency-lock <file>`.
 4. **`Doctor` and `powershell doctor`.**
 5. **Compile result additions**: `Summary`, `FallbackUnits`, `Timings`, and returning input problems as diagnostics instead of throwing.
 6. **Progress phases** through `IProgress<PowerShellCompilationProgress>`.
@@ -215,7 +216,8 @@ A simple host can start once slices 1 to 3 exist; the rest improve it.
 - Every `PowerShellCompilationDiagnosticCode` has a catalog entry; the test fails otherwise.
 - `Check` and `Compile` return a result, not an exception, for a missing file, an unsupported input kind, a missing SDK and a rejected construct.
 - Cancelling `Check` on a large module stops within one unit.
-- `Compile` with the lock from `Check` succeeds; editing an imported module name between the two makes the lock validation fail with a diagnostic asking for a new check.
+- A check with two requested targets keeps each target's action and reasons addressable in each mode.
+- `Compile` succeeds when the selection and sources match the confirmed lock. Changing the mode, the target or an imported module name returns a diagnostic asking for a new check.
 - An executable built with an icon, version `1.2.3`, product and company names shows them in Windows file properties, and `RequireAdministrator` prompts for elevation on start.
 - The JSON for `check`, `build` and `doctor` carries `SchemaVersion` and is covered by contract tests on the serialized shape.
 
