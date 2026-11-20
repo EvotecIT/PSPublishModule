@@ -90,6 +90,8 @@ $expectedMethods = @{
 }
 $cliSha256 = (Get-FileHash -LiteralPath $CliAssemblyPath -Algorithm SHA256).Hash.ToLowerInvariant()
 $results = [Collections.Generic.List[object]]::new()
+$total = $entries.Count * $targets.Count
+$runError = $null
 try {
     $null = New-Item -ItemType Directory -Path $run
     foreach ($entry in $entries) {
@@ -151,16 +153,22 @@ try {
     if ((Get-FileHash -LiteralPath $CliAssemblyPath -Algorithm SHA256).Hash.ToLowerInvariant() -cne $cliSha256) {
         throw 'The PowerForge CLI changed during the module matrix.'
     }
-    $passed = @($results | Where-Object matched).Count
-    Write-Utf8Json -Path $EvidencePath -Value ([ordered]@{
-        schemaVersion=1; packetSha256=$packet.Sha256; cliSha256=$cliSha256
-        passed=$passed; total=$results.Count; comparisons=@($results.ToArray())
-    })
-    Write-Host "$passed/$($results.Count) comparisons passed. Evidence $EvidencePath"
-    if ($passed -ne $results.Count) { throw 'Independent module workflow verification failed.' }
+} catch {
+    $runError = $_.Exception.Message
+    throw
 } finally {
-    if (-not $KeepRunArtifacts -and (Test-Path -LiteralPath $run -PathType Container)) {
-        $cleanup = Assert-ContainedPath -Root $WorkspacePath -Path (Resolve-Path -LiteralPath $run).Path -Label 'Independent module cleanup'
-        Remove-Item -LiteralPath $cleanup -Recurse
+    try {
+        $passed = @($results | Where-Object matched).Count
+        Write-Utf8Json -Path $EvidencePath -Value ([ordered]@{
+            schemaVersion=1; packetSha256=$packet.Sha256; cliSha256=$cliSha256
+            passed=$passed; attempted=$results.Count; total=$total; runError=$runError; comparisons=@($results.ToArray())
+        })
+        Write-Host "$passed/$total comparisons passed. Evidence $EvidencePath"
+    } finally {
+        if (-not $KeepRunArtifacts -and (Test-Path -LiteralPath $run -PathType Container)) {
+            $cleanup = Assert-ContainedPath -Root $WorkspacePath -Path (Resolve-Path -LiteralPath $run).Path -Label 'Independent module cleanup'
+            Remove-Item -LiteralPath $cleanup -Recurse
+        }
     }
 }
+if ($passed -ne $total) { throw 'Independent module workflow verification failed.' }
