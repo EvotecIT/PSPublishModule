@@ -60,12 +60,12 @@ emitted Pester method or replace the fixed packet's invocation probes.
 Eight additional version-pinned Gallery packages were measured with the Hybrid
 `net10.0` post-emission census on Windows x64. The baseline compiler at
 `833ca4cd6050a30249fcfc3dc6313c6e80083e2f` completed four package censuses.
-The compiler now completes all eight, with 707 of 736 units emitted. The
+The compiler now completes all eight, with 709 of 736 units emitted. The
 packages were read from the original Gallery archives.
 
 | Gallery package | Version | Baseline emitted units | Current emitted units |
 | --- | --- | ---: | ---: |
-| PSWriteColor | 1.0.7 | Input rejected | 0/2 |
+| PSWriteColor | 1.0.7 | Input rejected | 2/2 |
 | PSWriteHTML | 1.45.0 | Input rejected | 264/274 |
 | PSSharedGoods | 0.0.313 | Input rejected | 280/289 |
 | PowerInfoblox | 1.0.42 | Input rejected | 89/89 |
@@ -86,9 +86,33 @@ without skips.
 
 | Package | Observed behavior |
 | --- | --- |
-| PSWriteColor | `Write-Colour` resolves to `Write-Color`. Text output, host color records and the UTF-16 log match. The artifact retains the authored function body. |
+| PSWriteColor | `Write-Colour` resolves to `Write-Color`. Text output, host color records and the UTF-16 log match. The tested function body has an emitted CLR method. |
 | PSWordPress | `Connect-WordPress` and `Get-WordPressPost` match for two explicitly requested pages from a loopback server. The comparisons cover the GET path, query values, synthetic authorization and returned post data. Both entry points have emitted CLR bodies. |
 | PSWriteHTML | `New-HTML` and `New-HTMLTable` produce the same report title, headers, escaped cell content and embedded-asset structure. Both entry points have emitted CLR bodies. |
+
+## Independent script and module assessment
+
+A separate packet pins 12 Gallery modules and eight standalone scripts from
+the Gallery and a public Git revision. On PowerShell 7.6.6 the starting census
+completed for **15/20 inputs**, with **150/192 units emitted**. Support for
+a top-level export call splatted from an immediately preceding literal
+hashtable increased this to **17/20 inputs** and **220/284 units emitted**.
+PoshRSJob contributed **1/2** and posh-git **69/90**. The packet also counted
+three promoted regions in posh-git. Three modules still failed admission.
+PSDepend uses a computed export list, PSProfiler dot-sources a computed
+script block, and SimplySql already has a binary module as its manifest root.
+
+On PowerShell 7.6.6 and Windows PowerShell 5.1.26100.9818, posh-git returned
+matching branch, untracked-file, repository, and export information for a
+local Git fixture. PoshRSJob matched the exported commands, job completion,
+and output of a start, wait, receive, and remove sequence using the
+`CompleteModule` resource mode. All four original and Hybrid comparisons passed
+without skips.
+
+The same change admits static references to PowerShell's `ActionPreference`
+enum for hosted compilation. The unchanged PSWriteColor 1.0.7 improved from
+**0/2** just after literal named exports were enabled to **2/2**. The other
+seven Gallery packages in that packet kept their previous counts.
 
 ## Why these forms were selected
 
