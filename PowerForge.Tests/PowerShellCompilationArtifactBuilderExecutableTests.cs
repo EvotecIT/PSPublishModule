@@ -1,6 +1,8 @@
 using System;
 using System.Diagnostics;
 using System.IO;
+using System.Reflection.PortableExecutable;
+using System.Runtime.InteropServices;
 using PowerForge;
 using Xunit;
 
@@ -365,6 +367,45 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         };
 
         Assert.False(PowerShellCompilationArtifactBuilder.ShouldEnablePublishSingleFile(spec));
+    }
+
+    [Fact]
+    public async Task Build_WindowsNativeAotExecutableIsByteIdenticalAcrossFreshWorkspaces()
+    {
+        if (!OperatingSystem.IsWindows() || RuntimeInformation.ProcessArchitecture != Architecture.X64) return;
+        using var fixture = ArtifactFixture.Create("param([int] $Value = 42); return $Value");
+        const string name = "PowerForge.ReproducibleNativeAot";
+        await PowerShellCompilationTestPrerequisites.AcquireRuntimePackAsync("net10.0", "win-x64");
+        var builder = new PowerShellCompilationArtifactBuilder();
+
+        PowerShellCompilationBuildResult Build(string outputDirectory)
+            => builder.Build(new PowerShellCompilationBuildSpec(fixture.ScriptPath, outputDirectory, name,
+                PowerShellCompilationArtifactKind.Executable, PowerShellCompilationMode.Strict,
+                allowUnreviewedDependencyResolution: true)
+            {
+                TargetFramework = "net10.0",
+                RuntimeIdentifier = "win-x64",
+                SelfContained = true,
+                SingleFile = true,
+                Optimization = PowerShellCompilationExecutableOptimization.NativeAot,
+                UseBuildCache = false,
+                TimeoutSeconds = 600
+            });
+
+        var first = Build(fixture.OutputPath);
+        var second = Build(Path.Combine(fixture.RootPath, "rebuild"));
+        Assert.True(first.Succeeded, first.Error + Environment.NewLine + first.BuildOutput);
+        Assert.True(second.Succeeded, second.Error + Environment.NewLine + second.BuildOutput);
+        Assert.Equal(File.ReadAllBytes(first.ArtifactPath!), File.ReadAllBytes(second.ArtifactPath!));
+
+        Assert.True(File.Exists(Path.ChangeExtension(first.ArtifactPath, ".pdb")));
+        using var executable = File.OpenRead(first.ArtifactPath!);
+        using var reader = new PEReader(executable);
+        var entry = Assert.Single(reader.ReadDebugDirectory(), static item => item.Type == DebugDirectoryEntryType.CodeView);
+        Assert.Equal(name + ".pdb", reader.ReadCodeViewDebugDirectoryData(entry).Path);
+
+        var run = RunProcess(first.ArtifactPath!);
+        Assert.Equal((0, "42", string.Empty), (run.ExitCode, run.StandardOutput.Trim(), run.StandardError.Trim()));
     }
 
     [Fact]

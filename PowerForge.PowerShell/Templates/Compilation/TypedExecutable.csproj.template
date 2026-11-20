@@ -21,6 +21,11 @@
     <ILLinkTreatWarningsAsErrors>true</ILLinkTreatWarningsAsErrors>
     <TreatWarningsAsErrors Condition="'$(PublishTrimmed)' == 'true' or '$(PublishAot)' == 'true'">true</TreatWarningsAsErrors>
   </PropertyGroup>
+  <ItemGroup Condition="'$(PublishAot)' == 'true' and $([System.String]::Copy('$(RuntimeIdentifier)').StartsWith('win-'))">
+    <!-- Preserve the native PDB without recording the temporary project path in the executable. -->
+    <LinkerArg Include="/Brepro" />
+    <LinkerArg Include="/PDBALTPATH:$(AssemblyName).pdb" />
+  </ItemGroup>
   <ItemGroup>
     {{PROVIDER_REFERENCES}}
   </ItemGroup>
