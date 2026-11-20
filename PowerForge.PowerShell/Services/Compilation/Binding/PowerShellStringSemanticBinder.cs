@@ -35,8 +35,10 @@ internal static class PowerShellStringSemanticBinder
                     nested is not SubExpressionAst
                     {
                         SubExpression.Traps: null or { Count: 0 },
-                        SubExpression.Statements: [PipelineAst { PipelineElements: [CommandExpressionAst { Redirections.Count: 0 } item] } pipeline]
-                    } ||
+                        SubExpression.Statements.Count: 1
+                    } subexpression ||
+                    subexpression.SubExpression.Statements[0] is not PipelineAst { PipelineElements.Count: 1 } pipeline ||
+                    pipeline.PipelineElements[0] is not CommandExpressionAst { Redirections.Count: 0 } item ||
                     PowerShellCommandRegionSemanticBinder.IsBackground(pipeline))
                 {
                     var message = allowScalarSubexpression

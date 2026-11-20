@@ -25,6 +25,8 @@ internal sealed class PowerShellImplicitOutputPass : IPowerShellSemanticPass
                 exiting.Contains(function.Symbol.StableKey) &&
                 PowerShellSemanticAnalyzer.EnumerateStatements(function.Body).OfType<PowerShellBoundTryStatement>()
                     .Any(attempt => attempt.FinallyBlock is { } cleanup &&
+                        (ContainsReturningOutput(attempt.Body) ||
+                         attempt.Catches.Any(static clause => ContainsReturningOutput(clause.Body))) &&
                         (ContainsRuntimeFreeExit(cleanup) || GetCallees(cleanup).Any(exiting.Contains))) ||
                 commandHost && PowerShellSemanticAnalyzer.EnumerateStatements(function.Body).Any(statement =>
                     PowerShellSemanticAnalyzer.GetSuccessOutputExpression(statement) is { } output &&
@@ -55,6 +57,10 @@ internal sealed class PowerShellImplicitOutputPass : IPowerShellSemanticPass
     private static bool ContainsRuntimeFreeExit(PowerShellBoundBlock block)
         => PowerShellSemanticAnalyzer.EnumerateStatements(block)
             .Any(static statement => statement is PowerShellBoundExitStatement { RuntimeFree: true });
+
+    private static bool ContainsReturningOutput(PowerShellBoundBlock block)
+        => PowerShellSemanticAnalyzer.EnumerateStatements(block, descendIntoCaptures: false)
+            .Any(static statement => statement is PowerShellBoundReturnStatement { EmitsSuccessOutput: true });
 
     private static void AddCallers(HashSet<string> selected, IReadOnlyDictionary<string, string[]> calls)
     {

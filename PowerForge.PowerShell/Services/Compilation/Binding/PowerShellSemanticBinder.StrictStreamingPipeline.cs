@@ -68,8 +68,8 @@ internal sealed partial class PowerShellSemanticBinder
             UnwrapExpression(assignment.Right) is not ArrayExpressionAst
             {
                 SubExpression.Traps: null or { Count: 0 },
-                SubExpression.Statements: [PipelineAst collected]
-            } ||
+                SubExpression.Statements.Count: 1
+            } array || array.SubExpression.Statements[0] is not PipelineAst collected ||
             !symbols.TryGetValue(variable.VariablePath.UserPath, out var target) ||
             target.Symbol.Kind != PowerShellSymbolKind.Local ||
             constraint.TypeName.GetReflectionType() is not { IsArray: true } vector ||
@@ -488,15 +488,19 @@ internal sealed partial class PowerShellSemanticBinder
     }
 
     private static StrictPipelineMap? DescribeStrictMap(NamedBlockAst block)
-        => block.Statements switch
-        {
-            [var result] when IsStrictStageResult(result) => new(result),
-            [var counter, var result] when IsStrictStageResult(result) && TryGetStrictStageIncrement(counter, out _) =>
-                new(result, counter),
-            [var result, var counter] when IsStrictStageResult(result) && TryGetStrictStageIncrement(counter, out _) =>
-                new(result, counter, CounterAfterResult: true),
-            _ => null
-        };
+    {
+        var statements = block.Statements;
+        if (statements.Count is < 1 or > 2) return null;
+        var first = statements[0];
+        if (statements.Count == 1)
+            return IsStrictStageResult(first) ? new(first) : null;
+        var second = statements[1];
+        if (TryGetStrictStageIncrement(first, out _) && IsStrictStageResult(second))
+            return new(second, first);
+        if (IsStrictStageResult(first) && TryGetStrictStageIncrement(second, out _))
+            return new(first, second, CounterAfterResult: true);
+        return null;
+    }
 
     private static bool IsStrictStageResult(StatementAst statement)
         => statement is PipelineAst { PipelineElements.Count: 1 } pipeline &&

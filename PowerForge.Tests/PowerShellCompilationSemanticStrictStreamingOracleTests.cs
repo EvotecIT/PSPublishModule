@@ -101,6 +101,17 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
             ("ConditionalExit", """
                 param([int] $Status = 0)
                 if ($Status -ne 0) { exit $Status } else { return 7 }
+                """),
+            ("ValueReturnedAfterCleanupKeepsCallableAbi", """
+                function Get-Value {
+                    param([int] $Status)
+                    [int] $value = 0
+                    try { $value = 7 }
+                    finally { if ($Status -ne 0) { exit $Status } }
+                    return $value
+                }
+                [int] $result = Get-Value 0
+                return $result
                 """));
     }
 
@@ -119,6 +130,12 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
                 Write-Output $null
                 """),
             ("EmptyInputProducesNoRecords", "Write-Output @()"),
+            ("EmptyOutputPreservesOtherContinuations", """
+                function Get-One { return 1 }
+                Get-One
+                Write-Output @()
+                return 2
+                """),
             ("NullInputProducesOneNullRecord", "Write-Output $null"));
     }
 

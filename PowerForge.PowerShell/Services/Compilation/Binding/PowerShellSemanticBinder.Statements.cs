@@ -538,12 +538,11 @@ internal sealed partial class PowerShellSemanticBinder
             var message = BindExpression(document, messageSyntax, symbols, functions, diagnostics, expectedType, targetFramework, capabilities);
             if (strictOutput && message is not null)
             {
-                if (message is PowerShellBoundArrayExpression { Elements.Length: 0 })
-                    return new PowerShellBoundExpressionStatement(message.Span, message, emitsOutput: false);
                 var type = message.Type.ClrType;
                 if (!PowerShellStableScalarTypePolicy.IsSupported(type) &&
                     !(type.IsArray && type.GetArrayRank() == 1 && PowerShellStableScalarTypePolicy.IsSupported(type.GetElementType()!)) &&
-                    message.ValueState != PowerShellValueState.Null)
+                    message.ValueState != PowerShellValueState.Null &&
+                    message is not PowerShellBoundArrayExpression { Elements.Length: 0 })
                 {
                     diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2948",
                         "Strict Write-Output requires a stable scalar, an explicit null, or a one-dimensional stable-scalar array.", message.Span));
