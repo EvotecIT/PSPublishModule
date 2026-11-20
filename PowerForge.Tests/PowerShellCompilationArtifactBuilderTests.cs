@@ -592,6 +592,19 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         $public[0] = Get-Item -LiteralPath "$PSScriptRoot/Initialize.ps1"
         foreach ($file in $public) { . $file.FullName }
         """)]
+    [InlineData("""
+        $public.SetValue((Get-Item -LiteralPath "$PSScriptRoot/Initialize.ps1"), 0)
+        foreach ($file in $public) { . $file.FullName }
+        """)]
+    [InlineData("""
+        $public[0], $unused = (Get-Item -LiteralPath "$PSScriptRoot/Initialize.ps1"), $null
+        foreach ($file in $public) { . $file.FullName }
+        """)]
+    [InlineData("""
+        $alias = $public
+        $alias.SetValue((Get-Item -LiteralPath "$PSScriptRoot/Initialize.ps1"), 0)
+        foreach ($file in $public) { . $file.FullName }
+        """)]
     public void Build_RejectsFileNameExportsWhenLoaderAlsoUsesUnresolvedFiles(string load)
     {
         using var fixture = ArtifactFixture.Create(
