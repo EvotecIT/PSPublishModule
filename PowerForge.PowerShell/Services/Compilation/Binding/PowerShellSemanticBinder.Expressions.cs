@@ -118,7 +118,8 @@ internal sealed partial class PowerShellSemanticBinder
                     expandable,
                     (item, itemType) => BindExpression(document, item, symbols, functions, diagnostics, itemType, targetFramework, capabilities),
                     diagnostics,
-                    capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding));
+                    capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding),
+                    allowScalarSubexpression: capabilities == PowerShellCompilationCapabilities.TypedExecutable);
             case StringConstantExpressionAst text:
                 return new PowerShellBoundLiteralExpression(span, text.Value, LiteralType(typeof(string), "String literal syntax determines the CLR representation."), PowerShellValueState.Known);
             case ConstantExpressionAst constant:

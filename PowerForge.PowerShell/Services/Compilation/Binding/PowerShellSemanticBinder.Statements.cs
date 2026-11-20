@@ -532,8 +532,24 @@ internal sealed partial class PowerShellSemanticBinder
                 outputBinding = _semanticProfile.Family == PowerShellCompilationSemanticHostFamily.PowerShell7
                     ? PowerShellOutputBindingKind.PositionalNoEnumeratePowerShell7
                     : PowerShellOutputBindingKind.NoEnumerate;
-            var expectedType = streamKind == PowerShellStreamCommandKind.Success ? null : typeof(string);
+            var strictOutput = PowerShellCommandIslandPolicy.IsStrictWriteOutput(capabilities, streamProvider!);
+            var expectedType = strictOutput ? InferPipelineInputType(messageSyntax, symbols) :
+                streamKind == PowerShellStreamCommandKind.Success ? null : typeof(string);
             var message = BindExpression(document, messageSyntax, symbols, functions, diagnostics, expectedType, targetFramework, capabilities);
+            if (strictOutput && message is not null)
+            {
+                var type = message.Type.ClrType;
+                if (!PowerShellStableScalarTypePolicy.IsSupported(type) &&
+                    !(type.IsArray && type.GetArrayRank() == 1 && PowerShellStableScalarTypePolicy.IsSupported(type.GetElementType()!)) &&
+                    message.ValueState != PowerShellValueState.Null &&
+                    message is not PowerShellBoundArrayExpression { Elements.Length: 0 })
+                {
+                    diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2948",
+                        "Strict Write-Output requires a stable scalar, an explicit null, or a one-dimensional stable-scalar array.", message.Span));
+                    return null;
+                }
+                return StrictSuccessOutput(message);
+            }
             if (message is not null && namedNoEnumerate &&
                 _semanticProfile.Family == PowerShellCompilationSemanticHostFamily.WindowsPowerShell51 &&
                 !PowerShellStableScalarTypePolicy.IsSupported(message.Type))

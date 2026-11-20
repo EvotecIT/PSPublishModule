@@ -5,8 +5,10 @@ namespace PowerForge;
 
 internal sealed partial class PowerShellSemanticBinder
 {
-    private sealed record StrictPipelineStage(CommandAst Command, NamedBlockAst? Predicate = null, NamedBlockAst? Map = null,
+    private sealed record StrictPipelineStage(CommandAst Command, NamedBlockAst? Predicate = null, StrictPipelineMap? Map = null,
         string? ExpandProperty = null, int? First = null, PowerShellLocalCallSignature? Lifecycle = null);
+
+    private sealed record StrictPipelineMap(StatementAst Result, StatementAst? Counter = null, bool CounterAfterResult = false);
 
     private sealed record StrictStreamingBinding(ISet<string> LocalFunctionNames, List<PowerShellBoundLocal> GeneratedLocals);
 
@@ -122,7 +124,7 @@ internal sealed partial class PowerShellSemanticBinder
             return RejectStrictPipeline(diagnostics, span, "requires a one-dimensional, statically typed stable-scalar array");
 
         if (input is PowerShellBoundArrayExpression inlineArray &&
-            stages.Any(static stage => stage.Map?.Statements.Count == 2 || stage.Lifecycle is not null) &&
+            stages.Any(static stage => stage.Map?.Counter is not null || stage.Lifecycle is not null) &&
             !inlineArray.Elements.All(static item => IsTotalStrictStageExpression(item, null)))
             return RejectStrictPipeline(diagnostics, input.Span, "requires a closed inline source before a counter or lifecycle reduction");
 
@@ -188,7 +190,8 @@ internal sealed partial class PowerShellSemanticBinder
         PowerShellBoundStatement[]? BindStages(PowerShellBoundVariableExpression current)
         {
             var statements = new List<PowerShellBoundStatement>();
-            var guards = new Stack<(List<PowerShellBoundStatement> Parent, SourceSpan Span, PowerShellBoundExpression Predicate)>();
+            var continuations = new Stack<(List<PowerShellBoundStatement> Parent, SourceSpan Span,
+                PowerShellBoundExpression? Predicate, PowerShellBoundStatement? After)>();
             foreach (var stage in stages)
             {
                 stageSymbols["_"] = new PowerShellSemanticSymbolBinding(current.Symbol, current.Type);
@@ -202,18 +205,20 @@ internal sealed partial class PowerShellSemanticBinder
                 }
                 else if (stage.Map is { } map)
                 {
-                    var value = BindStageExpression(map.Statements.Last(), current, null);
+                    var value = BindStageExpression(map.Result, current, null);
                     if (value is null) return null;
-                    if (map.Statements.Count == 2)
+                    PowerShellBoundStatement? update = null;
+                    if (map.Counter is { } counter)
                     {
-                        var update = BindStrictPipelineCounter(map.Statements[0], symbols, preceding, initializer,
+                        update = BindStrictPipelineCounter(counter, symbols, preceding, initializer,
                             counterWrites, diagnostics, stageSpan,
                             (syntax, localSymbols) => BindStatement(document, syntax, localSymbols, functions, diagnostics,
                                 false, targetFramework, capabilities));
                         if (update is null) return null;
-                        statements.Add(update);
+                        if (!map.CounterAfterResult) statements.Add(update);
                     }
                     current = AssignStageResult(stage, stageSpan, value);
+                    if (map.CounterAfterResult) ContinueAfterStages(stageSpan, null, update);
                 }
                 else if (stage.ExpandProperty is { } property)
                 {
@@ -248,17 +253,26 @@ internal sealed partial class PowerShellSemanticBinder
                 statements.Add(output);
             }
 
-            while (guards.Count > 0)
+            while (continuations.Count > 0)
             {
-                var guard = guards.Pop();
-                guard.Parent.Add(StrictPipelineIf(guard.Span, guard.Predicate, statements.ToArray()));
-                statements = guard.Parent;
+                var continuation = continuations.Pop();
+                if (continuation.Predicate is { } condition)
+                    continuation.Parent.Add(StrictPipelineIf(continuation.Span, condition, statements.ToArray()));
+                else
+                {
+                    continuation.Parent.AddRange(statements);
+                    continuation.Parent.Add(continuation.After!);
+                }
+                statements = continuation.Parent;
             }
             return statements.ToArray();
 
             void GuardFollowingStages(SourceSpan stageSpan, PowerShellBoundExpression condition)
+                => ContinueAfterStages(stageSpan, condition, null);
+
+            void ContinueAfterStages(SourceSpan stageSpan, PowerShellBoundExpression? condition, PowerShellBoundStatement? after)
             {
-                guards.Push((statements, stageSpan, condition));
+                continuations.Push((statements, stageSpan, condition, after));
                 statements = new List<PowerShellBoundStatement>();
             }
 
@@ -326,7 +340,7 @@ internal sealed partial class PowerShellSemanticBinder
 
         PowerShellBoundStatement? BindRecordOutput(PowerShellBoundVariableExpression current)
         {
-            if (collector is null) return StrictPipelineOutput(current);
+            if (collector is null) return StrictSuccessOutput(current);
             if (current.Type.ClrType != capturedElementType)
             {
                 RejectStrictPipeline(diagnostics, current.Span, "requires captured records to match the declared array element type");
@@ -443,9 +457,8 @@ internal sealed partial class PowerShellSemanticBinder
                         continue;
                     case "powerforge.command.mapping.foreach-object" when
                         PowerShellMappingCommandSemanticBinder.TryGetRuntimeFreeScriptBlock(command, "Process", out var map) &&
-                        map.Unnamed && map.Statements.Count is 1 or 2 && IsStrictStageResult(map.Statements.Last()) &&
-                        (map.Statements.Count == 1 || TryGetStrictStageIncrement(map.Statements[0], out _)):
-                        discovered.Add(new(command, Map: map));
+                        map.Unnamed && DescribeStrictMap(map) is { } mapping:
+                        discovered.Add(new(command, Map: mapping));
                         continue;
                     case "powerforge.command.projection.select-object" when
                         command.CommandElements.Count == 3 &&
@@ -473,6 +486,17 @@ internal sealed partial class PowerShellSemanticBinder
         stages = discovered.ToArray();
         return true;
     }
+
+    private static StrictPipelineMap? DescribeStrictMap(NamedBlockAst block)
+        => block.Statements switch
+        {
+            [var result] when IsStrictStageResult(result) => new(result),
+            [var counter, var result] when IsStrictStageResult(result) && TryGetStrictStageIncrement(counter, out _) =>
+                new(result, counter),
+            [var result, var counter] when IsStrictStageResult(result) && TryGetStrictStageIncrement(counter, out _) =>
+                new(result, counter, CounterAfterResult: true),
+            _ => null
+        };
 
     private static bool IsStrictStageResult(StatementAst statement)
         => statement is PipelineAst { PipelineElements.Count: 1 } pipeline &&
@@ -508,7 +532,7 @@ internal sealed partial class PowerShellSemanticBinder
     private static PowerShellBoundIfStatement StrictPipelineIf(SourceSpan span, PowerShellBoundExpression condition, PowerShellBoundStatement[] statements)
         => new(span, new[] { new PowerShellBoundConditionalClause(condition, new PowerShellBoundBlock(span, statements)) }, null);
 
-    private static PowerShellBoundStreamWriteStatement StrictPipelineOutput(PowerShellBoundExpression value)
+    private static PowerShellBoundStreamWriteStatement StrictSuccessOutput(PowerShellBoundExpression value)
         => new(value.Span, PowerShellStreamCommandKind.Success, null, value, runtimeFree: true);
 
     private static PowerShellSymbolId CreateStrictPipelineItem(ParsedSourceDocument document,

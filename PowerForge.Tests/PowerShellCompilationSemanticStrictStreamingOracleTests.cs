@@ -67,6 +67,32 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
     }
 
     [PinnedSemanticHostFact]
+    public void StrictStreamingInterpolatesScalarSubexpressionsOnBothPinnedHosts()
+    {
+        CompareStrictStreamingCases(
+            ("ScalarInterpolation", """
+                [string] $label = 'example'
+                return "length=$($label.Length) empty=[$($null)] computed=$(1 + 2)"
+                """));
+    }
+
+    [PinnedSemanticHostFact]
+    public void StrictStreamingWriteOutputEnumeratesTypedValuesOnBothPinnedHosts()
+    {
+        CompareStrictStreamingCases(
+            ("ExplicitTypedOutputRecords", """
+                [string] $name = 'title'
+                Microsoft.PowerShell.Utility\Write-Output -InputObject "header=$name"
+                Write-Output ''
+                Write-Output @()
+                [string[]] $values = 'before', 'placeholder', 'after'
+                [Array]::Clear($values, 1, 1)
+                Write-Output $values
+                Write-Output $null
+                """));
+    }
+
+    [PinnedSemanticHostFact]
     public void StrictStreamingExpandsKnownPropertiesOnBothPinnedHosts()
     {
         CompareStrictStreamingCases(
@@ -123,6 +149,29 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
                 foreach ($number in 7, 8, 9) {
                     1, 2, 3 | ForEach-Object { $_ } | Select-Object -First 1
                 }
+                """));
+    }
+
+    [PinnedSemanticHostFact]
+    public void StrictStreamingResumesMapBodyAfterDownstreamOnBothPinnedHosts()
+    {
+        CompareStrictStreamingCases(
+            ("CountersOnEitherSideOfDownstreamProcessing", """
+                [int[]] $values = 1, 2, 3, 4
+                [int] $before = 0
+                [int] $outer = 0
+                [int] $inner = 0
+                $values | ForEach-Object { $before++; $_ } | ForEach-Object { $_; $outer++ } | ForEach-Object { $_; $inner++ } | Where-Object { $_ -gt 2 } | Select-Object -First 1
+                if ($before -ne 3 -or $outer -ne 2 -or $inner -ne 2) {
+                    throw [System.InvalidOperationException]::new('Stages resumed at the wrong point.')
+                }
+                $before
+                """),
+            ("DownstreamFilterStillResumesProducer", """
+                [int[]] $values = 1, 2, 3
+                [int] $count = 0
+                $values | ForEach-Object { $_; $count++ } | Where-Object { $_ -gt 3 }
+                $count
                 """));
     }
 

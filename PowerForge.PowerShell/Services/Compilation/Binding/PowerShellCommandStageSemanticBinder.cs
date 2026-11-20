@@ -85,7 +85,8 @@ internal static class PowerShellStreamCommandSemanticBinder
         PowerShellCompilationCommandProviderContract provider,
         out PowerShellStreamCommandKind kind,
         out ExpressionAst message,
-        out PowerShellOutputBindingKind outputBinding)
+        out PowerShellOutputBindingKind outputBinding,
+        bool allowTypedSuccessValue = false)
     {
         kind = default;
         message = null!;
@@ -93,6 +94,9 @@ internal static class PowerShellStreamCommandSemanticBinder
         if (command.Parent is not PipelineAst pipeline ||
             pipeline.PipelineElements.Count != 1 ||
             command.Redirections.Count != 0)
+            return false;
+        if (allowTypedSuccessValue && (command.InvocationOperator != TokenKind.Unknown ||
+            PowerShellCommandRegionSemanticBinder.IsBackground(pipeline)))
             return false;
         if (provider.Family is not (PowerShellCompilationCommandFamily.Stream or PowerShellCompilationCommandFamily.ExternalOperation) ||
             !provider.Adapter.RuntimeFree)
@@ -119,7 +123,9 @@ internal static class PowerShellStreamCommandSemanticBinder
         if (arguments.Length == 1 && valueParameter.Position == 0 && arguments[0] is ExpressionAst positional)
         {
             message = positional;
-            return kind == PowerShellStreamCommandKind.Success ? IsRuntimeFreeSuccessValue(message) : IsProvablyNonEmptyMessage(message);
+            return kind == PowerShellStreamCommandKind.Success
+                ? allowTypedSuccessValue || IsRuntimeFreeSuccessValue(message)
+                : IsProvablyNonEmptyMessage(message);
         }
         if (arguments.Length == 2 &&
             arguments[0] is CommandParameterAst parameter &&
@@ -127,7 +133,9 @@ internal static class PowerShellStreamCommandSemanticBinder
             arguments[1] is ExpressionAst named)
         {
             message = named;
-            return kind == PowerShellStreamCommandKind.Success ? IsRuntimeFreeSuccessValue(message) : IsProvablyNonEmptyMessage(message);
+            return kind == PowerShellStreamCommandKind.Success
+                ? allowTypedSuccessValue || IsRuntimeFreeSuccessValue(message)
+                : IsProvablyNonEmptyMessage(message);
         }
         return false;
     }

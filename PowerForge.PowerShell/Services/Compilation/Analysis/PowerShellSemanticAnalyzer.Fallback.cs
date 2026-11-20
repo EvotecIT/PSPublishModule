@@ -142,7 +142,8 @@ internal sealed partial class PowerShellSemanticAnalyzer
         {
             if (statement.Message is PowerShellBoundArrayExpression array)
                 return statement.RuntimeFree && array.Elements.Any(RequiresHostedArrayRecord);
-            if (type.ClrType == typeof(void) || PowerShellStableScalarTypePolicy.IsSupported(type))
+            if (type.ClrType == typeof(void) || PowerShellStableScalarTypePolicy.IsSupported(type) ||
+                statement.RuntimeFree && statement.Message.ValueState == PowerShellValueState.Null)
                 return false;
             var clr = type.ClrType;
             return !statement.RuntimeFree || !clr.IsArray || clr.GetArrayRank() != 1 ||

@@ -36,6 +36,11 @@ internal static class PowerShellSuccessOutputTypePolicy
             } && functions.TryGetValue(streamedCall.Target.StableKey, out var streamedTarget))
             return Resolve(streamedTarget, functions, visiting);
         if (expression is null) return null;
+        // Null records and empty vectors do not add a concrete record type.
+        if (statement is PowerShellBoundStreamWriteStatement { RuntimeFree: true } &&
+            (expression.ValueState == PowerShellValueState.Null ||
+             expression is PowerShellBoundArrayExpression { Elements.Length: 0 }))
+            return null;
         if (statement is PowerShellBoundStreamWriteStatement { Provider.Adapter.EntryPoint: { } entryPoint })
             return entryPoint.ResultType switch
             {
