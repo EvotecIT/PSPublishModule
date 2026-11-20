@@ -145,8 +145,14 @@ public sealed partial class RunnerHousekeepingService
 
     private static string MaintenanceStage(RunnerMaintenanceJournal journal) => Path.Combine(journal.Root, MaintenanceQuarantine, journal.Id);
 
+    private static string MaintenanceJournalDirectory(MaintenanceRun run, bool windowsTool)
+        => Path.Combine(run.Spec.StateRootPath, windowsTool ? "tool-journal" : "journal");
+
+    private static string MaintenanceJournalPath(MaintenanceRun run, RunnerMaintenanceJournal journal)
+        => Path.Combine(MaintenanceJournalDirectory(run, journal.WindowsTool), journal.Id + ".json");
+
     private static bool MaintenanceHasPendingJournals(MaintenanceRun run)
-        => run.Isolated.Any(journal => File.Exists(Path.Combine(run.Spec.StateRootPath, "journal", journal.Id + ".json")));
+        => run.Isolated.Any(journal => File.Exists(MaintenanceJournalPath(run, journal)));
 
     private static bool MaintenanceExcludedInstallation(MaintenanceRun run, string path)
         => run.Spec.Runners.Where(r => !r.CleanupEnabled)
@@ -179,7 +185,7 @@ public sealed partial class RunnerHousekeepingService
             var stage = MaintenanceStage(journal);
             MaintenancePhysicalPath(stage);
             Directory.CreateDirectory(Path.GetDirectoryName(stage)!);
-            var record = Path.Combine(run.Spec.StateRootPath, "journal", journal.Id + ".json");
+            var record = MaintenanceJournalPath(run, journal);
             MaintenanceWrite(record, journal, RunnerMaintenanceJsonContext.Default.RunnerMaintenanceJournal);
             if (directory) Directory.Move(path, stage);
             else File.Move(path, stage);
@@ -197,10 +203,10 @@ public sealed partial class RunnerHousekeepingService
     private void MaintenanceDeleteIsolated(MaintenanceRun run)
     {
         foreach (var journal in run.Isolated)
-            if (!MaintenanceDeleteIsolated(run, journal)) break;
+            if (!MaintenanceDeleteIsolated(run, journal, MaintenanceJournalPath(run, journal))) break;
     }
 
-    private bool MaintenanceDeleteIsolated(MaintenanceRun run, RunnerMaintenanceJournal journal)
+    private bool MaintenanceDeleteIsolated(MaintenanceRun run, RunnerMaintenanceJournal journal, string record)
     {
         var stage = MaintenanceStage(journal);
         try
@@ -214,7 +220,7 @@ public sealed partial class RunnerHousekeepingService
                 run.Result.RemovedBytes += journal.Bytes;
                 run.Removed.Add(journal.Source);
             }
-            File.Delete(Path.Combine(run.Spec.StateRootPath, "journal", journal.Id + ".json"));
+            File.Delete(record);
             var parent = Path.GetDirectoryName(stage)!;
             if (Directory.Exists(parent) && !Directory.EnumerateFileSystemEntries(parent).Any()) Directory.Delete(parent);
         }

@@ -11,14 +11,12 @@ public sealed partial class RunnerHousekeepingService
 {
     private void MaintenanceRecover(MaintenanceRun run, bool recoverWindowsTools)
     {
-        var directory = Path.Combine(run.Spec.StateRootPath, "journal");
-        if (!Directory.Exists(directory)) return;
         var roots = run.Spec.Runners.SelectMany(r => new[] { r.WorkRootPath, r.TempPath, Path.Combine(r.RootPath, "_diag") })
             .Concat(run.Spec.LegacyTemporaryRoots.Select(r => r.RootPath))
             .Concat(new[] { run.Spec.NuGetPackagesPath, run.Spec.NuGetHttpCachePath }).Where(p => !string.IsNullOrEmpty(p)).ToArray();
         var toolRoots = recoverWindowsTools && run.Spec.WindowsToolRetention is { } tools
             ? WindowsToolRetentionRoots(tools).ToArray() : Array.Empty<string>();
-        foreach (var record in Directory.EnumerateFiles(directory, "*.json"))
+        foreach (var record in MaintenanceRecoveryRecords(run, recoverWindowsTools))
         {
             if (run.Expired) break;
             try
@@ -49,14 +47,10 @@ public sealed partial class RunnerHousekeepingService
                 if (File.Exists(stage) || Directory.Exists(stage))
                 {
                     if (run.DryRun) continue;
-                    // Finish recovered tool records as we find them so discovery cannot spend their entire time slice.
-                    if (recoverWindowsTools)
-                    {
-                        var canContinue = MaintenanceDeleteIsolated(run, journal);
-                        run.State.Due |= File.Exists(record);
-                        if (!canContinue) break;
-                    }
-                    else run.Isolated.Add(journal);
+                    // Finish recovered records as we find them so discovery cannot spend their entire time slice.
+                    var canContinue = MaintenanceDeleteIsolated(run, journal, record);
+                    run.State.Due |= File.Exists(record);
+                    if (!canContinue) break;
                 }
                 else if (!run.DryRun) File.Delete(record);
             }
@@ -65,6 +59,21 @@ public sealed partial class RunnerHousekeepingService
                 run.Errors.Add("Quarantine record " + Path.GetFileName(record) + " retained — " + error.Message);
             }
         }
+    }
+
+    private static IEnumerable<string> MaintenanceRecoveryRecords(MaintenanceRun run, bool recoverWindowsTools)
+    {
+        if (recoverWindowsTools)
+        {
+            var toolDirectory = MaintenanceJournalDirectory(run, windowsTool: true);
+            if (Directory.Exists(toolDirectory))
+                foreach (var record in Directory.EnumerateFiles(toolDirectory, "*.json")) yield return record;
+        }
+
+        // Earlier Windows tool builds wrote records alongside ordinary cleanup.
+        var directory = MaintenanceJournalDirectory(run, windowsTool: false);
+        if (Directory.Exists(directory))
+            foreach (var record in Directory.EnumerateFiles(directory, "*.json")) yield return record;
     }
 
     private static void MaintenanceRecordJob(MaintenanceRun run, RunnerMaintenancePhase phase)

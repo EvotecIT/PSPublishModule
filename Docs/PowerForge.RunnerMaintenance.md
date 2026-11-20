@@ -100,6 +100,8 @@ The scheduled pass uses the host admission lock and waits for idle runners. It c
 
 Run a dry run and review the selected paths before enabling this policy. Git checkouts use tracked files for pin discovery, including source directories that share names with build output. Include pins from generated files, paths outside recorded checkouts, and other applications sharing the host in the machine policy. Keep the original authorized roots configured until quarantine cleanup finishes. If a policy change interrupted recovery, restore those roots and allow an idle scheduled pass to finish it.
 
+Windows tool records use the separate `tool-journal` directory so other cleanup can advance while tool retirement waits for idle. The tool pass also recovers earlier records from the shared journal.
+
 The GitHub runner refreshes action downloads at job preparation and retires old runner binaries through its updater. PowerForge preserves those installation lifecycles. The lifecycle hooks use GitHub's `ACTIONS_RUNNER_HOOK_JOB_STARTED` and `ACTIONS_RUNNER_HOOK_JOB_COMPLETED` settings. [GitHub job hooks](https://docs.github.com/en/actions/how-tos/manage-runners/self-hosted-runners/run-scripts), [action download lifecycle](https://github.com/actions/runner/blob/main/src/Runner.Worker/ActionManager.cs), [runner updater](https://github.com/actions/runner/blob/main/src/Runner.Listener/SelfUpdater.cs)
 
 ## Recovery

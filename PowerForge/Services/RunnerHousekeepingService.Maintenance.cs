@@ -112,9 +112,6 @@ public sealed partial class RunnerHousekeepingService
                     run.Retained.Add("Windows tool retention deferred because its installation roots could not be qualified — " + error.GetType().Name);
                 }
             }
-            MaintenanceRecover(run, recoverWindowsTools: false);
-            MaintenanceDeleteIsolated(run);
-            run.Isolated.Clear();
             MaintenanceRecordJob(run, phase);
             MaintenanceRefreshJobProcesses(run, fresh);
             var idleRegistrations = new List<RunnerMaintenanceRegistration>();
@@ -139,6 +136,7 @@ public sealed partial class RunnerHousekeepingService
             }
             if (toolRetentionIdle && run.SharedIdle)
                 MaintenanceWindowsToolPhase(run, windowsTools!);
+            MaintenanceRecover(run, recoverWindowsTools: false);
             foreach (var runner in idleRegistrations) MaintenanceRunnerOutput(run, runner);
             if (run.SharedIdle && !run.Expired)
             {

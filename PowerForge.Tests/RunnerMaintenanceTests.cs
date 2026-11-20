@@ -662,6 +662,7 @@ public sealed class RunnerMaintenanceTests
         Assert.False(Directory.Exists(Path.Combine(runtime, "81.0.1")));
         Assert.False(Directory.Exists(Path.Combine(packs, "81.0.1")));
         Assert.False(Directory.Exists(Path.Combine(module, "3.0.101")));
+        Assert.True(Directory.Exists(Path.Combine(fixture.Spec.StateRootPath, "tool-journal")));
         foreach (var version in new[] { "81.0.0", "81.0.0-preview.1", "81.0.2", "81.0.3", "81.0.4", "81.0.5", "81.0.6", "81.0.7" })
             Assert.True(Directory.Exists(Path.Combine(runtime, version)), version);
         Assert.True(Directory.Exists(Path.Combine(packs, "81.0.3")));
@@ -729,8 +730,10 @@ public sealed class RunnerMaintenanceTests
         Assert.False(File.Exists(generated));
     }
 
-    [Fact]
-    public void Maintain_WindowsToolRecoveryWaitsForRecordedJobProcessToExit()
+    [Theory]
+    [InlineData("journal")]
+    [InlineData("tool-journal")]
+    public void Maintain_WindowsToolRecoveryWaitsForRecordedJobProcessToExit(string journalDirectory)
     {
         if (!OperatingSystem.IsWindows()) return;
         using var fixture = new Installation();
@@ -741,7 +744,7 @@ public sealed class RunnerMaintenanceTests
         Directory.CreateDirectory(stage);
         File.WriteAllText(Path.Combine(stage, "runtime.dll"), "quarantined");
         fixture.Spec.WindowsToolRetention = new RunnerWindowsToolRetention { DotNetRoot = dotnet };
-        var journal = Path.Combine(fixture.Spec.StateRootPath, "journal");
+        var journal = Path.Combine(fixture.Spec.StateRootPath, journalDirectory);
         Directory.CreateDirectory(journal);
         var record = Path.Combine(journal, id + ".json");
         File.WriteAllText(record, JsonSerializer.Serialize(new RunnerMaintenanceJournal
