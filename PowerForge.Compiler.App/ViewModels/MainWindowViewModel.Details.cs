@@ -229,6 +229,7 @@ public sealed partial class MainWindowViewModel
     private void ApplySavedTarget(SavedTarget saved)
     {
         SelectedTarget = Targets.FirstOrDefault(target =>
+                             target.TargetFramework.Equals(saved.TargetFramework, StringComparison.OrdinalIgnoreCase) &&
                              target.RuntimeIdentifier.Equals(saved.RuntimeIdentifier, StringComparison.OrdinalIgnoreCase) &&
                              target.Deployment == saved.Deployment)
                          ?? SelectedTarget;

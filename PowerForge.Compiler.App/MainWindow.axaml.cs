@@ -19,6 +19,7 @@ public sealed partial class MainWindow : Window
     {
         InitializeComponent();
         DropZone.AddHandler(DragDrop.DragEnterEvent, OnDragEnter);
+        DropZone.AddHandler(DragDrop.DragOverEvent, OnDragOver);
         DropZone.AddHandler(DragDrop.DragLeaveEvent, OnDragLeave);
         DropZone.AddHandler(DragDrop.DropEvent, OnDrop);
 
@@ -76,12 +77,22 @@ public sealed partial class MainWindow : Window
         DropOverlay.IsVisible = accept;
     }
 
+    // The app only reads the dropped path, so it always reports Copy or None; never Move, which could make the source delete the file.
+    private void OnDragOver(object? sender, DragEventArgs e) =>
+        e.DragEffects = _viewModel is { IsBusy: false } && GetDroppedPath(e) is not null ? DragDropEffects.Copy : DragDropEffects.None;
+
     private void OnDragLeave(object? sender, DragEventArgs e) => DropOverlay.IsVisible = false;
 
     private async void OnDrop(object? sender, DragEventArgs e)
     {
         DropOverlay.IsVisible = false;
-        if (_viewModel is not { IsBusy: false } || GetDroppedPath(e) is not { } path) return;
+        if (_viewModel is not { IsBusy: false } || GetDroppedPath(e) is not { } path)
+        {
+            e.DragEffects = DragDropEffects.None;
+            return;
+        }
+
+        e.DragEffects = DragDropEffects.Copy;
         await _viewModel.SetInputAsync(path);
     }
 

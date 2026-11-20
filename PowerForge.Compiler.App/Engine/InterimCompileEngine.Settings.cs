@@ -36,9 +36,9 @@ internal sealed partial class InterimCompileEngine
             var contract = PowerShellCompilationTargetContractService.Create(
                 kind,
                 request.Mode,
-                TargetFramework,
+                request.Target.TargetFramework,
                 request.Target.RuntimeIdentifier,
-                selfContained: deployment is PowerShellCompilationDeploymentModel.SelfContained or PowerShellCompilationDeploymentModel.Trimmed,
+                selfContained: RequiresSelfContained(deployment),
                 singleFile: true,
                 optimization: deployment switch
                 {
@@ -47,7 +47,7 @@ internal sealed partial class InterimCompileEngine
                     _ => PowerShellCompilationExecutableOptimization.None
                 },
                 explicitContract: true,
-                semanticProfileId: GetSemanticProfileId());
+                semanticProfileId: GetSemanticProfileId(request.Target.TargetFramework));
 
             // A fresh manifest gives the engine's own name, lock path and output folder for this target.
             var fresh = service.Create(settingsPath, inputPath, Path.GetFileNameWithoutExtension(inputPath.TrimEnd('\\', '/')), contract);
@@ -96,6 +96,7 @@ internal sealed partial class InterimCompileEngine
                 .Select(artifact => new SavedTarget(
                     artifact.Name,
                     artifact.Target.Mode,
+                    artifact.Target.TargetFramework,
                     artifact.Target.RuntimeIdentifier,
                     artifact.Target.Deployment,
                     Path.GetFullPath(Path.Combine(root, artifact.OutputDirectory))))

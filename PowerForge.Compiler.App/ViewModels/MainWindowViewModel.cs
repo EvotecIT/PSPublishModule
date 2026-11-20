@@ -262,6 +262,8 @@ public sealed partial class MainWindowViewModel : ObservableObject
     {
         Cancel();
         using var operation = BeginOperation();
+        // A different input must never be compiled with the previous input's mode and target, even if its check is cancelled.
+        if (!string.Equals(path, InputPath, StringComparison.Ordinal)) ClearCheck();
         InputPath = path;
         _lastResult = null;
         RaiseResultChanged();
@@ -309,24 +311,45 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
     private void RefreshSelectedMode()
     {
-        Diagnostics.Clear();
         Dependencies.Clear();
         Targets.Clear();
+        if (_check is not null && SelectedMode is { } card)
+        {
+            foreach (var dependency in card.Check.Dependencies) Dependencies.Add(dependency);
+            if (_check.Kind is { } kind)
+                foreach (var target in _engine.GetTargets(card.Mode, kind)) Targets.Add(target);
+        }
+
+        SelectedTarget = Targets.FirstOrDefault();
+        RefreshProblems();
+        RaiseCommandStates();
+    }
+
+    // The problems list shows the check's findings for the selected mode; a failed build replaces them until the next build or check.
+    private void RefreshProblems()
+    {
+        Diagnostics.Clear();
         if (_check is not null)
         {
             foreach (var diagnostic in _check.InputDiagnostics) Diagnostics.Add(new DiagnosticItemViewModel(diagnostic));
             if (SelectedMode is { } card)
-            {
                 foreach (var diagnostic in card.Check.Diagnostics) Diagnostics.Add(new DiagnosticItemViewModel(diagnostic));
-                foreach (var dependency in card.Check.Dependencies) Dependencies.Add(dependency);
-                if (_check.Kind is { } kind)
-                    foreach (var target in _engine.GetTargets(card.Mode, kind)) Targets.Add(target);
-            }
         }
 
-        SelectedTarget = Targets.FirstOrDefault();
         RaiseListsChanged();
-        RaiseCommandStates();
+    }
+
+    private void ClearCheck()
+    {
+        _check = null;
+        Modes.Clear();
+        _selectedMode = null;
+        OnPropertyChanged(nameof(SelectedMode));
+        OnPropertyChanged(nameof(SelectedVerdict));
+        OnPropertyChanged(nameof(CompileButtonText));
+        OnPropertyChanged(nameof(HasCheck));
+        OnPropertyChanged(nameof(InputSummary));
+        RefreshSelectedMode();
     }
 
     private async Task CompileAsync()
@@ -335,6 +358,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         using var operation = BeginOperation();
         _lastResult = null;
         RaiseResultChanged();
+        RefreshProblems();
         Log.Clear();
         IsCompiling = true;
         StatusText = $"Compiling {InputName} in {card.Title} for {target.DisplayName}. The first build for a target takes a minute or so.";

@@ -35,6 +35,7 @@ internal sealed partial class InterimCompileEngine : ICompileEngine
             .Select(static profile => new CompileTarget(
                 profile.Id,
                 profile.Mode,
+                profile.TargetFramework,
                 profile.RuntimeIdentifier,
                 profile.Deployment,
                 profile.SupportLevel,
@@ -47,7 +48,7 @@ internal sealed partial class InterimCompileEngine : ICompileEngine
         if (targets.Count == 0)
         {
             // Modes without qualified profiles still build for the current machine, framework-dependent.
-            targets.Add(new CompileTarget($"host-{mode}", mode, hostRuntime, PowerShellCompilationDeploymentModel.FrameworkDependent, "this machine", Advertised: true));
+            targets.Add(new CompileTarget($"host-{mode}", mode, TargetFramework, hostRuntime, PowerShellCompilationDeploymentModel.FrameworkDependent, "this machine", Advertised: true));
         }
         return targets;
     }
@@ -227,6 +228,7 @@ internal sealed partial class InterimCompileEngine : ICompileEngine
             var files = request.Files ?? FileRules.Default;
             var resolved = new PowerShellCompilationInputResolver().Resolve(fullPath, mode: request.Mode, allowDynamicModuleRuntimeSources: AllowsRuntimeSources(files, request.Mode));
             var deployment = request.Target?.Deployment ?? PowerShellCompilationDeploymentModel.FrameworkDependent;
+            var framework = string.IsNullOrWhiteSpace(request.Target?.TargetFramework) ? TargetFramework : request.Target!.TargetFramework;
             var spec = new PowerShellCompilationBuildSpec(
                 resolved.SourcePath,
                 request.OutputDirectory ?? PowerShellCompilationOutputPolicy.GetDefaultOutputDirectory(resolved),
@@ -240,10 +242,12 @@ internal sealed partial class InterimCompileEngine : ICompileEngine
                 ResourceMode = files.Mode,
                 IncludeResource = files.Include.ToArray(),
                 ExcludeResource = files.Exclude.ToArray(),
-                TargetFramework = TargetFramework,
-                SemanticProfileId = GetSemanticProfileId(),
+                TargetFramework = framework,
+                SemanticProfileId = GetSemanticProfileId(framework),
                 RuntimeIdentifier = request.Target?.RuntimeIdentifier,
-                SelfContained = deployment is PowerShellCompilationDeploymentModel.SelfContained or PowerShellCompilationDeploymentModel.Trimmed,
+                // The engine requires self-contained single-file output for trimmed and NativeAOT executables.
+                SelfContained = RequiresSelfContained(deployment),
+                SingleFile = true,
                 Optimization = deployment switch
                 {
                     PowerShellCompilationDeploymentModel.Trimmed => PowerShellCompilationExecutableOptimization.Trimmed,
@@ -366,9 +370,14 @@ internal sealed partial class InterimCompileEngine : ICompileEngine
     private static bool AllowsRuntimeSources(FileRules files, PowerShellCompilationMode mode) =>
         files.Mode == PowerShellCompilationResourceMode.CompleteModule && mode != PowerShellCompilationMode.Strict;
 
-    private static string GetSemanticProfileId() =>
+    private static string GetSemanticProfileId(string targetFramework = TargetFramework) =>
         PowerShellCompilationSemanticOracleCatalog.Get(
-            PowerShellCompilationTargetContractService.GetDefaultSemanticProfileId(TargetFramework)).ProfileId;
+            PowerShellCompilationTargetContractService.GetDefaultSemanticProfileId(targetFramework)).ProfileId;
+
+    internal static bool RequiresSelfContained(PowerShellCompilationDeploymentModel deployment) =>
+        deployment is PowerShellCompilationDeploymentModel.SelfContained
+            or PowerShellCompilationDeploymentModel.Trimmed
+            or PowerShellCompilationDeploymentModel.NativeAot;
 
     private static CompileDiagnostic ToDiagnostic(PowerShellCompilationExplanationDiagnostic cause, string path, CompileSeverity severity) =>
         new(severity, cause.Code.ToString(), cause.FeatureId, cause.Message, path, cause.Line, cause.Column);

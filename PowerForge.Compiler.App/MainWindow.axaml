@@ -205,7 +205,10 @@
               </MenuFlyout>
             </Button.Flyout>
           </Button>
-          <Button Classes="band" Content="Check again" Command="{Binding RecheckCommand}" IsVisible="{Binding HasInput}" />
+          <Panel IsVisible="{Binding HasInput}">
+            <Button Classes="band" Content="Check again" Command="{Binding RecheckCommand}" IsVisible="{Binding !IsChecking}" />
+            <Button Classes="band" Content="Stop checking" Command="{Binding CancelCommand}" IsVisible="{Binding IsChecking}" />
+          </Panel>
         </StackPanel>
       </Grid>
     </Border>
@@ -290,6 +293,9 @@
         <!-- Build settings -->
         <Border Background="{DynamicResource PfSurface}" BorderBrush="{DynamicResource PfStroke}" BorderThickness="1"
                 CornerRadius="12" Padding="20" VerticalAlignment="Top">
+          <!-- Settings scroll when the window is short; Compile and Stop stay pinned and reachable. -->
+          <Grid RowDefinitions="*,Auto">
+          <ScrollViewer Grid.Row="0" Padding="0,0,6,0">
           <StackPanel Spacing="16">
             <StackPanel>
               <TextBlock Classes="label" Text="Build for" />
@@ -327,10 +333,14 @@
               <TextBlock Classes="muted" Text="{Binding SettingsSummary}" FontSize="12.5" TextTrimming="CharacterEllipsis" />
               <Button Classes="link" Content="Edit details…" Click="OnOpenDetails" IsEnabled="{Binding !IsBusy}" Margin="0,4,0,0" />
             </StackPanel>
+          </StackPanel>
+          </ScrollViewer>
+          <Grid Grid.Row="1" Margin="0,16,0,0">
             <Button Classes="primary" Content="{Binding CompileButtonText}" Command="{Binding CompileCommand}" IsVisible="{Binding !IsCompiling}" />
             <Button Classes="quiet" Content="Stop the build" Command="{Binding CancelCommand}" IsVisible="{Binding IsCompiling}"
                     Height="44" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" VerticalContentAlignment="Center" />
-          </StackPanel>
+          </Grid>
+          </Grid>
         </Border>
 
         <!-- Result and details -->

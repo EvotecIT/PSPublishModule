@@ -87,18 +87,25 @@ public sealed record CheckResult(
 public sealed record CompileTarget(
     string Id,
     PowerShellCompilationMode Mode,
+    string TargetFramework,
     string RuntimeIdentifier,
     PowerShellCompilationDeploymentModel Deployment,
     string SupportLevel,
     bool Advertised)
 {
     /// <summary>Label for pickers.</summary>
-    public string DisplayName => $"{Platform}, {DeploymentLabel}{(Advertised ? string.Empty : " (preview)")}";
+    public string DisplayName => (IsWindowsPowerShell ? "Windows PowerShell 5.1" : $"{Platform}, {DeploymentLabel}") +
+                                 (Advertised ? string.Empty : " (preview)");
+
+    // .NET Framework targets run in Windows PowerShell 5.1; platform and deployment labels don't apply to them.
+    private bool IsWindowsPowerShell => TargetFramework.StartsWith("net4", StringComparison.OrdinalIgnoreCase);
 
     private string Platform
     {
         get
         {
+            // Portable profiles have no runtime identifier and run wherever their runtime does.
+            if (string.IsNullOrWhiteSpace(RuntimeIdentifier)) return "Any platform";
             var parts = RuntimeIdentifier.Split('-', 2);
             var os = parts[0] switch
             {
@@ -146,6 +153,7 @@ public sealed record FileRules(
 public sealed record SavedTarget(
     string Name,
     PowerShellCompilationMode Mode,
+    string TargetFramework,
     string RuntimeIdentifier,
     PowerShellCompilationDeploymentModel Deployment,
     string OutputDirectory);
