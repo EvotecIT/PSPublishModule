@@ -8,6 +8,11 @@ namespace PowerForge;
 /// </summary>
 internal static class PowerShellConventionalModuleSourceDiscovery
 {
+    private static readonly HashSet<string> VariableWritingCommands = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "Set-Variable", "New-Variable", "Remove-Variable", "Clear-Variable", "set", "sv", "nv", "rv", "clv"
+    };
+
     internal static PowerShellConventionalModuleSourceDiscoveryResult Analyze(string sourcePath, bool rejectChangingFileLists = false)
     {
         var rootPath = Path.GetFullPath(sourcePath);
@@ -20,6 +25,7 @@ internal static class PowerShellConventionalModuleSourceDiscovery
         var discoveredDirectories = new HashSet<string>(PowerShellCompilationPathSafety.PathComparer);
         var recursiveDirectories = new HashSet<string>(PowerShellCompilationPathSafety.PathComparer);
         var loaders = new Dictionary<int, PowerShellConventionalLoaderIdentity>();
+        var enumerations = FindFileEnumerationAssignments(ast).ToArray();
         foreach (var command in ast.FindAll(
                      node => node is CommandAst candidate && IsTopLevel(candidate, ast),
                      searchNestedScriptBlocks: true)
@@ -29,12 +35,13 @@ internal static class PowerShellConventionalModuleSourceDiscovery
             if (!TryReadPathPattern(command, out var relativePattern, out var isLiteralPath, out var pathElementIndex) ||
                 !Path.GetExtension(relativePattern).Equals(".ps1", StringComparison.OrdinalIgnoreCase))
                 continue;
-            var acceptedLoaders = FindConventionalLoaders(command, ast, rootPath, rejectChangingFileLists).ToArray();
-            if (acceptedLoaders.Length == 0)
+            var associations = FindConventionalLoaders(command, ast, rootPath, enumerations).ToArray();
+            if (associations.Length == 0)
                 continue;
+            if (rejectChangingFileLists && associations.Any(static association => !association.Stable))
+                throw new InvalidOperationException(
+                    $"Conventional module loader at {rootPath}:{command.Extent.StartLineNumber} can change its file list before or during loading.");
             var (recurse, excludes) = ReadLoaderOptions(command, rootPath, pathElementIndex);
-            foreach (var loader in acceptedLoaders)
-                loaders[loader.StartOffset] = loader;
 
             var normalized = relativePattern.Replace('\\', Path.DirectorySeparatorChar).Replace('/', Path.DirectorySeparatorChar);
             if (isLiteralPath && WildcardPattern.ContainsWildcardCharacters(relativePattern))
@@ -51,12 +58,15 @@ internal static class PowerShellConventionalModuleSourceDiscovery
             var searchRoot = Path.GetFullPath(Path.Combine(sourceRoot, directoryPart));
             if (!PowerShellCompilationPathSafety.PathEquals(sourceRoot, searchRoot))
                 PowerShellCompilationPathSafety.EnsureContained(sourceRoot, searchRoot, $"Conventional module source pattern '{relativePattern}' escapes the module root.");
-            if (!Directory.Exists(searchRoot))
+            if (recurse)
+                recursiveDirectories.Add(searchRoot);
+            var accepted = associations.Where(static association => association.Stable).ToArray();
+            foreach (var association in accepted)
+                loaders[association.Loader.StartOffset] = association.Loader;
+            if (accepted.Length == 0 || !Directory.Exists(searchRoot))
                 continue;
             PowerShellCompilationPathSafety.EnsureNoLinks(sourceRoot, searchRoot, $"Conventional module source pattern '{relativePattern}' traverses a symbolic link or junction.");
             discoveredDirectories.Add(searchRoot);
-            if (recurse)
-                recursiveDirectories.Add(searchRoot);
             var wildcard = new WildcardPattern(filePattern, WildcardOptions.IgnoreCase | WildcardOptions.Compiled);
             var excluded = excludes.Select(pattern => new WildcardPattern(pattern, WildcardOptions.IgnoreCase | WildcardOptions.Compiled)).ToArray();
             foreach (var file in EnumerateAccessibleFiles(searchRoot, recurse)
@@ -171,6 +181,7 @@ internal static class PowerShellConventionalModuleSourceDiscovery
                     enumeration.Assignment.Extent.EndOffset < loader.Extent.StartOffset &&
                     enumeration.Name.Equals(name, StringComparison.OrdinalIgnoreCase)).Assignment;
                 if (producer is null ||
+                    HasInterveningAssignment(root, name, producer.Extent.EndOffset, loader.Extent.EndOffset) ||
                     HasUnmodeledFileListUse(root, name, producer.Extent.EndOffset, loader.Extent.EndOffset, allowedUses))
                     return false;
 
@@ -359,14 +370,14 @@ internal static class PowerShellConventionalModuleSourceDiscovery
         return true;
     }
 
-    private static IEnumerable<PowerShellConventionalLoaderIdentity> FindConventionalLoaders(
+    private static IEnumerable<(PowerShellConventionalLoaderIdentity Loader, bool Stable)> FindConventionalLoaders(
         CommandAst command,
         ScriptBlockAst root,
         string sourcePath,
-        bool rejectChangingFileLists)
+        (AssignmentStatementAst Assignment, string Name)[] enumerations)
     {
         foreach (var dotSource in GetPipelineDotSourceLoaders(command, root))
-            yield return new PowerShellConventionalLoaderIdentity(sourcePath, dotSource.Extent.StartOffset);
+            yield return (new PowerShellConventionalLoaderIdentity(sourcePath, dotSource.Extent.StartOffset), Stable: true);
 
         var assignment = FindAncestor<AssignmentStatementAst>(command, root);
         var assignedVariable = assignment is null ? null : FindAssignedVariable(assignment.Left);
@@ -380,7 +391,7 @@ internal static class PowerShellConventionalModuleSourceDiscovery
             if (IsDescendantOf(command, loader.Condition))
             {
                 foreach (var dotSource in dotSources)
-                    yield return new PowerShellConventionalLoaderIdentity(sourcePath, dotSource.Extent.StartOffset);
+                    yield return (new PowerShellConventionalLoaderIdentity(sourcePath, dotSource.Extent.StartOffset), Stable: true);
                 continue;
             }
             if (assignedVariable is null ||
@@ -392,17 +403,17 @@ internal static class PowerShellConventionalModuleSourceDiscovery
                     searchNestedScriptBlocks: false).Any())
                 continue;
 
-            if (HasInterveningAssignment(root, assignedVariable, assignment.Extent.StartOffset, loader.Extent.EndOffset) ||
-                HasUnmodeledFileListUse(root, assignedVariable, loader.Body.Extent.StartOffset, loader.Body.Extent.EndOffset))
-            {
-                if (rejectChangingFileLists)
-                    throw new InvalidOperationException(
-                        $"Conventional module loader at {sourcePath}:{loader.Extent.StartLineNumber} can change its file list before or during loading.");
+            var effective = enumerations.LastOrDefault(enumeration =>
+                enumeration.Assignment.Extent.EndOffset <= loader.Extent.StartOffset &&
+                enumeration.Name.Equals(assignedVariable, StringComparison.OrdinalIgnoreCase) &&
+                enumeration.Assignment.Extent.StartOffset >= assignment.Extent.StartOffset).Assignment;
+            if (effective is not null && !ReferenceEquals(effective, assignment))
                 continue;
-            }
 
+            var stable = !HasInterveningAssignment(root, assignedVariable, assignment.Extent.EndOffset, loader.Extent.EndOffset) &&
+                !HasUnmodeledFileListUse(root, assignedVariable, loader.Body.Extent.StartOffset, loader.Body.Extent.EndOffset);
             foreach (var dotSource in dotSources)
-                yield return new PowerShellConventionalLoaderIdentity(sourcePath, dotSource.Extent.StartOffset);
+                yield return (new PowerShellConventionalLoaderIdentity(sourcePath, dotSource.Extent.StartOffset), stable);
         }
     }
 
@@ -515,13 +526,36 @@ internal static class PowerShellConventionalModuleSourceDiscovery
     }
 
     private static bool HasInterveningAssignment(ScriptBlockAst root, string variableName, int producerOffset, int loaderOffset)
-        => root.FindAll(
-                node => node is AssignmentStatementAst assignment &&
-                        assignment.Extent.StartOffset > producerOffset &&
-                        assignment.Extent.StartOffset < loaderOffset,
-                searchNestedScriptBlocks: true)
-            .Cast<AssignmentStatementAst>()
-            .Any(assignment => WritesVariable(assignment.Left, variableName));
+        => root.Find(
+            node => node.Extent.StartOffset >= producerOffset && node.Extent.StartOffset < loaderOffset &&
+                    (node is AssignmentStatementAst assignment && WritesVariable(assignment.Left, variableName) ||
+                     node is ForEachStatementAst loop && MatchesVariable(loop.Variable, variableName) ||
+                     node is UnaryExpressionAst { TokenKind: TokenKind.PlusPlus or TokenKind.MinusMinus } unary &&
+                        WritesVariable(unary.Child, variableName) ||
+                     node is CommandAst command && CanChangeFileList(command, variableName)),
+            searchNestedScriptBlocks: true) is not null;
+
+    private static bool CanChangeFileList(CommandAst command, string variableName)
+    {
+        var name = GetUnqualifiedCommandName(command);
+        if (name is null || !VariableWritingCommands.Contains(name))
+            return false;
+
+        var elements = command.CommandElements;
+        for (var index = 1; index < elements.Count; index++)
+        {
+            if (elements[index] is not CommandParameterAst parameter ||
+                !"Name".StartsWith(parameter.ParameterName, StringComparison.OrdinalIgnoreCase))
+                continue;
+            return CouldTargetVariable(parameter.Argument ?? (index + 1 < elements.Count ? elements[index + 1] : null), variableName);
+        }
+        return CouldTargetVariable(elements.Count > 1 ? elements[1] : null, variableName);
+    }
+
+    private static bool CouldTargetVariable(CommandElementAst? argument, string name)
+        => argument is not StringConstantExpressionAst target ||
+           new WildcardPattern(PowerShellAssignmentTargetPolicy.GetUnscopedVariableName(target.Value), WildcardOptions.IgnoreCase)
+               .IsMatch(name);
 
     private static bool WritesVariable(ExpressionAst target, string name) => target switch
     {
