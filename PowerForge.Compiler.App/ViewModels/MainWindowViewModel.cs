@@ -19,6 +19,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
     private bool _isChecking;
     private bool _isCompiling;
     private CompileResult? _lastResult;
+    private int _checkGeneration;
     private bool _signOutput;
     private SigningCertificate? _selectedCertificate;
     private string _signingHint = string.Empty;
@@ -258,9 +259,11 @@ public sealed partial class MainWindowViewModel : ObservableObject
         if (folder is not null && OpenFolder is not null) await OpenFolder(folder);
     }
 
-    private async Task CheckAsync(string path)
+    // Returns true when this check's result was applied; false when it was cancelled or superseded.
+    private async Task<bool> CheckAsync(string path)
     {
         Cancel();
+        var generation = ++_checkGeneration;
         using var operation = BeginOperation();
         // A different input must never be compiled with the previous input's mode and target, even if its check is cancelled.
         if (!string.Equals(path, InputPath, StringComparison.Ordinal)) ClearCheck();
@@ -273,15 +276,19 @@ public sealed partial class MainWindowViewModel : ObservableObject
         try
         {
             var check = await _engine.CheckAsync(path, CurrentFileRules, operation.Token);
+            // A check that started later owns the window now; a cancelled one may still finish normally.
+            if (generation != _checkGeneration) return false;
             ApplyCheck(check);
+            return true;
         }
         catch (OperationCanceledException)
         {
-            StatusText = "Check cancelled.";
+            if (generation == _checkGeneration) StatusText = "Check cancelled.";
+            return false;
         }
         finally
         {
-            IsChecking = false;
+            if (generation == _checkGeneration) IsChecking = false;
         }
     }
 

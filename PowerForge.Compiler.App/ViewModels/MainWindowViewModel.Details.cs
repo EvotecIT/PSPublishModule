@@ -156,6 +156,13 @@ public sealed partial class MainWindowViewModel
     /// <summary>Opens a settings file and checks the script it names.</summary>
     public async Task OpenSettingsAsync(string path)
     {
+        if (IsCompiling)
+        {
+            SettingsMessage = "Wait for the build to finish, then open the settings.";
+            StatusText = SettingsMessage;
+            return;
+        }
+
         var result = _engine.OpenSettings(path);
         if (result.Settings is not { } settings)
         {
@@ -165,11 +172,14 @@ public sealed partial class MainWindowViewModel
         }
 
         ApplyFileRules(settings.Files);
+        // When opened from the details panel, the loaded rules are the new baseline, so Done doesn't check again
+        // and replace the saved mode and target with the recommendation.
+        if (IsDetailsOpen) _rulesWhenOpened = CurrentFileRules;
         SettingsPath = settings.SettingsPath;
         _settingsInputPath = settings.InputPath;
         _pendingSavedTarget = settings.Targets.FirstOrDefault();
-        await CheckAsync(settings.InputPath);
-        StatusText = $"Opened {Path.GetFileName(settings.SettingsPath)}.";
+        if (await CheckAsync(settings.InputPath))
+            StatusText = $"Opened {Path.GetFileName(settings.SettingsPath)}.";
     }
 
     /// <summary>Saves the current selection to the settings file in use, or to <c>powerforge.psproject.json</c> next to the script.</summary>
@@ -240,6 +250,7 @@ public sealed partial class MainWindowViewModel
     private void ForgetSettingsFor(string path)
     {
         if (!HasSettingsFile || SamePath(path, _settingsInputPath)) return;
+        _pendingSavedTarget = null;
         SettingsPath = string.Empty;
         _settingsInputPath = string.Empty;
         OutputDirectory = string.Empty;
