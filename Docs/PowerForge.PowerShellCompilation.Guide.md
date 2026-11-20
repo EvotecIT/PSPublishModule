@@ -58,6 +58,12 @@ choose the deployment explicitly. The current supported executable targets are
 Strict `net10.0` on Windows x64 and Linux x64, framework-dependent or NativeAOT.
 Other combinations remain experimental. Packaging does not conceal source.
 
+Packaged entries preserve compatible `#requires -Version` and
+`#requires -PSEdition` directives in the embedded script. Check and build apply
+the embedded PowerShell host's supported major and minor versions and edition.
+Requirements for modules, assemblies, a particular shell, or elevation block
+the build. Script dependencies with `#requires` directives also block the build.
+
 Two clean Windows x64 NativeAOT builds of the
 [file-summary example](../Examples/PowerShellCompilation/Get-FileLineSummary.ps1) produced
 byte-identical executables with the build cache disabled. The executable

@@ -222,8 +222,15 @@ public sealed partial class PowerForgeCliPowerShellCompilationTests
         Assert.Contains("optimization is supported only for Strict", invalidOptimization.Message, StringComparison.Ordinal);
     }
 
-    [Fact]
-    public async Task Check_ReportsPackageDirectiveDiagnosticWithoutWritingReview()
+    [Theory]
+    [InlineData("Package", "-Version 99.0", "PowerShell 99.0", false)]
+    [InlineData("Hybrid", "-Version 99.0", "PowerShell 99.0", false)]
+    [InlineData("Package", "-Version 6.9", "PowerShell 6.9", false)]
+    [InlineData("Package", "\u2013Modules ExampleNotInstalled", "-Modules", false)]
+    [InlineData("Package", "-PSEdition Desktop", "'Desktop'", false)]
+    [InlineData("Hybrid", "-Version 5.1", "Helper.ps1", true)]
+    public async Task Check_ReportsPackageDirectiveDiagnosticWithoutWritingReview(
+        string mode, string requirement, string expectedFinding, bool onDependency)
     {
         var repository = FindRepositoryRoot();
         var root = Path.Combine(Path.GetTempPath(), "PowerForge blocked check", Guid.NewGuid().ToString("N"));
@@ -232,10 +239,13 @@ public sealed partial class PowerForgeCliPowerShellCompilationTests
         {
             var source = Path.Combine(root, "Directive.ps1");
             var review = Path.Combine(root, "review.json");
-            File.WriteAllText(source, "#requires -Version 7.4\n'example'");
+            if (onDependency)
+                File.WriteAllText(source, ". \"$PSScriptRoot/Helper.ps1\"");
+            File.WriteAllText(onDependency ? Path.Combine(root, "Helper.ps1") : source,
+                $"#requires {requirement}\n'example'");
 
             var check = await RunCliAsync(repository,
-                new[] { "powershell", "check", source, "--mode", "Package", "--write-review", review, "--output", "json" });
+                new[] { "powershell", "check", source, "--mode", mode, "--write-review", review, "--output", "json" });
 
             Assert.Equal(1, check.ExitCode);
             Assert.False(File.Exists(review));
@@ -244,6 +254,7 @@ public sealed partial class PowerForgeCliPowerShellCompilationTests
             var finding = Assert.Single(diagnostics.EnumerateArray(),
                 item => item.GetProperty("severity").GetString() == "Error" &&
                         item.GetProperty("message").GetString()!.Contains("#requires", StringComparison.Ordinal));
+            Assert.Contains(expectedFinding, finding.GetProperty("message").GetString(), StringComparison.Ordinal);
             Assert.Equal(1, finding.GetProperty("line").GetInt32());
             Assert.Equal("powershell.package.validation", finding.GetProperty("featureId").GetString());
             Assert.False(string.IsNullOrWhiteSpace(finding.GetProperty("fix").GetString()));

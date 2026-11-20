@@ -33,10 +33,7 @@ internal static class PowerShellScriptRequirementPolicy
 
         var nativeModules = UsesNativeModuleRequirements(document, capabilities);
         var profile = PowerShellCompilationSemanticOracleCatalog.Get(semanticProfileId);
-        var unsupportedSwitch = DirectivePattern.Matches(document.SyntaxRoot.Extent.Text)
-            .Cast<Match>()
-            .SelectMany(static directive => SwitchPattern.Matches(directive.Groups["body"].Value).Cast<Match>())
-            .Select(static option => option.Groups["name"].Value)
+        var unsupportedSwitch = GetDirectiveOptions(document.SyntaxRoot.Extent.Text)
             .FirstOrDefault(option =>
                 !option.Equals("Version", StringComparison.OrdinalIgnoreCase) &&
                 !option.Equals("PSEdition", StringComparison.OrdinalIgnoreCase) &&
@@ -65,6 +62,67 @@ internal static class PowerShellScriptRequirementPolicy
 
         return null;
     }
+
+    /// <summary>Checks requirements against the PowerShell SDK embedded in a retained executable.</summary>
+    internal static string? GetPackagedEntryFailure(ScriptBlockAst ast, IEnumerable<Token> tokens)
+    {
+        if (ast.ScriptRequirements is not { } requirements)
+            return null;
+
+        var directives = tokens.Where(static token => token.Kind == TokenKind.Comment &&
+            token.Text.StartsWith("#requires", StringComparison.OrdinalIgnoreCase));
+        var directiveText = string.Join("\n", directives.Select(static token => token.Text));
+        var unsupported = GetUnsupportedPackagedRequirement(requirements) ??
+            directives.SelectMany(static token => GetNativeDirectiveOptions(token.Text))
+                .FirstOrDefault(static option =>
+                    "PSSnapin".StartsWith(option, StringComparison.OrdinalIgnoreCase) ||
+                    !("Version".StartsWith(option, StringComparison.OrdinalIgnoreCase) ||
+                      "PSEdition".StartsWith(option, StringComparison.OrdinalIgnoreCase)));
+        if (unsupported is not null)
+            return $"#requires -{unsupported} needs a dependency or execution contract that packaged entries do not yet support.";
+
+        var version = Version.Parse(PowerShellCompilationGeneratedPackageCatalog.GetVersion("Microsoft.PowerShell.SDK"));
+        if (requirements.RequiredPSVersion is { } minimum && !IsPackagedVersionCompatible(minimum, version))
+            return $"#requires specifies PowerShell {minimum}, which the packaged PowerShell {version} host does not accept.";
+
+        var editions = GetRequiredEditions(requirements, directiveText);
+        if (editions.Length > 0 && !editions.Contains("Core", StringComparer.OrdinalIgnoreCase))
+            return $"#requires accepts PowerShell edition '{string.Join("' or '", editions)}', but this package carries PowerShell Core.";
+
+        return null;
+    }
+
+    private static string? GetUnsupportedPackagedRequirement(ScriptRequirements requirements)
+    {
+        if (requirements.RequiredModules.Count > 0) return "Modules";
+        if (requirements.RequiredAssemblies.Count > 0) return "Assembly";
+        if (requirements.IsElevationRequired) return "RunAsAdministrator";
+        return string.IsNullOrEmpty(requirements.RequiredApplicationId) ? null : "ShellId";
+    }
+
+    private static IEnumerable<string> GetNativeDirectiveOptions(string directive)
+    {
+        var statement = Parser.ParseInput(directive.Substring(1), out _, out _);
+        return statement.FindAll(static node => node is CommandParameterAst, searchNestedScriptBlocks: false)
+            .Cast<CommandParameterAst>().Select(static parameter => parameter.ParameterName);
+    }
+
+    // PowerShell 7 checks historical major/minor combinations and ignores patch and revision.
+    private static bool IsPackagedVersionCompatible(Version requirement, Version runtime)
+        => requirement.Major switch
+        {
+            1 or 2 or 3 or 4 => requirement.Minor == 0,
+            5 => requirement.Minor is 0 or 1,
+            6 => requirement.Minor is >= 0 and <= 2,
+            7 => requirement.Minor >= 0 && requirement.Minor <= runtime.Minor,
+            _ => false
+        };
+
+    private static IEnumerable<string> GetDirectiveOptions(string sourceText)
+        => DirectivePattern.Matches(sourceText)
+            .Cast<Match>()
+            .SelectMany(static directive => SwitchPattern.Matches(directive.Groups["body"].Value).Cast<Match>())
+            .Select(static option => option.Groups["name"].Value);
 
     private static string[] GetRequiredEditions(ScriptRequirements requirements, string sourceText)
     {

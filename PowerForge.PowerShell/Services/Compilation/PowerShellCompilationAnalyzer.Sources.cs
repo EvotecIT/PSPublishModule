@@ -121,15 +121,17 @@ public sealed partial class PowerShellCompilationAnalyzer
             dependencies,
             dependencyGraph,
             target);
-        return capabilityMode == PowerShellCompilationMode.Package
-            ? ApplyPackagedValidation(combined, input, normalizedTargetFramework ?? PowerShellCompilationTargetFrameworkPolicy.Default)
+        return input.Kind == PowerShellCompilationArtifactKind.Executable &&
+               capabilityMode is PowerShellCompilationMode.Package or PowerShellCompilationMode.Hybrid
+            ? ApplyPackagedValidation(combined, input, normalizedTargetFramework ?? PowerShellCompilationTargetFrameworkPolicy.Default, capabilityMode)
             : combined;
     }
 
     private static PowerShellCompilationPlan ApplyPackagedValidation(
         PowerShellCompilationPlan plan,
         PowerShellCompilationResolvedInput input,
-        string targetFramework)
+        string targetFramework,
+        PowerShellCompilationMode mode)
     {
         try
         {
@@ -137,13 +139,17 @@ public sealed partial class PowerShellCompilationAnalyzer
                 .Select(Path.GetFullPath)
                 .Distinct(PowerShellCompilationPathSafety.PathComparer)
                 .ToArray();
-            PowerShellPackagedParameterBindingPolicy.Generate(input.SourcePath, targetFramework);
-            _ = PowerShellPackagedScriptRewriter.Rewrite(
-                input.SourcePath,
-                embeddedScriptPaths: embeddedScripts);
+            if (mode == PowerShellCompilationMode.Hybrid)
+                PowerShellPackagedScriptRewriter.ValidateEntryRequirements(input.SourcePath);
+            else
+            {
+                PowerShellPackagedParameterBindingPolicy.Generate(input.SourcePath, targetFramework);
+                _ = PowerShellPackagedScriptRewriter.Rewrite(input.SourcePath, embeddedScriptPaths: embeddedScripts);
+            }
             foreach (var dependency in embeddedScripts.Where(path =>
                          !PowerShellCompilationPathSafety.PathEquals(path, input.SourcePath)))
-                PowerShellPackagedScriptRewriter.ValidateDependency(dependency, embeddedScripts);
+                PowerShellPackagedScriptRewriter.ValidateDependency(
+                    dependency, embeddedScripts, allowDerivedPaths: mode == PowerShellCompilationMode.Hybrid);
             return plan;
         }
         catch (InvalidOperationException exception)

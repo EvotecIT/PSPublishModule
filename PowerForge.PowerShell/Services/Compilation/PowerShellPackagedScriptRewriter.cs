@@ -26,10 +26,10 @@ internal static partial class PowerShellPackagedScriptRewriter
         var commandPathExpression = string.IsNullOrWhiteSpace(packagedCommandPathExpression)
             ? PackagedCommandPathExpression
             : packagedCommandPathExpression!;
-        var ast = Parser.ParseFile(sourcePath, out _, out var errors);
+        var ast = Parser.ParseFile(sourcePath, out var tokens, out var errors);
         if (errors.Length > 0)
             throw new InvalidOperationException("Packaged script could not be parsed while preserving script semantics.");
-        ValidateScriptRequirements(ast, sourcePath);
+        ValidateEntryRequirements(ast, tokens, sourcePath);
 
         var fileResolvedUsing = ast.FindAll(static node => node is UsingStatementAst, searchNestedScriptBlocks: false)
             .Cast<UsingStatementAst>()
@@ -427,6 +427,20 @@ internal static partial class PowerShellPackagedScriptRewriter
             throw new InvalidOperationException(
                 $"Packaged dependency '{dependencyPath}' contains exit at line {exit.Extent.StartLineNumber}; dependency exits cannot preserve executable process-exit semantics and must remain in the root entry script.");
         }
+    }
+
+    internal static void ValidateEntryRequirements(string sourcePath)
+    {
+        var ast = Parser.ParseFile(sourcePath, out var tokens, out var errors);
+        if (errors.Length == 0)
+            ValidateEntryRequirements(ast, tokens, sourcePath);
+    }
+
+    private static void ValidateEntryRequirements(ScriptBlockAst ast, Token[] tokens, string sourcePath)
+    {
+        var failure = PowerShellScriptRequirementPolicy.GetPackagedEntryFailure(ast, tokens);
+        if (failure is not null)
+            throw new InvalidOperationException($"Packaged script '{sourcePath}': {failure}");
     }
 
     private static void ValidateScriptRequirements(ScriptBlockAst ast, string sourcePath)
