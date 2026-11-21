@@ -36,7 +36,7 @@ internal static partial class PowerShellCompilationSourcePathPlanner
             return true;
         }
         if (!allowDerivedPaths || command.Parent is not PipelineAst { PipelineElements.Count: 1 } pipeline ||
-            !ReferenceEquals(pipeline.Parent, root.EndBlock)) return false;
+            !IsRootSourceLoad(root, pipeline)) return false;
 
         // The staging candidate bounds the source closure. The load guard checks the actual
         // operand after the original command and its possible indirect writes have run.
@@ -59,6 +59,11 @@ internal static partial class PowerShellCompilationSourcePathPlanner
         fact = new PowerShellCompilationSourcePathFact(operand, producers[0].Path!, producers[0].Assignment);
         return true;
     }
+
+    private static bool IsRootSourceLoad(ScriptBlockAst root, PipelineAst pipeline)
+        => ReferenceEquals(pipeline.Parent, root.EndBlock) ||
+           (pipeline.Parent is StatementBlockAst { Parent: IfStatementAst conditional } &&
+            ReferenceEquals(conditional.Parent, root.EndBlock));
 
     private static string? ReadJoinPathCandidate(ScriptBlockAst root, StatementAst statement)
     {

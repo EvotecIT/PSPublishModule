@@ -32,7 +32,7 @@ internal static partial class PowerShellPackagedScriptRewriter
         var tokens = document.Tokens;
         if (document.Errors.Length > 0)
             throw new InvalidOperationException("Packaged script could not be parsed while preserving script semantics.");
-        ValidateEntryRequirements(ast, tokens, sourcePath);
+        ValidatePackagedRequirements(ast, tokens, sourcePath);
 
         var fileResolvedUsing = ast.FindAll(static node => node is UsingStatementAst, searchNestedScriptBlocks: false)
             .Cast<UsingStatementAst>()
@@ -356,16 +356,17 @@ internal static partial class PowerShellPackagedScriptRewriter
         document ??= PowerShellSourceParser.ParseHostFile(dependencyPath);
         if (document.Errors.Length > 0)
             throw new InvalidOperationException($"Packaged dependency '{dependencyPath}' could not be parsed while validating package semantics.");
-        ValidateDependency(document.SyntaxRoot, dependencyPath, embeddedScriptPaths, allowDerivedPaths);
+        ValidateDependency(document, dependencyPath, embeddedScriptPaths, allowDerivedPaths);
     }
 
     internal static void ValidateDependency(
-        ScriptBlockAst ast,
+        ParsedSourceDocument document,
         string dependencyPath,
         IReadOnlyCollection<string> embeddedScriptPaths,
         bool allowDerivedPaths)
     {
-        ValidateScriptRequirements(ast, dependencyPath);
+        var ast = document.SyntaxRoot;
+        ValidatePackagedRequirements(ast, document.Tokens, dependencyPath);
         ValidateHostInteraction(ast);
         ValidateDotSources(ast, dependencyPath, embeddedScriptPaths, allowDerivedPaths);
         var exit = ast.FindAll(static node => node is ExitStatementAst, searchNestedScriptBlocks: true)
@@ -385,23 +386,16 @@ internal static partial class PowerShellPackagedScriptRewriter
         var ast = document.SyntaxRoot;
         if (document.Errors.Length == 0)
         {
-            ValidateEntryRequirements(ast, document.Tokens, sourcePath);
+            ValidatePackagedRequirements(ast, document.Tokens, sourcePath);
             ValidateReadHostDefaults(ast, sourcePath, embeddedSources);
         }
     }
 
-    private static void ValidateEntryRequirements(ScriptBlockAst ast, Token[] tokens, string sourcePath)
+    private static void ValidatePackagedRequirements(ScriptBlockAst ast, Token[] tokens, string sourcePath)
     {
         var failure = PowerShellScriptRequirementPolicy.GetPackagedEntryFailure(ast, tokens);
         if (failure is not null)
             throw new InvalidOperationException($"Packaged script '{sourcePath}': {failure}");
-    }
-
-    private static void ValidateScriptRequirements(ScriptBlockAst ast, string sourcePath)
-    {
-        if (ast.ScriptRequirements is null) return;
-        throw new InvalidOperationException(
-            $"Packaged script '{sourcePath}' declares #requires directives, which AddScript cannot enforce with pwsh -File semantics. Remove the directives or keep the script on a file-backed PowerShell runtime path.");
     }
 
     private static bool IsTopLevel(Ast node, ScriptBlockAst root)

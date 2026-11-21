@@ -41,6 +41,7 @@ public sealed partial class PowerShellCompilationInputResolverTests
     [Theory]
     [InlineData(". (Join-Path $PSScriptRoot 'helper.ps1')")]
     [InlineData("$name = 'helper.ps1'; $helperPath = Join-Path $PSScriptRoot $name; . $helperPath")]
+    [InlineData("$name = 'helper.ps1'; $helperPath = Join-Path $PSScriptRoot $name; if (Test-Path -LiteralPath $helperPath) { . $helperPath }")]
     public void Resolve_DiscoversGuardedSourceLoadsWithADirectJoinOrLiteralChildVariable(string text)
     {
         using var fixture = ResolverFixture.Create();
@@ -59,7 +60,7 @@ public sealed partial class PowerShellCompilationInputResolverTests
     [InlineData("if ($true) { $helperPath = Join-Path $PSScriptRoot 'helper.ps1' }; . $helperPath")]
     [InlineData("foreach ($item in 1) { $helperPath = Join-Path $PSScriptRoot 'helper.ps1' }; . $helperPath")]
     [InlineData("& { $helperPath = Join-Path $PSScriptRoot 'helper.ps1' }; . $helperPath")]
-    [InlineData("$helperPath = Join-Path $PSScriptRoot 'helper.ps1'; if ($true) { . $helperPath }")]
+    [InlineData("$helperPath = Join-Path $PSScriptRoot 'helper.ps1'; & { . $helperPath }")]
     [InlineData("Set-Alias jp Join-Path; $helperPath = jp $PSScriptRoot 'helper.ps1'; . $helperPath")]
     [InlineData("$name = $args[0]; $helperPath = Join-Path $PSScriptRoot $name; . $helperPath")]
     [InlineData("$name = 'helper.ps1'; if ($true) { $name = 'other.ps1' }; $helperPath = Join-Path $PSScriptRoot $name; . $helperPath")]

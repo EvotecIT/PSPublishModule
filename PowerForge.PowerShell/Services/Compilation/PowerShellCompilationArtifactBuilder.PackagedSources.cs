@@ -104,7 +104,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             var document = snapshot.Get(dependency);
             if (document.Errors.Length != 0)
                 throw new InvalidOperationException($"Packaged dependency '{dependency}' could not be parsed while validating package semantics.");
-            PowerShellPackagedScriptRewriter.ValidateDependency(document.SyntaxRoot, dependency, embeddedPaths, allowDerivedPaths: true);
+            PowerShellPackagedScriptRewriter.ValidateDependency(document, dependency, embeddedPaths, allowDerivedPaths: true);
             var composed = hybrid is null ? null : PowerShellHybridModuleComposer.ComposeDependency(
                 dependency, hybrid, hybridCompiledMethods!, executable: true, document: document);
             var retained = composed ?? document.Text;
