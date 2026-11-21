@@ -7,7 +7,7 @@ internal static partial class Program
     private const string ModuleRestoreUsage =
         "Usage: powerforge module restore --requirements <modules.json> --lock-file <modules.lock.json> --destination <directory> [--source <feed-url-or-folder>] [--write-lock] [--plan] [--accept-license] [--allow-clobber] [--output json]";
 
-    private static bool IsModuleAction(string action) => action is "install" or "restore";
+    private static bool IsModuleAction(string action) => action is "install" or "restore" or "manifest";
 
     private static int CommandModule(string[] args, CliOptions cli, ILogger logger)
     {
@@ -17,7 +17,8 @@ internal static partial class Program
         {
             "install" => ModuleInstallUsage,
             "restore" => ModuleRestoreUsage,
-            _ => ModuleInstallUsage + Environment.NewLine + ModuleRestoreUsage
+            "manifest" => ModuleManifestUsage,
+            _ => string.Join(Environment.NewLine, ModuleInstallUsage, ModuleRestoreUsage, ModuleManifestUsage)
         };
 
         var outputJson = IsJsonOutput(args);
@@ -36,6 +37,10 @@ internal static partial class Program
             if (!IsModuleAction(action))
                 throw new ArgumentException(usage);
 
+            var commandArgs = args.Skip(2).ToArray();
+            if (action == "manifest")
+                return InspectModuleManifest(commandArgs, outputJson, logBuffer);
+
             using var cancellation = new CancellationTokenSource();
             ConsoleCancelEventHandler cancel = (_, eventArgs) =>
             {
@@ -45,7 +50,6 @@ internal static partial class Program
             Console.CancelKeyPress += cancel;
             try
             {
-                var commandArgs = args.Skip(2).ToArray();
                 if (action == "install")
                     return InstallModuleFromFeed(commandArgs, cli, commandLogger, logBuffer, outputJson, cancellation.Token);
                 return RestoreModules(commandArgs, cli, commandLogger, logBuffer, outputJson, cancellation.Token);
@@ -123,9 +127,9 @@ internal static partial class Program
             {
                 case "--write-lock" when action == "restore":
                 case "--prerelease" when action == "install":
-                case "--plan":
-                case "--accept-license":
-                case "--allow-clobber":
+                case "--plan" when action != "manifest":
+                case "--accept-license" when action != "manifest":
+                case "--allow-clobber" when action != "manifest":
                 case "--output-json":
                 case "--json":
                     options.Add(option, null);
@@ -133,8 +137,9 @@ internal static partial class Program
                 case "--requirements" when action == "restore":
                 case "--lock-file" when action == "restore":
                 case "--version" when action == "install":
-                case "--destination":
-                case "--source":
+                case "--destination" when action != "manifest":
+                case "--source" when action != "manifest":
+                case "--path" when action == "manifest":
                 case "--output":
                     if (index + 1 >= args.Length || args[index + 1].StartsWith("--", StringComparison.Ordinal) ||
                         string.IsNullOrWhiteSpace(args[index + 1]))

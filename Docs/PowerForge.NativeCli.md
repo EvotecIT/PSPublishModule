@@ -1,10 +1,14 @@
 # Native PowerForge CLI
 
-The standalone package exposes one command, powerforge. The launcher runs
-module install and module restore directly. Other commands go to the
-self-contained managed executable under full/. The managed executable
-also supports the module commands through the same implementation. Keep
-the package directory together when installing or moving it.
+The standalone package exposes `powerforge`. The launcher handles
+`--version`, `module install`, `module restore`, and `module manifest` directly.
+Other commands go to the self-contained managed executable under `full/`.
+Keep the package directory together when installing or moving it.
+
+Use `powerforge module manifest --path ./Example.psd1 --output json` to read
+the module name from the filename, the manifest's quoted numeric `ModuleVersion`,
+and its optional prerelease label. The command reads the file without loading
+the module.
 
 The PowerForge.Build .NET tool continues to install the powerforge command
 with the full managed feature set. The native package can be built on the
@@ -43,7 +47,8 @@ directory to produce an archive of the complete package. For an environment
 that only installs or restores modules, the root executable can be copied
 on its own.
 
-The native build treats trim and AOT warnings as errors. The artifact
-smoke test exercises install, frozen restore, rejection of altered packages,
-and forwarding to the managed CLI. Library consumers can reference
-PowerForge.Modules independently of the CLI and PowerShell SDK.
+The native build treats trim and AOT warnings as errors. The artifact smoke
+test exercises install, frozen restore, rejection of altered packages,
+standalone version and manifest commands, and forwarding to the managed CLI.
+Library consumers can reference PowerForge.Modules independently of the CLI
+and PowerShell SDK.
