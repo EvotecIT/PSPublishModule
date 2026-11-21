@@ -74,7 +74,20 @@ try {
             $configuration = if ($positive) {
                 "Configuration Fixture { Node localhost { File Demo { DestinationPath = 'C:\temp\fixture.txt'; Contents = 'fixture' } } }"
             } else { 'Configuration {' }
-            ConvertTo-DSCObject -Content $configuration -IncludeCIMInstanceInfo $false | ConvertTo-Json -Depth 6 -Compress
+            $records = @(ConvertTo-DSCObject -Content $configuration -IncludeCIMInstanceInfo $false)
+            if ($records.Count -ne 1 -or $records[0] -isnot [hashtable]) {
+                throw 'The DSC fixture must produce one unordered property map.'
+            }
+            $record = $records[0]
+            $fields = [ordered]@{}
+            $keys = [string[]] @($record.Keys)
+            [Array]::Sort($keys, [StringComparer]::Ordinal)
+            foreach ($key in $keys) {
+                $value = $record[$key]
+                $type = if ($null -eq $value) { $null } else { $value.GetType().FullName }
+                $fields[$key] = [ordered]@{ type = $type; value = $value }
+            }
+            ConvertTo-Json -InputObject ([ordered]@{ type = $record.GetType().FullName; fields = $fields }) -Depth 6 -Compress
         }
         'PSDocs' {
             $definition = "Document 'FixtureReport' { Title 'Fixture report'; Section 'Summary' { 'Fixture document body' } }"

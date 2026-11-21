@@ -232,6 +232,12 @@ behavior through the declared entry paths.
 | Module function export surface | 1 | PSSVG loses functions published by its root module |
 | Observed output or file differences | 3 | convert-zip2dir, DSCParser and PScribo |
 
+A second DSCParser measurement on the starting compiler recorded one
+unordered hashtable and its typed values with ordinal key ordering.
+Both source and generated artifacts matched on the two pinned hosts with
+that observation. The starting baseline records the original JSON field
+ordering difference.
+
 Use the built CLI for the revision being assessed and a scratch directory
 outside the source tree. The runner verifies packet hashes before executing
 any source. It requires explicit opt-in to run the pinned third-party inputs
