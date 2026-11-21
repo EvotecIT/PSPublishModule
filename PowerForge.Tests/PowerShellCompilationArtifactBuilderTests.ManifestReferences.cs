@@ -92,7 +92,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Directory.CreateDirectory(Path.GetDirectoryName(authoredAssemblyPath)!);
         File.Copy(typeof(AboutTopicTemplateResult).Assembly.Location, authoredAssemblyPath);
         File.WriteAllText(Path.ChangeExtension(fixture.ScriptPath, ".psd1"),
-            $"@{{ RootModule = 'input.psm1'; ModuleVersion = '1.0.0'; GUID = 'e8d5ff5c-d829-4b9b-9729-11daf14828fd'; FunctionsToExport = @('Get-PublicValue'); CmdletsToExport = @(); VariablesToExport = @(); AliasesToExport = @(); RequiredAssemblies = @('{requiredAssembly}') }}");
+            $"@{{ RootModule = 'input.psm1'; ModuleVersion = '1.0.0'; GUID = 'e8d5ff5c-d829-4b9b-9729-11daf14828fd'; FunctionsToExport = @('Get-PublicValue'); CmdletsToExport = @(); VariablesToExport = @(); AliasesToExport = @(); RequiredAssemblies = @('{requiredAssembly}'); FileList = @('input.psm1', '{requiredAssembly}') }}");
 
         var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
             fixture.ScriptPath,
@@ -109,6 +109,9 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
             artifactName + ".PowerForge.Compiled",
             System.Reflection.AssemblyName.GetAssemblyName(generatedAssemblyPath).Name);
         Assert.Equal(File.ReadAllBytes(authoredAssemblyPath), File.ReadAllBytes(Path.Combine(moduleRoot, requiredAssembly)));
+        var fileList = ModuleManifestValueReader.ReadTopLevelLiteralStringOrArrayOrThrow(result.ArtifactPath!, "FileList");
+        Assert.Contains(requiredAssembly, fileList!);
+        Assert.Contains(publishedAssemblyName, fileList!);
 
         var escapedPath = result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal);
         var run = RunPowerShell(
@@ -120,16 +123,19 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         Assert.Equal("1", run.StandardOutput.Trim());
     }
 
-    [Fact]
-    public void Build_HybridModuleDisambiguatesSelectedAssemblyFileWithADifferentClrIdentity()
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void Build_HybridModuleDisambiguatesSelectedAssemblyFileWithADifferentClrIdentity(bool manifestBacked)
     {
         const string artifactName = "IndependentModule";
         var authoredName = artifactName + ".dll";
         using var fixture = ArtifactFixture.Create("function Get-PublicValue { return 1 }", ".psm1");
         var authoredPath = Path.Combine(fixture.RootPath, authoredName);
         File.Copy(typeof(AboutTopicTemplateResult).Assembly.Location, authoredPath);
-        File.WriteAllText(Path.ChangeExtension(fixture.ScriptPath, ".psd1"),
-            "@{ RootModule = 'input.psm1'; ModuleVersion = '1.0.0'; FunctionsToExport = @('Get-PublicValue') }");
+        if (manifestBacked)
+            File.WriteAllText(Path.ChangeExtension(fixture.ScriptPath, ".psd1"),
+                "@{ RootModule = 'input.psm1'; ModuleVersion = '1.0.0'; FunctionsToExport = @('Get-PublicValue') }");
         var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
             fixture.ScriptPath, fixture.OutputPath, artifactName, PowerShellCompilationArtifactKind.BinaryModule,
             PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true)
@@ -141,7 +147,7 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
         var moduleRoot = Path.GetDirectoryName(result.ArtifactPath!)!;
         var authored = Path.Combine(moduleRoot, authoredName);
         Assert.Equal(File.ReadAllBytes(authoredPath), File.ReadAllBytes(authored));
-        var generated = Assert.Single(result.Manifest!.Files, file => file.Role == "TypedAssembly");
+        var generated = Assert.Single(result.Manifest!.Files, file => Path.GetFileName(file.Path) == artifactName + ".PowerForge.Compiled.dll");
         Assert.Equal(artifactName + ".PowerForge.Compiled.dll", Path.GetFileName(generated.Path));
         Assert.Equal(artifactName + ".PowerForge.Compiled",
             System.Reflection.AssemblyName.GetAssemblyName(generated.Path).Name);

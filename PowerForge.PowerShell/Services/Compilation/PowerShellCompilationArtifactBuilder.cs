@@ -479,6 +479,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                 stagedArtifact = stagedArtifact.WithAdditionalFiles(CopyPlannedPayload(
                     stagedArtifact.PrimaryPath,
                     artifactName,
+                    moduleAssemblyFileName,
                     dependencyPlan,
                     stagedArtifact.Files,
                     inputHashes));

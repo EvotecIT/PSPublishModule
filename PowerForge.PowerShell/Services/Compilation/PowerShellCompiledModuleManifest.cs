@@ -110,6 +110,7 @@ internal static class PowerShellCompiledModuleManifest
         string moduleDirectory,
         string artifactName,
         string rootModuleFileName,
+        string compiledAssemblyFileName,
         PowerShellTypedCompilationResult typed,
         string targetFramework,
         Action<string, string> verifyCopiedInput,
@@ -182,8 +183,8 @@ internal static class PowerShellCompiledModuleManifest
         var hasRetainedAlternatives = hybrid &&
             PowerShellHybridDependencyResolver.DiscoverRetainedModuleAlternatives(sourcePath, typed.SourcePaths, snapshot).Length > 0;
         // The root module can publish runtime-created functions that are absent from the compilation inventory.
-        var preserveAuthoredFunctionFilter = hybrid && explicitExports?.HasWildcardFunctions == true;
-        var functionExports = preserveAuthoredFunctionFilter || (hasScriptNestedModules && manifestFunctions is null)
+        var preserveAuthoredExports = hybrid && explicitExports?.HasWildcardFunctions == true;
+        var functionExports = hasScriptNestedModules && manifestFunctions is null
             ? null
             : selectedFallback;
 
@@ -197,7 +198,7 @@ internal static class PowerShellCompiledModuleManifest
                 PowerShellCompilationPathSafety.GetPathComparison(targetManifest)))
             throw new InvalidOperationException($"Module manifest '{sourceManifest}' does not contain a literal RootModule entry that can be updated.");
         ApplyTargetCompatibility(sourceManifest, targetManifest, targetFramework, mutator);
-        if (!hasRuntimeControlledExports && !hasRetainedAlternatives)
+        if (!hasRuntimeControlledExports && !hasRetainedAlternatives && !preserveAuthoredExports)
         {
             mutator.TrySetManifestExports(
                 targetManifest,
@@ -214,6 +215,7 @@ internal static class PowerShellCompiledModuleManifest
                 sourcePath,
                 artifactName,
                 rootModuleFileName,
+                compiledAssemblyFileName,
                 typedSourcePaths,
                 manifestFileList);
             mutator.TrySetTopLevelStringArray(targetManifest, "FileList", rewrittenFileList);
@@ -258,6 +260,7 @@ internal static class PowerShellCompiledModuleManifest
         string sourcePath,
         string artifactName,
         string rootModuleFileName,
+        string compiledAssemblyFileName,
         ISet<string> typedSourcePaths,
         IEnumerable<string> sourceEntries)
     {
@@ -276,7 +279,7 @@ internal static class PowerShellCompiledModuleManifest
             rewritten.Add(entry);
         }
         rewritten.Add(rootModuleFileName);
-        rewritten.Add(artifactName + ".dll");
+        rewritten.Add(compiledAssemblyFileName);
         return rewritten.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
     }
 

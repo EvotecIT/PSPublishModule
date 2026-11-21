@@ -82,17 +82,17 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                     PowerShellCompilationDependencyNodeKind.BinaryModule or
                     PowerShellCompilationDependencyNodeKind.MixedModule)
             .Select(static node => node.Identity.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var authoredAssemblies = dependencies.Where(static dependency => IsSelectedAdjacentPayload(dependency) &&
-                dependency.Kind == PowerShellCompilationDependencyKind.ManagedAssembly)
+        var authoredPaths = dependencies.Where(IsSelectedAdjacentPayload)
             .Select(static dependency => dependency.RelativePath.Replace('\\', '/'))
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var conventionalPathTaken = authoredAssemblies.Contains(moduleAssemblyFileName);
+        bool HasAuthoredPath(string name) => authoredPaths.Contains(name + ".dll") || authoredPaths.Contains(name + ".pdb");
+        var conventionalPathTaken = HasAuthoredPath(artifactName);
         if (!conventionalPathTaken && !identities.Contains(artifactName))
             return artifactName;
 
         var prefix = artifactName + ".PowerForge.Compiled";
         var generatedName = prefix;
-        for (var suffix = 1; identities.Contains(generatedName) || authoredAssemblies.Contains(generatedName + ".dll"); suffix++)
+        for (var suffix = 1; identities.Contains(generatedName) || HasAuthoredPath(generatedName); suffix++)
             generatedName = prefix + "." + suffix.ToString(System.Globalization.CultureInfo.InvariantCulture);
         if (conventionalPathTaken)
             moduleAssemblyFileName = generatedName + ".dll";

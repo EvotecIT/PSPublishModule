@@ -34,6 +34,32 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
 
     [PinnedSemanticHostFact]
     [Trait("Category", "PowerShellCompilerGate")]
+    public void MultiSourceHybridWildcardRunsAtItsAuthoredLocationWithNestedModulesOnBothHosts()
+    {
+        const string source = """
+            . "$PSScriptRoot/Runtime.ps1"
+            function Get-PublishedCount { return 21 }
+            Export-ModuleMember -Function Get-Published*
+            Set-Item Function:Get-PublishedLate -Value { 100 }
+            """;
+        const string probe = """
+            [ordered]@{
+                count = Get-PublishedCount
+                exports = @((Get-Module ScopedValues).ExportedCommands.Keys | Sort-Object)
+            } | ConvertTo-Json -Compress
+            """;
+        var files = new Dictionary<string, string>
+        {
+            ["Runtime.ps1"] = "function Read-Private { trap { break }; 'private' }",
+            ["Nested.psm1"] = "function Get-PublishedNested { 42 }; Export-ModuleMember -Function Get-PublishedNested"
+        };
+        CompareScopedArtifacts(source, probe, new[] { "Get-PublishedCount" },
+            value => Assert.Equal("{\"count\":21,\"exports\":[\"Get-PublishedCount\",\"Get-PublishedNested\"]}", value),
+            additionalSources: files, resolveModuleSources: true, nestedModule: "Nested.psm1");
+    }
+
+    [PinnedSemanticHostFact]
+    [Trait("Category", "PowerShellCompilerGate")]
     public void LiteralExportAssignmentsPreserveThePublicSurfaceOnBothHosts()
     {
         const string source = """

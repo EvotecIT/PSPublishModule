@@ -89,6 +89,7 @@ internal static class PowerShellHybridModuleComposer
             .ToArray();
         var source = new StringBuilder(document.Text);
         var exportContract = guardedPaths.Length == 0 ? PowerShellModuleExportContract.TryRead(ast) : null;
+        var preserveAuthoredExports = exportContract?.HasWildcardFunctions == true;
         var wrapped = GetWrappedCompiledMethodKeys(sourcePath, typed, document);
         var edits = new List<PowerShellHybridSourceEdit>();
         foreach (var function in functions)
@@ -103,7 +104,7 @@ internal static class PowerShellHybridModuleComposer
                 GetNativeFunctionRegistration(typed, sourcePath, function, tokens),
                 "function:" + function.Name));
         }
-        if (exportContract is not null)
+        if (exportContract is not null && !preserveAuthoredExports)
             edits.AddRange(exportContract.Commands.Select(static command => new PowerShellHybridSourceEdit(
                 command.Extent.StartOffset,
                 command.Extent.EndOffset - command.Extent.StartOffset,
@@ -172,8 +173,7 @@ internal static class PowerShellHybridModuleComposer
         source.Insert(prologueEndOffset, import.ToString());
         var builder = new StringBuilder(source.ToString());
         if (source.Length > 0 && source[source.Length - 1] != '\n') builder.AppendLine();
-        var preserveFunctionPatterns = exportContract?.HasWildcardFunctions == true;
-        if (guardedPaths.Length == 0 && (!manifestControlsExports || preserveFunctionPatterns) &&
+        if (guardedPaths.Length == 0 && !manifestControlsExports && !preserveAuthoredExports &&
             (exportContract is null || exportContract.Commands.Length > 0))
         {
             var fallbackFunctions = ReadRetainedFunctionNames(typed.SourcePaths.Concat(retainedSourcePaths ?? Array.Empty<string>()), wrapped, snapshot)
@@ -183,9 +183,7 @@ internal static class PowerShellHybridModuleComposer
                 .Select(static method => method.SourceName).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
             var scriptFunctions = fallbackFunctions.Concat(typed.Methods.Where(static method => method.NativeFunctionBinding is not null)
                 .Select(static method => method.SourceName)).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
-            var exportedFallbackFunctions = (preserveFunctionPatterns
-                    ? exportContract!.Functions
-                    : exportContract?.SelectFunctions(scriptFunctions) ?? scriptFunctions)
+            var exportedFallbackFunctions = (exportContract?.SelectFunctions(scriptFunctions) ?? scriptFunctions)
                 .Concat(PowerShellCompiledModuleManifest.GetNestedModuleFunctionExportPatterns(sourcePath, fallbackFunctions))
                 .Distinct(StringComparer.OrdinalIgnoreCase);
             var exportedCompiledCmdlets = exportContract?.SelectFunctions(compiledCmdlets) ?? compiledCmdlets;

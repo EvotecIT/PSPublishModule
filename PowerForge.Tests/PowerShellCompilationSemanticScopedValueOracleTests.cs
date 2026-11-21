@@ -672,7 +672,8 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
     private static void CompareScopedArtifacts(string source, string probe, string[] compiledNames, Action<string> assertValue,
         string? importSetup = null, string? requiredModule = null, Action<PowerShellCompilationBuildResult>? assertArtifact = null,
         IReadOnlyDictionary<string, string>? additionalSources = null, bool retainAdditionalSources = false,
-        bool discoverAdditionalSources = false, string? manifestFunctionPattern = "*", bool resolveModuleSources = false)
+        bool discoverAdditionalSources = false, string? manifestFunctionPattern = "*", bool resolveModuleSources = false,
+        string? nestedModule = null)
     {
         var modernHost = Environment.GetEnvironmentVariable("POWERFORGE_PWSH76_PATH");
         Assert.False(string.IsNullOrWhiteSpace(modernHost), "The exact PowerShell 7.6.6 host is required.");
@@ -694,14 +695,15 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
                     additionalSourcePaths.Add(path);
                 }
             string? manifest = null;
-            if (requiredModule is not null || retainAdditionalSources ||
+            if (requiredModule is not null || nestedModule is not null || retainAdditionalSources ||
                 (discoverAdditionalSources || resolveModuleSources) && manifestFunctionPattern is not null)
             {
                 manifest = Path.ChangeExtension(module, ".psd1");
                 var required = requiredModule is null ? string.Empty : " RequiredModules=@('" + requiredModule + "');";
                 var files = retainAdditionalSources ? " FileList=@(" + string.Join(", ", additionalSources!.Keys.Select(name => "'" + name + "'")) + ");" : string.Empty;
                 var functions = manifestFunctionPattern is null ? string.Empty : " FunctionsToExport='" + manifestFunctionPattern + "';";
-                File.WriteAllText(manifest, "@{ RootModule='ScopedValues.psm1'; ModuleVersion='1.0.0';" + functions + required + files + " }");
+                var nested = nestedModule is null ? string.Empty : " NestedModules=@('" + nestedModule + "');";
+                File.WriteAllText(manifest, "@{ RootModule='ScopedValues.psm1'; ModuleVersion='1.0.0';" + functions + required + files + nested + " }");
             }
             var input = resolveModuleSources
                 ? new PowerShellCompilationInputResolver(profile).Resolve(manifest ?? module,

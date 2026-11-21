@@ -67,7 +67,8 @@ public sealed partial class PowerShellTypedCompilationTranspiler
         // Runtime-selected files share the authored export scope. Method-backed
         // commands must be declared as functions so PowerShell resolves those exports.
         if (capabilities == PowerShellCompilationCapabilities.HybridModule &&
-            PowerShellCompilationSourcePathPlanner.HasModuleAlternatives(parsedFiles[0].Ast))
+            (PowerShellCompilationSourcePathPlanner.HasModuleAlternatives(parsedFiles[0].Ast) ||
+             PowerShellModuleExportContract.TryRead(parsedFiles[0].Ast)?.HasWildcardFunctions == true))
             declarationPaths.UnionWith(parsedFiles.Select(static file => file.Path));
         for (var index = 0; index < parsedFiles.Count; index++)
         {

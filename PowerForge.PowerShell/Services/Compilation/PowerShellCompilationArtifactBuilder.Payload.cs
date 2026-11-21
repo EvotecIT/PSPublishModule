@@ -5,6 +5,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
     private static PowerShellCompilationArtifactFile[] CopyPlannedPayload(
         string primaryArtifactPath,
         string artifactName,
+        string generatedAssemblyFileName,
         IEnumerable<PowerShellCompilationDependency> dependencies,
         IEnumerable<PowerShellCompilationArtifactFile> existingFiles,
         IReadOnlyDictionary<string, string> inputHashes)
@@ -14,8 +15,6 @@ public sealed partial class PowerShellCompilationArtifactBuilder
         var existingArtifacts = existingFiles
             .GroupBy(static file => Path.GetFullPath(file.Path), PowerShellCompilationPathSafety.PathComparer)
             .ToDictionary(static group => group.Key, static group => group.First(), PowerShellCompilationPathSafety.PathComparer);
-        var typedAssembly = existingArtifacts.Values.SingleOrDefault(static file => file.Role == "TypedAssembly");
-        var generatedAssemblyFileName = typedAssembly is null ? artifactName + ".dll" : Path.GetFileName(typedAssembly.Path);
         var existing = existingArtifacts.Keys.ToHashSet(PowerShellCompilationPathSafety.PathComparer);
         var copied = new List<PowerShellCompilationArtifactFile>();
         foreach (var dependency in dependencies.Where(IsSelectedAdjacentPayload))
