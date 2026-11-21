@@ -125,11 +125,13 @@ python3 Benchmarks/ManagedModules/module-cli-feed.py "$BENCH_ROOT" --port 8173
 python3 -m http.server 8173 --bind 127.0.0.1 --directory "$BENCH_ROOT/feed"
 ```
 
-In another shell, set `BENCH_ROOT` to the same directory, then run the spec
-from PowerShell with PSPublishModule available.
+In another shell, set `BENCH_ROOT` to the same directory, then run the wrapper
+from PowerShell with PSPublishModule available. The wrapper uses a separate
+work directory for each run and removes it after all samples finish, including
+warmups. Benchmark results stay under OutputRoot.
 
 ```powershell
-Invoke-BenchmarkSuite -Path ./Benchmarks/ManagedModules/module-cli.benchmark.ps1 -Variable @{
+./Benchmarks/ManagedModules/Invoke-ModuleCliBenchmark.ps1 -Variable @{
     PowerForgePath   = Join-Path $env:BENCH_ROOT 'powerforge'
     ModuleFastPath   = Join-Path $env:BENCH_ROOT 'modulefast'
     Source           = 'http://127.0.0.1:8173/index.json'
