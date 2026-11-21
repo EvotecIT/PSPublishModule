@@ -28,6 +28,7 @@ namespace PowerForge.Cli;
 [JsonSerializable(typeof(ModulePipelinePlan))]
 [JsonSerializable(typeof(ModuleBuildResult))]
 [JsonSerializable(typeof(ModuleInstallerResult))]
+[JsonSerializable(typeof(ManagedModuleRestoreResult))]
 [JsonSerializable(typeof(ModuleTestSuiteResult))]
 [JsonSerializable(typeof(ModulePipelineResult))]
 [JsonSerializable(typeof(ModulePipelineActionContext))]

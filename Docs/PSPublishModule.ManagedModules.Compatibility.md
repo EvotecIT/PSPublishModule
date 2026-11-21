@@ -89,6 +89,48 @@ Default install is latest-first for broad requests. When the caller does not pin
 
 Exact-version installs keep the fast local no-op path. `-Version`, `-RequiredVersion`, or an exact `-VersionPolicy` can skip repository work when the selected installed version is already healthy. Use `-Force` only when the selected root module version itself should be replaced.
 
+### Restore modules before starting PowerShell
+
+`powerforge module restore` installs modules to an explicit directory from the
+self-contained PowerForge CLI. Give it a JSON object mapping module names to
+exact root versions.
+
+```json
+{
+  "Pester": "5.7.1"
+}
+```
+
+Save this as `modules.json`, then resolve and write the lock once.
+
+```powershell
+powerforge module restore --requirements modules.json --lock-file modules.lock.json --destination ./Modules --write-lock
+```
+
+Commit both files. In CI, restore the locked dependency set into a dedicated
+module directory, then add that directory to `PSModulePath` for the PowerShell
+processes that use it.
+
+```powershell
+powerforge module restore --requirements modules.json --lock-file modules.lock.json --destination ./Modules --output json
+```
+
+The lock records one version and the package SHA-256 for each module in the
+dependency set. The command uses PowerShell Gallery by default. For a different
+NuGet feed or a local package folder, pass the same `--source` when creating and
+using the lock. Local folder locks record an absolute source path. Keep the
+requirements and lock files outside the module destination. A frozen restore
+verifies all package hashes and dependency
+requirements before installing. It reinstalls the locked versions from the
+verified packages and leaves other versions in place. Use `--write-lock` again
+to refresh dependency selection.
+
+Add `--plan` to inspect the resolved or frozen package set without writing the
+lock or destination. Plan mode downloads the packages to temporary storage to
+validate their dependency requirements and hashes. Review any required package
+licenses before passing `--accept-license`. Use `--allow-clobber` if the
+modules intentionally export overlapping commands.
+
 ### Update
 
 ```powershell

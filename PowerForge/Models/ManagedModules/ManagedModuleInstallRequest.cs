@@ -113,4 +113,6 @@ public sealed class ManagedModuleInstallRequest
     public bool SkipDependencyCheck { get; set; }
 
     internal bool RepairInstalledManifestDependencies { get; set; }
+
+    internal bool RequireVersionedModulePath { get; set; }
 }
