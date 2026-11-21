@@ -329,6 +329,61 @@ public sealed class PowerForgeCliModuleRestoreTests
         }
     }
 
+    [Fact]
+    public async Task RestoreEnforcesEveryManifestRequirementForTheSameModule()
+    {
+        using var temp = new TemporaryDirectory();
+        var feed = Path.Combine(temp.Path, "feed");
+        var requirements = Path.Combine(temp.Path, "modules.json");
+        var lockPath = Path.Combine(temp.Path, "modules.lock.json");
+        var destination = Path.Combine(temp.Path, "modules");
+        WritePackage(feed, "App", "1.0.0", manifestExports:
+            "RequiredModules = @(@{ ModuleName = 'Child'; ModuleVersion = '1.0.0' }, @{ ModuleName = 'Child'; ModuleVersion = '2.0.0' })");
+        var older = WritePackage(feed, "Child", "1.5.0");
+        File.WriteAllText(requirements, """{"App":"1.0.0"}""");
+        var args = new[] { "--requirements", requirements, "--lock-file", lockPath, "--source", feed };
+
+        using var rejected = await RunCliAsync(temp.Path, 1, [.. args, "--destination", destination, "--write-lock"]);
+        Assert.Contains("2.0.0", rejected.RootElement.GetProperty("error").GetString(), StringComparison.Ordinal);
+        Assert.False(Directory.Exists(destination));
+        Assert.False(File.Exists(lockPath));
+
+        WritePackage(feed, "Child", "2.0.0");
+        using var allowed = await RunCliAsync(temp.Path, 0, [.. args, "--destination", destination, "--write-lock"]);
+        Assert.True(File.Exists(Path.Combine(destination, "Child", "2.0.0", "Child.psd1")));
+        var evidence = JsonNode.Parse(File.ReadAllText(lockPath))!;
+        var pin = evidence["packages"]!.AsArray().Single(package => (string?)package!["name"] == "Child")!;
+        pin["version"] = "1.5.0";
+        pin["sha256"] = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(older))).ToLowerInvariant();
+        File.WriteAllText(lockPath, evidence.ToJsonString());
+
+        var frozenDestination = Path.Combine(temp.Path, "frozen");
+        using var frozen = await RunCliAsync(temp.Path, 1, [.. args, "--destination", frozenDestination]);
+        Assert.Contains("2.0.0", frozen.RootElement.GetProperty("error").GetString(), StringComparison.Ordinal);
+        Assert.False(Directory.Exists(frozenDestination));
+    }
+
+    [Fact]
+    public async Task QuietTextRestorePlanPrintsTheResolvedPackagesWithoutInstalling()
+    {
+        using var temp = new TemporaryDirectory();
+        var feed = Path.Combine(temp.Path, "feed");
+        var requirements = Path.Combine(temp.Path, "modules.json");
+        var lockPath = Path.Combine(temp.Path, "modules.lock.json");
+        var destination = Path.Combine(temp.Path, "modules");
+        WritePackage(feed, "App", "1.0.0");
+        File.WriteAllText(requirements, """{"App":"1.0.0"}""");
+
+        var output = await RunCliProcessAsync(temp.Path, 0,
+            ["--requirements", requirements, "--lock-file", lockPath, "--destination", destination, "--source", feed,
+                "--write-lock", "--plan", "--quiet"], outputJson: false);
+
+        Assert.Contains("Planned 1 module(s)", output, StringComparison.Ordinal);
+        Assert.Contains("App 1.0.0", output, StringComparison.Ordinal);
+        Assert.False(Directory.Exists(destination));
+        Assert.False(File.Exists(lockPath));
+    }
+
     private static string WritePackage(string feed, string name, string version,
         TestDependency? dependency = null, string? content = null, string? manifestExports = null,
         string? manifestVersion = null, TestDependency? additionalDependency = null)
@@ -350,6 +405,10 @@ public sealed class PowerForgeCliModuleRestoreTests
     }
 
     private static async Task<JsonDocument> RunCliAsync(string currentDirectory, int expectedExitCode, string[] args, string? tempDirectory = null)
+        => JsonDocument.Parse(await RunCliProcessAsync(currentDirectory, expectedExitCode, args, tempDirectory));
+
+    private static async Task<string> RunCliProcessAsync(string currentDirectory, int expectedExitCode, string[] args,
+        string? tempDirectory = null, bool outputJson = true)
     {
         var root = PowerForgeCliTestHost.FindRepositoryRoot();
         var assembly = PowerForgeCliTestHost.ResolveAssemblyPath(root,
@@ -367,7 +426,14 @@ public sealed class PowerForgeCliModuleRestoreTests
             startInfo.Environment["TEMP"] = tempDirectory;
             startInfo.Environment["TMP"] = tempDirectory;
         }
-        foreach (var argument in new[] { assembly, "module", "restore", "--output", "json" }.Concat(args))
+        foreach (var argument in new[] { assembly, "module", "restore" })
+            startInfo.ArgumentList.Add(argument);
+        if (outputJson)
+        {
+            startInfo.ArgumentList.Add("--output");
+            startInfo.ArgumentList.Add("json");
+        }
+        foreach (var argument in args)
             startInfo.ArgumentList.Add(argument);
         using var process = Process.Start(startInfo)!;
         var stdout = process.StandardOutput.ReadToEndAsync();
@@ -386,6 +452,6 @@ public sealed class PowerForgeCliModuleRestoreTests
 
         var output = await stdout;
         Assert.True(process.ExitCode == expectedExitCode, $"Exit code {process.ExitCode}: {output}\n{await stderr}");
-        return JsonDocument.Parse(output);
+        return output;
     }
 }

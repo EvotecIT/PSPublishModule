@@ -900,6 +900,7 @@ sealed class QuietLogger : ILogger
         _inner = inner ?? throw new ArgumentNullException(nameof(inner));
     }
 
+    internal ILogger Inner => _inner;
     public bool IsVerbose => _inner.IsVerbose;
 
     public void Info(string message) { }
