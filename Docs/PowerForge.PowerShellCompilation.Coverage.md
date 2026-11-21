@@ -86,7 +86,7 @@ Linux x64 with a verified runtime-free dependency closure.
 
 | Unchanged script | Starting Strict build | Observed native data path | Windows x64 bytes | Linux x64 bytes |
 | --- | --- | --- | ---: | ---: |
-| `list-files.ps1` | Rejected | Recursive filesystem records and ordered `FullName` projection | 3,145,216 | 3,252,792 |
+| `list-files.ps1` | Rejected | Recursive filesystem records and ordered `FullName` projection | 3,145,728 | 3,252,792 |
 | `convert-csv2txt.ps1` | Rejected | Explicit-header CSV reads and ordered row interpolation | 3,103,232 | 3,174,120 |
 | `list-empty-files.ps1` | Rejected | Filesystem working-directory default, empty-file selection and counts | 3,057,664 | 3,178,656 |
 
