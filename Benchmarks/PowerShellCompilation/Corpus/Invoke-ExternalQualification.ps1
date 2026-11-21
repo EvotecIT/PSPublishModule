@@ -22,14 +22,6 @@ if (-not $AllowExternalExecution) {
     throw 'External qualification imports and invokes reviewed third-party source. Pass -AllowExternalExecution to authorize this local execution lane.'
 }
 
-function Invoke-CliJson {
-    param([string[]] $Arguments, [string] $WorkingDirectory, [string] $ProcessEvidencePath, [hashtable] $Environment = @{})
-
-    $run = Invoke-OwnedProcess -FileName 'dotnet' -Arguments (@($CliAssemblyPath) + $Arguments) -WorkingDirectory $WorkingDirectory -Environment $Environment
-    $json = ConvertFrom-CorpusCliProcess $run -ProcessEvidencePath $ProcessEvidencePath
-    return $json.result
-}
-
 function Quote-PowerShellLiteral {
     param([string] $Value)
     return "'" + $Value.Replace("'", "''") + "'"

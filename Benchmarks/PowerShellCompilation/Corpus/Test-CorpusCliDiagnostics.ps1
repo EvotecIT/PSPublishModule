@@ -50,7 +50,7 @@ function Invoke-OwnedProcess {param($FileName,$Arguments,$WorkingDirectory,$Envi
 $script:fixtureProcess=New-ProcessFixture '{"success":false,"result":{"targets":[{"name":"script","succeeded":false,"message":"Actionable generated build failure"}]}}' 'exact SDK stderr' 1
 $CliAssemblyPath='fixture-never-launched.dll'
 foreach($adapter in @(
-    @{file='Invoke-ExternalQualification.ps1';name='Invoke-CliJson'},
+    @{file='Corpus.Qualification.Workflow.ps1';name='Invoke-CliJson'},
     @{file='Invoke-ExternalAssessment.ps1';name='Invoke-Census'},
     @{file='Invoke-PublicCorpus.ps1';name='Invoke-PowerForgeJson'}
 )) {

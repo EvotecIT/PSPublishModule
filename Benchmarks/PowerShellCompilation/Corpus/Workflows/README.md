@@ -19,3 +19,20 @@ This is Hybrid qualification. Module initialization and supported command region
 Windows PowerShell 5.1 qualification uses a short workspace because its script and managed assembly loaders have legacy path limits. The observers use an explicit policy inside their owned unsigned-validation runspaces; they do not change machine or user policy. Unsupported installation paths must fail before installation changes. Cabinet scenarios additionally need the existing Windows MakeCab and expand tools. The sitemap fixture uses only an owned loopback server and releases it after successful and failed runs.
 
 The module packages and their binaries are external comparison inputs. Acquire their exact hashes through the existing verified download and bounded extraction helpers; do not add them to compiler output or checked-in production dependencies. See each packet's README for acquisition, licensing, host prerequisites, observer contracts and proof limits. Keep qualification workspaces on configured scratch storage and preserve compact reports before releasing generated output.
+
+## Unfamiliar workflow baseline
+
+The [unfamiliar workflow packet](../unfamiliar-workflows.net10.json) pins 15 standalone scripts, ten Gallery modules, and five multi-file applications. It declares 30 Windows x64 artifacts for PowerShell 7.6.6 and ten module artifacts for Windows PowerShell 5.1. The packet lists the source hosts separately, since some scripts run in Windows PowerShell while their compiled executable target is .NET 10.
+
+Run the observation suite from the corpus directory with the PowerForge assembly from the compiler revision under assessment. Choose a short, dedicated scratch path. Each project installs into its own directory under that path.
+
+```powershell
+./Invoke-WorkflowBaseline.ps1 -CliAssemblyPath $cli -PowerShell76Path $pwsh766 `
+    -WorkspacePath $scratch -AllowExternalExecution
+```
+
+The runner verifies source package hashes and the exact PowerShell version for each selected target. It records the compiler version and fixture hashes. Set `-WorkloadId` or `-Framework` for a replay of specific lanes. `-OfflineAcquisition` uses an existing verified source cache, optionally at `-PayloadCachePath`. Fresh projects still use the normal project restore operation.
+
+Each lane retains separate source, built, and installed observations. The artifact comparisons withdraw the copied compiler inputs, and the installation entrypoint must match the built entrypoint by SHA-256. The observation compares output, errors, exit status, and changed or removed files. Module observations also compare exported commands. The full process streams remain available for investigating differences. Comparison removes terminal coloring, replaces the known per-case and entry paths, and normalizes elapsed time for the three fixtures that print it.
+
+A stage failure records where the lane stopped. A semantic difference records a completed lifecycle whose observations disagree with source. Parity records matching observations for the selected cases. The build receipt separately identifies the emitted CLR bodies.

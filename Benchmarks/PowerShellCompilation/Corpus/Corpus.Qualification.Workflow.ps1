@@ -54,6 +54,14 @@ function Initialize-WorkflowEvidenceRoot {
     return $evidence
 }
 
+function Invoke-CliJson {
+    param([string[]] $Arguments, [string] $WorkingDirectory, [string] $ProcessEvidencePath, [hashtable] $Environment = @{})
+
+    $run = Invoke-OwnedProcess -FileName 'dotnet' -Arguments (@($CliAssemblyPath) + $Arguments) -WorkingDirectory $WorkingDirectory -Environment $Environment
+    $json = ConvertFrom-CorpusCliProcess $run -ProcessEvidencePath $ProcessEvidencePath
+    return $json.result
+}
+
 function Invoke-WorkflowCliOperation {
     param([string[]] $Arguments, [string] $WorkingDirectory, [string] $EvidencePath, [hashtable] $Environment = @{})
     try {
@@ -321,7 +329,7 @@ function Copy-WorkflowSourceInputs {
     $paths = @($Entry.sourceInputs | ForEach-Object { $_.path })
     Assert-WorkflowNameSet $paths $paths 'Pinned source paths'
     if ($Entry.entryPoint -notin $paths) { throw 'The entrypoint must be included in pinned sourceInputs.' }
-    foreach ($required in @(Get-WorkflowProperty $Entry.qualification 'requiredSourceFiles' @())) {
+    foreach ($required in @(Get-WorkflowProperty (Get-WorkflowProperty $Entry 'qualification') 'requiredSourceFiles' @())) {
         if ($required -notin $paths) { throw "Required source file '$required' is not pinned." }
     }
     New-Item -ItemType Directory -Path $Destination -Force | Out-Null
