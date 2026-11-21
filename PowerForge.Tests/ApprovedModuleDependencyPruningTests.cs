@@ -255,6 +255,8 @@ public sealed class ApprovedModuleDependencyPruningTests
     [InlineData("$value='module'; function Get-SharedAliasTarget { param($value='alias-target') $value; Remove-Variable value }; Set-Alias SharedAlias Get-SharedAliasTarget", "later removal")]
     [InlineData("function Get-PrivateAliasTarget { 'alias-target' }; function Get-SharedAliasTarget { Set-Alias InnerAlias Get-PrivateAliasTarget; Set-Alias OuterAlias InnerAlias; OuterAlias }; Set-Alias SharedAlias Get-SharedAliasTarget", "local alias chain")]
     [InlineData("$value='module'; function Get-SharedAliasTarget { param($value='alias-target') function Get-Nested { $value }; Get-Nested }; Set-Alias SharedAlias Get-SharedAliasTarget", "nested parameter")]
+    [InlineData("$value='module'; function Get-SharedAliasTarget { param($value='alias-target') function Get-Nested { $value }; 1 | ForEach-Object { Get-Nested } }; Set-Alias SharedAlias Get-SharedAliasTarget", "nested callback")]
+    [InlineData("$value='module'; function Get-SharedAliasTarget { param($value='alias-target') Get-Variable value -ValueOnly }; Set-Alias SharedAlias Get-SharedAliasTarget", "local variable lookup")]
     [InlineData("function Get-SharedAliasTarget { 'alias-target' }; Set-Alias SharedAlias Get-SharedAliasTarget", "marked single root")]
     public void Run_PackagesApprovedDonorAliasOrReportsANameConflict(string aliasDeclaration, string? conflictScope)
     {
@@ -354,7 +356,7 @@ public sealed class ApprovedModuleDependencyPruningTests
                 or "current function name" or "local bindings" or "local alias target" or "private scope alias"
                 or "parameter default" or "synchronous callback" or "invocation parameters" or "shadowed consumer alias"
                 or "unrelated removal" or "later removal" or "local alias chain" or "nested parameter"
-                or "marked single root"))
+                or "marked single root" or "nested callback" or "local variable lookup"))
             {
                 var error = Assert.Throws<InvalidOperationException>(() => runner.Run(spec, runner.Plan(spec)));
                 Assert.Contains("SharedAlias", error.Message);
@@ -443,6 +445,9 @@ public sealed class ApprovedModuleDependencyPruningTests
     [InlineData("script variable cmdlet", "Get-SharedEntry", "outside the function's local scope")]
     [InlineData("escaped nested function", "Get-SharedEntry", "SharedValue")]
     [InlineData("authored root without merging", "Get-SharedEntry", "without merging")]
+    [InlineData("unloaded configured function", "Get-SharedEntry", "without merging")]
+    [InlineData("regenerated loader", "source", "will be regenerated")]
+    [InlineData("ambient variable lookup", "Get-SharedEntry", "SharedValue")]
     public void Run_RejectsUnpreservableApprovedDonorCommands(
         string scenario, string commandOrModule, string reason)
     {
@@ -473,6 +478,7 @@ public sealed class ApprovedModuleDependencyPruningTests
                 "script removal" => "function Get-SharedEntry { Remove-Variable -Name SharedValue -Scope Script }",
                 "global removal" => "function Get-SharedEntry { Remove-Variable -Name SharedValue -Scope Global }",
                 "script variable cmdlet" => "$SharedValue = 'donor'; function Get-SharedEntry { Get-Variable -Name SharedValue -Scope Script -ValueOnly }",
+                "ambient variable lookup" => "$SharedValue = 'donor'; function Get-SharedEntry { Get-Variable -Name SharedValue -ValueOnly }",
                 "escaped nested function" => "$SharedValue = 'donor'; function Get-SharedEntry { param($SharedValue='local') function Get-Nested { $SharedValue }; Get-Nested; ${function:Get-Nested} }",
                 _ => "function Get-SharedHelper { 'donor' }; function Get-SharedEntry { Get-SharedHelper }"
             };
@@ -495,11 +501,18 @@ public sealed class ApprovedModuleDependencyPruningTests
                 _ => "function Get-ConsumerThing { Get-SharedEntry }"
             };
             WriteModule(root, "source", consumer + "; Export-ModuleMember -Function Get-ConsumerThing");
-            if (scenario == "authored root without merging")
+            if (scenario is "authored root without merging" or "unloaded configured function")
             {
                 string custom = Path.Combine(root, "source", "Custom");
                 Directory.CreateDirectory(custom);
-                File.WriteAllText(Path.Combine(custom, "Helper.ps1"), "function Get-Unrelated { 'helper' }");
+                var name = scenario == "unloaded configured function" ? "Get-SharedEntry" : "Get-Unrelated";
+                File.WriteAllText(Path.Combine(custom, "Helper.ps1"), "function " + name + " { 'helper' }");
+            }
+            if (scenario == "regenerated loader")
+            {
+                string publicScripts = Path.Combine(root, "source", "Public");
+                Directory.CreateDirectory(publicScripts);
+                File.WriteAllText(Path.Combine(publicScripts, "Get-ConsumerThing.ps1"), consumer);
             }
             if (scenario == "sibling donor")
                 WriteModule(installed, "SiblingHelpers",
@@ -514,13 +527,13 @@ public sealed class ApprovedModuleDependencyPruningTests
                 {
                     BuildModule = new BuildModuleConfiguration
                     {
-                        Merge = scenario is not ("merge disabled" or "authored root without merging"),
-                        MergeMissing = scenario is not ("merge disabled" or "authored root without merging"),
+                        Merge = scenario is not ("merge disabled" or "authored root without merging" or "unloaded configured function" or "regenerated loader"),
+                        MergeMissing = scenario is not ("merge disabled" or "authored root without merging" or "unloaded configured function"),
                     }
                 },
                 new ConfigurationArtefactSegment { ArtefactType = ArtefactType.Packed, Configuration = new ArtefactConfiguration { Enabled = true, Path = packed } }
             };
-            if (scenario == "authored root without merging")
+            if (scenario is "authored root without merging" or "unloaded configured function")
             {
                 segments.Add(new ConfigurationInformationSegment
                 {

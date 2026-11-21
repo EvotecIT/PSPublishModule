@@ -51,25 +51,30 @@ public sealed partial class ModulePipelineRunner
         }
         string? analysisCode = mergeInfo.HasScripts ? mergeInfo.MergedScriptContent : null;
         string? analysisPath = mergeInfo.HasScripts ? null : mergeInfo.Psm1Path;
+        bool analyzingGeneratedLoader = false;
         if (approvedModules.Length > 0 && (!plan.MergeModule || !mergeInfo.HasScripts) &&
             File.Exists(mergeInfo.Psm1Path))
         {
             var rootContent = File.ReadAllText(mergeInfo.Psm1Path);
-            var generatedLoader = string.Equals(rootContent, buildResult.GeneratedRootBootstrapper, StringComparison.Ordinal);
+            analyzingGeneratedLoader = string.Equals(rootContent, buildResult.GeneratedRootBootstrapper, StringComparison.Ordinal);
             // Only the unchanged loader written by this build can be represented by its loaded sources.
             // An authored or previously merged root module may contain calls of its own.
-            if (generatedLoader || mergeInfo.HasScripts)
+            if (analyzingGeneratedLoader)
             {
-                var loadedFiles = generatedLoader
-                    ? ExcludeManifestScriptsToProcess(buildResult.ManifestPath, buildResult.StagingPath,
-                        ModuleMergeComposer.ResolveScriptFiles(buildResult.StagingPath, information: null))
-                    : new[] { mergeInfo.Psm1Path }.Concat(scriptFiles).ToArray();
+                var loadedFiles = ExcludeManifestScriptsToProcess(buildResult.ManifestPath, buildResult.StagingPath,
+                    ModuleMergeComposer.ResolveScriptFiles(buildResult.StagingPath, information: null));
                 analysisCode = loadedFiles.Length == 0
                     ? "# No authored script in the generated root module."
                     : ModuleMergeComposer.BuildSources(buildResult.StagingPath, plan.ModuleName, plan.Information,
                         buildResult.Exports, fixRelativePaths: !plan.DoNotAttemptToFixRelativePaths,
                         scriptFiles: loadedFiles, exportAssemblies: plan.BuildSpec.ExportAssemblies).MergedScriptContent;
                 analysisPath = null;
+            }
+            else
+            {
+                // Inclusion in the folder-merge configuration does not mean this root loads a script.
+                analysisCode = null;
+                analysisPath = mergeInfo.Psm1Path;
             }
         }
 
@@ -91,6 +96,9 @@ public sealed partial class ModulePipelineRunner
             missingReport = AnalyzeMissingFunctionsWithHeartbeat(analysisPath, analysisCode, plan, binaryCommands);
             LogMergeSummary(plan, mergeInfo, missingReport, dependentRequiredModules);
             ValidateApprovedDonorMerge(plan, missingReport, approvedModules);
+            if (analyzingGeneratedLoader && missingReport?.Functions is { Length: > 0 })
+                throw new InvalidOperationException(
+                    $"Cannot merge approved modules ({string.Join(", ", approvedModules)}) for '{plan.ModuleName}' into a loader that will be regenerated. Enable MergeModuleOnBuild or declare the original modules only as RequiredModule.");
             if (missingReport is not null)
                 ValidateMissingFunctions(missingReport, plan, dependentRequiredModules);
         }

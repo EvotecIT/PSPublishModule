@@ -25,13 +25,19 @@ public sealed partial class MissingFunctionsAnalyzer
         HashSet<string>? moduleVariableNames = null;
         NestedFunctionVisibilityAnalyzer? visibility = null;
         var removals = new List<(CommandAst Command, Func<string, bool> Affects)>();
+        var reads = new List<(CommandAst Command, Func<string, bool> Matches)>();
         foreach (var command in root.FindAll(static node => node is CommandAst, searchNestedScriptBlocks: true).Cast<CommandAst>())
         {
-            var affects = PowerShellVariableRemovalPolicy.ReadAffectedNames(command, out bool accessesEnclosingScope);
+            var affects = PowerShellVariableRemovalPolicy.ReadAffectedNames(command, out bool accessesEnclosingScope, out bool readsVariables);
             if (accessesEnclosingScope)
                 return $"accesses a variable outside the function's local scope using '{command.GetCommandName()}'.";
             if (affects is not null)
-                removals.Add((command, affects));
+            {
+                if (readsVariables)
+                    reads.Add((command, affects));
+                else
+                    removals.Add((command, affects));
+            }
         }
         foreach (var variable in root.FindAll(static node => node is VariableExpressionAst, searchNestedScriptBlocks: true)
                      .Cast<VariableExpressionAst>())
@@ -54,18 +60,32 @@ public sealed partial class MissingFunctionsAnalyzer
             moduleVariableNames ??= GetModuleScriptVariableNames(source);
             if (!moduleVariableNames.Contains(name) || IsLocalDeclaration(variable))
                 continue;
-            if (removals.Any(removal => removal.Affects(name) &&
-                    !FollowsReadInSameSingleRunBlock(removal.Command, variable)) ||
-                !HasLocalBinding(variable, root, CanReadEnclosingScope))
+            if (!IsProvenLocalRead(variable, name))
                 return DescribeContextVariable(path.UserPath);
         }
+        if (reads.Count > 0 && source is not null)
+        {
+            moduleVariableNames ??= GetModuleScriptVariableNames(source);
+            foreach (var read in reads)
+            {
+                var name = moduleVariableNames.FirstOrDefault(name =>
+                    IsPotentialModuleVariable(name) && read.Matches(name) && !IsProvenLocalRead(read.Command, name));
+                if (name is not null)
+                    return DescribeContextVariable(name);
+            }
+        }
         return null;
+
+        bool IsProvenLocalRead(Ast read, string name)
+            => !removals.Any(removal => removal.Affects(name) &&
+                    !FollowsReadInSameSingleRunBlock(removal.Command, read)) &&
+               HasLocalBinding(read, name, root, CanReadEnclosingScope);
 
         bool CanReadEnclosingScope(ScriptBlockAst scope)
         {
             visibility ??= NestedFunctionVisibilityAnalyzer.Create(root);
             if (scope.Parent is FunctionDefinitionAst function)
-                return visibility.HasSynchronousEnclosingFunction(function);
+                return visibility.HasSynchronousEnclosingFunction(function, CanReadEnclosingScope);
             if (scope.Parent is not ScriptBlockExpressionAst callback || !visibility.IsSynchronousScriptBlock(callback))
                 return false;
             if (callback.Parent is not CommandAst invocation)
@@ -130,7 +150,7 @@ param($module)
            !name.Equals("true", StringComparison.OrdinalIgnoreCase) &&
            !name.Equals("false", StringComparison.OrdinalIgnoreCase);
 
-    private static bool FollowsReadInSameSingleRunBlock(CommandAst command, VariableExpressionAst read)
+    private static bool FollowsReadInSameSingleRunBlock(CommandAst command, Ast read)
     {
         if (command.Extent.StartOffset < read.Extent.EndOffset)
             return false;
@@ -162,16 +182,16 @@ param($module)
     }
 
     private static bool HasLocalBinding(
-        VariableExpressionAst variable,
+        Ast read,
+        string name,
         ScriptBlockAst root,
         Func<ScriptBlockAst, bool> canReadEnclosingScope)
     {
-        string name = variable.VariablePath.UserPath;
         var comparer = StringComparer.OrdinalIgnoreCase;
         // A direct earlier assignment in the same executing statement block initializes this local.
         // Assignments in sibling branches or nested functions do not prove the binding.
         ParameterAst? defaultParameter = null;
-        for (Ast? node = variable; node is not null; node = node.Parent)
+        for (Ast? node = read; node is not null; node = node.Parent)
         {
             if (node.Parent is ParameterAst parameterAst && ReferenceEquals(parameterAst.DefaultValue, node))
                 defaultParameter = parameterAst;
@@ -187,7 +207,7 @@ param($module)
                     return true;
                 // begin runs in the same function scope before process and end.
                 if (defaultParameter is null && scope.BeginBlock is { } begin &&
-                    begin.Extent.EndOffset <= variable.Extent.StartOffset && HasPriorAssignment(begin.Statements, variable, name))
+                    begin.Extent.EndOffset <= read.Extent.StartOffset && HasPriorAssignment(begin.Statements, read, name))
                     return true;
                 if (ReferenceEquals(scope, root) || !canReadEnclosingScope(scope))
                     return false;

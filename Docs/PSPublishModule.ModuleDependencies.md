@@ -46,7 +46,9 @@ with child scopes or if `WhatIf` or `Confirm` can skip the alias assignment.
 PowerForge also checks variable removals that could make a read fall back to
 donor module state and explicit variable commands that access an enclosing
 scope. The analysis includes retained root module code and scripts loaded by
-the generated bootstrapper.
+the generated bootstrapper. If the generated bootstrapper needs approved
+helpers, enable `MergeModuleOnBuild` so those helpers are part of its merged
+script payload.
 PowerForge also checks aliases created in the consumer's script scope and
 verifies that a dependency resolved inside a donor matches the selected
 approved module identity. Dynamic calls or alias declarations that prevent

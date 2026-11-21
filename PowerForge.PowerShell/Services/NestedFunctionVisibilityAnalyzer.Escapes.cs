@@ -6,7 +6,8 @@ namespace PowerForge;
 
 internal sealed partial class NestedFunctionVisibilityAnalyzer
 {
-    internal bool HasSynchronousEnclosingFunction(FunctionDefinitionAst declaration)
+    internal bool HasSynchronousEnclosingFunction(
+        FunctionDefinitionAst declaration, Func<ScriptBlockAst, bool> canReadCallbackScope)
     {
         if (declaration.Name.IndexOf(':') >= 0 ||
             FindContainingScriptBlock(declaration) is not { } scope ||
@@ -20,9 +21,21 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
 
         var calls = graph.RootInvocations.Where(site =>
             string.Equals(site.Command.GetCommandName(), declaration.Name, StringComparison.OrdinalIgnoreCase)).ToArray();
-        return calls.Length > 0 && calls.All(site => ReferenceEquals(FindContainingScriptBlock(site.Command), scope) &&
+        return calls.Length > 0 && calls.All(site => ExecutesInEnclosingScope(site.Command) &&
             !IsPotentiallyShadowedByAlias(site.Command, declaration.Name) &&
             IsDeclaredInVisibleScope(site.Command, declaration.Name));
+
+        bool ExecutesInEnclosingScope(CommandAst command)
+        {
+            var containing = FindContainingScriptBlock(command);
+            while (!ReferenceEquals(containing, scope))
+            {
+                if (containing?.Parent is not ScriptBlockExpressionAst callback || !canReadCallbackScope(containing))
+                    return false;
+                containing = FindContainingScriptBlock(callback);
+            }
+            return true;
+        }
     }
 
     private bool IsPotentiallyShadowedByAlias(CommandAst command, string name)
