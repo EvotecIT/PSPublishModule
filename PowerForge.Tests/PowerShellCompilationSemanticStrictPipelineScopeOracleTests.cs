@@ -116,8 +116,10 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
     {
         using var fixture = OracleFixture.Create("""
             param([string] $Path)
-            $rows = Import-Csv -LiteralPath $Path -Header ' ',Author,Notes
-            foreach ($row in $rows) { "title=[$($row.' ')]" }
+            try {
+                $rows = Import-Csv -LiteralPath $Path -Header ' ',Author,Notes
+                foreach ($row in $rows) { "title=[$($row.' ')]" }
+            } catch { exit 3 }
             """);
         var rows = Path.Combine(fixture.RootPath, "data.csv");
         File.WriteAllText(rows, "first,Ada,one\nsecond,Doe,two\n");
