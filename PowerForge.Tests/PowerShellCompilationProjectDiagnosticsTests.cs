@@ -173,6 +173,26 @@ public sealed class PowerShellCompilationProjectDiagnosticsTests
         Assert.DoesNotContain(fixture.Root, JsonSerializer.Serialize(report), StringComparison.OrdinalIgnoreCase);
     }
 
+    [Theory]
+    [InlineData("$PSCmdlet.ShouldProcess('record', 'inspect')", "confirmation-capable script interaction")]
+    [InlineData("& $Command", "dynamic command invocation")]
+    public void ProjectExplain_ReportsPackagedHostRefusalsAtTheDependencyStatement(string statement, string reason)
+    {
+        using var fixture = Fixture.Create(". \"$PSScriptRoot/Helper.ps1\"; Invoke-Helper",
+            PowerShellCompilationArtifactKind.Executable, PowerShellCompilationMode.Hybrid);
+        File.WriteAllText(Path.Combine(fixture.Root, "Helper.ps1"),
+            "# Contained helper\nfunction Invoke-Helper {\n    " + statement + "\n}\n");
+
+        var result = new PowerShellCompilationProjectWorkflowService().Explain(fixture.Project);
+        Assert.False(result.Succeeded);
+        var report = Assert.Single(result.Targets).DiagnosticReport!;
+        var issue = Assert.Single(report.Issues, candidate => candidate.Message.Contains(reason, StringComparison.Ordinal));
+        Assert.Equal("Helper.ps1", issue.RelativePath);
+        Assert.Equal(3, issue.Line);
+        Assert.Equal(5, issue.Column);
+        Assert.DoesNotContain(fixture.Root, JsonSerializer.Serialize(report), StringComparison.OrdinalIgnoreCase);
+    }
+
     [Fact]
     public void ProjectExplain_ReportsMissingAssemblyWithoutRejectingTypedUnitSemantics()
     {
@@ -232,7 +252,7 @@ public sealed class PowerShellCompilationProjectDiagnosticsTests
         internal static Fixture Create(string source, PowerShellCompilationArtifactKind kind, PowerShellCompilationMode mode)
         {
             var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PFC", Guid.NewGuid().ToString("N")[..12])).FullName;
-            var path = Path.Combine(root, "Functions.psm1");
+            var path = Path.Combine(root, kind == PowerShellCompilationArtifactKind.Executable ? "Main.ps1" : "Functions.psm1");
             File.WriteAllText(path, source);
             var project = Path.Combine(root, "powerforge.psproject.json");
             var service = new PowerShellCompilationProjectManifestService();

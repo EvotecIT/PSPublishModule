@@ -224,7 +224,7 @@ behavior through the declared entry paths.
 | --- | ---: | --- |
 | Relative source and resource closure | 4 | Two parent-relative resource selections and two unresolved dot-source expressions |
 | Guarded provider path inside a callback | 2 | Nested `Get-Content` and `Get-ChildItem` reads |
-| Conventional loader argument binding | 1 | MarkdownPS uses a dynamic `-Exclude` |
+| Conventional loader argument binding | 1 | MarkdownPS wraps literal `-Exclude` patterns in an array subexpression |
 | Packaged script requirement enforcement | 1 | Build-MainSummaryFromZip loads a helper with `#requires` |
 | Packaged executable parameter binding | 1 | Verify-MarkdownLinks uses a mandatory entry parameter |
 | Generated module help identity | 1 | PSWriteHTML replaces a delivered help path during build |

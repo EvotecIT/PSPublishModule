@@ -4,6 +4,11 @@ namespace PowerForge;
 
 internal static class PowerShellCompilationSourceFailure
 {
+    internal static InvalidOperationException Create(string message, IScriptExtent extent)
+        => string.IsNullOrWhiteSpace(extent.File)
+            ? new InvalidOperationException(message)
+            : Create(message, extent.File, extent);
+
     /// <summary>Preserves the authored location of a rejection raised before a plan can report it.</summary>
     internal static InvalidOperationException Create(string message, string sourcePath, IScriptExtent extent)
     {

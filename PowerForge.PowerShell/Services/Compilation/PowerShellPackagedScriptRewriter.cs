@@ -428,11 +428,12 @@ internal static partial class PowerShellPackagedScriptRewriter
     internal static void ValidateHostInteraction(ScriptBlockAst ast)
     {
         PowerShellPackagedPathOperandPolicy.ValidateGuardableReads(ast);
-        var confirmationInvocation = FindConfirmationInvocation(ast);
-        if (SupportsShouldProcess(ast) || confirmationInvocation is not null)
+        var confirmation = (Ast?)FindConfirmationInvocation(ast) ?? FindConfirmationDeclaration(ast);
+        if (confirmation is not null)
         {
-            throw new InvalidOperationException(
-                $"Packaged executable generation does not support confirmation-capable script interaction '{confirmationInvocation?.Extent.Text ?? "SupportsShouldProcess"}' because the embedded runspace does not provide that host interaction.");
+            throw PowerShellCompilationSourceFailure.Create(
+                $"Packaged executable generation does not support confirmation-capable script interaction '{confirmation.Extent.Text}' because the embedded runspace does not provide that host interaction. Run the source in a PowerShell host that supports confirmation.",
+                confirmation.Extent);
         }
 
         var hostReference = ast.FindAll(
@@ -496,8 +497,9 @@ internal static partial class PowerShellPackagedScriptRewriter
             .FirstOrDefault(static command => IsDynamicCommandInvocation(command));
         if (dynamicCommand is not null)
         {
-            throw new InvalidOperationException(
-                $"Packaged executable generation does not support dynamic command invocation '{dynamicCommand.Extent.Text}' because hidden interactive or host requirements cannot be validated.");
+            throw PowerShellCompilationSourceFailure.Create(
+                $"Packaged executable generation does not support dynamic command invocation '{dynamicCommand.Extent.Text}' because hidden interactive or host requirements cannot be validated. Use a statically identifiable command or run the source in PowerShell.",
+                dynamicCommand.Extent);
         }
     }
 
@@ -577,14 +579,14 @@ internal static partial class PowerShellPackagedScriptRewriter
                unqualifiedName.Equals("Write-Progress", StringComparison.OrdinalIgnoreCase);
     }
 
-    private static bool SupportsShouldProcess(ScriptBlockAst ast)
+    private static NamedAttributeArgumentAst? FindConfirmationDeclaration(ScriptBlockAst ast)
         => ast.ParamBlock?.Attributes
             .OfType<AttributeAst>()
             .Where(static attribute => attribute.TypeName.Name.Equals("CmdletBinding", StringComparison.OrdinalIgnoreCase) ||
                                        attribute.TypeName.Name.Equals("CmdletBindingAttribute", StringComparison.OrdinalIgnoreCase))
             .SelectMany(static attribute => attribute.NamedArguments)
-            .Any(static argument => argument.ArgumentName.Equals("SupportsShouldProcess", StringComparison.OrdinalIgnoreCase) &&
-                                    IsConfirmationCapable(argument)) == true;
+            .FirstOrDefault(static argument => argument.ArgumentName.Equals("SupportsShouldProcess", StringComparison.OrdinalIgnoreCase) &&
+                                               IsConfirmationCapable(argument));
 
     private static InvokeMemberExpressionAst? FindConfirmationInvocation(ScriptBlockAst ast)
         => ast.FindAll(

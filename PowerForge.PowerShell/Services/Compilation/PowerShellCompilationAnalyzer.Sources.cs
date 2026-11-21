@@ -163,7 +163,10 @@ public sealed partial class PowerShellCompilationAnalyzer
         }
         catch (InvalidOperationException exception)
         {
-            var sourcePath = Path.GetFullPath(input.SourcePath);
+            var location = PowerShellCompilationSourceFailure.GetDiagnostic(exception);
+            if (location is { FilePath: var reportedPath } && !plan.Files.Any(file => PowerShellCompilationPathSafety.PathEquals(file.FullPath, reportedPath)))
+                location = null;
+            var sourcePath = location?.FilePath ?? Path.GetFullPath(input.SourcePath);
             var files = plan.Files.Select(file =>
             {
                 if (!PowerShellCompilationPathSafety.PathEquals(file.FullPath, sourcePath))
@@ -172,8 +175,8 @@ public sealed partial class PowerShellCompilationAnalyzer
                     PowerShellCompilationDiagnosticCode.InputError,
                     exception.Message,
                     sourcePath,
-                    1,
-                    1,
+                    location?.Line ?? 1,
+                    location?.Column ?? 1,
                     "powershell.package.validation");
                 return new PowerShellCompilationFilePlan(
                     file.FullPath,
