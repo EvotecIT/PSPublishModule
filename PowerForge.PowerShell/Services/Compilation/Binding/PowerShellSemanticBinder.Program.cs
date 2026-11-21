@@ -96,8 +96,22 @@ internal sealed partial class PowerShellSemanticBinder
             if (PowerShellLocalCallSemanticBinder.HasPipelineLifecycleProcessOutput(
                     declaration.Syntax,
                     signature.Parameters,
-                    functionsByName))
+                    functionsByName,
+                    includeBegin: capabilities == PowerShellCompilationCapabilities.TypedExecutable))
                 signature.SetPipelineLifecycleReturnsCollection();
+        }
+        if (capabilities == PowerShellCompilationCapabilities.TypedExecutable &&
+            functionsByName.Values.Any(static signature => signature.PipelineLifecycleReturnsCollection))
+        {
+            foreach (var pipeline in orderedDocuments.SelectMany(static document =>
+                         document.SyntaxRoot.FindAll(static node => node is PipelineAst { PipelineElements.Count: 3 }, searchNestedScriptBlocks: true))
+                     .OfType<PipelineAst>())
+            {
+                if (TryGetRuntimeFreePipelineLifecycleSelection(pipeline, functionsByName, capabilities, out var limit) &&
+                    limit > 0 && pipeline.PipelineElements[1] is CommandAst target &&
+                    TryGetLocalFunction(target, functionsByName, out var signature))
+                    signature.PipelineLifecycleHasOutputLimit = true;
+            }
         }
 
         var failedDiagnostics = new Dictionary<string, PowerShellSemanticDiagnostic[]>(StringComparer.OrdinalIgnoreCase);

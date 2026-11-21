@@ -40,6 +40,19 @@ internal sealed partial class PowerShellSemanticBinder
             : BindStatementCore(document, statement, symbols, functions, diagnostics, isTerminal,
                 targetFramework, capabilities, allowNonTerminalSuccessOutput, nonTerminalSuccessOutputType, strictStreaming);
         if (bound is null) return null;
+        if (capabilities == PowerShellCompilationCapabilities.TypedExecutable &&
+            statement is AssignmentStatementAst consoleAssignment &&
+            UnwrapExpression(consoleAssignment.Right) is CommandAst consoleCommand &&
+            PowerShellRuntimeStateCommandSemanticBinder.TryGetConsoleErrorRoute(consoleCommand, out var catchesConsoleError) &&
+            !catchesConsoleError &&
+            PowerShellSemanticAnalyzer.EnumerateDirectExpressions(bound).SelectMany(PowerShellSemanticAnalyzer.EnumerateExpressions)
+                .Any(static expression => expression is PowerShellBoundRuntimeStateExpression
+                    { Kind: PowerShellRuntimeStateIntrinsicKind.PlainConsoleInput }))
+        {
+            assignedSymbol?.ForgetValueState();
+            return new PowerShellBoundStatementErrorBoundary(new PowerShellBoundBlock(bound.Span, new[] { bound }),
+                document.Path, string.Empty, runtimeFree: true);
+        }
         // Native pipeline compilation owns its error and status route, including
         // direct returned records. Routing an escaping pipeline error again would
         // append it twice to the native function's ErrorVariable.
@@ -574,7 +587,7 @@ internal sealed partial class PowerShellSemanticBinder
                 out var enumeration))
             return enumeration;
         if (statement is PipelineAst lifecyclePipeline &&
-            IsRuntimeFreePipelineLifecycleInvocation(lifecyclePipeline, functions))
+            TryGetRuntimeFreePipelineLifecycleSelection(lifecyclePipeline, functions, capabilities, out _))
         {
             var invocation = BindRuntimeFreePipelineLifecycleInvocation(
                 document,
@@ -621,6 +634,11 @@ internal sealed partial class PowerShellSemanticBinder
                 capabilities);
             if (expression is null) return null;
             var emitsOutput = EmitsExpressionValue(expression);
+            if (capabilities == PowerShellCompilationCapabilities.TypedExecutable && !isTerminal &&
+                emitsOutput && !allowNonTerminalSuccessOutput &&
+                expression is not PowerShellBoundInvocationExpression &&
+                PowerShellStableScalarTypePolicy.IsSupported(expression.Type))
+                return StrictSuccessOutput(expression);
             if (!isTerminal && !allowNonTerminalSuccessOutput && emitsOutput &&
                 capabilities.HasFlag(PowerShellCompilationCapability.PowerShellStreams) &&
                 capabilities.HasFlag(PowerShellCompilationCapability.PipelineParameterBinding) &&

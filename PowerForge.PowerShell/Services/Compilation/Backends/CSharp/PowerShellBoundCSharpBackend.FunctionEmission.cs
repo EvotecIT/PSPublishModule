@@ -24,6 +24,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
         if (function.NativeFunctionBinding is not null)
             parameterParts = new List<string> { "global::PowerForge.Generated.Runtime.PowerShellNativeFunctionContext __nativeFunction" };
         var requiresBoundParameters = function.NativeFunctionBinding is null && (function.RequiresPowerShellBoundParameters || function.Parameters.Any(parameter =>
+            parameter.DefaultsToCurrentDirectory ||
             PowerShellParameterValidationPolicy.RequiresBoundParameterSet(parameter.Contract, targetCapabilities)));
         AddHostParameters(parameterParts, function, requiresBoundParameters);
         var parameters = string.Join(", ", parameterParts);
@@ -79,7 +80,8 @@ internal sealed partial class PowerShellBoundCSharpBackend
         var parameterContracts = function.Parameters.Where(_ => function.NativeFunctionBinding is null).Select(static parameter => new PowerShellParameterEmissionContract(
             parameter.Symbol.Name,
             parameter.ClrType,
-            parameter.Contract)).ToArray();
+            parameter.Contract,
+            parameter.DefaultsToCurrentDirectory)).ToArray();
         var prologue = new PowerShellParameterPrologueRenderer(
             targetCapabilities,
             PowerShellCSharpSymbolRenderer.TypeName,

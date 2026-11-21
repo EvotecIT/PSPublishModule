@@ -140,6 +140,268 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
     }
 
     [PinnedSemanticHostFact]
+    public void StrictStreamingProjectsRecursiveFileSourceOnBothPinnedHosts()
+    {
+        using var fixture = OracleFixture.Create("""
+            param([string] $Path)
+            Get-ChildItem -Path $Path -Recurse -Attributes !Directory |
+                Select-Object -ExpandProperty FullName | Select-Object -First 2
+            """);
+        var tree = Directory.CreateDirectory(Path.Combine(fixture.RootPath, "tree")).FullName;
+        var nested = Directory.CreateDirectory(Path.Combine(tree, "alpha")).FullName;
+        File.WriteAllText(Path.Combine(tree, "c.txt"), "root c");
+        File.WriteAllText(Path.Combine(tree, "A.txt"), "root a");
+        File.WriteAllText(Path.Combine(nested, "inner.txt"), "nested");
+        var hidden = Path.Combine(tree, "b.txt");
+        File.WriteAllText(hidden, "hidden");
+        File.SetAttributes(hidden, File.GetAttributes(hidden) | FileAttributes.Hidden);
+        var observer = new PowerShellCompilationSemanticRuntimeFreeArtifactObserver();
+        foreach (var pin in PowerShellCompilationSemanticHostArtifactPinCatalog.Pins)
+        {
+            var build = BuildStrictStreamingFixture(fixture, "StrictFileProjection", pin.ProfileId);
+            Assert.True(build.Succeeded, build.Error + Environment.NewLine + build.BuildOutput);
+            foreach (var path in new[] { tree, Path.Combine(tree, "*.txt"), Path.Combine(tree, "missing") })
+            {
+                var expected = new PowerShellCompilationSemanticOracleRunner().Observe(
+                    new PowerShellCompilationSemanticOracleRequest(pin.ProfileId, fixture.ScriptPath)
+                    {
+                        Arguments = new[] { path },
+                        HostExecutablePath = StrictStreamingHostPath(pin),
+                        ExpectedHostArtifactSha256 = PowerShellCompilationSemanticTestHost.GetIdentity(pin)
+                    });
+                var artifact = observer.Observe(pin.ProfileId, build, new[] { path });
+                Assert.Empty(expected.ErrorRecords);
+                Assert.Equal(0, artifact.ExitCode);
+                var differences = PowerShellCompilationSemanticOracleComparer.Compare(expected, artifact, new[] { "Encoding", "ExitCode" });
+                Assert.True(differences.Count == 0, pin.ProfileId + Environment.NewLine + string.Join(Environment.NewLine, differences));
+            }
+        }
+    }
+
+    [PinnedSemanticHostFact]
+    public async Task StrictStreamingPreservesOrderedFilePropertyRecordsAndConsoleOutput()
+    {
+        using var fixture = OracleFixture.Create("""
+            param([string] $Path, [int] $ExitAfter = 0)
+            Get-ChildItem -Path $Path -Recurse | Select-Object -Property Name,FullName
+            if ($ExitAfter -eq 1) { exit 0 }
+            """);
+        var tree = Directory.CreateDirectory(Path.Combine(fixture.RootPath, "items")).FullName;
+        Directory.CreateDirectory(Path.Combine(tree, "nested"));
+        File.WriteAllText(Path.Combine(tree, "a.txt"), "one");
+        File.WriteAllText(Path.Combine(tree, "longer.txt"), "two");
+        var observer = new PowerShellCompilationSemanticRuntimeFreeArtifactObserver();
+        foreach (var pin in PowerShellCompilationSemanticHostArtifactPinCatalog.Pins)
+        {
+            var build = BuildStrictStreamingFixture(fixture, "StrictPropertyRecords", pin.ProfileId);
+            Assert.True(build.Succeeded, build.Error + Environment.NewLine + build.BuildOutput);
+            var original = new PowerShellCompilationSemanticOracleRunner().Observe(
+                new PowerShellCompilationSemanticOracleRequest(pin.ProfileId, fixture.ScriptPath)
+                {
+                    Arguments = new[] { tree },
+                    ObservedPropertyNames = new[] { "Name", "FullName" },
+                    HostExecutablePath = StrictStreamingHostPath(pin),
+                    ExpectedHostArtifactSha256 = PowerShellCompilationSemanticTestHost.GetIdentity(pin)
+                });
+            Assert.Empty(original.ErrorRecords);
+            Assert.Equal(3, original.Success.Length);
+            var artifact = observer.Observe(pin.ProfileId, build, new[] { tree });
+            var differences = PowerShellCompilationSemanticOracleComparer.Compare(original, artifact, new[] { "Encoding", "ExitCode" });
+            Assert.True(differences.Count == 0, pin.ProfileId + Environment.NewLine + string.Join(Environment.NewLine, differences));
+            var host = StrictStreamingHostPath(pin) ??
+                Path.Combine(Environment.SystemDirectory, "WindowsPowerShell", "v1.0", "powershell.exe");
+            foreach (var status in new[] { "0", "1" })
+            {
+                var native = await ObserveExitedConsole(host, fixture.RootPath,
+                    new[] { "-NoProfile", "-NonInteractive", "-File", fixture.ScriptPath, tree, status }, string.Empty);
+                var compiled = await ObserveExitedConsole(build.ArtifactPath!, fixture.RootPath, new[] { tree, status }, string.Empty);
+                Assert.Equal(native, compiled);
+            }
+        }
+    }
+
+    [PinnedSemanticHostFact]
+    public async Task StrictCsvRowsMatchBothPinnedHosts()
+    {
+        using var fixture = OracleFixture.Create("""
+            param([string] $Path)
+            try {
+                $rows = Import-Csv -LiteralPath $Path -Header Title,Author,Notes
+                foreach ($row in $rows) {
+                    Write-Output "title=[$($row.Title)] author=[$($row.Author)] notes=[$($row.Notes)]"
+                }
+                exit 0
+            } catch {
+                "Error: $($Error[0]) (line $($_.InvocationInfo.ScriptLineNumber))"
+                exit 1
+            }
+            """);
+        var rows = Path.Combine(fixture.RootPath, "data[42].csv");
+        var empty = Path.Combine(fixture.RootPath, "empty.csv");
+        var missing = Path.Combine(fixture.RootPath, "missing.csv");
+        File.WriteAllText(rows, "first,\"Ada, B.\",\"a\"\"b\"\r\nsecond,Doe\r\nthird,Lee,\"line 1\r\nline 2\"\r\n\r\n");
+        File.WriteAllText(empty, string.Empty);
+        var observer = new PowerShellCompilationSemanticRuntimeFreeArtifactObserver();
+        foreach (var pin in PowerShellCompilationSemanticHostArtifactPinCatalog.Pins)
+        {
+            var build = BuildStrictStreamingFixture(fixture, "StrictCsvFields", pin.ProfileId);
+            Assert.True(build.Succeeded, build.Error + Environment.NewLine + build.BuildOutput);
+            var host = StrictStreamingHostPath(pin) ??
+                Path.Combine(Environment.SystemDirectory, "WindowsPowerShell", "v1.0", "powershell.exe");
+            foreach (var path in new[] { rows, empty, missing })
+            {
+                var native = await ObserveExitedConsole(host, fixture.RootPath,
+                    new[] { "-NoProfile", "-NonInteractive", "-File", fixture.ScriptPath, path }, string.Empty);
+                var compiled = await ObserveExitedConsole(build.ArtifactPath!, fixture.RootPath, new[] { path }, string.Empty);
+                Assert.Equal(path == missing ? 1 : 0, native.Code);
+                Assert.Equal(native.Code, compiled.Code);
+                Assert.Equal(native.Output, compiled.Output);
+                Assert.Equal(native.Error, compiled.Error);
+                var observation = observer.Observe(pin.ProfileId, build, new[] { path });
+                Assert.Equal(native.Code, observation.ExitCode);
+                Assert.Equal(path == rows ? 3 : path == missing ? 1 : 0, observation.Success.Length);
+            }
+        }
+    }
+
+    [PinnedSemanticHostFact]
+    public async Task StrictFileProcessingMatchesBothPinnedHosts()
+    {
+        using var fixture = OracleFixture.Create("""
+            param([string] $Path = "$PWD", [int] $Initial = 0, [double] $Elapsed = 2.5)
+            try {
+                $Path = Resolve-Path "$Path"
+                Write-Progress "Reading $Path"
+                [int] $count = $Initial
+                Get-ChildItem $Path -Attributes !Directory -Recurse |
+                    Where-Object { $_.Length -eq 0 } |
+                    ForEach-Object { "file=$($_.Name)"; $count++ }
+                Write-Progress -Completed "Reading $Path"
+                [int] $seconds = $Elapsed
+                "count=$count; path=$Path; seconds=$seconds"
+                exit 0
+            } catch {
+                "Error: $($Error[0]) (line $($_.InvocationInfo.ScriptLineNumber))"
+                exit 1
+            }
+            """);
+        var tree = Path.Combine(fixture.RootPath, "tree");
+        var nested = Directory.CreateDirectory(Path.Combine(tree, "child")).FullName;
+        File.WriteAllText(Path.Combine(tree, "a.txt"), string.Empty);
+        File.WriteAllText(Path.Combine(tree, "full.txt"), "data");
+        File.WriteAllText(Path.Combine(nested, "b.txt"), string.Empty);
+        var missing = Path.Combine(tree, "missing");
+        var cases = new (string[] Arguments, int Code)[]
+        {
+            (Array.Empty<string>(), 0),
+            (new[] { "." }, 0),
+            (new[] { nested, "0", "3.5" }, 0),
+            (new[] { tree, int.MaxValue.ToString(System.Globalization.CultureInfo.InvariantCulture) }, 1),
+            (new[] { "" }, 1),
+            (new[] { missing }, 0)
+        };
+        foreach (var pin in PowerShellCompilationSemanticHostArtifactPinCatalog.Pins)
+        {
+            var build = BuildStrictStreamingFixture(fixture, "StrictFileProcessing", pin.ProfileId);
+            Assert.True(build.Succeeded, build.Error + Environment.NewLine + build.BuildOutput);
+            Assert.True(build.Manifest!.DependencyClosureVerified);
+            Assert.False(build.Manifest.RequiresPowerShellRuntime);
+            var host = StrictStreamingHostPath(pin) ??
+                Path.Combine(Environment.SystemDirectory, "WindowsPowerShell", "v1.0", "powershell.exe");
+            foreach (var scenario in cases)
+            {
+                var hostArguments = new[] { "-NoProfile", "-NonInteractive", "-File", fixture.ScriptPath }
+                    .Concat(scenario.Arguments).ToArray();
+                var native = await ObserveExitedConsole(host, tree, hostArguments, string.Empty);
+                var compiled = await ObserveExitedConsole(build.ArtifactPath!, tree, scenario.Arguments, string.Empty);
+                Assert.Equal(scenario.Code, native.Code);
+                Assert.Equal(native.Code, compiled.Code);
+                Assert.Equal(native.Output, compiled.Output);
+                if (scenario.Arguments.FirstOrDefault() == missing)
+                {
+                    // Detached hosts render error records using different width and path conventions.
+                    Assert.Contains("Resolve-Path", native.Error);
+                    Assert.Contains("Resolve-Path", compiled.Error);
+                    Assert.Contains(missing, native.Error.Replace(Environment.NewLine, string.Empty));
+                    Assert.Contains(missing, compiled.Error.Replace(Environment.NewLine, string.Empty));
+                }
+                else
+                    Assert.Equal(native.Error, compiled.Error);
+            }
+        }
+    }
+
+    [PinnedSemanticHostFact]
+    public async Task StrictLocalLifecycleStopsBeforeResumingTheProducerOnBothPinnedHosts()
+    {
+        const string function = """
+            function Get-Record {
+                [CmdletBinding()]
+                [OutputType([int])]
+                param([Parameter(ValueFromPipeline)][int] $Record, [switch] $Mark)
+                begin {
+                    [IO.File]::AppendAllText('trace.txt', "begin=$Mark;")
+                    -1
+                    [IO.File]::AppendAllText('trace.txt', 'after begin;')
+                }
+                process {
+                    [IO.File]::AppendAllText('trace.txt', "before ${Record};")
+                    $Record
+                    [IO.File]::AppendAllText('trace.txt', "after ${Record};")
+                }
+                end {
+                    [IO.File]::AppendAllText('trace.txt', 'end;')
+                    99
+                }
+            """;
+        const string invocation = """
+            }
+            if ($First) { return 1,2 | Get-Record -Mark | Select-Object -First 2 }
+            return 1,2 | Get-Record -Mark
+            """;
+        const string cleanup = """
+                clean {
+                    [IO.File]::AppendAllText('trace.txt', 'clean;')
+                    -88
+                }
+            """;
+        foreach (var pin in PowerShellCompilationSemanticHostArtifactPinCatalog.Pins)
+        {
+            var host = StrictStreamingHostPath(pin) ??
+                Path.Combine(Environment.SystemDirectory, "WindowsPowerShell", "v1.0", "powershell.exe");
+            var supportsCleanClause = pin.ProfileId == PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId;
+            var versions = supportsCleanClause ? new[] { false, true } : new[] { false };
+            foreach (var withClean in versions)
+            {
+                using var fixture = OracleFixture.Create("param([switch] $First)\n" + function + "\n" +
+                    (withClean ? cleanup + "\n" : string.Empty) + invocation);
+                var tracePath = Path.Combine(fixture.RootPath, "trace.txt");
+                var build = BuildStrictStreamingFixture(fixture, "StrictLocalLifecycle", pin.ProfileId);
+                Assert.True(build.Succeeded, build.Error + Environment.NewLine + build.BuildOutput);
+                Assert.False(build.Manifest!.RequiresPowerShellRuntime);
+                Assert.True(build.Manifest.DependencyClosureVerified);
+                foreach (var first in new[] { false, true })
+                {
+                    var hostArgs = new[] { "-NoProfile", "-NonInteractive", "-File", fixture.ScriptPath };
+                    if (first) hostArgs = hostArgs.Append("-First").ToArray();
+                    var expected = await ObserveExitedConsole(host, fixture.RootPath, hostArgs, string.Empty);
+                    Assert.Equal(0, expected.Code);
+                    var expectedTrace = first ? "begin=True;after begin;before 1;" :
+                        "begin=True;after begin;before 1;after 1;before 2;after 2;end;";
+                    if (withClean) expectedTrace += "clean;";
+                    Assert.Equal(expectedTrace, File.ReadAllText(tracePath));
+                    File.Delete(tracePath);
+                    var candidateArgs = first ? new[] { "--First" } : Array.Empty<string>();
+                    var actual = await ObserveExitedConsole(build.ArtifactPath!, fixture.RootPath, candidateArgs, string.Empty);
+                    Assert.Equal(expected, actual);
+                    Assert.Equal(expectedTrace, File.ReadAllText(tracePath));
+                    File.Delete(tracePath);
+                }
+            }
+        }
+    }
+
+    [PinnedSemanticHostFact]
     public void StrictStreamingExpandsKnownPropertiesOnBothPinnedHosts()
     {
         CompareStrictStreamingCases(

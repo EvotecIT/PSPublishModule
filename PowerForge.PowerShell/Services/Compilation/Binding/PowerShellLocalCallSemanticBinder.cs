@@ -52,6 +52,7 @@ internal sealed class PowerShellLocalCallSignature
     internal int PipelineLifecycleParameterIndex { get; }
     internal bool IsPipelineLifecycle => PipelineLifecycleParameterIndex >= 0;
     internal bool PipelineLifecycleReturnsCollection { get; private set; }
+    internal bool PipelineLifecycleHasOutputLimit { get; set; }
     internal PowerShellStrictPipelineReduction? StrictPipelineReduction { get; }
     internal bool PipelineLifecycleRequiresNonNullInput { get; }
     internal bool ReturnsModuleStateDerived { get; private set; }
@@ -181,7 +182,8 @@ internal static class PowerShellLocalCallSemanticBinder
     internal static bool HasPipelineLifecycleProcessOutput(
         FunctionDefinitionAst function,
         IReadOnlyList<PowerShellLocalCallParameter> parameters,
-        IReadOnlyDictionary<string, PowerShellLocalCallSignature> functions)
+        IReadOnlyDictionary<string, PowerShellLocalCallSignature> functions,
+        bool includeBegin = false)
     {
         if (function.Body.ProcessBlock is null) return false;
         var knownTypes = parameters.ToDictionary(static parameter => parameter.Symbol.Name, static parameter => parameter.Type, StringComparer.OrdinalIgnoreCase);
@@ -197,7 +199,9 @@ internal static class PowerShellLocalCallSemanticBinder
                 : InferExpressionType(expression, knownTypes, functions);
             if (type is not null) knownTypes[variable.VariablePath.UserPath] = type;
         }
-        return EnumeratePipelineLifecycleProcessOutputs(function.Body.ProcessBlock.Statements)
+        var output = includeBegin && function.Body.BeginBlock is { } begin
+            ? begin.Statements.Concat(function.Body.ProcessBlock.Statements) : function.Body.ProcessBlock.Statements;
+        return EnumeratePipelineLifecycleProcessOutputs(output)
             .Any(pipeline =>
             {
                 var syntax = Unwrap(pipeline);
@@ -286,7 +290,8 @@ internal static class PowerShellLocalCallSemanticBinder
         string? targetFramework,
         PowerShellCompilationCapability capabilities,
         ICollection<PowerShellSemanticDiagnostic> diagnostics,
-        PowerShellBoundExpression? pipelineInput = null)
+        PowerShellBoundExpression? pipelineInput = null,
+        int lifecycleLimit = 0)
     {
         var span = PowerShellSourceParser.GetSpan(document, command.Extent);
         if (signature.IsPipelineLifecycle && pipelineInput is null)
@@ -388,7 +393,8 @@ internal static class PowerShellLocalCallSemanticBinder
                 $"Local function invocation '{signature.Symbol.Name}' cannot carry a value derived from live Hybrid module state across a call boundary.",
                 stateArgument.Span);
 
-        var arguments = new PowerShellBoundExpression[signature.Parameters.Length];
+        var capsLifecycleOutput = capabilities == PowerShellCompilationCapabilities.TypedExecutable && signature.PipelineLifecycleHasOutputLimit;
+        var arguments = new PowerShellBoundExpression[signature.Parameters.Length + (capsLifecycleOutput ? 1 : 0)];
         for (var index = 0; index < signature.Parameters.Length; index++)
         {
             if (bound.TryGetValue(index, out var value)) { arguments[index] = value; continue; }
@@ -396,6 +402,11 @@ internal static class PowerShellLocalCallSemanticBinder
             if (parameter.Contract.IsMandatory)
                 return Reject(diagnostics, "PSB2809", $"Mandatory local function parameter '-{parameter.Contract.Name}' was not supplied.", span);
             arguments[index] = DefaultValue(span, parameter.Type);
+        }
+        if (capsLifecycleOutput)
+        {
+            arguments[signature.Parameters.Length] = Literal(span, lifecycleLimit, typeof(int));
+            authoredOrder.Add(signature.Parameters.Length);
         }
         var invocationReturnType = signature.ClosedCollectionFactory is not null
             ? typeof(System.Collections.ArrayList)

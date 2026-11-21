@@ -1,12 +1,14 @@
 using System.Globalization;
 using System.Management.Automation.Language;
+using PowerForge.Generated.Runtime;
 
 namespace PowerForge;
 
 internal sealed partial class PowerShellSemanticBinder
 {
     private sealed record StrictPipelineStage(CommandAst Command, NamedBlockAst? Predicate = null, StrictPipelineMap? Map = null,
-        string? ExpandProperty = null, int? First = null, PowerShellLocalCallSignature? Lifecycle = null);
+        string? ExpandProperty = null, string[]? ProjectProperties = null, int? First = null,
+        PowerShellLocalCallSignature? Lifecycle = null);
 
     private sealed record StrictPipelineMap(StatementAst Result, StatementAst? Counter = null, bool CounterAfterResult = false);
 
@@ -100,7 +102,6 @@ internal sealed partial class PowerShellSemanticBinder
     {
         result = null;
         if (pipeline.PipelineElements.Count < 2 ||
-            pipeline.PipelineElements[0] is not CommandExpressionAst { Redirections.Count: 0 } source ||
             !TryDescribeStrictPipeline(pipeline, localFunctionNames, functions, out var stages))
             return false;
 
@@ -114,21 +115,46 @@ internal sealed partial class PowerShellSemanticBinder
             return RejectStrictPipeline(diagnostics, span, "cannot collect the output of a local lifecycle");
 
         const PowerShellCompilationCapability capabilities = PowerShellCompilationCapabilities.TypedExecutable;
-        var input = BindExpression(document, source.Expression, symbols, functions, diagnostics,
-            InferPipelineInputType(source.Expression, symbols), targetFramework, capabilities);
-        if (input is null) return true;
-
-        var type = input.Type.ClrType;
-        if (input is not (PowerShellBoundArrayExpression or PowerShellBoundVariableExpression) ||
-            !type.IsArray || type.GetArrayRank() != 1 || !PowerShellStableScalarTypePolicy.IsSupported(type.GetElementType()!))
-            return RejectStrictPipeline(diagnostics, span, "requires a one-dimensional, statically typed stable-scalar array");
+        PowerShellBoundExpression? input;
+        Type element;
+        var enumeration = PowerShellForEachEnumerationKind.TypedArray;
+        if (pipeline.PipelineElements[0] is CommandExpressionAst { Redirections.Count: 0 } source)
+        {
+            input = BindExpression(document, source.Expression, symbols, functions, diagnostics,
+                InferPipelineInputType(source.Expression, symbols), targetFramework, capabilities);
+            if (input is null) return true;
+            var type = input.Type.ClrType;
+            if (input is not (PowerShellBoundArrayExpression or PowerShellBoundVariableExpression) ||
+                !type.IsArray || type.GetArrayRank() != 1 || !PowerShellStableScalarTypePolicy.IsSupported(type.GetElementType()!))
+                return RejectStrictPipeline(diagnostics, span, "requires a one-dimensional, statically typed stable-scalar array");
+            element = type.GetElementType()!;
+        }
+        else if (pipeline.PipelineElements[0] is CommandAst command &&
+                 PowerShellStrictFilePipelinePolicy.TryGetSource(command, _commandResolver.Resolve(command, localFunctionNames, capabilities),
+                     out var authoredPath, out var filesOnly))
+        {
+            var path = BindExpression(document, authoredPath, symbols, functions, diagnostics, typeof(string), targetFramework, capabilities);
+            if (path is null) return true;
+            if (path.Type.ClrType != typeof(string))
+                return RejectStrictPipeline(diagnostics, path.Span, "requires a string filesystem path");
+            element = filesOnly ? typeof(FileInfo) : typeof(FileSystemInfo);
+            var method = filesOnly ? nameof(PowerShellStrictFileSystemReader.ReadFiles) : nameof(PowerShellStrictFileSystemReader.ReadItems);
+            input = new PowerShellBoundClrInvocationExpression(PowerShellSourceParser.GetSpan(document, command.Extent),
+                typeof(PowerShellStrictFileSystemReader), method, PowerShellClrInvocationKind.StaticMethod, null,
+                PowerShellClrReceiverBehavior.None, new[] { path }, new[] { typeof(string) },
+                StrictPipelineType(typeof(IEnumerable<>).MakeGenericType(element)));
+            enumeration = PowerShellForEachEnumerationKind.RuntimeFreeEnumerable;
+        }
+        else
+        {
+            return false;
+        }
 
         if (input is PowerShellBoundArrayExpression inlineArray &&
             stages.Any(static stage => stage.Map?.Counter is not null || stage.Lifecycle is not null) &&
             !inlineArray.Elements.All(static item => IsTotalStrictStageExpression(item, null)))
             return RejectStrictPipeline(diagnostics, input.Span, "requires a closed inline source before a counter or lifecycle reduction");
 
-        var element = type.GetElementType()!;
         var initializer = input as PowerShellBoundArrayExpression ??
             (input is PowerShellBoundVariableExpression sourceVariable
                 ? FindStrictPipelineInitializer(preceding, sourceVariable.Symbol) as PowerShellBoundArrayExpression : null);
@@ -168,15 +194,16 @@ internal sealed partial class PowerShellSemanticBinder
                     new[] { new PowerShellBoundAssignmentStatement(span, capture.Symbol, ToArray(collector, capturedElementType, span)) })));
         }
 
-        var item = new PowerShellBoundVariableExpression(span, itemSymbol, itemType, PowerShellValueState.Unknown);
+        var item = new PowerShellBoundVariableExpression(span, itemSymbol, itemType,
+            enumeration == PowerShellForEachEnumerationKind.RuntimeFreeEnumerable ? PowerShellValueState.Known : PowerShellValueState.Unknown);
         var body = BindStages(item);
         if (body is null) return true;
 
-        var nullRecord = initializer is null
+        var nullRecord = initializer is null && enumeration == PowerShellForEachEnumerationKind.TypedArray
             ? new PowerShellBoundLiteralExpression(span, null, itemType, PowerShellValueState.Null)
             : null;
         var loop = new PowerShellBoundForEachStatement(span, itemSymbol, element, input,
-            PowerShellForEachEnumerationKind.TypedArray, new PowerShellBoundBlock(span, body),
+            enumeration, new PowerShellBoundBlock(span, body),
             declareVariable: true, nullCollectionElement: nullRecord);
         result = setup.Append(loop).Concat(suffix).ToArray();
         generatedLocals.AddRange(pipelineLocals);
@@ -195,6 +222,7 @@ internal sealed partial class PowerShellSemanticBinder
             foreach (var stage in stages)
             {
                 stageSymbols["_"] = new PowerShellSemanticSymbolBinding(current.Symbol, current.Type);
+                stageSymbols["_"].Refine(current.Type, current.ValueState);
                 stageSymbols["PSItem"] = stageSymbols["_"];
                 var stageSpan = PowerShellSourceParser.GetSpan(document, stage.Command.Extent);
                 if (stage.Predicate is { } predicate)
@@ -213,7 +241,11 @@ internal sealed partial class PowerShellSemanticBinder
                         update = BindStrictPipelineCounter(counter, symbols, preceding, initializer,
                             counterWrites, diagnostics, stageSpan,
                             (syntax, localSymbols) => BindStatement(document, syntax, localSymbols, functions, diagnostics,
-                                false, targetFramework, capabilities));
+                                false, targetFramework, capabilities),
+                            enumeration == PowerShellForEachEnumerationKind.RuntimeFreeEnumerable &&
+                            PowerShellStrictCatchObservation.HasContainingUntypedCatch(pipeline)
+                                ? PowerShellStrictCatchObservation.GetAuthoredLine(document, counter.Extent)
+                                : null);
                         if (update is null) return null;
                         if (!map.CounterAfterResult) statements.Add(update);
                     }
@@ -231,6 +263,18 @@ internal sealed partial class PowerShellSemanticBinder
                     }
                     if (!PowerShellClrTypeSemantics.IsNonNullableValueType(current.Type.ClrType))
                         GuardFollowingStages(stageSpan, StrictPipelineRecordIsNotNull(stageSpan, current));
+                    current = AssignStageResult(stage, stageSpan, value);
+                }
+                else if (stage.ProjectProperties is { } properties)
+                {
+                    var value = BindStrictProjectionRecord(current, stageSpan, properties);
+                    if (value is null)
+                    {
+                        RejectStrictPipeline(diagnostics, stageSpan,
+                            "requires each selected property to be a known string field of the input record");
+                        return null;
+                    }
+                    GuardFollowingStages(stageSpan, StrictPipelineRecordIsNotNull(stageSpan, current));
                     current = AssignStageResult(stage, stageSpan, value);
                 }
                 else if (stage.First is { } first)
@@ -402,6 +446,14 @@ internal sealed partial class PowerShellSemanticBinder
         // same scalar shape on both pinned hosts. Other properties can be
         // adapted, invoke user code or report a nonterminating error per record.
         var type = record.Type.ClrType;
+        if (type == typeof(FileSystemInfo) || type == typeof(FileInfo))
+        {
+            var fileProperty = property.Equals(nameof(FileSystemInfo.FullName), StringComparison.OrdinalIgnoreCase)
+                ? nameof(FileSystemInfo.FullName)
+                : property.Equals(nameof(FileSystemInfo.Name), StringComparison.OrdinalIgnoreCase) ? nameof(FileSystemInfo.Name) : null;
+            return fileProperty is null ? null : new PowerShellBoundClrMemberExpression(span, type, fileProperty, false,
+                record, PowerShellClrReceiverBehavior.None, StrictPipelineType(typeof(string)));
+        }
         var memberName = type == typeof(string) && property.Equals(nameof(string.Length), StringComparison.OrdinalIgnoreCase)
             ? nameof(string.Length)
             : type == typeof(TimeSpan) && property.Equals(nameof(TimeSpan.Ticks), StringComparison.OrdinalIgnoreCase)
@@ -418,6 +470,30 @@ internal sealed partial class PowerShellSemanticBinder
         var nullValue = new PowerShellBoundLiteralExpression(span, null, current.Type, PowerShellValueState.Null);
         return new PowerShellBoundBinaryExpression(span, PowerShellBoundBinaryOperator.NullNotEqual,
             current, nullValue, StrictPipelineType(typeof(bool)));
+    }
+
+    private static PowerShellBoundExpression? BindStrictProjectionRecord(
+        PowerShellBoundVariableExpression record, SourceSpan span, string[] properties)
+    {
+        if (record.Type.ClrType != typeof(FileSystemInfo) && record.Type.ClrType != typeof(FileInfo)) return null;
+        var values = new List<PowerShellBoundExpression>(properties.Length);
+        var names = new List<PowerShellBoundExpression>(properties.Length);
+        foreach (var property in properties)
+        {
+            if (BindStrictPipelineProperty(record, span, property) is not PowerShellBoundClrMemberExpression member ||
+                member.Type.ClrType != typeof(string)) return null;
+            names.Add(new PowerShellBoundLiteralExpression(span, property, StrictPipelineType(typeof(string)), PowerShellValueState.Known));
+            values.Add(member);
+        }
+        var argumentType = typeof(string[]);
+        var arguments = new PowerShellBoundExpression[]
+        {
+            new PowerShellBoundArrayExpression(span, argumentType, PowerShellBoundArrayKind.Literal, names.ToArray()),
+            new PowerShellBoundArrayExpression(span, argumentType, PowerShellBoundArrayKind.Literal, values.ToArray())
+        };
+        var resultType = typeof(PowerShellStrictProjectionRecord);
+        return new PowerShellBoundClrInvocationExpression(span, resultType, ".ctor", PowerShellClrInvocationKind.Constructor,
+            null, PowerShellClrReceiverBehavior.None, arguments, new[] { argumentType, argumentType }, StrictPipelineType(resultType));
     }
 
     private static PowerShellBoundExpression ToArray(PowerShellBoundVariableExpression collection, Type recordType, SourceSpan span)
@@ -474,6 +550,10 @@ internal sealed partial class PowerShellSemanticBinder
                         command.CommandElements[2] is ConstantExpressionAst { Value: int first } && first > 0:
                         discovered.Add(new(command, First: first));
                         continue;
+                    case "powerforge.command.projection.select-object" when terminal &&
+                        TryGetStrictProjectionProperties(command, out var properties):
+                        discovered.Add(new(command, ProjectProperties: properties));
+                        continue;
                 }
             }
             if (terminal && index > 1 && TryGetLocalFunction(command, functions, out var lifecycle) && lifecycle.IsPipelineLifecycle)
@@ -485,6 +565,25 @@ internal sealed partial class PowerShellSemanticBinder
         }
         stages = discovered.ToArray();
         return true;
+    }
+
+    private static bool TryGetStrictProjectionProperties(CommandAst command, out string[] properties)
+    {
+        properties = Array.Empty<string>();
+        var elements = command.CommandElements;
+        var operand = elements.Count == 2 ? elements[1] :
+            elements.Count == 3 && elements[1] is CommandParameterAst { Argument: null } named &&
+            named.ParameterName.Equals("Property", StringComparison.OrdinalIgnoreCase) ? elements[2] : null;
+        if (operand is StringConstantExpressionAst { Value.Length: > 0 } property)
+        {
+            properties = new[] { property.Value };
+            return true;
+        }
+        if (operand is not ArrayLiteralAst { Elements.Count: >= 2 and <= 4 } array ||
+            array.Elements.Any(static item => item is not StringConstantExpressionAst { Value.Length: > 0 }))
+            return false;
+        properties = array.Elements.Cast<StringConstantExpressionAst>().Select(static item => item.Value).ToArray();
+        return properties.Distinct(StringComparer.OrdinalIgnoreCase).Count() == properties.Length;
     }
 
     private static StrictPipelineMap? DescribeStrictMap(NamedBlockAst block)

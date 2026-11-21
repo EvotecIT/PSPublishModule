@@ -159,13 +159,15 @@ internal static class PowerShellConversionSemanticBinder
     internal static PowerShellBoundExpression? BindClosedNumericConversion(PowerShellBoundExpression operand,
         Type targetType, PowerShellCompilationCapability capabilities)
     {
-        if (targetType != typeof(int) || operand.Type.Provenance != PowerShellTypeFactProvenance.Int32OrDouble ||
+        var isNumericUnion = operand.Type.Provenance == PowerShellTypeFactProvenance.Int32OrDouble;
+        var isStrictDouble = capabilities == PowerShellCompilationCapabilities.TypedExecutable && operand.Type.ClrType == typeof(double);
+        if (targetType != typeof(int) || !(isNumericUnion || isStrictDouble) ||
             capabilities.HasFlag(PowerShellCompilationCapability.PowerShellStatementErrors)) return null;
         return new PowerShellBoundClrInvocationExpression(operand.Span, typeof(Convert), nameof(Convert.ToInt32),
             PowerShellClrInvocationKind.StaticMethod, null, PowerShellClrReceiverBehavior.None,
-            new[] { operand }, new[] { typeof(object) },
+            new[] { operand }, new[] { isStrictDouble ? typeof(double) : typeof(object) },
             new PowerShellTypeFact(typeof(int), PowerShellTypeFactProvenance.Explicit,
-                "Closed Int32/Double conversion preserves integral values and midpoint-to-even rounding; out-of-range values raise the library's CLR conversion exception."));
+                "Closed numeric conversion preserves integral values and midpoint-to-even rounding through the target's CLR conversion contract."));
     }
 
     private static PowerShellBoundExpression BindResolvedLiteral(SourceSpan span, Type targetType, object? value)

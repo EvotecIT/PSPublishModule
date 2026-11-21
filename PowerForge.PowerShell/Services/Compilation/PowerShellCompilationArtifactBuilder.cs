@@ -182,6 +182,8 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                 WriteCompiledPowerShellSource(Path.Combine(workspace, "CompiledPowerShellScript.cs"), executable.CompiledSource,
                     spec.SourcePath, compilationSourcePaths, includeSyntheticEntry: true);
                 File.WriteAllText(Path.Combine(workspace, "Program.cs"), executable.ProgramSource, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+                foreach (var runtimeSource in executable.RuntimeSources)
+                    WriteExecutableRuntimeSource(workspace, runtimeSource);
                 projectPath = Path.Combine(workspace, artifactName + ".csproj");
                 var publishSingleFile = ShouldEnablePublishSingleFile(spec);
                 File.WriteAllText(

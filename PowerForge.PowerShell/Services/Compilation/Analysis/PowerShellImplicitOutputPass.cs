@@ -90,7 +90,7 @@ internal sealed class PowerShellImplicitOutputPass : IPowerShellSemanticPass
             {
                 statements.Add(new PowerShellBoundStatementErrorBoundary(
                     RewriteBlock(boundary.Body, usesNativeInvocation, commandEnumeration, document, true, runtimeFree),
-                    boundary.SourcePath, boundary.SourceText, boundary.NativeSuccessStatus, boundary.NativeSequencePoint));
+                    boundary.SourcePath, boundary.SourceText, boundary.NativeSuccessStatus, boundary.NativeSequencePoint, boundary.RuntimeFree));
             }
             else if (statement is PowerShellBoundReturnStatement { EmitsSuccessOutput: true, Expression: not null } returned)
             {

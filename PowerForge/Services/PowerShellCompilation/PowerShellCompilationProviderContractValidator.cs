@@ -66,18 +66,28 @@ public static class PowerShellCompilationProviderContractValidator
             }
             else if (compilerOwnedRuntimeState)
             {
-                if (!contract.Adapter.Operation.Equals("ReadCurrentLocalDateTime", StringComparison.Ordinal) ||
+                var validOperation = contract.Adapter.Operation switch
+                {
+                    "ReadCurrentLocalDateTime" =>
+                        contract.Errors == PowerShellCompilationCommandErrors.None &&
+                        contract.Parameters is { Length: 0 },
+                    "ReadPlainConsoleLine" =>
+                        contract.CommandName.Equals("Read-Host", StringComparison.OrdinalIgnoreCase) &&
+                        contract.Errors == PowerShellCompilationCommandErrors.Terminating &&
+                        contract.Parameters is { Length: 1 } &&
+                        contract.Parameters[0] is { Name: "Prompt", Position: 0 },
+                    _ => false
+                };
+                if (!validOperation ||
                     contract.Stream != "Success" ||
                     contract.Output != PowerShellCompilationCommandOutput.Projected ||
                     contract.Cardinality != PowerShellCompilationCommandCardinality.Scalar ||
-                    contract.Errors != PowerShellCompilationCommandErrors.None ||
                     !contract.Adapter.AotCompatible ||
                     contract.Adapter.Cancellation != PowerShellCompilationProviderCancellation.NotApplicable ||
                     contract.Adapter.ProcessIsolationTimeoutSeconds != 0 ||
                     contract.Adapter.Cleanup != PowerShellCompilationProviderCleanup.NotApplicable ||
                     contract.Adapter.Dependencies is not { Length: 0 } ||
-                    contract.Adapter.EntryPoint is not null ||
-                    contract.Parameters is not { Length: 0 })
+                    contract.Adapter.EntryPoint is not null)
                     throw new InvalidOperationException($"Compiler-owned runtime-state provider '{contract.ProviderId}' has an invalid intrinsic contract.");
             }
             else if (contract.Family == PowerShellCompilationCommandFamily.Stream)

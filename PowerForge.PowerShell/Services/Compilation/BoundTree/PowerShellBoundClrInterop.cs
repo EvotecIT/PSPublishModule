@@ -75,7 +75,8 @@ internal sealed class PowerShellBoundClrInvocationExpression : PowerShellBoundEx
         : base(
             span,
             type,
-            invocationKind == PowerShellClrInvocationKind.Constructor ? PowerShellValueState.Known : PowerShellValueState.Unknown,
+            invocationKind == PowerShellClrInvocationKind.Constructor || IsStopwatchStart(declaringType, memberName)
+                ? PowerShellValueState.Known : PowerShellValueState.Unknown,
             arguments.Aggregate(GetDirectEffects(declaringType, memberName, receiver), static (effects, argument) => effects | argument.Effects),
             arguments.Aggregate(GetDirectCapabilities(declaringType, memberName, receiver), static (capabilities, argument) => capabilities | argument.Capabilities) |
             (preserveStatementErrors ? PowerShellRequiredCapability.PowerShellStatementErrors | PowerShellRequiredCapability.PowerShellHostTypes : PowerShellRequiredCapability.None))
@@ -108,7 +109,15 @@ internal sealed class PowerShellBoundClrInvocationExpression : PowerShellBoundEx
 
     private static PowerShellSemanticEffect GetDirectEffects(Type declaringType, string memberName, PowerShellBoundExpression? receiver)
         => (receiver?.Effects ?? PowerShellSemanticEffect.None) |
+           (declaringType == typeof(Generated.Runtime.PowerShellStrictFileSystemReader) ? PowerShellSemanticEffect.FileSystem | PowerShellSemanticEffect.NonSuccessStream :
+            declaringType == typeof(Generated.Runtime.PowerShellStrictCsvReader) ? PowerShellSemanticEffect.FileSystem | PowerShellSemanticEffect.TerminatingError :
+            declaringType == typeof(Generated.Runtime.PowerShellStrictPipelineOperations) ? PowerShellSemanticEffect.TerminatingError :
+            declaringType.IsConstructedGenericType &&
+                declaringType.GetGenericTypeDefinition() == typeof(Generated.Runtime.PowerShellStrictPipelineOperations<>)
+                    ? PowerShellSemanticEffect.Mutation :
+            declaringType == typeof(Generated.Runtime.PowerShellStrictConsoleProgress) ? PowerShellSemanticEffect.NonSuccessStream : PowerShellSemanticEffect.None) |
            (IsProcessStart(declaringType, memberName) ? PowerShellSemanticEffect.Process : PowerShellSemanticEffect.None) |
+           (IsStopwatchStart(declaringType, memberName) ? PowerShellSemanticEffect.Host : PowerShellSemanticEffect.None) |
            (IsPotentiallyMutatingInvocation(declaringType, receiver) ? PowerShellSemanticEffect.Mutation : PowerShellSemanticEffect.None);
 
     private static PowerShellRequiredCapability GetDirectCapabilities(Type declaringType, string memberName, PowerShellBoundExpression? receiver)
@@ -118,6 +127,10 @@ internal sealed class PowerShellBoundClrInvocationExpression : PowerShellBoundEx
     private static bool IsProcessStart(Type declaringType, string memberName)
         => declaringType == typeof(System.Diagnostics.Process) &&
            memberName.Equals(nameof(System.Diagnostics.Process.Start), StringComparison.Ordinal);
+
+    private static bool IsStopwatchStart(Type declaringType, string memberName)
+        => declaringType == typeof(System.Diagnostics.Stopwatch) &&
+           memberName.Equals(nameof(System.Diagnostics.Stopwatch.StartNew), StringComparison.Ordinal);
 
     private static bool IsPotentiallyMutatingInvocation(Type declaringType, PowerShellBoundExpression? receiver)
         => receiver is not null &&

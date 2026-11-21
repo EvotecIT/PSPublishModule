@@ -120,13 +120,51 @@ internal static class PowerShellTypedExecutableEmitter
             PowerShellCommonParameterPolicy.GetAvailable(commandBinding, targetFramework).Select(parameter =>
                 "        new string[] { " + PowerShellCSharpLiteral.QuoteString(parameter.Name) + ", " +
                 PowerShellCSharpLiteral.QuoteString(parameter.Alias) + " },"));
+        var usesConsoleInput = reachableCommandProviders.Any(static provider =>
+            provider.ProviderId == PowerShellRuntimeStateCommandSemanticBinder.PlainConsoleInputProviderId);
+        var runtimeSources = compilation.RuntimeSources.ToList();
+        if (runtimeSources.Contains(nameof(Generated.Runtime.PowerShellStrictCsvReader)) &&
+            !runtimeSources.Contains(nameof(Generated.Runtime.PowerShellStrictFileSystemReader)))
+            runtimeSources.Add(nameof(Generated.Runtime.PowerShellStrictFileSystemReader));
+        if (usesConsoleInput)
+        {
+            runtimeSources.Add("PowerShellPackagedConsoleInput");
+            runtimeSources.Add("PowerShellStrictConsoleInput");
+        }
+        if (usesConsoleInput || runtimeSources.Contains(nameof(Generated.Runtime.PowerShellStrictCsvReader)) ||
+            runtimeSources.Contains(nameof(Generated.Runtime.PowerShellStrictPipelineOperations)) ||
+            runtimeSources.Contains(nameof(Generated.Runtime.PowerShellStrictFileSystemReader)))
+            runtimeSources.Add(nameof(Generated.Runtime.PowerShellScriptCommandError));
+        var usesProjection = runtimeSources.Contains(nameof(Generated.Runtime.PowerShellStrictProjectionRecord));
+        var windowsPowerShell = semanticProfileId == PowerShellCompilationSemanticOracleCatalog.WindowsPowerShell51ProfileId
+            ? "true" : "false";
+        const string projection = "global::PowerForge.Generated.Runtime.PowerShellStrictProjectionRecord";
+        var writeProjection = usesProjection ? $$"""
+                if (value is {{projection}} record)
+                {
+                    if (PowerShellStreamsUseObservationProtocol)
+                    {
+                        WriteSemanticFrame("ROW", {{projection}}.ProjectedTypeName, record.ToObservationPayload());
+                        PowerShellObservationFrameCount++;
+                    }
+                    else record.WriteConsole({{windowsPowerShell}});
+                    return;
+                }
+                if (!PowerShellStreamsUseObservationProtocol) {{projection}}.FlushConsole({{windowsPowerShell}});
+        """ : string.Empty;
+        var finishProjection = usesProjection
+            ? $"        if (!authoredExit && !PowerShellStreamsUseObservationProtocol) {projection}.FlushConsole({windowsPowerShell});"
+            : string.Empty;
         var programSource = ReadTemplate(ProgramTemplate)
             .Replace("{{PARAMETER_SPECS}}", parameterSpecs)
             .Replace("{{COMMON_PARAMETER_NAMES}}", commonParameterNames)
             .Replace("{{ACCEPTS_SURPLUS_POSITIONAL_ARGUMENTS}}", commandBinding.IsAdvancedFunction ? "false" : "true")
+            .Replace("{{WRITE_PROJECTION_RECORD}}", writeProjection)
+            .Replace("{{FINISH_PROJECTION_RECORDS}}", finishProjection)
             .Replace("{{PROVIDER_WORKER_INITIALIZATION}}", GenerateProviderWorkerInitialization(reachableCommandProviders))
             .Replace("{{INVOCATION}}", invocationSource);
-        return new PowerShellTypedExecutableEmission(compiledSource, programSource, compilation.Methods, compilation.Optimization, compilation.IrSnapshots);
+        return new PowerShellTypedExecutableEmission(compiledSource, programSource, compilation.Methods, compilation.Optimization,
+            compilation.IrSnapshots, runtimeSources.ToArray());
     }
 
     private static string GenerateStreamInvocation(
@@ -260,13 +298,15 @@ internal sealed class PowerShellTypedExecutableEmission
         string programSource,
         PowerShellCompiledMethod[] methods,
         PowerShellCompilationOptimizationEvidence optimization,
-        PowerShellCompilationIrSnapshotBundle irSnapshots)
+        PowerShellCompilationIrSnapshotBundle irSnapshots,
+        string[] runtimeSources)
     {
         CompiledSource = compiledSource;
         ProgramSource = programSource;
         Methods = methods;
         Optimization = optimization;
         IrSnapshots = irSnapshots;
+        RuntimeSources = runtimeSources;
     }
 
     internal string CompiledSource { get; }
@@ -274,4 +314,5 @@ internal sealed class PowerShellTypedExecutableEmission
     internal PowerShellCompiledMethod[] Methods { get; }
     internal PowerShellCompilationOptimizationEvidence Optimization { get; }
     internal PowerShellCompilationIrSnapshotBundle IrSnapshots { get; }
+    internal string[] RuntimeSources { get; }
 }

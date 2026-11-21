@@ -16,7 +16,8 @@ internal sealed partial class PowerShellSemanticBinder
     {
         var locals = new List<PowerShellBoundLocal>();
         var closedAlternatives = PowerShellClosedValueAlternativePolicy.Find(function);
-        var assignments = GetFunctionStatements(function.Body)
+        var includeClean = capabilities == PowerShellCompilationCapabilities.TypedExecutable;
+        var assignments = GetFunctionStatements(function.Body, includeClean)
             .SelectMany(static statement => statement.FindAll(static node => node is AssignmentStatementAst, searchNestedScriptBlocks: false))
             .Cast<AssignmentStatementAst>()
             .OrderBy(static assignment => assignment.Extent.StartOffset)
@@ -66,7 +67,7 @@ internal sealed partial class PowerShellSemanticBinder
             symbols.Add(name, new PowerShellSemanticSymbolBinding(symbol, type));
             locals.Add(local);
         }
-        var loops = GetFunctionStatements(function.Body)
+        var loops = GetFunctionStatements(function.Body, includeClean)
             .SelectMany(static statement => statement.FindAll(static node => node is ForEachStatementAst, searchNestedScriptBlocks: false))
             .Cast<ForEachStatementAst>()
             .OrderBy(static loop => loop.Extent.StartOffset);
@@ -75,9 +76,11 @@ internal sealed partial class PowerShellSemanticBinder
             var name = loop.Variable.VariablePath.UserPath;
             if (symbols.ContainsKey(name)) continue;
             var condition = UnwrapExpression(loop.Condition);
+            var source = condition is VariableExpressionAst variable &&
+                         symbols.TryGetValue(variable.VariablePath.UserPath, out var binding) ? binding.Type : null;
             Type? collectionType = condition switch
             {
-                VariableExpressionAst variable when symbols.TryGetValue(variable.VariablePath.UserPath, out var binding) => binding.Type.ClrType,
+                VariableExpressionAst => source?.ClrType,
                 ExpressionAst expression when expression.StaticType != typeof(object) => expression.StaticType,
                 _ => null
             };
@@ -89,7 +92,9 @@ internal sealed partial class PowerShellSemanticBinder
                 PowerShellTypeFactProvenance.Inferred,
                 enumerationKind is PowerShellForEachEnumerationKind.SystemArray or PowerShellForEachEnumerationKind.PowerShellEnumerable or PowerShellForEachEnumerationKind.NativeInvocation
                     ? "The generated PowerShell host preserves collection elements as object-valued foreach items."
-                    : "The foreach collection provides one stable CLR element type.");
+                    : "The foreach collection provides one stable CLR element type.",
+                source?.DictionaryValueKind == PowerShellDictionaryValueKind.CsvRow ? source.KnownProperties : null,
+                source?.DictionaryValueKind == PowerShellDictionaryValueKind.CsvRow ? PowerShellDictionaryValueKind.CsvRow : PowerShellDictionaryValueKind.None);
             var symbol = new PowerShellSymbolId(PowerShellSymbolKind.Local, document.DocumentId, name, span, function.Name + "/foreach/" + loop.Extent.StartOffset.ToString(System.Globalization.CultureInfo.InvariantCulture) + "/" + name);
             symbols.Add(name, new PowerShellSemanticSymbolBinding(symbol, type));
             locals.Add(new PowerShellBoundLocal(symbol, type));
@@ -127,6 +132,9 @@ internal sealed partial class PowerShellSemanticBinder
         PowerShellCommandSemanticResolver commandResolver)
     {
         var expression = UnwrapExpression(assignment.Right);
+        if (capabilities == PowerShellCompilationCapabilities.TypedExecutable && expression is CommandAst csv &&
+            PowerShellStrictCsvPolicy.TryGetRead(csv, functions.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase), out _, out var headers, out _))
+            return PowerShellStrictCsvPolicy.GetCollectionType(headers);
         if (PowerShellCommentHelpSemanticBinder.TryInferType(expression, functions, capabilities, out var helpType))
             return helpType;
         if (assignment.Left is ConvertExpressionAst typedDictionary &&

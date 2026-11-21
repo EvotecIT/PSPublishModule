@@ -12,6 +12,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
     private PowerShellLoweredFunction? _sourceFunction;
     private PowerShellCompilationSemanticHostFamily _semanticHostFamily;
     private PowerShellCompilationCapability _targetCapabilities;
+    private string? _strictCaughtException;
     private IReadOnlyDictionary<string, PowerShellLoweredFunction> _functions = new Dictionary<string, PowerShellLoweredFunction>();
     private PowerShellCSharpSourceDocumentPool _nativeSourceDocuments = new();
     internal PowerShellBoundCSharpResult Emit(PowerShellLoweredProgram program)
@@ -253,8 +254,11 @@ internal sealed partial class PowerShellBoundCSharpBackend
                     }
                     builder.Append(prefix).Append("catch (global::System.Exception ")
                         .Append(clause.ExceptionTemporary).Append(") when (").Append(filter).AppendLine(")");
+                    var enclosingCatch = _strictCaughtException;
+                    if (runtimeFreeExecutable) _strictCaughtException = clause.ExceptionTemporary;
                     EmitBlock(builder, clause.Statements, indent, getTemporaryIdentifier, discardHelper, sourceMap,
                         successOutputSink: successOutputSink);
+                    _strictCaughtException = enclosingCatch;
                 }
                 if (tryStatement.FinallyStatements is not null)
                 {

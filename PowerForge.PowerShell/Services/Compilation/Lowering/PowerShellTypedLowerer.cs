@@ -223,7 +223,8 @@ internal sealed partial class PowerShellTypedLowerer
                 function.Symbol,
                 PowerShellCSharpSymbolRenderer.Identifier(function.Symbol.Name),
                 function.ReturnType.ClrType,
-                function.Parameters.Select(static parameter => new PowerShellLoweredParameter(parameter.Symbol, parameter.Type.ClrType, parameter.Contract)).ToArray(),
+                function.Parameters.Select(static parameter => new PowerShellLoweredParameter(
+                    parameter.Symbol, parameter.Type.ClrType, parameter.Contract, parameter.DefaultsToCurrentDirectory)).ToArray(),
                 function.Locals.Select(static local => new PowerShellLoweredLocal(local.Symbol, local.Type.ClrType)).ToArray(),
                 function.Help,
                 function.Aliases.ToArray(),
@@ -448,7 +449,8 @@ internal sealed partial class PowerShellTypedLowerer
                 capture.ShareEmptyArray, capture.TransfersEnclosingLoop),
             PowerShellBoundStatementErrorBoundary boundary => new PowerShellLoweredStatementErrorBoundary(
                 boundary.Span, LowerStatements(boundary.Body, functions, symbolTypes, localTypes, declared, names, targetCapabilities),
-                boundary.SourcePath, boundary.SourceText, names.Allocate("pf_statement_error"), boundary.NativeSuccessStatus, boundary.NativeSequencePoint),
+                boundary.SourcePath, boundary.SourceText, names.Allocate("pf_statement_error"), boundary.NativeSuccessStatus,
+                boundary.NativeSequencePoint, boundary.RuntimeFree),
             PowerShellBoundAssignmentStatement assignment => new PowerShellLoweredAssignmentStatement(
                 assignment.Span,
                 assignment.Target,

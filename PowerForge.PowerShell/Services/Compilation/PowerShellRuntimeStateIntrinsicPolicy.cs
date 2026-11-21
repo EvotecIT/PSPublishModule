@@ -26,7 +26,10 @@ internal enum PowerShellRuntimeStateIntrinsicKind
     ShouldProcessTarget,
     ShouldProcessAction,
     CurrentLocalDateTime,
-    FormattedCurrentLocalDateTime
+    FormattedCurrentLocalDateTime,
+    PlainConsoleInput,
+    CaughtCommandErrorMessage,
+    CaughtCommandErrorLine
 }
 
 internal static class PowerShellRuntimeStateIntrinsicPolicy
@@ -189,7 +192,10 @@ internal static class PowerShellRuntimeStateIntrinsicPolicy
             PowerShellRuntimeStateIntrinsicKind.PSVersionMajor => typeof(int),
             PowerShellRuntimeStateIntrinsicKind.ProcessId => typeof(int),
             PowerShellRuntimeStateIntrinsicKind.CurrentLocalDateTime => typeof(DateTime),
-            PowerShellRuntimeStateIntrinsicKind.FormattedCurrentLocalDateTime => typeof(string),
+            PowerShellRuntimeStateIntrinsicKind.FormattedCurrentLocalDateTime or
+            PowerShellRuntimeStateIntrinsicKind.PlainConsoleInput => typeof(string),
+            PowerShellRuntimeStateIntrinsicKind.CaughtCommandErrorMessage => typeof(string),
+            PowerShellRuntimeStateIntrinsicKind.CaughtCommandErrorLine => typeof(int),
             PowerShellRuntimeStateIntrinsicKind.HomeDirectory or
             PowerShellRuntimeStateIntrinsicKind.CurrentCulture or
             PowerShellRuntimeStateIntrinsicKind.CurrentUICulture => typeof(string),

@@ -17,6 +17,13 @@ internal sealed partial class PowerShellSemanticBinder
         var authoredSyntax = syntax;
         syntax = UnwrapExpression(syntax, preservePipeline: capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding));
         var span = PowerShellSourceParser.GetSpan(document, syntax.Extent);
+        if (capabilities == PowerShellCompilationCapabilities.TypedExecutable && syntax is PipelineAst lifecycle &&
+            TryGetRuntimeFreePipelineLifecycleSelection(lifecycle, functions, capabilities, out _))
+            return BindRuntimeFreePipelineLifecycleInvocation(document, lifecycle, symbols, functions, diagnostics, targetFramework, capabilities);
+        if (capabilities == PowerShellCompilationCapabilities.TypedExecutable &&
+            PowerShellStrictCatchObservation.TryClassify(syntax, out var errorValue))
+            return new PowerShellBoundRuntimeStateExpression(span, errorValue, targetFramework ?? string.Empty,
+                _semanticProfile.ProfileId, Array.Empty<PowerShellBoundExpression>());
         if (_runtimeFreeModule is not null && syntax is VariableExpressionAst ownedVariable &&
             (ownedVariable.VariablePath.IsScript || ownedVariable.VariablePath.IsUnqualified &&
                 !symbols.ContainsKey(ownedVariable.VariablePath.UserPath)) &&
@@ -376,6 +383,9 @@ internal sealed partial class PowerShellSemanticBinder
                     targetFramework,
                     capabilities,
                     diagnostics);
+            case CommandAst command when capabilities == PowerShellCompilationCapabilities.TypedExecutable &&
+                TryBindStrictDataCommand(document, command, symbols, functions, diagnostics, targetFramework, out var dataCommand):
+                return dataCommand;
             case CommandAst command when PowerShellCommentHelpSemanticBinder.IsCommand(command):
                 return PowerShellCommentHelpSemanticBinder.Bind(
                     document,

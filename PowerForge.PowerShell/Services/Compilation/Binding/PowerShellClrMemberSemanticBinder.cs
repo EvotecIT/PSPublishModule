@@ -139,10 +139,11 @@ internal static partial class PowerShellClrMemberSemanticBinder
                 "PSB2621",
                 "CLR member access to live Hybrid module state requires one exact authored non-object conversion directly over the $script: variable and cannot use dynamic adapted-member semantics.",
                 target.Receiver!.Span);
-        if (!target.IsStatic && target.Receiver!.Type.DictionaryValueKind == PowerShellDictionaryValueKind.HelpMetadata)
+        if (!target.IsStatic && target.Receiver!.Type.DictionaryValueKind is
+            PowerShellDictionaryValueKind.HelpMetadata or PowerShellDictionaryValueKind.CsvRow)
         {
-            if (!target.Receiver.Type.TryGetKnownProperty(name, out var helpProperty))
-                return Reject(diagnostics, "PSB2933", $"The bounded runtime-free Get-Help contract does not expose property '{name}'.", span);
+            if (!target.Receiver.Type.TryGetKnownProperty(name, out var recordProperty))
+                return Reject(diagnostics, "PSB2933", $"The bounded runtime-free record does not expose property '{name}'.", span);
             return new PowerShellBoundClrMemberExpression(
                 span,
                 target.Type,
@@ -150,7 +151,7 @@ internal static partial class PowerShellClrMemberSemanticBinder
                 false,
                 target.Receiver,
                 PowerShellClrReceiverBehavior.DictionaryKeyLookup,
-                helpProperty);
+                recordProperty);
         }
         var flags = BindingFlags.Public | BindingFlags.IgnoreCase |
                     (target.IsStatic ? BindingFlags.Static | BindingFlags.FlattenHierarchy : BindingFlags.Instance);

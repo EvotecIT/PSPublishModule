@@ -2,6 +2,8 @@ using System.Globalization;
 using System.Reflection.Metadata;
 using System.Reflection.PortableExecutable;
 using System.Security.Cryptography;
+using System.Text.Json;
+using PowerForge.Generated.Runtime;
 
 namespace PowerForge;
 
@@ -284,7 +286,7 @@ public sealed class PowerShellCompilationSemanticRuntimeFreeArtifactObserver
             : method.ReturnType;
         var nullOnly = typeName == typeof(object).FullName &&
             method.OutputValueStates.All(static state => state == "Null");
-        if (!IsFramedScalarType(typeName) && !nullOnly)
+        if (!IsFramedScalarType(typeName) && !nullOnly && typeName != typeof(PowerShellStrictProjectionRecord).FullName)
             throw new InvalidOperationException($"The framed Strict observation protocol does not support ABI type '{typeName}'.");
     }
 
@@ -328,7 +330,7 @@ public sealed class PowerShellCompilationSemanticRuntimeFreeArtifactObserver
             throw new InvalidDataException("The Strict executable exceeded the bounded observation cardinality.");
 
         var indexedFrames = frames.Select(static (frame, index) => (Frame: frame, Sequence: index + 1)).ToArray();
-        var successFrames = indexedFrames.Where(static item => item.Frame.State is "VALUE" or "NULL").ToArray();
+        var successFrames = indexedFrames.Where(static item => item.Frame.State is "VALUE" or "NULL" or "ROW").ToArray();
         var streamRecords = new List<PowerShellCompilationSemanticStreamObservation>();
         var errors = new List<string>();
         var errorRecords = new List<PowerShellCompilationSemanticErrorObservation>();
@@ -336,7 +338,7 @@ public sealed class PowerShellCompilationSemanticRuntimeFreeArtifactObserver
         var warnings = new List<string>();
         var verbose = new List<string>();
         var debug = new List<string>();
-        foreach (var item in indexedFrames.Where(static item => item.Frame.State is not ("VALUE" or "NULL")))
+        foreach (var item in indexedFrames.Where(static item => item.Frame.State is not ("VALUE" or "NULL" or "ROW")))
         {
             var frame = item.Frame;
             var nonSuccessSequence = item.Sequence;
@@ -400,6 +402,14 @@ public sealed class PowerShellCompilationSemanticRuntimeFreeArtifactObserver
         {
             var item = successFrames[index];
             var frame = item.Frame;
+            if (frame.State == "ROW")
+            {
+                if (expectedType != typeof(PowerShellStrictProjectionRecord).FullName ||
+                    frame.TypeName != PowerShellStrictProjectionRecord.ProjectedTypeName)
+                    throw new InvalidDataException("The Strict executable emitted a projected record outside its ABI contract.");
+                result[index] = ReadProjectedRecord(item.Sequence, frame.Value);
+                continue;
+            }
             if (frame.State == "NULL")
             {
                 if (frame.TypeName.Length != 0 || frame.Value.Length != 0 || !method.CanProduceNull && !method.Nullable)
@@ -435,6 +445,29 @@ public sealed class PowerShellCompilationSemanticRuntimeFreeArtifactObserver
             streamRecords.ToArray(),
             errors.ToArray(),
             errorRecords.ToArray());
+    }
+
+    private static PowerShellCompilationSemanticValueObservation ReadProjectedRecord(int sequence, string payload)
+    {
+        using var document = JsonDocument.Parse(payload);
+        if (document.RootElement.ValueKind != JsonValueKind.Object)
+            throw new InvalidDataException("The Strict executable emitted a non-object projection payload.");
+        var properties = document.RootElement.EnumerateObject().ToArray();
+        if (properties.Length is < 1 or > 4 ||
+            properties.Any(static property => property.Name.Length == 0 || property.Value.ValueKind != JsonValueKind.String) ||
+            properties.Select(static property => property.Name).Distinct(StringComparer.OrdinalIgnoreCase).Count() != properties.Length)
+            throw new InvalidDataException("The Strict executable emitted invalid projected properties.");
+        return new PowerShellCompilationSemanticValueObservation
+        {
+            Sequence = sequence,
+            TypeName = PowerShellStrictProjectionRecord.ProjectedTypeName,
+            Properties = properties.Select(static property => new PowerShellCompilationSemanticPropertyObservation
+            {
+                Name = property.Name,
+                Value = property.Value.GetString()!,
+                TypeName = typeof(string).FullName!
+            }).ToArray()
+        };
     }
 
     private static string GetFramedScalarTypeName(string typeName)

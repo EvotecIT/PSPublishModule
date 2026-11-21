@@ -148,6 +148,64 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
 
     [PinnedSemanticHostFact]
     [Trait("Category", "PowerShellCompilerGate")]
+    public async Task StrictExecutableReadHostPreservesTheAssignmentOnStatementErrors()
+    {
+        using var fixture = OracleFixture.Create("""
+            param([switch] $Caught)
+            $answer = 'previous'
+            if ($Caught) {
+                try {
+                    $answer = Microsoft.PowerShell.Utility\Read-Host -Prompt 'Input'
+                } catch {
+                    "caught line=$($_.InvocationInfo.ScriptLineNumber): $($Error[0])"
+                }
+            } else {
+                $answer = Microsoft.PowerShell.Utility\Read-Host -Prompt 'Input'
+            }
+            if ($null -eq $answer) { return 'missing' }
+            return "value=[$answer]"
+            """);
+        var eol = Environment.NewLine;
+        var cases = new (string Input, bool Caught, string? Output, bool ReportsError)[]
+        {
+            ("line\n", false, $"line\nvalue=[line]{eol}", false),
+            ("line\r", false, $"line\rvalue=[line]{eol}", false),
+            ("line\r\n", false, $"line\r\nvalue=[line]{eol}", false),
+            ("line", false, $"linevalue=[line]{eol}", false),
+            ("\r\n", false, $"\r\nvalue=[]{eol}", false),
+            (string.Empty, false, $"missing{eol}", false),
+            ("xy\bz\r\n", false, $"xy\bz\r\nvalue=[xz]{eol}", false),
+            ("żółw 🐢\r\n", false, null, false),
+            ("\brest\r\n", false, $"\bvalue=[previous]{eol}", true),
+            ("\brest\r\n", true, null, false)
+        };
+        foreach (var pin in PowerShellCompilationSemanticHostArtifactPinCatalog.Pins)
+        {
+            var host = StrictStreamingHostPath(pin) ??
+                Path.Combine(Environment.SystemDirectory, "WindowsPowerShell", "v1.0", "powershell.exe");
+            var build = BuildStrictStreamingFixture(fixture, "StrictReadHost", pin.ProfileId);
+            Assert.True(build.Succeeded, build.Error + Environment.NewLine + build.BuildOutput);
+            Assert.False(build.Manifest!.RequiresPowerShellRuntime);
+            Assert.True(build.Manifest.DependencyClosureVerified);
+            foreach (var scenario in cases)
+            {
+                var hostArguments = new[] { "-NoLogo", "-NoProfile", "-File", fixture.ScriptPath };
+                if (scenario.Caught) hostArguments = hostArguments.Append("-Caught").ToArray();
+                var original = await ObserveExitedConsole(host, fixture.RootPath, hostArguments, scenario.Input);
+                Assert.Equal(0, original.Code);
+                if (scenario.Output is { } expectedOutput) Assert.Equal(expectedOutput, original.Output);
+                else Assert.NotEmpty(original.Output);
+                Assert.Equal(scenario.ReportsError, original.Error.Length != 0);
+                var expectedError = original.Error.Replace(fixture.ScriptPath, Path.GetFileName(fixture.ScriptPath));
+                var compiled = await ObserveExitedConsole(build.ArtifactPath!, fixture.RootPath,
+                    scenario.Caught ? new[] { "--Caught" } : Array.Empty<string>(), scenario.Input);
+                Assert.Equal((original.Code, original.Output, expectedError), compiled);
+            }
+        }
+    }
+
+    [PinnedSemanticHostFact]
+    [Trait("Category", "PowerShellCompilerGate")]
     public async Task StrictExecutableObservesReturnedRecordBeforeFinallyExitsOnPinnedHosts()
     {
         using var fixture = OracleFixture.Create("""
@@ -253,6 +311,11 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
 
     private static async Task AssertExitAndConsoleOutput(string executable, string root, string[] arguments,
         (string Name, int Code, string Output, string Input) expected)
+        => Assert.Equal((expected.Code, expected.Output, string.Empty),
+            await ObserveExitedConsole(executable, root, arguments, expected.Input));
+
+    private static async Task<(int Code, string Output, string Error)> ObserveExitedConsole(
+        string executable, string root, string[] arguments, string input)
     {
         var start = new ProcessStartInfo(executable)
         {
@@ -261,7 +324,10 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
             CreateNoWindow = true,
             RedirectStandardInput = true,
             RedirectStandardOutput = true,
-            RedirectStandardError = true
+            RedirectStandardError = true,
+            StandardInputEncoding = new System.Text.UTF8Encoding(false),
+            StandardOutputEncoding = System.Text.Encoding.UTF8,
+            StandardErrorEncoding = System.Text.Encoding.UTF8
         };
         foreach (var argument in arguments) start.ArgumentList.Add(argument);
         using var process = Process.Start(start)!;
@@ -270,11 +336,10 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
         {
             var stdout = process.StandardOutput.ReadToEndAsync(timeout.Token);
             var stderr = process.StandardError.ReadToEndAsync(timeout.Token);
-            await process.StandardInput.WriteAsync(expected.Input.AsMemory(), timeout.Token);
+            await process.StandardInput.WriteAsync(input.AsMemory(), timeout.Token);
             process.StandardInput.Close();
             await process.WaitForExitAsync(timeout.Token);
-            var observed = (process.ExitCode, await stdout, await stderr);
-            Assert.Equal((expected.Code, expected.Output, string.Empty), observed);
+            return (process.ExitCode, await stdout, await stderr);
         }
         finally
         {

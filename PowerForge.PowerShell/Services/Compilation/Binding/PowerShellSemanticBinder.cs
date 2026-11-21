@@ -152,13 +152,14 @@ internal sealed partial class PowerShellSemanticBinder
                 functions,
                 diagnostics,
                 targetFramework,
-                bindingCapabilities,
+                capabilities == PowerShellCompilationCapabilities.TypedExecutable ? capabilities : bindingCapabilities,
                 outputTypeContract.SemanticType,
                 outputTypeContract.MetadataTypeName,
                 symbols,
                 parameters,
                 pipelineParameter,
                 functions[function.Name].PipelineLifecycleReturnsCollection,
+                functions[function.Name].PipelineLifecycleHasOutputLimit,
                 functionDiagnosticStart,
                 outputTypeContract.Declarations);
         var authoredStatements = function.Body.EndBlock?.Statements.ToArray() ?? Array.Empty<StatementAst>();
@@ -415,7 +416,10 @@ internal sealed partial class PowerShellSemanticBinder
                     span));
                 invalid = true;
             }
-            if (parameter.DefaultValue is not null && contract.DefaultValue is null &&
+            var useCurrentDirectory = capabilities == PowerShellCompilationCapabilities.TypedExecutable &&
+                document.AuthoredProjection is not null &&
+                PowerShellStrictParameterDefaultPolicy.UsesFileSystemCurrentDirectory(parameter);
+            if (parameter.DefaultValue is not null && contract.DefaultValue is null && !useCurrentDirectory &&
                 !capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding))
             {
                 diagnostics.Add(new PowerShellSemanticDiagnostic(
@@ -438,7 +442,7 @@ internal sealed partial class PowerShellSemanticBinder
                             : $"Untyped parameter '${name}' preserves the PowerShell host's object-valued parameter contract.");
             var symbol = new PowerShellSymbolId(PowerShellSymbolKind.Parameter, document.DocumentId, name, span, function.Name + "/parameter/" + name);
             if (capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding)) type = PowerShellTypeFact.Unknown;
-            var bound = new PowerShellBoundParameter(symbol, type, contract);
+            var bound = new PowerShellBoundParameter(symbol, type, contract, useCurrentDirectory);
             symbols.Add(name, new PowerShellSemanticSymbolBinding(symbol, type));
             parameters.Add(bound);
         }

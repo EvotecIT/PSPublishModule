@@ -1,0 +1,21 @@
+namespace PowerForge.Generated.Runtime;
+
+internal static class PowerShellStrictPipelineOperations
+{
+    internal static int IncrementInt32(int value, int sourceLine)
+    {
+        if (value != int.MaxValue) return value + 1;
+        const string message = "Cannot convert value \"2147483648\" to type \"System.Int32\". Error: \"Value was either too large or too small for an Int32.\"";
+        throw new PowerShellScriptCommandError(message, message + Environment.NewLine, sourceLine, new OverflowException());
+    }
+}
+
+internal static class PowerShellStrictPipelineOperations<T>
+{
+    internal static bool AddAndReachedLimit(List<T> output, T value, int limit)
+    {
+        if (limit > 0 && value is null) return false;
+        output.Add(value);
+        return limit > 0 && output.Count >= limit;
+    }
+}
