@@ -88,7 +88,7 @@ Linux x64 with a verified runtime-free dependency closure.
 | --- | --- | --- | ---: | ---: |
 | `list-files.ps1` | Rejected | Recursive filesystem records and ordered `FullName` projection | 3,140,608 | 3,248,408 |
 | `convert-csv2txt.ps1` | Rejected | Explicit-header CSV reads and ordered row interpolation | 3,104,256 | 3,174,120 |
-| `list-empty-files.ps1` | Rejected | Filesystem working-directory default, empty-file selection and counts | 3,053,568 | 3,178,352 |
+| `list-empty-files.ps1` | Rejected | Filesystem working-directory default, empty-file selection and counts | 3,054,080 | 3,178,368 |
 
 The Windows builds match 30/30 executable observations against PowerShell
 7.6.6 and Windows PowerShell 5.1.26100.9818 with UTF-8 reference console
