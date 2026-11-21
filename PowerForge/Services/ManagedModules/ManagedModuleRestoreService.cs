@@ -23,10 +23,17 @@ internal sealed partial class ManagedModuleRestoreService(ILogger logger)
         var requirements = ReadRequirements(requirementsPath);
         var repository = ResolveRepository(request.Source);
         var restoreLock = request.WriteLock ? null : ReadLock(lockPath, requirements, repository.Source);
-        if (request.WriteLock && !request.Plan && !Directory.Exists(Path.GetDirectoryName(lockPath)))
-            throw new DirectoryNotFoundException($"Create the parent directory of '{lockPath}' before writing a lock.");
+        if (request.WriteLock && !request.Plan)
+        {
+            if (Directory.Exists(lockPath))
+                throw new ArgumentException($"The lock path '{lockPath}' must be a file.");
+            if (!Directory.Exists(Path.GetDirectoryName(lockPath)))
+                throw new DirectoryNotFoundException($"Create the parent directory of '{lockPath}' before writing a lock.");
+        }
 
         var scratch = Path.Combine(Path.GetTempPath(), "PFMM.R", Guid.NewGuid().ToString("N").Substring(0, 12));
+        if (IsInsideDestination(scratch, destination))
+            throw new InvalidOperationException("The restore temporary directory must be outside the module destination.");
         var cache = Path.Combine(scratch, "cache");
         var client = new ManagedModuleRepositoryClient(logger);
         var installer = new ManagedModuleInstallService(logger, client);
@@ -60,7 +67,7 @@ internal sealed partial class ManagedModuleRestoreService(ILogger logger)
                         ExpectedPackageSha256 = package.Pin.Sha256,
                         AcceptLicense = request.AcceptLicense,
                         AllowClobber = request.AllowClobber,
-                        RequireVersionedModulePath = true,
+                        RestoreModuleDirectoryVersion = package.ModuleDirectoryVersion,
                         SkipDependencyCheck = true
                     }, cancellationToken).ConfigureAwait(false);
                 }
@@ -111,7 +118,7 @@ internal sealed partial class ManagedModuleRestoreService(ILogger logger)
             throw new InvalidOperationException($"Package metadata is missing for '{download.Name}' version '{download.Version}'.");
         return new PreparedPackage(
             new ManagedModuleRestorePackage(
-                ValidateName(metadata.Id), download.Version,
+                ValidateName(metadata.Id), ValidateVersion(metadata.Id, metadata.Version),
                 ManagedModulePackageIntegrity.NormalizeSha256(download.PackageSha256) ??
                     throw new InvalidOperationException($"Package hash is missing for '{download.Name}'.")),
             metadata);
@@ -135,8 +142,8 @@ internal sealed partial class ManagedModuleRestoreService(ILogger logger)
                 throw new InvalidOperationException($"'{name}' requires license acceptance. Review the license and pass --accept-license.");
             foreach (var dependency in package.Dependencies)
             {
-                if (!prepared.TryGetValue(dependency.Name, out var child) || !dependency.Range.IsSatisfiedBy(child.Pin.Version))
-                    throw new InvalidOperationException($"'{name}' requires '{dependency.Name}' {dependency.Range}, but the restore lock has no matching package.");
+                if (!prepared.TryGetValue(dependency.Name, out var child) || !dependency.Matches(child))
+                    throw new InvalidOperationException($"'{name}' requires '{dependency.Name}' {dependency.Description}, but the restore lock has no matching package.");
             }
         }
 
@@ -202,8 +209,12 @@ internal sealed partial class ManagedModuleRestoreService(ILogger logger)
     {
         public ManagedModuleRestorePackage Pin { get; } = pin;
         public ManagedModulePackageMetadata Metadata { get; } = metadata;
+        public string ModuleDirectoryVersion { get; } = Version.TryParse(metadata.ModuleManifestVersion, out var version)
+            ? version.ToString()
+            : throw new InvalidOperationException($"Package '{pin.Name}' version '{pin.Version}' must declare a numeric ModuleVersion.");
         public DependencyConstraint[] Dependencies { get; } = ManagedModuleInstallService.SelectDependencies(metadata)
-            .Select(dependency => new DependencyConstraint(pin.Name, dependency.Id, ManagedModuleVersionRange.Parse(dependency.VersionRange)))
+            .Select(dependency => new DependencyConstraint(pin.Name, dependency.Id,
+                ManagedModuleVersionRange.Parse(dependency.VersionRange), dependency.RequiredModuleGuid))
             .ToArray();
     }
 }

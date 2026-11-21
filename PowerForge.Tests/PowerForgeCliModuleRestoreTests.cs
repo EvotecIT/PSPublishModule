@@ -189,21 +189,167 @@ public sealed class PowerForgeCliModuleRestoreTests
         Assert.True(File.Exists(lockPath));
     }
 
+    [Fact]
+    public async Task RestoreUsesManifestVersionFolderAndRefusesDifferentPackageInThatFolder()
+    {
+        using var temp = new TemporaryDirectory();
+        var feed = Path.Combine(temp.Path, "feed");
+        var requirements = Path.Combine(temp.Path, "modules.json");
+        var lockPath = Path.Combine(temp.Path, "modules.lock.json");
+        var destination = Path.Combine(temp.Path, "modules");
+        WritePackage(feed, "App", "2.0.0-beta", manifestVersion: "2.0",
+            manifestExports: "PrivateData = @{ PSData = @{ Prerelease = 'beta' } }");
+        WritePackage(feed, "App", "2.0.0", manifestVersion: "2.0");
+        var args = new[] { "--requirements", requirements, "--lock-file", lockPath, "--destination", destination, "--source", feed, "--write-lock" };
+
+        File.WriteAllText(requirements, """{"App":"2.0.0-beta"}""");
+        using var beta = await RunCliAsync(temp.Path, 0, args);
+        var installed = Path.Combine(destination, "App", "2.0", "App.psm1");
+        Assert.Equal("# App 2.0.0-beta", File.ReadAllText(installed));
+        var originalLock = File.ReadAllText(lockPath);
+        Assert.Contains("2.0.0-beta", originalLock, StringComparison.Ordinal);
+
+        File.WriteAllText(requirements, """{"App":"2.0.0"}""");
+        using var stable = await RunCliAsync(temp.Path, 1, args);
+        Assert.Contains("different module package", stable.RootElement.GetProperty("error").GetString(), StringComparison.Ordinal);
+        Assert.Equal("# App 2.0.0-beta", File.ReadAllText(installed));
+        Assert.Equal(originalLock, File.ReadAllText(lockPath));
+    }
+
+    [Theory]
+    [InlineData(false, 2, "must be a file")]
+    [InlineData(true, 1, "temporary directory must be outside")]
+    public async Task RestoreRejectsInvalidWriteLocationsBeforeTouchingDestination(bool plan, int exitCode, string error)
+    {
+        using var temp = new TemporaryDirectory();
+        var feed = Path.Combine(temp.Path, "feed");
+        var requirements = Path.Combine(temp.Path, "modules.json");
+        var lockPath = Path.Combine(temp.Path, "modules.lock.json");
+        var destination = Path.Combine(temp.Path, "modules");
+        WritePackage(feed, "App", "1.0.0");
+        File.WriteAllText(requirements, """{"App":"1.0.0"}""");
+        var args = new[] { "--requirements", requirements, "--lock-file", lockPath, "--destination", destination, "--source", feed, "--write-lock" };
+        if (plan)
+        {
+            Directory.CreateDirectory(destination);
+            args = [.. args, "--plan"];
+        }
+        else
+        {
+            Directory.CreateDirectory(lockPath);
+        }
+
+        using var result = await RunCliAsync(temp.Path, exitCode, args, plan ? destination : null);
+        Assert.Contains(error, result.RootElement.GetProperty("error").GetString(), StringComparison.Ordinal);
+        if (plan)
+            Assert.Empty(Directory.EnumerateFileSystemEntries(destination));
+        else
+            Assert.False(Directory.Exists(destination));
+    }
+
+    [Fact]
+    public async Task RestoreRejectsBuildMetadataOnTransitivePackageBeforeWriting()
+    {
+        using var temp = new TemporaryDirectory();
+        var feed = Path.Combine(temp.Path, "feed");
+        var requirements = Path.Combine(temp.Path, "modules.json");
+        var lockPath = Path.Combine(temp.Path, "modules.lock.json");
+        var destination = Path.Combine(temp.Path, "modules");
+        WritePackage(feed, "App", "1.0.0", new TestDependency("Leaf", "[1.2.3]", null));
+        WritePackage(feed, "Leaf", "1.2.3+ci", manifestVersion: "1.2.3");
+        File.WriteAllText(requirements, """{"App":"1.0.0"}""");
+
+        using var result = await RunCliAsync(temp.Path, 2,
+            ["--requirements", requirements, "--lock-file", lockPath, "--destination", destination, "--source", feed, "--write-lock"]);
+        Assert.Contains("'Leaf' requires an exact package version", result.RootElement.GetProperty("error").GetString(), StringComparison.Ordinal);
+        Assert.False(Directory.Exists(destination));
+        Assert.False(File.Exists(lockPath));
+    }
+
+    [Fact]
+    public async Task RestoreRequiresDependencyGuidInFreshAndFrozenResolution()
+    {
+        using var temp = new TemporaryDirectory();
+        var feed = Path.Combine(temp.Path, "feed");
+        var requirements = Path.Combine(temp.Path, "modules.json");
+        var lockPath = Path.Combine(temp.Path, "modules.lock.json");
+        var destination = Path.Combine(temp.Path, "modules");
+        const string guid = "11111111-1111-1111-1111-111111111111";
+        WritePackage(feed, "App", "1.0.0", manifestExports:
+            $"RequiredModules = @(@{{ ModuleName = 'Leaf'; RequiredVersion = '1.0.0'; GUID = '{guid}' }})");
+        var originalLeaf = WritePackage(feed, "Leaf", "1.0.0", manifestExports: $"GUID = '{guid}'");
+        File.WriteAllText(requirements, """{"App":"1.0.0"}""");
+        var args = new[] { "--requirements", requirements, "--lock-file", lockPath, "--destination", destination, "--source", feed, "--plan" };
+        var verified = Path.Combine(temp.Path, "verified");
+        var install = new[] { "--requirements", requirements, "--lock-file", lockPath, "--destination", verified, "--source", feed };
+        using var write = await RunCliAsync(temp.Path, 0, [.. install, "--write-lock"]);
+        File.Delete(originalLeaf);
+        var wrongPath = WritePackage(feed, "Leaf", "1.0.0", manifestExports: "GUID = '22222222-2222-2222-2222-222222222222'");
+        var evidence = JsonNode.Parse(File.ReadAllText(lockPath))!;
+        var leafPin = evidence["packages"]!.AsArray().Single(pin => (string?)pin!["name"] == "Leaf")!;
+        leafPin["sha256"] = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(wrongPath))).ToLowerInvariant();
+        File.WriteAllText(lockPath, evidence.ToJsonString());
+
+        using var fresh = await RunCliAsync(temp.Path, 1, [.. args, "--write-lock"]);
+        using var frozen = await RunCliAsync(temp.Path, 1,
+            ["--requirements", requirements, "--lock-file", lockPath, "--destination", destination, "--source", feed]);
+        Assert.Contains(guid, fresh.RootElement.GetProperty("error").GetString(), StringComparison.Ordinal);
+        Assert.Contains(guid, frozen.RootElement.GetProperty("error").GetString(), StringComparison.Ordinal);
+        Assert.False(Directory.Exists(destination));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task RestoreOnlyAllowsPrereleaseWhenDiscoveredConstraintsPermitIt(bool siblingPinsPrerelease)
+    {
+        using var temp = new TemporaryDirectory();
+        var feed = Path.Combine(temp.Path, "feed");
+        var requirements = Path.Combine(temp.Path, "modules.json");
+        var lockPath = Path.Combine(temp.Path, "modules.lock.json");
+        var destination = Path.Combine(temp.Path, "modules");
+        WritePackage(feed, "App", "1.0.0", new TestDependency("Alpha", "1.0.0", null),
+            additionalDependency: new TestDependency("Zulu", "1.0.0", null));
+        WritePackage(feed, "Zulu", "1.0.0", siblingPinsPrerelease ? new TestDependency("Alpha", "[2.0.0-beta]", null) : null);
+        WritePackage(feed, "Alpha", "2.0.0-beta", manifestVersion: "2.0.0",
+            manifestExports: "PrivateData = @{ PSData = @{ Prerelease = 'beta' } }");
+        File.WriteAllText(requirements, """{"App":"1.0.0"}""");
+
+        using var result = await RunCliAsync(temp.Path, siblingPinsPrerelease ? 0 : 1,
+            ["--requirements", requirements, "--lock-file", lockPath, "--destination", destination, "--source", feed, "--write-lock"]);
+        if (siblingPinsPrerelease)
+        {
+            Assert.Contains("2.0.0-beta", File.ReadAllText(lockPath), StringComparison.Ordinal);
+            Assert.True(File.Exists(Path.Combine(destination, "Alpha", "2.0.0", "Alpha.psd1")));
+        }
+        else
+        {
+            Assert.Contains("'Alpha'", result.RootElement.GetProperty("error").GetString(), StringComparison.Ordinal);
+            Assert.False(Directory.Exists(destination));
+        }
+    }
+
     private static string WritePackage(string feed, string name, string version,
-        TestDependency? dependency = null, string? content = null, string? manifestExports = null)
+        TestDependency? dependency = null, string? content = null, string? manifestExports = null,
+        string? manifestVersion = null, TestDependency? additionalDependency = null)
     {
         var path = Path.Combine(feed, $"{name}.{version}.nupkg");
+        var dependencies = new List<TestDependency>();
+        if (dependency is not null)
+            dependencies.Add(dependency);
+        if (additionalDependency is not null)
+            dependencies.Add(additionalDependency);
         TestPackageFactory.Create(path, name, version,
-            dependencies: dependency is null ? null : [dependency],
+            dependencies: dependencies,
             files: new Dictionary<string, string>
             {
-                [name + ".psd1"] = $"@{{ ModuleVersion = '{version}'; RootModule = '{name}.psm1'; {manifestExports} }}",
+                [name + ".psd1"] = $"@{{ ModuleVersion = '{manifestVersion ?? version}'; RootModule = '{name}.psm1'; {manifestExports} }}",
                 [name + ".psm1"] = content ?? $"# {name} {version}"
             });
         return path;
     }
 
-    private static async Task<JsonDocument> RunCliAsync(string currentDirectory, int expectedExitCode, string[] args)
+    private static async Task<JsonDocument> RunCliAsync(string currentDirectory, int expectedExitCode, string[] args, string? tempDirectory = null)
     {
         var root = PowerForgeCliTestHost.FindRepositoryRoot();
         var assembly = PowerForgeCliTestHost.ResolveAssemblyPath(root,
@@ -215,6 +361,12 @@ public sealed class PowerForgeCliModuleRestoreTests
             RedirectStandardOutput = true,
             RedirectStandardError = true
         };
+        if (tempDirectory is not null)
+        {
+            startInfo.Environment["TMPDIR"] = tempDirectory;
+            startInfo.Environment["TEMP"] = tempDirectory;
+            startInfo.Environment["TMP"] = tempDirectory;
+        }
         foreach (var argument in new[] { assembly, "module", "restore", "--output", "json" }.Concat(args))
             startInfo.ArgumentList.Add(argument);
         using var process = Process.Start(startInfo)!;
