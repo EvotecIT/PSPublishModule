@@ -62,9 +62,10 @@ public sealed partial class PowerForgeReleaseServiceTests
     }
 
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public void UnifiedGitHubRelease_PublishesProducedModuleArchivesWithoutOptionalFeatures(bool lockStaleArchive)
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    [InlineData(false, false)]
+    public void Execute_CollectsOnlyModuleArchivesProducedByTheCurrentBuild(bool publish, bool lockStaleArchive)
     {
         if (lockStaleArchive && !OperatingSystem.IsWindows()) return;
         var root = CreateSandbox();
@@ -78,6 +79,8 @@ public sealed partial class PowerForgeReleaseServiceTests
             var current = Path.Combine(artifacts, "SampleModule.v1.2.3.zip");
             var full = Path.Combine(artifacts, "SampleModule.v1.2.3-FullPackage.zip");
             var stale = Path.Combine(artifacts, "SampleModule.v1.2.2.zip");
+            var previous = Directory.CreateDirectory(Path.Combine(root, "previous")).FullName;
+            WriteArchive(Path.Combine(previous, Path.GetFileName(current)), "1.2.3");
             WriteArchive(stale, "1.2.2");
             using var staleLock = lockStaleArchive
                 ? File.Open(stale, FileMode.Open, FileAccess.Read, FileShare.None)
@@ -101,23 +104,32 @@ public sealed partial class PowerForgeReleaseServiceTests
                 {
                     RepositoryRoot = root, ScriptPath = scriptPath,
                     ModuleName = "SampleModule", ManifestPath = manifestPath,
-                    ModuleVersion = "1.2.3", ArtifactPaths = [artifacts], IncludesPackages = false
+                    ModuleVersion = "1.2.3", ArtifactPaths = [artifacts, previous], IncludesPackages = false
                 },
                 GitHub = new PowerForgeReleaseGitHubOptions
                 {
-                    Publish = true, Owner = "EvotecIT", Repository = "example",
+                    Publish = publish, Owner = "EvotecIT", Repository = "example",
                     TokenEnvName = "PATH", VersionSource = PowerForgeReleaseVersionSource.Module
                 }
             }, new PowerForgeReleaseRequest
             {
-                ConfigPath = Path.Combine(root, "release.json"), ModuleRunMode = ConfigurationGateMode.Publish
+                ConfigPath = Path.Combine(root, "release.json"),
+                ModuleRunMode = publish ? ConfigurationGateMode.Publish : ConfigurationGateMode.Build,
+                StageRoot = publish ? null : Path.Combine(root, "stage")
             });
 
             Assert.True(result.Success, result.ErrorMessage);
-            Assert.NotNull(publication);
-            Assert.Equal(new[] { full, current }.Order(), result.ReleaseAssets.Order());
-            Assert.Equal(2, result.ModuleProducedAssets.Length);
-            Assert.DoesNotContain(stale, result.ReleaseAssets);
+            Assert.Equal(new[] { full, current }.Order(), result.ModuleProducedAssets.Order());
+            Assert.Equal(
+                new[] { Path.GetFileName(full), Path.GetFileName(current) }.Order(),
+                result.ReleaseAssets.Select(Path.GetFileName).Order());
+            if (publish)
+                Assert.NotNull(publication);
+            else
+            {
+                Assert.Null(publication);
+                Assert.All(result.ReleaseAssets, path => Assert.StartsWith(Path.Combine(root, "stage", "modules"), path));
+            }
         }
         finally { TryDelete(root); }
 

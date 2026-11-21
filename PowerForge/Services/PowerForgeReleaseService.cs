@@ -456,7 +456,8 @@ internal sealed partial class PowerForgeReleaseService
         var captureModuleArtifactProvenance =
             !request.PlanOnly && !request.ValidateOnly &&
             (ShouldCaptureVirusTotalModuleArtifactProvenance(spec, request, runModule) ||
-             runModule && (spec.Module?.IncludesPackages == true || publishUnifiedGitHub));
+             runModule && (spec.Module?.IncludesPackages == true || publishUnifiedGitHub ||
+                           !string.IsNullOrWhiteSpace(request.StageRoot ?? spec.Outputs?.Staging?.RootPath)));
 
         if (!runModule && !runPackages && !runTools && !runAppleApps && !runWorkspaceValidation)
         {
