@@ -88,7 +88,7 @@ public static class PowerShellCompilationExplainShaper
                 targetFramework, profile, commandProviders ?? Array.Empty<PowerShellCompilationCommandProviderContract>(), documents);
         var typed = transpiler.TranspileAnalyzed(documents, plan, "PowerForge.Compiled", typeName, targetFramework, capabilities,
             guardedExecutableEntryPath: input.Kind == PowerShellCompilationArtifactKind.Executable ? input.SourcePath : null,
-            nativeScriptEntry: entry?.EntryPointMethod.NativeFunctionBinding is not null);
+            nativeScriptEntry: entry?.EntryPointMethod.NativeFunctionBinding is not null, moduleManifestPath: input.ModuleManifestPath);
         if (plan.Mode == PowerShellCompilationMode.Hybrid &&
             input.Kind is PowerShellCompilationArtifactKind.BinaryModule or PowerShellCompilationArtifactKind.Executable)
         {

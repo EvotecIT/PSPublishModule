@@ -31,6 +31,10 @@ internal sealed class PowerShellModuleExportContract
     internal string[] Variables { get; }
     internal bool HasRuntimeControlledExports { get; }
     internal bool HasWildcardFunctions => Functions.Any(WildcardPattern.ContainsWildcardCharacters);
+    internal bool HasTerminalAllCommandExport =>
+        Commands.Length == 1 && Functions is ["*"] && Cmdlets is ["*"] &&
+        Commands[0].Parent is PipelineAst { Parent: NamedBlockAst body } pipeline &&
+        ReferenceEquals(body.Statements.LastOrDefault(), pipeline);
 
     internal static PowerShellModuleExportContract? TryRead(ScriptBlockAst ast)
     {

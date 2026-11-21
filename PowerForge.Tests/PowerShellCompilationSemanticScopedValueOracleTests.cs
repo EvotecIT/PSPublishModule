@@ -673,7 +673,7 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
         string? importSetup = null, string? requiredModule = null, Action<PowerShellCompilationBuildResult>? assertArtifact = null,
         IReadOnlyDictionary<string, string>? additionalSources = null, bool retainAdditionalSources = false,
         bool discoverAdditionalSources = false, string? manifestFunctionPattern = "*", bool resolveModuleSources = false,
-        string? nestedModule = null)
+        string? nestedModule = null, bool excludeManifestCmdlets = false)
     {
         var modernHost = Environment.GetEnvironmentVariable("POWERFORGE_PWSH76_PATH");
         Assert.False(string.IsNullOrWhiteSpace(modernHost), "The exact PowerShell 7.6.6 host is required.");
@@ -702,8 +702,9 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
                 var required = requiredModule is null ? string.Empty : " RequiredModules=@('" + requiredModule + "');";
                 var files = retainAdditionalSources ? " FileList=@(" + string.Join(", ", additionalSources!.Keys.Select(name => "'" + name + "'")) + ");" : string.Empty;
                 var functions = manifestFunctionPattern is null ? string.Empty : " FunctionsToExport='" + manifestFunctionPattern + "';";
+                var cmdlets = excludeManifestCmdlets ? " CmdletsToExport=@();" : string.Empty;
                 var nested = nestedModule is null ? string.Empty : " NestedModules=@('" + nestedModule + "');";
-                File.WriteAllText(manifest, "@{ RootModule='ScopedValues.psm1'; ModuleVersion='1.0.0';" + functions + required + files + nested + " }");
+                File.WriteAllText(manifest, "@{ RootModule='ScopedValues.psm1'; ModuleVersion='1.0.0';" + functions + cmdlets + required + files + nested + " }");
             }
             var input = resolveModuleSources
                 ? new PowerShellCompilationInputResolver(profile).Resolve(manifest ?? module,

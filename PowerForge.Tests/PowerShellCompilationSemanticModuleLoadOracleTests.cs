@@ -60,6 +60,48 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
 
     [PinnedSemanticHostFact]
     [Trait("Category", "PowerShellCompilerGate")]
+    public void TerminalWildcardPreservesBothHostEditionAndManifestSelection()
+    {
+        const string source = """
+            . "$PSScriptRoot/Identity.ps1"
+            function Get-OtherExport { return 21 }
+            Export-ModuleMember -Function '*' -Cmdlet '*'
+            """;
+        const string probe = """
+            if ((Test-HostEdition) -ne ($PSEdition -eq 'Core')) { throw 'Unexpected edition' }
+            @((Get-Module ScopedValues).ExportedCommands.Keys | Sort-Object) -join ','
+            """;
+        var files = new Dictionary<string, string>
+        {
+            ["Identity.ps1"] = """
+                function Test-HostEdition {
+                    [CmdletBinding()]
+                    [OutputType([bool])]
+                    param()
+                    [bool]($PSEdition -eq 'Core')
+                }
+                """
+        };
+        foreach (var (functionFilter, expectedExports, runtimeRouted) in new[]
+        {
+            ("*", "Get-OtherExport,Test-HostEdition", false),
+            ("Test-HostEdition", "Test-HostEdition", true)
+        })
+        {
+            CompareScopedArtifacts(source, probe, new[] { "Test-HostEdition" },
+                value => Assert.Equal(expectedExports, value),
+                assertArtifact: built =>
+                {
+                    var unit = Assert.Single(built.Manifest!.UnitDispositionLedger!.Entries, entry => entry.Name == "Test-HostEdition");
+                    Assert.Equal(runtimeRouted, unit.RuntimeRouted);
+                },
+                additionalSources: files, manifestFunctionPattern: functionFilter, resolveModuleSources: true,
+                excludeManifestCmdlets: true);
+        }
+    }
+
+    [PinnedSemanticHostFact]
+    [Trait("Category", "PowerShellCompilerGate")]
     public void LiteralExportAssignmentsPreserveThePublicSurfaceOnBothHosts()
     {
         const string source = """

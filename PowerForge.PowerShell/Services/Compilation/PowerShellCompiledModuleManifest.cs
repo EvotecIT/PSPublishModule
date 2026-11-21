@@ -183,8 +183,10 @@ internal static class PowerShellCompiledModuleManifest
         var hasRetainedAlternatives = hybrid &&
             PowerShellHybridDependencyResolver.DiscoverRetainedModuleAlternatives(sourcePath, typed.SourcePaths, snapshot).Length > 0;
         // The root module can publish runtime-created functions that are absent from the compilation inventory.
-        var preserveAuthoredExports = hybrid && explicitExports?.HasWildcardFunctions == true;
-        var functionExports = hasScriptNestedModules && manifestFunctions is null
+        var preserveAuthoredFunctionFilter = hybrid && explicitExports?.HasWildcardFunctions == true;
+        var preserveAuthoredExports = preserveAuthoredFunctionFilter &&
+            !(explicitExports!.HasTerminalAllCommandExport && SelectsAllRootFunctions(manifestFunctions, hasNestedModules));
+        var functionExports = preserveAuthoredFunctionFilter || (hasScriptNestedModules && manifestFunctions is null)
             ? null
             : selectedFallback;
 
@@ -605,6 +607,18 @@ internal static class PowerShellCompiledModuleManifest
         => string.IsNullOrWhiteSpace(moduleManifestPath)
             ? Path.ChangeExtension(sourcePath, ".psd1")
             : Path.GetFullPath(moduleManifestPath!.Trim().Trim('"'));
+
+    internal static bool SelectsAllRootFunctions(string sourcePath, string? moduleManifestPath)
+    {
+        var manifest = ResolveSourceManifest(sourcePath, moduleManifestPath);
+        return !File.Exists(manifest) ||
+            SelectsAllRootFunctions(
+                ModuleManifestValueReader.ReadTopLevelLiteralStringOrArrayOrThrow(manifest, "FunctionsToExport"),
+                ModuleManifestValueReader.ReadTopLevelModuleReferencePaths(manifest, "NestedModules").Any());
+    }
+
+    private static bool SelectsAllRootFunctions(string[]? functions, bool hasNestedModules)
+        => functions is ["*"] && !hasNestedModules;
 
     private sealed class ManifestFileReference
     {

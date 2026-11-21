@@ -240,7 +240,8 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                 var transpiler = new PowerShellTypedCompilationTranspiler(commandProviderInputs, spec.SemanticProfileId, nativeDependencyTypes);
                 typed = transpiler.TranspileAnalyzed(
                     sourceDocuments, plan, "PowerForge.Compiled",
-                    PowerShellCSharpSymbolRenderer.Identifier(artifactName) + "Methods", spec.TargetFramework, capabilities);
+                    PowerShellCSharpSymbolRenderer.Identifier(artifactName) + "Methods", spec.TargetFramework, capabilities,
+                    moduleManifestPath: spec.ModuleManifestPath);
                 string[]? exportedFunctions = null;
                 if (spec.Kind == PowerShellCompilationArtifactKind.BinaryModule)
                 {
