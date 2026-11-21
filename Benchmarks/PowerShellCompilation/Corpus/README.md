@@ -200,3 +200,55 @@ Use `-WorkloadId` for a subset or `-Offline -PayloadCachePath <directory>`
 to reuse the verified external-assessment payload cache. `-WorkspacePath`
 controls where the runner creates temporary files. `-KeepRunArtifacts`
 preserves the original sources, reviewed locks and generated artifacts for inspection.
+
+## Measure unfamiliar PowerShell workflows
+
+The [Windows starting baseline](unfamiliar-workflows-baseline.windows.json)
+covers the [pinned 30-workload packet](unfamiliar-workflows.net10.json).
+It exercises 15 standalone scripts, ten Gallery modules and five multi-file
+applications through their declared entry paths. PowerShell 7.6.6 covers the
+30 `net10.0` targets. Windows PowerShell 5.1.26100.9818 covers the ten additional
+`net472` module targets. Executable artifacts in this packet target `win-x64`.
+Each lane runs two declared cases and compares its applicable source, built
+and installed observations. The report records output and error hashes, exit
+codes, changed and removed files, and the authenticated artifact entry hash.
+
+The starting compiler, `f482dcd8b1fb277e54ec04e5a0570d56b03e757e`, matched
+source observations on every declared target for **15 of 30** workflows.
+Across the 40 target lanes, 21 matched, five differed and 14 stopped at a
+project stage. All 40 produced a recorded outcome. The report lists emitted
+bodies for each completed artifact. The parity count measures observed
+behavior through the declared entry paths.
+
+| Observed block | Workflows affected | Cases |
+| --- | ---: | --- |
+| Relative source and resource closure | 4 | Two parent-relative resource selections and two unresolved dot-source expressions |
+| Guarded provider path inside a callback | 2 | Nested `Get-Content` and `Get-ChildItem` reads |
+| Conventional loader argument binding | 1 | MarkdownPS uses a dynamic `-Exclude` |
+| Packaged script requirement enforcement | 1 | Build-MainSummaryFromZip loads a helper with `#requires` |
+| Packaged executable parameter binding | 1 | Verify-MarkdownLinks uses a mandatory entry parameter |
+| Generated module help identity | 1 | PSWriteHTML replaces a delivered help path during build |
+| Generated and authored assembly name collision | 1 | PSDocs already ships `PSDocs.dll` |
+| Module function export surface | 1 | PSSVG loses functions published by its root module |
+| Observed output or file differences | 3 | convert-zip2dir, DSCParser and PScribo |
+
+Use the built CLI for the revision being assessed and a scratch directory
+outside the source tree. The runner verifies packet hashes before executing
+any source. It requires explicit opt-in to run the pinned third-party inputs
+with the supplied local fixtures. Every install goes to the isolated project
+under the scratch directory.
+
+```powershell
+$corpus = './Benchmarks/PowerShellCompilation/Corpus'
+& "$corpus/Invoke-WorkflowBaseline.ps1" -CliAssemblyPath $cliAssembly -WorkspacePath $scratch -PowerShell76Path $pinnedPwsh -AllowExternalExecution
+& "$corpus/Publish-WorkflowBaseline.ps1" -EvidencePath $workflowReport -OutputPath (Join-Path $scratch 'unfamiliar-workflows-baseline.windows.json')
+```
+
+Use the raw report path printed by the runner as `$workflowReport`.
+Reuse a verified payload cache with `-PayloadCachePath` and
+`-OfflineAcquisition`. To run the two frameworks separately, pass
+`-Framework net10.0` and `-Framework net472` in separate invocations, then
+supply both raw report paths in `-EvidencePath`. The publication command
+verifies all declared lanes, the exact compiler and hosts, and the source
+fixture hashes. The starting report records the two targeted fixture replays
+for ZIP extraction and local Git history against the same compiler revision.

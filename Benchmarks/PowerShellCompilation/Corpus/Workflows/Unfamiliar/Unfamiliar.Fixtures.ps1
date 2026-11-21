@@ -48,7 +48,7 @@ beta
 function New-UnfamiliarGitFixture {
     param([string] $Root)
 
-    Write-UnfamiliarText (Join-Path $Root 'consolegit2gitfilters.json') '{"ContainsFilters":[],"SuffixFilters":[],"PrefixFilters":[]}'
+    Write-UnfamiliarText (Join-Path $Root 'consolegit2gitfilters.json') '{"ContainsFilters":["/excluded"],"SuffixFilters":[".generated"],"PrefixFilters":["scratch"]}'
     $environment = @{
         GIT_AUTHOR_NAME = 'Fixture Author'
         GIT_COMMITTER_NAME = 'Fixture Author'
@@ -123,7 +123,7 @@ function New-UnfamiliarScriptArguments {
                     'README.md' = [Text.Encoding]::UTF8.GetBytes('fixture')
                 })
             } else { Write-UnfamiliarText $file 'invalid archive' }
-            $file
+            [IO.Path]::GetFileName($file)
         }
         'GenerateParsingHelpers' {
             $schema = Join-Path $Root 'schema.json'
