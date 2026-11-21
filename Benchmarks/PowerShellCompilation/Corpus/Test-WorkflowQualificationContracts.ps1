@@ -513,6 +513,42 @@ try {
     Set-Item -LiteralPath Function:\Invoke-WorkflowFixture -Value $savedFixture
 }
 
+. (Join-Path $PSScriptRoot 'Workflows/Unfamiliar/Unfamiliar.Fixtures.ps1')
+$htmlRoot = Join-Path $WorkspacePath ('report-effect-' + [guid]::NewGuid().ToString('N'))
+$null = New-Item -ItemType Directory -Path $htmlRoot
+$reportPath = Join-Path $htmlRoot 'report.html'
+$started = [datetime]::new(2026, 1, 1, 9, 0, 0)
+$completed = $started.AddSeconds(3)
+$firstHtml = '<meta name="viewport" content="same"><meta name="revised" content="2026-01-01 09:00:00"><p>Fixture</p>'
+$secondHtml = '<meta content="same" name="viewport"><meta content="2026-01-01 09:00:02" name="revised"><p>Fixture</p>'
+[IO.File]::WriteAllText($reportPath, $firstHtml)
+$baseline = ConvertTo-UnfamiliarReportEffectHash $reportPath $started $completed
+[IO.File]::WriteAllText($reportPath, $secondHtml)
+if ((ConvertTo-UnfamiliarReportEffectHash $reportPath $started $completed) -cne $baseline) {
+    throw 'The observed HTML effect changed when the viewport attributes or invocation timestamp changed order or value.'
+}
+$checked.Add('HTML report comparison preserves its content across attribute order and valid invocation time')
+
+foreach ($item in @(
+    @{ name = 'body'; changed = $secondHtml.Replace('Fixture', 'Different body') }
+    @{ name = 'viewport'; changed = $secondHtml.Replace('same', 'different viewport') }
+)) {
+    [IO.File]::WriteAllText($reportPath, $item.changed)
+    if ((ConvertTo-UnfamiliarReportEffectHash $reportPath $started $completed) -ceq $baseline) {
+        throw "The report comparison ignored a changed $($item.name)."
+    }
+    $checked.Add("observe differences in HTML report $($item.name)")
+}
+
+[IO.File]::WriteAllText($reportPath, $secondHtml.Replace('09:00:02', '08:55:00'))
+Assert-RejectedContract 'reject stale HTML revision timestamp' {
+    ConvertTo-UnfamiliarReportEffectHash $reportPath $started $completed
+} 'outside the invocation'
+[IO.File]::WriteAllText($reportPath, $secondHtml + '<meta name="revised" content="2026-01-01 09:00:01">')
+Assert-RejectedContract 'reject duplicate HTML revision metadata' {
+    ConvertTo-UnfamiliarReportEffectHash $reportPath $started $completed
+} 'one viewport and one revision'
+
 $result=[ordered]@{schemaVersion=1;passed=$true;checks=@($checked);checkCount=$checked.Count
     scope='Standalone qualification assertions only; no compiler, SDK, third-party source, lifecycle process, or benchmark executed'
     retainedFixtureRoot=$source}

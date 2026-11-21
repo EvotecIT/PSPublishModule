@@ -277,3 +277,39 @@ function ConvertTo-UnfamiliarScenarioText {
     }
     return $Text
 }
+
+function ConvertTo-UnfamiliarScenarioEffectHash {
+    param([string] $WorkloadId, [string] $RelativePath, [string] $Root, [string] $RawHash,
+        [datetime] $Started, [datetime] $Completed)
+
+    if ($WorkloadId -ceq 'PSWriteHTML' -and $RelativePath -ceq 'report.html') {
+        return ConvertTo-UnfamiliarReportEffectHash (Join-Path $Root $RelativePath) $Started $Completed
+    }
+    return $RawHash
+}
+
+function ConvertTo-UnfamiliarReportEffectHash {
+    param([string] $Path, [datetime] $Started, [datetime] $Completed)
+
+    $utf8 = [Text.UTF8Encoding]::new($false, $true)
+    $html = $utf8.GetString([IO.File]::ReadAllBytes($Path))
+    $meta = [regex] '<meta (?:name="(?<name>viewport|revised)" content="(?<value>[^"]*)"|content="(?<value>[^"]*)" name="(?<name>viewport|revised)")>'
+    $tags = $meta.Matches($html)
+    $revision = @($tags | Where-Object { $_.Groups['name'].Value -ceq 'revised' })
+    $viewport = @($tags | Where-Object { $_.Groups['name'].Value -ceq 'viewport' })
+    if ($revision.Count -ne 1 -or $viewport.Count -ne 1) {
+        throw 'The HTML report must contain one viewport and one revision meta element.'
+    }
+    $timestamp = [DateTime]::ParseExact($revision[0].Groups['value'].Value, 'yyyy-MM-dd HH:mm:ss',
+        [Globalization.CultureInfo]::InvariantCulture)
+    if ($timestamp -lt $Started.AddSeconds(-1) -or $timestamp -gt $Completed) {
+        throw 'The HTML report revision timestamp falls outside the invocation.'
+    }
+    $content = $meta.Replace($html, {
+        param($tag)
+        $name = $tag.Groups['name'].Value
+        $value = if ($name -ceq 'revised') { '<invocation-time>' } else { $tag.Groups['value'].Value }
+        '<meta name="{0}" content="{1}">' -f $name, $value
+    })
+    return [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($utf8.GetBytes($content))).ToLowerInvariant()
+}

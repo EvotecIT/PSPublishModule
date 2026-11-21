@@ -238,6 +238,12 @@ Both source and generated artifacts matched on the two pinned hosts with
 that observation. The starting baseline records the original JSON field
 ordering difference.
 
+The PSWriteHTML report observation validates its revision time against the
+invocation window and canonicalizes the attribute order of its viewport and
+revision metadata. The rest of the report contributes directly to the
+comparison hash. The raw byte hash and invocation window remain in each
+affected case's `.effect-bytes.json` receipt.
+
 Use the built CLI for the revision being assessed and a scratch directory
 outside the source tree. The runner verifies packet hashes before executing
 any source. It requires explicit opt-in to run the pinned third-party inputs

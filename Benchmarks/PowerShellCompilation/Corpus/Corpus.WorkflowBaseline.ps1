@@ -46,18 +46,31 @@ function Invoke-WorkflowCase {
         $arguments = @()
     }
     $arguments += @($Case.arguments)
+    $started = [DateTime]::Now
     $process = Invoke-OwnedProcess -FileName $executable -Arguments $arguments -WorkingDirectory $root -TimeoutSeconds 75 -Environment @{
         NO_COLOR = '1'
         POWERSHELL_TELEMETRY_OPTOUT = '1'
         TEMP = $root
         TMP = $root
     }
+    $completed = [DateTime]::Now
+    Write-Utf8Json ($root + '.process.json') $process
     $after = Get-WorkflowEffectSnapshot $root
     $effects = [ordered]@{}
+    $rawEffects = [ordered]@{}
     foreach ($key in $after.Keys) {
         if (-not $before.Contains($key) -or $before[$key] -ne $after[$key]) {
-            $effects[$key] = $after[$key]
+            $observed = ConvertTo-UnfamiliarScenarioEffectHash $Entry.id $key $root $after[$key] $started $completed
+            $effects[$key] = $observed
+            if ($after[$key] -cne $observed) { $rawEffects[$key] = $after[$key] }
         }
+    }
+    if ($rawEffects.Count) {
+        Write-Utf8Json ($root + '.effect-bytes.json') ([ordered]@{
+            started = $started.ToString('O')
+            completed = $completed.ToString('O')
+            changedFiles = $rawEffects
+        })
     }
     $outcome = [ordered]@{
         id = $Case.id
@@ -67,7 +80,6 @@ function Invoke-WorkflowCase {
         changedFiles = $effects
         removedFiles = @($before.Keys | Where-Object { -not $after.Contains($_) })
     }
-    Write-Utf8Json ($root + '.process.json') $process
     return $outcome
 }
 
