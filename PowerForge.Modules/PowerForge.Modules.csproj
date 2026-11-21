@@ -16,7 +16,8 @@
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
   </PropertyGroup>
   <ItemGroup>
-    <None Update="README.md" Pack="true" PackagePath="/" />
+    <None Remove="README.md" />
+    <None Include="README.md" Pack="true" PackagePath="\" />
     <PackageReference Include="NuGet.Packaging" Version="7.9.0" />
     <PackageReference Include="System.Security.Cryptography.Pkcs" Version="10.0.15" />
   </ItemGroup>
