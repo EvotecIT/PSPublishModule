@@ -827,7 +827,13 @@
       "probe": "local ETW XML to .resx and C# output; invalid XML",
       "artifactTargets": [
         "net10.0"
-      ]
+      ],
+      "resources": {
+        "mode": "Declared",
+        "include": [
+          "ResxGen.psm1"
+        ]
+      }
     }
   ],
   "artifactMatrix": {
