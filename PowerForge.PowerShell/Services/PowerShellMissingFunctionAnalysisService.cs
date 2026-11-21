@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 
 namespace PowerForge;
@@ -15,7 +16,38 @@ internal sealed class PowerShellMissingFunctionAnalysisService : IMissingFunctio
             summaryFiltered: Map(report.SummaryFiltered),
             functions: report.Functions ?? Array.Empty<string>(),
             functionsTopLevelOnly: report.FunctionsTopLevelOnly ?? Array.Empty<string>(),
-            fullyInlinedApprovedModules: ResolveFullyInlinedApprovedModules(report, options));
+            fullyInlinedApprovedModules: ResolveFullyInlinedApprovedModules(report, options))
+        {
+            ApprovedModuleMergeErrors = FindApprovedModuleMergeErrors(report, options),
+            ApprovedModulesUnusedInInput = report.AnalysisComplete
+                ? options.ApprovedModules.Except(
+                    report.ApprovedModuleRuntimeReferences.Concat(report.Summary.Select(command => command.Source)),
+                    StringComparer.OrdinalIgnoreCase).ToArray()
+                : Array.Empty<string>()
+        };
+    }
+
+    private static string[] FindApprovedModuleMergeErrors(MissingFunctionsReport report, MissingFunctionsOptions options)
+    {
+        var approved = new HashSet<string>(options.ApprovedModules, StringComparer.OrdinalIgnoreCase);
+        var references = report.Summary.Where(command => approved.Contains(command.Source)).ToArray();
+        var blockers = references
+            .Where(command => command.ScriptBlock is null || !string.IsNullOrWhiteSpace(command.Error))
+            .Select(command => !string.IsNullOrWhiteSpace(command.Error)
+                ? command.Error
+                : $"'{command.Name}' from '{command.Source}' is a {command.CommandType} and requires its original module.")
+            .ToList();
+        foreach (string module in report.ApprovedModuleRuntimeReferences)
+        {
+            string commands = string.Join(", ", references.Where(command =>
+                string.Equals(command.Source, module, StringComparison.OrdinalIgnoreCase)).Select(command => command.Name));
+            blockers.Add(commands.Length == 0
+                ? $"'{module}' is referenced at runtime."
+                : $"'{module}' is referenced at runtime by: {commands}.");
+        }
+        if (blockers.Count == 0 && approved.Count > 0 && !report.AnalysisComplete)
+            blockers.Add($"A dynamic command prevents proving which helpers are required from: {string.Join(", ", approved.OrderBy(name => name, StringComparer.OrdinalIgnoreCase))}.");
+        return blockers.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
     }
 
     private static string[] ResolveFullyInlinedApprovedModules(

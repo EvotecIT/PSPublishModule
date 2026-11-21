@@ -8,7 +8,7 @@ namespace PowerForge;
 
 internal static partial class ModuleBootstrapperGenerator
 {
-    internal static void Generate(
+    internal static bool Generate(
         string moduleRoot,
         string moduleName,
         ExportSet exports,
@@ -44,7 +44,7 @@ internal static partial class ModuleBootstrapperGenerator
 
         // Avoid overwriting "single file" script modules that keep all code in the PSM1 and do not use folder layout.
         // If there is no Lib and no folder-based layout, leave the existing PSM1 intact.
-        if (!ShouldWriteBootstrapper(hasLib, hasScriptFolders, hasDevelopmentBinaryLoader, forceBootstrapperWrite)) return;
+        if (!ShouldWriteBootstrapper(hasLib, hasScriptFolders, hasDevelopmentBinaryLoader, forceBootstrapperWrite)) return false;
 
         var primaryLibraryName = Path.GetFileNameWithoutExtension(primaryAssemblyName);
         if (string.IsNullOrWhiteSpace(primaryLibraryName)) primaryLibraryName = moduleName;
@@ -90,6 +90,7 @@ internal static partial class ModuleBootstrapperGenerator
             sharedAssemblies: sharedAssemblies,
             preloadSharedAssemblies: preloadSharedAssemblies);
         WritePowerShellFile(psm1Path, psm1Content);
+        return true;
     }
 
     internal static bool ShouldWriteBootstrapper(

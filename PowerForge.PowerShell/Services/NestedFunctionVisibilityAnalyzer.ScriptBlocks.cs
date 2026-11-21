@@ -6,6 +6,31 @@ namespace PowerForge;
 
 internal sealed partial class NestedFunctionVisibilityAnalyzer
 {
+    internal bool IsSynchronousScriptBlock(ScriptBlockExpressionAst expression)
+        => !IsEscapingOrIsolatedScriptBlock(expression);
+
+    internal bool HasEstablishedLocalAlias(CommandAst invocation, string name)
+    {
+        var aliases = GetLocalAliasDeclarations(invocation, name, out var scope);
+        return aliases.Length == 1 &&
+               PowerShellAliasDefinitionPolicy.TryGetLiteralDefinition(aliases[0], out _, out _) &&
+               AliasCanShadowInvocation(aliases[0], invocation) &&
+               CommandDominatesCommandInEffectiveScope(aliases[0], invocation, scope!);
+    }
+
+    internal bool HasLocalAliasDeclaration(CommandAst invocation, string name)
+        => GetLocalAliasDeclarations(invocation, name, out _).Length > 0;
+
+    private CommandAst[] GetLocalAliasDeclarations(CommandAst invocation, string name, out ScriptBlockAst? scope)
+    {
+        scope = FindContainingScriptBlock(invocation);
+        if (scope is null || name.IndexOf('\\') >= 0 || !_aliasDeclarationsByName.TryGetValue(name, out var aliases))
+            return Array.Empty<CommandAst>();
+        var invocationScope = scope;
+        return aliases.Where(alias => !PowerShellAliasDefinitionPolicy.MayWriteOutsideLocalScope(alias) &&
+            ReferenceEquals(FindContainingScriptBlock(alias), invocationScope)).ToArray();
+    }
+
     private bool IsEscapingOrIsolatedScriptBlock(ScriptBlockExpressionAst scriptBlockExpression)
     {
         if (scriptBlockExpression.Parent is not CommandAst invocation)

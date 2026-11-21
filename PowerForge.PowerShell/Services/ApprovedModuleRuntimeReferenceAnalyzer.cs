@@ -37,17 +37,18 @@ internal static class ApprovedModuleRuntimeReferenceAnalyzer
     internal static string[] Find(
         ScriptBlockAst ast,
         IEnumerable<string> commandNames,
+        ISet<string> approvedModules,
         IReadOnlyDictionary<string, ApprovedModuleSource> approvedModuleSources,
         Func<ApprovedModuleSource, string, bool>? typeOwnershipResolver = null)
     {
-        if (approvedModuleSources is null || approvedModuleSources.Count == 0)
+        if (approvedModules.Count == 0)
             return Array.Empty<string>();
 
         var blocked = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var commandName in commandNames ?? Array.Empty<string>())
         {
             var qualifier = GetModuleQualifier(commandName);
-            if (qualifier is not null && approvedModuleSources.ContainsKey(qualifier))
+            if (qualifier is not null && approvedModules.Contains(qualifier))
                 blocked.Add(qualifier);
         }
 
@@ -58,14 +59,14 @@ internal static class ApprovedModuleRuntimeReferenceAnalyzer
                  .Cast<UsingStatementAst>())
         {
             var referencedModule = GetUsingModuleName(statement);
-            if (referencedModule is not null && approvedModuleSources.ContainsKey(referencedModule))
+            if (referencedModule is not null && approvedModules.Contains(referencedModule))
                 blocked.Add(referencedModule);
         }
 
         foreach (var requiredModule in ast.ScriptRequirements?.RequiredModules.AsEnumerable() ?? Enumerable.Empty<ModuleSpecification>())
         {
             var referencedModule = NormalizeModuleReferenceName(requiredModule.Name);
-            if (referencedModule is not null && approvedModuleSources.ContainsKey(referencedModule))
+            if (referencedModule is not null && approvedModules.Contains(referencedModule))
                 blocked.Add(referencedModule);
         }
 
@@ -83,7 +84,7 @@ internal static class ApprovedModuleRuntimeReferenceAnalyzer
                 // Module-management commands can receive their name from pipeline input. With no target in the
                 // command AST, the runtime module cannot be proven and every approved donor must
                 // remain available to the generated module.
-                blocked.UnionWith(approvedModuleSources.Keys);
+                blocked.UnionWith(approvedModules);
                 continue;
             }
 
@@ -92,11 +93,11 @@ internal static class ApprovedModuleRuntimeReferenceAnalyzer
                 foreach (var importedModule in GetStaticModuleNames(target))
                 {
                     var pattern = new WildcardPattern(importedModule, WildcardOptions.IgnoreCase);
-                    blocked.UnionWith(approvedModuleSources.Keys.Where(pattern.IsMatch));
+                    blocked.UnionWith(approvedModules.Where(pattern.IsMatch));
                 }
 
                 if (!IsFullyStaticModuleReference(target))
-                    blocked.UnionWith(approvedModuleSources.Keys);
+                    blocked.UnionWith(approvedModules);
             }
         }
 
