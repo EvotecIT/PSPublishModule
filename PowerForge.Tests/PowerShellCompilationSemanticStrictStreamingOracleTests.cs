@@ -187,6 +187,9 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
             if ($ExitAfter -eq 1) { exit 0 }
             if ($ExitAfter -ge 7) { 'complete' }
             if ($ExitAfter -eq 7) { exit 7 }
+            if ($ExitAfter -eq 9) {
+                Get-ChildItem -Path $Path -Recurse | Select-Object -Property Name,FullName
+            }
             """);
         var tree = Directory.CreateDirectory(Path.Combine(fixture.RootPath, "items")).FullName;
         Directory.CreateDirectory(Path.Combine(tree, "nested"));
@@ -217,7 +220,7 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
             Assert.Equal("System.String", mixed.Success[3].TypeName);
             var host = StrictStreamingHostPath(pin) ??
                 Path.Combine(Environment.SystemDirectory, "WindowsPowerShell", "v1.0", "powershell.exe");
-            foreach (var status in new[] { "0", "1", "7", "8" })
+            foreach (var status in new[] { "0", "1", "7", "8", "9" })
             {
                 var native = await ObserveExitedConsole(host, fixture.RootPath,
                     new[] { "-NoProfile", "-NonInteractive", "-File", fixture.ScriptPath, tree, status }, string.Empty);
@@ -315,6 +318,7 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
             (Array.Empty<string>(), 0),
             (new[] { "." }, 0),
             (new[] { nested, "0", "3.5" }, 0),
+            (new[] { nested, "0", "2147483648.123456" }, 1),
             (new[] { "~", "-ResolveOnly" }, 0),
             (new[] { Path.Combine(tree, "ch?ld", "*.txt"), "-ResolveOnly" }, 0),
             (new[] { tree, int.MaxValue.ToString(System.Globalization.CultureInfo.InvariantCulture) }, 1),

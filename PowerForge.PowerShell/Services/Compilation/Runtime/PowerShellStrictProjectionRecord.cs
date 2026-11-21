@@ -55,15 +55,15 @@ internal sealed class PowerShellStrictProjectionRecord
                 continue;
             }
             var end = index + 1;
-            while (end < Pending.Count && Pending[end] is PowerShellStrictProjectionRecord next &&
-                   first.Names.SequenceEqual(next.Names, StringComparer.Ordinal))
+            while (end < Pending.Count && (Pending[end] is not PowerShellStrictProjectionRecord next ||
+                   first.Names.SequenceEqual(next.Names, StringComparer.Ordinal)))
                 end++;
             if (wroteTable)
             {
                 WriteTableFooter(windowsPowerShell);
                 Console.WriteLine();
             }
-            WriteTable(first.Names, index, end, windowsPowerShell);
+            WriteTable(first.Names, index, end, windowsPowerShell, writeScalar);
             wroteTable = true;
             index = end;
         }
@@ -77,20 +77,23 @@ internal sealed class PowerShellStrictProjectionRecord
         if (windowsPowerShell) Console.WriteLine();
     }
 
-    private static void WriteTable(string[] names, int start, int end, bool windowsPowerShell)
+    private static void WriteTable(string[] names, int start, int end, bool windowsPowerShell, Action<object?> writeScalar)
     {
         var widths = names.Select(static name => name.Length).ToArray();
         for (var index = start; index < end; index++)
         {
-            var record = (PowerShellStrictProjectionRecord)Pending[index]!;
-            for (var column = 0; column < names.Length; column++)
-                widths[column] = Math.Max(widths[column], record.Values[column].Length);
+            if (Pending[index] is PowerShellStrictProjectionRecord record)
+                for (var column = 0; column < names.Length; column++)
+                    widths[column] = Math.Max(widths[column], record.Values[column].Length);
         }
 
         WriteRow(names);
         WriteRow(names.Select(static name => new string('-', name.Length)).ToArray());
         for (var index = start; index < end; index++)
-            WriteRow(((PowerShellStrictProjectionRecord)Pending[index]!).Values);
+            if (Pending[index] is PowerShellStrictProjectionRecord record)
+                WriteRow(record.Values);
+            else
+                writeScalar(Pending[index]);
         void WriteRow(string[] values)
         {
             var columns = values.Select((value, index) => value.PadRight(widths[index]));

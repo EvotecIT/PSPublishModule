@@ -264,6 +264,38 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
     }
 
     [PinnedSemanticHostFact]
+    public async Task StrictLifecyclePreservesPartialOutputWithoutSelectionOnBothPinnedHosts()
+    {
+        using var fixture = OracleFixture.Create("""
+            function Get-Record {
+                [CmdletBinding()]
+                [OutputType([int])]
+                param([Parameter(ValueFromPipeline)][int] $Record)
+                begin {}
+                process {
+                    if ($Record -eq 2) { throw [InvalidOperationException]::new('later failure') }
+                    $Record
+                }
+                end { 99 }
+            }
+            try { return 1,2 | Get-Record }
+            catch { exit 7 }
+            """);
+        foreach (var pin in PowerShellCompilationSemanticHostArtifactPinCatalog.Pins)
+        {
+            var build = BuildStrictStreamingFixture(fixture, "StrictPartialLifecycleOutput", pin.ProfileId);
+            Assert.True(build.Succeeded, build.Error + Environment.NewLine + build.BuildOutput);
+            var host = StrictStreamingHostPath(pin) ??
+                Path.Combine(Environment.SystemDirectory, "WindowsPowerShell", "v1.0", "powershell.exe");
+            var native = await ObserveExitedConsole(host, fixture.RootPath,
+                new[] { "-NoProfile", "-NonInteractive", "-File", fixture.ScriptPath }, string.Empty);
+            var candidate = await ObserveExitedConsole(build.ArtifactPath!, fixture.RootPath, Array.Empty<string>(), string.Empty);
+            Assert.Equal((7, "1" + Environment.NewLine, string.Empty), native);
+            Assert.Equal(native, candidate);
+        }
+    }
+
+    [PinnedSemanticHostFact]
     public void RuntimeFreePipelineLifecycleProcessOutputMatchesPinnedPowerShell76AndInstalledWindowsPowerShell()
     {
         const string source = "function Select-Value { [CmdletBinding()] [OutputType([int])] " +

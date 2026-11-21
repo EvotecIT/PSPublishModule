@@ -169,7 +169,7 @@ internal static class PowerShellTypedExecutableCompiler
         {
             var analyzedFunctions = semantic.Analyzed.Functions.ToDictionary(static function => function.Symbol.StableKey, StringComparer.Ordinal);
             var types = PowerShellSuccessOutputTypePolicy.ResolveTypes(analyzedFunctions[entry.Function.Symbol.StableKey], analyzedFunctions);
-            if (types.Length > 1 && types.All(type => PowerShellStableScalarTypePolicy.IsSupported(type) ||
+            if (types.Length > 1 && types.All(type => PowerShellCompilationSemanticRuntimeFreeArtifactObserver.IsFramedScalarType(type.FullName ?? type.Name) ||
                     type == typeof(Generated.Runtime.PowerShellStrictProjectionRecord)))
                 entryDescription.ClosedSuccessRecordTypes = types.Select(static type => type.FullName!)
                     .OrderBy(static name => name, StringComparer.Ordinal).ToArray();

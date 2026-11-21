@@ -98,7 +98,8 @@ internal static class PowerShellConversionSemanticBinder
                     "An authored cast uses the native conversion binder in the active invocation."), operand, useNativeConversion: true);
         if (targetType == typeof(string) && BindClosedStringConversion(operand) is { } stringValue)
             return stringValue;
-        if (BindClosedNumericConversion(operand, targetType, capabilities) is { } numericValue)
+        var numericErrorLine = GetStrictNumericErrorLine(document, syntax, operand, targetType, capabilities);
+        if (BindClosedNumericConversion(operand, targetType, capabilities, numericErrorLine, semanticProfileId) is { } numericValue)
             return numericValue;
         var usePowerShellLanguageRuntime = !PowerShellClrTypeSemantics.CanAssign(targetType, operand.Type.ClrType);
         if (usePowerShellLanguageRuntime && PowerShellStringificationScopePolicy.RequiresCallerScope(targetType, operand))
@@ -157,18 +158,37 @@ internal static class PowerShellConversionSemanticBinder
 
     /// <summary>Converts a closed numeric union through the runtime-free library's direct CLR exception contract.</summary>
     internal static PowerShellBoundExpression? BindClosedNumericConversion(PowerShellBoundExpression operand,
-        Type targetType, PowerShellCompilationCapability capabilities)
+        Type targetType, PowerShellCompilationCapability capabilities, int? strictErrorLine, string semanticProfileId)
     {
         var isNumericUnion = operand.Type.Provenance == PowerShellTypeFactProvenance.Int32OrDouble;
-        var isStrictDouble = capabilities == PowerShellCompilationCapabilities.TypedExecutable && operand.Type.ClrType == typeof(double);
+        var isStrictDouble = strictErrorLine.HasValue;
         if (targetType != typeof(int) || !(isNumericUnion || isStrictDouble) ||
             capabilities.HasFlag(PowerShellCompilationCapability.PowerShellStatementErrors)) return null;
+        var result = new PowerShellTypeFact(typeof(int), PowerShellTypeFactProvenance.Explicit,
+            "Closed numeric conversion preserves integral values and midpoint-to-even rounding.");
+        if (strictErrorLine is int line)
+        {
+            var lineArgument = new PowerShellBoundLiteralExpression(operand.Span, line, result, PowerShellValueState.Known);
+            var profileArgument = new PowerShellBoundLiteralExpression(operand.Span,
+                semanticProfileId == PowerShellCompilationSemanticOracleCatalog.WindowsPowerShell51ProfileId,
+                new PowerShellTypeFact(typeof(bool), PowerShellTypeFactProvenance.Literal, "The selected host determines numeric error rendering."),
+                PowerShellValueState.Known);
+            return new PowerShellBoundClrInvocationExpression(operand.Span, typeof(Generated.Runtime.PowerShellStrictPipelineOperations),
+                nameof(Generated.Runtime.PowerShellStrictPipelineOperations.ConvertDoubleToInt32),
+                PowerShellClrInvocationKind.StaticMethod, null, PowerShellClrReceiverBehavior.None,
+                new[] { operand, lineArgument, profileArgument }, new[] { typeof(double), typeof(int), typeof(bool) }, result);
+        }
         return new PowerShellBoundClrInvocationExpression(operand.Span, typeof(Convert), nameof(Convert.ToInt32),
             PowerShellClrInvocationKind.StaticMethod, null, PowerShellClrReceiverBehavior.None,
-            new[] { operand }, new[] { isStrictDouble ? typeof(double) : typeof(object) },
-            new PowerShellTypeFact(typeof(int), PowerShellTypeFactProvenance.Explicit,
-                "Closed numeric conversion preserves integral values and midpoint-to-even rounding through the target's CLR conversion contract."));
+            new[] { operand }, new[] { typeof(object) }, result);
     }
+
+    internal static int? GetStrictNumericErrorLine(ParsedSourceDocument document, Ast syntax, PowerShellBoundExpression operand,
+        Type targetType, PowerShellCompilationCapability capabilities)
+        => capabilities == PowerShellCompilationCapabilities.TypedExecutable &&
+           targetType == typeof(int) && operand.Type.ClrType == typeof(double) &&
+           PowerShellStrictCatchObservation.HasContainingUntypedCatch(syntax)
+            ? PowerShellStrictCatchObservation.GetAuthoredLine(document, syntax.Extent) : null;
 
     private static PowerShellBoundExpression BindResolvedLiteral(SourceSpan span, Type targetType, object? value)
     {

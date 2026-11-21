@@ -300,7 +300,8 @@ internal sealed partial class PowerShellSemanticBinder
                 symbols,
                 (item, itemType) => BindExpression(document, item, symbols, functions, diagnostics, itemType, targetFramework, assignmentCapabilities),
                 diagnostics,
-                assignmentCapabilities);
+                assignmentCapabilities,
+                _semanticProfile.ProfileId);
             return mutation is null
                 ? null
                 : new PowerShellBoundAssignmentStatement(

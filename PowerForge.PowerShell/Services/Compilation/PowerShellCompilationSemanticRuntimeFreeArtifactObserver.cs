@@ -262,10 +262,16 @@ public sealed class PowerShellCompilationSemanticRuntimeFreeArtifactObserver
             throw new InvalidOperationException("The Strict executable primary artifact identity differs from its compiler manifest.");
     }
 
-    private static void RequireObservableOutputContract(PowerShellCompilationAbiMethod method, CultureInfo culture)
+    internal static void RequireObservableOutputContract(PowerShellCompilationAbiMethod method, CultureInfo culture)
     {
         _ = culture;
         var cardinality = method.OutputCardinality;
+        var closedTypes = method.ClosedSuccessRecordTypes;
+        if (closedTypes.Length != 0 &&
+            (!cardinality.Equals("Collection", StringComparison.OrdinalIgnoreCase) || method.CollectionElementType != typeof(object).FullName ||
+             closedTypes.Length < 2 || closedTypes.Distinct(StringComparer.Ordinal).Count() != closedTypes.Length ||
+             closedTypes.Any(type => !IsFramedScalarType(type) && type != typeof(PowerShellStrictProjectionRecord).FullName)))
+            throw new InvalidOperationException("The Strict executable ABI declares an invalid closed success-record contract.");
         if (cardinality.Equals("None", StringComparison.OrdinalIgnoreCase))
         {
             if (method.OutputValueStates.Length != 0 || method.CanProduceNull || method.Nullable)
@@ -286,17 +292,11 @@ public sealed class PowerShellCompilationSemanticRuntimeFreeArtifactObserver
             : method.ReturnType;
         var nullOnly = typeName == typeof(object).FullName &&
             method.OutputValueStates.All(static state => state == "Null");
-        var closedTypes = method.ClosedSuccessRecordTypes;
-        var closedCollection = typeName == typeof(object).FullName && cardinality.Equals("Collection", StringComparison.OrdinalIgnoreCase) &&
-            closedTypes.Length > 1 && closedTypes.Distinct(StringComparer.Ordinal).Count() == closedTypes.Length &&
-            closedTypes.All(type => IsFramedScalarType(type) || type == typeof(PowerShellStrictProjectionRecord).FullName);
-        if (closedTypes.Length != 0 && !closedCollection)
-            throw new InvalidOperationException("The Strict executable ABI declares an invalid closed success-record contract.");
-        if (!IsFramedScalarType(typeName) && !nullOnly && !closedCollection && typeName != typeof(PowerShellStrictProjectionRecord).FullName)
+        if (!IsFramedScalarType(typeName) && !nullOnly && closedTypes.Length == 0 && typeName != typeof(PowerShellStrictProjectionRecord).FullName)
             throw new InvalidOperationException($"The framed Strict observation protocol does not support ABI type '{typeName}'.");
     }
 
-    private static bool IsFramedScalarType(string typeName)
+    internal static bool IsFramedScalarType(string typeName)
     {
         typeName = GetFramedScalarTypeName(typeName);
         return typeName is "System.Boolean" or "System.Byte" or "System.SByte" or "System.Int16" or

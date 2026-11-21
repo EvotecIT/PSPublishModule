@@ -95,7 +95,8 @@ internal static partial class PowerShellMutationSemanticBinder
         IReadOnlyDictionary<string, PowerShellSemanticSymbolBinding> symbols,
         Func<Ast, Type?, PowerShellBoundExpression?> bindExpression,
         ICollection<PowerShellSemanticDiagnostic> diagnostics,
-        PowerShellCompilationCapability capabilities = PowerShellCompilationCapability.None)
+        PowerShellCompilationCapability capabilities = PowerShellCompilationCapability.None,
+        string semanticProfileId = PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId)
     {
         var variable = PowerShellAssignmentTargetPolicy.FindDirectVariable(syntax.Left, capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding));
         if (variable is null || !symbols.TryGetValue(variable.VariablePath.UserPath, out var target))
@@ -157,7 +158,9 @@ internal static partial class PowerShellMutationSemanticBinder
         var value = bindExpression(syntax.Right, contextualType);
         if (value is null) return null;
         if (operation == PowerShellBoundMutationOperator.Assign && target.Type.Provenance == PowerShellTypeFactProvenance.Explicit &&
-            PowerShellConversionSemanticBinder.BindClosedNumericConversion(value, targetType, capabilities) is { } convertedNumeric)
+            PowerShellConversionSemanticBinder.BindClosedNumericConversion(value, targetType, capabilities,
+                PowerShellConversionSemanticBinder.GetStrictNumericErrorLine(document, syntax, value, targetType, capabilities),
+                semanticProfileId) is { } convertedNumeric)
             value = convertedNumeric;
         if (target.Type.Provenance == PowerShellTypeFactProvenance.Int32OrDouble)
         {
