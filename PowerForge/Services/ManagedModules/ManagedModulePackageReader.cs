@@ -115,6 +115,7 @@ public sealed class ManagedModulePackageReader
             Dependencies = SelectInstallableDependencies(nuspecDependencies, manifest.Dependencies, manifest.ExternalModuleDependencies),
             ModuleManifestPath = manifest.Path,
             ModuleManifestVersion = manifest.Version,
+            ModuleManifestGuid = manifest.Guid,
             ModuleManifestPrerelease = manifest.Prerelease,
             ManifestDependencies = manifest.Dependencies,
             ManifestExternalModuleDependencies = manifest.ExternalModuleDependencies,
@@ -177,6 +178,10 @@ public sealed class ManagedModulePackageReader
         var version = ModuleManifestTextParser.TryGetTopLevelQuotedStringValue(manifestText, "ModuleVersion", out var manifestVersion)
             ? manifestVersion
             : null;
+        var guid = ModuleManifestTextParser.TryGetTopLevelQuotedStringValue(manifestText, "GUID", out var manifestGuid) &&
+                   Guid.TryParse(manifestGuid, out var parsedGuid)
+            ? parsedGuid
+            : (Guid?)null;
         var prerelease = ModuleManifestValueReader.ReadPsDataStringOrArrayFromText(manifestText, "Prerelease").FirstOrDefault();
         var dependencies = ReadManifestDependencies(manifestText);
         var externalDependencies = ModuleManifestValueReader.ReadPsDataStringOrArrayFromText(manifestText, "ExternalModuleDependencies")
@@ -191,7 +196,8 @@ public sealed class ManagedModulePackageReader
             version,
             prerelease,
             dependencies,
-            externalDependencies);
+            externalDependencies,
+            guid);
     }
 
     private static ZipArchiveEntry? SelectManifestEntry(ZipArchive archive, string packageId)
@@ -287,6 +293,7 @@ public sealed class ManagedModulePackageReader
             {
                 Id = module.ModuleName,
                 VersionRange = ToVersionRange(module),
+                RequiredModuleGuid = module.Guid,
                 TargetFramework = null
             })
             .ToArray();
@@ -347,6 +354,7 @@ public sealed class ManagedModulePackageReader
                 {
                     Id = manifestDependency.Id,
                     VersionRange = nuspecDependency.VersionRange,
+                    RequiredModuleGuid = manifestDependency.RequiredModuleGuid,
                     TargetFramework = manifestDependency.TargetFramework ?? nuspecDependency.TargetFramework
                 });
                 continue;
@@ -417,8 +425,10 @@ public sealed class ManagedModulePackageReader
             string? version,
             string? prerelease,
             IReadOnlyList<ManagedModuleDependencyInfo> dependencies,
-            IReadOnlyList<string> externalModuleDependencies)
+            IReadOnlyList<string> externalModuleDependencies,
+            Guid? guid = null)
         {
+            Guid = guid;
             Path = path;
             Version = version;
             Prerelease = prerelease;
@@ -426,6 +436,7 @@ public sealed class ManagedModulePackageReader
             ExternalModuleDependencies = externalModuleDependencies;
         }
 
+        public Guid? Guid { get; }
         public string? Path { get; }
 
         public string? Version { get; }
