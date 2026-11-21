@@ -12,6 +12,7 @@ public sealed partial class MissingFunctionsAnalyzer
     {
         var names = new HashSet<string>(functions.SelectMany(PowerShellAdvancedFunctionPolicy.GetAliases),
             StringComparer.OrdinalIgnoreCase);
+        var sharedNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         bool hasUnknownNames = functions.Any(PowerShellAdvancedFunctionPolicy.HasNonLiteralAlias);
         var scriptLevelCommands = new HashSet<CommandAst>(
             ast.FindAll(static node => node is CommandAst, searchNestedScriptBlocks: false).Cast<CommandAst>());
@@ -20,12 +21,16 @@ public sealed partial class MissingFunctionsAnalyzer
             if (!scriptLevelCommands.Contains(command) && !PowerShellAliasDefinitionPolicy.MayWriteOutsideLocalScope(command))
                 continue;
             if (PowerShellAliasDefinitionPolicy.TryGetLiteralDefinition(command, out string alias, out _))
+            {
                 names.Add(alias);
+                if (PowerShellAliasDefinitionPolicy.MayShareAliasWithChildScopes(command))
+                    sharedNames.Add(alias);
+            }
             else if (PowerShellAliasDefinitionPolicy.IsAliasDefinitionCommand(command) ||
                      PowerShellAliasDefinitionPolicy.TargetsAliasProvider(command, ast))
                 hasUnknownNames = true;
         }
-        return new AuthoredAliases(names, hasUnknownNames);
+        return new AuthoredAliases(names, sharedNames, hasUnknownNames);
     }
 
     private static MissingFunctionCommand[] DistinctResolvedCommands(IEnumerable<MissingFunctionCommand> commands)
@@ -46,6 +51,7 @@ public sealed partial class MissingFunctionsAnalyzer
             if (!rootCommands.Contains(command) &&
                 PowerShellAliasDefinitionPolicy.TryGetLiteralDefinition(command, out _, out string target) &&
                 !PowerShellAliasDefinitionPolicy.MayWriteOutsideLocalScope(command) &&
+                !visibility.HasEstablishedLocalAlias(command, target) &&
                 !visibility.IsDeclaredInVisibleScope(command, target))
                 yield return target;
         }
@@ -70,12 +76,20 @@ public sealed partial class MissingFunctionsAnalyzer
 
             if (PowerShellAliasDefinitionPolicy.MayWriteOutsideLocalScope(command))
                 return "changes the donor alias scope, which cannot be preserved after merging.";
+            if (PowerShellAliasDefinitionPolicy.MayChooseWhetherToSetAlias(command))
+                return "conditionally creates a local alias with WhatIf or Confirm, whose binding cannot be proven after merging.";
             if (!PowerShellAliasDefinitionPolicy.TryGetLiteralDefinition(command, out string alias, out string target))
                 return "creates a local alias whose name or target cannot be resolved statically.";
-            if (consumerAliases.Names.Contains(alias))
-                return $"creates local alias '{alias}', which conflicts with a consumer alias.";
+            if (consumerAliases.SharedNames.Contains(alias))
+                return $"creates local alias '{alias}', which conflicts with a consumer alias shared with child scopes.";
 
             visibility ??= NestedFunctionVisibilityAnalyzer.Create(body);
+            if (visibility.HasLocalAliasDeclaration(command, target))
+            {
+                if (visibility.HasEstablishedLocalAlias(command, target))
+                    continue;
+                return $"creates local alias '{alias}' with target '{target}', whose function-local binding is ambiguous.";
+            }
             if (visibility.IsDeclaredInVisibleScope(command, target))
                 continue;
 
@@ -197,10 +211,11 @@ public sealed partial class MissingFunctionsAnalyzer
 
     private sealed class AuthoredAliases
     {
-        internal AuthoredAliases(HashSet<string> names, bool hasUnknownNames)
-            => (Names, HasUnknownNames) = (names, hasUnknownNames);
+        internal AuthoredAliases(HashSet<string> names, HashSet<string> sharedNames, bool hasUnknownNames)
+            => (Names, SharedNames, HasUnknownNames) = (names, sharedNames, hasUnknownNames);
 
         internal HashSet<string> Names { get; }
+        internal HashSet<string> SharedNames { get; }
         internal bool HasUnknownNames { get; }
     }
 

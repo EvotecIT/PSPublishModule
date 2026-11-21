@@ -24,7 +24,7 @@ public sealed partial class MissingFunctionsAnalyzer
     {
         HashSet<string>? moduleVariableNames = null;
         NestedFunctionVisibilityAnalyzer? visibility = null;
-        bool? canRemoveVariables = null;
+        (CommandAst Command, Func<string, bool>? Affects)[]? removals = null;
         foreach (var variable in root.FindAll(static node => node is VariableExpressionAst, searchNestedScriptBlocks: true)
                      .Cast<VariableExpressionAst>())
         {
@@ -46,10 +46,14 @@ public sealed partial class MissingFunctionsAnalyzer
             moduleVariableNames ??= GetModuleScriptVariableNames(source);
             if (!moduleVariableNames.Contains(name) || IsLocalDeclaration(variable))
                 continue;
-            canRemoveVariables ??= root.Find(static node => node is CommandAst invocation &&
-                invocation.GetCommandName() is { } commandName && IsVariableRemovalCommand(commandName),
-                searchNestedScriptBlocks: true) is not null;
-            if (canRemoveVariables.Value || !HasLocalBinding(variable, root, CanReadEnclosingScope))
+            removals ??= root.FindAll(static node => node is CommandAst, searchNestedScriptBlocks: true)
+                .Cast<CommandAst>()
+                .Select(command => (command, PowerShellVariableRemovalPolicy.ReadAffectedNames(command)))
+                .Where(removal => removal.Item2 is not null)
+                .ToArray();
+            if (removals.Any(removal => removal.Affects!(name) &&
+                    !FollowsReadInSameSingleRunBlock(removal.Command, variable)) ||
+                !HasLocalBinding(variable, root, CanReadEnclosingScope))
                 return path.UserPath;
         }
         return null;
@@ -118,10 +122,25 @@ param($module)
            !name.Equals("true", StringComparison.OrdinalIgnoreCase) &&
            !name.Equals("false", StringComparison.OrdinalIgnoreCase);
 
-    private static bool IsVariableRemovalCommand(string commandName)
-        => GetUnqualifiedCommandName(commandName) is { } leaf &&
-           (leaf.Equals("Remove-Variable", StringComparison.OrdinalIgnoreCase) ||
-            leaf.Equals("rv", StringComparison.OrdinalIgnoreCase));
+    private static bool FollowsReadInSameSingleRunBlock(CommandAst command, VariableExpressionAst read)
+    {
+        if (command.Extent.StartOffset < read.Extent.EndOffset)
+            return false;
+        var block = DirectNamedBlock(read);
+        return block is { BlockKind: TokenKind.Begin or TokenKind.End } && ReferenceEquals(block, DirectNamedBlock(command));
+
+        static NamedBlockAst? DirectNamedBlock(Ast node)
+        {
+            for (Ast? current = node; current is not null; current = current.Parent)
+            {
+                if (current is StatementBlockAst or ScriptBlockAst)
+                    return null;
+                if (current is NamedBlockAst named)
+                    return named;
+            }
+            return null;
+        }
+    }
 
     private static bool IsLocalDeclaration(VariableExpressionAst variable)
     {
@@ -153,6 +172,10 @@ param($module)
                 var parameters = (scope.ParamBlock?.Parameters ?? (scope.Parent as FunctionDefinitionAst)?.Parameters)
                     ?.TakeWhile(item => !ReferenceEquals(item, defaultParameter));
                 if (parameters?.Any(item => comparer.Equals(item.Name.VariablePath.UserPath, name)) == true)
+                    return true;
+                if (defaultParameter is null &&
+                    (ReferenceEquals(scope, root) || scope.Parent is FunctionDefinitionAst) &&
+                    name.Equals("PSBoundParameters", StringComparison.OrdinalIgnoreCase))
                     return true;
                 // begin runs in the same function scope before process and end.
                 if (defaultParameter is null && scope.BeginBlock is { } begin &&

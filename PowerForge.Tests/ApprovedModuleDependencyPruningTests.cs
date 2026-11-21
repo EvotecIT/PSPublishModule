@@ -249,6 +249,11 @@ public sealed class ApprovedModuleDependencyPruningTests
     [InlineData("function Get-SharedAliasTarget { Set-Alias LocalDate Get-Date -Scope Private; if ((LocalDate) -is [datetime]) { 'alias-target' } }; Set-Alias SharedAlias Get-SharedAliasTarget", "private scope alias")]
     [InlineData("$value='module'; function Get-SharedAliasTarget { param($value='alias-target', $result=$value) $result }; Set-Alias SharedAlias Get-SharedAliasTarget", "parameter default")]
     [InlineData("$value='module'; function Get-SharedAliasTarget { param($value='alias-target') 1 | ForEach-Object { $value } }; Set-Alias SharedAlias Get-SharedAliasTarget", "synchronous callback")]
+    [InlineData("$PSBoundParameters=@{value='module'}; function Get-SharedAliasTarget { param($value) $PSBoundParameters['value'] }; Set-Alias SharedAlias Get-SharedAliasTarget", "invocation parameters")]
+    [InlineData("function Get-SharedAliasTarget { Set-Alias LocalDate Get-Date; (LocalDate) -is [datetime] }; Set-Alias SharedAlias Get-SharedAliasTarget", "shadowed consumer alias")]
+    [InlineData("$value='module'; function Get-SharedAliasTarget { param($value='alias-target') $temporary=1; Remove-Variable temporary; $value }; Set-Alias SharedAlias Get-SharedAliasTarget", "unrelated removal")]
+    [InlineData("$value='module'; function Get-SharedAliasTarget { param($value='alias-target') $value; Remove-Variable value }; Set-Alias SharedAlias Get-SharedAliasTarget", "later removal")]
+    [InlineData("function Get-PrivateAliasTarget { 'alias-target' }; function Get-SharedAliasTarget { Set-Alias InnerAlias Get-PrivateAliasTarget; Set-Alias OuterAlias InnerAlias; OuterAlias }; Set-Alias SharedAlias Get-SharedAliasTarget", "local alias chain")]
     public void Run_PackagesApprovedDonorAliasOrReportsANameConflict(string aliasDeclaration, string? conflictScope)
     {
         var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
@@ -275,6 +280,7 @@ public sealed class ApprovedModuleDependencyPruningTests
                 "consumer alias" => "function Get-LocalTarget { 'consumer' }; Set-Alias SharedAlias Get-LocalTarget; ",
                 "nested consumer function" => "function Invoke-DonorAlias { SharedAlias }; ",
                 "nested local alias" => "function Initialize-LocalAlias { Set-Alias SharedAlias Get-ParentThing -Scope Local }; Initialize-LocalAlias; ",
+                "shadowed consumer alias" => "Set-Alias LocalDate Get-Item; ",
                 _ => string.Empty
             };
             string consumerSetup = conflictScope switch
@@ -289,6 +295,8 @@ public sealed class ApprovedModuleDependencyPruningTests
                 "additional alias" => "SharedAlias; (Get-Alias -Name Get-AdditionalFixture).Definition; ",
                 "nested consumer function" => "Invoke-DonorAlias; ",
                 "filter" => "1,2 | SharedAlias; ",
+                "invocation parameters" => "SharedAlias -Value 'bound'; ",
+                "shadowed consumer alias" => "SharedAlias; (Get-Alias LocalDate).Definition; ",
                 _ => "SharedAlias; "
             };
             WriteModule(root, "source",
@@ -341,7 +349,8 @@ public sealed class ApprovedModuleDependencyPruningTests
                 missingFunctionAnalysisService: new PowerShellMissingFunctionAnalysisService());
             if (conflictScope is not (null or "qualified cmdlet" or "additional alias" or "filter" or "nested local alias"
                 or "current function name" or "local bindings" or "local alias target" or "private scope alias"
-                or "parameter default" or "synchronous callback"))
+                or "parameter default" or "synchronous callback" or "invocation parameters" or "shadowed consumer alias"
+                or "unrelated removal" or "later removal" or "local alias chain"))
             {
                 var error = Assert.Throws<InvalidOperationException>(() => runner.Run(spec, runner.Plan(spec)));
                 Assert.Contains("SharedAlias", error.Message);
@@ -382,6 +391,8 @@ public sealed class ApprovedModuleDependencyPruningTests
                 "filter" => new[] { "parent-copy", "alias-1", "alias-2" },
                 "current function name" => new[] { "parent-copy", "Get-SharedAliasTarget" },
                 "local bindings" => new[] { "parent-copy", "local", "parameter" },
+                "invocation parameters" => new[] { "parent-copy", "bound" },
+                "shadowed consumer alias" => new[] { "parent-copy", "True", "Get-Item" },
                 _ => new[] { "parent-copy", "alias-target" }
             };
             Assert.Equal(expected, output.Select(item => item.BaseObject.ToString()));
@@ -419,6 +430,10 @@ public sealed class ApprovedModuleDependencyPruningTests
     [InlineData("module state in callback", "Get-SharedEntry", "SharedValue")]
     [InlineData("escaping callback", "Get-SharedEntry", "SharedValue")]
     [InlineData("removed local binding", "Get-SharedEntry", "SharedValue")]
+    [InlineData("provider removal", "Get-SharedEntry", "SharedValue")]
+    [InlineData("conditional alias", "Get-SharedEntry", "WhatIf or Confirm")]
+    [InlineData("shared consumer alias", "Get-SharedEntry", "shared with child scopes")]
+    [InlineData("local alias cycle", "Get-SharedEntry", "function-local binding is ambiguous")]
     public void Run_RejectsUnpreservableApprovedDonorCommands(
         string scenario, string commandOrModule, string reason)
     {
@@ -442,6 +457,10 @@ public sealed class ApprovedModuleDependencyPruningTests
                 "module state in callback" => "$SharedValue = 'donor'; function Get-SharedEntry { 1 | ForEach-Object { $SharedValue } }",
                 "escaping callback" => "$SharedValue = 'donor'; function Get-SharedEntry { param($SharedValue='local') { $SharedValue } }",
                 "removed local binding" => "$SharedValue = 'donor'; function Get-SharedEntry { param($SharedValue='local') Remove-Variable SharedValue; 1 | ForEach-Object { $SharedValue } }",
+                "provider removal" => "$SharedValue = 'donor'; function Get-SharedEntry { param($SharedValue='local') . Remove-Item -LiteralPath Variable:SharedValue; $SharedValue }",
+                "conditional alias" => "function Get-PrivateAliasTarget { 'donor' }; function Get-SharedEntry { Set-Alias Get-Date Get-PrivateAliasTarget -wi; Get-Date }",
+                "shared consumer alias" => "function Get-SharedEntry { Set-Alias LocalDate Get-Date; (LocalDate) -is [datetime] }",
+                "local alias cycle" => "function Get-SharedEntry { Set-Alias FirstAlias SecondAlias; Set-Alias SecondAlias FirstAlias; FirstAlias }",
                 _ => "function Get-SharedHelper { 'donor' }; function Get-SharedEntry { Get-SharedHelper }"
             };
             if (scenario != "unbound runtime import")
@@ -452,6 +471,7 @@ public sealed class ApprovedModuleDependencyPruningTests
                     "function Get-SharedHelper { 'consumer' }; function Get-ConsumerThing { Get-SharedHelper; Get-SharedEntry }",
                 "nested script alias" =>
                     "function Get-LocalEntry { 'consumer' }; function Initialize-SharedAliases { Set-Alias Get-SharedHelper Get-LocalEntry -Scope Script }; Initialize-SharedAliases; function Get-ConsumerThing { Get-SharedEntry }",
+                "shared consumer alias" => "Set-Alias LocalDate Get-Item -Option AllScope; function Get-ConsumerThing { Get-SharedEntry }",
                 "computed consumer alias" =>
                     "function Get-LocalEntry { [Alias(('Get-' + 'SharedAlias'))] param() 'consumer' }; function Get-ConsumerThing { Get-SharedAlias; Get-SharedEntry }",
                 "consumer cmdlet" => "function Get-ConsumerThing { Get-Date | Out-Null; Get-SharedEntry }",

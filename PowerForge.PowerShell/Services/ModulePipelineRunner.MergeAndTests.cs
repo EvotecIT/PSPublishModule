@@ -85,9 +85,9 @@ public sealed partial class ModulePipelineRunner
                 : Array.Empty<string>();
             missingReport = AnalyzeMissingFunctionsWithHeartbeat(analysisPath, analysisCode, plan, binaryCommands);
             LogMergeSummary(plan, mergeInfo, missingReport, dependentRequiredModules);
+            ValidateApprovedDonorMerge(plan, missingReport, approvedModules);
             if (missingReport is not null)
                 ValidateMissingFunctions(missingReport, plan, dependentRequiredModules);
-            ValidateApprovedDonorMerge(plan, missingReport, approvedModules);
         }
 
         var mergeOutcome = ModuleMergeApplier.Apply(_logger, plan, mergeInfo, missingReport);
