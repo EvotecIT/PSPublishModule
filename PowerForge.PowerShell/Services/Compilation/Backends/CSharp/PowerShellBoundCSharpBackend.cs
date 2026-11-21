@@ -250,6 +250,8 @@ internal sealed partial class PowerShellBoundCSharpBackend
                     if (runtimeFreeExecutable)
                     {
                         var userException = $"{clause.ExceptionTemporary} is not global::PowerForge.Compiled.PowerShellScriptExit";
+                        if (_emittingStrictPipelineClause)
+                            userException += $" && {clause.ExceptionTemporary} is not global::PowerForge.Generated.Runtime.PowerShellStrictPipelineStopSignal";
                         filter = clause.ExceptionTypes.Length == 0 ? userException : $"{userException} && ({filter})";
                     }
                     builder.Append(prefix).Append("catch (global::System.Exception ")
@@ -295,6 +297,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
         {
             PowerShellLoweredNativeReferenceExpression reference => "__nativeFunction.GetVariableReference(" + PowerShellCSharpLiteral.QuoteString(reference.Name) + ", " + (reference.DirectLocal ? "true" : "false") + ")",
             PowerShellLoweredLiteralExpression literal => EmitLiteral(literal),
+            PowerShellLoweredStrictSuccessSinkExpression => "__writeOutput",
             PowerShellLoweredNativeVariableExpression variable => EmitNativeVariableRead(variable),
             PowerShellLoweredNativeScriptBlockExpression block => EmitNativeBlockValue(block),
             PowerShellLoweredTransportedScriptBlockExpression block => "__nativeFunction.CreateTransportedScriptBlock(" +

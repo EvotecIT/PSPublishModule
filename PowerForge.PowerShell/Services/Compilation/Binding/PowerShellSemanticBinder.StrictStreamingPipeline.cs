@@ -23,9 +23,13 @@ internal sealed partial class PowerShellSemanticBinder
     {
         streaming = null;
         var diagnosticCount = diagnostics.Count;
-        if (binding is null || !TryGetStrictStreamingPipeline(statement, symbols, out var pipeline, out var capture) ||
-            !TryBindStrictStreamingPipeline(document, pipeline, symbols, functions, binding.LocalFunctionNames, preceding,
-                diagnostics, isTerminal || statement is ReturnStatementAst, targetFramework, binding.GeneratedLocals, capture, out streaming))
+        if (binding is null || !TryGetStrictStreamingPipeline(statement, symbols, out var pipeline, out var capture))
+            return false;
+        if (capture is null && TryDescribeComposedLifecycle(pipeline, functions, out var composition))
+            streaming = BindComposedLifecycle(composition, pipeline, document, symbols, functions, diagnostics, targetFramework,
+                binding.GeneratedLocals);
+        else if (!TryBindStrictStreamingPipeline(document, pipeline, symbols, functions, binding.LocalFunctionNames, preceding,
+                     diagnostics, isTerminal || statement is ReturnStatementAst, targetFramework, binding.GeneratedLocals, capture, out streaming))
             return false;
         if (streaming is null)
         {

@@ -101,16 +101,22 @@ internal sealed partial class PowerShellSemanticBinder
                 signature.SetPipelineLifecycleReturnsCollection();
         }
         if (capabilities == PowerShellCompilationCapabilities.TypedExecutable &&
-            functionsByName.Values.Any(static signature => signature.PipelineLifecycleReturnsCollection))
+            functionsByName.Values.Any(static signature => signature.IsPipelineLifecycle))
         {
             var ownsExecutableEntry = orderedDocuments.Any(static document => document.AuthoredProjection is not null);
             if (ownsExecutableEntry)
                 foreach (var signature in functionsByName.Values.Where(static signature => signature.PipelineLifecycleReturnsCollection))
                     signature.PipelineLifecycleStreamsOutput = true;
             foreach (var pipeline in orderedDocuments.SelectMany(static document =>
-                         document.SyntaxRoot.FindAll(static node => node is PipelineAst { PipelineElements.Count: 3 }, searchNestedScriptBlocks: true))
+                         document.SyntaxRoot.FindAll(static node => node is PipelineAst { PipelineElements.Count: 3 or 4 }, searchNestedScriptBlocks: true))
                      .OfType<PipelineAst>())
             {
+                if (TryDescribeComposedLifecycle(pipeline, functionsByName, out var composition))
+                {
+                    composition.Upstream.PipelineLifecycleSupportsComposition = true;
+                    composition.Downstream.PipelineLifecycleSupportsComposition = true;
+                    continue;
+                }
                 if (TryGetRuntimeFreePipelineLifecycleSelection(pipeline, functionsByName, capabilities, out var limit) &&
                     limit > 0 && pipeline.PipelineElements[1] is CommandAst target &&
                     TryGetLocalFunction(target, functionsByName, out var signature))

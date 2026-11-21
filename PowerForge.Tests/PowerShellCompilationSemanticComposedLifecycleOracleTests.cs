@@ -1,0 +1,211 @@
+using PowerForge;
+using Xunit;
+
+namespace PowerForge.Tests;
+
+public sealed partial class PowerShellCompilationSemanticOracleTests
+{
+    [PinnedSemanticHostFact]
+    public async Task StrictComposedLifecycleMatchesBothPinnedHosts()
+    {
+        const string source = """
+            param([switch] $Take, [switch] $EmitLeft, [switch] $EmitRight, [switch] $FailLeft,
+                  [switch] $FailRight, [switch] $FailRecord, [switch] $Empty, [switch] $Direct, [switch] $Repeat,
+                  [switch] $Count, [switch] $CountDirect)
+
+            function Send-Record {
+                [CmdletBinding()]
+                [OutputType([int])]
+                param([Parameter(ValueFromPipeline)][int] $Record, [switch] $Emit, [switch] $Fail)
+                begin {
+                    [int] $seen = 0
+                    [IO.File]::AppendAllText('trace.txt', 'left:begin;')
+                    if ($Fail) { throw [InvalidOperationException]::new('left begin failure') }
+                    if ($Emit) { 10 }
+                    [IO.File]::AppendAllText('trace.txt', 'left:begin-resumed;')
+                }
+                process {
+                    $seen++
+                    [IO.File]::AppendAllText('trace.txt', "left:before:${Record}:${seen};")
+                    try {
+                        $Record
+                        [IO.File]::AppendAllText('trace.txt', 'left:resumed;')
+                    } catch {
+                        [IO.File]::AppendAllText('trace.txt', 'left:caught;')
+                    } finally {
+                        [IO.File]::AppendAllText('trace.txt', 'left:finally;')
+                    }
+                }
+                end {
+                    [IO.File]::AppendAllText('trace.txt', "left:end:${seen};")
+                    30
+                }
+                # LEFT_CLEAN
+            }
+
+            function Receive-Record {
+                [CmdletBinding()]
+                [OutputType([int])]
+                param([Parameter(ValueFromPipeline)][int] $Record, [switch] $Emit,
+                      [switch] $FailBegin, [switch] $FailProcess)
+                begin {
+                    [int] $seen = 0
+                    [IO.File]::AppendAllText('trace.txt', 'right:begin;')
+                    if ($FailBegin) { throw [InvalidOperationException]::new('right begin failure') }
+                    if ($Emit) { 20 }
+                    [IO.File]::AppendAllText('trace.txt', 'right:begin-resumed;')
+                }
+                process {
+                    $seen++
+                    [IO.File]::AppendAllText('trace.txt', "right:before:${Record}:${seen};")
+                    if ($FailProcess) { throw [InvalidOperationException]::new('right process failure') }
+                    $Record
+                    [IO.File]::AppendAllText('trace.txt', 'right:resumed;')
+                }
+                end {
+                    [IO.File]::AppendAllText('trace.txt', "right:end:${seen};")
+                    40
+                }
+                # RIGHT_CLEAN
+            }
+
+            function Measure-RecordCount {
+                [CmdletBinding()]
+                [OutputType([int])]
+                param([Parameter(ValueFromPipeline)][int] $Record)
+                begin { [int] $total = 0 }
+                process {
+                    [IO.File]::AppendAllText('trace.txt', "measure:[${Record}];")
+                    $total++
+                }
+                end { $total }
+            }
+
+            [int[]] $records = 1,2
+            if ($Empty) { $records = @() }
+            try {
+                if ($Take) {
+                    return $records | Send-Record -Emit:$EmitLeft -Fail:$FailLeft |
+                        Receive-Record -Emit:$EmitRight -FailBegin:$FailRight | Select-Object -First 1
+                }
+                if ($Direct) { return $records | Send-Record | Select-Object -First 1 }
+                if ($Repeat) { return $records | Send-Record | Send-Record }
+                if ($Count) { return $records | Send-Record | Measure-RecordCount }
+                if ($CountDirect) { return $records | Measure-RecordCount }
+                return $records | Send-Record -Emit:$EmitLeft -Fail:$FailLeft |
+                    Receive-Record -FailBegin:$FailRight -FailProcess:$FailRecord
+            } catch {
+                [IO.File]::AppendAllText('trace.txt', 'outer:caught;')
+                exit 7
+            }
+            """;
+
+        var cases = new (string[] Options, int Code, string[] Records)[]
+        {
+            (Array.Empty<string>(), 0, new[] { "1", "2", "30", "40" }),
+            (new[] { "Empty" }, 0, new[] { "30", "40" }),
+            (new[] { "Take" }, 0, new[] { "1" }),
+            (new[] { "Take", "EmitLeft" }, 0, new[] { "10" }),
+            (new[] { "Take", "EmitRight" }, 0, new[] { "20" }),
+            (new[] { "FailLeft" }, 7, Array.Empty<string>()),
+            (new[] { "FailRight" }, 7, Array.Empty<string>()),
+            (new[] { "FailRecord" }, 7, Array.Empty<string>()),
+            (new[] { "Direct" }, 0, new[] { "1" }),
+            (new[] { "Repeat" }, 0, new[] { "1", "2", "30", "30" }),
+            (new[] { "Count" }, 0, new[] { "3" }),
+            (new[] { "CountDirect" }, 0, new[] { "2" })
+        };
+        foreach (var pin in PowerShellCompilationSemanticHostArtifactPinCatalog.Pins)
+        {
+            var supportsClean = pin.ProfileId == PowerShellCompilationSemanticOracleCatalog.PowerShell76ProfileId;
+            using var fixture = OracleFixture.Create(supportsClean
+                ? source.Replace("# LEFT_CLEAN", Cleanup("left"), StringComparison.Ordinal)
+                    .Replace("# RIGHT_CLEAN", Cleanup("right"), StringComparison.Ordinal)
+                : source);
+            var build = BuildStrictStreamingFixture(fixture, "StrictComposedLifecycle", pin.ProfileId);
+            Assert.True(build.Succeeded, build.Error + Environment.NewLine + build.BuildOutput);
+            Assert.False(build.Manifest!.RequiresPowerShellRuntime);
+            Assert.True(build.Manifest.DependencyClosureVerified);
+            var host = StrictStreamingHostPath(pin) ??
+                Path.Combine(Environment.SystemDirectory, "WindowsPowerShell", "v1.0", "powershell.exe");
+            var tracePath = Path.Combine(fixture.RootPath, "trace.txt");
+            foreach (var scenario in cases)
+            {
+                var nativeArgs = new[] { "-NoProfile", "-NonInteractive", "-File", fixture.ScriptPath }
+                    .Concat(scenario.Options.Select(static option => "-" + option)).ToArray();
+                var native = await ObserveExitedConsole(host, fixture.RootPath, nativeArgs, string.Empty);
+                Assert.Equal(scenario.Code, native.Code);
+                Assert.Equal(scenario.Records, native.Output.Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries));
+                Assert.Empty(native.Error);
+                var trace = File.ReadAllText(tracePath);
+                File.Delete(tracePath);
+                var compiled = await ObserveExitedConsole(build.ArtifactPath!, fixture.RootPath,
+                    scenario.Options.Select(static option => "--" + option).ToArray(), string.Empty);
+                Assert.Equal(native, compiled);
+                Assert.Equal(trace, File.ReadAllText(tracePath));
+                File.Delete(tracePath);
+            }
+        }
+
+        static string Cleanup(string side)
+            => $$"""
+                clean {
+                    try { [IO.File]::AppendAllText('trace.txt', '{{side}}:clean;') } catch {}
+                    99
+                }
+                """;
+    }
+
+    [PinnedSemanticHostFact]
+    public async Task StrictComposedLifecycleBindsNullBeforeForwardingTypedScalarRecords()
+    {
+        using var fixture = OracleFixture.Create("""
+            function Send-Record {
+                [CmdletBinding()]
+                [OutputType([string])]
+                param([Parameter(ValueFromPipeline)][string] $Record)
+                begin { [IO.File]::AppendAllText('trace.txt', 'send:begin;') }
+                process {
+                    $null
+                    $Record
+                    [IO.File]::AppendAllText('trace.txt', 'send:resumed;')
+                }
+                end {}
+            }
+            function Measure-Record {
+                [CmdletBinding()]
+                [OutputType([int])]
+                param([Parameter(ValueFromPipeline)][string] $Record)
+                begin { [IO.File]::AppendAllText('trace.txt', 'measure:begin;') }
+                process {
+                    [IO.File]::AppendAllText('trace.txt', "measure:input:[${Record}];")
+                    $Record.Length
+                }
+                end {}
+            }
+            [string[]] $data = 'abc','longer'
+            return $data | Send-Record | Measure-Record | Select-Object -First 2
+            """);
+        var tracePath = Path.Combine(fixture.RootPath, "trace.txt");
+        foreach (var pin in PowerShellCompilationSemanticHostArtifactPinCatalog.Pins)
+        {
+            var build = BuildStrictStreamingFixture(fixture, "StrictComposedScalarTypes", pin.ProfileId);
+            Assert.True(build.Succeeded, build.Error + Environment.NewLine + build.BuildOutput);
+            var host = StrictStreamingHostPath(pin) ??
+                Path.Combine(Environment.SystemDirectory, "WindowsPowerShell", "v1.0", "powershell.exe");
+            var original = await ObserveExitedConsole(host, fixture.RootPath,
+                new[] { "-NoProfile", "-NonInteractive", "-File", fixture.ScriptPath }, string.Empty);
+            Assert.Equal((0, $"0{Environment.NewLine}3{Environment.NewLine}", string.Empty), original);
+            Assert.Equal("send:begin;measure:begin;measure:input:[];measure:input:[abc];", File.ReadAllText(tracePath));
+            File.Delete(tracePath);
+            var compiled = await ObserveExitedConsole(build.ArtifactPath!, fixture.RootPath, Array.Empty<string>(), string.Empty);
+            Assert.Equal(original, compiled);
+            Assert.Equal("send:begin;measure:begin;measure:input:[];measure:input:[abc];", File.ReadAllText(tracePath));
+            File.Delete(tracePath);
+            var observer = new PowerShellCompilationSemanticRuntimeFreeArtifactObserver();
+            var observed = observer.Observe(pin.ProfileId, build, Array.Empty<string>());
+            Assert.Equal(2, observed.Success.Length);
+            Assert.All(observed.Success, static record => Assert.Equal("System.Int32", record.TypeName));
+        }
+    }
+}

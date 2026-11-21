@@ -197,8 +197,9 @@ internal sealed partial class PowerShellTypedLowerer
             if (function.NativeFunctionBinding is not null) localTypes.Clear();
             var symbolTypes = function.Parameters.ToDictionary(static parameter => parameter.Symbol.StableKey, static parameter => parameter.Type.ClrType, StringComparer.Ordinal);
             foreach (var local in function.Locals) symbolTypes[local.Symbol.StableKey] = local.Type.ClrType;
+            var sharesLifecycleLocals = function.Parameters.Any(static parameter => IsStrictStageType(parameter.Type.ClrType));
             var names = new LoweredFunctionScope(function.Parameters.Select(static parameter => parameter.Symbol.Name)
-                .Concat(function.Locals.Select(static local => local.Symbol.Name)), symbolTypes, localTypes, declared);
+                .Concat(function.Locals.Select(static local => local.Symbol.Name)), symbolTypes, localTypes, declared, sharesLifecycleLocals);
             var topLevelAssignments = function.Body.Statements.OfType<PowerShellBoundAssignmentStatement>()
                 .GroupBy(static assignment => assignment.Target.StableKey, StringComparer.Ordinal)
                 .ToDictionary(static group => group.Key, static group => group.Min(assignment => assignment.Span.StartOffset), StringComparer.Ordinal);
@@ -209,6 +210,8 @@ internal sealed partial class PowerShellTypedLowerer
                 .Distinct(StringComparer.Ordinal)
                 .OrderBy(static key => key, StringComparer.Ordinal)
                 .ToArray();
+            if (sharesLifecycleLocals)
+                predeclared = localTypes.Keys.OrderBy(static key => key, StringComparer.Ordinal).ToArray();
             foreach (var key in predeclared)
             {
                 var local = function.Locals.Single(candidate => candidate.Symbol.StableKey == key);
@@ -273,6 +276,9 @@ internal sealed partial class PowerShellTypedLowerer
             targetCapabilities,
             program.SemanticHostFamily);
     }
+
+    internal static bool IsStrictStageType(Type type)
+        => type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Generated.Runtime.PowerShellStrictPipelineStage<>);
 
     private static void CloseLoweringDependencies(List<PowerShellLoweredFunction> functions,
         PowerShellBoundProgram program, ICollection<PowerShellSemanticDiagnostic> diagnostics)
@@ -632,7 +638,7 @@ internal sealed partial class PowerShellTypedLowerer
             LowerExpression(loop.Collection, functions, names, targetCapabilities),
             loop.EnumerationKind,
             LowerStatements(loop.Body, functions, symbolTypes, localTypes, declared, names, targetCapabilities),
-            loop.DeclareVariable,
+            loop.DeclareVariable && !(names.SharesLifecycleLocals && localTypes.ContainsKey(loop.Variable.StableKey)),
             loop.NullCollectionElement is null
                 ? null
                 : LowerExpression(loop.NullCollectionElement, functions, names, targetCapabilities),

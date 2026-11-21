@@ -195,6 +195,7 @@ internal static class PowerShellTypedExecutableCompiler
             .Where(static type => type == typeof(Generated.Runtime.PowerShellStrictFileSystemReader) ||
                 type == typeof(Generated.Runtime.PowerShellStrictCsvReader) ||
                 type == typeof(Generated.Runtime.PowerShellStrictPipelineOperations) ||
+                type == typeof(Generated.Runtime.PowerShellStrictPipelineComposition) ||
                 type == typeof(Generated.Runtime.PowerShellStrictConsoleProgress) ||
                 type == typeof(Generated.Runtime.PowerShellStrictProjectionRecord))
             .Select(static type => type.Name).Distinct(StringComparer.Ordinal).ToArray();

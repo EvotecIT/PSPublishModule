@@ -114,6 +114,23 @@ around fallible operations.
 [Upstream source revision](https://github.com/fleschutz/PowerShell/tree/50082bcec78864a42527a4291b34d4af7fdb8be9/scripts).
 [Pinned oracle tests](../PowerForge.Tests/PowerShellCompilationSemanticStrictStreamingOracleTests.cs).
 
+### Composed Strict lifecycle pipelines
+
+A typed array can feed two local advanced functions in a standalone Strict
+statement or explicit return. Records from the first stage reach the second
+before the first resumes, including records emitted during `begin` and
+`end`. Both stages keep their own local state. A terminal
+`Select-Object -First` stops the active producers at the selected record.
+Authored `finally` blocks still run, and a downstream error can reach an
+upstream author catch. PowerShell 7 `clean` runs in source order for each
+started stage and discards its success output.
+
+NativeAOT executables on Windows x64 and Linux x64 match six reference
+scenarios for ordered output, trace files, and exit status. The Windows
+run uses an empty .NET lookup directory. The Linux run uses an isolated
+filesystem with the executable and its native OS libraries.
+[Pinned oracle tests](../PowerForge.Tests/PowerShellCompilationSemanticComposedLifecycleOracleTests.cs).
+
 ## Additional published Gallery packages
 
 Eight additional version-pinned Gallery packages were measured with the Hybrid

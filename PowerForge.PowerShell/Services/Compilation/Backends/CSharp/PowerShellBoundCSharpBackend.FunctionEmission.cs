@@ -20,7 +20,9 @@ internal sealed partial class PowerShellBoundCSharpBackend
         var sourceMap = new List<PowerShellCompilationSourceMapEntry>();
         var nestedBodies = new List<PowerShellCompiledBodyIdentity>();
         var parameterParts = function.Parameters.Select(parameter =>
-            $"{PowerShellCSharpSymbolRenderer.TypeName(parameter.ClrType)} {PowerShellCSharpSymbolRenderer.Identifier(parameter.Symbol.Name)}").ToList();
+            PowerShellCSharpSymbolRenderer.TypeName(parameter.ClrType) +
+            (PowerShellTypedLowerer.IsStrictStageType(parameter.ClrType) ? "? " : " ") +
+            PowerShellCSharpSymbolRenderer.Identifier(parameter.Symbol.Name)).ToList();
         if (function.NativeFunctionBinding is not null)
             parameterParts = new List<string> { "global::PowerForge.Generated.Runtime.PowerShellNativeFunctionContext __nativeFunction" };
         var requiresBoundParameters = function.NativeFunctionBinding is null && (function.RequiresPowerShellBoundParameters || function.Parameters.Any(parameter =>
@@ -47,7 +49,9 @@ internal sealed partial class PowerShellBoundCSharpBackend
         if (!initializer && function.Symbol.Kind != PowerShellSymbolKind.NativeScriptBlock)
             AppendPublicMethodDocumentation(builder, function);
         builder.Append(initializer ? "    private " : function.Symbol.Kind == PowerShellSymbolKind.NativeScriptBlock ? "    private static " :
-                function.Symbol.Kind == PowerShellSymbolKind.ConditionalFunction ? "    internal static " : managedInstance ? "    public " : "    public static ")
+                function.Symbol.Kind == PowerShellSymbolKind.ConditionalFunction ||
+                function.Parameters.Any(static parameter => PowerShellTypedLowerer.IsStrictStageType(parameter.ClrType))
+                    ? "    internal static " : managedInstance ? "    public " : "    public static ")
             .Append(PowerShellCSharpSymbolRenderer.TypeName(function.ReturnType))
             .Append(' ')
             .Append(function.GeneratedName)
@@ -97,8 +101,9 @@ internal sealed partial class PowerShellBoundCSharpBackend
         if (transfersCapturedReturn)
             builder.Append(new string(' ', bodyIndent * 4)).AppendLine("try")
                 .Append(new string(' ', bodyIndent * 4)).AppendLine("{");
-        foreach (var statement in function.Statements)
-            EmitStatement(builder, statement, bodyIndent + (transfersCapturedReturn ? 1 : 0), GetTemporaryIdentifier, discardHelper, sourceMap);
+        if (!TryEmitStrictPipelineStage(builder, function, bodyIndent, GetTemporaryIdentifier, discardHelper, sourceMap))
+            foreach (var statement in function.Statements)
+                EmitStatement(builder, statement, bodyIndent + (transfersCapturedReturn ? 1 : 0), GetTemporaryIdentifier, discardHelper, sourceMap);
         if (transfersCapturedReturn)
             builder.Append(new string(' ', bodyIndent * 4)).AppendLine("}")
                 .Append(new string(' ', bodyIndent * 4)).AppendLine("catch (global::PowerForge.Generated.Runtime.PowerShellCapturedReturnSignal) { return; }");
