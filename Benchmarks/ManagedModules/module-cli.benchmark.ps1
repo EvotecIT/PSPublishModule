@@ -43,10 +43,13 @@ New-BenchmarkSuite 'managed-module-cli' -OutputRoot $outputRoot {
         $run.Scratch = Join-Path $workRoot ([guid]::NewGuid().ToString('N'))
         $run.Destination = Join-Path $run.Scratch 'Modules'
         $run.Log = Join-Path $run.Scratch 'output.log'
-        $run.BundleRoot = if ($case.Name -eq 'FirstBundleUse') {
+        $run.BundleRoot = if ($case.Scenario -eq 'FirstBundleUse') {
             Join-Path $run.Scratch 'bundle'
         } else {
             Join-Path $workRoot 'warm-bundle'
+        }
+        if ($case.Scenario -eq 'FirstBundleUse' -and (Test-Path -LiteralPath $run.BundleRoot)) {
+            throw 'First bundle use requires an empty extraction directory.'
         }
         New-Item -ItemType Directory -Path $run.Scratch -Force | Out-Null
         $name = $case.Modules | Select-Object -First 1
@@ -93,6 +96,9 @@ New-BenchmarkSuite 'managed-module-cli' -OutputRoot $outputRoot {
         try {
             if ($run.ExitCode -ne 0) {
                 throw "$($case.Engine) failed with exit code $($run.ExitCode): $(Get-Content -LiteralPath $run.Log -Raw)"
+            }
+            if ($case.Scenario -eq 'FirstBundleUse' -and $case.Engine -eq 'PowerForge') {
+                Assert-BenchmarkPath $run.BundleRoot
             }
             if ($case.Modules.Count -eq 0) {
                 if ((Get-Content -LiteralPath $run.Log -Raw) -notmatch [regex]::Escape($run.HelpPattern)) {
