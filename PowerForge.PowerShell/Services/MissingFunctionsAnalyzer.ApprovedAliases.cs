@@ -13,8 +13,12 @@ public sealed partial class MissingFunctionsAnalyzer
         var names = new HashSet<string>(functions.SelectMany(PowerShellAdvancedFunctionPolicy.GetAliases),
             StringComparer.OrdinalIgnoreCase);
         bool hasUnknownNames = functions.Any(PowerShellAdvancedFunctionPolicy.HasNonLiteralAlias);
-        foreach (var command in ast.FindAll(node => node is CommandAst, searchNestedScriptBlocks: false).Cast<CommandAst>())
+        var scriptLevelCommands = new HashSet<CommandAst>(
+            ast.FindAll(static node => node is CommandAst, searchNestedScriptBlocks: false).Cast<CommandAst>());
+        foreach (var command in ast.FindAll(static node => node is CommandAst, searchNestedScriptBlocks: true).Cast<CommandAst>())
         {
+            if (!scriptLevelCommands.Contains(command) && !PowerShellAliasDefinitionPolicy.MayWriteOutsideLocalScope(command))
+                continue;
             if (PowerShellAliasDefinitionPolicy.TryGetLiteralDefinition(command, out string alias, out _))
                 names.Add(alias);
             else if (PowerShellAliasDefinitionPolicy.IsAliasDefinitionCommand(command) ||
@@ -30,8 +34,9 @@ public sealed partial class MissingFunctionsAnalyzer
             .Select(group => group.FirstOrDefault(command => !string.IsNullOrWhiteSpace(command.Error)) ?? group.First())
             .ToArray();
 
-    private static bool RejectUnsafeApprovedBindings(
+    private bool RejectUnsafeApprovedBindings(
         List<MissingFunctionCommand> commands, HashSet<string> approvedModules,
+        IReadOnlyDictionary<string, ApprovedModuleSource> approvedModuleSources,
         HashSet<string> consumerFunctions, ParsedInput consumer,
         List<ApprovedInvocationScope> invocationScopes,
         Func<string, ApprovedModuleSource?, MissingFunctionCommand> resolveInvocation)
@@ -51,9 +56,19 @@ public sealed partial class MissingFunctionsAnalyzer
         foreach (var function in functions)
         {
             string target = GetInlineFunctionName(function);
-            if (FindDonorContextVariable(function.ScriptBlock!) is { } variable)
+            approvedModuleSources.TryGetValue(function.Source, out var source);
+            if (FindDonorContextVariable(function.ScriptBlock!, source) is { } variable)
             {
                 function.Error = $"Command '{function.Name}' from '{function.Source}' uses donor context variable '{variable}', which is unavailable after merging.";
+                continue;
+            }
+            if (function.ScriptBlock!.Ast.Find(static node =>
+                    node is CommandAst command && PowerShellAliasDefinitionPolicy.MayWriteOutsideLocalScope(command),
+                    searchNestedScriptBlocks: true) is CommandAst aliasWrite)
+            {
+                string name = PowerShellAliasDefinitionPolicy.TryGetLiteralDefinition(aliasWrite, out string alias, out _)
+                    ? alias : aliasWrite.GetCommandName() ?? "an alias";
+                function.Error = $"Command '{function.Name}' from '{function.Source}' changes the donor alias scope for '{name}', which cannot be preserved after merging.";
                 continue;
             }
             if (consumer.DeclaredAliases.HasUnknownNames)
@@ -96,7 +111,7 @@ public sealed partial class MissingFunctionsAnalyzer
             }
 
             bool SameTarget(MissingFunctionCommand command)
-                => comparer.Equals(command.Source, function.Source) &&
+                => string.IsNullOrWhiteSpace(command.Error) && comparer.Equals(command.Source, function.Source) &&
                    comparer.Equals(GetInlineFunctionName(command), target);
 
             string DescribeConflict(string name, string scope)
@@ -108,15 +123,6 @@ public sealed partial class MissingFunctionsAnalyzer
 
     private static string GetInlineFunctionName(MissingFunctionCommand command)
         => command.InlineFunctionName ?? command.Name;
-
-    private static string? FindDonorContextVariable(ScriptBlock body)
-        => body.Ast.FindAll(static node => node is VariableExpressionAst, searchNestedScriptBlocks: true)
-            .Cast<VariableExpressionAst>()
-            .Select(static node => node.VariablePath)
-            .FirstOrDefault(static path => path.IsScript ||
-                path.UserPath.Equals("PSScriptRoot", StringComparison.OrdinalIgnoreCase) ||
-                path.UserPath.Equals("PSCommandPath", StringComparison.OrdinalIgnoreCase) ||
-                path.UserPath.Equals("MyInvocation", StringComparison.OrdinalIgnoreCase))?.UserPath;
 
     private static IEnumerable<string> ReadFunctionAliases(MissingFunctionCommand command)
         => command.ScriptBlock!.Attributes.OfType<AliasAttribute>().SelectMany(attribute => attribute.AliasNames);

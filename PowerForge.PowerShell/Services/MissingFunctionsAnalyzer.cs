@@ -207,7 +207,7 @@ public sealed partial class MissingFunctionsAnalyzer
         }
 
         if (isRootAnalysis &&
-            RejectUnsafeApprovedBindings(combinedSummary, approvedModules, consumerFunctionsForNestedAnalysis, parsed,
+            RejectUnsafeApprovedBindings(combinedSummary, approvedModules, approvedModuleSources, consumerFunctionsForNestedAnalysis, parsed,
                 invocationScopes, ResolveInvocation))
         {
             // None of the collected definitions are safe to emit into the shared module scope.
@@ -514,9 +514,18 @@ public sealed partial class MissingFunctionsAnalyzer
                         return CreateApprovedResolution(preferredApprovedModuleSource, preferredCommand);
                     if (approvedModuleSources.TryGetValue(preferredCommand.Source ?? string.Empty, out var importedDonor))
                     {
-                        var selected = GetCommandFromModuleScopeCached(importedDonor, lookupName);
-                        if (selected is not null)
-                            return CreateApprovedResolution(importedDonor, selected);
+                        var selectedModule = GetOrCreateModuleScopeSession(importedDonor).Module;
+                        if (!MatchesObservedModuleIdentity(preferredCommand.Module, selectedModule))
+                        {
+                            string observed = preferredCommand.Module is { } observedModule
+                                ? $"'{observedModule.Name}' {FormatImportedModuleVersion(observedModule)} ({observedModule.Guid}) at '{observedModule.ModuleBase}'"
+                                : "an unidentified module";
+                            return new MissingFunctionCommand(name, importedDonor.Name, preferredCommand.CommandType.ToString(),
+                                isAlias: preferredCommand is AliasInfo, isPrivate: false,
+                                error: $"Command '{name}' in donor '{preferredApprovedModuleSource.Name}' resolves to {observed}, but the approved source is '{selectedModule.Name}' {FormatImportedModuleVersion(selectedModule)} ({selectedModule.Guid}) at '{selectedModule.ModuleBase}'.",
+                                scriptBlock: null);
+                        }
+                        return CreateApprovedResolution(importedDonor, preferredCommand);
                     }
                     return CreateRuntimeResolution(preferredCommand);
                 }

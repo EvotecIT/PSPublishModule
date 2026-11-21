@@ -18,6 +18,30 @@ internal static class PowerShellAliasDefinitionPolicy
                name.Equals("nal", StringComparison.OrdinalIgnoreCase);
     }
 
+    internal static bool MayWriteOutsideLocalScope(CommandAst command)
+    {
+        if (!IsAliasDefinitionCommand(command))
+            return false;
+        var elements = command.CommandElements;
+        for (int i = 1; i < elements.Count; i++)
+        {
+            if (elements[i] is VariableExpressionAst { Splatted: true })
+                return true;
+            if (elements[i] is not CommandParameterAst parameter ||
+                !MatchesParameter(parameter.ParameterName, "Scope"))
+                continue;
+            var argument = parameter.Argument ?? (i + 1 < elements.Count ? elements[i + 1] as ExpressionAst : null);
+            return argument switch
+            {
+                StringConstantExpressionAst literal => !literal.Value.Equals("Local", StringComparison.OrdinalIgnoreCase) &&
+                                                       !literal.Value.Equals("0", StringComparison.Ordinal),
+                ConstantExpressionAst { Value: int scope } => scope != 0,
+                _ => true
+            };
+        }
+        return false;
+    }
+
     internal static bool TryGetLiteralDefinition(CommandAst command, out string aliasName, out string targetName)
     {
         aliasName = string.Empty;

@@ -242,6 +242,9 @@ public sealed class ApprovedModuleDependencyPruningTests
     [InlineData("function Get-SharedAliasTarget { 'alias-target' }; Set-Alias SharedAlias Get-SharedAliasTarget", "nested consumer function")]
     [InlineData("function Get-SharedAliasTarget { 'alias-target' }; Set-Alias SharedAlias Get-SharedAliasTarget", "nested donor function")]
     [InlineData("filter Convert-DonorItem { \"alias-$_\" }; Set-Alias SharedAlias Convert-DonorItem", "filter")]
+    [InlineData("function Get-SharedAliasTarget { 'alias-target' }; Set-Alias SharedAlias Get-SharedAliasTarget", "nested local alias")]
+    [InlineData("function Get-SharedAliasTarget { $MyInvocation.MyCommand.Name }; Set-Alias SharedAlias Get-SharedAliasTarget", "current function name")]
+    [InlineData("$sharedValue='module'; $parameterValue='module'; function Get-SharedAliasTarget { param($parameterValue='parameter') $sharedValue = 'local'; $sharedValue; $parameterValue }; Set-Alias SharedAlias Get-SharedAliasTarget", "local bindings")]
     public void Run_PackagesApprovedDonorAliasOrReportsANameConflict(string aliasDeclaration, string? conflictScope)
     {
         var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
@@ -267,6 +270,7 @@ public sealed class ApprovedModuleDependencyPruningTests
                 "consumer" => "function Get-SharedAliasTarget { 'consumer' }; ",
                 "consumer alias" => "function Get-LocalTarget { 'consumer' }; Set-Alias SharedAlias Get-LocalTarget; ",
                 "nested consumer function" => "function Invoke-DonorAlias { SharedAlias }; ",
+                "nested local alias" => "function Initialize-LocalAlias { Set-Alias SharedAlias Get-ParentThing -Scope Local }; Initialize-LocalAlias; ",
                 _ => string.Empty
             };
             string consumerSetup = conflictScope switch
@@ -331,7 +335,7 @@ public sealed class ApprovedModuleDependencyPruningTests
             var runner = new ModulePipelineRunner(new NullLogger(), powerShellRunner: null,
                 moduleDependencyMetadataProvider: new FixtureMetadataProvider(modules),
                 missingFunctionAnalysisService: new PowerShellMissingFunctionAnalysisService());
-            if (conflictScope is not (null or "qualified cmdlet" or "additional alias" or "filter"))
+            if (conflictScope is not (null or "qualified cmdlet" or "additional alias" or "filter" or "nested local alias" or "current function name" or "local bindings"))
             {
                 var error = Assert.Throws<InvalidOperationException>(() => runner.Run(spec, runner.Plan(spec)));
                 Assert.Contains("SharedAlias", error.Message);
@@ -370,6 +374,8 @@ public sealed class ApprovedModuleDependencyPruningTests
             {
                 "additional alias" => new[] { "parent-copy", "alias-target", "Get-SharedAliasTarget" },
                 "filter" => new[] { "parent-copy", "alias-1", "alias-2" },
+                "current function name" => new[] { "parent-copy", "Get-SharedAliasTarget" },
+                "local bindings" => new[] { "parent-copy", "local", "parameter" },
                 _ => new[] { "parent-copy", "alias-target" }
             };
             Assert.Equal(expected, output.Select(item => item.BaseObject.ToString()));
@@ -391,6 +397,9 @@ public sealed class ApprovedModuleDependencyPruningTests
     [InlineData("sibling donor", "Get-SharedHelper", "name conflict")]
     [InlineData("consumer cmdlet", "Get-Date", "name conflict")]
     [InlineData("computed consumer alias", "Get-SharedAlias", "consumer alias declaration")]
+    [InlineData("nested script alias", "Get-SharedHelper", "name conflict")]
+    [InlineData("unqualified state", "Get-SharedEntry", "SharedValue")]
+    [InlineData("donor alias write", "Get-SharedEntry", "donor alias scope")]
     [InlineData("qualified call", "Get-SharedEntry", "referenced at runtime")]
     [InlineData("dynamic call", "SharedHelpers", "dynamic command")]
     [InlineData("unbound runtime import", "SharedHelpers", "referenced at runtime")]
@@ -410,6 +419,8 @@ public sealed class ApprovedModuleDependencyPruningTests
                 "computed consumer alias" =>
                     "function Get-SharedHelper { 'donor' }; Set-Alias Get-SharedAlias Get-SharedHelper; function Get-SharedEntry { Get-SharedAlias }",
                 "script state" => "$script:SharedValue = 'donor'; function Get-SharedEntry { $script:SharedValue }",
+                "unqualified state" => "$SharedValue = 'donor'; function Get-SharedEntry { $SharedValue }",
+                "donor alias write" => "function Get-SharedHelper { 'donor' }; function Get-SharedEntry { Set-Alias Get-SharedAlias Get-SharedHelper -Scope Script }",
                 "relative file" => "function Get-SharedEntry { Get-Content (Join-Path $PSScriptRoot 'data.txt') }",
                 _ => "function Get-SharedHelper { 'donor' }; function Get-SharedEntry { Get-SharedHelper }"
             };
@@ -419,6 +430,8 @@ public sealed class ApprovedModuleDependencyPruningTests
             {
                 "consumer function" =>
                     "function Get-SharedHelper { 'consumer' }; function Get-ConsumerThing { Get-SharedHelper; Get-SharedEntry }",
+                "nested script alias" =>
+                    "function Get-LocalEntry { 'consumer' }; function Initialize-SharedAliases { Set-Alias Get-SharedHelper Get-LocalEntry -Scope Script }; Initialize-SharedAliases; function Get-ConsumerThing { Get-SharedEntry }",
                 "computed consumer alias" =>
                     "function Get-LocalEntry { [Alias(('Get-' + 'SharedAlias'))] param() 'consumer' }; function Get-ConsumerThing { Get-SharedAlias; Get-SharedEntry }",
                 "consumer cmdlet" => "function Get-ConsumerThing { Get-Date | Out-Null; Get-SharedEntry }",
