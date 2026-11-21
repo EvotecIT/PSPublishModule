@@ -105,7 +105,9 @@ each platform reproduces all six executable hashes.
 
 The pinned oracles also check partial output after a terminating error and
 stopping in the middle of a local advanced function. PowerShell 7.6.6 covers
-`clean`, including early stop and discarded cleanup output.
+`clean`, including early stop, discarded cleanup output, and locally handled
+failures. Strict requires proven-total cleanup or an exhaustive local catch
+around fallible operations.
 [Upstream source revision](https://github.com/fleschutz/PowerShell/tree/50082bcec78864a42527a4291b34d4af7fdb8be9/scripts).
 [Pinned oracle tests](../PowerForge.Tests/PowerShellCompilationSemanticStrictStreamingOracleTests.cs).
 

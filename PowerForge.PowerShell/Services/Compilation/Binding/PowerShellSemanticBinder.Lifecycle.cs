@@ -91,6 +91,13 @@ internal sealed partial class PowerShellSemanticBinder
             clean = BindLifecycleBlock(document, cleanSyntax, cleanSymbols, functions, diagnostics, terminalLast: false,
                 allowTopLevelSuccessOutput: true, successOutputType: null, targetFramework, capabilities);
             if (clean is null) return null;
+            if (strict && !IsStrictCleanupClosed(clean))
+            {
+                diagnostics.Add(new PowerShellSemanticDiagnostic("PSB2921",
+                    "Strict pipeline clean requires total statements or an exhaustive local catch for fallible cleanup.",
+                    clean.Span));
+                return null;
+            }
             clean = DiscardLifecycleBlockOutput(clean);
         }
         if (begin is null || process is null || end is null || diagnostics.Count > functionDiagnosticStart)
@@ -166,7 +173,8 @@ internal sealed partial class PowerShellSemanticBinder
         PowerShellBoundParameter? limitParameter = null;
         PowerShellBoundBlock body;
         var needsLiveOutput = supportsOutputLimit || streamsSuccessOutput &&
-            (beginOutputs.Length != 0 || new[] { begin, process, end }.Any(LifecycleHasObservableFailure));
+            (beginOutputs.Length != 0 || new[] { begin, process, end }.Any(LifecycleHasObservableFailure) ||
+             clean is not null && LifecycleHasObservableFailure(clean));
         if (returnsCollection && needsLiveOutput)
         {
             limitParameter = supportsOutputLimit ? CreateLifecycleLimitParameter(document, function, symbols, pipelineParameter, sourceParameter) : null;
@@ -451,6 +459,20 @@ internal sealed partial class PowerShellSemanticBinder
                 .Any(static expression => expression is PowerShellBoundClrInvocationExpression or PowerShellBoundInvocationExpression or
                     PowerShellBoundClrMemberExpression or PowerShellBoundConversionExpression or PowerShellBoundMutationExpression or
                     PowerShellBoundRuntimeStateExpression));
+
+    private static bool IsStrictCleanupClosed(PowerShellBoundBlock block)
+        => block.Statements.All(static statement => statement switch
+        {
+            // An escaping PowerShell cleanup error has a separate route from the
+            // invocation's errors. A local catch keeps that route out of the CLR finally.
+            PowerShellBoundTryStatement tried =>
+                (tried.Catches.Any(static clause => clause.ExceptionTypes.Length == 0) ||
+                 IsStrictCleanupClosed(tried.Body)) &&
+                tried.Catches.All(static clause => IsStrictCleanupClosed(clause.Body)) &&
+                (tried.FinallyBlock is null || IsStrictCleanupClosed(tried.FinallyBlock)),
+            _ => PowerShellSemanticAnalyzer.GetSuccessOutputExpression(statement) is { } output &&
+                IsTotalStrictStageExpression(output, current: null)
+        });
 
     private static bool TryGetLifecycleOutputElementType(
         PowerShellBoundExpression[] processOutputs,

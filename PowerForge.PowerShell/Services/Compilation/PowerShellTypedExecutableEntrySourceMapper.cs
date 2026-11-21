@@ -55,7 +55,7 @@ internal static class PowerShellTypedExecutableEntrySourceMapper
                     body.RegionGraph, authored.DocumentId, authored.Text, mappings);
             return remappedBody;
         }).ToArray();
-        var end = GetLineColumn(authored.Text, authored.Text.Length);
+        var end = PowerShellSourceParser.GetLineColumn(authored.Text, authored.Text.Length);
         emission.SourceSpan = new SourceSpan(authored.DocumentId, 0, authored.Text.Length,
             1, 1, end.Line, end.Column);
     }
@@ -65,13 +65,13 @@ internal static class PowerShellTypedExecutableEntrySourceMapper
     {
         var lineStart = GetOffset(synthetic, line, 1);
         var lineEnd = lineStart;
-        while (lineEnd < synthetic.Length && synthetic[lineEnd] != '\n') lineEnd++;
+        while (lineEnd < synthetic.Length && PowerShellSourceParser.GetLineBreakLength(synthetic, lineEnd) == 0) lineEnd++;
         foreach (var mapping in mappings)
         {
             if (mapping.SyntheticStartOffset > lineEnd || mapping.SyntheticEndOffset < lineStart)
                 continue;
             var position = Math.Max(lineStart, mapping.SyntheticStartOffset);
-            return GetLineColumn(authored, MapOffset(position, mapping)).Line;
+            return PowerShellSourceParser.GetLineColumn(authored, MapOffset(position, mapping)).Line;
         }
         throw new InvalidDataException($"Executable entry line {line} has no authored source mapping.");
     }
@@ -82,7 +82,7 @@ internal static class PowerShellTypedExecutableEntrySourceMapper
         var offset = GetOffset(synthetic, line, column);
         foreach (var mapping in mappings)
             if (offset >= mapping.SyntheticStartOffset && offset <= mapping.SyntheticEndOffset)
-                return GetLineColumn(authored, MapOffset(offset, mapping));
+                return PowerShellSourceParser.GetLineColumn(authored, MapOffset(offset, mapping));
         throw new InvalidDataException($"Executable entry position {line}:{column} has no authored source mapping.");
     }
 
@@ -97,19 +97,15 @@ internal static class PowerShellTypedExecutableEntrySourceMapper
         var currentLine = 1;
         var lineStart = 0;
         for (var index = 0; index < text.Length && currentLine < line; index++)
-            if (text[index] == '\n') { currentLine++; lineStart = index + 1; }
+        {
+            var width = PowerShellSourceParser.GetLineBreakLength(text, index);
+            if (width == 0) continue;
+            index += width - 1;
+            currentLine++;
+            lineStart = index + 1;
+        }
         if (currentLine != line || lineStart + column - 1 > text.Length)
             throw new InvalidDataException($"Executable entry position {line}:{column} exceeds the synthetic source.");
         return lineStart + column - 1;
-    }
-
-    private static (int Line, int Column) GetLineColumn(string text, int offset)
-    {
-        var line = 1;
-        var column = 1;
-        for (var index = 0; index < offset; index++)
-            if (text[index] == '\n') { line++; column = 1; }
-            else column++;
-        return (line, column);
     }
 }

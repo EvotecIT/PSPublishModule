@@ -282,6 +282,13 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
             Assert.Equal(1, original.Code);
             Assert.Contains("path resolved to more than one file", original.Output, StringComparison.Ordinal);
             Assert.Equal(original, generated);
+            var escaped = rows.Replace("[", "`[", StringComparison.Ordinal).Replace("]", "`]", StringComparison.Ordinal);
+            var originalEscaped = await ObserveExitedConsole(host, fixture.RootPath,
+                new[] { "-NoProfile", "-NonInteractive", "-File", wildcardFixture.ScriptPath, escaped }, string.Empty);
+            var generatedEscaped = await ObserveExitedConsole(wildcardBuild.ArtifactPath!, fixture.RootPath, new[] { escaped }, string.Empty);
+            Assert.Equal(0, originalEscaped.Code);
+            Assert.Contains("title=[first]", originalEscaped.Output, StringComparison.Ordinal);
+            Assert.Equal(originalEscaped, generatedEscaped);
         }
     }
 
@@ -394,7 +401,7 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
             """;
         const string cleanup = """
                 clean {
-                    [IO.File]::AppendAllText('trace.txt', 'clean;')
+                    try { [IO.File]::AppendAllText('trace.txt', 'clean;') } catch {}
                     -88
                 }
             """;

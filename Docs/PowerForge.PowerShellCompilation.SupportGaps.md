@@ -31,8 +31,9 @@ Strict rejects possibly overflowing reducers. A typed array can also feed a
 local advanced function that emits homogeneous scalar records from its
 lifecycle. A terminal `Select-Object -First` can stop that producer before
 it resumes after its final selected record. On the PowerShell 7 profile the
-admitted `clean` clause runs once and discards its success output. Multiple
-effectful local stages still require native lifecycle interleaving.
+admitted `clean` clause runs once and discards its success output. Fallible
+cleanup requires an exhaustive local catch. Multiple effectful local stages
+still require native lifecycle interleaving.
 
 Property expansion covers known scalar members such as string length,
 TimeSpan ticks and filesystem names. Terminal filesystem projection supports

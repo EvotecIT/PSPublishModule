@@ -40,7 +40,7 @@ internal sealed partial class PowerShellSemanticBinder
             var source = document.AuthoredProjection?.Select(document, new[] { command.Extent }) ??
                 new PowerShellCommandRegionSourceSelection(document.Path, document.Text, new[] { span });
             var authored = source.Statements.Single();
-            var line = source.Document.Split('\n')[authored.StartLine - 1].TrimEnd('\r');
+            var line = PowerShellSourceParser.GetSourceLine(source.Document, authored);
             var length = authored.StartLine == authored.EndLine ? authored.EndColumn - authored.StartColumn :
                 line.Length - authored.StartColumn + 1;
             expression = BindIntrinsic(typeof(PowerShellStrictFileSystemReader), nameof(PowerShellStrictFileSystemReader.ResolvePath),

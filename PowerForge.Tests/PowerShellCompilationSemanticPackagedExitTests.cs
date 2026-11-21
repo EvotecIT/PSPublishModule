@@ -329,6 +329,7 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
             StandardOutputEncoding = System.Text.Encoding.UTF8,
             StandardErrorEncoding = System.Text.Encoding.UTF8
         };
+        start.Environment["NO_COLOR"] = "1";
         foreach (var argument in arguments) start.ArgumentList.Add(argument);
         using var process = Process.Start(start)!;
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));

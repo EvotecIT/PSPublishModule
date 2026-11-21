@@ -25,7 +25,7 @@ internal sealed partial class PowerShellSemanticBinder
         var diagnosticCount = diagnostics.Count;
         if (binding is null || !TryGetStrictStreamingPipeline(statement, symbols, out var pipeline, out var capture) ||
             !TryBindStrictStreamingPipeline(document, pipeline, symbols, functions, binding.LocalFunctionNames, preceding,
-                diagnostics, isTerminal, targetFramework, binding.GeneratedLocals, capture, out streaming))
+                diagnostics, isTerminal || statement is ReturnStatementAst, targetFramework, binding.GeneratedLocals, capture, out streaming))
             return false;
         if (streaming is null)
         {
@@ -158,7 +158,7 @@ internal sealed partial class PowerShellSemanticBinder
         var initializer = input as PowerShellBoundArrayExpression ??
             (input is PowerShellBoundVariableExpression sourceVariable
                 ? FindStrictPipelineInitializer(preceding, sourceVariable.Symbol) as PowerShellBoundArrayExpression : null);
-        if (initializer is null && element.IsValueType)
+        if (initializer is null && element.IsValueType && input.ValueState != PowerShellValueState.Known)
             return RejectStrictPipeline(diagnostics, span, "requires a proven non-null array for value-type records");
 
         var pipelineLocals = new List<PowerShellBoundLocal>();
@@ -199,7 +199,8 @@ internal sealed partial class PowerShellSemanticBinder
         var body = BindStages(item);
         if (body is null) return true;
 
-        var nullRecord = initializer is null && enumeration == PowerShellForEachEnumerationKind.TypedArray
+        var nullRecord = initializer is null && input.ValueState != PowerShellValueState.Known &&
+            enumeration == PowerShellForEachEnumerationKind.TypedArray
             ? new PowerShellBoundLiteralExpression(span, null, itemType, PowerShellValueState.Null)
             : null;
         var loop = new PowerShellBoundForEachStatement(span, itemSymbol, element, input,
@@ -584,6 +585,20 @@ internal sealed partial class PowerShellSemanticBinder
             return false;
         properties = array.Elements.Cast<StringConstantExpressionAst>().Select(static item => item.Value).ToArray();
         return properties.Distinct(StringComparer.OrdinalIgnoreCase).Count() == properties.Length;
+    }
+
+    private bool HasStrictPipelineItemOwner(VariableExpressionAst variable, SwitchStatementAst scope, StrictStreamingBinding binding,
+        IReadOnlyDictionary<string, PowerShellLocalCallSignature> functions)
+    {
+        for (var ancestor = variable.Parent; ancestor is not null && !ReferenceEquals(ancestor, scope); ancestor = ancestor.Parent)
+        {
+            if (ancestor is SwitchStatementAst or CatchClauseAst) return false;
+            if (ancestor is not ScriptBlockAst block) continue;
+            return block.Parent is ScriptBlockExpressionAst { Parent: CommandAst { Parent: PipelineAst pipeline } command } &&
+                TryDescribeStrictPipeline(pipeline, binding.LocalFunctionNames, functions, out var stages) &&
+                stages.Any(stage => ReferenceEquals(stage.Command, command) && (stage.Predicate is not null || stage.Map is not null));
+        }
+        return false;
     }
 
     private static StrictPipelineMap? DescribeStrictMap(NamedBlockAst block)

@@ -28,7 +28,8 @@ internal sealed partial class PowerShellSemanticBinder
         var matchMode = wildcard ? PowerShellBoundSwitchMatchMode.Wildcard : (statement.Flags & SwitchFlags.Regex) != 0
             ? PowerShellBoundSwitchMatchMode.Regex
             : PowerShellBoundSwitchMatchMode.Exact;
-        var observesSwitch = PowerShellAutomaticVariableObservationPolicy.ObservesSwitchState(statement);
+        var observesSwitch = PowerShellAutomaticVariableObservationPolicy.ObservesSwitchState(statement,
+            strictStreaming is null ? null : variable => HasStrictPipelineItemOwner(variable, statement, strictStreaming, functions));
         if (!capabilities.HasFlag(PowerShellCompilationCapability.NativeFunctionBinding) &&
             matchMode == PowerShellBoundSwitchMatchMode.Regex &&
             PowerShellAutomaticVariableObservationPolicy.Observes(statement, "Matches"))

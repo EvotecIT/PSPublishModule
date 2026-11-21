@@ -35,13 +35,13 @@ internal static class PowerShellRuntimeStateCommandSemanticBinder
             if (!IsSupportedShape(command, provider, capabilities, document.AuthoredProjection is not null) || !TryGetLiteralPrompt(command, out var prompt))
             {
                 diagnostics.Add(new PowerShellSemanticDiagnostic(provider.FeatureId,
-                    "Strict Read-Host requires a direct script-root assignment with an optional literal prompt.", span));
+                    "Strict Read-Host requires a direct script-root assignment with an optional nonempty literal prompt.", span));
                 return null;
             }
             var source = document.AuthoredProjection?.Select(document, new[] { command.Extent }) ??
                 new PowerShellCommandRegionSourceSelection(document.Path, document.Text, new[] { span });
             var authored = source.Statements.Single();
-            var line = source.Document.Split('\n')[authored.StartLine - 1].TrimEnd('\r');
+            var line = PowerShellSourceParser.GetSourceLine(source.Document, authored);
             var consoleArguments = new object[]
             {
                 prompt, Path.GetFileName(source.Path), authored.StartLine, authored.StartColumn,
@@ -159,7 +159,7 @@ internal static class PowerShellRuntimeStateCommandSemanticBinder
                 => elements[2] as StringConstantExpressionAst,
             _ => null
         };
-        if (value is null) return false;
+        if (value is null || value.Value.Length == 0) return false;
         prompt = value.Value;
         return true;
     }

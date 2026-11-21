@@ -97,7 +97,7 @@ internal sealed partial class PowerShellSemanticBinder
                     declaration.Syntax,
                     signature.Parameters,
                     functionsByName,
-                    includeBegin: capabilities == PowerShellCompilationCapabilities.TypedExecutable))
+                    strictResolver: capabilities == PowerShellCompilationCapabilities.TypedExecutable ? _commandResolver : null))
                 signature.SetPipelineLifecycleReturnsCollection();
         }
         if (capabilities == PowerShellCompilationCapabilities.TypedExecutable &&

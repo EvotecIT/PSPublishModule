@@ -27,10 +27,16 @@ internal static class PowerShellStrictFileSystemReader
         return string.Empty;
     }
 
-    internal static bool HasWildcard(string path) => path.IndexOfAny(new[] { '*', '?', '[' }) >= 0;
+    internal static bool HasWildcard(string path) => path.IndexOfAny(new[] { '*', '?', '[', '`' }) >= 0;
 
     internal static string GetFullPath(string path)
     {
+        const string qualifiedProvider = "Microsoft.PowerShell.Core\\FileSystem::";
+        const string provider = "FileSystem::";
+        if (path.StartsWith(qualifiedProvider, StringComparison.OrdinalIgnoreCase))
+            path = path.Substring(qualifiedProvider.Length);
+        else if (path.StartsWith(provider, StringComparison.OrdinalIgnoreCase))
+            path = path.Substring(provider.Length);
         if (path == "~" || path.Length > 1 && path[0] == '~' && (path[1] == '/' || path[1] == '\\'))
         {
             var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
@@ -104,7 +110,9 @@ internal static class PowerShellStrictFileSystemReader
         for (var index = 0; index < leaf.Length; index++)
         {
             var value = leaf[index];
-            if (value == '*') pattern.Append(".*");
+            if (value == '`' && index + 1 < leaf.Length && leaf[index + 1] is '*' or '?' or '[' or ']' or '`')
+                pattern.Append(Regex.Escape(leaf[++index].ToString()));
+            else if (value == '*') pattern.Append(".*");
             else if (value == '?') pattern.Append('.');
             else if (value == '[' && leaf.IndexOf(']', index + 1) is var last && last > index + 1)
             {
@@ -120,11 +128,12 @@ internal static class PowerShellStrictFileSystemReader
 
     private static IEnumerable<FileSystemInfo> Descendants(DirectoryInfo directory, bool filesOnly)
     {
-        var folders = Visible(directory.GetDirectories());
+        var entries = ReadDirectory(directory);
+        var folders = entries.OfType<DirectoryInfo>().ToArray();
         if (!filesOnly)
             foreach (var folder in folders)
                 yield return folder;
-        foreach (var file in Visible(directory.GetFiles()))
+        foreach (var file in entries.OfType<FileInfo>())
             yield return file;
         foreach (var folder in folders)
             if (CanDescend(folder))
@@ -134,7 +143,8 @@ internal static class PowerShellStrictFileSystemReader
 
     private static IEnumerable<FileSystemInfo> Search(DirectoryInfo directory, Regex matcher, bool filesOnly)
     {
-        foreach (var folder in Visible(directory.GetDirectories()))
+        var entries = ReadDirectory(directory);
+        foreach (var folder in entries.OfType<DirectoryInfo>())
         {
             if (!filesOnly && matcher.IsMatch(folder.Name))
                 yield return folder;
@@ -142,7 +152,7 @@ internal static class PowerShellStrictFileSystemReader
                 foreach (var child in Search(folder, matcher, filesOnly))
                     yield return child;
         }
-        foreach (var file in Visible(directory.GetFiles()))
+        foreach (var file in entries.OfType<FileInfo>())
             if (matcher.IsMatch(file.Name))
                 yield return file;
     }
@@ -151,6 +161,23 @@ internal static class PowerShellStrictFileSystemReader
         => entries.Where(entry => (entry.Attributes & FileAttributes.Hidden) == 0)
             .OrderBy(entry => entry.Name, StringComparer.CurrentCultureIgnoreCase).ToArray();
 
+    private static FileSystemInfo[] ReadDirectory(DirectoryInfo directory)
+    {
+        try { return Visible(directory.GetFileSystemInfos()); }
+        catch (UnauthorizedAccessException error)
+        {
+            Console.Error.WriteLine("Get-ChildItem: " + error.Message);
+            return Array.Empty<FileSystemInfo>();
+        }
+    }
+
     private static bool CanDescend(DirectoryInfo directory)
-        => (directory.Attributes & FileAttributes.ReparsePoint) == 0;
+    {
+        if ((directory.Attributes & FileAttributes.ReparsePoint) == 0) return true;
+#if NET6_0_OR_GREATER
+        return directory.LinkTarget is null;
+#else
+        return false;
+#endif
+    }
 }

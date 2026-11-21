@@ -184,7 +184,7 @@ internal static class PowerShellLocalCallSemanticBinder
         FunctionDefinitionAst function,
         IReadOnlyList<PowerShellLocalCallParameter> parameters,
         IReadOnlyDictionary<string, PowerShellLocalCallSignature> functions,
-        bool includeBegin = false)
+        PowerShellCommandSemanticResolver? strictResolver = null)
     {
         if (function.Body.ProcessBlock is null) return false;
         var knownTypes = parameters.ToDictionary(static parameter => parameter.Symbol.Name, static parameter => parameter.Type, StringComparer.OrdinalIgnoreCase);
@@ -200,12 +200,19 @@ internal static class PowerShellLocalCallSemanticBinder
                 : InferExpressionType(expression, knownTypes, functions);
             if (type is not null) knownTypes[variable.VariablePath.UserPath] = type;
         }
-        var output = includeBegin && function.Body.BeginBlock is { } begin
+        var output = strictResolver is not null && function.Body.BeginBlock is { } begin
             ? begin.Statements.Concat(function.Body.ProcessBlock.Statements) : function.Body.ProcessBlock.Statements;
+        var localFunctionNames = strictResolver is null ? null : functions.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase);
         return EnumeratePipelineLifecycleProcessOutputs(output)
             .Any(pipeline =>
             {
                 var syntax = Unwrap(pipeline);
+                if (strictResolver is not null && syntax is CommandAst command &&
+                    PowerShellCommandIslandPolicy.TryGetTargetStreamCommand(command,
+                        PowerShellCompilationCapabilities.TypedExecutable, out _, out var message, out var provider, out _,
+                        strictResolver, localFunctionNames) &&
+                    PowerShellCommandIslandPolicy.IsStrictWriteOutput(PowerShellCompilationCapabilities.TypedExecutable, provider!))
+                    syntax = Unwrap(message);
                 var type = InferExpressionType(syntax, knownTypes, functions);
                 return type is not null ? type != typeof(void) : syntax is BinaryExpressionAst;
             });

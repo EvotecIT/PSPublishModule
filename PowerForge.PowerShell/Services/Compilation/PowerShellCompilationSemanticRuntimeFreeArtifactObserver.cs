@@ -111,6 +111,25 @@ public sealed class PowerShellCompilationSemanticRuntimeFreeArtifactObserver
                 }
             };
         }
+        else if (!string.IsNullOrWhiteSpace(run.StdErr))
+        {
+            var message = run.StdErr.Trim();
+            var sequence = envelope.Success.Select(static record => record.Sequence)
+                .Concat(envelope.StreamRecords.Select(static record => record.Sequence))
+                .Concat(envelope.ErrorRecords.Select(static record => record.Sequence)).DefaultIfEmpty(0).Max() + 1;
+            // A separate stderr pipe does not establish its position among stdout frames.
+            envelope.Errors = envelope.Errors.Append(message).ToArray();
+            envelope.ErrorRecords = envelope.ErrorRecords.Append(new PowerShellCompilationSemanticErrorObservation
+            {
+                Sequence = sequence,
+                Message = message,
+                FullyQualifiedErrorId = "PowerForge.StrictExecutable.StandardError",
+                Category = "NotSpecified",
+                ExceptionTypeName = typeof(InvalidOperationException).FullName!,
+                IsTerminating = false
+            }).ToArray();
+            PowerShellCompilationSemanticOracleEnvelopeValidator.Validate(envelope, profileId);
+        }
         return envelope;
     }
 
