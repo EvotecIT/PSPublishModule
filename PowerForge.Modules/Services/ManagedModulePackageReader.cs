@@ -293,7 +293,7 @@ public sealed class ManagedModulePackageReader
             {
                 Id = module.ModuleName,
                 VersionRange = ToVersionRange(module),
-                RequiredModuleGuid = string.IsNullOrWhiteSpace(module.Guid) ? null : Guid.Parse(module.Guid!),
+                RequiredModuleGuid = module.Guid,
                 TargetFramework = null
             })
             .ToArray();

@@ -143,22 +143,28 @@ public sealed partial class ManagedModuleRestoreService
         => $"No compatible version of '{name}' satisfies the requirements: " +
            string.Join(", ", constraints.Select(static constraint => $"{constraint.Parent} requires {constraint.Description}")) + ".";
 
-    private readonly record struct PackageCandidate(string Version, bool Listed, bool IsPrerelease)
+    private readonly struct PackageCandidate(string version, bool listed, bool isPrerelease)
     {
+        public string Version { get; } = version;
+
         public bool IsEligible(IEnumerable<DependencyConstraint> constraints)
             => constraints.Any(static constraint => constraint.Range.ExactVersion is not null) ||
-               (Listed && (!IsPrerelease || constraints.Any(static constraint => constraint.Range.AllowsPrerelease)));
+               (listed && (!isPrerelease || constraints.Any(static constraint => constraint.Range.AllowsPrerelease)));
     }
 
-    private sealed class DependencyConstraint(string parent, string name, ManagedModuleVersionRange range, Guid? guid)
+    private sealed class DependencyConstraint(string parent, string name, ManagedModuleVersionRange range, string? manifestGuid)
     {
+        private readonly Guid? _guid = string.IsNullOrWhiteSpace(manifestGuid) ? null :
+            Guid.TryParse(manifestGuid, out var parsed) ? parsed :
+            throw new InvalidOperationException($"'{parent}' requires '{name}' with an invalid module GUID '{manifestGuid}'.");
+
         public string Parent { get; } = parent;
         public string Name { get; } = name;
         public ManagedModuleVersionRange Range { get; } = range;
-        public string Description => guid is { } requiredGuid ? $"{Range} with GUID {requiredGuid}" : Range.ToString();
+        public string Description => _guid is { } requiredGuid ? $"{Range} with GUID {requiredGuid}" : Range.ToString();
 
         public bool Matches(PreparedPackage package)
             => Range.IsSatisfiedBy(package.Pin.Version) &&
-               (guid is null || guid == package.Metadata.ModuleManifestGuid);
+               (_guid is null || _guid == package.Metadata.ModuleManifestGuid);
     }
 }
