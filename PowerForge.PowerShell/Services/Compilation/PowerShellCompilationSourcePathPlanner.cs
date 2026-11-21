@@ -35,43 +35,73 @@ internal static partial class PowerShellCompilationSourcePathPlanner
             fact = new PowerShellCompilationSourcePathFact(operand, literal, producer: null);
             return true;
         }
-        if (!allowDerivedPaths || operand is not VariableExpressionAst variable || variable.Splatted ||
-            !variable.VariablePath.IsUnqualified ||
-            command.Parent is not PipelineAst { PipelineElements.Count: 1 } pipeline ||
+        if (!allowDerivedPaths || command.Parent is not PipelineAst { PipelineElements.Count: 1 } pipeline ||
             !ReferenceEquals(pipeline.Parent, root.EndBlock)) return false;
 
-        // These are staging candidates, not a constant-value or command-binding proof.
-        // Explicit contradictory writes are refused. Calls and their indirect mutations still
-        // execute unchanged; the load guard checks the actual operand rather than trusting this syntax.
-        var producers = root.EndBlock!.Statements.OfType<AssignmentStatementAst>()
-            .Where(assignment => assignment.Extent.EndOffset < command.Extent.StartOffset &&
-                                 assignment.Operator == TokenKind.Equals &&
-                                 assignment.Left is VariableExpressionAst target && target.VariablePath.IsUnqualified &&
-                                 target.VariablePath.UserPath.Equals(variable.VariablePath.UserPath, StringComparison.OrdinalIgnoreCase))
-            .Select(assignment => (Assignment: assignment, Path: ReadJoinPathCandidate(assignment.Right)))
+        // The staging candidate bounds the source closure. The load guard checks the actual
+        // operand after the original command and its possible indirect writes have run.
+        if (operand is ParenExpressionAst direct && ReadJoinPathCandidate(root, direct.Pipeline) is { } directPath)
+        {
+            fact = new PowerShellCompilationSourcePathFact(operand, directPath, producer: null);
+            return true;
+        }
+        if (operand is not VariableExpressionAst { Splatted: false } variable || !variable.VariablePath.IsUnqualified)
+            return false;
+
+        var name = variable.VariablePath.UserPath;
+        var producers = FindPriorAssignments(root, name, command.Extent.StartOffset)
+            .Select(assignment => (Assignment: assignment, Path: ReadJoinPathCandidate(root, assignment.Right)))
             .Where(static candidate => candidate.Path is not null)
             .ToArray();
         if (producers.Length != 1) return false;
-        if (HasInterveningWrite(root, variable.VariablePath.UserPath, producers[0].Assignment.Extent.EndOffset,
-                command.Extent.StartOffset)) return false;
+        if (HasInterveningWrite(root, name, producers[0].Assignment.Extent.EndOffset, command.Extent.StartOffset))
+            return false;
         fact = new PowerShellCompilationSourcePathFact(operand, producers[0].Path!, producers[0].Assignment);
         return true;
     }
 
-    private static string? ReadJoinPathCandidate(StatementAst statement)
+    private static string? ReadJoinPathCandidate(ScriptBlockAst root, StatementAst statement)
     {
         if (statement is not PipelineAst { PipelineElements.Count: 1 } pipeline ||
             pipeline.PipelineElements[0] is not CommandAst { CommandElements.Count: 3 } command ||
-            command.InvocationOperator is TokenKind.Dot or TokenKind.Ampersand || command.Redirections.Count != 0)
+            command.InvocationOperator is TokenKind.Dot or TokenKind.Ampersand || command.Redirections.Count != 0 ||
+            !IsJoinPathCommand(command) ||
+            command.CommandElements[1] is not VariableExpressionAst rootVariable || !IsScriptRoot(rootVariable))
             return null;
-        if (!IsJoinPathCommand(command)) return null;
-        if (command.CommandElements[1] is not VariableExpressionAst root || !IsScriptRoot(root) ||
-            command.CommandElements[2] is not StringConstantExpressionAst child ||
-            string.IsNullOrWhiteSpace(child.Value) || child.Value.IndexOfAny(new[] { '\0', ':' }) >= 0 ||
-            child.Value.StartsWith("/", StringComparison.Ordinal) || child.Value.StartsWith("\\", StringComparison.Ordinal))
-            return null;
-        return child.Value;
+
+        var child = ReadJoinPathChild(root, command.CommandElements[2]);
+        return child is null || string.IsNullOrWhiteSpace(child) || child.IndexOfAny(new[] { '\0', ':' }) >= 0 ||
+            child.StartsWith("/", StringComparison.Ordinal) || child.StartsWith("\\", StringComparison.Ordinal)
+            ? null
+            : child;
     }
+
+    private static string? ReadJoinPathChild(ScriptBlockAst root, CommandElementAst child)
+    {
+        if (child is StringConstantExpressionAst literal) return literal.Value;
+        if (child is not VariableExpressionAst { Splatted: false } variable || !variable.VariablePath.IsUnqualified)
+            return null;
+
+        var name = variable.VariablePath.UserPath;
+        var producers = FindPriorAssignments(root, name, child.Extent.StartOffset).Take(2).ToArray();
+        if (producers.Length != 1 ||
+            HasInterveningWrite(root, name, producers[0].Extent.EndOffset, child.Extent.StartOffset))
+            return null;
+        var expression = producers[0].Right switch
+        {
+            CommandExpressionAst command => command.Expression,
+            PipelineAst pipeline => pipeline.GetPureExpression(),
+            _ => null
+        };
+        return (expression as StringConstantExpressionAst)?.Value;
+    }
+
+    private static IEnumerable<AssignmentStatementAst> FindPriorAssignments(ScriptBlockAst root, string name, int consumerStart)
+        => root.EndBlock!.Statements.OfType<AssignmentStatementAst>()
+            .Where(assignment => assignment.Extent.EndOffset < consumerStart &&
+                assignment.Operator == TokenKind.Equals &&
+                assignment.Left is VariableExpressionAst target && target.VariablePath.IsUnqualified &&
+                target.VariablePath.UserPath.Equals(name, StringComparison.OrdinalIgnoreCase));
 
     private static bool IsScriptRoot(VariableExpressionAst variable)
         => !variable.Splatted && variable.VariablePath.IsUnqualified &&
