@@ -4,7 +4,9 @@ on:
   pull_request:
     paths:
       - '.github/workflows/powerforge-native.yml'
+      - 'Build/Build-Project.ps1'
       - 'Build/Test-PowerForgeNative.ps1'
+      - 'Build/release.native-cli.json'
       - 'Directory.Build.props'
       - 'global.json'
       - 'PowerForge/**'
@@ -37,15 +39,18 @@ jobs:
         with:
           persist-credentials: false
       - uses: ./.github/actions/setup-dotnet
-      - name: Publish and verify the native package
+      - name: Build and verify the native preview
+        id: preview
         shell: pwsh
         env:
           POWERFORGE_NATIVE_RID: ${{ matrix.rid }}
         run: |
-          $package = Join-Path $env:RUNNER_TEMP 'powerforge-native'
-          $archive = Join-Path $env:RUNNER_TEMP "powerforge-$env:POWERFORGE_NATIVE_RID.zip"
-          dotnet publish ./PowerForge.Cli.Native/PowerForge.Cli.Native.csproj -c Release -r $env:POWERFORGE_NATIVE_RID --self-contained -o $package "-p:PowerForgeNativeArchive=$archive"
+          $rid = $env:POWERFORGE_NATIVE_RID
+          $project = [xml](Get-Content -Raw ./PowerForge.Cli/PowerForge.Cli.csproj)
+          $version = $project.Project.PropertyGroup.VersionPrefix
+          ./Build/Build-Project.ps1 -ConfigPath ./Build/release.native-cli.json -ToolsOnly -Target PowerForgeNative -Runtimes $rid -ReleaseVersion $version -Json
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $archive = (Get-Item -LiteralPath "./Artifacts/Preview/PowerForgeNative/$rid/net10.0/PowerForgeNative-$version-$rid.zip").FullName
           $installed = Join-Path $env:RUNNER_TEMP 'powerforge-installed'
           if ($IsWindows) {
             Expand-Archive -LiteralPath $archive -DestinationPath $installed
@@ -54,3 +59,11 @@ jobs:
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           }
           ./Build/Test-PowerForgeNative.ps1 -PackageDirectory $installed
+          "archive=$archive" >> $env:GITHUB_OUTPUT
+      - name: Upload the verified native archive
+        uses: actions/upload-artifact@v7
+        with:
+          name: powerforge-native-${{ matrix.rid }}
+          path: ${{ steps.preview.outputs.archive }}
+          if-no-files-found: error
+          compression-level: 0
