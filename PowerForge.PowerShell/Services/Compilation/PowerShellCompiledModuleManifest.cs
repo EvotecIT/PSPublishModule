@@ -181,7 +181,11 @@ internal static class PowerShellCompiledModuleManifest
         var hybrid = rootModuleFileName.EndsWith(".psm1", StringComparison.OrdinalIgnoreCase);
         var hasRetainedAlternatives = hybrid &&
             PowerShellHybridDependencyResolver.DiscoverRetainedModuleAlternatives(sourcePath, typed.SourcePaths, snapshot).Length > 0;
-        var functionExports = hasScriptNestedModules && manifestFunctions is null ? null : selectedFallback;
+        // The root module can publish runtime-created functions that are absent from the compilation inventory.
+        var preserveAuthoredFunctionFilter = hybrid && explicitExports?.Functions.Any(WildcardPattern.ContainsWildcardCharacters) == true;
+        var functionExports = preserveAuthoredFunctionFilter || (hasScriptNestedModules && manifestFunctions is null)
+            ? null
+            : selectedFallback;
 
         var mutator = new AstModuleManifestMutator();
         var rootKey = ModuleManifestValueReader.ReadTopLevelString(sourceManifest, "ModuleToProcess") is not null

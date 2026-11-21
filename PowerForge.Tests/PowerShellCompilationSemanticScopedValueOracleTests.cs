@@ -699,8 +699,8 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
                 manifest = Path.ChangeExtension(module, ".psd1");
                 var required = requiredModule is null ? string.Empty : " RequiredModules=@('" + requiredModule + "');";
                 var files = retainAdditionalSources ? " FileList=@(" + string.Join(", ", additionalSources!.Keys.Select(name => "'" + name + "'")) + ");" : string.Empty;
-                File.WriteAllText(manifest, "@{ RootModule='ScopedValues.psm1'; ModuleVersion='1.0.0'; FunctionsToExport='" +
-                    manifestFunctionPattern + "';" + required + files + " }");
+                var functions = manifestFunctionPattern is null ? string.Empty : " FunctionsToExport='" + manifestFunctionPattern + "';";
+                File.WriteAllText(manifest, "@{ RootModule='ScopedValues.psm1'; ModuleVersion='1.0.0';" + functions + required + files + " }");
             }
             var built = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
                 module, Path.Combine(fixture.RootPath, "built"), "ScopedValues", PowerShellCompilationArtifactKind.BinaryModule,

@@ -183,6 +183,30 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
             discoverAdditionalSources: true, manifestFunctionPattern: null);
     }
 
+    [PinnedSemanticHostFact]
+    [Trait("Category", "PowerShellCompilerGate")]
+    public void RootModuleWildcardExportsRuntimeFunctionsWithAnOmittedManifestFilterOnBothHosts()
+    {
+        const string source = """
+            . "$PSScriptRoot/Runtime.ps1"
+            function Get-PublishedCount { return 21 }
+            function Read-Private { 'private' }
+            Export-ModuleMember -Function Get-Published*
+            """;
+        const string runtime = "Set-Item Function:Get-PublishedRuntime -Value { 42 }";
+        const string probe = """
+            [ordered]@{
+                count = Get-PublishedCount
+                runtime = Get-PublishedRuntime
+                exports = @((Get-Module ScopedValues).ExportedCommands.Keys | Sort-Object)
+            } | ConvertTo-Json -Compress
+            """;
+        CompareScopedArtifacts(source, probe, new[] { "Get-PublishedCount" },
+            value => Assert.Equal("{\"count\":21,\"runtime\":42,\"exports\":[\"Get-PublishedCount\",\"Get-PublishedRuntime\"]}", value),
+            additionalSources: new Dictionary<string, string> { ["Runtime.ps1"] = runtime },
+            retainAdditionalSources: true, manifestFunctionPattern: null);
+    }
+
     private static void AssertRuntimeModulePathRejectsAnUnstagedFile(PowerShellCompilationBuildResult built)
     {
         using var fixture = OracleFixture.Create(string.Empty);
