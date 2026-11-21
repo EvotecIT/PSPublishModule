@@ -1,0 +1,56 @@
+name: PowerForge Native CLI
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/powerforge-native.yml'
+      - 'Build/Test-PowerForgeNative.ps1'
+      - 'Directory.Build.props'
+      - 'global.json'
+      - 'PowerForge/**'
+      - 'PowerForge.Cli/**'
+      - 'PowerForge.Cli.Native/**'
+      - 'PowerForge.ConsoleUi*/**'
+      - 'PowerForge.ModuleLoader/**'
+      - 'PowerForge.Modules/**'
+      - 'PowerForge.PowerShell/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    name: Native package (${{ matrix.rid }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            rid: linux-x64
+          - os: windows-latest
+            rid: win-x64
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-dotnet
+      - name: Publish and verify the native package
+        shell: pwsh
+        env:
+          POWERFORGE_NATIVE_RID: ${{ matrix.rid }}
+        run: |
+          $package = Join-Path $env:RUNNER_TEMP 'powerforge-native'
+          $archive = Join-Path $env:RUNNER_TEMP "powerforge-$env:POWERFORGE_NATIVE_RID.zip"
+          dotnet publish ./PowerForge.Cli.Native/PowerForge.Cli.Native.csproj -c Release -r $env:POWERFORGE_NATIVE_RID --self-contained -o $package "-p:PowerForgeNativeArchive=$archive"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $installed = Join-Path $env:RUNNER_TEMP 'powerforge-installed'
+          if ($IsWindows) {
+            Expand-Archive -LiteralPath $archive -DestinationPath $installed
+          } else {
+            unzip -q $archive -d $installed
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
+          ./Build/Test-PowerForgeNative.ps1 -PackageDirectory $installed

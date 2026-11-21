@@ -1,14 +1,22 @@
 namespace PowerForge;
 
-internal sealed partial class ManagedModuleRestoreService(ILogger logger)
+/// <summary>Resolves or restores modules from a SHA-256-verified dependency lock.</summary>
+/// <param name="logger">The logger that receives repository and installation diagnostics.</param>
+public sealed partial class ManagedModuleRestoreService(ILogger logger)
 {
-    internal const string DefaultSource = ManagedModuleCatalogDefaults.PowerShellGalleryV3;
+    /// <summary>The default PowerShell Gallery endpoint.</summary>
+    public const string DefaultSource = ManagedModuleCatalogDefaults.PowerShellGalleryV3;
     private const int LockSchemaVersion = 1;
 
-    internal async Task<ManagedModuleRestoreResult> RestoreAsync(
+    /// <summary>Prepares or applies a module restore, downloading and verifying the full dependency closure.</summary>
+    /// <param name="request">Requirements, lock file, destination and restore policy.</param>
+    /// <param name="cancellationToken">Cancels repository reads and installation.</param>
+    /// <returns>The resolved package pins and the outcome of the requested operation.</returns>
+    public async Task<ManagedModuleRestoreResult> RestoreAsync(
         ManagedModuleRestoreRequest request,
         CancellationToken cancellationToken = default)
     {
+        if (request is null) throw new ArgumentNullException(nameof(request));
         var requirementsPath = Path.GetFullPath(request.RequirementsPath);
         var lockPath = Path.GetFullPath(request.LockPath);
         var destination = ManagedModuleInstallRootResolver.Resolve(ManagedModuleInstallScope.Custom, customRoot: request.Destination);

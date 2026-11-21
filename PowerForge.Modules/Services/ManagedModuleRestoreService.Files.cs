@@ -2,7 +2,7 @@ using System.Text.Json;
 
 namespace PowerForge;
 
-internal sealed partial class ManagedModuleRestoreService
+public sealed partial class ManagedModuleRestoreService
 {
     private static void RequireOutsideDestination(string path, string destination)
     {

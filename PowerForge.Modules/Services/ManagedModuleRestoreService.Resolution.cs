@@ -1,6 +1,6 @@
 namespace PowerForge;
 
-internal sealed partial class ManagedModuleRestoreService
+public sealed partial class ManagedModuleRestoreService
 {
     private static async Task<Dictionary<string, PreparedPackage>> ResolveAsync(
         ManagedModuleRestoreRequirement[] requirements,

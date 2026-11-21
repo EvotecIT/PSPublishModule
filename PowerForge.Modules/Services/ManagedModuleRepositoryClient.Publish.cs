@@ -129,7 +129,7 @@ public sealed partial class ManagedModuleRepositoryClient
 
         var publishAddress = await ResolvePackagePublishAddressAsync(repository, credential, cancellationToken).ConfigureAwait(false);
         var uploadTarget = DescribeUploadTarget(publishAddress);
-        var uploadSize = DotNetRepositoryReleaseService.FormatBytes(new FileInfo(package).Length);
+        var uploadSize = OperationDisplay.FormatBytes(new FileInfo(package).Length);
         _logger.Info($"Uploading '{Path.GetFileName(package)}' ({uploadSize}) to {uploadTarget}.");
         var uploadTimer = System.Diagnostics.Stopwatch.StartNew();
         using var heartbeat = OperationHeartbeat.Start(_logger, $"Upload of '{Path.GetFileName(package)}' ({uploadSize}) to {uploadTarget}");
@@ -157,7 +157,7 @@ public sealed partial class ManagedModuleRepositoryClient
             },
             cancellationToken).ConfigureAwait(false);
         heartbeat.Dispose();
-        _logger.Info($"Upload to {uploadTarget} finished with HTTP {(int)response.StatusCode} in {DotNetRepositoryReleaseService.FormatDuration(uploadTimer.Elapsed)}.");
+        _logger.Info($"Upload to {uploadTarget} finished with HTTP {(int)response.StatusCode} in {OperationDisplay.FormatDuration(uploadTimer.Elapsed)}.");
         if (response.StatusCode == System.Net.HttpStatusCode.Conflict)
         {
             return new ManagedModulePackagePublishResult

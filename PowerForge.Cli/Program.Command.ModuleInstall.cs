@@ -34,7 +34,7 @@ internal static partial class Program
             var plan = RunWithStatus(outputJson, cli, $"Planning install of {name}",
                 () => installer.PlanInstallAsync(request, cancellationToken).GetAwaiter().GetResult());
             if (outputJson)
-                WriteModuleCommandResult("module.install", plan, CliJson.Context.ManagedModuleInstallPlan, logBuffer);
+                WriteModuleCommandResult("module.install", plan, ModuleCliJson.Default.ManagedModuleInstallPlan, logBuffer);
             else
                 logger.Info($"{plan.Action}: {plan.Name} {plan.Version} at {plan.ModulePath}");
             return 0;
@@ -43,7 +43,7 @@ internal static partial class Program
         var result = RunWithStatus(outputJson, cli, $"Installing {name}",
             () => installer.InstallAsync(request, cancellationToken).GetAwaiter().GetResult());
         if (outputJson)
-            WriteModuleCommandResult("module.install", result, CliJson.Context.ManagedModuleInstallResult, logBuffer);
+            WriteModuleCommandResult("module.install", result, ModuleCliJson.Default.ManagedModuleInstallResult, logBuffer);
         else
             logger.Success($"{result.Status}: {result.Name} {result.Version} at {result.ModulePath}");
         return 0;

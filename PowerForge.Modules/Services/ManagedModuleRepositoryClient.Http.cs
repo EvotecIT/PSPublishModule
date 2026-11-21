@@ -121,7 +121,7 @@ public sealed partial class ManagedModuleRepositoryClient
             try
             {
                 response = await SendAttemptAsync(request, cancellationToken).ConfigureAwait(false);
-                var transient = ModuleRepositoryRetryPolicy.IsTransientStatus(response.StatusCode,
+                var transient = RepositoryRetryTiming.IsTransientStatus(response.StatusCode,
                     includeNotFound: request.Method == HttpMethod.Get || request.Method == HttpMethod.Head);
                 if (transient && attempt < attempts)
                 {
@@ -294,7 +294,7 @@ public sealed partial class ManagedModuleRepositoryClient
 
     private async Task DelayBeforeRetryAsync(int attempt, CancellationToken cancellationToken)
     {
-        var delay = ModuleRepositoryRetryPolicy.Backoff(_options.RetryDelay, attempt);
+        var delay = RepositoryRetryTiming.Backoff(_options.RetryDelay, attempt);
         _logger.Warn($"Managed module repository transient failure on attempt {attempt}/{Math.Max(0, _options.MaxRetries) + 1}; retrying attempt {attempt + 1} after {delay}.");
         if (delay > TimeSpan.Zero)
             await Task.Delay(delay, cancellationToken).ConfigureAwait(false);

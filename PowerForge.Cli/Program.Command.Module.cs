@@ -7,10 +7,12 @@ internal static partial class Program
     private const string ModuleRestoreUsage =
         "Usage: powerforge module restore --requirements <modules.json> --lock-file <modules.lock.json> --destination <directory> [--source <feed-url-or-folder>] [--write-lock] [--plan] [--accept-license] [--allow-clobber] [--output json]";
 
+    private static bool IsModuleAction(string action) => action is "install" or "restore";
+
     private static int CommandModule(string[] args, CliOptions cli, ILogger logger)
     {
         var action = args.Length > 1 ? args[1].ToLowerInvariant() : string.Empty;
-        var command = action is "install" or "restore" ? "module." + action : "module";
+        var command = IsModuleAction(action) ? "module." + action : "module";
         var usage = action switch
         {
             "install" => ModuleInstallUsage,
@@ -25,13 +27,13 @@ internal static partial class Program
             if (args.Length == 1 || args.Skip(1).Any(static argument => argument is "--help" or "-h"))
             {
                 if (outputJson)
-                    WriteModuleCommandResult(command, usage, CliJson.Context.String, logBuffer);
+                    WriteModuleCommandResult(command, usage, ModuleCliJson.Default.String, logBuffer);
                 else
                     Console.WriteLine(usage);
                 return 0;
             }
 
-            if (action is not ("install" or "restore"))
+            if (!IsModuleAction(action))
                 throw new ArgumentException(usage);
 
             using var cancellation = new CancellationTokenSource();
@@ -83,7 +85,7 @@ internal static partial class Program
             () => service.RestoreAsync(request, cancellationToken).GetAwaiter().GetResult());
         if (outputJson)
         {
-            WriteModuleCommandResult("module.restore", result, CliJson.Context.ManagedModuleRestoreResult, logBuffer);
+            WriteModuleCommandResult("module.restore", result, ModuleCliJson.Default.ManagedModuleRestoreResult, logBuffer);
         }
         else
         {
@@ -157,7 +159,7 @@ internal static partial class Program
             SchemaVersion = OutputSchemaVersion,
             Command = command,
             Success = true,
-            Result = CliJson.SerializeToElement(value, type),
+            Result = System.Text.Json.JsonSerializer.SerializeToElement(value, type),
             Logs = LogsToJsonElement(logBuffer)
         });
 }
