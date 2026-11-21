@@ -40,7 +40,8 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
     {
         const string source = """
             $public = @(Get-ChildItem -Path "$PSScriptRoot/Read-Public*.ps1" -Exclude @('*.Tests.ps1', 'Read-PublicInternal*') -ErrorAction SilentlyContinue)
-            foreach ($file in $public) {
+            $private = @()
+            foreach ($file in @($public + $private)) {
                 . $file.FullName
             }
             function Read-PrivateFlavor { return 'private' }
