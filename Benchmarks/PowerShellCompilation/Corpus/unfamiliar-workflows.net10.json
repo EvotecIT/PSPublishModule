@@ -1,0 +1,852 @@
+{
+  "schemaVersion": 1,
+  "packetId": "unfamiliar-workflows-net10-v1",
+  "fixedOn": "2026-11-21",
+  "semanticProfile": "PowerForge.Oracle.PowerShell/7.6",
+  "targetFramework": "net10.0",
+  "purpose": "Assess the frozen source inputs for 15 standalone scripts, ten Gallery module workflows, and five multi-file applications. Census results measure emitted units. Artifact qualification uses the declared entry paths and target applicability.",
+  "workloads": [
+    {
+      "id": "check-ipv4-address",
+      "workloadKind": "Script",
+      "scenarioFamily": "address-validation",
+      "repositoryUrl": "https://github.com/fleschutz/PowerShell",
+      "license": "CC0-1.0",
+      "licenseUrl": "https://github.com/fleschutz/PowerShell/blob/f071b4d6abb2981d837edc9e0698dbdeffd53082/LICENSE",
+      "revisionKind": "GitCommit",
+      "revision": "f071b4d6abb2981d837edc9e0698dbdeffd53082",
+      "acquisition": {
+        "kind": "File",
+        "url": "https://raw.githubusercontent.com/fleschutz/PowerShell/f071b4d6abb2981d837edc9e0698dbdeffd53082/scripts/check-ipv4-address.ps1",
+        "sha256": "51ef324d8d72d88c53f2411ce88b67ea6a65b5853f4d4531f203e5dbc504f99a"
+      },
+      "entryPoint": "scripts/check-ipv4-address.ps1",
+      "applicableOracleHosts": [
+        "7.6.6",
+        "5.1.26100.9818"
+      ],
+      "probe": "example address and malformed octet",
+      "artifactTargets": [
+        "net10.0"
+      ]
+    },
+    {
+      "id": "check-ps1-file",
+      "workloadKind": "Script",
+      "scenarioFamily": "parser-validation",
+      "repositoryUrl": "https://github.com/fleschutz/PowerShell",
+      "license": "CC0-1.0",
+      "licenseUrl": "https://github.com/fleschutz/PowerShell/blob/f071b4d6abb2981d837edc9e0698dbdeffd53082/LICENSE",
+      "revisionKind": "GitCommit",
+      "revision": "f071b4d6abb2981d837edc9e0698dbdeffd53082",
+      "acquisition": {
+        "kind": "File",
+        "url": "https://raw.githubusercontent.com/fleschutz/PowerShell/f071b4d6abb2981d837edc9e0698dbdeffd53082/scripts/check-ps1-file.ps1",
+        "sha256": "acb8e6c11d41c108922aab32f7a09bb5619e8a8938e70ec4b3762ff7dd75a8ff"
+      },
+      "entryPoint": "scripts/check-ps1-file.ps1",
+      "applicableOracleHosts": [
+        "7.6.6",
+        "5.1.26100.9818"
+      ],
+      "probe": "valid script and unmatched syntax",
+      "artifactTargets": [
+        "net10.0"
+      ]
+    },
+    {
+      "id": "convert-zip2dir",
+      "workloadKind": "Script",
+      "scenarioFamily": "archive-file-effects",
+      "repositoryUrl": "https://github.com/fleschutz/PowerShell",
+      "license": "CC0-1.0",
+      "licenseUrl": "https://github.com/fleschutz/PowerShell/blob/f071b4d6abb2981d837edc9e0698dbdeffd53082/LICENSE",
+      "revisionKind": "GitCommit",
+      "revision": "f071b4d6abb2981d837edc9e0698dbdeffd53082",
+      "acquisition": {
+        "kind": "File",
+        "url": "https://raw.githubusercontent.com/fleschutz/PowerShell/f071b4d6abb2981d837edc9e0698dbdeffd53082/scripts/convert-zip2dir.ps1",
+        "sha256": "4ac8d4652a9b4f1e75fa0f84eaeef5a09bdbb09b5455526e95e6d14ea14da76a"
+      },
+      "entryPoint": "scripts/convert-zip2dir.ps1",
+      "applicableOracleHosts": [
+        "7.6.6",
+        "5.1.26100.9818"
+      ],
+      "probe": "contained two-file ZIP and invalid ZIP; compare delivered file bytes and native status",
+      "artifactTargets": [
+        "net10.0"
+      ]
+    },
+    {
+      "id": "count-characters",
+      "workloadKind": "Script",
+      "scenarioFamily": "string-length",
+      "repositoryUrl": "https://github.com/fleschutz/PowerShell",
+      "license": "CC0-1.0",
+      "licenseUrl": "https://github.com/fleschutz/PowerShell/blob/f071b4d6abb2981d837edc9e0698dbdeffd53082/LICENSE",
+      "revisionKind": "GitCommit",
+      "revision": "f071b4d6abb2981d837edc9e0698dbdeffd53082",
+      "acquisition": {
+        "kind": "File",
+        "url": "https://raw.githubusercontent.com/fleschutz/PowerShell/f071b4d6abb2981d837edc9e0698dbdeffd53082/scripts/count-characters.ps1",
+        "sha256": "0524725f7fd03aa54a9535818a0bded0ca7a6e2537ec08c3f33a56a9d75e486c"
+      },
+      "entryPoint": "scripts/count-characters.ps1",
+      "applicableOracleHosts": [
+        "7.6.6",
+        "5.1.26100.9818"
+      ],
+      "probe": "ordinary and multiword input",
+      "artifactTargets": [
+        "net10.0"
+      ]
+    },
+    {
+      "id": "count-lines",
+      "workloadKind": "Script",
+      "scenarioFamily": "text-tree-report",
+      "repositoryUrl": "https://github.com/fleschutz/PowerShell",
+      "license": "CC0-1.0",
+      "licenseUrl": "https://github.com/fleschutz/PowerShell/blob/f071b4d6abb2981d837edc9e0698dbdeffd53082/LICENSE",
+      "revisionKind": "GitCommit",
+      "revision": "f071b4d6abb2981d837edc9e0698dbdeffd53082",
+      "acquisition": {
+        "kind": "File",
+        "url": "https://raw.githubusercontent.com/fleschutz/PowerShell/f071b4d6abb2981d837edc9e0698dbdeffd53082/scripts/count-lines.ps1",
+        "sha256": "8060c3952658f5450cc1e9b6c46fa4204bbb7b30388ecdbd2e5c9bba03dc63e8"
+      },
+      "entryPoint": "scripts/count-lines.ps1",
+      "applicableOracleHosts": [
+        "7.6.6",
+        "5.1.26100.9818"
+      ],
+      "probe": "nested text fixture and absent path",
+      "artifactTargets": [
+        "net10.0"
+      ]
+    },
+    {
+      "id": "get-sha512",
+      "workloadKind": "Script",
+      "scenarioFamily": "content-hashing",
+      "repositoryUrl": "https://github.com/fleschutz/PowerShell",
+      "license": "CC0-1.0",
+      "licenseUrl": "https://github.com/fleschutz/PowerShell/blob/f071b4d6abb2981d837edc9e0698dbdeffd53082/LICENSE",
+      "revisionKind": "GitCommit",
+      "revision": "f071b4d6abb2981d837edc9e0698dbdeffd53082",
+      "acquisition": {
+        "kind": "File",
+        "url": "https://raw.githubusercontent.com/fleschutz/PowerShell/f071b4d6abb2981d837edc9e0698dbdeffd53082/scripts/get-sha512.ps1",
+        "sha256": "e622519d7fcac0c824e3e5ab485eb6faf15b87357e2aa9064634ab8da6f5f051"
+      },
+      "entryPoint": "scripts/get-sha512.ps1",
+      "applicableOracleHosts": [
+        "7.6.6",
+        "5.1.26100.9818"
+      ],
+      "probe": "fixed bytes and absent file",
+      "artifactTargets": [
+        "net10.0"
+      ]
+    },
+    {
+      "id": "list-calendar",
+      "workloadKind": "Script",
+      "scenarioFamily": "calendar-rendering",
+      "repositoryUrl": "https://github.com/fleschutz/PowerShell",
+      "license": "CC0-1.0",
+      "licenseUrl": "https://github.com/fleschutz/PowerShell/blob/f071b4d6abb2981d837edc9e0698dbdeffd53082/LICENSE",
+      "revisionKind": "GitCommit",
+      "revision": "f071b4d6abb2981d837edc9e0698dbdeffd53082",
+      "acquisition": {
+        "kind": "File",
+        "url": "https://raw.githubusercontent.com/fleschutz/PowerShell/f071b4d6abb2981d837edc9e0698dbdeffd53082/scripts/list-calendar.ps1",
+        "sha256": "bdb0e2b63ef5638c6ca6096ab64a4424188635955de7642072e6cc856534afbe"
+      },
+      "entryPoint": "scripts/list-calendar.ps1",
+      "applicableOracleHosts": [
+        "7.6.6",
+        "5.1.26100.9818"
+      ],
+      "probe": "February 2024 and invalid month",
+      "artifactTargets": [
+        "net10.0"
+      ]
+    },
+    {
+      "id": "list-dir-tree",
+      "workloadKind": "Script",
+      "scenarioFamily": "tree-rendering",
+      "repositoryUrl": "https://github.com/fleschutz/PowerShell",
+      "license": "CC0-1.0",
+      "licenseUrl": "https://github.com/fleschutz/PowerShell/blob/f071b4d6abb2981d837edc9e0698dbdeffd53082/LICENSE",
+      "revisionKind": "GitCommit",
+      "revision": "f071b4d6abb2981d837edc9e0698dbdeffd53082",
+      "acquisition": {
+        "kind": "File",
+        "url": "https://raw.githubusercontent.com/fleschutz/PowerShell/f071b4d6abb2981d837edc9e0698dbdeffd53082/scripts/list-dir-tree.ps1",
+        "sha256": "312634ce9b03bedbddf32e1b2216ffd828ea0e5bdee8e9d3fcacda08d7139790"
+      },
+      "entryPoint": "scripts/list-dir-tree.ps1",
+      "applicableOracleHosts": [
+        "7.6.6",
+        "5.1.26100.9818"
+      ],
+      "probe": "nested fixed bytes and absent path",
+      "artifactTargets": [
+        "net10.0"
+      ]
+    },
+    {
+      "id": "list-empty-dirs",
+      "workloadKind": "Script",
+      "scenarioFamily": "provider-enumeration",
+      "repositoryUrl": "https://github.com/fleschutz/PowerShell",
+      "license": "CC0-1.0",
+      "licenseUrl": "https://github.com/fleschutz/PowerShell/blob/f071b4d6abb2981d837edc9e0698dbdeffd53082/LICENSE",
+      "revisionKind": "GitCommit",
+      "revision": "f071b4d6abb2981d837edc9e0698dbdeffd53082",
+      "acquisition": {
+        "kind": "File",
+        "url": "https://raw.githubusercontent.com/fleschutz/PowerShell/f071b4d6abb2981d837edc9e0698dbdeffd53082/scripts/list-empty-dirs.ps1",
+        "sha256": "4e650a97eca55aacf1394d85467f431f4ee61f298819c2a1418d97cf84a75ca5"
+      },
+      "entryPoint": "scripts/list-empty-dirs.ps1",
+      "applicableOracleHosts": [
+        "7.6.6",
+        "5.1.26100.9818"
+      ],
+      "probe": "nested directories and absent path",
+      "artifactTargets": [
+        "net10.0"
+      ]
+    },
+    {
+      "id": "list-anagrams",
+      "workloadKind": "Script",
+      "scenarioFamily": "permutations-and-formatting",
+      "repositoryUrl": "https://github.com/fleschutz/PowerShell",
+      "license": "CC0-1.0",
+      "licenseUrl": "https://github.com/fleschutz/PowerShell/blob/f071b4d6abb2981d837edc9e0698dbdeffd53082/LICENSE",
+      "revisionKind": "GitCommit",
+      "revision": "f071b4d6abb2981d837edc9e0698dbdeffd53082",
+      "acquisition": {
+        "kind": "File",
+        "url": "https://raw.githubusercontent.com/fleschutz/PowerShell/f071b4d6abb2981d837edc9e0698dbdeffd53082/scripts/list-anagrams.ps1",
+        "sha256": "fdf1f7ea2009e726a5627c9899efa33b2d13892996535e2af3ed638045a16993"
+      },
+      "entryPoint": "scripts/list-anagrams.ps1",
+      "applicableOracleHosts": [
+        "7.6.6",
+        "5.1.26100.9818"
+      ],
+      "probe": "three distinct characters and repeated characters",
+      "artifactTargets": [
+        "net10.0"
+      ]
+    },
+    {
+      "id": "write-pi",
+      "workloadKind": "Script",
+      "scenarioFamily": "big-integer-loop",
+      "repositoryUrl": "https://github.com/fleschutz/PowerShell",
+      "license": "CC0-1.0",
+      "licenseUrl": "https://github.com/fleschutz/PowerShell/blob/f071b4d6abb2981d837edc9e0698dbdeffd53082/LICENSE",
+      "revisionKind": "GitCommit",
+      "revision": "f071b4d6abb2981d837edc9e0698dbdeffd53082",
+      "acquisition": {
+        "kind": "File",
+        "url": "https://raw.githubusercontent.com/fleschutz/PowerShell/f071b4d6abb2981d837edc9e0698dbdeffd53082/scripts/write-pi.ps1",
+        "sha256": "89d5fc49ba21eeb31bd8b9a62e84b1a9fbd73a0aedb4aeb0a7a82d223a065b1a"
+      },
+      "entryPoint": "scripts/write-pi.ps1",
+      "applicableOracleHosts": [
+        "7.6.6",
+        "5.1.26100.9818"
+      ],
+      "probe": "12 digits and invalid numeric argument",
+      "artifactTargets": [
+        "net10.0"
+      ]
+    },
+    {
+      "id": "Summarize-AsaResults",
+      "workloadKind": "Script",
+      "scenarioFamily": "structured-json-report",
+      "repositoryUrl": "https://github.com/PowerShell/PowerShell",
+      "license": "MIT",
+      "licenseUrl": "https://github.com/PowerShell/PowerShell/blob/ba2221aed027041b6620c5fe1c0675567f14452a/LICENSE.txt",
+      "revisionKind": "GitCommit",
+      "revision": "ba2221aed027041b6620c5fe1c0675567f14452a",
+      "acquisition": {
+        "kind": "File",
+        "url": "https://raw.githubusercontent.com/PowerShell/PowerShell/ba2221aed027041b6620c5fe1c0675567f14452a/tools/AttackSurfaceAnalyzer/Summarize-AsaResults.ps1",
+        "sha256": "fa0de421a4208596a06a28f3f992418142ff470aa131e471665683f6d8f24f31"
+      },
+      "entryPoint": "tools/AttackSurfaceAnalyzer/Summarize-AsaResults.ps1",
+      "applicableOracleHosts": [
+        "7.6.6"
+      ],
+      "probe": "synthetic local report and malformed JSON",
+      "artifactTargets": [
+        "net10.0"
+      ]
+    },
+    {
+      "id": "GenerateParsingHelpers",
+      "workloadKind": "Script",
+      "scenarioFamily": "source-generation",
+      "repositoryUrl": "https://github.com/microsoft/DirectML",
+      "license": "MIT",
+      "licenseUrl": "https://github.com/microsoft/DirectML/blob/8700779fe7a09ea7a007cf3d7ab4293c78e41017/LICENSE",
+      "revisionKind": "GitCommit",
+      "revision": "8700779fe7a09ea7a007cf3d7ab4293c78e41017",
+      "acquisition": {
+        "kind": "File",
+        "url": "https://raw.githubusercontent.com/microsoft/DirectML/8700779fe7a09ea7a007cf3d7ab4293c78e41017/DxDispatch/tools/GenerateParsingHelpers.ps1",
+        "sha256": "745c83ffef239533d34af2aba1f406af53bbd0579502c87fa43953f6fa4430bd"
+      },
+      "entryPoint": "DxDispatch/tools/GenerateParsingHelpers.ps1",
+      "applicableOracleHosts": [
+        "7.6.6",
+        "5.1.26100.9818"
+      ],
+      "probe": "local schema with explicit feature level and invalid schema",
+      "artifactTargets": [
+        "net10.0"
+      ]
+    },
+    {
+      "id": "Get-OSSConhostLog",
+      "workloadKind": "Script",
+      "scenarioFamily": "native-git-pipeline",
+      "repositoryUrl": "https://github.com/microsoft/terminal",
+      "license": "MIT",
+      "licenseUrl": "https://github.com/microsoft/terminal/blob/cf5e6bf22727a251aced8bc30491c87428a4e116/LICENSE",
+      "revisionKind": "GitCommit",
+      "revision": "cf5e6bf22727a251aced8bc30491c87428a4e116",
+      "acquisition": {
+        "kind": "File",
+        "url": "https://raw.githubusercontent.com/microsoft/terminal/cf5e6bf22727a251aced8bc30491c87428a4e116/tools/Get-OSSConhostLog.ps1",
+        "sha256": "356f1f6136122d110b76d90d84a3bf0d0c0317412b07eefc16f1636e89046cb7"
+      },
+      "entryPoint": "tools/Get-OSSConhostLog.ps1",
+      "applicableOracleHosts": [
+        "7.6.6"
+      ],
+      "probe": "local Git history with fixed commits and invalid revision",
+      "artifactTargets": [
+        "net10.0"
+      ],
+      "hostPrerequisites": {
+        "7.6.6": [
+          "Git available on PATH. All operations use a temporary repository."
+        ]
+      }
+    },
+    {
+      "id": "BuildScriptVersions",
+      "workloadKind": "Script",
+      "scenarioFamily": "csv-file-effects",
+      "repositoryUrl": "https://github.com/microsoft/CSS-Exchange",
+      "license": "MIT",
+      "licenseUrl": "https://github.com/microsoft/CSS-Exchange/blob/a5a267f752c719cc465613c47d33ba8f62c32340/LICENSE",
+      "revisionKind": "GitCommit",
+      "revision": "a5a267f752c719cc465613c47d33ba8f62c32340",
+      "acquisition": {
+        "kind": "File",
+        "url": "https://raw.githubusercontent.com/microsoft/CSS-Exchange/a5a267f752c719cc465613c47d33ba8f62c32340/.build/BuildScriptVersions.ps1",
+        "sha256": "1fa0dc2cce8279f65f481fdf5569094fed55a6494497a4c45ed5fe6981f694f3"
+      },
+      "entryPoint": ".build/BuildScriptVersions.ps1",
+      "applicableOracleHosts": [
+        "7.6.6"
+      ],
+      "probe": "generated release inventory for local fixed files and absent CSV",
+      "artifactTargets": [
+        "net10.0"
+      ]
+    },
+    {
+      "id": "PSWriteHTML",
+      "workloadKind": "Module",
+      "scenarioFamily": "gallery-module-workflow",
+      "repositoryUrl": "https://github.com/EvotecIT/PSWriteHTML",
+      "license": "MIT",
+      "licenseUrl": "https://github.com/EvotecIT/PSWriteHTML/blob/master/LICENSE",
+      "revisionKind": "GalleryVersion",
+      "revision": "1.45.0",
+      "acquisition": {
+        "kind": "ZipArchive",
+        "url": "https://www.powershellgallery.com/api/v2/package/PSWriteHTML/1.45.0",
+        "sha256": "2f9fb7baa3e378864e9ed1c9964ba176536e73da88dc3fd59bd082a0bc3abb14"
+      },
+      "entryPoint": "PSWriteHTML.psd1",
+      "probe": "local document with inline header and a table",
+      "entryCommand": "New-HTML",
+      "applicableOracleHosts": [
+        "7.6.6",
+        "5.1.26100.9818"
+      ],
+      "artifactTargets": [
+        "net10.0",
+        "net472"
+      ]
+    },
+    {
+      "id": "PSWriteColor",
+      "workloadKind": "Module",
+      "scenarioFamily": "gallery-module-workflow",
+      "repositoryUrl": "https://github.com/EvotecIT/PSWriteColor",
+      "license": "MIT",
+      "licenseUrl": "https://github.com/EvotecIT/PSWriteColor/blob/master/LICENSE",
+      "revisionKind": "GalleryVersion",
+      "revision": "1.0.7",
+      "acquisition": {
+        "kind": "ZipArchive",
+        "url": "https://www.powershellgallery.com/api/v2/package/PSWriteColor/1.0.7",
+        "sha256": "e201a618d8c8b25b21b6549aa0e9091c65075ba4f19644aaa1b76b0178beb39d"
+      },
+      "entryPoint": "PSWriteColor.psd1",
+      "probe": "Compare output, log bytes, and the parameter binding error for an invalid console color.",
+      "entryCommand": "Write-Color",
+      "applicableOracleHosts": [
+        "7.6.6",
+        "5.1.26100.9818"
+      ],
+      "artifactTargets": [
+        "net10.0",
+        "net472"
+      ]
+    },
+    {
+      "id": "PSSharedGoods",
+      "workloadKind": "Module",
+      "scenarioFamily": "gallery-module-workflow",
+      "repositoryUrl": "https://github.com/EvotecIT/PSSharedGoods",
+      "license": "MIT",
+      "licenseUrl": "https://github.com/EvotecIT/PSSharedGoods/blob/master/License",
+      "revisionKind": "GalleryVersion",
+      "revision": "0.0.313",
+      "acquisition": {
+        "kind": "ZipArchive",
+        "url": "https://www.powershellgallery.com/api/v2/package/PSSharedGoods/0.0.313",
+        "sha256": "e1eee19356385ea324383c64266926e7af508068ae8756860933398e3f35edcb"
+      },
+      "entryPoint": "PSSharedGoods.psd1",
+      "probe": "known and unknown country code",
+      "entryCommand": "Convert-CountryCodeToCountry",
+      "applicableOracleHosts": [
+        "7.6.6",
+        "5.1.26100.9818"
+      ],
+      "artifactTargets": [
+        "net10.0",
+        "net472"
+      ]
+    },
+    {
+      "id": "PSSVG",
+      "workloadKind": "Module",
+      "scenarioFamily": "gallery-module-workflow",
+      "repositoryUrl": "https://github.com/StartAutomating/PSSVG",
+      "license": "MIT",
+      "licenseUrl": "https://github.com/StartAutomating/PSSVG/blob/main/LICENSE",
+      "revisionKind": "GalleryVersion",
+      "revision": "0.2.10",
+      "acquisition": {
+        "kind": "ZipArchive",
+        "url": "https://www.powershellgallery.com/api/v2/package/PSSVG/0.2.10",
+        "sha256": "56b3431d7db0aca7094fb0d49ae1bda8230a9507aeab5763db19df9436c2b0ad"
+      },
+      "entryPoint": "PSSVG.psd1",
+      "probe": "Build an SVG containing a rectangle and observe the serialized XML.",
+      "entryCommand": "SVG.svg",
+      "applicableOracleHosts": [
+        "7.6.6",
+        "5.1.26100.9818"
+      ],
+      "artifactTargets": [
+        "net10.0",
+        "net472"
+      ],
+      "hostPrerequisites": {
+        "5.1.26100.9818": [
+          "Load the installed .NET Framework System.Web assembly before importing PSSVG."
+        ]
+      }
+    },
+    {
+      "id": "MarkdownPS",
+      "workloadKind": "Module",
+      "scenarioFamily": "gallery-module-workflow",
+      "repositoryUrl": "https://github.com/Sarafian/MarkdownPS",
+      "license": "MIT",
+      "licenseUrl": "https://github.com/Sarafian/MarkdownPS/blob/master/LICENSE",
+      "revisionKind": "GalleryVersion",
+      "revision": "1.10",
+      "acquisition": {
+        "kind": "ZipArchive",
+        "url": "https://www.powershellgallery.com/api/v2/package/MarkdownPS/1.10",
+        "sha256": "5544f19b53f4c4fea54d74d2a10134aa84ed8768347917223c8c69f8cd33900c"
+      },
+      "entryPoint": "MarkdownPS.psd1",
+      "probe": "pipeline of fixed records",
+      "entryCommand": "New-MDTable",
+      "applicableOracleHosts": [
+        "7.6.6",
+        "5.1.26100.9818"
+      ],
+      "artifactTargets": [
+        "net10.0",
+        "net472"
+      ]
+    },
+    {
+      "id": "PSStringScanner",
+      "workloadKind": "Module",
+      "scenarioFamily": "gallery-module-workflow",
+      "repositoryUrl": "https://github.com/dfinke/PSStringScanner",
+      "license": "MIT",
+      "licenseUrl": "https://github.com/dfinke/PSStringScanner/blob/master/LICENSE",
+      "revisionKind": "GalleryVersion",
+      "revision": "1.0.6",
+      "acquisition": {
+        "kind": "ZipArchive",
+        "url": "https://www.powershellgallery.com/api/v2/package/PSStringScanner/1.0.6",
+        "sha256": "06f632ecaec453368964e9aeb753a2278785c81de9709d4ebe2bd7bbf438f995"
+      },
+      "entryPoint": "PSStringScanner.psd1",
+      "probe": "scan tokens including mismatch and end of input",
+      "entryCommand": "New-PSStringScanner",
+      "applicableOracleHosts": [
+        "7.6.6",
+        "5.1.26100.9818"
+      ],
+      "artifactTargets": [
+        "net10.0",
+        "net472"
+      ]
+    },
+    {
+      "id": "PScribo",
+      "workloadKind": "Module",
+      "scenarioFamily": "gallery-module-workflow",
+      "repositoryUrl": "https://github.com/iainbrighton/PScribo",
+      "license": "MIT",
+      "licenseUrl": "https://github.com/iainbrighton/PScribo/blob/dev/LICENSE",
+      "revisionKind": "GalleryVersion",
+      "revision": "0.11.1",
+      "acquisition": {
+        "kind": "ZipArchive",
+        "url": "https://www.powershellgallery.com/api/v2/package/PScribo/0.11.1",
+        "sha256": "36d4d7aaace20b28514a3d59d5c448ede0a7a1773cd26ad87c356845275e6212"
+      },
+      "entryPoint": "PScribo.psd1",
+      "probe": "render a local HTML report and invalid format",
+      "entryCommand": "Document and Export-Document",
+      "applicableOracleHosts": [
+        "7.6.6",
+        "5.1.26100.9818"
+      ],
+      "artifactTargets": [
+        "net10.0",
+        "net472"
+      ]
+    },
+    {
+      "id": "BuildHelpers",
+      "workloadKind": "Module",
+      "scenarioFamily": "gallery-module-workflow",
+      "repositoryUrl": "https://github.com/PowerShellOrg/BuildHelpers",
+      "license": "MIT",
+      "licenseUrl": "https://github.com/PowerShellOrg/BuildHelpers/blob/master/LICENSE",
+      "revisionKind": "GalleryVersion",
+      "revision": "2.0.16",
+      "acquisition": {
+        "kind": "ZipArchive",
+        "url": "https://www.powershellgallery.com/api/v2/package/BuildHelpers/2.0.16",
+        "sha256": "c4cf3f7664f09f29f19debd2246ab2a95a67648c41066611a5fd8c6421a58155"
+      },
+      "entryPoint": "BuildHelpers.psd1",
+      "probe": "local versioned project fixture and missing input",
+      "entryCommand": "Get-ProjectName",
+      "applicableOracleHosts": [
+        "7.6.6",
+        "5.1.26100.9818"
+      ],
+      "artifactTargets": [
+        "net10.0",
+        "net472"
+      ]
+    },
+    {
+      "id": "DSCParser",
+      "workloadKind": "Module",
+      "scenarioFamily": "gallery-module-workflow",
+      "repositoryUrl": "https://github.com/Microsoft365DSC/DSCParser",
+      "license": "MIT",
+      "licenseUrl": "https://github.com/Microsoft365DSC/DSCParser/blob/dev/LICENSE",
+      "revisionKind": "GalleryVersion",
+      "revision": "3.1.0.8",
+      "acquisition": {
+        "kind": "ZipArchive",
+        "url": "https://www.powershellgallery.com/api/v2/package/DSCParser/3.1.0.8",
+        "sha256": "ef02abc04c7648bea0d39b552b9a65b7a3f840de60b67f2f06997a9f06840a3d"
+      },
+      "entryPoint": "DSCParser.psd1",
+      "probe": "local DSC source as data and malformed source",
+      "entryCommand": "ConvertTo-DSCObject",
+      "applicableOracleHosts": [
+        "7.6.6",
+        "5.1.26100.9818"
+      ],
+      "artifactTargets": [
+        "net10.0",
+        "net472"
+      ]
+    },
+    {
+      "id": "PSDocs",
+      "workloadKind": "Module",
+      "scenarioFamily": "gallery-module-workflow",
+      "repositoryUrl": "https://github.com/microsoft/PSDocs",
+      "license": "MIT",
+      "licenseUrl": "https://github.com/microsoft/PSDocs/blob/main/LICENSE",
+      "revisionKind": "GalleryVersion",
+      "revision": "0.9.0",
+      "acquisition": {
+        "kind": "ZipArchive",
+        "url": "https://www.powershellgallery.com/api/v2/package/PSDocs/0.9.0",
+        "sha256": "798cab96c0db89dcad3b8307bf2ad3236f492b429b354154289f2859aaaf8b9a"
+      },
+      "entryPoint": "PSDocs.psd1",
+      "probe": "Pass a fixed input object to a local document definition and inspect the resulting Markdown.",
+      "entryCommand": "Invoke-PSDocument",
+      "applicableOracleHosts": [
+        "7.6.6",
+        "5.1.26100.9818"
+      ],
+      "artifactTargets": [
+        "net10.0",
+        "net472"
+      ]
+    },
+    {
+      "id": "DirectoryDistributionChecker",
+      "workloadKind": "Script",
+      "scenarioFamily": "multi-file-application",
+      "repositoryUrl": "https://github.com/SDormans/PowershellScripts",
+      "license": "MIT",
+      "licenseUrl": "https://github.com/SDormans/PowershellScripts/blob/9c2e43cd5fceddc49cdf0fd592e2354f00e84147/LICENSE",
+      "revisionKind": "GitCommit",
+      "revision": "9c2e43cd5fceddc49cdf0fd592e2354f00e84147",
+      "acquisition": {
+        "kind": "ZipArchive",
+        "url": "https://codeload.github.com/SDormans/PowershellScripts/zip/9c2e43cd5fceddc49cdf0fd592e2354f00e84147",
+        "sha256": "a725a90bc876e3610abee75b98489398514d4a35267fed0c3f4b3b9d83bb8936"
+      },
+      "entryPoint": "PowershellScripts-9c2e43cd5fceddc49cdf0fd592e2354f00e84147/DirectoryDistributionChecker.ps1",
+      "sourceInputs": [
+        {
+          "path": "PowershellScripts-9c2e43cd5fceddc49cdf0fd592e2354f00e84147/DirectoryDistributionChecker.ps1",
+          "sha256": "9852db5ef3d183dcc5137c43e7b7b7d40c3528a76d495ec65913669a239ebf72"
+        },
+        {
+          "path": "PowershellScripts-9c2e43cd5fceddc49cdf0fd592e2354f00e84147/Common.ps1",
+          "sha256": "fc08e5cb092ea6692c590766553024b9f53b758c930e7921fea504ad74a4666a"
+        },
+        {
+          "path": "PowershellScripts-9c2e43cd5fceddc49cdf0fd592e2354f00e84147/LICENSE",
+          "sha256": "61c41d09101df3ca2692412372524c68c50693bddb3b89149cb24e1d17cc5289"
+        }
+      ],
+      "applicableOracleHosts": [
+        "7.6.6",
+        "5.1.26100.9818"
+      ],
+      "probe": "temporary directory sizes and JSON report; missing directory",
+      "artifactTargets": [
+        "net10.0"
+      ]
+    },
+    {
+      "id": "Format-SourceHygiene",
+      "workloadKind": "Script",
+      "scenarioFamily": "multi-file-application",
+      "repositoryUrl": "https://github.com/aelassas/servy",
+      "license": "MIT",
+      "licenseUrl": "https://github.com/aelassas/servy/blob/d399d72f9cf1140b92c8a8b7a8284a7fdc727c9b/LICENSE.txt",
+      "revisionKind": "GitCommit",
+      "revision": "d399d72f9cf1140b92c8a8b7a8284a7fdc727c9b",
+      "acquisition": {
+        "kind": "ZipArchive",
+        "url": "https://codeload.github.com/aelassas/servy/zip/d399d72f9cf1140b92c8a8b7a8284a7fdc727c9b",
+        "sha256": "95923781b304a2e531a881873e5e6944b8189590064d5da40d474d4e9e822c1f"
+      },
+      "entryPoint": "servy-d399d72f9cf1140b92c8a8b7a8284a7fdc727c9b/Format-SourceHygiene.ps1",
+      "sourceInputs": [
+        {
+          "path": "servy-d399d72f9cf1140b92c8a8b7a8284a7fdc727c9b/Format-SourceHygiene.ps1",
+          "sha256": "408a6816afd17e2eea65dd2e16ed53922e017f5defd19d64bf82f2d1510bd78e"
+        },
+        {
+          "path": "servy-d399d72f9cf1140b92c8a8b7a8284a7fdc727c9b/Update-FileHelpers.ps1",
+          "sha256": "10c8d30287e835e473323664d66cef3d238668715c2eed295085f746036b5309"
+        },
+        {
+          "path": "servy-d399d72f9cf1140b92c8a8b7a8284a7fdc727c9b/Get-FileEncoding.ps1",
+          "sha256": "4c57ffef3c5a698546fc4a1725677720d395c6c79ce2f5f71e010f43deb8bbed"
+        },
+        {
+          "path": "servy-d399d72f9cf1140b92c8a8b7a8284a7fdc727c9b/LICENSE.txt",
+          "sha256": "0c13957d1fa370a9d752222c4478a073140f1f5e65e05036910aea7f39af03ff"
+        }
+      ],
+      "applicableOracleHosts": [
+        "7.6.6",
+        "5.1.26100.9818"
+      ],
+      "probe": "scratch-only source formatting and dry run; missing helper",
+      "artifactTargets": [
+        "net10.0"
+      ]
+    },
+    {
+      "id": "Verify-MarkdownLinks",
+      "workloadKind": "Script",
+      "scenarioFamily": "multi-file-application",
+      "repositoryUrl": "https://github.com/PowerShell/PowerShell",
+      "license": "MIT",
+      "licenseUrl": "https://github.com/PowerShell/PowerShell/blob/ba2221aed027041b6620c5fe1c0675567f14452a/LICENSE.txt",
+      "revisionKind": "GitCommit",
+      "revision": "ba2221aed027041b6620c5fe1c0675567f14452a",
+      "acquisition": {
+        "kind": "ZipArchive",
+        "url": "https://codeload.github.com/PowerShell/PowerShell/zip/ba2221aed027041b6620c5fe1c0675567f14452a",
+        "sha256": "044edd5a835418594e35978955c5c6dad5e4553ec74fd35fccaf1e9d333dfa5a"
+      },
+      "entryPoint": "PowerShell-ba2221aed027041b6620c5fe1c0675567f14452a/.github/actions/infrastructure/markdownlinks/Verify-MarkdownLinks.ps1",
+      "sourceInputs": [
+        {
+          "path": "PowerShell-ba2221aed027041b6620c5fe1c0675567f14452a/.github/actions/infrastructure/markdownlinks/Verify-MarkdownLinks.ps1",
+          "sha256": "e8e810fa132ba1b436f68a7593047eb7cb770cf10ec686130332936e215e9fe8"
+        },
+        {
+          "path": "PowerShell-ba2221aed027041b6620c5fe1c0675567f14452a/.github/actions/infrastructure/markdownlinks/Parse-MarkdownLink.ps1",
+          "sha256": "8fd06dd6d652e30810ce71e700e7f25b93d1aad821fdf44c2430426dbe3a4070"
+        },
+        {
+          "path": "PowerShell-ba2221aed027041b6620c5fe1c0675567f14452a/LICENSE.txt",
+          "sha256": "7c77a44a8acd9b41fdc209864a8016b3d430b5d0e09309818d5b7444336df744"
+        }
+      ],
+      "applicableOracleHosts": [
+        "7.6.6"
+      ],
+      "probe": "contained Markdown links; broken link; PowerShell 7 required",
+      "artifactTargets": [
+        "net10.0"
+      ]
+    },
+    {
+      "id": "Build-MainSummaryFromZip",
+      "workloadKind": "Script",
+      "scenarioFamily": "multi-file-application",
+      "repositoryUrl": "https://github.com/Awslabs/resource-discovery-for-azure",
+      "license": "MIT-0",
+      "licenseUrl": "https://github.com/Awslabs/resource-discovery-for-azure/blob/1a860ef49e906ecc2ff9b058a05800a7dd833fda/LICENSE",
+      "revisionKind": "GitCommit",
+      "revision": "1a860ef49e906ecc2ff9b058a05800a7dd833fda",
+      "acquisition": {
+        "kind": "ZipArchive",
+        "url": "https://codeload.github.com/Awslabs/resource-discovery-for-azure/zip/1a860ef49e906ecc2ff9b058a05800a7dd833fda",
+        "sha256": "43e934869e85a05912257bf423da849a7853623284bf3011460aa6ce61f85f1f"
+      },
+      "entryPoint": "resource-discovery-for-azure-1a860ef49e906ecc2ff9b058a05800a7dd833fda/Build-MainSummaryFromZip.ps1",
+      "sourceInputs": [
+        {
+          "path": "resource-discovery-for-azure-1a860ef49e906ecc2ff9b058a05800a7dd833fda/Build-MainSummaryFromZip.ps1",
+          "sha256": "1afcb9f9444d4effcac91efc4d43377294c09fb8673793f76c138dd8fe12141c"
+        },
+        {
+          "path": "resource-discovery-for-azure-1a860ef49e906ecc2ff9b058a05800a7dd833fda/Functions/AllSubHtmlSummary.Functions.ps1",
+          "sha256": "11ef1001c2fabd5390c11d2370e2314d899cc1790ab862e183df3960c3167952"
+        },
+        {
+          "path": "resource-discovery-for-azure-1a860ef49e906ecc2ff9b058a05800a7dd833fda/Version.json",
+          "sha256": "30cec557add6c32709008db009c70daac39f7d39bd36f1daedcff516c12456bc"
+        },
+        {
+          "path": "resource-discovery-for-azure-1a860ef49e906ecc2ff9b058a05800a7dd833fda/LICENSE",
+          "sha256": "7cb750713252efd1d578837ba8785b61319109906f0c10b87adab7cf4badfc42"
+        }
+      ],
+      "applicableOracleHosts": [
+        "7.6.6"
+      ],
+      "probe": "generated local report bundle and invalid ZIP; PowerShell 7 required",
+      "artifactTargets": [
+        "net10.0"
+      ]
+    },
+    {
+      "id": "ResxGen",
+      "workloadKind": "Script",
+      "scenarioFamily": "multi-file-application",
+      "repositoryUrl": "https://github.com/PowerShell/PowerShell",
+      "license": "MIT",
+      "licenseUrl": "https://github.com/PowerShell/PowerShell/blob/ba2221aed027041b6620c5fe1c0675567f14452a/LICENSE.txt",
+      "revisionKind": "GitCommit",
+      "revision": "ba2221aed027041b6620c5fe1c0675567f14452a",
+      "acquisition": {
+        "kind": "ZipArchive",
+        "url": "https://codeload.github.com/PowerShell/PowerShell/zip/ba2221aed027041b6620c5fe1c0675567f14452a",
+        "sha256": "044edd5a835418594e35978955c5c6dad5e4553ec74fd35fccaf1e9d333dfa5a"
+      },
+      "entryPoint": "PowerShell-ba2221aed027041b6620c5fe1c0675567f14452a/tools/ResxGen/ResxGen.ps1",
+      "sourceInputs": [
+        {
+          "path": "PowerShell-ba2221aed027041b6620c5fe1c0675567f14452a/tools/ResxGen/ResxGen.ps1",
+          "sha256": "6d199f42fa299e8eb25d496e0e9adbb3f6a503daf6a67993856896975876f496"
+        },
+        {
+          "path": "PowerShell-ba2221aed027041b6620c5fe1c0675567f14452a/tools/ResxGen/ResxGen.psm1",
+          "sha256": "68f23dbc645a513f8bc9c80e99584bbed803ed8a5551d3a11bcd7a6cbbc0af3c"
+        },
+        {
+          "path": "PowerShell-ba2221aed027041b6620c5fe1c0675567f14452a/LICENSE.txt",
+          "sha256": "7c77a44a8acd9b41fdc209864a8016b3d430b5d0e09309818d5b7444336df744"
+        }
+      ],
+      "applicableOracleHosts": [
+        "7.6.6",
+        "5.1.26100.9818"
+      ],
+      "probe": "local ETW XML to .resx and C# output; invalid XML",
+      "artifactTargets": [
+        "net10.0"
+      ]
+    }
+  ],
+  "artifactMatrix": {
+    "net10.0": {
+      "operatingSystem": "Windows",
+      "architecture": "x64",
+      "referenceHost": "7.6.6",
+      "appliesTo": [
+        "Script",
+        "Module"
+      ]
+    },
+    "net472": {
+      "operatingSystem": "Windows",
+      "architecture": "x64",
+      "referenceHost": "5.1.26100.9818",
+      "appliesTo": [
+        "Module"
+      ]
+    }
+  }
+}
