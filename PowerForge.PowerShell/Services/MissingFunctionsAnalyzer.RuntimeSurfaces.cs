@@ -36,7 +36,10 @@ public sealed partial class MissingFunctionsAnalyzer
         }
         return new MissingFunctionsReport(report.Summary, report.SummaryFiltered, report.Functions,
             report.FunctionsTopLevelOnly, report.AnalysisComplete,
-            retained.OrderBy(static name => name, StringComparer.OrdinalIgnoreCase).ToArray());
+            retained.OrderBy(static name => name, StringComparer.OrdinalIgnoreCase).ToArray())
+        {
+            ApprovedModuleRuntimeReferences = report.ApprovedModuleRuntimeReferences
+        };
     }
 
     private static bool HasNonFunctionRuntimeSurface(PSModuleInfo module)

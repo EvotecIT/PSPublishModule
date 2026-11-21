@@ -120,6 +120,27 @@ public sealed partial class ModulePipelineRunner
             .ToArray();
     }
 
+    private static void ValidateApprovedDonorMerge(
+        ModulePipelinePlan plan, MissingFunctionAnalysisResult? report, string[] approvedModules)
+    {
+        if (approvedModules.Length == 0)
+            return;
+        if (report is null)
+            throw new InvalidOperationException(
+                $"Cannot verify approved module calls for '{plan.ModuleName}': {string.Join(", ", approvedModules)}. Missing function analysis did not complete.");
+        if (report.ApprovedModuleMergeErrors.Length > 0)
+            throw new InvalidOperationException(
+                $"Cannot merge approved modules for '{plan.ModuleName}'. {string.Join(" ", report.ApprovedModuleMergeErrors)} Declare dependencies requiring their original context only as RequiredModule.");
+        if (!plan.MergeMissing)
+        {
+            var approved = new HashSet<string>(approvedModules, StringComparer.OrdinalIgnoreCase);
+            var needed = report.Summary.Where(command => approved.Contains(command.Source)).ToArray();
+            if (needed.Length > 0)
+                throw new InvalidOperationException(
+                    $"Cannot omit approved module commands without merging: {string.Join(", ", needed.Select(command => $"'{command.Source}\\{command.Name}'"))}. Enable MergeFunctionsFromApprovedModules.");
+        }
+    }
+
     private void ValidateMissingFunctions(
         MissingFunctionAnalysisResult report,
         ModulePipelinePlan plan,

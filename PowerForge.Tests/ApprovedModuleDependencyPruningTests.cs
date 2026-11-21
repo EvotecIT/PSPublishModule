@@ -285,11 +285,15 @@ public sealed class ApprovedModuleDependencyPruningTests
             };
             WriteModule(root, "source",
                 consumerPrefix +
-                "function Get-ConsumerThing { param([string]$ProviderName='PnP.PowerShell'); " + consumerSetup +
-                "Get-ParentThing; " + aliasCall + "Get-Module -Name $ProviderName | Out-Null }; Export-ModuleMember Get-ConsumerThing");
+                "function Get-ConsumerThing { " + consumerSetup +
+                "Get-ParentThing; " + aliasCall + "}; Export-ModuleMember Get-ConsumerThing");
             File.WriteAllText(Path.Combine(source, "Consumer.format.ps1xml"),
                 "<Configuration><ViewDefinitions><View><Name>Consumer</Name><ViewSelectedBy><TypeName>System.String</TypeName></ViewSelectedBy><TableControl><TableRowEntries><TableRowEntry><TableColumnItems><TableColumnItem><PropertyName>Length</PropertyName></TableColumnItem></TableColumnItems></TableRowEntry></TableRowEntries></TableControl></View></ViewDefinitions></Configuration>");
             Assert.True(ManifestEditor.TrySetTopLevelStringArray(Path.Combine(source, "source.psd1"), "FormatsToProcess", new[] { "Consumer.format.ps1xml" }));
+            string hooks = Path.Combine(source, "Hooks");
+            Directory.CreateDirectory(hooks);
+            File.WriteAllText(Path.Combine(hooks, "Initialize.ps1"), "$null = 1");
+            Assert.True(ManifestEditor.TrySetTopLevelStringArray(Path.Combine(source, "source.psd1"), "ScriptsToProcess", new[] { "Hooks/Initialize.ps1" }));
             // WriteModule uses the directory name as identity; the consumer has a normal manifest.
             var segments = new List<IConfigurationSegment>
             {
@@ -382,6 +386,100 @@ public sealed class ApprovedModuleDependencyPruningTests
         }
     }
 
+    [Theory]
+    [InlineData("consumer function", "Get-SharedHelper", "name conflict")]
+    [InlineData("sibling donor", "Get-SharedHelper", "name conflict")]
+    [InlineData("consumer cmdlet", "Get-Date", "name conflict")]
+    [InlineData("computed consumer alias", "Get-SharedAlias", "consumer alias declaration")]
+    [InlineData("qualified call", "Get-SharedEntry", "referenced at runtime")]
+    [InlineData("dynamic call", "SharedHelpers", "dynamic command")]
+    [InlineData("unbound runtime import", "SharedHelpers", "referenced at runtime")]
+    [InlineData("merge disabled", "Get-SharedEntry", "without merging")]
+    [InlineData("script state", "Get-SharedEntry", "script:SharedValue")]
+    [InlineData("relative file", "Get-SharedEntry", "PSScriptRoot")]
+    public void Run_RejectsUnpreservableApprovedDonorCommands(
+        string scenario, string commandOrModule, string reason)
+    {
+        string root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
+        try
+        {
+            string installed = Path.Combine(root, "installed");
+            string donor = scenario switch
+            {
+                "consumer cmdlet" => "function Get-Date { 'private' }; function Get-SharedEntry { Get-Date }",
+                "computed consumer alias" =>
+                    "function Get-SharedHelper { 'donor' }; Set-Alias Get-SharedAlias Get-SharedHelper; function Get-SharedEntry { Get-SharedAlias }",
+                "script state" => "$script:SharedValue = 'donor'; function Get-SharedEntry { $script:SharedValue }",
+                "relative file" => "function Get-SharedEntry { Get-Content (Join-Path $PSScriptRoot 'data.txt') }",
+                _ => "function Get-SharedHelper { 'donor' }; function Get-SharedEntry { Get-SharedHelper }"
+            };
+            if (scenario != "unbound runtime import")
+                WriteModule(installed, "SharedHelpers", donor + "; Export-ModuleMember -Function Get-SharedEntry");
+            string consumer = scenario switch
+            {
+                "consumer function" =>
+                    "function Get-SharedHelper { 'consumer' }; function Get-ConsumerThing { Get-SharedHelper; Get-SharedEntry }",
+                "computed consumer alias" =>
+                    "function Get-LocalEntry { [Alias(('Get-' + 'SharedAlias'))] param() 'consumer' }; function Get-ConsumerThing { Get-SharedAlias; Get-SharedEntry }",
+                "consumer cmdlet" => "function Get-ConsumerThing { Get-Date | Out-Null; Get-SharedEntry }",
+                "qualified call" => "function Get-ConsumerThing { SharedHelpers\\Get-SharedEntry }",
+                "dynamic call" => "function Get-ConsumerThing { $name = 'Get-SharedEntry'; & $name }",
+                "unbound runtime import" => "function Get-ConsumerThing { Import-Module SharedHelpers }",
+                "sibling donor" => "function Get-ConsumerThing { Get-SharedEntry; Get-SiblingEntry }",
+                _ => "function Get-ConsumerThing { Get-SharedEntry }"
+            };
+            WriteModule(root, "source", consumer + "; Export-ModuleMember -Function Get-ConsumerThing");
+            if (scenario == "sibling donor")
+                WriteModule(installed, "SiblingHelpers",
+                    "function Get-SharedHelper { 'sibling' }; function Get-SiblingEntry { Get-SharedHelper }; Export-ModuleMember -Function Get-SiblingEntry");
+            if (scenario == "relative file")
+                File.WriteAllText(Path.Combine(installed, "SharedHelpers", "data.txt"), "donor asset");
+
+            string packed = Path.Combine(root, "packed");
+            var segments = new List<IConfigurationSegment>
+            {
+                new ConfigurationBuildSegment
+                {
+                    BuildModule = new BuildModuleConfiguration
+                    {
+                        Merge = scenario != "merge disabled",
+                        MergeMissing = scenario != "merge disabled",
+                    }
+                },
+                new ConfigurationArtefactSegment { ArtefactType = ArtefactType.Packed, Configuration = new ArtefactConfiguration { Enabled = true, Path = packed } }
+            };
+            foreach (string name in scenario == "sibling donor" ? new[] { "SharedHelpers", "SiblingHelpers" } : new[] { "SharedHelpers" })
+            {
+                segments.Add(new ConfigurationModuleSegment
+                {
+                    Kind = ModuleDependencyKind.ApprovedModule,
+                    Configuration = new ModuleDependencyConfiguration { ModuleName = name, VersionSource = ModuleDependencyVersionSource.Installed }
+                });
+            }
+
+            var spec = new ModulePipelineSpec
+            {
+                Build = new ModuleBuildSpec { Name = "source", SourcePath = Path.Combine(root, "source"), Version = "1.0.0" },
+                Install = new ModulePipelineInstallOptions { Enabled = false },
+                Segments = segments.ToArray()
+            };
+            var runner = new ModulePipelineRunner(new NullLogger(), powerShellRunner: null,
+                moduleDependencyMetadataProvider: new FixtureMetadataProvider(installed),
+                missingFunctionAnalysisService: new PowerShellMissingFunctionAnalysisService());
+
+            var error = Assert.Throws<InvalidOperationException>(() => runner.Run(spec, runner.Plan(spec)));
+            Assert.Contains("SharedHelpers", error.Message);
+            Assert.Contains(commandOrModule, error.Message);
+            Assert.Contains(reason, error.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.False(File.Exists(Path.Combine(packed, "source.zip")));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+
     [Fact]
     public void Analyze_PrunesApprovedDependencyWhoseHelperIsAlreadyLocal()
     {
@@ -462,7 +560,8 @@ public sealed class ApprovedModuleDependencyPruningTests
             => GetLatestInstalledModules(references.Select(reference => reference.ModuleName).ToArray());
 
         public IReadOnlyDictionary<string, InstalledModuleMetadata> GetLatestInstalledModules(IReadOnlyList<string> names)
-            => names.ToDictionary(name => name, name => new InstalledModuleMetadata(name, "1.0.0", null, Path.Combine(modulesRoot, name)), StringComparer.OrdinalIgnoreCase);
+            => names.Where(name => Directory.Exists(Path.Combine(modulesRoot, name)))
+                .ToDictionary(name => name, name => new InstalledModuleMetadata(name, "1.0.0", null, Path.Combine(modulesRoot, name)), StringComparer.OrdinalIgnoreCase);
 
         public IReadOnlyList<RequiredModuleReference> GetRequiredModulesForInstalledModule(string moduleName)
             => Array.Empty<RequiredModuleReference>();

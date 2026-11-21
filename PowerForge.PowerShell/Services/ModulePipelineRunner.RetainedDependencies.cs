@@ -95,7 +95,7 @@ public sealed partial class ModulePipelineRunner
                 var analysis = AnalyzeMissingFunctions(code is null ? path : null, code, plan, Array.Empty<string>());
                 if (analysis is null || analysis.Summary.Any(command => string.IsNullOrWhiteSpace(command.Source)))
                     return Array.Empty<string>();
-                candidates.IntersectWith(analysis.FullyInlinedApprovedModules);
+                candidates.IntersectWith(analysis.ApprovedModulesUnusedInInput ?? analysis.FullyInlinedApprovedModules);
                 // Even inlineable donor functions remain external when this file itself is retained.
                 candidates.ExceptWith(analysis.Summary.Select(command => command.Source));
             }

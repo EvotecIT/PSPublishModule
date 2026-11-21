@@ -102,7 +102,7 @@ public sealed class MissingFunctionsAnalyzerBoundSourceTests
     }
 
     [Fact]
-    public void Analyze_RecursiveDonorAnalysisPrefersDonorHelperOverSameNamedConsumerFunction()
+    public void Analyze_RejectsDonorHelperThatWouldBindToSameNamedConsumerFunction()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N")));
         try
@@ -123,10 +123,10 @@ public sealed class MissingFunctionsAnalyzerBoundSourceTests
                     includeFunctionsRecursively: true,
                     approvedModuleSources: new[] { new ApprovedModuleSource(moduleName, "2.0.0", modulePath) }));
 
-            Assert.Equal(2, result.Functions.Length);
-            Assert.Contains(result.Functions, function => function.Contains("donor-helper", StringComparison.Ordinal));
-            Assert.DoesNotContain(result.Functions, function => function.Contains("consumer-helper", StringComparison.Ordinal));
-            Assert.Equal(new[] { moduleName }, result.FullyInlinedApprovedModules);
+            Assert.Empty(result.Functions);
+            Assert.Contains(result.Summary, command => command.Name == "Get-CollidingHelper" &&
+                command.Source == moduleName && command.Error.Contains("name conflict", StringComparison.OrdinalIgnoreCase));
+            Assert.Empty(result.FullyInlinedApprovedModules);
         }
         finally
         {

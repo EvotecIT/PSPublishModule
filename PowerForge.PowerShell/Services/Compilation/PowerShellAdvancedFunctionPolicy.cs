@@ -7,13 +7,19 @@ internal static class PowerShellAdvancedFunctionPolicy
     internal static string[] GetAliases(FunctionDefinitionAst function)
         => function.Body.ParamBlock?.Attributes
             .OfType<AttributeAst>()
-            .Where(static attribute =>
-                IsAttributeNamed(attribute, "Alias") ||
-                IsAttributeNamed(attribute, "AliasAttribute"))
+            .Where(IsAliasAttribute)
             .SelectMany(static attribute => attribute.PositionalArguments.OfType<StringConstantExpressionAst>())
             .Select(static alias => alias.Value)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray() ?? Array.Empty<string>();
+
+    internal static bool HasNonLiteralAlias(FunctionDefinitionAst function)
+        => function.Body.ParamBlock?.Attributes.OfType<AttributeAst>()
+            .Any(static attribute => IsAliasAttribute(attribute) &&
+                attribute.PositionalArguments.Any(static argument => argument is not StringConstantExpressionAst)) == true;
+
+    private static bool IsAliasAttribute(AttributeAst attribute)
+        => IsAttributeNamed(attribute, "Alias") || IsAttributeNamed(attribute, "AliasAttribute");
 
     internal static bool IsAdvanced(FunctionDefinitionAst function)
         => IsAdvancedBody(function.Body);

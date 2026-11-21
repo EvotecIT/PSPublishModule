@@ -8,60 +8,87 @@ namespace PowerForge;
 
 public sealed partial class MissingFunctionsAnalyzer
 {
-    private static HashSet<string> ReadRootAliasNames(ScriptBlockAst ast, FunctionDefinitionAst[] functions)
+    private static AuthoredAliases ReadRootAliases(ScriptBlockAst ast, FunctionDefinitionAst[] functions)
     {
         var names = new HashSet<string>(functions.SelectMany(PowerShellAdvancedFunctionPolicy.GetAliases),
             StringComparer.OrdinalIgnoreCase);
+        bool hasUnknownNames = functions.Any(PowerShellAdvancedFunctionPolicy.HasNonLiteralAlias);
         foreach (var command in ast.FindAll(node => node is CommandAst, searchNestedScriptBlocks: false).Cast<CommandAst>())
+        {
             if (PowerShellAliasDefinitionPolicy.TryGetLiteralDefinition(command, out string alias, out _))
                 names.Add(alias);
-        return names;
+            else if (PowerShellAliasDefinitionPolicy.IsAliasDefinitionCommand(command) ||
+                     PowerShellAliasDefinitionPolicy.TargetsAliasProvider(command, ast))
+                hasUnknownNames = true;
+        }
+        return new AuthoredAliases(names, hasUnknownNames);
     }
 
-    private static bool RejectConflictingAliasBindings(
+    private static MissingFunctionCommand[] DistinctResolvedCommands(IEnumerable<MissingFunctionCommand> commands)
+        => commands.GroupBy(command => command.Source + "\0" + command.Name + "\0" + command.CommandType,
+                StringComparer.OrdinalIgnoreCase)
+            .Select(group => group.FirstOrDefault(command => !string.IsNullOrWhiteSpace(command.Error)) ?? group.First())
+            .ToArray();
+
+    private static bool RejectUnsafeApprovedBindings(
         List<MissingFunctionCommand> commands, HashSet<string> approvedModules,
-        HashSet<string> consumerFunctions, HashSet<string> consumerAliases,
-        List<AliasInvocationScope> invocationScopes,
+        HashSet<string> consumerFunctions, ParsedInput consumer,
+        List<ApprovedInvocationScope> invocationScopes,
         Func<string, ApprovedModuleSource?, MissingFunctionCommand> resolveInvocation)
     {
-        var aliases = commands.Where(command => command.InlineFunctionName is not null).ToArray();
-        if (aliases.Length == 0)
-            return false;
-
+        var functions = commands.Where(command => command.ScriptBlock is not null && approvedModules.Contains(command.Source))
+            .ToArray();
         var comparer = StringComparer.OrdinalIgnoreCase;
-        var functions = commands.Where(command => command.ScriptBlock is not null && approvedModules.Contains(command.Source));
-        var functionsByName = functions.ToLookup(command => command.InlineFunctionName ?? command.Name, comparer);
-        var aliasesByName = aliases.Select(alias => (Name: alias.Name, Command: alias))
-            .Concat(functions.SelectMany(command => ReadFunctionAliases(command).Select(name => (Name: name, Command: command))))
-            .ToLookup(binding => binding.Name, binding => binding.Command, comparer);
+        var functionsByName = functions.ToLookup(GetInlineFunctionName, comparer);
+        var emittedAliases = functions.SelectMany(command => ReadFunctionAliases(command)
+            .Concat(command.InlineFunctionName is null ? Array.Empty<string>() : new[] { command.Name })
+            .Distinct(comparer)
+            .Select(name => (Name: name, Command: command)))
+            .ToArray();
+        var aliasesByName = emittedAliases.ToLookup(binding => binding.Name, binding => binding.Command, comparer);
+        var aliasesByTarget = emittedAliases.ToLookup(binding => binding.Command);
 
-        foreach (var alias in aliases)
+        foreach (var function in functions)
         {
-            string target = alias.InlineFunctionName!;
-            var aliasNames = new HashSet<string>(ReadFunctionAliases(alias), comparer) { alias.Name };
-            var conflict = aliasNames.FirstOrDefault(name => consumerFunctions.Contains(name) ||
-                consumerAliases.Contains(name) || functionsByName.Contains(name) ||
+            string target = GetInlineFunctionName(function);
+            if (FindDonorContextVariable(function.ScriptBlock!) is { } variable)
+            {
+                function.Error = $"Command '{function.Name}' from '{function.Source}' uses donor context variable '{variable}', which is unavailable after merging.";
+                continue;
+            }
+            if (consumer.DeclaredAliases.HasUnknownNames)
+            {
+                function.Error = $"Command '{function.Name}' from '{function.Source}' cannot be merged safely because a consumer alias declaration cannot be resolved statically.";
+                continue;
+            }
+            if (consumerFunctions.Contains(target) || consumer.DeclaredAliases.Names.Contains(target) ||
+                aliasesByName.Contains(target) || functionsByName[target].Any(other => !SameTarget(other)))
+            {
+                function.Error = DescribeConflict(target, "the merged module");
+                continue;
+            }
+
+            var names = aliasesByTarget[function].Select(binding => binding.Name).ToArray();
+            var conflict = names.FirstOrDefault(name => consumerFunctions.Contains(name) ||
+                consumer.DeclaredAliases.Names.Contains(name) || functionsByName.Contains(name) ||
                 aliasesByName[name].Any(other => !SameTarget(other)));
-            if (conflict is null && (consumerFunctions.Contains(target) || consumerAliases.Contains(target) ||
-                aliasesByName.Contains(target) || functionsByName[target].Any(other => !SameTarget(other))))
-                conflict = target;
             if (conflict is not null)
             {
-                alias.Error = $"The alias '{alias.Name}' from '{alias.Source}', with target '{target}', would cause a name conflict at '{conflict}' in the merged module.";
+                function.Error = DescribeConflict(conflict, "the merged module");
                 continue;
             }
 
             foreach (var scope in invocationScopes)
             {
-                if (comparer.Equals(alias.Source, scope.Donor?.Name))
+                if (comparer.Equals(function.Source, scope.Donor?.Name))
                     continue;
-                conflict = aliasNames.FirstOrDefault(name => scope.LocalFunctionCalls.Contains(name) || ChangesBinding(name));
+                conflict = names.FirstOrDefault(name => scope.LocalFunctionCalls.Contains(name) || ChangesBinding(name));
                 if (conflict is null && ChangesBinding(target))
                     conflict = target;
                 if (conflict is null)
                     continue;
-                string caller = scope.Donor is null ? "the consumer" : $"'{scope.Donor.Name}'";
-                alias.Error = $"The alias '{alias.Name}' from '{alias.Source}', with target '{target}', would cause a name conflict by changing the binding of '{conflict}' in {caller}.";
+                string caller = scope.Donor is null ? "the consumer" : $"donor '{scope.Donor.Name}'";
+                function.Error = DescribeConflict(conflict, caller);
                 break;
 
                 bool ChangesBinding(string name)
@@ -69,19 +96,43 @@ public sealed partial class MissingFunctionsAnalyzer
             }
 
             bool SameTarget(MissingFunctionCommand command)
-                => comparer.Equals(command.Source, alias.Source) &&
-                   comparer.Equals(command.InlineFunctionName ?? command.Name, target);
+                => comparer.Equals(command.Source, function.Source) &&
+                   comparer.Equals(GetInlineFunctionName(command), target);
+
+            string DescribeConflict(string name, string scope)
+                => $"Command '{function.Name}' from '{function.Source}', with function '{target}', would cause a name conflict at '{name}' in {scope}.";
         }
 
-        return aliases.Any(alias => !string.IsNullOrWhiteSpace(alias.Error));
+        return functions.Any(command => !string.IsNullOrWhiteSpace(command.Error));
     }
+
+    private static string GetInlineFunctionName(MissingFunctionCommand command)
+        => command.InlineFunctionName ?? command.Name;
+
+    private static string? FindDonorContextVariable(ScriptBlock body)
+        => body.Ast.FindAll(static node => node is VariableExpressionAst, searchNestedScriptBlocks: true)
+            .Cast<VariableExpressionAst>()
+            .Select(static node => node.VariablePath)
+            .FirstOrDefault(static path => path.IsScript ||
+                path.UserPath.Equals("PSScriptRoot", StringComparison.OrdinalIgnoreCase) ||
+                path.UserPath.Equals("PSCommandPath", StringComparison.OrdinalIgnoreCase) ||
+                path.UserPath.Equals("MyInvocation", StringComparison.OrdinalIgnoreCase))?.UserPath;
 
     private static IEnumerable<string> ReadFunctionAliases(MissingFunctionCommand command)
         => command.ScriptBlock!.Attributes.OfType<AliasAttribute>().SelectMany(attribute => attribute.AliasNames);
 
-    private sealed class AliasInvocationScope
+    private sealed class AuthoredAliases
     {
-        public AliasInvocationScope(ApprovedModuleSource? donor, ParsedInput parsed)
+        internal AuthoredAliases(HashSet<string> names, bool hasUnknownNames)
+            => (Names, HasUnknownNames) = (names, hasUnknownNames);
+
+        internal HashSet<string> Names { get; }
+        internal bool HasUnknownNames { get; }
+    }
+
+    private sealed class ApprovedInvocationScope
+    {
+        public ApprovedInvocationScope(ApprovedModuleSource? donor, ParsedInput parsed)
         {
             Donor = donor;
             InvokedNames = new HashSet<string>(parsed.CommandNames, StringComparer.OrdinalIgnoreCase);
