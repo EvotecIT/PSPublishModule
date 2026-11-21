@@ -45,7 +45,7 @@ internal sealed class OperationHeartbeat : IDisposable
     public TimeSpan Elapsed => _stopwatch.Elapsed;
 
     /// <summary>The message a beat writes now.</summary>
-    internal string Message => $"{_label} is still running ({DotNetRepositoryReleaseService.FormatDuration(_stopwatch.Elapsed)})";
+    internal string Message => $"{_label} is still running ({OperationDisplay.FormatDuration(_stopwatch.Elapsed)})";
 
     internal void Beat()
     {

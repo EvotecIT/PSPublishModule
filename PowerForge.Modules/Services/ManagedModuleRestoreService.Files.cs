@@ -1,10 +1,8 @@
 using System.Text.Json;
-using NuGet.Packaging;
-using NuGet.Versioning;
 
 namespace PowerForge;
 
-internal sealed partial class ManagedModuleRestoreService
+public sealed partial class ManagedModuleRestoreService
 {
     private static void RequireOutsideDestination(string path, string destination)
     {
@@ -43,9 +41,9 @@ internal sealed partial class ManagedModuleRestoreService
         var requirements = new Dictionary<string, ManagedModuleRestoreRequirement>(StringComparer.OrdinalIgnoreCase);
         foreach (var property in document.RootElement.EnumerateObject())
         {
-            var name = ValidateName(property.Name);
+            var name = ManagedModuleStandaloneInput.ValidateName(property.Name);
             var version = property.Value.ValueKind == JsonValueKind.String ? property.Value.GetString() : null;
-            var requirement = new ManagedModuleRestoreRequirement(name, ValidateVersion(name, version));
+            var requirement = new ManagedModuleRestoreRequirement(name, ManagedModuleStandaloneInput.ValidateVersion(name, version));
             if (requirements.ContainsKey(name))
                 throw new InvalidOperationException($"Requirements list '{name}' more than once.");
             requirements.Add(name, requirement);
@@ -73,10 +71,10 @@ internal sealed partial class ManagedModuleRestoreService
         {
             if (root is null)
                 throw new InvalidOperationException("The restore lock contains an empty requirement.");
-            var name = ValidateName(root.Name);
+            var name = ManagedModuleStandaloneInput.ValidateName(root.Name);
             if (roots.ContainsKey(name))
                 throw new InvalidOperationException($"The restore lock lists requirement '{name}' more than once.");
-            roots.Add(name, ValidateVersion(name, root.Version));
+            roots.Add(name, ManagedModuleStandaloneInput.ValidateVersion(name, root.Version));
         }
 
         foreach (var requirement in requirements)
@@ -90,10 +88,10 @@ internal sealed partial class ManagedModuleRestoreService
         {
             if (package is null)
                 throw new InvalidOperationException("The restore lock contains an empty package.");
-            var name = ValidateName(package.Name);
+            var name = ManagedModuleStandaloneInput.ValidateName(package.Name);
             if (!names.Add(name))
                 throw new InvalidOperationException($"The restore lock lists package '{name}' more than once.");
-            ValidateVersion(name, package.Version);
+            ManagedModuleStandaloneInput.ValidateVersion(name, package.Version);
             if (ManagedModulePackageIntegrity.NormalizeSha256(package.Sha256) is null)
                 throw new InvalidOperationException($"The restore lock is missing a SHA-256 for '{name}'.");
         }
@@ -106,34 +104,6 @@ internal sealed partial class ManagedModuleRestoreService
         }
 
         return restoreLock;
-    }
-
-    private static string ValidateName(string? name)
-    {
-        if (name is null || name.Length > PackageIdValidator.MaxPackageIdLength || !PackageIdValidator.IsValidPackageId(name))
-            throw new ArgumentException($"'{name}' is not a valid module name.");
-        return ManagedModulePackageIdentity.RequireSafeId(name, nameof(name));
-    }
-
-    private static string ValidateVersion(string name, string? version)
-    {
-        if (version is null || version != version.Trim() || !NuGetVersion.TryParse(version, out var exact) || exact.HasMetadata)
-            throw new ArgumentException($"'{name}' requires an exact package version such as '1.2.3'.");
-        return ManagedModulePackageIdentity.RequireSafeVersion(exact.ToNormalizedString(), nameof(version));
-    }
-
-    private static ManagedModuleRepository ResolveRepository(string source)
-    {
-        if (Uri.TryCreate(source, UriKind.Absolute, out var uri) && !uri.IsFile)
-        {
-            if (uri.Scheme is not ("https" or "http") || uri.UserInfo.Length != 0 ||
-                uri.Query.Length != 0 || uri.Fragment.Length != 0)
-                throw new ArgumentException("The source must be an HTTP(S) feed URL without credentials, a query, or a fragment, or a local folder.");
-            return new ManagedModuleRepository("Restore", uri.AbsoluteUri.TrimEnd('/'));
-        }
-
-        return new ManagedModuleRepository("Restore", Path.GetFullPath(ManagedModuleRepositoryPathResolver.ResolveLocalFolder(source)),
-            ManagedModuleRepositoryKind.LocalFolder);
     }
 
     private static void WriteLock(string path, ManagedModuleRestoreLock restoreLock)

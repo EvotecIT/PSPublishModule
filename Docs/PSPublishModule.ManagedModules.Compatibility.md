@@ -89,6 +89,22 @@ Default install is latest-first for broad requests. When the caller does not pin
 
 Exact-version installs keep the fast local no-op path. `-Version`, `-RequiredVersion`, or an exact `-VersionPolicy` can skip repository work when the selected installed version is already healthy. Use `-Force` only when the selected root module version itself should be replaced.
 
+### Install a module directly from the CLI
+
+Use `powerforge module install` to install a module and its dependencies into
+a directory before launching PowerShell. This also works with one-off jobs
+that have no requirements or lock file.
+
+```powershell
+powerforge module install Pester --version 5.7.1 --destination ./Modules
+```
+
+Omit `--version` to select the latest stable version, or add `--prerelease`
+to include prereleases in that selection. Use `--source` for a different feed
+or a local package folder. Add `--plan` to preview the selected root module
+and `--output json` for the typed install plan or result. See the restore
+workflow below to pin the entire dependency set.
+
 ### Restore modules before starting PowerShell
 
 `powerforge module restore` installs modules to an explicit directory from the

@@ -2,75 +2,80 @@ using PowerForge;
 using PowerForge.Cli;
 using System.Diagnostics;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Text.Json;
 
 internal static partial class Program
 {
-    private const int OutputSchemaVersion = 1;
-
     public static int Main(string[] args)
     {
+        using var consoleEncoding = ConsoleEncoding.UseUtf8(switchEncoding: true);
 
-    using var consoleEncoding = ConsoleEncoding.UseUtf8(switchEncoding: true);
-
-    var cli = ParseCliOptions(args, out var cliParseError);
-    // ConsoleMonster reads NO_COLOR when it first detects the console, which happens after this point.
-    if (cli.NoColor) Environment.SetEnvironmentVariable("NO_COLOR", "1");
-    if (!string.IsNullOrWhiteSpace(cliParseError))
-    {
-        if (IsJsonOutput(args ?? Array.Empty<string>()))
+        var cli = ParseCliOptions(args, out var cliParseError);
+        // ConsoleMonster reads NO_COLOR when it first detects the console.
+        if (cli.NoColor) Environment.SetEnvironmentVariable("NO_COLOR", "1");
+        if (!string.IsNullOrWhiteSpace(cliParseError))
         {
-            WriteJson(new CliJsonEnvelope
+            if (IsJsonOutput(args ?? Array.Empty<string>()))
             {
-                SchemaVersion = OutputSchemaVersion,
-                Command = "cli",
-                Success = false,
-                ExitCode = 2,
-                Error = cliParseError
-            });
+                WriteJson(new CliJsonEnvelope
+                {
+                    SchemaVersion = OutputSchemaVersion,
+                    Command = "cli",
+                    Success = false,
+                    ExitCode = 2,
+                    Error = cliParseError
+                });
+                return 2;
+            }
+
+            Console.WriteLine(cliParseError);
+            PrintHelp();
             return 2;
         }
 
-        Console.WriteLine(cliParseError);
-        PrintHelp();
-        return 2;
-    }
-
-    var filteredArgs = StripGlobalArgs(args);
-
-    if (IsVersionInvocation(args))
-    {
-        var version = typeof(Program).Assembly
-            .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?
-            .InformationalVersion ?? typeof(Program).Assembly.GetName().Version?.ToString() ?? "unknown";
-        if (IsJsonOutput(args))
+        var filteredArgs = StripGlobalArgs(args);
+        if (IsVersionInvocation(args))
         {
-            WriteJson(new CliJsonEnvelope
+            var version = typeof(Program).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?
+                .InformationalVersion ?? typeof(Program).Assembly.GetName().Version?.ToString() ?? "unknown";
+            if (IsJsonOutput(args))
             {
-                SchemaVersion = OutputSchemaVersion,
-                Command = "version",
-                Success = true,
-                ExitCode = 0,
-                Result = JsonSerializer.SerializeToElement(new { version })
-            });
+                WriteJson(new CliJsonEnvelope
+                {
+                    SchemaVersion = OutputSchemaVersion,
+                    Command = "version",
+                    Success = true,
+                    ExitCode = 0,
+                    Result = JsonSerializer.SerializeToElement(new { version })
+                });
+            }
+            else
+            {
+                Console.WriteLine(version);
+            }
+            return 0;
         }
-        else
+
+        if (filteredArgs.Length == 0 || filteredArgs[0].Equals("-h", StringComparison.OrdinalIgnoreCase) ||
+            filteredArgs[0].Equals("--help", StringComparison.OrdinalIgnoreCase))
         {
-            Console.WriteLine(version);
+            PrintHelp();
+            return 0;
         }
-        return 0;
+
+        var cmd = filteredArgs[0].ToLowerInvariant();
+        if (cmd == "module")
+            return CommandModule(filteredArgs, cli, CreateTextLogger(cli));
+
+        return DispatchCommand(cmd, filteredArgs, cli);
     }
 
-    ILogger logger = CreateTextLogger(cli);
-    var forge = new PowerForgeFacade(logger);
-
-    if (filteredArgs.Length == 0 || filteredArgs[0].Equals("-h", StringComparison.OrdinalIgnoreCase) || filteredArgs[0].Equals("--help", StringComparison.OrdinalIgnoreCase))
+    // Keep references to hosted operations out of the JIT compilation of help, version and module commands.
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static int DispatchCommand(string cmd, string[] filteredArgs, CliOptions cli)
     {
-        PrintHelp();
-        return 0;
-    }
-
-    var cmd = filteredArgs[0].ToLowerInvariant();
+    var logger = CreateTextLogger(cli);
     switch (cmd)
     {
         case "build":
@@ -120,8 +125,6 @@ internal static partial class Program
             return CommandWorkspace(filteredArgs, cli, logger);
         case "test-dotnet":
             return CommandDotNetTest(filteredArgs, logger);
-        case "module":
-            return CommandModule(filteredArgs, cli, logger);
         case "powershell":
         case "ps":
             return CommandPowerShell(filteredArgs, cli, logger);
@@ -132,6 +135,7 @@ internal static partial class Program
             return CommandHomeAssistant(filteredArgs, cli, logger);
         case "normalize":
         {
+            var forge = new PowerForgeFacade(logger);
             var argv = filteredArgs.Skip(1).ToArray();
             var outputJson = IsJsonOutput(argv);
  
@@ -220,7 +224,7 @@ internal static partial class Program
                 return 0;
             }
 
-            var results = forge.Format(targets);
+            var results = new PowerForgeFacade(logger).Format(targets);
             foreach (var r in results)
             {
                 var prefix = r.Changed ? "Formatted" : "Unchanged";
@@ -320,373 +324,11 @@ internal static partial class Program
             }
         }
         case "test":
-        {
-            var argv = filteredArgs.Skip(1).ToArray();
-            var configPath = TryGetOptionValue(argv, "--config");
-            var outputJson = IsJsonOutput(argv);
-
-            ModuleTestSuiteSpec spec;
-            if (!string.IsNullOrWhiteSpace(configPath))
-            {
-                var loaded = LoadTestSuiteSpecWithPath(configPath);
-                ResolveTestSpecPaths(loaded.Value, loaded.FullPath);
-                spec = loaded.Value;
-            }
-            else
-            {
-                var parsed = ParseTestArgs(argv);
-                if (parsed is null)
-                {
-                    if (outputJson)
-                    {
-                        WriteJson(new CliJsonEnvelope
-                        {
-                            SchemaVersion = OutputSchemaVersion,
-                            Command = "test",
-                            Success = false,
-                            ExitCode = 2,
-                            Error = "Invalid arguments."
-                        });
-                        return 2;
-                    }
-
-                    PrintHelp();
-                    return 2;
-                }
-                spec = parsed;
-            }
-
-            try
-            {
-                var (cmdLogger, logBuffer) = CreateCommandLogger(outputJson, cli, logger);
-                var service = new ModuleTestSuiteService(new PowerShellRunner(), cmdLogger);
-                // Pester output is shown as it runs (above the status line); JSON mode keeps stdout for the envelope.
-                Action<string>? showLine = outputJson
-                    ? null
-                    : line => PowerForge.ConsoleUi.ConsoleOutput.WriteOutside(() => PowerForge.ConsoleUi.ConsoleOutput.WriteLine(line));
-                var res = RunWithStatus(outputJson, cli, "Running test suite", () => service.Run(spec, showLine), value => value.FailedCount == 0 && value.ExitCode == 0);
-
-                var success = res.FailedCount == 0 && res.ExitCode == 0;
-                var exitCode = success ? 0 : 1;
-
-                if (outputJson)
-                {
-                    WriteJson(new CliJsonEnvelope
-                    {
-                        SchemaVersion = OutputSchemaVersion,
-                        Command = "test",
-                        Success = success,
-                        ExitCode = exitCode,
-                        Spec = CliJson.SerializeToElement(spec, CliJson.Context.ModuleTestSuiteSpec),
-                        Result = CliJson.SerializeToElement(res, CliJson.Context.ModuleTestSuiteResult),
-                        Logs = LogsToJsonElement(logBuffer)
-                    });
-                    return exitCode;
-                }
-
-                // A passing run already reported its stderr as warnings while streaming.
-                if (!success && !string.IsNullOrWhiteSpace(res.StdErr))
-                    logger.Warn(res.StdErr.Trim());
-
-                logger.Info($"Tests: {res.PassedCount}/{res.TotalCount} passed (failed: {res.FailedCount}, skipped: {res.SkippedCount})");
-                if (res.Duration is not null) logger.Info($"Duration: {res.Duration}");
-                if (res.CoveragePercent is not null) logger.Info($"Coverage: {res.CoveragePercent:0.00}%");
-
-                if (!success && res.FailureAnalysis is not null && res.FailureAnalysis.FailedTests.Length > 0)
-                {
-                    logger.Error($"Failed tests ({res.FailureAnalysis.FailedTests.Length}):");
-                    foreach (var f in res.FailureAnalysis.FailedTests)
-                        logger.Error($" - {f.Name}");
-                }
-
-                if (success) logger.Success("Test suite passed");
-                else logger.Error("Test suite failed");
-
-                return exitCode;
-            }
-            catch (Exception ex)
-            {
-                if (outputJson)
-                {
-                    WriteJson(new CliJsonEnvelope
-                    {
-                        SchemaVersion = OutputSchemaVersion,
-                        Command = "test",
-                        Success = false,
-                        ExitCode = 1,
-                        Error = ex.Message
-                    });
-                    return 1;
-                }
-
-                logger.Error(ex.Message);
-                return 1;
-            }
-        }
+            return CommandTest(filteredArgs, cli, logger);
         case "pipeline":
-        {
-            var argv = filteredArgs.Skip(1).ToArray();
-            var configPath = TryGetOptionValue(argv, "--config");
-            var outputJson = IsJsonOutput(argv);
-
-            if (string.IsNullOrWhiteSpace(configPath))
-            {
-                var baseDir = TryGetProjectRoot(argv);
-                if (!string.IsNullOrWhiteSpace(baseDir))
-                    baseDir = Path.GetFullPath(baseDir.Trim().Trim('"'));
-                else
-                    baseDir = Directory.GetCurrentDirectory();
-
-                configPath = FindDefaultPipelineConfig(baseDir);
-            }
-
-            if (string.IsNullOrWhiteSpace(configPath))
-            {
-                if (outputJson)
-                {
-                    WriteJson(new CliJsonEnvelope
-                    {
-                        SchemaVersion = OutputSchemaVersion,
-                        Command = "pipeline",
-                        Success = false,
-                        ExitCode = 2,
-                        Error = "Missing required --config."
-                    });
-                    return 2;
-                }
-
-                Console.WriteLine("Usage: powerforge pipeline --config <Pipeline.json> [--output json]");
-                return 2;
-            }
-
-            ModulePipelineSpec spec;
-            try
-            {
-                var loaded = LoadPipelineSpecWithPath(configPath);
-                spec = loaded.Value;
-                ResolvePipelineSpecPaths(spec, loaded.FullPath);
-                spec.Diagnostics ??= new ModulePipelineDiagnosticsOptions();
-                var diagnosticsBaselinePath = TryGetOptionValue(argv, "--diagnostics-baseline");
-                if (!string.IsNullOrWhiteSpace(diagnosticsBaselinePath))
-                    spec.Diagnostics.BaselinePath = ResolvePathFromBase(Path.GetDirectoryName(loaded.FullPath) ?? Directory.GetCurrentDirectory(), diagnosticsBaselinePath);
-                spec.Diagnostics.GenerateBaseline = spec.Diagnostics.GenerateBaseline || argv.Any(a => a.Equals("--diagnostics-baseline-generate", StringComparison.OrdinalIgnoreCase));
-                spec.Diagnostics.UpdateBaseline = spec.Diagnostics.UpdateBaseline || argv.Any(a => a.Equals("--diagnostics-baseline-update", StringComparison.OrdinalIgnoreCase));
-                spec.Diagnostics.FailOnNewDiagnostics = spec.Diagnostics.FailOnNewDiagnostics || argv.Any(a => a.Equals("--fail-on-new-diagnostics", StringComparison.OrdinalIgnoreCase));
-                var failOnSeverity = TryGetOptionValue(argv, "--fail-on-diagnostics-severity");
-                if (!string.IsNullOrWhiteSpace(failOnSeverity))
-                {
-                    if (!Enum.TryParse<BuildDiagnosticSeverity>(failOnSeverity, ignoreCase: true, out var severity) ||
-                        severity == BuildDiagnosticSeverity.Info)
-                    {
-                        throw new InvalidOperationException("Invalid value for --fail-on-diagnostics-severity. Expected Warning or Error.");
-                    }
-
-                    spec.Diagnostics.FailOnSeverity = severity;
-                }
-            }
-            catch (Exception ex)
-            {
-                if (outputJson)
-                {
-                    WriteJson(new CliJsonEnvelope
-                    {
-                        SchemaVersion = OutputSchemaVersion,
-                        Command = "pipeline",
-                        Success = false,
-                        ExitCode = 2,
-                        Error = ex.Message
-                    });
-                    return 2;
-                }
-
-                logger.Error(ex.Message);
-                return 2;
-            }
-
-            ModulePipelinePlan? lastPlan = null;
-            bool usedInteractiveView = false;
-            try
-            {
-                var interactive = PipelineConsoleUi.ShouldUseInteractiveView(outputJson, cli);
-                usedInteractiveView = interactive;
-                var (cmdLogger, logBuffer) = CreateCommandLogger(outputJson, cli, logger);
-                var runner = new ModulePipelineRunner(cmdLogger);
-                var plan = runner.Plan(spec);
-                lastPlan = plan;
-                var res = interactive
-                    ? PipelineConsoleUi.Run(runner, spec, plan, configPath, outputJson, cli)
-                    : RunWithStatus(outputJson, cli, "Running pipeline", () => runner.Run(spec, plan));
-
-                if (outputJson)
-                {
-                    WriteJson(new CliJsonEnvelope
-                    {
-                        SchemaVersion = OutputSchemaVersion,
-                        Command = "pipeline",
-                        Success = true,
-                        ExitCode = 0,
-                        Spec = CliJson.SerializeToElement(spec, CliJson.Context.ModulePipelineSpec),
-                        Result = CliJson.SerializeToElement(res, CliJson.Context.ModulePipelineResult),
-                        Logs = LogsToJsonElement(logBuffer)
-                    });
-                    return 0;
-                }
-
-                WritePipelineSummary(res, cli, logger);
-                return 0;
-            }
-            catch (Exception ex)
-            {
-                var policyFailure = ex as ModulePipelineDiagnosticsPolicyException;
-                if (outputJson)
-                {
-                    WriteJson(new CliJsonEnvelope
-                    {
-                        SchemaVersion = OutputSchemaVersion,
-                        Command = "pipeline",
-                        Success = false,
-                        ExitCode = 1,
-                        Error = ex.Message,
-                        Spec = CliJson.SerializeToElement(spec, CliJson.Context.ModulePipelineSpec),
-                        Result = policyFailure is null ? null : CliJson.SerializeToElement(policyFailure.Result, CliJson.Context.ModulePipelineResult)
-                    });
-                    return 1;
-                }
-
-                if (policyFailure is not null)
-                {
-                    WritePipelineSummary(policyFailure.Result, cli, logger);
-                    logger.Error(policyFailure.Message);
-                }
-                else if (usedInteractiveView && lastPlan is not null)
-                {
-                    try { PipelineConsoleUi.WriteFailureSummary(lastPlan, ex); } catch { }
-                }
-                else
-                {
-                    logger.Error(ex.Message);
-                }
-                return 1;
-            }
-        }
+            return CommandPipeline(filteredArgs, cli, logger);
         case "plan":
-        {
-            var argv = filteredArgs.Skip(1).ToArray();
-            var configPath = TryGetOptionValue(argv, "--config");
-            var outputJson = IsJsonOutput(argv);
-
-            if (string.IsNullOrWhiteSpace(configPath))
-            {
-                var baseDir = TryGetProjectRoot(argv);
-                if (!string.IsNullOrWhiteSpace(baseDir))
-                    baseDir = Path.GetFullPath(baseDir.Trim().Trim('"'));
-                else
-                    baseDir = Directory.GetCurrentDirectory();
-
-                configPath = FindDefaultPipelineConfig(baseDir);
-            }
-
-            if (string.IsNullOrWhiteSpace(configPath))
-            {
-                if (outputJson)
-                {
-                    WriteJson(new CliJsonEnvelope
-                    {
-                        SchemaVersion = OutputSchemaVersion,
-                        Command = "plan",
-                        Success = false,
-                        ExitCode = 2,
-                        Error = "Missing required --config."
-                    });
-                    return 2;
-                }
-
-                Console.WriteLine("Usage: powerforge plan --config <Pipeline.json> [--output json]");
-                return 2;
-            }
-
-            ModulePipelineSpec spec;
-            try
-            {
-                var loaded = LoadPipelineSpecWithPath(configPath);
-                spec = loaded.Value;
-                ResolvePipelineSpecPaths(spec, loaded.FullPath);
-            }
-            catch (Exception ex)
-            {
-                if (outputJson)
-                {
-                    WriteJson(new CliJsonEnvelope
-                    {
-                        SchemaVersion = OutputSchemaVersion,
-                        Command = "plan",
-                        Success = false,
-                        ExitCode = 2,
-                        Error = ex.Message
-                    });
-                    return 2;
-                }
-
-                logger.Error(ex.Message);
-                return 2;
-            }
-
-            try
-            {
-                var (cmdLogger, logBuffer) = CreateCommandLogger(outputJson, cli, logger);
-                var runner = new ModulePipelineRunner(cmdLogger);
-                var plan = RunWithStatus(outputJson, cli, "Planning pipeline", () => runner.Plan(spec));
-
-                if (outputJson)
-                {
-                    WriteJson(new CliJsonEnvelope
-                    {
-                        SchemaVersion = OutputSchemaVersion,
-                        Command = "plan",
-                        Success = true,
-                        ExitCode = 0,
-                        Spec = CliJson.SerializeToElement(spec, CliJson.Context.ModulePipelineSpec),
-                        Plan = CliJson.SerializeToElement(plan, CliJson.Context.ModulePipelinePlan),
-                        Logs = LogsToJsonElement(logBuffer)
-                    });
-                    return 0;
-                }
-
-                logger.Success($"Plan: {plan.ModuleName} {plan.ResolvedVersion}");
-                logger.Info($"Project: {plan.ProjectRoot}");
-                logger.Info($"Staging: {plan.BuildSpec.StagingPath}");
-                logger.Info($"Install: {(plan.InstallEnabled ? "yes" : "no")} ({plan.InstallStrategy}, keep {plan.InstallKeepVersions})");
-                foreach (var root in plan.InstallRoots) logger.Info($"Root: {root}");
-
-                if (plan.DocumentationBuild is not null && plan.DocumentationBuild.Enable)
-                {
-                    logger.Info($"Docs: {plan.Documentation?.Path}");
-                }
-
-                if (plan.Artefacts.Length > 0) logger.Info($"Artefacts: {plan.Artefacts.Length}");
-                if (plan.Publishes.Length > 0) logger.Info($"Publishes: {plan.Publishes.Length}");
-
-                return 0;
-            }
-            catch (Exception ex)
-            {
-                if (outputJson)
-                {
-                    WriteJson(new CliJsonEnvelope
-                    {
-                        SchemaVersion = OutputSchemaVersion,
-                        Command = "plan",
-                        Success = false,
-                        ExitCode = 1,
-                        Error = ex.Message
-                    });
-                    return 1;
-                }
-
-                logger.Error(ex.Message);
-                return 1;
-            }
-        }
+            return CommandPlan(filteredArgs, cli, logger);
         case "find":
         {
             var argv = filteredArgs.Skip(1).ToArray();

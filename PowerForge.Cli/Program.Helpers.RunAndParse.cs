@@ -54,29 +54,6 @@ internal static partial class Program
         return interactive ? ConsoleView.Standard : ConsoleView.Ansi;
     }
 
-    static bool TryParseConsoleView(string? value, out ConsoleView view)
-    {
-        view = ConsoleView.Auto;
-        if (string.IsNullOrWhiteSpace(value)) return false;
-
-        switch (value.Trim().ToLowerInvariant())
-        {
-            case "auto":
-                view = ConsoleView.Auto;
-                return true;
-            case "standard":
-            case "interactive":
-                view = ConsoleView.Standard;
-                return true;
-            case "ansi":
-            case "plain":
-                view = ConsoleView.Ansi;
-                return true;
-            default:
-                return false;
-        }
-    }
-
     static (string Name, string Source, string? Staging, string? Csproj, string Version, string Configuration, string[] Frameworks, string? Author, string? CompanyName, string? Description, string[] Tags, string? IconUri, string? ProjectUri)? ParseBuildArgs(string[] argv)
     {
         string? name = null, source = null, staging = null, csproj = null, version = null;

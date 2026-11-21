@@ -5,16 +5,6 @@ using System.Text.Json;
 
 internal static partial class Program
 {
-    static string? TryGetOptionValue(string[] argv, string optionName)
-    {
-        for (int i = 0; i < argv.Length; i++)
-        {
-            if (!argv[i].Equals(optionName, StringComparison.OrdinalIgnoreCase)) continue;
-            return ++i < argv.Length ? argv[i] : null;
-        }
-        return null;
-    }
-
     static string? TryGetProjectRoot(string[] argv)
         => TryGetOptionValue(argv, "--project-root")
            ?? TryGetOptionValue(argv, "--project")
@@ -750,19 +740,6 @@ internal static partial class Program
         throw new InvalidOperationException($"Invalid value for --repo-api-version: '{value}'. Expected: auto|v2|v3|containerregistry.");
     }
 
-    static bool IsJsonOutput(string[] argv)
-    {
-        argv = argv.TakeWhile(static argument => argument != "--").ToArray();
-        foreach (var a in argv)
-        {
-            if (a.Equals("--output-json", StringComparison.OrdinalIgnoreCase) || a.Equals("--json", StringComparison.OrdinalIgnoreCase))
-                return true;
-        }
-
-        var output = TryGetOptionValue(argv, "--output");
-        return string.Equals(output, "json", StringComparison.OrdinalIgnoreCase);
-    }
-
     static string[] ParseTargets(string[] argv)
     {
         var list = new List<string>();
@@ -785,13 +762,6 @@ internal static partial class Program
         }
 
         return list.ToArray();
-    }
-
-    static JsonElement? LogsToJsonElement(BufferedLogger? logBuffer)
-    {
-        if (logBuffer is null) return null;
-        if (logBuffer.Entries.Count == 0) return null;
-        return CliJson.SerializeToElement(logBuffer.Entries.ToArray(), CliJson.Context.BufferedLogEntryArray);
     }
 
     static ProcessResult RunProcess(string command, IEnumerable<string> args, string workingDirectory)
@@ -861,51 +831,6 @@ internal static partial class Program
         });
     }
 
-    static void WriteJson(
-        CliJsonEnvelope envelope,
-        Action<Utf8JsonWriter>? writeAdditionalProperties = null,
-        Func<string, string>? redactOutput = null)
-    {
-        CliJsonWriter.Write(envelope, writeAdditionalProperties, redactOutput);
-    }
-
     sealed record ProcessResult(int ExitCode, string Output, string Error);
 
-}
-
-sealed class CliOptions
-{
-    public bool Verbose { get; }
-    public bool Quiet { get; }
-    public bool Diagnostics { get; }
-    public bool NoColor { get; }
-    public ConsoleView View { get; }
-
-    public CliOptions(bool verbose, bool quiet, bool diagnostics, bool noColor, ConsoleView view)
-    {
-        Verbose = verbose;
-        Quiet = quiet;
-        Diagnostics = diagnostics;
-        NoColor = noColor;
-        View = view;
-    }
-}
-
-sealed class QuietLogger : ILogger
-{
-    private readonly ILogger _inner;
-
-    public QuietLogger(ILogger inner)
-    {
-        _inner = inner ?? throw new ArgumentNullException(nameof(inner));
-    }
-
-    internal ILogger Inner => _inner;
-    public bool IsVerbose => _inner.IsVerbose;
-
-    public void Info(string message) { }
-    public void Success(string message) { }
-    public void Warn(string message) => _inner.Warn(message);
-    public void Error(string message) => _inner.Error(message);
-    public void Verbose(string message) { }
 }

@@ -1,6 +1,6 @@
 namespace PowerForge;
 
-internal sealed partial class ManagedModuleRestoreService
+public sealed partial class ManagedModuleRestoreService
 {
     private static async Task<Dictionary<string, PreparedPackage>> ResolveAsync(
         ManagedModuleRestoreRequirement[] requirements,
@@ -121,7 +121,7 @@ internal sealed partial class ManagedModuleRestoreService
                 .FirstOrDefault(static version => version is not null);
             if (exact is not null && repository.Kind != ManagedModuleRepositoryKind.LocalFolder)
                 return constraints.All(constraint => constraint.Range.IsSatisfiedBy(exact))
-                    ? new[] { new PackageCandidate(ValidateVersion(name, exact), true, ManagedModuleVersionComparer.IsPrerelease(exact)) }
+                    ? new[] { new PackageCandidate(ManagedModuleStandaloneInput.ValidateVersion(name, exact), true, ManagedModuleVersionComparer.IsPrerelease(exact)) }
                     : Array.Empty<PackageCandidate>();
 
             if (!listings.TryGetValue(name, out var versions))

@@ -190,6 +190,35 @@ public sealed class PowerForgeCliModuleRestoreTests
     }
 
     [Fact]
+    public async Task InstallFromFeedPlansAndInstallsWithoutARequirementsFile()
+    {
+        using var temp = new TemporaryDirectory();
+        var feed = Path.Combine(temp.Path, "feed");
+        var destination = Path.Combine(temp.Path, "modules");
+        WritePackage(feed, "App", "1.0.0", new TestDependency("Leaf", "[1.0.0]", null));
+        WritePackage(feed, "App", "2.0.0");
+        WritePackage(feed, "Leaf", "1.0.0");
+        var arguments = new[] { "App", "--destination", destination, "--source", feed, "--version", "1.0.0" };
+
+        using var plan = await RunCliAsync(temp.Path, 0, [.. arguments, "--plan"], "install");
+        Assert.Equal("module.install", plan.RootElement.GetProperty("command").GetString());
+        Assert.Equal("1.0.0", plan.RootElement.GetProperty("result").GetProperty("version").GetString());
+        Assert.False(Directory.Exists(destination));
+
+        using var install = await RunCliAsync(temp.Path, 0, arguments, "install");
+        var result = install.RootElement.GetProperty("result");
+        Assert.Equal("Installed", result.GetProperty("status").GetString());
+        Assert.Equal("Leaf", Assert.Single(result.GetProperty("dependencyResults").EnumerateArray()).GetProperty("name").GetString());
+        Assert.Equal("# App 1.0.0", File.ReadAllText(Path.Combine(destination, "App", "1.0.0", "App.psm1")));
+        Assert.True(File.Exists(Path.Combine(destination, "Leaf", "1.0.0", "Leaf.psd1")));
+        Assert.False(Directory.Exists(Path.Combine(destination, "App", "2.0.0")));
+
+        using var latest = await RunCliAsync(temp.Path, 0, ["App", "--destination", destination, "--source", feed], "install");
+        Assert.Equal("2.0.0", latest.RootElement.GetProperty("result").GetProperty("version").GetString());
+        Assert.True(File.Exists(Path.Combine(destination, "App", "2.0.0", "App.psd1")));
+    }
+
+    [Fact]
     public async Task RestoreUsesManifestVersionFolderAndRefusesDifferentPackageInThatFolder()
     {
         using var temp = new TemporaryDirectory();
@@ -239,7 +268,7 @@ public sealed class PowerForgeCliModuleRestoreTests
             Directory.CreateDirectory(lockPath);
         }
 
-        using var result = await RunCliAsync(temp.Path, exitCode, args, plan ? destination : null);
+        using var result = await RunCliAsync(temp.Path, exitCode, args, tempDirectory: plan ? destination : null);
         Assert.Contains(error, result.RootElement.GetProperty("error").GetString(), StringComparison.Ordinal);
         if (plan)
             Assert.Empty(Directory.EnumerateFileSystemEntries(destination));
@@ -404,11 +433,11 @@ public sealed class PowerForgeCliModuleRestoreTests
         return path;
     }
 
-    private static async Task<JsonDocument> RunCliAsync(string currentDirectory, int expectedExitCode, string[] args, string? tempDirectory = null)
-        => JsonDocument.Parse(await RunCliProcessAsync(currentDirectory, expectedExitCode, args, tempDirectory));
+    private static async Task<JsonDocument> RunCliAsync(string currentDirectory, int expectedExitCode, string[] args, string action = "restore", string? tempDirectory = null)
+        => JsonDocument.Parse(await RunCliProcessAsync(currentDirectory, expectedExitCode, args, action, tempDirectory));
 
     private static async Task<string> RunCliProcessAsync(string currentDirectory, int expectedExitCode, string[] args,
-        string? tempDirectory = null, bool outputJson = true)
+        string action = "restore", string? tempDirectory = null, bool outputJson = true)
     {
         var root = PowerForgeCliTestHost.FindRepositoryRoot();
         var assembly = PowerForgeCliTestHost.ResolveAssemblyPath(root,
@@ -426,7 +455,7 @@ public sealed class PowerForgeCliModuleRestoreTests
             startInfo.Environment["TEMP"] = tempDirectory;
             startInfo.Environment["TMP"] = tempDirectory;
         }
-        foreach (var argument in new[] { assembly, "module", "restore" })
+        foreach (var argument in new[] { assembly, "module", action })
             startInfo.ArgumentList.Add(argument);
         if (outputJson)
         {

@@ -11,10 +11,9 @@ namespace PowerForge;
 /// <summary>
 /// Stores and refreshes local managed module catalog metadata.
 /// </summary>
-public sealed class ManagedModuleCatalogStore
+public sealed partial class ManagedModuleCatalogStore
 {
     private static readonly ConcurrentDictionary<string, SemaphoreSlim> CatalogLocks = new(StringComparer.OrdinalIgnoreCase);
-    private static readonly JsonSerializerOptions JsonOptions = CreateJsonOptions();
     private readonly HttpClient _httpClient;
     private readonly string _path;
 
@@ -766,7 +765,7 @@ public sealed class ManagedModuleCatalogStore
 
         try
         {
-            var document = JsonSerializer.Deserialize<ManagedModuleCatalogDocument>(json, JsonOptions) ?? new ManagedModuleCatalogDocument();
+            var document = JsonSerializer.Deserialize(json, CatalogJsonContext.Default.ManagedModuleCatalogDocument) ?? new ManagedModuleCatalogDocument();
             document.Catalogs ??= new List<ManagedModuleCatalog>();
             return document;
         }
@@ -782,7 +781,7 @@ public sealed class ManagedModuleCatalogStore
         if (!string.IsNullOrWhiteSpace(directory))
             Directory.CreateDirectory(directory!);
 
-        File.WriteAllText(_path, JsonSerializer.Serialize(document, JsonOptions) + Environment.NewLine);
+        File.WriteAllText(_path, JsonSerializer.Serialize(document, CatalogJsonContext.Default.ManagedModuleCatalogDocument) + Environment.NewLine);
     }
 
     private static Uri BuildFindPackagesByIdUri(string source, string packageId)
@@ -1044,16 +1043,9 @@ public sealed class ManagedModuleCatalogStore
         }
     }
 
-    private static JsonSerializerOptions CreateJsonOptions()
-    {
-        var options = new JsonSerializerOptions
-        {
-            PropertyNameCaseInsensitive = true,
-            WriteIndented = true
-        };
-        options.Converters.Add(new JsonStringEnumConverter());
-        return options;
-    }
+    [JsonSourceGenerationOptions(PropertyNameCaseInsensitive = true, WriteIndented = true, UseStringEnumConverter = true)]
+    [JsonSerializable(typeof(ManagedModuleCatalogDocument))]
+    private sealed partial class CatalogJsonContext : JsonSerializerContext;
 
     private sealed class ManagedModuleCatalogDocument
     {

@@ -25,10 +25,9 @@ internal static class PipelineConsoleUi
             return runner.Run(spec, plan, progress: null);
 
         return ModulePipelineConsoleUi.RunInteractive(
-            runner,
-            spec,
             plan,
-            string.IsNullOrWhiteSpace(configPath) ? "(discovered)" : configPath);
+            string.IsNullOrWhiteSpace(configPath) ? "(discovered)" : configPath,
+            progress => runner.Run(spec, plan, progress));
     }
 
     public static void WriteFailureSummary(ModulePipelinePlan plan, Exception error)

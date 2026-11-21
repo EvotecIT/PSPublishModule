@@ -18,7 +18,7 @@ internal static partial class ModulePipelineSummary
         if (res is null) return;
 
         var plan = res.Plan;
-        var versionText = BuildServices.FormatVersionWithPreRelease(plan.ResolvedVersion, plan.PreRelease);
+        var versionText = ModulePathTokenFormatter.FormatVersionWithPreRelease(plan.ResolvedVersion, plan.PreRelease);
         var publishSummary = PipelinePublishSummaryBuilder.Build(res);
         var summary = new SummaryFrame($"{plan.ModuleName} {versionText}", success: true, outcome: "built")
             .Fact(res.BuildResult.StagingPath);
@@ -99,7 +99,7 @@ internal static partial class ModulePipelineSummary
         if (plan is null || error is null) return;
 
         var summary = new SummaryFrame(
-                $"{plan.ModuleName} {BuildServices.FormatVersionWithPreRelease(plan.ResolvedVersion, plan.PreRelease)}",
+                $"{plan.ModuleName} {ModulePathTokenFormatter.FormatVersionWithPreRelease(plan.ResolvedVersion, plan.PreRelease)}",
                 success: false)
             .Fact(plan.ProjectRoot)
             .Line("Project", plan.ProjectRoot)

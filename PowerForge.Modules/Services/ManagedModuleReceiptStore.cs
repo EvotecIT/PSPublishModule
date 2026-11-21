@@ -1,15 +1,11 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace PowerForge;
 
 internal sealed class ManagedModuleReceiptStore
 {
     internal const string ReceiptRelativePath = ".powerforge/managed-module-receipt.json";
-
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        WriteIndented = true
-    };
 
     public string WriteReceipt(
         ManagedModuleRepository repository,
@@ -42,7 +38,7 @@ internal sealed class ManagedModuleReceiptStore
         var receiptPath = GetReceiptPath(result.ModulePath);
         var fileSystemReceiptPath = GetFileSystemPath(receiptPath);
         Directory.CreateDirectory(Path.GetDirectoryName(fileSystemReceiptPath)!);
-        File.WriteAllText(fileSystemReceiptPath, JsonSerializer.Serialize(receipt, JsonOptions));
+        File.WriteAllText(fileSystemReceiptPath, JsonSerializer.Serialize(receipt, ManagedModuleReceiptJsonContext.Default.ManagedModuleReceipt));
 
         result.Receipt = receipt;
         result.ReceiptPath = receiptPath;
@@ -58,7 +54,7 @@ internal sealed class ManagedModuleReceiptStore
 
         try
         {
-            return JsonSerializer.Deserialize<ManagedModuleReceipt>(File.ReadAllText(fileSystemReceiptPath));
+            return JsonSerializer.Deserialize(File.ReadAllText(fileSystemReceiptPath), ManagedModuleReceiptJsonContext.Default.ManagedModuleReceipt);
         }
         catch (JsonException)
         {
@@ -86,3 +82,7 @@ internal sealed class ManagedModuleReceiptStore
         return @"\\?\" + fullPath;
     }
 }
+
+[JsonSourceGenerationOptions(WriteIndented = true)]
+[JsonSerializable(typeof(ManagedModuleReceipt))]
+internal sealed partial class ManagedModuleReceiptJsonContext : JsonSerializerContext;
