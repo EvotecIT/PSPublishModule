@@ -245,6 +245,10 @@ public sealed class ApprovedModuleDependencyPruningTests
     [InlineData("function Get-SharedAliasTarget { 'alias-target' }; Set-Alias SharedAlias Get-SharedAliasTarget", "nested local alias")]
     [InlineData("function Get-SharedAliasTarget { $MyInvocation.MyCommand.Name }; Set-Alias SharedAlias Get-SharedAliasTarget", "current function name")]
     [InlineData("$sharedValue='module'; $parameterValue='module'; function Get-SharedAliasTarget { param($parameterValue='parameter') $sharedValue = 'local'; $sharedValue; $parameterValue }; Set-Alias SharedAlias Get-SharedAliasTarget", "local bindings")]
+    [InlineData("function Get-PrivateAliasTarget { 'alias-target' }; function Get-SharedAliasTarget { Set-Alias Get-Date Get-PrivateAliasTarget; Get-Date }; Set-Alias SharedAlias Get-SharedAliasTarget", "local alias target")]
+    [InlineData("function Get-SharedAliasTarget { Set-Alias LocalDate Get-Date -Scope Private; if ((LocalDate) -is [datetime]) { 'alias-target' } }; Set-Alias SharedAlias Get-SharedAliasTarget", "private scope alias")]
+    [InlineData("$value='module'; function Get-SharedAliasTarget { param($value='alias-target', $result=$value) $result }; Set-Alias SharedAlias Get-SharedAliasTarget", "parameter default")]
+    [InlineData("$value='module'; function Get-SharedAliasTarget { param($value='alias-target') 1 | ForEach-Object { $value } }; Set-Alias SharedAlias Get-SharedAliasTarget", "synchronous callback")]
     public void Run_PackagesApprovedDonorAliasOrReportsANameConflict(string aliasDeclaration, string? conflictScope)
     {
         var root = Path.Combine(Path.GetTempPath(), "PowerForge.Tests", Guid.NewGuid().ToString("N"));
@@ -335,7 +339,9 @@ public sealed class ApprovedModuleDependencyPruningTests
             var runner = new ModulePipelineRunner(new NullLogger(), powerShellRunner: null,
                 moduleDependencyMetadataProvider: new FixtureMetadataProvider(modules),
                 missingFunctionAnalysisService: new PowerShellMissingFunctionAnalysisService());
-            if (conflictScope is not (null or "qualified cmdlet" or "additional alias" or "filter" or "nested local alias" or "current function name" or "local bindings"))
+            if (conflictScope is not (null or "qualified cmdlet" or "additional alias" or "filter" or "nested local alias"
+                or "current function name" or "local bindings" or "local alias target" or "private scope alias"
+                or "parameter default" or "synchronous callback"))
             {
                 var error = Assert.Throws<InvalidOperationException>(() => runner.Run(spec, runner.Plan(spec)));
                 Assert.Contains("SharedAlias", error.Message);
@@ -406,6 +412,13 @@ public sealed class ApprovedModuleDependencyPruningTests
     [InlineData("merge disabled", "Get-SharedEntry", "without merging")]
     [InlineData("script state", "Get-SharedEntry", "script:SharedValue")]
     [InlineData("relative file", "Get-SharedEntry", "PSScriptRoot")]
+    [InlineData("scoped path", "Get-SharedEntry", "PSScriptRoot")]
+    [InlineData("computed local alias", "Get-SharedEntry", "alias whose name or target")]
+    [InlineData("forward parameter default", "Get-SharedEntry", "SharedValue")]
+    [InlineData("function header default", "Get-SharedEntry", "SharedValue")]
+    [InlineData("module state in callback", "Get-SharedEntry", "SharedValue")]
+    [InlineData("escaping callback", "Get-SharedEntry", "SharedValue")]
+    [InlineData("removed local binding", "Get-SharedEntry", "SharedValue")]
     public void Run_RejectsUnpreservableApprovedDonorCommands(
         string scenario, string commandOrModule, string reason)
     {
@@ -422,6 +435,13 @@ public sealed class ApprovedModuleDependencyPruningTests
                 "unqualified state" => "$SharedValue = 'donor'; function Get-SharedEntry { $SharedValue }",
                 "donor alias write" => "function Get-SharedHelper { 'donor' }; function Get-SharedEntry { Set-Alias Get-SharedAlias Get-SharedHelper -Scope Script }",
                 "relative file" => "function Get-SharedEntry { Get-Content (Join-Path $PSScriptRoot 'data.txt') }",
+                "scoped path" => "function Get-SharedEntry { $local:PSScriptRoot }",
+                "computed local alias" => "function Get-PrivateAliasTarget { 'donor' }; function Get-SharedEntry { $name = 'Get-PrivateAliasTarget'; Set-Alias Get-Date $name; Get-Date }",
+                "forward parameter default" => "$SharedValue = 'donor'; function Get-SharedEntry { param($other=$SharedValue, $SharedValue='local') $other }",
+                "function header default" => "$SharedValue = 'donor'; function Get-SharedEntry($other=$SharedValue) { $other }",
+                "module state in callback" => "$SharedValue = 'donor'; function Get-SharedEntry { 1 | ForEach-Object { $SharedValue } }",
+                "escaping callback" => "$SharedValue = 'donor'; function Get-SharedEntry { param($SharedValue='local') { $SharedValue } }",
+                "removed local binding" => "$SharedValue = 'donor'; function Get-SharedEntry { param($SharedValue='local') Remove-Variable SharedValue; 1 | ForEach-Object { $SharedValue } }",
                 _ => "function Get-SharedHelper { 'donor' }; function Get-SharedEntry { Get-SharedHelper }"
             };
             if (scenario != "unbound runtime import")

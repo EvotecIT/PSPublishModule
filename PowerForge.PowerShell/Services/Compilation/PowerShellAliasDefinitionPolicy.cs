@@ -34,6 +34,7 @@ internal static class PowerShellAliasDefinitionPolicy
             return argument switch
             {
                 StringConstantExpressionAst literal => !literal.Value.Equals("Local", StringComparison.OrdinalIgnoreCase) &&
+                                                       !literal.Value.Equals("Private", StringComparison.OrdinalIgnoreCase) &&
                                                        !literal.Value.Equals("0", StringComparison.Ordinal),
                 ConstantExpressionAst { Value: int scope } => scope != 0,
                 _ => true

@@ -36,7 +36,10 @@ also listed as required. A build stops if removing a donor would leave a
 detected call unresolved or change its binding. Examples include colliding
 helper names, a binary cmdlet, a module-qualified call, and a function that
 relies on the donor's private module variables or files relative to its module
-path. A helper may use parameters and variables it initializes locally.
+path. A helper may use its own parameters and local variables, including in
+parameter defaults and synchronous callbacks where those bindings are available.
+PowerForge follows literal function-local alias targets through the same
+dependency checks as direct calls.
 PowerForge also checks aliases created in the consumer's script scope and
 verifies that a dependency resolved inside a donor matches the selected
 approved module identity. Dynamic calls or alias declarations that prevent

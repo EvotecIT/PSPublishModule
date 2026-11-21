@@ -42,6 +42,16 @@ internal sealed partial class NestedFunctionVisibilityAnalyzer
         _dynamicFunctionRemovals = FindDynamicFunctionRemovalCommands(root);
     }
 
+    internal static NestedFunctionVisibilityAnalyzer Create(ScriptBlockAst root)
+    {
+        var declarations = root.FindAll(static node => node is FunctionDefinitionAst, searchNestedScriptBlocks: true)
+            .Cast<FunctionDefinitionAst>()
+            .Where(static function => !string.IsNullOrWhiteSpace(function.Name))
+            .GroupBy(function => NormalizeDeclaredFunctionName(function.Name), StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key, group => group.ToArray(), StringComparer.OrdinalIgnoreCase);
+        return new NestedFunctionVisibilityAnalyzer(root, declarations);
+    }
+
     internal static string NormalizeDeclaredFunctionName(string name)
     {
         if (string.IsNullOrWhiteSpace(name))

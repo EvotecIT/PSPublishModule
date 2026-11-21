@@ -122,7 +122,8 @@ public sealed partial class MissingFunctionsAnalyzer
         List<ApprovedInvocationScope>? invocationScopes = null,
         HashSet<(string Source, string Name, bool Alias)>? emittedCommands = null)
     {
-        var parsed = ParseInput(filePath, code, approvedModules, approvedModuleSources);
+        var parsed = ParseInput(filePath, code, approvedModules, approvedModuleSources,
+            includeDonorAliasTargets: preferredApprovedModuleSource is not null);
         bool isRootAnalysis = invocationScopes is null;
         invocationScopes ??= new List<ApprovedInvocationScope>();
         emittedCommands ??= new HashSet<(string, string, bool)>();
@@ -279,7 +280,8 @@ public sealed partial class MissingFunctionsAnalyzer
         string? filePath,
         string? code,
         ISet<string> approvedModules,
-        IReadOnlyDictionary<string, ApprovedModuleSource> approvedModuleSources)
+        IReadOnlyDictionary<string, ApprovedModuleSource> approvedModuleSources,
+        bool includeDonorAliasTargets)
     {
         string? effectiveFilePath = null;
         ScriptBlockAst ast;
@@ -297,17 +299,6 @@ public sealed partial class MissingFunctionsAnalyzer
             ast = Parser.ParseInput(text, out tokens, out errors);
         }
 
-        var functionDeclarationsByName = ast.FindAll(a => a is FunctionDefinitionAst, searchNestedScriptBlocks: true)
-            .Cast<FunctionDefinitionAst>()
-            .Where(f => !string.IsNullOrWhiteSpace(f.Name))
-            .GroupBy(
-                f => NestedFunctionVisibilityAnalyzer.NormalizeDeclaredFunctionName(f.Name),
-                StringComparer.OrdinalIgnoreCase)
-            .ToDictionary(
-                group => group.Key,
-                group => group.ToArray(),
-                StringComparer.OrdinalIgnoreCase);
-
         var rootFunctions = ast.FindAll(a => a is FunctionDefinitionAst, searchNestedScriptBlocks: false)
             .Cast<FunctionDefinitionAst>()
             .ToArray();
@@ -317,12 +308,18 @@ public sealed partial class MissingFunctionsAnalyzer
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
-        var visibilityAnalyzer = new NestedFunctionVisibilityAnalyzer(ast, functionDeclarationsByName);
+        var visibilityAnalyzer = NestedFunctionVisibilityAnalyzer.Create(ast);
         var allCommands = ast.FindAll(static node => node is CommandAst, searchNestedScriptBlocks: true)
             .Cast<CommandAst>()
             .ToArray();
         var localFunctionCalls = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var commandNames = ExtractCommandNames(allCommands, visibilityAnalyzer, localFunctionCalls).ToArray();
+        var commandNames = ExtractCommandNames(allCommands, visibilityAnalyzer, localFunctionCalls, includeDonorAliasTargets).ToArray();
+        if (includeDonorAliasTargets)
+        {
+            commandNames = commandNames.Concat(ReadLocalAliasTargets(ast, allCommands, visibilityAnalyzer))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+        }
         var hasDynamicCommandInvocation = allCommands.Any(static command =>
             (string.IsNullOrWhiteSpace(command.GetCommandName()) &&
              (command.CommandElements.Count == 0 || command.CommandElements[0] is not StringConstantExpressionAst) &&
@@ -383,7 +380,8 @@ public sealed partial class MissingFunctionsAnalyzer
     private static IEnumerable<string> ExtractCommandNames(
         IEnumerable<CommandAst> allCommands,
         NestedFunctionVisibilityAnalyzer visibilityAnalyzer,
-        HashSet<string> localFunctionCalls)
+        HashSet<string> localFunctionCalls,
+        bool includeDonorAliasTargets)
     {
         var adCmdlets = new HashSet<string>(new[]
         {
@@ -444,6 +442,8 @@ public sealed partial class MissingFunctionsAnalyzer
             if (reserved.Contains(name) || redirection.Contains(name))
                 continue;
             if (!LooksLikeCommandName(name))
+                continue;
+            if (includeDonorAliasTargets && visibilityAnalyzer.HasEstablishedLocalAlias(cmd, name))
                 continue;
             if (visibilityAnalyzer.IsDeclaredInVisibleScope(cmd, name))
             {

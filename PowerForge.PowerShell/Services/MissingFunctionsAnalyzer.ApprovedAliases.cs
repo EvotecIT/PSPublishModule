@@ -34,6 +34,65 @@ public sealed partial class MissingFunctionsAnalyzer
             .Select(group => group.FirstOrDefault(command => !string.IsNullOrWhiteSpace(command.Error)) ?? group.First())
             .ToArray();
 
+    private static IEnumerable<string> ReadLocalAliasTargets(
+        ScriptBlockAst root,
+        IEnumerable<CommandAst> commands,
+        NestedFunctionVisibilityAnalyzer visibility)
+    {
+        var rootCommands = new HashSet<CommandAst>(
+            root.FindAll(static node => node is CommandAst, searchNestedScriptBlocks: false).Cast<CommandAst>());
+        foreach (var command in commands)
+        {
+            if (!rootCommands.Contains(command) &&
+                PowerShellAliasDefinitionPolicy.TryGetLiteralDefinition(command, out _, out string target) &&
+                !PowerShellAliasDefinitionPolicy.MayWriteOutsideLocalScope(command) &&
+                !visibility.IsDeclaredInVisibleScope(command, target))
+                yield return target;
+        }
+    }
+
+    private string? FindUnpreservableAlias(
+        ScriptBlockAst body,
+        ApprovedModuleSource? source,
+        Func<string, ApprovedModuleSource?, MissingFunctionCommand> resolveInvocation,
+        HashSet<string> consumerFunctions,
+        AuthoredAliases consumerAliases)
+    {
+        NestedFunctionVisibilityAnalyzer? visibility = null;
+        foreach (var command in body.FindAll(static node => node is CommandAst, searchNestedScriptBlocks: true).Cast<CommandAst>())
+        {
+            if (!PowerShellAliasDefinitionPolicy.IsAliasDefinitionCommand(command))
+            {
+                if (PowerShellAliasDefinitionPolicy.TargetsAliasProvider(command, body))
+                    return "changes the donor alias scope through the Alias provider, which cannot be preserved after merging.";
+                continue;
+            }
+
+            if (PowerShellAliasDefinitionPolicy.MayWriteOutsideLocalScope(command))
+                return "changes the donor alias scope, which cannot be preserved after merging.";
+            if (!PowerShellAliasDefinitionPolicy.TryGetLiteralDefinition(command, out string alias, out string target))
+                return "creates a local alias whose name or target cannot be resolved statically.";
+            if (consumerAliases.Names.Contains(alias))
+                return $"creates local alias '{alias}', which conflicts with a consumer alias.";
+
+            visibility ??= NestedFunctionVisibilityAnalyzer.Create(body);
+            if (visibility.IsDeclaredInVisibleScope(command, target))
+                continue;
+
+            var unqualified = GetModuleQualifier(target) is null;
+            var observed = unqualified && source is not null
+                ? GetCommandFromModuleScopeCached(source, target, includePrivate: true, requireOwnership: false)
+                : null;
+            var resolution = resolveInvocation(target, source);
+            if (!string.IsNullOrWhiteSpace(resolution.Error) || unqualified && (source is not null && observed is null ||
+                    consumerFunctions.Contains(target) || consumerAliases.Names.Contains(target)))
+            {
+                return $"creates local alias '{alias}' with target '{target}', whose donor binding cannot be preserved after merging.";
+            }
+        }
+        return null;
+    }
+
     private bool RejectUnsafeApprovedBindings(
         List<MissingFunctionCommand> commands, HashSet<string> approvedModules,
         IReadOnlyDictionary<string, ApprovedModuleSource> approvedModuleSources,
@@ -57,18 +116,27 @@ public sealed partial class MissingFunctionsAnalyzer
         {
             string target = GetInlineFunctionName(function);
             approvedModuleSources.TryGetValue(function.Source, out var source);
-            if (FindDonorContextVariable(function.ScriptBlock!, source) is { } variable)
+            var body = function.ScriptBlock!.Ast switch
+            {
+                // Function-header parameters become a param block in the emitted definition.
+                FunctionDefinitionAst { Parameters.Count: > 0 } => Parser.ParseInput(function.ScriptBlock.ToString(), out _, out _),
+                FunctionDefinitionAst declaration => declaration.Body,
+                ScriptBlockAst script => script,
+                _ => null
+            };
+            if (body is null)
+            {
+                function.Error = $"Cannot inspect the script body of '{function.Name}' from '{function.Source}'.";
+                continue;
+            }
+            if (FindDonorContextVariable(body, source, consumerFunctions, consumer.DeclaredAliases) is { } variable)
             {
                 function.Error = $"Command '{function.Name}' from '{function.Source}' uses donor context variable '{variable}', which is unavailable after merging.";
                 continue;
             }
-            if (function.ScriptBlock!.Ast.Find(static node =>
-                    node is CommandAst command && PowerShellAliasDefinitionPolicy.MayWriteOutsideLocalScope(command),
-                    searchNestedScriptBlocks: true) is CommandAst aliasWrite)
+            if (FindUnpreservableAlias(body, source, resolveInvocation, consumerFunctions, consumer.DeclaredAliases) is { } aliasError)
             {
-                string name = PowerShellAliasDefinitionPolicy.TryGetLiteralDefinition(aliasWrite, out string alias, out _)
-                    ? alias : aliasWrite.GetCommandName() ?? "an alias";
-                function.Error = $"Command '{function.Name}' from '{function.Source}' changes the donor alias scope for '{name}', which cannot be preserved after merging.";
+                function.Error = $"Command '{function.Name}' from '{function.Source}' {aliasError}";
                 continue;
             }
             if (consumer.DeclaredAliases.HasUnknownNames)

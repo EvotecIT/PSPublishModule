@@ -16,32 +16,68 @@ public sealed partial class MissingFunctionsAnalyzer
            observed.Guid == selected.Guid &&
            FrameworkCompatibility.PathComparer.Equals(observed.ModuleBase, selected.ModuleBase);
 
-    private string? FindDonorContextVariable(ScriptBlock body, ApprovedModuleSource? source)
+    private string? FindDonorContextVariable(
+        ScriptBlockAst root,
+        ApprovedModuleSource? source,
+        HashSet<string> consumerFunctions,
+        AuthoredAliases consumerAliases)
     {
         HashSet<string>? moduleVariableNames = null;
-        foreach (var variable in body.Ast.FindAll(static node => node is VariableExpressionAst, searchNestedScriptBlocks: true)
+        NestedFunctionVisibilityAnalyzer? visibility = null;
+        bool? canRemoveVariables = null;
+        foreach (var variable in root.FindAll(static node => node is VariableExpressionAst, searchNestedScriptBlocks: true)
                      .Cast<VariableExpressionAst>())
         {
             var path = variable.VariablePath;
-            string name = path.UserPath;
+            string name = PowerShellAssignmentTargetPolicy.GetUnscopedVariableName(path.UserPath);
             if (path.IsScript ||
                 name.Equals("PSScriptRoot", StringComparison.OrdinalIgnoreCase) ||
                 name.Equals("PSCommandPath", StringComparison.OrdinalIgnoreCase))
-                return name;
+                return path.UserPath;
             if (name.Equals("MyInvocation", StringComparison.OrdinalIgnoreCase))
             {
                 if (!ReadsCurrentFunctionName(variable))
-                    return name;
+                    return path.UserPath;
                 continue;
             }
             if (source is null || !path.IsUnqualified || !IsPotentialModuleVariable(name))
                 continue;
 
             moduleVariableNames ??= GetModuleScriptVariableNames(source);
-            if (moduleVariableNames.Contains(name) && !HasLocalBinding(variable))
-                return name;
+            if (!moduleVariableNames.Contains(name) || IsLocalDeclaration(variable))
+                continue;
+            canRemoveVariables ??= root.Find(static node => node is CommandAst invocation &&
+                invocation.GetCommandName() is { } commandName && IsVariableRemovalCommand(commandName),
+                searchNestedScriptBlocks: true) is not null;
+            if (canRemoveVariables.Value || !HasLocalBinding(variable, root, CanReadEnclosingScope))
+                return path.UserPath;
         }
         return null;
+
+        bool CanReadEnclosingScope(ScriptBlockExpressionAst callback)
+        {
+            visibility ??= NestedFunctionVisibilityAnalyzer.Create(root);
+            if (!visibility.IsSynchronousScriptBlock(callback))
+                return false;
+            if (callback.Parent is not CommandAst invocation)
+                return false;
+            if (invocation.InvocationOperator is TokenKind.Ampersand or TokenKind.Dot &&
+                ReferenceEquals(invocation.CommandElements[0], callback))
+                return true;
+            if (source is null || invocation.GetCommandName() is not { } commandName)
+                return false;
+
+            string name = GetUnqualifiedCommandName(commandName);
+            if (GetModuleQualifier(commandName) is null &&
+                (consumerFunctions.Contains(name) || consumerAliases.Names.Contains(name)))
+                return false;
+
+            var command = GetCommandFromModuleScopeCached(source, commandName, includePrivate: true, requireOwnership: false);
+            if (command is AliasInfo alias)
+                command = alias.ResolvedCommand;
+            return command is CmdletInfo cmdlet &&
+                   cmdlet.Source.StartsWith("Microsoft.PowerShell.", StringComparison.OrdinalIgnoreCase);
+        }
     }
 
     private HashSet<string> GetModuleScriptVariableNames(ApprovedModuleSource source)
@@ -82,37 +118,49 @@ param($module)
            !name.Equals("true", StringComparison.OrdinalIgnoreCase) &&
            !name.Equals("false", StringComparison.OrdinalIgnoreCase);
 
-    private static bool HasLocalBinding(VariableExpressionAst variable)
-    {
-        string name = variable.VariablePath.UserPath;
-        var comparer = StringComparer.OrdinalIgnoreCase;
+    private static bool IsVariableRemovalCommand(string commandName)
+        => GetUnqualifiedCommandName(commandName) is { } leaf &&
+           (leaf.Equals("Remove-Variable", StringComparison.OrdinalIgnoreCase) ||
+            leaf.Equals("rv", StringComparison.OrdinalIgnoreCase));
 
+    private static bool IsLocalDeclaration(VariableExpressionAst variable)
+    {
         if (variable.Parent is ParameterAst parameter && ReferenceEquals(parameter.Name, variable) ||
-            variable.Parent is ForEachStatementAst declaration && ReferenceEquals(declaration.Variable, variable))
+            variable.Parent is ForEachStatementAst loop && ReferenceEquals(loop.Variable, variable))
             return true;
 
         Ast target = variable.Parent is ConvertExpressionAst conversion ? conversion : variable;
-        if (target.Parent is AssignmentStatementAst { Operator: TokenKind.Equals } assignment &&
-            ReferenceEquals(assignment.Left, target))
-            return true;
+        return target.Parent is AssignmentStatementAst { Operator: TokenKind.Equals } assignment &&
+               ReferenceEquals(assignment.Left, target);
+    }
 
+    private static bool HasLocalBinding(
+        VariableExpressionAst variable,
+        ScriptBlockAst root,
+        Func<ScriptBlockExpressionAst, bool> canReadEnclosingScope)
+    {
+        string name = variable.VariablePath.UserPath;
+        var comparer = StringComparer.OrdinalIgnoreCase;
         // A direct earlier assignment in the same executing statement block initializes this local.
         // Assignments in sibling branches or nested functions do not prove the binding.
-        bool inParameterDefault = false;
+        ParameterAst? defaultParameter = null;
         for (Ast? node = variable; node is not null; node = node.Parent)
         {
-            if (node is ParameterAst)
-                inParameterDefault = true;
+            if (node.Parent is ParameterAst parameterAst && ReferenceEquals(parameterAst.DefaultValue, node))
+                defaultParameter = parameterAst;
             if (node is ScriptBlockAst scope)
             {
-                if (inParameterDefault)
-                    return false;
-                var parameters = scope.ParamBlock?.Parameters ?? (scope.Parent as FunctionDefinitionAst)?.Parameters;
+                var parameters = (scope.ParamBlock?.Parameters ?? (scope.Parent as FunctionDefinitionAst)?.Parameters)
+                    ?.TakeWhile(item => !ReferenceEquals(item, defaultParameter));
                 if (parameters?.Any(item => comparer.Equals(item.Name.VariablePath.UserPath, name)) == true)
                     return true;
                 // begin runs in the same function scope before process and end.
-                return scope.BeginBlock is { } begin && begin.Extent.EndOffset <= variable.Extent.StartOffset &&
-                       HasPriorAssignment(begin.Statements, variable, name);
+                if (defaultParameter is null && scope.BeginBlock is { } begin &&
+                    begin.Extent.EndOffset <= variable.Extent.StartOffset && HasPriorAssignment(begin.Statements, variable, name))
+                    return true;
+                if (ReferenceEquals(scope, root) || scope.Parent is not ScriptBlockExpressionAst callback ||
+                    !canReadEnclosingScope(callback))
+                    return false;
             }
             if (node.Parent is ForEachStatementAst loop && ReferenceEquals(loop.Body, node) &&
                 comparer.Equals(loop.Variable.VariablePath.UserPath, name))
