@@ -92,8 +92,11 @@ Linux x64 with a verified runtime-free dependency closure.
 
 The Windows builds match 30/30 executable observations against PowerShell
 7.6.6 and Windows PowerShell 5.1.26100.9818 with UTF-8 reference console
-output. The comparisons cover ordered file records, quoted CSV fields,
-redirected input, counted outputs, exit status and selected failures. They
+output. Strict console tables display full path values. PowerShell can
+shorten displayed paths to fit the console, and the oracles verify the
+complete values through structured records. The comparisons cover ordered
+file records, quoted CSV fields, redirected input, counted outputs, exit
+status and selected failures. They
 normalize the measured elapsed seconds and the layout of the nonterminating
 missing-path diagnostic. The default Windows reference console can replace
 an authored warning glyph under its active code page. All three Linux

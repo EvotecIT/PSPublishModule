@@ -8,6 +8,28 @@ namespace PowerForge.Tests;
 
 public sealed partial class PowerShellCompilationSemanticOracleTests
 {
+    private static string[] NormalizeFileProjectionConsole(string output, IReadOnlyDictionary<string, string> files,
+        bool allowTruncation)
+        => output.Split(Environment.NewLine, StringSplitOptions.None).Select(line =>
+        {
+            var row = line.TrimEnd();
+            var separator = row.IndexOf(' ');
+            if (separator < 0 || !files.TryGetValue(row[..separator], out var fullPath)) return row;
+            var path = row[(separator + 1)..].TrimStart();
+            if (allowTruncation && !path.Equals(fullPath, StringComparison.Ordinal))
+            {
+                var prefix = path.EndsWith('…') ? path[..^1] : path.TrimEnd('.');
+                Assert.InRange(path.Length - prefix.Length, 1, 3);
+                Assert.NotEmpty(prefix);
+                Assert.StartsWith(prefix, fullPath, StringComparison.Ordinal);
+            }
+            else
+            {
+                Assert.Equal(fullPath, path);
+            }
+            return row[..(separator + 1)] + fullPath;
+        }).ToArray();
+
     [PinnedSemanticHostFact]
     public void StrictPipelineStagesPreserveTheirRecordOwnersOnBothPinnedHosts()
     {

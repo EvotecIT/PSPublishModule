@@ -191,10 +191,11 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
                 Get-ChildItem -Path $Path -Recurse | Select-Object -Property Name,FullName
             }
             """);
-        var tree = Directory.CreateDirectory(Path.Combine(fixture.RootPath, "items")).FullName;
+        var tree = Directory.CreateDirectory(Path.Combine(fixture.RootPath, "items-" + new string('x', 60))).FullName;
         Directory.CreateDirectory(Path.Combine(tree, "nested"));
         File.WriteAllText(Path.Combine(tree, "a.txt"), "one");
         File.WriteAllText(Path.Combine(tree, "longer.txt"), "two");
+        var files = new[] { "nested", "a.txt", "longer.txt" }.ToDictionary(name => name, name => Path.Combine(tree, name));
         var observer = new PowerShellCompilationSemanticRuntimeFreeArtifactObserver();
         foreach (var pin in PowerShellCompilationSemanticHostArtifactPinCatalog.Pins)
         {
@@ -225,7 +226,10 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
                 var native = await ObserveExitedConsole(host, fixture.RootPath,
                     new[] { "-NoProfile", "-NonInteractive", "-File", fixture.ScriptPath, tree, status }, string.Empty);
                 var compiled = await ObserveExitedConsole(build.ArtifactPath!, fixture.RootPath, new[] { tree, status }, string.Empty);
-                Assert.Equal(native, compiled);
+                Assert.Equal(native.Code, compiled.Code);
+                Assert.Equal(native.Error, compiled.Error);
+                Assert.Equal(NormalizeFileProjectionConsole(native.Output, files, allowTruncation: true),
+                    NormalizeFileProjectionConsole(compiled.Output, files, allowTruncation: false));
             }
         }
     }

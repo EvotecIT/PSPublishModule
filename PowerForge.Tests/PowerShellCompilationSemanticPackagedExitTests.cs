@@ -199,8 +199,31 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
                 var expectedError = original.Error.Replace(fixture.ScriptPath, Path.GetFileName(fixture.ScriptPath));
                 var compiled = await ObserveExitedConsole(build.ArtifactPath!, fixture.RootPath,
                     scenario.Caught ? new[] { "--Caught" } : Array.Empty<string>(), scenario.Input);
-                Assert.Equal((original.Code, original.Output, expectedError), compiled);
+                Assert.Equal(original.Code, compiled.Code);
+                Assert.Equal(original.Output, compiled.Output);
+                if (scenario.ReportsError && pin.ProfileId == PowerShellCompilationSemanticOracleCatalog.WindowsPowerShell51ProfileId)
+                {
+                    AssertReadHostDesktopDiagnostic(expectedError);
+                    AssertReadHostDesktopDiagnostic(compiled.Error);
+                }
+                else
+                {
+                    Assert.Equal(expectedError, compiled.Error);
+                }
             }
+        }
+
+        static void AssertReadHostDesktopDiagnostic(string error)
+        {
+            // The Desktop formatter can wrap error lists at the console's width.
+            var fields = System.Text.RegularExpressions.Regex.Replace(error, @"\s+", "");
+            Assert.StartsWith(@"Microsoft.PowerShell.Utility\Read-Host:StartIndexcannotbelessthanzero.", fields);
+            Assert.Contains("Parametername:startIndex", fields, StringComparison.Ordinal);
+            Assert.Contains("Atcase.ps1:10char:15", fields, StringComparison.Ordinal);
+            Assert.Contains(@"+$answer=Microsoft.PowerShell.Utility\Read-Host-Prompt'Input'", fields, StringComparison.Ordinal);
+            Assert.Contains("CategoryInfo:NotSpecified:(:)[Read-Host],ArgumentOutOfRangeException", fields, StringComparison.Ordinal);
+            Assert.Contains("FullyQualifiedErrorId:System.ArgumentOutOfRangeException,Microsoft.PowerShell.Commands.ReadHostCommand",
+                fields, StringComparison.Ordinal);
         }
     }
 
