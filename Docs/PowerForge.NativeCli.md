@@ -33,6 +33,22 @@ intended preview version and use linux-x64 on Linux.
 The preview builder writes the ZIP under Artifacts/Preview/PowerForgeNative.
 Publication is a separate release operation.
 
+## Stage the full PowerForge build
+
+Build and smoke-test the native ZIP on each target OS. Place the verified
+`PowerForgeNative-<version>-win-x64.zip` and
+`PowerForgeNative-<version>-linux-x64.zip` together. Pass that directory to
+`Build/Build-Project.ps1 -NativeArchiveRoot <directory> -StageRoot <directory>`
+for the same version as the module and NuGet packages. Signed release builds
+sign the Windows launcher and managed companion before creating their ZIP.
+
+The unified release includes one standalone archive per runtime. Its tool
+manifest directs the installer to the native archive on Windows and Linux
+x64. Other runtimes continue to use their managed standalone archives.
+The installer preserves the managed companion for forwarded commands.
+The `PowerForge.Build` .NET tool stays on the managed CLI, and `PowerForge`
+and `PowerForge.Modules` ship on the same NuGet release track.
+
 ## Build from source
 
 Run the following from the repository on Linux x64. Use win-x64 on Windows.

@@ -409,6 +409,14 @@
         "ManifestJsonPath": { "type": [ "string", "null" ] },
         "ChecksumsPath": { "type": [ "string", "null" ] },
         "PowerForgeToolManifestPath": { "type": [ "string", "null" ] },
+        "NativePowerForgeArchivePaths": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "win-x64": { "type": "string", "minLength": 1 },
+            "linux-x64": { "type": "string", "minLength": 1 }
+          }
+        },
         "AdditionalAssetPaths": {
           "type": "array",
           "items": { "type": "string", "minLength": 1 },

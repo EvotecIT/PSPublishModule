@@ -27,6 +27,8 @@ param(
     [string] $ModuleFramework = 'auto',
     [string] $ModuleVersion,
     [string] $ReleaseVersion,
+    [string] $NativeArchiveRoot,
+    [string] $StageRoot,
     [Alias('PreReleaseTag')]
     [string] $ModulePreReleaseTag,
     [Alias('NoBuild')]
@@ -117,7 +119,7 @@ $result = $null
 try {
     if ($PrepareMetadata -and ($Plan -or $Validate -or $publishRequested -or
             $PublishNuget -or $PublishProjectGitHub -or $PublishToolGitHub -or
-            $PackagesOnly -or $ModuleOnly -or $ToolsOnly)) {
+            $PackagesOnly -or $ModuleOnly -or $ToolsOnly -or $NativeArchiveRoot -or $StageRoot)) {
         throw 'PrepareMetadata cannot be combined with planning, validation, publication, or lane selection.'
     }
     if ($Publish -and $ModuleOnly) {

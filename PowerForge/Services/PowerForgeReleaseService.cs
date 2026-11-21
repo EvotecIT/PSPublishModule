@@ -720,6 +720,12 @@ internal sealed partial class PowerForgeReleaseService
 
         var sharedReleaseVersion = request.ResolvedReleaseVersion ?? ResolveSharedReleaseVersion(spec, result);
         request.ResolvedReleaseVersion ??= sharedReleaseVersion;
+        var nativeArchives = runTools && selectedToolOutputs.Contains(PowerForgeReleaseToolOutputKind.Tool) &&
+                             (selectedTargets.Length == 0 || toolTargetMatches.Contains("PowerForge", StringComparer.OrdinalIgnoreCase))
+            ? ResolveNativePowerForgeArchives(spec, configDirectory, sharedReleaseVersion, request.NativeArchiveRoot)
+            : Array.Empty<PowerForgeReleaseAssetEntry>();
+        if (!string.IsNullOrWhiteSpace(request.NativeArchiveRoot) && nativeArchives.Length == 0)
+            throw new ArgumentException("NativeArchiveRoot requires the standalone PowerForge tool output.");
 
         PowerForgeAppleReleasePlan? applePlan = null;
         if (willRunAppleApps)
@@ -820,6 +826,8 @@ internal sealed partial class PowerForgeReleaseService
                             spec.GitHub?.Commitish,
                             request.EffectiveConfigurationPath ?? configPath);
                     }
+                    if (nativeArchives.Length > 0)
+                        SkipManagedBuildsCoveredByNativeArchives(toolPlan, nativeArchives);
 
                     if (!request.PlanOnly && !request.ValidateOnly)
                     {
@@ -918,7 +926,7 @@ internal sealed partial class PowerForgeReleaseService
         if (!request.PlanOnly && !request.ValidateOnly && !explicitAppleAction)
         {
             ValidatePostBuildSourceState(request);
-            PopulateReleaseOutputs(spec, request, configDirectory, result, sharedReleaseVersion);
+            PopulateReleaseOutputs(spec, request, configDirectory, result, sharedReleaseVersion, nativeArchives);
             result.ToolGitHubReleasePlans = BuildToolGitHubReleasePlans(spec, result);
             GenerateWingetOutputs(spec, request, configDirectory, result);
             IncludeWingetOutputsInReleaseAssets(result);
@@ -3578,9 +3586,14 @@ internal sealed partial class PowerForgeReleaseService
         PowerForgeReleaseRequest request,
         string configDirectory,
         PowerForgeReleaseResult result,
-        string? sharedReleaseVersion)
+        string? sharedReleaseVersion,
+        IReadOnlyCollection<PowerForgeReleaseAssetEntry> nativeArchives)
     {
+        var standaloneToolsSelected = ResolveSelectedToolOutputs(request).Contains(PowerForgeReleaseToolOutputKind.Tool);
+        var nativeRuntimes = new HashSet<string?>(nativeArchives.Select(archive => archive.Runtime), StringComparer.OrdinalIgnoreCase);
         var producedAssetEntries = CollectReleaseAssetEntries(result, result.DotNetToolPlan, sharedReleaseVersion)
+            .Where(entry => !IsStandalonePowerForgeArchive(entry) || !nativeRuntimes.Contains(entry.Runtime))
+            .Concat(nativeArchives)
             .GroupBy(entry => entry.Path, StringComparer.OrdinalIgnoreCase)
             .Select(group => group.First())
             .ToArray();
@@ -3590,8 +3603,13 @@ internal sealed partial class PowerForgeReleaseService
             result,
             sharedReleaseVersion,
             producedAssetEntries,
-            ResolveSelectedToolOutputs(request).Contains(PowerForgeReleaseToolOutputKind.Tool));
-        var assetEntries = CollectReleaseAssetEntries(result, result.DotNetToolPlan, sharedReleaseVersion, additionalAssetPaths)
+            standaloneToolsSelected);
+        var assetEntries = producedAssetEntries.Concat(additionalAssetPaths.Select(path => new PowerForgeReleaseAssetEntry
+            {
+                Path = path,
+                Category = PowerForgeReleaseAssetCategory.Metadata,
+                Source = "ReleaseOutputs"
+            }))
             .GroupBy(entry => entry.Path, StringComparer.OrdinalIgnoreCase)
             .Select(group => group.First())
             .ToArray();
@@ -5183,8 +5201,7 @@ internal sealed partial class PowerForgeReleaseService
     private static PowerForgeReleaseAssetEntry[] CollectReleaseAssetEntries(
         PowerForgeReleaseResult result,
         DotNetPublishPlan? dotNetPlan,
-        string? sharedReleaseVersion,
-        IReadOnlyCollection<string>? additionalAssetPaths = null)
+        string? sharedReleaseVersion)
     {
         var assets = new List<PowerForgeReleaseAssetEntry>();
 
@@ -5261,17 +5278,6 @@ internal sealed partial class PowerForgeReleaseService
                 Path = path!,
                 Category = PowerForgeReleaseAssetCategory.Metadata,
                 Source = "DotNetPublish"
-            }));
-
-        assets.AddRange(
-            (additionalAssetPaths ?? Array.Empty<string>())
-            .Where(static path => !string.IsNullOrWhiteSpace(path) && File.Exists(path))
-            .Select(path => new PowerForgeReleaseAssetEntry
-            {
-                Path = path,
-                Category = PowerForgeReleaseAssetCategory.Metadata,
-                Source = "ReleaseOutputs",
-                IsFinalPackageOutput = false
             }));
 
         assets.AddRange(CreateConfigurationAssetEntries(

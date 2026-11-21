@@ -125,6 +125,9 @@ internal sealed class PowerForgeReleaseRequest
     /// </summary>
     public string? ReleaseVersion { get; set; }
 
+    /// <summary>Directory containing the versioned native PowerForge archives produced on each target OS.</summary>
+    public string? NativeArchiveRoot { get; set; }
+
     public string? ModuleFramework { get; set; }
 
     public string? ModuleHostPath { get; set; }
@@ -420,6 +423,9 @@ internal sealed class PowerForgeReleaseOutputsOptions
 
     /// <summary>Additional tracked release files included in staging, checksums, and the unified GitHub release.</summary>
     public string[] AdditionalAssetPaths { get; set; } = Array.Empty<string>();
+
+    /// <summary>Verified native PowerForge archives keyed by runtime.</summary>
+    public Dictionary<string, string> NativePowerForgeArchivePaths { get; set; } = new();
 
     public PowerForgeReleaseStagingOptions? Staging { get; set; }
 }

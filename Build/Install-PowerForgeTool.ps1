@@ -114,9 +114,28 @@ if ([string]::IsNullOrWhiteSpace($CacheRoot)) {
 }
 $CacheRoot = [IO.Path]::GetFullPath($CacheRoot)
 $installRoot = Join-Path $CacheRoot "$version/$rid/$expectedSha256"
-$executableName = if ($isWindowsHost) { 'PowerForge.exe' } else { 'PowerForge' }
+$suffix = if ($isWindowsHost) { '.exe' } else { '' }
+$executableName = [string] (Get-ManifestPropertyValue -Object $asset -Name 'executableName')
+$companionSha256 = [string] (Get-ManifestPropertyValue -Object $asset -Name 'companionSha256')
+$companionRelativePath = $null
+if ([string]::IsNullOrEmpty($executableName) -and [string]::IsNullOrEmpty($companionSha256)) {
+    $executableName = "PowerForge$suffix"
+} elseif ($executableName -ceq "powerforge$suffix" -and $companionSha256 -match '^[a-fA-F0-9]{64}$') {
+    $companionRelativePath = "full/powerforge-full$suffix"
+    $companionSha256 = $companionSha256.ToLowerInvariant()
+} else {
+    throw "PowerForge asset '$rid' has an invalid native launcher or managed companion entry."
+}
 $toolPath = Join-Path $installRoot $executableName
 $markerPath = Join-Path $installRoot '.powerforge-install.json'
+
+function Test-ManagedCompanion {
+    param([string] $Root)
+    if (-not $companionRelativePath) { return $true }
+    $path = Join-Path $Root $companionRelativePath
+    return (Test-Path -LiteralPath $path -PathType Leaf) -and
+        (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant() -ceq $companionSha256
+}
 
 function Test-InstalledTool {
     if ([string]::IsNullOrWhiteSpace($trustedExecutableSha256)) {
@@ -131,6 +150,7 @@ function Test-InstalledTool {
         if ($actualExecutableSha256 -cne $trustedExecutableSha256) {
             return $false
         }
+        if (-not (Test-ManagedCompanion -Root $installRoot)) { return $false }
         $marker = Get-Content -LiteralPath $markerPath -Raw | ConvertFrom-Json
         if ([string] $marker.sha256 -cne $expectedSha256 -or
             [string] $marker.executableSha256 -cne $trustedExecutableSha256 -or
@@ -200,9 +220,14 @@ if (-not $reused) {
         if ($legacyArchiveOnlyManifest) {
             $trustedExecutableSha256 = $stagedExecutableSha256
         }
+        if (-not (Test-ManagedCompanion -Root $stageRoot)) {
+            throw 'The managed PowerForge companion is missing or its checksum differs from the tool manifest.'
+        }
         if (-not $isWindowsHost) {
-            & chmod +x $stagedTool
-            if ($LASTEXITCODE -ne 0) { throw "Failed to mark '$stagedTool' executable." }
+            $executables = @($stagedTool)
+            if ($companionRelativePath) { $executables += Join-Path $stageRoot $companionRelativePath }
+            & chmod +x @executables
+            if ($LASTEXITCODE -ne 0) { throw 'Failed to mark the installed PowerForge executables.' }
         }
         $versionOutput = @(& $stagedTool --version)
         $toolExitCode = $LASTEXITCODE

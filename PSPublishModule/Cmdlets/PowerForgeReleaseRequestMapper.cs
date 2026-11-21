@@ -74,6 +74,7 @@ internal static class PowerForgeReleaseRequestMapper
             request.SourceInputPaths = options.SourceInputPaths;
         request.ModuleHostPath = ChooseString(request.ModuleHostPath, options.ModuleHostPath);
         request.ReleaseVersion = ChooseString(request.ReleaseVersion, options.ReleaseVersion);
+        request.NativeArchiveRoot = ChooseString(request.NativeArchiveRoot, options.NativeArchiveRoot);
         request.ModuleVersion = ChooseString(request.ModuleVersion, options.ModuleVersion);
         request.ModulePreReleaseTag = ChooseString(request.ModulePreReleaseTag, options.ModulePreReleaseTag);
         request.WorkspaceConfigPath = ChooseString(request.WorkspaceConfigPath, options.WorkspaceConfigPath);
@@ -169,6 +170,7 @@ internal static class PowerForgeReleaseRequestMapper
             SourceInputPaths = source.SourceInputPaths.ToArray(),
             ModuleHostPath = source.ModuleHostPath,
             ReleaseVersion = source.ReleaseVersion,
+            NativeArchiveRoot = source.NativeArchiveRoot,
             ModuleFramework = source.ModuleFramework,
             ModuleRunMode = source.ModuleRunMode,
             ModuleNoDotnetBuild = source.ModuleNoDotnetBuild,

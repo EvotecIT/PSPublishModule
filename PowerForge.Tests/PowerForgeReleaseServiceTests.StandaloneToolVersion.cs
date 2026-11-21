@@ -158,21 +158,35 @@ public sealed partial class PowerForgeReleaseServiceTests
         }
     }
 
-    [Fact]
-    public void Execute_WritesConsumerToolManifestWithoutCommitGuard()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Execute_WritesConsumerToolManifestForTheSelectedArchive(bool includeNativeArchive)
     {
         var root = CreateSandbox();
         try
         {
-            var zip = Path.Combine(root, "PowerForge-3.0.110-net10.0-osx-arm64-SingleContained.zip");
+            var runtime = includeNativeArchive ? "linux-x64" : "osx-arm64";
+            var zip = Path.Combine(root, $"PowerForge-3.0.110-net10.0-{runtime}-SingleContained.zip");
+            var nativeZip = Path.Combine(root, $"PowerForgeNative-3.0.110-{runtime}.zip");
             var installer = Path.Combine(root, "Install-PowerForgeTool.ps1");
             var lockManifest = Path.Combine(root, "PowerForge-tool-manifest.json");
             var executableBytes = System.Text.Encoding.UTF8.GetBytes("verified PowerForge executable");
+            var nativeBytes = System.Text.Encoding.UTF8.GetBytes("native PowerForge launcher");
+            var companionBytes = System.Text.Encoding.UTF8.GetBytes("managed companion");
             using (var archive = System.IO.Compression.ZipFile.Open(zip, System.IO.Compression.ZipArchiveMode.Create))
             {
                 var entry = archive.CreateEntry("PowerForge");
                 using var stream = entry.Open();
                 stream.Write(executableBytes, 0, executableBytes.Length);
+            }
+            if (includeNativeArchive)
+            {
+                using var archive = System.IO.Compression.ZipFile.Open(nativeZip, System.IO.Compression.ZipArchiveMode.Create);
+                using (var launcher = archive.CreateEntry("powerforge").Open())
+                    launcher.Write(nativeBytes);
+                using (var companion = archive.CreateEntry("full/powerforge-full").Open())
+                    companion.Write(companionBytes);
             }
             File.WriteAllText(installer, "param()");
             var service = new PowerForgeReleaseService(
@@ -194,7 +208,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                             [
                                 new PowerForgeToolReleaseCombinationPlan
                                 {
-                                    Runtime = "osx-arm64",
+                                    Runtime = runtime,
                                     Framework = "net10.0",
                                     Flavor = PowerForgeToolReleaseFlavor.SingleContained,
                                     ZipPath = zip
@@ -213,7 +227,7 @@ public sealed partial class PowerForgeReleaseServiceTests
                             Target = "PowerForge",
                             Version = Assert.Single(plan.Targets).Version,
                             OutputName = "PowerForge",
-                            Runtime = "osx-arm64",
+                            Runtime = runtime,
                             Framework = "net10.0",
                             Flavor = PowerForgeToolReleaseFlavor.SingleContained,
                             OutputPath = root,
@@ -230,7 +244,8 @@ public sealed partial class PowerForgeReleaseServiceTests
                     Outputs = new PowerForgeReleaseOutputsOptions
                     {
                         PowerForgeToolManifestPath = lockManifest,
-                        AdditionalAssetPaths = [installer]
+                        AdditionalAssetPaths = [installer],
+                        NativePowerForgeArchivePaths = includeNativeArchive ? new() { [runtime] = nativeZip } : new()
                     },
                     Tools = new PowerForgeToolReleaseSpec(),
                     GitHub = new PowerForgeReleaseGitHubOptions
@@ -256,14 +271,31 @@ public sealed partial class PowerForgeReleaseServiceTests
             Assert.Equal("3.0.110", json.GetProperty("version").GetString());
             Assert.Equal("v3.0.110", json.GetProperty("releaseTag").GetString());
             Assert.False(json.TryGetProperty("commit", out _));
-            var asset = json.GetProperty("assets").GetProperty("osx-arm64");
-            Assert.Equal(Path.GetFileName(zip), asset.GetProperty("name").GetString());
+            var asset = json.GetProperty("assets").GetProperty(runtime);
+            var selectedZip = includeNativeArchive ? nativeZip : zip;
+            Assert.Contains(selectedZip, result.ReleaseAssets);
+            Assert.Equal(Path.GetFileName(selectedZip), asset.GetProperty("name").GetString());
             Assert.Equal(
-                Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(zip))).ToLowerInvariant(),
+                Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(selectedZip))).ToLowerInvariant(),
                 asset.GetProperty("sha256").GetString());
             Assert.Equal(
-                Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(executableBytes)).ToLowerInvariant(),
+                Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(includeNativeArchive ? nativeBytes : executableBytes)).ToLowerInvariant(),
                 asset.GetProperty("executableSha256").GetString());
+            if (includeNativeArchive)
+            {
+                Assert.Empty(Assert.Single(result.ToolPlan!.Targets).Combinations);
+                Assert.DoesNotContain(zip, result.ReleaseAssets);
+                Assert.Equal("powerforge", asset.GetProperty("executableName").GetString());
+                Assert.Equal(
+                    Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(companionBytes)).ToLowerInvariant(),
+                    asset.GetProperty("companionSha256").GetString());
+            }
+            else
+            {
+                Assert.Single(Assert.Single(result.ToolPlan!.Targets).Combinations);
+                Assert.False(asset.TryGetProperty("executableName", out _));
+                Assert.False(asset.TryGetProperty("companionSha256", out _));
+            }
         }
         finally
         {
