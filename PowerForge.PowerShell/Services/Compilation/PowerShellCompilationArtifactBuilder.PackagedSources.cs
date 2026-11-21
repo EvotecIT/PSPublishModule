@@ -46,11 +46,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
         var fullSourcePath = Path.GetFullPath(sourcePath);
         var sourceRoot = Path.GetDirectoryName(fullSourcePath) ?? Directory.GetCurrentDirectory();
         var compiled = compilationSourcePaths.ToHashSet(PowerShellCompilationPathSafety.PathComparer);
-        var retainedScripts = dependencyPlan.Where(static dependency =>
-                dependency.Discovery == PowerShellCompilationDependencyDiscovery.SourceGraph &&
-                dependency.Disposition == PowerShellCompilationDependencyDisposition.EmbeddedAndExtracted &&
-                dependency.Selection == PowerShellCompilationDependencySelection.Source &&
-                dependency.SourcePath is not null)
+        var retainedScripts = dependencyPlan.Where(PowerShellCompilationDependencyPlanner.IsPackagedSourceDependency)
             .Select(static dependency => Path.GetFullPath(dependency.SourcePath!))
             .Where(path => !compiled.Contains(path))
             .ToArray();

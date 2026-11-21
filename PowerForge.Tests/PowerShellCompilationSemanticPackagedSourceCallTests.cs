@@ -9,20 +9,21 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
         using var fixture = OracleFixture.Create("""
             param([string] $Label, [switch] $Each, [string] $OverridePath)
             $ErrorActionPreference = 'Stop'
-            function Get-Tag { return 'parent' }
             $directory = Split-Path -Parent $MyInvocation.MyCommand.Path
             $value = 'outer'
             if ($Each) {
                 $scriptPath = Join-Path $directory 'helper.ps1'
-                foreach ($item in 1, 2) {
-                    $result = & $scriptPath -Label "$Label$item" 3>$null 4>$null 5>$null
-                    "$result|$value|$(Get-Tag)"
+                $results = foreach ($item in 1, 2) {
+                    & $scriptPath -Label "$Label$item" 3>$null 4>$null 5>$null
                 }
             }
             else {
                 $scriptPath = Join-Path $directory 'helper.ps1'
                 if ($OverridePath) { $scriptPath = $OverridePath }
-                $result = & $scriptPath -Label $Label 3>$null 4>$null 5>$null
+                $results = & $scriptPath -Label $Label 3>$null 4>$null 5>$null
+            }
+            function Get-Tag { return 'parent' }
+            foreach ($result in $results) {
                 "$result|$value|$(Get-Tag)"
             }
             Write-Warning 'visible warning'
@@ -33,14 +34,17 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
         var helper = Path.Combine(fixture.RootPath, "helper.ps1");
         File.WriteAllText(helper, """
             param([string] $Label)
+            $parentVisible = [bool](Get-Command Get-Tag -ErrorAction SilentlyContinue)
             function Get-Tag { return 'child' }
             $value = 'inner'
             Write-Warning 'hidden warning'
             Write-Verbose 'hidden verbose' -Verbose
             $DebugPreference = 'Continue'
             Write-Debug 'hidden debug'
-            "$(Get-Tag):$Label"
+            $resource = Get-Content -LiteralPath "$PSScriptRoot/label.txt" -Raw
+            "$parentVisible|$(Get-Tag):${Label}:$resource"
             """);
+        File.WriteAllText(Path.Combine(fixture.RootPath, "label.txt"), "bundled");
         var other = Path.Combine(fixture.RootPath, "other.ps1");
         File.WriteAllText(other, "'unexpected source ran'");
         var service = new PowerShellCompilationHostService();
@@ -69,9 +73,9 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
                 Path.Combine(Environment.SystemDirectory, "WindowsPowerShell", "v1.0", "powershell.exe");
             foreach (var (arguments, expected) in new[]
             {
-                (new[] { "-Label", "Ada" }, new[] { "child:Ada|outer|parent",
+                (new[] { "-Label", "Ada" }, new[] { "False|child:Ada:bundled|outer|parent",
                     "WARNING: visible warning", "VERBOSE: visible verbose", "DEBUG: visible debug" }),
-                (new[] { "-Label", "Ada", "-Each" }, new[] { "child:Ada1|outer|parent", "child:Ada2|outer|parent",
+                (new[] { "-Label", "Ada", "-Each" }, new[] { "False|child:Ada1:bundled|outer|parent", "False|child:Ada2:bundled|outer|parent",
                     "WARNING: visible warning", "VERBOSE: visible verbose", "DEBUG: visible debug" })
             })
             {

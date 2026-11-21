@@ -167,10 +167,16 @@ public sealed partial class PowerShellCompilationAnalyzer
         catch (InvalidOperationException exception)
         {
             var location = PowerShellCompilationSourceFailure.GetDiagnostic(exception);
-            if (location is { FilePath: var reportedPath } && !plan.Files.Any(file => PowerShellCompilationPathSafety.PathEquals(file.FullPath, reportedPath)))
+            if (location is { FilePath: var reportedPath } &&
+                !input.SourceFiles.Contains(reportedPath, PowerShellCompilationPathSafety.PathComparer))
                 location = null;
             var sourcePath = location?.FilePath ?? Path.GetFullPath(input.SourcePath);
-            var files = plan.Files.Select(file =>
+            IEnumerable<PowerShellCompilationFilePlan> sourceFiles = plan.Files;
+            if (!plan.Files.Any(file => PowerShellCompilationPathSafety.PathEquals(file.FullPath, sourcePath)))
+                sourceFiles = sourceFiles.Append(new PowerShellCompilationFilePlan(sourcePath,
+                    FrameworkCompatibility.GetRelativePath(input.ModuleRoot, sourcePath).Replace('\\', '/'),
+                    Array.Empty<PowerShellCompilationUnitPlan>(), Array.Empty<PowerShellCompilationDiagnostic>()));
+            var files = sourceFiles.Select(file =>
             {
                 if (!PowerShellCompilationPathSafety.PathEquals(file.FullPath, sourcePath))
                     return file;

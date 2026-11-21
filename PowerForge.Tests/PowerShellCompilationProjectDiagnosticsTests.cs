@@ -174,11 +174,12 @@ public sealed class PowerShellCompilationProjectDiagnosticsTests
     }
 
     [Theory]
-    [InlineData("$PSCmdlet.ShouldProcess('record', 'inspect')", "confirmation-capable script interaction")]
-    [InlineData("& $Command", "dynamic command invocation")]
-    public void ProjectExplain_ReportsPackagedHostRefusalsAtTheDependencyStatement(string statement, string reason)
+    [InlineData(".", "$PSCmdlet.ShouldProcess('record', 'inspect')", "confirmation-capable script interaction")]
+    [InlineData(".", "& $Command", "dynamic command invocation")]
+    [InlineData("&", "& $Command", "dynamic command invocation")]
+    public void ProjectExplain_ReportsPackagedHostRefusalsAtTheDependencyStatement(string invocation, string statement, string reason)
     {
-        using var fixture = Fixture.Create(". \"$PSScriptRoot/Helper.ps1\"; Invoke-Helper",
+        using var fixture = Fixture.Create(invocation + " \"$PSScriptRoot/Helper.ps1\"",
             PowerShellCompilationArtifactKind.Executable, PowerShellCompilationMode.Hybrid);
         File.WriteAllText(Path.Combine(fixture.Root, "Helper.ps1"),
             "# Contained helper\nfunction Invoke-Helper {\n    " + statement + "\n}\n");

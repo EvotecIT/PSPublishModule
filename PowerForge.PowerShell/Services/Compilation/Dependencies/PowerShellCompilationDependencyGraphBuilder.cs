@@ -100,11 +100,17 @@ internal sealed partial class PowerShellCompilationDependencyGraphBuilder
                 runtimeIdentifier)
             : sourceNodeId;
 
+        var compiledPaths = sources.ToHashSet(PowerShellCompilationPathSafety.PathComparer);
+        var retainedSources = new List<(string Path, string NodeId)>();
         foreach (var dependency in dependencies.OrderBy(static item => item.RelativePath, StringComparer.OrdinalIgnoreCase))
         {
             var nodeId = AddDependencyNode(dependency, targetFramework, runtimeIdentifier);
             if (nodeId == rootId) continue;
             AddEdge(rootId, nodeId, MapEdgeKind(dependency.Discovery), dependency.RelativePath);
+            if (_artifactKind == PowerShellCompilationArtifactKind.Executable &&
+                PowerShellCompilationDependencyPlanner.IsPackagedSourceDependency(dependency) &&
+                !compiledPaths.Contains(dependency.SourcePath!))
+                retainedSources.Add((dependency.SourcePath!, nodeId));
         }
 
         foreach (var input in sources)
@@ -123,6 +129,8 @@ internal sealed partial class PowerShellCompilationDependencyGraphBuilder
                 AddEdge(rootId, inputId, PowerShellCompilationDependencyEdgeKind.BuildInput, Relative(input));
             DiscoverSourceEdges(input, inputId, targetFramework, runtimeIdentifier);
         }
+        foreach (var (path, nodeId) in retainedSources)
+            DiscoverSourceEdges(path, nodeId, targetFramework, runtimeIdentifier);
 
         if (!string.IsNullOrWhiteSpace(manifestPath) && File.Exists(manifestPath))
             DiscoverManifestEdges(Path.GetFullPath(manifestPath!), rootId, targetFramework, runtimeIdentifier, new HashSet<string>(PowerShellCompilationPathSafety.PathComparer));

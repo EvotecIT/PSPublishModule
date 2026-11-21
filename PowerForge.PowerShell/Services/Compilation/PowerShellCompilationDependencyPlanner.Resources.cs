@@ -20,20 +20,22 @@ public sealed partial class PowerShellCompilationDependencyPlanner
         string moduleRoot,
         string sourcePath,
         string? manifestPath,
-        PowerShellCompilationArtifactKind kind,
-        PowerShellCompilationMode mode,
+        bool extractResourcesWithSource,
         PowerShellCompilationResourceMode resourceMode,
         IEnumerable<string>? includeResource,
         IEnumerable<string>? excludeResource,
         string? outputDirectory,
         IEnumerable<string>? generatedOutputDirectories,
-        IEnumerable<string> compilationGraph,
+        IEnumerable<string> resourceReferencingSources,
         ICollection<PowerShellCompilationDependency> results,
         ISet<string> localPaths,
         PowerShellSourceSnapshot snapshot)
     {
         var includePatterns = NormalizePatterns(includeResource, nameof(includeResource));
         var excludePatterns = NormalizePatterns(excludeResource, nameof(excludeResource));
+        var includedDisposition = extractResourcesWithSource
+            ? PowerShellCompilationDependencyDisposition.EmbeddedAndExtracted
+            : PowerShellCompilationDependencyDisposition.CopiedAdjacent;
         var isModuleInput = IsModuleInput(sourcePath, manifestPath);
         var outputRoot = string.IsNullOrWhiteSpace(outputDirectory) ? null : Path.GetFullPath(outputDirectory!);
         var generatedRoots = (generatedOutputDirectories ?? Array.Empty<string>())
@@ -100,7 +102,7 @@ public sealed partial class PowerShellCompilationDependencyPlanner
 
         var inferredPaths = resourceMode == PowerShellCompilationResourceMode.None
             ? new HashSet<string>(PowerShellCompilationPathSafety.PathComparer)
-            : DiscoverLiteralResources(compilationGraph, moduleRoot, snapshot).ToHashSet(PowerShellCompilationPathSafety.PathComparer);
+            : DiscoverLiteralResources(resourceReferencingSources, moduleRoot, snapshot).ToHashSet(PowerShellCompilationPathSafety.PathComparer);
         foreach (var inferred in inferredPaths)
         {
             if (inventory.All(candidate => !PowerShellCompilationPathSafety.PathEquals(candidate.FullPath, inferred)))
@@ -156,7 +158,7 @@ public sealed partial class PowerShellCompilationDependencyPlanner
                 moduleRoot,
                 candidate.FullPath,
                 discovery,
-                included ? GetResourceDisposition(kind, mode) : PowerShellCompilationDependencyDisposition.NotIncluded,
+                included ? includedDisposition : PowerShellCompilationDependencyDisposition.NotIncluded,
                 GetResourceNote(selection, candidate.Discovery),
                 required: inferred,
                 selection);
@@ -337,13 +339,6 @@ public sealed partial class PowerShellCompilationDependencyPlanner
                 "The folder name is a classification hint only. Use IncludeResource, FileList, a safe literal reference, or CompleteModule mode to include this optional file.",
             _ => "The optional file is inventoried but unclassified and is not included. Declare it with FileList or IncludeResource, or select CompleteModule mode."
         };
-
-    private static PowerShellCompilationDependencyDisposition GetResourceDisposition(
-        PowerShellCompilationArtifactKind kind,
-        PowerShellCompilationMode mode)
-        => kind == PowerShellCompilationArtifactKind.Executable && mode == PowerShellCompilationMode.Package
-            ? PowerShellCompilationDependencyDisposition.EmbeddedAndExtracted
-            : PowerShellCompilationDependencyDisposition.CopiedAdjacent;
 
     private static bool IsSameOrContained(string root, string path)
     {

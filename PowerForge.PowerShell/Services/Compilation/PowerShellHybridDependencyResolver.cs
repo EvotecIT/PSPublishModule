@@ -85,7 +85,8 @@ internal static class PowerShellHybridDependencyResolver
         if (!hosted) return (compiled, compiled);
         // Called scripts own a child scope. Stage them, but do not add their functions to the caller's symbol table.
         var runtime = DiscoverDependenciesCore(sourcePath, null, moduleScopeOnly: false, conventionalLoaders: null,
-            allowDerivedPaths: true, snapshot: snapshot, includeScriptCalls: true);
+            allowDerivedPaths: true, snapshot: snapshot,
+            callerScopeSources: compiled.ToHashSet(PowerShellCompilationPathSafety.PathComparer));
         return (compiled, runtime);
     }
 
@@ -122,7 +123,7 @@ internal static class PowerShellHybridDependencyResolver
         IReadOnlyDictionary<string, ParsedSourceDocument>? sourceDocuments = null,
         string? semanticProfileId = null,
         PowerShellSourceSnapshot? snapshot = null,
-        bool includeScriptCalls = false)
+        ISet<string>? callerScopeSources = null)
     {
         var primarySource = Path.GetFullPath(sourcePath);
         var sourceRoot = Path.GetFullPath(Path.GetDirectoryName(sourcePath) ?? Directory.GetCurrentDirectory());
@@ -171,7 +172,7 @@ internal static class PowerShellHybridDependencyResolver
                 : ast.FindAll(
                         node => node is CommandAst command &&
                                 (command.InvocationOperator == TokenKind.Dot ||
-                                 includeScriptCalls && command.InvocationOperator == TokenKind.Ampersand),
+                                 callerScopeSources is not null && command.InvocationOperator == TokenKind.Ampersand),
                         searchNestedScriptBlocks: true)
                     .Cast<CommandAst>();
             foreach (var command in dotSourceCommands)
@@ -185,6 +186,10 @@ internal static class PowerShellHybridDependencyResolver
                             "A packaged script invocation needs a contained .ps1 target without wildcards.", current, call.Operand.Extent);
                     var calledScript = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(current)!, relative));
                     PowerShellCompilationPathSafety.EnsureContained(sourceRoot, calledScript, "A packaged script invocation escapes the executable source root.");
+                    if (callerScopeSources!.Contains(calledScript))
+                        throw PowerShellCompilationSourceFailure.Create(
+                            $"The packaged call target '{call.RelativePath}' is also in the caller's dot-sourced compilation set. Use separate authored files for caller-scope declarations and child-scope entry points, or run the source in PowerShell.",
+                            current, call.Operand.Extent);
                     if (!File.Exists(calledScript))
                         throw PowerShellCompilationSourceFailure.Create(
                             $"The called script '{call.RelativePath}' is missing. Supply the contained script or run the source in PowerShell.", current, call.Operand.Extent);
@@ -232,6 +237,10 @@ internal static class PowerShellHybridDependencyResolver
                         throw new InvalidOperationException($"Dot-source path '{relativePath}' at {current}:{command.Extent.StartLineNumber} must be a contained literal path without wildcards.");
                     var dependency = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(current)!, relativePath));
                     PowerShellCompilationPathSafety.EnsureContained(sourceRoot, dependency, $"Dot-source path at {current}:{command.Extent.StartLineNumber} escapes the hybrid module source root.");
+                    if (callerScopeSources is not null && !callerScopeSources.Contains(current) && callerScopeSources.Contains(dependency))
+                        throw PowerShellCompilationSourceFailure.Create(
+                            $"The child script dot-sources '{relativePath}', which is also in the caller's compilation set. Use separate authored files for the two scopes, or run the source in PowerShell.",
+                            current, expression.Extent);
                     if (selectedAtImport && PowerShellCompilationPathSafety.PathEquals(dependency, primarySource))
                         throw new InvalidOperationException($"Module switch alternative '{relativePath}' selects the importing source itself.");
                     if (!File.Exists(dependency))

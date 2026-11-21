@@ -185,6 +185,9 @@ public sealed partial class PowerShellCompilationDependencyPlanner
             .Distinct(PowerShellCompilationPathSafety.PathComparer)
             .OrderBy(path => FrameworkCompatibility.GetRelativePath(root, path), StringComparer.OrdinalIgnoreCase)
             .ToArray();
+        var runtimeGraph = sourceFiles.Where(static path => !string.IsNullOrWhiteSpace(path))
+            .Select(Path.GetFullPath).Distinct(PowerShellCompilationPathSafety.PathComparer)
+            .OrderBy(path => FrameworkCompatibility.GetRelativePath(root, path), StringComparer.OrdinalIgnoreCase).ToArray();
         foreach (var file in compilationGraph)
         {
             AddLocal(
@@ -217,11 +220,7 @@ public sealed partial class PowerShellCompilationDependencyPlanner
             CollectManifestDependencies(manifest, root, kind, mode, results, localPaths, new HashSet<string>(PowerShellCompilationPathSafety.PathComparer), includeRootModule: false);
         }
 
-        foreach (var file in sourceFiles
-                     .Where(static path => !string.IsNullOrWhiteSpace(path))
-                     .Select(Path.GetFullPath)
-                     .Distinct(PowerShellCompilationPathSafety.PathComparer)
-                     .OrderBy(path => FrameworkCompatibility.GetRelativePath(root, path), StringComparer.OrdinalIgnoreCase))
+        foreach (var file in runtimeGraph)
         {
             AddLocal(
                 results,
@@ -234,18 +233,23 @@ public sealed partial class PowerShellCompilationDependencyPlanner
                 selection: PowerShellCompilationDependencySelection.Source);
         }
 
+        var packagedExecutable = kind == PowerShellCompilationArtifactKind.Executable &&
+            mode is PowerShellCompilationMode.Package or PowerShellCompilationMode.Hybrid;
+        var extractResourcesWithSource = packagedExecutable &&
+            (mode == PowerShellCompilationMode.Package || runtimeGraph.Except(compilationGraph, PowerShellCompilationPathSafety.PathComparer).Any());
         CollectConfiguredPayload(
             root,
             source,
             manifestPath,
-            kind,
-            mode,
+            extractResourcesWithSource,
             resourceMode,
             includeResource,
             excludeResource,
             outputDirectory,
             generatedOutputDirectories,
-            compilationGraph,
+            packagedExecutable
+                ? compilationGraph.Concat(runtimeGraph).Distinct(PowerShellCompilationPathSafety.PathComparer)
+                : compilationGraph,
             results,
             localPaths,
             snapshot);
@@ -469,6 +473,12 @@ public sealed partial class PowerShellCompilationDependencyPlanner
             : kind == PowerShellCompilationArtifactKind.BinaryModule && mode == PowerShellCompilationMode.Hybrid
                 ? PowerShellCompilationDependencyDisposition.PreservedScript
                 : PowerShellCompilationDependencyDisposition.NotIncluded;
+
+    internal static bool IsPackagedSourceDependency(PowerShellCompilationDependency dependency)
+        => dependency.Discovery == PowerShellCompilationDependencyDiscovery.SourceGraph &&
+           dependency.Disposition == PowerShellCompilationDependencyDisposition.EmbeddedAndExtracted &&
+           dependency.Selection == PowerShellCompilationDependencySelection.Source &&
+           dependency.SourcePath is not null;
 
     private static string GetRuntimeSourceNote(PowerShellCompilationArtifactKind kind, PowerShellCompilationMode mode)
         => kind == PowerShellCompilationArtifactKind.Executable && mode is PowerShellCompilationMode.Package or PowerShellCompilationMode.Hybrid
