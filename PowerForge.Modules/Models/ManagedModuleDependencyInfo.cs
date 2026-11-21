@@ -15,6 +15,8 @@ public sealed class ManagedModuleDependencyInfo
     /// </summary>
     public string? VersionRange { get; set; }
 
+    internal Guid? RequiredModuleGuid { get; set; }
+
     /// <summary>
     /// Target framework group that declared the dependency.
     /// </summary>

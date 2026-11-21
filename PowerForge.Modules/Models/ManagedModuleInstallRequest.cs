@@ -114,5 +114,5 @@ public sealed class ManagedModuleInstallRequest
 
     internal bool RepairInstalledManifestDependencies { get; set; }
 
-    internal bool RequireVersionedModulePath { get; set; }
+    internal string? RestoreModuleDirectoryVersion { get; set; }
 }

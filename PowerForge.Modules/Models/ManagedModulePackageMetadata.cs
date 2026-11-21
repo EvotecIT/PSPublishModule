@@ -75,6 +75,8 @@ public sealed class ManagedModulePackageMetadata
     /// </summary>
     public string? ModuleManifestVersion { get; set; }
 
+    internal Guid? ModuleManifestGuid { get; set; }
+
     /// <summary>
     /// Prerelease label read from PrivateData.PSData.Prerelease when available.
     /// </summary>

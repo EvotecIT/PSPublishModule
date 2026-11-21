@@ -135,11 +135,13 @@ The lock records one version and the package SHA-256 for each module in the
 dependency set. The command uses PowerShell Gallery by default. For a different
 NuGet feed or a local package folder, pass the same `--source` when creating and
 using the lock. Local folder locks record an absolute source path. Keep the
-requirements and lock files outside the module destination. A frozen restore
-verifies all package hashes and dependency
-requirements before installing. It reinstalls the locked versions from the
-verified packages and leaves other versions in place. Use `--write-lock` again
-to refresh dependency selection.
+requirements, lock file and temporary directory outside the module destination.
+A frozen restore verifies all package hashes and dependency requirements,
+including GUID constraints declared by a module manifest, before installing.
+The lock keeps the NuGet package version. PowerShell discovers each module in
+the numeric version folder named by its manifest's `ModuleVersion`.
+If a different package version already occupies that folder, restore reports
+the collision. Use `--write-lock` again to refresh dependency selection.
 
 Add `--plan` to inspect the resolved or frozen package set without writing the
 lock or destination. Plan mode downloads the packages to temporary storage to

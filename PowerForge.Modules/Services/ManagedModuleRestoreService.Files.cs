@@ -6,9 +6,14 @@ public sealed partial class ManagedModuleRestoreService
 {
     private static void RequireOutsideDestination(string path, string destination)
     {
-        if (IsInside(path, destination) ||
-            IsInside(FrameworkCompatibility.ResolvePhysicalPath(path), FrameworkCompatibility.ResolvePhysicalPath(destination)))
+        if (IsInsideDestination(path, destination))
             throw new ArgumentException("Keep the requirements and lock file outside the module destination.");
+    }
+
+    private static bool IsInsideDestination(string path, string destination)
+    {
+        return IsInside(path, destination) ||
+               IsInside(FrameworkCompatibility.ResolvePhysicalPath(path), FrameworkCompatibility.ResolvePhysicalPath(destination));
 
         static bool IsInside(string path, string destination)
         {
@@ -20,12 +25,10 @@ public sealed partial class ManagedModuleRestoreService
 
     private static void ValidateModuleDestinations(string destination, IEnumerable<PreparedPackage> packages)
     {
-        var physicalRoot = FrameworkCompatibility.ResolvePhysicalPath(destination);
         foreach (var package in packages)
         {
-            var path = Path.Combine(physicalRoot, package.Pin.Name);
-            if (!FrameworkCompatibility.PathComparer.Equals(path, FrameworkCompatibility.ResolvePhysicalPath(path)))
-                throw new InvalidOperationException($"Restore cannot write module '{package.Pin.Name}' through a linked module directory.");
+            var modulePath = Path.Combine(destination, package.Pin.Name, package.ModuleDirectoryVersion);
+            ManagedModuleInstallService.ValidateRestoreTarget(destination, modulePath, package.Pin.Name, package.Pin.Version);
         }
     }
 
