@@ -18,7 +18,8 @@ internal static class PowerShellCompiledHelpWriter
 
         var payload = new DocumentationExtractionPayload { ModuleName = moduleName };
         foreach (var method in documented) payload.Commands.Add(CreateCommand(method));
-        return new MamlHelpWriter().WriteExternalHelpFile(payload, moduleName, Path.Combine(moduleRoot, culture));
+        return new MamlHelpWriter().WriteExternalHelpFile(payload, moduleName, Path.Combine(moduleRoot, culture),
+            preserveExistingTopics: true);
     }
 
     private static DocumentationCommandHelp CreateCommand(PowerShellCompiledMethod method)

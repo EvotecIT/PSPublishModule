@@ -6,6 +6,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
         PowerShellCompilationBuildSpec spec,
         string artifactName,
         string generatedAssemblyName,
+        string moduleAssemblyFileName,
         string publishDirectory,
         PowerShellTypedCompilationResult? typed,
         bool usesPowerShellRuntimeFallback,
@@ -21,11 +22,11 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             if (!File.Exists(source)) throw new FileNotFoundException("Generated library was not found.", source);
             if (spec.Kind == PowerShellCompilationArtifactKind.BinaryModule &&
                 (usesPowerShellRuntimeFallback || typed?.Methods.Any(static method => method.NativeFunctionBinding is not null) == true))
-                return CopyHybridModule(spec, artifactName, source, typed ?? throw new InvalidOperationException("Typed module metadata was not available."), outputDirectory, VerifyCopiedInput, snapshot);
+                return CopyHybridModule(spec, artifactName, moduleAssemblyFileName, source, typed ?? throw new InvalidOperationException("Typed module metadata was not available."), outputDirectory, VerifyCopiedInput, snapshot);
             if (spec.Kind == PowerShellCompilationArtifactKind.BinaryModule &&
                 (!string.IsNullOrWhiteSpace(spec.ModuleManifestPath) || HasSiblingModuleManifest(spec.SourcePath)))
-                return CopyStrictModuleWithManifest(spec, artifactName, source, typed ?? throw new InvalidOperationException("Typed module metadata was not available."), outputDirectory, VerifyCopiedInput, snapshot);
-            var target = Path.Combine(outputDirectory, artifactName + ".dll");
+                return CopyStrictModuleWithManifest(spec, artifactName, moduleAssemblyFileName, source, typed ?? throw new InvalidOperationException("Typed module metadata was not available."), outputDirectory, VerifyCopiedInput, snapshot);
+            var target = Path.Combine(outputDirectory, moduleAssemblyFileName);
             File.Copy(source, target, overwrite: true);
             return CreateCopiedArtifactWithSymbols(source, target, "Primary");
         }
@@ -69,17 +70,33 @@ public sealed partial class PowerShellCompilationArtifactBuilder
     private static string ResolveGeneratedAssemblyName(
         PowerShellCompilationBuildSpec spec,
         string artifactName,
-        PowerShellCompilationDependencyGraph dependencyGraph)
+        PowerShellCompilationDependencyGraph dependencyGraph,
+        IReadOnlyCollection<PowerShellCompilationDependency> dependencies,
+        out string moduleAssemblyFileName)
     {
+        moduleAssemblyFileName = artifactName + ".dll";
         if (spec.Kind != PowerShellCompilationArtifactKind.BinaryModule || spec.Mode != PowerShellCompilationMode.Hybrid)
             return artifactName;
-        return dependencyGraph.Nodes.Any(node =>
-                (node.Kind is PowerShellCompilationDependencyNodeKind.ManagedLibrary or
+        var identities = dependencyGraph.Nodes.Where(static node =>
+                node.Kind is PowerShellCompilationDependencyNodeKind.ManagedLibrary or
                     PowerShellCompilationDependencyNodeKind.BinaryModule or
-                    PowerShellCompilationDependencyNodeKind.MixedModule) &&
-                node.Identity.Name.Equals(artifactName, StringComparison.OrdinalIgnoreCase))
-            ? artifactName + ".PowerForge.Compiled"
-            : artifactName;
+                    PowerShellCompilationDependencyNodeKind.MixedModule)
+            .Select(static node => node.Identity.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var authoredAssemblies = dependencies.Where(static dependency => IsSelectedAdjacentPayload(dependency) &&
+                dependency.Kind == PowerShellCompilationDependencyKind.ManagedAssembly)
+            .Select(static dependency => dependency.RelativePath.Replace('\\', '/'))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var conventionalPathTaken = authoredAssemblies.Contains(moduleAssemblyFileName);
+        if (!conventionalPathTaken && !identities.Contains(artifactName))
+            return artifactName;
+
+        var prefix = artifactName + ".PowerForge.Compiled";
+        var generatedName = prefix;
+        for (var suffix = 1; identities.Contains(generatedName) || authoredAssemblies.Contains(generatedName + ".dll"); suffix++)
+            generatedName = prefix + "." + suffix.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        if (conventionalPathTaken)
+            moduleAssemblyFileName = generatedName + ".dll";
+        return generatedName;
     }
 
     private static bool HasSiblingModuleManifest(string sourcePath)

@@ -6,6 +6,34 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
 {
     [PinnedSemanticHostFact]
     [Trait("Category", "PowerShellCompilerGate")]
+    public void MultiSourceHybridWildcardKeepsAuthoredExportAndManifestFiltersOnBothHosts()
+    {
+        const string source = """
+            . "$PSScriptRoot/Runtime.ps1"
+            function Get-PublishedCount { return 21 }
+            Export-ModuleMember -Function Get-Published*
+            """;
+        const string runtime = """
+            Set-Item Function:Get-PublishedRuntime -Value { 42 }
+            function Read-Private { trap { break }; 'private' }
+            """;
+        const string probe = """
+            [ordered]@{
+                count = Get-PublishedCount
+                exports = @((Get-Module ScopedValues).ExportedCommands.Keys | Sort-Object)
+            } | ConvertTo-Json -Compress
+            """;
+        var files = new Dictionary<string, string> { ["Runtime.ps1"] = runtime };
+        CompareScopedArtifacts(source, probe, new[] { "Get-PublishedCount" },
+            value => Assert.Equal("{\"count\":21,\"exports\":[\"Get-PublishedCount\",\"Get-PublishedRuntime\"]}", value),
+            requiredModule: "Microsoft.PowerShell.Utility", additionalSources: files, manifestFunctionPattern: null);
+        CompareScopedArtifacts(source, probe, new[] { "Get-PublishedCount" },
+            value => Assert.Equal("{\"count\":21,\"exports\":[\"Get-PublishedCount\"]}", value),
+            requiredModule: "Microsoft.PowerShell.Utility", additionalSources: files, manifestFunctionPattern: "Get-PublishedCount");
+    }
+
+    [PinnedSemanticHostFact]
+    [Trait("Category", "PowerShellCompilerGate")]
     public void LiteralExportAssignmentsPreserveThePublicSurfaceOnBothHosts()
     {
         const string source = """

@@ -18,14 +18,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
         var generatedAssemblyFileName = typedAssembly is null ? artifactName + ".dll" : Path.GetFileName(typedAssembly.Path);
         var existing = existingArtifacts.Keys.ToHashSet(PowerShellCompilationPathSafety.PathComparer);
         var copied = new List<PowerShellCompilationArtifactFile>();
-        foreach (var dependency in dependencies.Where(static dependency =>
-                     dependency.Exists &&
-                     dependency.SourcePath is not null &&
-                     dependency.Disposition == PowerShellCompilationDependencyDisposition.CopiedAdjacent &&
-                     dependency.Selection is PowerShellCompilationDependencySelection.Required or
-                         PowerShellCompilationDependencySelection.ExplicitInclude or
-                         PowerShellCompilationDependencySelection.Inferred or
-                         PowerShellCompilationDependencySelection.PolicyInclude))
+        foreach (var dependency in dependencies.Where(IsSelectedAdjacentPayload))
         {
             var relativePath = PowerShellCompiledModuleManifest.NormalizeManifestRelativePath(dependency.RelativePath);
             var targetPath = Path.GetFullPath(Path.Combine(payloadRoot, relativePath));
@@ -62,6 +55,13 @@ public sealed partial class PowerShellCompilationArtifactBuilder
         }
         return copied.ToArray();
     }
+
+    private static bool IsSelectedAdjacentPayload(PowerShellCompilationDependency dependency)
+        => dependency.Exists && dependency.SourcePath is not null &&
+           dependency.Disposition == PowerShellCompilationDependencyDisposition.CopiedAdjacent &&
+           dependency.Selection is PowerShellCompilationDependencySelection.Required or
+               PowerShellCompilationDependencySelection.ExplicitInclude or PowerShellCompilationDependencySelection.Inferred or
+               PowerShellCompilationDependencySelection.PolicyInclude;
 
     private static void EnsurePayloadDoesNotOccupyGeneratedNamespace(string relativePath, string artifactName, string generatedAssemblyFileName)
     {

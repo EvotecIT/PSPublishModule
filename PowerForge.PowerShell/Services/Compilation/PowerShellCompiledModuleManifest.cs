@@ -93,14 +93,6 @@ internal static class PowerShellCompiledModuleManifest
         return ExcludeSelectedSource(CollectRuntimeScriptFiles(sourceManifest), sourcePath, sourceManifest);
     }
 
-    internal static bool ReferencesStagedPath(string sourcePath, string? moduleManifestPath, string relativePath)
-    {
-        var sourceManifest = ResolveSourceManifest(sourcePath, moduleManifestPath);
-        return File.Exists(sourceManifest) &&
-               ReadReferencedFileClosure(sourceManifest).Any(reference =>
-                   reference.RelativePath.Equals(relativePath, StringComparison.OrdinalIgnoreCase));
-    }
-
     private static string[] ExcludeSelectedSource(IEnumerable<string> references, string sourcePath, string manifestPath)
     {
         var root = Path.GetDirectoryName(Path.GetFullPath(manifestPath)) ?? Directory.GetCurrentDirectory();
@@ -190,7 +182,7 @@ internal static class PowerShellCompiledModuleManifest
         var hasRetainedAlternatives = hybrid &&
             PowerShellHybridDependencyResolver.DiscoverRetainedModuleAlternatives(sourcePath, typed.SourcePaths, snapshot).Length > 0;
         // The root module can publish runtime-created functions that are absent from the compilation inventory.
-        var preserveAuthoredFunctionFilter = hybrid && explicitExports?.Functions.Any(WildcardPattern.ContainsWildcardCharacters) == true;
+        var preserveAuthoredFunctionFilter = hybrid && explicitExports?.HasWildcardFunctions == true;
         var functionExports = preserveAuthoredFunctionFilter || (hasScriptNestedModules && manifestFunctions is null)
             ? null
             : selectedFallback;

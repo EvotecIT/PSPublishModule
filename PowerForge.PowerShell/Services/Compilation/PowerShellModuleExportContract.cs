@@ -30,6 +30,7 @@ internal sealed class PowerShellModuleExportContract
     internal string[] Aliases { get; }
     internal string[] Variables { get; }
     internal bool HasRuntimeControlledExports { get; }
+    internal bool HasWildcardFunctions => Functions.Any(WildcardPattern.ContainsWildcardCharacters);
 
     internal static PowerShellModuleExportContract? TryRead(ScriptBlockAst ast)
     {

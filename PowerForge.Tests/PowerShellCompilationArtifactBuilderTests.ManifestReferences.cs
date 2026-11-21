@@ -121,6 +121,37 @@ public sealed partial class PowerShellCompilationArtifactBuilderTests
     }
 
     [Fact]
+    public void Build_HybridModuleDisambiguatesSelectedAssemblyFileWithADifferentClrIdentity()
+    {
+        const string artifactName = "IndependentModule";
+        var authoredName = artifactName + ".dll";
+        using var fixture = ArtifactFixture.Create("function Get-PublicValue { return 1 }", ".psm1");
+        var authoredPath = Path.Combine(fixture.RootPath, authoredName);
+        File.Copy(typeof(AboutTopicTemplateResult).Assembly.Location, authoredPath);
+        File.WriteAllText(Path.ChangeExtension(fixture.ScriptPath, ".psd1"),
+            "@{ RootModule = 'input.psm1'; ModuleVersion = '1.0.0'; FunctionsToExport = @('Get-PublicValue') }");
+        var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
+            fixture.ScriptPath, fixture.OutputPath, artifactName, PowerShellCompilationArtifactKind.BinaryModule,
+            PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true)
+        {
+            IncludeResource = new[] { authoredName }
+        });
+
+        Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
+        var moduleRoot = Path.GetDirectoryName(result.ArtifactPath!)!;
+        var authored = Path.Combine(moduleRoot, authoredName);
+        Assert.Equal(File.ReadAllBytes(authoredPath), File.ReadAllBytes(authored));
+        var generated = Assert.Single(result.Manifest!.Files, file => file.Role == "TypedAssembly");
+        Assert.Equal(artifactName + ".PowerForge.Compiled.dll", Path.GetFileName(generated.Path));
+        Assert.Equal(artifactName + ".PowerForge.Compiled",
+            System.Reflection.AssemblyName.GetAssemblyName(generated.Path).Name);
+        var escapedPath = result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal);
+        var run = RunPowerShell("-NoProfile", "-NonInteractive", "-Command",
+            $"Import-Module -Name '{escapedPath}' -Force -ErrorAction Stop; Get-PublicValue");
+        Assert.Equal((0, "1", string.Empty), (run.ExitCode, run.StandardOutput.Trim(), run.StandardError.Trim()));
+    }
+
+    [Fact]
     public void Build_HybridModulePreservesManifestFunctionsLoadedByRuntimeDirectoryDiscovery()
     {
         using var fixture = ArtifactFixture.Create(

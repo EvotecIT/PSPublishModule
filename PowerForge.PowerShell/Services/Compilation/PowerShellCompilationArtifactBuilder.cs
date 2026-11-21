@@ -111,7 +111,8 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             ValidateProviderTargetCompatibility(spec, commandProviderInputs);
             var dependencyPlan = PowerShellCompilationDependencyPlanner.Analyze(spec, compilationSourcePaths, snapshot);
             var dependencyGraph = PowerShellCompilationDependencyPlanner.AnalyzeGraph(spec, compilationSourcePaths, dependencyPlan, snapshot);
-            var generatedAssemblyName = ResolveGeneratedAssemblyName(spec, artifactName, dependencyGraph);
+            var generatedAssemblyName = ResolveGeneratedAssemblyName(spec, artifactName, dependencyGraph, dependencyPlan,
+                out var moduleAssemblyFileName);
             ValidateExpectedDependencyLock(spec, dependencyGraph, approvedDependencyHash);
             var inputHashes = CreateLockedDependencyFileHashes(spec, dependencyGraph);
             if (dependencyGraph.Conflicts.Length > 0)
@@ -466,7 +467,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             var artifactStagingDirectory = PowerShellArtifactSetPublisher.CreateStagingDirectory(spec.OutputDirectory, artifactName);
             try
             {
-                var stagedArtifact = CopyArtifact(spec, artifactName, generatedAssemblyName, publishDirectory,
+                var stagedArtifact = CopyArtifact(spec, artifactName, generatedAssemblyName, moduleAssemblyFileName, publishDirectory,
                     typed, usesPowerShellRuntimeFallback, artifactStagingDirectory, inputHashes, snapshot);
                 stagedArtifact = stagedArtifact.WithReplacementFiles(CopyProviderRuntimeAssemblies(
                     spec,

@@ -7,6 +7,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
     private static CopiedArtifact CopyHybridModule(
         PowerShellCompilationBuildSpec spec,
         string artifactName,
+        string moduleAssemblyFileName,
         string compiledAssembly,
         PowerShellTypedCompilationResult typed,
         string outputDirectory,
@@ -15,7 +16,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
     {
         var moduleDirectory = Path.Combine(outputDirectory, artifactName);
         Directory.CreateDirectory(moduleDirectory);
-        var assemblyPath = Path.Combine(moduleDirectory, GetPublishedModuleAssemblyName(spec, artifactName, compiledAssembly));
+        var assemblyPath = Path.Combine(moduleDirectory, moduleAssemblyFileName);
         var modulePath = Path.Combine(moduleDirectory, artifactName + ".psm1");
         File.Copy(compiledAssembly, assemblyPath, overwrite: true);
         var files = new List<PowerShellCompilationArtifactFile>();
@@ -88,6 +89,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
     private static CopiedArtifact CopyStrictModuleWithManifest(
         PowerShellCompilationBuildSpec spec,
         string artifactName,
+        string moduleAssemblyFileName,
         string compiledAssembly,
         PowerShellTypedCompilationResult typed,
         string outputDirectory,
@@ -96,7 +98,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
     {
         var moduleDirectory = Path.Combine(outputDirectory, artifactName);
         Directory.CreateDirectory(moduleDirectory);
-        var assemblyPath = Path.Combine(moduleDirectory, GetPublishedModuleAssemblyName(spec, artifactName, compiledAssembly));
+        var assemblyPath = Path.Combine(moduleDirectory, moduleAssemblyFileName);
         File.Copy(compiledAssembly, assemblyPath, overwrite: true);
         var files = new List<PowerShellCompilationArtifactFile> { CreateArtifactFile(assemblyPath, "TypedAssembly") };
         CopyDebugSymbolsIfPresent(compiledAssembly, assemblyPath, files);
@@ -113,16 +115,6 @@ public sealed partial class PowerShellCompilationArtifactBuilder
         var primaryManifest = manifestFiles[0].Path;
         files.AddRange(manifestFiles.Select(file => CreateManifestArtifactFile(file, primaryManifest)));
         return new CopiedArtifact(primaryManifest, files.ToArray());
-    }
-
-    private static string GetPublishedModuleAssemblyName(PowerShellCompilationBuildSpec spec, string artifactName, string compiledAssembly)
-    {
-        var conventionalName = artifactName + ".dll";
-        var generatedName = Path.GetFileName(compiledAssembly);
-        return !string.Equals(generatedName, conventionalName, StringComparison.OrdinalIgnoreCase) &&
-               PowerShellCompiledModuleManifest.ReferencesStagedPath(spec.SourcePath, spec.ModuleManifestPath, conventionalName)
-            ? generatedName
-            : conventionalName;
     }
 
     private static PowerShellCompilationArtifactFile CreateManifestArtifactFile(PowerShellStagedModuleFile file, string primaryManifest)

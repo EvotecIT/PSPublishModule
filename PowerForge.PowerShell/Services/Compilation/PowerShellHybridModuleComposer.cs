@@ -172,7 +172,9 @@ internal static class PowerShellHybridModuleComposer
         source.Insert(prologueEndOffset, import.ToString());
         var builder = new StringBuilder(source.ToString());
         if (source.Length > 0 && source[source.Length - 1] != '\n') builder.AppendLine();
-        if (guardedPaths.Length == 0 && !manifestControlsExports && (exportContract is null || exportContract.Commands.Length > 0))
+        var preserveFunctionPatterns = exportContract?.HasWildcardFunctions == true;
+        if (guardedPaths.Length == 0 && (!manifestControlsExports || preserveFunctionPatterns) &&
+            (exportContract is null || exportContract.Commands.Length > 0))
         {
             var fallbackFunctions = ReadRetainedFunctionNames(typed.SourcePaths.Concat(retainedSourcePaths ?? Array.Empty<string>()), wrapped, snapshot)
                 .Distinct(StringComparer.OrdinalIgnoreCase)
@@ -181,7 +183,9 @@ internal static class PowerShellHybridModuleComposer
                 .Select(static method => method.SourceName).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
             var scriptFunctions = fallbackFunctions.Concat(typed.Methods.Where(static method => method.NativeFunctionBinding is not null)
                 .Select(static method => method.SourceName)).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
-            var exportedFallbackFunctions = (exportContract?.SelectFunctions(scriptFunctions) ?? scriptFunctions)
+            var exportedFallbackFunctions = (preserveFunctionPatterns
+                    ? exportContract!.Functions
+                    : exportContract?.SelectFunctions(scriptFunctions) ?? scriptFunctions)
                 .Concat(PowerShellCompiledModuleManifest.GetNestedModuleFunctionExportPatterns(sourcePath, fallbackFunctions))
                 .Distinct(StringComparer.OrdinalIgnoreCase);
             var exportedCompiledCmdlets = exportContract?.SelectFunctions(compiledCmdlets) ?? compiledCmdlets;
