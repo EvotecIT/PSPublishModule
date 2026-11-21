@@ -167,7 +167,7 @@ public sealed class BuildPowerShellArtifactCommand : AsyncPSCmdlet
         PowerShellCompilationTargetContract? target;
         try
         {
-            target = TargetContract is null ? null : PowerShellCompilationTargetContractService.Normalize(TargetContract);
+            target = TargetContract is null ? null : PowerShellCompilationTargetContractService.Normalize(TargetContract.Copy());
             var kind = Kind ?? target?.ArtifactKind ?? (entryPointPath is not null ? PowerShellCompilationArtifactKind.Executable
                 : requestedPaths.Length > 1 ? PowerShellCompilationArtifactKind.Library
                 : PowerShellCompilationInputResolver.InferDefaultArtifactKind(requestedPaths[0]));

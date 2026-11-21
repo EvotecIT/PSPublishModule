@@ -200,7 +200,6 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
             function Get-CompiledCount { return 21 }
             Export-ModuleMember -Function Get-ProfileValue, Get-CompiledCount
             """;
-        const string manifest = "@{ RootModule = 'Module.psm1'; ModuleVersion = '1.0.0'; FunctionsToExport = @('Get-*') }";
         const string desktopScript = "function Get-ProfileValue { 'desktop'; [int][char]'é' }";
         const string modernScript = "function Get-ProfileValue { 'modern'; [int][char]'é' }";
         const string profile = PowerShellCompilationSemanticOracleCatalog.WindowsPowerShell51ProfileId;
@@ -209,6 +208,8 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
         var referenceRoot = Path.Combine(fixture.RootPath, "reference");
         var legacy = CodePagesEncodingProvider.Instance.GetEncoding(0) ?? Encoding.UTF8;
         var modernName = legacy.GetString(Encoding.Latin1.GetBytes("café.ps1"));
+        var manifest = "@{ RootModule = 'Module.psm1'; ModuleVersion = '1.0.0'; FunctionsToExport = @('Get-*'); FileList = @('Desktop.ps1', '" +
+            System.Management.Automation.Language.CodeGeneration.EscapeSingleQuotedStringContent(modernName) + "') }";
         foreach (var (name, text) in new[] { ("Module.psm1", source), ("Desktop.ps1", desktopScript), (modernName, modernScript) })
         {
             Directory.CreateDirectory(moduleRoot);
@@ -217,8 +218,8 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
             File.WriteAllBytes(Path.Combine(moduleRoot, name), bytes);
             File.WriteAllText(Path.Combine(referenceRoot, name), legacy.GetString(bytes), new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
         }
-        File.WriteAllText(Path.Combine(moduleRoot, "Module.psd1"), manifest);
-        File.WriteAllText(Path.Combine(referenceRoot, "Module.psd1"), manifest);
+        File.WriteAllText(Path.Combine(moduleRoot, "Module.psd1"), manifest, new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
+        File.WriteAllText(Path.Combine(referenceRoot, "Module.psd1"), manifest, new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
         var observer = Path.Combine(fixture.RootPath, "ObserveManifest.ps1");
         File.WriteAllText(observer, "Import-Module -Name $args[0] -ErrorAction Stop; Get-ProfileValue; Get-CompiledCount");
         foreach (var pin in PowerShellCompilationSemanticHostArtifactPinCatalog.Pins)
@@ -239,6 +240,9 @@ public sealed partial class PowerShellCompilationSemanticOracleTests
             });
             Assert.True(build.Succeeded, build.Error + Environment.NewLine + build.BuildOutput);
             Assert.Equal(1, build.Manifest!.UnitDispositionLedger!.EmittedUnits);
+            var retainedFile = Assert.Single(build.Manifest.Files, file => Path.GetFileName(file.Path) == modernName);
+            var needsRewrite = pin.ProfileId != profile && legacy.CodePage != Encoding.UTF8.CodePage;
+            Assert.Equal(needsRewrite ? "GeneratedModuleDependency" : "ModuleDependency", retainedFile.Role);
             var host = StrictStreamingHostPath(pin) ??
                 Path.Combine(Environment.SystemDirectory, "WindowsPowerShell", "v1.0", "powershell.exe");
             var native = await ObserveExitedConsole(host, fixture.RootPath,

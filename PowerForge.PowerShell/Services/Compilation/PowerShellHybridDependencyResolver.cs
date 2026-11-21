@@ -8,7 +8,7 @@ namespace PowerForge;
 /// </summary>
 internal static class PowerShellHybridDependencyResolver
 {
-    internal static PowerShellHybridDependencyCopy[] CopyDependencies(
+    internal static PowerShellStagedModuleFile[] CopyDependencies(
         string sourcePath,
         string moduleDirectory,
         IEnumerable<string>? additionalEntryPaths = null,
@@ -26,7 +26,7 @@ internal static class PowerShellHybridDependencyResolver
             comparer);
         var discoveryEntries = (additionalEntryPaths ?? Array.Empty<string>())
             .Concat(explicitDependencyPaths ?? Array.Empty<string>());
-        var copied = new List<PowerShellHybridDependencyCopy>();
+        var copied = new List<PowerShellStagedModuleFile>();
         foreach (var dependency in DiscoverDependenciesCore(sourcePath, discoveryEntries, moduleScopeOnly: true, conventionalLoaders,
                      runtimeAlternatives: PowerShellModuleRuntimeAlternatives.Stage, snapshot: snapshot))
         {
@@ -49,12 +49,12 @@ internal static class PowerShellHybridDependencyResolver
             {
                 verifyCopiedInput?.Invoke(dependency, dependency);
                 File.WriteAllText(target, transformedContent, new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
-                copied.Add(new PowerShellHybridDependencyCopy(target, isGenerated: true));
+                copied.Add(new PowerShellStagedModuleFile(target, isGenerated: true));
             }
             else
             {
                 File.Copy(dependency, target, overwrite: false);
-                copied.Add(new PowerShellHybridDependencyCopy(target, isGenerated: false));
+                copied.Add(new PowerShellStagedModuleFile(target, isGenerated: false));
             }
             if (transformedContent is null)
                 verifyCopiedInput?.Invoke(dependency, target);
@@ -235,9 +235,9 @@ internal enum PowerShellModuleRuntimeAlternatives
 }
 
 /// <summary>Describes a staged hybrid dependency and whether PowerForge generated its current contents.</summary>
-internal sealed class PowerShellHybridDependencyCopy
+internal sealed class PowerShellStagedModuleFile
 {
-    internal PowerShellHybridDependencyCopy(string path, bool isGenerated)
+    internal PowerShellStagedModuleFile(string path, bool isGenerated)
     {
         Path = path;
         IsGenerated = isGenerated;

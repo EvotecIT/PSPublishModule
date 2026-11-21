@@ -54,9 +54,8 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             snapshot);
         if (manifestFiles is not null)
         {
-            var primaryManifest = manifestFiles.First(path => path.EndsWith(artifactName + ".psd1", StringComparison.OrdinalIgnoreCase));
-            foreach (var manifestFile in manifestFiles)
-                files.Add(CreateArtifactFile(manifestFile, PowerShellCompilationPathSafety.PathEquals(manifestFile, primaryManifest) ? "PrimaryModuleManifest" : "ModuleDependency"));
+            var primaryManifest = manifestFiles[0].Path;
+            files.AddRange(manifestFiles.Select(file => CreateManifestArtifactFile(file, primaryManifest)));
         }
         foreach (var sourceDirectory in conventionalDiscovery.SourceDirectories)
         {
@@ -82,7 +81,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             files.Add(CreateArtifactFile(
                 dependency.Path,
                 dependency.IsGenerated ? "GeneratedModuleDependency" : "ModuleDependency"));
-        var primaryPath = manifestFiles?.First(path => path.EndsWith(".psd1", StringComparison.OrdinalIgnoreCase)) ?? modulePath;
+        var primaryPath = manifestFiles?[0].Path ?? modulePath;
         return new CopiedArtifact(primaryPath, files.ToArray());
     }
 
@@ -111,9 +110,15 @@ public sealed partial class PowerShellCompilationArtifactBuilder
             spec.TargetFramework,
             verifyCopiedInput,
             snapshot) ?? throw new InvalidOperationException("The sibling module manifest was not available during artifact publication.");
-        var primaryManifest = manifestFiles.First(path => path.EndsWith(artifactName + ".psd1", StringComparison.OrdinalIgnoreCase));
-        foreach (var manifestFile in manifestFiles)
-            files.Add(CreateArtifactFile(manifestFile, PowerShellCompilationPathSafety.PathEquals(manifestFile, primaryManifest) ? "PrimaryModuleManifest" : "ModuleDependency"));
+        var primaryManifest = manifestFiles[0].Path;
+        files.AddRange(manifestFiles.Select(file => CreateManifestArtifactFile(file, primaryManifest)));
         return new CopiedArtifact(primaryManifest, files.ToArray());
+    }
+
+    private static PowerShellCompilationArtifactFile CreateManifestArtifactFile(PowerShellStagedModuleFile file, string primaryManifest)
+    {
+        var role = PowerShellCompilationPathSafety.PathEquals(file.Path, primaryManifest) ? "PrimaryModuleManifest"
+            : file.IsGenerated ? "GeneratedModuleDependency" : "ModuleDependency";
+        return CreateArtifactFile(file.Path, role);
     }
 }

@@ -104,7 +104,7 @@ internal static class PowerShellCompiledModuleManifest
             .ToArray();
     }
 
-    internal static string[]? Create(
+    internal static PowerShellStagedModuleFile[]? Create(
         string sourcePath,
         string? moduleManifestPath,
         string moduleDirectory,
@@ -215,7 +215,7 @@ internal static class PowerShellCompiledModuleManifest
             mutator.TrySetTopLevelStringArray(targetManifest, "FileList", rewrittenFileList);
         }
 
-        var copied = new List<string> { targetManifest };
+        var copied = new List<PowerShellStagedModuleFile> { new(targetManifest, isGenerated: true) };
         foreach (var reference in ReadReferencedFileClosure(sourceManifest))
         {
             var sourceFile = reference.SourcePath;
@@ -239,11 +239,12 @@ internal static class PowerShellCompiledModuleManifest
             Directory.CreateDirectory(Path.GetDirectoryName(targetFile) ?? moduleDirectory);
             File.Copy(sourceFile, targetFile, overwrite: false);
             verifyCopiedInput(sourceFile, targetFile);
-            if (hybrid && PowerShellCompilationInputResolver.IsPowerShellSource(sourceFile) &&
-                snapshot.GetDeliveryRewrite(sourceFile, PowerShellCompilationTargetContractService.GetDefaultSemanticProfileId(targetFramework),
-                    targetFile) is { } portableText)
+            var portableText = hybrid && PowerShellCompilationInputResolver.IsPowerShellSource(sourceFile)
+                ? snapshot.GetDeliveryRewrite(sourceFile, PowerShellCompilationTargetContractService.GetDefaultSemanticProfileId(targetFramework), targetFile)
+                : null;
+            if (portableText is not null)
                 File.WriteAllText(targetFile, portableText, new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
-            copied.Add(targetFile);
+            copied.Add(new PowerShellStagedModuleFile(targetFile, isGenerated: portableText is not null));
         }
         return copied.ToArray();
     }
