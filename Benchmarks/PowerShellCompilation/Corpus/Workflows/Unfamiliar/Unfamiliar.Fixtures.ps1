@@ -331,6 +331,9 @@ function ConvertTo-SingleClassReportEffectHash {
     }
 
     $css = $styles[0].Groups['css']
+    if ($css.Value.Contains('/*') -or $css.Value.Contains('*/')) {
+        throw 'The report comparison requires a comment-free stylesheet.'
+    }
     $rules = [regex]::Matches($css.Value, '(?m)^[\t ]*\.(?<name>[-A-Za-z0-9_]+)[\t ]*\{[^\r\n{}]*\}[\t ]*\r?\n')
     $names = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
     $lines = [Collections.Generic.List[string]]::new()

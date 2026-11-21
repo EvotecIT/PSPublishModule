@@ -577,6 +577,12 @@ Assert-RejectedContract 'reject duplicate CSS selectors' {
 Assert-RejectedContract 'reject noncontiguous CSS rule block' {
     ConvertTo-SingleClassReportEffectHash $reportPath
 } 'contiguous block'
+$commentOpen = '.a { /* start of comment }' + [Environment]::NewLine
+$commentClose = '.c { end of comment */ }' + [Environment]::NewLine
+[IO.File]::WriteAllText($reportPath, $cssStart + $commentOpen + $ruleB + $commentClose + $cssEnd)
+Assert-RejectedContract 'reject CSS comments spanning sortable rules' {
+    ConvertTo-SingleClassReportEffectHash $reportPath
+} 'comment-free stylesheet'
 
 $result=[ordered]@{schemaVersion=1;passed=$true;checks=@($checked);checkCount=$checked.Count
     scope='Standalone qualification assertions only; no compiler, SDK, third-party source, lifecycle process, or benchmark executed'
