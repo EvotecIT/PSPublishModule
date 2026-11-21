@@ -11,6 +11,7 @@ internal sealed partial class ManagedModuleRestoreService
     {
         var selected = new Dictionary<string, PreparedPackage>(StringComparer.OrdinalIgnoreCase);
         var downloads = new Dictionary<string, PreparedPackage>(StringComparer.OrdinalIgnoreCase);
+        var selections = new Dictionary<string, PackageCandidate>(StringComparer.OrdinalIgnoreCase);
         var listings = new Dictionary<string, IReadOnlyList<ManagedModuleVersionInfo>>(StringComparer.OrdinalIgnoreCase);
         string? conflict = null;
 
@@ -41,70 +42,87 @@ internal sealed partial class ManagedModuleRestoreService
                 .OrderByDescending(static group => group.Any(constraint => constraint.Range.ExactVersion is not null))
                 .ThenBy(static group => group.Key, StringComparer.OrdinalIgnoreCase);
             string? pendingName = null;
-            DependencyConstraint[] pendingConstraints = Array.Empty<DependencyConstraint>();
+            var unresolved = new List<IGrouping<string, DependencyConstraint>>();
             foreach (var group in constraints)
             {
                 if (selected.TryGetValue(group.Key, out var current))
                 {
-                    if (group.All(constraint => constraint.Range.IsSatisfiedBy(current.Pin.Version)))
+                    if (group.All(constraint => constraint.Matches(current)))
                         continue;
 
                     conflict = DescribeConflict(group.Key, group);
                     return false;
                 }
 
-                if (pendingName is null)
-                {
-                    pendingName = group.Key;
-                    pendingConstraints = group.ToArray();
-                }
+                unresolved.Add(group);
             }
 
-            if (pendingName is null)
+            if (unresolved.Count == 0)
             {
+                foreach (var group in constraints)
+                {
+                    if (selections.TryGetValue(group.Key, out var candidate) && !candidate.IsEligible(group))
+                    {
+                        conflict = DescribeConflict(group.Key, group);
+                        return false;
+                    }
+                }
+
                 if (TryOrderPackages(requirements, selected, out _, out var cycle))
                     return true;
                 conflict = $"Restore contains a dependency cycle involving '{cycle}'.";
                 return false;
             }
 
-            var candidates = (await GetCandidateVersionsAsync(pendingName, pendingConstraints).ConfigureAwait(false)).ToArray();
-            if (candidates.Length == 0)
+            // A sibling can introduce a pin for a missing, prerelease or unlisted version.
+            PackageCandidate[] candidates = Array.Empty<PackageCandidate>();
+            foreach (var group in unresolved)
             {
-                conflict = DescribeConflict(pendingName, pendingConstraints);
+                candidates = await GetCandidateVersionsAsync(group.Key, group.ToArray()).ConfigureAwait(false);
+                if (candidates.Length == 0)
+                    continue;
+                pendingName = group.Key;
+                break;
+            }
+
+            if (pendingName is null)
+            {
+                conflict = DescribeConflict(unresolved[0].Key, unresolved[0]);
                 return false;
             }
 
-            foreach (var version in candidates)
+            foreach (var candidate in candidates)
             {
                 PreparedPackage package;
                 try
                 {
-                    package = await DownloadAsync(pendingName, version).ConfigureAwait(false);
+                    package = await DownloadAsync(pendingName, candidate.Version).ConfigureAwait(false);
                 }
                 catch (ManagedModuleRepositoryException ex) when (ex.Operation == "Download" && ex.StatusCode == 404)
                 {
-                    conflict = $"'{pendingName}' version '{version}' is missing from the restore source.";
+                    conflict = $"'{pendingName}' version '{candidate.Version}' is missing from the restore source.";
                     continue;
                 }
 
                 selected.Add(pendingName, package);
+                selections.Add(pendingName, candidate);
                 if (await SelectDependenciesAsync().ConfigureAwait(false))
                     return true;
+                selections.Remove(pendingName);
                 selected.Remove(pendingName);
             }
 
             return false;
         }
 
-        async Task<IEnumerable<string>> GetCandidateVersionsAsync(string name, DependencyConstraint[] constraints)
+        async Task<PackageCandidate[]> GetCandidateVersionsAsync(string name, DependencyConstraint[] constraints)
         {
             var exact = constraints.Select(static constraint => constraint.Range.ExactVersion)
                 .FirstOrDefault(static version => version is not null);
             if (exact is not null && repository.Kind != ManagedModuleRepositoryKind.LocalFolder)
                 return constraints.All(constraint => constraint.Range.IsSatisfiedBy(exact))
-                    ? new[] { ManagedModuleStandaloneInput.ValidateVersion(name, exact) }
-                    : Array.Empty<string>();
+                    ? new[] { new PackageCandidate(ManagedModuleStandaloneInput.ValidateVersion(name, exact), true, ManagedModuleVersionComparer.IsPrerelease(exact)) }
+                    : Array.Empty<PackageCandidate>();
 
             if (!listings.TryGetValue(name, out var versions))
             {
@@ -113,22 +131,34 @@ internal sealed partial class ManagedModuleRestoreService
                 listings.Add(name, versions);
             }
 
-            var allowPrerelease = constraints.Any(static constraint => constraint.Range.AllowsPrerelease);
-            return versions.Where(version => exact is not null || (version.Listed && (allowPrerelease || !version.IsPrerelease)))
-                .Select(static version => version.Version)
-                .Where(version => constraints.All(constraint => constraint.Range.IsSatisfiedBy(version)))
-                .OrderByDescending(static version => version, ManagedModuleVersionComparer.Instance);
+            return versions.Where(version => constraints.All(constraint => constraint.Range.IsSatisfiedBy(version.Version)))
+                .Select(static version => new PackageCandidate(version.Version, version.Listed, version.IsPrerelease))
+                .OrderByDescending(candidate => candidate.IsEligible(constraints))
+                .ThenByDescending(static candidate => candidate.Version, ManagedModuleVersionComparer.Instance)
+                .ToArray();
         }
     }
 
     private static string DescribeConflict(string name, IEnumerable<DependencyConstraint> constraints)
         => $"No compatible version of '{name}' satisfies the requirements: " +
-           string.Join(", ", constraints.Select(static constraint => $"{constraint.Parent} requires {constraint.Range}")) + ".";
+           string.Join(", ", constraints.Select(static constraint => $"{constraint.Parent} requires {constraint.Description}")) + ".";
 
-    private sealed class DependencyConstraint(string parent, string name, ManagedModuleVersionRange range)
+    private readonly record struct PackageCandidate(string Version, bool Listed, bool IsPrerelease)
+    {
+        public bool IsEligible(IEnumerable<DependencyConstraint> constraints)
+            => constraints.Any(static constraint => constraint.Range.ExactVersion is not null) ||
+               (Listed && (!IsPrerelease || constraints.Any(static constraint => constraint.Range.AllowsPrerelease)));
+    }
+
+    private sealed class DependencyConstraint(string parent, string name, ManagedModuleVersionRange range, Guid? guid)
     {
         public string Parent { get; } = parent;
         public string Name { get; } = name;
         public ManagedModuleVersionRange Range { get; } = range;
+        public string Description => guid is { } requiredGuid ? $"{Range} with GUID {requiredGuid}" : Range.ToString();
+
+        public bool Matches(PreparedPackage package)
+            => Range.IsSatisfiedBy(package.Pin.Version) &&
+               (guid is null || guid == package.Metadata.ModuleManifestGuid);
     }
 }

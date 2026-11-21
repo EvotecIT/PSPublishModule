@@ -817,6 +817,9 @@ public sealed partial class ManagedModuleInstallService
                             cancellationToken).ConfigureAwait(false);
                     }
 
+                    if (request.RestoreModuleDirectoryVersion is not null)
+                        ValidateRestoreTarget(moduleRoot, modulePath, request.Name, version);
+
                     if (directPayloadLease is not null && !Directory.Exists(modulePath))
                     {
                         try
@@ -1074,7 +1077,9 @@ public sealed partial class ManagedModuleInstallService
     private static string ResolveTargetPath(ManagedModuleInstallRequest request, string moduleRoot, string moduleName, string version)
         => request.SaveAsNupkg
             ? ResolveSavedPackagePath(moduleRoot, moduleName, version)
-            : ResolveInstalledModulePath(moduleRoot, moduleName, version, allowFlatInstall: !request.RequireVersionedModulePath);
+            : request.RestoreModuleDirectoryVersion is { } manifestVersion
+                ? Path.Combine(moduleRoot, moduleName.Trim(), manifestVersion)
+                : ResolveInstalledModulePath(moduleRoot, moduleName, version);
 
     private static string ResolveWriteTargetPath(ManagedModuleInstallRequest request, string moduleRoot, string moduleName, string version)
         => request.SaveAsNupkg
@@ -1091,7 +1096,18 @@ public sealed partial class ManagedModuleInstallService
     private static bool TargetExists(ManagedModuleInstallRequest request, string path)
         => request.SaveAsNupkg ? File.Exists(path) : Directory.Exists(path);
 
-    private static string ResolveInstalledModulePath(string moduleRoot, string moduleName, string version, bool allowFlatInstall = true)
+    internal static void ValidateRestoreTarget(string moduleRoot, string modulePath, string name, string packageVersion)
+    {
+        var physicalRoot = FrameworkCompatibility.ResolvePhysicalPath(moduleRoot);
+        var physicalTarget = Path.Combine(physicalRoot, name, Path.GetFileName(modulePath));
+        if (!FrameworkCompatibility.PathComparer.Equals(physicalTarget, FrameworkCompatibility.ResolvePhysicalPath(physicalTarget)))
+            throw new InvalidOperationException($"Restore cannot write module '{name}' through a linked module directory.");
+        if (File.Exists(Path.GetDirectoryName(physicalTarget)) || File.Exists(physicalTarget) ||
+            (Directory.Exists(physicalTarget) && !IsInstalledModulePathSatisfied(physicalTarget, name, packageVersion, requireManifest: true)))
+            throw new InvalidOperationException($"Cannot restore '{name}' package '{packageVersion}': '{modulePath}' already contains a different module package.");
+    }
+
+    private static string ResolveInstalledModulePath(string moduleRoot, string moduleName, string version)
     {
         var moduleFolder = Path.Combine(moduleRoot, moduleName.Trim());
         var versionPath = Path.Combine(moduleFolder, ResolveModuleDirectoryVersion(version));
@@ -1101,9 +1117,6 @@ public sealed partial class ManagedModuleInstallService
         var equivalentVersionPath = ResolveInstalledVersionDirectoryPath(moduleFolder, moduleName, version);
         if (!string.IsNullOrWhiteSpace(equivalentVersionPath))
             return equivalentVersionPath!;
-
-        if (!allowFlatInstall)
-            return versionPath;
 
         var flatManifestPath = ResolveInstalledManifestPath(moduleName, moduleFolder);
         if (!string.IsNullOrWhiteSpace(flatManifestPath) &&
@@ -1148,22 +1161,23 @@ public sealed partial class ManagedModuleInstallService
         return null;
     }
 
-    private static bool IsInstalledModulePathSatisfied(string modulePath, string moduleName, string version)
+    private static bool IsInstalledModulePathSatisfied(string modulePath, string moduleName, string version, bool requireManifest = false)
     {
         if (!Directory.Exists(modulePath))
             return false;
 
         var manifestPath = Path.Combine(modulePath, moduleName.Trim() + ".psd1");
         if (!File.Exists(manifestPath))
-            manifestPath = Directory.EnumerateFiles(modulePath, "*.psd1", SearchOption.TopDirectoryOnly).FirstOrDefault() ?? string.Empty;
+            manifestPath = requireManifest ? string.Empty :
+                Directory.EnumerateFiles(modulePath, "*.psd1", SearchOption.TopDirectoryOnly).FirstOrDefault() ?? string.Empty;
         if (string.IsNullOrWhiteSpace(manifestPath))
-            return IsInstalledPathVersionNameSatisfied(modulePath, version);
+            return !requireManifest && IsInstalledPathVersionNameSatisfied(modulePath, version);
 
         try
         {
             var manifest = new ModuleManifestMetadataReader().Read(manifestPath);
             if (string.IsNullOrWhiteSpace(manifest.ModuleVersion))
-                return IsInstalledPathVersionNameSatisfied(modulePath, version);
+                return !requireManifest && IsInstalledPathVersionNameSatisfied(modulePath, version);
 
             var manifestVersion = string.IsNullOrWhiteSpace(manifest.PreRelease)
                 ? manifest.ModuleVersion.Trim()
@@ -1172,7 +1186,7 @@ public sealed partial class ManagedModuleInstallService
         }
         catch
         {
-            return IsInstalledPathVersionNameSatisfied(modulePath, version);
+            return !requireManifest && IsInstalledPathVersionNameSatisfied(modulePath, version);
         }
     }
 
