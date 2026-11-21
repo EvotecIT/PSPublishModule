@@ -125,8 +125,9 @@ Authored `finally` blocks still run, and a downstream error can reach an
 upstream author catch. PowerShell 7 `clean` runs in source order for each
 started stage and discards its success output.
 
-NativeAOT executables on Windows x64 and Linux x64 match six reference
-scenarios for ordered output, trace files, and exit status. The Windows
+Three NativeAOT executables per platform cover 17 reference scenarios on
+Windows x64 and Linux x64. The comparisons check ordered output, trace
+files, and exit status. The Windows
 run uses an empty .NET lookup directory. The Linux run uses an isolated
 filesystem with the executable and its native OS libraries.
 [Pinned oracle tests](../PowerForge.Tests/PowerShellCompilationSemanticComposedLifecycleOracleTests.cs).

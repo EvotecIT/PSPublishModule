@@ -135,8 +135,9 @@ internal sealed partial class PowerShellSemanticBinder
 
         var returnsCollection = processOutputs.Length > 0;
         Type? outputElementType = null;
-        if (!composition && returnsCollection != signatureReturnsCollection ||
-            returnsCollection && !TryGetLifecycleOutputElementType(processOutputs, end, semanticOutputType, composition, out outputElementType))
+        if ((!composition && returnsCollection != signatureReturnsCollection) ||
+            (returnsCollection || composition) &&
+            !TryGetLifecycleOutputElementType(processOutputs, end, semanticOutputType, composition, out outputElementType))
         {
             diagnostics.Add(new PowerShellSemanticDiagnostic(
                 "PSB2928",
@@ -171,7 +172,7 @@ internal sealed partial class PowerShellSemanticBinder
             declareVariable: true,
             nullCollectionElement,
             checkHostInterrupts: PowerShellLoopInterruptContract.IsAvailable(capabilities));
-        var limitParameter = supportsOutputLimit || composition
+        var limitParameter = supportsOutputLimit
             ? CreateLifecycleLimitParameter(document, function, symbols, pipelineParameter, sourceParameter) : null;
         PowerShellBoundBlock body;
         var needsLiveOutput = composition || supportsOutputLimit || streamsSuccessOutput &&

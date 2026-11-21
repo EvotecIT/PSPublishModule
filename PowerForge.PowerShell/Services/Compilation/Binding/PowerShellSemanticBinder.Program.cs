@@ -125,6 +125,12 @@ internal sealed partial class PowerShellSemanticBinder
                     signature.PipelineLifecycleStreamsOutput = true;
                 }
             }
+            foreach (var declaration in declarations)
+                if (functionsByName.TryGetValue(declaration.Syntax.Name, out var signature) &&
+                    signature.PipelineLifecycleSupportsComposition && signature.DeclaredReturnType is null &&
+                    PowerShellLocalCallSemanticBinder.InferPipelineLifecycleRecordType(
+                        declaration.Syntax, signature, functionsByName) is { } recordType)
+                    signature.RefineReturnType(recordType);
         }
 
         var failedDiagnostics = new Dictionary<string, PowerShellSemanticDiagnostic[]>(StringComparer.OrdinalIgnoreCase);

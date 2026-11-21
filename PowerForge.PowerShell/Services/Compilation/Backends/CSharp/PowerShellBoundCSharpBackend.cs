@@ -13,6 +13,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
     private PowerShellCompilationSemanticHostFamily _semanticHostFamily;
     private PowerShellCompilationCapability _targetCapabilities;
     private string? _strictCaughtException;
+    private bool _usesStrictPipelineComposition;
     private IReadOnlyDictionary<string, PowerShellLoweredFunction> _functions = new Dictionary<string, PowerShellLoweredFunction>();
     private PowerShellCSharpSourceDocumentPool _nativeSourceDocuments = new();
     internal PowerShellBoundCSharpResult Emit(PowerShellLoweredProgram program)
@@ -20,13 +21,16 @@ internal sealed partial class PowerShellBoundCSharpBackend
         if (program is null) throw new ArgumentNullException(nameof(program));
         // Each function owns its temporary names and generated helper registry.
         var functions = program.Functions.ToDictionary(static function => function.Symbol.StableKey, StringComparer.Ordinal);
+        var usesStrictPipelineComposition = program.Functions.Any(static function =>
+            function.Parameters.Any(static parameter => PowerShellTypedLowerer.IsStrictStageType(parameter.ClrType)));
         var sourceDocuments = new PowerShellCSharpSourceDocumentPool();
         var methods = program.Functions.Select(function => new PowerShellBoundCSharpBackend
         {
             _functions = functions,
             _nativeSourceDocuments = sourceDocuments,
             _semanticHostFamily = program.SemanticHostFamily,
-            _targetCapabilities = program.TargetCapabilities
+            _targetCapabilities = program.TargetCapabilities,
+            _usesStrictPipelineComposition = usesStrictPipelineComposition
         }.EmitFunction(function, program.TargetCapabilities)).ToArray();
         return new PowerShellBoundCSharpResult(methods, program.Diagnostics.ToArray());
     }
@@ -250,7 +254,7 @@ internal sealed partial class PowerShellBoundCSharpBackend
                     if (runtimeFreeExecutable)
                     {
                         var userException = $"{clause.ExceptionTemporary} is not global::PowerForge.Compiled.PowerShellScriptExit";
-                        if (_emittingStrictPipelineClause)
+                        if (_usesStrictPipelineComposition)
                             userException += $" && {clause.ExceptionTemporary} is not global::PowerForge.Generated.Runtime.PowerShellStrictPipelineStopSignal";
                         filter = clause.ExceptionTypes.Length == 0 ? userException : $"{userException} && ({filter})";
                     }

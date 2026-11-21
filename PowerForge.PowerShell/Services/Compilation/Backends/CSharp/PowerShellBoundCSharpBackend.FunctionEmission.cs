@@ -19,6 +19,8 @@ internal sealed partial class PowerShellBoundCSharpBackend
         var builder = new StringBuilder();
         var sourceMap = new List<PowerShellCompilationSourceMapEntry>();
         var nestedBodies = new List<PowerShellCompiledBodyIdentity>();
+        var hasStageAttachment = function.Parameters.LastOrDefault() is { } lastParameter &&
+            PowerShellTypedLowerer.IsStrictStageType(lastParameter.ClrType);
         var parameterParts = function.Parameters.Select(parameter =>
             PowerShellCSharpSymbolRenderer.TypeName(parameter.ClrType) +
             (PowerShellTypedLowerer.IsStrictStageType(parameter.ClrType) ? "? " : " ") +
@@ -49,9 +51,9 @@ internal sealed partial class PowerShellBoundCSharpBackend
         if (!initializer && function.Symbol.Kind != PowerShellSymbolKind.NativeScriptBlock)
             AppendPublicMethodDocumentation(builder, function);
         builder.Append(initializer ? "    private " : function.Symbol.Kind == PowerShellSymbolKind.NativeScriptBlock ? "    private static " :
-                function.Symbol.Kind == PowerShellSymbolKind.ConditionalFunction ||
-                function.Parameters.Any(static parameter => PowerShellTypedLowerer.IsStrictStageType(parameter.ClrType))
-                    ? "    internal static " : managedInstance ? "    public " : "    public static ")
+                hasStageAttachment ? "    private static " :
+                function.Symbol.Kind == PowerShellSymbolKind.ConditionalFunction ? "    internal static " :
+                managedInstance ? "    public " : "    public static ")
             .Append(PowerShellCSharpSymbolRenderer.TypeName(function.ReturnType))
             .Append(' ')
             .Append(function.GeneratedName)
@@ -117,6 +119,8 @@ internal sealed partial class PowerShellBoundCSharpBackend
             .AppendLine("            finally { this.__moduleActiveCalls--; }")
             .AppendLine("        }");
         builder.Append("    }");
+        if (hasStageAttachment)
+            AppendDirectLifecycleOverload(builder, function, parameterParts);
         AppendNativeScriptBlocks(builder, function, targetCapabilities, sourceMap, nestedBodies);
         var regionGraph = PowerShellLoweredRegionGraphBuilder.Create(function, _functions);
         var closureStatements = PowerShellLoweredScriptBlockClosure.Enumerate(function, _functions).SelectMany(static body => body.Statements).ToArray();

@@ -30,8 +30,7 @@ internal static class PowerShellSuccessOutputTypePolicy
         // A hosted region can emit records without a typed output expression.
         // Captured regions do not contribute records to the enclosing command.
         if (statement is PowerShellBoundCommandRegionStatement) return new[] { typeof(object) };
-        if (statement is PowerShellBoundStreamWriteStatement { Message: PowerShellBoundClrInvocationExpression invocation } &&
-            invocation.Arguments.OfType<PowerShellBoundStrictSuccessSinkExpression>().SingleOrDefault() is { } sink)
+        if (GetStrictPipelineSink(statement) is { } sink)
             return new[] { sink.RecordType };
         var expression = PowerShellSemanticAnalyzer.GetSuccessOutputExpression(statement);
         // An unconsumed local command writes directly to its caller's success stream.
@@ -65,6 +64,11 @@ internal static class PowerShellSuccessOutputTypePolicy
         var recordType = GetRecordType(expression.Type.ClrType);
         return recordType is null ? Type.EmptyTypes : new[] { recordType };
     }
+
+    internal static PowerShellBoundStrictSuccessSinkExpression? GetStrictPipelineSink(PowerShellBoundStatement statement)
+        => statement is PowerShellBoundStreamWriteStatement { Message: PowerShellBoundClrInvocationExpression invocation }
+            ? invocation.Arguments.OfType<PowerShellBoundStrictSuccessSinkExpression>().SingleOrDefault()
+            : null;
 
     private static Type? GetRecordType(Type type)
     {

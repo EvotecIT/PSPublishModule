@@ -47,6 +47,8 @@ internal sealed partial class PowerShellTypedLowerer
             StringComparer.Ordinal);
         foreach (var function in program.Functions)
         {
+            if (targetCapabilities == PowerShellCompilationCapabilities.TypedExecutable &&
+                !ValidateComposedLifecycleRecords(function, boundFunctions, diagnostics)) continue;
             if (function.Disposition.Kind != PowerShellExecutionDispositionKind.Typed)
             {
                 diagnostics.Add(new PowerShellSemanticDiagnostic(
@@ -244,10 +246,7 @@ internal sealed partial class PowerShellTypedLowerer
                 moduleStateReadBindings.Contains(function.Symbol.StableKey),
                 moduleStateWriteBindings.Contains(function.Symbol.StableKey),
                 function.OutputCardinality,
-                PowerShellSemanticAnalyzer.EnumerateStatements(function.Body, descendIntoCaptures: false)
-                    .Select(PowerShellSemanticAnalyzer.GetSuccessOutputExpression)
-                    .Where(static expression => expression is not null)
-                    .Select(static expression => expression!.ValueState)
+                EnumerateOutputValueStates(function.Body)
                     .Distinct()
                     .OrderBy(static state => state)
                     .ToArray(),
@@ -279,6 +278,46 @@ internal sealed partial class PowerShellTypedLowerer
 
     internal static bool IsStrictStageType(Type type)
         => type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Generated.Runtime.PowerShellStrictPipelineStage<>);
+
+    private static bool ValidateComposedLifecycleRecords(PowerShellBoundFunction owner,
+        IReadOnlyDictionary<string, PowerShellBoundFunction> functions, ICollection<PowerShellSemanticDiagnostic> diagnostics)
+    {
+        foreach (var statement in PowerShellSemanticAnalyzer.EnumerateStatements(owner.Body, descendIntoCaptures: false))
+        {
+            if (PowerShellSuccessOutputTypePolicy.GetStrictPipelineSink(statement) is not { } sink) continue;
+            if (!Validate(sink.Upstream, sink.IntermediateType, sink.Span) ||
+                !Validate(sink.Downstream, sink.RecordType, sink.Span)) return false;
+        }
+        return true;
+
+        bool Validate(PowerShellSymbolId stage, Type expected, SourceSpan span)
+        {
+            var types = functions.TryGetValue(stage.StableKey, out var function)
+                ? PowerShellSuccessOutputTypePolicy.ResolveTypes(function, functions)
+                : Type.EmptyTypes;
+            if (types.Length == 1 && types[0] == expected) return true;
+            var actual = types.Length == 0 ? "no concrete records" : string.Join(", ", types.Select(static type => type.Name));
+            diagnostics.Add(new PowerShellSemanticDiagnostic("PSL1018",
+                $"Strict pipeline stage '{stage.Name}' requires '{expected.Name}' records. Its bound output includes {actual}.", span));
+            return false;
+        }
+    }
+
+    private static IEnumerable<PowerShellValueState> EnumerateOutputValueStates(PowerShellBoundBlock body)
+    {
+        foreach (var statement in PowerShellSemanticAnalyzer.EnumerateStatements(body, descendIntoCaptures: false))
+        {
+            if (PowerShellSuccessOutputTypePolicy.GetStrictPipelineSink(statement) is { } sink)
+            {
+                yield return PowerShellValueState.Known;
+                if (sink.MayWriteNull) yield return PowerShellValueState.Null;
+            }
+            else if (PowerShellSemanticAnalyzer.GetSuccessOutputExpression(statement) is { } output)
+            {
+                yield return output.ValueState;
+            }
+        }
+    }
 
     private static void CloseLoweringDependencies(List<PowerShellLoweredFunction> functions,
         PowerShellBoundProgram program, ICollection<PowerShellSemanticDiagnostic> diagnostics)

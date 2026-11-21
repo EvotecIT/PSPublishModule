@@ -83,7 +83,9 @@ internal sealed partial class PowerShellSemanticBinder
             nullRecord ?? new PowerShellBoundLiteralExpression(span,
                 inputType.IsValueType ? Activator.CreateInstance(inputType) : null,
                 StrictPipelineType(inputType), PowerShellValueState.Unknown),
-            left, right, StrictIntLiteral(span, composition.First), new PowerShellBoundStrictSuccessSinkExpression(span, outputType)
+            left, right, StrictIntLiteral(span, composition.First), new PowerShellBoundStrictSuccessSinkExpression(span,
+                composition.Upstream.Symbol, intermediate, composition.Downstream.Symbol, outputType,
+                composition.First == 0 && !PowerShellClrTypeSemantics.IsNonNullableValueType(outputType))
         };
         var run = new PowerShellBoundClrInvocationExpression(span, typeof(PowerShellStrictPipelineComposition),
             nameof(PowerShellStrictPipelineComposition.Run), PowerShellClrInvocationKind.StaticMethod, null,

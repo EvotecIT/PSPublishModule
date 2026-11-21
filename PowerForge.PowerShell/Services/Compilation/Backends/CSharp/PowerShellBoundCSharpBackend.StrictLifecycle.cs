@@ -4,7 +4,18 @@ namespace PowerForge;
 
 internal sealed partial class PowerShellBoundCSharpBackend
 {
-    private bool _emittingStrictPipelineClause;
+    private static void AppendDirectLifecycleOverload(StringBuilder builder, PowerShellLoweredFunction function,
+        IReadOnlyList<string> parameterParts)
+    {
+        var attachmentIndex = function.Parameters.Length - 1;
+        var visible = parameterParts.Where((_, index) => index != attachmentIndex).ToArray();
+        var arguments = visible.Select(static parameter => parameter.Substring(parameter.LastIndexOf(' ') + 1)).ToList();
+        arguments.Insert(attachmentIndex, "null");
+        builder.AppendLine().Append("    public static ")
+            .Append(PowerShellCSharpSymbolRenderer.TypeName(function.ReturnType)).Append(' ')
+            .Append(function.GeneratedName).Append('(').Append(string.Join(", ", visible)).Append(") => ")
+            .Append(function.GeneratedName).Append('(').Append(string.Join(", ", arguments)).Append(");");
+    }
 
     private bool TryEmitStrictPipelineStage(StringBuilder builder, PowerShellLoweredFunction function, int indent,
         Func<string, string> allocate, string? discardHelper, ICollection<PowerShellCompilationSourceMapEntry> sourceMap)
@@ -36,7 +47,9 @@ internal sealed partial class PowerShellBoundCSharpBackend
         var stage = allocate("pipelineStage");
         var record = allocate("pipelineRecord");
         var attachmentName = RenderStorage(attachment.Symbol);
-        var limit = RenderStorage(function.Parameters[function.Parameters.Length - 2].Symbol);
+        var limitParameter = function.Parameters.FirstOrDefault(static parameter =>
+            parameter.Symbol.StableKey.EndsWith("/PIPELINE-OUTPUT-LIMIT", StringComparison.Ordinal));
+        var limit = limitParameter is null ? "0" : RenderStorage(limitParameter.Symbol);
         if (returnsValue)
         {
             builder.Append(prefix).Append("if (").Append(attachmentName).AppendLine(" is not null)");
@@ -52,18 +65,10 @@ internal sealed partial class PowerShellBoundCSharpBackend
         }
         builder.Append(prefix).Append(stage).AppendLine(".Configure(");
 
-        _emittingStrictPipelineClause = true;
-        try
-        {
-            EmitClause("()", body.Take(processIndex), stage + ".Output", ",");
-            EmitClause(record, process.Statements, stage + ".Output", ",", RenderStorage(process.Variable) + " = " + record + ";");
-            EmitClause("()", body.Skip(processIndex + 1), stage + ".Output", ",");
-            EmitClause("()", cleanup, stage + ".Output", ");");
-        }
-        finally
-        {
-            _emittingStrictPipelineClause = false;
-        }
+        EmitClause("()", body.Take(processIndex), stage + ".Output", ",");
+        EmitClause(record, process.Statements, stage + ".Output", ",", RenderStorage(process.Variable) + " = " + record + ";");
+        EmitClause("()", body.Skip(processIndex + 1), stage + ".Output", ",");
+        EmitClause("()", cleanup, stage + ".Output", ");");
 
         if (returnsValue)
         {

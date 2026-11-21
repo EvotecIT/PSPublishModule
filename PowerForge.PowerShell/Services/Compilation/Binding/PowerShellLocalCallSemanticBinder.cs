@@ -239,6 +239,20 @@ internal static class PowerShellLocalCallSemanticBinder
         }
     }
 
+    internal static Type? InferPipelineLifecycleRecordType(FunctionDefinitionAst function,
+        PowerShellLocalCallSignature signature, IReadOnlyDictionary<string, PowerShellLocalCallSignature> functions)
+    {
+        var knownTypes = signature.Parameters.ToDictionary(static parameter => parameter.Symbol.Name,
+            static parameter => parameter.Type, StringComparer.OrdinalIgnoreCase);
+        var clauses = new[] { function.Body.BeginBlock, function.Body.ProcessBlock };
+        var types = clauses.OfType<NamedBlockAst>()
+            .SelectMany(static clause => EnumeratePipelineLifecycleProcessOutputs(clause.Statements))
+            .Select(pipeline => InferExpressionType(Unwrap(pipeline), knownTypes, functions))
+            .Where(static type => type is not null && type != typeof(void))
+            .Distinct().ToArray();
+        return types.Length == 1 ? types[0] : null;
+    }
+
     private static Type? InferExpressionType(
         Ast syntax,
         IReadOnlyDictionary<string, Type> knownTypes,
@@ -403,9 +417,8 @@ internal static class PowerShellLocalCallSemanticBinder
                 $"Local function invocation '{signature.Symbol.Name}' cannot carry a value derived from live Hybrid module state across a call boundary.",
                 stateArgument.Span);
 
-        var composition = signature.PipelineLifecycleSupportsComposition;
-        var capsLifecycleOutput = capabilities == PowerShellCompilationCapabilities.TypedExecutable &&
-            (signature.PipelineLifecycleHasOutputLimit || composition);
+        var composition = lifecycleStage is not null;
+        var capsLifecycleOutput = capabilities == PowerShellCompilationCapabilities.TypedExecutable && signature.PipelineLifecycleHasOutputLimit;
         var arguments = new PowerShellBoundExpression[signature.Parameters.Length + (capsLifecycleOutput ? 1 : 0) + (composition ? 1 : 0)];
         for (var index = 0; index < signature.Parameters.Length; index++)
         {
@@ -422,9 +435,7 @@ internal static class PowerShellLocalCallSemanticBinder
         }
         if (composition)
         {
-            var stageType = typeof(Generated.Runtime.PowerShellStrictPipelineStage<>)
-                .MakeGenericType(signature.Parameters[signature.PipelineLifecycleParameterIndex].Type);
-            arguments[arguments.Length - 1] = lifecycleStage ?? Literal(span, null, stageType);
+            arguments[arguments.Length - 1] = lifecycleStage!;
             authoredOrder.Add(arguments.Length - 1);
         }
         var invocationReturnType = signature.ClosedCollectionFactory is not null
