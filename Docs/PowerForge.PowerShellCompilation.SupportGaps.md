@@ -2,6 +2,19 @@
 
 For measurements from both fixed external packets, see the [coverage report](PowerForge.PowerShellCompilation.Coverage.md). The historical results below describe earlier compiler revisions.
 
+Retained Hybrid executables can invoke a bundled `.ps1` in a child scope with
+`&`. The file body can use a literal `$PSScriptRoot` path or a supported
+`Join-Path` expression with a literal child name. The executable verifies the
+selected staged file at the call. The dependency lock includes the child
+script's supported literal dependency declarations and resources. The native
+PowerShell host binds the child's parameters and runs its body. Caller
+functions can compile and remain available from their authored declaration.
+
+Computed command targets outside the guarded path forms, calls from a nested
+function or script block, and using the same file as both a caller-scope
+compilation input and a child-scope entry remain outside this contract.
+The caller can use its authored PowerShell host for those paths.
+
 An eligible single-file Hybrid module can compile startup assignments, branches,
 data statements and function declarations in the importing scope. PowerShell
 binds import arguments and initializes module-scoped classes and enums.

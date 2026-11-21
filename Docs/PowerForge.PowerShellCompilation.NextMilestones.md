@@ -39,6 +39,44 @@ Generated compiler artifacts accept `net10.0` and `net472`; executables accept o
 
 The complete October 3 five-module census records **545/565** complete emitted functions on `net10.0` and **542/565** on `net472`. The twenty modern-target residuals have named hosted boundaries; three additional legacy residuals have explicit reference or target prerequisites. The separate seven-workload comparison records **130/183** functions and **130/196** units. The dated records preserve their per-function and retained-region results. See the coverage report above for the latest external rerun. The [support-gap inventory](PowerForge.PowerShellCompilation.SupportGaps.md) records the pinned inputs and execution limits. An emitted Hybrid method may still delegate work to PowerShell.
 
+## Current qualification targets
+
+### Qualify unfamiliar PowerShell workflows
+
+The [30-workload packet](../Benchmarks/PowerShellCompilation/Corpus/unfamiliar-workflows.net10.json)
+covers 15 standalone scripts, ten Gallery modules, and five multi-file
+applications. The [starting run](../Benchmarks/PowerShellCompilation/Corpus/unfamiliar-workflows-baseline.windows.json)
+matched all declared targets for 15 workloads. The
+[qualified run](../Benchmarks/PowerShellCompilation/Corpus/unfamiliar-workflows-baseline.qualified.windows.json)
+matched all declared targets for 24 complete Hybrid workflows through their
+authored entry paths, each exercising emitted code. Preserve the 30 PowerShell
+7.6.6 lanes and ten applicable Windows PowerShell 5.1 lanes.
+
+Compare success and failure cases through the normal build and installed
+artifact paths. Compare values, streams, errors, exit codes, and file effects
+where they are part of the declared case. Preserve executable and module
+installation, upgrade, and rollback evidence. Report unsupported cases at
+their authored source locations with the prerequisite or delivery mode they
+need. Preserve all ten Gallery module probes, 753 emitted Gallery units, the
+seven external workloads, and six Strict programs.
+
+### Qualify Hybrid performance and Strict NativeAOT applications
+
+After workflow qualification, fix three unrelated Hybrid workloads and their
+startup or import, allocation, and statistical budgets before optimization.
+On all three, require at least 90% of source warm throughput and meet the
+declared import or startup and allocation budgets. On two, require at least
+1.5 times source warm throughput. Compare the same inputs, outputs, and
+failure cases with the pinned hosts and record the measured dispatch,
+conversion, and record-handling costs.
+
+Qualify three complete Strict NativeAOT applications, including a multi-file
+application, on Windows x64 and Linux x64. Use realistic inputs, verify
+failure cases and repeatable builds, and run the installed artifacts on
+clean targets without PowerShell or .NET installed. Use the resulting
+functional and performance evidence when recommending Strict, Hybrid,
+or Package.
+
 ## Delivery order
 
 | Priority | Milestone | Current state | Required outcome |

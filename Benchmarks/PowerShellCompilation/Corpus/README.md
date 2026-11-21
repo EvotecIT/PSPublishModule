@@ -220,6 +220,14 @@ project stage. All 40 produced a recorded outcome. The report lists emitted
 bodies for each completed artifact. The parity count measures observed
 behavior through the declared entry paths.
 
+The [qualified baseline](unfamiliar-workflows-baseline.qualified.windows.json)
+records the same packet on compiler `e213c728f432a3ee0448bce7aa93b9493e622610`.
+It matched all declared targets for **24 of 30** workflows. Across the same
+40 target lanes, 34 matched, two differed and four stopped during analysis.
+Every matching lane recorded both cases through source, build and installation.
+Seven gains followed changes in compilation or delivery. Corrected comparisons
+for the unchanged DSCParser and PScribo cases account for the other two gains.
+
 | Observed block | Workflows affected | Cases |
 | --- | ---: | --- |
 | Relative source and resource closure | 4 | Two parent-relative resource selections and two unresolved dot-source expressions |
@@ -246,9 +254,10 @@ affected case's `.effect-bytes.json` receipt.
 
 The PScribo observation canonicalizes its contiguous block of distinct
 single-class stylesheet rules. It first verifies that each class attribute
-contains one class and that the document has one inline stylesheet and no
-script elements. The comparison preserves the contents of every rule and
-the rest of the document. The case receipt records the raw file hash.
+contains one class and that the document has one comment-free inline
+stylesheet and no script elements. The comparison preserves the contents
+of every rule and the rest of the document. The case receipt records the
+raw file hash.
 
 Use the built CLI for the revision being assessed and a scratch directory
 outside the source tree. The runner verifies packet hashes before executing
@@ -259,7 +268,7 @@ under the scratch directory.
 ```powershell
 $corpus = './Benchmarks/PowerShellCompilation/Corpus'
 & "$corpus/Invoke-WorkflowBaseline.ps1" -CliAssemblyPath $cliAssembly -WorkspacePath $scratch -PowerShell76Path $pinnedPwsh -AllowExternalExecution
-& "$corpus/Publish-WorkflowBaseline.ps1" -EvidencePath $workflowReport -OutputPath (Join-Path $scratch 'unfamiliar-workflows-baseline.windows.json')
+& "$corpus/Publish-WorkflowBaseline.ps1" -EvidencePath $workflowReport -OutputPath (Join-Path $scratch 'unfamiliar-workflows-baseline.qualified.windows.json')
 ```
 
 Use the raw report path printed by the runner as `$workflowReport`.
