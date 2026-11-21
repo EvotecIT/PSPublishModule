@@ -499,7 +499,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
                         typed.Methods);
                     if (externalHelpPath is not null)
                     {
-                        stagedArtifact = stagedArtifact.WithAdditionalFiles(new[]
+                        stagedArtifact = stagedArtifact.WithReplacementFiles(new[]
                         {
                             CreateArtifactFile(externalHelpPath, "ExternalHelp")
                         });

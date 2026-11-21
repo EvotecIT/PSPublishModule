@@ -319,17 +319,27 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
             "function Get-HelpedValue {\n<#\n.SYNOPSIS\nAuthored compiler help synopsis.\n.DESCRIPTION\nRetained description.\n#>\nreturn 7\n}; " +
             "Export-ModuleMember -Function Get-HelpedValue",
             ".psm1");
+        const string artifactName = "PowerForge.CommentHelpIdentity";
+        var cultureDirectory = Directory.CreateDirectory(Path.Combine(Path.GetDirectoryName(fixture.ScriptPath)!, "en-US"));
+        var authoredHelpName = artifactName + "-help.xml";
+        File.WriteAllText(Path.Combine(cultureDirectory.FullName, authoredHelpName), "<helpItems schema='maml' />");
         var result = new PowerShellCompilationArtifactBuilder().Build(new PowerShellCompilationBuildSpec(
             fixture.ScriptPath,
             fixture.OutputPath,
-            "PowerForge.CommentHelpIdentity",
+            artifactName,
             PowerShellCompilationArtifactKind.BinaryModule,
-            PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true));
+            PowerShellCompilationMode.Hybrid, allowUnreviewedDependencyResolution: true)
+        {
+            ResourceMode = PowerShellCompilationResourceMode.CompleteModule
+        });
 
         Assert.True(result.Succeeded, result.Error + Environment.NewLine + result.BuildOutput);
         Assert.Equal(1, result.Manifest!.CompiledMethods);
         Assert.Equal(0, result.Manifest.RuntimeFallbackUnits);
-        Assert.Contains(result.Manifest.Files, file => file.Role == "ExternalHelp" && File.Exists(file.Path));
+        var help = Assert.Single(result.Manifest.Files, file => Path.GetFileName(file.Path) == authoredHelpName);
+        Assert.Equal("ExternalHelp", help.Role);
+        var hash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(help.Path)));
+        Assert.Equal(hash, help.Sha256, ignoreCase: true);
         var escapedPath = result.ArtifactPath!.Replace("'", "''", StringComparison.Ordinal);
         var run = Run(
             "pwsh",
