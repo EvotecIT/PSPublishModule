@@ -54,7 +54,7 @@ public sealed partial class PowerShellCompilationArtifactBuilder
         var packagedSources = PreparePackagedSources(workspace, spec.SourcePath, compilationSourcePaths, dependencyPlan,
             inputHashes, snapshot, typed, nativeScriptEntry: nativeEntry);
         var parameterInitializers = PowerShellPackagedParameterBindingPolicy.Generate(spec.SourcePath, spec.TargetFramework,
-            nativeScriptEntry: nativeEntry, document: document);
+            document: document);
         // The native owner reparses exact authored text. Do not rewrite its variables,
         // insert registrations or replace its body before hashing/native script dispatch.
         var sourceMapping = nativeEntry ? null : new PowerShellPackagedSourceMapping(document);

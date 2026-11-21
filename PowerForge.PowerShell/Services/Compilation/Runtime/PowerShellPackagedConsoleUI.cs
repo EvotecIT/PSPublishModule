@@ -39,9 +39,10 @@ namespace PowerForge.Generated.Runtime
 
         public override Dictionary<string, PSObject> Prompt(string caption, string message, Collection<FieldDescription> descriptions)
         {
-            if (caption.Length != 0 || message.Length != 0 || descriptions.Count != 1 ||
+            if (!string.IsNullOrEmpty(caption) || !string.IsNullOrEmpty(message) || descriptions.Count != 1 ||
                 descriptions[0].ParameterTypeFullName != typeof(string).FullName)
-                throw PowerShellPackagedConsoleHost.NonInteractive();
+                // PowerShell's binder translates a host prompt refusal into its missing-parameter error.
+                throw new HostException(PowerShellPackagedConsoleHost.NonInteractiveMessage);
 
             var field = descriptions[0].Name;
             if (!Console.IsInputRedirected && field.Length != 0)

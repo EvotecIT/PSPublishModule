@@ -246,7 +246,7 @@ public sealed partial class PowerShellCompilationCurrentReviewRegressionTests
     }
 
     [Theory]
-    [InlineData("param([Parameter(Mandatory)] [string] $Name); $Name")]
+    [InlineData("param([string] $Host); $Host")]
     [InlineData("Read-Host -AsSecureString 'Value'")]
     [InlineData("process { 1 }")]
     [InlineData("$PSDefaultParameterValues = @{'Read-Host:MaskInput'=$true}; Read-Host")]
